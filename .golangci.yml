@@ -1,4 +1,4 @@
-# golangci-lint configuration for Alita Robot
+# golangci-lint configuration for Fuku Robot
 version: "2"
 
 run:
@@ -31,8 +31,8 @@ linters:
       - path: scripts/generate_docs/
         linters:
           - gocyclo
-      # Exclude pre-existing complex migration logic (moved from alita/db/migrations.go)
-      - path: alita/db/migrations/
+      # Exclude pre-existing complex migration logic (moved from fuku/db/migrations.go)
+      - path: fuku/db/migrations/
         linters:
           - gocyclo
 

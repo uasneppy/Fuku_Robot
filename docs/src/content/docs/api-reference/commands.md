@@ -1,12 +1,12 @@
 ---
 title: Command Reference
-description: Complete reference of all Alita Robot commands
+description: Complete reference of all Fuku Robot commands
 ---
 <!-- MANUALLY MAINTAINED: do not regenerate -->
 
 # Command Reference
 
-This page provides a complete reference of all commands available in Alita Robot.
+This page provides a complete reference of all commands available in Fuku Robot.
 
 ## Overview
 
@@ -528,7 +528,7 @@ helpers.WrapCommand(dispatcher, helpers.CommandDescriptor{
 }, handler)
 ```
 
-**Key types** (from `alita/utils/helpers/command_pipeline.go`):
+**Key types** (from `fuku/utils/helpers/command_pipeline.go`):
 
 | Type | Description |
 |------|-------------|

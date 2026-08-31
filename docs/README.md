@@ -1,6 +1,6 @@
-# Alita Robot Documentation
+# Fuku Robot Documentation
 
-This is the documentation website for [Alita Robot](https://github.com/divkix/Alita_Robot), a modern Telegram group management bot built with Go.
+This is the documentation website for [Fuku Robot](https://github.com/uasneppy/Fuku_Robot), a modern Telegram group management bot built with Go.
 
 Built with [Blume](https://useblume.dev/) — a fast, AI-ready, markdown-first documentation framework.
 
@@ -64,6 +64,6 @@ See the main [README](../README.md) for full contribution guidelines.
 
 ## Links
 
-- [Alita Robot Repository](https://github.com/divkix/Alita_Robot)
-- [Live Documentation](https://alita.divkix.me)
+- [Fuku Robot Repository](https://github.com/uasneppy/Fuku_Robot)
+- [Live Documentation](https://fuku.divkix.me)
 - [Support Group](https://t.me/DivideSupport)

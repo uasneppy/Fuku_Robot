@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# PostgreSQL Migration Script for Alita Robot (vendor-agnostic)
+# PostgreSQL Migration Script for Fuku Robot (vendor-agnostic)
 # Uses migrations/ as source-of-truth and auto-cleans for plain PostgreSQL
 
 set -euo pipefail
@@ -85,7 +85,7 @@ elif [[ -d "$DEFAULT_MIGRATIONS_DIR" ]]; then
   MIGRATIONS_DIR="$DEFAULT_MIGRATIONS_DIR"
   SOURCE_MIGRATIONS_DIR="$DEFAULT_MIGRATIONS_DIR"
 elif [[ -d "$SRC_MIGRATIONS_DIR" ]]; then
-  AUTO_TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/alita-migrations.XXXXXX")
+  AUTO_TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fuku-migrations.XXXXXX")
   trap cleanup_temp_dir EXIT
   echo -e "${BLUE}No local migrations found. Auto-preparing from migrations/...${NC}"
   prepare_clean_migrations_from_supabase "$SRC_MIGRATIONS_DIR" "$AUTO_TEMP_DIR"

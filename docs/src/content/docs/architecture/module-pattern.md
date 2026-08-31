@@ -1,9 +1,9 @@
 ---
 title: Module Pattern
-description: How to create new feature modules for Alita Robot.
+description: How to create new feature modules for Fuku Robot.
 ---
 
-This guide explains how to add new feature modules to Alita Robot, following the established patterns and conventions.
+This guide explains how to add new feature modules to Fuku Robot, following the established patterns and conventions.
 
 ## Module Structure Template
 
@@ -22,11 +22,11 @@ import (
     "github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
     log "github.com/sirupsen/logrus"
 
-    "github.com/divkix/Alita_Robot/alita/db"
-    "github.com/divkix/Alita_Robot/alita/i18n"
-    "github.com/divkix/Alita_Robot/alita/utils/chat_status"
-    "github.com/divkix/Alita_Robot/alita/utils/extraction"
-    "github.com/divkix/Alita_Robot/alita/utils/formatting"
+    "github.com/uasneppy/Fuku_Robot/fuku/db"
+    "github.com/uasneppy/Fuku_Robot/fuku/i18n"
+    "github.com/uasneppy/Fuku_Robot/fuku/utils/chat_status"
+    "github.com/uasneppy/Fuku_Robot/fuku/utils/extraction"
+    "github.com/uasneppy/Fuku_Robot/fuku/utils/formatting"
 )
 
 // Module struct with name for help system
@@ -123,7 +123,7 @@ func init() {
 
 ### Step 1: Create Database Model (If Needed)
 
-Create a new file `alita/db/example/repository.go` (following the domain-package pattern):
+Create a new file `fuku/db/example/repository.go` (following the domain-package pattern):
 
 ```go
 package db
@@ -202,7 +202,7 @@ Always use auto-increment `id` as the primary key. External IDs (`chat_id`, `use
 
 ### Step 3: Implement Database Operations
 
-Add cache helpers to `alita/db/cache/ttl.go` and `alita/db/cache/keys.go` using the CacheKey helper:
+Add cache helpers to `fuku/db/cache/ttl.go` and `fuku/db/cache/keys.go` using the CacheKey helper:
 
 ```go
 const (
@@ -239,7 +239,7 @@ func GetExampleSettings(chatID int64) *ExampleSettings {
 ```
 
 :::tip[CacheKey helper]
-The `CacheKey()` function in `alita/db/cache/keys.go` provides consistent key formatting as `alita:{module}:{id}`. Always use it instead of manual string formatting.
+The `CacheKey()` function in `fuku/db/cache/keys.go` provides consistent key formatting as `fuku:{module}:{id}`. Always use it instead of manual string formatting.
 :::
 
 :::tip[Cache invalidation is mandatory]
@@ -274,7 +274,7 @@ You must add keys to ALL locale files, not just `en.yml`. Missing keys cause run
 
 ### Step 5: Register Module
 
-Modules self-register via `init()` using the registry system. The `LoadAllModules` function in `alita/main.go` loads all registered modules in priority order:
+Modules self-register via `init()` using the registry system. The `LoadAllModules` function in `fuku/main.go` loads all registered modules in priority order:
 
 ```go
 func LoadModules(dispatcher *ext.Dispatcher) {
@@ -445,10 +445,10 @@ import (
     "github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
     log "github.com/sirupsen/logrus"
 
-    "github.com/divkix/Alita_Robot/alita/db"
-    "github.com/divkix/Alita_Robot/alita/i18n"
-    "github.com/divkix/Alita_Robot/alita/utils/chat_status"
-    "github.com/divkix/Alita_Robot/alita/utils/formatting"
+    "github.com/uasneppy/Fuku_Robot/fuku/db"
+    "github.com/uasneppy/Fuku_Robot/fuku/i18n"
+    "github.com/uasneppy/Fuku_Robot/fuku/utils/chat_status"
+    "github.com/uasneppy/Fuku_Robot/fuku/utils/formatting"
 )
 
 var welcomeModule = moduleStruct{moduleName: "Welcome"}
@@ -543,7 +543,7 @@ func init() {
 When displaying user-controlled data in HTML-formatted messages, always escape it:
 
 ```go
-import "github.com/divkix/Alita_Robot/alita/utils/formatting"
+import "github.com/uasneppy/Fuku_Robot/fuku/utils/formatting"
 
 // Escape chat titles, usernames, and user-supplied text
 text := fmt.Sprintf("Settings for %s", formatting.HtmlEscape(chat.Title))

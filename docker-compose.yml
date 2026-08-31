@@ -1,16 +1,16 @@
-# Production Docker Compose for Alita Robot
+# Production Docker Compose for Fuku Robot
 # Uses pre-built images from GHCR, optimized for Dokploy deployment
 #
 # Environment variables to set in Dokploy UI:
 #   BOT_TOKEN, OWNER_ID, MESSAGE_DUMP, WEBHOOK_DOMAIN, WEBHOOK_SECRET
 
 services:
-  alita:
-    image: ghcr.io/divkix/alita_robot:latest
-    container_name: alita-robot
+  fuku:
+    image: ghcr.io/uasneppy/fuku_robot:latest
+    container_name: fuku-robot
     restart: always
     environment:
-      DATABASE_URL: postgresql://alita:alita@postgres:5432/alita
+      DATABASE_URL: postgresql://fuku:fuku@postgres:5432/fuku
       REDIS_ADDRESS: redis:6379
       REDIS_PASSWORD: redis
       AUTO_MIGRATE: "true"
@@ -30,7 +30,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "/app/alita_robot", "--health"]
+      test: ["CMD", "/app/fuku_robot", "--health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -45,17 +45,17 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    container_name: alita-postgres
+    container_name: fuku-postgres
     restart: always
     environment:
-      POSTGRES_USER: alita
-      POSTGRES_PASSWORD: alita
-      POSTGRES_DB: alita
+      POSTGRES_USER: fuku
+      POSTGRES_PASSWORD: fuku
+      POSTGRES_DB: fuku
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U alita -d alita"]
+      test: ["CMD-SHELL", "pg_isready -U fuku -d fuku"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,7 +67,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: alita-redis
+    container_name: fuku-redis
     restart: always
     command: redis-server --requirepass redis
     healthcheck:

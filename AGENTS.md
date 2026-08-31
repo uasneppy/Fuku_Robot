@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Alita Robot is a Telegram group-management bot written in **Go 1.26** on top of
+Fuku Robot is a Telegram group-management bot written in **Go 1.26** on top of
 the **gotgbot/v2** library (`v2.0.0-rc.36`). It provides admin tools, filters,
 notes, greetings, anti-flood / anti-raid / anti-spam, captcha verification,
 warns, locks, backups, connections, reactions and multi-language support
@@ -65,18 +65,18 @@ Telegram ──► (polling updater  OR  webhook /webhook POST)
 Big architectural facts an agent must hold in mind:
 
 - **Config and the DB connection are opened in package `init()` functions, not in
-  `main()`.** Importing `alita/config` loads+validates config into the global
-  `config.AppConfig`; importing `alita/db` opens the Postgres connection. Both
+  `main()`.** Importing `fuku/config` loads+validates config into the global
+  `config.AppConfig`; importing `fuku/db` opens the Postgres connection. Both
   short-circuit for CLI flags (`--version`/`--health`) and when their required env
   is unset (so tests can import them). Do **not** move this into `main()`.
-- **The DB layer is split into per-domain sub-packages** (`alita/db/<domain>/`)
-  with all GORM structs in `alita/db/models/`. `alita/db/db.go` is a
+- **The DB layer is split into per-domain sub-packages** (`fuku/db/<domain>/`)
+  with all GORM structs in `fuku/db/models/`. `fuku/db/db.go` is a
   backward-compat shim that re-exports model types (`db.User = models.User`) and
   message-type constants (`db.TEXT`…`db.VIDEO_NOTE`) — it does **not** re-export
-  cache helpers or TTL constants (those live in `alita/db/cache/`). ⚠️ Older docs
-  described a flat `alita/db/*_db.go` layout — that no longer exists.
+  cache helpers or TTL constants (those live in `fuku/db/cache/`). ⚠️ Older docs
+  described a flat `fuku/db/*_db.go` layout — that no longer exists.
 - **Schema source of truth is raw SQL in `migrations/*.sql`**, applied by a custom
-  runtime engine (`alita/db/migrations/runner.go`), **not** `gorm.AutoMigrate`.
+  runtime engine (`fuku/db/migrations/runner.go`), **not** `gorm.AutoMigrate`.
   GORM struct tags only affect runtime CRUD. Tests bootstrap schema via SQLite
   `AutoMigrate` (`testmain_test.go`), so struct↔SQL drift is possible and not
   caught by tests — keep them in sync manually.
@@ -94,7 +94,7 @@ Big architectural facts an agent must hold in mind:
 
 - **`main.go`** — process entry point (CLI flags, bootstrap, polling/webhook
   branch, dispatcher, shutdown wiring, tuned Bot-API HTTP transport).
-- **`alita/`** — application code
+- **`fuku/`** — application code
   - `main.go` — `LoadModules`, `InitialChecks`, `ListModules`.
   - `config/` — `config.go` (manual env loading, defaults, validation, logredact
     wiring in `init()`), `types.go` (`typeConvertor`). **No viper here.**
@@ -146,8 +146,8 @@ make test-postgres-integrity # focused DB-native concurrency/constraint tests; r
 make tidy / make vendor
 
 # Single tests
-go test -v -run TestXxx ./alita/db
-go test -v -count=1 -timeout 10m ./alita/db
+go test -v -run TestXxx ./fuku/db
+go test -v -count=1 -timeout 10m ./fuku/db
 
 # Translations & docs
 make check-translations # runs scripts/check_translations (separate module) — missing-key gate
@@ -171,7 +171,7 @@ Redis-dependent tests use miniredis. `CGO_ENABLED=1` and a C toolchain are still
 required for `-race`; shipped binaries use `CGO_ENABLED=0`. CI additionally runs
 the complete migration chain and focused DB-native integrity tests serially
 against PostgreSQL 16 + Redis 7 before the self-contained full suite. `-coverpkg` excludes the root
-`main` package and `scripts/`, so changes there do not move coverage; `alita/*`
+`main` package and `scripts/`, so changes there do not move coverage; `fuku/*`
 changes do. Coverage gate is **78%** (hardcoded in `ci.yml`).
 
 ---
@@ -189,7 +189,7 @@ Parallel jobs (no `needs`), then aggregation:
 |-----|--------------|---------|
 | `security` | gosec `-no-fail` → SARIF upload (`continue-on-error`); govulncheck (`continue-on-error`) | ⚠️ **Non-gating** — nothing here can fail the build despite being "required" by `ci-success`. |
 | `lint` | golangci-lint **binary v2.11.4**, `--timeout 10m`, `only-new-issues:true`; second run with `--enable dupl`; informational TODO/FIXME + gocyclo>15 step summaries | New issues block; pre-existing tolerated. |
-| `build` | `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"`, then `./alita_robot --version` from `/tmp` | Yes |
+| `build` | `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"`, then `./fuku_robot --version` from `/tmp` | Yes |
 | `test` | Service containers **postgres:16** + **redis:7**; verifies the raw migration chain, runs focused DB-native integrity tests serially under `-race`, then `make test` and coverage **≥78%** | Yes |
 | `docs-check` | `make check-translations` + `make check-docs` (translation + docs drift gate) | Yes |
 | `docker-verify` | single-arch `docker build -f docker/alpine` (no push) | Yes |
@@ -224,11 +224,11 @@ fallback `version = "v2.22.0"` in `main.go` (used only when
 config didn't load). There are **no** `-X main.version/commit/date` ldflags anymore
 (they were no-ops — `package main` declares no such vars). ⚠️ After the bump step,
 `goreleaser` runs a **"Verify BotVersion matches tag"** gate that `grep`s **both**
-`alita/config/config.go` (`BotVersion:  "<ver>"`) **and** `main.go`
+`fuku/config/config.go` (`BotVersion:  "<ver>"`) **and** `main.go`
 (`version = "v<tag>"`) and fails the release on mismatch — this is the enforcement
 behind "don't hand-edit BotVersion."
 
-### `docs.yml` (path-filtered to docs/alita/scripts/locales)
+### `docs.yml` (path-filtered to docs/fuku/scripts/locales)
 
 `make generate-docs` → Node 22 + Bun → `bun run build` → deploy to **Cloudflare
 Workers** via `wrangler@4` (only on push to `main`). Tag pushes do not run
@@ -263,7 +263,7 @@ push/PR CI pipeline.
 Docker Compose/Dokploy (`AUTO_MIGRATE=true`, port 8080), Railway (`RAILPACK`,
 healthcheck `/health`, injected `PORT` supported), Render (`AUTO_MIGRATE=true`,
 `HTTP_PORT=10000`), Heroku
-(`Procfile` → `bin/Alita_Robot` capitalized ⚠️, `app.json`), Nixpacks. Prod image
+(`Procfile` → `bin/Fuku_Robot` capitalized ⚠️, `app.json`), Nixpacks. Prod image
 is `distroless/static-debian12`, non-root UID 65532, EXPOSE 8080, healthcheck via
 the `--health` flag.
 
@@ -283,7 +283,7 @@ the `--health` flag.
 6. `tracing.InitTracing()` — **non-fatal** (warns and continues).
 7. Tuned HTTP transport + optional `API_SERVER` through gotgbot's
    `RequestOpts.APIURL` → `gotgbot.NewBot` → resolve username.
-8. `alita.InitialChecks(b)` — `user.EnsureBotInDb` (blocking, FK anchor).
+8. `fuku.InitialChecks(b)` — `user.EnsureBotInDb` (blocking, FK anchor).
 9. dispatcher (`TracingProcessor`, `dispatcherErrorHandler`,
    `MaxRoutines` default 200) → monitoring systems → shutdown manager →
    unified HTTP server.
@@ -293,7 +293,7 @@ the `--health` flag.
     both) loads modules, restores/starts the captcha lifecycle, sets `/start` and
     `/help`, and sends an HTML startup message to `MESSAGE_DUMP` (non-fatal).
 
-**Graceful shutdown** (`alita/utils/shutdown`): a goroutine waits on
+**Graceful shutdown** (`fuku/utils/shutdown`): a goroutine waits on
 SIGTERM/SIGINT/Interrupt, then runs handlers **LIFO** (reverse of registration
 order in `main`), each with panic recovery, under a **60s** total timeout, then
 `os.Exit(0/1)`. `WaitForShutdown` starts only after the mode-specific HTTP/updater
@@ -305,12 +305,12 @@ tracing, DB monitoring and application monitors, and finally the DB pool.
 
 ## 6. Module system
 
-### Registry (`alita/modules/registry.go`)
+### Registry (`fuku/modules/registry.go`)
 
 - `RegisterLegacyModule(name, priority, loadFunc)` appends a `registeredModule`
   record. Dedup is by name (duplicates silently ignored, first wins).
 - `LoadAllModules` stable-sorts **ascending** by priority. **Lower number loads
-  earlier.** `alita.LoadModules` resets `AbleMap`, **defers `LoadHelp`** (so Help
+  earlier.** `fuku.LoadModules` resets `AbleMap`, **defers `LoadHelp`** (so Help
   renders after every module pushed its metadata), then `LoadAllModules`.
 
 **Priorities** (edit the literal in each module's `init()` to reorder):
@@ -334,7 +334,7 @@ uses `RegisterLegacyModule`.
 
 ### `moduleStruct` and the help registry (`core.go`)
 
-⚠️ There is **no `alita/modules/helpers.go`** (older docs claimed one). `moduleStruct`
+⚠️ There is **no `fuku/modules/helpers.go`** (older docs claimed one). `moduleStruct`
 (fields `moduleName`, `handlerGroup`, `permHandlerGroup`, `restrHandlerGroup`,
 `defaultRulesBtn`, `AbleMap`, `AltHelpOptions`, `helpableKb`) lives in `core.go`.
 
@@ -361,17 +361,17 @@ uses `RegisterLegacyModule`.
 
 ### Adding a module
 
-1. DB ops in `alita/db/<domain>/repository.go` (+ optimized.go for hot reads),
-   model in `alita/db/models/<domain>.go`, alias in `db.go`, migration in
+1. DB ops in `fuku/db/<domain>/repository.go` (+ optimized.go for hot reads),
+   model in `fuku/db/models/<domain>.go`, alias in `db.go`, migration in
    `migrations/`.
-2. Handlers + `LoadYourModule(dispatcher)` in `alita/modules/your_module.go`.
+2. Handlers + `LoadYourModule(dispatcher)` in `fuku/modules/your_module.go`.
 3. `RegisterLegacyModule("YourModule", <priority>, LoadYourModule)` in `init()`;
    set `DefaultHelpRegistry().AbleMap[name] = true` inside `LoadXxx`.
 4. Add `<yourmodule>_help_msg` (and any keys) to **all** locale files.
 
 ### Command registration: two patterns coexist
 
-- **New declarative pipeline** (`alita/utils/helpers/command_pipeline.go`) — used by
+- **New declarative pipeline** (`fuku/utils/helpers/command_pipeline.go`) — used by
   `admin.go` and `pins.go`: `WrapCommand(dispatcher, CommandDescriptor, handler)`
   runs panic-recovery → `BuildCommandContext` → ordered `RequiredChecks`
   (`CheckFunc` builders like `RequireGroup`, `RequireUserAdmin`, `CanUserPromote`)
@@ -393,7 +393,7 @@ uses `RegisterLegacyModule`.
 - **Return values**: commands return `ext.EndGroups`; watchers return
   `ext.ContinueGroups` (so multiple watchers fire on one message). The Users
   tracker (group -1, every message) **must** return `ContinueGroups`.
-- **Callback codec** (`alita/utils/callbackcodec`, wrapped by
+- **Callback codec** (`fuku/utils/callbackcodec`, wrapped by
   `modules/callback_codec.go`): `Encode(namespace, fields)` →
   `<namespace>|v1|<url-encoded fields>`, **hard-capped at 64 bytes**
   (`MaxCallbackDataLen`). `decodeCallbackData(data, expectedNamespaces…)` filters
@@ -410,7 +410,7 @@ uses `RegisterLegacyModule`.
   concrete message fields rather than asserting `*gotgbot.Message`.
 - **Anonymous-admin flow**: on a `GroupAnonymousBot` sender, `chat_status.checkAnonAdmin`
   either bypasses (if the chat's `AnonAdmin` DB setting is on) or caches the
-  original message (`alita:anonAdmin:<chat>:<msg>`, **20s TTL**) and shows a "prove
+  original message (`fuku:anonAdmin:<chat>:<msg>`, **20s TTL**) and shows a "prove
   admin" button. `bot_updates.go:verifyAnonymousAdmin` re-checks admin status,
   restores `ctx.EffectiveMessage`, **nils `SenderChat` and `CallbackQuery`** (to
   stop re-detection), and re-dispatches via `HandleAnonymousAdmin`. ⚠️ This path
@@ -431,7 +431,7 @@ uses `RegisterLegacyModule`.
 
 ---
 
-## 8. Permission system (`alita/utils/chat_status/`)
+## 8. Permission system (`fuku/utils/chat_status/`)
 
 Public `Can*/Require*` permission implementations live directly in `access.go`;
 `chat_status.go` holds shared status and membership logic.
@@ -462,7 +462,7 @@ Public `Can*/Require*` permission implementations live directly in `access.go`;
 
 ## 9. Database layer
 
-### Shared wrappers (`alita/db/db.go`)
+### Shared wrappers (`fuku/db/db.go`)
 
 OTel-traced: `GetRecord`/`GetRecords`/`CreateRecord`/`UpdateRecord`/
 `UpdateRecordWithZeroValues` + `ChatExists`. Connection (`conn.go`) uses
@@ -478,7 +478,7 @@ OTel-traced: `GetRecord`/`GetRecords`/`CreateRecord`/`UpdateRecord`/
   (not-found *and* connection failures) so callers that ensure the chat will
   attempt recovery instead of skipping FK setup.
 
-### Models & schema (`alita/db/models/`)
+### Models & schema (`fuku/db/models/`)
 
 - **Surrogate keys everywhere**: `ID uint` autoincrement PK; the real Telegram id
   (`chat_id`/`user_id`) is a separate **unique** column (single or composite named
@@ -550,7 +550,7 @@ OTel-traced: `GetRecord`/`GetRecords`/`CreateRecord`/`UpdateRecord`/
 - Most read helpers swallow errors and return safe defaults (empty slice/map,
   `"en"`, default struct) — callers can't rely on errors to detect missing data.
 
-### Migrations (`alita/db/migrations/runner.go`)
+### Migrations (`fuku/db/migrations/runner.go`)
 
 - Runs only when `AUTO_MIGRATE=true`. Globs `migrations/*.sql`, sorts
   lexically (timestamp prefix = apply order), applies each unrecorded file in **one
@@ -574,7 +574,7 @@ OTel-traced: `GetRecord`/`GetRecords`/`CreateRecord`/`UpdateRecord`/
 
 ---
 
-## 10. Cache layer (`alita/utils/cache/`)
+## 10. Cache layer (`fuku/utils/cache/`)
 
 Redis-only via gocache. **Always** access the marshaler through mutex-guarded
 `cache.GetMarshal()`/`SetMarshal()` and nil-check it (`if m := cache.GetMarshal();
@@ -588,8 +588,8 @@ m != nil`) — every helper bails when it's nil.
   and path-selected DB. An explicit `REDIS_ADDRESS` selects direct-address mode
   and ignores URL-only credentials/options; `REDIS_PASSWORD` overrides either
   source. With neither address variable set, the default is `localhost:6379`.
-- Key format `alita:{module}:{id}:{id}…` (`CacheKey` accepts variadic `...any`).
-- **Admin cache** (`adminCache.go`, key `alita:adminCache:<chat>`, 30-min): caches
+- Key format `fuku:{module}:{id}:{id}…` (`CacheKey` accepts variadic `...any`).
+- **Admin cache** (`adminCache.go`, key `fuku:adminCache:<chat>`, 30-min): caches
   Telegram admin lists with an O(1) `UserMap` + linear fallback; negative results
   (bot-not-admin or an empty admin list) are cached with `Cached:true` to avoid
   retry storms; `LoadAdminCache` stores the result before returning so later
@@ -601,16 +601,16 @@ m != nil`) — every helper bails when it's nil.
   with no `GetChatMember` fallback, so missing that flag treats other admin bots
   as regular members. Two paths invalidate the key (`InvalidateAdminCache` + a
   raw delete in `admin.go`).
-- **Restricted-chat cache** (`restrictedCache.go`, `alita:restricted:<chat>`, 30-min):
+- **Restricted-chat cache** (`restrictedCache.go`, `fuku:restricted:<chat>`, 30-min):
   tracks chats where the bot can't send; 5-min probe window with a Redis `SETNX`
-  single-flight (`alita:restricted_probe:<chat>`). Fails **open** (returns false) on
+  single-flight (`fuku:restricted_probe:<chat>`). Fails **open** (returns false) on
   malformed timestamp or nil Redis — do not change to fail-closed.
 - `MarkChatRestricted`/`IsChatRestricted`/`MarkChatNotRestricted` are driven by
   `media.Send` and `helpers.SendMessageWithErrorHandling`.
 
 ---
 
-## 11. Internationalization (`alita/i18n/`)
+## 11. Internationalization (`fuku/i18n/`)
 
 - Singleton `LocaleManager` (`GetManager()` + `sync.Once`); `Initialize()` runs
   once from `main.go` (after `cache.InitCache`). `go:embed` pulls the **entire**
@@ -621,10 +621,10 @@ m != nil`) — every helper bails when it's nil.
 - ⚠️ **`ENABLED_LOCALES` does not control which locales load** — the manager always
   loads all embedded `.yml`. It only filters the `/lang` picker keyboard.
 - The `/lang` callback validates against the seven user locales in
-  `alita/modules/language.go`; keep that allowlist in sync with embedded user
+  `fuku/modules/language.go`; keep that allowlist in sync with embedded user
   locale files and exclude the `"config"` pseudo-language.
 - `i18n.MustNewTranslator(langCode)` (382 call sites) never panics — falls back to
-  English. Per-context language comes from `alita/db/lang.GetLanguage(ctx)` (user
+  English. Per-context language comes from `fuku/db/lang.GetLanguage(ctx)` (user
   pref in private, group pref in groups, default `"en"`).
 - `GetString(key, params…)` falls back to the default language on missing keys
   (recursion-guarded). Supports **both** `{named}` and legacy `%s`/`%d` placeholders;
@@ -659,7 +659,7 @@ m != nil`) — every helper bails when it's nil.
   Mute/ban inline buttons reuse the `unrestrict` callback namespace handled in
   `bans.go`.
 - **Antiraid** (`antiraid.go`, group -5): **Redis-only** live state
-  (`alita:antiraid:state:<chat>`, TTL covering the requested expiry) + a join
+  (`fuku:antiraid:state:<chat>`, TTL covering the requested expiry) + a join
   sorted-set that expires after its 60s counting window; enable/disable/duration/
   expiry transitions use Redis compare-and-swap scripts so stale timers cannot
   remove newer state. If expired-state cleanup loses to a fresh state, the join
@@ -688,12 +688,12 @@ m != nil`) — every helper bails when it's nil.
   export **membership only** (`fed_id` + `quiet`), not the federation itself.
 - **Log channels** (`logchannels.go`, group **11**, priority 55): `/setlog` in a
   channel stores a pending Redis marker for **that exact message**
-  (`alita:setlog:<channel>:<msgId>`, 1h). There is **no** `:0` wildcard — capture
+  (`fuku:setlog:<channel>:<msgId>`, 1h). There is **no** `:0` wildcard — capture
   matches `origin.MessageId` only. A nil marshaler or Redis write failure replies
   `common_settings_save_failed` instead of instructing the user to forward.
   Forwarding that message into a group binds `log_channels`. Categories
   (`settings`/`admin`/`user`/`automated`/`reports`/`other`) default all-on.
-  `alita/utils/actionlog` fans out HTML lines and must key off `chat.Type ==
+  `fuku/utils/actionlog` fans out HTML lines and must key off `chat.Type ==
   "channel"` (not `IsChannelId`) because supergroup IDs are channel-shaped.
 - **Antispam** (`antispam.go`, group -2): ⚠️ a **local** in-memory rate limiter
   (18 msgs/sec) used for telemetry only; it always returns `ContinueGroups`, so
@@ -736,7 +736,7 @@ m != nil`) — every helper bails when it's nil.
   raw Telegram entity offsets are UTF-16 code units, so slice them through
   `extractEntityText`, never as Go byte or rune indexes.
 - **Overwrite confirmation**: filters and notes store user-bound pending payloads
-  in **Redis** (`alita:{filter|note}_overwrite:<token>`, 5-min TTL, short hex token
+  in **Redis** (`fuku:{filter|note}_overwrite:<token>`, 5-min TTL, short hex token
   in callback). Confirmation consumes the value with `GETDEL`, so replay and
   concurrent double-submit cannot recreate deleted content. `AddFilter`/`AddNote`
   use `ON CONFLICT DO NOTHING` and preserve an existing value; only the explicit
@@ -777,7 +777,7 @@ m != nil`) — every helper bails when it's nil.
 
 ## 14. Observability & ops
 
-- **`alita/utils/monitoring`** (distinct from `alita/db/monitoring`): three
+- **`fuku/utils/monitoring`** (distinct from `fuku/db/monitoring`): three
   background services — `ActivityMonitor` (per-chat & per-user DAU/WAU/MAU, marks
   chats inactive; ⚠️ user counts ignore `is_inactive`, chat counts don't),
   `BackgroundStatsCollector` (3 ticker goroutines — 30s system / 1m DB / 5m report —
@@ -834,7 +834,7 @@ m != nil`) — every helper bails when it's nil.
 
 ## 16. Backups & rate limiting
 
-- `alita/db/backup` exports/imports/clears **19 modules**:
+- `fuku/db/backup` exports/imports/clears **19 modules**:
   admin, antiflood, antiraid, approvals, blacklists, captcha, connections,
   disabling, filters, greetings, locks, notes, pins, reactions, reports, rules,
   warns, **federations**, **logchannels**. `BackupFormatVersion = "1.1"`; legacy
@@ -847,7 +847,7 @@ m != nil`) — every helper bails when it's nil.
   transaction, invalidates affected caches after commit, and round-trips complete
   filter/note/greeting/pin/report/warn/reaction/federation-membership/log-channel
   state.
-- `alita/modules/backup.go` adds Telegram UI, **in-memory** pending-import/reset
+- `fuku/modules/backup.go` adds Telegram UI, **in-memory** pending-import/reset
   confirmation state with one-use random nonces and a 10-minute TTL (lost on
   restart, not cross-instance), and rate limiting via
   `ratelimit.GetBackupRateLimiter()`. Reservations are atomic in Redis or the
@@ -871,7 +871,7 @@ m != nil`) — every helper bails when it's nil.
   separately parses commands, callbacks, and message watchers, then writes
   `.planning/INVENTORY.{json,md}`.
 - **`scripts/check_translations/`** — a **separate Go module** (own `go.mod`); cannot
-  import `alita`; uses hardcoded `../../alita` and `../../locales`. Only validates
+  import `fuku`; uses hardcoded `../../fuku` and `../../locales`. Only validates
   **string-literal** keys passed to `tr.GetString`/`GetStringSlice`.
 - **`scripts/validate_orphaned_data.go`** — 26 referential-integrity checks
   (`defaultOrphanChecks()`); keep in sync with
@@ -885,7 +885,7 @@ m != nil`) — every helper bails when it's nil.
   `schema_migrations` record in one transaction, verifies raw-file SHA-256
   checksums, and fails closed on status/backfill/apply errors.
 - **`scripts/bump_version.sh <vX.Y.Z>`** — sed-patches the two version strings
-  (`BotVersion` in `alita/config/config.go` + the `--version` fallback in `main.go`);
+  (`BotVersion` in `fuku/config/config.go` + the `--version` fallback in `main.go`);
   BSD/GNU-sed portable, idempotent (a no-op leaves the tree clean so the release
   workflow skips the commit). Wrapped by `make bump-version TAG=vX.Y.Z`.
 
@@ -1016,7 +1016,7 @@ patch/minor auto-merge and requires manual review.
 
 ### Issue tracker
 
-Issues live as GitHub issues in `Divkix/Alita_Robot` (use the `gh` CLI); external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+Issues live as GitHub issues in `uasneppy/Fuku_Robot` (use the `gh` CLI); external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

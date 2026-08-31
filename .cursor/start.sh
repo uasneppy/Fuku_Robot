@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Per-boot startup for the Alita Robot Cloud Agent environment.
+# Per-boot startup for the Fuku Robot Cloud Agent environment.
 # Starts PostgreSQL and Redis, ensures the application database exists, applies
 # SQL migrations (idempotent), and writes a local .env with local service
 # defaults. Secrets (BOT_TOKEN, OWNER_ID, MESSAGE_DUMP) are injected by Cursor
 # as environment variables and are NOT written here.
 set -euo pipefail
 
-DB_NAME="alita_robot"
+DB_NAME="fuku_robot"
 DB_USER="postgres"
 DB_PASSWORD="password"
 DB_PORT="5432"

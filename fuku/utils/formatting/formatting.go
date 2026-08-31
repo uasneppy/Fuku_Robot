@@ -1,0 +1,318 @@
+// Package formatting provides text-formatting helpers for Telegram messages,
+// including HTML / Markdown option builders, message splitting, HTML↔Markdown
+// conversion, and user/chat placeholder replacement.
+package formatting
+
+import (
+	"fmt"
+	"html"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+
+	"github.com/uasneppy/Fuku_Robot/fuku/db"
+	"github.com/uasneppy/Fuku_Robot/fuku/db/rules"
+	"github.com/uasneppy/Fuku_Robot/fuku/i18n"
+)
+
+// Parse-mode constants and the Telegram message length limit.
+const (
+	Markdown             = "Markdown"
+	HTML                 = "HTML"
+	MaxMessageLength int = 4096
+)
+
+// precompiled regexes and replacer for ReverseHTML2MD.
+var (
+	linkRegex     = regexp.MustCompile(`<a href="(.*?)">(.*?)</a>`)
+	rulesBtnRegex = regexp.MustCompile(`(?s){rules(:(same|up))?}`)
+	// htmlToMdReplacer efficiently replaces HTML tags with Markdown in a single pass.
+	htmlToMdReplacer = strings.NewReplacer(
+		"<b>", "*",
+		"</b>", "*",
+		"<i>", "_",
+		"</i>", "_",
+		"<u>", "__",
+		"</u>", "__",
+		"<s>", "~",
+		"</s>", "~",
+		"<code>", "`",
+		"</code>", "`",
+		"<pre>", "```",
+		"</pre>", "```",
+	)
+)
+
+type memberCountEntry struct {
+	count int
+	at    time.Time
+}
+
+const defaultMemberCountCacheTTL = 60 * time.Second
+
+var (
+	memberCountCache    sync.Map // map[int64]memberCountEntry
+	memberCountCacheTTL = defaultMemberCountCacheTTL
+)
+
+// cachedMemberCount returns member count with a short TTL per chat to avoid an
+// API call per message. Expired entries are deleted on read and via AfterFunc
+// so idle chats cannot accumulate forever.
+func cachedMemberCount(b *gotgbot.Bot, chat *gotgbot.Chat) string {
+	if v, ok := memberCountCache.Load(chat.Id); ok {
+		if e, ok := v.(memberCountEntry); ok && time.Since(e.at) < memberCountCacheTTL {
+			return strconv.Itoa(e.count)
+		}
+		memberCountCache.Delete(chat.Id)
+	}
+	count, err := chat.GetMemberCount(b, nil)
+	if err != nil {
+		return "0"
+	}
+	entry := memberCountEntry{count: int(count), at: time.Now()}
+	memberCountCache.Store(chat.Id, entry)
+	expireMemberCount(chat.Id, entry)
+	return strconv.Itoa(int(count))
+}
+
+func expireMemberCount(chatID int64, entry memberCountEntry) {
+	time.AfterFunc(memberCountCacheTTL, func() {
+		memberCountCache.CompareAndDelete(chatID, entry)
+	})
+}
+
+// Shtml returns SendMessageOpts configured with HTML parse mode, disabled link preview,
+// and reply parameters that allow sending without reply.
+func Shtml() *gotgbot.SendMessageOpts {
+	return &gotgbot.SendMessageOpts{
+		ParseMode: HTML,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{
+			IsDisabled: true,
+		},
+		ReplyParameters: &gotgbot.ReplyParameters{
+			AllowSendingWithoutReply: true,
+		},
+	}
+}
+
+// Smarkdown returns SendMessageOpts configured with Markdown parse mode, disabled link preview,
+// and reply parameters that allow sending without reply.
+func Smarkdown() *gotgbot.SendMessageOpts {
+	return &gotgbot.SendMessageOpts{
+		ParseMode: Markdown,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{
+			IsDisabled: true,
+		},
+		ReplyParameters: &gotgbot.ReplyParameters{
+			AllowSendingWithoutReply: true,
+		},
+	}
+}
+
+// SplitMessage splits a message into multiple messages if it exceeds MaxMessageLength.
+// It splits on newlines to preserve message structure when possible.
+// Uses utf8.RuneCountInString to correctly count UTF-8 characters instead of bytes.
+func SplitMessage(msg string) []string {
+	totalRunes := utf8.RuneCountInString(msg)
+	if totalRunes <= MaxMessageLength {
+		return []string{msg}
+	}
+
+	lines := strings.Split(msg, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	// Pre-allocate result with a heuristic capacity
+	result := make([]string, 0, totalRunes/MaxMessageLength+1)
+
+	smallMsg := ""
+	smallMsgRunes := 0
+
+	for _, line := range lines {
+		lineRunes := utf8.RuneCountInString(line)
+		potentialRunes := smallMsgRunes + lineRunes + 1
+
+		if potentialRunes <= MaxMessageLength {
+			smallMsg += line + "\n"
+			smallMsgRunes = potentialRunes
+			continue
+		}
+
+		if lineRunes > MaxMessageLength {
+			if smallMsg != "" {
+				result = append(result, smallMsg)
+				smallMsg = ""
+				smallMsgRunes = 0
+			}
+			runes := []rune(line)
+			for len(runes) > 0 {
+				chunkSize := min(MaxMessageLength, len(runes))
+				result = append(result, string(runes[:chunkSize]))
+				runes = runes[chunkSize:]
+			}
+		} else {
+			if smallMsg != "" {
+				result = append(result, smallMsg)
+			}
+			smallMsg = line + "\n"
+			smallMsgRunes = lineRunes + 1
+		}
+	}
+
+	if smallMsg != "" {
+		result = append(result, smallMsg)
+	}
+
+	return result
+}
+
+// MentionHtml creates an HTML mention link for a user using their Telegram user ID.
+func MentionHtml(userId int64, name string) string {
+	return MentionUrl(fmt.Sprintf("tg://user?id=%d", userId), name)
+}
+
+// MentionUrl creates an HTML link with the given URL and display name.
+// Both the URL and name are HTML-escaped for safety.
+func MentionUrl(url, name string) string {
+	return fmt.Sprintf("<a href=\"%s\">%s</a>", html.EscapeString(url), html.EscapeString(name))
+}
+
+// HtmlEscape escapes special HTML characters in a string to prevent injection.
+// Used when inserting untrusted content into HTML-formatted messages.
+func HtmlEscape(s string) string {
+	return html.EscapeString(s)
+}
+
+// ReverseHTML2MD converts HTML-formatted text back to markdown format.
+// Handles common HTML tags like bold, italic, underline, strikethrough, code, pre, and links.
+func ReverseHTML2MD(text string) string {
+	if linkRegex.MatchString(text) {
+		matches := linkRegex.FindAllStringSubmatch(text, -1)
+		for _, match := range matches {
+			if len(match) >= 3 {
+				oldLink := match[0]
+				newLink := fmt.Sprintf("[%s](%s)", match[2], match[1])
+				text = strings.Replace(text, oldLink, newLink, 1)
+			}
+		}
+	}
+
+	return htmlToMdReplacer.Replace(text)
+}
+
+// FormattingReplacer processes message text and replaces placeholders with actual user/chat data.
+// Handles variables like {first}, {last}, {username}, {mention}, {count}, {chatname}, {id}.
+// Also processes rules button insertion with various positioning options.
+func FormattingReplacer(b *gotgbot.Bot, chat *gotgbot.Chat, user *gotgbot.User, oldMsg string, buttons []db.Button) (res string, btns []db.Button) {
+	const language = "en"
+	var (
+		firstName string
+		lastName  string
+		fullName  string
+		username  string
+		userId    int64
+	)
+
+	if user == nil {
+		tr := i18n.MustNewTranslator(language)
+		personNoName, _ := tr.GetString("helpers_person_no_name")
+		if personNoName == "" {
+			personNoName = "PersonWithNoName"
+		}
+		firstName = personNoName
+		fullName = personNoName
+		username = personNoName
+		userId = 0
+	} else {
+		firstName = user.FirstName
+		if len(user.FirstName) <= 0 {
+			tr := i18n.MustNewTranslator(language)
+			personNoName, _ := tr.GetString("helpers_person_no_name")
+			if personNoName == "" {
+				personNoName = "PersonWithNoName"
+			}
+			firstName = personNoName
+		}
+
+		lastName = user.LastName
+		fullName = GetFullName(firstName, user.LastName)
+		mention := MentionHtml(user.Id, firstName)
+
+		if user.Username != "" {
+			username = "@" + html.EscapeString(user.Username)
+		} else {
+			username = mention
+		}
+		userId = user.Id
+	}
+
+	countStr := "0"
+	if strings.Contains(oldMsg, "{count}") {
+		countStr = cachedMemberCount(b, chat)
+	}
+
+	r := strings.NewReplacer(
+		"{first}", html.EscapeString(firstName),
+		"{last}", html.EscapeString(lastName),
+		"{fullname}", html.EscapeString(fullName),
+		"{username}", username,
+		"{mention}", username,
+		"{count}", countStr,
+		"{chatname}", html.EscapeString(chat.Title),
+		"{id}", strconv.Itoa(int(userId)),
+	)
+
+	response := rulesBtnRegex.FindStringSubmatch(oldMsg)
+	if response == nil {
+		return r.Replace(oldMsg), buttons
+	}
+
+	res = r.Replace(rulesBtnRegex.ReplaceAllString(oldMsg, ""))
+	// Copy buttons to avoid mutating cached slice underlying array.
+	btns = append([]db.Button(nil), buttons...)
+
+	rulesDb := rules.GetChatRulesInfo(chat.Id)
+	if rulesDb.Rules == "" {
+		return res, btns
+	}
+
+	rulesBtnText := rulesDb.RulesBtn
+	if rulesBtnText == "" {
+		tr := i18n.MustNewTranslator(language)
+		defaultRulesText, _ := tr.GetString("button_rules_default")
+		if defaultRulesText == "" {
+			defaultRulesText = "Rules"
+		}
+		rulesBtnText = defaultRulesText
+	}
+
+	sameline := response[2] == "same"
+	rulesButton := db.Button{
+		Name:     rulesBtnText,
+		Url:      fmt.Sprintf("https://t.me/%s?start=rules_%d", b.Username, chat.Id),
+		SameLine: sameline,
+	}
+
+	if response[2] == "up" {
+		btns = append([]db.Button{rulesButton}, buttons...)
+	} else {
+		btns = append(btns, rulesButton)
+	}
+
+	return res, btns
+}
+
+// GetFullName combines first name and last name into a full name.
+// If last name is empty, returns only the first name.
+func GetFullName(firstName, lastName string) string {
+	if lastName != "" {
+		return firstName + " " + lastName
+	}
+	return firstName
+}

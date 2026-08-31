@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
-    -o alita_robot .
+    -o fuku_robot .
 
 # Stage 2: Alpine runtime with shell access
 FROM alpine:3.21
@@ -36,24 +36,24 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 # Copy binary and migrations
-COPY --from=builder /app/alita_robot /app/alita_robot
+COPY --from=builder /app/fuku_robot /app/fuku_robot
 COPY --from=builder /app/migrations /app/migrations
 
 # Create non-root user
-RUN addgroup -g 65532 -S alita && \
-    adduser -u 65532 -S alita -G alita && \
-    chown -R alita:alita /app
+RUN addgroup -g 65532 -S fuku && \
+    adduser -u 65532 -S fuku -G fuku && \
+    chown -R fuku:fuku /app
 
-USER alita:alita
+USER fuku:fuku
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/alita_robot"]
+ENTRYPOINT ["/app/fuku_robot"]
 
 # Metadata
 LABEL org.opencontainers.image.authors="Divanshu Chauhan <divkix@divkix.me>"
 LABEL org.opencontainers.image.url="https://divkix.me"
-LABEL org.opencontainers.image.source="https://github.com/divkix/Alita_Robot"
-LABEL org.opencontainers.image.title="Alita Go Robot"
-LABEL org.opencontainers.image.description="Official Alita Go Robot Debug Docker Image"
+LABEL org.opencontainers.image.source="https://github.com/uasneppy/Fuku_Robot"
+LABEL org.opencontainers.image.title="Fuku Go Robot"
+LABEL org.opencontainers.image.description="Official Fuku Go Robot Debug Docker Image"
 LABEL org.opencontainers.image.vendor="Divkix"

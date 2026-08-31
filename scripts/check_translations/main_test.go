@@ -90,7 +90,7 @@ func handler() {
 	}
 
 	// Build a relative path containing ".." to simulate how the script is invoked
-	// (from scripts/check_translations/, paths like ../../alita/... are legitimate)
+	// (from scripts/check_translations/, paths like ../../fuku/... are legitimate)
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get cwd: %v", err)

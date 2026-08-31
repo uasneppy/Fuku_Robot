@@ -1,11 +1,11 @@
 ---
 title: Troubleshooting
-description: Common issues and solutions for Alita Robot.
+description: Common issues and solutions for Fuku Robot.
 ---
 
 # Troubleshooting
 
-This guide covers common issues you may encounter when running Alita Robot and how to resolve them.
+This guide covers common issues you may encounter when running Fuku Robot and how to resolve them.
 
 ## Bot Won't Start
 
@@ -54,7 +54,7 @@ BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
 2. **Verify connection string:**
    ```bash
    # Test connection directly
-   psql "postgres://user:pass@localhost:5432/alita?sslmode=disable"
+   psql "postgres://user:pass@localhost:5432/fuku?sslmode=disable"
    ```
 
 3. **Check network access:**
@@ -63,7 +63,7 @@ BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
    nc -zv localhost 5432
    ```
 
-4. **Docker Compose:** Ensure PostgreSQL is healthy before Alita starts:
+4. **Docker Compose:** Ensure PostgreSQL is healthy before Fuku starts:
    ```yaml
    depends_on:
      postgres:
@@ -91,7 +91,7 @@ BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
    REDIS_PASSWORD=your_password  # Leave empty if no password
    ```
 
-3. **Docker:** Ensure Redis is started before Alita
+3. **Docker:** Ensure Redis is started before Fuku
 
 ### MESSAGE_DUMP Invalid
 
@@ -218,7 +218,7 @@ incomplete schema.
 
 **Error:**
 ```
-pq: too many connections for role "alita"
+pq: too many connections for role "fuku"
 ```
 
 **Solutions:**
@@ -237,7 +237,7 @@ pq: too many connections for role "alita"
 
 3. **Use connection pooling (PgBouncer):**
    ```bash
-   DATABASE_URL=postgres://user:pass@pgbouncer:6432/alita
+   DATABASE_URL=postgres://user:pass@pgbouncer:6432/fuku
    ```
 
 ### Query Timeout
@@ -404,13 +404,13 @@ DEBUG=true
 
 ```bash
 # Docker
-docker compose logs alita 2>&1 | grep -i error
+docker compose logs fuku 2>&1 | grep -i error
 
 # Systemd
-journalctl -u alita-robot | grep -i error
+journalctl -u fuku-robot | grep -i error
 
 # Last 100 errors
-docker compose logs --tail=1000 alita 2>&1 | grep -i error | tail -100
+docker compose logs --tail=1000 fuku 2>&1 | grep -i error | tail -100
 ```
 
 ### Log Levels
@@ -432,17 +432,17 @@ docker compose logs --tail=1000 alita 2>&1 | grep -i error | tail -100
 docker compose ps
 
 # View logs
-docker compose logs alita
+docker compose logs fuku
 
 # Check for OOM kill
-docker inspect alita-robot | grep -i oom
+docker inspect fuku-robot | grep -i oom
 ```
 
 ### Health Check Failing
 
 ```bash
 # Test health endpoint manually
-docker compose exec alita /app/alita_robot --health
+docker compose exec fuku /app/fuku_robot --health
 
 # Or from host
 curl http://localhost:8080/health
@@ -456,10 +456,10 @@ Inside Docker Compose, services communicate by service name, not `localhost`. Us
 
 ```bash
 # Check network
-docker network inspect alita_robot_default
+docker network inspect fuku_robot_default
 
 # Verify service names match in DATABASE_URL and REDIS_ADDRESS
-DATABASE_URL=postgresql://alita:alita@postgres:5432/alita  # Use service name, not localhost
+DATABASE_URL=postgresql://fuku:fuku@postgres:5432/fuku  # Use service name, not localhost
 ```
 
 ## Internationalization (i18n) Issues
@@ -510,7 +510,7 @@ DATABASE_URL=postgresql://alita:alita@postgres:5432/alita  # Use service name, n
 
 If you cannot resolve an issue:
 
-1. **Check existing issues:** [GitHub Issues](https://github.com/divkix/Alita_Robot/issues)
+1. **Check existing issues:** [GitHub Issues](https://github.com/uasneppy/Fuku_Robot/issues)
 2. **Enable debug logging** and collect relevant logs
 3. **Open a new issue** with:
    - Full error message

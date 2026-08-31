@@ -1,13 +1,13 @@
 import { defineConfig } from "blume";
 
-// Blume configuration for the Alita Robot documentation site.
+// Blume configuration for the Fuku Robot documentation site.
 // See https://useblume.dev/docs/configuration for the full reference.
 export default defineConfig({
-	title: "Alita Robot",
+	title: "Fuku Robot",
 	description:
 		"A modern Telegram group management bot built with Go — 29+ modules, 158+ commands, 7+ languages, and blazing-fast performance powered by Redis caching and PostgreSQL.",
-	logo: { image: "/favicon.svg", text: "Alita Robot" },
-	github: { owner: "divkix", repo: "Alita_Robot" },
+	logo: { image: "/favicon.svg", text: "Fuku Robot" },
+	github: { owner: "divkix", repo: "Fuku_Robot" },
 
 	// Content stays where Starlight had it; the Go docs generator still
 	// writes here (output path unchanged).
@@ -16,7 +16,7 @@ export default defineConfig({
 	// Static output keeps the existing Cloudflare Workers deployment as-is.
 	deployment: {
 		output: "static",
-		site: "https://alita-docs.divkix.me",
+		site: "https://fuku-robot-docs.workers.dev",
 	},
 
 	// Built-in AI artifacts (on by default): llms.txt, llms-full.txt, and a

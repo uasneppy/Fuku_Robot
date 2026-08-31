@@ -1,11 +1,11 @@
 ---
 title: Monitoring and Observability
-description: Monitor Alita Robot health, metrics, and errors.
+description: Monitor Fuku Robot health, metrics, and errors.
 ---
 
 # Monitoring and Observability
 
-Alita Robot provides comprehensive monitoring capabilities including health checks, Prometheus metrics, and resource monitoring.
+Fuku Robot provides comprehensive monitoring capabilities including health checks, Prometheus metrics, and resource monitoring.
 
 ## Health Endpoint
 
@@ -68,7 +68,7 @@ Both checks must pass for `healthy` status.
 curl http://localhost:8080/health
 
 # Docker health check (built-in)
-/app/alita_robot --health
+/app/fuku_robot --health
 
 # Kubernetes liveness probe
 livenessProbe:
@@ -95,9 +95,9 @@ Add to your `prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: 'alita-robot'
+  - job_name: 'fuku-robot'
     static_configs:
-      - targets: ['alita:8080']
+      - targets: ['fuku:8080']
     scrape_interval: 15s
     scrape_timeout: 10s
     metrics_path: /metrics
@@ -115,7 +115,7 @@ services:
     ports:
       - "9090:9090"
     depends_on:
-      - alita
+      - fuku
 
 volumes:
   prometheus_data:
@@ -144,7 +144,7 @@ volumes:
 
 ## Resource Monitoring
 
-Alita Robot includes automatic resource monitoring to prevent resource exhaustion.
+Fuku Robot includes automatic resource monitoring to prevent resource exhaustion.
 
 ### Configuration
 
@@ -315,7 +315,7 @@ Structured log entries include:
   "msg": "Handler error occurred: user blocked bot",
   "update_id": 123456789,
   "error_type": "*gotgbot.TelegramError",
-  "file": "alita/modules/admin.go",
+  "file": "fuku/modules/admin.go",
   "line": 45,
   "function": "handleAdminCommand",
   "time": "2024-03-15T10:30:00Z"
@@ -335,7 +335,7 @@ Structured log entries include:
 ## Alerting
 
 :::tip
-At minimum, set up alerts for `AlitaUnhealthy` and monitor the `/health` endpoint with an external HTTP check (e.g., blackbox exporter) to catch critical outages early.
+At minimum, set up alerts for `FukuUnhealthy` and monitor the `/health` endpoint with an external HTTP check (e.g., blackbox exporter) to catch critical outages early.
 :::
 
 ### Prometheus Alerting Rules
@@ -344,15 +344,15 @@ Create `alerts.yml`:
 
 ```yaml
 groups:
-  - name: alita-alerts
+  - name: fuku-alerts
     rules:
-      - alert: AlitaUnhealthy
-        expr: up{job="alita-robot"} == 0
+      - alert: FukuUnhealthy
+        expr: up{job="fuku-robot"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Alita Robot is down"
+          summary: "Fuku Robot is down"
 
       - alert: HighMemoryUsage
         expr: process_resident_memory_bytes > 500000000

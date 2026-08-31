@@ -1,9 +1,9 @@
 ---
 title: Request Flow
-description: How Telegram updates are processed through the Alita Robot pipeline.
+description: How Telegram updates are processed through the Fuku Robot pipeline.
 ---
 
-This document details how Telegram updates flow through Alita Robot, from reception to response.
+This document details how Telegram updates flow through Fuku Robot, from reception to response.
 
 ## Update Processing Pipeline
 
@@ -152,7 +152,7 @@ When the bot starts (`main.go`), it performs these steps in order:
     been loaded and validated by the config package.
 
     ```go
-    if err := alita.InitialChecks(b); err != nil {
+    if err := fuku.InitialChecks(b); err != nil {
         log.Fatalf("Initial checks failed: %v", err)
     }
     ```
@@ -228,7 +228,7 @@ func LoadModules(dispatcher *ext.Dispatcher) {
     modules.LoadAllModules(dispatcher)
 }
 
-alita.LoadModules(dispatcher)
+fuku.LoadModules(dispatcher)
 if err := modules.StartCaptchaLifecycle(bot); err != nil {
     log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 }

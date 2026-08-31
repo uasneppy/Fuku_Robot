@@ -1,9 +1,9 @@
 ---
 title: Building from Source
-description: Compile Alita Robot from source code.
+description: Compile Fuku Robot from source code.
 ---
 
-Build Alita Robot from source for development, customization, or when pre-built binaries are not available for your platform.
+Build Fuku Robot from source for development, customization, or when pre-built binaries are not available for your platform.
 
 ## Prerequisites
 
@@ -59,8 +59,8 @@ All tools below must be accessible from your `PATH`. After installing Go or gola
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/divkix/Alita_Robot.git
-cd Alita_Robot
+git clone https://github.com/uasneppy/Fuku_Robot.git
+cd Fuku_Robot
 ```
 
 ## Build Commands
@@ -100,13 +100,13 @@ go run main.go
 Build for your current platform:
 
 ```bash
-go build -o alita_robot .
+go build -o fuku_robot .
 ```
 
 :::tip[Smaller Binaries]
 Build with optimizations to strip debug symbols and reduce binary size:
 ```bash
-go build -ldflags="-s -w" -o alita_robot .
+go build -ldflags="-s -w" -o fuku_robot .
 ```
 :::
 
@@ -114,13 +114,13 @@ Cross-compile for other platforms:
 
 ```bash
 # Linux amd64
-GOOS=linux GOARCH=amd64 go build -o alita_robot_linux_amd64 .
+GOOS=linux GOARCH=amd64 go build -o fuku_robot_linux_amd64 .
 
 # macOS arm64
-GOOS=darwin GOARCH=arm64 go build -o alita_robot_darwin_arm64 .
+GOOS=darwin GOARCH=arm64 go build -o fuku_robot_darwin_arm64 .
 
 # Windows amd64
-GOOS=windows GOARCH=amd64 go build -o alita_robot_windows_amd64.exe .
+GOOS=windows GOARCH=amd64 go build -o fuku_robot_windows_amd64.exe .
 ```
 
 ## Makefile Targets
@@ -169,7 +169,7 @@ This:
 ## Project Structure
 
 ```
-Alita_Robot/
+Fuku_Robot/
 ├── main.go              # Entry point
 ├── go.mod               # Go module definition
 ├── go.sum               # Dependency checksums
@@ -179,7 +179,7 @@ Alita_Robot/
 ├── docker-compose.yml   # Docker Compose configuration
 ├── .dockerignore          # Docker ignore rules
 ├── debug.docker-compose.yml # Debug compose configuration
-├── alita/               # Main application code
+├── fuku/               # Main application code
 │   ├── config/          # Configuration loading
 │   ├── db/              # Database models and operations
 │   ├── modules/         # Bot command handlers
@@ -214,10 +214,10 @@ The `.goreleaser.yaml` defines the build process:
 
 ```yaml
 version: 2
-project_name: alita_robot
+project_name: fuku_robot
 
 builds:
-  - binary: alita_robot
+  - binary: fuku_robot
     env:
       - CGO_ENABLED=0
     goos:
@@ -240,16 +240,16 @@ After running `make build`, binaries are created in:
 
 ```
 dist/
-├── alita_robot_linux_amd64/
-│   └── alita_robot
-├── alita_robot_linux_arm64/
-│   └── alita_robot
-├── alita_robot_darwin_amd64/
-│   └── alita_robot
-├── alita_robot_darwin_arm64/
-│   └── alita_robot
-├── alita_robot_windows_amd64/
-│   └── alita_robot.exe
+├── fuku_robot_linux_amd64/
+│   └── fuku_robot
+├── fuku_robot_linux_arm64/
+│   └── fuku_robot
+├── fuku_robot_darwin_amd64/
+│   └── fuku_robot
+├── fuku_robot_darwin_arm64/
+│   └── fuku_robot
+├── fuku_robot_windows_amd64/
+│   └── fuku_robot.exe
 └── checksums.txt
 ```
 
@@ -302,8 +302,8 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-cmd = "go build -o ./tmp/alita_robot ."
-bin = "tmp/alita_robot"
+cmd = "go build -o ./tmp/fuku_robot ."
+bin = "tmp/fuku_robot"
 include_ext = ["go"]
 exclude_dir = ["tmp", "vendor", "docs"]
 ```
@@ -355,5 +355,5 @@ The bot is built with `CGO_ENABLED=0` for static binaries. If you explicitly nee
 :::
 
 ```bash
-CGO_ENABLED=1 go build -o alita_robot .
+CGO_ENABLED=1 go build -o fuku_robot .
 ```

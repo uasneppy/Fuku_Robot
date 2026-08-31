@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "alita-robot-docs",
+      "name": "fuku-robot-docs",
       "dependencies": {
         "blume": "^1.1.4",
         "typescript": "^6.0.3",

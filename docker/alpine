@@ -27,21 +27,21 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w" \
-    -o alita_robot .
+    -o fuku_robot .
 
 # Stage 2: Minimal runtime image
 FROM gcr.io/distroless/static-debian12
 USER 65532:65532
 WORKDIR /app
-COPY --from=builder /app/alita_robot /app/alita_robot
+COPY --from=builder /app/fuku_robot /app/fuku_robot
 COPY --from=builder /app/migrations /app/migrations
 EXPOSE 8080
-ENTRYPOINT ["/app/alita_robot"]
+ENTRYPOINT ["/app/fuku_robot"]
 
 # Metadata
 LABEL org.opencontainers.image.authors="Divanshu Chauhan <divkix@divkix.me>"
 LABEL org.opencontainers.image.url="https://divkix.me"
-LABEL org.opencontainers.image.source="https://github.com/divkix/Alita_Robot"
-LABEL org.opencontainers.image.title="Alita Go Robot"
-LABEL org.opencontainers.image.description="Official Alita Go Robot Docker Image"
+LABEL org.opencontainers.image.source="https://github.com/uasneppy/Fuku_Robot"
+LABEL org.opencontainers.image.title="Fuku Go Robot"
+LABEL org.opencontainers.image.description="Official Fuku Go Robot Docker Image"
 LABEL org.opencontainers.image.vendor="Divkix"

@@ -6,7 +6,7 @@ description: Complete reference of inline button callback handlers
 
 # Callback Queries
 
-This page documents all inline button callback handlers in Alita Robot.
+This page documents all inline button callback handlers in Fuku Robot.
 
 ## Overview
 

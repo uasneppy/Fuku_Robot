@@ -1,5 +1,5 @@
 {
-  "name": "Alita Robot Dev",
+  "name": "Fuku Robot Dev",
   "image": "mcr.microsoft.com/devcontainers/go:1.25",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
@@ -44,6 +44,6 @@
   "postStartCommand": "docker compose -f debug.docker-compose.yml up -d postgres redis",
   "remoteUser": "vscode",
   "annotations": {
-    "annotation": "Alita Robot - Telegram Group Management Bot"
+    "annotation": "Fuku Robot - Telegram Group Management Bot"
   }
 }

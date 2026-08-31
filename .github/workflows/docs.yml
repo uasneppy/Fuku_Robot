@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - "docs/**"
-      - "alita/**"
+      - "fuku/**"
       - "scripts/**"
       - ".github/workflows/docs.yml"
       - "locales/**"
@@ -15,7 +15,7 @@ on:
       - main
     paths:
       - "docs/**"
-      - "alita/**"
+      - "fuku/**"
       - "scripts/**"
       - ".github/workflows/docs.yml"
       - "locales/**"

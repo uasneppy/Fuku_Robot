@@ -1,9 +1,9 @@
 ---
 title: Docker Deployment
-description: Deploy Alita Robot using Docker and docker-compose.
+description: Deploy Fuku Robot using Docker and docker-compose.
 ---
 
-Docker is the recommended way to deploy Alita Robot. The provided `docker-compose.yml` includes all required services with optimized configurations for production use.
+Docker is the recommended way to deploy Fuku Robot. The provided `docker-compose.yml` includes all required services with optimized configurations for production use.
 
 ## Prerequisites
 
@@ -17,8 +17,8 @@ Docker is the recommended way to deploy Alita Robot. The provided `docker-compos
 <Steps>
   <Step title="Clone the repository">
     ```bash
-    git clone https://github.com/divkix/Alita_Robot.git
-    cd Alita_Robot
+    git clone https://github.com/uasneppy/Fuku_Robot.git
+    cd Fuku_Robot
     ```
   </Step>
 
@@ -47,16 +47,16 @@ Docker is the recommended way to deploy Alita Robot. The provided `docker-compos
 The `docker-compose.yml` deploys three services:
 
 ```yaml
-# Production Docker Compose for Alita Robot
+# Production Docker Compose for Fuku Robot
 # Uses pre-built images from GHCR
 
 services:
-  alita:
-    image: ghcr.io/divkix/alita_robot:latest
-    container_name: alita-robot
+  fuku:
+    image: ghcr.io/uasneppy/fuku_robot:latest
+    container_name: fuku-robot
     restart: always
     environment:
-      DATABASE_URL: postgresql://alita:alita@postgres:5432/alita
+      DATABASE_URL: postgresql://fuku:fuku@postgres:5432/fuku
       REDIS_ADDRESS: redis:6379
       REDIS_PASSWORD: redis
       AUTO_MIGRATE: "true"
@@ -76,7 +76,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "/app/alita_robot", "--health"]
+      test: ["CMD", "/app/fuku_robot", "--health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -91,17 +91,17 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    container_name: alita-postgres
+    container_name: fuku-postgres
     restart: always
     environment:
-      POSTGRES_USER: alita
-      POSTGRES_PASSWORD: alita
-      POSTGRES_DB: alita
+      POSTGRES_USER: fuku
+      POSTGRES_PASSWORD: fuku
+      POSTGRES_DB: fuku
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U alita -d alita"]
+      test: ["CMD-SHELL", "pg_isready -U fuku -d fuku"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -113,7 +113,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: alita-redis
+    container_name: fuku-redis
     restart: always
     command: redis-server --requirepass redis
     healthcheck:
@@ -133,13 +133,13 @@ volumes:
 
 ## Service Descriptions
 
-### alita (Bot Service)
+### fuku (Bot Service)
 
 The main Telegram bot service.
 
 | Configuration | Value | Description |
 |--------------|-------|-------------|
-| **Image** | `ghcr.io/divkix/alita_robot:latest` | Pre-built image from GitHub Container Registry |
+| **Image** | `ghcr.io/uasneppy/fuku_robot:latest` | Pre-built image from GitHub Container Registry |
 | **Port** | 8080 | HTTP server for health, metrics, and webhooks |
 | **Memory Limit** | 1GB | Maximum memory allocation |
 | **Memory Reservation** | 256MB | Guaranteed minimum memory |
@@ -200,7 +200,7 @@ The compose file includes recommended resource limits:
 
 | Service | Memory Limit | CPU Limit | Use Case |
 |---------|-------------|-----------|----------|
-| alita | 1GB | 1.0 | Handles bot traffic |
+| fuku | 1GB | 1.0 | Handles bot traffic |
 | postgres | 512MB | 0.5 | Database operations |
 | redis | 256MB | 0.25 | Caching |
 
@@ -246,12 +246,12 @@ deploy:
   </Tab>
   <Tab title="Bot Only">
     ```bash
-    docker compose logs -f alita
+    docker compose logs -f fuku
     ```
   </Tab>
   <Tab title="Last 100 Lines">
     ```bash
-    docker compose logs --tail=100 alita
+    docker compose logs --tail=100 fuku
     ```
   </Tab>
   <Tab title="PostgreSQL">
@@ -266,7 +266,7 @@ deploy:
 ### Restart the bot
 
 ```bash
-docker compose restart alita
+docker compose restart fuku
 ```
 
 ### Stop all services
@@ -288,7 +288,7 @@ docker compose down -v
 ### Access PostgreSQL shell
 
 ```bash
-docker compose exec postgres psql -U alita -d alita
+docker compose exec postgres psql -U fuku -d fuku
 ```
 
 ### Access Redis CLI
@@ -322,7 +322,7 @@ The bot includes built-in health checks accessible at `http://localhost:8080/hea
 Check the logs for error messages:
 
 ```bash
-docker compose logs alita
+docker compose logs fuku
 ```
 
 Common issues:
@@ -332,7 +332,7 @@ Common issues:
 
 ### Database connection errors
 
-Ensure postgres is healthy before alita starts:
+Ensure postgres is healthy before fuku starts:
 
 ```bash
 docker compose ps

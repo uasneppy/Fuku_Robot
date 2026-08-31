@@ -1,4 +1,4 @@
-# French locale for Alita Robot
+# French locale for Fuku Robot
 # Language metadata
 lang_sample: Bonjour, je suis un bot de gestion de groupe
 language_flag: 🇫🇷
@@ -682,7 +682,7 @@ greetings_clean_service_not: "Je ne supprime actuellement pas les messages de re
 # Filters module strings
 filters_help_msg: |
   Les filtres ne sont pas sensibles à la casse ; chaque fois que quelqu'un dit vos mots
-  déclencheurs, Alita répondra autre chose ! Cela peut être utilisé pour créer vos propres commandes,
+  déclencheurs, Fuku répondra autre chose ! Cela peut être utilisé pour créer vos propres commandes,
   si désiré.
 
 
@@ -1072,14 +1072,14 @@ extraction_invalid_time_format: "Format de temps invalide spécifié."
 help_about: "@%s est l'un des gestionnaires de groupe les plus rapides et les plus complets.
 
 
-  Alita ✨ est développé et activement maintenu par @DivideProjects !
+  Fuku ✨ est développé et activement maintenu par @DivideProjects !
 
 
-  Alita est en ligne depuis 2020 et a servi des milliers de groupes avec des centaines
+  Fuku est en ligne depuis 2020 et a servi des milliers de groupes avec des centaines
   de milliers d'utilisateurs !
 
 
-  <b>Pourquoi Alita :</b>
+  <b>Pourquoi Fuku :</b>
 
   - Simple : Utilisation facile et compatible avec de nombreuses commandes de bot.
 
@@ -1090,10 +1090,10 @@ help_about: "@%s est l'un des gestionnaires de groupe les plus rapides et les pl
 
 
   <b>Version actuelle :</b> %s"
-help_configuration_step-1: "Bienvenue dans la configuration d'Alita
+help_configuration_step-1: "Bienvenue dans la configuration d'Fuku
 
 
-  La première chose à faire est d'ajouter Alita ✨ à votre groupe ! Pour ce faire, appuyez sur le
+  La première chose à faire est d'ajouter Fuku ✨ à votre groupe ! Pour ce faire, appuyez sur le
   bouton ci-dessous et sélectionnez votre groupe, puis appuyez sur Terminé pour continuer le tutoriel."
 help_configuration_step-2: "Ok, bien joué !
 
@@ -1142,8 +1142,8 @@ help_donatetext: "Vous voulez faire un don ? Incroyable !
   Vous pouvez faire un don en contactant mon propriétaire ici : @DivideProjectsBot"
 help_pm_questions: "Salut :) Envoyez-moi un MP si vous avez des questions sur mon utilisation !"
 help_config_private_only: La configuration ne fonctionne qu'en privé
-help_info_about_header: "Info & À propos\n\nVoici quelques FAQ sur Alita."
-help_news_channel_text: "Rejoignez mon <a href='https://t.me/AlitaRobotUpdates'>canal d'actualités</a> pour obtenir des informations sur toutes les dernières mises à jour."
+help_info_about_header: "Info & À propos\n\nVoici quelques FAQ sur Fuku."
+help_news_channel_text: "Rejoignez mon <a href='https://t.me/FukuRobotUpdates'>canal d'actualités</a> pour obtenir des informations sur toutes les dernières mises à jour."
 help_all_commands_usage: "Toutes les commandes peuvent être utilisées avec : / ou !"
 help_button_about_me: "À propos de moi 👨‍💻"
 help_button_news_channel: "Canal d'actualités 📢"
@@ -1151,7 +1151,7 @@ help_button_support_group: "Groupe de support 👥"
 help_button_configuration: "Configuration ⚙️"
 help_button_about: "À propos ✨"
 help_button_add_to_chat: "➕ Ajoute-moi au chat !"
-help_button_add_alita: "➕ Ajouter Alita au chat !"
+help_button_add_fuku: "➕ Ajouter Fuku au chat !"
 help_button_commands_help: "📚 Commandes & Aide"
 help_button_language: "Langue 🌏"
 help_click_button_info: "Cliquez sur le bouton ci-dessous pour obtenir des infos sur moi !"
@@ -1161,10 +1161,10 @@ help_markdown_help_button: "Aide Markdown"
 help_markdown_formatting_button: "Formatage Markdown"
 help_fillings_button: "Remplissages"
 help_random_content_button: "Contenu aléatoire"
-help_bot_intro: "Salut ! Je m'appelle Alita ✨.\nJe suis là pour vous aider à gérer vos groupes !\nTapez /help pour en savoir plus sur comment m'utiliser au maximum.\n"
+help_bot_intro: "Salut ! Je m'appelle Fuku ✨.\nJe suis là pour vous aider à gérer vos groupes !\nTapez /help pour en savoir plus sur comment m'utiliser au maximum.\n"
 help_pm_intro: |
   Salut %s !
-  Je m'appelle Alita ✨.
+  Je m'appelle Fuku ✨.
 
   Je suis un bot de gestion de groupe, là pour vous aider à naviguer et maintenir l'ordre dans vos groupes !
   J'ai plein de fonctionnalités pratiques, comme le contrôle du flood, un système d'avertissements, un système de notes, et même des réponses prédéfinies sur certains mots-clés.
@@ -1341,7 +1341,7 @@ reports_help_msg: |
   @admin.
 
 
-  Pour signaler un utilisateur, répondez simplement à son message avec @admin ou /report ; Alita
+  Pour signaler un utilisateur, répondez simplement à son message avec @admin ou /report ; Fuku
   répondra alors avec un message indiquant que les admins ont été notifiés.
 
   Vous DEVEZ répondre à un message pour signaler un utilisateur ; vous ne pouvez pas utiliser @admin
@@ -1478,11 +1478,11 @@ math_operator_multiply: "×"
 
 # Formatting module additional strings
 formatting_press_button: "Appuyez sur le bouton ci-dessous pour obtenir l'aide Markdown !"
-formatting_large_options: "Alita supporte un grand nombre d'options de formatage pour rendre vos messages plus expressifs. Jetez un œil !"
+formatting_large_options: "Fuku supporte un grand nombre d'options de formatage pour rendre vos messages plus expressifs. Jetez un œil !"
 
 # Languages help module strings
 help_help_msg:
-  "Le point d'entrée principal et le système de navigation d'Alita Robot.
+  "Le point d'entrée principal et le système de navigation d'Fuku Robot.
 
   *Commandes de navigation:*
 
@@ -1502,7 +1502,7 @@ languages_help_msg: "Vous n'arrivez pas à changer la langue du bot ?
   groupe.
 
 
-  Vous pouvez nous aider à apporter le bot dans plus de langues en contribuant sur [Crowdin](https://crowdin.com/project/alita_robot)"
+  Vous pouvez nous aider à apporter le bot dans plus de langues en contribuant sur [Crowdin](https://crowdin.com/project/fuku_robot)"
 
 # Antiflood module help message
 antiflood_help_msg: |
@@ -1944,7 +1944,7 @@ users_extended_docs: |
   • D'autres modules, comme <code>/info</code>, dépendent des données collectées par ce module
 
 # Formatting module help message
-formatting_help_msg: "Alita supporte un grand nombre d'options de formatage pour rendre vos messages plus expressifs. Jetez un œil en cliquant sur les boutons ci-dessous !"
+formatting_help_msg: "Fuku supporte un grand nombre d'options de formatage pour rendre vos messages plus expressifs. Jetez un œil en cliquant sur les boutons ci-dessous !"
 
 # Formatting module - Markdown documentation
 formatting_markdown: |
@@ -2006,7 +2006,7 @@ formatting_random: |
   Cela choisira aléatoirement entre envoyer le premier message, "bonjour", ou le second
   message, "comment ça va".
 
-  Utilisez ceci pour rendre Alita un peu plus personnalisé ! (fonctionne uniquement dans les filtres/notes)
+  Utilisez ceci pour rendre Fuku un peu plus personnalisé ! (fonctionne uniquement dans les filtres/notes)
 
   Exemple de message de bienvenue :
 

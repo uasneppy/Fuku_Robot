@@ -56,7 +56,7 @@ func TestPollingLoadsModulesBeforeStartingPolling(t *testing.T) {
 	}
 
 	// The polling block in main() calls postInit(...) then updater.StartPolling(...).
-	// postInit itself (defined after main()) calls alita.LoadModules(dispatcher).
+	// postInit itself (defined after main()) calls fuku.LoadModules(dispatcher).
 	// Check execution order by verifying the call site in the polling branch.
 	pollingEnd := strings.Index(source[pollingStart:], "\n}")
 	if pollingEnd == -1 {
@@ -77,24 +77,24 @@ func TestPollingLoadsModulesBeforeStartingPolling(t *testing.T) {
 		t.Fatal("polling branch starts polling before calling postInit")
 	}
 
-	// Verify that postInit itself calls alita.LoadModules before returning.
+	// Verify that postInit itself calls fuku.LoadModules before returning.
 	sourceAfterPolling := source[pollingStart+pollingEnd:]
 	postInitFunc := strings.Index(sourceAfterPolling, "func postInit(")
 	if postInitFunc == -1 {
 		t.Fatal("postInit function definition is missing")
 	}
 	postInitBody := sourceAfterPolling[postInitFunc:]
-	loadModules := strings.Index(postInitBody, "alita.LoadModules(")
+	loadModules := strings.Index(postInitBody, "fuku.LoadModules(")
 	postInitEnd := strings.Index(postInitBody, "\n}\n")
 	if loadModules == -1 || (postInitEnd != -1 && loadModules > postInitEnd) {
-		t.Fatal("postInit must call alita.LoadModules")
+		t.Fatal("postInit must call fuku.LoadModules")
 	}
 }
 
 func TestAntiSpamCleanupDefersUnlockAndRecovers(t *testing.T) {
 	t.Parallel()
 
-	source := readRepoFile(t, "alita", "modules", "antispam.go")
+	source := readRepoFile(t, "fuku", "modules", "antispam.go")
 	if !strings.Contains(source, "error_handling.RecoverFromPanic") {
 		t.Fatal("antiSpamCleanupLoop must recover from panics")
 	}
@@ -106,7 +106,7 @@ func TestAntiSpamCleanupDefersUnlockAndRecovers(t *testing.T) {
 func TestCaptchaBackgroundGoroutinesRecoverFromPanics(t *testing.T) {
 	t.Parallel()
 
-	source := readRepoFile(t, "alita", "modules", "captcha.go")
+	source := readRepoFile(t, "fuku", "modules", "captcha.go")
 	required := []string{
 		`error_handling.RecoverFromPanic("CaptchaCleanup"`,
 		`error_handling.RecoverFromPanic("CaptchaCleanupExpiredAttempts"`,
@@ -124,7 +124,7 @@ func TestCaptchaBackgroundGoroutinesRecoverFromPanics(t *testing.T) {
 func TestLoadModulesDelegatesToRegistryOnly(t *testing.T) {
 	t.Parallel()
 
-	source := readRepoFile(t, "alita", "main.go")
+	source := readRepoFile(t, "fuku", "main.go")
 	start := strings.Index(source, "func LoadModules(")
 	if start == -1 {
 		t.Fatal("LoadModules function is missing")
@@ -153,7 +153,7 @@ func TestLoadModulesDelegatesToRegistryOnly(t *testing.T) {
 func TestModuleLoadersAreRegisteredWithRegistry(t *testing.T) {
 	t.Parallel()
 
-	files, err := filepath.Glob(filepath.Join("..", "..", "alita", "modules", "*.go"))
+	files, err := filepath.Glob(filepath.Join("..", "..", "fuku", "modules", "*.go"))
 	if err != nil {
 		t.Fatalf("failed to list module files: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestModuleLoadersAreRegisteredWithRegistry(t *testing.T) {
 func TestHelpRegistryDoesNotExposeGlobalMutableSingleton(t *testing.T) {
 	t.Parallel()
 
-	source := readRepoFile(t, "alita", "modules", "core.go")
+	source := readRepoFile(t, "fuku", "modules", "core.go")
 	if regexp.MustCompile(`(?m)^var\s+HelpModule\b`).MatchString(source) {
 		t.Fatal("help registry must not expose a package-level HelpModule singleton")
 	}
@@ -205,7 +205,7 @@ func TestHelpRegistryDoesNotExposeGlobalMutableSingleton(t *testing.T) {
 func TestBotLockApprovedBypassRequiresPositiveSenderID(t *testing.T) {
 	t.Parallel()
 
-	source := readRepoFile(t, "alita", "modules", "locks.go")
+	source := readRepoFile(t, "fuku", "modules", "locks.go")
 	start := strings.Index(source, "func (moduleStruct) botLockHandler")
 	if start == -1 {
 		t.Fatal("botLockHandler function is missing")
@@ -227,7 +227,7 @@ func TestCodeUsesSafeCallbackQueryAccessor(t *testing.T) {
 	t.Parallel()
 
 	var files []string
-	root := filepath.Join("..", "..", "alita")
+	root := filepath.Join("..", "..", "fuku")
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err

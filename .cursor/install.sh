@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent repository bootstrap for the Alita Robot Cloud Agent environment.
+# Idempotent repository bootstrap for the Fuku Robot Cloud Agent environment.
 # Installs the system services (PostgreSQL, Redis), the pinned linter, and Go
 # module dependencies. Services themselves are started per-boot in start.sh.
 set -euo pipefail

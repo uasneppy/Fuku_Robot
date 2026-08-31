@@ -6,7 +6,7 @@ description: Configuration reference for all environment variables
 
 # ⚙️ Environment Variables
 
-This page documents all environment variables used to configure Alita Robot.
+This page documents all environment variables used to configure Fuku Robot.
 
 ## 📂 Activity monitoring configuration
 
@@ -278,7 +278,7 @@ Service name for trace identification.
 |----------|-------|
 | **Type** | `string` |
 | **Required** | No |
-| **Default** | `alita_robot` |
+| **Default** | `fuku_robot` |
 
 ### `OTEL_TRACES_SAMPLE_RATE`
 
@@ -504,7 +504,7 @@ MIGRATIONS_PATH=# path to migration files (default: migrations)
 OTEL_EXPORTER_CONSOLE=# enable console trace exporter (default: false)
 OTEL_EXPORTER_OTLP_ENDPOINT=# OTLP gRPC endpoint (e.g., localhost:4317)
 OTEL_EXPORTER_OTLP_INSECURE=# use insecure OTLP gRPC (default: false)
-OTEL_SERVICE_NAME=# service name for traces (default: alita_robot)
+OTEL_SERVICE_NAME=# service name for traces (default: fuku_robot)
 OTEL_TRACES_SAMPLE_RATE=# trace sampling rate 0.0-1.0 (default: 1.0)
 REDIS_DB=# Redis database number (default: 1)
 REDIS_PASSWORD=# Redis password

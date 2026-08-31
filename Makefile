@@ -31,13 +31,13 @@ lint:
 	$(GOLANGCI_LINT_CMD) run
 
 test:
-	$(GO_CMD) test -tags testtools -v -race -coverprofile=coverage.out -coverpkg=$$(go list ./... | grep -v -E '(^github.com/divkix/Alita_Robot$$|scripts/)' | paste -sd, -) -count=1 -timeout 10m ./...
+	$(GO_CMD) test -tags testtools -v -race -coverprofile=coverage.out -coverpkg=$$(go list ./... | grep -v -E '(^github.com/uasneppy/Fuku_Robot$$|scripts/)' | paste -sd, -) -count=1 -timeout 10m ./...
 
 test-postgres-integrity:
 	$(GO_CMD) test -tags testtools -v -race -p 1 -count=1 -timeout 10m \
 		-run '^(TestAllModulesRoundTripEveryMeaningfulField|TestImportChatDataRollsBackEarlierModules|TestImportWarnsCreatesMissingParents|TestLegacyBackupPreservesFieldsThatVersionDidNotExport|TestDeleteCaptchaAttemptByIDAtomicSingleClaim|TestCreateMutedUserUpdatesExistingSchedule|TestCreateMutedUserConcurrentUpsert|TestCreateCaptchaAttemptReplacesExistingChallenge|TestCreateCaptchaAttemptIfEnabledRejectsDisabledChat|TestCaptchaAttemptClaimsSchedulePermissionRestore|TestDeleteMutedUserIfUnchangedPreservesNewerSchedule|TestIncrementCaptchaAttemptsRejectsRefreshedChallenge|TestUpdateChannelClearsAndReassignsNormalizedUsername|TestConcurrentConnectKeepsOneRowPerUser|TestAddFilterConcurrentInsert|TestAddNoteConcurrentInsert|TestGetUserReportSettings_Defaults|TestConcurrentReportBlockListUpdates|TestWarnUserCreatesMissingParentRows|TestConcurrentWarnAndRemovePreserveCount)$$' \
-		./alita/db/backup ./alita/db/captcha ./alita/db/channels ./alita/db/connections \
-		./alita/db/filters ./alita/db/notes ./alita/db/reports ./alita/db/warns
+		./fuku/db/backup ./fuku/db/captcha ./fuku/db/channels ./fuku/db/connections \
+		./fuku/db/filters ./fuku/db/notes ./fuku/db/reports ./fuku/db/warns
 
 check-translations:
 	@echo "🔍 Checking for missing translations..."
@@ -87,7 +87,7 @@ generate-docs:
 check-docs:
 	@echo "🔍 Checking docs generation for drift..."
 	@set -e; \
-	TMP=$$(mktemp -d /tmp/alita-docs-check.XXXXXX); \
+	TMP=$$(mktemp -d /tmp/fuku-docs-check.XXXXXX); \
 	trap 'rm -rf "$$TMP"' EXIT; \
 	ROOT=$$(pwd); \
 	cp -R docs/src/content/docs/. "$$TMP"/; \

@@ -1,0 +1,74 @@
+package modules
+
+import (
+	"testing"
+
+	"github.com/uasneppy/Fuku_Robot/fuku/db"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/cache"
+)
+
+func TestFilterOverwriteCacheKeysAndToken(t *testing.T) {
+	if got := filterOverwriteCacheKey("abc123"); got != "fuku:filter_overwrite:abc123" {
+		t.Fatalf("filterOverwriteCacheKey() = %q", got)
+	}
+
+	token, err := newOverwriteToken()
+	if err != nil {
+		t.Fatalf("newOverwriteToken() error = %v", err)
+	}
+	if len(token) != 16 {
+		t.Fatalf("newOverwriteToken() len = %d, want 16 hex chars", len(token))
+	}
+	for _, ch := range token {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			t.Fatalf("newOverwriteToken() contains non-hex character %q in %q", ch, token)
+		}
+	}
+}
+
+func TestFilterOverwriteCacheNoCacheFallbacks(t *testing.T) {
+	withNilCacheMarshal(t)
+
+	data := overwriteFilter{overwriteBase: overwriteBase{
+		ChatID:   -100123,
+		ItemName: "hello",
+		Text:     "world",
+		DataType: 1,
+	}}
+
+	if err := setFilterOverwriteCache("token", data); err == nil {
+		t.Fatal("setFilterOverwriteCache() error = nil, want cache not initialized")
+	}
+	if _, err := getOverwriteCache[overwriteFilter](filterOverwriteCacheKey("token")); err == nil {
+		t.Fatal("getOverwriteCache[overwriteFilter]() error = nil, want cache not initialized")
+	}
+
+	deleteFilterOverwriteCache("token")
+}
+
+func TestFilterOverwriteCacheRoundTripsCurrentData(t *testing.T) {
+	if cache.GetMarshal() == nil {
+		t.Skip("requires cache marshal")
+	}
+
+	current := overwriteFilter{overwriteBase: overwriteBase{
+		ChatID:   -100123,
+		ItemName: "hello",
+		Text:     "current",
+		DataType: db.TEXT,
+	}}
+	if err := setFilterOverwriteCache("token-current", current); err != nil {
+		t.Fatalf("setFilterOverwriteCache() error = %v", err)
+	}
+	got, err := getOverwriteCache[overwriteFilter](filterOverwriteCacheKey("token-current"))
+	if err != nil {
+		t.Fatalf("getOverwriteCache[overwriteFilter]() error = %v", err)
+	}
+	if got.ChatID != current.ChatID || got.ItemName != current.ItemName || got.Text != current.Text {
+		t.Fatalf("getOverwriteCache[overwriteFilter]() = %+v, want %+v", got, current)
+	}
+	deleteFilterOverwriteCache("token-current")
+	if _, err := getOverwriteCache[overwriteFilter](filterOverwriteCacheKey("token-current")); err == nil {
+		t.Fatal("getOverwriteCache[overwriteFilter](deleted) error = nil, want cache miss")
+	}
+}

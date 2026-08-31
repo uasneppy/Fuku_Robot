@@ -1,9 +1,9 @@
 ---
 title: Self-Hosting
-description: Host your own instance of Alita Robot.
+description: Host your own instance of Fuku Robot.
 ---
 
-This guide covers everything you need to deploy your own instance of Alita Robot.
+This guide covers everything you need to deploy your own instance of Fuku Robot.
 
 ## Prerequisites
 
@@ -26,11 +26,11 @@ Docker Compose is the fastest way to get started. It bundles PostgreSQL and Redi
 
 <CardGroup cols={3}>
   <Card title="Docker Compose" href="/self-hosting/docker/" icon="container">
-    <Badge variant="success">Recommended</Badge> The easiest way to deploy Alita. Includes PostgreSQL and Redis out of the box.
+    <Badge variant="success">Recommended</Badge> The easiest way to deploy Fuku. Includes PostgreSQL and Redis out of the box.
 
     ```bash
-    git clone https://github.com/divkix/Alita_Robot.git
-    cd Alita_Robot
+    git clone https://github.com/uasneppy/Fuku_Robot.git
+    cd Fuku_Robot
     cp sample.env .env
     # Edit .env with your configuration
     docker compose up -d
@@ -47,9 +47,9 @@ Docker Compose is the fastest way to get started. It bundles PostgreSQL and Redi
     Compile the bot yourself for development or customization:
 
     ```bash
-    git clone https://github.com/divkix/Alita_Robot.git
-    cd Alita_Robot
-    go build -o alita_robot .
+    git clone https://github.com/uasneppy/Fuku_Robot.git
+    cd Fuku_Robot
+    go build -o fuku_robot .
     ```
   </Card>
 </CardGroup>
@@ -62,7 +62,7 @@ At minimum, you need these environment variables:
 BOT_TOKEN=your_bot_token_from_botfather
 OWNER_ID=your_telegram_user_id
 MESSAGE_DUMP=-100xxxxxxxxxx  # Log channel ID
-DATABASE_URL=postgresql://alita:change-me@localhost:5432/alita
+DATABASE_URL=postgresql://fuku:change-me@localhost:5432/fuku
 ```
 
 Redis itself is also required at runtime. No Redis endpoint variable is needed
@@ -86,7 +86,7 @@ when it is available at the default `localhost:6379`; otherwise set either
 
 ## Database Setup
 
-Alita uses PostgreSQL with automatic migrations:
+Fuku uses PostgreSQL with automatic migrations:
 
 ```bash
 # Enable auto-migration

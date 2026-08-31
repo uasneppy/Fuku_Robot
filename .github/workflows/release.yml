@@ -28,11 +28,11 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: alita_test
+          POSTGRES_DB: fuku_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d alita_test"
+          --health-cmd "pg_isready -U postgres -d fuku_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -50,7 +50,7 @@ jobs:
       OWNER_ID: "1"
       MESSAGE_DUMP: "1"
       REDIS_ADDRESS: "localhost:6379"
-      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/alita_test?sslmode=disable"
+      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/fuku_test?sslmode=disable"
       AUTO_MIGRATE: "false"
       USE_WEBHOOKS: "false"
       DEBUG: "false"
@@ -77,7 +77,7 @@ jobs:
             tag="v${INPUT_TAG#v}"
             bash scripts/bump_version.sh "$tag"
           fi
-          git add alita/config/config.go main.go
+          git add fuku/config/config.go main.go
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "tree=$(git write-tree)" >> "$GITHUB_OUTPUT"
 
@@ -98,8 +98,8 @@ jobs:
 
       - name: Test release build
         run: |
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o alita_robot .
-          if [ ! -f alita_robot ]; then
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o fuku_robot .
+          if [ ! -f fuku_robot ]; then
             echo "Build failed"
             exit 1
           fi
@@ -107,12 +107,12 @@ jobs:
 
       - name: Verify repository migration chain
         env:
-          ALITA_TEST_MIGRATION_CHAIN: "true"
-        run: go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./alita/db/migrations
+          FUKU_TEST_MIGRATION_CHAIN: "true"
+        run: go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations
 
       - name: Run PostgreSQL integrity tests
         env:
-          ALITA_TEST_DATABASE: "true"
+          FUKU_TEST_DATABASE: "true"
         run: make test-postgres-integrity
 
       - name: Run full test suite
@@ -194,7 +194,7 @@ jobs:
             exit 1
           fi
           bash scripts/bump_version.sh "$TAG"
-          git add alita/config/config.go main.go
+          git add fuku/config/config.go main.go
           if [ "$(git write-tree)" != "$TESTED_TREE" ]; then
             echo "::error::release tree differs from the tree that passed checks" >&2
             exit 1
@@ -240,8 +240,8 @@ jobs:
         run: |
           set -euo pipefail
           ver="${TAG#v}"
-          if ! grep -qF "BotVersion:  \"${ver}\"" alita/config/config.go; then
-            echo "::error::BotVersion in alita/config/config.go != ${ver} — run 'make bump-version TAG=${TAG}', commit, and re-tag" >&2
+          if ! grep -qF "BotVersion:  \"${ver}\"" fuku/config/config.go; then
+            echo "::error::BotVersion in fuku/config/config.go != ${ver} — run 'make bump-version TAG=${TAG}', commit, and re-tag" >&2
             exit 1
           fi
           if ! grep -qF "version = \"${TAG}\"" main.go; then
@@ -322,7 +322,7 @@ jobs:
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/divkix/alita_robot:latest
+          image-ref: ghcr.io/uasneppy/fuku_robot:latest
           format: table
           exit-code: 0
           severity: CRITICAL,HIGH
@@ -331,4 +331,4 @@ jobs:
         run: |
           echo "Release completed successfully!"
           echo "Artifacts published to GitHub Releases"
-          echo "Docker images available at ghcr.io/divkix/alita_robot"
+          echo "Docker images available at ghcr.io/uasneppy/fuku_robot"

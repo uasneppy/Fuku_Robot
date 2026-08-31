@@ -1,13 +1,13 @@
 ---
 title: Caching Architecture
-description: Redis caching implementation and patterns in Alita Robot.
+description: Redis caching implementation and patterns in Fuku Robot.
 ---
 
-Alita Robot uses Redis as its caching layer to reduce database load and improve response times. This document explains the caching architecture, patterns, and best practices.
+Fuku Robot uses Redis as its caching layer to reduce database load and improve response times. This document explains the caching architecture, patterns, and best practices.
 
 ## Cache Configuration
 
-The cache is initialized in `alita/utils/cache/cache.go`:
+The cache is initialized in `fuku/utils/cache/cache.go`:
 
 ```go
 package cache
@@ -66,7 +66,7 @@ The cache initialization uses exponential backoff (1s, 2s, 4s, 8s, 16s) for Redi
 
 ## TTL Values
 
-Cache Time-To-Live (TTL) values are defined in `alita/db/cache/ttl.go`:
+Cache Time-To-Live (TTL) values are defined in `fuku/db/cache/ttl.go`:
 
 | Constant | Duration | Used For |
 |----------|----------|----------|
@@ -112,33 +112,33 @@ Choose TTL based on how frequently data changes:
 
 ## Key Patterns
 
-All cache keys use the `alita:` prefix for namespace isolation:
+All cache keys use the `fuku:` prefix for namespace isolation:
 
 | Key Pattern | Description |
 |-------------|-------------|
-| `alita:chat_settings:{chatId}` | Legacy invalidation target only — settings are read via `alita:chat:{chatId}` |
-| `alita:user_lang:{userId}` | User language preference |
-| `alita:chat_lang:{chatId}` | Chat language preference |
-| `alita:filter_list:{chatId}` | List of filters for chat |
-| `alita:blacklist:{chatId}` | Blacklist settings |
-| `alita:warn_settings:{chatId}` | Warning settings |
-| `alita:disabled_cmds:{chatId}` | Disabled commands |
-| `alita:anonAdmin:{chatId}:{msgId}` | Anonymous admin verification (20s TTL) |
-| `alita:adminCache:{chatId}` | Cached admin list for a chat (30min TTL) |
-| `alita:captcha_settings:{chatId}` | Captcha settings (30 min TTL) |
-| `alita:approvals:{chatId}` | Approved users list (30 min TTL) |
-| `alita:antiraid:state:{chatId}` | Live anti-raid state (TTL covers the requested raid expiry, capped at 24h) |
-| `alita:antiraid:joins:{chatId}` | Anti-raid join tracking (60s counting window) |
-| `alita:locks_map:{chatId}` | Lock status (1 hour TTL, from optimized queries) |
-| `alita:user:{userId}` | User basic info (1 hour TTL, from optimized queries) |
-| `alita:chat:{chatId}` | Chat basic info (30 min TTL, from optimized queries) |
-| `alita:antiflood:{chatId}` | Antiflood settings (30 min TTL, from optimized queries) |
-| `alita:channel:{chatId}` | Channel settings (30 min TTL, from optimized queries) |
+| `fuku:chat_settings:{chatId}` | Legacy invalidation target only — settings are read via `fuku:chat:{chatId}` |
+| `fuku:user_lang:{userId}` | User language preference |
+| `fuku:chat_lang:{chatId}` | Chat language preference |
+| `fuku:filter_list:{chatId}` | List of filters for chat |
+| `fuku:blacklist:{chatId}` | Blacklist settings |
+| `fuku:warn_settings:{chatId}` | Warning settings |
+| `fuku:disabled_cmds:{chatId}` | Disabled commands |
+| `fuku:anonAdmin:{chatId}:{msgId}` | Anonymous admin verification (20s TTL) |
+| `fuku:adminCache:{chatId}` | Cached admin list for a chat (30min TTL) |
+| `fuku:captcha_settings:{chatId}` | Captcha settings (30 min TTL) |
+| `fuku:approvals:{chatId}` | Approved users list (30 min TTL) |
+| `fuku:antiraid:state:{chatId}` | Live anti-raid state (TTL covers the requested raid expiry, capped at 24h) |
+| `fuku:antiraid:joins:{chatId}` | Anti-raid join tracking (60s counting window) |
+| `fuku:locks_map:{chatId}` | Lock status (1 hour TTL, from optimized queries) |
+| `fuku:user:{userId}` | User basic info (1 hour TTL, from optimized queries) |
+| `fuku:chat:{chatId}` | Chat basic info (30 min TTL, from optimized queries) |
+| `fuku:antiflood:{chatId}` | Antiflood settings (30 min TTL, from optimized queries) |
+| `fuku:channel:{chatId}` | Channel settings (30 min TTL, from optimized queries) |
 
 ### Anonymous Admin Verification Flow
 
 When an anonymous admin uses a command, the bot:
-1. Stores the original message in cache with key `alita:anonAdmin:{chatId}:{msgId}`
+1. Stores the original message in cache with key `fuku:anonAdmin:{chatId}:{msgId}`
 2. Sends a verification button to the chat
 3. When clicked, the callback handler retrieves the original message from cache via `cache.GetMarshal().Get`
 4. The bot verifies the user is an admin and executes the original command
@@ -147,7 +147,7 @@ When an anonymous admin uses a command, the bot:
 // Store original message for anonymous admin
 cache.GetMarshal().Set(
     cache.Context,
-    fmt.Sprintf("alita:anonAdmin:%d:%d", chatId, msgId),
+    fmt.Sprintf("fuku:anonAdmin:%d:%d", chatId, msgId),
     originalMessage,
     store.WithExpiration(20*time.Second),  // Short TTL - button expires quickly
 )
@@ -156,7 +156,7 @@ cache.GetMarshal().Set(
 var originalMsg gotgbot.Message
 _, err := cache.GetMarshal().Get(
     cache.Context,
-    fmt.Sprintf("alita:anonAdmin:%d:%d", chatId, msgId),
+    fmt.Sprintf("fuku:anonAdmin:%d:%d", chatId, msgId),
     &originalMsg,
 )
 ```
@@ -169,35 +169,35 @@ The anonymous admin verification window is intentionally short. If the admin doe
 
 ```go
 func chatSettingsCacheKey(chatID int64) string {
-    return fmt.Sprintf("alita:chat_settings:%d", chatID)
+    return fmt.Sprintf("fuku:chat_settings:%d", chatID)
 }
 
 func userLanguageCacheKey(userID int64) string {
-    return fmt.Sprintf("alita:user_lang:%d", userID)
+    return fmt.Sprintf("fuku:user_lang:%d", userID)
 }
 
 func chatLanguageCacheKey(chatID int64) string {
-    return fmt.Sprintf("alita:chat_lang:%d", chatID)
+    return fmt.Sprintf("fuku:chat_lang:%d", chatID)
 }
 
 func filterListCacheKey(chatID int64) string {
-    return fmt.Sprintf("alita:filter_list:%d", chatID)
+    return fmt.Sprintf("fuku:filter_list:%d", chatID)
 }
 
 func blacklistCacheKey(chatID int64) string {
-    return fmt.Sprintf("alita:blacklist:%d", chatID)
+    return fmt.Sprintf("fuku:blacklist:%d", chatID)
 }
 
 func warnSettingsCacheKey(chatID int64) string {
-    return fmt.Sprintf("alita:warn_settings:%d", chatID)
+    return fmt.Sprintf("fuku:warn_settings:%d", chatID)
 }
 
 func disabledCommandsCacheKey(chatID int64) string {
-    return fmt.Sprintf("alita:disabled_cmds:%d", chatID)
+    return fmt.Sprintf("fuku:disabled_cmds:%d", chatID)
 }
 
 func captchaSettingsCacheKey(chatID int64) string {
-    return fmt.Sprintf("alita:captcha_settings:%d", chatID)
+    return fmt.Sprintf("fuku:captcha_settings:%d", chatID)
 }
 ```
 
@@ -372,7 +372,7 @@ func LoadAdminCache(b *gotgbot.Bot, chatID int64) AdminCache {
     }
 
     // Store in Redis via cache.GetMarshal().Set
-    cache.GetMarshal().Set(cache.Context, fmt.Sprintf("alita:adminCache:%d", chatID),
+    cache.GetMarshal().Set(cache.Context, fmt.Sprintf("fuku:adminCache:%d", chatID),
         adminCache, store.WithExpiration(30*time.Minute))
 
     return adminCache
@@ -510,9 +510,9 @@ func GetSettings(chatID int64) *Settings {
 
 ```go
 // GOOD - Consistent prefix and format
-"alita:chat_settings:{chatId}"
-"alita:user_lang:{userId}"
-"alita:filter_list:{chatId}"
+"fuku:chat_settings:{chatId}"
+"fuku:user_lang:{userId}"
+"fuku:filter_list:{chatId}"
 
 // BAD - Inconsistent patterns
 "settings-{chatId}"
@@ -521,7 +521,7 @@ func GetSettings(chatID int64) *Settings {
 ```
 
 :::note[Key format convention]
-All keys follow the pattern `alita:{domain}:{identifier}`. Use underscores within domain names (e.g., `chat_settings`, `user_lang`). Use colons as separators between segments. This makes it easy to use Redis `KEYS alita:chat_settings:*` for debugging.
+All keys follow the pattern `fuku:{domain}:{identifier}`. Use underscores within domain names (e.g., `chat_settings`, `user_lang`). Use colons as separators between segments. This makes it easy to use Redis `KEYS fuku:chat_settings:*` for debugging.
 :::
 
 ### 5. Set Timeout on Cache Operations
@@ -556,19 +556,19 @@ Monitor cache performance via:
 # Check cache key count
 redis-cli DBSIZE
 
-# View all Alita keys
-redis-cli KEYS "alita:*"
+# View all Fuku keys
+redis-cli KEYS "fuku:*"
 
 # Check specific key TTL
-redis-cli TTL "alita:chat_settings:123456789"
+redis-cli TTL "fuku:chat_settings:123456789"
 
 # Memory usage
-redis-cli MEMORY USAGE "alita:chat_settings:123456789"
+redis-cli MEMORY USAGE "fuku:chat_settings:123456789"
 ```
 
 :::tip[Cache operations]
 Use `cache.GetMarshal().Get/Set/Delete` for direct cache operations, and prefer
-`GetFromCacheOrLoad()` in `alita/db/cache/loader.go` for DB-backed cached reads
+`GetFromCacheOrLoad()` in `fuku/db/cache/loader.go` for DB-backed cached reads
 with singleflight protection to prevent cache stampedes.
 :::
 

@@ -16,29 +16,29 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
-	"github.com/divkix/Alita_Robot/alita/utils/constants"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/constants"
 
-	"github.com/divkix/Alita_Robot/alita"
-	"github.com/divkix/Alita_Robot/alita/config"
-	"github.com/divkix/Alita_Robot/alita/db"
-	dbmonitoring "github.com/divkix/Alita_Robot/alita/db/monitoring"
-	"github.com/divkix/Alita_Robot/alita/i18n"
-	"github.com/divkix/Alita_Robot/alita/modules"
-	"github.com/divkix/Alita_Robot/alita/utils/cache"
-	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
-	"github.com/divkix/Alita_Robot/alita/utils/errors"
-	"github.com/divkix/Alita_Robot/alita/utils/formatting"
-	"github.com/divkix/Alita_Robot/alita/utils/helpers"
-	"github.com/divkix/Alita_Robot/alita/utils/httpserver"
-	"github.com/divkix/Alita_Robot/alita/utils/monitoring"
-	"github.com/divkix/Alita_Robot/alita/utils/shutdown"
-	"github.com/divkix/Alita_Robot/alita/utils/tracing"
+	"github.com/uasneppy/Fuku_Robot/fuku"
+	"github.com/uasneppy/Fuku_Robot/fuku/config"
+	"github.com/uasneppy/Fuku_Robot/fuku/db"
+	dbmonitoring "github.com/uasneppy/Fuku_Robot/fuku/db/monitoring"
+	"github.com/uasneppy/Fuku_Robot/fuku/i18n"
+	"github.com/uasneppy/Fuku_Robot/fuku/modules"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/cache"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/error_handling"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/errors"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/formatting"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/helpers"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/httpserver"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/monitoring"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/shutdown"
+	"github.com/uasneppy/Fuku_Robot/fuku/utils/tracing"
 )
 
 //go:embed locales
 var Locales embed.FS
 
-// main initializes and starts the Alita Robot Telegram bot.
+// main initializes and starts the Fuku Robot Telegram bot.
 // It sets up monitoring, database connections, webhook/polling mode,
 // loads all modules, and handles graceful shutdown.
 func main() {
@@ -143,7 +143,7 @@ func main() {
 	botUsername := resolveBotUsername(b)
 
 	// some initial checks before running bot
-	if err := alita.InitialChecks(b); err != nil {
+	if err := fuku.InitialChecks(b); err != nil {
 		log.Fatalf("Initial checks failed: %v", err)
 	}
 
@@ -443,11 +443,11 @@ func dispatcherErrorHandler(_ *gotgbot.Bot, ctx *ext.Context, err error) ext.Dis
 // It loads modules, restores captcha state, sets bot commands, and sends the
 // startup notification.
 func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
-	alita.LoadModules(d)
+	fuku.LoadModules(d)
 	if err := modules.StartCaptchaLifecycle(b); err != nil {
 		log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 	}
-	log.Infof("[Modules] Loaded modules: %s", alita.ListModules())
+	log.Infof("[Modules] Loaded modules: %s", fuku.ListModules())
 
 	config.AppConfig.WorkingMode = mode
 
@@ -472,7 +472,7 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 
 	// send startup message to log group
 	_, err = b.SendMessage(config.AppConfig.MessageDump,
-		fmt.Sprintf("<b>Started Bot!</b>\n<b>Mode:</b> %s\n<b>Loaded Modules:</b>\n%s", mode, alita.ListModules()),
+		fmt.Sprintf("<b>Started Bot!</b>\n<b>Mode:</b> %s\n<b>Loaded Modules:</b>\n%s", mode, fuku.ListModules()),
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
 		},

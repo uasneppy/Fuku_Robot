@@ -20,8 +20,8 @@ tmp/
 .idea/
 
 # Executables
-Alita_Robot
-Alita_Robot.exe
+Fuku_Robot
+Fuku_Robot.exe
 .env
 .db.env
 local.docker-compose.yml
@@ -29,7 +29,7 @@ local.docker-compose.yml
 # Mac OS DS_Store file
 .DS_Store
 .mcp.json
-alita_test
+fuku_test
 .gocache/
 specs/.current-spec
 **/.progress.md

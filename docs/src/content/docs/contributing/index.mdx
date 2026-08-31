@@ -1,9 +1,9 @@
 ---
 title: Contributing
-description: How to contribute to Alita Robot development.
+description: How to contribute to Fuku Robot development.
 ---
 
-Thank you for your interest in contributing to Alita Robot! This guide will help you get started with development.
+Thank you for your interest in contributing to Fuku Robot! This guide will help you get started with development.
 
 ## Development Setup
 
@@ -19,8 +19,8 @@ Thank you for your interest in contributing to Alita Robot! This guide will help
 <Steps>
   <Step title="Clone the repository">
     ```bash
-    git clone https://github.com/divkix/Alita_Robot.git
-    cd Alita_Robot
+    git clone https://github.com/uasneppy/Fuku_Robot.git
+    cd Fuku_Robot
     ```
   </Step>
 
@@ -70,8 +70,8 @@ make psql-reset    # Reset database (DANGEROUS: drops all tables)
 ## Project Structure
 
 ```
-Alita_Robot/
-├── alita/
+Fuku_Robot/
+├── fuku/
 │   ├── config/       # Configuration and environment parsing
 │   ├── db/           # Database operations and repositories
 │   ├── i18n/         # Internationalization
@@ -86,11 +86,11 @@ Alita_Robot/
 
 <Steps>
   <Step title="Create database operations">
-    Add them in `alita/db/{module}/repository.go` (following the domain-package pattern).
+    Add them in `fuku/db/{module}/repository.go` (following the domain-package pattern).
   </Step>
 
   <Step title="Implement command handlers">
-    Put them in `alita/modules/{module}.go`.
+    Put them in `fuku/modules/{module}.go`.
   </Step>
 
   <Step title="Register commands">
@@ -102,7 +102,7 @@ Alita_Robot/
   </Step>
 
   <Step title="Self-register in init()">
-    Use `RegisterLegacyModule("MyModule", priority, LoadMyModule)` — modules auto-load via `LoadAllModules()` in `alita/main.go`.
+    Use `RegisterLegacyModule("MyModule", priority, LoadMyModule)` — modules auto-load via `LoadAllModules()` in `fuku/main.go`.
   </Step>
 </Steps>
 
@@ -163,7 +163,7 @@ pip install pre-commit && pre-commit install
 Always escape user-controlled input before rendering in HTML-formatted messages:
 
 ```go
-import "github.com/divkix/Alita_Robot/alita/utils/formatting"
+import "github.com/uasneppy/Fuku_Robot/fuku/utils/formatting"
 
 // Wrong - vulnerable to HTML injection
 text := fmt.Sprintf("Welcome to %s!", chat.Title)
@@ -381,4 +381,4 @@ The `tgmd2html` library provides conversion functions:
 ## Getting Help
 
 - **Support Group**: [t.me/DivideSupport](https://t.me/DivideSupport)
-- **GitHub Issues**: [Report bugs or request features](https://github.com/divkix/Alita_Robot/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/uasneppy/Fuku_Robot/issues)
