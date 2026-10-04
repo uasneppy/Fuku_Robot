@@ -40,8 +40,9 @@ specs/.current-spec
 # Git worktrees
 .worktrees/
 
-# Local make inventory output
-.planning/
+# Local make inventory output (the rest of .planning/ holds tracked GSD planning docs)
+.planning/INVENTORY.json
+.planning/INVENTORY.md
 
 # Lean build cache
 formal/antiflood/lean/.lake/
