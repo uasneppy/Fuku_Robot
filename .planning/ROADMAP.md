@@ -35,6 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Staff Group Links
+
 **Goal:** As a community owner, I want to make one group my Staff Group and link my groups to it, so that staff have one control room.
 **Mode:** mvp
 **Depends on:** Nothing (first phase)
@@ -46,21 +47,36 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. When ownership of either group passes to someone else, the link disappears without anyone running a command.
   4. A link and the Staff Group status keep working after a group upgrades to a supergroup and gets a new chat ID.
   5. `/staff` in the Staff Group shows the help text and each linked group's status: linked, bot is admin, bot can restrict members, owner still matches. All its text exists in all 7 languages. The in-lockdown status is added when Phase 4 ships.
+
 **Plans:** 10 plans
 
 Plans:
+**Wave 1**
 - [ ] 01-01-PLAN.md: Walking skeleton. `/setstaff` makes a Staff Group and `/staff` shows it (schema, repository, live owner check, test harness, locale parity test)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md: `/unsetstaff` with confirm, plus the full `/setstaff` refusal matrix (anonymous, channel, bot not admin, linked group)
 - [ ] 01-03-PLAN.md: Chat-migration re-key, so the Staff Group and its links survive a supergroup upgrade (StaffWatchers module, group -3)
 - [ ] 01-04-PLAN.md: D-10 role exclusivity in PostgreSQL. Decision checkpoint, then a trigger with an advisory lock and a CI-only test
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-05-PLAN.md: Linking by `/linkstaff [id]` and the "Add group" picker, with live owner-of-both checks and quiet linked groups
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 01-06-PLAN.md: Unlinking by `/unlinkstaff` and the Unlink button with confirm
+
+**Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 01-07-PLAN.md: Auto-unlink on ownership change (service messages and chat_member; one recheck core; exactly-once notices)
+
+**Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 01-08-PLAN.md: Bot-health tracking, with one heads-up per change, including recovery
+
+**Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 01-09-PLAN.md: Live `/staff` panel with per-group statuses, Refresh in place, paging and length cap
 - [ ] 01-10-PLAN.md: Hourly and startup sweeper behind a Redis lock, wired into startup and shutdown
 
 ### Phase 2: Staff Actions Across Groups
+
 **Goal:** As a staff member, I want to ban, mute or kick someone in every linked group at once, so that one command protects them all.
 **Mode:** mvp
 **Depends on:** Phase 1
@@ -72,9 +88,11 @@ Plans:
   3. A post from an anonymous admin in the Staff Group gets the reply "post as yourself", and nothing else happens.
   4. The issuer gets one summary message that updates as groups finish. Every linked group is marked done, skipped (with the reason) or failed (with the reason, such as missing bot rights or rate limiting). The bot stays within Telegram's rate limits even with many groups and several bot replicas, and waits and retries when Telegram says to. No group is ever silently dropped.
   5. `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` work exactly as before in every group that isn't a Staff Group.
+
 **Plans:** TBD
 
 ### Phase 3: Staff Audit and Undo
+
 **Goal:** As a staff member, I want to log, list and undo every staff action, so that mistakes can be reversed and we stay accountable.
 **Mode:** mvp
 **Depends on:** Phase 2
@@ -84,9 +102,11 @@ Plans:
   2. Every staff action is recorded with the issuer, target, action, duration, reason, time and per-group outcomes. The record survives bot restarts.
   3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
   4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
+
 **Plans:** TBD
 
 ### Phase 4: Manual Lockdown
+
 **Goal:** As a group admin, I want to lock my group down during a raid and lift it when safe, so that attackers are stopped and settings survive.
 **Mode:** mvp
 **Depends on:** Phase 1
@@ -98,9 +118,11 @@ Plans:
   3. An admin can see whether the group is locked, since when and why, and `/staff` shows the group as in lockdown. Running `/lockdown` again during a lockdown reports the existing one instead of starting another.
   4. A lockdown never lifts on its own. It survives bot restarts and a Redis flush, and every bot replica enforces it. Only an admin of the group can lift it with `/unlockdown`, and anyone else is refused.
   5. Lifting the lockdown restores the group's permissions exactly as they were before. Anyone unmuted during the lockdown, by `/unmute` or by passing the captcha, can still talk after it lifts.
+
 **Plans:** TBD
 
 ### Phase 5: Lockdown Alerts and Response
+
 **Goal:** As a group admin or staff member, I want to get a lockdown alert with one-tap fixes, so that we can see a raid and clean it up fast.
 **Mode:** mvp
 **Depends on:** Phase 2, Phase 4
@@ -111,9 +133,11 @@ Plans:
   3. An admin of the locked group can press "Ban N recent joiners" to ban the accounts that joined during the burst, except admins and approved users. They are told how many were banned, skipped and failed.
   4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
   5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
+
 **Plans:** TBD
 
 ### Phase 6: Automatic Raid Detection
+
 **Goal:** As a group admin, I want to have raids detected and locked down automatically, so that my group is protected when no admin is online.
 **Mode:** mvp
 **Depends on:** Phase 5
@@ -124,9 +148,11 @@ Plans:
   3. Both triggers are on by default in every group, with conservative thresholds. An admin can turn each one off or change its threshold, and the next burst follows the new setting.
   4. When several triggers fire at once, the group gets exactly one lockdown and one alert. This holds even when different bot replicas handle the joins and messages.
   5. `/antiraid` and its old timing commands now point admins to `/lockdown`. A group's old auto-threshold becomes its join-surge threshold, and the old raid mode no longer temp-bans anyone.
+
 **Plans:** TBD
 
 ### Phase 7: AI-Assisted Raid Detection
+
 **Goal:** As a group admin, I want to have AI flag borderline spam text and images, so that subtler raids still trigger a lockdown.
 **Mode:** mvp
 **Depends on:** Phase 6
@@ -137,9 +163,11 @@ Plans:
   2. A burst of AI spam verdicts in a short window locks the group, and the alert names the AI trigger and its count. Like the other triggers, it's on by default, and an admin can turn it off or change its threshold.
   3. AI never decides a lockdown alone. A single verdict doesn't lock a group. If an AI provider is slow, down or not configured, the rule-based triggers keep working and nothing waits on AI.
   4. The Gemini API key never appears in logs, including errors and debug output.
+
 **Plans:** TBD
 
 ### Phase 8: Turnstile Web Captcha
+
 **Goal:** As a group admin, I want to verify new members with Turnstile in a Telegram Mini App, so that bots stay out with little friction.
 **Mode:** mvp
 **Depends on:** Phase 4
@@ -151,10 +179,12 @@ Plans:
   3. Only the member the challenge was issued to can pass it. Another user's tap, a reused challenge, or a page reporting a pass by itself never unmutes anyone. The bot's server decides a pass using only Telegram's signed user data and Cloudflare's verification.
   4. A member who fails the Turnstile check, or doesn't pass within the group's time limit, is kicked and can rejoin to try again. This works no matter which bot replica handles the join or the check.
   5. The owner can deploy the captcha page by following the documented steps: a public HTTPS hostname, BotFather Mini App registration, and Turnstile keys. The Turnstile secret never appears in logs.
+
 **Plans:** TBD
 **UI hint**: yes
 
 ### Phase 9: Settings Menu
+
 **Goal:** As a group admin, I want to manage my group from one button menu, so that staff, lockdown, captcha and antiflood need no commands.
 **Mode:** mvp
 **Depends on:** Phase 3, Phase 7, Phase 8
@@ -165,6 +195,7 @@ Plans:
   3. The Staff Group page shows the `/staff` panel information. Only the owner of both groups can link or unlink.
   4. The Lockdown page shows the current state, a working Lift button, and an on/off switch and threshold for each automatic trigger. The Captcha page sets the mode and time limit, and the Antiflood page configures antiflood.
   5. A setting changed in the menu is identical to the same setting changed by command, and both always show the same current value.
+
 **Plans:** TBD
 **UI hint**: yes
 
