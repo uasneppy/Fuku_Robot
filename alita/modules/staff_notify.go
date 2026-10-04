@@ -9,6 +9,7 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/db/lang"
 	"github.com/divkix/Alita_Robot/alita/i18n"
+	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 )
 
@@ -22,6 +23,26 @@ var staffSelfDeleteAfter = 30 * time.Second
 // them, use the Staff Group's language rather than the issuer's or English.
 func staffChatTranslator(chatID int64) *i18n.Translator {
 	return i18n.MustNewTranslator(lang.GetLanguage(&ext.Context{EffectiveChat: &gotgbot.Chat{Id: chatID}}))
+}
+
+// replySelfDeleting replies to msg in HTML and deletes the reply after
+// staffSelfDeleteAfter. It is how refusals reach a user who has not yet proven
+// they own the Staff Group they named: the answer stays in the chat the command
+// came from and does not linger there. Send failures are logged at warn.
+func replySelfDeleting(b *gotgbot.Bot, msg *gotgbot.Message, text string) {
+	if msg == nil || text == "" {
+		return
+	}
+	sent, err := msg.Reply(b, text, formatting.Shtml())
+	if err != nil {
+		log.Warnf("[Staff] self-deleting reply in chat %d failed: %v", msg.Chat.Id, err)
+		return
+	}
+	chatID, messageID := msg.Chat.Id, sent.MessageId
+	time.AfterFunc(staffSelfDeleteAfter, func() {
+		defer error_handling.RecoverFromPanic("replySelfDeleting", "Staff")
+		_, _ = b.DeleteMessage(chatID, messageID, nil)
+	})
 }
 
 // sendStaffNotice posts an HTML notice into a Staff Group with link previews off.

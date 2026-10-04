@@ -106,10 +106,57 @@ func staffHealthFromBot(m gotgbot.MergedChatMember, res chat_status.BotMemberRes
 	}
 }
 
-// resolveLinkStaffGroup finds the Staff Group named by staffArg and verifies live
-// that the issuer is its creator. Anything that does not prove it, including a
-// chat that is not a Staff Group at all, gives the same refusal.
+// resolveLinkStaffGroup finds the Staff Group to link to and verifies live that
+// the issuer is its creator. With an argument it is the named Staff Group; without
+// one it is the issuer's only live-verified Staff Group.
 func resolveLinkStaffGroup(b *gotgbot.Bot, issuer *gotgbot.User, staffArg string) (*models.StaffGroup, staffRefusal) {
+	if strings.TrimSpace(staffArg) == "" {
+		return resolveOwnStaffGroup(b, issuer)
+	}
+	return resolveNamedStaffGroup(b, issuer, staffArg)
+}
+
+// resolveOwnStaffGroup picks the Staff Group for /linkstaff without an argument.
+// The issuer's recorded Staff Groups are only candidates: each is verified live,
+// and one is used only when it is the single match. Several matches ask for an
+// explicit ID, never an ordering guess. A candidate that could not be verified
+// also fails closed, because it might be a second match.
+func resolveOwnStaffGroup(b *gotgbot.Bot, issuer *gotgbot.User) (*models.StaffGroup, staffRefusal) {
+	candidates, err := staff.ListStaffGroupsByOwner(issuer.Id)
+	if err != nil {
+		return nil, staffRefusalCheckFailedInPlace
+	}
+	if len(candidates) == 0 {
+		return nil, staffRefusalNoStaffGroup
+	}
+	var matched []*models.StaffGroup
+	unknown := 0
+	for i := range candidates {
+		result, _, ownerErr := chat_status.CheckOwner(b, candidates[i].ChatID, issuer.Id)
+		switch result {
+		case chat_status.OwnerMatch:
+			matched = append(matched, &candidates[i])
+		case chat_status.OwnerUnknown:
+			log.Warnf("[Staff] link: owner check for Staff Group %d failed: %v", candidates[i].ChatID, ownerErr)
+			unknown++
+		}
+	}
+	switch {
+	case len(matched) > 1:
+		return nil, staffRefusalNeedStaffID
+	case unknown > 0:
+		return nil, staffRefusalCheckFailedInPlace
+	case len(matched) == 1:
+		return matched[0], staffRefusalNone
+	default:
+		return nil, staffRefusalNoStaffGroup
+	}
+}
+
+// resolveNamedStaffGroup verifies the Staff Group named by staffArg. Anything that
+// does not prove the issuer is its live creator, including a chat that is not a
+// Staff Group at all, gives the same refusal.
+func resolveNamedStaffGroup(b *gotgbot.Bot, issuer *gotgbot.User, staffArg string) (*models.StaffGroup, staffRefusal) {
 	staffChatID, ok := parseStaffChatIDArg(staffArg)
 	if !ok {
 		return nil, staffRefusalInvalidID
@@ -131,11 +178,18 @@ func resolveLinkStaffGroup(b *gotgbot.Bot, issuer *gotgbot.User, staffArg string
 	return group, staffRefusalNone
 }
 
-// checkLinkTarget verifies, live, that the target is a supergroup the issuer
-// created.
+// checkLinkTarget verifies, live, that the target is a supergroup that is not a
+// Staff Group and that the issuer created.
 func checkLinkTarget(b *gotgbot.Bot, issuer *gotgbot.User, target *gotgbot.Chat) staffRefusal {
 	if target.Type != "supergroup" {
 		return staffRefusalNotSupergroup
+	}
+	targetStaff, err := staff.GetStaffGroupFresh(target.Id)
+	if err != nil {
+		return staffRefusalCheckFailed
+	}
+	if targetStaff != nil {
+		return staffRefusalTargetIsStaff
 	}
 	switch result, _, ownerErr := chat_status.CheckOwner(b, target.Id, issuer.Id); result {
 	case chat_status.OwnerUnknown:
@@ -218,18 +272,76 @@ func linkHealthWarning(tr *i18n.Translator, health string) string {
 	return text
 }
 
+// staffLinkRefusalText maps a refusal to its message. Every case reads a literal
+// locale key so make check-translations sees it. groupTitle is the title of the
+// group being linked; it is user-controlled, so it is escaped and spliced in after
+// translation rather than passed through the translator.
+func staffLinkRefusalText(tr *i18n.Translator, r staffRefusal, groupTitle string) string {
+	params := i18n.TranslationParams{"group": staffGroupTitleToken}
+	var text string
+	switch r {
+	case staffRefusalAnonymous:
+		text, _ = tr.GetString("staff_post_as_yourself")
+	case staffRefusalInvalidID:
+		text, _ = tr.GetString("staff_link_invalid_id")
+	case staffRefusalNoStaffGroup:
+		text, _ = tr.GetString("staff_link_no_staff_group")
+	case staffRefusalNeedStaffID:
+		text, _ = tr.GetString("staff_link_need_staff_id")
+	case staffRefusalNotStaffOwner:
+		text, _ = tr.GetString("staff_link_refuse_not_staff_owner")
+	case staffRefusalNotSupergroup:
+		text, _ = tr.GetString("staff_link_refuse_not_supergroup", params)
+	case staffRefusalTargetIsStaff:
+		text, _ = tr.GetString("staff_link_refuse_target_is_staff", params)
+	case staffRefusalNotTargetOwner:
+		text, _ = tr.GetString("staff_link_refuse_not_target_owner", params)
+	case staffRefusalAlreadyLinked:
+		text, _ = tr.GetString("staff_link_refuse_already_linked", params)
+	case staffRefusalCheckFailed:
+		text, _ = tr.GetString("staff_link_check_failed_group", params)
+	default:
+		// staffRefusalCheckFailedInPlace and anything unexpected: could not verify.
+		text, _ = tr.GetString("staff_check_failed")
+	}
+	return strings.Replace(text, staffGroupTitleToken, staffDisplayTitle(groupTitle), 1)
+}
+
+// deliverLinkRefusal tells the right place about a refusal. Before the issuer is
+// verified as the Staff Group's creator, the refusal is a self-deleting reply in
+// the issuing group, in that chat's language, and nothing is ever sent to the
+// named chat. After verification it is posted in the Staff Group, in its language;
+// if that post fails, a self-deleting reply in the issuing group takes its place.
+func deliverLinkRefusal(b *gotgbot.Bot, ctx *ext.Context, target *gotgbot.Chat, out staffLinkOutcome) {
+	issuingTr := ctxTr(ctx)
+	if out.StaffGroup == nil {
+		replySelfDeleting(b, ctx.EffectiveMessage, staffLinkRefusalText(issuingTr, out.Refusal, target.Title))
+		return
+	}
+	staffTr := staffChatTranslator(out.StaffGroup.ChatID)
+	if err := sendStaffNotice(b, out.StaffGroup.ChatID, staffLinkRefusalText(staffTr, out.Refusal, target.Title)); err != nil {
+		replySelfDeleting(b, ctx.EffectiveMessage, staffLinkRefusalText(issuingTr, out.Refusal, target.Title))
+	}
+}
+
 // deliverLinkOutcome reports the outcome of runLinkGroup. A created link is
 // announced in the Staff Group only, with one warning line when the bot lacks
-// rights in the new group. Nothing is ever sent to the linked group.
+// rights in the new group. Nothing about a successful link is ever sent to the
+// linked group, even when the Staff Group cannot be reached: the failure is only
+// logged, because the group's members must not learn that it is linked (D-06).
 func (moduleStruct) deliverLinkOutcome(
 	b *gotgbot.Bot,
-	_ *ext.Context,
+	ctx *ext.Context,
 	_ *gotgbot.User,
-	_ *gotgbot.Chat,
+	target *gotgbot.Chat,
 	out staffLinkOutcome,
 ) error {
-	if out.Refusal != staffRefusalNone || out.Link == nil || out.StaffGroup == nil {
-		log.Debugf("[Staff] link refused: %d", out.Refusal)
+	if out.Refusal != staffRefusalNone {
+		deliverLinkRefusal(b, ctx, target, out)
+		return ext.EndGroups
+	}
+	if out.Link == nil || out.StaffGroup == nil {
+		log.Errorf("[Staff] link outcome without a link for group %d", target.Id)
 		return ext.EndGroups
 	}
 	tr := staffChatTranslator(out.StaffGroup.ChatID)

@@ -201,16 +201,26 @@ func GetStaffGroupFresh(chatID int64) (*models.StaffGroup, error) {
 	return &row, nil
 }
 
-// CreateLink stores link in one transaction. It returns ErrStaffGroupMissing when
-// no staff_groups row has chat_id = link.StaffChatID, ErrRoleConflict when the
-// group being linked is itself a Staff Group (D-10), and ErrAlreadyLinked when the
-// group already has a link. The insert is ON CONFLICT DO NOTHING on the unique
+// CreateLink stores link in one transaction. It returns ErrAlreadyLinked when the
+// group already has a link, ErrStaffGroupMissing when no staff_groups row has
+// chat_id = link.StaffChatID, and ErrRoleConflict when the group being linked is
+// itself a Staff Group (D-10); the last two leave nothing behind. The insert is ON CONFLICT DO NOTHING on the unique
 // group_chat_id, so when two callers race for the same group exactly one gets a
 // nil error and the other gets ErrAlreadyLinked. On success the group's cached
 // lookups are invalidated after the commit.
 func CreateLink(link *models.StaffGroupLink) error {
 	link.GroupTitle = trimStaffTitle(link.GroupTitle)
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		// The insert comes first so the transaction takes its write lock up front
+		// (no read-then-write lock upgrade, which SQLite refuses under contention).
+		// The two role checks that follow roll the insert back when they fail.
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(link)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrAlreadyLinked
+		}
 		var staffRows int64
 		if err := tx.Model(&models.StaffGroup{}).Where("chat_id = ?", link.StaffChatID).Count(&staffRows).Error; err != nil {
 			return err
@@ -224,13 +234,6 @@ func CreateLink(link *models.StaffGroupLink) error {
 		}
 		if groupIsStaff > 0 {
 			return ErrRoleConflict
-		}
-		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(link)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return ErrAlreadyLinked
 		}
 		return nil
 	})
@@ -290,9 +293,17 @@ func GetLinkOfGroup(groupChatID int64) *models.StaffGroupLink {
 	return &result
 }
 
-// ListStaffGroupsByOwner is a compile-only stub for the RED step.
+// ListStaffGroupsByOwner lists the Staff Groups whose recorded owner is
+// ownerUserID, in id order, straight from the database. The recorded owner only
+// narrows the candidates for /linkstaff without an argument; every candidate is
+// still verified live before it is used.
 func ListStaffGroupsByOwner(ownerUserID int64) ([]models.StaffGroup, error) {
-	return nil, nil
+	var groups []models.StaffGroup
+	if err := db.DB.Where("owner_user_id = ?", ownerUserID).Order("id ASC").Find(&groups).Error; err != nil {
+		log.Errorf("[Staff] ListStaffGroupsByOwner: %v", err)
+		return nil, alitaerrors.Wrapf(err, "list staff groups of owner %d", ownerUserID)
+	}
+	return groups, nil
 }
 
 // GetLinkOfGroupFresh reads the link of groupChatID straight from the database,
