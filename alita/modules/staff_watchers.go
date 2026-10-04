@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/staff"
+	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 )
 
@@ -115,6 +116,34 @@ func (moduleStruct) onCreatorChatMember(b *gotgbot.Bot, ctx *ext.Context) error 
 	return ext.ContinueGroups
 }
 
+// onBotChatMember tracks the bot's own status in a linked group (D-14). A
+// my_chat_member update is Telegram's statement about the bot, so the new health is
+// derived from the update itself with no extra API call. The cached link gate drops
+// every chat that is not a linked group, the Staff Group included, before anything
+// else happens; a linked group's link is then reloaded fresh and handed to
+// applyLinkHealth, which records the change and posts the single heads-up. The
+// watcher never calls Telegram itself beyond that heads-up, never replies in the
+// chat, and always returns ext.ContinueGroups so the admin cache (-2) and
+// botJoinedGroup (-1) still run.
+func (moduleStruct) onBotChatMember(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("onBotChatMember", "StaffWatchers")
+
+	u := ctx.MyChatMember
+	if u == nil || u.NewChatMember == nil {
+		return ext.ContinueGroups
+	}
+	if staff.GetLinkOfGroup(u.Chat.Id) == nil {
+		return ext.ContinueGroups
+	}
+	link, err := staff.GetLinkOfGroupFresh(u.Chat.Id)
+	if err != nil || link == nil {
+		return ext.ContinueGroups
+	}
+	health := staffHealthFromBot(u.NewChatMember.MergeChatMember(), chat_status.BotMemberFound)
+	applyLinkHealth(b, *link, health)
+	return ext.ContinueGroups
+}
+
 // rekeyFromTelegramError re-keys oldChatID when err is a Telegram error that
 // carries ResponseParameters.MigrateToChatId, which Telegram returns (with a
 // 400) when a request targets a group that has since become a supergroup. It
@@ -151,6 +180,10 @@ func LoadStaffWatchers(dispatcher *ext.Dispatcher) {
 	)
 	dispatcher.AddHandlerToGroup(
 		handlers.NewChatMember(staffCreatorTransition, staffWatchersModule.onCreatorChatMember),
+		staffWatchersModule.handlerGroup,
+	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewMyChatMember(func(u *gotgbot.ChatMemberUpdated) bool { return u != nil }, staffWatchersModule.onBotChatMember),
 		staffWatchersModule.handlerGroup,
 	)
 }

@@ -754,6 +754,108 @@ func TestStaffRepoUpdateStaffGroupOwnerSameValueIsNotAChange(t *testing.T) {
 	}
 }
 
+// seedHealthLink creates a Staff Group and one link in it, both removed when the
+// test ends, and returns the link.
+func seedHealthLink(t *testing.T) *models.StaffGroupLink {
+	t.Helper()
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	link := &models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "Group"}
+	if err := CreateLink(link); err != nil {
+		t.Fatal(err)
+	}
+	return link
+}
+
+func TestStaffRepoSetLinkHealthChangesOnceAndInvalidates(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	link := seedHealthLink(t)
+	if got := GetLinkOfGroup(link.GroupChatID); got == nil || got.Health != models.StaffHealthOK {
+		t.Fatalf("GetLinkOfGroup before = %+v, want health ok", got)
+	}
+
+	changed, err := SetLinkHealth(link.ID, models.StaffHealthBotMissing)
+	if err != nil || !changed {
+		t.Fatalf("SetLinkHealth(bot_missing) = (%v, %v), want (true, nil)", changed, err)
+	}
+	if got := GetLinkOfGroup(link.GroupChatID); got == nil || got.Health != models.StaffHealthBotMissing {
+		t.Fatalf("GetLinkOfGroup after = %+v, want health bot_missing (the write must invalidate the gate)", got)
+	}
+	changed, err = SetLinkHealth(link.ID, models.StaffHealthBotMissing)
+	if err != nil || changed {
+		t.Fatalf("SetLinkHealth(same value) = (%v, %v), want (false, nil)", changed, err)
+	}
+	changed, err = SetLinkHealth(link.ID, models.StaffHealthOK)
+	if err != nil || !changed {
+		t.Fatalf("SetLinkHealth(back to ok) = (%v, %v), want (true, nil)", changed, err)
+	}
+	fresh, err := GetLinkByIDFresh(link.ID)
+	if err != nil || fresh == nil || fresh.Health != models.StaffHealthOK || fresh.OwnerUserID != 7 || fresh.GroupTitle != "Group" {
+		t.Fatalf("GetLinkByIDFresh = (%+v, %v), want health ok and every other column untouched", fresh, err)
+	}
+}
+
+func TestStaffRepoSetLinkHealthRejectsUnknownValue(t *testing.T) {
+	link := seedHealthLink(t)
+
+	changed, err := SetLinkHealth(link.ID, "broken")
+	if err == nil || changed {
+		t.Fatalf(`SetLinkHealth("broken") = (%v, %v), want (false, error from the CHECK constraint)`, changed, err)
+	}
+	fresh, err := GetLinkByIDFresh(link.ID)
+	if err != nil || fresh == nil || fresh.Health != models.StaffHealthOK {
+		t.Fatalf("link after the rejected write = (%+v, %v), want health ok", fresh, err)
+	}
+}
+
+func TestStaffRepoSetLinkHealthMissingLinkIsNoop(t *testing.T) {
+	if changed, err := SetLinkHealth(4_000_000_000, models.StaffHealthBotMissing); err != nil || changed {
+		t.Fatalf("SetLinkHealth(unknown id) = (%v, %v), want (false, nil)", changed, err)
+	}
+}
+
+func TestStaffRepoSetLinkHealthConcurrentOneWinner(t *testing.T) {
+	link := seedHealthLink(t)
+
+	const workers = 8
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		winners int
+		errs    []error
+	)
+	start := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			changed, err := SetLinkHealth(link.ID, models.StaffHealthBotNotAdmin)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+			}
+			if changed {
+				winners++
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if len(errs) != 0 {
+		t.Fatalf("concurrent SetLinkHealth errors: %v", errs)
+	}
+	if winners != 1 {
+		t.Fatalf("%d callers got changed=true, want exactly 1", winners)
+	}
+}
+
 func TestStaffRepoListStaffGroupsByOwner(t *testing.T) {
 	owner := -uniqueStaffChatID() % 1_000_000_000_000
 	otherOwner := owner + 1

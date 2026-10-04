@@ -397,6 +397,38 @@ func DeleteLinkIfOwner(id uint, ownerUserID int64) (deleted bool, err error) {
 	return true, nil
 }
 
+// SetLinkHealth moves the link with row ID id to health in one conditional
+// statement, UPDATE ... WHERE id = ? AND health <> ?. That statement is the claim:
+// of any number of callers racing to the same value exactly one gets changed=true,
+// and only that caller may post the Staff Group heads-up. The same value, or a
+// link that no longer exists, gives (false, nil). The update goes through a map so
+// a zero value is never skipped. The database CHECK rejects an unknown health
+// value; that error is wrapped and returned. The cached lookups of the link's
+// group are invalidated after the write when a row changed.
+func SetLinkHealth(id uint, health string) (changed bool, err error) {
+	var current models.StaffGroupLink
+	if err := db.DB.Select("id", "group_chat_id").Where("id = ?", id).First(&current).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		log.Errorf("[Staff] SetLinkHealth: %v", err)
+		return false, alitaerrors.Wrapf(err, "read staff link %d", id)
+	}
+
+	result := db.DB.Model(&models.StaffGroupLink{}).
+		Where("id = ? AND health <> ?", id, health).
+		Updates(map[string]any{"health": health, "updated_at": time.Now()})
+	if result.Error != nil {
+		log.Errorf("[Staff] SetLinkHealth: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "set staff link %d health", id)
+	}
+	if result.RowsAffected != 1 {
+		return false, nil
+	}
+	invalidateStaffKeys(current.GroupChatID)
+	return true, nil
+}
+
 // UpdateStaffGroupOwner refreshes staff_groups.owner_user_id for chatID to
 // ownerUserID. The recorded owner is only a lookup hint (it is never an
 // authority), so recheckStaffGroup keeps it equal to the live creator.
