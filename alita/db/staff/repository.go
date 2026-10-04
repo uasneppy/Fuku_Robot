@@ -308,6 +308,17 @@ func ListStaffGroupsByOwner(ownerUserID int64) ([]models.StaffGroup, error) {
 	return groups, nil
 }
 
+// ListStaffGroupsFresh lists every Staff Group in id order, straight from the
+// database. The hourly sweep walks this list; it is never cached.
+func ListStaffGroupsFresh() ([]models.StaffGroup, error) {
+	var groups []models.StaffGroup
+	if err := db.DB.Order("id ASC").Find(&groups).Error; err != nil {
+		log.Errorf("[Staff] ListStaffGroupsFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list staff groups")
+	}
+	return groups, nil
+}
+
 // GetLinkOfGroupFresh reads the link of groupChatID straight from the database,
 // bypassing every cache. It returns (nil, nil) when the group is not linked. It
 // is the authority read.
