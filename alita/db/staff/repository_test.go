@@ -5,6 +5,7 @@ package staff
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -114,6 +115,30 @@ func TestStaffRepoCreateStaffGroupIdempotent(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].OwnerUserID != 7 {
 		t.Fatalf("rows = %+v, want exactly one row still owned by 7", rows)
+	}
+}
+
+func TestStaffRepoCreateStaffGroupRoleConflict(t *testing.T) {
+	linkedGroup, otherStaff := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, linkedGroup, otherStaff)
+
+	link := &models.StaffGroupLink{GroupChatID: linkedGroup, StaffChatID: otherStaff, OwnerUserID: 1}
+	if err := db.DB.Create(link).Error; err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+
+	created, err := CreateStaffGroup(linkedGroup, 7, "Linked")
+	if !errors.Is(err, ErrRoleConflict) || created {
+		t.Fatalf("CreateStaffGroup(linked group) = (%v, %v), want (false, ErrRoleConflict)", created, err)
+	}
+	if row, err := GetStaffGroupFresh(linkedGroup); err != nil || row != nil {
+		t.Fatalf("a refused CreateStaffGroup inserted %+v (err %v)", row, err)
+	}
+
+	// The refusal is about this chat only: the Staff Group side of the link and
+	// unrelated chats are unaffected.
+	if created, err := CreateStaffGroup(otherStaff, 7, "Other"); err != nil || !created {
+		t.Fatalf("CreateStaffGroup(staff side of the link) = (%v, %v), want (true, nil)", created, err)
 	}
 }
 

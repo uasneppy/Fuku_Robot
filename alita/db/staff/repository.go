@@ -44,6 +44,10 @@ func trimStaffTitle(s string) string {
 	return string(runes[:maxStaffTitleRunes])
 }
 
+// ErrRoleConflict is returned by CreateStaffGroup when the chat is currently a
+// linked group of some Staff Group: the two roles never overlap (D-10).
+var ErrRoleConflict = errors.New("staff: chat already holds the other staff role")
+
 // CreateStaffGroup stores chatID as a Staff Group owned by ownerUserID. It is
 // idempotent: when the chat is already a Staff Group it returns created=false
 // with a nil error and leaves the existing row (and its owner) untouched.
