@@ -83,6 +83,16 @@ func parseStaffChatIDArg(arg string) (int64, bool) {
 	return id, true
 }
 
+// parseStaffPickerPayload is a compile-only stub for the RED step.
+func parseStaffPickerPayload(arg string) (int64, bool) {
+	return 0, false
+}
+
+// staffAddGroupURL is a compile-only stub for the RED step.
+func staffAddGroupURL(botUsername string, staffChatID int64) string {
+	return ""
+}
+
 // staffHealthFromBot turns a live bot membership lookup into the health value
 // stored on a link. Unknown is stored as ok: the live panel and the sweep correct
 // it later.

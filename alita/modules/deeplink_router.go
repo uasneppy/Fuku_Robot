@@ -49,6 +49,19 @@ func HandleDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg st
 	return sendDefaultHelp(b, ctx, user)
 }
 
+// GroupDeepLinkHandler is a compile-only stub for the RED step.
+type GroupDeepLinkHandler func(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) (handled bool, err error)
+
+var groupDeepLinkRegistry = make(map[string]GroupDeepLinkHandler)
+
+// RegisterGroupDeepLinkHandler is a compile-only stub for the RED step.
+func RegisterGroupDeepLinkHandler(prefix string, handler GroupDeepLinkHandler) {}
+
+// HandleGroupDeepLink is a compile-only stub for the RED step.
+func HandleGroupDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) (bool, error) {
+	return false, nil
+}
+
 func sendDefaultHelp(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User) error {
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	startHelpText := getStartHelp(tr)
