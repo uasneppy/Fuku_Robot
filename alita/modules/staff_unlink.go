@@ -217,7 +217,7 @@ func editStaffMessage(
 		opts.ReplyMarkup = keyboard
 	}
 	_, _, err := msg.EditText(b, opts)
-	if err != nil && !strings.Contains(err.Error(), "message is not modified") {
+	if err != nil && !isMessageNotModified(err) {
 		log.Errorf("[Staff] edit staff panel message: %v", err)
 		return err
 	}
@@ -239,7 +239,7 @@ func staffRerenderPanel(b *gotgbot.Bot, msg gotgbot.MaybeInaccessibleMessage, tr
 	if group == nil {
 		return errStaffPanelGone
 	}
-	text, keyboard, err := buildStaffPanel(tr, *group, b.Username)
+	text, keyboard, err := buildStaffPanel(b, tr, *group, 0)
 	if err != nil {
 		return err
 	}

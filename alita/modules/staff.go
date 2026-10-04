@@ -48,6 +48,7 @@ const (
 	staffActUnlinkAsk     = "ul"
 	staffActUnlinkConfirm = "uc"
 	staffActUnlinkCancel  = "ux"
+	staffActRefresh       = "rf"
 )
 
 // staffGroupsToken stands in for the group list while the translation is
@@ -155,7 +156,7 @@ func (moduleStruct) staffPanel(c *helpers.CommandContext) error {
 	if group == nil {
 		return ext.EndGroups
 	}
-	text, keyboard, err := buildStaffPanel(c.Tr, *group, c.Bot.Username)
+	text, keyboard, err := buildStaffPanel(c.Bot, c.Tr, *group, 0)
 	if err != nil {
 		failed, _ := c.Tr.GetString("staff_check_failed")
 		replyStaff(c, failed)
@@ -253,6 +254,8 @@ func (m moduleStruct) staffCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 		return m.staffUnlinkConfirm(b, query, tr, decoded.Fields)
 	case staffActUnlinkCancel:
 		return m.staffUnlinkCancel(b, query, tr, decoded.Fields)
+	case staffActRefresh:
+		return m.staffPanelRefresh(b, query, tr, decoded.Fields)
 	default:
 		text, _ := tr.GetString("staff_cb_expired")
 		answerStaffCallback(b, query, text, false)
