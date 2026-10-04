@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/backup"
 	"github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	utilsCache "github.com/divkix/Alita_Robot/alita/utils/cache"
@@ -178,5 +179,20 @@ func TestStaffRepoTrimStaffTitle(t *testing.T) {
 	}
 	if !utf8.ValidString(row.Title) {
 		t.Fatal("stored title is not valid UTF-8")
+	}
+}
+
+// Backup export, import and reset must never create, restore or erase Staff
+// Groups or links, so no backup module may name them.
+func TestStaffTablesStayOutOfBackup(t *testing.T) {
+	for _, name := range []string{"staff", "staff_groups", "staff_group_links", "staff_group", "staff_links"} {
+		if backup.IsValidModule(name) {
+			t.Errorf("backup module %q is valid; Staff Groups must stay out of backup", name)
+		}
+	}
+	for _, module := range backup.AllExportableModules() {
+		if strings.Contains(strings.ToLower(module), "staff") {
+			t.Errorf("exportable backup module %q mentions staff", module)
+		}
 	}
 }
