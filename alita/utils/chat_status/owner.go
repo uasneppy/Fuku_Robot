@@ -2,6 +2,8 @@ package chat_status
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -32,13 +34,62 @@ const (
 	BotMemberUnknown
 )
 
-// FetchBotMember is a RED-phase stub.
-func FetchBotMember(b *gotgbot.Bot, chatID int64) (gotgbot.MergedChatMember, BotMemberResult, error) {
-	return gotgbot.MergedChatMember{}, BotMemberFound, nil
+// liveCheckTimeout bounds the live Telegram calls made by CheckOwner and
+// FetchBotMember.
+var liveCheckTimeout = 8 * time.Second
+
+// botMissingMarkers are the lower-cased fragments of the Telegram error
+// descriptions that say the bot is not in the chat.
+var botMissingMarkers = []string{"bot was kicked", "bot is not a member", "chat not found"}
+
+// isBotMissingError reports whether err is a Telegram answer saying the bot is
+// no longer in the chat (kicked, never a member, or the chat is gone).
+func isBotMissingError(err error) bool {
+	var tgErr *gotgbot.TelegramError
+	if !errors.As(err, &tgErr) {
+		return false
+	}
+	description := strings.ToLower(tgErr.Description)
+	for _, marker := range botMissingMarkers {
+		if strings.Contains(description, marker) {
+			return true
+		}
+	}
+	return false
 }
 
-// liveCheckTimeout bounds the getChatAdministrators call made by CheckOwner.
-var liveCheckTimeout = 8 * time.Second
+// FetchBotMember asks Telegram, live and uncached, for the bot's own membership
+// record in chatID.
+//
+// It is tri-state like CheckOwner: BotMemberFound carries the merged member
+// (Status, CanRestrictMembers and the other rights); BotMemberMissing means
+// Telegram definitely says the bot is not there, either through an error such as
+// "bot was kicked" or through a left or kicked status, and returns a nil error;
+// BotMemberUnknown covers every other failure (flood wait, timeout, network) with
+// a non-nil error. Callers must fail closed on Unknown and never read it as
+// Missing.
+func FetchBotMember(b *gotgbot.Bot, chatID int64) (gotgbot.MergedChatMember, BotMemberResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), liveCheckTimeout)
+	defer cancel()
+
+	member, err := b.GetChatMemberWithContext(ctx, chatID, b.Id, nil)
+	if err != nil {
+		if isBotMissingError(err) {
+			return gotgbot.MergedChatMember{}, BotMemberMissing, nil
+		}
+		return gotgbot.MergedChatMember{}, BotMemberUnknown, err
+	}
+	if member == nil {
+		return gotgbot.MergedChatMember{}, BotMemberUnknown, errors.New("getChatMember returned no member")
+	}
+
+	merged := member.MergeChatMember()
+	switch merged.Status {
+	case gotgbot.ChatMemberStatusLeft, gotgbot.ChatMemberStatusKicked:
+		return merged, BotMemberMissing, nil
+	}
+	return merged, BotMemberFound, nil
+}
 
 // CheckOwner asks Telegram, live and uncached, whether wantUserID is the
 // creator of chatID. It returns the creator's user ID when one is listed.
