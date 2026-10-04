@@ -2615,9 +2615,10 @@ staff_help_msg: |
   × /setstaff: Convierte este grupo en tu Grupo de Staff (solo el creador del grupo).
   × /unsetstaff: Quita el estado de Staff y desvincula todos los grupos (solo el creador del grupo).
   × /linkstaff [ID]: Vincula este grupo a tu Grupo de Staff (solo el creador del grupo). Añade el ID de chat del Grupo de Staff si tienes más de uno.
+  × /unlinkstaff: Desvincula este grupo de su Grupo de Staff (solo el creador de ambos grupos).
 
   *En el Grupo de Staff:*
-  × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados.
+  × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados. Pulsa Desvincular junto a un grupo para desvincularlo (solo el creador de ambos grupos).
 staff_set_done: "Este grupo ahora es un Grupo de Staff. ID del chat: <code>{chat_id}</code>"
 staff_set_already: "Este grupo ya es un Grupo de Staff."
 staff_refuse_not_owner: "Solo el creador de este grupo puede convertirlo en Grupo de Staff."
@@ -2652,3 +2653,8 @@ staff_link_refuse_not_target_owner: "No vinculado: no eres el creador de {group}
 staff_link_refuse_already_linked: "No vinculado: {group} ya está vinculado a un Grupo de Staff. Desvincúlalo primero."
 staff_link_check_failed_group: "No vinculado: no pude verificar quién creó {group} en este momento. No se cambió nada, inténtalo de nuevo en un momento."
 staff_panel_add_group_button: "➕ Añadir grupo"
+staff_notice_unlinked_by: "Grupo desvinculado: {group}\nDesvinculado por {user}"
+staff_unlink_not_linked: "Este grupo no está vinculado a un Grupo de Staff."
+staff_unlink_refuse_not_owner: "Solo el creador de este grupo y de su Grupo de Staff puede desvincularlo. No se cambió nada."
+staff_unlink_refuse_not_group_owner: "No desvinculado: no eres el creador de {group}. Solo el creador de ambos grupos puede desvincularlos."
+staff_unlink_check_failed_group: "No desvinculado: no pude verificar quién creó {group} en este momento. No se cambió nada, inténtalo de nuevo en un momento."

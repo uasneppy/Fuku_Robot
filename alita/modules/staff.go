@@ -358,6 +358,7 @@ func LoadStaff(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, unsetStaffDesc, staffModule.unsetStaff)
 	helpers.WrapCommand(dispatcher, staffDesc, staffModule.staffPanel)
 	helpers.WrapCommand(dispatcher, linkStaffDesc, staffModule.linkStaff)
+	helpers.WrapCommand(dispatcher, unlinkStaffDesc, staffModule.unlinkStaff)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("staff|"), staffModule.staffCallback))
 }
 

@@ -2643,9 +2643,10 @@ staff_help_msg: |
   × /setstaff: Make this group your Staff Group (group creator only).
   × /unsetstaff: Remove Staff status and unlink every group (group creator only).
   × /linkstaff [ID]: Link this group to your Staff Group (group creator only). Add the Staff Group chat ID when you own more than one.
+  × /unlinkstaff: Unlink this group from its Staff Group (creator of both groups only).
 
   *In the Staff Group:*
-  × /staff: Show the Staff Group chat ID and its linked groups.
+  × /staff: Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only).
 staff_set_done: "This group is now a Staff Group. Chat ID: <code>{chat_id}</code>"
 staff_set_already: "This group is already a Staff Group."
 staff_refuse_not_owner: "Only the creator of this group can make it a Staff Group."
@@ -2680,3 +2681,8 @@ staff_link_refuse_not_target_owner: "Not linked: you are not the creator of {gro
 staff_link_refuse_already_linked: "Not linked: {group} is already linked to a Staff Group. Unlink it first."
 staff_link_check_failed_group: "Not linked: I could not verify who created {group} right now. Nothing was changed, please try again in a moment."
 staff_panel_add_group_button: "➕ Add group"
+staff_notice_unlinked_by: "Group unlinked: {group}\nUnlinked by {user}"
+staff_unlink_not_linked: "This group is not linked to a Staff Group."
+staff_unlink_refuse_not_owner: "Only the creator of this group and of its Staff Group can unlink it. Nothing was changed."
+staff_unlink_refuse_not_group_owner: "Not unlinked: you are not the creator of {group}. Only the creator of both groups can unlink them."
+staff_unlink_check_failed_group: "Not unlinked: I could not verify who created {group} right now. Nothing was changed, please try again in a moment."

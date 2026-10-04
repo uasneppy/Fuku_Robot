@@ -495,6 +495,126 @@ func TestStaffRepoListLinksByStaffFresh(t *testing.T) {
 	}
 }
 
+func TestStaffRepoDeleteLinkOnlyNamedRow(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	staffID, g1, g2 := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, g1, g2)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	first := &models.StaffGroupLink{GroupChatID: g1, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "One"}
+	second := &models.StaffGroupLink{GroupChatID: g2, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "Two"}
+	for _, link := range []*models.StaffGroupLink{first, second} {
+		if err := CreateLink(link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Cache both lookups, so the delete has something to invalidate.
+	if GetLinkOfGroup(g1) == nil || GetLinkOfGroup(g2) == nil {
+		t.Fatal("both groups should be linked before the delete")
+	}
+
+	deleted, err := DeleteLink(first.ID)
+	if err != nil || !deleted {
+		t.Fatalf("DeleteLink(first) = (%v, %v), want (true, nil)", deleted, err)
+	}
+	if got := GetLinkOfGroup(g1); got != nil {
+		t.Fatalf("GetLinkOfGroup(deleted) = %+v, want nil (the delete must invalidate the cache)", got)
+	}
+	if got := GetLinkOfGroup(g2); got == nil || got.ID != second.ID {
+		t.Fatalf("GetLinkOfGroup(other) = %+v, want the untouched link", got)
+	}
+	if staffRow, err := GetStaffGroupFresh(staffID); err != nil || staffRow == nil {
+		t.Fatalf("the Staff Group itself must stay: (%+v, %v)", staffRow, err)
+	}
+	links, err := ListLinksByStaffFresh(staffID)
+	if err != nil || len(links) != 1 || links[0].ID != second.ID {
+		t.Fatalf("remaining links = (%+v, %v), want only the second", links, err)
+	}
+}
+
+func TestStaffRepoDeleteLinkSecondCallIsNoop(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	link := &models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7}
+	if err := CreateLink(link); err != nil {
+		t.Fatal(err)
+	}
+
+	if deleted, err := DeleteLink(link.ID); err != nil || !deleted {
+		t.Fatalf("first DeleteLink = (%v, %v), want (true, nil)", deleted, err)
+	}
+	if deleted, err := DeleteLink(link.ID); err != nil || deleted {
+		t.Fatalf("second DeleteLink = (%v, %v), want (false, nil)", deleted, err)
+	}
+	if got, err := GetLinkOfGroupFresh(groupID); err != nil || got != nil {
+		t.Fatalf("GetLinkOfGroupFresh after delete = (%+v, %v), want (nil, nil)", got, err)
+	}
+	if deleted, err := DeleteLink(0); err != nil || deleted {
+		t.Fatalf("DeleteLink(0) = (%v, %v), want (false, nil)", deleted, err)
+	}
+}
+
+func TestStaffRepoDeleteLinkConcurrentOneWinner(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	link := &models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7}
+	if err := CreateLink(link); err != nil {
+		t.Fatal(err)
+	}
+
+	const callers = 4
+	var wins, failures int
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			deleted, err := DeleteLink(link.ID)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				failures++
+			}
+			if deleted {
+				wins++
+			}
+		}()
+	}
+	wg.Wait()
+	if wins != 1 {
+		t.Fatalf("%d callers reported a delete (%d errors), want exactly 1", wins, failures)
+	}
+}
+
+func TestStaffRepoGetLinkByIDFresh(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	link := &models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "One"}
+	if err := CreateLink(link); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GetLinkByIDFresh(link.ID)
+	if err != nil || got == nil || got.GroupChatID != groupID || got.StaffChatID != staffID {
+		t.Fatalf("GetLinkByIDFresh = (%+v, %v), want the link", got, err)
+	}
+	if none, err := GetLinkByIDFresh(link.ID + 1_000_000); err != nil || none != nil {
+		t.Fatalf("GetLinkByIDFresh(unknown) = (%+v, %v), want (nil, nil)", none, err)
+	}
+}
+
 func TestStaffRepoListStaffGroupsByOwner(t *testing.T) {
 	owner := -uniqueStaffChatID() % 1_000_000_000_000
 	otherOwner := owner + 1
