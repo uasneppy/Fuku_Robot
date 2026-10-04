@@ -48,6 +48,11 @@ func (moduleStruct) onMigrateMessage(_ *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.ContinueGroups
 }
 
+// rekeyFromTelegramError is a RED-phase stub; the real detector follows.
+func rekeyFromTelegramError(oldChatID int64, err error) (newChatID int64, rekeyed bool) {
+	return 0, false
+}
+
 // LoadStaffWatchers registers the Staff Group watchers at handler group -3.
 func LoadStaffWatchers(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandlerToGroup(
