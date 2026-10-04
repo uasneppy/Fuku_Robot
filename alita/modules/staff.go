@@ -43,8 +43,11 @@ const staffCallbackNamespace = "staff"
 
 // Actions carried in the "a" field of a staff callback.
 const (
-	staffActUnsetConfirm = "uy"
-	staffActUnsetCancel  = "un"
+	staffActUnsetConfirm  = "uy"
+	staffActUnsetCancel   = "un"
+	staffActUnlinkAsk     = "ul"
+	staffActUnlinkConfirm = "uc"
+	staffActUnlinkCancel  = "ux"
 )
 
 // staffGroupsToken stands in for the group list while the translation is

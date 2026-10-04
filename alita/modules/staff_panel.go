@@ -91,3 +91,8 @@ func renderStaffPanel(
 	}
 	return sb.String(), keyboard
 }
+
+// staffButtonTitle is a compile-only stub for the RED commit.
+func staffButtonTitle(title string) string {
+	return ""
+}
