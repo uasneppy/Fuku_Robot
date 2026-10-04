@@ -46,7 +46,19 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. When ownership of either group passes to someone else, the link disappears without anyone running a command.
   4. A link and the Staff Group status keep working after a group upgrades to a supergroup and gets a new chat ID.
   5. `/staff` in the Staff Group shows the help text and each linked group's status: linked, bot is admin, bot can restrict members, owner still matches. All its text exists in all 7 languages. The in-lockdown status is added when Phase 4 ships.
-**Plans:** TBD
+**Plans:** 10 plans
+
+Plans:
+- [ ] 01-01-PLAN.md: Walking skeleton. `/setstaff` makes a Staff Group and `/staff` shows it (schema, repository, live owner check, test harness, locale parity test)
+- [ ] 01-02-PLAN.md: `/unsetstaff` with confirm, plus the full `/setstaff` refusal matrix (anonymous, channel, bot not admin, linked group)
+- [ ] 01-03-PLAN.md: Chat-migration re-key, so the Staff Group and its links survive a supergroup upgrade (StaffWatchers module, group -3)
+- [ ] 01-04-PLAN.md: D-10 role exclusivity in PostgreSQL. Decision checkpoint, then a trigger with an advisory lock and a CI-only test
+- [ ] 01-05-PLAN.md: Linking by `/linkstaff [id]` and the "Add group" picker, with live owner-of-both checks and quiet linked groups
+- [ ] 01-06-PLAN.md: Unlinking by `/unlinkstaff` and the Unlink button with confirm
+- [ ] 01-07-PLAN.md: Auto-unlink on ownership change (service messages and chat_member; one recheck core; exactly-once notices)
+- [ ] 01-08-PLAN.md: Bot-health tracking, with one heads-up per change, including recovery
+- [ ] 01-09-PLAN.md: Live `/staff` panel with per-group statuses, Refresh in place, paging and length cap
+- [ ] 01-10-PLAN.md: Hourly and startup sweeper behind a Redis lock, wired into startup and shutdown
 
 ### Phase 2: Staff Actions Across Groups
 **Goal:** As a staff member, I want to ban, mute or kick someone in every linked group at once, so that one command protects them all.
