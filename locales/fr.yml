@@ -2531,9 +2531,10 @@ staff_help_msg: |
   × /setstaff : Faire de ce groupe votre groupe Staff (créateur du groupe uniquement).
   × /unsetstaff : Retirer le statut Staff et dissocier tous les groupes (créateur du groupe uniquement).
   × /linkstaff [ID] : Lier ce groupe à votre groupe Staff (créateur du groupe uniquement). Ajoutez l'ID de discussion du groupe Staff si vous en avez plusieurs.
+  × /unlinkstaff : Dissocier ce groupe de son groupe Staff (créateur des deux groupes uniquement).
 
   *Dans le groupe Staff :*
-  × /staff : Afficher l'ID de discussion du groupe Staff et ses groupes liés.
+  × /staff : Afficher l'ID de discussion du groupe Staff et ses groupes liés. Appuyez sur Dissocier à côté d'un groupe pour le dissocier (créateur des deux groupes uniquement).
 staff_set_done: "Ce groupe est maintenant un groupe Staff. ID de discussion : <code>{chat_id}</code>"
 staff_set_already: "Ce groupe est déjà un groupe Staff."
 staff_refuse_not_owner: "Seul le créateur de ce groupe peut en faire un groupe Staff."
@@ -2568,3 +2569,11 @@ staff_link_refuse_not_target_owner: "Non lié : vous n'êtes pas le créateur de
 staff_link_refuse_already_linked: "Non lié : {group} est déjà lié à un groupe Staff. Dissociez-le d'abord."
 staff_link_check_failed_group: "Non lié : je n'ai pas pu vérifier qui a créé {group} pour le moment. Rien n'a été modifié, réessayez dans un instant."
 staff_panel_add_group_button: "➕ Ajouter un groupe"
+staff_notice_unlinked_by: "Groupe dissocié : {group}\nDissocié par {user}"
+staff_unlink_not_linked: "Ce groupe n'est pas lié à un groupe Staff."
+staff_unlink_refuse_not_owner: "Seul le créateur de ce groupe et de son groupe Staff peut le dissocier. Rien n'a été modifié."
+staff_unlink_refuse_not_group_owner: "Non dissocié : vous n'êtes pas le créateur de {group}. Seul le créateur des deux groupes peut les dissocier."
+staff_unlink_check_failed_group: "Non dissocié : je n'ai pas pu vérifier qui a créé {group} pour le moment. Rien n'a été modifié, réessayez dans un instant."
+staff_panel_unlink_button: "Dissocier {group}"
+staff_unlink_confirm_prompt: "Voulez-vous vraiment dissocier {group} ? Les commandes Staff ne l'atteindront plus."
+staff_cb_denied: "Ce bouton n'appartient pas à ce chat."

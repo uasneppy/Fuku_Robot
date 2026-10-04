@@ -322,3 +322,46 @@ func GetLinkOfGroupFresh(groupChatID int64) (*models.StaffGroupLink, error) {
 	}
 	return &row, nil
 }
+
+// GetLinkByIDFresh reads one link by its row ID straight from the database,
+// bypassing every cache. It returns (nil, nil) when there is no such row. The
+// Unlink buttons carry only this ID, so it is the authority read behind them.
+func GetLinkByIDFresh(id uint) (*models.StaffGroupLink, error) {
+	var row models.StaffGroupLink
+	err := db.DB.Where("id = ?", id).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		log.Errorf("[Staff] GetLinkByIDFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "get staff link by id %d", id)
+	}
+	return &row, nil
+}
+
+// DeleteLink removes the one link with row ID id and nothing else. The delete
+// itself claims the row, so when two callers race only the one whose delete
+// affected a row gets deleted=true; the other gets (false, nil) and must post
+// nothing. The deleted row is read back by the same statement (RETURNING), so
+// the cached lookups of its group are invalidated after the commit without a
+// separate read that could go stale.
+func DeleteLink(id uint) (deleted bool, err error) {
+	var removed []models.StaffGroupLink
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Clauses(clause.Returning{}).Where("id = ?", id).Delete(&removed)
+		if result.Error != nil {
+			return result.Error
+		}
+		deleted = result.RowsAffected == 1 && len(removed) == 1
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Staff] DeleteLink: %v", err)
+		return false, alitaerrors.Wrapf(err, "delete staff link %d", id)
+	}
+	if !deleted {
+		return false, nil
+	}
+	invalidateStaffKeys(removed[0].GroupChatID)
+	return true, nil
+}

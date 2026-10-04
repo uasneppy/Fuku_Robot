@@ -43,8 +43,11 @@ const staffCallbackNamespace = "staff"
 
 // Actions carried in the "a" field of a staff callback.
 const (
-	staffActUnsetConfirm = "uy"
-	staffActUnsetCancel  = "un"
+	staffActUnsetConfirm  = "uy"
+	staffActUnsetCancel   = "un"
+	staffActUnlinkAsk     = "ul"
+	staffActUnlinkConfirm = "uc"
+	staffActUnlinkCancel  = "ux"
 )
 
 // staffGroupsToken stands in for the group list while the translation is
@@ -152,17 +155,12 @@ func (moduleStruct) staffPanel(c *helpers.CommandContext) error {
 	if group == nil {
 		return ext.EndGroups
 	}
-	links, err := staff.ListLinksByStaffFresh(group.ChatID)
+	text, keyboard, err := buildStaffPanel(c.Tr, *group, c.Bot.Username)
 	if err != nil {
-		text, _ := c.Tr.GetString("staff_check_failed")
-		replyStaff(c, text)
+		failed, _ := c.Tr.GetString("staff_check_failed")
+		replyStaff(c, failed)
 		return ext.EndGroups
 	}
-	rows := make([]staffLinkRow, 0, len(links))
-	for _, link := range links {
-		rows = append(rows, staffLinkRow{Link: link})
-	}
-	text, keyboard := renderStaffPanel(c.Tr, *group, rows, c.Bot.Username)
 	opts := formatting.Shtml()
 	if len(keyboard.InlineKeyboard) > 0 {
 		opts.ReplyMarkup = keyboard
@@ -249,6 +247,12 @@ func (m moduleStruct) staffCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 		return m.staffUnsetConfirm(b, query, tr)
 	case staffActUnsetCancel:
 		return m.staffUnsetCancel(b, query, tr)
+	case staffActUnlinkAsk:
+		return m.staffUnlinkAsk(b, query, tr, decoded.Fields)
+	case staffActUnlinkConfirm:
+		return m.staffUnlinkConfirm(b, query, tr, decoded.Fields)
+	case staffActUnlinkCancel:
+		return m.staffUnlinkCancel(b, query, tr, decoded.Fields)
 	default:
 		text, _ := tr.GetString("staff_cb_expired")
 		answerStaffCallback(b, query, text, false)
@@ -358,6 +362,7 @@ func LoadStaff(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, unsetStaffDesc, staffModule.unsetStaff)
 	helpers.WrapCommand(dispatcher, staffDesc, staffModule.staffPanel)
 	helpers.WrapCommand(dispatcher, linkStaffDesc, staffModule.linkStaff)
+	helpers.WrapCommand(dispatcher, unlinkStaffDesc, staffModule.unlinkStaff)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("staff|"), staffModule.staffCallback))
 }
 

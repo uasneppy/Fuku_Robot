@@ -2605,9 +2605,10 @@ staff_help_msg: |
   × /setstaff: Jadikan grup ini Grup Staf Anda (hanya pembuat grup).
   × /unsetstaff: Hapus status Staf dan putuskan tautan semua grup (hanya pembuat grup).
   × /linkstaff [ID]: Tautkan grup ini ke Grup Staf Anda (hanya pembuat grup). Tambahkan ID obrolan Grup Staf jika Anda punya lebih dari satu.
+  × /unlinkstaff: Putuskan tautan grup ini dari Grup Staf-nya (hanya pembuat kedua grup).
 
   *Di Grup Staf:*
-  × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung.
+  × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung. Tekan Putuskan di samping grup untuk memutus tautannya (hanya pembuat kedua grup).
 staff_set_done: "Grup ini sekarang menjadi Grup Staf. ID obrolan: <code>{chat_id}</code>"
 staff_set_already: "Grup ini sudah menjadi Grup Staf."
 staff_refuse_not_owner: "Hanya pembuat grup ini yang dapat menjadikannya Grup Staf."
@@ -2642,3 +2643,11 @@ staff_link_refuse_not_target_owner: "Tidak ditautkan: Anda bukan pembuat {group}
 staff_link_refuse_already_linked: "Tidak ditautkan: {group} sudah ditautkan ke sebuah Grup Staf. Putuskan tautannya terlebih dahulu."
 staff_link_check_failed_group: "Tidak ditautkan: saya tidak bisa memverifikasi siapa pembuat {group} saat ini. Tidak ada yang diubah, coba lagi sebentar lagi."
 staff_panel_add_group_button: "➕ Tambah grup"
+staff_notice_unlinked_by: "Tautan grup diputus: {group}\nDiputus oleh {user}"
+staff_unlink_not_linked: "Grup ini tidak ditautkan ke Grup Staf."
+staff_unlink_refuse_not_owner: "Hanya pembuat grup ini dan Grup Stafnya yang dapat memutus tautannya. Tidak ada yang diubah."
+staff_unlink_refuse_not_group_owner: "Tautan tidak diputus: Anda bukan pembuat {group}. Hanya pembuat kedua grup yang dapat memutus tautannya."
+staff_unlink_check_failed_group: "Tautan tidak diputus: saya tidak bisa memverifikasi siapa pembuat {group} saat ini. Tidak ada yang diubah, coba lagi sebentar lagi."
+staff_panel_unlink_button: "Putuskan {group}"
+staff_unlink_confirm_prompt: "Yakin ingin memutus tautan {group}? Perintah Staf tidak akan lagi menjangkaunya."
+staff_cb_denied: "Tombol ini bukan milik obrolan ini."
