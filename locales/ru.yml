@@ -2345,3 +2345,17 @@ misc_runs:
   - "I'm out."
   - "Catch me if you can."
 chat_status_bot_change_info_error: "I can't change group info here! Make sure I'm admin and can change group info."
+staff_help_msg: |
+  Штаб-группа — это одна группа доверенных админов, которая управляет вашими остальными группами.
+
+  *Владелец группы:*
+  × /setstaff: Сделать эту группу вашей штаб-группой (только создатель группы).
+
+  *В штаб-группе:*
+  × /staff: Показать ID чата штаб-группы и связанные группы.
+staff_set_done: "Эта группа теперь штаб-группа. ID чата: <code>{chat_id}</code>"
+staff_set_already: "Эта группа уже является штаб-группой."
+staff_refuse_not_owner: "Только создатель этой группы может сделать её штаб-группой."
+staff_check_failed: "Сейчас не удалось проверить, кто создал эту группу. Ничего не изменено, попробуйте ещё раз чуть позже."
+staff_panel_chat_id: "ID чата штаб-группы: <code>{chat_id}</code>"
+staff_panel_no_links: "Связанных групп пока нет."

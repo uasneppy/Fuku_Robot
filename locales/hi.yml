@@ -2285,3 +2285,17 @@ misc_runs:
   - "I'm out."
   - "Catch me if you can."
 chat_status_bot_change_info_error: "I can't change group info here! Make sure I'm admin and can change group info."
+staff_help_msg: |
+  स्टाफ ग्रुप भरोसेमंद एडमिन का एक ग्रुप होता है जो आपके बाकी ग्रुप को संभालता है।
+
+  *ग्रुप ओनर:*
+  × /setstaff: इस ग्रुप को अपना स्टाफ ग्रुप बनाएं (केवल ग्रुप बनाने वाला)।
+
+  *स्टाफ ग्रुप में:*
+  × /staff: स्टाफ ग्रुप की चैट आईडी और जुड़े हुए ग्रुप दिखाएं।
+staff_set_done: "यह ग्रुप अब एक स्टाफ ग्रुप है। चैट आईडी: <code>{chat_id}</code>"
+staff_set_already: "यह ग्रुप पहले से ही एक स्टाफ ग्रुप है।"
+staff_refuse_not_owner: "केवल इस ग्रुप को बनाने वाला ही इसे स्टाफ ग्रुप बना सकता है।"
+staff_check_failed: "मैं अभी यह जांच नहीं कर पाया कि इस ग्रुप को किसने बनाया है। कुछ भी नहीं बदला गया, कृपया थोड़ी देर बाद फिर कोशिश करें।"
+staff_panel_chat_id: "स्टाफ ग्रुप की चैट आईडी: <code>{chat_id}</code>"
+staff_panel_no_links: "अभी तक कोई ग्रुप जुड़ा नहीं है।"

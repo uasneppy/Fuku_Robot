@@ -2636,3 +2636,17 @@ misc_runs:
   - "I'm out."
   - "Catch me if you can."
 chat_status_bot_change_info_error: "I can't change group info here! Make sure I'm admin and can change group info."
+staff_help_msg: |
+  A Staff Group is one group of trusted admins that manages your other groups.
+
+  *Group owner:*
+  × /setstaff: Make this group your Staff Group (group creator only).
+
+  *In the Staff Group:*
+  × /staff: Show the Staff Group chat ID and its linked groups.
+staff_set_done: "This group is now a Staff Group. Chat ID: <code>{chat_id}</code>"
+staff_set_already: "This group is already a Staff Group."
+staff_refuse_not_owner: "Only the creator of this group can make it a Staff Group."
+staff_check_failed: "I could not verify who created this group right now. Nothing was changed, please try again in a moment."
+staff_panel_chat_id: "Staff Group chat ID: <code>{chat_id}</code>"
+staff_panel_no_links: "No groups are linked yet."

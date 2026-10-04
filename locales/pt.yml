@@ -2570,3 +2570,17 @@ misc_runs:
   - "I'm out."
   - "Catch me if you can."
 chat_status_bot_change_info_error: "I can't change group info here! Make sure I'm admin and can change group info."
+staff_help_msg: |
+  Um Grupo de Staff é um grupo de administradores de confiança que gere os seus outros grupos.
+
+  *Dono do grupo:*
+  × /setstaff: Torna este grupo o seu Grupo de Staff (apenas o criador do grupo).
+
+  *No Grupo de Staff:*
+  × /staff: Mostra o ID de chat do Grupo de Staff e os grupos vinculados.
+staff_set_done: "Este grupo agora é um Grupo de Staff. ID do chat: <code>{chat_id}</code>"
+staff_set_already: "Este grupo já é um Grupo de Staff."
+staff_refuse_not_owner: "Apenas o criador deste grupo pode torná-lo um Grupo de Staff."
+staff_check_failed: "Não consegui verificar agora quem criou este grupo. Nada foi alterado, tente novamente daqui a pouco."
+staff_panel_chat_id: "ID de chat do Grupo de Staff: <code>{chat_id}</code>"
+staff_panel_no_links: "Ainda não há grupos vinculados."

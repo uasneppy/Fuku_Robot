@@ -74,6 +74,8 @@ func TestMain(m *testing.M) {
 			&models.FederationSub{},
 			&models.LogChannel{},
 			&models.AISpamSettings{},
+			&models.StaffGroup{},
+			&models.StaffGroupLink{},
 		)
 		if err != nil {
 			fmt.Printf("AutoMigrate failed: %v\n", err)
