@@ -203,6 +203,13 @@ func main() {
 		modules.StopCaptchaLifecycle()
 		return nil
 	})
+	// Registered after the DB-close handler, so LIFO stops the sweeper before the
+	// database closes.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping staff sweeper...")
+		modules.StopStaffSweeper()
+		return nil
+	})
 
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")
@@ -415,6 +422,7 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 	if err := modules.StartCaptchaLifecycle(b); err != nil {
 		log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 	}
+	modules.StartStaffSweeper(b)
 	log.Infof("[Modules] Loaded modules: %s", alita.ListModules())
 
 	config.AppConfig.WorkingMode = mode

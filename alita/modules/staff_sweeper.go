@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"math/rand/v2"
+	"sync"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -12,6 +13,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
+	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 )
 
 // staffSweepLockKey is the operational Redis key one replica holds per cycle. It
@@ -74,11 +76,77 @@ var staffSweepFirstDelay = func() time.Duration {
 // leaves it nil; tests use it to count cycles or inject a panic.
 var staffSweepCycleHook func()
 
-// StartStaffSweeper is a placeholder until the lifecycle is implemented.
-func StartStaffSweeper(b *gotgbot.Bot) {}
+// Lifecycle state of the sweeper goroutine.
+var (
+	staffSweepMu     sync.Mutex
+	staffSweepCancel context.CancelFunc
+	staffSweepWG     sync.WaitGroup
+)
 
-// StopStaffSweeper is a placeholder until the lifecycle is implemented.
-func StopStaffSweeper() {}
+// StartStaffSweeper starts the background sweep that rechecks every Staff Group
+// link hourly, the first run coming one to five minutes after startup. It is
+// idempotent: while a sweeper is running, further calls do nothing. Stop it with
+// StopStaffSweeper before the database closes.
+func StartStaffSweeper(b *gotgbot.Bot) {
+	staffSweepMu.Lock()
+	defer staffSweepMu.Unlock()
+	if staffSweepCancel != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	staffSweepCancel = cancel
+	staffSweepWG.Add(1)
+	go func() {
+		defer staffSweepWG.Done()
+		defer error_handling.RecoverFromPanic("staffSweeper", "Staff")
+		staffSweepLoop(ctx, b)
+	}()
+}
+
+// StopStaffSweeper cancels the sweeper and waits for it to finish, so no sweep is
+// touching the database when shutdown closes it. It is safe to call when the
+// sweeper is not running, and more than once.
+func StopStaffSweeper() {
+	staffSweepMu.Lock()
+	cancel := staffSweepCancel
+	staffSweepMu.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+	// Wait without holding the mutex (cf. StopAntiRaidExpiryPoller): a sweep that
+	// is mid-call must not wedge shutdown behind a lock.
+	staffSweepWG.Wait()
+	staffSweepMu.Lock()
+	staffSweepCancel = nil
+	staffSweepMu.Unlock()
+}
+
+// staffSweepLoop waits the jittered first delay, then runs a cycle every
+// staffSweepInterval until ctx is cancelled.
+func staffSweepLoop(ctx context.Context, b *gotgbot.Bot) {
+	timer := time.NewTimer(staffSweepFirstDelay())
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		staffSweepCycle(ctx, b)
+		timer.Reset(staffSweepInterval)
+	}
+}
+
+// staffSweepCycle runs one sweep with its own panic recovery, so a panicking
+// cycle is logged and the loop carries on to the next one.
+func staffSweepCycle(ctx context.Context, b *gotgbot.Bot) {
+	defer error_handling.RecoverFromPanic("staffSweepCycle", "Staff")
+	if hook := staffSweepCycleHook; hook != nil {
+		hook()
+	}
+	runStaffSweep(ctx, b)
+}
 
 // staffSweepLockTTL is how long a replica holds the sweep lock: one minute short
 // of the interval, so the next hourly cycle can always take it.

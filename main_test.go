@@ -113,6 +113,7 @@ func TestPostInitSetsCommandsAndStartupMessage(t *testing.T) {
 	}
 	db.DB = testDB
 	t.Cleanup(func() {
+		modules.StopStaffSweeper()
 		modules.StopCaptchaLifecycle()
 		db.DB = previousDB
 	})
