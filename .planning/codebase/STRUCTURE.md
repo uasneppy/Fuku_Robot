@@ -227,12 +227,12 @@ last_mapped_at: 2026-10-04
 │
 ├── locales/                        # Embedded i18n files
 │   ├── en.yml                      # English (default, used by docs generator)
+│   ├── es.yml                      # Spanish
+│   ├── fr.yml                      # French
+│   ├── hi.yml                      # Hindi
 │   ├── id.yml                      # Indonesian
 │   ├── pt.yml                      # Portuguese
-│   ├── ro.yml                      # Romanian
-│   ├── tr.yml                      # Turkish
-│   ├── hi.yml                      # Hindi
-│   ├── es.yml                      # Spanish
+│   ├── ru.yml                      # Russian
 │   └── config.yml                  # Help alt-names (pseudo-locale, not a language)
 │
 ├── scripts/                        # Build and utility scripts
@@ -327,7 +327,7 @@ last_mapped_at: 2026-10-04
 
 **`locales/`:**
 - Purpose: Embedded i18n files (7 languages)
-- Files: `en.yml` (default), `id.yml`, `pt.yml`, `ro.yml`, `tr.yml`, `hi.yml`, `es.yml`, `config.yml`
+- Files: `en.yml` (default), `es.yml`, `fr.yml`, `hi.yml`, `id.yml`, `pt.yml`, `ru.yml`, `config.yml`
 - Referenced by: `i18n.Manager` loads from embedded `locales/` directory at runtime
 
 **`scripts/`:**
@@ -420,7 +420,7 @@ last_mapped_at: 2026-10-04
      - Handler methods with value receiver on `moduleStruct`
    
 3. **Localization:**
-   - Add keys to all 7 locale files: `locales/{en,id,pt,ro,tr,hi,es}.yml`
+   - Add keys to all 7 locale files: `locales/{en,es,fr,hi,id,pt,ru}.yml`
    - Key format: `reputation_<context>` (e.g., `reputation_info`, `reputation_added`)
    - Run `make check-translations` to verify
    

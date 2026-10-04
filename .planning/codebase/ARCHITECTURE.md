@@ -132,7 +132,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 - Used by: Command pipeline, handlers via predicates or PermissionResponder
 
 **Internationalization Layer:**
-- Purpose: Localize messages across 7 languages (en, id, pt, ro, tr, hi, es)
+- Purpose: Localize messages across 7 languages (en, es, fr, hi, id, pt, ru)
 - Location: `alita/i18n/`, `locales/` (embedded), `alita/db/lang/`
 - Contains: Translator (stateful per language), cache of parsed YAML, fallback to English
 - Depends on: Embedded locale files, user language preference from DB

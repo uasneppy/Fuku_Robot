@@ -275,7 +275,7 @@ Fuku Robot is a fork of Alita Robot, a Go Telegram group-management bot. It runs
 - Contains: IsUserAdmin, IsGroupAdmin, RequireGroup, CheckDisabledCmd (return bools, never reply)
 - Depends on: Cache layer (admin list caching), chat/user models
 - Used by: Command pipeline, handlers via predicates or PermissionResponder
-- Purpose: Localize messages across 7 languages (en, id, pt, ro, tr, hi, es)
+- Purpose: Localize messages across 7 languages (en, es, fr, hi, id, pt, ru)
 - Location: `alita/i18n/`, `locales/` (embedded), `alita/db/lang/`
 - Contains: Translator (stateful per language), cache of parsed YAML, fallback to English
 - Depends on: Embedded locale files, user language preference from DB
