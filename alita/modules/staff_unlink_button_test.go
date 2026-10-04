@@ -137,7 +137,7 @@ func TestStaffUnlinkButtonRenderedByStaffCommand(t *testing.T) {
 	}
 	markup := fmt.Sprint(calls[0].Params["reply_markup"])
 	for _, id := range []uint{env.link.ID, env.other.ID} {
-		if want := fmt.Sprintf("a=ul|l=%d", id); !strings.Contains(markup, want) {
+		if want := fmt.Sprintf("a=ul&l=%d", id); !strings.Contains(markup, want) {
 			t.Errorf("panel keyboard %s missing %q", markup, want)
 		}
 	}
@@ -157,7 +157,7 @@ func TestStaffUnlinkButtonConfirmFlow(t *testing.T) {
 	}
 	markup := fmt.Sprint(edits[0].Params["reply_markup"])
 	for _, want := range []string{
-		fmt.Sprintf("a=uc|l=%d", env.link.ID), fmt.Sprintf("a=ux|l=%d", env.link.ID),
+		fmt.Sprintf("a=uc&l=%d", env.link.ID), fmt.Sprintf("a=ux&l=%d", env.link.ID),
 		staffMarker("staff_btn_confirm"), staffMarker("staff_btn_cancel"),
 	} {
 		if !strings.Contains(markup, want) {
@@ -184,8 +184,8 @@ func TestStaffUnlinkButtonConfirmFlow(t *testing.T) {
 		t.Errorf("re-rendered panel %q must list only the other link", panel)
 	}
 	panelMarkup := fmt.Sprint(edits[1].Params["reply_markup"])
-	if !strings.Contains(panelMarkup, fmt.Sprintf("a=ul|l=%d", env.other.ID)) ||
-		strings.Contains(panelMarkup, fmt.Sprintf("a=ul|l=%d", env.link.ID)) {
+	if !strings.Contains(panelMarkup, fmt.Sprintf("a=ul&l=%d", env.other.ID)) ||
+		strings.Contains(panelMarkup, fmt.Sprintf("a=ul&l=%d", env.link.ID)) {
 		t.Errorf("re-rendered keyboard %s must offer Unlink for the other link only", panelMarkup)
 	}
 	env.wantInStaff(t, "staff_notice_unlinked_by")

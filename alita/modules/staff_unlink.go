@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -181,4 +183,236 @@ func (moduleStruct) unlinkStaff(c *helpers.CommandContext) error {
 	refusal, verifiedStaffOwner := runUnlinkGroup(c.Bot, c.User, *link)
 	deliverUnlinkRefusal(c.Bot, c, *link, refusal, verifiedStaffOwner)
 	return ext.EndGroups
+}
+
+// errStaffPanelGone means the message a button sits on is no longer a Staff
+// Group panel: the message is missing, or its chat stopped being a Staff Group.
+var errStaffPanelGone = errors.New("staff: no panel to render")
+
+// parseStaffLinkID parses the "l" field of an Unlink button strictly: decimal
+// digits only (no sign, no spaces), non-zero, and within the range of a uint.
+func parseStaffLinkID(raw string) (uint, bool) {
+	id, err := strconv.ParseUint(raw, 10, 0)
+	if err != nil || id == 0 {
+		return 0, false
+	}
+	return uint(id), true
+}
+
+// editStaffMessage replaces the text and keyboard of the message a button sits
+// on. Telegram's "message is not modified" answer is not a failure: the message
+// already shows what was asked for.
+func editStaffMessage(
+	b *gotgbot.Bot,
+	msg gotgbot.MaybeInaccessibleMessage,
+	text string,
+	keyboard gotgbot.InlineKeyboardMarkup,
+) error {
+	opts := &gotgbot.EditMessageTextOpts{
+		Text:               text,
+		ParseMode:          formatting.HTML,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+	}
+	if len(keyboard.InlineKeyboard) > 0 {
+		opts.ReplyMarkup = keyboard
+	}
+	_, _, err := msg.EditText(b, opts)
+	if err != nil && !strings.Contains(err.Error(), "message is not modified") {
+		log.Errorf("[Staff] edit staff panel message: %v", err)
+		return err
+	}
+	return nil
+}
+
+// staffRerenderPanel rebuilds the /staff panel of the chat msg sits in, from the
+// database, and edits msg to show it. It returns errStaffPanelGone, touching
+// nothing, when there is no message or its chat is not a Staff Group; the caller
+// answers the callback.
+func staffRerenderPanel(b *gotgbot.Bot, msg gotgbot.MaybeInaccessibleMessage, tr *i18n.Translator) error {
+	if msg == nil {
+		return errStaffPanelGone
+	}
+	group, err := staff.GetStaffGroupFresh(msg.GetChat().Id)
+	if err != nil {
+		return err
+	}
+	if group == nil {
+		return errStaffPanelGone
+	}
+	text, keyboard, err := buildStaffPanel(tr, *group, b.Username)
+	if err != nil {
+		return err
+	}
+	return editStaffMessage(b, msg, text, keyboard)
+}
+
+// staffUnlinkExpired answers a press whose link no longer exists (or whose button
+// data is unusable) with the "expired" toast and refreshes the panel, so the stale
+// button disappears.
+func staffUnlinkExpired(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator) {
+	if err := staffRerenderPanel(b, query.Message, tr); err != nil && !errors.Is(err, errStaffPanelGone) {
+		log.Warnf("[Staff] refresh after expired unlink press: %v", err)
+	}
+	text, _ := tr.GetString("staff_cb_expired")
+	answerStaffCallback(b, query, text, false)
+}
+
+// answerUnlinkRefusal answers a refused Unlink press once: an owner-only alert for
+// either ownership mismatch, the expired toast for a lost race, and a could-not-
+// verify alert for everything else. Nothing is ever posted to a chat from here.
+func answerUnlinkRefusal(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	refusal staffUnlinkRefusal,
+) {
+	switch refusal {
+	case staffUnlinkNotStaffOwner, staffUnlinkNotGroupOwner:
+		text, _ := tr.GetString("staff_cb_owner_only")
+		answerStaffCallback(b, query, text, true)
+	case staffUnlinkGone:
+		staffUnlinkExpired(b, query, tr)
+	default:
+		text, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, text, true)
+	}
+}
+
+// loadUnlinkTarget resolves the link an Unlink button names, from the row ID
+// alone: the data is client-supplied, so the row is loaded fresh and the message
+// must sit in that link's own Staff Group. On any failure it has already answered
+// the press and returns nil.
+func loadUnlinkTarget(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) *models.StaffGroupLink {
+	id, ok := parseStaffLinkID(fields["l"])
+	if !ok {
+		staffUnlinkExpired(b, query, tr)
+		return nil
+	}
+	link, err := staff.GetLinkByIDFresh(id)
+	if err != nil {
+		text, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, text, true)
+		return nil
+	}
+	if link == nil {
+		staffUnlinkExpired(b, query, tr)
+		return nil
+	}
+	if query.Message.GetChat().Id != link.StaffChatID {
+		text, _ := tr.GetString("staff_cb_denied")
+		answerStaffCallback(b, query, text, true)
+		return nil
+	}
+	return link
+}
+
+// staffUnlinkConfirmPrompt builds the "Are you sure?" text and its Confirm and
+// Cancel buttons, which carry the same link ID. ok is false when the button data
+// cannot be encoded.
+func staffUnlinkConfirmPrompt(
+	tr *i18n.Translator,
+	link models.StaffGroupLink,
+) (text string, keyboard gotgbot.InlineKeyboardMarkup, ok bool) {
+	id := strconv.FormatUint(uint64(link.ID), 10)
+	confirmData := encodeCallbackData(staffCallbackNamespace, map[string]string{"a": staffActUnlinkConfirm, "l": id})
+	cancelData := encodeCallbackData(staffCallbackNamespace, map[string]string{"a": staffActUnlinkCancel, "l": id})
+	if confirmData == "" || cancelData == "" {
+		return "", keyboard, false
+	}
+	text, _ = tr.GetString("staff_unlink_confirm_prompt", i18n.TranslationParams{"group": staffGroupTitleToken})
+	text = strings.Replace(text, staffGroupTitleToken, staffDisplayTitle(link.GroupTitle), 1)
+	confirmLabel, _ := tr.GetString("staff_btn_confirm")
+	cancelLabel, _ := tr.GetString("staff_btn_cancel")
+	keyboard.InlineKeyboard = [][]gotgbot.InlineKeyboardButton{{
+		{Text: confirmLabel, CallbackData: confirmData},
+		{Text: cancelLabel, CallbackData: cancelData},
+	}}
+	return text, keyboard, true
+}
+
+// staffUnlinkAsk handles the Unlink button: after the live creator-of-both check
+// it swaps the panel for an "Are you sure?" prompt. Nothing is deleted yet.
+func (moduleStruct) staffUnlinkAsk(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	link := loadUnlinkTarget(b, query, tr, fields)
+	if link == nil {
+		return ext.EndGroups
+	}
+	if refusal, _ := checkUnlinkAuthority(b, &query.From, *link); refusal != staffUnlinkOK {
+		answerUnlinkRefusal(b, query, tr, refusal)
+		return ext.EndGroups
+	}
+	text, keyboard, ok := staffUnlinkConfirmPrompt(tr, *link)
+	if !ok {
+		failed, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, failed, true)
+		return ext.EndGroups
+	}
+	_ = editStaffMessage(b, query.Message, text, keyboard)
+	answerStaffCallback(b, query, "", false)
+	return ext.EndGroups
+}
+
+// staffUnlinkConfirm handles Confirm. The live creator-of-both check runs again
+// here, inside runUnlinkGroup, because ownership may have moved since the prompt
+// was shown. On success the Staff Group gets the "unlinked by" notice and the panel
+// is re-rendered in place.
+func (moduleStruct) staffUnlinkConfirm(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	link := loadUnlinkTarget(b, query, tr, fields)
+	if link == nil {
+		return ext.EndGroups
+	}
+	if refusal, _ := runUnlinkGroup(b, &query.From, *link); refusal != staffUnlinkOK {
+		answerUnlinkRefusal(b, query, tr, refusal)
+		return ext.EndGroups
+	}
+	finishStaffPanelPress(b, query, tr)
+	return ext.EndGroups
+}
+
+// staffUnlinkCancel handles Cancel: it needs the same authority as the other two
+// buttons, so a bystander cannot dismiss the creator's prompt, and then restores
+// the panel.
+func (moduleStruct) staffUnlinkCancel(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	link := loadUnlinkTarget(b, query, tr, fields)
+	if link == nil {
+		return ext.EndGroups
+	}
+	if refusal, _ := checkUnlinkAuthority(b, &query.From, *link); refusal != staffUnlinkOK {
+		answerUnlinkRefusal(b, query, tr, refusal)
+		return ext.EndGroups
+	}
+	finishStaffPanelPress(b, query, tr)
+	return ext.EndGroups
+}
+
+// finishStaffPanelPress re-renders the panel in place and answers the press once:
+// with the expired toast when there is no Staff Group panel any more, otherwise
+// with an empty answer (a failed edit is logged and does not undo the change).
+func finishStaffPanelPress(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator) {
+	if err := staffRerenderPanel(b, query.Message, tr); errors.Is(err, errStaffPanelGone) {
+		text, _ := tr.GetString("staff_cb_expired")
+		answerStaffCallback(b, query, text, false)
+		return
+	}
+	answerStaffCallback(b, query, "", false)
 }
