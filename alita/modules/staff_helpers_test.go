@@ -80,9 +80,9 @@ func (c *staffBotClient) record(method string, params map[string]any) {
 	for key, value := range params {
 		copied[key] = value
 	}
-	c.moduleBotClient.mu.Lock()
-	defer c.moduleBotClient.mu.Unlock()
-	c.moduleBotClient.calls = append(c.moduleBotClient.calls, moduleBotCall{Method: method, Params: copied})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, moduleBotCall{Method: method, Params: copied})
 }
 
 func staffMemberJSON(userID int64, isBot bool, status string, canRestrict bool) json.RawMessage {

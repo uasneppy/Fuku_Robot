@@ -41,13 +41,13 @@ func (moduleStruct) setStaff(c *helpers.CommandContext) error {
 	}
 
 	result, _, err := chat_status.CheckOwner(c.Bot, c.Chat.Id, c.User.Id)
-	switch {
-	case result == chat_status.OwnerUnknown:
+	switch result {
+	case chat_status.OwnerUnknown:
 		log.Warnf("[Staff] setStaff: owner check for chat %d failed: %v", c.Chat.Id, err)
 		text, _ := c.Tr.GetString("staff_check_failed")
 		replyStaff(c, text)
 		return ext.EndGroups
-	case result == chat_status.OwnerMismatch:
+	case chat_status.OwnerMismatch:
 		text, _ := c.Tr.GetString("staff_refuse_not_owner")
 		replyStaff(c, text)
 		return ext.EndGroups
