@@ -440,6 +440,9 @@ func SetLinkHealth(id uint, health string) (changed bool, err error) {
 	return true, nil
 }
 
+// DeleteOrphanLinks is a placeholder until the sweep cleanup is implemented.
+func DeleteOrphanLinks() (int64, error) { return 0, nil }
+
 // UpdateStaffGroupOwner refreshes staff_groups.owner_user_id for chatID to
 // ownerUserID. The recorded owner is only a lookup hint (it is never an
 // authority), so recheckStaffGroup keeps it equal to the live creator.

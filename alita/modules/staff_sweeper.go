@@ -11,6 +11,9 @@ import (
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 )
 
+// staffSweepLockKey is the operational Redis key one replica holds per cycle.
+const staffSweepLockKey = "alita:staff:sweep:lock"
+
 // Variables rather than constants so tests can shorten them.
 var (
 	// staffSweepInterval is how often the hourly sweep runs.

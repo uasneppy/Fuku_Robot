@@ -883,6 +883,84 @@ func TestStaffRepoListStaffGroupsByOwner(t *testing.T) {
 	}
 }
 
+func TestStaffRepoListStaffGroupsFresh(t *testing.T) {
+	first, second := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, first, second)
+	for _, chatID := range []int64{first, second} {
+		if _, err := CreateStaffGroup(chatID, 7, "Staff"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	groups, err := ListStaffGroupsFresh()
+	if err != nil {
+		t.Fatalf("ListStaffGroupsFresh: %v", err)
+	}
+	position := map[int64]int{}
+	for i, g := range groups {
+		position[g.ChatID] = i
+		if i > 0 && groups[i-1].ID >= g.ID {
+			t.Fatalf("groups are not in id order: %+v", groups)
+		}
+	}
+	if _, ok := position[first]; !ok {
+		t.Fatalf("groups = %+v, want the first Staff Group listed", groups)
+	}
+	if _, ok := position[second]; !ok {
+		t.Fatalf("groups = %+v, want the second Staff Group listed", groups)
+	}
+}
+
+func TestStaffRepoDeleteOrphanLinks(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	staffID, keptGroup := uniqueStaffChatID(), uniqueStaffChatID()
+	goneStaff, orphanA, orphanB := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, keptGroup, goneStaff, orphanA, orphanB)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	kept := &models.StaffGroupLink{GroupChatID: keptGroup, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "Kept"}
+	if err := CreateLink(kept); err != nil {
+		t.Fatal(err)
+	}
+	// Orphans: their Staff Group row does not exist.
+	for _, group := range []int64{orphanA, orphanB} {
+		orphan := &models.StaffGroupLink{GroupChatID: group, StaffChatID: goneStaff, OwnerUserID: 7, GroupTitle: "Orphan"}
+		if err := db.DB.Create(orphan).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Prime the cached lookups: a stale cache must not outlive the delete.
+	for _, group := range []int64{keptGroup, orphanA, orphanB} {
+		if GetLinkOfGroup(group) == nil {
+			t.Fatalf("group %d should be linked before the cleanup", group)
+		}
+	}
+
+	count, err := DeleteOrphanLinks()
+	if err != nil {
+		t.Fatalf("DeleteOrphanLinks: %v", err)
+	}
+	if count < 2 {
+		t.Fatalf("DeleteOrphanLinks = %d, want at least the two seeded orphans", count)
+	}
+	for _, group := range []int64{orphanA, orphanB} {
+		if got, err := GetLinkOfGroupFresh(group); err != nil || got != nil {
+			t.Fatalf("orphan of group %d = (%+v, %v), want it deleted", group, got, err)
+		}
+		if got := GetLinkOfGroup(group); got != nil {
+			t.Fatalf("GetLinkOfGroup(%d) = %+v, want nil (the delete must invalidate the cache)", group, got)
+		}
+	}
+	if got := GetLinkOfGroup(keptGroup); got == nil || got.ID != kept.ID {
+		t.Fatalf("GetLinkOfGroup(kept) = %+v, want the untouched link", got)
+	}
+	if again, err := DeleteOrphanLinks(); err != nil || again != 0 {
+		t.Fatalf("second DeleteOrphanLinks = (%d, %v), want (0, nil)", again, err)
+	}
+}
+
 // Backup export, import and reset must never create, restore or erase Staff
 // Groups or links, so no backup module may name them.
 func TestStaffTablesStayOutOfBackup(t *testing.T) {
