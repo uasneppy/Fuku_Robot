@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -51,16 +52,19 @@ func (moduleStruct) onMigrateMessage(_ *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 // recheckChatOwnership runs the live ownership recheck for chatID when the cached
-// gates say it is a linked group. The cached gate only filters out unrelated
-// chats cheaply; the link is reloaded fresh before it is judged, and the decision
-// itself always comes from recheckLink's live Telegram check.
+// gates say it is a linked group or a Staff Group. The cached gates only filter
+// out unrelated chats cheaply; a link is reloaded fresh before it is judged, and
+// the decision itself always comes from the live Telegram check inside
+// recheckLink and recheckStaffGroup.
 func recheckChatOwnership(b *gotgbot.Bot, chatID int64) {
 	if staff.GetLinkOfGroup(chatID) != nil {
 		link, err := staff.GetLinkOfGroupFresh(chatID)
-		if err != nil || link == nil {
-			return
+		if err == nil && link != nil {
+			recheckLink(b, *link, newStaffOwnerPass())
 		}
-		recheckLink(b, *link, newStaffOwnerPass())
+	}
+	if staff.GetStaffGroup(chatID) != nil {
+		recheckStaffGroup(context.Background(), b, chatID, nil)
 	}
 }
 
@@ -76,6 +80,38 @@ func (moduleStruct) onOwnershipMessage(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.ContinueGroups
 	}
 	recheckChatOwnership(b, msg.Chat.Id)
+	return ext.ContinueGroups
+}
+
+// staffCreatorTransition reports whether a chat_member update moves the creator
+// role: the old or the new status is "creator". Every other transition is
+// ignored, so ordinary promotions and joins cost nothing.
+func staffCreatorTransition(u *gotgbot.ChatMemberUpdated) bool {
+	if u == nil {
+		return false
+	}
+	for _, member := range []gotgbot.ChatMember{u.OldChatMember, u.NewChatMember} {
+		if member != nil && member.GetStatus() == gotgbot.ChatMemberStatusCreator {
+			return true
+		}
+	}
+	return false
+}
+
+// onCreatorChatMember reacts to a chat_member update in which the creator role
+// moved. Whether Telegram sends one on an ownership transfer is undocumented, so
+// this is an extra trigger; the update is only a hint and the recheck asks
+// Telegram live. Chats that are neither a Staff Group nor a linked group are
+// dropped by the cached gates without a Telegram call. It always returns
+// ext.ContinueGroups.
+func (moduleStruct) onCreatorChatMember(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("onCreatorChatMember", "StaffWatchers")
+
+	update := ctx.ChatMember
+	if !staffCreatorTransition(update) {
+		return ext.ContinueGroups
+	}
+	recheckChatOwnership(b, update.Chat.Id)
 	return ext.ContinueGroups
 }
 
@@ -113,14 +149,12 @@ func LoadStaffWatchers(dispatcher *ext.Dispatcher) {
 		}, staffWatchersModule.onOwnershipMessage).SetAllowBot(true),
 		staffWatchersModule.handlerGroup,
 	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewChatMember(staffCreatorTransition, staffWatchersModule.onCreatorChatMember),
+		staffWatchersModule.handlerGroup,
+	)
 }
 
 func init() {
 	RegisterLegacyModule("StaffWatchers", 237, LoadStaffWatchers)
-}
-
-func staffCreatorTransition(u *gotgbot.ChatMemberUpdated) bool { return false }
-
-func (moduleStruct) onCreatorChatMember(_ *gotgbot.Bot, _ *ext.Context) error {
-	return ext.ContinueGroups
 }

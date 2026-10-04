@@ -173,13 +173,94 @@ func recheckLink(b *gotgbot.Bot, link models.StaffGroupLink, pass *staffOwnerPas
 	return staffRecheckUnknown
 }
 
-// staffRecheckSummary is a RED-phase stub.
+// staffRecheckSummary is what one recheckStaffGroup run did.
 type staffRecheckSummary struct {
+	// RemovedGroupIDs lists the linked groups this run unlinked, in link-id
+	// order within each kind of removal.
 	RemovedGroupIDs []int64
-	Unknown         bool
+	// Unknown is true when some Telegram answer was missing, or the pass was
+	// stopped early, so not every link was judged. Nothing was removed for it.
+	Unknown bool
 }
 
-// recheckStaffGroup is a RED-phase stub.
+// recheckStaffGroup rechecks a Staff Group and all of its links live (D-15). Like
+// recheckLink it is part of the single authority recheck: the hourly sweep, the
+// panel, the ownership watchers and Phase 2's pre-action check all use it, and
+// only a successful Telegram answer showing a different or missing creator
+// removes anything.
+//
+// It asks Telegram who the Staff Group's creator is. On an error nothing is
+// deleted (the chat may also have migrated, which re-keys it). The recorded
+// staff_groups.owner_user_id is only a lookup hint, so it is refreshed to the live
+// creator when it differs. A link whose maker is not that live creator is removed
+// (D-12); every such removal is one conditional DELETE, and the callers that won
+// get one combined notice in id order. Links whose maker still owns the Staff
+// Group continue with their own group-side recheckLink, sharing the Staff Group
+// answer already in hand. A Staff Group keeps its Staff status whoever owns it.
+//
+// pace, when not nil, is called before each group-side check and may block to
+// respect Bot API rate limits; a false return stops the run early with Unknown set.
 func recheckStaffGroup(ctx context.Context, b *gotgbot.Bot, staffChatID int64, pace func(context.Context) bool) staffRecheckSummary {
-	return staffRecheckSummary{}
+	var summary staffRecheckSummary
+
+	sg, err := staff.GetStaffGroupFresh(staffChatID)
+	if err != nil {
+		summary.Unknown = true
+		return summary
+	}
+	if sg == nil {
+		return summary
+	}
+
+	result, liveOwner, err := chat_status.CheckOwner(b, staffChatID, sg.OwnerUserID)
+	if result == chat_status.OwnerUnknown {
+		log.Warnf("[Staff] recheck: owner check for Staff Group %d failed: %v", staffChatID, err)
+		rekeyFromTelegramError(staffChatID, err)
+		summary.Unknown = true
+		return summary
+	}
+	if liveOwner != 0 && liveOwner != sg.OwnerUserID {
+		if _, err := staff.UpdateStaffGroupOwner(staffChatID, liveOwner); err != nil {
+			log.Errorf("[Staff] recheck: refresh owner of Staff Group %d: %v", staffChatID, err)
+		}
+	}
+
+	links, err := staff.ListLinksByStaffFresh(staffChatID)
+	if err != nil {
+		summary.Unknown = true
+		return summary
+	}
+
+	pass := newStaffOwnerPass()
+	if liveOwner != 0 {
+		pass.seed(staffChatID, liveOwner, chat_status.OwnerMatch, liveOwner, nil)
+	}
+	var removedTitles []string
+	defer func() { postStaffOwnerChangedNotice(b, staffChatID, removedTitles) }()
+
+	for _, link := range links {
+		if link.OwnerUserID != liveOwner {
+			deleted, err := staff.DeleteLinkIfOwner(link.ID, link.OwnerUserID)
+			if err != nil {
+				summary.Unknown = true
+				continue
+			}
+			if deleted {
+				summary.RemovedGroupIDs = append(summary.RemovedGroupIDs, link.GroupChatID)
+				removedTitles = append(removedTitles, link.GroupTitle)
+			}
+			continue
+		}
+		if ctx.Err() != nil || (pace != nil && !pace(ctx)) {
+			summary.Unknown = true
+			return summary
+		}
+		switch recheckLink(b, link, pass) {
+		case staffRecheckRemoved:
+			summary.RemovedGroupIDs = append(summary.RemovedGroupIDs, link.GroupChatID)
+		case staffRecheckUnknown:
+			summary.Unknown = true
+		}
+	}
+	return summary
 }

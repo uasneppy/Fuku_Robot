@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	log "github.com/sirupsen/logrus"
@@ -396,7 +397,25 @@ func DeleteLinkIfOwner(id uint, ownerUserID int64) (deleted bool, err error) {
 	return true, nil
 }
 
-// UpdateStaffGroupOwner is a RED-phase stub.
+// UpdateStaffGroupOwner refreshes staff_groups.owner_user_id for chatID to
+// ownerUserID. The recorded owner is only a lookup hint (it is never an
+// authority), so recheckStaffGroup keeps it equal to the live creator.
+//
+// It is one conditional UPDATE through a map, so a zero-value column is never
+// skipped. changed is true only when a row existed with a different owner; the
+// same value, or an unknown chat, gives (false, nil). The cached Staff Group
+// lookup is invalidated after the write.
 func UpdateStaffGroupOwner(chatID, ownerUserID int64) (changed bool, err error) {
-	return false, nil
+	result := db.DB.Model(&models.StaffGroup{}).
+		Where("chat_id = ? AND owner_user_id <> ?", chatID, ownerUserID).
+		Updates(map[string]any{"owner_user_id": ownerUserID, "updated_at": time.Now()})
+	if result.Error != nil {
+		log.Errorf("[Staff] UpdateStaffGroupOwner: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "update staff group %d owner", chatID)
+	}
+	if result.RowsAffected != 1 {
+		return false, nil
+	}
+	invalidateStaffKeys(chatID)
+	return true, nil
 }
