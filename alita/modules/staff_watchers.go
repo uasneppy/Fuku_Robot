@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"errors"
+
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
@@ -48,9 +50,26 @@ func (moduleStruct) onMigrateMessage(_ *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.ContinueGroups
 }
 
-// rekeyFromTelegramError is a RED-phase stub; the real detector follows.
+// rekeyFromTelegramError re-keys oldChatID when err is a Telegram error that
+// carries ResponseParameters.MigrateToChatId, which Telegram returns (with a
+// 400) when a request targets a group that has since become a supergroup. It
+// returns the new chat ID and true once staff.RekeyChat has run; for any other
+// error, including nil, it changes nothing and returns (0, false). A RekeyChat
+// failure is logged and still reports the new ID, so the caller can retry its
+// Telegram call against it.
+//
+// Plans 01-09 (panel) and 01-10 (sweeper) call it after a Telegram call on a
+// Staff Group chat fails.
 func rekeyFromTelegramError(oldChatID int64, err error) (newChatID int64, rekeyed bool) {
-	return 0, false
+	var tgErr *gotgbot.TelegramError
+	if !errors.As(err, &tgErr) || tgErr.ResponseParams == nil || tgErr.ResponseParams.MigrateToChatId == 0 {
+		return 0, false
+	}
+	newChatID = tgErr.ResponseParams.MigrateToChatId
+	if _, rekeyErr := staff.RekeyChat(oldChatID, newChatID); rekeyErr != nil {
+		log.Errorf("[StaffWatchers] rekeyFromTelegramError: rekey %d -> %d: %v", oldChatID, newChatID, rekeyErr)
+	}
+	return newChatID, true
 }
 
 // LoadStaffWatchers registers the Staff Group watchers at handler group -3.
