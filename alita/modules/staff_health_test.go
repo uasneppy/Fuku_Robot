@@ -4,6 +4,7 @@ package modules
 
 import (
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -89,4 +90,149 @@ func TestStaffHealthTracer(t *testing.T) {
 	if got := staff.GetLinkOfGroup(link.GroupChatID); got == nil || got.Health != models.StaffHealthBotMissing {
 		t.Fatalf("GetLinkOfGroup after the change = %+v, want health bot_missing (cache invalidated)", got)
 	}
+}
+
+func TestStaffHealthTransitions(t *testing.T) {
+	cases := []struct {
+		name   string
+		member gotgbot.ChatMember
+		health string
+		key    string
+	}{
+		{
+			name:   "administrator without the restrict right",
+			member: gotgbot.ChatMemberAdministrator{User: botUser, CanRestrictMembers: false},
+			health: models.StaffHealthBotCannotRestrict,
+			key:    "staff_notice_health_bot_cannot_restrict",
+		},
+		{
+			name:   "demoted to a plain member",
+			member: gotgbot.ChatMemberMember{User: botUser},
+			health: models.StaffHealthBotNotAdmin,
+			key:    "staff_notice_health_bot_not_admin",
+		},
+		{
+			name:   "kicked from the group",
+			member: gotgbot.ChatMemberBanned{User: botUser},
+			health: models.StaffHealthBotMissing,
+			key:    "staff_notice_health_bot_missing",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newOwnershipEnv(t)
+			link := env.addGroup(t, env.ownerID, "Group One")
+			chat := gotgbot.Chat{Id: link.GroupChatID, Type: "supergroup", Title: "Group One"}
+
+			env.deliverBotChange(t, myChatMemberContext(env.bot, chat, tc.member))
+
+			wantHealth(t, link.GroupChatID, tc.health)
+			env.wantHeadsUps(t, tc.key, 1)
+		})
+	}
+}
+
+func TestStaffHealthRecovery(t *testing.T) {
+	env := newOwnershipEnv(t)
+	link := env.addGroup(t, env.ownerID, "Group One")
+	chat := gotgbot.Chat{Id: link.GroupChatID, Type: "supergroup", Title: "Group One"}
+
+	env.deliverBotChange(t, myChatMemberContext(env.bot, chat, gotgbot.ChatMemberLeft{User: botUser}))
+	lost := wantHealth(t, link.GroupChatID, models.StaffHealthBotMissing)
+
+	env.deliverBotChange(t, myChatMemberContext(env.bot, chat,
+		gotgbot.ChatMemberAdministrator{User: botUser, CanRestrictMembers: true}))
+
+	back := wantHealth(t, link.GroupChatID, models.StaffHealthOK)
+	if back.ID != lost.ID || back.ID != link.ID {
+		t.Fatalf("link ID after recovery = %d, was %d: recovery must not relink", back.ID, link.ID)
+	}
+	notices := textsToChat(env.client, env.staffID)
+	if len(notices) != 2 ||
+		!strings.Contains(notices[0], staffMarker("staff_notice_health_bot_missing")) ||
+		!strings.Contains(notices[1], staffMarker("staff_notice_health_ok")) {
+		t.Fatalf("notices to the Staff Group = %q, want the problem heads-up then one healthy-again heads-up", notices)
+	}
+	if all := env.client.callsFor("sendMessage"); len(all) != 2 {
+		t.Fatalf("%d messages were sent in total, want 2", len(all))
+	}
+}
+
+func TestStaffHealthNoRepeat(t *testing.T) {
+	t.Run("the same update twice", func(t *testing.T) {
+		env := newOwnershipEnv(t)
+		link := env.addGroup(t, env.ownerID, "Group One")
+		chat := gotgbot.Chat{Id: link.GroupChatID, Type: "supergroup", Title: "Group One"}
+
+		env.deliverBotChange(t, myChatMemberContext(env.bot, chat, gotgbot.ChatMemberLeft{User: botUser}))
+		env.deliverBotChange(t, myChatMemberContext(env.bot, chat, gotgbot.ChatMemberLeft{User: botUser}))
+
+		wantHealth(t, link.GroupChatID, models.StaffHealthBotMissing)
+		env.wantHeadsUps(t, "staff_notice_health_bot_missing", 1)
+	})
+	t.Run("applyLinkHealth twice", func(t *testing.T) {
+		env := newOwnershipEnv(t)
+		link := env.addGroup(t, env.ownerID, "Group One")
+
+		if !applyLinkHealth(env.bot, link, models.StaffHealthBotMissing) {
+			t.Fatal("the first applyLinkHealth reported no change")
+		}
+		if applyLinkHealth(env.bot, link, models.StaffHealthBotMissing) {
+			t.Fatal("the repeated applyLinkHealth reported a change")
+		}
+		env.wantHeadsUps(t, "staff_notice_health_bot_missing", 1)
+	})
+}
+
+func TestStaffHealthConcurrentPostsOnce(t *testing.T) {
+	env := newOwnershipEnv(t)
+	link := env.addGroup(t, env.ownerID, "Group One")
+
+	const workers = 8
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			applyLinkHealth(env.bot, link, models.StaffHealthBotNotAdmin)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	wantHealth(t, link.GroupChatID, models.StaffHealthBotNotAdmin)
+	env.wantHeadsUps(t, "staff_notice_health_bot_not_admin", 1)
+}
+
+func TestStaffHealthIgnoresUnrelatedChats(t *testing.T) {
+	env := newOwnershipEnv(t)
+	link := env.addGroup(t, env.ownerID, "Group One")
+	unlinked := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Unlinked"}
+	staffChat := env.staffChat()
+
+	for name, chat := range map[string]gotgbot.Chat{"an unlinked group": unlinked, "the Staff Group itself": staffChat} {
+		t.Run(name, func(t *testing.T) {
+			env.deliverBotChange(t, myChatMemberContext(env.bot, chat, gotgbot.ChatMemberLeft{User: botUser}))
+		})
+	}
+
+	if sent := env.client.callsFor("sendMessage"); len(sent) != 0 {
+		t.Fatalf("%d messages were sent, want none for chats that are not linked groups", len(sent))
+	}
+	wantHealth(t, link.GroupChatID, models.StaffHealthOK)
+	if sg, err := staff.GetStaffGroupFresh(env.staffID); err != nil || sg == nil {
+		t.Fatalf("Staff Group row = (%+v, %v), want it untouched", sg, err)
+	}
+	if rows, err := staff.ListLinksByStaffFresh(env.staffID); err != nil || len(rows) != 1 || rows[0].Health != models.StaffHealthOK {
+		t.Fatalf("links of the Staff Group = (%+v, %v), want the one link, still ok", rows, err)
+	}
+	if got := staff.GetLinkOfGroup(unlinked.Id); got != nil {
+		t.Fatalf("an unlinked group gained a link: %+v", got)
+	}
+
+	// An update with no my_chat_member payload is ignored as well.
+	empty := ext.NewContext(env.bot, &gotgbot.Update{UpdateId: 7}, nil)
+	env.deliverBotChange(t, empty)
 }
