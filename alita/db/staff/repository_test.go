@@ -615,6 +615,145 @@ func TestStaffRepoGetLinkByIDFresh(t *testing.T) {
 	}
 }
 
+func TestStaffRepoDeleteLinkIfOwnerOnlyWhenMakerMatches(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	staffID, g1, g2 := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, g1, g2)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	first := &models.StaffGroupLink{GroupChatID: g1, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "One"}
+	second := &models.StaffGroupLink{GroupChatID: g2, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "Two"}
+	for _, link := range []*models.StaffGroupLink{first, second} {
+		if err := CreateLink(link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if GetLinkOfGroup(g1) == nil || GetLinkOfGroup(g2) == nil {
+		t.Fatal("both groups should be linked before the delete")
+	}
+
+	if deleted, err := DeleteLinkIfOwner(first.ID, 8); err != nil || deleted {
+		t.Fatalf("DeleteLinkIfOwner(wrong maker) = (%v, %v), want (false, nil)", deleted, err)
+	}
+	if got, err := GetLinkByIDFresh(first.ID); err != nil || got == nil {
+		t.Fatalf("the link must survive a wrong-maker delete: (%+v, %v)", got, err)
+	}
+
+	deleted, err := DeleteLinkIfOwner(first.ID, 7)
+	if err != nil || !deleted {
+		t.Fatalf("DeleteLinkIfOwner(right maker) = (%v, %v), want (true, nil)", deleted, err)
+	}
+	if got := GetLinkOfGroup(g1); got != nil {
+		t.Fatalf("GetLinkOfGroup(deleted) = %+v, want nil (the delete must invalidate the cache)", got)
+	}
+	if got := GetLinkOfGroup(g2); got == nil || got.ID != second.ID {
+		t.Fatalf("GetLinkOfGroup(other) = %+v, want the untouched link", got)
+	}
+	if staffRow, err := GetStaffGroupFresh(staffID); err != nil || staffRow == nil {
+		t.Fatalf("the Staff Group itself must stay: (%+v, %v)", staffRow, err)
+	}
+}
+
+func TestStaffRepoDeleteLinkIfOwnerSecondCallIsNoop(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	link := &models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7}
+	if err := CreateLink(link); err != nil {
+		t.Fatal(err)
+	}
+
+	if deleted, err := DeleteLinkIfOwner(link.ID, 7); err != nil || !deleted {
+		t.Fatalf("first DeleteLinkIfOwner = (%v, %v), want (true, nil)", deleted, err)
+	}
+	if deleted, err := DeleteLinkIfOwner(link.ID, 7); err != nil || deleted {
+		t.Fatalf("second DeleteLinkIfOwner = (%v, %v), want (false, nil)", deleted, err)
+	}
+	if deleted, err := DeleteLinkIfOwner(0, 7); err != nil || deleted {
+		t.Fatalf("DeleteLinkIfOwner(0) = (%v, %v), want (false, nil)", deleted, err)
+	}
+}
+
+func TestStaffRepoDeleteLinkIfOwnerConcurrentOneWinner(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	link := &models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7}
+	if err := CreateLink(link); err != nil {
+		t.Fatal(err)
+	}
+
+	const callers = 4
+	var wins, failures int
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			deleted, err := DeleteLinkIfOwner(link.ID, 7)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				failures++
+			}
+			if deleted {
+				wins++
+			}
+		}()
+	}
+	wg.Wait()
+	if wins != 1 {
+		t.Fatalf("%d callers reported a delete (%d errors), want exactly 1", wins, failures)
+	}
+}
+
+func TestStaffRepoUpdateStaffGroupOwnerChangesAndInvalidates(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	chatID := uniqueStaffChatID()
+	cleanupStaffRows(t, chatID)
+	if _, err := CreateStaffGroup(chatID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	if got := GetStaffGroup(chatID); got == nil || got.OwnerUserID != 7 {
+		t.Fatalf("GetStaffGroup before = %+v, want owner 7", got)
+	}
+
+	changed, err := UpdateStaffGroupOwner(chatID, 9)
+	if err != nil || !changed {
+		t.Fatalf("UpdateStaffGroupOwner(9) = (%v, %v), want (true, nil)", changed, err)
+	}
+	if got := GetStaffGroup(chatID); got == nil || got.OwnerUserID != 9 {
+		t.Fatalf("GetStaffGroup after = %+v, want owner 9 (the write must invalidate staff_group:<chat>)", got)
+	}
+	fresh, err := GetStaffGroupFresh(chatID)
+	if err != nil || fresh == nil || fresh.OwnerUserID != 9 || fresh.Title != "Staff" {
+		t.Fatalf("GetStaffGroupFresh = (%+v, %v), want owner 9 and the title untouched", fresh, err)
+	}
+}
+
+func TestStaffRepoUpdateStaffGroupOwnerSameValueIsNotAChange(t *testing.T) {
+	chatID := uniqueStaffChatID()
+	cleanupStaffRows(t, chatID)
+	if _, err := CreateStaffGroup(chatID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+
+	if changed, err := UpdateStaffGroupOwner(chatID, 7); err != nil || changed {
+		t.Fatalf("UpdateStaffGroupOwner(same) = (%v, %v), want (false, nil)", changed, err)
+	}
+	if changed, err := UpdateStaffGroupOwner(uniqueStaffChatID(), 9); err != nil || changed {
+		t.Fatalf("UpdateStaffGroupOwner(unknown chat) = (%v, %v), want (false, nil)", changed, err)
+	}
+}
+
 func TestStaffRepoListStaffGroupsByOwner(t *testing.T) {
 	owner := -uniqueStaffChatID() % 1_000_000_000_000
 	otherOwner := owner + 1

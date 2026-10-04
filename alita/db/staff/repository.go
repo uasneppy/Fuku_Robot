@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	log "github.com/sirupsen/logrus"
@@ -363,5 +364,58 @@ func DeleteLink(id uint) (deleted bool, err error) {
 		return false, nil
 	}
 	invalidateStaffKeys(removed[0].GroupChatID)
+	return true, nil
+}
+
+// DeleteLinkIfOwner removes the link with row ID id only while its recorded
+// maker is still ownerUserID, in one conditional statement. That statement is the
+// claim: of any number of callers racing on the same link (service message,
+// chat_member update, panel recheck, sweep) exactly one gets deleted=true, and only
+// that caller may post the removal notice. A link that is gone, or was re-made by
+// someone else, gives (false, nil). Like DeleteLink it uses RETURNING, so the
+// cached lookups of the group are invalidated by the exact key after the commit.
+func DeleteLinkIfOwner(id uint, ownerUserID int64) (deleted bool, err error) {
+	var removed []models.StaffGroupLink
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Clauses(clause.Returning{}).
+			Where("id = ? AND owner_user_id = ?", id, ownerUserID).
+			Delete(&removed)
+		if result.Error != nil {
+			return result.Error
+		}
+		deleted = result.RowsAffected == 1 && len(removed) == 1
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Staff] DeleteLinkIfOwner: %v", err)
+		return false, alitaerrors.Wrapf(err, "delete staff link %d if owner", id)
+	}
+	if !deleted {
+		return false, nil
+	}
+	invalidateStaffKeys(removed[0].GroupChatID)
+	return true, nil
+}
+
+// UpdateStaffGroupOwner refreshes staff_groups.owner_user_id for chatID to
+// ownerUserID. The recorded owner is only a lookup hint (it is never an
+// authority), so recheckStaffGroup keeps it equal to the live creator.
+//
+// It is one conditional UPDATE through a map, so a zero-value column is never
+// skipped. changed is true only when a row existed with a different owner; the
+// same value, or an unknown chat, gives (false, nil). The cached Staff Group
+// lookup is invalidated after the write.
+func UpdateStaffGroupOwner(chatID, ownerUserID int64) (changed bool, err error) {
+	result := db.DB.Model(&models.StaffGroup{}).
+		Where("chat_id = ? AND owner_user_id <> ?", chatID, ownerUserID).
+		Updates(map[string]any{"owner_user_id": ownerUserID, "updated_at": time.Now()})
+	if result.Error != nil {
+		log.Errorf("[Staff] UpdateStaffGroupOwner: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "update staff group %d owner", chatID)
+	}
+	if result.RowsAffected != 1 {
+		return false, nil
+	}
+	invalidateStaffKeys(chatID)
 	return true, nil
 }

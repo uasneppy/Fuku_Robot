@@ -2616,6 +2616,8 @@ staff_link_refuse_already_linked: "Não vinculado: {group} já está vinculado a
 staff_link_check_failed_group: "Não vinculado: não consegui verificar quem criou {group} neste momento. Nada foi alterado, tente de novo daqui a pouco."
 staff_panel_add_group_button: "➕ Adicionar grupo"
 staff_notice_unlinked_by: "Grupo desvinculado: {group}\nDesvinculado por {user}"
+staff_notice_unlinked_group_owner_changed: "Grupo desvinculado: {group}\nMotivo: o proprietário mudou"
+staff_notice_unlinked_staff_owner_changed: "O proprietário deste Staff Group mudou, por isso estes grupos foram desvinculados:\n{groups}"
 staff_unlink_not_linked: "Este grupo não está vinculado a um Grupo de Staff."
 staff_unlink_refuse_not_owner: "Apenas o criador deste grupo e do seu Grupo de Staff pode desvinculá-lo. Nada foi alterado."
 staff_unlink_refuse_not_group_owner: "Não desvinculado: você não é o criador de {group}. Apenas o criador dos dois grupos pode desvinculá-los."

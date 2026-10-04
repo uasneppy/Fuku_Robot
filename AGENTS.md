@@ -98,6 +98,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   must `DeleteCache` it after commit.
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated.
+- Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
+  removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
+  the caller with RowsAffected == 1 posts the Staff Group notice.
 
 ## Go rules
 

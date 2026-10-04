@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -50,6 +51,70 @@ func (moduleStruct) onMigrateMessage(_ *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.ContinueGroups
 }
 
+// recheckChatOwnership runs the live ownership recheck for chatID when the cached
+// gates say it is a linked group or a Staff Group. The cached gates only filter
+// out unrelated chats cheaply; a link is reloaded fresh before it is judged, and
+// the decision itself always comes from the live Telegram check inside
+// recheckLink and recheckStaffGroup.
+func recheckChatOwnership(b *gotgbot.Bot, chatID int64) {
+	if staff.GetLinkOfGroup(chatID) != nil {
+		link, err := staff.GetLinkOfGroupFresh(chatID)
+		if err == nil && link != nil {
+			recheckLink(b, *link, newStaffOwnerPass())
+		}
+	}
+	if staff.GetStaffGroup(chatID) != nil {
+		recheckStaffGroup(context.Background(), b, chatID, nil)
+	}
+}
+
+// onOwnershipMessage reacts to the chat_owner_changed and chat_owner_left service
+// messages. They need no bot admin rights, but their payload is only a hint that
+// something changed: the recheck always asks Telegram live who the creator is.
+// The watcher never replies to the chat and always returns ext.ContinueGroups.
+func (moduleStruct) onOwnershipMessage(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("onOwnershipMessage", "StaffWatchers")
+
+	msg := ctx.EffectiveMessage
+	if msg == nil {
+		return ext.ContinueGroups
+	}
+	recheckChatOwnership(b, msg.Chat.Id)
+	return ext.ContinueGroups
+}
+
+// staffCreatorTransition reports whether a chat_member update moves the creator
+// role: the old or the new status is "creator". Every other transition is
+// ignored, so ordinary promotions and joins cost nothing.
+func staffCreatorTransition(u *gotgbot.ChatMemberUpdated) bool {
+	if u == nil {
+		return false
+	}
+	for _, member := range []gotgbot.ChatMember{u.OldChatMember, u.NewChatMember} {
+		if member != nil && member.GetStatus() == gotgbot.ChatMemberStatusCreator {
+			return true
+		}
+	}
+	return false
+}
+
+// onCreatorChatMember reacts to a chat_member update in which the creator role
+// moved. Whether Telegram sends one on an ownership transfer is undocumented, so
+// this is an extra trigger; the update is only a hint and the recheck asks
+// Telegram live. Chats that are neither a Staff Group nor a linked group are
+// dropped by the cached gates without a Telegram call. It always returns
+// ext.ContinueGroups.
+func (moduleStruct) onCreatorChatMember(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("onCreatorChatMember", "StaffWatchers")
+
+	update := ctx.ChatMember
+	if !staffCreatorTransition(update) {
+		return ext.ContinueGroups
+	}
+	recheckChatOwnership(b, update.Chat.Id)
+	return ext.ContinueGroups
+}
+
 // rekeyFromTelegramError re-keys oldChatID when err is a Telegram error that
 // carries ResponseParameters.MigrateToChatId, which Telegram returns (with a
 // 400) when a request targets a group that has since become a supergroup. It
@@ -76,6 +141,16 @@ func rekeyFromTelegramError(oldChatID int64, err error) (newChatID int64, rekeye
 func LoadStaffWatchers(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandlerToGroup(
 		handlers.NewMessage(message.Migrate, staffWatchersModule.onMigrateMessage).SetAllowBot(true),
+		staffWatchersModule.handlerGroup,
+	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewMessage(func(m *gotgbot.Message) bool {
+			return message.ChatOwnerChanged(m) || message.ChatOwnerLeft(m)
+		}, staffWatchersModule.onOwnershipMessage).SetAllowBot(true),
+		staffWatchersModule.handlerGroup,
+	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewChatMember(staffCreatorTransition, staffWatchersModule.onCreatorChatMember),
 		staffWatchersModule.handlerGroup,
 	)
 }
