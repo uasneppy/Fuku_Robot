@@ -105,30 +105,42 @@ func CreateStaffGroup(chatID, ownerUserID int64, title string) (created bool, er
 // sentinel is cached for "not found", so CreateStaffGroup must invalidate.
 // Never use it as an authority read; use GetStaffGroupFresh for that.
 func GetStaffGroup(chatID int64) *models.StaffGroup {
+	return getCachedRow(cachePrefixStaffGroup, "chat_id = ?", chatID, func(row *models.StaffGroup) bool {
+		return row.ChatID == 0
+	})
+}
+
+// getCachedRow is the cached gate behind GetStaffGroup and GetLinkOfGroup. query
+// is a constant condition with one placeholder for chatID. It caches the zero
+// value for "no row", which isMissing recognises, and returns nil for it and for
+// a failed load (logged).
+func getCachedRow[T any](prefix, query string, chatID int64, isMissing func(*T) bool) *T {
 	if chatID == 0 {
 		return nil
 	}
 	result, err := cache.GetFromCacheOrLoad(
 		context.Background(),
-		cache.CacheKey(cachePrefixStaffGroup, chatID),
+		cache.CacheKey(prefix, chatID),
 		cache.DefaultCacheTTL,
-		func(ctx context.Context) (models.StaffGroup, error) {
-			var row models.StaffGroup
-			err := db.DB.WithContext(ctx).Where("chat_id = ?", chatID).First(&row).Error
+		func(ctx context.Context) (T, error) {
+			var row T
+			err := db.DB.WithContext(ctx).Where(query, chatID).First(&row).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return models.StaffGroup{}, nil
+				var none T
+				return none, nil
 			}
 			if err != nil {
-				return models.StaffGroup{}, err
+				var none T
+				return none, err
 			}
 			return row, nil
 		},
 	)
 	if err != nil {
-		log.Errorf("[Staff] GetStaffGroup: %v", err)
+		log.Errorf("[Staff] cached lookup %s for chat %d: %v", prefix, chatID, err)
 		return nil
 	}
-	if result.ChatID == 0 {
+	if isMissing(&result) {
 		return nil
 	}
 	return &result
@@ -201,42 +213,55 @@ func GetStaffGroupFresh(chatID int64) (*models.StaffGroup, error) {
 	return &row, nil
 }
 
-// CreateLink stores link in one transaction. It returns ErrAlreadyLinked when the
-// group already has a link, ErrStaffGroupMissing when no staff_groups row has
-// chat_id = link.StaffChatID, and ErrRoleConflict when the group being linked is
-// itself a Staff Group (D-10); the last two leave nothing behind. The insert is ON CONFLICT DO NOTHING on the unique
-// group_chat_id, so when two callers race for the same group exactly one gets a
-// nil error and the other gets ErrAlreadyLinked. On success the group's cached
+// checkLinkRoles verifies, on q, that the Staff Group of link exists and that the
+// group being linked is not itself a Staff Group.
+func checkLinkRoles(q *gorm.DB, link *models.StaffGroupLink) error {
+	var staffRows int64
+	if err := q.Model(&models.StaffGroup{}).Where("chat_id = ?", link.StaffChatID).Count(&staffRows).Error; err != nil {
+		return err
+	}
+	if staffRows == 0 {
+		return ErrStaffGroupMissing
+	}
+	var groupIsStaff int64
+	if err := q.Model(&models.StaffGroup{}).Where("chat_id = ?", link.GroupChatID).Count(&groupIsStaff).Error; err != nil {
+		return err
+	}
+	if groupIsStaff > 0 {
+		return ErrRoleConflict
+	}
+	return nil
+}
+
+// CreateLink stores link. It returns ErrStaffGroupMissing when no staff_groups
+// row has chat_id = link.StaffChatID, ErrRoleConflict when the group being linked
+// is itself a Staff Group (D-10), and ErrAlreadyLinked when the group already has
+// a link. The first two leave nothing behind.
+//
+// The role checks run once before the transaction, so the caller gets the precise
+// reason even on PostgreSQL, where the exclusivity trigger would otherwise reject
+// the insert with a generic error, and once more inside it, after the insert, so
+// they hold at the moment of the write. The insert comes first inside the
+// transaction so it takes its write lock up front; a read-then-write upgrade
+// fails under contention on SQLite. It is ON CONFLICT DO NOTHING on the unique
+// group_chat_id: when two callers race for the same group exactly one gets a nil
+// error and the other gets ErrAlreadyLinked. On success the group's cached
 // lookups are invalidated after the commit.
 func CreateLink(link *models.StaffGroupLink) error {
 	link.GroupTitle = trimStaffTitle(link.GroupTitle)
-	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		// The insert comes first so the transaction takes its write lock up front
-		// (no read-then-write lock upgrade, which SQLite refuses under contention).
-		// The two role checks that follow roll the insert back when they fail.
-		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(link)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return ErrAlreadyLinked
-		}
-		var staffRows int64
-		if err := tx.Model(&models.StaffGroup{}).Where("chat_id = ?", link.StaffChatID).Count(&staffRows).Error; err != nil {
-			return err
-		}
-		if staffRows == 0 {
-			return ErrStaffGroupMissing
-		}
-		var groupIsStaff int64
-		if err := tx.Model(&models.StaffGroup{}).Where("chat_id = ?", link.GroupChatID).Count(&groupIsStaff).Error; err != nil {
-			return err
-		}
-		if groupIsStaff > 0 {
-			return ErrRoleConflict
-		}
-		return nil
-	})
+	err := checkLinkRoles(db.DB, link)
+	if err == nil {
+		err = db.DB.Transaction(func(tx *gorm.DB) error {
+			result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(link)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return ErrAlreadyLinked
+			}
+			return checkLinkRoles(tx, link)
+		})
+	}
 	switch {
 	case errors.Is(err, ErrStaffGroupMissing), errors.Is(err, ErrRoleConflict), errors.Is(err, ErrAlreadyLinked):
 		return err
@@ -264,33 +289,9 @@ func ListLinksByStaffFresh(staffChatID int64) ([]models.StaffGroupLink, error) {
 // sentinel is cached for "not found", so every link write invalidates it. Never
 // use it as an authority read; use GetLinkOfGroupFresh for that.
 func GetLinkOfGroup(groupChatID int64) *models.StaffGroupLink {
-	if groupChatID == 0 {
-		return nil
-	}
-	result, err := cache.GetFromCacheOrLoad(
-		context.Background(),
-		cache.CacheKey(cachePrefixStaffLinkOf, groupChatID),
-		cache.DefaultCacheTTL,
-		func(ctx context.Context) (models.StaffGroupLink, error) {
-			var row models.StaffGroupLink
-			err := db.DB.WithContext(ctx).Where("group_chat_id = ?", groupChatID).First(&row).Error
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return models.StaffGroupLink{}, nil
-			}
-			if err != nil {
-				return models.StaffGroupLink{}, err
-			}
-			return row, nil
-		},
-	)
-	if err != nil {
-		log.Errorf("[Staff] GetLinkOfGroup: %v", err)
-		return nil
-	}
-	if result.GroupChatID == 0 {
-		return nil
-	}
-	return &result
+	return getCachedRow(cachePrefixStaffLinkOf, "group_chat_id = ?", groupChatID, func(row *models.StaffGroupLink) bool {
+		return row.GroupChatID == 0
+	})
 }
 
 // ListStaffGroupsByOwner lists the Staff Groups whose recorded owner is
