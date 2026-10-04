@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Staff Group Links
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-10-04T21:27:41.029Z"
+last_updated: "2026-10-04T23:23:46.715Z"
 last_activity: 2026-10-04
 last_activity_desc: Phase 01 execution started
-state_head: 07261299d7c86ffedb6a1a3d9ee976f4da48e7b9
+state_head: c85d6488be481ae5dd64d420610d9067c74bdf3b
 progress:
   total_phases: 9
   completed_phases: 0
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 Phase: 01 (Staff Group Links) — EXECUTING
 Plan: 1 of 10
 Status: Executing Phase 01
-Last activity: 2026-10-04 — Phase 01 execution started
+Last activity: 2026-10-04 - Completed quick task 261004-w9v: Load AGENTS.md from .claude/CLAUDE.md and correct the locale list in CLAUDE.md and the codebase map
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -77,6 +77,12 @@ None yet.
 - [Phase 8]: Spike gate. Test Direct Link Mini App launch from a group, and Turnstile rendering in Telegram WebViews. The owner must provide a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
 - [Phase 1/2]: Research flags (not gating). Check `chat_member` updates on ownership transfer (Phase 1), and `restrictChatMember` on banned or absent users (Phase 2).
 - [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) lands in Phase 4. The alert's Lift button (LOCK-06), and listing removed joiners on the alert (LOCK-01), land in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261004-w9v | Load AGENTS.md from .claude/CLAUDE.md and correct the locale list in CLAUDE.md and the codebase map | 2026-10-04 | c85d648 | [261004-w9v-load-agents-md-from-claude-claude-md-and](./quick/261004-w9v-load-agents-md-from-claude-claude-md-and/) |
 
 ## Deferred Items
 
