@@ -113,6 +113,15 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | — Pending |
 | `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | — Pending |
 | Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | — Pending |
+| Every staff action needs a Confirm tap showing the resolved target | `@usernames` can be stale or recycled; owner prefers safety over speed | — Pending |
+| Staff Group members aren't protected from staff actions; only each group's admins and owner, and the bot, are | Owner's call; staff are trusted, not immune | — Pending |
+| Undo-everywhere button and a recent-actions list in `/staff` are in v1, backed by an audit record | Mistakes are reversible and accountable | — Pending |
+| Old `/antiraid` is retired; its auto-threshold carries over to join-surge detection | One raid system, not two | — Pending |
+| Auto-triggers are on by default with conservative thresholds | Protection from day one; admins tune or disable per group | — Pending |
+| Images are classified by Gemini `gemini-3.5-flash-lite` (owner's key); text stays on TypeSafe | Owner's choice of provider; TypeSafe is text-only | — Pending |
+| Turnstile captcha is one solve only; math and text modes stay as fallbacks | Owner's call; fallbacks cover Cloudflare or hosting outages | — Pending |
+| `/settings` asks whether to open in the group or in private | GroupHelp-style choice | — Pending |
+| Multiple replicas: pacing, counters, challenges and lockdown state are shared, not per process | That's how the bot is deployed | — Pending |
 
 ## Evolution
 
@@ -132,4 +141,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-04 after initialization*
+*Last updated: 2026-10-04 after requirements scoping*
