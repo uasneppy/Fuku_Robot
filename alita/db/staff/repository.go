@@ -440,8 +440,31 @@ func SetLinkHealth(id uint, health string) (changed bool, err error) {
 	return true, nil
 }
 
-// DeleteOrphanLinks is a placeholder until the sweep cleanup is implemented.
-func DeleteOrphanLinks() (int64, error) { return 0, nil }
+// DeleteOrphanLinks removes every link whose Staff Group row no longer exists and
+// returns how many it removed. Links are normally removed together with their
+// Staff Group; an orphan is what a crash or an out-of-band delete leaves behind.
+//
+// It is one DELETE ... RETURNING whose condition is checked at the moment of the
+// write, so a Staff Group created concurrently is never mistaken for missing.
+// After the commit the cached lookups of each removed link's group are
+// invalidated by the exact key.
+func DeleteOrphanLinks() (int64, error) {
+	var removed []models.StaffGroupLink
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		staffChats := tx.Model(&models.StaffGroup{}).Select("chat_id")
+		return tx.Clauses(clause.Returning{}).
+			Where("staff_chat_id NOT IN (?)", staffChats).
+			Delete(&removed).Error
+	})
+	if err != nil {
+		log.Errorf("[Staff] DeleteOrphanLinks: %v", err)
+		return 0, alitaerrors.Wrap(err, "delete orphan staff links")
+	}
+	for _, link := range removed {
+		invalidateStaffKeys(link.GroupChatID)
+	}
+	return int64(len(removed)), nil
+}
 
 // UpdateStaffGroupOwner refreshes staff_groups.owner_user_id for chatID to
 // ownerUserID. The recorded owner is only a lookup hint (it is never an
