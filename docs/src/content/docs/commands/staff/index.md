@@ -10,6 +10,7 @@ A Staff Group is one group of trusted admins that manages your other groups.
 ### Group owner:
 - `/setstaff`: Make this group your Staff Group (group creator only).
 - `/unsetstaff`: Remove Staff status and unlink every group (group creator only).
+- `/linkstaff [ID]`: Link this group to your Staff Group (group creator only). Add the Staff Group chat ID when you own more than one.
 
 ### In the Staff Group:
 - `/staff`: Show the Staff Group chat ID and its linked groups.
@@ -22,6 +23,7 @@ This module can be accessed using the following aliases:
 - `staff`
 - `setstaff`
 - `unsetstaff`
+- `linkstaff`
 
 ## Available Commands
 

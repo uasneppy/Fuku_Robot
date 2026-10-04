@@ -152,7 +152,17 @@ func (moduleStruct) staffPanel(c *helpers.CommandContext) error {
 	if group == nil {
 		return ext.EndGroups
 	}
-	text, keyboard := renderStaffPanel(c.Tr, *group, nil)
+	links, err := staff.ListLinksByStaffFresh(group.ChatID)
+	if err != nil {
+		text, _ := c.Tr.GetString("staff_check_failed")
+		replyStaff(c, text)
+		return ext.EndGroups
+	}
+	rows := make([]staffLinkRow, 0, len(links))
+	for _, link := range links {
+		rows = append(rows, staffLinkRow{Link: link})
+	}
+	text, keyboard := renderStaffPanel(c.Tr, *group, rows, c.Bot.Username)
 	opts := formatting.Shtml()
 	if len(keyboard.InlineKeyboard) > 0 {
 		opts.ReplyMarkup = keyboard
@@ -347,6 +357,7 @@ func LoadStaff(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, setStaffDesc, staffModule.setStaff)
 	helpers.WrapCommand(dispatcher, unsetStaffDesc, staffModule.unsetStaff)
 	helpers.WrapCommand(dispatcher, staffDesc, staffModule.staffPanel)
+	helpers.WrapCommand(dispatcher, linkStaffDesc, staffModule.linkStaff)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("staff|"), staffModule.staffCallback))
 }
 

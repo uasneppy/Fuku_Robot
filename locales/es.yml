@@ -2614,6 +2614,7 @@ staff_help_msg: |
   *Propietario del grupo:*
   × /setstaff: Convierte este grupo en tu Grupo de Staff (solo el creador del grupo).
   × /unsetstaff: Quita el estado de Staff y desvincula todos los grupos (solo el creador del grupo).
+  × /linkstaff [ID]: Vincula este grupo a tu Grupo de Staff (solo el creador del grupo). Añade el ID de chat del Grupo de Staff si tienes más de uno.
 
   *En el Grupo de Staff:*
   × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados.
@@ -2636,3 +2637,18 @@ staff_post_as_yourself: "Envía este comando como tú mismo, no como administrad
 staff_refuse_not_group: "Un Grupo de Staff debe ser un grupo o supergrupo, no un canal."
 staff_refuse_bot_not_admin: "Primero debo ser administrador de este grupo. Hazme administrador y vuelve a enviar el comando."
 staff_refuse_group_is_linked: "Este grupo está vinculado a un Grupo de Staff, así que no puede ser un Grupo de Staff. Desvincúlalo primero."
+staff_link_done: "Grupo vinculado: {group}\nID del chat: <code>{id}</code>"
+staff_link_warn_bot_missing: "Aviso: no estoy en ese grupo. Añádeme como administrador para que las acciones de staff funcionen."
+staff_link_warn_bot_not_admin: "Aviso: no soy administrador en ese grupo. Hazme administrador con permiso para restringir miembros."
+staff_link_warn_bot_cannot_restrict: "Aviso: soy administrador allí pero no puedo restringir miembros. Dame ese permiso para que las acciones de staff funcionen."
+staff_panel_links_header: "Grupos vinculados ({count}):"
+staff_link_invalid_id: "Ese no es un ID de chat de Grupo de Staff válido. Envía /linkstaff con el ID de chat que muestra /staff en tu Grupo de Staff, por ejemplo /linkstaff -1001234567890."
+staff_link_no_staff_group: "Todavía no eres dueño de ningún Grupo de Staff. Primero convierte un grupo en tu Grupo de Staff con /setstaff y luego envía este comando otra vez."
+staff_link_need_staff_id: "Eres dueño de más de un Grupo de Staff. Envía /linkstaff seguido del ID de chat del Grupo de Staff que quieras, tal como lo muestra /staff en él."
+staff_link_refuse_not_staff_owner: "Solo puedes vincular un grupo a un Grupo de Staff que hayas creado tú. Revisa el ID de chat e inténtalo de nuevo."
+staff_link_refuse_not_supergroup: "No vinculado: {group} es un grupo básico. Conviértelo primero en supergrupo y vincúlalo de nuevo."
+staff_link_refuse_target_is_staff: "No vinculado: {group} es un Grupo de Staff y un Grupo de Staff no se puede vincular a otro."
+staff_link_refuse_not_target_owner: "No vinculado: no eres el creador de {group}. Solo el creador de ambos grupos puede vincularlos."
+staff_link_refuse_already_linked: "No vinculado: {group} ya está vinculado a un Grupo de Staff. Desvincúlalo primero."
+staff_link_check_failed_group: "No vinculado: no pude verificar quién creó {group} en este momento. No se cambió nada, inténtalo de nuevo en un momento."
+staff_panel_add_group_button: "➕ Añadir grupo"

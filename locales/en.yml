@@ -2642,6 +2642,7 @@ staff_help_msg: |
   *Group owner:*
   × /setstaff: Make this group your Staff Group (group creator only).
   × /unsetstaff: Remove Staff status and unlink every group (group creator only).
+  × /linkstaff [ID]: Link this group to your Staff Group (group creator only). Add the Staff Group chat ID when you own more than one.
 
   *In the Staff Group:*
   × /staff: Show the Staff Group chat ID and its linked groups.
@@ -2664,3 +2665,18 @@ staff_post_as_yourself: "Please send this command as yourself, not as an anonymo
 staff_refuse_not_group: "A Staff Group has to be a group or supergroup, not a channel."
 staff_refuse_bot_not_admin: "I need to be an administrator of this group first. Make me an admin, then send the command again."
 staff_refuse_group_is_linked: "This group is linked to a Staff Group, so it cannot be a Staff Group itself. Unlink it first."
+staff_link_done: "Group linked: {group}\nChat ID: <code>{id}</code>"
+staff_link_warn_bot_missing: "Warning: I am not in that group. Add me there as an admin so staff actions can work."
+staff_link_warn_bot_not_admin: "Warning: I am not an admin in that group. Make me an admin with the right to restrict members."
+staff_link_warn_bot_cannot_restrict: "Warning: I am an admin there but cannot restrict members. Give me that right so staff actions can work."
+staff_panel_links_header: "Linked groups ({count}):"
+staff_link_invalid_id: "That is not a valid Staff Group chat ID. Send /linkstaff with the chat ID shown by /staff in your Staff Group, for example /linkstaff -1001234567890."
+staff_link_no_staff_group: "You do not own a Staff Group yet. Make a group your Staff Group with /setstaff first, then send this command again."
+staff_link_need_staff_id: "You own more than one Staff Group. Send /linkstaff followed by the chat ID of the Staff Group you want, as shown by /staff in it."
+staff_link_refuse_not_staff_owner: "You can only link a group to a Staff Group that you created. Check the chat ID and try again."
+staff_link_refuse_not_supergroup: "Not linked: {group} is a basic group. Upgrade it to a supergroup first, then link it again."
+staff_link_refuse_target_is_staff: "Not linked: {group} is a Staff Group, and a Staff Group cannot be linked to another one."
+staff_link_refuse_not_target_owner: "Not linked: you are not the creator of {group}. Only the creator of both groups can link them."
+staff_link_refuse_already_linked: "Not linked: {group} is already linked to a Staff Group. Unlink it first."
+staff_link_check_failed_group: "Not linked: I could not verify who created {group} right now. Nothing was changed, please try again in a moment."
+staff_panel_add_group_button: "➕ Add group"
