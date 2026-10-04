@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"math/rand/v2"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -61,6 +62,23 @@ func staffSweepPaceFunc(ctx context.Context) bool {
 		return true
 	}
 }
+
+// staffSweepFirstDelay returns how long to wait before the first cycle: one to
+// five minutes after startup, which catches ownership updates the Bot API dropped
+// while the bot was down for over 24 hours. A variable so tests can shorten it.
+var staffSweepFirstDelay = func() time.Duration {
+	return time.Minute + time.Duration(rand.IntN(240))*time.Second
+}
+
+// staffSweepCycleHook, when not nil, runs at the start of every cycle. Production
+// leaves it nil; tests use it to count cycles or inject a panic.
+var staffSweepCycleHook func()
+
+// StartStaffSweeper is a placeholder until the lifecycle is implemented.
+func StartStaffSweeper(b *gotgbot.Bot) {}
+
+// StopStaffSweeper is a placeholder until the lifecycle is implemented.
+func StopStaffSweeper() {}
 
 // staffSweepLockTTL is how long a replica holds the sweep lock: one minute short
 // of the interval, so the next hourly cycle can always take it.

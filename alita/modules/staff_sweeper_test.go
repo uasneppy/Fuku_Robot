@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -319,5 +320,112 @@ func TestStaffSweepStopsOnCancel(t *testing.T) {
 	case <-finished:
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("runStaffSweep did not return within 500ms of the cancel")
+	}
+}
+
+// sweepLifecycleSetup shortens the sweeper's timers, counts cycles through the
+// hook and guarantees the sweeper is stopped before the timers are restored.
+// Redis is switched off so the sweep lock does not gate the short intervals.
+func sweepLifecycleSetup(t *testing.T, firstDelay, interval time.Duration) *atomic.Int32 {
+	t.Helper()
+	previousDelay, previousInterval, previousHook := staffSweepFirstDelay, staffSweepInterval, staffSweepCycleHook
+	t.Cleanup(func() {
+		staffSweepFirstDelay, staffSweepInterval, staffSweepCycleHook = previousDelay, previousInterval, previousHook
+	})
+	t.Cleanup(cache.DisableRedisForTest())
+	sweepNoPace(t)
+	// Registered last so it runs first: nothing is restored under a live loop.
+	t.Cleanup(StopStaffSweeper)
+
+	cycles := &atomic.Int32{}
+	staffSweepFirstDelay = func() time.Duration { return firstDelay }
+	staffSweepInterval = interval
+	staffSweepCycleHook = func() { cycles.Add(1) }
+	return cycles
+}
+
+// sweepWaitCycles fails the test unless at least n cycles have started within d.
+func sweepWaitCycles(t *testing.T, cycles *atomic.Int32, n int32, d time.Duration) {
+	t.Helper()
+	deadline := time.After(d)
+	for cycles.Load() < n {
+		select {
+		case <-deadline:
+			t.Fatalf("only %d cycle(s) started within %v, want at least %d", cycles.Load(), d, n)
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}
+
+func TestStaffSweepLifecycleStartStop(t *testing.T) {
+	cycles := sweepLifecycleSetup(t, 10*time.Millisecond, 50*time.Millisecond)
+	env := newOwnershipEnv(t)
+
+	StartStaffSweeper(env.bot)
+	sweepWaitCycles(t, cycles, 2, time.Second)
+
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		StopStaffSweeper()
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("StopStaffSweeper did not return within 1s")
+	}
+
+	settled := cycles.Load()
+	time.Sleep(150 * time.Millisecond)
+	if after := cycles.Load(); after != settled {
+		t.Fatalf("%d cycle(s) ran after Stop returned, want none", after-settled)
+	}
+	sweepWithin(t, time.Second, StopStaffSweeper)
+}
+
+func TestStaffSweepLifecycleStartTwiceRunsOneLoop(t *testing.T) {
+	// One loop gives its only cycle at 10ms and the next at 210ms; a second loop
+	// would add a second cycle at 10ms.
+	cycles := sweepLifecycleSetup(t, 10*time.Millisecond, 200*time.Millisecond)
+	env := newOwnershipEnv(t)
+
+	StartStaffSweeper(env.bot)
+	StartStaffSweeper(env.bot)
+	sweepWaitCycles(t, cycles, 1, time.Second)
+	time.Sleep(100 * time.Millisecond)
+
+	if got := cycles.Load(); got != 1 {
+		t.Fatalf("%d cycles ran in the first interval, want 1 (Start must be idempotent)", got)
+	}
+}
+
+func TestStaffSweepCyclePanicDoesNotKillLoop(t *testing.T) {
+	cycles := sweepLifecycleSetup(t, 10*time.Millisecond, 50*time.Millisecond)
+	staffSweepCycleHook = func() {
+		if cycles.Add(1) == 1 {
+			panic("scripted sweep failure")
+		}
+	}
+	env := newOwnershipEnv(t)
+
+	StartStaffSweeper(env.bot)
+
+	// The first cycle panicked; the loop must still be running and finish more.
+	sweepWaitCycles(t, cycles, 3, 2*time.Second)
+	sweepWithin(t, time.Second, StopStaffSweeper)
+}
+
+// sweepWithin fails the test unless fn returns before d elapses.
+func sweepWithin(t *testing.T, d time.Duration, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+		t.Fatalf("did not return within %v", d)
 	}
 }
