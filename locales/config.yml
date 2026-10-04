@@ -30,4 +30,4 @@ alt_names:
   Warns: [warn, warning, warnings]
   Federations: [fed, feds, fban, unfban, newfed, joinfed]
   LogChannels: [setlog, logchannel, logcategories]
-  Staff: [staff, setstaff]
+  Staff: [staff, setstaff, unsetstaff]

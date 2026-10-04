@@ -2529,6 +2529,7 @@ staff_help_msg: |
 
   *Propriétaire du groupe :*
   × /setstaff : Faire de ce groupe votre groupe Staff (créateur du groupe uniquement).
+  × /unsetstaff : Retirer le statut Staff et dissocier tous les groupes (créateur du groupe uniquement).
 
   *Dans le groupe Staff :*
   × /staff : Afficher l'ID de discussion du groupe Staff et ses groupes liés.
@@ -2538,3 +2539,12 @@ staff_refuse_not_owner: "Seul le créateur de ce groupe peut en faire un groupe 
 staff_check_failed: "Je n'ai pas pu vérifier qui a créé ce groupe pour le moment. Rien n'a été modifié, réessayez dans un instant."
 staff_panel_chat_id: "ID de discussion du groupe Staff : <code>{chat_id}</code>"
 staff_panel_no_links: "Aucun groupe n'est encore lié."
+staff_unset_not_staff: "Ce groupe n'est pas un groupe Staff."
+staff_unset_confirm_prompt: "Êtes-vous sûr ? Retirer le statut Staff dissociera {count} groupe(s) de ce groupe Staff."
+staff_btn_confirm: "Confirmer"
+staff_btn_cancel: "Annuler"
+staff_unset_done: "Statut Staff retiré. Groupes dissociés : {count}\n{groups}"
+staff_unset_cancelled: "Annulé. Ce groupe reste un groupe Staff."
+staff_unset_already_removed: "Le statut Staff a déjà été retiré."
+staff_cb_owner_only: "Seul le créateur de ce groupe peut faire cela."
+staff_cb_expired: "Ce bouton n'est plus valide."

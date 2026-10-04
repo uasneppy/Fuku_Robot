@@ -2575,6 +2575,7 @@ staff_help_msg: |
 
   *Dono do grupo:*
   × /setstaff: Torna este grupo o seu Grupo de Staff (apenas o criador do grupo).
+  × /unsetstaff: Remove o estado de Staff e desvincula todos os grupos (apenas o criador do grupo).
 
   *No Grupo de Staff:*
   × /staff: Mostra o ID de chat do Grupo de Staff e os grupos vinculados.
@@ -2584,3 +2585,12 @@ staff_refuse_not_owner: "Apenas o criador deste grupo pode torná-lo um Grupo de
 staff_check_failed: "Não consegui verificar agora quem criou este grupo. Nada foi alterado, tente novamente daqui a pouco."
 staff_panel_chat_id: "ID de chat do Grupo de Staff: <code>{chat_id}</code>"
 staff_panel_no_links: "Ainda não há grupos vinculados."
+staff_unset_not_staff: "Este grupo não é um Grupo de Staff."
+staff_unset_confirm_prompt: "Tem a certeza? Remover o estado de Staff desvinculará {count} grupo(s) deste Grupo de Staff."
+staff_btn_confirm: "Confirmar"
+staff_btn_cancel: "Cancelar"
+staff_unset_done: "Estado de Staff removido. Grupos desvinculados: {count}\n{groups}"
+staff_unset_cancelled: "Cancelado. Este grupo continua a ser um Grupo de Staff."
+staff_unset_already_removed: "O estado de Staff já foi removido."
+staff_cb_owner_only: "Apenas o criador deste grupo pode fazer isto."
+staff_cb_expired: "Este botão já não é válido."

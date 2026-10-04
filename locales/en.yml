@@ -2641,6 +2641,7 @@ staff_help_msg: |
 
   *Group owner:*
   × /setstaff: Make this group your Staff Group (group creator only).
+  × /unsetstaff: Remove Staff status and unlink every group (group creator only).
 
   *In the Staff Group:*
   × /staff: Show the Staff Group chat ID and its linked groups.
@@ -2650,3 +2651,12 @@ staff_refuse_not_owner: "Only the creator of this group can make it a Staff Grou
 staff_check_failed: "I could not verify who created this group right now. Nothing was changed, please try again in a moment."
 staff_panel_chat_id: "Staff Group chat ID: <code>{chat_id}</code>"
 staff_panel_no_links: "No groups are linked yet."
+staff_unset_not_staff: "This group is not a Staff Group."
+staff_unset_confirm_prompt: "Are you sure? Removing Staff status will unlink {count} group(s) from this Staff Group."
+staff_btn_confirm: "Confirm"
+staff_btn_cancel: "Cancel"
+staff_unset_done: "Staff status removed. Groups unlinked: {count}\n{groups}"
+staff_unset_cancelled: "Cancelled. This group is still a Staff Group."
+staff_unset_already_removed: "Staff status was already removed."
+staff_cb_owner_only: "Only the creator of this group can do this."
+staff_cb_expired: "This button is no longer valid."

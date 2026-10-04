@@ -99,6 +99,57 @@ func GetStaffGroup(chatID int64) *models.StaffGroup {
 	return &result
 }
 
+// CountLinksByStaffFresh counts the groups linked to the Staff Group staffChatID
+// straight from the database, bypassing every cache.
+func CountLinksByStaffFresh(staffChatID int64) (int64, error) {
+	var count int64
+	err := db.DB.Model(&models.StaffGroupLink{}).Where("staff_chat_id = ?", staffChatID).Count(&count).Error
+	if err != nil {
+		log.Errorf("[Staff] CountLinksByStaffFresh: %v", err)
+		return 0, alitaerrors.Wrapf(err, "count staff links %d", staffChatID)
+	}
+	return count, nil
+}
+
+// DeleteStaffGroupWithLinks removes the Staff Group chatID and every link whose
+// staff_chat_id is chatID in one transaction, so either all of them still exist
+// or none do. removed lists the deleted links in link-id order.
+//
+// The staff_groups row is deleted first: that delete claims the row, so when two
+// callers race only the one whose delete affected a row gets deleted=true and a
+// non-empty removed; the other gets (nil, false, nil) and must post nothing.
+func DeleteStaffGroupWithLinks(chatID int64) (removed []models.StaffGroupLink, deleted bool, err error) {
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("chat_id = ?", chatID).Delete(&models.StaffGroup{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
+		if err := tx.Where("staff_chat_id = ?", chatID).Order("id ASC").Find(&removed).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("staff_chat_id = ?", chatID).Delete(&models.StaffGroupLink{}).Error; err != nil {
+			return err
+		}
+		deleted = true
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Staff] DeleteStaffGroupWithLinks: %v", err)
+		return nil, false, alitaerrors.Wrapf(err, "delete staff group %d", chatID)
+	}
+	if !deleted {
+		return nil, false, nil
+	}
+	invalidateStaffKeys(chatID)
+	for _, link := range removed {
+		invalidateStaffKeys(link.GroupChatID)
+	}
+	return removed, true, nil
+}
+
 // GetStaffGroupFresh reads the Staff Group for chatID straight from the
 // database, bypassing every cache. It returns (nil, nil) when there is no row.
 // It is the authority read.
