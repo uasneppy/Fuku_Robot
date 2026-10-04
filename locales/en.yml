@@ -2642,6 +2642,7 @@ staff_help_msg: |
   *Group owner:*
   × /setstaff: Make this group your Staff Group (group creator only).
   × /unsetstaff: Remove Staff status and unlink every group (group creator only).
+  × /linkstaff [ID]: Link this group to your Staff Group (group creator only). Add the Staff Group chat ID when you own more than one.
 
   *In the Staff Group:*
   × /staff: Show the Staff Group chat ID and its linked groups.
@@ -2664,3 +2665,8 @@ staff_post_as_yourself: "Please send this command as yourself, not as an anonymo
 staff_refuse_not_group: "A Staff Group has to be a group or supergroup, not a channel."
 staff_refuse_bot_not_admin: "I need to be an administrator of this group first. Make me an admin, then send the command again."
 staff_refuse_group_is_linked: "This group is linked to a Staff Group, so it cannot be a Staff Group itself. Unlink it first."
+staff_link_done: "Group linked: {group}\nChat ID: <code>{id}</code>"
+staff_link_warn_bot_missing: "Warning: I am not in that group. Add me there as an admin so staff actions can work."
+staff_link_warn_bot_not_admin: "Warning: I am not an admin in that group. Make me an admin with the right to restrict members."
+staff_link_warn_bot_cannot_restrict: "Warning: I am an admin there but cannot restrict members. Give me that right so staff actions can work."
+staff_panel_links_header: "Linked groups ({count}):"

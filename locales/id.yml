@@ -2604,6 +2604,7 @@ staff_help_msg: |
   *Pemilik grup:*
   × /setstaff: Jadikan grup ini Grup Staf Anda (hanya pembuat grup).
   × /unsetstaff: Hapus status Staf dan putuskan tautan semua grup (hanya pembuat grup).
+  × /linkstaff [ID]: Tautkan grup ini ke Grup Staf Anda (hanya pembuat grup). Tambahkan ID obrolan Grup Staf jika Anda punya lebih dari satu.
 
   *Di Grup Staf:*
   × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung.
@@ -2626,3 +2627,8 @@ staff_post_as_yourself: "Kirim perintah ini sebagai diri Anda sendiri, bukan seb
 staff_refuse_not_group: "Grup Staf harus berupa grup atau supergrup, bukan channel."
 staff_refuse_bot_not_admin: "Saya harus menjadi administrator grup ini terlebih dahulu. Jadikan saya admin, lalu kirim perintah lagi."
 staff_refuse_group_is_linked: "Grup ini terhubung ke sebuah Grup Staf, sehingga tidak bisa menjadi Grup Staf. Putuskan tautannya terlebih dahulu."
+staff_link_done: "Grup ditautkan: {group}\nID obrolan: <code>{id}</code>"
+staff_link_warn_bot_missing: "Peringatan: saya tidak berada di grup itu. Tambahkan saya sebagai admin di sana agar tindakan staf bisa berjalan."
+staff_link_warn_bot_not_admin: "Peringatan: saya bukan admin di grup itu. Jadikan saya admin dengan hak untuk membatasi anggota."
+staff_link_warn_bot_cannot_restrict: "Peringatan: saya admin di sana tetapi tidak bisa membatasi anggota. Berikan hak itu agar tindakan staf bisa berjalan."
+staff_panel_links_header: "Grup yang terhubung ({count}):"

@@ -2530,6 +2530,7 @@ staff_help_msg: |
   *Propriétaire du groupe :*
   × /setstaff : Faire de ce groupe votre groupe Staff (créateur du groupe uniquement).
   × /unsetstaff : Retirer le statut Staff et dissocier tous les groupes (créateur du groupe uniquement).
+  × /linkstaff [ID] : Lier ce groupe à votre groupe Staff (créateur du groupe uniquement). Ajoutez l'ID de discussion du groupe Staff si vous en avez plusieurs.
 
   *Dans le groupe Staff :*
   × /staff : Afficher l'ID de discussion du groupe Staff et ses groupes liés.
@@ -2552,3 +2553,8 @@ staff_post_as_yourself: "Envoyez cette commande en tant que vous-même, et non c
 staff_refuse_not_group: "Un groupe Staff doit être un groupe ou un supergroupe, pas un canal."
 staff_refuse_bot_not_admin: "Je dois d'abord être administrateur de ce groupe. Nommez-moi administrateur, puis renvoyez la commande."
 staff_refuse_group_is_linked: "Ce groupe est lié à un groupe Staff, il ne peut donc pas être lui-même un groupe Staff. Dissociez-le d'abord."
+staff_link_done: "Groupe lié : {group}\nID de discussion : <code>{id}</code>"
+staff_link_warn_bot_missing: "Attention : je ne suis pas dans ce groupe. Ajoutez-moi comme administrateur pour que les actions du staff fonctionnent."
+staff_link_warn_bot_not_admin: "Attention : je ne suis pas administrateur dans ce groupe. Nommez-moi administrateur avec le droit de restreindre des membres."
+staff_link_warn_bot_cannot_restrict: "Attention : je suis administrateur là-bas mais je ne peux pas restreindre des membres. Donnez-moi ce droit pour que les actions du staff fonctionnent."
+staff_panel_links_header: "Groupes liés ({count}) :"

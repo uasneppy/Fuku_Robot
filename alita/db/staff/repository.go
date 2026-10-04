@@ -44,8 +44,16 @@ func trimStaffTitle(s string) string {
 	return string(runes[:maxStaffTitleRunes])
 }
 
+// ErrAlreadyLinked is returned by CreateLink when the group already has a link.
+var ErrAlreadyLinked = errors.New("staff: group already linked")
+
+// ErrStaffGroupMissing is returned by CreateLink when the named Staff Group has
+// no staff_groups row.
+var ErrStaffGroupMissing = errors.New("staff: staff group not found")
+
 // ErrRoleConflict is returned by CreateStaffGroup when the chat is currently a
-// linked group of some Staff Group: the two roles never overlap (D-10).
+// linked group of some Staff Group, and by CreateLink when the group being linked
+// is itself a Staff Group: the two roles never overlap (D-10).
 var ErrRoleConflict = errors.New("staff: chat already holds the other staff role")
 
 // CreateStaffGroup stores chatID as a Staff Group owned by ownerUserID. It is
@@ -189,6 +197,111 @@ func GetStaffGroupFresh(chatID int64) (*models.StaffGroup, error) {
 	if err != nil {
 		log.Errorf("[Staff] GetStaffGroupFresh: %v", err)
 		return nil, alitaerrors.Wrapf(err, "get staff group %d", chatID)
+	}
+	return &row, nil
+}
+
+// CreateLink stores link in one transaction. It returns ErrStaffGroupMissing when
+// no staff_groups row has chat_id = link.StaffChatID, ErrRoleConflict when the
+// group being linked is itself a Staff Group (D-10), and ErrAlreadyLinked when the
+// group already has a link. The insert is ON CONFLICT DO NOTHING on the unique
+// group_chat_id, so when two callers race for the same group exactly one gets a
+// nil error and the other gets ErrAlreadyLinked. On success the group's cached
+// lookups are invalidated after the commit.
+func CreateLink(link *models.StaffGroupLink) error {
+	link.GroupTitle = trimStaffTitle(link.GroupTitle)
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		var staffRows int64
+		if err := tx.Model(&models.StaffGroup{}).Where("chat_id = ?", link.StaffChatID).Count(&staffRows).Error; err != nil {
+			return err
+		}
+		if staffRows == 0 {
+			return ErrStaffGroupMissing
+		}
+		var groupIsStaff int64
+		if err := tx.Model(&models.StaffGroup{}).Where("chat_id = ?", link.GroupChatID).Count(&groupIsStaff).Error; err != nil {
+			return err
+		}
+		if groupIsStaff > 0 {
+			return ErrRoleConflict
+		}
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(link)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrAlreadyLinked
+		}
+		return nil
+	})
+	switch {
+	case errors.Is(err, ErrStaffGroupMissing), errors.Is(err, ErrRoleConflict), errors.Is(err, ErrAlreadyLinked):
+		return err
+	case err != nil:
+		log.Errorf("[Staff] CreateLink: %v", err)
+		return alitaerrors.Wrapf(err, "create staff link %d", link.GroupChatID)
+	}
+	invalidateStaffKeys(link.GroupChatID)
+	return nil
+}
+
+// ListLinksByStaffFresh lists the groups linked to the Staff Group staffChatID in
+// link-id order, straight from the database.
+func ListLinksByStaffFresh(staffChatID int64) ([]models.StaffGroupLink, error) {
+	var links []models.StaffGroupLink
+	if err := db.DB.Where("staff_chat_id = ?", staffChatID).Order("id ASC").Find(&links).Error; err != nil {
+		log.Errorf("[Staff] ListLinksByStaffFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "list staff links %d", staffChatID)
+	}
+	return links, nil
+}
+
+// GetLinkOfGroup is the cached gate: it returns the link of groupChatID, or nil
+// when the group is not linked (or on an error, which is logged). A zero-value
+// sentinel is cached for "not found", so every link write invalidates it. Never
+// use it as an authority read; use GetLinkOfGroupFresh for that.
+func GetLinkOfGroup(groupChatID int64) *models.StaffGroupLink {
+	if groupChatID == 0 {
+		return nil
+	}
+	result, err := cache.GetFromCacheOrLoad(
+		context.Background(),
+		cache.CacheKey(cachePrefixStaffLinkOf, groupChatID),
+		cache.DefaultCacheTTL,
+		func(ctx context.Context) (models.StaffGroupLink, error) {
+			var row models.StaffGroupLink
+			err := db.DB.WithContext(ctx).Where("group_chat_id = ?", groupChatID).First(&row).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return models.StaffGroupLink{}, nil
+			}
+			if err != nil {
+				return models.StaffGroupLink{}, err
+			}
+			return row, nil
+		},
+	)
+	if err != nil {
+		log.Errorf("[Staff] GetLinkOfGroup: %v", err)
+		return nil
+	}
+	if result.GroupChatID == 0 {
+		return nil
+	}
+	return &result
+}
+
+// GetLinkOfGroupFresh reads the link of groupChatID straight from the database,
+// bypassing every cache. It returns (nil, nil) when the group is not linked. It
+// is the authority read.
+func GetLinkOfGroupFresh(groupChatID int64) (*models.StaffGroupLink, error) {
+	var row models.StaffGroupLink
+	err := db.DB.Where("group_chat_id = ?", groupChatID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		log.Errorf("[Staff] GetLinkOfGroupFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "get staff link %d", groupChatID)
 	}
 	return &row, nil
 }

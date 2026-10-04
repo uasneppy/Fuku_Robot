@@ -2576,6 +2576,7 @@ staff_help_msg: |
   *Dono do grupo:*
   × /setstaff: Torna este grupo o seu Grupo de Staff (apenas o criador do grupo).
   × /unsetstaff: Remove o estado de Staff e desvincula todos os grupos (apenas o criador do grupo).
+  × /linkstaff [ID]: Vincula este grupo ao seu Grupo de Staff (apenas o criador do grupo). Adicione o ID de chat do Grupo de Staff se tiver mais de um.
 
   *No Grupo de Staff:*
   × /staff: Mostra o ID de chat do Grupo de Staff e os grupos vinculados.
@@ -2598,3 +2599,8 @@ staff_post_as_yourself: "Envie este comando como você mesmo, não como administ
 staff_refuse_not_group: "Um Grupo de Staff tem de ser um grupo ou supergrupo, não um canal."
 staff_refuse_bot_not_admin: "Primeiro preciso de ser administrador deste grupo. Torne-me administrador e envie o comando novamente."
 staff_refuse_group_is_linked: "Este grupo está vinculado a um Grupo de Staff, por isso não pode ser um Grupo de Staff. Desvincule-o primeiro."
+staff_link_done: "Grupo vinculado: {group}\nID do chat: <code>{id}</code>"
+staff_link_warn_bot_missing: "Aviso: não estou nesse grupo. Adicione-me lá como administrador para que as ações da staff funcionem."
+staff_link_warn_bot_not_admin: "Aviso: não sou administrador nesse grupo. Torne-me administrador com permissão para restringir membros."
+staff_link_warn_bot_cannot_restrict: "Aviso: sou administrador lá, mas não posso restringir membros. Dê-me essa permissão para que as ações da staff funcionem."
+staff_panel_links_header: "Grupos vinculados ({count}):"

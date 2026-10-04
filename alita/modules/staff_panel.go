@@ -55,6 +55,13 @@ func renderStaffPanel(
 		sb.WriteString("\n")
 		sb.WriteString(noLinks)
 	}
+	if len(rows) > 0 {
+		header, _ := tr.GetString("staff_panel_links_header", i18n.TranslationParams{
+			"count": len(rows),
+		})
+		sb.WriteString("\n")
+		sb.WriteString(header)
+	}
 	for _, row := range rows {
 		sb.WriteString("\n")
 		sb.WriteString(staffDisplayTitle(row.Link.GroupTitle))
