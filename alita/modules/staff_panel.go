@@ -30,14 +30,26 @@ func staffDisplayTitle(title string) string {
 	return html.EscapeString(title)
 }
 
+// staffAddGroupURL builds the t.me link behind the Add group button. It opens
+// Telegram's group picker and asks for the restrict-members and delete-messages
+// admin rights in the same step. The payload is stf_ plus the decimal of the
+// negated Staff Group chat ID, at most 23 characters of A-Za-z0-9_-. URL buttons
+// cannot be limited to one presser, so authority is enforced when /start@bot
+// arrives in the picked group (D-17), never from this link.
+func staffAddGroupURL(botUsername string, staffChatID int64) string {
+	return "https://t.me/" + botUsername + "?startgroup=stf_" +
+		strconv.FormatInt(-staffChatID, 10) + "&admin=restrict_members+delete_messages"
+}
+
 // renderStaffPanel builds the text and keyboard of the /staff panel. It is pure:
-// it performs no I/O, so the Phase 9 settings menu can reuse it. The keyboard is
-// empty for now; later plans add the Add group, Unlink, Refresh and paging
+// it performs no I/O, so the Phase 9 settings menu can reuse it. The keyboard has
+// the Add group button for now; later plans add the Unlink, Refresh and paging
 // buttons.
 func renderStaffPanel(
 	tr *i18n.Translator,
 	staffGroup models.StaffGroup,
 	rows []staffLinkRow,
+	botUsername string,
 ) (string, gotgbot.InlineKeyboardMarkup) {
 	var sb strings.Builder
 
@@ -70,5 +82,12 @@ func renderStaffPanel(
 		sb.WriteString("</code>")
 	}
 
-	return sb.String(), gotgbot.InlineKeyboardMarkup{}
+	var keyboard gotgbot.InlineKeyboardMarkup
+	if botUsername != "" {
+		addLabel, _ := tr.GetString("staff_panel_add_group_button")
+		keyboard.InlineKeyboard = [][]gotgbot.InlineKeyboardButton{{
+			{Text: addLabel, Url: staffAddGroupURL(botUsername, staffGroup.ChatID)},
+		}}
+	}
+	return sb.String(), keyboard
 }

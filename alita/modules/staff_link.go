@@ -20,6 +20,14 @@ import (
 // digits of the largest int64.
 const maxStaffChatIDArgLen = 20
 
+// staffPickerPrefix starts the start payload of the Add group picker, followed by
+// the decimal of the negated Staff Group chat ID: at most 4 + 19 characters, all
+// from the charset Telegram allows in a start payload (A-Za-z0-9_-).
+const (
+	staffPickerPrefix    = "stf_"
+	maxStaffPickerDigits = 19
+)
+
 // staffGroupTitleToken stands in for a group title while a notice is translated.
 // Titles are user-controlled and the translator runs a printf-style pass over the
 // interpolated text, so the escaped title is spliced in after translation.
@@ -83,14 +91,45 @@ func parseStaffChatIDArg(arg string) (int64, bool) {
 	return id, true
 }
 
-// parseStaffPickerPayload is a compile-only stub for the RED step.
-func parseStaffPickerPayload(arg string) (int64, bool) {
-	return 0, false
+// parseStaffPickerPayload parses the start payload of the Add group picker: "stf_"
+// followed by 1 to 19 ASCII digits, the decimal of the negated Staff Group chat
+// ID. Anything else, including a zero value, is not ours. The payload names the
+// Staff Group only; it never authorizes anything.
+func parseStaffPickerPayload(arg string) (staffChatID int64, ok bool) {
+	digits, found := strings.CutPrefix(arg, staffPickerPrefix)
+	if !found || digits == "" || len(digits) > maxStaffPickerDigits {
+		return 0, false
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	id, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return -id, true
 }
 
-// staffAddGroupURL is a compile-only stub for the RED step.
-func staffAddGroupURL(botUsername string, staffChatID int64) string {
-	return ""
+// staffPickerDeepLink handles /start@bot stf_<id> in a group: the picker's message.
+// A payload that is not stf_ plus digits is not handled, so /start keeps its
+// normal reply. Otherwise it removes the message (D-07), runs the same live-checked
+// link flow as /linkstaff, and always ends the update.
+func staffPickerDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) (bool, error) {
+	staffChatID, ok := parseStaffPickerPayload(arg)
+	if !ok || ctx == nil || ctx.EffectiveChat == nil {
+		return false, nil
+	}
+	if msg := ctx.EffectiveMessage; msg != nil {
+		_, _ = msg.Delete(b, nil)
+	}
+	out := runLinkGroup(b, ctx, user, ctx.EffectiveChat, strconv.FormatInt(staffChatID, 10))
+	return true, staffModule.deliverLinkOutcome(b, ctx, user, ctx.EffectiveChat, out)
+}
+
+func init() {
+	RegisterGroupDeepLinkHandler("stf_", staffPickerDeepLink)
 }
 
 // staffHealthFromBot turns a live bot membership lookup into the health value

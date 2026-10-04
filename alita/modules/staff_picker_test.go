@@ -151,6 +151,12 @@ func inlineKeyboardOf(t *testing.T, call moduleBotCall) gotgbot.InlineKeyboardMa
 	if raw == nil {
 		t.Fatalf("call %+v carries no reply_markup", call.Params)
 	}
+	switch markup := raw.(type) {
+	case gotgbot.InlineKeyboardMarkup:
+		return markup
+	case *gotgbot.InlineKeyboardMarkup:
+		return *markup
+	}
 	var markup gotgbot.InlineKeyboardMarkup
 	if err := json.Unmarshal([]byte(fmt.Sprint(raw)), &markup); err != nil {
 		t.Fatalf("decode reply_markup %v: %v", raw, err)

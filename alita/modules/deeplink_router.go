@@ -49,17 +49,40 @@ func HandleDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg st
 	return sendDefaultHelp(b, ctx, user)
 }
 
-// GroupDeepLinkHandler is a compile-only stub for the RED step.
+// GroupDeepLinkHandler processes a /start payload that arrives in a group chat,
+// for example the "Add group" picker's /start@bot stf_<id>. It reports handled =
+// false when the payload is not one it recognises, so /start falls back to its
+// normal reply.
+//
+// A group payload is attacker-controlled text that anyone in any group can send:
+// it never grants authority. A handler must treat it as a hint about what was
+// asked for and decide with live checks.
 type GroupDeepLinkHandler func(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) (handled bool, err error)
 
 var groupDeepLinkRegistry = make(map[string]GroupDeepLinkHandler)
 
-// RegisterGroupDeepLinkHandler is a compile-only stub for the RED step.
-func RegisterGroupDeepLinkHandler(prefix string, handler GroupDeepLinkHandler) {}
+// RegisterGroupDeepLinkHandler registers a handler for a group deep link prefix.
+func RegisterGroupDeepLinkHandler(prefix string, handler GroupDeepLinkHandler) {
+	groupDeepLinkRegistry[prefix] = handler
+}
 
-// HandleGroupDeepLink is a compile-only stub for the RED step.
+// HandleGroupDeepLink routes a group /start payload to the handler with the
+// longest matching prefix, like HandleDeepLink. It returns (false, nil) when no
+// prefix matches, and passes through a handler's own handled flag, so the caller
+// can keep its existing behaviour for anything unhandled.
 func HandleGroupDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) (bool, error) {
-	return false, nil
+	var matchedPrefix string
+	var handler GroupDeepLinkHandler
+	for prefix, h := range groupDeepLinkRegistry {
+		if strings.HasPrefix(arg, prefix) && len(prefix) > len(matchedPrefix) {
+			matchedPrefix = prefix
+			handler = h
+		}
+	}
+	if handler == nil {
+		return false, nil
+	}
+	return handler(b, ctx, user, arg)
 }
 
 func sendDefaultHelp(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User) error {

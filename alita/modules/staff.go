@@ -162,7 +162,7 @@ func (moduleStruct) staffPanel(c *helpers.CommandContext) error {
 	for _, link := range links {
 		rows = append(rows, staffLinkRow{Link: link})
 	}
-	text, keyboard := renderStaffPanel(c.Tr, *group, rows)
+	text, keyboard := renderStaffPanel(c.Tr, *group, rows, c.Bot.Username)
 	opts := formatting.Shtml()
 	if len(keyboard.InlineKeyboard) > 0 {
 		opts.ReplyMarkup = keyboard

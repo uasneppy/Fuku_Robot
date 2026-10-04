@@ -2328,3 +2328,4 @@ staff_link_refuse_target_is_staff: "लिंक नहीं हुआ: {group}
 staff_link_refuse_not_target_owner: "लिंक नहीं हुआ: आप {group} के बनाने वाले नहीं हैं। केवल दोनों ग्रुप का बनाने वाला ही उन्हें लिंक कर सकता है।"
 staff_link_refuse_already_linked: "लिंक नहीं हुआ: {group} पहले से एक स्टाफ ग्रुप से लिंक है। पहले उसे अनलिंक करें।"
 staff_link_check_failed_group: "लिंक नहीं हुआ: मैं अभी यह जांच नहीं कर पाया कि {group} किसने बनाया। कुछ नहीं बदला गया, कृपया थोड़ी देर बाद फिर कोशिश करें।"
+staff_panel_add_group_button: "➕ ग्रुप जोड़ें"

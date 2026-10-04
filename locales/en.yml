@@ -2679,3 +2679,4 @@ staff_link_refuse_target_is_staff: "Not linked: {group} is a Staff Group, and a 
 staff_link_refuse_not_target_owner: "Not linked: you are not the creator of {group}. Only the creator of both groups can link them."
 staff_link_refuse_already_linked: "Not linked: {group} is already linked to a Staff Group. Unlink it first."
 staff_link_check_failed_group: "Not linked: I could not verify who created {group} right now. Nothing was changed, please try again in a moment."
+staff_panel_add_group_button: "➕ Add group"

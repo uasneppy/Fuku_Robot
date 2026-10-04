@@ -2567,3 +2567,4 @@ staff_link_refuse_target_is_staff: "Non lié : {group} est un groupe Staff, et u
 staff_link_refuse_not_target_owner: "Non lié : vous n'êtes pas le créateur de {group}. Seul le créateur des deux groupes peut les lier."
 staff_link_refuse_already_linked: "Non lié : {group} est déjà lié à un groupe Staff. Dissociez-le d'abord."
 staff_link_check_failed_group: "Non lié : je n'ai pas pu vérifier qui a créé {group} pour le moment. Rien n'a été modifié, réessayez dans un instant."
+staff_panel_add_group_button: "➕ Ajouter un groupe"

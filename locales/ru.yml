@@ -2388,3 +2388,4 @@ staff_link_refuse_target_is_staff: "Не привязана: {group} — шта�
 staff_link_refuse_not_target_owner: "Не привязана: вы не создатель {group}. Привязать группы может только создатель обеих."
 staff_link_refuse_already_linked: "Не привязана: {group} уже привязана к штаб-группе. Сначала отвяжите её."
 staff_link_check_failed_group: "Не привязана: сейчас не удалось проверить, кто создал {group}. Ничего не изменено, попробуйте ещё раз чуть позже."
+staff_panel_add_group_button: "➕ Добавить группу"

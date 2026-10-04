@@ -2613,3 +2613,4 @@ staff_link_refuse_target_is_staff: "Não vinculado: {group} é um Grupo de Staff
 staff_link_refuse_not_target_owner: "Não vinculado: você não é o criador de {group}. Só o criador dos dois grupos pode vinculá-los."
 staff_link_refuse_already_linked: "Não vinculado: {group} já está vinculado a um Grupo de Staff. Desvincule-o primeiro."
 staff_link_check_failed_group: "Não vinculado: não consegui verificar quem criou {group} neste momento. Nada foi alterado, tente de novo daqui a pouco."
+staff_panel_add_group_button: "➕ Adicionar grupo"

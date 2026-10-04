@@ -2641,3 +2641,4 @@ staff_link_refuse_target_is_staff: "Tidak ditautkan: {group} adalah Grup Staf, d
 staff_link_refuse_not_target_owner: "Tidak ditautkan: Anda bukan pembuat {group}. Hanya pembuat kedua grup yang bisa menautkannya."
 staff_link_refuse_already_linked: "Tidak ditautkan: {group} sudah ditautkan ke sebuah Grup Staf. Putuskan tautannya terlebih dahulu."
 staff_link_check_failed_group: "Tidak ditautkan: saya tidak bisa memverifikasi siapa pembuat {group} saat ini. Tidak ada yang diubah, coba lagi sebentar lagi."
+staff_panel_add_group_button: "➕ Tambah grup"

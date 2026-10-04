@@ -371,6 +371,14 @@ func (moduleStruct) start(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.WithField("args", args).Debug("Unexpected number of args in /start deep link")
 		}
 	} else {
+		if len(args) == 2 {
+			if handled, err := HandleGroupDeepLink(b, ctx, user, args[1]); handled {
+				if err != nil && !errors.Is(err, ext.EndGroups) && !errors.Is(err, ext.ContinueGroups) {
+					log.Error(err)
+				}
+				return err
+			}
+		}
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("help_pm_questions")
 		_, err := msg.Reply(b, text, formatting.Shtml())
