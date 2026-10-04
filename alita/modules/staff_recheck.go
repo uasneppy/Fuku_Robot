@@ -173,6 +173,53 @@ func recheckLink(b *gotgbot.Bot, link models.StaffGroupLink, pass *staffOwnerPas
 	return staffRecheckUnknown
 }
 
+// staffHealthNoticeText returns the Staff Group heads-up for a link's new health,
+// with the group title still a placeholder token. Every case reads a literal
+// locale key so make check-translations sees it.
+func staffHealthNoticeText(tr *i18n.Translator, health string) string {
+	params := i18n.TranslationParams{"group": staffGroupTitleToken}
+	var text string
+	switch health {
+	case models.StaffHealthBotMissing:
+		text, _ = tr.GetString("staff_notice_health_bot_missing", params)
+	case models.StaffHealthBotNotAdmin:
+		text, _ = tr.GetString("staff_notice_health_bot_not_admin", params)
+	case models.StaffHealthBotCannotRestrict:
+		text, _ = tr.GetString("staff_notice_health_bot_cannot_restrict", params)
+	case models.StaffHealthOK:
+		text, _ = tr.GetString("staff_notice_health_ok", params)
+	}
+	return text
+}
+
+// applyLinkHealth is the single path through which a link's bot health changes
+// (D-14): the my_chat_member watcher, the /staff panel and the hourly sweep all
+// call it, and nothing else writes the health column. Losing the bot never
+// removes a link; only the health value moves.
+//
+// The transition is staff.SetLinkHealth, a conditional UPDATE ... WHERE health <>
+// new. Only the caller whose statement changed the row posts the one heads-up to
+// the Staff Group, in its own language, so a repeated check that finds the same
+// health, or several racing callers, post nothing extra. Nothing is ever sent to
+// the linked group itself. It reports whether this call changed the health.
+func applyLinkHealth(b *gotgbot.Bot, link models.StaffGroupLink, health string) bool {
+	changed, err := staff.SetLinkHealth(link.ID, health)
+	if err != nil {
+		log.Errorf("[Staff] applyLinkHealth: link %d -> %s: %v", link.ID, health, err)
+		return false
+	}
+	if !changed {
+		return false
+	}
+	text := staffHealthNoticeText(staffChatTranslator(link.StaffChatID), health)
+	if text == "" {
+		return true
+	}
+	text = strings.Replace(text, staffGroupTitleToken, staffDisplayTitle(link.GroupTitle), 1)
+	_ = sendStaffNotice(b, link.StaffChatID, text)
+	return true
+}
+
 // staffRecheckSummary is what one recheckStaffGroup run did.
 type staffRecheckSummary struct {
 	// RemovedGroupIDs lists the linked groups this run unlinked, in link-id
