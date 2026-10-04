@@ -26,7 +26,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Handlers
 
-- Group numbers are execution order: `-10` captcha sweeper · `-6` fed-ban · `-5` antiraid · `-2` admin-cache ·
+- Group numbers are execution order: `-10` captcha sweeper · `-6` fed-ban · `-5` antiraid ·
+  `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
   `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel.
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
@@ -95,6 +96,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `alita:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
   must `DeleteCache` it after commit.
+- Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
+  `migrate_to_chat_id` parameter; other per-chat settings are not migrated.
 
 ## Go rules
 
