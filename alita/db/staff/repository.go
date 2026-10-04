@@ -290,6 +290,11 @@ func GetLinkOfGroup(groupChatID int64) *models.StaffGroupLink {
 	return &result
 }
 
+// ListStaffGroupsByOwner is a compile-only stub for the RED step.
+func ListStaffGroupsByOwner(ownerUserID int64) ([]models.StaffGroup, error) {
+	return nil, nil
+}
+
 // GetLinkOfGroupFresh reads the link of groupChatID straight from the database,
 // bypassing every cache. It returns (nil, nil) when the group is not linked. It
 // is the authority read.

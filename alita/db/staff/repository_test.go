@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
@@ -324,6 +325,200 @@ func TestStaffRepoCountLinksByStaffFresh(t *testing.T) {
 	}
 	if n, err := CountLinksByStaffFresh(staffID); err != nil || n != 2 {
 		t.Fatalf("count = (%d, %v), want (2, nil)", n, err)
+	}
+}
+
+func TestStaffRepoCreateLinkRefusesMissingStaffGroup(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+
+	err := CreateLink(&models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7})
+	if !errors.Is(err, ErrStaffGroupMissing) {
+		t.Fatalf("CreateLink(no Staff Group) = %v, want ErrStaffGroupMissing", err)
+	}
+	if link, err := GetLinkOfGroupFresh(groupID); err != nil || link != nil {
+		t.Fatalf("a refused CreateLink inserted %+v (err %v)", link, err)
+	}
+}
+
+func TestStaffRepoCreateLinkRefusesStaffGroupAsLinkedGroup(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	for _, id := range []int64{staffID, groupID} {
+		if _, err := CreateStaffGroup(id, 7, "Staff"); err != nil {
+			t.Fatalf("CreateStaffGroup(%d): %v", id, err)
+		}
+	}
+
+	err := CreateLink(&models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7})
+	if !errors.Is(err, ErrRoleConflict) {
+		t.Fatalf("CreateLink(group is a Staff Group) = %v, want ErrRoleConflict", err)
+	}
+	if link, err := GetLinkOfGroupFresh(groupID); err != nil || link != nil {
+		t.Fatalf("a refused CreateLink inserted %+v (err %v)", link, err)
+	}
+}
+
+func TestStaffRepoCreateLinkStoresTrimmedTitleAndInvalidatesGate(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cache the "not linked" sentinel; the write must invalidate it.
+	if got := GetLinkOfGroup(groupID); got != nil {
+		t.Fatalf("GetLinkOfGroup before link = %+v, want nil", got)
+	}
+	title := strings.Repeat("日", 70)
+	link := &models.StaffGroupLink{
+		GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7, GroupTitle: "  " + title + "  ", Health: models.StaffHealthBotNotAdmin,
+	}
+	if err := CreateLink(link); err != nil {
+		t.Fatalf("CreateLink: %v", err)
+	}
+
+	got := GetLinkOfGroup(groupID)
+	if got == nil || got.StaffChatID != staffID || got.OwnerUserID != 7 || got.Health != models.StaffHealthBotNotAdmin {
+		t.Fatalf("GetLinkOfGroup after link = %+v, want the new link (the write must invalidate)", got)
+	}
+	if utf8.RuneCountInString(got.GroupTitle) != 64 {
+		t.Fatalf("stored title has %d runes, want 64", utf8.RuneCountInString(got.GroupTitle))
+	}
+	fresh, err := GetLinkOfGroupFresh(groupID)
+	if err != nil || fresh == nil || fresh.ID != got.ID {
+		t.Fatalf("GetLinkOfGroupFresh = (%+v, %v), want the same link", fresh, err)
+	}
+	if none, err := GetLinkOfGroupFresh(uniqueStaffChatID()); err != nil || none != nil {
+		t.Fatalf("GetLinkOfGroupFresh(unlinked) = (%+v, %v), want (nil, nil)", none, err)
+	}
+	if GetLinkOfGroup(0) != nil {
+		t.Fatal("GetLinkOfGroup(0) must be nil")
+	}
+}
+
+func TestStaffRepoCreateLinkSecondInsertIsAlreadyLinked(t *testing.T) {
+	staffA, staffB, groupID := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffA, staffB, groupID)
+	for _, id := range []int64{staffA, staffB} {
+		if _, err := CreateStaffGroup(id, 7, "Staff"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := CreateLink(&models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffA, OwnerUserID: 7}); err != nil {
+		t.Fatalf("first CreateLink: %v", err)
+	}
+
+	err := CreateLink(&models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffB, OwnerUserID: 8})
+	if !errors.Is(err, ErrAlreadyLinked) {
+		t.Fatalf("second CreateLink = %v, want ErrAlreadyLinked", err)
+	}
+	link, err := GetLinkOfGroupFresh(groupID)
+	if err != nil || link == nil || link.StaffChatID != staffA || link.OwnerUserID != 7 {
+		t.Fatalf("link = (%+v, %v), want the first link untouched", link, err)
+	}
+}
+
+// Two writers racing for the same group, through the same or different Staff
+// Groups, end with exactly one row: one nil error, one ErrAlreadyLinked.
+func TestStaffRepoCreateLinkConcurrentSameGroupMakesOneRow(t *testing.T) {
+	for round := 0; round < 10; round++ {
+		staffA, staffB, groupID := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+		cleanupStaffRows(t, staffA, staffB, groupID)
+		for _, id := range []int64{staffA, staffB} {
+			if _, err := CreateStaffGroup(id, 7, "Staff"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		errs := make([]error, 2)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i, staffID := range []int64{staffA, staffB} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				errs[i] = CreateLink(&models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7})
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		var nilCount, alreadyCount int
+		for _, err := range errs {
+			switch {
+			case err == nil:
+				nilCount++
+			case errors.Is(err, ErrAlreadyLinked):
+				alreadyCount++
+			default:
+				t.Fatalf("round %d: unexpected error %v", round, err)
+			}
+		}
+		if nilCount != 1 || alreadyCount != 1 {
+			t.Fatalf("round %d: errors = %v, want exactly one nil and one ErrAlreadyLinked", round, errs)
+		}
+		var rows int64
+		if err := db.DB.Model(&models.StaffGroupLink{}).Where("group_chat_id = ?", groupID).Count(&rows).Error; err != nil || rows != 1 {
+			t.Fatalf("round %d: rows = %d (err %v), want exactly one", round, rows, err)
+		}
+	}
+}
+
+func TestStaffRepoListLinksByStaffFresh(t *testing.T) {
+	staffA, staffB, g1, g2, g3 := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffA, staffB, g1, g2, g3)
+	for _, id := range []int64{staffA, staffB} {
+		if _, err := CreateStaffGroup(id, 7, "Staff"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, link := range []*models.StaffGroupLink{
+		{GroupChatID: g1, StaffChatID: staffA, OwnerUserID: 7, GroupTitle: "One"},
+		{GroupChatID: g2, StaffChatID: staffB, OwnerUserID: 7, GroupTitle: "Other staff"},
+		{GroupChatID: g3, StaffChatID: staffA, OwnerUserID: 7, GroupTitle: "Three"},
+	} {
+		if err := CreateLink(link); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	links, err := ListLinksByStaffFresh(staffA)
+	if err != nil || len(links) != 2 || links[0].GroupChatID != g1 || links[1].GroupChatID != g3 {
+		t.Fatalf("ListLinksByStaffFresh = (%+v, %v), want g1 then g3 in id order", links, err)
+	}
+	if none, err := ListLinksByStaffFresh(uniqueStaffChatID()); err != nil || len(none) != 0 {
+		t.Fatalf("ListLinksByStaffFresh(unknown) = (%+v, %v), want empty", none, err)
+	}
+}
+
+func TestStaffRepoListStaffGroupsByOwner(t *testing.T) {
+	owner := -uniqueStaffChatID() % 1_000_000_000_000
+	otherOwner := owner + 1
+	first, second, third := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, first, second, third)
+	for chatID, who := range map[int64]int64{first: owner, second: owner, third: otherOwner} {
+		if _, err := CreateStaffGroup(chatID, who, "Staff"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	groups, err := ListStaffGroupsByOwner(owner)
+	if err != nil || len(groups) != 2 {
+		t.Fatalf("ListStaffGroupsByOwner(owner) = (%+v, %v), want two groups", groups, err)
+	}
+	if groups[0].ID >= groups[1].ID {
+		t.Fatalf("groups = %+v, want id order", groups)
+	}
+	got := map[int64]bool{groups[0].ChatID: true, groups[1].ChatID: true}
+	if !got[first] || !got[second] || got[third] {
+		t.Fatalf("groups = %+v, want exactly the owner's two Staff Groups", groups)
+	}
+	if none, err := ListStaffGroupsByOwner(owner + 99); err != nil || len(none) != 0 {
+		t.Fatalf("ListStaffGroupsByOwner(stranger) = (%+v, %v), want empty", none, err)
 	}
 }
 

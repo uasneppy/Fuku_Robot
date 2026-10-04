@@ -16,13 +16,18 @@ import (
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 )
 
-const linkOwnerID int64 = 6161
+// uniqueLinkOwnerID returns a random positive user ID, so a test's recorded Staff
+// Groups never mix with another test's when /linkstaff looks them up by owner.
+func uniqueLinkOwnerID() int64 {
+	return -uniqueModuleChatID()%1_000_000_000_000 + 1_000_000
+}
 
 // linkEnv is a scripted bot, a Staff Group and a supergroup that both have
-// linkOwnerID as creator. The Staff Group row exists; the supergroup is unlinked.
+// ownerID as creator. The Staff Group row exists; the supergroup is unlinked.
 type linkEnv struct {
 	client  *staffBotClient
 	bot     *gotgbot.Bot
+	ownerID int64
 	staffID int64
 	groupID int64
 }
@@ -33,15 +38,16 @@ func newLinkEnv(t *testing.T) *linkEnv {
 
 	env := &linkEnv{
 		client:  newStaffBotClient(),
+		ownerID: uniqueLinkOwnerID(),
 		staffID: uniqueModuleChatID(),
 		groupID: uniqueModuleChatID(),
 	}
 	env.bot = newModuleTestBot(env.client.moduleBotClient)
 	env.bot.BotClient = env.client
-	env.client.setCreator(env.staffID, linkOwnerID)
-	env.client.setCreator(env.groupID, linkOwnerID)
+	env.client.setCreator(env.staffID, env.ownerID)
+	env.client.setCreator(env.groupID, env.ownerID)
 	staffCleanup(t, env.staffID, env.groupID)
-	if _, err := staff.CreateStaffGroup(env.staffID, linkOwnerID, "Staff HQ"); err != nil {
+	if _, err := staff.CreateStaffGroup(env.staffID, env.ownerID, "Staff HQ"); err != nil {
 		t.Fatalf("create Staff Group: %v", err)
 	}
 	return env
@@ -87,8 +93,8 @@ func (e *linkEnv) wantLink(t *testing.T, health string) *models.StaffGroupLink {
 	if err != nil || link == nil {
 		t.Fatalf("link of group = (%+v, %v), want a link", link, err)
 	}
-	if link.OwnerUserID != linkOwnerID || link.StaffChatID != e.staffID || link.Health != health {
-		t.Fatalf("link = %+v, want owner %d, staff %d, health %q", link, linkOwnerID, e.staffID, health)
+	if link.OwnerUserID != e.ownerID || link.StaffChatID != e.staffID || link.Health != health {
+		t.Fatalf("link = %+v, want owner %d, staff %d, health %q", link, e.ownerID, e.staffID, health)
 	}
 	return link
 }
@@ -97,7 +103,7 @@ func TestLinkStaffTracer(t *testing.T) {
 	env := newLinkEnv(t)
 	const title = "Group <b>One</b>"
 
-	env.sendLink(t, env.groupChat(title), linkOwnerID, fmt.Sprintf("/linkstaff %d", env.staffID))
+	env.sendLink(t, env.groupChat(title), env.ownerID, fmt.Sprintf("/linkstaff %d", env.staffID))
 
 	deletes := callsToChat(env.client, "deleteMessage", env.groupID)
 	if len(deletes) != 1 || fmt.Sprint(deletes[0].Params["message_id"]) != "101" {
@@ -119,7 +125,7 @@ func TestLinkStaffTracer(t *testing.T) {
 		t.Fatalf("%d messages were sent to the linked group, want none (D-06, D-07)", len(sent))
 	}
 
-	staffCtx := newModuleMessageContext(env.bot, staffSupergroup(env.staffID), gotgbot.User{Id: linkOwnerID, FirstName: "Owner"}, "/staff")
+	staffCtx := newModuleMessageContext(env.bot, staffSupergroup(env.staffID), gotgbot.User{Id: env.ownerID, FirstName: "Owner"}, "/staff")
 	if err := runStaffCommand(t, env.bot, staffCtx, staffDesc, staffModule.staffPanel); err != ext.EndGroups {
 		t.Fatalf("/staff returned %v, want ext.EndGroups", err)
 	}
@@ -156,7 +162,7 @@ func TestLinkStaffWarnsWhenBotLacksRights(t *testing.T) {
 			env := newLinkEnv(t)
 			env.client.botRole[env.groupID] = tc.role
 
-			env.sendLink(t, env.groupChat("Weak Bot Group"), linkOwnerID, fmt.Sprintf("/linkstaff %d", env.staffID))
+			env.sendLink(t, env.groupChat("Weak Bot Group"), env.ownerID, fmt.Sprintf("/linkstaff %d", env.staffID))
 
 			env.wantLink(t, tc.wantHealth)
 			notices := textsToChat(env.client, env.staffID)

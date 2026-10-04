@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"time"
+
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
@@ -9,6 +11,11 @@ import (
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 )
+
+// staffSelfDeleteAfter is how long a refusal posted in the issuing group stays
+// visible before the bot deletes it. A restart loses the timer, which leaves a
+// short refusal visible; that is accepted.
+var staffSelfDeleteAfter = 30 * time.Second
 
 // staffChatTranslator returns the translator for a chat's own language. Notices
 // that are posted into a Staff Group, possibly long after the command that caused
