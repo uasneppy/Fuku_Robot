@@ -270,6 +270,18 @@ func CanBotDelete() CheckFunc {
 	}
 }
 
+// IsAnonymousSender is a RED-phase stub.
+func IsAnonymousSender(ctx *ext.Context, user *gotgbot.User) bool {
+	return false
+}
+
+// RejectAnonymousSender is a RED-phase stub.
+func RejectAnonymousSender() CheckFunc {
+	return func(c *CommandContext) bool {
+		return true
+	}
+}
+
 // RunChecks re-runs pipeline checks, for anonymous-admin post-proof handlers
 // which bypass WrapCommand's RequiredChecks. Returns false on first failure.
 func RunChecks(c *CommandContext, checks []CheckFunc) bool {

@@ -20,6 +20,23 @@ const (
 	OwnerUnknown
 )
 
+// BotMemberResult is the outcome of a live lookup of the bot's own membership.
+type BotMemberResult int
+
+const (
+	// BotMemberFound means Telegram answered with a member record for the bot.
+	BotMemberFound BotMemberResult = iota
+	// BotMemberMissing means Telegram says the bot is not in the chat.
+	BotMemberMissing
+	// BotMemberUnknown means the answer could not be obtained.
+	BotMemberUnknown
+)
+
+// FetchBotMember is a RED-phase stub.
+func FetchBotMember(b *gotgbot.Bot, chatID int64) (gotgbot.MergedChatMember, BotMemberResult, error) {
+	return gotgbot.MergedChatMember{}, BotMemberFound, nil
+}
+
 // liveCheckTimeout bounds the getChatAdministrators call made by CheckOwner.
 var liveCheckTimeout = 8 * time.Second
 
