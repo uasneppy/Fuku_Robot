@@ -395,3 +395,8 @@ func DeleteLinkIfOwner(id uint, ownerUserID int64) (deleted bool, err error) {
 	invalidateStaffKeys(removed[0].GroupChatID)
 	return true, nil
 }
+
+// UpdateStaffGroupOwner is a RED-phase stub.
+func UpdateStaffGroupOwner(chatID, ownerUserID int64) (changed bool, err error) {
+	return false, nil
+}

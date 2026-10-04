@@ -118,3 +118,9 @@ func LoadStaffWatchers(dispatcher *ext.Dispatcher) {
 func init() {
 	RegisterLegacyModule("StaffWatchers", 237, LoadStaffWatchers)
 }
+
+func staffCreatorTransition(u *gotgbot.ChatMemberUpdated) bool { return false }
+
+func (moduleStruct) onCreatorChatMember(_ *gotgbot.Bot, _ *ext.Context) error {
+	return ext.ContinueGroups
+}

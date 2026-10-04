@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -170,4 +171,15 @@ func recheckLink(b *gotgbot.Bot, link models.StaffGroupLink, pass *staffOwnerPas
 		log.Warnf("[Staff] recheck: owner check for Staff Group %d failed: %v", link.StaffChatID, staffErr)
 	}
 	return staffRecheckUnknown
+}
+
+// staffRecheckSummary is a RED-phase stub.
+type staffRecheckSummary struct {
+	RemovedGroupIDs []int64
+	Unknown         bool
+}
+
+// recheckStaffGroup is a RED-phase stub.
+func recheckStaffGroup(ctx context.Context, b *gotgbot.Bot, staffChatID int64, pace func(context.Context) bool) staffRecheckSummary {
+	return staffRecheckSummary{}
 }
