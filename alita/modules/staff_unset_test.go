@@ -296,6 +296,26 @@ func TestUnsetStaffZeroLinksReportsZero(t *testing.T) {
 	}
 }
 
+func TestUnsetStaffRejectsAnonymousAdmin(t *testing.T) {
+	f := newUnsetFixture(t, "Alpha")
+
+	ctx := anonymousAdminContext(f.bot, f.chat())
+	if err := runStaffCommand(t, f.bot, ctx, unsetStaffDesc, staffModule.unsetStaff); err != ext.EndGroups {
+		t.Fatalf("anonymous /unsetstaff returned %v, want ext.EndGroups", err)
+	}
+
+	texts := sentTexts(f.client)
+	if len(texts) != 1 || !strings.Contains(texts[0], staffMarker("staff_post_as_yourself")) {
+		t.Fatalf("replies = %q, want staff_post_as_yourself", texts)
+	}
+	if n := len(f.client.callsFor("getChatAdministrators")) + len(f.client.callsFor("getChatMember")); n != 0 {
+		t.Fatalf("an anonymous admin triggered %d lookups, want 0", n)
+	}
+	if groups, links := f.rowsLeft(t); groups != 1 || links != 1 {
+		t.Fatalf("anonymous /unsetstaff changed rows: groups=%d links=%d", groups, links)
+	}
+}
+
 func TestUnsetStaffInNonStaffChatWritesNothing(t *testing.T) {
 	withStaffLocale(t)
 	client := newStaffBotClient()

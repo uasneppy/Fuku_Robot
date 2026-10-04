@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -25,11 +26,11 @@ var staffModule = moduleStruct{
 var (
 	setStaffDesc = helpers.CommandDescriptor{
 		Name:           "setstaff",
-		RequiredChecks: []helpers.CheckFunc{helpers.RequireGroup()},
+		RequiredChecks: []helpers.CheckFunc{helpers.RejectAnonymousSender(), helpers.RequireGroup()},
 	}
 	unsetStaffDesc = helpers.CommandDescriptor{
 		Name:           "unsetstaff",
-		RequiredChecks: []helpers.CheckFunc{helpers.RequireGroup()},
+		RequiredChecks: []helpers.CheckFunc{helpers.RejectAnonymousSender(), helpers.RequireGroup()},
 	}
 	staffDesc = helpers.CommandDescriptor{
 		Name: "staff",
@@ -62,41 +63,86 @@ func replyStaff(c *helpers.CommandContext, text string) {
 // setStaff makes the current group a Staff Group. Authority comes from a live
 // getChatAdministrators call (never the cached admin list): only the group's
 // current creator may do it, and an API error refuses without writing anything.
-func (moduleStruct) setStaff(c *helpers.CommandContext) error {
+//
+// When several checks would fail the reason reported is fixed: anonymous sender
+// (the pipeline's RejectAnonymousSender), chat type, live creator, bot
+// administrator, role conflict. Arguments after the command are ignored.
+func (m moduleStruct) setStaff(c *helpers.CommandContext) error {
 	if c.Chat.Type != "group" && c.Chat.Type != "supergroup" {
+		// RequireGroup only rejects private chats, so channels reach this point.
+		text, _ := c.Tr.GetString("staff_refuse_not_group")
+		replyStaff(c, text)
 		return ext.EndGroups
 	}
+	if !m.requireLiveCreator(c) || !m.requireBotAdministrator(c) {
+		return ext.EndGroups
+	}
+	m.createStaffGroup(c)
+	return ext.EndGroups
+}
 
+// requireLiveCreator replies and returns false unless Telegram, asked live,
+// lists the sender as the creator of the chat.
+func (moduleStruct) requireLiveCreator(c *helpers.CommandContext) bool {
 	result, _, err := chat_status.CheckOwner(c.Bot, c.Chat.Id, c.User.Id)
 	switch result {
 	case chat_status.OwnerUnknown:
 		log.Warnf("[Staff] setStaff: owner check for chat %d failed: %v", c.Chat.Id, err)
 		text, _ := c.Tr.GetString("staff_check_failed")
 		replyStaff(c, text)
-		return ext.EndGroups
+		return false
 	case chat_status.OwnerMismatch:
 		text, _ := c.Tr.GetString("staff_refuse_not_owner")
 		replyStaff(c, text)
-		return ext.EndGroups
+		return false
 	}
+	return true
+}
 
+// requireBotAdministrator replies and returns false unless the bot is already an
+// administrator of the chat (D-08). A failed lookup refuses as unverifiable.
+func (moduleStruct) requireBotAdministrator(c *helpers.CommandContext) bool {
+	member, result, err := chat_status.FetchBotMember(c.Bot, c.Chat.Id)
+	switch result {
+	case chat_status.BotMemberUnknown:
+		log.Warnf("[Staff] setStaff: bot membership check for chat %d failed: %v", c.Chat.Id, err)
+		text, _ := c.Tr.GetString("staff_check_failed")
+		replyStaff(c, text)
+		return false
+	case chat_status.BotMemberMissing:
+		text, _ := c.Tr.GetString("staff_refuse_bot_not_admin")
+		replyStaff(c, text)
+		return false
+	}
+	if member.Status != gotgbot.ChatMemberStatusAdministrator {
+		text, _ := c.Tr.GetString("staff_refuse_bot_not_admin")
+		replyStaff(c, text)
+		return false
+	}
+	return true
+}
+
+// createStaffGroup records the chat as a Staff Group and reports the outcome:
+// refused (the chat is a linked group), already a Staff Group, or newly made.
+func (moduleStruct) createStaffGroup(c *helpers.CommandContext) {
 	created, err := staff.CreateStaffGroup(c.Chat.Id, c.User.Id, c.Chat.Title)
-	if err != nil {
+	switch {
+	case errors.Is(err, staff.ErrRoleConflict):
+		text, _ := c.Tr.GetString("staff_refuse_group_is_linked")
+		replyStaff(c, text)
+	case err != nil:
 		log.Errorf("[Staff] setStaff: %v", err)
 		text, _ := c.Tr.GetString("staff_check_failed")
 		replyStaff(c, text)
-		return ext.EndGroups
-	}
-	if !created {
+	case !created:
 		text, _ := c.Tr.GetString("staff_set_already")
 		replyStaff(c, text)
-		return ext.EndGroups
+	default:
+		text, _ := c.Tr.GetString("staff_set_done", i18n.TranslationParams{
+			"chat_id": c.Chat.Id,
+		})
+		replyStaff(c, text)
 	}
-	text, _ := c.Tr.GetString("staff_set_done", i18n.TranslationParams{
-		"chat_id": c.Chat.Id,
-	})
-	replyStaff(c, text)
-	return ext.EndGroups
 }
 
 // staffPanel shows the Staff Group help text and chat ID. Outside a Staff Group

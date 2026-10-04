@@ -51,22 +51,45 @@ var ErrRoleConflict = errors.New("staff: chat already holds the other staff role
 // CreateStaffGroup stores chatID as a Staff Group owned by ownerUserID. It is
 // idempotent: when the chat is already a Staff Group it returns created=false
 // with a nil error and leaves the existing row (and its owner) untouched.
+//
+// The two staff roles never overlap (D-10): in the same transaction as the
+// insert it refuses a chat that is currently a linked group and returns
+// ErrRoleConflict without writing. This application-level check works on both
+// PostgreSQL and SQLite. It cannot stop two replicas that race past the check at
+// the same moment; only a database-level constraint can.
 func CreateStaffGroup(chatID, ownerUserID int64, title string) (created bool, err error) {
 	row := &models.StaffGroup{
 		ChatID:      chatID,
 		OwnerUserID: ownerUserID,
 		Title:       trimStaffTitle(title),
 	}
-	result := db.DB.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "chat_id"}},
-		DoNothing: true,
-	}).Create(row)
-	if result.Error != nil {
-		log.Errorf("[Staff] CreateStaffGroup: %v", result.Error)
-		return false, alitaerrors.Wrapf(result.Error, "create staff group %d", chatID)
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		var linked int64
+		if err := tx.Model(&models.StaffGroupLink{}).Where("group_chat_id = ?", chatID).Count(&linked).Error; err != nil {
+			return err
+		}
+		if linked > 0 {
+			return ErrRoleConflict
+		}
+		result := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "chat_id"}},
+			DoNothing: true,
+		}).Create(row)
+		if result.Error != nil {
+			return result.Error
+		}
+		created = result.RowsAffected > 0
+		return nil
+	})
+	if errors.Is(err, ErrRoleConflict) {
+		return false, ErrRoleConflict
+	}
+	if err != nil {
+		log.Errorf("[Staff] CreateStaffGroup: %v", err)
+		return false, alitaerrors.Wrapf(err, "create staff group %d", chatID)
 	}
 	invalidateStaffKeys(chatID)
-	return result.RowsAffected > 0, nil
+	return created, nil
 }
 
 // GetStaffGroup is the cached gate: it returns the Staff Group for chatID, or
