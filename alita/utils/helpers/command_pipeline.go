@@ -270,6 +270,48 @@ func CanBotDelete() CheckFunc {
 	}
 }
 
+// User IDs Telegram uses in place of a real person. They are the same two IDs
+// the chat_status package treats as non-users.
+const (
+	// groupAnonymousBotID is the placeholder From of an anonymous group admin.
+	groupAnonymousBotID int64 = 1087968824
+	// telegramServiceUserID is the Telegram service account (777000), the From of
+	// channel auto-forwards and service notices.
+	telegramServiceUserID int64 = 777000
+)
+
+// IsAnonymousSender reports whether the sender of the update cannot be tied to
+// one real user: an anonymous group admin, a channel identity (a channel post, a
+// message sent as another channel, or a linked-channel auto-forward), the
+// Telegram service accounts, or no identifiable user at all. Callers that need to
+// answer in their own way (for example with a self-deleting message) use this
+// predicate directly; commands use RejectAnonymousSender.
+func IsAnonymousSender(ctx *ext.Context, user *gotgbot.User) bool {
+	if ctx == nil || ctx.EffectiveSender == nil {
+		return true
+	}
+	sender := ctx.EffectiveSender
+	if sender.IsAnonymousAdmin() || sender.IsAnonymousChannel() || sender.IsChannelPost() || sender.IsLinkedChannel() {
+		return true
+	}
+	return user == nil || user.Id == groupAnonymousBotID || user.Id == telegramServiceUserID
+}
+
+// RejectAnonymousSender refuses senders that IsAnonymousSender flags and tells
+// them to post as themselves. It must be the first RequiredChecks entry of any
+// command whose authority depends on who the sender is, so no Telegram lookup
+// runs for an identity that cannot be proven. The anonymous-admin proof button is
+// deliberately not offered. Phase 2 reuses this check for STAFF-06.
+func RejectAnonymousSender() CheckFunc {
+	return func(c *CommandContext) bool {
+		if !IsAnonymousSender(c.Ctx, c.User) {
+			return true
+		}
+		chat_status.NewPermissionResponder(c.Bot).Respond(c.Ctx, "staff_post_as_yourself", "", chat_status.WithReply())
+		return false
+	}
+}
+
 // RunChecks re-runs pipeline checks, for anonymous-admin post-proof handlers
 // which bypass WrapCommand's RequiredChecks. Returns false on first failure.
 func RunChecks(c *CommandContext, checks []CheckFunc) bool {

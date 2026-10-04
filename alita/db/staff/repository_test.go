@@ -5,6 +5,7 @@ package staff
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -117,6 +118,30 @@ func TestStaffRepoCreateStaffGroupIdempotent(t *testing.T) {
 	}
 }
 
+func TestStaffRepoCreateStaffGroupRoleConflict(t *testing.T) {
+	linkedGroup, otherStaff := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, linkedGroup, otherStaff)
+
+	link := &models.StaffGroupLink{GroupChatID: linkedGroup, StaffChatID: otherStaff, OwnerUserID: 1}
+	if err := db.DB.Create(link).Error; err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+
+	created, err := CreateStaffGroup(linkedGroup, 7, "Linked")
+	if !errors.Is(err, ErrRoleConflict) || created {
+		t.Fatalf("CreateStaffGroup(linked group) = (%v, %v), want (false, ErrRoleConflict)", created, err)
+	}
+	if row, err := GetStaffGroupFresh(linkedGroup); err != nil || row != nil {
+		t.Fatalf("a refused CreateStaffGroup inserted %+v (err %v)", row, err)
+	}
+
+	// The refusal is about this chat only: the Staff Group side of the link and
+	// unrelated chats are unaffected.
+	if created, err := CreateStaffGroup(otherStaff, 7, "Other"); err != nil || !created {
+		t.Fatalf("CreateStaffGroup(staff side of the link) = (%v, %v), want (true, nil)", created, err)
+	}
+}
+
 func TestStaffRepoGetStaffGroupSentinelAndInvalidation(t *testing.T) {
 	utilsCache.SetupTestMemoryMarshaler(t)
 	cache.ResetLocalForTest()
@@ -179,6 +204,126 @@ func TestStaffRepoTrimStaffTitle(t *testing.T) {
 	}
 	if !utf8.ValidString(row.Title) {
 		t.Fatal("stored title is not valid UTF-8")
+	}
+}
+
+func TestStaffRepoDeleteStaffGroupWithLinksOnlyTarget(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	staffA, staffB := uniqueStaffChatID(), uniqueStaffChatID()
+	groupA1, groupA2, groupB1 := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffA, staffB, groupA1, groupA2, groupB1)
+
+	for _, chatID := range []int64{staffA, staffB} {
+		if _, err := CreateStaffGroup(chatID, 7, "Staff"); err != nil {
+			t.Fatalf("CreateStaffGroup(%d): %v", chatID, err)
+		}
+	}
+	// Insert in an order where link ids ascend but chat IDs do not, so a sort by
+	// chat ID would be caught.
+	links := []*models.StaffGroupLink{
+		{GroupChatID: groupA2, StaffChatID: staffA, OwnerUserID: 7, GroupTitle: "A2"},
+		{GroupChatID: groupB1, StaffChatID: staffB, OwnerUserID: 7, GroupTitle: "B1"},
+		{GroupChatID: groupA1, StaffChatID: staffA, OwnerUserID: 7, GroupTitle: "A1"},
+	}
+	for _, link := range links {
+		if err := db.DB.Create(link).Error; err != nil {
+			t.Fatalf("create link: %v", err)
+		}
+	}
+
+	removed, deleted, err := DeleteStaffGroupWithLinks(staffA)
+	if err != nil || !deleted {
+		t.Fatalf("DeleteStaffGroupWithLinks = (%v, %v, %v), want deleted with nil error", removed, deleted, err)
+	}
+	if len(removed) != 2 || removed[0].GroupChatID != groupA2 || removed[1].GroupChatID != groupA1 {
+		t.Fatalf("removed = %+v, want [A2, A1] in link-id order", removed)
+	}
+	if removed[0].ID >= removed[1].ID {
+		t.Fatalf("removed ids %d, %d are not ascending", removed[0].ID, removed[1].ID)
+	}
+
+	var left []models.StaffGroupLink
+	if err := db.DB.Where("staff_chat_id IN ?", []int64{staffA, staffB}).Find(&left).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 1 || left[0].GroupChatID != groupB1 {
+		t.Fatalf("links left = %+v, want only the other Staff Group's link", left)
+	}
+	if got := GetStaffGroup(staffA); got != nil {
+		t.Fatalf("GetStaffGroup after delete = %+v, want nil (cache must be invalidated)", got)
+	}
+	if got := GetStaffGroup(staffB); got == nil {
+		t.Fatal("the other Staff Group of the same owner was removed")
+	}
+}
+
+func TestStaffRepoDeleteStaffGroupWithLinksSecondCallIsNoop(t *testing.T) {
+	staffID, groupID := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, groupID)
+
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.Create(&models.StaffGroupLink{GroupChatID: groupID, StaffChatID: staffID, OwnerUserID: 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if _, deleted, err := DeleteStaffGroupWithLinks(staffID); err != nil || !deleted {
+		t.Fatalf("first call = (deleted %v, err %v), want deleted", deleted, err)
+	}
+	removed, deleted, err := DeleteStaffGroupWithLinks(staffID)
+	if err != nil || deleted || len(removed) != 0 {
+		t.Fatalf("second call = (%v, %v, %v), want (empty, false, nil)", removed, deleted, err)
+	}
+}
+
+func TestStaffRepoDeleteStaffGroupWithLinksZeroLinks(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	staffID := uniqueStaffChatID()
+	cleanupStaffRows(t, staffID)
+
+	if _, err := CreateStaffGroup(staffID, 7, "Staff"); err != nil {
+		t.Fatal(err)
+	}
+	if GetStaffGroup(staffID) == nil {
+		t.Fatal("setup: GetStaffGroup returned nil for a created Staff Group")
+	}
+
+	removed, deleted, err := DeleteStaffGroupWithLinks(staffID)
+	if err != nil || !deleted || len(removed) != 0 {
+		t.Fatalf("DeleteStaffGroupWithLinks = (%v, %v, %v), want (empty, true, nil)", removed, deleted, err)
+	}
+	if got := GetStaffGroup(staffID); got != nil {
+		t.Fatalf("GetStaffGroup after delete = %+v, want nil", got)
+	}
+	if fresh, err := GetStaffGroupFresh(staffID); err != nil || fresh != nil {
+		t.Fatalf("GetStaffGroupFresh after delete = (%+v, %v), want (nil, nil)", fresh, err)
+	}
+}
+
+func TestStaffRepoDeleteStaffGroupWithLinksMissingChat(t *testing.T) {
+	removed, deleted, err := DeleteStaffGroupWithLinks(uniqueStaffChatID())
+	if err != nil || deleted || len(removed) != 0 {
+		t.Fatalf("delete of a non-Staff chat = (%v, %v, %v), want (empty, false, nil)", removed, deleted, err)
+	}
+}
+
+func TestStaffRepoCountLinksByStaffFresh(t *testing.T) {
+	staffID, g1, g2 := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupStaffRows(t, staffID, g1, g2)
+
+	if n, err := CountLinksByStaffFresh(staffID); err != nil || n != 0 {
+		t.Fatalf("count with no links = (%d, %v), want (0, nil)", n, err)
+	}
+	for _, g := range []int64{g1, g2} {
+		if err := db.DB.Create(&models.StaffGroupLink{GroupChatID: g, StaffChatID: staffID, OwnerUserID: 7}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := CountLinksByStaffFresh(staffID); err != nil || n != 2 {
+		t.Fatalf("count = (%d, %v), want (2, nil)", n, err)
 	}
 }
 

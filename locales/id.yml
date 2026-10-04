@@ -2603,6 +2603,7 @@ staff_help_msg: |
 
   *Pemilik grup:*
   × /setstaff: Jadikan grup ini Grup Staf Anda (hanya pembuat grup).
+  × /unsetstaff: Hapus status Staf dan putuskan tautan semua grup (hanya pembuat grup).
 
   *Di Grup Staf:*
   × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung.
@@ -2612,3 +2613,16 @@ staff_refuse_not_owner: "Hanya pembuat grup ini yang dapat menjadikannya Grup St
 staff_check_failed: "Saya tidak dapat memverifikasi siapa pembuat grup ini saat ini. Tidak ada yang diubah, silakan coba lagi sebentar lagi."
 staff_panel_chat_id: "ID obrolan Grup Staf: <code>{chat_id}</code>"
 staff_panel_no_links: "Belum ada grup yang terhubung."
+staff_unset_not_staff: "Grup ini bukan Grup Staf."
+staff_unset_confirm_prompt: "Yakin? Menghapus status Staf akan memutuskan tautan {count} grup dari Grup Staf ini."
+staff_btn_confirm: "Konfirmasi"
+staff_btn_cancel: "Batal"
+staff_unset_done: "Status Staf dihapus. Grup yang diputus tautannya: {count}\n{groups}"
+staff_unset_cancelled: "Dibatalkan. Grup ini masih menjadi Grup Staf."
+staff_unset_already_removed: "Status Staf sudah dihapus."
+staff_cb_owner_only: "Hanya pembuat grup ini yang dapat melakukan ini."
+staff_cb_expired: "Tombol ini sudah tidak berlaku."
+staff_post_as_yourself: "Kirim perintah ini sebagai diri Anda sendiri, bukan sebagai admin anonim atau channel, agar saya tahu siapa Anda. Tidak ada yang diubah."
+staff_refuse_not_group: "Grup Staf harus berupa grup atau supergrup, bukan channel."
+staff_refuse_bot_not_admin: "Saya harus menjadi administrator grup ini terlebih dahulu. Jadikan saya admin, lalu kirim perintah lagi."
+staff_refuse_group_is_linked: "Grup ini terhubung ke sebuah Grup Staf, sehingga tidak bisa menjadi Grup Staf. Putuskan tautannya terlebih dahulu."

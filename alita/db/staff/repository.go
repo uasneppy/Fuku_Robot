@@ -44,25 +44,52 @@ func trimStaffTitle(s string) string {
 	return string(runes[:maxStaffTitleRunes])
 }
 
+// ErrRoleConflict is returned by CreateStaffGroup when the chat is currently a
+// linked group of some Staff Group: the two roles never overlap (D-10).
+var ErrRoleConflict = errors.New("staff: chat already holds the other staff role")
+
 // CreateStaffGroup stores chatID as a Staff Group owned by ownerUserID. It is
 // idempotent: when the chat is already a Staff Group it returns created=false
 // with a nil error and leaves the existing row (and its owner) untouched.
+//
+// The two staff roles never overlap (D-10): in the same transaction as the
+// insert it refuses a chat that is currently a linked group and returns
+// ErrRoleConflict without writing. This application-level check works on both
+// PostgreSQL and SQLite. It cannot stop two replicas that race past the check at
+// the same moment; only a database-level constraint can.
 func CreateStaffGroup(chatID, ownerUserID int64, title string) (created bool, err error) {
 	row := &models.StaffGroup{
 		ChatID:      chatID,
 		OwnerUserID: ownerUserID,
 		Title:       trimStaffTitle(title),
 	}
-	result := db.DB.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "chat_id"}},
-		DoNothing: true,
-	}).Create(row)
-	if result.Error != nil {
-		log.Errorf("[Staff] CreateStaffGroup: %v", result.Error)
-		return false, alitaerrors.Wrapf(result.Error, "create staff group %d", chatID)
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		var linked int64
+		if err := tx.Model(&models.StaffGroupLink{}).Where("group_chat_id = ?", chatID).Count(&linked).Error; err != nil {
+			return err
+		}
+		if linked > 0 {
+			return ErrRoleConflict
+		}
+		result := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "chat_id"}},
+			DoNothing: true,
+		}).Create(row)
+		if result.Error != nil {
+			return result.Error
+		}
+		created = result.RowsAffected > 0
+		return nil
+	})
+	if errors.Is(err, ErrRoleConflict) {
+		return false, ErrRoleConflict
+	}
+	if err != nil {
+		log.Errorf("[Staff] CreateStaffGroup: %v", err)
+		return false, alitaerrors.Wrapf(err, "create staff group %d", chatID)
 	}
 	invalidateStaffKeys(chatID)
-	return result.RowsAffected > 0, nil
+	return created, nil
 }
 
 // GetStaffGroup is the cached gate: it returns the Staff Group for chatID, or
@@ -97,6 +124,57 @@ func GetStaffGroup(chatID int64) *models.StaffGroup {
 		return nil
 	}
 	return &result
+}
+
+// CountLinksByStaffFresh counts the groups linked to the Staff Group staffChatID
+// straight from the database, bypassing every cache.
+func CountLinksByStaffFresh(staffChatID int64) (int64, error) {
+	var count int64
+	err := db.DB.Model(&models.StaffGroupLink{}).Where("staff_chat_id = ?", staffChatID).Count(&count).Error
+	if err != nil {
+		log.Errorf("[Staff] CountLinksByStaffFresh: %v", err)
+		return 0, alitaerrors.Wrapf(err, "count staff links %d", staffChatID)
+	}
+	return count, nil
+}
+
+// DeleteStaffGroupWithLinks removes the Staff Group chatID and every link whose
+// staff_chat_id is chatID in one transaction, so either all of them still exist
+// or none do. removed lists the deleted links in link-id order.
+//
+// The staff_groups row is deleted first: that delete claims the row, so when two
+// callers race only the one whose delete affected a row gets deleted=true and a
+// non-empty removed; the other gets (nil, false, nil) and must post nothing.
+func DeleteStaffGroupWithLinks(chatID int64) (removed []models.StaffGroupLink, deleted bool, err error) {
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("chat_id = ?", chatID).Delete(&models.StaffGroup{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
+		if err := tx.Where("staff_chat_id = ?", chatID).Order("id ASC").Find(&removed).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("staff_chat_id = ?", chatID).Delete(&models.StaffGroupLink{}).Error; err != nil {
+			return err
+		}
+		deleted = true
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Staff] DeleteStaffGroupWithLinks: %v", err)
+		return nil, false, alitaerrors.Wrapf(err, "delete staff group %d", chatID)
+	}
+	if !deleted {
+		return nil, false, nil
+	}
+	invalidateStaffKeys(chatID)
+	for _, link := range removed {
+		invalidateStaffKeys(link.GroupChatID)
+	}
+	return removed, true, nil
 }
 
 // GetStaffGroupFresh reads the Staff Group for chatID straight from the
