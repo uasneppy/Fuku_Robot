@@ -50,6 +50,35 @@ func (moduleStruct) onMigrateMessage(_ *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.ContinueGroups
 }
 
+// recheckChatOwnership runs the live ownership recheck for chatID when the cached
+// gates say it is a linked group. The cached gate only filters out unrelated
+// chats cheaply; the link is reloaded fresh before it is judged, and the decision
+// itself always comes from recheckLink's live Telegram check.
+func recheckChatOwnership(b *gotgbot.Bot, chatID int64) {
+	if staff.GetLinkOfGroup(chatID) != nil {
+		link, err := staff.GetLinkOfGroupFresh(chatID)
+		if err != nil || link == nil {
+			return
+		}
+		recheckLink(b, *link, newStaffOwnerPass())
+	}
+}
+
+// onOwnershipMessage reacts to the chat_owner_changed and chat_owner_left service
+// messages. They need no bot admin rights, but their payload is only a hint that
+// something changed: the recheck always asks Telegram live who the creator is.
+// The watcher never replies to the chat and always returns ext.ContinueGroups.
+func (moduleStruct) onOwnershipMessage(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("onOwnershipMessage", "StaffWatchers")
+
+	msg := ctx.EffectiveMessage
+	if msg == nil {
+		return ext.ContinueGroups
+	}
+	recheckChatOwnership(b, msg.Chat.Id)
+	return ext.ContinueGroups
+}
+
 // rekeyFromTelegramError re-keys oldChatID when err is a Telegram error that
 // carries ResponseParameters.MigrateToChatId, which Telegram returns (with a
 // 400) when a request targets a group that has since become a supergroup. It
@@ -76,6 +105,12 @@ func rekeyFromTelegramError(oldChatID int64, err error) (newChatID int64, rekeye
 func LoadStaffWatchers(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandlerToGroup(
 		handlers.NewMessage(message.Migrate, staffWatchersModule.onMigrateMessage).SetAllowBot(true),
+		staffWatchersModule.handlerGroup,
+	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewMessage(func(m *gotgbot.Message) bool {
+			return message.ChatOwnerChanged(m) || message.ChatOwnerLeft(m)
+		}, staffWatchersModule.onOwnershipMessage).SetAllowBot(true),
 		staffWatchersModule.handlerGroup,
 	)
 }

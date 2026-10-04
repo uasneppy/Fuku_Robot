@@ -2391,6 +2391,8 @@ staff_link_refuse_already_linked: "Не привязана: {group} уже пр�
 staff_link_check_failed_group: "Не привязана: сейчас не удалось проверить, кто создал {group}. Ничего не изменено, попробуйте ещё раз чуть позже."
 staff_panel_add_group_button: "➕ Добавить группу"
 staff_notice_unlinked_by: "Группа отвязана: {group}\nОтвязал: {user}"
+staff_notice_unlinked_group_owner_changed: "Группа отвязана: {group}\nПричина: сменился её владелец"
+staff_notice_unlinked_staff_owner_changed: "Владелец этой Staff Group сменился, поэтому эти группы отвязаны:\n{groups}"
 staff_unlink_not_linked: "Эта группа не привязана к штаб-группе."
 staff_unlink_refuse_not_owner: "Отвязать эту группу может только создатель этой группы и её штаб-группы. Ничего не изменено."
 staff_unlink_refuse_not_group_owner: "Не отвязана: вы не создатель {group}. Отвязать группы может только создатель обеих."

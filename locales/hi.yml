@@ -2331,6 +2331,8 @@ staff_link_refuse_already_linked: "लिंक नहीं हुआ: {group} 
 staff_link_check_failed_group: "लिंक नहीं हुआ: मैं अभी यह जांच नहीं कर पाया कि {group} किसने बनाया। कुछ नहीं बदला गया, कृपया थोड़ी देर बाद फिर कोशिश करें।"
 staff_panel_add_group_button: "➕ ग्रुप जोड़ें"
 staff_notice_unlinked_by: "ग्रुप अनलिंक हुआ: {group}\n{user} ने अनलिंक किया"
+staff_notice_unlinked_group_owner_changed: "ग्रुप अनलिंक हुआ: {group}\nकारण: उसका मालिक बदल गया"
+staff_notice_unlinked_staff_owner_changed: "इस Staff Group का मालिक बदल गया, इसलिए ये ग्रुप अनलिंक हो गए:\n{groups}"
 staff_unlink_not_linked: "यह ग्रुप किसी स्टाफ ग्रुप से लिंक नहीं है।"
 staff_unlink_refuse_not_owner: "केवल इस ग्रुप और इसके स्टाफ ग्रुप को बनाने वाला ही इसे अनलिंक कर सकता है। कुछ नहीं बदला गया।"
 staff_unlink_refuse_not_group_owner: "अनलिंक नहीं हुआ: आप {group} को बनाने वाले नहीं हैं। केवल दोनों ग्रुप बनाने वाला ही उन्हें अनलिंक कर सकता है।"

@@ -2644,6 +2644,8 @@ staff_link_refuse_already_linked: "Tidak ditautkan: {group} sudah ditautkan ke s
 staff_link_check_failed_group: "Tidak ditautkan: saya tidak bisa memverifikasi siapa pembuat {group} saat ini. Tidak ada yang diubah, coba lagi sebentar lagi."
 staff_panel_add_group_button: "➕ Tambah grup"
 staff_notice_unlinked_by: "Tautan grup diputus: {group}\nDiputus oleh {user}"
+staff_notice_unlinked_group_owner_changed: "Tautan grup diputus: {group}\nAlasan: pemiliknya berganti"
+staff_notice_unlinked_staff_owner_changed: "Pemilik Staff Group ini berganti, jadi tautan grup berikut diputus:\n{groups}"
 staff_unlink_not_linked: "Grup ini tidak ditautkan ke Grup Staf."
 staff_unlink_refuse_not_owner: "Hanya pembuat grup ini dan Grup Stafnya yang dapat memutus tautannya. Tidak ada yang diubah."
 staff_unlink_refuse_not_group_owner: "Tautan tidak diputus: Anda bukan pembuat {group}. Hanya pembuat kedua grup yang dapat memutus tautannya."

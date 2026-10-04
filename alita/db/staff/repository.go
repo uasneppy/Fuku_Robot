@@ -365,3 +365,33 @@ func DeleteLink(id uint) (deleted bool, err error) {
 	invalidateStaffKeys(removed[0].GroupChatID)
 	return true, nil
 }
+
+// DeleteLinkIfOwner removes the link with row ID id only while its recorded
+// maker is still ownerUserID, in one conditional statement. That statement is the
+// claim: of any number of callers racing on the same link (service message,
+// chat_member update, panel recheck, sweep) exactly one gets deleted=true, and only
+// that caller may post the removal notice. A link that is gone, or was re-made by
+// someone else, gives (false, nil). Like DeleteLink it uses RETURNING, so the
+// cached lookups of the group are invalidated by the exact key after the commit.
+func DeleteLinkIfOwner(id uint, ownerUserID int64) (deleted bool, err error) {
+	var removed []models.StaffGroupLink
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Clauses(clause.Returning{}).
+			Where("id = ? AND owner_user_id = ?", id, ownerUserID).
+			Delete(&removed)
+		if result.Error != nil {
+			return result.Error
+		}
+		deleted = result.RowsAffected == 1 && len(removed) == 1
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Staff] DeleteLinkIfOwner: %v", err)
+		return false, alitaerrors.Wrapf(err, "delete staff link %d if owner", id)
+	}
+	if !deleted {
+		return false, nil
+	}
+	invalidateStaffKeys(removed[0].GroupChatID)
+	return true, nil
+}

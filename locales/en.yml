@@ -2682,6 +2682,8 @@ staff_link_refuse_already_linked: "Not linked: {group} is already linked to a St
 staff_link_check_failed_group: "Not linked: I could not verify who created {group} right now. Nothing was changed, please try again in a moment."
 staff_panel_add_group_button: "➕ Add group"
 staff_notice_unlinked_by: "Group unlinked: {group}\nUnlinked by {user}"
+staff_notice_unlinked_group_owner_changed: "Group unlinked: {group}\nReason: its owner changed"
+staff_notice_unlinked_staff_owner_changed: "This Staff Group's owner changed, so these groups were unlinked:\n{groups}"
 staff_unlink_not_linked: "This group is not linked to a Staff Group."
 staff_unlink_refuse_not_owner: "Only the creator of this group and of its Staff Group can unlink it. Nothing was changed."
 staff_unlink_refuse_not_group_owner: "Not unlinked: you are not the creator of {group}. Only the creator of both groups can unlink them."

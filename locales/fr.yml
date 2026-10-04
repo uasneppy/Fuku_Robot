@@ -2570,6 +2570,8 @@ staff_link_refuse_already_linked: "Non lié : {group} est déjà lié à un grou
 staff_link_check_failed_group: "Non lié : je n'ai pas pu vérifier qui a créé {group} pour le moment. Rien n'a été modifié, réessayez dans un instant."
 staff_panel_add_group_button: "➕ Ajouter un groupe"
 staff_notice_unlinked_by: "Groupe dissocié : {group}\nDissocié par {user}"
+staff_notice_unlinked_group_owner_changed: "Groupe dissocié : {group}\nMotif : son propriétaire a changé"
+staff_notice_unlinked_staff_owner_changed: "Le propriétaire de ce Staff Group a changé, donc ces groupes ont été dissociés :\n{groups}"
 staff_unlink_not_linked: "Ce groupe n'est pas lié à un groupe Staff."
 staff_unlink_refuse_not_owner: "Seul le créateur de ce groupe et de son groupe Staff peut le dissocier. Rien n'a été modifié."
 staff_unlink_refuse_not_group_owner: "Non dissocié : vous n'êtes pas le créateur de {group}. Seul le créateur des deux groupes peut les dissocier."
