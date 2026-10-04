@@ -44,7 +44,7 @@ last_mapped_at: 2026-10-04
 - `github.com/prometheus/client_golang` v1.24.1 - Prometheus metrics client
 
 **Testing & Fixtures:**
-- `github.com/stretchr/testify` v1.12.1 - Test assertions and mocking
+- `github.com/stretchr/testify` v1.12.1 - Test assertions only (AGENTS.md: no mock libraries; use real fixtures)
 - `github.com/alicebob/miniredis/v2` v2.39.0 - In-memory Redis server for tests
 
 **Build & Release:**

@@ -276,7 +276,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 
 ## Architectural Constraints
 
-- **Threading:** Single-threaded event loop (gotgbot dispatcher); async writes to users table join WaitGroup drained by `modules.DrainUsersAsyncWrites` on shutdown
+- **Threading:** Concurrent: the gotgbot dispatcher runs up to `DISPATCHER_MAX_ROUTINES` (default 200) updates in parallel goroutines (`main.go`, `alita/config/config.go`), so handlers must be race-safe; async writes to users table join WaitGroup drained by `modules.DrainUsersAsyncWrites` on shutdown
 - **Global state:** 
   - `defaultHelpRegistry` (module enable/disable map) — guarded by `ableMapMu`
   - `db.DB` (GORM connection) — shared across handlers; migrations run on startup if `AUTO_MIGRATE=true`
