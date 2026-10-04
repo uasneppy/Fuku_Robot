@@ -165,16 +165,80 @@ Deferred. Tracked but not in this roadmap.
 
 ## Traceability
 
-Which phases cover which requirements. Filled in during roadmap creation.
+Which phases cover which requirements. Each v1 requirement maps to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| SETUP-01 | Phase 1 | Pending |
+| SETUP-02 | Phase 1 | Pending |
+| SETUP-03 | Phase 1 | Pending |
+| SETUP-04 | Phase 1 | Pending |
+| SETUP-05 | Phase 1 | Pending |
+| SETUP-06 | Phase 1 | Pending |
+| SETUP-07 | Phase 1 | Pending |
+| SETUP-08 | Phase 1 | Pending |
+| SETUP-09 | Phase 3 | Pending |
+| STAFF-01 | Phase 2 | Pending |
+| STAFF-02 | Phase 2 | Pending |
+| STAFF-03 | Phase 2 | Pending |
+| STAFF-04 | Phase 2 | Pending |
+| STAFF-05 | Phase 2 | Pending |
+| STAFF-06 | Phase 2 | Pending |
+| STAFF-07 | Phase 2 | Pending |
+| STAFF-08 | Phase 2 | Pending |
+| STAFF-09 | Phase 3 | Pending |
+| STAFF-10 | Phase 3 | Pending |
+| STAFF-11 | Phase 3 | Pending |
+| STAFF-12 | Phase 2 | Pending |
+| STAFF-13 | Phase 2 | Pending |
+| LOCK-01 | Phase 4 | Pending |
+| LOCK-02 | Phase 4 | Pending |
+| LOCK-03 | Phase 4 | Pending |
+| LOCK-04 | Phase 4 | Pending |
+| LOCK-05 | Phase 4 | Pending |
+| LOCK-06 | Phase 4 | Pending |
+| LOCK-07 | Phase 4 | Pending |
+| LOCK-08 | Phase 4 | Pending |
+| LOCK-09 | Phase 4 | Pending |
+| LOCK-10 | Phase 6 | Pending |
+| LOCK-11 | Phase 5 | Pending |
+| LOCK-12 | Phase 5 | Pending |
+| LOCK-13 | Phase 5 | Pending |
+| LOCK-14 | Phase 5 | Pending |
+| LOCK-15 | Phase 6 | Pending |
+| RAID-01 | Phase 6 | Pending |
+| RAID-02 | Phase 6 | Pending |
+| RAID-03 | Phase 7 | Pending |
+| RAID-04 | Phase 7 | Pending |
+| RAID-05 | Phase 7 | Pending |
+| RAID-06 | Phase 6 | Pending |
+| RAID-07 | Phase 6 | Pending |
+| CAPT-01 | Phase 8 | Pending |
+| CAPT-02 | Phase 8 | Pending |
+| CAPT-03 | Phase 8 | Pending |
+| CAPT-04 | Phase 8 | Pending |
+| CAPT-05 | Phase 8 | Pending |
+| CAPT-06 | Phase 8 | Pending |
+| CAPT-07 | Phase 8 | Pending |
+| CAPT-08 | Phase 8 | Pending |
+| MENU-01 | Phase 9 | Pending |
+| MENU-02 | Phase 9 | Pending |
+| MENU-03 | Phase 9 | Pending |
+| MENU-04 | Phase 9 | Pending |
+| MENU-05 | Phase 9 | Pending |
+| MENU-06 | Phase 9 | Pending |
+| MENU-07 | Phase 9 | Pending |
+| MENU-08 | Phase 9 | Pending |
+| PLAT-01 | Phase 2 | Pending |
+| PLAT-02 | Phase 7 | Pending |
+| PLAT-03 | Phase 1 | Pending |
+| PLAT-04 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 64 total
-- Mapped to phases: 0
-- Unmapped: 64 ⚠️ (until the roadmap is created)
+- Mapped to phases: 64
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-04*
-*Last updated: 2026-10-04 after initial definition*
+*Last updated: 2026-10-04 after roadmap creation (traceability filled)*
