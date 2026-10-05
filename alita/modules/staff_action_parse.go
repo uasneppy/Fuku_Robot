@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -8,6 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+
+	"github.com/divkix/Alita_Robot/alita/utils/extraction"
 )
 
 // staffReasonMaxRunes caps the reason of a staff action. The card shows exactly
@@ -26,11 +29,31 @@ type staffTargetRef struct {
 	MentionName string
 }
 
+// staffDurationMode says whether a staff command reads a duration after the target.
+type staffDurationMode int
+
+const (
+	// staffDurationNone never reads a duration: kick, unban and unmute.
+	staffDurationNone staffDurationMode = iota
+	// staffDurationOptional reads a duration when the next field is one: ban and mute.
+	staffDurationOptional
+	// staffDurationRequired needs a duration right after the target: tban and tmute.
+	staffDurationRequired
+)
+
 // staffActionRequest is a parsed staff command.
 type staffActionRequest struct {
 	Kind   staffActionKind
 	Target staffTargetRef
 	Reason string
+	// DurationSec is the length in seconds; 0 means permanent.
+	DurationSec int64
+	// DurationAmount and DurationUnit are the amount and unit exactly as typed.
+	DurationAmount int64
+	DurationUnit   string
+	// OverLimit is set when the typed duration was longer than 366 days; the action
+	// is then permanent.
+	OverLimit bool
 }
 
 // staffParseResult says whether a staff command could be parsed.
@@ -43,6 +66,10 @@ const (
 	staffParseNoTarget
 	// staffParseBadTarget means the first argument is not a usable target.
 	staffParseBadTarget
+	// staffParseNeedDuration means a command that requires a duration had none.
+	staffParseNeedDuration
+	// staffParseBadDuration means the duration had an amount of zero.
+	staffParseBadDuration
 )
 
 // staffSplitField returns the first whitespace-separated field of s and what
@@ -78,8 +105,49 @@ func parseStaffActionArgs(msg *gotgbot.Message, spec staffCommandSpec) (staffAct
 		return req, staffParseBadTarget
 	}
 	req.Target = staffTargetRef{UserID: id}
+
+	if spec.Duration != staffDurationNone {
+		var result staffParseResult
+		reason, result = readStaffDuration(&req, reason, spec.Duration)
+		if result != staffParseOK {
+			return req, result
+		}
+	}
 	req.Reason = capStaffReason(reason)
 	return req, staffParseOK
+}
+
+// readStaffDuration looks at the first field after the target and fills the
+// duration of req when it is one, returning what is left as the reason. The
+// grammar is extraction.ParseDurationToken, shared with the per-group /tban and
+// /tmute. Under staffDurationOptional a field that is not a duration stays part of
+// the reason, so the card shows "permanent" and a misparse is visible before
+// Confirm; under staffDurationRequired it is an error.
+func readStaffDuration(req *staffActionRequest, rest string, mode staffDurationMode) (string, staffParseResult) {
+	field, after := staffSplitField(rest)
+	spec, matched, err := extraction.ParseDurationToken(field)
+	switch {
+	case !matched:
+		if mode == staffDurationRequired {
+			return rest, staffParseNeedDuration
+		}
+		return rest, staffParseOK
+	case errors.Is(err, extraction.ErrDurationInvalid):
+		return rest, staffParseBadDuration
+	case errors.Is(err, extraction.ErrDurationTooLong):
+		// Longer than Telegram's 366-day window: permanent, with what was typed kept
+		// for the card. Telegram never gets a clamped value.
+		req.OverLimit = true
+		req.DurationAmount = spec.Amount
+		req.DurationUnit = string(spec.Unit)
+		return after, staffParseOK
+	case err != nil:
+		return rest, staffParseBadDuration
+	}
+	req.DurationSec = spec.Seconds
+	req.DurationAmount = spec.Amount
+	req.DurationUnit = string(spec.Unit)
+	return after, staffParseOK
 }
 
 // capStaffReason trims a reason and cuts it to staffReasonMaxRunes runes, adding

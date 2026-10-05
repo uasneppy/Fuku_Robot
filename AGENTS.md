@@ -120,6 +120,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
   `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
   `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
+- Staff durations: `/ban` and `/mute` take an optional `<digits><m|h|d|w>` token right after the target, `/tban` and
+  `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
+  than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not
+  an end date: `until_date` is computed once at Confirm and that one value goes to every group.
 
 ## Go rules
 
