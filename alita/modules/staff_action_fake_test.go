@@ -213,6 +213,27 @@ func staffParamBool(params map[string]any, key string) bool {
 	return ok && value
 }
 
+// staffImpliedPermissions applies the Bot API's implied-permission rule that
+// restrictChatMember uses when use_independent_chat_permissions is false:
+// can_send_other_messages or can_add_web_page_previews imply the seven send
+// permissions, and can_send_polls implies can_send_messages (gotgbot's
+// RestrictChatMemberOpts doc). It returns a copy; the input is not changed.
+func staffImpliedPermissions(p gotgbot.ChatPermissions) gotgbot.ChatPermissions {
+	if p.CanSendOtherMessages || p.CanAddWebPagePreviews {
+		p.CanSendMessages = true
+		p.CanSendAudios = true
+		p.CanSendDocuments = true
+		p.CanSendPhotos = true
+		p.CanSendVideos = true
+		p.CanSendVideoNotes = true
+		p.CanSendVoiceNotes = true
+	}
+	if p.CanSendPolls {
+		p.CanSendMessages = true
+	}
+	return p
+}
+
 func staffIsAdminStatus(status string) bool {
 	return status == gotgbot.ChatMemberStatusCreator || status == gotgbot.ChatMemberStatusAdministrator
 }
@@ -332,10 +353,13 @@ func (f *staffActionFake) RequestWithContext(
 			perms = p
 		}
 		stored := perms
+		if !staffParamBool(params, "use_independent_chat_permissions") {
+			stored = staffImpliedPermissions(perms)
+		}
 		f.records[key] = &staffFakeMember{
 			Status:          gotgbot.ChatMemberStatusRestricted,
 			IsMember:        wasMember,
-			CanSendMessages: perms.CanSendMessages,
+			CanSendMessages: stored.CanSendMessages,
 			UntilDate:       staffParamInt(params, "until_date"),
 			Perms:           &stored,
 		}
