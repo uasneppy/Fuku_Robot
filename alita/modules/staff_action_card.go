@@ -251,6 +251,13 @@ type staffActionCard struct {
 	DurationUnit   string
 	// OverLimit marks a duration typed above 366 days, which is applied as permanent.
 	OverLimit bool
+
+	// ActionID is the staff_actions row created at Confirm. It is in-memory only and
+	// never written to the Redis hash: the run that Confirm starts carries it.
+	ActionID uint
+	// IssuerName is the issuer's display name, taken from the Confirm tap and stored
+	// raw in the audit record. It is in-memory only, like ActionID.
+	IssuerName string
 }
 
 var staffActionTokenRe = regexp.MustCompile(`^[0-9a-f]{16}$`)
@@ -852,6 +859,19 @@ func (m moduleStruct) staffActionConfirm(
 		}
 		newUntil = until
 	}
+
+	// The audit record exists before the first write call: an action is never applied
+	// without one (STAFF-10). Every check that can still end the card has passed, and
+	// a record that cannot be stored ends the card with no write in any group.
+	card.IssuerName = staffFullName(&query.From)
+	action, groupRows := newStaffActionRecord(card, staffChat.Id, msgID, newUntil, links)
+	if err := staffCreateActionRecord(action, groupRows); err != nil {
+		log.Errorf("[StaffActions] create audit record for card %s: %v", card.Token, err)
+		text, _ := staffTr.GetString("staff_act_abort_check_failed")
+		abortStaffActionCard(b, staffTr, card, staffChat.Id, msgID, text)
+		return ext.EndGroups
+	}
+	card.ActionID = action.ID
 
 	if err := editStaffActionMessage(b, staffChat.Id, msgID, renderStaffActionSummary(staffTr, card, pendingResults(links))); err != nil {
 		log.Warnf("[StaffActions] edit card %s into summary: %v", card.Token, err)
