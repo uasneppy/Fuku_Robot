@@ -48,11 +48,13 @@ func panelRenderGroup() models.StaffGroup {
 }
 
 // panelButtons splits a keyboard into its buttons by action: "ul" Unlink buttons
-// (in keyboard order), "pg" paging buttons, "rf" Refresh buttons and URL buttons.
+// (in keyboard order), "pg" paging buttons, "rf" Refresh buttons, "rc" Recent
+// actions buttons and URL buttons.
 type panelButtons struct {
 	unlink  []gotgbot.InlineKeyboardButton
 	paging  []gotgbot.InlineKeyboardButton
 	refresh []gotgbot.InlineKeyboardButton
+	recent  []gotgbot.InlineKeyboardButton
 	urls    []gotgbot.InlineKeyboardButton
 }
 
@@ -83,6 +85,8 @@ func panelSplitKeyboard(t *testing.T, keyboard gotgbot.InlineKeyboardMarkup) (bu
 				buttons.paging = append(buttons.paging, button)
 			case staffActRefresh:
 				buttons.refresh = append(buttons.refresh, button)
+			case "rc":
+				buttons.recent = append(buttons.recent, button)
 			default:
 				t.Errorf("button %q carries unexpected action %q", button.Text, fields.Fields["a"])
 			}

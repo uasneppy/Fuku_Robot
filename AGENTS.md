@@ -52,6 +52,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 - Encode/decode only through `alita/utils/callbackcodec` (`<ns>|v1|<url-encoded>`, 64-byte cap). Never `strings.Split`.
 - `encodeCallbackData` returns `""` on overflow, which ships a dead button. Put user text in Redis behind a short token.
+- The staff namespace's history list is `a=rc&o=<offset>` (the `/staff` panel's Recent actions, and its Prev and Next).
+  Paging uses an offset cursor, not a page number, so a page shrunk to the 3800-unit cap hides no entry: Next starts
+  right after the last line shown. Callback data carries only numbers or tokens, never names or reasons, and the
+  handler refuses an offset outside 0..`staffHistoryMaxOffset` as expired.
 
 ## Permissions
 

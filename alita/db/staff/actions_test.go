@@ -205,3 +205,88 @@ func TestStaffActionRecordRoundTrip(t *testing.T) {
 		t.Fatalf("group B = %q %q after finalize, want failed fail_interrupted", rows[1].Outcome, rows[1].Reason)
 	}
 }
+
+func TestStaffActionListFresh(t *testing.T) {
+	chat, other := uniqueStaffChatID(), uniqueStaffChatID()
+	cleanupActionRows(t, chat, other)
+
+	var ids []uint
+	for i := 0; i < 12; i++ {
+		action, groups := newTestAction(chat, []int{0}, []int64{uniqueStaffChatID()})
+		if err := CreateAction(action, groups); err != nil {
+			t.Fatalf("CreateAction %d: %v", i, err)
+		}
+		ids = append(ids, action.ID)
+	}
+	for i := 0; i < 2; i++ {
+		action, groups := newTestAction(other, []int{0}, []int64{uniqueStaffChatID()})
+		if err := CreateAction(action, groups); err != nil {
+			t.Fatalf("CreateAction (other chat) %d: %v", i, err)
+		}
+	}
+
+	page, err := ListActionsFresh(chat, 0, 11)
+	if err != nil {
+		t.Fatalf("ListActionsFresh(0, 11): %v", err)
+	}
+	if len(page) != 11 {
+		t.Fatalf("first page has %d rows, want 11", len(page))
+	}
+	for i, row := range page {
+		if row.StaffChatID != chat {
+			t.Fatalf("row %d belongs to chat %d, want %d", i, row.StaffChatID, chat)
+		}
+		if want := ids[len(ids)-1-i]; row.ID != want {
+			t.Fatalf("row %d has id %d, want %d (newest first)", i, row.ID, want)
+		}
+	}
+
+	rest, err := ListActionsFresh(chat, 10, 11)
+	if err != nil {
+		t.Fatalf("ListActionsFresh(10, 11): %v", err)
+	}
+	if len(rest) != 2 || rest[0].ID != ids[1] || rest[1].ID != ids[0] {
+		t.Fatalf("second page = %+v, want the 2 oldest rows %d and %d", rest, ids[1], ids[0])
+	}
+}
+
+func TestStaffActionTally(t *testing.T) {
+	chat := uniqueStaffChatID()
+	cleanupActionRows(t, chat)
+	groups := []int64{uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()}
+
+	action, rows := newTestAction(chat, []int{0, 1, 2, 3, 4}, groups)
+	if err := CreateAction(action, rows); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+	outcomes := []string{
+		models.StaffActionOutcomeDone, models.StaffActionOutcomeDone,
+		models.StaffActionOutcomeSkipped, models.StaffActionOutcomeFailed,
+	}
+	for i, outcome := range outcomes {
+		if err := SaveGroupResult(action.ID, ActionGroupResult{GroupChatID: groups[i], Outcome: outcome}); err != nil {
+			t.Fatalf("SaveGroupResult %d: %v", i, err)
+		}
+	}
+
+	empty, noGroups := newTestAction(chat, nil, nil)
+	if err := CreateAction(empty, noGroups); err != nil {
+		t.Fatalf("CreateAction (no groups): %v", err)
+	}
+
+	tallies, err := TallyActionGroups([]uint{action.ID, empty.ID})
+	if err != nil {
+		t.Fatalf("TallyActionGroups: %v", err)
+	}
+	if got, want := tallies[action.ID], (ActionTally{Done: 2, Skipped: 1, Failed: 1, Pending: 1}); got != want {
+		t.Fatalf("tally = %+v, want %+v", got, want)
+	}
+	if _, present := tallies[empty.ID]; present {
+		t.Fatalf("an action with no groups must be absent from the tally map, got %+v", tallies[empty.ID])
+	}
+
+	none, err := TallyActionGroups(nil)
+	if err != nil || len(none) != 0 {
+		t.Fatalf("TallyActionGroups(nil) = %v, %v, want an empty map and no error", none, err)
+	}
+}
