@@ -4,13 +4,19 @@ package modules
 
 import (
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/divkix/Alita_Robot/alita/db/logchannels"
+	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/i18n"
+	"github.com/divkix/Alita_Robot/alita/utils/actionlog"
+	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 )
 
 // setStaffLogChannel gives groupID a log channel with every category on, and
@@ -169,4 +175,181 @@ func TestStaffActionLogNoneWhenNothingApplied(t *testing.T) {
 			t.Fatalf("post of an action without a reason is missing %q:\n%s", staffMarker("staff_act_no_reason"), posts[0])
 		}
 	})
+}
+
+// wantSingleGroupDone fails unless the card of msgID ended with its only linked
+// group (Group A) applied: a done line, a done tally and a done record row.
+func wantSingleGroupDone(t *testing.T, env *staffActionEnv, msgID int64) {
+	t.Helper()
+	final := env.lastEditText(env.staffChat, msgID)
+	if !hasLinePrefix(final, "✅ Group A") {
+		t.Fatalf("final summary has no done line for Group A:\n%s", final)
+	}
+	if want := staffSummaryTallyLine(1, 0, 0); !strings.Contains(final, want) {
+		t.Fatalf("final summary tally is not %q:\n%s", want, final)
+	}
+	_, rows := recordOfCard(t, msgID)
+	if len(rows) != 1 || rows[0].Outcome != models.StaffActionOutcomeDone {
+		t.Fatalf("record rows = %+v, want exactly one done row", rows)
+	}
+}
+
+func TestStaffActionLogFailureKeepsDone(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	channel := uniqueModuleChatID()
+	setStaffLogChannel(t, env.groups[0], channel)
+	env.fake.script("sendMessage", channel, staffFakeError(403, "Forbidden: bot is not a member of the channel chat"))
+
+	_, msgID := env.startRun("/ban 4242 2d spamming")
+	env.waitRuns()
+
+	if got := len(env.callsTo("sendMessage", channel)); got != 1 {
+		t.Fatalf("log post attempts = %d, want 1 (a 403 is not retried)", got)
+	}
+	wantSingleGroupDone(t, env, msgID)
+}
+
+func TestStaffActionLogPaced(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	channel := uniqueModuleChatID()
+	setStaffLogChannel(t, env.groups[0], channel)
+	env.fake.script("sendMessage", channel, staffFake429(1))
+
+	_, msgID := env.startRun("/ban 4242 2d spamming")
+	env.waitRuns()
+
+	if got := len(env.callsTo("sendMessage", channel)); got != 2 {
+		t.Fatalf("log post attempts = %d, want 2 (the 429 is waited out and the post retried)", got)
+	}
+	if got := env.logTextsTo(channel); len(got) != 1 {
+		t.Fatalf("channel received %d posts, want exactly 1: %q", len(got), got)
+	}
+	wantSingleGroupDone(t, env, msgID)
+}
+
+func TestStaffActionLogRateLimitedKeepsDone(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	channel := uniqueModuleChatID()
+	setStaffLogChannel(t, env.groups[0], channel)
+	// One more 429 than the pacer retries, so the post is given up.
+	env.fake.script("sendMessage", channel,
+		staffFake429(1), staffFake429(1), staffFake429(1), staffFake429(1))
+
+	_, msgID := env.startRun("/ban 4242 2d spamming")
+	env.waitRuns()
+
+	if got := env.logTextsTo(channel); len(got) != 0 {
+		t.Fatalf("channel received %q, want no post after the retries ran out", got)
+	}
+	if got := len(env.callsTo("sendMessage", channel)); got < 2 {
+		t.Fatalf("log post attempts = %d, want the post retried after a 429", got)
+	}
+	wantSingleGroupDone(t, env, msgID)
+}
+
+func TestStaffActionLogCategoryOff(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	channel := uniqueModuleChatID()
+	setStaffLogChannel(t, env.groups[0], channel)
+	if err := logchannels.SetCategory(env.groups[0], logchannels.CategoryAdmin, false); err != nil {
+		t.Fatalf("switch the admin category off: %v", err)
+	}
+
+	_, msgID := env.startRun("/ban 4242 2d spamming")
+	env.waitRuns()
+
+	if got := len(env.callsTo("sendMessage", channel)); got != 0 {
+		t.Fatalf("log channel got %d send attempts, want none with the admin category off", got)
+	}
+	wantSingleGroupDone(t, env, msgID)
+}
+
+func TestStaffActionLogReasonCapped(t *testing.T) {
+	withStaffLocale(t)
+	tr := i18n.MustNewTranslator("en")
+	reason := `<b>&"x` + strings.Repeat("y", 400-utf8.RuneCountInString(`<b>&"x`))
+	if utf8.RuneCountInString(reason) != 400 {
+		t.Fatalf("test reason has %d runes, want 400", utf8.RuneCountInString(reason))
+	}
+
+	card := &staffActionCard{
+		Kind:       staffKindBan,
+		Issuer:     77,
+		IssuerName: "Issuer",
+		Target:     4242,
+		TargetName: "Target",
+		Reason:     reason,
+	}
+	text := composeStaffActionLog(tr, card)
+	if !strings.Contains(text, "&lt;b&gt;&amp;&#34;x") {
+		t.Fatalf("log text does not carry the escaped reason:\n%s", text)
+	}
+	if strings.Contains(text, "<b>&") {
+		t.Fatalf("a raw tag from the reason reached the log text:\n%s", text)
+	}
+
+	segment := html.UnescapeString(staffLogReason(tr, reason))
+	if got := utf8.RuneCountInString(segment); got != 301 {
+		t.Fatalf("reason segment has %d runes, want 300 plus the ellipsis", got)
+	}
+	if want := string([]rune(reason)[:300]) + "…"; segment != want {
+		t.Fatal("reason segment is not the first 300 runes plus an ellipsis")
+	}
+}
+
+func TestActionLogDestination(t *testing.T) {
+	withMiniredis(t)
+	chatID, channelID := uniqueModuleChatID(), uniqueModuleChatID()
+	setStaffLogChannel(t, chatID, channelID)
+	chat := &gotgbot.Chat{Id: chatID, Title: "Title", Type: "supergroup"}
+
+	gotChannel, header, ok := actionlog.Destination(chat, logchannels.CategoryAdmin)
+	if !ok || gotChannel != channelID {
+		t.Fatalf("Destination = channel %d ok=%v, want channel %d and true", gotChannel, ok, channelID)
+	}
+	if want := fmt.Sprintf("<b>Title</b> (<code>%d</code>)\n", chatID); header != want {
+		t.Fatalf("header = %q, want %q", header, want)
+	}
+
+	if err := logchannels.SetCategory(chatID, logchannels.CategoryAdmin, false); err != nil {
+		t.Fatalf("switch the admin category off: %v", err)
+	}
+	if _, _, ok := actionlog.Destination(chat, logchannels.CategoryAdmin); ok {
+		t.Fatal("Destination reported a post with the admin category off")
+	}
+
+	asChannel := &gotgbot.Chat{Id: chatID, Title: "Title", Type: "channel"}
+	if _, _, ok := actionlog.Destination(asChannel, logchannels.CategoryUser); ok {
+		t.Fatal("Destination reported a post for a chat of type channel")
+	}
+	if _, _, ok := actionlog.Destination(nil, logchannels.CategoryAdmin); ok {
+		t.Fatal("Destination reported a post for a nil chat")
+	}
+}
+
+func TestActionLogAdminUnchanged(t *testing.T) {
+	withMiniredis(t)
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chatID, channelID := uniqueModuleChatID(), uniqueModuleChatID()
+	setStaffLogChannel(t, chatID, channelID)
+	chat := &gotgbot.Chat{Id: chatID, Title: "Title", Type: "supergroup"}
+	actor := &gotgbot.User{Id: 55, FirstName: "Act<or>"}
+
+	actionlog.Admin(bot, chat, actor, "BAN", 42, "why")
+
+	var sent []moduleBotCall
+	for _, call := range client.callsFor("sendMessage") {
+		if fmt.Sprint(call.Params["chat_id"]) == strconv.FormatInt(channelID, 10) {
+			sent = append(sent, call)
+		}
+	}
+	if len(sent) != 1 {
+		t.Fatalf("sendMessage calls to the log channel = %d, want 1", len(sent))
+	}
+	want := fmt.Sprintf("<b>Title</b> (<code>%d</code>)\n", chatID) +
+		"#BAN\nAdmin: " + formatting.MentionHtml(actor.Id, actor.FirstName) + "\nUser: <code>42</code>\nReason: why"
+	if got := fmt.Sprint(sent[0].Params["text"]); got != want {
+		t.Fatalf("admin log text = %q, want %q", got, want)
+	}
 }
