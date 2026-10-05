@@ -30,6 +30,11 @@ const (
 	pacerRedisBackoff = 5 * time.Second
 )
 
+// pacerMaxRetryAfterSeconds clamps Telegram's retry_after to one day before it is
+// multiplied by RetryAfterUnit, so an absurd value cannot overflow time.Duration
+// into a negative or garbage block.
+const pacerMaxRetryAfterSeconds = 86400
+
 // TelegramPacerOptions tunes a TelegramPacer. Zero values take the defaults:
 // 100 ms between calls, 3 retries, a 60 s cap on one wait and seconds as the unit
 // of Telegram's retry_after.
@@ -43,8 +48,9 @@ type TelegramPacerOptions struct {
 	Interval time.Duration
 	// MaxRetries is how many times a call is repeated after a 429.
 	MaxRetries int
-	// MaxWait is the longest single retry_after that is waited out; a longer one
-	// fails the call at once.
+	// MaxWait is the longest wait a call accepts, for its own retry_after or for
+	// its slot behind the shared block and other callers. A longer one fails the
+	// call at once with ErrRateLimited and no Telegram request.
 	MaxWait time.Duration
 	// RetryAfterUnit is the length of one retry_after second; tests shorten it.
 	RetryAfterUnit time.Duration
@@ -72,6 +78,9 @@ var ErrRateLimited = errors.New("telegram rate limit: gave up after retries")
 // reserveSlotScript hands the caller a wait, in milliseconds, so that calls made
 // through it are at least ARGV[1] ms apart and none starts before the shared
 // block ends. The slot key lives until the slot it records, plus ARGV[2] ms.
+// ARGV[3] is the caller's max wait in ms: when the slot is further away than that
+// the script returns the distance without taking the slot, so a refused caller
+// leaves the next-slot key exactly as it was.
 var reserveSlotScript = redis.NewScript(`
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
@@ -80,6 +89,7 @@ local blk = redis.call('PTTL', KEYS[2])
 local slot = math.max(now, nxt)
 if blk > 0 then slot = math.max(slot, now + blk) end
 local interval = tonumber(ARGV[1])
+if slot - now > tonumber(ARGV[3]) then return slot - now end
 redis.call('SET', KEYS[1], slot + interval, 'PX', slot - now + interval + tonumber(ARGV[2]))
 return slot - now
 `)
@@ -123,8 +133,10 @@ func RetryAfterSeconds(err error) (int64, bool) {
 // retry_after, extends the shared block and runs call again, up to MaxRetries
 // times. The same closure is invoked every time, so its arguments (an until_date,
 // for one) are identical on every attempt. Any other error is returned as it is.
-// A retry_after above MaxWait, or one still answered after MaxRetries retries,
-// returns an error that wraps ErrRateLimited.
+// A retry_after above MaxWait, one still answered after MaxRetries retries, or a
+// slot more than MaxWait away (behind a long shared block) returns an error that
+// wraps ErrRateLimited; in the last case no Telegram request is made and no slot
+// is taken.
 func (p *TelegramPacer) Do(ctx context.Context, call func(context.Context) error) error {
 	for retries := 0; ; retries++ {
 		if err := p.wait(ctx); err != nil {
@@ -135,7 +147,11 @@ func (p *TelegramPacer) Do(ctx context.Context, call func(context.Context) error
 		if !limited {
 			return err
 		}
+		seconds = min(seconds, pacerMaxRetryAfterSeconds)
 		d := time.Duration(seconds) * p.opts.RetryAfterUnit
+		// The full retry_after is recorded on purpose (research Q2, plan 02-06):
+		// every replica keeps out of the flood, and wait turns a block longer than
+		// MaxWait into a fast "rate limited" failure instead of a sleep.
 		p.block(d)
 		if d > p.opts.MaxWait || retries >= p.opts.MaxRetries {
 			return fmt.Errorf("%w: %v", ErrRateLimited, err)
@@ -152,6 +168,9 @@ func (p *TelegramPacer) wait(ctx context.Context) error {
 	delay, ok := p.reserve(ctx)
 	if !ok {
 		delay = p.reserveLocal()
+	}
+	if delay > p.opts.MaxWait {
+		return fmt.Errorf("%w: next slot is %s away, over the %s cap", ErrRateLimited, delay, p.opts.MaxWait)
 	}
 	if delay <= 0 {
 		return nil
@@ -181,7 +200,7 @@ func (p *TelegramPacer) reserve(ctx context.Context) (time.Duration, bool) {
 	defer cancel()
 	ms, err := reserveSlotScript.Run(callCtx, client,
 		[]string{p.opts.NextKey, p.opts.BlockKey},
-		max(p.opts.Interval.Milliseconds(), 1), pacerKeySlackMs).Int64()
+		max(p.opts.Interval.Milliseconds(), 1), pacerKeySlackMs, p.opts.MaxWait.Milliseconds()).Int64()
 	if err != nil {
 		p.warnRedisDown(err)
 		return 0, false
@@ -190,7 +209,9 @@ func (p *TelegramPacer) reserve(ctx context.Context) (time.Duration, bool) {
 }
 
 // reserveLocal is the per-replica stand-in for reserve when Redis is down: it
-// spaces this replica's calls one interval apart and honours the local block.
+// spaces this replica's calls one interval apart and honours the local block. A
+// slot more than MaxWait away is returned without moving the local next slot, so
+// a refused caller takes no slot, as in the Redis script.
 func (p *TelegramPacer) reserveLocal() time.Duration {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -201,6 +222,9 @@ func (p *TelegramPacer) reserveLocal() time.Duration {
 	}
 	if p.localBlock.After(slot) {
 		slot = p.localBlock
+	}
+	if slot.Sub(now) > p.opts.MaxWait {
+		return slot.Sub(now)
 	}
 	p.localNext = slot.Add(p.opts.Interval)
 	return slot.Sub(now)

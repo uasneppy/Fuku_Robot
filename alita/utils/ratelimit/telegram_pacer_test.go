@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"testing"
@@ -355,5 +356,187 @@ func TestRetryAfterSeconds(t *testing.T) {
 		if got, ok := RetryAfterSeconds(err); ok {
 			t.Fatalf("RetryAfterSeconds(%s) = (%d, true), want false", name, got)
 		}
+	}
+}
+
+func TestTelegramPacerRefusesSlotAboveMaxWait(t *testing.T) {
+	newOne := func(t *testing.T) (*miniredis.Miniredis, TelegramPacerOptions, *TelegramPacer) {
+		mr := newPacerRedis(t)
+		opts := pacerOpts(t)
+		opts.Interval = time.Millisecond
+		opts.MaxWait = 50 * time.Millisecond
+		return mr, opts, NewTelegramPacer(opts)
+	}
+	setBlock := func(mr *miniredis.Miniredis, opts TelegramPacerOptions, ttl time.Duration) {
+		mr.Set(opts.BlockKey, "1")
+		mr.SetTTL(opts.BlockKey, ttl)
+	}
+
+	t.Run("exactly the cap is waited", func(t *testing.T) {
+		mr, opts, pacer := newOne(t)
+		setBlock(mr, opts, 50*time.Millisecond)
+
+		var calls callLog
+		started := time.Now()
+		err := pacer.Do(context.Background(), func(context.Context) error {
+			calls.record()
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("Do() error = %v, want nil for a slot exactly at the cap", err)
+		}
+		if calls.count() != 1 {
+			t.Fatalf("invocations = %d, want 1", calls.count())
+		}
+		if waited := calls.at(0).Sub(started); waited < 45*time.Millisecond {
+			t.Fatalf("call came after %v, want it to wait out the 50ms block", waited)
+		}
+	})
+
+	t.Run("one millisecond above the cap is refused", func(t *testing.T) {
+		mr, opts, pacer := newOne(t)
+		setBlock(mr, opts, 51*time.Millisecond)
+
+		var calls callLog
+		started := time.Now()
+		err := pacer.Do(context.Background(), func(context.Context) error {
+			calls.record()
+			return nil
+		})
+		if !errors.Is(err, ErrRateLimited) {
+			t.Fatalf("Do() error = %v, want ErrRateLimited", err)
+		}
+		if calls.count() != 0 {
+			t.Fatalf("invocations = %d, want 0 for a refused call", calls.count())
+		}
+		if elapsed := time.Since(started); elapsed > 25*time.Millisecond {
+			t.Fatalf("Do() took %v, want an immediate refusal", elapsed)
+		}
+	})
+
+	t.Run("a refused caller takes no slot", func(t *testing.T) {
+		mr, opts, pacer := newOne(t)
+		if err := pacer.Do(context.Background(), func(context.Context) error { return nil }); err != nil {
+			t.Fatalf("first Do() error = %v, want nil", err)
+		}
+		wantNext, err := mr.Get(opts.NextKey)
+		if err != nil {
+			t.Fatalf("read next slot: %v", err)
+		}
+		wantTTL := mr.TTL(opts.NextKey)
+
+		setBlock(mr, opts, 51*time.Millisecond)
+		var calls callLog
+		err = pacer.Do(context.Background(), func(context.Context) error {
+			calls.record()
+			return nil
+		})
+		if !errors.Is(err, ErrRateLimited) {
+			t.Fatalf("Do() error = %v, want ErrRateLimited", err)
+		}
+		if calls.count() != 0 {
+			t.Fatalf("invocations = %d, want 0", calls.count())
+		}
+		gotNext, err := mr.Get(opts.NextKey)
+		if err != nil {
+			t.Fatalf("read next slot after the refusal: %v", err)
+		}
+		if gotNext != wantNext {
+			t.Fatalf("next slot = %s after a refusal, want it unchanged at %s", gotNext, wantNext)
+		}
+		if gotTTL := mr.TTL(opts.NextKey); gotTTL != wantTTL {
+			t.Fatalf("next slot TTL = %v after a refusal, want it unchanged at %v", gotTTL, wantTTL)
+		}
+	})
+}
+
+func TestTelegramPacerLocalRefusesAboveMaxWait(t *testing.T) {
+	mr := newPacerRedis(t)
+	opts := pacerOpts(t)
+	opts.Interval = 40 * time.Millisecond
+	opts.MaxWait = 50 * time.Millisecond
+	opts.RetryAfterUnit = 10 * time.Millisecond
+	pacer := NewTelegramPacer(opts)
+	mr.Close()
+
+	var first callLog
+	err := pacer.Do(context.Background(), func(context.Context) error {
+		first.record()
+		return tg429(10)
+	})
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("Do() #1 error = %v, want ErrRateLimited", err)
+	}
+	if first.count() != 1 {
+		t.Fatalf("Do() #1 invocations = %d, want 1", first.count())
+	}
+
+	var second callLog
+	started := time.Now()
+	err = pacer.Do(context.Background(), func(context.Context) error {
+		second.record()
+		return nil
+	})
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("Do() #2 error = %v, want ErrRateLimited from the local block", err)
+	}
+	if second.count() != 0 {
+		t.Fatalf("Do() #2 invocations = %d, want 0", second.count())
+	}
+	if elapsed := time.Since(started); elapsed > 25*time.Millisecond {
+		t.Fatalf("Do() #2 took %v, want an immediate refusal", elapsed)
+	}
+
+	// The 100 ms local block is now within the cap. Had the refused Do #2 moved
+	// the local next slot one interval past the block, this call would still be
+	// more than 50 ms away and be refused.
+	time.Sleep(70 * time.Millisecond)
+	var third callLog
+	if err := pacer.Do(context.Background(), func(context.Context) error {
+		third.record()
+		return nil
+	}); err != nil {
+		t.Fatalf("Do() #3 error = %v, want nil once the block is within the cap", err)
+	}
+	if third.count() != 1 {
+		t.Fatalf("Do() #3 invocations = %d, want 1", third.count())
+	}
+}
+
+func TestTelegramPacerRetryAfterOverflow(t *testing.T) {
+	mr := newPacerRedis(t)
+	opts := pacerOpts(t)
+	opts.Interval = time.Millisecond
+	opts.MaxWait = 50 * time.Millisecond
+	opts.RetryAfterUnit = 10 * time.Millisecond
+	pacer := NewTelegramPacer(opts)
+
+	var calls callLog
+	err := pacer.Do(context.Background(), func(context.Context) error {
+		calls.record()
+		return tg429(math.MaxInt64)
+	})
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("Do() error = %v, want ErrRateLimited", err)
+	}
+	if calls.count() != 1 {
+		t.Fatalf("invocations = %d, want exactly 1", calls.count())
+	}
+	ttl := mr.TTL(opts.BlockKey)
+	if ttl <= 0 || ttl > 86400*opts.RetryAfterUnit {
+		t.Fatalf("block TTL = %v, want more than 0 and at most %v", ttl, 86400*opts.RetryAfterUnit)
+	}
+
+	other := NewTelegramPacer(opts)
+	var refused callLog
+	err = other.Do(context.Background(), func(context.Context) error {
+		refused.record()
+		return nil
+	})
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("second pacer error = %v, want ErrRateLimited behind the block", err)
+	}
+	if refused.count() != 0 {
+		t.Fatalf("second pacer invocations = %d, want 0", refused.count())
 	}
 }
