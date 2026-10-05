@@ -64,9 +64,57 @@ var (
 	ErrDurationTooLong = errors.New("duration longer than 366 days")
 )
 
-// ParseDurationToken is a stub until the GREEN step.
+// ParseDurationToken reads one duration token of the form <digits><m|h|d|w>, all
+// lowercase, the same grammar the per-group /tban and /tmute use. matched is false
+// for anything else ("2D", "12", "-1d", "1.5d", ""), so a caller can treat that
+// word as plain text.
+//
+// For a matched token err says whether it is usable: ErrDurationInvalid for an
+// amount of zero, ErrDurationTooLong when it is above 366 days or too large to
+// represent (Amount and Unit are still set when they could be read, so a caller
+// can show what was typed). It never replies and never reads the clock.
 func ParseDurationToken(token string) (spec DurationSpec, matched bool, err error) {
-	return DurationSpec{}, false, nil
+	if len(token) < 2 {
+		return DurationSpec{}, false, nil
+	}
+	digits, unit := token[:len(token)-1], token[len(token)-1]
+	var multiplier int64
+	switch unit {
+	case 'm':
+		multiplier = 60
+	case 'h':
+		multiplier = 60 * 60
+	case 'd':
+		multiplier = 24 * 60 * 60
+	case 'w':
+		multiplier = 7 * 24 * 60 * 60
+	default:
+		return DurationSpec{}, false, nil
+	}
+	for i := 0; i < len(digits); i++ {
+		if digits[i] < '0' || digits[i] > '9' {
+			return DurationSpec{}, false, nil
+		}
+	}
+
+	spec.Unit = unit
+	amount, perr := strconv.ParseInt(digits, 10, 64)
+	if perr != nil {
+		// Only digits were checked above, so the only failure is a range error.
+		return spec, true, ErrDurationTooLong
+	}
+	spec.Amount = amount
+	if amount == 0 {
+		return spec, true, ErrDurationInvalid
+	}
+	if amount > math.MaxInt64/multiplier {
+		return spec, true, ErrDurationTooLong
+	}
+	spec.Seconds = amount * multiplier
+	if spec.Seconds > maxTemporaryDurationSeconds {
+		return spec, true, ErrDurationTooLong
+	}
+	return spec, true, nil
 }
 
 func ExtractChat(b *gotgbot.Bot, ctx *ext.Context) *gotgbot.Chat {
