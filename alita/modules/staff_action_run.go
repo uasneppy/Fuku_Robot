@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"sync"
 	"time"
@@ -196,7 +197,10 @@ func staffIssuerSkipReason(m gotgbot.MergedChatMember) staffReason {
 	return staffReasonSkipIssuerNotAdmin
 }
 
-// executeStaffCall makes the one write call a verdict asks for.
+// executeStaffCall makes the one write call a verdict asks for. The verdict's
+// Call is the only thing that selects the Telegram method, so the decision table
+// in decideStaffAction stays the single place that keeps a restrict or a
+// member-removing unban away from a banned target.
 func executeStaffCall(
 	ctx context.Context,
 	b *gotgbot.Bot,
@@ -210,8 +214,29 @@ func executeStaffCall(
 	case staffCallBan:
 		_, err := b.BanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.BanChatMemberOpts{UntilDate: newUntil})
 		return err
+	case staffCallMute:
+		_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, MutedPermissions,
+			&gotgbot.RestrictChatMemberOpts{UntilDate: newUntil})
+		return err
+	case staffCallKick:
+		// The same call per-group /kick makes: it removes a current member without
+		// leaving a ban, so they can rejoin.
+		_, err := b.UnbanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
+		return err
+	case staffCallUnban:
+		_, err := b.UnbanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
+		return err
+	case staffCallUnmute:
+		// Like per-group /unmute, the group's default permissions come from a live
+		// getChat and a failure there fails the group.
+		info, err := b.GetChatWithContext(callCtx, groupID, nil)
+		if err != nil {
+			return err
+		}
+		_, err = b.RestrictChatMemberWithContext(callCtx, groupID, targetID, resolveUnmutePermissions(info), nil)
+		return err
 	}
-	return nil
+	return fmt.Errorf("unknown staff call %d", verdict.Call)
 }
 
 // telegramErrorDetail is the short, HTML-escaped text shown on a failed line:

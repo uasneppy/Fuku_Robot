@@ -2,13 +2,20 @@ package modules
 
 import "github.com/PaulSonOfLars/gotgbot/v2"
 
-// staffActionKind names a staff moderation action. Later plans add mute, kick,
-// unban and unmute next to ban.
+// staffActionKind names a staff moderation action.
 type staffActionKind string
 
 const (
 	// staffKindBan bans the target, permanently or until a date.
 	staffKindBan staffActionKind = "ban"
+	// staffKindMute restricts a member so they cannot send messages.
+	staffKindMute staffActionKind = "mute"
+	// staffKindKick removes a current member, who may rejoin.
+	staffKindKick staffActionKind = "kick"
+	// staffKindUnban lifts a ban and never removes a member.
+	staffKindUnban staffActionKind = "unban"
+	// staffKindUnmute gives a muted target the group's default permissions back.
+	staffKindUnmute staffActionKind = "unmute"
 )
 
 // staffOutcome is how one linked group ended for a staff action.
@@ -32,12 +39,20 @@ type staffReason string
 const (
 	staffReasonBanned             staffReason = "banned"
 	staffReasonBannedNotInGroup   staffReason = "banned_not_in_group"
+	staffReasonMuted              staffReason = "muted"
+	staffReasonKicked             staffReason = "kicked"
+	staffReasonUnbanned           staffReason = "unbanned"
+	staffReasonUnmuted            staffReason = "unmuted"
 	staffReasonSkipIssuerNotAdmin staffReason = "skip_issuer_not_admin"
 	staffReasonSkipIssuerNoRight  staffReason = "skip_issuer_no_right"
 	staffReasonSkipTargetAdmin    staffReason = "skip_target_admin"
 	staffReasonSkipTargetBot      staffReason = "skip_target_bot"
 	staffReasonSkipTargetService  staffReason = "skip_target_service"
 	staffReasonSkipAlreadyBanned  staffReason = "skip_already_banned"
+	staffReasonSkipNotInGroup     staffReason = "skip_not_in_group"
+	staffReasonSkipAlreadyMuted   staffReason = "skip_already_muted"
+	staffReasonSkipNotBanned      staffReason = "skip_not_banned"
+	staffReasonSkipNotMuted       staffReason = "skip_not_muted"
 	staffReasonSkipLinkRemoved    staffReason = "skip_link_removed"
 	staffReasonSkipStaffGroup     staffReason = "skip_staff_group"
 	staffReasonFailOwnerUnknown   staffReason = "fail_owner_unknown"
@@ -48,11 +63,13 @@ const (
 // staffReasonOutcome maps a reason to the outcome it stands for.
 func staffReasonOutcome(r staffReason) staffOutcome {
 	switch r {
-	case staffReasonBanned, staffReasonBannedNotInGroup:
+	case staffReasonBanned, staffReasonBannedNotInGroup, staffReasonMuted, staffReasonKicked,
+		staffReasonUnbanned, staffReasonUnmuted:
 		return staffOutcomeDone
 	case staffReasonSkipIssuerNotAdmin, staffReasonSkipIssuerNoRight, staffReasonSkipTargetAdmin,
 		staffReasonSkipTargetBot, staffReasonSkipTargetService, staffReasonSkipAlreadyBanned,
-		staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup:
+		staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup, staffReasonSkipNotInGroup,
+		staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned, staffReasonSkipNotMuted:
 		return staffOutcomeSkipped
 	case staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram:
 		return staffOutcomeFailed
@@ -93,6 +110,15 @@ const (
 	staffCallNone staffAPICall = iota
 	// staffCallBan is banChatMember.
 	staffCallBan
+	// staffCallMute is restrictChatMember with MutedPermissions.
+	staffCallMute
+	// staffCallKick is unbanChatMember with only_if_banned=false, which removes a
+	// current member without banning them.
+	staffCallKick
+	// staffCallUnban is unbanChatMember with only_if_banned=true.
+	staffCallUnban
+	// staffCallUnmute is restrictChatMember with the group's default permissions.
+	staffCallUnmute
 )
 
 // staffVerdict is the decision for one group: the write to make, if any, and the
@@ -115,18 +141,43 @@ func staffEndsLater(newUntil, curUntil int64) bool {
 	}
 }
 
-// decideStaffAction is the pure per-group decision. The target's creator or
+// staffDo is a verdict that makes a call.
+func staffDo(call staffAPICall, reason staffReason) staffVerdict {
+	return staffVerdict{Call: call, Reason: reason}
+}
+
+// staffSkip is a verdict that leaves the group alone for the given reason.
+func staffSkip(reason staffReason) staffVerdict {
+	return staffVerdict{Call: staffCallNone, Reason: reason}
+}
+
+// decideStaffAction is the pure per-group decision, and the only place that
+// chooses which Telegram write a group gets. The target's creator or
 // administrator status always wins (D-15); after that each kind has its own
 // column of the status table.
+//
+// The table is built around one rule: restrictChatMember and unbanChatMember
+// REPLACE the target's status on the server, so a restrict sent to a banned or
+// departed target would lift the ban. Restrict goes only to a member or a
+// restricted target, member-removing unban only to a current member, and every
+// unban is only_if_banned=true.
 func decideStaffAction(kind staffActionKind, st staffTargetState, newUntil int64) staffVerdict {
 	if st.Status == gotgbot.ChatMemberStatusCreator || st.Status == gotgbot.ChatMemberStatusAdministrator {
-		return staffVerdict{Call: staffCallNone, Reason: staffReasonSkipTargetAdmin}
+		return staffSkip(staffReasonSkipTargetAdmin)
 	}
 	switch kind {
 	case staffKindBan:
 		return decideStaffBan(st, newUntil)
+	case staffKindMute:
+		return decideStaffMute(st, newUntil)
+	case staffKindKick:
+		return decideStaffKick(st)
+	case staffKindUnban:
+		return decideStaffUnban(st)
+	case staffKindUnmute:
+		return decideStaffUnmute(st)
 	}
-	return staffVerdict{Call: staffCallNone, Reason: staffReasonFailLookup}
+	return staffSkip(staffReasonFailLookup)
 }
 
 // decideStaffBan is the ban column: a ban reaches a group the target is not in
@@ -149,6 +200,76 @@ func decideStaffBan(st staffTargetState, newUntil int64) staffVerdict {
 		return staffVerdict{Call: staffCallBan, Reason: staffReasonBanned}
 	}
 	return staffVerdict{Call: staffCallNone, Reason: staffReasonFailLookup}
+}
+
+// decideStaffMute is the mute column. Only a current member is muted (D-11); a
+// muted member is muted again only when the new mute ends later (D-12, D-13), and
+// a banned target is never touched, because restrictChatMember would replace the
+// ban.
+func decideStaffMute(st staffTargetState, newUntil int64) staffVerdict {
+	switch st.Status {
+	case gotgbot.ChatMemberStatusMember:
+		return staffDo(staffCallMute, staffReasonMuted)
+	case gotgbot.ChatMemberStatusRestricted:
+		if !st.IsMember {
+			return staffSkip(staffReasonSkipNotInGroup)
+		}
+		if st.Muted && !staffEndsLater(newUntil, st.Until) {
+			return staffSkip(staffReasonSkipAlreadyMuted)
+		}
+		return staffDo(staffCallMute, staffReasonMuted)
+	case gotgbot.ChatMemberStatusLeft, gotgbot.ChatMemberStatusKicked:
+		return staffSkip(staffReasonSkipNotInGroup)
+	}
+	return staffSkip(staffReasonFailLookup)
+}
+
+// decideStaffKick is the kick column. Only a current member is removed; the
+// member-removing unban on anyone else would lift a ban. A muted member is kicked
+// too, which drops the mute exactly as the per-group /kick does.
+func decideStaffKick(st staffTargetState) staffVerdict {
+	switch st.Status {
+	case gotgbot.ChatMemberStatusMember:
+		return staffDo(staffCallKick, staffReasonKicked)
+	case gotgbot.ChatMemberStatusRestricted:
+		if st.IsMember {
+			return staffDo(staffCallKick, staffReasonKicked)
+		}
+		return staffSkip(staffReasonSkipNotInGroup)
+	case gotgbot.ChatMemberStatusLeft, gotgbot.ChatMemberStatusKicked:
+		return staffSkip(staffReasonSkipNotInGroup)
+	}
+	return staffSkip(staffReasonFailLookup)
+}
+
+// decideStaffUnban is the unban column: it acts on a banned target and on nobody
+// else (D-14), so it can never remove a member.
+func decideStaffUnban(st staffTargetState) staffVerdict {
+	switch st.Status {
+	case gotgbot.ChatMemberStatusKicked:
+		return staffDo(staffCallUnban, staffReasonUnbanned)
+	case gotgbot.ChatMemberStatusMember, gotgbot.ChatMemberStatusRestricted, gotgbot.ChatMemberStatusLeft:
+		return staffSkip(staffReasonSkipNotBanned)
+	}
+	return staffSkip(staffReasonFailLookup)
+}
+
+// decideStaffUnmute is the unmute column. A muted restricted target gets the
+// default permissions back, member or not, without becoming a member. A banned
+// target is never unmuted, because restrictChatMember would lift the ban.
+func decideStaffUnmute(st staffTargetState) staffVerdict {
+	switch st.Status {
+	case gotgbot.ChatMemberStatusRestricted:
+		if st.Muted {
+			return staffDo(staffCallUnmute, staffReasonUnmuted)
+		}
+		return staffSkip(staffReasonSkipNotMuted)
+	case gotgbot.ChatMemberStatusMember, gotgbot.ChatMemberStatusLeft:
+		return staffSkip(staffReasonSkipNotMuted)
+	case gotgbot.ChatMemberStatusKicked:
+		return staffSkip(staffReasonSkipNotInGroup)
+	}
+	return staffSkip(staffReasonFailLookup)
 }
 
 // staffServiceUserIDs are Telegram's own accounts: the service account, the

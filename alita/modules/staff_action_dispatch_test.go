@@ -80,6 +80,11 @@ func TestStaffActionNonStaffUnchanged(t *testing.T) {
 		{name: "ban an ID", text: "/ban 4242"},
 		{name: "ban without an argument", text: "/ban"},
 		{name: "ban as a reply", text: "/ban spam", reply: &target},
+		{name: "mute an ID", text: "/mute 4242"},
+		{name: "kick an ID", text: "/kick 4242"},
+		{name: "unban an ID", text: "/unban 4242"},
+		{name: "unmute an ID", text: "/unmute 4242"},
+		{name: "mute as a reply", text: "/mute spam", reply: &target},
 	}
 	for _, tc := range commands {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,57 +138,65 @@ func (e *staffActionEnv) wantCardOnly() {
 
 func TestStaffActionAnonymous(t *testing.T) {
 	staffChatOf := func(env *staffActionEnv) gotgbot.Chat { return env.staffChatObj() }
-	cases := []struct {
-		name  string
-		build func(env *staffActionEnv) *gotgbot.Update
-	}{
-		{
-			name: "anonymous admin",
-			build: func(env *staffActionEnv) *gotgbot.Update {
-				chat := staffChatOf(env)
-				from := gotgbot.User{Id: 1087968824, IsBot: true, FirstName: "Group"}
-				update := env.messageUpdate(chat, &from, "/ban 4242")
-				update.Message.SenderChat = &chat
-				return update
+	for _, command := range []string{"ban", "mute", "kick", "unban", "unmute"} {
+		text := "/" + command + " 4242"
+		cases := []struct {
+			name  string
+			build func(env *staffActionEnv) *gotgbot.Update
+		}{
+			{
+				name: "anonymous admin",
+				build: func(env *staffActionEnv) *gotgbot.Update {
+					chat := staffChatOf(env)
+					from := gotgbot.User{Id: 1087968824, IsBot: true, FirstName: "Group"}
+					update := env.messageUpdate(chat, &from, text)
+					update.Message.SenderChat = &chat
+					return update
+				},
 			},
-		},
-		{
-			name: "linked channel post",
-			build: func(env *staffActionEnv) *gotgbot.Update {
-				from := gotgbot.User{Id: 777000, FirstName: "Telegram"}
-				update := env.messageUpdate(staffChatOf(env), &from, "/ban 4242")
-				update.Message.SenderChat = &gotgbot.Chat{Id: -1009999999999, Type: "channel", Title: "News"}
-				update.Message.IsAutomaticForward = true
-				return update
+			{
+				name: "linked channel post",
+				build: func(env *staffActionEnv) *gotgbot.Update {
+					from := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+					update := env.messageUpdate(staffChatOf(env), &from, text)
+					update.Message.SenderChat = &gotgbot.Chat{Id: -1009999999999, Type: "channel", Title: "News"}
+					update.Message.IsAutomaticForward = true
+					return update
+				},
 			},
-		},
-		{
-			name: "channel identity",
-			build: func(env *staffActionEnv) *gotgbot.Update {
-				from := gotgbot.User{Id: 136817688, IsBot: true, FirstName: "Channel"}
-				update := env.messageUpdate(staffChatOf(env), &from, "/ban 4242")
-				update.Message.SenderChat = &gotgbot.Chat{Id: -1008888888888, Type: "channel", Title: "Other"}
-				return update
+			{
+				name: "channel identity",
+				build: func(env *staffActionEnv) *gotgbot.Update {
+					from := gotgbot.User{Id: 136817688, IsBot: true, FirstName: "Channel"}
+					update := env.messageUpdate(staffChatOf(env), &from, text)
+					update.Message.SenderChat = &gotgbot.Chat{Id: -1008888888888, Type: "channel", Title: "Other"}
+					return update
+				},
 			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			env := newStaffActionEnv(t, 1)
-			env.process(tc.build(env))
-			env.wantPostAsYourself()
-		})
+		}
+		for _, tc := range cases {
+			t.Run(command+" "+tc.name, func(t *testing.T) {
+				env := newStaffActionEnv(t, 1)
+				env.process(tc.build(env))
+				env.wantPostAsYourself()
+			})
+		}
 	}
 
 	t.Run("sender without a user", func(t *testing.T) {
-		env := newStaffActionEnv(t, 1)
-		ctx := ext.NewContext(env.bot, env.messageUpdate(env.staffChatObj(), &gotgbot.User{Id: 555001}, "/ban 4242"), nil)
-		ctx.EffectiveSender = &gotgbot.Sender{ChatId: env.staffChat}
-
-		if err := staffModule.handleStaffAction(env.bot, ctx, staffActionCommands[0]); err != ext.EndGroups {
-			t.Fatalf("handleStaffAction error = %v, want ext.EndGroups", err)
+		if len(staffActionCommands) != 5 {
+			t.Fatalf("staff commands = %d, want ban, mute, kick, unban and unmute", len(staffActionCommands))
 		}
-		env.wantPostAsYourself()
+		for _, spec := range staffActionCommands {
+			env := newStaffActionEnv(t, 1)
+			ctx := ext.NewContext(env.bot, env.messageUpdate(env.staffChatObj(), &gotgbot.User{Id: 555001}, "/"+spec.Name+" 4242"), nil)
+			ctx.EffectiveSender = &gotgbot.Sender{ChatId: env.staffChat}
+
+			if err := staffModule.handleStaffAction(env.bot, ctx, spec); err != ext.EndGroups {
+				t.Fatalf("handleStaffAction(%s) error = %v, want ext.EndGroups", spec.Name, err)
+			}
+			env.wantPostAsYourself()
+		}
 	})
 }
 
@@ -191,7 +204,7 @@ func TestStaffActionAnonymous(t *testing.T) {
 func (e *staffActionEnv) wantPostAsYourself() {
 	e.t.Helper()
 	e.wantReplyMarker("staff_post_as_yourself")
-	for _, method := range []string{"getChatMember", "getChatAdministrators", "banChatMember"} {
+	for _, method := range []string{"getChatMember", "getChatAdministrators", "banChatMember", "restrictChatMember", "unbanChatMember"} {
 		if calls := e.fake.callsFor(method); len(calls) != 0 {
 			e.t.Fatalf("%s calls = %d, want 0 for an anonymous sender", method, len(calls))
 		}

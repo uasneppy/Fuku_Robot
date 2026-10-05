@@ -28,6 +28,10 @@ type staffCommandSpec struct {
 // them a second time.
 var staffActionCommands = []staffCommandSpec{
 	{Name: "ban", Kind: staffKindBan},
+	{Name: "mute", Kind: staffKindMute},
+	{Name: "kick", Kind: staffKindKick},
+	{Name: "unban", Kind: staffKindUnban},
+	{Name: "unmute", Kind: staffKindUnmute},
 }
 
 // LoadStaffActions registers the Staff Group command interceptors. They are raw

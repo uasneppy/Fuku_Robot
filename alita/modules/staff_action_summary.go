@@ -32,6 +32,14 @@ func staffActionIcon(kind staffActionKind) string {
 	switch kind {
 	case staffKindBan:
 		return "🔨"
+	case staffKindMute:
+		return "🔇"
+	case staffKindKick:
+		return "👢"
+	case staffKindUnban:
+		return "🔓"
+	case staffKindUnmute:
+		return "🔊"
 	}
 	return "⚙️"
 }
@@ -43,8 +51,26 @@ func staffActionName(tr *i18n.Translator, kind staffActionKind) string {
 	case staffKindBan:
 		text, _ := tr.GetString("staff_act_name_ban")
 		return text
+	case staffKindMute:
+		text, _ := tr.GetString("staff_act_name_mute")
+		return text
+	case staffKindKick:
+		text, _ := tr.GetString("staff_act_name_kick")
+		return text
+	case staffKindUnban:
+		text, _ := tr.GetString("staff_act_name_unban")
+		return text
+	case staffKindUnmute:
+		text, _ := tr.GetString("staff_act_name_unmute")
+		return text
 	}
 	return ""
+}
+
+// staffActionHasDuration reports whether an action has an end date to show:
+// only ban and mute do.
+func staffActionHasDuration(kind staffActionKind) bool {
+	return kind == staffKindBan || kind == staffKindMute
 }
 
 // staffTargetDisplay shows the target as its stored name in bold followed by the
@@ -59,16 +85,19 @@ func staffTargetDisplay(tr *i18n.Translator, card *staffActionCard) string {
 }
 
 // staffActionHeader is the first line of the card and of the summary: icon,
-// action, target, duration and reason. It is built by concatenation, so no user
-// text goes through the translator.
+// action, target, duration (ban and mute only) and reason. It is built by
+// concatenation, so no user text goes through the translator.
 func staffActionHeader(tr *i18n.Translator, card *staffActionCard) string {
-	duration, _ := tr.GetString("staff_act_duration_permanent")
 	reason := html.EscapeString(card.Reason)
 	if strings.TrimSpace(card.Reason) == "" {
 		reason, _ = tr.GetString("staff_act_no_reason")
 	}
-	return staffActionIcon(card.Kind) + " " + staffActionName(tr, card.Kind) + " · " +
-		staffTargetDisplay(tr, card) + " · " + duration + " · " + reason
+	header := staffActionIcon(card.Kind) + " " + staffActionName(tr, card.Kind) + " · " + staffTargetDisplay(tr, card)
+	if staffActionHasDuration(card.Kind) {
+		duration, _ := tr.GetString("staff_act_duration_permanent")
+		header += " · " + duration
+	}
+	return header + " · " + reason
 }
 
 // staffReasonText is the localized words for a result reason. Telegram's error
@@ -76,7 +105,7 @@ func staffActionHeader(tr *i18n.Translator, card *staffActionCard) string {
 func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 	var text string
 	switch r {
-	case staffReasonBanned:
+	case staffReasonBanned, staffReasonMuted, staffReasonKicked, staffReasonUnbanned, staffReasonUnmuted:
 		return ""
 	case staffReasonBannedNotInGroup:
 		text, _ = tr.GetString("staff_act_banned_not_in_group")
@@ -92,6 +121,14 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		text, _ = tr.GetString("staff_act_skip_target_service")
 	case staffReasonSkipAlreadyBanned:
 		text, _ = tr.GetString("staff_act_skip_already_banned")
+	case staffReasonSkipNotInGroup:
+		text, _ = tr.GetString("staff_act_skip_not_in_group")
+	case staffReasonSkipAlreadyMuted:
+		text, _ = tr.GetString("staff_act_skip_already_muted")
+	case staffReasonSkipNotBanned:
+		text, _ = tr.GetString("staff_act_skip_not_banned")
+	case staffReasonSkipNotMuted:
+		text, _ = tr.GetString("staff_act_skip_not_muted")
 	case staffReasonSkipLinkRemoved:
 		text, _ = tr.GetString("staff_act_skip_link_removed")
 	case staffReasonSkipStaffGroup:
