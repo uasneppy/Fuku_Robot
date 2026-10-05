@@ -79,7 +79,7 @@ func staffReasonOutcome(r staffReason) staffOutcome {
 		return staffOutcomeSkipped
 	case staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
-		staffReasonFailGroupNotFound, staffReasonFailInternal:
+		staffReasonFailGroupNotFound, staffReasonFailInternal, staffReasonFailInterrupted:
 		return staffOutcomeFailed
 	}
 	return staffOutcomeFailed

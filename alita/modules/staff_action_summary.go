@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -178,6 +179,8 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		text, _ = tr.GetString("staff_act_fail_group_not_found")
 	case staffReasonFailInternal:
 		text, _ = tr.GetString("staff_act_fail_internal")
+	case staffReasonFailInterrupted:
+		text, _ = tr.GetString("staff_act_fail_interrupted")
 	}
 	return text
 }
@@ -203,14 +206,177 @@ func staffResultLine(tr *i18n.Translator, res staffGroupResult) string {
 	return "⏳ " + title
 }
 
-// renderStaffActionSummary is the card text once the run has started: the header,
-// a blank line, then one line per linked group in the order given.
-func renderStaffActionSummary(tr *i18n.Translator, card *staffActionCard, results []staffGroupResult) string {
+// staffSummaryLen is the length of text in UTF-16 code units, the unit Telegram's
+// message cap is counted in. It is meant for the final HTML, after every title,
+// name and reason has been escaped.
+func staffSummaryLen(text string) int {
+	return len(utf16.Encode([]rune(text)))
+}
+
+// staffSummaryFits reports whether the final HTML text is within the length cap.
+func staffSummaryFits(text string) bool {
+	return staffSummaryLen(text) <= staffPanelMaxUTF16
+}
+
+// staffSummaryTally counts the results by outcome.
+func staffSummaryTally(results []staffGroupResult) (done, skipped, failed, pending int) {
+	for _, res := range results {
+		switch res.Outcome {
+		case staffOutcomeDone:
+			done++
+		case staffOutcomeSkipped:
+			skipped++
+		case staffOutcomeFailed:
+			failed++
+		default:
+			pending++
+		}
+	}
+	return done, skipped, failed, pending
+}
+
+// staffSummaryTallyLine is the line under the header (D-17). The icons and the
+// digits are not localized.
+func staffSummaryTallyLine(done, skipped, failed int) string {
+	return "✅ " + strconv.Itoa(done) + " · ⏭ " + strconv.Itoa(skipped) + " · ❌ " + strconv.Itoa(failed)
+}
+
+// staffSummaryText joins a head and the group lines. Lines are whole units built
+// from escaped pieces, so a message is never cut in the middle of a tag.
+func staffSummaryText(head string, lines []string) string {
+	return head + "\n\n" + strings.Join(lines, "\n")
+}
+
+// fitStaffSummaryLines puts as many whole lines under head as the cap allows and
+// ends the text with tail when it is not empty. It returns the text and how many
+// lines went in. With atLeastOne a first line is always taken, so a caller that
+// loops over the remaining lines always makes progress.
+func fitStaffSummaryLines(head string, lines []string, tail string, atLeastOne bool) (string, int) {
+	budget := staffPanelMaxUTF16 - staffSummaryLen(head) - len("\n\n")
+	tailCost := 0
+	if tail != "" {
+		tailCost = len("\n") + staffSummaryLen(tail)
+	}
+	used, n := 0, 0
+	for n < len(lines) {
+		cost := staffSummaryLen(lines[n])
+		if n > 0 {
+			cost += len("\n")
+		}
+		if used+cost+tailCost > budget && (n > 0 || !atLeastOne) {
+			break
+		}
+		used += cost
+		n++
+	}
+	text := staffSummaryText(head, lines[:n])
+	if tail != "" {
+		if n > 0 {
+			text += "\n"
+		}
+		text += tail
+	}
+	return text, n
+}
+
+// composeStaffActionSummary builds the summary text for a set of results. Lines
+// keep their link order and only their icon changes (D-17). A text over the cap
+// collapses the done lines into one count (D-18); no skipped or failed line is
+// ever summarized, so no group is hidden (STAFF-08). When final is false the
+// pending lines may collapse too, and what still does not fit is left for the
+// final summary. When final is true the lines that do not fit in the first
+// message are returned as continuation messages, each starting with the header.
+func composeStaffActionSummary(
+	tr *i18n.Translator,
+	card *staffActionCard,
+	results []staffGroupResult,
+	final bool,
+) (string, []string) {
+	header := staffActionHeader(tr, card)
+	done, skipped, failed, pending := staffSummaryTally(results)
+	head := header + "\n" + staffSummaryTallyLine(done, skipped, failed)
+
 	lines := make([]string, len(results))
 	for i, res := range results {
 		lines[i] = staffResultLine(tr, res)
 	}
-	return staffActionHeader(tr, card) + "\n\n" + strings.Join(lines, "\n")
+	if text := staffSummaryText(head, lines); staffSummaryFits(text) {
+		return text, nil
+	}
+
+	var doneLine string
+	if done > 0 {
+		text, _ := tr.GetString("staff_act_summary_done_collapsed", i18n.TranslationParams{"count": done})
+		doneLine = "✅ " + text
+	}
+	collapsed := make([]string, 0, len(lines))
+	if doneLine != "" {
+		collapsed = append(collapsed, doneLine)
+	}
+	for i, res := range results {
+		if res.Outcome != staffOutcomeDone {
+			collapsed = append(collapsed, lines[i])
+		}
+	}
+	if text := staffSummaryText(head, collapsed); staffSummaryFits(text) {
+		return text, nil
+	}
+
+	continued, _ := tr.GetString("staff_act_summary_continued")
+	if !final {
+		kept := make([]string, 0, len(lines))
+		if doneLine != "" {
+			kept = append(kept, doneLine)
+		}
+		if pending > 0 {
+			text, _ := tr.GetString("staff_act_summary_pending_collapsed", i18n.TranslationParams{"count": pending})
+			kept = append(kept, "⏳ "+text)
+		}
+		for i, res := range results {
+			if res.Outcome == staffOutcomeSkipped || res.Outcome == staffOutcomeFailed {
+				kept = append(kept, lines[i])
+			}
+		}
+		if text, n := fitStaffSummaryLines(head, kept, "", false); n == len(kept) {
+			return text, nil
+		}
+		text, _ := fitStaffSummaryLines(head, kept, continued, false)
+		return text, nil
+	}
+
+	first, n := fitStaffSummaryLines(head, collapsed, continued, false)
+	remaining := collapsed[n:]
+	marker, _ := tr.GetString("staff_act_summary_continuation")
+	continuationHead := header + "\n" + marker
+	var parts []string
+	for len(remaining) > 0 {
+		if text := staffSummaryText(continuationHead, remaining); staffSummaryFits(text) {
+			parts = append(parts, text)
+			break
+		}
+		text, taken := fitStaffSummaryLines(continuationHead, remaining, continued, true)
+		parts = append(parts, text)
+		remaining = remaining[taken:]
+	}
+	return first, parts
+}
+
+// renderStaffActionSummary is the card text while the run is going and when it
+// starts: the header, the tally, a blank line, then one line per linked group in
+// link order. A text over the cap collapses done and then pending lines into
+// counts and keeps every skipped and failed line it can.
+func renderStaffActionSummary(tr *i18n.Translator, card *staffActionCard, results []staffGroupResult) string {
+	text, _ := composeStaffActionSummary(tr, card, results, false)
+	return text
+}
+
+// renderStaffActionSummaryFinal renders the last summary of a run. The caller
+// guarantees no result is still pending. The first return value is the text of the
+// card; the second holds the continuation messages, in order, when the skipped and
+// failed lines alone do not fit in one message. Every group appears exactly once
+// across all of them (STAFF-08).
+func renderStaffActionSummaryFinal(tr *i18n.Translator, card *staffActionCard, results []staffGroupResult) (string, []string) {
+	return composeStaffActionSummary(tr, card, results, true)
 }
 
 // editStaffActionMessage replaces the text of a message in the Staff Group and
@@ -230,21 +396,6 @@ func editStaffActionMessage(b *gotgbot.Bot, chatID, msgID int64, text string) er
 		return err
 	}
 	return nil
-}
-
-// staffSummaryTally counts the results by outcome.
-func staffSummaryTally(results []staffGroupResult) (done, skipped, failed, pending int) {
-	return 0, 0, 0, 0
-}
-
-// staffSummaryFits reports whether text is within the message length cap.
-func staffSummaryFits(text string) bool {
-	return false
-}
-
-// renderStaffActionSummaryFinal renders the last summary.
-func renderStaffActionSummaryFinal(tr *i18n.Translator, card *staffActionCard, results []staffGroupResult) (string, []string) {
-	return "", nil
 }
 
 // deliverStaffActionSummary puts the final text on the card. When the card cannot
