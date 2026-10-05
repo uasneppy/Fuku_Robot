@@ -55,6 +55,7 @@ type staffActionFake struct {
 	gmu         sync.Mutex
 	delays      map[string]time.Duration
 	panics      map[string]bool
+	stamps      map[string][]time.Time
 	inFlight    int
 	maxInFlight int
 }
@@ -68,6 +69,7 @@ func newStaffActionFake() *staffActionFake {
 		nextMsgID:      5000,
 		delays:         make(map[string]time.Duration),
 		panics:         make(map[string]bool),
+		stamps:         make(map[string][]time.Time),
 	}
 }
 
@@ -110,7 +112,16 @@ func (f *staffActionFake) enter(method string, chatID int64) (delay time.Duratio
 		f.maxInFlight = f.inFlight
 	}
 	key := fmt.Sprintf("%s:%d", method, chatID)
+	f.stamps[key] = append(f.stamps[key], time.Now())
 	return f.delays[key], f.panics[key]
+}
+
+// requestTimes returns when each "method" request addressed to chatID arrived, in
+// order. A request counts when it arrives, before any scripted delay or answer.
+func (f *staffActionFake) requestTimes(method string, chatID int64) []time.Time {
+	f.gmu.Lock()
+	defer f.gmu.Unlock()
+	return append([]time.Time(nil), f.stamps[fmt.Sprintf("%s:%d", method, chatID)]...)
 }
 
 func (f *staffActionFake) leave() {

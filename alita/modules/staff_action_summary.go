@@ -409,11 +409,28 @@ const (
 // retry_after times staffActionEditRetryUnit, capped. It is false when err is not
 // a 429 that names a wait.
 func staffRetryAfterWait(err error) (time.Duration, bool) {
+	hold, ok := staffRetryAfterHold(err)
+	if !ok {
+		return 0, false
+	}
+	return min(hold, staffActionRetryAfterCap), true
+}
+
+// staffRetryAfterMaxSeconds is how many seconds of Telegram's retry_after count.
+// The value is clamped to it before it is multiplied, so an absurd retry_after
+// cannot overflow time.Duration into a negative wait.
+const staffRetryAfterMaxSeconds = 3600
+
+// staffRetryAfterHold is how long the coordinator must leave the card alone after
+// a rate-limited progress edit: Telegram's retry_after, clamped to
+// staffRetryAfterMaxSeconds, times staffActionEditRetryUnit, without the 60 s cap
+// of a single wait. It is false when err is not a 429 that names a wait.
+func staffRetryAfterHold(err error) (time.Duration, bool) {
 	seconds, ok := ratelimit.RetryAfterSeconds(err)
 	if !ok {
 		return 0, false
 	}
-	return min(time.Duration(seconds)*staffActionEditRetryUnit, staffActionRetryAfterCap), true
+	return time.Duration(min(seconds, staffRetryAfterMaxSeconds)) * staffActionEditRetryUnit, true
 }
 
 // sleepStaffRetry waits d, or less when ctx ends first, and reports whether the
@@ -429,6 +446,10 @@ func sleepStaffRetry(ctx context.Context, d time.Duration) bool {
 	}
 }
 
+// staffActionSleep waits out one retry. It is a variable so tests can install a
+// clock that checks each wait against the deadline of its context.
+var staffActionSleep = sleepStaffRetry
+
 // editStaffActionFinal puts the final text on the card, trying up to
 // staffActionFinalAttempts times. A 429 waits out Telegram's retry_after and tries
 // again; "message is not modified" counts as success (editStaffActionMessage);
@@ -440,7 +461,7 @@ func editStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int
 			return true
 		}
 		wait, limited := staffRetryAfterWait(err)
-		if !limited || attempt == staffActionFinalAttempts || !sleepStaffRetry(ctx, wait) {
+		if !limited || attempt == staffActionFinalAttempts || !staffActionSleep(ctx, wait) {
 			log.Warnf("[StaffActions] could not edit the final summary in chat %d: %v", chatID, err)
 			return false
 		}
@@ -457,27 +478,55 @@ func sendStaffSummaryPart(ctx context.Context, b *gotgbot.Bot, chatID int64, tex
 			return true
 		}
 		wait, limited := staffRetryAfterWait(err)
-		if !limited || attempt == staffActionFinalAttempts || !sleepStaffRetry(ctx, wait) {
+		if !limited || attempt == staffActionFinalAttempts || !staffActionSleep(ctx, wait) {
 			return false
 		}
 	}
 	return false
 }
 
+// staffActionDeliverPartTimeout bounds the delivery of one summary message. Before
+// each of its attempts the message may wait once at the retry cap, and each attempt
+// has its own edit timeout: 210 s with today's values.
+const staffActionDeliverPartTimeout = staffActionFinalAttempts * (staffActionRetryAfterCap + staffActionEditTimeout)
+
+// newStaffDeliverContext opens the budget of one summary message. It is never
+// derived from the run's context, which a shutdown may already have cancelled.
+func newStaffDeliverContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), staffActionDeliverPartTimeout)
+}
+
 // deliverStaffActionFinal puts a run's final summary in front of the issuer. The
 // card is edited first, with retries (STAFF-12). When it cannot be edited (deleted,
 // or any other error) the summary is posted as a new message in the Staff Group,
 // so the result always arrives. Each continuation message follows in order
-// (STAFF-08); one that cannot be sent is logged and the rest still go out. ctx
-// bounds only the waits between retries.
-func deliverStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string) {
-	if !editStaffActionFinal(ctx, b, chatID, msgID, text) {
-		if !sendStaffSummaryPart(ctx, b, chatID, text) {
+// (STAFF-08); one that cannot be sent is logged and the rest still go out. Every
+// message has its own budget, so a long wait on one never starves the next.
+//
+// notBefore is the end of a retry_after hold that Telegram put on the card during
+// the run: the final edit waits for it (at most one capped wait) instead of
+// spending an attempt inside it. The zero time means no hold.
+func deliverStaffActionFinal(b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string, notBefore time.Time) {
+	editCtx, cancelEdit := newStaffDeliverContext()
+	if remaining := time.Until(notBefore); remaining > 0 {
+		// Whether the wait elapsed or the budget ran out, the edit is tried next.
+		staffActionSleep(editCtx, min(remaining, staffActionRetryAfterCap))
+	}
+	edited := editStaffActionFinal(editCtx, b, chatID, msgID, text)
+	cancelEdit()
+	if !edited {
+		sendCtx, cancelSend := newStaffDeliverContext()
+		sent := sendStaffSummaryPart(sendCtx, b, chatID, text)
+		cancelSend()
+		if !sent {
 			log.Errorf("[StaffActions] the final summary could not be delivered to chat %d", chatID)
 		}
 	}
 	for i, part := range continuation {
-		if !sendStaffSummaryPart(ctx, b, chatID, part) {
+		partCtx, cancelPart := newStaffDeliverContext()
+		sent := sendStaffSummaryPart(partCtx, b, chatID, part)
+		cancelPart()
+		if !sent {
 			log.Errorf("[StaffActions] continuation %d of the summary could not be delivered to chat %d", i+1, chatID)
 		}
 	}
