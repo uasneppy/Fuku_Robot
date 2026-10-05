@@ -3,15 +3,15 @@ status: testing
 phase: 02-staff-actions-across-groups
 source: [02-VERIFICATION.md]
 started: 2026-10-05T11:28:45Z
-updated: 2026-10-05T11:42:46Z
+updated: 2026-10-05T11:42:59Z
 ---
 
 ## Current Test
 
-number: 3
-name: Second Confirm on the same target while a first run is still going
+number: 4
+name: Anonymous admin posts /ban in the Staff Group
 expected: |
-  Answered "target busy" for as long as the first run lasts, also past 30 minutes (lock renewal)
+  Reply asking to post as yourself, no card, no action
 awaiting: user response
 
 ## Tests
@@ -26,7 +26,7 @@ result: pass
 
 ### 3. Second Confirm on the same target while a first run is still going
 expected: Answered "target busy" for as long as the first run lasts, also past 30 minutes (lock renewal)
-result: [pending]
+result: pass
 
 ### 4. Anonymous admin posts /ban in the Staff Group
 expected: Reply asking to post as yourself, no card, no action
@@ -35,9 +35,9 @@ result: [pending]
 ## Summary
 
 total: 4
-passed: 2
+passed: 3
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 
