@@ -33,10 +33,118 @@ var (
 	staffActionCallTimeout = 8 * time.Second
 	// staffActionRunsWG joins every running fan-out, so a shutdown can wait for them.
 	staffActionRunsWG sync.WaitGroup
-	// staffActionsCtx is the context every run starts with; a later plan cancels it
-	// on shutdown.
-	staffActionsCtx, staffActionsCancel = context.WithCancel(context.Background()) //nolint:unused // the shutdown drain that calls it arrives in a later plan
+	// staffActionsMu guards staffActionsCtx and staffActionsCancel.
+	staffActionsMu sync.Mutex
+	// staffActionsCtx is the context every run starts with; StopStaffActions
+	// cancels it on shutdown.
+	staffActionsCtx, staffActionsCancel = context.WithCancel(context.Background())
 )
+
+var (
+	// staffActionEditEvery is the least time between two progress edits of the card
+	// (D-16). It is a variable so tests can run the clock fast.
+	staffActionEditEvery = 2500 * time.Millisecond
+	// staffActionEditRetryUnit is what one second of Telegram's retry_after is worth
+	// when the final edit waits to be retried.
+	staffActionEditRetryUnit = time.Second
+	// staffActionStopWait bounds how long StopStaffActions waits for the runs.
+	staffActionStopWait = 30 * time.Second
+)
+
+// staffActionDeliverTimeout bounds the delivery of a run's final summary. It runs
+// on a fresh context, never the cancelled one a shutdown leaves behind.
+const staffActionDeliverTimeout = 15 * time.Second
+
+// staffActionsContext is the context a new run starts with.
+func staffActionsContext() context.Context {
+	staffActionsMu.Lock()
+	defer staffActionsMu.Unlock()
+	return staffActionsCtx
+}
+
+// StopStaffActions cancels every running staff fan-out and waits for each to put
+// its final summary on its card, so a group still unfinished reads "interrupted by
+// restart" instead of staying pending. It is safe to call when nothing runs and
+// more than once. The wait is bounded by staffActionStopWait.
+//
+// It must run before the database closes: the fan-out workers still write links
+// through recheckLink while they wind down.
+func StopStaffActions() {
+	staffActionsMu.Lock()
+	cancel := staffActionsCancel
+	staffActionsMu.Unlock()
+	cancel()
+
+	// Wait without holding the mutex, so a late run can still read the context.
+	drained := make(chan struct{})
+	go func() {
+		defer error_handling.RecoverFromPanic("StopStaffActions", "StaffActions")
+		defer close(drained)
+		staffActionRunsWG.Wait()
+	}()
+	timer := time.NewTimer(staffActionStopWait)
+	defer timer.Stop()
+	select {
+	case <-drained:
+	case <-timer.C:
+		log.Warnf("[StaffActions] runs did not finish within %s of the shutdown", staffActionStopWait)
+	}
+}
+
+// staffActionProgress holds the results of one run while it is going. Workers
+// write their own slot through set; the coordinator reads a copy through
+// snapshot. dirty says something changed since the last snapshot, which is what
+// lets the coordinator skip an edit that would change nothing.
+type staffActionProgress struct {
+	mu      sync.Mutex
+	results []staffGroupResult
+	dirty   bool
+}
+
+func newStaffActionProgress(links []models.StaffGroupLink) *staffActionProgress {
+	return &staffActionProgress{results: pendingResults(links)}
+}
+
+// set records how group i ended.
+func (p *staffActionProgress) set(i int, r staffGroupResult) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.results[i] = r
+	p.dirty = true
+}
+
+// snapshot returns a copy of the results and whether anything changed since the
+// last call, and clears the flag.
+func (p *staffActionProgress) snapshot() (results []staffGroupResult, dirty bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	results = make([]staffGroupResult, len(p.results))
+	copy(results, p.results)
+	dirty = p.dirty
+	p.dirty = false
+	return results, dirty
+}
+
+// sweepPending turns every group that never reported into a failed line with
+// reason, and returns the final results. A worker that panicked, or a group a
+// shutdown cut off, would otherwise stay pending and be dropped from the summary
+// (STAFF-08).
+func (p *staffActionProgress) sweepPending(reason staffReason) []staffGroupResult {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.results {
+		if p.results[i].Outcome == staffOutcomePending {
+			log.Errorf("[StaffActions] group %d finished without a result; reporting it as failed (%s)",
+				p.results[i].Link.GroupChatID, reason)
+			p.results[i].Outcome = staffReasonOutcome(reason)
+			p.results[i].Reason = reason
+		}
+	}
+	results := make([]staffGroupResult, len(p.results))
+	copy(results, p.results)
+	p.dirty = false
+	return results
+}
 
 // staffTelegramDetailRunes caps the Telegram error text shown on a failed line.
 const staffTelegramDetailRunes = 120
@@ -80,7 +188,10 @@ func startStaffActionRun(
 	newUntil int64,
 	chatID, msgID int64,
 ) {
+	// Added before the context is read, so a shutdown that cancels it afterwards
+	// still finds this run in the wait group.
 	staffActionRunsWG.Add(1)
+	ctx := staffActionsContext()
 	go func() {
 		defer staffActionRunsWG.Done()
 		defer error_handling.RecoverFromPanic("staffActionRun", "StaffActions")
@@ -89,34 +200,67 @@ func startStaffActionRun(
 		defer releaseStaffTargetLock(card.Target, card.Token)
 
 		tr := staffChatTranslator(card.StaffChat)
-		results := runStaffActionFanOut(staffActionsCtx, b, card, links, newUntil)
-		deliverStaffActionSummary(b, chatID, msgID, renderStaffActionSummary(tr, card, results))
+		progress := newStaffActionProgress(links)
+
+		// The fan-out runs in its own goroutine so this one stays the only writer of
+		// the card from here on: it alone edits the message, on a timer.
+		fanOutDone := make(chan struct{})
+		go func() {
+			defer error_handling.RecoverFromPanic("staffActionFanOut", "StaffActions")
+			defer close(fanOutDone)
+			runStaffActionFanOut(ctx, b, card, links, newUntil, progress)
+		}()
+
+		ticker := time.NewTicker(staffActionEditEvery)
+		defer ticker.Stop()
+	progressLoop:
+		for {
+			select {
+			case <-fanOutDone:
+				break progressLoop
+			case <-ticker.C:
+				snapshot, dirty := progress.snapshot()
+				if !dirty {
+					continue
+				}
+				// A failed progress edit is skipped; the next tick or the final
+				// summary carries the same information.
+				if err := editStaffActionMessage(b, chatID, msgID, renderStaffActionSummary(tr, card, snapshot)); err != nil {
+					log.Warnf("[StaffActions] progress edit of card %s: %v", card.Token, err)
+				}
+			}
+		}
+		ticker.Stop()
+
+		// A group that never reported was cut off by a shutdown or lost to a panic.
+		sweep := staffReasonFailInternal
+		if ctx.Err() != nil {
+			sweep = staffReasonFailInterrupted
+		}
+		results := progress.sweepPending(sweep)
+
+		final, continuation := renderStaffActionSummaryFinal(tr, card, results)
+		// Fresh context: the run's own may already be cancelled by a shutdown, and the
+		// summary still has to be delivered.
+		deliverCtx, cancel := context.WithTimeout(context.Background(), staffActionDeliverTimeout)
+		deliverStaffActionFinal(deliverCtx, b, chatID, msgID, final, continuation)
+		cancel()
 		if err := setStaffActionCardState(card.Token, staffCardDone); err != nil {
 			log.Warnf("[StaffActions] mark card %s done: %v", card.Token, err)
 		}
 
-		var done, skipped, failed int
-		for _, res := range results {
-			switch res.Outcome {
-			case staffOutcomeDone:
-				done++
-			case staffOutcomeSkipped:
-				skipped++
-			default:
-				failed++
-			}
-		}
+		done, skipped, failed, _ := staffSummaryTally(results)
 		log.Infof("[StaffActions] %s by %d on %d: %d done, %d skipped, %d failed",
 			card.Kind, card.Issuer, card.Target, done, skipped, failed)
 	}()
 }
 
 // runStaffActionFanOut visits the linked groups, staffActionWorkers at a time, and
-// returns one result per group, in link order. One paced owner pass is shared, so
-// the Staff Group's creator is asked about once.
+// records each group's result in progress as soon as it is known. One paced owner
+// pass is shared, so the Staff Group's creator is asked about once.
 //
 // Every slot starts pending and each worker writes only its own. A worker that
-// panics leaves its slot pending, and the sweep after the wait turns it into a
+// panics leaves its slot pending; the coordinator sweeps what is left into a
 // failed line, so no group is ever dropped from the summary (STAFF-08).
 func runStaffActionFanOut(
 	ctx context.Context,
@@ -124,31 +268,22 @@ func runStaffActionFanOut(
 	card *staffActionCard,
 	links []models.StaffGroupLink,
 	newUntil int64,
-) []staffGroupResult {
+	progress *staffActionProgress,
+) {
 	pass := newPacedStaffOwnerPass(func(run func() error) error {
 		return staffPaced(ctx, func(context.Context) error { return run() })
 	})
-	results := pendingResults(links)
 
 	var workers errgroup.Group
 	workers.SetLimit(staffActionWorkers)
 	for i, link := range links {
 		workers.Go(func() error {
 			defer error_handling.RecoverFromPanic("staffActionWorker", "StaffActions")
-			results[i] = runStaffActionInGroup(ctx, b, card, link, newUntil, pass)
+			progress.set(i, runStaffActionInGroup(ctx, b, card, link, newUntil, pass))
 			return nil
 		})
 	}
 	_ = workers.Wait()
-
-	for i := range results {
-		if results[i].Outcome == staffOutcomePending {
-			log.Errorf("[StaffActions] group %d finished without a result; reporting it as failed", results[i].Link.GroupChatID)
-			results[i].Outcome = staffReasonOutcome(staffReasonFailInternal)
-			results[i].Reason = staffReasonFailInternal
-		}
-	}
-	return results
 }
 
 // runStaffActionInGroup is the whole per-group check chain. The order is part of
@@ -166,6 +301,13 @@ func runStaffActionInGroup(
 		return staffGroupResult{Link: link, Outcome: staffReasonOutcome(reason), Reason: reason, Detail: detail}
 	}
 
+	// A shutdown ends the run between steps: a group that has not reached its write
+	// call gets none, and reads "interrupted by restart".
+	interrupted := func() bool { return ctx.Err() != nil }
+	if interrupted() {
+		return result(staffReasonFailInterrupted, "")
+	}
+
 	// Defensive: the database already forbids a link to the Staff Group itself.
 	if link.GroupChatID == card.StaffChat {
 		return result(staffReasonSkipStaffGroup, "")
@@ -175,7 +317,13 @@ func runStaffActionInGroup(
 	case staffRecheckRemoved, staffRecheckGone:
 		return result(staffReasonSkipLinkRemoved, "")
 	case staffRecheckUnknown:
+		if interrupted() {
+			return result(staffReasonFailInterrupted, "")
+		}
 		return result(staffOwnerUnknownReason(b, link, pass), "")
+	}
+	if interrupted() {
+		return result(staffReasonFailInterrupted, "")
 	}
 
 	// The only authority for the issuer in this group is this live answer.
@@ -195,6 +343,9 @@ func runStaffActionInGroup(
 		return result(staffReasonSkipTargetService, "")
 	}
 
+	if interrupted() {
+		return result(staffReasonFailInterrupted, "")
+	}
 	target, err := fetchLiveMember(ctx, b, link.GroupChatID, card.Target)
 	if err != nil {
 		log.Warnf("[StaffActions] target lookup in group %d: %v", link.GroupChatID, err)
@@ -204,6 +355,9 @@ func runStaffActionInGroup(
 	verdict := decideStaffAction(card.Kind, staffTargetStateFrom(target), newUntil)
 	if verdict.Call == staffCallNone {
 		return result(verdict.Reason, "")
+	}
+	if interrupted() {
+		return result(staffReasonFailInterrupted, "")
 	}
 	if err := executeStaffCall(ctx, b, link.GroupChatID, card.Target, verdict, newUntil); err != nil {
 		log.Warnf("[StaffActions] %s in group %d: %v", card.Kind, link.GroupChatID, err)
@@ -366,6 +520,9 @@ func isStaffClientError(err error) bool {
 // by matching error text: the bot is gone, is not an admin, or lacks the
 // restrict right. Anything else is shown as Telegram's own, escaped text.
 func classifyStaffFailure(ctx context.Context, b *gotgbot.Bot, groupID int64, err error) (staffReason, string) {
+	if ctx.Err() != nil {
+		return staffReasonFailInterrupted, ""
+	}
 	if errors.Is(err, ratelimit.ErrRateLimited) {
 		return staffReasonFailRateLimited, ""
 	}
@@ -394,6 +551,9 @@ func classifyStaffFailure(ctx context.Context, b *gotgbot.Bot, groupID int64, er
 // the issuer or the target: a rate limit and a bot that is gone are told apart,
 // and every other failure stays "could not check members".
 func classifyStaffLookupFailure(ctx context.Context, b *gotgbot.Bot, groupID int64, err error) (staffReason, string) {
+	if ctx.Err() != nil {
+		return staffReasonFailInterrupted, ""
+	}
 	if errors.Is(err, ratelimit.ErrRateLimited) {
 		return staffReasonFailRateLimited, ""
 	}

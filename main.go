@@ -210,6 +210,14 @@ func main() {
 		modules.StopStaffSweeper()
 		return nil
 	})
+	// Also registered after the DB-close handler, so LIFO cancels the staff fan-outs
+	// and lets them deliver their final summaries before the database closes: their
+	// workers still write links through recheckLink while they wind down.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping staff actions...")
+		modules.StopStaffActions()
+		return nil
+	})
 
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")

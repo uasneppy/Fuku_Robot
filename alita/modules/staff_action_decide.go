@@ -63,6 +63,7 @@ const (
 	staffReasonFailBotNoRights    staffReason = "fail_bot_no_rights"
 	staffReasonFailGroupNotFound  staffReason = "fail_group_not_found"
 	staffReasonFailInternal       staffReason = "fail_internal"
+	staffReasonFailInterrupted    staffReason = "fail_interrupted"
 )
 
 // staffReasonOutcome maps a reason to the outcome it stands for.
@@ -78,7 +79,7 @@ func staffReasonOutcome(r staffReason) staffOutcome {
 		return staffOutcomeSkipped
 	case staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
-		staffReasonFailGroupNotFound, staffReasonFailInternal:
+		staffReasonFailGroupNotFound, staffReasonFailInternal, staffReasonFailInterrupted:
 		return staffOutcomeFailed
 	}
 	return staffOutcomeFailed
