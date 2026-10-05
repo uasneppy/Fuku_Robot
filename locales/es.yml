@@ -2619,6 +2619,20 @@ staff_help_msg: |
 
   *En el Grupo de Staff:*
   × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados. Pulsa Desvincular junto a un grupo para desvincularlo (solo el creador de ambos grupos).
+
+  *Acciones de staff (en el Grupo de Staff):*
+  × /ban usuario [duración] [motivo]: Banea al usuario en todos los grupos vinculados. El usuario es un ID numérico, un @username que haya visto o una mención. La duración es un número seguido de m, h, d o w, y más de 366 días significa permanente.
+  × /tban usuario duración [motivo]: Baneo temporal. La duración es obligatoria.
+  × /mute usuario [duración] [motivo]: Silencia al usuario en todos los grupos vinculados. La duración funciona como en /ban.
+  × /tmute usuario duración [motivo]: Silencio temporal. La duración es obligatoria.
+  × /kick usuario [motivo]: Expulsa al usuario de todos los grupos vinculados. Puede volver a entrar.
+  × /unban usuario: Quita un baneo en todos los grupos vinculados.
+  × /unmute usuario: Quita un silencio en todos los grupos vinculados.
+
+  Cada acción muestra primero una tarjeta. Solo quien envió el comando puede pulsar Confirmar o Cancelar, y la tarjeta caduca a los 5 minutos.
+  Solo actúo en los grupos vinculados donde eres administrador con permiso para restringir miembros en este momento, nunca contra los administradores o el propietario de un grupo, y el resultado muestra cada grupo como hecho, omitido o fallido.
+  /sban, /dban, /skick, /dkick, /smute y /dmute no se usan aquí.
+  Envía estos comandos como tú mismo, no de forma anónima.
 staff_set_done: "Este grupo ahora es un Grupo de Staff. ID del chat: <code>{chat_id}</code>"
 staff_set_already: "Este grupo ya es un Grupo de Staff."
 staff_refuse_not_owner: "Solo el creador de este grupo puede convertirlo en Grupo de Staff."
@@ -2713,6 +2727,8 @@ staff_act_card_expired_text: "Caducada. No se hizo nada."
 staff_act_card_handled: "Esta acción ya fue gestionada."
 staff_act_abort_not_staff: "Este chat ya no es un Grupo de Staff. No se hizo nada."
 staff_act_abort_issuer_left: "Ya no eres miembro de este Grupo de Staff. No se hizo nada."
+staff_act_abort_links_changed: "Los grupos vinculados cambiaron desde que se mostró esta tarjeta ({old} antes, {new} ahora). No se hizo nada; vuelve a ejecutar el comando."
+staff_act_target_busy: "Otra acción de staff sobre este usuario sigue en curso. Espera su resumen y vuelve a pulsar Confirmar."
 staff_act_abort_check_failed: "No pude comprobarlo ahora mismo. No se hizo nada; ejecuta el comando de nuevo."
 staff_act_line_skipped: "omitido: {reason}"
 staff_act_line_failed: "falló: {reason}"

@@ -2535,6 +2535,20 @@ staff_help_msg: |
 
   *Dans le groupe Staff :*
   × /staff : Afficher l'ID de discussion du groupe Staff et ses groupes liés. Appuyez sur Dissocier à côté d'un groupe pour le dissocier (créateur des deux groupes uniquement).
+
+  *Actions du staff (dans le groupe Staff) :*
+  × /ban utilisateur [durée] [motif] : Bannir l'utilisateur dans tous les groupes liés. L'utilisateur est un ID numérique, un @username que j'ai déjà vu ou une mention. La durée est un nombre suivi de m, h, d ou w, et plus de 366 jours signifie définitif.
+  × /tban utilisateur durée [motif] : Bannissement temporaire. La durée est obligatoire.
+  × /mute utilisateur [durée] [motif] : Rendre l'utilisateur muet dans tous les groupes liés. La durée fonctionne comme pour /ban.
+  × /tmute utilisateur durée [motif] : Mutisme temporaire. La durée est obligatoire.
+  × /kick utilisateur [motif] : Retirer l'utilisateur de tous les groupes liés. Il peut revenir.
+  × /unban utilisateur : Lever un bannissement dans tous les groupes liés.
+  × /unmute utilisateur : Lever un mutisme dans tous les groupes liés.
+
+  Chaque action affiche d'abord une carte. Seule la personne qui a envoyé la commande peut appuyer sur Confirmer ou Annuler, et la carte expire après 5 minutes.
+  Je n'agis que dans les groupes liés où vous êtes administrateur avec le droit de restreindre des membres à cet instant, jamais contre les administrateurs ou le propriétaire d'un groupe, et le résultat indique chaque groupe comme fait, ignoré ou échoué.
+  /sban, /dban, /skick, /dkick, /smute et /dmute ne sont pas utilisées ici.
+  Envoyez ces commandes en votre nom, pas de façon anonyme.
 staff_set_done: "Ce groupe est maintenant un groupe Staff. ID de discussion : <code>{chat_id}</code>"
 staff_set_already: "Ce groupe est déjà un groupe Staff."
 staff_refuse_not_owner: "Seul le créateur de ce groupe peut en faire un groupe Staff."
@@ -2629,6 +2643,8 @@ staff_act_card_expired_text: "Expiré. Rien n'a été fait."
 staff_act_card_handled: "Cette action a déjà été traitée."
 staff_act_abort_not_staff: "Ce chat n'est plus un groupe Staff. Rien n'a été fait."
 staff_act_abort_issuer_left: "Vous n'êtes plus membre de ce groupe Staff. Rien n'a été fait."
+staff_act_abort_links_changed: "Les groupes liés ont changé depuis l'affichage de cette carte ({old} avant, {new} maintenant). Rien n'a été fait ; relancez la commande."
+staff_act_target_busy: "Une autre action du staff sur cet utilisateur est encore en cours. Attendez son résumé, puis appuyez de nouveau sur Confirmer."
 staff_act_abort_check_failed: "Je n'ai pas pu vérifier cela pour le moment. Rien n'a été fait ; relancez la commande."
 staff_act_line_skipped: "ignoré : {reason}"
 staff_act_line_failed: "échec : {reason}"

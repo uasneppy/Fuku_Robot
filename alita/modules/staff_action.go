@@ -200,6 +200,7 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 		TargetName: targetName,
 		Reason:     req.Reason,
 		GroupCount: len(links),
+		LinksSig:   staffLinksSignature(links),
 
 		DurationSec:    req.DurationSec,
 		DurationAmount: req.DurationAmount,

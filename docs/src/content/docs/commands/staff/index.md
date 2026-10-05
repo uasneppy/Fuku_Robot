@@ -16,6 +16,20 @@ A Staff Group is one group of trusted admins that manages your other groups.
 ### In the Staff Group:
 - `/staff`: Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only).
 
+### Staff actions (in the Staff Group):
+- `/ban user [duration] [reason]`: Ban the user in every linked group. The user is a numeric ID, an @username I have seen, or a mention. The duration is a number followed by m, h, d or w, and more than 366 days means permanent.
+- `/tban user duration [reason]`: Temporary ban. The duration is required.
+- `/mute user [duration] [reason]`: Mute the user in every linked group. The duration works like /ban.
+- `/tmute user duration [reason]`: Temporary mute. The duration is required.
+- `/kick user [reason]`: Remove the user from every linked group. They can rejoin.
+- `/unban user`: Lift a ban in every linked group.
+- `/unmute user`: Lift a mute in every linked group.
+
+Every action shows a card first. Only the person who sent the command can press Confirm or Cancel, and the card expires after 5 minutes.
+I act only in linked groups where you are an admin who can restrict members right now, never against a group's admins or owner, and the result lists every group as done, skipped or failed.
+/sban, /dban, /skick, /dkick, /smute and /dmute are not used here.
+Send these commands as yourself, not anonymously.
+
 
 ## Module Aliases
 

@@ -2,11 +2,13 @@ package modules
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"html"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -83,14 +85,81 @@ const staffTargetLockPrefix = "alita:staff:lock:target:"
 // staffTargetLockTTL is the safety net that frees a target lock whose run died.
 var staffTargetLockTTL = 30 * time.Minute
 
-// staffLinksSignature is not implemented yet.
-func staffLinksSignature(_ []models.StaffGroupLink) string { return "" }
+// releaseStaffTargetLockScript deletes the lock only while it still holds the
+// releasing card's token, so a card whose lock expired never frees a newer card's
+// lock.
+var releaseStaffTargetLockScript = redis.NewScript(`
+	if redis.call("GET", KEYS[1]) == ARGV[1] then
+		return redis.call("DEL", KEYS[1])
+	end
+	return 0
+`)
 
-// acquireStaffTargetLock is not implemented yet.
-func acquireStaffTargetLock(_ int64, _ string) (bool, error) { return true, nil }
+// staffLinksSignature identifies a set of linked groups: the first 16 hex
+// characters of the sha256 of the ascending group chat IDs joined with commas. A
+// card stores it when it is shown and Confirm compares it again, so a group that
+// was swapped for another is caught even when the count is the same.
+func staffLinksSignature(links []models.StaffGroupLink) string {
+	ids := make([]int64, len(links))
+	for i, link := range links {
+		ids[i] = link.GroupChatID
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.FormatInt(id, 10)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, ",")))
+	return hex.EncodeToString(sum[:])[:16]
+}
 
-// releaseStaffTargetLock is not implemented yet.
-func releaseStaffTargetLock(_ int64, _ string) {}
+// staffTargetLockKey is the Redis key of a target's fan-out lock.
+func staffTargetLockKey(target int64) string {
+	return staffTargetLockPrefix + strconv.FormatInt(target, 10)
+}
+
+// acquireStaffTargetLock takes the per-target lock for the card with token: SET NX
+// with the token as value and a safety TTL. It reports false when another card
+// holds it. Two staff actions on one person never run at once, so a restrict from
+// one can not replace the ban of the other.
+func acquireStaffTargetLock(target int64, token string) (bool, error) {
+	client := cache.GetRedisClient()
+	if client == nil {
+		return false, errStaffCardNoRedis
+	}
+	ctx, cancel := cache.ContextWithTimeout()
+	defer cancel()
+	return client.SetNX(ctx, staffTargetLockKey(target), token, staffTargetLockTTL).Result()
+}
+
+// staffTargetLockHolder is the token that holds the target's lock, "" when none.
+func staffTargetLockHolder(target int64) (string, error) {
+	client := cache.GetRedisClient()
+	if client == nil {
+		return "", errStaffCardNoRedis
+	}
+	ctx, cancel := cache.ContextWithTimeout()
+	defer cancel()
+	holder, err := client.Get(ctx, staffTargetLockKey(target)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", nil
+	}
+	return holder, err
+}
+
+// releaseStaffTargetLock frees the target's lock when the card with token holds
+// it. A failure is logged and left to the lock's TTL.
+func releaseStaffTargetLock(target int64, token string) {
+	client := cache.GetRedisClient()
+	if client == nil {
+		return
+	}
+	ctx, cancel := cache.ContextWithTimeout()
+	defer cancel()
+	if err := releaseStaffTargetLockScript.Run(ctx, client, []string{staffTargetLockKey(target)}, token).Err(); err != nil && !errors.Is(err, redis.Nil) {
+		log.Warnf("[StaffActions] release target lock %d: %v", target, err)
+	}
+}
 
 const (
 	// staffActionCardGrace keeps a pending card's key a little past its expiry, so
@@ -125,6 +194,8 @@ type staffActionCard struct {
 	TargetName string
 	Reason     string
 	GroupCount int
+	// LinksSig is staffLinksSignature of the linked groups the card was shown for.
+	LinksSig string
 	// ExpiresAt is a Unix time in milliseconds.
 	ExpiresAt int64
 	// DurationSec is the length of a ban or mute in seconds; 0 means permanent. The
@@ -234,6 +305,7 @@ func saveStaffActionCard(card *staffActionCard) error {
 			"target_name", card.TargetName,
 			"reason", card.Reason,
 			"group_count", card.GroupCount,
+			"links_sig", card.LinksSig,
 			"expires_at", card.ExpiresAt,
 			"duration_s", card.DurationSec,
 			"dur_n", card.DurationAmount,
@@ -282,6 +354,7 @@ func loadStaffActionCard(token string) (*staffActionCard, error) {
 		Kind:       staffActionKind(fields["action"]),
 		TargetName: fields["target_name"],
 		Reason:     fields["reason"],
+		LinksSig:   fields["links_sig"],
 	}
 	ints := []struct {
 		name string
@@ -578,6 +651,49 @@ func staffFullName(u *gotgbot.User) string {
 	return u.FirstName + " " + u.LastName
 }
 
+// takeStaffTargetLock takes the card's target lock for a Confirm tap. When it
+// returns false it has already answered the tap and the card is left untouched:
+//   - the lock is held by this same card, so a run of this very card is starting or
+//     in flight and the tap is a repeat: "already handled";
+//   - the lock is held by another card: the "target busy" alert, the card stays
+//     pending and usable;
+//   - Redis failed: the "could not check" alert.
+func takeStaffTargetLock(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator, card *staffActionCard) bool {
+	// A holder that releases between the two reads is retried once, so a free target
+	// is never reported busy.
+	for attempt := 0; attempt < 2; attempt++ {
+		taken, err := acquireStaffTargetLock(card.Target, card.Token)
+		if err != nil {
+			log.Warnf("[StaffActions] target lock for card %s: %v", card.Token, err)
+			text, _ := tr.GetString("staff_check_failed")
+			answerStaffCallback(b, query, text, true)
+			return false
+		}
+		if taken {
+			return true
+		}
+		holder, err := staffTargetLockHolder(card.Target)
+		if err != nil {
+			log.Warnf("[StaffActions] read target lock for card %s: %v", card.Token, err)
+			text, _ := tr.GetString("staff_check_failed")
+			answerStaffCallback(b, query, text, true)
+			return false
+		}
+		switch holder {
+		case "":
+			continue
+		case card.Token:
+			text, _ := tr.GetString("staff_act_card_handled")
+			answerStaffCallback(b, query, text, false)
+			return false
+		}
+		break
+	}
+	text, _ := tr.GetString("staff_act_target_busy")
+	answerStaffCallback(b, query, text, true)
+	return false
+}
+
 // staffActionConfirm handles the Confirm button. Only the issuer's tap moves the
 // card to running, and only once; every live check then runs before the first
 // write, and each failure ends the card with the reason shown on it.
@@ -591,6 +707,29 @@ func (m moduleStruct) staffActionConfirm(
 	if card == nil {
 		return ext.EndGroups
 	}
+
+	// Two staff actions on one person never run at once (A9). Only a live pending
+	// card from its own issuer asks for the target lock; any other tap goes straight
+	// to the compare-and-set, which answers handled, expired or issuer-only.
+	lockHeld, runStarted := false, false
+	if card.State == staffCardPending && time.Now().UnixMilli() < card.ExpiresAt {
+		if card.Issuer != query.From.Id {
+			text, _ := tr.GetString("staff_act_card_issuer_only")
+			answerStaffCallback(b, query, text, true)
+			return ext.EndGroups
+		}
+		if !takeStaffTargetLock(b, query, tr, card) {
+			return ext.EndGroups
+		}
+		lockHeld = true
+	}
+	// Every path that ends before the run starts frees the lock; once it starts, the
+	// run goroutine frees it after the final delivery.
+	defer func() {
+		if lockHeld && !runStarted {
+			releaseStaffTargetLock(card.Target, card.Token)
+		}
+	}()
 
 	claim, state, err := transitionStaffActionCard(card.Token, query.From.Id, staffCardRunning, true)
 	if err != nil {
@@ -645,6 +784,16 @@ func (m moduleStruct) staffActionConfirm(
 		abortStaffActionCard(b, staffTr, card, staffChat.Id, msgID, text)
 		return ext.EndGroups
 	}
+	// The card told the issuer "applies to N linked groups" (D-06). Acting on a
+	// different set would act on something they never confirmed, so a changed count
+	// or a changed set of groups, even at the same count, ends the card (STAFF-04).
+	// A card without a stored signature is compared by count only.
+	if len(links) != card.GroupCount || (card.LinksSig != "" && staffLinksSignature(links) != card.LinksSig) {
+		text, _ := staffTr.GetString("staff_act_abort_links_changed",
+			i18n.TranslationParams{"old": card.GroupCount, "new": len(links)})
+		abortStaffActionCard(b, staffTr, card, staffChat.Id, msgID, text)
+		return ext.EndGroups
+	}
 
 	// The end date is fixed here, once: this one value goes to every linked group
 	// and to every retry, so all groups end at the same moment. A card without a
@@ -663,6 +812,7 @@ func (m moduleStruct) staffActionConfirm(
 	if err := editStaffActionMessage(b, staffChat.Id, msgID, renderStaffActionSummary(staffTr, card, pendingResults(links))); err != nil {
 		log.Warnf("[StaffActions] edit card %s into summary: %v", card.Token, err)
 	}
+	runStarted = true
 	startStaffActionRun(b, card, links, newUntil, staffChat.Id, msgID)
 	return ext.EndGroups
 }
