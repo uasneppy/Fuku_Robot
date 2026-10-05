@@ -132,7 +132,7 @@ Plans:
   3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
   4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
 
-**Plans:** 3/9 plans executed
+**Plans:** 4/9 plans executed
 
 Plans:
 **Wave 1**
@@ -143,7 +143,7 @@ Plans:
 - [x] 03-03-PLAN.md: Log-channel posts for applied actions (admin category, paced, never naming the Staff Group, never changing the result); the run engine takes a spec
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-04-PLAN.md: "Recent actions" on /staff: paged list, newest first, 10 per page, offset cursor, members only
+- [x] 03-04-PLAN.md: "Recent actions" on /staff: paged list, newest first, 10 per page, offset cursor, members only
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 03-05-PLAN.md: History detail view: per-group lines in the summary format, undo outcomes, unlinked and unfinished groups, wording for every undo reason
@@ -263,7 +263,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 |-------|----------------|--------|-----------|
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
-| 3. Staff Audit and Undo | 3/9 | In Progress|  |
+| 3. Staff Audit and Undo | 4/9 | In Progress|  |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
