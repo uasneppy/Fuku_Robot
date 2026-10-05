@@ -220,11 +220,23 @@ func startStaffActionRun(
 		var editHoldUntil time.Time
 		ticker := time.NewTicker(staffActionEditEvery)
 		defer ticker.Stop()
+		// The lock guards the group writes, so it is renewed only while the fan-out
+		// runs: none happen after it, and the deferred release frees the lock once
+		// the summary is delivered.
+		lockRenew := time.NewTicker(staffTargetLockRenewEvery)
+		defer lockRenew.Stop()
 	progressLoop:
 		for {
 			select {
 			case <-fanOutDone:
 				break progressLoop
+			case <-lockRenew.C:
+				held, err := renewStaffTargetLock(card.Target, card.Token)
+				if err != nil {
+					log.Warnf("[StaffActions] renew target lock %d for card %s: %v", card.Target, card.Token, err)
+				} else if !held {
+					log.Warnf("[StaffActions] target lock %d is no longer held by card %s", card.Target, card.Token)
+				}
 			case <-ticker.C:
 				// Inside a hold the tick is skipped before the snapshot, so the changes
 				// stay marked and the newest results go out on the first tick after it.
@@ -254,6 +266,7 @@ func startStaffActionRun(
 			}
 		}
 		ticker.Stop()
+		lockRenew.Stop()
 
 		// A group that never reported was cut off by a shutdown or lost to a panic.
 		sweep := staffReasonFailInternal

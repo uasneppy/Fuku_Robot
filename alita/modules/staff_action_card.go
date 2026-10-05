@@ -85,12 +85,36 @@ const staffTargetLockPrefix = "alita:staff:lock:target:"
 // staffTargetLockTTL is the safety net that frees a target lock whose run died.
 var staffTargetLockTTL = 30 * time.Minute
 
+// staffTargetLockRenewEvery is how often a running fan-out renews its target lock:
+// a third of staffTargetLockTTL, so two renewals can fail in a row before the lock
+// expires. It is a variable so tests can run it fast.
+var staffTargetLockRenewEvery = 10 * time.Minute
+
 // releaseStaffTargetLockScript deletes the lock only while it still holds the
 // releasing card's token, so a card whose lock expired never frees a newer card's
 // lock.
 var releaseStaffTargetLockScript = redis.NewScript(`
 	if redis.call("GET", KEYS[1]) == ARGV[1] then
 		return redis.call("DEL", KEYS[1])
+	end
+	return 0
+`)
+
+// renewStaffTargetLockScript pushes the lock back to its full TTL (ARGV[2], in
+// milliseconds) while it holds the renewing card's token (ARGV[1]) and returns 1.
+// A lock whose key vanished (a Redis restart or flush mid-run) is taken again with
+// that token and returns 2: no other card can hold it at that moment, because a
+// second Confirm would have stored its own token. A lock that holds any other
+// value returns 0 and nothing is written.
+var renewStaffTargetLockScript = redis.NewScript(`
+	local holder = redis.call("GET", KEYS[1])
+	if holder == ARGV[1] then
+		redis.call("PEXPIRE", KEYS[1], ARGV[2])
+		return 1
+	end
+	if not holder then
+		redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+		return 2
 	end
 	return 0
 `)
@@ -145,6 +169,26 @@ func staffTargetLockHolder(target int64) (string, error) {
 		return "", nil
 	}
 	return holder, err
+}
+
+// renewStaffTargetLock pushes the target's lock back to its full staffTargetLockTTL
+// while it holds the token of the card that is running, and takes it again when the
+// key vanished, because no other card can hold it at that moment (a second Confirm
+// would have stored its own token). A lock that holds another token is never
+// extended or taken over. It reports whether the lock is this card's afterwards.
+func renewStaffTargetLock(target int64, token string) (held bool, err error) {
+	client := cache.GetRedisClient()
+	if client == nil {
+		return false, errStaffCardNoRedis
+	}
+	ctx, cancel := cache.ContextWithTimeout()
+	defer cancel()
+	renewed, err := renewStaffTargetLockScript.Run(ctx, client, []string{staffTargetLockKey(target)},
+		token, staffTargetLockTTL.Milliseconds()).Int()
+	if err != nil {
+		return false, err
+	}
+	return renewed == 1 || renewed == 2, nil
 }
 
 // releaseStaffTargetLock frees the target's lock when the card with token holds

@@ -74,10 +74,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
   signature of the sorted linked group IDs (`links_sig`) changed since the card was shown.
 - `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
-  TTL, taken at Confirm and released by compare-and-delete with that token when the run ends or the Confirm aborts.
+  TTL, taken at Confirm, renewed every 10 minutes (`staffTargetLockRenewEvery`) by the run's coordinator through a
+  compare-and-set on that token while the fan-out runs (a vanished key is re-taken, another card's lock is never
+  touched), and released by compare-and-delete with that token when the run ends or the Confirm aborts.
 - `alita:staff:pace:next` and `alita:staff:pace:block` are the fleet-wide Telegram pacing for staff fan-outs: a slot
-  reservation plus a shared `retry_after` block. Every staff fan-out Telegram call goes through `staffPaced`, and
-  per-replica limiters must not be used for shared budgets.
+  reservation plus a shared `retry_after` block. The block keeps Telegram's full `retry_after`; a call whose slot is
+  more than `MaxWait` (60 s) away fails at once as rate limited, with no Telegram request and without taking the slot.
+  Every staff fan-out Telegram call goes through `staffPaced`, and per-replica limiters must not be used for shared
+  budgets.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
