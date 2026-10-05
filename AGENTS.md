@@ -72,6 +72,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   signature of the sorted linked group IDs (`links_sig`) changed since the card was shown.
 - `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
   TTL, taken at Confirm and released by compare-and-delete with that token when the run ends or the Confirm aborts.
+- `alita:staff:pace:next` and `alita:staff:pace:block` are the fleet-wide Telegram pacing for staff fan-outs: a slot
+  reservation plus a shared `retry_after` block. Every staff fan-out Telegram call goes through `staffPaced`, and
+  per-replica limiters must not be used for shared budgets.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→

@@ -168,6 +168,16 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 	case staffReasonFailTelegram:
 		text, _ = tr.GetString("staff_act_fail_telegram", i18n.TranslationParams{"error": staffErrorToken})
 		text = strings.Replace(text, staffErrorToken, detail, 1)
+	case staffReasonFailRateLimited:
+		text, _ = tr.GetString("staff_act_fail_rate_limited")
+	case staffReasonFailBotNotAdmin:
+		text, _ = tr.GetString("staff_act_fail_bot_not_admin")
+	case staffReasonFailBotNoRights:
+		text, _ = tr.GetString("staff_act_fail_bot_no_rights")
+	case staffReasonFailGroupNotFound:
+		text, _ = tr.GetString("staff_act_fail_group_not_found")
+	case staffReasonFailInternal:
+		text, _ = tr.GetString("staff_act_fail_internal")
 	}
 	return text
 }

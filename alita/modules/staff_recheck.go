@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
@@ -48,11 +49,25 @@ type staffOwnerOutcome struct {
 type staffOwnerPass struct {
 	mu      sync.Mutex
 	results map[[2]int64]*staffOwnerOutcome
+	// call, when set, runs each live CheckOwner through the caller's rate-limit
+	// pacing. Only the staff fan-out sets it; the panel, the sweeper and the
+	// watchers leave it nil and call CheckOwner directly.
+	call func(run func() error) error
 }
 
 // newStaffOwnerPass returns an empty pass cache.
 func newStaffOwnerPass() *staffOwnerPass {
 	return &staffOwnerPass{results: make(map[[2]int64]*staffOwnerOutcome)}
+}
+
+// newPacedStaffOwnerPass returns a pass cache whose live owner checks go through
+// call. call must invoke run, possibly more than once, and return its final
+// error; an error call returns that run did not produce (a rate limit it gave up
+// on, a cancelled context) is recorded as an unknown owner, never a mismatch.
+func newPacedStaffOwnerPass(call func(run func() error) error) *staffOwnerPass {
+	pass := newStaffOwnerPass()
+	pass.call = call
+	return pass
 }
 
 func (p *staffOwnerPass) entry(chatID, want int64) *staffOwnerOutcome {
@@ -73,7 +88,20 @@ func (p *staffOwnerPass) entry(chatID, want int64) *staffOwnerOutcome {
 func (p *staffOwnerPass) check(b *gotgbot.Bot, chatID, want int64) (chat_status.OwnerResult, int64, error) {
 	e := p.entry(chatID, want)
 	e.once.Do(func() {
-		e.result, e.live, e.err = chat_status.CheckOwner(b, chatID, want)
+		run := func() error {
+			e.result, e.live, e.err = chat_status.CheckOwner(b, chatID, want)
+			return e.err
+		}
+		if p.call == nil {
+			_ = run()
+			return
+		}
+		// Until run finishes the answer is unknown, so a panic inside it cannot
+		// leave the zero value (OwnerMatch) behind for the other callers.
+		e.result, e.err = chat_status.OwnerUnknown, errors.New("owner check did not finish")
+		if err := p.call(run); err != nil {
+			e.result, e.live, e.err = chat_status.OwnerUnknown, 0, err
+		}
 	})
 	return e.result, e.live, e.err
 }

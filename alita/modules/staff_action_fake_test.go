@@ -15,6 +15,7 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
+	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
 // staffFakeMember is the stored state of one member of one fake chat.
@@ -377,10 +378,28 @@ type staffActionEnv struct {
 	nextUpdate int64
 }
 
+// withFastStaffPacer installs a pacer with a 1 ms interval and a 5 ms retry_after
+// unit as staffActionPacer for the test, so a 429 costs milliseconds and not
+// seconds and the production pacer's 100 ms spacing does not slow the suite.
+func withFastStaffPacer(t *testing.T) {
+	t.Helper()
+	previous := staffActionPacer
+	staffActionPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+		NextKey:        "alita:staff:pace:next",
+		BlockKey:       "alita:staff:pace:block",
+		Interval:       time.Millisecond,
+		MaxRetries:     3,
+		MaxWait:        60 * time.Second,
+		RetryAfterUnit: 5 * time.Millisecond,
+	})
+	t.Cleanup(func() { staffActionPacer = previous })
+}
+
 func newStaffActionEnv(t *testing.T, groupCount int) *staffActionEnv {
 	t.Helper()
 	withMiniredis(t)
 	withStaffLocale(t)
+	withFastStaffPacer(t)
 
 	fake := newStaffActionFake()
 	bot := newModuleTestBot(fake.moduleBotClient)
