@@ -73,6 +73,35 @@ func staffActionHasDuration(kind staffActionKind) bool {
 	return kind == staffKindBan || kind == staffKindMute
 }
 
+// staffDurationLabel is the duration segment of the header: the amount and unit
+// exactly as typed ("2 day(s)"), "permanent", or the over-limit wording. It is what
+// makes a misparsed duration visible before Confirm. Every case reads a literal
+// locale key so make check-translations sees it.
+func staffDurationLabel(tr *i18n.Translator, card *staffActionCard) string {
+	var text string
+	switch {
+	case card.OverLimit:
+		text, _ = tr.GetString("staff_act_duration_over_limit")
+	case card.DurationSec == 0:
+		text, _ = tr.GetString("staff_act_duration_permanent")
+	default:
+		params := i18n.TranslationParams{"n": card.DurationAmount}
+		switch card.DurationUnit {
+		case "m":
+			text, _ = tr.GetString("staff_act_duration_minutes", params)
+		case "h":
+			text, _ = tr.GetString("staff_act_duration_hours", params)
+		case "d":
+			text, _ = tr.GetString("staff_act_duration_days", params)
+		case "w":
+			text, _ = tr.GetString("staff_act_duration_weeks", params)
+		default:
+			text, _ = tr.GetString("staff_act_duration_permanent")
+		}
+	}
+	return text
+}
+
 // staffTargetDisplay shows the target as its stored name in bold followed by the
 // ID in a code tag. A target the bot has never seen reads "unknown name".
 func staffTargetDisplay(tr *i18n.Translator, card *staffActionCard) string {
@@ -94,8 +123,7 @@ func staffActionHeader(tr *i18n.Translator, card *staffActionCard) string {
 	}
 	header := staffActionIcon(card.Kind) + " " + staffActionName(tr, card.Kind) + " · " + staffTargetDisplay(tr, card)
 	if staffActionHasDuration(card.Kind) {
-		duration, _ := tr.GetString("staff_act_duration_permanent")
-		header += " · " + duration
+		header += " · " + staffDurationLabel(tr, card)
 	}
 	return header + " · " + reason
 }

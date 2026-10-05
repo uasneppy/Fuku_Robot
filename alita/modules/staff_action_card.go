@@ -20,6 +20,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
+	"github.com/divkix/Alita_Robot/alita/utils/extraction"
 )
 
 // staffActionCardPrefix is the Redis key family of the confirm cards. It sits
@@ -65,6 +66,15 @@ type staffActionCard struct {
 	GroupCount int
 	// ExpiresAt is a Unix time in milliseconds.
 	ExpiresAt int64
+	// DurationSec is the length of a ban or mute in seconds; 0 means permanent. The
+	// end date is not stored: it is computed once at Confirm.
+	DurationSec int64
+	// DurationAmount and DurationUnit (m, h, d or w) are the duration as typed, for
+	// the card's label.
+	DurationAmount int64
+	DurationUnit   string
+	// OverLimit marks a duration typed above 366 days, which is applied as permanent.
+	OverLimit bool
 }
 
 var staffActionTokenRe = regexp.MustCompile(`^[0-9a-f]{16}$`)
@@ -164,6 +174,10 @@ func saveStaffActionCard(card *staffActionCard) error {
 			"reason", card.Reason,
 			"group_count", card.GroupCount,
 			"expires_at", card.ExpiresAt,
+			"duration_s", card.DurationSec,
+			"dur_n", card.DurationAmount,
+			"dur_u", card.DurationUnit,
+			"over_limit", staffBoolField(card.OverLimit),
 		).Int()
 		cancel()
 		if err != nil {
@@ -175,6 +189,14 @@ func saveStaffActionCard(card *staffActionCard) error {
 		}
 	}
 	return errors.New("staff action card: could not find a free token")
+}
+
+// staffBoolField stores a bool as the hash value "1" or "0".
+func staffBoolField(v bool) string {
+	if v {
+		return "1"
+	}
+	return "0"
 }
 
 // loadStaffActionCard reads a card. A missing or expired-away key gives (nil,
@@ -221,6 +243,28 @@ func loadStaffActionCard(token string) (*staffActionCard, error) {
 		return nil, fmt.Errorf("staff action card %s: bad group_count: %w", token, err)
 	}
 	card.GroupCount = count
+
+	// The duration fields are optional: a card saved before they existed has none and
+	// reads as permanent.
+	for _, field := range []struct {
+		name string
+		dst  *int64
+	}{
+		{"duration_s", &card.DurationSec},
+		{"dur_n", &card.DurationAmount},
+	} {
+		raw := fields[field.name]
+		if raw == "" {
+			continue
+		}
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value < 0 {
+			return nil, fmt.Errorf("staff action card %s: bad %s: %q", token, field.name, raw)
+		}
+		*field.dst = value
+	}
+	card.DurationUnit = fields["dur_u"]
+	card.OverLimit = fields["over_limit"] == "1"
 	return card, nil
 }
 
@@ -541,8 +585,19 @@ func (m moduleStruct) staffActionConfirm(
 		return ext.EndGroups
 	}
 
-	// Permanent for now; a later plan adds durations.
+	// The end date is fixed here, once: this one value goes to every linked group
+	// and to every retry, so all groups end at the same moment. A card without a
+	// duration is permanent (until_date 0).
 	var newUntil int64
+	if card.DurationSec > 0 {
+		until, ok := extraction.TemporaryUntilDate(time.Now().Unix(), card.DurationSec)
+		if !ok {
+			text, _ := staffTr.GetString("staff_act_abort_check_failed")
+			abortStaffActionCard(b, staffTr, card, staffChat.Id, msgID, text)
+			return ext.EndGroups
+		}
+		newUntil = until
+	}
 
 	if err := editStaffActionMessage(b, staffChat.Id, msgID, renderStaffActionSummary(staffTr, card, pendingResults(links))); err != nil {
 		log.Warnf("[StaffActions] edit card %s into summary: %v", card.Token, err)

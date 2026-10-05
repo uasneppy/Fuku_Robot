@@ -33,6 +33,9 @@ var staffActionCommands = []staffCommandSpec{
 	{Name: "kick", Kind: staffKindKick, Duration: staffDurationNone},
 	{Name: "unban", Kind: staffKindUnban, Duration: staffDurationNone},
 	{Name: "unmute", Kind: staffKindUnmute, Duration: staffDurationNone},
+	// tban and tmute are the same actions as ban and mute with the duration required.
+	{Name: "tban", Kind: staffKindBan, Duration: staffDurationRequired},
+	{Name: "tmute", Kind: staffKindMute, Duration: staffDurationRequired},
 }
 
 // LoadStaffActions registers the Staff Group command interceptors. They are raw
@@ -121,6 +124,10 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 		return reply("staff_act_hint_need_target")
 	case staffParseBadTarget:
 		return reply("staff_act_hint_bad_target")
+	case staffParseNeedDuration:
+		return reply("staff_act_hint_need_duration")
+	case staffParseBadDuration:
+		return reply("staff_act_hint_bad_duration")
 	}
 
 	links, err := staff.ListLinksByStaffFresh(group.ChatID)
@@ -139,6 +146,11 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 		TargetName: staffStoredName(req.Target.UserID),
 		Reason:     req.Reason,
 		GroupCount: len(links),
+
+		DurationSec:    req.DurationSec,
+		DurationAmount: req.DurationAmount,
+		DurationUnit:   req.DurationUnit,
+		OverLimit:      req.OverLimit,
 	}
 	if err := saveStaffActionCard(card); err != nil {
 		log.Errorf("[StaffActions] save card: %v", err)
