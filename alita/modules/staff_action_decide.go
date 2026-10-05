@@ -396,6 +396,13 @@ func staffUndoLeftBehind(orig staffActionKind, applied staffAppliedState, live s
 // (staffUndoLeftBehind), so the call replaces nothing but the staff's own work.
 // A prior end date within staffUndoMinRemaining is never re-applied.
 func decideStaffUndo(orig staffActionKind, prior staffPriorState, applied staffAppliedState, live staffTargetState, now int64) staffUndoVerdict {
+	switch orig {
+	case staffKindBan, staffKindMute, staffKindUnban, staffKindUnmute:
+	default:
+		// Kick removes a member who may rejoin and has nothing to put back; like
+		// decideStaffAction's default, anything else is a failed lookup.
+		return staffUndoSkip(staffReasonFailLookup)
+	}
 	if live.Status == gotgbot.ChatMemberStatusCreator || live.Status == gotgbot.ChatMemberStatusAdministrator {
 		return staffUndoSkip(staffReasonSkipTargetAdmin)
 	}
@@ -413,10 +420,39 @@ func decideStaffUndo(orig staffActionKind, prior staffPriorState, applied staffA
 		return decideStaffUndoBan(prior, now)
 	case staffKindMute:
 		return decideStaffUndoMute(prior, now)
-	case staffKindUnban, staffKindUnmute:
-		return staffUndoSkip(staffReasonSkipNoPriorState)
+	case staffKindUnban:
+		return decideStaffUndoUnban(prior, now)
+	case staffKindUnmute:
+		return decideStaffUndoUnmute(prior, now)
 	}
 	return staffUndoSkip(staffReasonFailLookup)
+}
+
+// decideStaffUndoUnban is the unban column: it puts a ban back only when the ban
+// the unban lifted still has time to run, with its original end date.
+func decideStaffUndoUnban(prior staffPriorState, now int64) staffUndoVerdict {
+	if prior.Status != gotgbot.ChatMemberStatusKicked {
+		return staffUndoSkip(staffReasonSkipNoPriorState)
+	}
+	if staffUndoEnded(prior.Until, now) {
+		return staffUndoSkip(staffReasonSkipRestrictionEnded)
+	}
+	return staffUndoDo(staffCallBan, staffReasonUndoneBanRestored, prior.Until)
+}
+
+// decideStaffUndoUnmute is the unmute column: it puts the recorded restriction
+// back, with its permission set and end date, only while it still has time to run.
+func decideStaffUndoUnmute(prior staffPriorState, now int64) staffUndoVerdict {
+	if prior.Status != gotgbot.ChatMemberStatusRestricted {
+		return staffUndoSkip(staffReasonSkipNoPriorState)
+	}
+	if staffUndoEnded(prior.Until, now) {
+		return staffUndoSkip(staffReasonSkipRestrictionEnded)
+	}
+	if prior.Perms == nil {
+		return staffUndoSkip(staffReasonSkipNoPriorState)
+	}
+	return staffUndoRestore(prior)
 }
 
 // decideStaffUndoBan is the ban column: a ban over a member or a departed target
