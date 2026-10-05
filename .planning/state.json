@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Staff Actions Across Groups",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
@@ -54,5 +54,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 02 of 9 · 11% · executing"
   },
-  "updated_at": "2026-10-05T05:15:59.290Z"
+  "updated_at": "2026-10-05T08:32:49.566Z"
 }
