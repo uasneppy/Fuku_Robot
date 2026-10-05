@@ -11,5 +11,5 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(testdb.Run(m, &models.StaffGroup{}, &models.StaffGroupLink{}))
+	os.Exit(testdb.Run(m, &models.StaffGroup{}, &models.StaffGroupLink{}, &models.StaffAction{}, &models.StaffActionGroup{}))
 }
