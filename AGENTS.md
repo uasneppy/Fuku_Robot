@@ -120,6 +120,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
   `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
   `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
+- Staff targets are the first argument and never guessed: a numeric ID, a `text_mention` entity starting exactly at that
+  UTF-16 offset, or an `@username` (4-32 of `A-Za-z0-9_`). A username resolves through `user.FindUsersByUsername` (users
+  table only, case-insensitive, up to 10 rows, newest activity first) behind the `staffUserLookup` seam: no row is
+  "never seen", more than one is refused with each name, ID and last-seen date, and a database error is "could not
+  check". Never call `extraction.GetUserId` or the extract-user helpers for staff targets: they are case-sensitive and
+  fall back to the channels table and live `getChat`. A reply is never a target (a bare reply gets a hint; a reply plus
+  an explicit target uses the explicit one). `/sban`, `/dban`, `/skick`, `/dkick`, `/smute` and `/dmute` are
+  intercepted in a Staff Group only to be refused with a hint (`staffCommandSpec.Refused`), after the anonymous check.
 - Staff durations: `/ban` and `/mute` take an optional `<digits><m|h|d|w>` token right after the target, `/tban` and
   `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
   than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not

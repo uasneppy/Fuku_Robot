@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -136,4 +137,193 @@ func TestStaffActionParseCommandTable(t *testing.T) {
 			t.Fatalf("/%s duration mode = %d, want %d", spec.Name, spec.Duration, mode)
 		}
 	}
+}
+
+func TestStaffActionParseRefusedTable(t *testing.T) {
+	refused := map[string]bool{"sban": true, "dban": true, "skick": true, "dkick": true, "smute": true, "dmute": true}
+	seen := map[string]bool{}
+	for _, spec := range staffActionCommands {
+		if seen[spec.Name] {
+			t.Fatalf("/%s is listed twice", spec.Name)
+		}
+		seen[spec.Name] = true
+		if spec.Refused != refused[spec.Name] {
+			t.Fatalf("/%s Refused = %t, want %t", spec.Name, spec.Refused, refused[spec.Name])
+		}
+	}
+	for name := range refused {
+		if !seen[name] {
+			t.Fatalf("/%s is not intercepted in a Staff Group", name)
+		}
+	}
+}
+
+// textMentionMessage builds a text message whose entities are the given ones.
+func textMentionMessage(text string, entities ...gotgbot.MessageEntity) *gotgbot.Message {
+	return &gotgbot.Message{Text: text, Entities: entities}
+}
+
+func TestStaffActionParseUsername(t *testing.T) {
+	tests := []struct {
+		name         string
+		text         string
+		wantResult   staffParseResult
+		wantUsername string
+		wantSec      int64
+		wantReason   string
+	}{
+		{name: "username with duration and reason", text: "/ban @SpamBot1 2d x", wantUsername: "SpamBot1", wantSec: 172800, wantReason: "x"},
+		{name: "username only", text: "/kick @spam_bot", wantUsername: "spam_bot"},
+		{name: "shortest allowed username", text: "/ban @abcd", wantUsername: "abcd"},
+		{name: "longest allowed username", text: "/ban @" + strings.Repeat("a", 32), wantUsername: strings.Repeat("a", 32)},
+		{name: "too short", text: "/ban @ab x", wantResult: staffParseBadUsername},
+		{name: "too long", text: "/ban @" + strings.Repeat("a", 33), wantResult: staffParseBadUsername},
+		{name: "illegal character", text: "/ban @bad-name x", wantResult: staffParseBadUsername},
+		{name: "an at sign alone", text: "/ban @ x", wantResult: staffParseBadUsername},
+		{name: "a second at sign", text: "/ban @@name_ok x", wantResult: staffParseBadUsername},
+		{name: "command with bot name", text: "/ban@FukuBot @spam_bot x", wantUsername: "spam_bot", wantReason: "x"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req, result := parseCommand(tc.text, staffSpecBan)
+			if result != tc.wantResult {
+				t.Fatalf("parse %q result = %d, want %d", tc.text, result, tc.wantResult)
+			}
+			if result != staffParseOK {
+				return
+			}
+			if req.Target.Username != tc.wantUsername || req.Target.UserID != 0 || req.DurationSec != tc.wantSec || req.Reason != tc.wantReason {
+				t.Fatalf("parse %q = {username %q, id %d, sec %d, reason %q}, want {username %q, id 0, sec %d, reason %q}",
+					tc.text, req.Target.Username, req.Target.UserID, req.DurationSec, req.Reason, tc.wantUsername, tc.wantSec, tc.wantReason)
+			}
+		})
+	}
+}
+
+func TestStaffActionParseTextMention(t *testing.T) {
+	person := &gotgbot.User{Id: 777, FirstName: "Zoë 🙂", LastName: "Smith"}
+	command := gotgbot.MessageEntity{Type: "bot_command", Offset: 0, Length: 4}
+
+	t.Run("a multi-word non-ASCII name does not shift the reason", func(t *testing.T) {
+		// "/ban " is 5 UTF-16 units; "Zoë 🙂 Smith" is 3+1+2+1+5 = 12.
+		msg := textMentionMessage("/ban Zoë 🙂 Smith spam", command,
+			gotgbot.MessageEntity{Type: "text_mention", Offset: 5, Length: 12, User: person})
+		req, result := parseStaffActionArgs(msg, staffSpecBan)
+		if result != staffParseOK {
+			t.Fatalf("result = %d, want OK", result)
+		}
+		if req.Target.UserID != 777 || req.Target.MentionName != "Zoë 🙂 Smith" || req.Target.Username != "" || req.Reason != "spam" {
+			t.Fatalf("request = %+v, want user 777, name \"Zoë 🙂 Smith\" and reason \"spam\"", req)
+		}
+	})
+
+	t.Run("astral characters before the mention count as two units", func(t *testing.T) {
+		msg := textMentionMessage("/ban 🙂🙂 Zed x",
+			gotgbot.MessageEntity{Type: "text_mention", Offset: 5, Length: 8, User: &gotgbot.User{Id: 778, FirstName: "🙂🙂", LastName: "Zed"}})
+		req, result := parseStaffActionArgs(msg, staffSpecBan)
+		if result != staffParseOK || req.Target.UserID != 778 || req.Reason != "x" {
+			t.Fatalf("parse = (%+v, %d), want user 778 and reason \"x\"", req, result)
+		}
+	})
+
+	t.Run("a duration after the mention is read", func(t *testing.T) {
+		msg := textMentionMessage("/tban Zoë 🙂 Smith 2d spam",
+			gotgbot.MessageEntity{Type: "text_mention", Offset: 6, Length: 12, User: person})
+		req, result := parseStaffActionArgs(msg, staffSpecTban)
+		if result != staffParseOK || req.Target.UserID != 777 || req.DurationSec != 172800 || req.Reason != "spam" {
+			t.Fatalf("parse = (%+v, %d), want user 777, 2d and reason \"spam\"", req, result)
+		}
+	})
+
+	t.Run("a caption uses the caption entities", func(t *testing.T) {
+		msg := &gotgbot.Message{
+			Caption: "/ban Zoë 🙂 Smith spam",
+			CaptionEntities: []gotgbot.MessageEntity{
+				{Type: "text_mention", Offset: 5, Length: 12, User: person},
+			},
+		}
+		req, result := parseStaffActionArgs(msg, staffSpecBan)
+		if result != staffParseOK || req.Target.UserID != 777 || req.Target.MentionName != "Zoë 🙂 Smith" || req.Reason != "spam" {
+			t.Fatalf("parse = (%+v, %d), want user 777 and reason \"spam\"", req, result)
+		}
+	})
+
+	t.Run("a mention that is not at the first argument is ignored", func(t *testing.T) {
+		msg := textMentionMessage("/ban spam Zoë 🙂 Smith",
+			gotgbot.MessageEntity{Type: "text_mention", Offset: 10, Length: 12, User: person})
+		if _, result := parseStaffActionArgs(msg, staffSpecBan); result != staffParseBadTarget {
+			t.Fatalf("result = %d, want BadTarget: the first field is parsed normally", result)
+		}
+
+		msg = textMentionMessage("/ban 4242 Zoë 🙂 Smith",
+			gotgbot.MessageEntity{Type: "text_mention", Offset: 10, Length: 12, User: person})
+		req, result := parseStaffActionArgs(msg, staffSpecBan)
+		if result != staffParseOK || req.Target.UserID != 4242 || req.Target.MentionName != "" || req.Reason != "Zoë 🙂 Smith" {
+			t.Fatalf("parse = (%+v, %d), want the numeric target 4242 and the mention left in the reason", req, result)
+		}
+	})
+
+	t.Run("a mention one unit off the first argument is ignored", func(t *testing.T) {
+		msg := textMentionMessage("/ban Zoë 🙂 Smith spam",
+			gotgbot.MessageEntity{Type: "text_mention", Offset: 6, Length: 11, User: person})
+		if _, result := parseStaffActionArgs(msg, staffSpecBan); result != staffParseBadTarget {
+			t.Fatalf("result = %d, want BadTarget", result)
+		}
+	})
+
+	t.Run("a mention entity without a user is ignored", func(t *testing.T) {
+		msg := textMentionMessage("/ban Zoë spam", gotgbot.MessageEntity{Type: "text_mention", Offset: 5, Length: 3})
+		if _, result := parseStaffActionArgs(msg, staffSpecBan); result != staffParseBadTarget {
+			t.Fatalf("result = %d, want BadTarget", result)
+		}
+	})
+
+	t.Run("an at-mention entity is not a text mention", func(t *testing.T) {
+		msg := textMentionMessage("/ban @spam_bot x",
+			gotgbot.MessageEntity{Type: "mention", Offset: 5, Length: 9})
+		req, result := parseStaffActionArgs(msg, staffSpecBan)
+		if result != staffParseOK || req.Target.Username != "spam_bot" || req.Target.UserID != 0 {
+			t.Fatalf("parse = (%+v, %d), want the @username target", req, result)
+		}
+	})
+}
+
+func TestStaffActionParseBareReply(t *testing.T) {
+	replied := &gotgbot.Message{From: &gotgbot.User{Id: 999, FirstName: "Replied"}, Text: "moderated"}
+
+	t.Run("a reply with no argument asks for a target", func(t *testing.T) {
+		msg := &gotgbot.Message{Text: "/ban", ReplyToMessage: replied}
+		if _, result := parseStaffActionArgs(msg, staffSpecBan); result != staffParseBareReply {
+			t.Fatalf("result = %d, want BareReply", result)
+		}
+	})
+
+	t.Run("no reply and no argument has no target", func(t *testing.T) {
+		if _, result := parseCommand("/ban", staffSpecBan); result != staffParseNoTarget {
+			t.Fatalf("result = %d, want NoTarget", result)
+		}
+	})
+
+	t.Run("a reply with an explicit ID uses the ID", func(t *testing.T) {
+		msg := &gotgbot.Message{Text: "/ban 4242", ReplyToMessage: replied}
+		req, result := parseStaffActionArgs(msg, staffSpecBan)
+		if result != staffParseOK || req.Target.UserID != 4242 {
+			t.Fatalf("parse = (%+v, %d), want target 4242, never the replied-to sender", req, result)
+		}
+	})
+
+	t.Run("a reply with an explicit username uses the username", func(t *testing.T) {
+		msg := &gotgbot.Message{Text: "/mute @spam_bot 1h", ReplyToMessage: replied}
+		req, result := parseStaffActionArgs(msg, staffSpecBan)
+		if result != staffParseOK || req.Target.Username != "spam_bot" || req.Target.UserID != 0 {
+			t.Fatalf("parse = (%+v, %d), want the username, never the replied-to sender", req, result)
+		}
+	})
+
+	t.Run("a reply with a non-target word is a bad target", func(t *testing.T) {
+		msg := &gotgbot.Message{Text: "/ban spam", ReplyToMessage: replied}
+		if _, result := parseStaffActionArgs(msg, staffSpecBan); result != staffParseBadTarget {
+			t.Fatalf("result = %d, want BadTarget", result)
+		}
+	})
 }

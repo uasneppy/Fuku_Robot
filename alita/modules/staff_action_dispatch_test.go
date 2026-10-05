@@ -94,6 +94,14 @@ func TestStaffActionNonStaffUnchanged(t *testing.T) {
 		{name: "tmute as a reply", text: "/tmute 1h spam", reply: &target},
 		{name: "ban with a duration", text: "/ban 4242 2d spam"},
 		{name: "mute with a duration", text: "/mute 4242 30m"},
+		{name: "ban by username", text: "/ban @spam_bot 2d spam"},
+		{name: "mute by username", text: "/mute @spam_bot 1h"},
+		{name: "sban an ID", text: "/sban 4242"},
+		{name: "dban as a reply", text: "/dban", reply: &target},
+		{name: "skick an ID", text: "/skick 4242"},
+		{name: "dkick as a reply", text: "/dkick", reply: &target},
+		{name: "smute an ID", text: "/smute 4242"},
+		{name: "dmute as a reply", text: "/dmute", reply: &target},
 	}
 	for _, tc := range commands {
 		t.Run(tc.name, func(t *testing.T) {
@@ -147,7 +155,12 @@ func (e *staffActionEnv) wantCardOnly() {
 
 func TestStaffActionAnonymous(t *testing.T) {
 	staffChatOf := func(env *staffActionEnv) gotgbot.Chat { return env.staffChatObj() }
-	for _, command := range []string{"ban", "mute", "kick", "unban", "unmute", "tban", "tmute"} {
+	// All 13 intercepted names, the six refused variants included: an anonymous
+	// sender gets only "post as yourself", before any variant hint.
+	for _, command := range []string{
+		"ban", "mute", "kick", "unban", "unmute", "tban", "tmute",
+		"sban", "dban", "skick", "dkick", "smute", "dmute",
+	} {
 		text := "/" + command + " 4242"
 		if command == "tban" || command == "tmute" {
 			text += " 2d"
@@ -196,8 +209,8 @@ func TestStaffActionAnonymous(t *testing.T) {
 	}
 
 	t.Run("sender without a user", func(t *testing.T) {
-		if len(staffActionCommands) != 7 {
-			t.Fatalf("staff commands = %d, want ban, mute, kick, unban, unmute, tban and tmute", len(staffActionCommands))
+		if len(staffActionCommands) != 13 {
+			t.Fatalf("staff commands = %d, want the 7 staff commands and the 6 refused variants", len(staffActionCommands))
 		}
 		for _, spec := range staffActionCommands {
 			env := newStaffActionEnv(t, 1)
