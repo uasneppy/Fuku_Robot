@@ -101,13 +101,20 @@ var releaseStaffTargetLockScript = redis.NewScript(`
 `)
 
 // renewStaffTargetLockScript pushes the lock back to its full TTL (ARGV[2], in
-// milliseconds) only while it still holds the renewing card's token (ARGV[1]). It
-// returns 1 when it renewed and 0 when the lock holds another value, in which case
-// nothing is written.
+// milliseconds) while it holds the renewing card's token (ARGV[1]) and returns 1.
+// A lock whose key vanished (a Redis restart or flush mid-run) is taken again with
+// that token and returns 2: no other card can hold it at that moment, because a
+// second Confirm would have stored its own token. A lock that holds any other
+// value returns 0 and nothing is written.
 var renewStaffTargetLockScript = redis.NewScript(`
-	if redis.call("GET", KEYS[1]) == ARGV[1] then
+	local holder = redis.call("GET", KEYS[1])
+	if holder == ARGV[1] then
 		redis.call("PEXPIRE", KEYS[1], ARGV[2])
 		return 1
+	end
+	if not holder then
+		redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+		return 2
 	end
 	return 0
 `)
@@ -165,9 +172,10 @@ func staffTargetLockHolder(target int64) (string, error) {
 }
 
 // renewStaffTargetLock pushes the target's lock back to its full staffTargetLockTTL
-// while it still holds the token of the card that is running. It reports whether
-// the lock was this card's. It never extends another card's lock, so a run can not
-// keep a stranger's hold alive.
+// while it holds the token of the card that is running, and takes it again when the
+// key vanished, because no other card can hold it at that moment (a second Confirm
+// would have stored its own token). A lock that holds another token is never
+// extended or taken over. It reports whether the lock is this card's afterwards.
 func renewStaffTargetLock(target int64, token string) (held bool, err error) {
 	client := cache.GetRedisClient()
 	if client == nil {
@@ -180,7 +188,7 @@ func renewStaffTargetLock(target int64, token string) (held bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	return renewed == 1, nil
+	return renewed == 1 || renewed == 2, nil
 }
 
 // releaseStaffTargetLock frees the target's lock when the card with token holds
