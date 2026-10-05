@@ -25,11 +25,11 @@ findings:
     title: "New tests leak shared state when they fail early"
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Final summary can be lost under flood control; the delivery budget is shorter than the waits it tries to honor"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "A 429 block longer than `MaxWait` makes every other paced call sleep through the whole block, which can outlive the target lock"
   - id: IN-01
     severity: info
@@ -55,7 +55,7 @@ findings:
     severity: info
     disposition: open
     title: "Any Staff Group member's tap on a card whose Redis hash is gone rewrites the message"
-open: 13
+open: 11
 total: 13
 recorded: 2026-10-05T11:09:36.334Z
 ---
@@ -69,8 +69,8 @@ recorded: 2026-10-05T11:09:36.334Z
 | IN-08 | info | open | - |
 | IN-09 | info | open | - |
 | IN-10 | info | open | - |
-| WR-01 | warning | open | - (not in the current review) |
-| WR-02 | warning | open | - (not in the current review) |
+| WR-01 | warning | fixed | Plan 02-08 (per-message delivery budgets, 429 backoff); confirmed RESOLVED by the 1a395c2 re-review (not in the current review) |
+| WR-02 | warning | fixed | Plans 02-09 (MaxWait refusal) and 02-10 (target-lock renewal); confirmed RESOLVED by the 1a395c2 re-review (not in the current review) |
 | IN-01 | info | open | - (not in the current review) |
 | IN-02 | info | open | - (not in the current review) |
 | IN-03 | info | open | - (not in the current review) |
