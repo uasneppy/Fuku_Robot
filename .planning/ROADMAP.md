@@ -89,7 +89,29 @@ Plans:
   4. The issuer gets one summary message that updates as groups finish. Every linked group is marked done, skipped (with the reason) or failed (with the reason, such as missing bot rights or rate limiting). The bot stays within Telegram's rate limits even with many groups and several bot replicas, and waits and retries when Telegram says to. No group is ever silently dropped.
   5. `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` work exactly as before in every group that isn't a Staff Group.
 
-**Plans:** TBD
+**Plans:** 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 02-01-PLAN.md: Tracer. `/ban <ID> [reason]` from the Staff Group, Redis confirm card (issuer-only Confirm and Cancel), live per-group checks, ban in every linked group, card edited into the summary; per-group `/ban` unchanged elsewhere; anonymous senders refused
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md: `/mute`, `/kick`, `/unban` and `/unmute`, with a status-first decision table that never lifts or shortens a ban (research flag)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-03-PLAN.md: Timed bans and mutes (`/ban <ID> 2d`, `/tban`, `/tmute`); duration on the card, over 366 days treated as permanent, end date fixed at Confirm
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 02-04-PLAN.md: Targets by `@username` (case-insensitive, never guessed) and text mention; hints for unknown or ambiguous names, bare replies and the refused `/sban`-style variants
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 02-05-PLAN.md: Card lifecycle: 5-minute expiry, exactly-once Confirm across replicas, abort when linked groups changed, one staff action per target; `/staff` help text
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 02-06-PLAN.md: Fleet-wide Redis pacer with shared `retry_after`, four paced workers, D-19 failure reasons
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 02-07-PLAN.md: Live summary: tally, batched edits, collapse and continuation, final-edit retry and fallback, shutdown drain
 
 ### Phase 3: Staff Audit and Undo
 
@@ -207,7 +229,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
-| 2. Staff Actions Across Groups | 0/TBD | Not started | - |
+| 2. Staff Actions Across Groups | 0/7 | Planned | - |
 | 3. Staff Audit and Undo | 0/TBD | Not started | - |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
