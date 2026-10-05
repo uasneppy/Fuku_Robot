@@ -60,7 +60,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`alita/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `alita/db/cache`, not `alita/utils/cache`.
-- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`) sit outside the `alita:cache:` prefix;
+- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:staff:*`) sit outside the `alita:cache:` prefix;
   `CLEAR_CACHE_ON_STARTUP` does not clear them.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
@@ -101,6 +101,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
   the caller with RowsAffected == 1 posts the Staff Group notice.
+- The staff sweeper (`StartStaffSweeper`/`StopStaffSweeper`) rechecks every Staff Group link hourly (first run 1-5 min
+  after start) behind `SETNX alita:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
+  conditional. Staff tables are never part of backup/export/import/reset.
 
 ## Go rules
 

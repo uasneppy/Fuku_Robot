@@ -308,6 +308,17 @@ func ListStaffGroupsByOwner(ownerUserID int64) ([]models.StaffGroup, error) {
 	return groups, nil
 }
 
+// ListStaffGroupsFresh lists every Staff Group in id order, straight from the
+// database. The hourly sweep walks this list; it is never cached.
+func ListStaffGroupsFresh() ([]models.StaffGroup, error) {
+	var groups []models.StaffGroup
+	if err := db.DB.Order("id ASC").Find(&groups).Error; err != nil {
+		log.Errorf("[Staff] ListStaffGroupsFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list staff groups")
+	}
+	return groups, nil
+}
+
 // GetLinkOfGroupFresh reads the link of groupChatID straight from the database,
 // bypassing every cache. It returns (nil, nil) when the group is not linked. It
 // is the authority read.
@@ -427,6 +438,32 @@ func SetLinkHealth(id uint, health string) (changed bool, err error) {
 	}
 	invalidateStaffKeys(current.GroupChatID)
 	return true, nil
+}
+
+// DeleteOrphanLinks removes every link whose Staff Group row no longer exists and
+// returns how many it removed. Links are normally removed together with their
+// Staff Group; an orphan is what a crash or an out-of-band delete leaves behind.
+//
+// It is one DELETE ... RETURNING whose condition is checked at the moment of the
+// write, so a Staff Group created concurrently is never mistaken for missing.
+// After the commit the cached lookups of each removed link's group are
+// invalidated by the exact key.
+func DeleteOrphanLinks() (int64, error) {
+	var removed []models.StaffGroupLink
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		staffChats := tx.Model(&models.StaffGroup{}).Select("chat_id")
+		return tx.Clauses(clause.Returning{}).
+			Where("staff_chat_id NOT IN (?)", staffChats).
+			Delete(&removed).Error
+	})
+	if err != nil {
+		log.Errorf("[Staff] DeleteOrphanLinks: %v", err)
+		return 0, alitaerrors.Wrap(err, "delete orphan staff links")
+	}
+	for _, link := range removed {
+		invalidateStaffKeys(link.GroupChatID)
+	}
+	return int64(len(removed)), nil
 }
 
 // UpdateStaffGroupOwner refreshes staff_groups.owner_user_id for chatID to
