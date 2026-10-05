@@ -63,6 +63,7 @@ const (
 	staffReasonFailBotNoRights    staffReason = "fail_bot_no_rights"
 	staffReasonFailGroupNotFound  staffReason = "fail_group_not_found"
 	staffReasonFailInternal       staffReason = "fail_internal"
+	staffReasonFailInterrupted    staffReason = "fail_interrupted"
 )
 
 // staffReasonOutcome maps a reason to the outcome it stands for.

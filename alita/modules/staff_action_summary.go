@@ -232,6 +232,21 @@ func editStaffActionMessage(b *gotgbot.Bot, chatID, msgID int64, text string) er
 	return nil
 }
 
+// staffSummaryTally counts the results by outcome.
+func staffSummaryTally(results []staffGroupResult) (done, skipped, failed, pending int) {
+	return 0, 0, 0, 0
+}
+
+// staffSummaryFits reports whether text is within the message length cap.
+func staffSummaryFits(text string) bool {
+	return false
+}
+
+// renderStaffActionSummaryFinal renders the last summary.
+func renderStaffActionSummaryFinal(tr *i18n.Translator, card *staffActionCard, results []staffGroupResult) (string, []string) {
+	return "", nil
+}
+
 // deliverStaffActionSummary puts the final text on the card. When the card cannot
 // be edited (deleted, or any other error) the summary is posted as a new message
 // in the Staff Group, so the issuer always gets the result.
