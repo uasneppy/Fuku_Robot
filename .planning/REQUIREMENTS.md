@@ -26,9 +26,9 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Staff actions
 
-- [ ] **STAFF-01**: Any member of the Staff Group can run `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` there, with optional timed variants for ban and mute, against an `@username` or a numeric user ID.
-- [ ] **STAFF-02**: A staff member can add an optional reason to any staff action.
-- [ ] **STAFF-03**: Before anything is applied, the bot shows a confirmation with:
+- [x] **STAFF-01**: Any member of the Staff Group can run `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` there, with optional timed variants for ban and mute, against an `@username` or a numeric user ID.
+- [x] **STAFF-02**: A staff member can add an optional reason to any staff action.
+- [x] **STAFF-03**: Before anything is applied, the bot shows a confirmation with:
   - the resolved target (name and ID)
   - the action
   - the duration
@@ -36,11 +36,11 @@ Requirements for this milestone. Each maps to one roadmap phase.
   - the number of linked groups
 
   Nothing happens until the issuer taps Confirm. Only the issuer can confirm or cancel.
-- [ ] **STAFF-04**: A confirmed action is applied to every linked group and never to the Staff Group itself.
-- [ ] **STAFF-05**: Before acting in each linked group, the bot checks live that the issuer is an admin there with the right to restrict members. It acts where they are and skips the groups where they aren't.
-- [ ] **STAFF-06**: Posts from anonymous admins in the Staff Group are refused with "post as yourself", because they can't be authorised per group.
-- [ ] **STAFF-07**: The bot never acts against a target who is an admin or the owner of a given group, or against the bot itself. Such groups are skipped with that reason. Staff Group membership alone does not protect anyone.
-- [ ] **STAFF-08**: The issuer sees one summary message, updated as groups complete. Each group is marked done, skipped (with reason) or failed (with reason, e.g. the bot lacks rights or is rate limited). No group is silently dropped.
+- [x] **STAFF-04**: A confirmed action is applied to every linked group and never to the Staff Group itself.
+- [x] **STAFF-05**: Before acting in each linked group, the bot checks live that the issuer is an admin there with the right to restrict members. It acts where they are and skips the groups where they aren't.
+- [x] **STAFF-06**: Posts from anonymous admins in the Staff Group are refused with "post as yourself", because they can't be authorised per group.
+- [x] **STAFF-07**: The bot never acts against a target who is an admin or the owner of a given group, or against the bot itself. Such groups are skipped with that reason. Staff Group membership alone does not protect anyone.
+- [x] **STAFF-08**: The issuer sees one summary message, updated as groups complete. Each group is marked done, skipped (with reason) or failed (with reason, e.g. the bot lacks rights or is rate limited). No group is silently dropped.
 - [ ] **STAFF-09**: Each applied action and its reason are posted to the log channel of every group where it was applied.
 - [ ] **STAFF-10**: Every staff action is recorded with:
   - the issuer
@@ -51,8 +51,8 @@ Requirements for this milestone. Each maps to one roadmap phase.
   - the time
   - the per-group outcomes
 - [ ] **STAFF-11**: The summary has an "Undo everywhere" button. A Staff Group member who is an admin with restrict rights in a group can reverse the action there. The same per-group checks and the same summary apply.
-- [ ] **STAFF-12**: The fan-out stays within Telegram's rate limits, waits and retries when Telegram says to, and reports a group as failed instead of dropping it.
-- [ ] **STAFF-13**: The `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` commands keep their existing per-group behaviour everywhere except inside a Staff Group.
+- [x] **STAFF-12**: The fan-out stays within Telegram's rate limits, waits and retries when Telegram says to, and reports a group as failed instead of dropping it.
+- [x] **STAFF-13**: The `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` commands keep their existing per-group behaviour everywhere except inside a Staff Group.
 
 ### Lockdown
 
@@ -110,7 +110,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Platform
 
-- [ ] **PLAT-01**: Everything works with several bot replicas running at once. Fan-out pacing, detection counters, captcha challenges and lockdown state are shared, not per process.
+- [x] **PLAT-01**: Everything works with several bot replicas running at once. Fan-out pacing, detection counters, captcha challenges and lockdown state are shared, not per process.
 - [ ] **PLAT-02**: New secrets (Turnstile secret key, Gemini API key) never appear in logs.
 - [x] **PLAT-03**: Every new message and button label exists in all 7 languages.
 - [ ] **PLAT-04**: The deployment steps for the captcha page are documented: public HTTPS hostname, BotFather Mini App registration, Turnstile keys.
@@ -178,19 +178,19 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | SETUP-07 | Phase 1 | Complete |
 | SETUP-08 | Phase 1 | Complete |
 | SETUP-09 | Phase 3 | Pending |
-| STAFF-01 | Phase 2 | Pending |
-| STAFF-02 | Phase 2 | Pending |
-| STAFF-03 | Phase 2 | Pending |
-| STAFF-04 | Phase 2 | Pending |
-| STAFF-05 | Phase 2 | Pending |
-| STAFF-06 | Phase 2 | Pending |
-| STAFF-07 | Phase 2 | Pending |
-| STAFF-08 | Phase 2 | Pending |
+| STAFF-01 | Phase 2 | Complete |
+| STAFF-02 | Phase 2 | Complete |
+| STAFF-03 | Phase 2 | Complete |
+| STAFF-04 | Phase 2 | Complete |
+| STAFF-05 | Phase 2 | Complete |
+| STAFF-06 | Phase 2 | Complete |
+| STAFF-07 | Phase 2 | Complete |
+| STAFF-08 | Phase 2 | Complete |
 | STAFF-09 | Phase 3 | Pending |
 | STAFF-10 | Phase 3 | Pending |
 | STAFF-11 | Phase 3 | Pending |
-| STAFF-12 | Phase 2 | Pending |
-| STAFF-13 | Phase 2 | Pending |
+| STAFF-12 | Phase 2 | Complete |
+| STAFF-13 | Phase 2 | Complete |
 | LOCK-01 | Phase 4 | Pending |
 | LOCK-02 | Phase 4 | Pending |
 | LOCK-03 | Phase 4 | Pending |
@@ -229,7 +229,7 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | MENU-06 | Phase 9 | Pending |
 | MENU-07 | Phase 9 | Pending |
 | MENU-08 | Phase 9 | Pending |
-| PLAT-01 | Phase 2 | Pending |
+| PLAT-01 | Phase 2 | Complete |
 | PLAT-02 | Phase 7 | Pending |
 | PLAT-03 | Phase 1 | Complete |
 | PLAT-04 | Phase 8 | Pending |

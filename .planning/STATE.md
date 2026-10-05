@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 02
-current_phase_name: Staff Actions Across Groups
-status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-10-05T10:31:43.628Z"
+current_phase: 3
+current_phase_name: Staff Audit and Undo
+status: planning
+stopped_at: Phase 02 complete, ready to plan Phase 3
+last_updated: "2026-10-05T11:43:52.635Z"
 last_activity: 2026-10-05
-last_activity_desc: Phase 02 execution started
-state_head: e21826dcb309aec2e62704d4cba6aa13ff75c5e9
+last_activity_desc: Phase 02 complete, transitioned to Phase 3
+state_head: a6d96532062fb7886635a7fc5885d920ba5eeb3f
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 20
-  completed_plans: 17
-  percent: 11
+  completed_plans: 20
+  percent: 22
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-05)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 02 — Staff Actions Across Groups
+**Current focus:** Phase 3 — Staff Audit and Undo
 
 ## Current Position
 
-Phase: 02 (Staff Actions Across Groups) — EXECUTING
-Plan: 1 of 10
-Status: Executing Phase 02
-Last activity: 2026-10-05 — Phase 02 execution started
+Phase: 3 — Staff Audit and Undo
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-05 — Phase 02 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 11%
+Progress: [██░░░░░░░░] 22%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 20
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -46,6 +46,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 10 | - | - |
+| 02 | 10 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Phase 1]: Role exclusivity is enforced by a PostgreSQL trigger with per-chat advisory locks (owner's pick), on top of in-transaction app checks.
 - [Phase 1]: Only a definite owner mismatch removes a link; Telegram errors are unknown and change nothing. Phase 2's pre-action owner recheck should reuse `staff.*Fresh` + `chat_status.CheckOwner` the same way.
 - [Phase 1]: Exactly-once Staff Group notices come from conditional writes (RowsAffected == 1 posts), not locks.
+- [Phase 2]: One decision table (`decideStaffAction`) picks each group's Telegram call from the target's live status, so no staff action lifts a ban. Phase 3's "Undo everywhere" must reuse it rather than calling Telegram directly.
+- [Phase 2]: Staff fan-out calls go through the fleet-wide Redis pacer (`staffPaced`); a slot more than 60 s away fails at once as "rate limited". One run per target is held by a Redis lock renewed every 10 minutes.
+- [Phase 2]: The reason shows on the card and in the summary only. Posting to linked groups' log channels (STAFF-09), the audit record (STAFF-10) and "Undo everywhere" (STAFF-11) are Phase 3.
 
 ### Pending Todos
 
@@ -81,7 +85,8 @@ None yet.
 - [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
 - [Phase 1]: 10 of 11 live-Telegram UAT checks were deferred without being run (`phases/01-staff-group-links/01-UAT.md` Deferred Follow-Ups). CI had not run on PR #1 at phase close; the PostgreSQL trigger test passed locally against PostgreSQL 16.
 - [Phase 1]: Low, non-blocking security flag TF-01-06: a stranger's `/unlinkstaff` reply reveals whether the group is linked (`01-SECURITY.md`).
-- [Phase 2]: Research flag (not gating). Check `restrictChatMember` on banned or absent users.
+- [Phase 2]: Open code-review finding WR-03 (warning): at a `retry_after` of exactly 60 s, all but the first concurrent paced call fail as "rate limited" instead of waiting. Those groups are still reported. Nine info notes are open too (`02-REVIEW-DISPOSITION.md`).
+- [Phase 2]: `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` is flaky (2 of 6 verifier runs red): two runs straddle a wall-clock second in `until_date`. Test-only; it can turn `make test` red intermittently.
 - [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) lands in Phase 4. The alert's Lift button (LOCK-06), and listing removed joiners on the alert (LOCK-01), land in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
 
 ### Quick Tasks Completed
@@ -100,6 +105,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T01:07:15.897Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-staff-actions-across-groups/02-CONTEXT.md
+Last session: 2026-10-05T11:44:42Z
+Stopped at: Phase 2 complete, ready to plan Phase 3
+Resume file: None

@@ -30,16 +30,17 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ Links break automatically when the same person no longer owns both groups (ownership watchers plus an hourly live sweep; errors never unlink) — Phase 1
 - ✓ `/staff` panel shows the help text and each linked group's live status, with Refresh and paging; the settings-menu button is Phase 9 — Phase 1
   <!-- Phase 1 caveat: 10 of 11 live-Telegram UAT checks were deferred without being run (see phases/01-staff-group-links/01-UAT.md Deferred Follow-Ups). -->
+- ✓ Staff actions: any Staff Group member runs `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` (timed ban and mute, optional reason) against an `@username`, a numeric ID or a mention, behind a Confirm card only the issuer can tap — Phase 2
+- ✓ Every staff action fans out to all linked groups with a live per-group check of the issuer's restrict right; it acts where allowed, skips the rest, never touches the Staff Group, and never lifts a ban by accident — Phase 2
+- ✓ One live summary per action: every group is marked done, skipped or failed with its reason, and none is dropped, under Telegram rate limits across replicas — Phase 2
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
 **Staff Group (first)**
-- [ ] Any member of the Staff Group can run `/ban`, `/mute`, `/kick`, `/unban` and `/unmute`, including timed ban and mute, against an `@username` or a user ID.
-- [ ] Every Staff Group action applies to all linked groups. In each group the bot first checks that the issuing member is an admin there with the needed right. It acts where they have it and skips the rest.
-- [ ] After each action the issuer gets a per-group summary: done, skipped (not an admin there or missing the right), or failed (for example, the bot lacks rights).
-- [ ] An optional reason appears in the summary and is posted to each affected group's log channel.
+- [ ] Each applied staff action and its reason are posted to the log channel of every group where it was applied. (The reason already shows on the card and in the summary since Phase 2.)
+- [ ] Every staff action is recorded, and the summary gets an "Undo everywhere" button plus a recent-actions list in `/staff`.
 
 **Raid protection (second)**
 - [ ] A lockdown stops new members (anyone joining is kicked and listed in the alert) and mutes everyone except admins and approved users.
@@ -105,29 +106,34 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Staff Group is separate from federations | Different model: a shared staff room, not a ban list; keeps `/fban` stable | — Pending |
-| Any Staff Group member can act, gated by per-group admin rights | The Staff Group holds trusted people; the per-group check is the real safeguard | — Pending |
-| Act where allowed, skip the rest, with a per-group summary | Partial success is more useful than all-or-nothing, as long as it's visible | — Pending |
-| Every action hits all linked groups | That is the core value; per-group targeting adds complexity without demand | — Pending |
+| Any Staff Group member can act, gated by per-group admin rights | The Staff Group holds trusted people; the per-group check is the real safeguard | ✓ Shipped — Phase 2 |
+| Act where allowed, skip the rest, with a per-group summary | Partial success is more useful than all-or-nothing, as long as it's visible | ✓ Shipped — Phase 2 |
+| Every action hits all linked groups | That is the core value; per-group targeting adds complexity without demand | ✓ Shipped — Phase 2 |
 | Only a person who owns both groups can link them; one Staff Group per group; auto-unlink on ownership change | Strongest guarantee that a Staff Group can't gain control of a group it shouldn't | ✓ Shipped — Phase 1 |
 | Lockdown = kick joiners + mute all except admins and approved users; admin-only manual lift | Stops a raid immediately and leaves the "safe again" call to a human | — Pending |
 | Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | — Pending |
 | Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | — Pending |
 | `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | ✓ Panel shipped — Phase 1; menu fold-in Phase 9 |
 | Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | — Pending |
-| Every staff action needs a Confirm tap showing the resolved target | `@usernames` can be stale or recycled; owner prefers safety over speed | — Pending |
-| Staff Group members aren't protected from staff actions; only each group's admins and owner, and the bot, are | Owner's call; staff are trusted, not immune | — Pending |
+| Every staff action needs a Confirm tap showing the resolved target | `@usernames` can be stale or recycled; owner prefers safety over speed | ✓ Shipped — Phase 2 (5-minute card, issuer-only Confirm) |
+| Staff Group members aren't protected from staff actions; only each group's admins and owner, and the bot, are | Owner's call; staff are trusted, not immune | ✓ Shipped — Phase 2 |
 | Undo-everywhere button and a recent-actions list in `/staff` are in v1, backed by an audit record | Mistakes are reversible and accountable | — Pending |
 | Old `/antiraid` is retired; its auto-threshold carries over to join-surge detection | One raid system, not two | — Pending |
 | Auto-triggers are on by default with conservative thresholds | Protection from day one; admins tune or disable per group | — Pending |
 | Images are classified by Gemini `gemini-3.5-flash-lite` (owner's key); text stays on TypeSafe | Owner's choice of provider; TypeSafe is text-only | — Pending |
 | Turnstile captcha is one solve only; math and text modes stay as fallbacks | Owner's call; fallbacks cover Cloudflare or hosting outages | — Pending |
 | `/settings` asks whether to open in the group or in private | GroupHelp-style choice | — Pending |
-| Multiple replicas: pacing, counters, challenges and lockdown state are shared, not per process | That's how the bot is deployed | — Pending |
+| Multiple replicas: pacing, counters, challenges and lockdown state are shared, not per process | That's how the bot is deployed | ✓ Pacing and the per-target lock are shared through Redis — Phase 2; counters, challenges and lockdown state come later |
 | Role exclusivity (a group can't be both a Staff Group and linked) is enforced by a PostgreSQL trigger with per-chat advisory locks, on top of the app checks | Closes the two-replica race the app checks alone can't; trigger rejection fails closed | ✓ Good — Phase 1 (concurrency test passes on PostgreSQL 16) |
 | Only a definite owner mismatch removes a link; any Telegram error counts as unknown and changes nothing | A 429 or timeout must never mass-unlink groups | ✓ Good — Phase 1 |
 | Exactly-once notices come from conditional writes (RowsAffected == 1 posts), not locks | Racing triggers and replicas can't double-post or contradict each other | ✓ Good — Phase 1 |
 | Hourly staff sweeper across replicas behind a Redis `SETNX` lock; runs unguarded without Redis because every staff write is conditional | Catches ownership changes Telegram never announced (bot not admin, bot down) | ✓ Good — Phase 1 |
 | Link refusals to strangers use one uniform text and never post into the named Staff Group | Prevents probing which chats are Staff Groups and spamming someone else's staff room | ✓ Good — Phase 1 |
+| Staff commands are raw group-0 interceptors ahead of Bans and Mutes, a documented exception to `WrapCommand` | `BuildCommandContext` replies to sender-less updates; outside a Staff Group the interceptors pass through with no reply, write or Telegram call, so per-group commands are unchanged | ✓ Good — Phase 2 |
+| One decision table picks each group's Telegram call from the target's live status | `restrictChatMember` and `unbanChatMember` replace a status server-side, so a mute, kick or unmute could otherwise lift a ban | ✓ Good — Phase 2 (live UAT passed) |
+| Staff fan-out goes through a fleet-wide Redis pacer; a call whose slot is more than 60 s away fails at once as "rate limited" | One flood must not freeze every staff run on every replica, and a refused group is reported, never dropped | ✓ Good — Phase 2 (edge case WR-03 at `retry_after` = 60 left open) |
+| One staff run per target, held by a Redis lock the run renews every 10 minutes | A second Confirm on the same person must not race a slow first run | ✓ Good — Phase 2 |
+| Each summary message has its own delivery budget, and progress edits pause during a 429 | The final summary must still arrive when Telegram makes the bot wait | ✓ Good — Phase 2 |
 
 ## Evolution
 
@@ -147,4 +153,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-05 after Phase 1*
+*Last updated: 2026-10-05 after Phase 2*

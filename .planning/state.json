@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Staff Actions Across Groups",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 02 of 9 · 11% · executing"
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 9 — needs a plan"
   },
-  "updated_at": "2026-10-05T10:31:43.656Z"
+  "updated_at": "2026-10-05T11:43:52.660Z"
 }
