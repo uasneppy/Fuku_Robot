@@ -2436,3 +2436,6 @@ staff_act_summary_pending_collapsed: "{count} समूह प्रगति �
 staff_act_summary_continued: "और समूह अगले संदेश में सूचीबद्ध हैं।"
 staff_act_summary_continuation: "जारी:"
 staff_act_card_cancelled: "{name} द्वारा रद्द किया गया। कुछ भी नहीं किया गया।"
+staff_log_admin_label: "एडमिन"
+staff_log_user_label: "उपयोगकर्ता"
+staff_log_via_staff_group: "स्टाफ ग्रुप के माध्यम से"

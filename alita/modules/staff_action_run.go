@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
@@ -183,15 +184,42 @@ func pendingResults(links []models.StaffGroupLink) []staffGroupResult {
 	return results
 }
 
-// startStaffActionRun runs the fan-out in the background, then puts the final
-// summary on the card and marks the card done.
-func startStaffActionRun(
-	b *gotgbot.Bot,
-	card *staffActionCard,
-	links []models.StaffGroupLink,
-	newUntil int64,
-	chatID, msgID int64,
-) {
+// staffRunSpec describes one staff run for startStaffRun: the card it belongs to,
+// the groups it visits, the message it keeps up to date, and the functions that do
+// the per-group work and render the text. Phase 2's action run is the first spec;
+// the undo run is another. Everything else (the one writer of the message, the
+// throttled edits, the 429 hold, the lock renewal, the shutdown sweep and the final
+// delivery) belongs to the engine and is the same for every run.
+type staffRunSpec struct {
+	// Card owns the target lock the run releases, names the Staff Group whose
+	// language the text is rendered in, and supplies the final log line.
+	Card *staffActionCard
+	// Links are the linked groups the run visits, in the order the summary lists them.
+	Links []models.StaffGroupLink
+	// ChatID and MsgID are the message the coordinator edits and finally replaces
+	// with the summary.
+	ChatID, MsgID int64
+	// Group does the work for group i and returns how it ended. It runs in a worker
+	// goroutine and gets the run's shared paced owner pass.
+	Group func(ctx context.Context, i int, pass *staffOwnerPass) staffGroupResult
+	// AfterGroup runs in the same worker right after group i's result is set in the
+	// run's progress, so the summary already shows it. It may be nil. It must not
+	// change the result.
+	AfterGroup func(ctx context.Context, i int, res staffGroupResult)
+	// Render builds the card text for a set of results: with final false, a progress
+	// text whose pending lines may collapse; with final true, the last text plus any
+	// continuation messages.
+	Render func(tr *i18n.Translator, results []staffGroupResult, final bool) (string, []string)
+	// Finish runs once after the unfinished groups are swept into failed lines and
+	// before the final summary is delivered. It may be nil.
+	Finish func(results []staffGroupResult)
+}
+
+// startStaffRun runs spec in the background: it fans out over spec.Links, keeps the
+// message current, then puts the final summary on it and marks the card done. One
+// coordinator goroutine per run is the only writer of the message.
+func startStaffRun(b *gotgbot.Bot, spec staffRunSpec) {
+	card := spec.Card
 	// Added before the context is read, so a shutdown that cancels it afterwards
 	// still finds this run in the wait group.
 	staffActionRunsWG.Add(1)
@@ -204,7 +232,7 @@ func startStaffActionRun(
 		defer releaseStaffTargetLock(card.Target, card.Token)
 
 		tr := staffChatTranslator(card.StaffChat)
-		progress := newStaffActionProgress(links)
+		progress := newStaffActionProgress(spec.Links)
 
 		// The fan-out runs in its own goroutine so this one stays the only writer of
 		// the card from here on: it alone edits the message, on a timer.
@@ -212,7 +240,7 @@ func startStaffActionRun(
 		go func() {
 			defer error_handling.RecoverFromPanic("staffActionFanOut", "StaffActions")
 			defer close(fanOutDone)
-			runStaffActionFanOut(ctx, b, card, links, newUntil, progress)
+			runStaffFanOut(ctx, b, spec, progress)
 		}()
 
 		// editHoldUntil is when Telegram's last retry_after for a progress edit of this
@@ -247,7 +275,8 @@ func startStaffActionRun(
 				if !dirty {
 					continue
 				}
-				err := editStaffActionMessage(b, chatID, msgID, renderStaffActionSummary(tr, card, snapshot))
+				text, _ := spec.Render(tr, snapshot, false)
+				err := editStaffActionMessage(b, spec.ChatID, spec.MsgID, text)
 				if err == nil {
 					continue
 				}
@@ -276,12 +305,14 @@ func startStaffActionRun(
 		results := progress.sweepPending(sweep)
 		// The record is closed before anything is shown: its writes use db.DB, never
 		// ctx, so a shutdown that cancelled the run cannot lose them.
-		finalizeStaffActionRecord(card, results)
+		if spec.Finish != nil {
+			spec.Finish(results)
+		}
 
-		final, continuation := renderStaffActionSummaryFinal(tr, card, results)
+		final, continuation := spec.Render(tr, results, true)
 		// Delivery never runs on the run's own context, which a shutdown may already
 		// have cancelled: each message opens a fresh budget of its own.
-		deliverStaffActionFinal(b, chatID, msgID, final, continuation, editHoldUntil)
+		deliverStaffActionFinal(b, spec.ChatID, spec.MsgID, final, continuation, editHoldUntil)
 		if err := setStaffActionCardState(card.Token, staffCardDone); err != nil {
 			log.Warnf("[StaffActions] mark card %s done: %v", card.Token, err)
 		}
@@ -292,19 +323,51 @@ func startStaffActionRun(
 	}()
 }
 
-// runStaffActionFanOut visits the linked groups, staffActionWorkers at a time, and
-// records each group's result in progress as soon as it is known. One paced owner
-// pass is shared, so the Staff Group's creator is asked about once.
-//
-// Every slot starts pending and each worker writes only its own. A worker that
-// panics leaves its slot pending; the coordinator sweeps what is left into a
-// failed line, so no group is ever dropped from the summary (STAFF-08).
-func runStaffActionFanOut(
-	ctx context.Context,
+// startStaffActionRun runs a confirmed staff action as the first staffRunSpec: each
+// group goes through the per-group check chain, its result is recorded and, when
+// the action was applied there, posted to the group's log channel.
+func startStaffActionRun(
 	b *gotgbot.Bot,
 	card *staffActionCard,
 	links []models.StaffGroupLink,
 	newUntil int64,
+	chatID, msgID int64,
+) {
+	startStaffRun(b, staffRunSpec{
+		Card:   card,
+		Links:  links,
+		ChatID: chatID,
+		MsgID:  msgID,
+		Group: func(ctx context.Context, i int, pass *staffOwnerPass) staffGroupResult {
+			return runStaffActionInGroup(ctx, b, card, links[i], newUntil, pass)
+		},
+		AfterGroup: func(ctx context.Context, _ int, res staffGroupResult) {
+			saveStaffGroupResult(card, res)
+			// The post comes after the record write and never changes the result.
+			if res.Outcome == staffOutcomeDone {
+				postStaffActionLog(ctx, b, card, res.Link)
+			}
+		},
+		Render: func(tr *i18n.Translator, results []staffGroupResult, final bool) (string, []string) {
+			return composeStaffActionSummary(tr, card, results, final)
+		},
+		Finish: func(results []staffGroupResult) {
+			finalizeStaffActionRecord(card, results)
+		},
+	})
+}
+
+// runStaffFanOut visits spec.Links, staffActionWorkers at a time, and records each
+// group's result in progress as soon as it is known. One paced owner pass is
+// shared, so the Staff Group's creator is asked about once.
+//
+// Every slot starts pending and each worker writes only its own. A worker that
+// panics leaves its slot pending; the coordinator sweeps what is left into a
+// failed line, so no group is ever dropped from the summary (STAFF-08).
+func runStaffFanOut(
+	ctx context.Context,
+	b *gotgbot.Bot,
+	spec staffRunSpec,
 	progress *staffActionProgress,
 ) {
 	pass := newPacedStaffOwnerPass(func(run func() error) error {
@@ -313,12 +376,14 @@ func runStaffActionFanOut(
 
 	var workers errgroup.Group
 	workers.SetLimit(staffActionWorkers)
-	for i, link := range links {
+	for i := range spec.Links {
 		workers.Go(func() error {
 			defer error_handling.RecoverFromPanic("staffActionWorker", "StaffActions")
-			res := runStaffActionInGroup(ctx, b, card, link, newUntil, pass)
+			res := spec.Group(ctx, i, pass)
 			progress.set(i, res)
-			saveStaffGroupResult(card, res)
+			if spec.AfterGroup != nil {
+				spec.AfterGroup(ctx, i, res)
+			}
 			return nil
 		})
 	}
