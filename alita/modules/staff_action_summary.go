@@ -468,20 +468,40 @@ func sendStaffSummaryPart(ctx context.Context, b *gotgbot.Bot, chatID int64, tex
 	return false
 }
 
+// staffActionDeliverPartTimeout bounds the delivery of one summary message. Before
+// each of its attempts the message may wait once at the retry cap, and each attempt
+// has its own edit timeout: 210 s with today's values.
+const staffActionDeliverPartTimeout = staffActionFinalAttempts * (staffActionRetryAfterCap + staffActionEditTimeout)
+
+// newStaffDeliverContext opens the budget of one summary message. It is never
+// derived from the run's context, which a shutdown may already have cancelled.
+func newStaffDeliverContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), staffActionDeliverPartTimeout)
+}
+
 // deliverStaffActionFinal puts a run's final summary in front of the issuer. The
 // card is edited first, with retries (STAFF-12). When it cannot be edited (deleted,
 // or any other error) the summary is posted as a new message in the Staff Group,
 // so the result always arrives. Each continuation message follows in order
-// (STAFF-08); one that cannot be sent is logged and the rest still go out. ctx
-// bounds only the waits between retries.
-func deliverStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string) {
-	if !editStaffActionFinal(ctx, b, chatID, msgID, text) {
-		if !sendStaffSummaryPart(ctx, b, chatID, text) {
+// (STAFF-08); one that cannot be sent is logged and the rest still go out. Every
+// message has its own budget, so a long wait on one never starves the next.
+func deliverStaffActionFinal(b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string) {
+	editCtx, cancelEdit := newStaffDeliverContext()
+	edited := editStaffActionFinal(editCtx, b, chatID, msgID, text)
+	cancelEdit()
+	if !edited {
+		sendCtx, cancelSend := newStaffDeliverContext()
+		sent := sendStaffSummaryPart(sendCtx, b, chatID, text)
+		cancelSend()
+		if !sent {
 			log.Errorf("[StaffActions] the final summary could not be delivered to chat %d", chatID)
 		}
 	}
 	for i, part := range continuation {
-		if !sendStaffSummaryPart(ctx, b, chatID, part) {
+		partCtx, cancelPart := newStaffDeliverContext()
+		sent := sendStaffSummaryPart(partCtx, b, chatID, part)
+		cancelPart()
+		if !sent {
 			log.Errorf("[StaffActions] continuation %d of the summary could not be delivered to chat %d", i+1, chatID)
 		}
 	}

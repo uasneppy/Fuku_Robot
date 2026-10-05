@@ -51,10 +51,6 @@ var (
 	staffActionStopWait = 30 * time.Second
 )
 
-// staffActionDeliverTimeout bounds the delivery of a run's final summary. It runs
-// on a fresh context, never the cancelled one a shutdown leaves behind.
-const staffActionDeliverTimeout = 15 * time.Second
-
 // staffActionsContext is the context a new run starts with.
 func staffActionsContext() context.Context {
 	staffActionsMu.Lock()
@@ -240,11 +236,9 @@ func startStaffActionRun(
 		results := progress.sweepPending(sweep)
 
 		final, continuation := renderStaffActionSummaryFinal(tr, card, results)
-		// Fresh context: the run's own may already be cancelled by a shutdown, and the
-		// summary still has to be delivered.
-		deliverCtx, cancel := context.WithTimeout(context.Background(), staffActionDeliverTimeout)
-		deliverStaffActionFinal(deliverCtx, b, chatID, msgID, final, continuation)
-		cancel()
+		// Delivery never runs on the run's own context, which a shutdown may already
+		// have cancelled: each message opens a fresh budget of its own.
+		deliverStaffActionFinal(b, chatID, msgID, final, continuation)
 		if err := setStaffActionCardState(card.Token, staffCardDone); err != nil {
 			log.Warnf("[StaffActions] mark card %s done: %v", card.Token, err)
 		}
