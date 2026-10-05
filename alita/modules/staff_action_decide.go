@@ -2,13 +2,20 @@ package modules
 
 import "github.com/PaulSonOfLars/gotgbot/v2"
 
-// staffActionKind names a staff moderation action. Later plans add mute, kick,
-// unban and unmute next to ban.
+// staffActionKind names a staff moderation action.
 type staffActionKind string
 
 const (
 	// staffKindBan bans the target, permanently or until a date.
 	staffKindBan staffActionKind = "ban"
+	// staffKindMute restricts a member so they cannot send messages.
+	staffKindMute staffActionKind = "mute"
+	// staffKindKick removes a current member, who may rejoin.
+	staffKindKick staffActionKind = "kick"
+	// staffKindUnban lifts a ban and never removes a member.
+	staffKindUnban staffActionKind = "unban"
+	// staffKindUnmute gives a muted target the group's default permissions back.
+	staffKindUnmute staffActionKind = "unmute"
 )
 
 // staffOutcome is how one linked group ended for a staff action.
@@ -32,12 +39,20 @@ type staffReason string
 const (
 	staffReasonBanned             staffReason = "banned"
 	staffReasonBannedNotInGroup   staffReason = "banned_not_in_group"
+	staffReasonMuted              staffReason = "muted"
+	staffReasonKicked             staffReason = "kicked"
+	staffReasonUnbanned           staffReason = "unbanned"
+	staffReasonUnmuted            staffReason = "unmuted"
 	staffReasonSkipIssuerNotAdmin staffReason = "skip_issuer_not_admin"
 	staffReasonSkipIssuerNoRight  staffReason = "skip_issuer_no_right"
 	staffReasonSkipTargetAdmin    staffReason = "skip_target_admin"
 	staffReasonSkipTargetBot      staffReason = "skip_target_bot"
 	staffReasonSkipTargetService  staffReason = "skip_target_service"
 	staffReasonSkipAlreadyBanned  staffReason = "skip_already_banned"
+	staffReasonSkipNotInGroup     staffReason = "skip_not_in_group"
+	staffReasonSkipAlreadyMuted   staffReason = "skip_already_muted"
+	staffReasonSkipNotBanned      staffReason = "skip_not_banned"
+	staffReasonSkipNotMuted       staffReason = "skip_not_muted"
 	staffReasonSkipLinkRemoved    staffReason = "skip_link_removed"
 	staffReasonSkipStaffGroup     staffReason = "skip_staff_group"
 	staffReasonFailOwnerUnknown   staffReason = "fail_owner_unknown"
@@ -93,6 +108,15 @@ const (
 	staffCallNone staffAPICall = iota
 	// staffCallBan is banChatMember.
 	staffCallBan
+	// staffCallMute is restrictChatMember with MutedPermissions.
+	staffCallMute
+	// staffCallKick is unbanChatMember with only_if_banned=false, which removes a
+	// current member without banning them.
+	staffCallKick
+	// staffCallUnban is unbanChatMember with only_if_banned=true.
+	staffCallUnban
+	// staffCallUnmute is restrictChatMember with the group's default permissions.
+	staffCallUnmute
 )
 
 // staffVerdict is the decision for one group: the write to make, if any, and the
