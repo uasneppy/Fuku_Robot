@@ -31,6 +31,17 @@ const staffActionCardPrefix = "alita:staff:act:"
 // is a variable so tests can shorten it.
 var staffActionCardLifetime = 5 * time.Minute
 
+// staffActionExpirySlack is how long after the card's lifetime the expiry timer
+// fires, so it never runs before the card's own expires_at. It is a variable so
+// tests can shorten it.
+var staffActionExpirySlack = 2 * time.Second
+
+// scheduleStaffActionExpiry is not implemented yet.
+func scheduleStaffActionExpiry(_ *gotgbot.Bot, _ string, _, _ int64) {}
+
+// expireStaffActionCard is not implemented yet.
+func expireStaffActionCard(_ *gotgbot.Bot, _ string, _, _ int64) {}
+
 const (
 	// staffActionCardGrace keeps a pending card's key a little past its expiry, so
 	// a late tap can still be answered "expired".
