@@ -169,6 +169,21 @@ func GetActionFresh(id uint) (*models.StaffAction, error) {
 	return &row, nil
 }
 
+// ActionTally counts a staff action's group rows by outcome.
+type ActionTally struct {
+	Done, Skipped, Failed, Pending int
+}
+
+// ListActionsFresh is not implemented yet.
+func ListActionsFresh(staffChatID int64, offset, limit int) ([]models.StaffAction, error) {
+	return nil, nil
+}
+
+// TallyActionGroups is not implemented yet.
+func TallyActionGroups(actionIDs []uint) (map[uint]ActionTally, error) {
+	return map[uint]ActionTally{}, nil
+}
+
 // ListActionGroupsFresh lists the per-group rows of one staff action in the order
 // the run visited the groups (seq), straight from the database.
 func ListActionGroupsFresh(actionID uint) ([]models.StaffActionGroup, error) {
