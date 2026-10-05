@@ -48,7 +48,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A link and the Staff Group status keep working after a group upgrades to a supergroup and gets a new chat ID.
   5. `/staff` in the Staff Group shows the help text and each linked group's status: linked, bot is admin, bot can restrict members, owner still matches. All its text exists in all 7 languages. The in-lockdown status is added when Phase 4 ships.
 
-**Plans:** 8/10 plans executed
+**Plans:** 10/10 plans executed
 
 Plans:
 **Wave 1**
@@ -72,8 +72,8 @@ Plans:
 - [x] 01-08-PLAN.md: Bot-health tracking, with one heads-up per change, including recovery
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 01-09-PLAN.md: Live `/staff` panel with per-group statuses, Refresh in place, paging and length cap
-- [ ] 01-10-PLAN.md: Hourly and startup sweeper behind a Redis lock, wired into startup and shutdown
+- [x] 01-09-PLAN.md: Live `/staff` panel with per-group statuses, Refresh in place, paging and length cap
+- [x] 01-10-PLAN.md: Hourly and startup sweeper behind a Redis lock, wired into startup and shutdown
 
 ### Phase 2: Staff Actions Across Groups
 
@@ -206,7 +206,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Staff Group Links | 8/10 | In Progress|  |
+| 1. Staff Group Links | 10/10 | In Progress|  |
 | 2. Staff Actions Across Groups | 0/TBD | Not started | - |
 | 3. Staff Audit and Undo | 0/TBD | Not started | - |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
