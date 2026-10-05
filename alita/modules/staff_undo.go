@@ -148,6 +148,13 @@ func (m moduleStruct) staffUndoAsk(
 		answerStaffCallback(b, query, text, alert)
 	}
 
+	// A Telegram service identity is refused before any lookup. A callback's sender is
+	// the real pressing user, so this is defence in depth (research A4).
+	if staffServiceUserIDs[query.From.Id] {
+		answer("staff_post_as_yourself", true)
+		return ext.EndGroups
+	}
+
 	id, err := strconv.ParseUint(fields["r"], 10, 63)
 	if err != nil || id == 0 {
 		answer("staff_cb_expired", false)
@@ -277,6 +284,13 @@ func (m moduleStruct) staffUndoConfirm(
 	tr *i18n.Translator,
 	fields map[string]string,
 ) error {
+	// A Telegram service identity is refused before any lookup. A callback's sender is
+	// the real pressing user, so this is defence in depth (research A4).
+	if staffServiceUserIDs[query.From.Id] {
+		text, _ := tr.GetString("staff_post_as_yourself")
+		answerStaffCallback(b, query, text, true)
+		return ext.EndGroups
+	}
 	card := loadStaffCardForTap(b, query, tr, fields)
 	if card == nil {
 		return ext.EndGroups
@@ -294,7 +308,7 @@ func (m moduleStruct) staffUndoConfirm(
 	lockHeld, runStarted := false, false
 	if card.State == staffCardPending && time.Now().UnixMilli() < card.ExpiresAt {
 		if card.Issuer != query.From.Id {
-			text, _ := tr.GetString("staff_act_card_issuer_only")
+			text, _ := tr.GetString("staff_undo_card_presser_only")
 			answerStaffCallback(b, query, text, true)
 			return ext.EndGroups
 		}

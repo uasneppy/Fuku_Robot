@@ -613,7 +613,13 @@ func answerStaffCardClaim(
 ) {
 	switch claim {
 	case staffClaimNotIssuer:
-		text, _ := tr.GetString("staff_act_card_issuer_only")
+		// An undo card belongs to the member who pressed Undo, not to whoever ran the
+		// original command, so its wording says so.
+		key := "staff_act_card_issuer_only"
+		if card.Kind == staffKindUndo {
+			key = "staff_undo_card_presser_only"
+		}
+		text, _ := tr.GetString(key)
 		answerStaffCallback(b, query, text, true)
 	case staffClaimWrongState:
 		var text string
