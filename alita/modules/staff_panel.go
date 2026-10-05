@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -27,6 +28,13 @@ const (
 
 	// staffPanelBuildTimeout bounds one whole live panel build.
 	staffPanelBuildTimeout = 45 * time.Second
+
+	// staffPanelPageSize is the number of linked groups on one panel page.
+	staffPanelPageSize = 8
+	// staffPanelMaxUTF16 caps the panel text, measured in UTF-16 code units on
+	// the HTML source. Telegram allows 4096 characters after parsing, so this
+	// leaves room for the entity markup.
+	staffPanelMaxUTF16 = 3800
 )
 
 // staffLinkRow is one linked group as shown in the Staff Group panel. Later
@@ -163,11 +171,114 @@ func renderStaffRow(tr *i18n.Translator, row staffLinkRow) string {
 	return sb.String()
 }
 
-// renderStaffPanel builds the text and keyboard of the /staff panel. It is pure:
-// it performs no I/O, so the Phase 9 settings menu can reuse it. The text has the
-// help, the chat ID, each linked group with its live status, a legend and the
-// time of the check. The keyboard has the Add group button first (when the bot
-// has a username), then Refresh, then one Unlink button per linked group.
+// staffPanelView is everything composeStaffPanelText needs to lay out one page.
+type staffPanelView struct {
+	staffGroup models.StaffGroup
+	// total is the number of linked groups over all pages.
+	total int
+	// shown are the rows written into the text, in order.
+	shown []staffLinkRow
+	// hidden counts rows of this page left out to fit the length cap.
+	hidden      int
+	page, pages int
+	updatedAt   time.Time
+	helpAsHint  bool
+}
+
+// composeStaffPanelText lays out the panel text of one page: the help (or its
+// short hint), the chat ID, the links header and page line, the rows, a note for
+// rows left out, the legend and the time of the check.
+func composeStaffPanelText(tr *i18n.Translator, v staffPanelView) string {
+	var sb strings.Builder
+
+	if v.helpAsHint {
+		hint, _ := tr.GetString("staff_panel_help_hint")
+		sb.WriteString(hint)
+	} else {
+		help, _ := tr.GetString("staff_help_msg")
+		sb.WriteString(formatting.ToTelegramHTML(help))
+	}
+
+	chatLine, _ := tr.GetString("staff_panel_chat_id", i18n.TranslationParams{
+		"chat_id": v.staffGroup.ChatID,
+	})
+	sb.WriteString("\n\n")
+	sb.WriteString(chatLine)
+
+	if v.total == 0 {
+		noLinks, _ := tr.GetString("staff_panel_no_links")
+		sb.WriteString("\n")
+		sb.WriteString(noLinks)
+	} else {
+		header, _ := tr.GetString("staff_panel_links_header", i18n.TranslationParams{
+			"count": v.total,
+		})
+		sb.WriteString("\n")
+		sb.WriteString(header)
+	}
+	if v.pages > 1 {
+		pageLine, _ := tr.GetString("staff_panel_page", i18n.TranslationParams{
+			"page":  v.page + 1,
+			"pages": v.pages,
+		})
+		sb.WriteString("\n")
+		sb.WriteString(pageLine)
+	}
+	for _, row := range v.shown {
+		sb.WriteString("\n\n")
+		sb.WriteString(renderStaffRow(tr, row))
+	}
+	if v.hidden > 0 {
+		truncated, _ := tr.GetString("staff_panel_truncated", i18n.TranslationParams{
+			"count": v.hidden,
+		})
+		sb.WriteString("\n\n")
+		sb.WriteString(truncated)
+	}
+
+	if v.total > 0 {
+		legend, _ := tr.GetString("staff_panel_legend")
+		sb.WriteString("\n\n")
+		sb.WriteString(legend)
+	}
+	updated, _ := tr.GetString("staff_panel_updated", i18n.TranslationParams{
+		"time": v.updatedAt.UTC().Format("15:04:05"),
+	})
+	sb.WriteString("\n")
+	sb.WriteString(updated)
+	return sb.String()
+}
+
+// staffPanelTextFor returns the text of a page that fits the length cap, measured
+// in UTF-16 code units on the HTML source. The help is swapped for its short hint
+// when the page is too long with it, and rows are then dropped from the end of the
+// page, with a note, until it fits. It also returns the rows that stayed in.
+func staffPanelTextFor(tr *i18n.Translator, v staffPanelView) (string, []staffLinkRow) {
+	fits := func(text string) bool { return len(utf16.Encode([]rune(text))) <= staffPanelMaxUTF16 }
+
+	pageRows := v.shown
+	text := composeStaffPanelText(tr, v)
+	if fits(text) {
+		return text, v.shown
+	}
+	v.helpAsHint = true
+	text = composeStaffPanelText(tr, v)
+	for !fits(text) && len(v.shown) > 0 {
+		v.shown = v.shown[:len(v.shown)-1]
+		v.hidden = len(pageRows) - len(v.shown)
+		text = composeStaffPanelText(tr, v)
+	}
+	return text, v.shown
+}
+
+// renderStaffPanel builds the text and keyboard of one page of the /staff panel.
+// It is pure: it performs no I/O, so the Phase 9 settings menu can reuse it. The
+// text has the help, the chat ID, the page's linked groups with their live
+// status, a legend and the time of the check, and stays within
+// staffPanelMaxUTF16 UTF-16 code units. The keyboard has the Add group button
+// first (when the bot has a username), then Refresh, then one Unlink button per
+// group shown, then Prev and Next when there are other pages. page is clamped
+// into range.
 func renderStaffPanel(
 	tr *i18n.Translator,
 	staffGroup models.StaffGroup,
@@ -176,44 +287,22 @@ func renderStaffPanel(
 	page int,
 	updatedAt time.Time,
 ) (string, gotgbot.InlineKeyboardMarkup) {
-	var sb strings.Builder
+	pages := (len(rows) + staffPanelPageSize - 1) / staffPanelPageSize
+	if pages < 1 {
+		pages = 1
+	}
+	page = min(max(page, 0), pages-1)
+	start := page * staffPanelPageSize
+	end := min(start+staffPanelPageSize, len(rows))
 
-	help, _ := tr.GetString("staff_help_msg")
-	sb.WriteString(formatting.ToTelegramHTML(help))
-
-	chatLine, _ := tr.GetString("staff_panel_chat_id", i18n.TranslationParams{
-		"chat_id": staffGroup.ChatID,
+	text, shown := staffPanelTextFor(tr, staffPanelView{
+		staffGroup: staffGroup,
+		total:      len(rows),
+		shown:      rows[start:end],
+		page:       page,
+		pages:      pages,
+		updatedAt:  updatedAt,
 	})
-	sb.WriteString("\n\n")
-	sb.WriteString(chatLine)
-
-	if len(rows) == 0 {
-		noLinks, _ := tr.GetString("staff_panel_no_links")
-		sb.WriteString("\n")
-		sb.WriteString(noLinks)
-	}
-	if len(rows) > 0 {
-		header, _ := tr.GetString("staff_panel_links_header", i18n.TranslationParams{
-			"count": len(rows),
-		})
-		sb.WriteString("\n")
-		sb.WriteString(header)
-	}
-	for _, row := range rows {
-		sb.WriteString("\n\n")
-		sb.WriteString(renderStaffRow(tr, row))
-	}
-
-	if len(rows) > 0 {
-		legend, _ := tr.GetString("staff_panel_legend")
-		sb.WriteString("\n\n")
-		sb.WriteString(legend)
-	}
-	updated, _ := tr.GetString("staff_panel_updated", i18n.TranslationParams{
-		"time": updatedAt.UTC().Format("15:04:05"),
-	})
-	sb.WriteString("\n")
-	sb.WriteString(updated)
 
 	var keyboard gotgbot.InlineKeyboardMarkup
 	if botUsername != "" {
@@ -225,12 +314,42 @@ func renderStaffPanel(
 	if refresh, ok := staffRefreshButton(tr, page); ok {
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []gotgbot.InlineKeyboardButton{refresh})
 	}
-	for _, row := range rows {
+	for _, row := range shown {
 		if button, ok := staffUnlinkButton(tr, row.Link); ok {
 			keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []gotgbot.InlineKeyboardButton{button})
 		}
 	}
-	return sb.String(), keyboard
+	if paging := staffPagingRow(tr, page, pages); len(paging) > 0 {
+		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, paging)
+	}
+	return text, keyboard
+}
+
+// staffPagingRow builds the Prev and Next buttons of a page: Prev when there is a
+// page before it, Next when there is one after. A button whose data does not fit
+// Telegram's 64 bytes is left out and logged.
+func staffPagingRow(tr *i18n.Translator, page, pages int) []gotgbot.InlineKeyboardButton {
+	var row []gotgbot.InlineKeyboardButton
+	add := func(target int, label string) {
+		data := encodeCallbackData(staffCallbackNamespace, map[string]string{
+			"a": staffActPage,
+			"p": strconv.Itoa(target),
+		})
+		if data == "" {
+			log.Warnf("[Staff] paging button for page %d skipped: callback data does not fit", target)
+			return
+		}
+		row = append(row, gotgbot.InlineKeyboardButton{Text: label, CallbackData: data})
+	}
+	if page > 0 {
+		prev, _ := tr.GetString("staff_panel_prev")
+		add(page-1, prev)
+	}
+	if page < pages-1 {
+		next, _ := tr.GetString("staff_panel_next")
+		add(page+1, next)
+	}
+	return row
 }
 
 // staffRefreshButton builds the Refresh button. Its data names the page to
@@ -348,12 +467,35 @@ func isMessageNotModified(err error) bool {
 	return err != nil && strings.Contains(strings.ToLower(err.Error()), "message is not modified")
 }
 
-// staffPanelRefresh handles the Refresh button: any current member of the Staff
-// Group may press it. The chat is the one the button sits in, which must be a
-// Staff Group, and the presser's membership is checked live. The press is
-// answered exactly once, then the panel is rebuilt live and the same message is
-// edited in place.
-func (moduleStruct) staffPanelRefresh(
+// staffPanelRefresh handles the Refresh button: it rebuilds the page the button
+// names, live, and edits the same message in place. See staffPanelRebuild for the
+// authority it requires.
+func (m moduleStruct) staffPanelRefresh(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	return m.staffPanelRebuild(b, query, tr, fields)
+}
+
+// staffPanelPage handles the Prev and Next buttons with the same authority as
+// Refresh: it rebuilds the requested page live and edits the message in place.
+func (m moduleStruct) staffPanelPage(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	return m.staffPanelRebuild(b, query, tr, fields)
+}
+
+// staffPanelRebuild is the shared body of Refresh and paging. Any current member
+// of the Staff Group may press the buttons. The chat is the one the button sits
+// in, which must be a Staff Group, and the presser's membership is checked live.
+// The press is answered exactly once, then the panel is rebuilt live and the same
+// message is edited in place.
+func (moduleStruct) staffPanelRebuild(
 	b *gotgbot.Bot,
 	query *gotgbot.CallbackQuery,
 	tr *i18n.Translator,

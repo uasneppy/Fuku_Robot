@@ -2353,3 +2353,8 @@ staff_panel_legend: "✅ हां | ❌ नहीं | ❔ जांच नह�
 staff_panel_updated: "{time} UTC पर अपडेट किया गया"
 staff_panel_refresh_button: "🔄 रिफ्रेश करें"
 staff_cb_members_only: "केवल इस स्टाफ ग्रुप के सदस्य ही यह कर सकते हैं।"
+staff_panel_prev: "⬅️ पिछला"
+staff_panel_next: "अगला ➡️"
+staff_panel_page: "पेज {page}/{pages}"
+staff_panel_help_hint: "स्टाफ ग्रुप के कमांड /help में दिए गए हैं।"
+staff_panel_truncated: "संदेश बहुत लंबा होने के कारण इस पेज के {count} और ग्रुप नहीं दिखाए गए हैं।"

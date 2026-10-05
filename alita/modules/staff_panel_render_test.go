@@ -332,3 +332,40 @@ func TestStaffPanelPageCallback(t *testing.T) {
 		t.Fatalf("non-member answer = %+v, want a members-only alert", answers[1].Params)
 	}
 }
+
+func TestStaffPanelRenderDropsRowsWithANoteWhenTooLong(t *testing.T) {
+	raw, err := os.ReadFile("../../locales/en.yml")
+	if err != nil {
+		t.Fatalf("read locale en: %v", err)
+	}
+	tr, err := i18n.NewTestTranslator(string(raw))
+	if err != nil {
+		t.Fatalf("parse locale en: %v", err)
+	}
+	rows := panelRows(8, func(int) string { return strings.Repeat("&", 64) })
+	for i := range rows {
+		rows[i].Health = models.StaffHealthBotCannotRestrict
+	}
+
+	text, keyboard := renderStaffPanel(tr, panelRenderGroup(), rows, "fukubot", 0, time.Now())
+
+	if got := panelUTF16Len(text); got > 3800 {
+		t.Fatalf("text is %d UTF-16 units, want at most 3800", got)
+	}
+	hint, _ := tr.GetString("staff_panel_help_hint")
+	if !strings.Contains(text, hint) {
+		t.Errorf("text must swap the help for %q before dropping rows", hint)
+	}
+	buttons, _ := panelSplitKeyboard(t, keyboard)
+	shown := strings.Count(text, "<code>-1002")
+	if shown >= len(rows) || shown == 0 {
+		t.Fatalf("%d rows shown, want some but not all of %d", shown, len(rows))
+	}
+	if len(buttons.unlink) != shown {
+		t.Errorf("%d Unlink buttons for %d rows shown, want one per row shown", len(buttons.unlink), shown)
+	}
+	note, _ := tr.GetString("staff_panel_truncated", i18n.TranslationParams{"count": len(rows) - shown})
+	if !strings.Contains(text, note) {
+		t.Errorf("text must carry the note %q for the %d dropped rows", note, len(rows)-shown)
+	}
+}

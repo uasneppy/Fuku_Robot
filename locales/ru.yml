@@ -2413,3 +2413,8 @@ staff_panel_legend: "✅ да | ❌ нет | ❔ не удалось прове�
 staff_panel_updated: "Обновлено в {time} UTC"
 staff_panel_refresh_button: "🔄 Обновить"
 staff_cb_members_only: "Это могут делать только участники этой Staff-группы."
+staff_panel_prev: "⬅️ Назад"
+staff_panel_next: "Вперёд ➡️"
+staff_panel_page: "Страница {page}/{pages}"
+staff_panel_help_hint: "Команды Staff-группы перечислены в /help."
+staff_panel_truncated: "Ещё {count} групп на этой странице не показаны, потому что сообщение слишком длинное."
