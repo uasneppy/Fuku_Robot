@@ -181,6 +181,22 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		text, _ = tr.GetString("staff_act_fail_internal")
 	case staffReasonFailInterrupted:
 		text, _ = tr.GetString("staff_act_fail_interrupted")
+	case staffReasonUndoneUnbanned:
+		text, _ = tr.GetString("staff_undo_unbanned")
+	case staffReasonUndoneUnmuted:
+		text, _ = tr.GetString("staff_undo_unmuted")
+	case staffReasonUndoneBanRestored:
+		text, _ = tr.GetString("staff_undo_ban_restored")
+	case staffReasonUndoneRestrictionRestored:
+		text, _ = tr.GetString("staff_undo_restriction_restored")
+	case staffReasonSkipNotApplied:
+		text, _ = tr.GetString("staff_undo_skip_not_applied")
+	case staffReasonSkipChangedSince:
+		text, _ = tr.GetString("staff_undo_skip_changed_since")
+	case staffReasonSkipRestrictionEnded:
+		text, _ = tr.GetString("staff_undo_skip_restriction_ended")
+	case staffReasonSkipNoPriorState:
+		text, _ = tr.GetString("staff_undo_skip_no_prior_state")
 	}
 	return text
 }
