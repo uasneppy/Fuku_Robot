@@ -23,7 +23,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   side effects with `isCliModeActive`.
 - Shutdown runs LIFO within 60 s. Register new drains *after* DB-close so they run before it.
 - `StopStaffActions` is one of those drains: it cancels running staff fan-outs, marks every unfinished group
-  "interrupted by restart", delivers the final summary and returns within 30 s. A hard crash can still leave ⏳ lines.
+  "interrupted by restart", delivers the final summary and returns within 30 s. A delivery still waiting out a 429
+  when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
@@ -138,10 +139,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   an explicit target uses the explicit one). `/sban`, `/dban`, `/skick`, `/dkick`, `/smute` and `/dmute` are
   intercepted in a Staff Group only to be refused with a hint (`staffCommandSpec.Refused`), after the anonymous check.
 - A staff action card has one writer once its run starts: the run's coordinator goroutine, which edits at most every
-  2.5 s (`staffActionEditEvery`) and only when a result changed. The summary never drops a group: over 3800 UTF-16
-  units (counted on the escaped HTML) only done lines collapse into a count, skipped and failed lines are always listed,
-  and overflow goes to continuation messages in the Staff Group. The final edit is retried after `retry_after`, and a
-  card that cannot be edited gets the summary as a new message.
+  2.5 s (`staffActionEditEvery`), only when a result changed, and never before a progress edit's 429 `retry_after` has
+  passed. The summary never drops a group: over 3800 UTF-16 units (counted on the escaped HTML) only done lines
+  collapse into a count, skipped and failed lines are always listed, and overflow goes to continuation messages in the
+  Staff Group. The final edit waits out that hold and is retried after `retry_after`, and a card that cannot be edited
+  gets the summary as a new message. The final edit, the fallback and each continuation message each get their own
+  budget (`staffActionDeliverPartTimeout`, 3 x (60 s cap + 10 s edit timeout)), so one long wait never starves the
+  next message.
 - Staff durations: `/ban` and `/mute` take an optional `<digits><m|h|d|w>` token right after the target, `/tban` and
   `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
   than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not

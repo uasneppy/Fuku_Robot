@@ -45,7 +45,7 @@ var (
 	// (D-16). It is a variable so tests can run the clock fast.
 	staffActionEditEvery = 2500 * time.Millisecond
 	// staffActionEditRetryUnit is what one second of Telegram's retry_after is worth
-	// when the final edit waits to be retried.
+	// when a progress edit is held or the final edit waits to be retried.
 	staffActionEditRetryUnit = time.Second
 	// staffActionStopWait bounds how long StopStaffActions waits for the runs.
 	staffActionStopWait = 30 * time.Second
@@ -106,6 +106,14 @@ func (p *staffActionProgress) set(i int, r staffGroupResult) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.results[i] = r
+	p.dirty = true
+}
+
+// markDirty says the card does not show the current results, so the next
+// snapshot reports a change. The coordinator calls it after a rate-limited edit.
+func (p *staffActionProgress) markDirty() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.dirty = true
 }
 
@@ -207,6 +215,9 @@ func startStaffActionRun(
 			runStaffActionFanOut(ctx, b, card, links, newUntil, progress)
 		}()
 
+		// editHoldUntil is when Telegram's last retry_after for a progress edit of this
+		// card has passed. Only this goroutine reads and writes it.
+		var editHoldUntil time.Time
 		ticker := time.NewTicker(staffActionEditEvery)
 		defer ticker.Stop()
 	progressLoop:
@@ -215,15 +226,31 @@ func startStaffActionRun(
 			case <-fanOutDone:
 				break progressLoop
 			case <-ticker.C:
+				// Inside a hold the tick is skipped before the snapshot, so the changes
+				// stay marked and the newest results go out on the first tick after it.
+				if time.Now().Before(editHoldUntil) {
+					continue
+				}
 				snapshot, dirty := progress.snapshot()
 				if !dirty {
 					continue
 				}
-				// A failed progress edit is skipped; the next tick or the final
-				// summary carries the same information.
-				if err := editStaffActionMessage(b, chatID, msgID, renderStaffActionSummary(tr, card, snapshot)); err != nil {
-					log.Warnf("[StaffActions] progress edit of card %s: %v", card.Token, err)
+				err := editStaffActionMessage(b, chatID, msgID, renderStaffActionSummary(tr, card, snapshot))
+				if err == nil {
+					continue
 				}
+				// A failed progress edit is skipped; the next tick or the final summary
+				// carries the same information. A 429 also holds the card and keeps
+				// the snapshot marked as unsent. Any other error is not re-marked, so
+				// a deleted card is not edited on every tick.
+				if hold, limited := staffRetryAfterHold(err); limited {
+					editHoldUntil = time.Now().Add(hold)
+					progress.markDirty()
+					log.Warnf("[StaffActions] progress edit of card %s rate limited, holding edits for %s: %v",
+						card.Token, hold, err)
+					continue
+				}
+				log.Warnf("[StaffActions] progress edit of card %s: %v", card.Token, err)
 			}
 		}
 		ticker.Stop()
@@ -238,7 +265,7 @@ func startStaffActionRun(
 		final, continuation := renderStaffActionSummaryFinal(tr, card, results)
 		// Delivery never runs on the run's own context, which a shutdown may already
 		// have cancelled: each message opens a fresh budget of its own.
-		deliverStaffActionFinal(b, chatID, msgID, final, continuation, time.Time{})
+		deliverStaffActionFinal(b, chatID, msgID, final, continuation, editHoldUntil)
 		if err := setStaffActionCardState(card.Token, staffCardDone); err != nil {
 			log.Warnf("[StaffActions] mark card %s done: %v", card.Token, err)
 		}

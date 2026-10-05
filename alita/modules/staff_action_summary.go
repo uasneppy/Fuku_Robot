@@ -409,11 +409,11 @@ const (
 // retry_after times staffActionEditRetryUnit, capped. It is false when err is not
 // a 429 that names a wait.
 func staffRetryAfterWait(err error) (time.Duration, bool) {
-	seconds, ok := ratelimit.RetryAfterSeconds(err)
+	hold, ok := staffRetryAfterHold(err)
 	if !ok {
 		return 0, false
 	}
-	return min(time.Duration(seconds)*staffActionEditRetryUnit, staffActionRetryAfterCap), true
+	return min(hold, staffActionRetryAfterCap), true
 }
 
 // staffRetryAfterMaxSeconds is how many seconds of Telegram's retry_after count.
@@ -421,9 +421,16 @@ func staffRetryAfterWait(err error) (time.Duration, bool) {
 // cannot overflow time.Duration into a negative wait.
 const staffRetryAfterMaxSeconds = 3600
 
-// staffRetryAfterHold is a stub until the green step.
+// staffRetryAfterHold is how long the coordinator must leave the card alone after
+// a rate-limited progress edit: Telegram's retry_after, clamped to
+// staffRetryAfterMaxSeconds, times staffActionEditRetryUnit, without the 60 s cap
+// of a single wait. It is false when err is not a 429 that names a wait.
 func staffRetryAfterHold(err error) (time.Duration, bool) {
-	return 0, false
+	seconds, ok := ratelimit.RetryAfterSeconds(err)
+	if !ok {
+		return 0, false
+	}
+	return time.Duration(min(seconds, staffRetryAfterMaxSeconds)) * staffActionEditRetryUnit, true
 }
 
 // sleepStaffRetry waits d, or less when ctx ends first, and reports whether the
@@ -495,9 +502,16 @@ func newStaffDeliverContext() (context.Context, context.CancelFunc) {
 // so the result always arrives. Each continuation message follows in order
 // (STAFF-08); one that cannot be sent is logged and the rest still go out. Every
 // message has its own budget, so a long wait on one never starves the next.
+//
+// notBefore is the end of a retry_after hold that Telegram put on the card during
+// the run: the final edit waits for it (at most one capped wait) instead of
+// spending an attempt inside it. The zero time means no hold.
 func deliverStaffActionFinal(b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string, notBefore time.Time) {
-	_ = notBefore
 	editCtx, cancelEdit := newStaffDeliverContext()
+	if remaining := time.Until(notBefore); remaining > 0 {
+		// Whether the wait elapsed or the budget ran out, the edit is tried next.
+		staffActionSleep(editCtx, min(remaining, staffActionRetryAfterCap))
+	}
 	edited := editStaffActionFinal(editCtx, b, chatID, msgID, text)
 	cancelEdit()
 	if !edited {
