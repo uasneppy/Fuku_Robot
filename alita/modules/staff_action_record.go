@@ -3,6 +3,8 @@ package modules
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"sort"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -156,6 +158,47 @@ func newStaffActionRecord(
 		}
 	}
 	return action, groups
+}
+
+// staffCardFromRecord rebuilds the card fields of a stored action that
+// staffActionHeader reads, so the history's detail view shows the same header the
+// run's summary did. The token, state, links signature and expiry belong to the
+// live card and stay empty.
+func staffCardFromRecord(a *models.StaffAction) *staffActionCard {
+	return &staffActionCard{
+		Kind:           staffActionKind(a.Action),
+		Issuer:         a.IssuerUserID,
+		IssuerName:     a.IssuerName,
+		StaffChat:      a.StaffChatID,
+		Target:         a.TargetUserID,
+		TargetName:     a.TargetName,
+		Reason:         a.Reason,
+		DurationSec:    a.DurationSec,
+		DurationAmount: a.DurationAmount,
+		DurationUnit:   a.DurationUnit,
+		OverLimit:      a.OverLimit,
+		ActionID:       a.ID,
+		GroupCount:     a.GroupCount,
+	}
+}
+
+// staffResultsFromRecord maps the stored group rows to the results the summary
+// renders, one per row in seq order (the order the run visited the groups). The
+// link carries only the group's ID and the title stored at action time, so a group
+// that has since been unlinked still reads by the name it had.
+func staffResultsFromRecord(groups []models.StaffActionGroup) []staffGroupResult {
+	rows := slices.Clone(groups)
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Seq < rows[j].Seq })
+	results := make([]staffGroupResult, len(rows))
+	for i, row := range rows {
+		results[i] = staffGroupResult{
+			Link:    models.StaffGroupLink{GroupChatID: row.GroupChatID, GroupTitle: row.GroupTitle},
+			Outcome: staffOutcomeFromName(row.Outcome),
+			Reason:  staffReason(row.Reason),
+			Detail:  row.Detail,
+		}
+	}
+	return results
 }
 
 // Test seams: tests replace these to prove the fail-closed paths with a real

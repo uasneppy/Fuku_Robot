@@ -28,6 +28,11 @@ const (
 	// staffHistoryMaxOffset is the largest offset a callback may carry; anything
 	// above it is refused as expired.
 	staffHistoryMaxOffset = 1_000_000
+	// staffHistoryDetailPerRow is how many detail buttons share a keyboard row.
+	staffHistoryDetailPerRow = 5
+	// staffHistoryDetailReasonRunes caps the reason in a detail header, so a reason
+	// typed at Telegram's own message limit cannot push the view over the cap.
+	staffHistoryDetailReasonRunes = 300
 )
 
 // staffHistoryCut makes a stored name or reason safe for one history line: the
@@ -169,6 +174,23 @@ func renderStaffHistory(
 	}
 
 	var keyboard gotgbot.InlineKeyboardMarkup
+	// One detail button per entry shown, labelled with the entry's number, five to a
+	// row. An entry whose data does not fit is skipped, never shipped dead.
+	var detailRow []gotgbot.InlineKeyboardButton
+	for i := 0; i < shown; i++ {
+		fields := map[string]string{
+			"a": staffActDetail,
+			"r": strconv.FormatUint(uint64(actions[i].ID), 10),
+			"o": strconv.Itoa(offset),
+		}
+		if button, ok := staffHistoryButton(strconv.Itoa(offset+i+1), fields); ok {
+			detailRow = append(detailRow, button)
+		}
+		if len(detailRow) == staffHistoryDetailPerRow || (i == shown-1 && len(detailRow) > 0) {
+			keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, detailRow)
+			detailRow = nil
+		}
+	}
 	var paging []gotgbot.InlineKeyboardButton
 	if offset > 0 {
 		label, _ := tr.GetString("staff_panel_prev")
@@ -200,36 +222,37 @@ func staffRecentButton(tr *i18n.Translator) (gotgbot.InlineKeyboardButton, bool)
 	return staffHistoryButton(label, map[string]string{"a": staffActRecent, "o": "0"})
 }
 
-// staffHistoryList handles the Recent actions, Prev and Next buttons: it edits the
-// message the button sits on into the history page that starts at the offset in
-// fields["o"]. Authority is the same as the panel's: the chat is the one the
-// button sits in, which must be a Staff Group, and the presser must be a live
-// member of it. Only that chat's actions are read. The press is answered exactly
-// once.
-func (moduleStruct) staffHistoryList(
+// parseStaffHistoryOffset reads the list offset a history button carries. It
+// reports false for anything outside 0..staffHistoryMaxOffset.
+func parseStaffHistoryOffset(fields map[string]string) (int, bool) {
+	offset, err := strconv.Atoi(fields["o"])
+	if err != nil || offset < 0 || offset > staffHistoryMaxOffset {
+		return 0, false
+	}
+	return offset, true
+}
+
+// staffHistoryGate is the access sequence of every history button. The chat is the
+// one the button sits in, which must be a Staff Group, and the presser must be a
+// live member of it. When it reports false it has already answered the press (an
+// expired toast, a members-only or check-failed alert) and the caller must do
+// nothing more. When it reports true the press is still unanswered.
+func staffHistoryGate(
 	b *gotgbot.Bot,
 	query *gotgbot.CallbackQuery,
 	tr *i18n.Translator,
-	fields map[string]string,
-) error {
-	offset, err := strconv.Atoi(fields["o"])
-	if err != nil || offset < 0 || offset > staffHistoryMaxOffset {
-		text, _ := tr.GetString("staff_cb_expired")
-		answerStaffCallback(b, query, text, false)
-		return ext.EndGroups
-	}
-
+) (gotgbot.Chat, bool) {
 	chat := query.Message.GetChat()
 	group, err := staff.GetStaffGroupFresh(chat.Id)
 	if err != nil {
 		text, _ := tr.GetString("staff_check_failed")
 		answerStaffCallback(b, query, text, true)
-		return ext.EndGroups
+		return chat, false
 	}
 	if group == nil {
 		text, _ := tr.GetString("staff_cb_expired")
 		answerStaffCallback(b, query, text, false)
-		return ext.EndGroups
+		return chat, false
 	}
 
 	member, err := chat_status.IsUserInChatWithError(b, &chat, query.From.Id)
@@ -237,11 +260,35 @@ func (moduleStruct) staffHistoryList(
 		log.Warnf("[Staff] history press: membership check of user %d in chat %d failed: %v", query.From.Id, chat.Id, err)
 		text, _ := tr.GetString("staff_check_failed")
 		answerStaffCallback(b, query, text, true)
-		return ext.EndGroups
+		return chat, false
 	}
 	if !member {
 		text, _ := tr.GetString("staff_cb_members_only")
 		answerStaffCallback(b, query, text, true)
+		return chat, false
+	}
+	return chat, true
+}
+
+// staffHistoryList handles the Recent actions, Prev and Next buttons: it edits the
+// message the button sits on into the history page that starts at the offset in
+// fields["o"]. Authority is staffHistoryGate's. Only that chat's actions are read.
+// The press is answered exactly once.
+func (moduleStruct) staffHistoryList(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	offset, ok := parseStaffHistoryOffset(fields)
+	if !ok {
+		text, _ := tr.GetString("staff_cb_expired")
+		answerStaffCallback(b, query, text, false)
+		return ext.EndGroups
+	}
+
+	chat, ok := staffHistoryGate(b, query, tr)
+	if !ok {
 		return ext.EndGroups
 	}
 
@@ -263,6 +310,124 @@ func (moduleStruct) staffHistoryList(
 	}
 
 	text, keyboard, _ := renderStaffHistory(tr, rows, tallies, offset, len(rows) > staffHistoryPageSize, time.Now())
+	_ = editStaffMessage(b, query.Message, text, keyboard)
+	return ext.EndGroups
+}
+
+// renderStaffHistoryDetail builds the full record of one staff action: the run
+// summary's header, who issued it and when, the tally, and one line per linked
+// group in the order the run visited them, in the summary's own line format. It
+// is pure: no I/O. linked holds the group IDs still linked to the Staff Group.
+// The keyboard is one Back button to the list at offset.
+func renderStaffHistoryDetail(
+	tr *i18n.Translator,
+	a *models.StaffAction,
+	groups []models.StaffActionGroup,
+	linked map[int64]bool,
+	offset int,
+	now time.Time,
+) (string, gotgbot.InlineKeyboardMarkup) {
+	card := staffCardFromRecord(a)
+	if utf8.RuneCountInString(card.Reason) > staffHistoryDetailReasonRunes {
+		card.Reason = string([]rune(card.Reason)[:staffHistoryDetailReasonRunes]) + "…"
+	}
+	results := staffResultsFromRecord(groups)
+	done, skipped, failed, _ := staffSummaryTally(results)
+
+	issuer := staffHistoryCut(a.IssuerName, staffHistoryNameRunes)
+	if issuer == "" {
+		issuer = strconv.FormatInt(a.IssuerUserID, 10)
+	}
+	by, _ := tr.GetString("staff_history_by", i18n.TranslationParams{"name": staffUserToken})
+	head := staffActionHeader(tr, card) + "\n" +
+		strings.Replace(by, staffUserToken, issuer, 1) + " · " +
+		a.CreatedAt.UTC().Format("2 Jan 15:04") + " UTC"
+	if state := staffHistoryState(tr, a, now); state != "" {
+		head += " · " + state
+	}
+	head += "\n" + staffSummaryTallyLine(done, skipped, failed)
+
+	lines := make([]string, len(results))
+	for i, res := range results {
+		lines[i] = staffResultLine(tr, res)
+	}
+	text := head
+	if len(lines) > 0 {
+		text = staffSummaryText(head, lines)
+	}
+
+	var keyboard gotgbot.InlineKeyboardMarkup
+	backLabel, _ := tr.GetString("staff_history_back_list")
+	if back, ok := staffHistoryButton(backLabel, map[string]string{"a": staffActRecent, "o": strconv.Itoa(offset)}); ok {
+		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []gotgbot.InlineKeyboardButton{back})
+	}
+	return text, keyboard
+}
+
+// staffHistoryDetail handles an entry's detail button: it edits the message the
+// button sits on into that action's full record. A malformed or zero record ID or
+// offset is answered as expired before anything is read. Authority is
+// staffHistoryGate's, and the record is then loaded fresh and refused unless its
+// staff_chat_id is the chat of the pressed message, so a forged or replayed button
+// naming another Staff Group's record shows nothing. Every refusal is answered
+// before any edit, and the press is answered exactly once.
+func (moduleStruct) staffHistoryDetail(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	id, idErr := strconv.ParseUint(fields["r"], 10, 63)
+	offset, offsetOK := parseStaffHistoryOffset(fields)
+	if idErr != nil || id == 0 || !offsetOK {
+		text, _ := tr.GetString("staff_cb_expired")
+		answerStaffCallback(b, query, text, false)
+		return ext.EndGroups
+	}
+
+	chat, ok := staffHistoryGate(b, query, tr)
+	if !ok {
+		return ext.EndGroups
+	}
+
+	a, err := staff.GetActionFresh(uint(id))
+	if err != nil {
+		text, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, text, true)
+		return ext.EndGroups
+	}
+	if a == nil {
+		text, _ := tr.GetString("staff_cb_expired")
+		answerStaffCallback(b, query, text, false)
+		return ext.EndGroups
+	}
+	if a.StaffChatID != chat.Id {
+		text, _ := tr.GetString("staff_cb_denied")
+		answerStaffCallback(b, query, text, true)
+		return ext.EndGroups
+	}
+
+	groups, err := staff.ListActionGroupsFresh(a.ID)
+	if err != nil {
+		log.Errorf("[Staff] detail press: list groups of action %d: %v", a.ID, err)
+		text, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, text, true)
+		return ext.EndGroups
+	}
+	links, err := staff.ListLinksByStaffFresh(chat.Id)
+	if err != nil {
+		log.Errorf("[Staff] detail press: list links of chat %d: %v", chat.Id, err)
+		text, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, text, true)
+		return ext.EndGroups
+	}
+	linked := make(map[int64]bool, len(links))
+	for _, link := range links {
+		linked[link.GroupChatID] = true
+	}
+
+	answerStaffCallback(b, query, "", false)
+	text, keyboard := renderStaffHistoryDetail(tr, a, groups, linked, offset, time.Now())
 	_ = editStaffMessage(b, query.Message, text, keyboard)
 	return ext.EndGroups
 }
