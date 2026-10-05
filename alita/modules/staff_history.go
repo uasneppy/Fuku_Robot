@@ -316,9 +316,12 @@ func (moduleStruct) staffHistoryList(
 
 // renderStaffHistoryDetail builds the full record of one staff action: the run
 // summary's header, who issued it and when, the tally, and one line per linked
-// group in the order the run visited them, in the summary's own line format. It
-// is pure: no I/O. linked holds the group IDs still linked to the Staff Group.
-// The keyboard is one Back button to the list at offset.
+// group in the order the run visited them, in the summary's own line format, then
+// the undo's outcome once an undo was claimed. It is pure: no I/O. linked holds the
+// group IDs still linked to the Staff Group; a group missing from it keeps the title
+// stored at action time and is marked as no longer linked (a nil map marks none).
+// The text never exceeds the length cap and never drops a group silently
+// (fitStaffHistoryDetail). The keyboard is one Back button to the list at offset.
 func renderStaffHistoryDetail(
 	tr *i18n.Translator,
 	a *models.StaffAction,
@@ -332,6 +335,17 @@ func renderStaffHistoryDetail(
 		card.Reason = string([]rune(card.Reason)[:staffHistoryDetailReasonRunes]) + "…"
 	}
 	results := staffResultsFromRecord(groups)
+	// A run that never finished and has not written for longer than the target lock
+	// lives is dead: its pending groups read as failed "interrupted by restart".
+	// This is display only, nothing is written.
+	if a.FinishedAt == nil && now.Sub(a.UpdatedAt) >= staffTargetLockTTL {
+		for i := range results {
+			if results[i].Outcome == staffOutcomePending {
+				results[i].Outcome = staffOutcomeFailed
+				results[i].Reason = staffReasonFailInterrupted
+			}
+		}
+	}
 	done, skipped, failed, _ := staffSummaryTally(results)
 
 	issuer := staffHistoryCut(a.IssuerName, staffHistoryNameRunes)
@@ -347,14 +361,47 @@ func renderStaffHistoryDetail(
 	}
 	head += "\n" + staffSummaryTallyLine(done, skipped, failed)
 
+	// The undo block, once an undo was claimed: who and when, then the undo's result
+	// for each group the action was applied in.
+	var undoHeader string
+	var undoResults []staffGroupResult
+	if a.UndoStartedAt != nil {
+		undoBy := staffHistoryCut(a.UndoByName, staffHistoryNameRunes)
+		if undoBy == "" && a.UndoBy != nil {
+			undoBy = strconv.FormatInt(*a.UndoBy, 10)
+		}
+		text, _ := tr.GetString("staff_history_undone_by", i18n.TranslationParams{
+			"name": staffUserToken,
+			"time": a.UndoStartedAt.UTC().Format("2 Jan 15:04"),
+		})
+		undoHeader = strings.Replace(text, staffUserToken, undoBy, 1)
+		undoResults = staffUndoResultsFromRecord(groups)
+	}
+
+	unlinked, _ := tr.GetString("staff_history_unlinked")
+	lineOf := func(res staffGroupResult) string {
+		line := staffResultLine(tr, res)
+		if linked != nil && !linked[res.Link.GroupChatID] {
+			line += " · " + unlinked
+		}
+		return line
+	}
 	lines := make([]string, len(results))
 	for i, res := range results {
-		lines[i] = staffResultLine(tr, res)
+		lines[i] = lineOf(res)
 	}
-	text := head
-	if len(lines) > 0 {
-		text = staffSummaryText(head, lines)
+	undoLines := make([]string, len(undoResults))
+	for i, res := range undoResults {
+		undoLines[i] = lineOf(res)
 	}
+	// An undo with no group to show has only its header, which rides in the head so
+	// it can never be the one thing the fitting cuts.
+	if undoHeader != "" && len(undoResults) == 0 {
+		head += "\n" + undoHeader
+		undoHeader = ""
+	}
+
+	text := fitStaffHistoryDetail(tr, head, results, lines, undoHeader, undoResults, undoLines)
 
 	var keyboard gotgbot.InlineKeyboardMarkup
 	backLabel, _ := tr.GetString("staff_history_back_list")
@@ -362,6 +409,106 @@ func renderStaffHistoryDetail(
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []gotgbot.InlineKeyboardButton{back})
 	}
 	return text, keyboard
+}
+
+// staffDetailItem is one line of the detail text and how many groups it stands for:
+// 1 for a group's line, the number of groups for a collapsed done line.
+type staffDetailItem struct {
+	text   string
+	groups int
+}
+
+// staffDetailBlock lists one block's lines. With collapse the done lines are
+// replaced by one "N groups done" line placed first, like the run summary does.
+func staffDetailBlock(tr *i18n.Translator, results []staffGroupResult, lines []string, collapse bool) []staffDetailItem {
+	var items []staffDetailItem
+	if collapse {
+		done := 0
+		for _, res := range results {
+			if res.Outcome == staffOutcomeDone {
+				done++
+			}
+		}
+		if done > 0 {
+			text, _ := tr.GetString("staff_act_summary_done_collapsed", i18n.TranslationParams{"count": done})
+			items = append(items, staffDetailItem{text: "✅ " + text, groups: done})
+		}
+	}
+	for i, res := range results {
+		if collapse && res.Outcome == staffOutcomeDone {
+			continue
+		}
+		items = append(items, staffDetailItem{text: lines[i], groups: 1})
+	}
+	return items
+}
+
+// fitStaffHistoryDetail joins the head, the group lines and the undo block into
+// one text within the length cap, and never drops a group silently. A text over the
+// cap first collapses the done lines of each block into a count; when that is still
+// too long as many lines as fit are listed and the text ends with the number of
+// groups left out. The undo header always travels with the first line under it.
+func fitStaffHistoryDetail(
+	tr *i18n.Translator,
+	head string,
+	results []staffGroupResult,
+	lines []string,
+	undoHeader string,
+	undoResults []staffGroupResult,
+	undoLines []string,
+) string {
+	assemble := func(collapse bool) []staffDetailItem {
+		items := staffDetailBlock(tr, results, lines, collapse)
+		if undoHeader == "" {
+			return items
+		}
+		block := staffDetailBlock(tr, undoResults, undoLines, collapse)
+		block[0].text = "\n" + undoHeader + "\n" + block[0].text
+		return append(items, block...)
+	}
+	texts := func(items []staffDetailItem) []string {
+		out := make([]string, len(items))
+		for i, item := range items {
+			out[i] = item.text
+		}
+		return out
+	}
+	join := func(items []staffDetailItem) string {
+		if len(items) == 0 {
+			return head
+		}
+		return staffSummaryText(head, texts(items))
+	}
+
+	items := assemble(false)
+	if text := join(items); staffSummaryFits(text) {
+		return text
+	}
+	items = assemble(true)
+	if text := join(items); staffSummaryFits(text) {
+		return text
+	}
+
+	moreText := func(n int) string {
+		text, _ := tr.GetString("staff_history_more_groups", i18n.TranslationParams{"count": n})
+		return text
+	}
+	total := 0
+	for _, item := range items {
+		total += item.groups
+	}
+	// Size the tail with the largest count it can carry, so the final one, with a
+	// count of at most as many digits, always fits.
+	_, n := fitStaffSummaryLines(head, texts(items), moreText(total), true)
+	left := 0
+	for _, item := range items[n:] {
+		left += item.groups
+	}
+	if left == 0 {
+		return join(items[:n])
+	}
+	text, _ := fitStaffSummaryLines(head, texts(items[:n]), moreText(left), true)
+	return text
 }
 
 // staffHistoryDetail handles an entry's detail button: it edits the message the

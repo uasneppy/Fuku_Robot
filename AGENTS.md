@@ -56,6 +56,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Paging uses an offset cursor, not a page number, so a page shrunk to the 3800-unit cap hides no entry: Next starts
   right after the last line shown. Callback data carries only numbers or tokens, never names or reasons, and the
   handler refuses an offset outside 0..`staffHistoryMaxOffset` as expired.
+- The history detail view is `a=dt&r=<record id>&o=<offset>` (`r` is the `staff_actions` row ID, `o` the list offset
+  Back returns to). The record is loaded fresh and refused unless its `staff_chat_id` is the pressed message's chat, so a
+  forged or replayed button naming another Staff Group's record shows nothing. A zero, negative, non-numeric or
+  over-63-bit ID is answered as expired before any read. The view reads only the audit record and the current link list
+  and makes no Telegram call to linked groups; an unfinished record's stale pending groups are shown as interrupted
+  without writing anything.
 
 ## Permissions
 

@@ -187,8 +187,7 @@ func staffCardFromRecord(a *models.StaffAction) *staffActionCard {
 // link carries only the group's ID and the title stored at action time, so a group
 // that has since been unlinked still reads by the name it had.
 func staffResultsFromRecord(groups []models.StaffActionGroup) []staffGroupResult {
-	rows := slices.Clone(groups)
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Seq < rows[j].Seq })
+	rows := staffGroupsBySeq(groups)
 	results := make([]staffGroupResult, len(rows))
 	for i, row := range rows {
 		results[i] = staffGroupResult{
@@ -199,6 +198,39 @@ func staffResultsFromRecord(groups []models.StaffActionGroup) []staffGroupResult
 		}
 	}
 	return results
+}
+
+// staffUndoResultsFromRecord maps the undo columns of the groups where the action
+// was applied (outcome done) to results, in seq order. A group whose undo has no
+// result yet, an empty or pending undo_outcome, reads as pending, which renders as
+// still running; staffOutcomeFromName alone would read an empty name as failed. A
+// group the action never touched has no undo line.
+func staffUndoResultsFromRecord(groups []models.StaffActionGroup) []staffGroupResult {
+	var results []staffGroupResult
+	for _, row := range staffGroupsBySeq(groups) {
+		if staffOutcomeFromName(row.Outcome) != staffOutcomeDone {
+			continue
+		}
+		outcome := staffOutcomePending
+		if row.UndoOutcome != "" {
+			outcome = staffOutcomeFromName(row.UndoOutcome)
+		}
+		results = append(results, staffGroupResult{
+			Link:    models.StaffGroupLink{GroupChatID: row.GroupChatID, GroupTitle: row.GroupTitle},
+			Outcome: outcome,
+			Reason:  staffReason(row.UndoReason),
+			Detail:  row.UndoDetail,
+		})
+	}
+	return results
+}
+
+// staffGroupsBySeq returns a copy of the group rows in the order the run visited
+// the groups.
+func staffGroupsBySeq(groups []models.StaffActionGroup) []models.StaffActionGroup {
+	rows := slices.Clone(groups)
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Seq < rows[j].Seq })
+	return rows
 }
 
 // Test seams: tests replace these to prove the fail-closed paths with a real
