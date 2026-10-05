@@ -72,6 +72,17 @@ created: "2026-10-05"
 | T-02-29 | Denial of service | edit rate limit on the card | medium | mitigate | One writer edits at most every 2.5 s, the final edit retries on 429, and a new message is posted if the edit fails. Tests: `TestStaffActionFinalEditRetriesOn429`, `TestStaffActionFinalFallsBackToNewMessage` | closed |
 | T-02-30 | Repudiation | shutdown mid-run | medium | mitigate | `StopStaffActions` marks unfinished groups "interrupted by restart" and delivers within 30 s. It is registered in `main.go:218`, after the DB-close handler, so it runs first (LIFO). A hard crash is accepted (AR-02-04). Test: `TestStopStaffActionsFinalizes` | closed |
 | T-02-31 | Repudiation | a worker panic drops a group | medium | mitigate | Slots are pre-filled, every goroutine recovers, and a post-wait sweep marks leftovers "internal error". Test: `TestStaffActionWorkerPanicReported`, plus the coordinator sweep | closed |
+| T-02-32 | Repudiation | final summary delivery under flood control | medium | mitigate | Each delivered message (final edit, fallback, every continuation) opens its own `staffActionDeliverPartTimeout` budget (3 x (60 s cap + 10 s edit timeout)) via `newStaffDeliverContext`. Tests: `TestStaffActionFinalEditLongRetryAfter`, `TestStaffActionFinalPartsOwnBudget` | closed |
+| T-02-33 | Denial of service | progress edits feeding a Staff Group flood | medium | mitigate | The coordinator keeps `editHoldUntil` and skips progress ticks inside a 429 hold; the final edit waits out the hold (`staff_action_run.go`). Tests: `TestStaffActionProgressBacksOffAfter429`, `TestStaffActionFinalEditWaitsForHold` | closed |
+| T-02-34 | Denial of service | an absurd retry_after overflowing into a negative wait | low | mitigate | `staffRetryAfterMaxSeconds` (3600) clamps retry_after before it is multiplied. Test: `TestStaffRetryAfterClamp` | closed |
+| T-02-35 | Denial of service | a long delivery stalling shutdown | low | accept | `StopStaffActions` stays bounded at 30 s (`TestStopStaffActionsFinalizes`); a delivery still waiting at that point is cut off with the process, documented in AGENTS.md (AR-02-06) | closed |
+| T-02-36 | Denial of service | fleet-wide stall behind a shared block longer than MaxWait | medium | mitigate | `TelegramPacer.wait` refuses a slot more than `MaxWait` (60 s) away with `ErrRateLimited`, before any Telegram request. Tests: `TestStaffActionBlockAboveMaxWaitFailsFast`, `TestTelegramPacerRefusesSlotAboveMaxWait` | closed |
+| T-02-37 | Denial of service | refused reservations pushing the shared next slot | low | mitigate | `reserveSlotScript` returns before its SET when the slot is beyond `ARGV[3]`; `reserveLocal` leaves `localNext` unchanged for a refused caller. Tests: the NextKey-unchanged subtest of `TestTelegramPacerRefusesSlotAboveMaxWait`, `TestTelegramPacerLocalRefusesAboveMaxWait`, the second run in `TestStaffActionBlockAboveMaxWaitFailsFast` | closed |
+| T-02-38 | Denial of service | an absurd retry_after overflowing into a negative block | low | mitigate | `pacerMaxRetryAfterSeconds` (86400) clamps retry_after before multiplication (`telegram_pacer.go:150`). Test: `TestTelegramPacerRetryAfterOverflow` | closed |
+| T-02-39 | Tampering | target lock expiring under a slow run | medium | mitigate | The coordinator renews the lock every `staffTargetLockRenewEvery` (10 min) through `renewStaffTargetLock`, a compare-and-set on the card token (`staff_action_run.go:226-234`). Test: `TestStaffActionTargetLockRenewedDuringRun` "renews its own lock" | closed |
+| T-02-40 | Tampering | a renewal extending or taking over another card's lock | medium | mitigate | `renewStaffTargetLockScript` compares the stored token before `PEXPIRE` and writes nothing for another token. Tests: subtest "leaves a foreign lock alone", `TestStaffActionTargetLockForeignRelease` | closed |
+| T-02-41 | Denial of service | an orphaned lock kept alive after its run | low | mitigate | Renewal runs only inside the coordinator loop, which ends with the fan-out; the compare-and-delete release still runs after delivery. Every renewal subtest asserts the key is gone after the run | closed |
+| T-02-42 | Tampering | Redis losing the lock key mid-run | low | mitigate | A vanished key is re-taken with the run's token (`SET ... PX`) on the next renewal tick. Test: subtest "re-takes a lock that vanished" | closed |
 | T-02-SC | Tampering | npm/pip/cargo installs | low | accept | See AR-02-05 | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
@@ -88,7 +99,8 @@ created: "2026-10-05"
 | AR-02-02 | T-02-12 | A staff `/kick` on a muted member drops the restriction, so the user can rejoin unmuted. This matches per-group `/kick` and is flagged for owner review at verification | Plan 02-02 threat model | 2026-10-05 |
 | AR-02-03 | T-02-16 | The ambiguity list shows only users who used the exact username typed. It appears only inside the Staff Group, to trusted staff, and is needed to pick the right ID (D-04). Names are HTML-escaped and capped at 64 runes | Plan 02-04 threat model | 2026-10-05 |
 | AR-02-04 | T-02-30 (hard crash) | A SIGKILL or OOM in the middle of a run can leave ⏳ lines on the card. Re-running the same command is safe, because the decision table never shortens or lifts anything. Phase 3's durable audit record could back a resume (OQ4) | Plan 02-07 threat model | 2026-10-05 |
-| AR-02-05 | T-02-SC | No packages were installed: `go.mod` and `go.sum` are unchanged from 039c915 (phase start) to the phase head. errgroup, miniredis and go-redis were already required | Plan threat models 02-01 to 02-07 | 2026-10-05 |
+| AR-02-05 | T-02-SC | No packages were installed: `go.mod` and `go.sum` are unchanged from 039c915 (phase start) to the phase head, including gap-closure plans 02-08 to 02-10. errgroup, miniredis and go-redis were already required | Plan threat models 02-01 to 02-10 | 2026-10-05 |
+| AR-02-06 | T-02-35 | During shutdown, a final-summary delivery that is still waiting out a 429 when `StopStaffActions`' 30 s budget ends is cut off with the process, so that card can keep its last progress snapshot. Shutdown must stay bounded; the bans themselves have already landed and re-running the command is safe. Documented in AGENTS.md | Plan 02-08 threat model | 2026-10-05 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -99,6 +111,7 @@ created: "2026-10-05"
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-10-05 | 32 | 32 | 0 | /gsd-secure-phase (orchestrator, L1 grep depth; the auditor was skipped under the threats_open 0 / plan-time register / ASVS 1 short-circuit) |
+| 2026-10-05 (gap closure) | 43 | 43 | 0 | /gsd-secure-phase (orchestrator, L1 grep depth; auditor skipped under the same short-circuit) |
 
 ## Security Audit 2026-10-05
 
@@ -118,6 +131,24 @@ Evidence at L1 depth:
 
 Behaviour against the real Telegram Bot API (ban preservation under mute, flood control) is outside L1. It is tracked as manual-only in `02-VALIDATION.md`.
 
+
+## Security Audit 2026-10-05 (gap closure)
+
+Re-audited after gap-closure plans 02-08, 02-09 and 02-10 merged (WR-01, WR-02). Their threat models added T-02-32 to T-02-42; each plan's T-02-SC duplicates the existing supply-chain row and is covered by AR-02-05.
+
+| Metric | Count |
+|--------|-------|
+| Threats found | 43 |
+| Closed | 43 |
+| Open | 0 |
+
+Evidence at L1 depth:
+- Each new mitigation is present in code: `staffActionDeliverPartTimeout` / `newStaffDeliverContext`, `editHoldUntil`, `staffRetryAfterMaxSeconds`, the `MaxWait` refusal and `ARGV[3]` early return in `telegram_pacer.go`, `pacerMaxRetryAfterSeconds`, and `renewStaffTargetLockScript` (token compare before `PEXPIRE`, `SET ... PX` only when the key is gone).
+- All named tests exist and passed under `-race` on the merged head (the pacer tests at `-count=3`); `make test` passed after waves 8 and 9.
+- No Threat Flags in the 02-08, 02-09 or 02-10 SUMMARYs.
+- `git diff 12eb21a HEAD -- go.mod go.sum` is empty.
+
+Real flood control across replicas stays outside L1 and is tracked as manual-only in `02-VALIDATION.md` (human-check in task 2-10-02).
 ---
 
 ## Sign-Off
@@ -127,4 +158,4 @@ Behaviour against the real Telegram Bot API (ban preservation under mute, flood 
 - [x] `threats_open: 0` confirmed
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-10-05
+**Approval:** verified 2026-10-05; re-verified 2026-10-05 after gap closure (43/43 closed)
