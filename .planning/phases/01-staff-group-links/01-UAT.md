@@ -3,22 +3,23 @@ status: testing
 phase: 01-staff-group-links
 source: [01-VERIFICATION.md]
 started: 2026-10-05T00:22:22Z
-updated: 2026-10-05T00:22:22Z
+updated: 2026-10-05T00:27:17Z
 ---
 
 ## Current Test
+<!-- OVERWRITE each test - shows where we are -->
 
-number: 1
-name: Anonymous-admin delivery (plan 01-02 / 01-05 human-check, research A4). In a throwaway supergroup where the bot is admin, turn on 'Remain anonymous' for the owner and send /setstaff, /linkstaff and the picker's /start payload; then turn it off and repeat.
+number: 2
+name: Add group picker (plan 01-05 human-check, research A3/A12). In /staff press 'Add group' and pick (a) a supergroup where the bot is already a member and admin, (b) one where it is not a member, (c) once with 'Remain anonymous' on.
 expected: |
-  Anonymous posts get the 'post as yourself' reply (self-deleting in the issuing group for link attempts) and nothing is created; the non-anonymous posts succeed.
+  Picker accepts (a) and (b); the bot's existing admin rights are not reduced (restrict + delete are combined with them); /start@bot stf_... arrives with the owner as sender, is deleted, and the confirmation appears only in the Staff Group. /linkstaff is the fallback if the picker misbehaves.
 awaiting: user response
 
 ## Tests
 
 ### 1. Anonymous-admin delivery (plan 01-02 / 01-05 human-check, research A4). In a throwaway supergroup where the bot is admin, turn on 'Remain anonymous' for the owner and send /setstaff, /linkstaff and the picker's /start payload; then turn it off and repeat.
 expected: Anonymous posts get the 'post as yourself' reply (self-deleting in the issuing group for link attempts) and nothing is created; the non-anonymous posts succeed.
-result: [pending]
+result: pass
 
 ### 2. Add group picker (plan 01-05 human-check, research A3/A12). In /staff press 'Add group' and pick (a) a supergroup where the bot is already a member and admin, (b) one where it is not a member, (c) once with 'Remain anonymous' on.
 expected: Picker accepts (a) and (b); the bot's existing admin rights are not reduced (restrict + delete are combined with them); /start@bot stf_... arrives with the owner as sender, is deleted, and the confirmation appears only in the Staff Group. /linkstaff is the fallback if the picker misbehaves.
@@ -63,9 +64,9 @@ result: [pending]
 ## Summary
 
 total: 11
-passed: 0
+passed: 1
 issues: 0
-pending: 11
+pending: 10
 skipped: 0
 blocked: 0
 
