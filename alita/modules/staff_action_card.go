@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
@@ -75,6 +76,21 @@ func expireStaffActionCard(b *gotgbot.Bot, token string, chatID, msgID int64) {
 		log.Warnf("[StaffActions] edit expired card in chat %d: %v", chatID, err)
 	}
 }
+
+// staffTargetLockPrefix is the Redis key family of the per-target fan-out lock.
+const staffTargetLockPrefix = "alita:staff:lock:target:"
+
+// staffTargetLockTTL is the safety net that frees a target lock whose run died.
+var staffTargetLockTTL = 30 * time.Minute
+
+// staffLinksSignature is not implemented yet.
+func staffLinksSignature(_ []models.StaffGroupLink) string { return "" }
+
+// acquireStaffTargetLock is not implemented yet.
+func acquireStaffTargetLock(_ int64, _ string) (bool, error) { return true, nil }
+
+// releaseStaffTargetLock is not implemented yet.
+func releaseStaffTargetLock(_ int64, _ string) {}
 
 const (
 	// staffActionCardGrace keeps a pending card's key a little past its expiry, so

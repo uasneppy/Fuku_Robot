@@ -3,6 +3,8 @@
 package modules
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +14,8 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
+	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
@@ -302,5 +306,298 @@ func TestStaffActionTimerSkipsCancelledCard(t *testing.T) {
 	}
 	if state := cardState(t, token); state != staffCardCancelled {
 		t.Fatalf("card state = %q, want %q", state, staffCardCancelled)
+	}
+}
+
+// addLinkedGroup links one more group, with the same creator and the issuer an
+// administrator in it, and returns its chat ID.
+func (e *staffActionEnv) addLinkedGroup(title string) int64 {
+	e.t.Helper()
+	group := uniqueModuleChatID()
+	staffCleanup(e.t, group)
+	e.fake.setCreator(group, e.owner)
+	e.fake.setMember(group, e.issuer.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true})
+	link := &models.StaffGroupLink{GroupChatID: group, StaffChatID: e.staffChat, OwnerUserID: e.owner, GroupTitle: title}
+	if err := staff.CreateLink(link); err != nil {
+		e.t.Fatalf("create link for %s: %v", title, err)
+	}
+	return group
+}
+
+// removeLink unlinks a group.
+func (e *staffActionEnv) removeLink(group int64) {
+	e.t.Helper()
+	link, err := staff.GetLinkOfGroupFresh(group)
+	if err != nil || link == nil {
+		e.t.Fatalf("read link of group %d: %v (link %v)", group, err, link)
+	}
+	if deleted, err := staff.DeleteLink(link.ID); err != nil || !deleted {
+		e.t.Fatalf("delete link of group %d: deleted=%v err=%v", group, deleted, err)
+	}
+}
+
+// targetLockHolder reads the value of the target lock, "" when there is none.
+func targetLockHolder(t *testing.T, target int64) string {
+	t.Helper()
+	value, err := cache.GetRedisClient().Get(cache.Context, fmt.Sprintf("%s%d", staffTargetLockPrefix, target)).Result()
+	if err != nil {
+		return ""
+	}
+	return value
+}
+
+func TestStaffActionLinksChangedAborts(t *testing.T) {
+	t.Run("a group was linked", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		for _, group := range env.groups {
+			env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		}
+		env.send(env.issuer, "/ban 4242")
+		token, msgID := env.card()
+		third := env.addLinkedGroup("Group C")
+		env.fake.setMember(third, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+		env.tap(env.issuer, staffActRunConfirm, token, msgID)
+		env.waitRuns()
+
+		text := env.lastEditText(env.staffChat, msgID)
+		if !strings.Contains(text, staffMarker("staff_act_abort_links_changed")+" 2 3") {
+			t.Fatalf("card = %q, want the links-changed abort with the old count 2 and the new count 3", text)
+		}
+		wantNoKeyboard(t, env.edits(env.staffChat, msgID)[len(env.edits(env.staffChat, msgID))-1])
+		for _, group := range append(append([]int64{}, env.groups...), third) {
+			if writes := env.writes(group); len(writes) != 0 {
+				t.Fatalf("write calls in group %d = %+v, want none", group, writes)
+			}
+		}
+		if state := cardState(t, token); state != staffCardAborted {
+			t.Fatalf("card state = %q, want %q", state, staffCardAborted)
+		}
+	})
+
+	t.Run("one group swapped for another", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		for _, group := range env.groups {
+			env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		}
+		env.send(env.issuer, "/ban 4242")
+		token, msgID := env.card()
+		env.removeLink(env.groups[0])
+		swapped := env.addLinkedGroup("Group C")
+		env.fake.setMember(swapped, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+		env.tap(env.issuer, staffActRunConfirm, token, msgID)
+		env.waitRuns()
+
+		text := env.lastEditText(env.staffChat, msgID)
+		if !strings.Contains(text, staffMarker("staff_act_abort_links_changed")+" 2 2") {
+			t.Fatalf("card = %q, want the links-changed abort although the count is unchanged", text)
+		}
+		for _, group := range []int64{env.groups[0], env.groups[1], swapped} {
+			if writes := env.writes(group); len(writes) != 0 {
+				t.Fatalf("write calls in group %d = %+v, want none", group, writes)
+			}
+		}
+		if state := cardState(t, token); state != staffCardAborted {
+			t.Fatalf("card state = %q, want %q", state, staffCardAborted)
+		}
+	})
+
+	t.Run("links unchanged", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		for _, group := range env.groups {
+			env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		}
+		env.send(env.issuer, "/ban 4242")
+		token, msgID := env.card()
+
+		env.tap(env.issuer, staffActRunConfirm, token, msgID)
+		env.waitRuns()
+
+		for _, group := range env.groups {
+			wantBanned(t, env.fake, group, staffTestTarget)
+		}
+		if state := cardState(t, token); state != staffCardDone {
+			t.Fatalf("card state = %q, want %q", state, staffCardDone)
+		}
+	})
+}
+
+func TestStaffActionTargetLock(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	group := env.groups[0]
+	env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	env.send(env.issuer, "/ban 4242")
+	token, msgID := env.card()
+
+	// Another card's run holds the target.
+	taken, err := acquireStaffTargetLock(staffTestTarget, "othertoken")
+	if err != nil || !taken {
+		t.Fatalf("acquireStaffTargetLock = %v, %v, want it taken", taken, err)
+	}
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+	env.waitRuns()
+
+	text, alert := env.lastAnswer()
+	if !strings.Contains(text, staffMarker("staff_act_target_busy")) || !alert {
+		t.Fatalf("answer = %q (alert %v), want the target-busy alert", text, alert)
+	}
+	if writes := env.writes(group); len(writes) != 0 {
+		t.Fatalf("write calls while the target was busy = %+v, want none", writes)
+	}
+	if state := cardState(t, token); state != staffCardPending {
+		t.Fatalf("card state = %q, want it still %q", state, staffCardPending)
+	}
+	if edits := env.edits(env.staffChat, msgID); len(edits) != 0 {
+		t.Fatalf("the busy answer edited the card %d times, want none", len(edits))
+	}
+	if holder := targetLockHolder(t, staffTestTarget); holder != "othertoken" {
+		t.Fatalf("target lock holder = %q, want the other card to keep it", holder)
+	}
+
+	// The other run ends; the same card can be confirmed now.
+	releaseStaffTargetLock(staffTestTarget, "othertoken")
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+	env.waitRuns()
+	wantBanned(t, env.fake, group, staffTestTarget)
+	if state := cardState(t, token); state != staffCardDone {
+		t.Fatalf("card state = %q, want %q", state, staffCardDone)
+	}
+}
+
+func TestStaffActionTargetLockReleased(t *testing.T) {
+	t.Run("after a completed run", func(t *testing.T) {
+		env := newStaffActionEnv(t, 1)
+		env.fake.setMember(env.groups[0], staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		env.send(env.issuer, "/ban 4242")
+		token, msgID := env.card()
+
+		env.tap(env.issuer, staffActRunConfirm, token, msgID)
+		env.waitRuns()
+
+		wantBanned(t, env.fake, env.groups[0], staffTestTarget)
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the run = %q, want the key gone", holder)
+		}
+	})
+
+	t.Run("after a Confirm aborted by changed links", func(t *testing.T) {
+		env := newStaffActionEnv(t, 1)
+		env.send(env.issuer, "/ban 4242")
+		token, msgID := env.card()
+		env.addLinkedGroup("Group B")
+
+		env.tap(env.issuer, staffActRunConfirm, token, msgID)
+		env.waitRuns()
+
+		if state := cardState(t, token); state != staffCardAborted {
+			t.Fatalf("card state = %q, want %q", state, staffCardAborted)
+		}
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the abort = %q, want the key gone", holder)
+		}
+	})
+
+	t.Run("after a Confirm refused for a late tap", func(t *testing.T) {
+		env := newStaffActionEnv(t, 1)
+		env.send(env.issuer, "/ban 4242")
+		token, msgID := env.card()
+		if err := cache.GetRedisClient().HSet(cache.Context, staffCardKey(token), "expires_at", time.Now().Add(-time.Second).UnixMilli()).Err(); err != nil {
+			t.Fatalf("set expires_at: %v", err)
+		}
+
+		env.tap(env.issuer, staffActRunConfirm, token, msgID)
+
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after an expired tap = %q, want the key gone", holder)
+		}
+	})
+}
+
+func TestStaffActionTargetLockForeignRelease(t *testing.T) {
+	withMiniredis(t)
+
+	taken, err := acquireStaffTargetLock(staffTestTarget, "holder")
+	if err != nil || !taken {
+		t.Fatalf("acquireStaffTargetLock = %v, %v, want it taken", taken, err)
+	}
+	if holder := targetLockHolder(t, staffTestTarget); holder != "holder" {
+		t.Fatalf("target lock holder = %q, want %q", holder, "holder")
+	}
+	if again, err := acquireStaffTargetLock(staffTestTarget, "second"); err != nil || again {
+		t.Fatalf("second acquire = %v, %v, want it refused", again, err)
+	}
+
+	releaseStaffTargetLock(staffTestTarget, "wrong")
+	if holder := targetLockHolder(t, staffTestTarget); holder != "holder" {
+		t.Fatalf("target lock holder after a foreign release = %q, want it kept by %q", holder, "holder")
+	}
+
+	releaseStaffTargetLock(staffTestTarget, "holder")
+	if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+		t.Fatalf("target lock holder after its own release = %q, want the key gone", holder)
+	}
+}
+
+// gatedBanClient holds every banChatMember until release is closed, so a test can
+// tap a card while its run is still in flight.
+type gatedBanClient struct {
+	*staffActionFake
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (g *gatedBanClient) RequestWithContext(
+	ctx context.Context,
+	token, method string,
+	params map[string]any,
+	opts *gotgbot.RequestOpts,
+) (json.RawMessage, error) {
+	if method == "banChatMember" {
+		g.once.Do(func() { close(g.entered) })
+		<-g.release
+	}
+	return g.staffActionFake.RequestWithContext(ctx, token, method, params, opts)
+}
+
+func TestStaffActionOwnCardDoubleTap(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	group := env.groups[0]
+	env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	gate := &gatedBanClient{staffActionFake: env.fake, entered: make(chan struct{}), release: make(chan struct{})}
+	env.bot.BotClient = gate
+	var releaseOnce sync.Once
+	releaseRun := func() { releaseOnce.Do(func() { close(gate.release) }) }
+	t.Cleanup(releaseRun)
+
+	env.send(env.issuer, "/ban 4242")
+	token, msgID := env.card()
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+	select {
+	case <-gate.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the run never reached its first ban")
+	}
+	editsBefore := len(env.edits(env.staffChat, msgID))
+
+	// The run is in flight and holds the target lock; the issuer taps again.
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+
+	if got := env.answersContaining("staff_act_card_handled"); got != 1 {
+		text, _ := env.lastAnswer()
+		t.Fatalf("already-handled toasts = %d (last answer %q), want 1", got, text)
+	}
+	if got := env.answersContaining("staff_act_target_busy"); got != 0 {
+		t.Fatalf("target-busy answers = %d, want none for the issuer's own running card", got)
+	}
+	if edits := len(env.edits(env.staffChat, msgID)); edits != editsBefore {
+		t.Fatalf("the second tap edited the card: %d edits, want %d", edits, editsBefore)
+	}
+
+	releaseRun()
+	env.waitRuns()
+	if got := env.bansOf(group, staffTestTarget); got != 1 {
+		t.Fatalf("banChatMember calls = %d, want exactly 1", got)
 	}
 }
