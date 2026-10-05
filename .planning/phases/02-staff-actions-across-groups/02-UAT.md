@@ -3,15 +3,15 @@ status: testing
 phase: 02-staff-actions-across-groups
 source: [02-VERIFICATION.md]
 started: 2026-10-05T11:28:45Z
-updated: 2026-10-05T11:42:25Z
+updated: 2026-10-05T11:42:46Z
 ---
 
 ## Current Test
 
-number: 2
-name: Flood control with many linked groups and two bot replicas
+number: 3
+name: Second Confirm on the same target while a first run is still going
 expected: |
-  Staff Group edits and moderation calls stay inside Telegram limits, a real 429 is waited out, the final summary still arrives, and a retry_after of exactly 60 shows which groups (if any) read "rate limited" (WR-03)
+  Answered "target busy" for as long as the first run lasts, also past 30 minutes (lock renewal)
 awaiting: user response
 
 ## Tests
@@ -22,7 +22,7 @@ result: pass
 
 ### 2. Flood control with many linked groups and two bot replicas
 expected: Staff Group edits and moderation calls stay inside Telegram limits, a real 429 is waited out, the final summary still arrives, and a retry_after of exactly 60 shows which groups (if any) read "rate limited" (WR-03)
-result: [pending]
+result: pass
 
 ### 3. Second Confirm on the same target while a first run is still going
 expected: Answered "target busy" for as long as the first run lasts, also past 30 minutes (lock renewal)
@@ -35,9 +35,9 @@ result: [pending]
 ## Summary
 
 total: 4
-passed: 1
+passed: 2
 issues: 0
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
