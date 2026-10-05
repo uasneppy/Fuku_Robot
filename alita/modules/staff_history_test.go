@@ -14,6 +14,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
@@ -630,6 +631,348 @@ func TestStaffHistoryDetailBack(t *testing.T) {
 	}
 	if listKeys.prev == nil || listKeys.fields[listKeys.prev.CallbackData]["o"] != "0" {
 		t.Errorf("the list after Back has Prev %+v, want o=0", listKeys.prev)
+	}
+}
+
+// detailData encodes a detail button's data for a record ID and a list offset, both
+// given as the text the callback carries so a forged value can be tried.
+func detailData(t *testing.T, record, offset string) string {
+	t.Helper()
+	data := encodeCallbackData(staffCallbackNamespace, map[string]string{"a": "dt", "r": record, "o": offset})
+	if data == "" {
+		t.Fatalf("detail callback data for record %s offset %s did not encode", record, offset)
+	}
+	return data
+}
+
+// lineStartingWith returns the first line of text that starts with prefix, or "".
+func lineStartingWith(text, prefix string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return line
+		}
+	}
+	return ""
+}
+
+// banRecordWithSkip runs "/ban 4242 2d spamming" over three groups where the issuer
+// is only a plain member of the third, so the record has two done groups and one
+// skipped group, and returns the stored record.
+func banRecordWithSkip(t *testing.T, env *staffActionEnv) *models.StaffAction {
+	t.Helper()
+	env.fake.setMember(env.groups[2], env.issuer.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	_, cardMsg := env.startRun("/ban 4242 2d spamming")
+	env.waitRuns()
+	record, _ := recordOfCard(t, cardMsg)
+	return record
+}
+
+func TestStaffReasonText(t *testing.T) {
+	withStaffLocale(t)
+	tr := i18n.MustNewTranslator("en")
+	plain := []staffReason{
+		staffReasonBanned, staffReasonMuted, staffReasonKicked, staffReasonUnbanned, staffReasonUnmuted,
+	}
+	worded := []staffReason{
+		staffReasonBannedNotInGroup,
+		staffReasonSkipIssuerNotAdmin, staffReasonSkipIssuerNoRight, staffReasonSkipTargetAdmin,
+		staffReasonSkipTargetBot, staffReasonSkipTargetService, staffReasonSkipAlreadyBanned,
+		staffReasonSkipNotInGroup, staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned,
+		staffReasonSkipNotMuted, staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup,
+		staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
+		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
+		staffReasonFailGroupNotFound, staffReasonFailInternal, staffReasonFailInterrupted,
+		staffReasonUndoneUnbanned, staffReasonUndoneUnmuted, staffReasonUndoneBanRestored,
+		staffReasonUndoneRestrictionRestored, staffReasonSkipNotApplied, staffReasonSkipChangedSince,
+		staffReasonSkipRestrictionEnded, staffReasonSkipNoPriorState,
+	}
+	for _, reason := range plain {
+		if got := staffReasonText(tr, reason, ""); got != "" {
+			t.Errorf("staffReasonText(%q) = %q, want no text for a plain success", reason, got)
+		}
+	}
+	for _, reason := range worded {
+		if got := staffReasonText(tr, reason, "detail"); strings.TrimSpace(got) == "" {
+			t.Errorf("staffReasonText(%q) is empty, a skipped or failed line would end in nothing", reason)
+		}
+	}
+}
+
+func TestStaffHistoryDetailUnlinked(t *testing.T) {
+	env := newStaffActionEnv(t, 3)
+	record := banRecordWithSkip(t, env)
+
+	link, err := staff.GetLinkOfGroupFresh(env.groups[1])
+	if err != nil || link == nil {
+		t.Fatalf("link of Group B: %v, %v", link, err)
+	}
+	if deleted, err := staff.DeleteLink(link.ID); err != nil || !deleted {
+		t.Fatalf("DeleteLink = %v, %v, want true", deleted, err)
+	}
+
+	text, _ := env.pressDetail(env.issuer, env.staffChatObj(), 6010, detailData(t, strconv.FormatUint(uint64(record.ID), 10), "0"))
+	lineB := lineStartingWith(text, "✅ Group B")
+	if lineB == "" || !strings.Contains(lineB, staffMarker("staff_history_unlinked")) {
+		t.Errorf("Group B's line = %q, want the stored title and the no-longer-linked mark", lineB)
+	}
+	lineA := lineStartingWith(text, "✅ Group A")
+	if lineA == "" || strings.Contains(lineA, staffMarker("staff_history_unlinked")) {
+		t.Errorf("Group A's line = %q, want it present and not marked", lineA)
+	}
+}
+
+func TestStaffHistoryDetailUndoOutcome(t *testing.T) {
+	env := newStaffActionEnv(t, 3)
+	record := banRecordWithSkip(t, env)
+	groupA, groupB, groupC := env.groups[0], env.groups[1], env.groups[2]
+	data := func(id int) string {
+		return detailData(t, strconv.FormatUint(uint64(record.ID), 10), strconv.Itoa(id))
+	}
+
+	started := time.Date(2026, 10, 5, 14, 30, 0, 0, time.UTC)
+	finished := started.Add(time.Minute)
+	setUndo := func(finishedAt *time.Time) {
+		t.Helper()
+		err := db.DB.Model(&models.StaffAction{}).Where("id = ?", record.ID).Updates(map[string]any{
+			"undo_started_at": started, "undo_finished_at": finishedAt, "undo_by_name": "Bob",
+		}).Error
+		if err != nil {
+			t.Fatalf("mark undo: %v", err)
+		}
+	}
+	setGroup := func(group int64, outcome, reason string) {
+		t.Helper()
+		err := db.DB.Model(&models.StaffActionGroup{}).
+			Where("action_id = ? AND group_chat_id = ?", record.ID, group).
+			Updates(map[string]any{"undo_outcome": outcome, "undo_reason": reason}).Error
+		if err != nil {
+			t.Fatalf("mark undo result of group %d: %v", group, err)
+		}
+	}
+
+	setUndo(&finished)
+	setGroup(groupA, models.StaffActionOutcomeDone, "undone_unbanned")
+	setGroup(groupB, models.StaffActionOutcomeSkipped, "skip_changed_since")
+	setGroup(groupC, models.StaffActionOutcomeSkipped, "skip_not_applied")
+
+	text, _ := env.pressDetail(env.issuer, env.staffChatObj(), 6020, data(0))
+	before, after, found := strings.Cut(text, staffMarker("staff_history_undone_by"))
+	if !found {
+		t.Fatalf("detail %q lacks the undone-by line", text)
+	}
+	wantInOrder(t, after, "Bob", "5 Oct 14:30")
+	if !strings.Contains(before, "⏭ Group C") {
+		t.Errorf("the original block %q must still show Group C's skip", before)
+	}
+	lineA := lineStartingWith(after, "✅ Group A")
+	if !strings.Contains(lineA, staffMarker("staff_undo_unbanned")) {
+		t.Errorf("Group A's undo line = %q, want the unbanned wording", lineA)
+	}
+	lineB := lineStartingWith(after, "⏭ Group B")
+	if !strings.Contains(lineB, staffMarker("staff_undo_skip_changed_since")) {
+		t.Errorf("Group B's undo line = %q, want the changed-since wording", lineB)
+	}
+	if strings.Contains(after, "Group C") {
+		t.Errorf("Group C was never banned, so it must have no undo line: %q", after)
+	}
+
+	// An undo still running: no finish time, and Group B has no result yet.
+	setUndo(nil)
+	setGroup(groupB, "", "")
+	text, _ = env.pressDetail(env.issuer, env.staffChatObj(), 6021, data(0))
+	_, after, found = strings.Cut(text, staffMarker("staff_history_undone_by"))
+	if !found || !strings.Contains(after, "⏳ Group B") {
+		t.Errorf("a running undo shows %q after the header, want Group B as ⏳", after)
+	}
+}
+
+func TestStaffHistoryDetailUnfinished(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	action := models.StaffAction{
+		StaffChatID: env.staffChat, IssuerUserID: env.issuer.Id, IssuerName: "Issuer",
+		TargetUserID: 4242, Action: "ban", GroupCount: 1, SummaryChatID: env.staffChat, SummaryMsgID: 7001,
+	}
+	group := models.StaffActionGroup{GroupChatID: env.groups[0], GroupTitle: "Group A", Outcome: models.StaffActionOutcomePending}
+	if err := staff.CreateAction(&action, []models.StaffActionGroup{group}); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+	data := detailData(t, strconv.FormatUint(uint64(action.ID), 10), "0")
+	setUpdated := func(at time.Time) {
+		t.Helper()
+		if err := db.DB.Model(&models.StaffAction{}).Where("id = ?", action.ID).UpdateColumn("updated_at", at).Error; err != nil {
+			t.Fatalf("set updated_at: %v", err)
+		}
+	}
+
+	setUpdated(time.Now())
+	text, _ := env.pressDetail(env.issuer, env.staffChatObj(), 6030, data)
+	if line := lineStartingWith(text, "⏳ Group A"); line == "" {
+		t.Errorf("a record updated just now shows %q, want Group A as ⏳", text)
+	}
+
+	setUpdated(time.Now().Add(-31 * time.Minute))
+	text, _ = env.pressDetail(env.issuer, env.staffChatObj(), 6031, data)
+	line := lineStartingWith(text, "❌ Group A")
+	if line == "" || !strings.Contains(line, staffMarker("staff_act_fail_interrupted")) {
+		t.Errorf("a record updated 31 minutes ago shows %q, want Group A as failed: interrupted", text)
+	}
+
+	rows, err := staff.ListActionGroupsFresh(action.ID)
+	if err != nil || len(rows) != 1 || rows[0].Outcome != models.StaffActionOutcomePending {
+		t.Errorf("rows after viewing = %+v (%v), want the row still pending: the view never writes", rows, err)
+	}
+}
+
+func TestStaffHistoryDetailLong(t *testing.T) {
+	tr := panelMarkerTranslator(t)
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	finished := now.Add(-time.Hour)
+	hostile := strings.Repeat("&", 64)
+	record := func(n int, outcome func(i int) string) (*models.StaffAction, []models.StaffActionGroup) {
+		action := &models.StaffAction{
+			ID: 1, Action: "ban", TargetUserID: 5, IssuerName: hostile, Reason: strings.Repeat("&", 5000),
+			CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: finished, FinishedAt: &finished, GroupCount: n,
+		}
+		groups := make([]models.StaffActionGroup, n)
+		for i := range groups {
+			groups[i] = models.StaffActionGroup{
+				Seq: i, GroupChatID: int64(-1000 - i), GroupTitle: hostile,
+				Outcome: outcome(i), Reason: "skip_not_in_group",
+			}
+			if groups[i].Outcome == models.StaffActionOutcomeDone {
+				groups[i].Reason = "banned"
+			}
+			if groups[i].Outcome == models.StaffActionOutcomeFailed {
+				groups[i].Reason = "fail_internal"
+			}
+		}
+		return action, groups
+	}
+
+	t.Run("mixed outcomes list what fits and count the rest", func(t *testing.T) {
+		mixed := func(i int) string {
+			return []string{models.StaffActionOutcomeDone, models.StaffActionOutcomeSkipped, models.StaffActionOutcomeFailed}[i%3]
+		}
+		action, groups := record(150, mixed)
+		text, _ := renderStaffHistoryDetail(tr, action, groups, nil, 0, now)
+		if got := staffSummaryLen(text); got > staffPanelMaxUTF16 {
+			t.Fatalf("detail text is %d UTF-16 units, want at most %d", got, staffPanelMaxUTF16)
+		}
+		last := text[strings.LastIndex(text, "\n")+1:]
+		if !strings.HasPrefix(last, staffMarker("staff_history_more_groups")) {
+			t.Fatalf("the text ends with %q, want the more-groups note", last)
+		}
+		var left int
+		if _, err := fmt.Sscanf(strings.TrimPrefix(last, staffMarker("staff_history_more_groups")), "%d", &left); err != nil {
+			t.Fatalf("the more-groups note %q carries no count: %v", last, err)
+		}
+		shown := 0
+		for _, line := range strings.Split(text, "\n") {
+			if strings.HasPrefix(line, "⏭ ") || strings.HasPrefix(line, "❌ ") {
+				shown++
+			}
+		}
+		if shown+left != 100 {
+			t.Errorf("%d skipped and failed lines shown plus %d left out = %d, want all 100", shown, left, shown+left)
+		}
+		if !strings.Contains(text, staffMarker("staff_act_summary_done_collapsed")) {
+			t.Errorf("the done lines were not collapsed into a count: %q", text)
+		}
+	})
+
+	t.Run("all done collapse to one count and nothing is left out", func(t *testing.T) {
+		action, groups := record(60, func(int) string { return models.StaffActionOutcomeDone })
+		text, _ := renderStaffHistoryDetail(tr, action, groups, nil, 0, now)
+		if got := staffSummaryLen(text); got > staffPanelMaxUTF16 {
+			t.Fatalf("detail text is %d UTF-16 units, want at most %d", got, staffPanelMaxUTF16)
+		}
+		if strings.Contains(text, staffMarker("staff_history_more_groups")) {
+			t.Errorf("a collapse that fits must not claim groups are hidden: %q", text)
+		}
+		if !strings.Contains(text, staffMarker("staff_act_summary_done_collapsed")+" 60") {
+			t.Errorf("text %q lacks the collapsed count of 60", text)
+		}
+	})
+}
+
+func TestStaffHistoryDetailAccess(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	mine := seedStaffActions(t, env.staffChat, 1, nil)
+	other := uniqueModuleChatID()
+	staffCleanup(t, other)
+	theirs := seedStaffActions(t, other, 1, nil)
+	mineID := strconv.FormatUint(uint64(mine[0].ID), 10)
+
+	// refused presses a detail button and demands one answer with the wanted text and
+	// alert flag, and no edit of the message.
+	refused := func(t *testing.T, from gotgbot.User, msgID int64, data, wantKey string, wantAlert bool) {
+		t.Helper()
+		before := env.answerCount()
+		env.tapData(from, env.staffChatObj(), msgID, data)
+		if got := env.answerCount() - before; got != 1 {
+			t.Errorf("the press was answered %d times, want exactly once", got)
+		}
+		text, alert := env.lastAnswer()
+		if !strings.Contains(text, staffMarker(wantKey)) || alert != wantAlert {
+			t.Errorf("answer = %q alert=%v, want %s alert=%v", text, alert, wantKey, wantAlert)
+		}
+		if edits := env.edits(env.staffChat, msgID); len(edits) != 0 {
+			t.Errorf("a refused press edited the message %d time(s), want none", len(edits))
+		}
+	}
+
+	t.Run("other Staff Group", func(t *testing.T) {
+		refused(t, env.issuer, 6040, detailData(t, strconv.FormatUint(uint64(theirs[0].ID), 10), "0"), "staff_cb_denied", true)
+	})
+	t.Run("missing record", func(t *testing.T) {
+		refused(t, env.issuer, 6041, detailData(t, "999999999", "0"), "staff_cb_expired", false)
+	})
+	t.Run("bad id", func(t *testing.T) {
+		for i, id := range []string{"0", "-5", "abc", "", "18446744073709551615"} {
+			refused(t, env.issuer, int64(6050+i), detailData(t, id, "0"), "staff_cb_expired", false)
+		}
+	})
+	t.Run("bad offset", func(t *testing.T) {
+		refused(t, env.issuer, 6060, detailData(t, mineID, "-1"), "staff_cb_expired", false)
+	})
+	t.Run("non-member", func(t *testing.T) {
+		outsider := gotgbot.User{Id: env.issuer.Id + 100, FirstName: "Outsider"}
+		env.fake.setMember(env.staffChat, outsider.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusLeft})
+		refused(t, outsider, 6070, detailData(t, mineID, "0"), "staff_cb_members_only", true)
+	})
+	t.Run("a member answers once and sees the record", func(t *testing.T) {
+		before := env.answerCount()
+		env.tapData(env.issuer, env.staffChatObj(), 6080, detailData(t, mineID, "0"))
+		if got := env.answerCount() - before; got != 1 {
+			t.Errorf("the press was answered %d times, want exactly once", got)
+		}
+		if text := env.lastEditText(env.staffChat, 6080); !strings.Contains(text, staffMarker("staff_act_name_kick")) {
+			t.Errorf("a member's press showed %q, want the record", text)
+		}
+	})
+}
+
+func TestStaffHistoryDetailCallbackBudget(t *testing.T) {
+	for _, data := range []string{
+		detailData(t, "18446744073709551615", "999999"),
+		encodeCallbackData(staffCallbackNamespace, map[string]string{"a": "rc", "o": "999999"}),
+	} {
+		if n := len(data); n < 1 || n > 64 {
+			t.Errorf("callback data %q is %d bytes, want 1 to 64", data, n)
+		}
+	}
+
+	tr := panelMarkerTranslator(t)
+	now := time.Now()
+	finished := now
+	actions := []models.StaffAction{{ID: ^uint(0), Action: "ban", TargetUserID: 1, CreatedAt: now, FinishedAt: &finished}}
+	_, keyboard, _ := renderStaffHistory(tr, actions, nil, 999990, false, now)
+	if keys := historyKeyboardOf(t, keyboard.InlineKeyboard); len(keys.detail) != 1 {
+		t.Errorf("a record with the largest ID got %d detail buttons, want 1", len(keys.detail))
+	}
+	_, detailKeyboard := renderStaffHistoryDetail(tr, &actions[0], nil, nil, 999999, now)
+	if keys := historyKeyboardOf(t, detailKeyboard.InlineKeyboard); keys.backList == nil {
+		t.Error("the detail view at offset 999999 has no Back button")
 	}
 }
 
