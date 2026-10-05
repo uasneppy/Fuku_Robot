@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
@@ -211,8 +212,12 @@ type staffRunSpec struct {
 	// continuation messages.
 	Render func(tr *i18n.Translator, results []staffGroupResult, final bool) (string, []string)
 	// Finish runs once after the unfinished groups are swept into failed lines and
-	// before the final summary is delivered. It may be nil.
-	Finish func(results []staffGroupResult)
+	// before the final summary is delivered. It returns the keyboard the final
+	// summary carries, an empty markup for none. It may be nil.
+	Finish func(results []staffGroupResult) gotgbot.InlineKeyboardMarkup
+	// Delivered runs after the final summary was delivered with the ID of the
+	// message that holds it, 0 when it could not be delivered at all. It may be nil.
+	Delivered func(landedMsgID int64)
 }
 
 // startStaffRun runs spec in the background: it fans out over spec.Links, keeps the
@@ -305,14 +310,18 @@ func startStaffRun(b *gotgbot.Bot, spec staffRunSpec) {
 		results := progress.sweepPending(sweep)
 		// The record is closed before anything is shown: its writes use db.DB, never
 		// ctx, so a shutdown that cancelled the run cannot lose them.
+		var markup gotgbot.InlineKeyboardMarkup
 		if spec.Finish != nil {
-			spec.Finish(results)
+			markup = spec.Finish(results)
 		}
 
 		final, continuation := spec.Render(tr, results, true)
 		// Delivery never runs on the run's own context, which a shutdown may already
 		// have cancelled: each message opens a fresh budget of its own.
-		deliverStaffActionFinal(b, spec.ChatID, spec.MsgID, final, continuation, editHoldUntil)
+		landed := deliverStaffActionFinal(b, spec.ChatID, spec.MsgID, final, continuation, editHoldUntil, markup)
+		if spec.Delivered != nil {
+			spec.Delivered(landed)
+		}
 		if err := setStaffActionCardState(card.Token, staffCardDone); err != nil {
 			log.Warnf("[StaffActions] mark card %s done: %v", card.Token, err)
 		}
@@ -351,8 +360,29 @@ func startStaffActionRun(
 		Render: func(tr *i18n.Translator, results []staffGroupResult, final bool) (string, []string) {
 			return composeStaffActionSummary(tr, card, results, final)
 		},
-		Finish: func(results []staffGroupResult) {
-			finalizeStaffActionRecord(card, results)
+		Finish: func(results []staffGroupResult) gotgbot.InlineKeyboardMarkup {
+			finalized := finalizeStaffActionRecord(card, results)
+			// The Undo button exists only on the final text of a record that was
+			// finalized: Ask and Confirm both read the record, so a run whose record
+			// could not be closed offers nothing to press. Kick has no undo.
+			if !finalized || card.Kind == staffKindKick {
+				return gotgbot.InlineKeyboardMarkup{}
+			}
+			if done, _, _, _ := staffSummaryTally(results); done == 0 {
+				return gotgbot.InlineKeyboardMarkup{}
+			}
+			keyboard, _ := staffUndoKeyboard(staffChatTranslator(card.StaffChat), card.ActionID)
+			return keyboard
+		},
+		Delivered: func(landed int64) {
+			// A fallback message is where staff read the summary now, so the record
+			// follows it: the "Undone" line must land on that message.
+			if landed == 0 || landed == msgID || card.ActionID == 0 {
+				return
+			}
+			if err := staff.SetSummaryMessage(card.ActionID, chatID, landed); err != nil {
+				log.Errorf("[StaffActions] point action %d at its summary message %d: %v", card.ActionID, landed, err)
+			}
 		},
 	})
 }
@@ -390,9 +420,84 @@ func runStaffFanOut(
 	_ = workers.Wait()
 }
 
-// runStaffActionInGroup is the whole per-group check chain. The order is part of
-// the safety contract: a group that fails any step gets no write call, and the
-// issuer's rights are read live before the target is even looked up.
+// staffGroupPrechecks is the first half of the per-group check chain, shared by the
+// staff action and its undo: the interrupted check, the Staff Group guard, the link
+// owner recheck, the actor's live rights, the bot and service-ID guards and the
+// target's live state. The actor is card.Issuer, which is the issuer of an action and
+// the member who pressed Undo for an undo card. It returns the live target and true,
+// or the group's early result and false. The order is part of the safety contract: a
+// group that fails any step gets no write call, and the actor's rights are read live
+// before the target is even looked up.
+func staffGroupPrechecks(
+	ctx context.Context,
+	b *gotgbot.Bot,
+	card *staffActionCard,
+	link models.StaffGroupLink,
+	pass *staffOwnerPass,
+) (gotgbot.MergedChatMember, staffGroupResult, bool) {
+	early := func(reason staffReason, detail string) (gotgbot.MergedChatMember, staffGroupResult, bool) {
+		return gotgbot.MergedChatMember{}, staffGroupResult{
+			Link: link, Outcome: staffReasonOutcome(reason), Reason: reason, Detail: detail,
+		}, false
+	}
+
+	// A shutdown ends the run between steps: a group that has not reached its write
+	// call gets none, and reads "interrupted by restart".
+	interrupted := func() bool { return ctx.Err() != nil }
+	if interrupted() {
+		return early(staffReasonFailInterrupted, "")
+	}
+
+	// Defensive: the database already forbids a link to the Staff Group itself.
+	if link.GroupChatID == card.StaffChat {
+		return early(staffReasonSkipStaffGroup, "")
+	}
+
+	switch recheckLink(b, link, pass) {
+	case staffRecheckRemoved, staffRecheckGone:
+		return early(staffReasonSkipLinkRemoved, "")
+	case staffRecheckUnknown:
+		if interrupted() {
+			return early(staffReasonFailInterrupted, "")
+		}
+		return early(staffOwnerUnknownReason(b, link, pass), "")
+	}
+	if interrupted() {
+		return early(staffReasonFailInterrupted, "")
+	}
+
+	// The only authority for the actor in this group is this live answer.
+	issuer, err := fetchLiveMember(ctx, b, link.GroupChatID, card.Issuer)
+	if err != nil {
+		log.Warnf("[StaffActions] issuer lookup in group %d: %v", link.GroupChatID, err)
+		return early(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
+	}
+	if reason := staffIssuerSkipReason(issuer); reason != "" {
+		return early(reason, "")
+	}
+
+	if card.Target == b.Id {
+		return early(staffReasonSkipTargetBot, "")
+	}
+	if staffServiceUserIDs[card.Target] {
+		return early(staffReasonSkipTargetService, "")
+	}
+
+	if interrupted() {
+		return early(staffReasonFailInterrupted, "")
+	}
+	target, err := fetchLiveMember(ctx, b, link.GroupChatID, card.Target)
+	if err != nil {
+		log.Warnf("[StaffActions] target lookup in group %d: %v", link.GroupChatID, err)
+		return early(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
+	}
+	return target, staffGroupResult{}, true
+}
+
+// runStaffActionInGroup is the whole per-group check chain of a staff action: the
+// shared prechecks, then the decision and the write. The order is part of the safety
+// contract: a group that fails any step gets no write call, and the issuer's rights
+// are read live before the target is even looked up.
 func runStaffActionInGroup(
 	ctx context.Context,
 	b *gotgbot.Bot,
@@ -404,56 +509,11 @@ func runStaffActionInGroup(
 	result := func(reason staffReason, detail string) staffGroupResult {
 		return staffGroupResult{Link: link, Outcome: staffReasonOutcome(reason), Reason: reason, Detail: detail}
 	}
-
-	// A shutdown ends the run between steps: a group that has not reached its write
-	// call gets none, and reads "interrupted by restart".
 	interrupted := func() bool { return ctx.Err() != nil }
-	if interrupted() {
-		return result(staffReasonFailInterrupted, "")
-	}
 
-	// Defensive: the database already forbids a link to the Staff Group itself.
-	if link.GroupChatID == card.StaffChat {
-		return result(staffReasonSkipStaffGroup, "")
-	}
-
-	switch recheckLink(b, link, pass) {
-	case staffRecheckRemoved, staffRecheckGone:
-		return result(staffReasonSkipLinkRemoved, "")
-	case staffRecheckUnknown:
-		if interrupted() {
-			return result(staffReasonFailInterrupted, "")
-		}
-		return result(staffOwnerUnknownReason(b, link, pass), "")
-	}
-	if interrupted() {
-		return result(staffReasonFailInterrupted, "")
-	}
-
-	// The only authority for the issuer in this group is this live answer.
-	issuer, err := fetchLiveMember(ctx, b, link.GroupChatID, card.Issuer)
-	if err != nil {
-		log.Warnf("[StaffActions] issuer lookup in group %d: %v", link.GroupChatID, err)
-		return result(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
-	}
-	if reason := staffIssuerSkipReason(issuer); reason != "" {
-		return result(reason, "")
-	}
-
-	if card.Target == b.Id {
-		return result(staffReasonSkipTargetBot, "")
-	}
-	if staffServiceUserIDs[card.Target] {
-		return result(staffReasonSkipTargetService, "")
-	}
-
-	if interrupted() {
-		return result(staffReasonFailInterrupted, "")
-	}
-	target, err := fetchLiveMember(ctx, b, link.GroupChatID, card.Target)
-	if err != nil {
-		log.Warnf("[StaffActions] target lookup in group %d: %v", link.GroupChatID, err)
-		return result(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
+	target, skipped, ok := staffGroupPrechecks(ctx, b, card, link, pass)
+	if !ok {
+		return skipped
 	}
 
 	verdict := decideStaffAction(card.Kind, staffTargetStateFrom(target), newUntil)

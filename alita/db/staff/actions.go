@@ -237,3 +237,122 @@ func ListActionGroupsFresh(actionID uint) ([]models.StaffActionGroup, error) {
 	}
 	return rows, nil
 }
+
+// SetSummaryMessage points the record at the message that now holds the action's
+// final summary. The run calls it when the final edit fell back to a new message,
+// so a later "Undone" line lands on the message staff actually see. The chat and
+// the message ID are always written together: a message ID only means something in
+// the chat it was sent to.
+func SetSummaryMessage(actionID uint, chatID, msgID int64) error {
+	result := db.DB.Model(&models.StaffAction{}).Where("id = ?", actionID).
+		Updates(map[string]any{
+			"summary_chat_id": chatID,
+			"summary_msg_id":  msgID,
+			"updated_at":      time.Now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Staff] SetSummaryMessage: %v", result.Error)
+		return alitaerrors.Wrapf(result.Error, "set summary message of staff action %d", actionID)
+	}
+	if result.RowsAffected != 1 {
+		err := alitaerrors.Wrapf(gorm.ErrRecordNotFound, "set summary message of staff action %d", actionID)
+		log.Errorf("[Staff] SetSummaryMessage: %v", err)
+		return err
+	}
+	return nil
+}
+
+// ClaimUndo is the one-undo-per-action guarantee (D-09). It records who undoes the
+// action and when with a single conditional update that matches only while no undo
+// was claimed, and reports whether this call won: exactly one caller ever sees
+// true for a record, on any replica. It outlives the Redis confirm card, which
+// expires after an hour, so an old card can never start a second undo.
+func ClaimUndo(actionID uint, by int64, byName string) (claimed bool, err error) {
+	now := time.Now()
+	result := db.DB.Model(&models.StaffAction{}).
+		Where("id = ? AND undo_started_at IS NULL", actionID).
+		Updates(map[string]any{
+			"undo_by":         by,
+			"undo_by_name":    byName,
+			"undo_started_at": now,
+			"updated_at":      now,
+		})
+	if result.Error != nil {
+		log.Errorf("[Staff] ClaimUndo: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "claim undo of staff action %d", actionID)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// writeUndoResult stores one group's undo outcome inside tx. It fails with
+// gorm.ErrRecordNotFound when no row matched.
+func writeUndoResult(tx *gorm.DB, actionID uint, res ActionGroupResult, now time.Time) error {
+	result := tx.Model(&models.StaffActionGroup{}).
+		Where("action_id = ? AND group_chat_id = ?", actionID, res.GroupChatID).
+		Updates(map[string]any{
+			"undo_outcome": res.Outcome,
+			"undo_reason":  res.Reason,
+			"undo_detail":  res.Detail,
+			"updated_at":   now,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// SaveUndoResult stores one group's undo result as soon as the group finishes, and
+// bumps the parent's updated_at in the same transaction.
+func SaveUndoResult(actionID uint, res ActionGroupResult) error {
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		if err := writeUndoResult(tx, actionID, res, now); err != nil {
+			return err
+		}
+		return tx.Model(&models.StaffAction{}).Where("id = ?", actionID).Update("updated_at", now).Error
+	})
+	if err != nil {
+		log.Errorf("[Staff] SaveUndoResult: %v", err)
+		return alitaerrors.Wrapf(err, "save undo result of action %d in group %d", actionID, res.GroupChatID)
+	}
+	return nil
+}
+
+// FinalizeUndo is the authoritative end of an undo: in one transaction it writes
+// every given group's undo result, marks each group the original did not apply to
+// as skipped with skip_not_applied (its undo outcome is still empty), and sets
+// undo_finished_at, only while it is still NULL, so a second call keeps the first
+// finish time.
+func FinalizeUndo(actionID uint, results []ActionGroupResult) error {
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		for _, res := range results {
+			if err := writeUndoResult(tx, actionID, res, now); err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&models.StaffActionGroup{}).
+			Where("action_id = ? AND outcome <> ? AND undo_outcome = ''", actionID, models.StaffActionOutcomeDone).
+			Updates(map[string]any{
+				"undo_outcome": models.StaffActionOutcomeSkipped,
+				"undo_reason":  "skip_not_applied",
+				"updated_at":   now,
+			}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.StaffAction{}).
+			Where("id = ? AND undo_finished_at IS NULL", actionID).
+			Update("undo_finished_at", now).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.StaffAction{}).Where("id = ?", actionID).Update("updated_at", now).Error
+	})
+	if err != nil {
+		log.Errorf("[Staff] FinalizeUndo: %v", err)
+		return alitaerrors.Wrapf(err, "finalize undo of staff action %d", actionID)
+	}
+	return nil
+}

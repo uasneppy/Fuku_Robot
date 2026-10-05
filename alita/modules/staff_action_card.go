@@ -252,6 +252,13 @@ type staffActionCard struct {
 	// OverLimit marks a duration typed above 366 days, which is applied as permanent.
 	OverLimit bool
 
+	// UndoOf is the staff_actions row an undo card undoes, and UndoKind the action
+	// that row recorded. They are set only on undo cards (Kind staffKindUndo), whose
+	// Issuer is the member who pressed Undo. They are stored in the hash as undo_of
+	// and undo_kind.
+	UndoOf   uint
+	UndoKind staffActionKind
+
 	// ActionID is the staff_actions row created at Confirm. It is in-memory only and
 	// never written to the Redis hash: the run that Confirm starts carries it.
 	ActionID uint
@@ -346,7 +353,7 @@ func saveStaffActionCard(card *staffActionCard) error {
 			return err
 		}
 		ctx, cancel := cache.ContextWithTimeout()
-		created, err := createStaffCardScript.Run(ctx, client, []string{staffCardKey(token)},
+		args := []any{
 			ttl.Milliseconds(),
 			"state", card.State,
 			"issuer", card.Issuer,
@@ -362,7 +369,13 @@ func saveStaffActionCard(card *staffActionCard) error {
 			"dur_n", card.DurationAmount,
 			"dur_u", card.DurationUnit,
 			"over_limit", staffBoolField(card.OverLimit),
-		).Int()
+		}
+		// Only an undo card carries the record it undoes. A card without these two
+		// fields is a plain staff action card, which is what an older replica writes.
+		if card.Kind == staffKindUndo {
+			args = append(args, "undo_of", card.UndoOf, "undo_kind", string(card.UndoKind))
+		}
+		created, err := createStaffCardScript.Run(ctx, client, []string{staffCardKey(token)}, args...).Int()
 		cancel()
 		if err != nil {
 			return err
@@ -450,6 +463,17 @@ func loadStaffActionCard(token string) (*staffActionCard, error) {
 	}
 	card.DurationUnit = fields["dur_u"]
 	card.OverLimit = fields["over_limit"] == "1"
+
+	// undo_of and undo_kind are optional: empty means a normal card. A malformed
+	// undo_of is an error, never a card that reads as normal.
+	if raw := fields["undo_of"]; raw != "" {
+		value, err := strconv.ParseUint(raw, 10, 63)
+		if err != nil || value == 0 {
+			return nil, fmt.Errorf("staff action card %s: bad undo_of: %q", token, raw)
+		}
+		card.UndoOf = uint(value)
+		card.UndoKind = staffActionKind(fields["undo_kind"])
+	}
 	return card, nil
 }
 
@@ -756,6 +780,13 @@ func (m moduleStruct) staffActionConfirm(
 ) error {
 	card := loadStaffCardForTap(b, query, tr, fields)
 	if card == nil {
+		return ext.EndGroups
+	}
+	// An undo card has its own Confirm. Run through this one it would be decided as
+	// a staff action, so it is refused before anything else happens.
+	if card.Kind == staffKindUndo {
+		text, _ := tr.GetString("staff_cb_expired")
+		answerStaffCallback(b, query, text, false)
 		return ext.EndGroups
 	}
 

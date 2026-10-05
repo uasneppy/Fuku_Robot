@@ -85,7 +85,16 @@ func TestStaffActionTracer(t *testing.T) {
 
 	edits := env.edits(env.staffChat, cardMsgID)
 	last := edits[len(edits)-1]
-	wantNoKeyboard(t, last)
+	// The Confirm and Cancel buttons are gone. A ban applied in at least one group
+	// ends on its summary with the single Undo button and nothing else (STAFF-11).
+	for _, row := range staffKeyboardOf(last.Params["reply_markup"]) {
+		for _, button := range row {
+			decoded, ok := decodeCallbackData(button.CallbackData, staffCallbackNamespace)
+			if !ok || decoded.Fields["a"] != staffActUndoAsk {
+				t.Fatalf("final summary kept the button %+v, want only the Undo button", button)
+			}
+		}
+	}
 	text := env.lastEditText(env.staffChat, cardMsgID)
 	for _, want := range []string{"Group A", "Group B", staffMarker("staff_act_banned_not_in_group")} {
 		if !strings.Contains(text, want) {
