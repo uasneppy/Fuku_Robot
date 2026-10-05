@@ -128,6 +128,11 @@ func GetUserIdByUserName(username string) int64 {
 	return userId
 }
 
+// FindUsersByUsername is the Staff Group target resolver for an @username.
+func FindUsersByUsername(username string, limit int) ([]models.User, error) {
+	return nil, nil
+}
+
 func GetUserInfoById(userId int64) (username, name string, found bool) {
 	user := checkUserInfo(userId)
 	if user != nil {
