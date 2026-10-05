@@ -81,12 +81,15 @@ const (
 func staffReasonOutcome(r staffReason) staffOutcome {
 	switch r {
 	case staffReasonBanned, staffReasonBannedNotInGroup, staffReasonMuted, staffReasonKicked,
-		staffReasonUnbanned, staffReasonUnmuted:
+		staffReasonUnbanned, staffReasonUnmuted, staffReasonUndoneUnbanned, staffReasonUndoneUnmuted,
+		staffReasonUndoneBanRestored, staffReasonUndoneRestrictionRestored:
 		return staffOutcomeDone
 	case staffReasonSkipIssuerNotAdmin, staffReasonSkipIssuerNoRight, staffReasonSkipTargetAdmin,
 		staffReasonSkipTargetBot, staffReasonSkipTargetService, staffReasonSkipAlreadyBanned,
 		staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup, staffReasonSkipNotInGroup,
-		staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned, staffReasonSkipNotMuted:
+		staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned, staffReasonSkipNotMuted,
+		staffReasonSkipNotApplied, staffReasonSkipChangedSince, staffReasonSkipRestrictionEnded,
+		staffReasonSkipNoPriorState:
 		return staffOutcomeSkipped
 	case staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
@@ -321,9 +324,141 @@ type staffUndoVerdict struct {
 	Perms gotgbot.ChatPermissions
 }
 
-// decideStaffUndo is a placeholder until the table is written.
+// staffUndoSkip is an undo verdict that leaves the group alone.
+func staffUndoSkip(reason staffReason) staffUndoVerdict {
+	return staffUndoVerdict{staffVerdict: staffSkip(reason)}
+}
+
+// staffUndoDo is an undo verdict that makes a call with an end date.
+func staffUndoDo(call staffAPICall, reason staffReason, until int64) staffUndoVerdict {
+	return staffUndoVerdict{staffVerdict: staffDo(call, reason), Until: until}
+}
+
+// staffUndoRestore is the verdict that puts a recorded restriction back.
+func staffUndoRestore(prior staffPriorState) staffUndoVerdict {
+	return staffUndoVerdict{
+		staffVerdict: staffDo(staffCallRestore, staffReasonUndoneRestrictionRestored),
+		Until:        prior.Until,
+		Perms:        *prior.Perms,
+	}
+}
+
+// staffUndoEnded reports whether a recorded end date is gone or too close to be
+// re-applied safely. Zero is permanent and never ended.
+func staffUndoEnded(until, now int64) bool {
+	return until != 0 && until <= now+staffUndoMinRemaining
+}
+
+// staffUndoSameUntil reports whether a live end date is the one the staff action
+// sent. Telegram stores an end date less than 30 seconds after the call as a
+// permanent ban, so a live permanent state also matches such a recorded date.
+func staffUndoSameUntil(live int64, applied staffAppliedState) bool {
+	if live == applied.Until {
+		return true
+	}
+	return applied.Until != 0 && live == 0 && applied.Until-applied.AppliedAt < 30
+}
+
+// staffUndoLeftBehind reports whether the live state is exactly what the staff
+// action left in the group. Undo acts only on that state: any difference is a later
+// decision by someone else (D-04). A mute does not compare membership, because a
+// muted member who left keeps the same restriction and membership is not a staff
+// decision. Kick has no undo.
+func staffUndoLeftBehind(orig staffActionKind, applied staffAppliedState, live staffTargetState) bool {
+	switch orig {
+	case staffKindBan:
+		return live.Status == gotgbot.ChatMemberStatusKicked && staffUndoSameUntil(live.Until, applied)
+	case staffKindMute:
+		return live.Status == gotgbot.ChatMemberStatusRestricted && live.Muted && staffUndoSameUntil(live.Until, applied)
+	case staffKindUnban:
+		return live.Status == gotgbot.ChatMemberStatusLeft
+	case staffKindUnmute:
+		switch live.Status {
+		case gotgbot.ChatMemberStatusMember, gotgbot.ChatMemberStatusLeft:
+			return true
+		case gotgbot.ChatMemberStatusRestricted:
+			return !live.Muted
+		}
+	}
+	return false
+}
+
+// decideStaffUndo is the pure per-group decision for undoing a staff action, and
+// the only place that chooses an undo's Telegram call. It puts the target's
+// recorded prior state back and never just lifts (D-02), and it leaves the group
+// alone whenever the live state is not exactly what the staff action left behind
+// (D-04).
+//
+// It makes the one sanctioned exception to the rule decideStaffAction is built
+// on: a restore or a re-ban may be sent to a kicked or left target, which a
+// restrict or ban must never reach otherwise because it replaces that status. That
+// is safe only because the live state equals the state the staff action itself left
+// (staffUndoLeftBehind), so the call replaces nothing but the staff's own work.
+// A prior end date within staffUndoMinRemaining is never re-applied.
 func decideStaffUndo(orig staffActionKind, prior staffPriorState, applied staffAppliedState, live staffTargetState, now int64) staffUndoVerdict {
-	return staffUndoVerdict{staffVerdict: staffSkip(staffReasonSkipNoPriorState)}
+	if live.Status == gotgbot.ChatMemberStatusCreator || live.Status == gotgbot.ChatMemberStatusAdministrator {
+		return staffUndoSkip(staffReasonSkipTargetAdmin)
+	}
+	if prior.Status == "" {
+		return staffUndoSkip(staffReasonSkipNoPriorState)
+	}
+	if (orig == staffKindBan || orig == staffKindMute) && applied.Until != 0 && applied.Until <= now {
+		return staffUndoSkip(staffReasonSkipRestrictionEnded)
+	}
+	if !staffUndoLeftBehind(orig, applied, live) {
+		return staffUndoSkip(staffReasonSkipChangedSince)
+	}
+	switch orig {
+	case staffKindBan:
+		return decideStaffUndoBan(prior, now)
+	case staffKindMute:
+		return decideStaffUndoMute(prior, now)
+	case staffKindUnban, staffKindUnmute:
+		return staffUndoSkip(staffReasonSkipNoPriorState)
+	}
+	return staffUndoSkip(staffReasonFailLookup)
+}
+
+// decideStaffUndoBan is the ban column: a ban over a member or a departed target
+// is lifted, a ban over a restriction or a shorter ban still running puts that
+// back.
+func decideStaffUndoBan(prior staffPriorState, now int64) staffUndoVerdict {
+	switch prior.Status {
+	case gotgbot.ChatMemberStatusMember, gotgbot.ChatMemberStatusLeft:
+		return staffUndoDo(staffCallUnban, staffReasonUndoneUnbanned, 0)
+	case gotgbot.ChatMemberStatusRestricted:
+		if staffUndoEnded(prior.Until, now) {
+			return staffUndoDo(staffCallUnban, staffReasonUndoneUnbanned, 0)
+		}
+		if prior.Perms == nil {
+			return staffUndoSkip(staffReasonSkipNoPriorState)
+		}
+		return staffUndoRestore(prior)
+	case gotgbot.ChatMemberStatusKicked:
+		if staffUndoEnded(prior.Until, now) {
+			return staffUndoDo(staffCallUnban, staffReasonUndoneUnbanned, 0)
+		}
+		return staffUndoDo(staffCallBan, staffReasonUndoneBanRestored, prior.Until)
+	}
+	return staffUndoSkip(staffReasonSkipNoPriorState)
+}
+
+// decideStaffUndoMute is the mute column: a mute over a member is lifted, a mute
+// over a restriction still running puts that restriction back.
+func decideStaffUndoMute(prior staffPriorState, now int64) staffUndoVerdict {
+	switch prior.Status {
+	case gotgbot.ChatMemberStatusMember:
+		return staffUndoDo(staffCallUnmute, staffReasonUndoneUnmuted, 0)
+	case gotgbot.ChatMemberStatusRestricted:
+		if staffUndoEnded(prior.Until, now) {
+			return staffUndoDo(staffCallUnmute, staffReasonUndoneUnmuted, 0)
+		}
+		if prior.Perms == nil {
+			return staffUndoSkip(staffReasonSkipNoPriorState)
+		}
+		return staffUndoRestore(prior)
+	}
+	return staffUndoSkip(staffReasonSkipNoPriorState)
 }
 
 // staffServiceUserIDs are Telegram's own accounts: the service account, the
