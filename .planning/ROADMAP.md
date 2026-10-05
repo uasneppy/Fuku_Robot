@@ -89,7 +89,7 @@ Plans:
   4. The issuer gets one summary message that updates as groups finish. Every linked group is marked done, skipped (with the reason) or failed (with the reason, such as missing bot rights or rate limiting). The bot stays within Telegram's rate limits even with many groups and several bot replicas, and waits and retries when Telegram says to. No group is ever silently dropped.
   5. `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` work exactly as before in every group that isn't a Staff Group.
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 
 Plans:
 **Wave 1**
@@ -108,7 +108,7 @@ Plans:
 - [x] 02-05-PLAN.md: Card lifecycle: 5-minute expiry, exactly-once Confirm across replicas, abort when linked groups changed, one staff action per target; `/staff` help text
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 02-06-PLAN.md: Fleet-wide Redis pacer with shared `retry_after`, four paced workers, D-19 failure reasons
+- [x] 02-06-PLAN.md: Fleet-wide Redis pacer with shared `retry_after`, four paced workers, D-19 failure reasons
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 02-07-PLAN.md: Live summary: tally, batched edits, collapse and continuation, final-edit retry and fallback, shutdown drain
@@ -229,7 +229,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
-| 2. Staff Actions Across Groups | 5/7 | In Progress|  |
+| 2. Staff Actions Across Groups | 6/7 | In Progress|  |
 | 3. Staff Audit and Undo | 0/TBD | Not started | - |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
