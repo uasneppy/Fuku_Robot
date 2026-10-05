@@ -4,6 +4,7 @@ package modules
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 	"strconv"
 	"strings"
@@ -75,8 +76,12 @@ func historyEntryLines(text string) []string { return historyEntryRe.FindAllStri
 // historyKeys is a history keyboard split by what each button does.
 type historyKeys struct {
 	next, prev, back *gotgbot.InlineKeyboardButton
-	fields           map[string]map[string]string
-	total            int
+	// backList is the detail view's Back to list button; detail holds the per-entry
+	// detail buttons of a list, in order.
+	backList *gotgbot.InlineKeyboardButton
+	detail   []gotgbot.InlineKeyboardButton
+	fields   map[string]map[string]string
+	total    int
 }
 
 // historyKeyboardOf classifies every button of a history keyboard and fails on one
@@ -98,6 +103,10 @@ func historyKeyboardOf(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton) 
 			}
 			keys.fields[button.CallbackData] = decoded.Fields
 			switch {
+			case decoded.Fields["a"] == "dt":
+				keys.detail = append(keys.detail, button)
+			case decoded.Fields["a"] == "rc" && strings.Contains(button.Text, staffMarker("staff_history_back_list")):
+				keys.backList = &button
 			case decoded.Fields["a"] == "rc" && strings.Contains(button.Text, staffMarker("staff_panel_next")):
 				keys.next = &button
 			case decoded.Fields["a"] == "rc" && strings.Contains(button.Text, staffMarker("staff_panel_prev")):
@@ -488,9 +497,9 @@ func TestStaffHistoryCallbackBudget(t *testing.T) {
 		t.Fatalf("renderStaffHistory shows %d entries, want 1", shown)
 	}
 	keys := historyKeyboardOf(t, keyboard.InlineKeyboard)
-	if keys.total != 3 || keys.prev == nil || keys.next == nil || keys.back == nil {
-		t.Errorf("keyboard has %d buttons (prev %v next %v back %v), want Prev, Next and Back",
-			keys.total, keys.prev != nil, keys.next != nil, keys.back != nil)
+	if keys.total != 4 || len(keys.detail) != 1 || keys.prev == nil || keys.next == nil || keys.back == nil {
+		t.Errorf("keyboard has %d buttons (detail %d prev %v next %v back %v), want one detail button, Prev, Next and Back",
+			keys.total, len(keys.detail), keys.prev != nil, keys.next != nil, keys.back != nil)
 	}
 
 	button, ok := staffRecentButton(tr)
@@ -529,5 +538,121 @@ func TestStaffHistoryUnfinished(t *testing.T) {
 	done := staffHistoryLine(tr, 1, record(now.Add(-time.Hour), &finished), staff.ActionTally{Done: 1}, now)
 	if strings.Contains(done, running) || strings.Contains(done, interrupted) {
 		t.Errorf("a finished record reads %q, want neither running nor interrupted", done)
+	}
+}
+
+// pressDetail presses a detail or Back-to-list button (raw data) on message msgID of
+// chat as from, and returns the text and keyboard of the edit it caused.
+func (e *staffActionEnv) pressDetail(from gotgbot.User, chat gotgbot.Chat, msgID int64, data string) (string, historyKeys) {
+	e.t.Helper()
+	e.tapData(from, chat, msgID, data)
+	edits := e.edits(chat.Id, msgID)
+	if len(edits) == 0 {
+		e.t.Fatalf("pressing %q edited nothing", data)
+	}
+	last := edits[len(edits)-1]
+	return fmt.Sprint(last.Params["text"]), historyKeyboardOf(e.t, staffKeyboardOf(last.Params["reply_markup"]))
+}
+
+// wantInOrder fails unless every want occurs in text, each after the one before.
+func wantInOrder(t *testing.T, text string, wants ...string) {
+	t.Helper()
+	from := 0
+	for _, want := range wants {
+		i := strings.Index(text[from:], want)
+		if i < 0 {
+			t.Errorf("text %q lacks %q after offset %d", text, want, from)
+			return
+		}
+		from += i + len(want)
+	}
+}
+
+func TestStaffHistoryDetail(t *testing.T) {
+	env := newStaffActionEnv(t, 3)
+	// The issuer is only a plain member of Group C, so that group is skipped.
+	env.fake.setMember(env.groups[2], env.issuer.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	_, cardMsg := env.startRun("/ban 4242 2d spamming")
+	env.waitRuns()
+	record, _ := recordOfCard(t, cardMsg)
+
+	_, keys := env.pressHistory(env.issuer, env.staffChatObj(), "0")
+	if len(keys.detail) != 1 || keys.detail[0].Text != "1" {
+		t.Fatalf("list has detail buttons %+v, want one labelled 1", keys.detail)
+	}
+	fields := keys.fields[keys.detail[0].CallbackData]
+	if fields["r"] != strconv.FormatUint(uint64(record.ID), 10) || fields["o"] != "0" {
+		t.Fatalf("detail button fields = %v, want r=%d o=0", fields, record.ID)
+	}
+
+	text, detailKeys := env.pressDetail(env.issuer, env.staffChatObj(), 6001, keys.detail[0].CallbackData)
+	wantInOrder(t, text,
+		staffMarker("staff_act_name_ban"),
+		"(<code>4242</code>)",
+		staffMarker("staff_act_duration_days"),
+		"spamming",
+		staffMarker("staff_history_by"),
+		html.EscapeString(env.issuer.FirstName),
+		"✅ 2 · ⏭ 1 · ❌ 0",
+		"✅ Group A",
+		"✅ Group B",
+		"⏭ Group C: ",
+		staffMarker("staff_act_skip_issuer_not_admin"),
+	)
+	if detailKeys.total != 1 || detailKeys.backList == nil ||
+		detailKeys.fields[detailKeys.backList.CallbackData]["a"] != "rc" ||
+		detailKeys.fields[detailKeys.backList.CallbackData]["o"] != "0" {
+		t.Errorf("detail keyboard = %+v, want one Back button with a=rc o=0", detailKeys)
+	}
+}
+
+func TestStaffHistoryDetailBack(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	seedStaffActions(t, env.staffChat, 12, nil)
+
+	_, page := env.pressHistory(env.issuer, env.staffChatObj(), "10")
+	if len(page.detail) != 2 {
+		t.Fatalf("second page has %d detail buttons, want 2", len(page.detail))
+	}
+	if page.detail[0].Text != "11" || page.detail[1].Text != "12" {
+		t.Errorf("second page detail labels = %q, %q, want 11 and 12", page.detail[0].Text, page.detail[1].Text)
+	}
+
+	_, detailKeys := env.pressDetail(env.issuer, env.staffChatObj(), 6002, page.detail[0].CallbackData)
+	if detailKeys.backList == nil {
+		t.Fatal("the detail view has no Back button")
+	}
+
+	text, listKeys := env.pressDetail(env.issuer, env.staffChatObj(), 6002, detailKeys.backList.CallbackData)
+	lines := historyEntryLines(text)
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "11. ") {
+		t.Errorf("Back showed entries %v, want the list at offset 10 (entries 11 and 12)", lines)
+	}
+	if listKeys.prev == nil || listKeys.fields[listKeys.prev.CallbackData]["o"] != "0" {
+		t.Errorf("the list after Back has Prev %+v, want o=0", listKeys.prev)
+	}
+}
+
+func TestStaffResultsFromRecord(t *testing.T) {
+	rows := []models.StaffActionGroup{
+		{Seq: 2, GroupChatID: -1003, GroupTitle: "Third", Outcome: models.StaffActionOutcomeFailed, Reason: "fail_telegram", Detail: "Bad &amp; sad"},
+		{Seq: 0, GroupChatID: -1001, GroupTitle: "First", Outcome: models.StaffActionOutcomeDone, Reason: "banned"},
+		{Seq: 3, GroupChatID: -1004, GroupTitle: "Fourth", Outcome: models.StaffActionOutcomePending},
+		{Seq: 1, GroupChatID: -1002, GroupTitle: "Second", Outcome: models.StaffActionOutcomeSkipped, Reason: "skip_not_in_group"},
+	}
+	got := staffResultsFromRecord(rows)
+	want := []staffGroupResult{
+		{Link: models.StaffGroupLink{GroupChatID: -1001, GroupTitle: "First"}, Outcome: staffOutcomeDone, Reason: staffReasonBanned},
+		{Link: models.StaffGroupLink{GroupChatID: -1002, GroupTitle: "Second"}, Outcome: staffOutcomeSkipped, Reason: staffReasonSkipNotInGroup},
+		{Link: models.StaffGroupLink{GroupChatID: -1003, GroupTitle: "Third"}, Outcome: staffOutcomeFailed, Reason: staffReasonFailTelegram, Detail: "Bad &amp; sad"},
+		{Link: models.StaffGroupLink{GroupChatID: -1004, GroupTitle: "Fourth"}, Outcome: staffOutcomePending},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d results, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("result %d = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }
