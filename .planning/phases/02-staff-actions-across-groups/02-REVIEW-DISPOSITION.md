@@ -3,6 +3,26 @@ phase: 02
 review: 02-REVIEW.md
 titles: json
 findings:
+  - id: WR-03
+    severity: warning
+    disposition: open
+    title: "A `retry_after` at the `MaxWait` cap makes all but one concurrent worker fail instead of retrying"
+  - id: IN-07
+    severity: info
+    disposition: open
+    title: "A lost target lock is only logged; the run keeps writing"
+  - id: IN-08
+    severity: info
+    disposition: open
+    title: "Retry waits are truncated to 60 s, so a `retry_after` above 60 s burns attempts"
+  - id: IN-09
+    severity: info
+    disposition: open
+    title: "Two new timing tests install their 429 script after the run has started"
+  - id: IN-10
+    severity: info
+    disposition: open
+    title: "New tests leak shared state when they fail early"
   - id: WR-01
     severity: warning
     disposition: open
@@ -35,23 +55,28 @@ findings:
     severity: info
     disposition: open
     title: "Any Staff Group member's tap on a card whose Redis hash is gone rewrites the message"
-open: 8
-total: 8
-recorded: 2026-10-05T07:58:01.947Z
+open: 13
+total: 13
+recorded: 2026-10-05T11:09:36.334Z
 ---
 
 # Phase 02: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
-| IN-06 | info | open | - |
+| WR-03 | warning | open | - |
+| IN-07 | info | open | - |
+| IN-08 | info | open | - |
+| IN-09 | info | open | - |
+| IN-10 | info | open | - |
+| WR-01 | warning | open | - (not in the current review) |
+| WR-02 | warning | open | - (not in the current review) |
+| IN-01 | info | open | - (not in the current review) |
+| IN-02 | info | open | - (not in the current review) |
+| IN-03 | info | open | - (not in the current review) |
+| IN-04 | info | open | - (not in the current review) |
+| IN-05 | info | open | - (not in the current review) |
+| IN-06 | info | open | - (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
