@@ -61,6 +61,9 @@ func startStaffActionRun(
 	go func() {
 		defer staffActionRunsWG.Done()
 		defer error_handling.RecoverFromPanic("staffActionRun", "StaffActions")
+		// Frees the target for the next staff action once this run is over, a panic
+		// included. The lock's TTL is the safety net for a crash.
+		defer releaseStaffTargetLock(card.Target, card.Token)
 
 		tr := staffChatTranslator(card.StaffChat)
 		results := runStaffActionFanOut(staffActionsCtx, b, card, links, newUntil)

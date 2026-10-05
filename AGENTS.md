@@ -68,6 +68,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `CLEAR_CACHE_ON_STARTUP` does not clear them.
 - `alita:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
+  It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
+  signature of the sorted linked group IDs (`links_sig`) changed since the card was shown.
+- `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
+  TTL, taken at Confirm and released by compare-and-delete with that token when the run ends or the Confirm aborts.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→

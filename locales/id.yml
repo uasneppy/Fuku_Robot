@@ -2609,6 +2609,20 @@ staff_help_msg: |
 
   *Di Grup Staf:*
   × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung. Tekan Putuskan di samping grup untuk memutus tautannya (hanya pembuat kedua grup).
+
+  *Aksi staf (di Grup Staf):*
+  × /ban pengguna [durasi] [alasan]: Blokir pengguna di semua grup yang terhubung. Pengguna adalah ID numerik, @username yang pernah saya lihat, atau sebuah mention. Durasi adalah angka diikuti m, h, d, atau w, dan lebih dari 366 hari berarti permanen.
+  × /tban pengguna durasi [alasan]: Blokir sementara. Durasi wajib diisi.
+  × /mute pengguna [durasi] [alasan]: Bisukan pengguna di semua grup yang terhubung. Durasi bekerja seperti pada /ban.
+  × /tmute pengguna durasi [alasan]: Pembisuan sementara. Durasi wajib diisi.
+  × /kick pengguna [alasan]: Keluarkan pengguna dari semua grup yang terhubung. Mereka bisa bergabung lagi.
+  × /unban pengguna: Cabut blokir di semua grup yang terhubung.
+  × /unmute pengguna: Cabut pembisuan di semua grup yang terhubung.
+
+  Setiap aksi menampilkan kartu terlebih dahulu. Hanya orang yang mengirim perintah yang bisa menekan Konfirmasi atau Batal, dan kartu kedaluwarsa setelah 5 menit.
+  Saya hanya bertindak di grup terhubung tempat Anda saat ini menjadi admin yang boleh membatasi anggota, tidak pernah terhadap admin atau pemilik grup, dan hasilnya mencantumkan setiap grup sebagai selesai, dilewati, atau gagal.
+  /sban, /dban, /skick, /dkick, /smute, dan /dmute tidak dipakai di sini.
+  Kirim perintah ini atas nama Anda sendiri, bukan secara anonim.
 staff_set_done: "Grup ini sekarang menjadi Grup Staf. ID obrolan: <code>{chat_id}</code>"
 staff_set_already: "Grup ini sudah menjadi Grup Staf."
 staff_refuse_not_owner: "Hanya pembuat grup ini yang dapat menjadikannya Grup Staf."
@@ -2703,6 +2717,8 @@ staff_act_card_expired_text: "Kedaluwarsa. Tidak ada yang dilakukan."
 staff_act_card_handled: "Aksi ini sudah ditangani."
 staff_act_abort_not_staff: "Chat ini bukan lagi Grup Staf. Tidak ada yang dilakukan."
 staff_act_abort_issuer_left: "Anda bukan lagi anggota Grup Staf ini. Tidak ada yang dilakukan."
+staff_act_abort_links_changed: "Grup yang terhubung berubah sejak kartu ini ditampilkan ({old} tadi, {new} sekarang). Tidak ada yang dilakukan; jalankan perintah lagi."
+staff_act_target_busy: "Aksi staf lain terhadap pengguna ini masih berjalan. Tunggu ringkasannya, lalu tekan Konfirmasi lagi."
 staff_act_abort_check_failed: "Saya tidak bisa memeriksanya sekarang. Tidak ada yang dilakukan; silakan jalankan perintah lagi."
 staff_act_line_skipped: "dilewati: {reason}"
 staff_act_line_failed: "gagal: {reason}"

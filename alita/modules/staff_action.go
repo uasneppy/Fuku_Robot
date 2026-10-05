@@ -200,6 +200,7 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 		TargetName: targetName,
 		Reason:     req.Reason,
 		GroupCount: len(links),
+		LinksSig:   staffLinksSignature(links),
 
 		DurationSec:    req.DurationSec,
 		DurationAmount: req.DurationAmount,
@@ -217,10 +218,13 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 	}
 	opts := formatting.Shtml()
 	opts.ReplyMarkup = keyboard
-	if _, err := msg.Reply(b, staffActionCardText(tr, card), opts); err != nil {
+	sent, err := msg.Reply(b, staffActionCardText(tr, card), opts)
+	if err != nil {
 		log.Errorf("[StaffActions] send card: %v", err)
 		deleteStaffActionCard(card.Token)
+		return ext.EndGroups
 	}
+	scheduleStaffActionExpiry(b, card.Token, sent.Chat.Id, sent.MessageId)
 	return ext.EndGroups
 }
 
