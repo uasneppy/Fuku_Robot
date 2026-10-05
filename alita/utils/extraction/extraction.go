@@ -49,6 +49,26 @@ func TemporaryUntilDate(now, durationSeconds int64) (int64, bool) {
 	return now + durationSeconds, true
 }
 
+// DurationSpec is a parsed m/h/d/w duration token.
+type DurationSpec struct {
+	Amount  int64
+	Unit    byte
+	Seconds int64
+}
+
+var (
+	// ErrDurationInvalid means a duration token has an amount of zero.
+	ErrDurationInvalid = errors.New("invalid duration")
+	// ErrDurationTooLong means a duration token is longer than 366 days, or too
+	// large to represent.
+	ErrDurationTooLong = errors.New("duration longer than 366 days")
+)
+
+// ParseDurationToken is a stub until the GREEN step.
+func ParseDurationToken(token string) (spec DurationSpec, matched bool, err error) {
+	return DurationSpec{}, false, nil
+}
+
 func ExtractChat(b *gotgbot.Bot, ctx *ext.Context) *gotgbot.Chat {
 	msg := ctx.EffectiveMessage
 	args := ctx.Args()[1:]

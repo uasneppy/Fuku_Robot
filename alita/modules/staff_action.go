@@ -18,8 +18,9 @@ import (
 // staffCommandSpec is one staff command: the command word and the action it runs
 // across the linked groups.
 type staffCommandSpec struct {
-	Name string
-	Kind staffActionKind
+	Name     string
+	Kind     staffActionKind
+	Duration staffDurationMode
 }
 
 // staffActionCommands lists the commands the StaffActions module intercepts. It
@@ -27,11 +28,11 @@ type staffCommandSpec struct {
 // and the docs generator, which reads only literal registrations, does not list
 // them a second time.
 var staffActionCommands = []staffCommandSpec{
-	{Name: "ban", Kind: staffKindBan},
-	{Name: "mute", Kind: staffKindMute},
-	{Name: "kick", Kind: staffKindKick},
-	{Name: "unban", Kind: staffKindUnban},
-	{Name: "unmute", Kind: staffKindUnmute},
+	{Name: "ban", Kind: staffKindBan, Duration: staffDurationOptional},
+	{Name: "mute", Kind: staffKindMute, Duration: staffDurationOptional},
+	{Name: "kick", Kind: staffKindKick, Duration: staffDurationNone},
+	{Name: "unban", Kind: staffKindUnban, Duration: staffDurationNone},
+	{Name: "unmute", Kind: staffKindUnmute, Duration: staffDurationNone},
 }
 
 // LoadStaffActions registers the Staff Group command interceptors. They are raw

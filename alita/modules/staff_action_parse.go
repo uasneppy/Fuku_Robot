@@ -26,11 +26,31 @@ type staffTargetRef struct {
 	MentionName string
 }
 
+// staffDurationMode says whether a staff command reads a duration after the target.
+type staffDurationMode int
+
+const (
+	// staffDurationNone never reads a duration: kick, unban and unmute.
+	staffDurationNone staffDurationMode = iota
+	// staffDurationOptional reads a duration when the next field is one: ban and mute.
+	staffDurationOptional
+	// staffDurationRequired needs a duration right after the target: tban and tmute.
+	staffDurationRequired
+)
+
 // staffActionRequest is a parsed staff command.
 type staffActionRequest struct {
 	Kind   staffActionKind
 	Target staffTargetRef
 	Reason string
+	// DurationSec is the length in seconds; 0 means permanent.
+	DurationSec int64
+	// DurationAmount and DurationUnit are the amount and unit exactly as typed.
+	DurationAmount int64
+	DurationUnit   string
+	// OverLimit is set when the typed duration was longer than 366 days; the action
+	// is then permanent.
+	OverLimit bool
 }
 
 // staffParseResult says whether a staff command could be parsed.
@@ -43,6 +63,10 @@ const (
 	staffParseNoTarget
 	// staffParseBadTarget means the first argument is not a usable target.
 	staffParseBadTarget
+	// staffParseNeedDuration means a command that requires a duration had none.
+	staffParseNeedDuration
+	// staffParseBadDuration means the duration had an amount of zero.
+	staffParseBadDuration
 )
 
 // staffSplitField returns the first whitespace-separated field of s and what
