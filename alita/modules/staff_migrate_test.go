@@ -82,6 +82,11 @@ func TestStaffMigrateTracer(t *testing.T) {
 		t.Fatalf("the migrate watcher sent %d messages, want 0", got)
 	}
 
+	// /staff now checks every link live, so the re-keyed chats must still have the
+	// links' maker as their creator or the panel would unlink them.
+	for _, id := range []int64{newID, groupA, groupB} {
+		client.setCreator(id, 4242)
+	}
 	owner := gotgbot.User{Id: 4242, FirstName: "Owner"}
 	err = runStaffCommand(t, bot,
 		newModuleMessageContext(bot, staffSupergroup(newID), owner, "/staff"),

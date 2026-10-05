@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -87,12 +88,13 @@ func TestStaffUnlinkButtonRendered(t *testing.T) {
 	env.link.GroupTitle = "100%d " + strings.Repeat("x", 40)
 
 	rows := []staffLinkRow{{Link: *env.link}, {Link: *env.other}}
-	_, keyboard := renderStaffPanel(staffChatTranslator(env.staffID), models.StaffGroup{ChatID: env.staffID, OwnerUserID: env.ownerID}, rows, "fukubot")
+	_, keyboard := renderStaffPanel(staffChatTranslator(env.staffID), models.StaffGroup{ChatID: env.staffID, OwnerUserID: env.ownerID}, rows, "fukubot", 0, time.Now())
 
 	var unlinkButtons []gotgbot.InlineKeyboardButton
 	for _, row := range keyboard.InlineKeyboard {
 		for _, button := range row {
-			if button.CallbackData != "" {
+			// The Refresh button is a callback button too; only Unlink is counted here.
+			if decoded, ok := decodeCallbackData(button.CallbackData, staffCallbackNamespace); ok && decoded.Fields["a"] == staffActUnlinkAsk {
 				unlinkButtons = append(unlinkButtons, button)
 			}
 		}

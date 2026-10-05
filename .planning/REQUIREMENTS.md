@@ -16,7 +16,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [ ] **SETUP-05**: The owner of both groups can unlink a group.
 - [ ] **SETUP-06**: A link is removed automatically as soon as the same person no longer owns both groups. Ownership is re-checked before every staff action, and ownership-change updates are also watched.
 - [ ] **SETUP-07**: Links, and Staff Group status, keep working after a group upgrades to a supergroup and its chat ID changes.
-- [ ] **SETUP-08**: In the Staff Group, `/staff` opens a panel with the Staff Group help text and every linked group with its status:
+- [x] **SETUP-08**: In the Staff Group, `/staff` opens a panel with the Staff Group help text and every linked group with its status:
   - linked
   - bot is admin
   - bot can restrict members
@@ -112,7 +112,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 - [ ] **PLAT-01**: Everything works with several bot replicas running at once. Fan-out pacing, detection counters, captcha challenges and lockdown state are shared, not per process.
 - [ ] **PLAT-02**: New secrets (Turnstile secret key, Gemini API key) never appear in logs.
-- [ ] **PLAT-03**: Every new message and button label exists in all 7 languages.
+- [x] **PLAT-03**: Every new message and button label exists in all 7 languages.
 - [ ] **PLAT-04**: The deployment steps for the captcha page are documented: public HTTPS hostname, BotFather Mini App registration, Turnstile keys.
 
 ## v2 Requirements
@@ -176,7 +176,7 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | SETUP-05 | Phase 1 | Pending |
 | SETUP-06 | Phase 1 | Pending |
 | SETUP-07 | Phase 1 | Pending |
-| SETUP-08 | Phase 1 | Pending |
+| SETUP-08 | Phase 1 | Complete |
 | SETUP-09 | Phase 3 | Pending |
 | STAFF-01 | Phase 2 | Pending |
 | STAFF-02 | Phase 2 | Pending |
@@ -231,7 +231,7 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | MENU-08 | Phase 9 | Pending |
 | PLAT-01 | Phase 2 | Pending |
 | PLAT-02 | Phase 7 | Pending |
-| PLAT-03 | Phase 1 | Pending |
+| PLAT-03 | Phase 1 | Complete |
 | PLAT-04 | Phase 8 | Pending |
 
 **Coverage:**
