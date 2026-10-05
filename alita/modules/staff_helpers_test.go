@@ -266,6 +266,13 @@ func staffCleanup(t *testing.T, chatIDs ...int64) {
 		if len(chatIDs) == 0 {
 			return
 		}
+		// The audit rows of the test's actions go first: the group rows belong to a
+		// staff_actions row, which is found by its Staff Group or its summary chat.
+		db.DB.Where("action_id IN (?)",
+			db.DB.Model(&models.StaffAction{}).Select("id").
+				Where("staff_chat_id IN ? OR summary_chat_id IN ?", chatIDs, chatIDs)).
+			Delete(&models.StaffActionGroup{})
+		db.DB.Where("staff_chat_id IN ? OR summary_chat_id IN ?", chatIDs, chatIDs).Delete(&models.StaffAction{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.StaffGroup{})
 		db.DB.Where("group_chat_id IN ? OR staff_chat_id IN ?", chatIDs, chatIDs).Delete(&models.StaffGroupLink{})
 	})

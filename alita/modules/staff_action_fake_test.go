@@ -25,6 +25,11 @@ type staffFakeMember struct {
 	CanSendMessages    bool
 	CanRestrictMembers bool
 	UntilDate          int64
+	// Perms is the full permission set of a restricted member. When it is set,
+	// getChatMember reports every can_* flag from it (can_send_messages included)
+	// and restrictChatMember stores the permission set it was sent. A record
+	// without Perms reports exactly the fields it always did.
+	Perms *gotgbot.ChatPermissions
 }
 
 // staffSentMessage is one sendMessage the fake answered.
@@ -224,6 +229,9 @@ func staffFakeMemberJSON(userID int64, m *staffFakeMember) json.RawMessage {
 				`"can_promote_members":false,"can_change_info":false,"can_invite_users":true}`,
 			user, m.CanRestrictMembers))
 	case gotgbot.ChatMemberStatusRestricted:
+		if m.Perms != nil {
+			return staffFakeRestrictedWithPerms(userID, m)
+		}
 		return json.RawMessage(fmt.Sprintf(
 			`{"status":"restricted","user":%s,"is_member":%t,"can_send_messages":%t,"until_date":%d}`,
 			user, m.IsMember, m.CanSendMessages, m.UntilDate))
@@ -232,6 +240,28 @@ func staffFakeMemberJSON(userID int64, m *staffFakeMember) json.RawMessage {
 	default:
 		return json.RawMessage(fmt.Sprintf(`{"status":%q,"user":%s}`, m.Status, user))
 	}
+}
+
+// staffFakeRestrictedWithPerms is the getChatMember answer for a restricted member
+// that carries a full permission set: every can_* flag comes from Perms.
+func staffFakeRestrictedWithPerms(userID int64, m *staffFakeMember) json.RawMessage {
+	raw, err := json.Marshal(m.Perms)
+	if err != nil {
+		panic(fmt.Sprintf("staffActionFake: marshal permissions: %v", err))
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		panic(fmt.Sprintf("staffActionFake: unmarshal permissions: %v", err))
+	}
+	out["status"] = gotgbot.ChatMemberStatusRestricted
+	out["user"] = map[string]any{"id": userID, "is_bot": false, "first_name": fmt.Sprintf("User%d", userID)}
+	out["is_member"] = m.IsMember
+	out["until_date"] = m.UntilDate
+	answer, err := json.Marshal(out)
+	if err != nil {
+		panic(fmt.Sprintf("staffActionFake: marshal member: %v", err))
+	}
+	return answer
 }
 
 func staffFakeChatJSON(chatID int64) string {
@@ -301,11 +331,13 @@ func (f *staffActionFake) RequestWithContext(
 		if p, ok := params["permissions"].(gotgbot.ChatPermissions); ok {
 			perms = p
 		}
+		stored := perms
 		f.records[key] = &staffFakeMember{
 			Status:          gotgbot.ChatMemberStatusRestricted,
 			IsMember:        wasMember,
 			CanSendMessages: perms.CanSendMessages,
 			UntilDate:       staffParamInt(params, "until_date"),
+			Perms:           &stored,
 		}
 		return json.RawMessage(`true`), nil
 	case "unbanChatMember":

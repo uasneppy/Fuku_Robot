@@ -218,3 +218,47 @@ func TestRekeyChatInvalidatesBothIDs(t *testing.T) {
 		t.Fatalf("GetStaffGroup(new) = %+v after the re-key, want the moved row (stale sentinel)", got)
 	}
 }
+
+// A re-key moves the history of the Staff Group with it, but not the message it
+// was summarised in or the groups it acted on: a message ID only names a message
+// in the chat it was sent to, and a restriction lives in the group it was made in.
+func TestRekeyChatMovesStaffActions(t *testing.T) {
+	oldID, newID, groupID := uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()
+	rekeySeed(t, oldID)
+	cleanupStaffRows(t, newID)
+	cleanupActionRows(t, oldID, newID)
+
+	action := &models.StaffAction{
+		StaffChatID:   oldID,
+		IssuerUserID:  1,
+		TargetUserID:  2,
+		Action:        "ban",
+		GroupCount:    1,
+		SummaryChatID: oldID,
+		SummaryMsgID:  5,
+	}
+	groups := []models.StaffActionGroup{{Seq: 0, GroupChatID: groupID, Outcome: models.StaffActionOutcomePending}}
+	if err := CreateAction(action, groups); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+
+	changed, err := RekeyChat(oldID, newID)
+	if err != nil || !changed {
+		t.Fatalf("RekeyChat = (%v, %v), want (true, nil)", changed, err)
+	}
+
+	got, err := GetActionFresh(action.ID)
+	if err != nil || got == nil {
+		t.Fatalf("GetActionFresh = %v, %v", got, err)
+	}
+	if got.StaffChatID != newID {
+		t.Fatalf("staff_chat_id = %d, want it moved to %d", got.StaffChatID, newID)
+	}
+	if got.SummaryChatID != oldID || got.SummaryMsgID != 5 {
+		t.Fatalf("summary = %d/%d, want it left at %d/5: the message lives in the old chat", got.SummaryChatID, got.SummaryMsgID, oldID)
+	}
+	rows, err := ListActionGroupsFresh(action.ID)
+	if err != nil || len(rows) != 1 || rows[0].GroupChatID != groupID {
+		t.Fatalf("group rows = %+v, %v, want the one row still on group %d", rows, err, groupID)
+	}
+}

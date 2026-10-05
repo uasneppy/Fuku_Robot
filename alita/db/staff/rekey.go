@@ -12,10 +12,16 @@ import (
 )
 
 // RekeyChat moves every Staff Group row that names oldChatID to newChatID. It
-// updates staff_groups.chat_id, staff_group_links.staff_chat_id and
-// staff_group_links.group_chat_id in one transaction, so a chat that is
-// migrated from a basic group to a supergroup (or otherwise gets a new ID)
-// keeps its Staff Group status and its links.
+// updates staff_groups.chat_id, staff_group_links.staff_chat_id,
+// staff_group_links.group_chat_id and staff_actions.staff_chat_id in one
+// transaction, so a chat that is migrated from a basic group to a supergroup (or
+// otherwise gets a new ID) keeps its Staff Group status, its links and its action
+// history.
+//
+// staff_actions.staff_chat_id follows the Staff Group so its history moves with it.
+// staff_actions.summary_chat_id and staff_action_groups.group_chat_id are never
+// re-keyed: a message ID only means something in the chat it was sent to, and a
+// restriction lives in the group it was made in.
 //
 // It is idempotent: it returns changed=false with a nil error when oldChatID
 // equals newChatID, when either is 0, or when no row matched (for example the
@@ -39,6 +45,7 @@ func RekeyChat(oldChatID, newChatID int64) (changed bool, err error) {
 			{&models.StaffGroup{}, "chat_id"},
 			{&models.StaffGroupLink{}, "staff_chat_id"},
 			{&models.StaffGroupLink{}, "group_chat_id"},
+			{&models.StaffAction{}, "staff_chat_id"},
 		}
 		for _, u := range updates {
 			result := tx.Model(u.model).

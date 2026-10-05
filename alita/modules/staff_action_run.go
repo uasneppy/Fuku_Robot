@@ -274,6 +274,9 @@ func startStaffActionRun(
 			sweep = staffReasonFailInterrupted
 		}
 		results := progress.sweepPending(sweep)
+		// The record is closed before anything is shown: its writes use db.DB, never
+		// ctx, so a shutdown that cancelled the run cannot lose them.
+		finalizeStaffActionRecord(card, results)
 
 		final, continuation := renderStaffActionSummaryFinal(tr, card, results)
 		// Delivery never runs on the run's own context, which a shutdown may already
@@ -313,7 +316,9 @@ func runStaffActionFanOut(
 	for i, link := range links {
 		workers.Go(func() error {
 			defer error_handling.RecoverFromPanic("staffActionWorker", "StaffActions")
-			progress.set(i, runStaffActionInGroup(ctx, b, card, link, newUntil, pass))
+			res := runStaffActionInGroup(ctx, b, card, link, newUntil, pass)
+			progress.set(i, res)
+			saveStaffGroupResult(card, res)
 			return nil
 		})
 	}
@@ -389,6 +394,18 @@ func runStaffActionInGroup(
 	verdict := decideStaffAction(card.Kind, staffTargetStateFrom(target), newUntil)
 	if verdict.Call == staffCallNone {
 		return result(verdict.Reason, "")
+	}
+	// Write-ahead: the target's state in this group, from the very read the verdict
+	// was made on, is committed before the write call. If that cannot be stored the
+	// group gets no write, because an action whose prior state is lost can never be
+	// undone correctly (D-02).
+	priorRow, err := staffPriorFromMember(target).row()
+	if err == nil {
+		err = staffSavePrior(card.ActionID, link.GroupChatID, priorRow)
+	}
+	if err != nil {
+		log.Errorf("[StaffActions] save prior state in group %d: %v", link.GroupChatID, err)
+		return result(staffReasonFailInternal, "")
 	}
 	if interrupted() {
 		return result(staffReasonFailInterrupted, "")
