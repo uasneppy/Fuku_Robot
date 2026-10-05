@@ -20,6 +20,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
+	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 	"github.com/divkix/Alita_Robot/alita/utils/extraction"
 )
 
@@ -36,11 +37,44 @@ var staffActionCardLifetime = 5 * time.Minute
 // tests can shorten it.
 var staffActionExpirySlack = 2 * time.Second
 
-// scheduleStaffActionExpiry is not implemented yet.
-func scheduleStaffActionExpiry(_ *gotgbot.Bot, _ string, _, _ int64) {}
+// scheduleStaffActionExpiry edits the card to "Expired" shortly after its lifetime
+// when nobody has acted on it. The timer lives on the replica that created the
+// card; a restart loses it, and the lazy check on any later tap (and the hash TTL)
+// covers that case.
+func scheduleStaffActionExpiry(b *gotgbot.Bot, token string, chatID, msgID int64) {
+	time.AfterFunc(staffActionCardLifetime+staffActionExpirySlack, func() {
+		defer error_handling.RecoverFromPanic("staffActionExpiry", "StaffActions")
+		expireStaffActionCard(b, token, chatID, msgID)
+	})
+}
 
-// expireStaffActionCard is not implemented yet.
-func expireStaffActionCard(_ *gotgbot.Bot, _ string, _, _ int64) {}
+// expireStaffActionCard is the timer's work: it moves a still-pending card to
+// expired and edits it, buttons removed. The move is the same Redis compare-and-set
+// a tap uses, so the timer and a late tap never both edit the card, and a card that
+// was confirmed or cancelled, on this replica or another, is left alone (D-07).
+func expireStaffActionCard(b *gotgbot.Bot, token string, chatID, msgID int64) {
+	card, err := loadStaffActionCard(token)
+	if err != nil {
+		log.Warnf("[StaffActions] expiry load of card %s: %v", token, err)
+		return
+	}
+	if card == nil || card.State != staffCardPending {
+		return
+	}
+	claim, _, err := transitionStaffActionCard(token, 0, staffCardExpired, false)
+	if err != nil {
+		log.Warnf("[StaffActions] expire card %s: %v", token, err)
+		return
+	}
+	if claim != staffClaimOK && claim != staffClaimExpired {
+		return
+	}
+	tr := staffChatTranslator(card.StaffChat)
+	text, _ := tr.GetString("staff_act_card_expired_text")
+	if err := editStaffActionMessage(b, chatID, msgID, staffActionHeader(tr, card)+"\n\n"+text); err != nil {
+		log.Warnf("[StaffActions] edit expired card in chat %d: %v", chatID, err)
+	}
+}
 
 const (
 	// staffActionCardGrace keeps a pending card's key a little past its expiry, so
