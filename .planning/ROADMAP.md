@@ -132,7 +132,7 @@ Plans:
   3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
   4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
 
-**Plans:** 8/9 plans executed
+**Plans:** 9/9 plans executed
 
 Plans:
 **Wave 1**
@@ -158,7 +158,7 @@ Plans:
 - [x] 03-08-PLAN.md: Undo restores exactly the prior state end to end (independent permissions), skips changed, unapplied, unlinked and rightless groups; #STAFF_UNDO log posts
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 03-09-PLAN.md: Undo from the history detail view, /staff help and docs, final AGENTS.md pass, full phase gate with PostgreSQL migration chain
+- [x] 03-09-PLAN.md: Undo from the history detail view, /staff help and docs, final AGENTS.md pass, full phase gate with PostgreSQL migration chain
 
 ### Phase 4: Manual Lockdown
 
@@ -263,7 +263,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 |-------|----------------|--------|-----------|
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
-| 3. Staff Audit and Undo | 8/9 | In Progress|  |
+| 3. Staff Audit and Undo | 9/9 | In Progress|  |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
