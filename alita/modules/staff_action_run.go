@@ -38,6 +38,22 @@ var (
 	staffActionsCtx, staffActionsCancel = context.WithCancel(context.Background()) //nolint:unused // the shutdown drain that calls it arrives in a later plan
 )
 
+var (
+	// staffActionEditEvery is the least time between two progress edits of the card.
+	staffActionEditEvery = 2500 * time.Millisecond
+	// staffActionEditRetryUnit is what one second of Telegram's retry_after is worth
+	// when the final edit waits to be retried.
+	staffActionEditRetryUnit = time.Second
+	// staffActionStopWait bounds how long StopStaffActions waits for the runs.
+	staffActionStopWait = 30 * time.Second
+	// staffActionsMu guards staffActionsCtx and staffActionsCancel.
+	staffActionsMu sync.Mutex
+)
+
+// StopStaffActions cancels every running staff fan-out. It is a stub until the
+// drain is built.
+func StopStaffActions() {}
+
 // staffTelegramDetailRunes caps the Telegram error text shown on a failed line.
 const staffTelegramDetailRunes = 120
 
