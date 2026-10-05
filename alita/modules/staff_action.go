@@ -21,7 +21,17 @@ type staffCommandSpec struct {
 	Name     string
 	Kind     staffActionKind
 	Duration staffDurationMode
+	// Refused marks a per-group variant (sban, dmute and the others) that has no
+	// meaning in a Staff Group: it gets a hint and never acts.
+	Refused bool
 }
+
+// staffUsernameMatchLimit caps how many users sharing one username are listed.
+const staffUsernameMatchLimit = 10
+
+// staffUserLookup resolves an @username against the users table. It is a package
+// variable only so a test can make the lookup fail.
+var staffUserLookup = user.FindUsersByUsername
 
 // staffActionCommands lists the commands the StaffActions module intercepts. It
 // is a table so the command names reach the dispatcher through a loop variable

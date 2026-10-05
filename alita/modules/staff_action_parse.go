@@ -70,6 +70,11 @@ const (
 	staffParseNeedDuration
 	// staffParseBadDuration means the duration had an amount of zero.
 	staffParseBadDuration
+	// staffParseBareReply means the command had no argument but replied to a message.
+	staffParseBareReply
+	// staffParseBadUsername means the first argument started with "@" but is not a
+	// Telegram username.
+	staffParseBadUsername
 )
 
 // staffSplitField returns the first whitespace-separated field of s and what
