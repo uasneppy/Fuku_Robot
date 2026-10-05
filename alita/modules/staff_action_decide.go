@@ -64,6 +64,17 @@ const (
 	staffReasonFailGroupNotFound  staffReason = "fail_group_not_found"
 	staffReasonFailInternal       staffReason = "fail_internal"
 	staffReasonFailInterrupted    staffReason = "fail_interrupted"
+
+	// Undo reasons (Phase 3). The undone_* reasons stand for a call that was made;
+	// the skip_* reasons leave the group alone.
+	staffReasonUndoneUnbanned            staffReason = "undone_unbanned"
+	staffReasonUndoneUnmuted             staffReason = "undone_unmuted"
+	staffReasonUndoneBanRestored         staffReason = "undone_ban_restored"
+	staffReasonUndoneRestrictionRestored staffReason = "undone_restriction_restored"
+	staffReasonSkipNotApplied            staffReason = "skip_not_applied"
+	staffReasonSkipChangedSince          staffReason = "skip_changed_since"
+	staffReasonSkipRestrictionEnded      staffReason = "skip_restriction_ended"
+	staffReasonSkipNoPriorState          staffReason = "skip_no_prior_state"
 )
 
 // staffReasonOutcome maps a reason to the outcome it stands for.
@@ -278,6 +289,41 @@ func decideStaffUnmute(st staffTargetState) staffVerdict {
 		return staffSkip(staffReasonSkipNotInGroup)
 	}
 	return staffSkip(staffReasonFailLookup)
+}
+
+// staffCallRestore is restrictChatMember with a recorded permission set and end
+// date, sent with use_independent_chat_permissions. Only decideStaffUndo returns
+// it.
+const staffCallRestore staffAPICall = staffCallUnmute + 1
+
+// staffUndoMinRemaining is how many seconds a recorded end date must still have
+// before undo re-applies it. Telegram turns a ban or restriction that ends less
+// than 30 seconds from the moment it is applied into a permanent one, and a pacing
+// wait or a 429 retry can delay the call, so a closer end date counts as ended.
+const staffUndoMinRemaining int64 = 120
+
+// staffAppliedState is what the staff action sent to one group.
+type staffAppliedState struct {
+	// Until is the until_date the action sent; 0 is permanent.
+	Until int64
+	// AppliedAt is when the group's write was recorded, as a Unix time.
+	AppliedAt int64
+}
+
+// staffUndoVerdict is the decision for one group's undo. It embeds staffVerdict
+// instead of adding fields to it: the Phase 2 tests build staffVerdict with
+// unkeyed literals, so that type must not change.
+type staffUndoVerdict struct {
+	staffVerdict
+	// Until is the end date of a restored ban or restriction; 0 is permanent.
+	Until int64
+	// Perms is the permission set of a staffCallRestore.
+	Perms gotgbot.ChatPermissions
+}
+
+// decideStaffUndo is a placeholder until the table is written.
+func decideStaffUndo(orig staffActionKind, prior staffPriorState, applied staffAppliedState, live staffTargetState, now int64) staffUndoVerdict {
+	return staffUndoVerdict{staffVerdict: staffSkip(staffReasonSkipNoPriorState)}
 }
 
 // staffServiceUserIDs are Telegram's own accounts: the service account, the
