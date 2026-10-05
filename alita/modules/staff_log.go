@@ -106,3 +106,9 @@ func postStaffActionLog(ctx context.Context, b *gotgbot.Bot, card *staffActionCa
 		log.Warnf("[StaffActions] log post for group %d: %v", link.GroupChatID, err)
 	}
 }
+
+// staffReverseKind is the action that reverses kind. Placeholder until the undo log
+// post lands: it reverses nothing yet.
+func staffReverseKind(kind staffActionKind) staffActionKind {
+	return kind
+}
