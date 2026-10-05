@@ -85,6 +85,11 @@ const staffTargetLockPrefix = "alita:staff:lock:target:"
 // staffTargetLockTTL is the safety net that frees a target lock whose run died.
 var staffTargetLockTTL = 30 * time.Minute
 
+// staffTargetLockRenewEvery is how often a running fan-out renews its target lock:
+// a third of staffTargetLockTTL, so two renewals can fail in a row before the lock
+// expires. It is a variable so tests can run it fast.
+var staffTargetLockRenewEvery = 10 * time.Minute
+
 // releaseStaffTargetLockScript deletes the lock only while it still holds the
 // releasing card's token, so a card whose lock expired never frees a newer card's
 // lock.

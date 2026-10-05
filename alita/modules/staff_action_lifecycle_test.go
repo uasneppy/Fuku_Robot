@@ -601,3 +601,73 @@ func TestStaffActionOwnCardDoubleTap(t *testing.T) {
 		t.Fatalf("banChatMember calls = %d, want exactly 1", got)
 	}
 }
+
+// targetLockPTTL is the remaining life of the target lock, 0 when there is none.
+func targetLockPTTL(t *testing.T, target int64) time.Duration {
+	t.Helper()
+	ttl, err := cache.GetRedisClient().PTTL(cache.Context, staffTargetLockKey(target)).Result()
+	if err != nil || ttl < 0 {
+		return 0
+	}
+	return ttl
+}
+
+// heldStaffRun starts a ban run on a gated client and returns once its first ban
+// call is in flight, so the run holds its target lock and its coordinator loop is
+// alive. The renewal interval is shortened for the test. The returned function
+// lets the run finish and waits for it.
+func heldStaffRun(t *testing.T) (env *staffActionEnv, token string, finish func()) {
+	t.Helper()
+	previous := staffTargetLockRenewEvery
+	staffTargetLockRenewEvery = 20 * time.Millisecond
+	t.Cleanup(func() { staffTargetLockRenewEvery = previous })
+
+	env = newStaffActionEnv(t, 1)
+	group := env.groups[0]
+	env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	gate := &gatedBanClient{staffActionFake: env.fake, entered: make(chan struct{}), release: make(chan struct{})}
+	env.bot.BotClient = gate
+	var releaseOnce sync.Once
+	releaseRun := func() { releaseOnce.Do(func() { close(gate.release) }) }
+	t.Cleanup(releaseRun)
+
+	env.send(env.issuer, "/ban 4242")
+	token, msgID := env.card()
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+	select {
+	case <-gate.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the run never reached its first ban")
+	}
+	return env, token, func() {
+		releaseRun()
+		env.waitRuns()
+	}
+}
+
+func TestStaffActionTargetLockRenewedDuringRun(t *testing.T) {
+	t.Run("renews its own lock", func(t *testing.T) {
+		_, token, finish := heldStaffRun(t)
+
+		// The run's lock is about to expire; a live run must push it back out.
+		if err := cache.GetRedisClient().PExpire(cache.Context, staffTargetLockKey(staffTestTarget), 2*time.Second).Err(); err != nil {
+			t.Fatalf("shorten the lock: %v", err)
+		}
+		deadline := time.Now().Add(time.Second)
+		for targetLockPTTL(t, staffTestTarget) <= 2*time.Second && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		if holder := targetLockHolder(t, staffTestTarget); holder != token {
+			t.Fatalf("target lock holder = %q, want the running card %q", holder, token)
+		}
+		if ttl := targetLockPTTL(t, staffTestTarget); ttl <= staffTargetLockTTL-time.Minute {
+			t.Fatalf("target lock TTL = %s, want it renewed above %s", ttl, staffTargetLockTTL-time.Minute)
+		}
+
+		finish()
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the run = %q, want the key gone", holder)
+		}
+	})
+}
