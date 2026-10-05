@@ -3,9 +3,9 @@ phase: "2"
 slug: "staff-actions-across-groups"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-05"
 ---
 
@@ -23,7 +23,7 @@ created: "2026-10-05"
 | **Config file** | none; every test file starts with `//go:build testtools` |
 | **Quick run command** | `go test -tags testtools -race -count=1 -run '^TestStaffAction' ./alita/modules` |
 | **Full suite command** | `make test` (sandbox: `go test -tags testtools -race -count=1 ./alita/modules ./alita/utils/ratelimit ./alita/utils/extraction ./alita/db/user ./alita/i18n`) |
-| **Estimated runtime** | ~60 seconds (quick run ~15 s) |
+| **Estimated runtime** | `make test` ~180 s; `alita/modules` package ~120 s; quick run ~56 s (measured 2026-10-05 after wave 7) |
 
 ---
 
@@ -40,21 +40,21 @@ created: "2026-10-05"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 2-01-01 | 01 | 1 | STAFF-01, STAFF-02, STAFF-03, STAFF-04, STAFF-05, STAFF-07 | T-02-01, T-02-02, T-02-03 | Live getChatMember per group; only the issuer's Confirm runs; callback data carries only a token | unit + miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffActionTracer$\|^TestStaffActionSkipsWhereIssuerNotAdmin$' ./alita/modules` | ❌ W0 (fake + harness created here) | ⬜ pending |
-| 2-01-02 | 01 | 1 | STAFF-03, STAFF-05, STAFF-07, PLAT-01 | T-02-02, T-02-04, T-02-07 | Non-issuer taps refused; every skip/fail branch makes no write; Redis required | unit + miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffAction(Cancel\|CardIssuerOnly\|CardTapAnswers\|ConfirmAborts\|PerGroupGates\|StaffChatNeverActedOn\|RedisRequired\|NoLinks\|ParseHints)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-01-03 | 01 | 1 | STAFF-06, STAFF-13 | T-02-05, T-02-08 | Anonymous senders refused before any lookup; non-staff /ban identical to baseline | dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(NonStaffUnchanged\|StaffGroupRoutesToCard\|Anonymous\|ModuleOrder\|StaleGatePassesThrough\|CommandNamesExact)$' ./alita/modules` | ❌ W0 (dispatcher harness created here) | ⬜ pending |
-| 2-02-01 | 02 | 2 | STAFF-07 (research flag) | T-02-10 | restrictChatMember only to member/restricted; unban(false) only for kick; unban always only_if_banned | table-driven | `go test -tags testtools -race -count=1 -run '^TestStaffActionDecision\|^TestStaffActionEndsLater$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-02-02 | 02 | 2 | STAFF-01, STAFF-05, STAFF-13 | T-02-10, T-02-11, T-02-12 | Stateful fake proves no ban is lifted by mute/unmute/kick | unit + dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(FiveActions\|NeverLiftsBan\|BanOverMute\|MuteNeverShortens\|KickClearsMute\|UnmuteNonMember\|HeaderDuration\|NonStaffUnchanged\|Anonymous)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-03-01 | 03 | 3 | STAFF-01, STAFF-03 | T-02-13, T-02-14 | Strict lowercase duration grammar with overflow checks | unit | `go test -tags testtools -count=1 ./alita/utils/extraction` and `go test -tags testtools -race -count=1 -run '^TestStaffActionParse' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-03-02 | 03 | 3 | STAFF-01, STAFF-02, STAFF-03, STAFF-13 | T-02-13 | until_date fixed once at Confirm; timed actions never shorten | unit + dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(TimedBan\|TimedMute\|TimedNeverShortens\|OverLimitIsPermanent\|TbanTmuteNeedDuration\|DurationTokenRules\|NonStaffUnchanged\|Anonymous)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-04-01 | 04 | 4 | STAFF-01 | T-02-15 | Lookup errors never read as "never seen" | repo (SQLite) | `go test -tags testtools -race -count=1 -run '^TestFindUsersByUsername' ./alita/db/user` | ❌ W0 | ⬜ pending |
-| 2-04-02 | 04 | 4 | STAFF-01, STAFF-03, STAFF-06, STAFF-13 | T-02-15, T-02-17, T-02-18 | Ambiguous/unknown usernames refused; variants never act in a Staff Group | unit + dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(Parse\|Username\|TextMention\|BareReplyHint\|RefusedVariants\|NonStaffUnchanged\|Anonymous)' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-05-01 | 05 | 5 | STAFF-03, PLAT-01 | T-02-19, T-02-23 | Exactly one fan-out per card across taps, timers and instances | miniredis + concurrency | `go test -tags testtools -race -count=1 -run '^TestStaffAction(CardExpiresByTimer\|CardExpiryBoundary\|ConfirmExactlyOnce\|ConfirmAcrossReplicas\|TimerSkipsCancelledCard)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-05-02 | 05 | 5 | STAFF-03, STAFF-04, PLAT-01 | T-02-20, T-02-21, T-02-22 | Abort on changed links; one run per target | miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffAction(LinksChangedAborts\|TargetLock\|TargetLockReleased\|TargetLockForeignRelease\|OwnCardDoubleTap)$' ./alita/modules` and `make generate-docs && make check-docs && make check-translations` | ❌ W0 | ⬜ pending |
-| 2-06-01 | 06 | 6 | STAFF-12, PLAT-01 | T-02-24, T-02-25, T-02-27 | Fleet-wide spacing, shared retry_after block, capped waits, local fallback | unit + miniredis | `go test -tags testtools -race -count=1 ./alita/utils/ratelimit` | ❌ W0 | ⬜ pending |
-| 2-06-02 | 06 | 6 | STAFF-08, STAFF-12, PLAT-01 | T-02-24, T-02-26 | Every fan-out call paced; D-19 reasons from a live probe; panics reported | unit | `go test -tags testtools -race -count=1 -run '^TestStaffAction(RetriesOn429\|RateLimitedFails\|FailureClassification\|LookupClassification\|RecheckPaced\|RecheckRateLimited\|WorkersBounded\|WorkerPanicReported)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-07-01 | 07 | 7 | STAFF-08 | T-02-28 | Only done lines collapse; overflow goes to continuation; UTF-16 measured after escaping | unit (pure) | `go test -tags testtools -race -count=1 -run '^TestStaffActionSummary' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 2-07-02 | 07 | 7 | STAFF-08, STAFF-12 | T-02-29, T-02-30, T-02-31 | Final summary always delivered (retry, fallback); shutdown drain before DB close | unit | `go test -tags testtools -race -count=1 -run '^TestStaffAction(ProgressBatched\|FinalEditRetriesOn429\|FinalFallsBackToNewMessage\|NotModifiedIsSuccess\|OverflowContinuation\|AllSkippedTally)$\|^TestStopStaffActionsFinalizes$' ./alita/modules` | ❌ W0 | ⬜ pending |
+| 2-01-01 | 01 | 1 | STAFF-01, STAFF-02, STAFF-03, STAFF-04, STAFF-05, STAFF-07 | T-02-01, T-02-02, T-02-03 | Live getChatMember per group; only the issuer's Confirm runs; callback data carries only a token | unit + miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffActionTracer$\|^TestStaffActionSkipsWhereIssuerNotAdmin$' ./alita/modules` | ✅ | ✅ green |
+| 2-01-02 | 01 | 1 | STAFF-03, STAFF-05, STAFF-07, PLAT-01 | T-02-02, T-02-04, T-02-07 | Non-issuer taps refused; every skip/fail branch makes no write; Redis required | unit + miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffAction(Cancel\|CardIssuerOnly\|CardTapAnswers\|ConfirmAborts\|PerGroupGates\|StaffChatNeverActedOn\|RedisRequired\|NoLinks\|ParseHints)$' ./alita/modules` | ✅ | ✅ green |
+| 2-01-03 | 01 | 1 | STAFF-06, STAFF-13 | T-02-05, T-02-08 | Anonymous senders refused before any lookup; non-staff /ban identical to baseline | dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(NonStaffUnchanged\|StaffGroupRoutesToCard\|Anonymous\|ModuleOrder\|StaleGatePassesThrough\|CommandNamesExact)$' ./alita/modules` | ✅ | ✅ green |
+| 2-02-01 | 02 | 2 | STAFF-07 (research flag) | T-02-10 | restrictChatMember only to member/restricted; unban(false) only for kick; unban always only_if_banned | table-driven | `go test -tags testtools -race -count=1 -run '^TestStaffActionDecision\|^TestStaffActionEndsLater$' ./alita/modules` | ✅ | ✅ green |
+| 2-02-02 | 02 | 2 | STAFF-01, STAFF-05, STAFF-13 | T-02-10, T-02-11, T-02-12 | Stateful fake proves no ban is lifted by mute/unmute/kick | unit + dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(FiveActions\|NeverLiftsBan\|BanOverMute\|MuteNeverShortens\|KickClearsMute\|UnmuteNonMember\|HeaderDuration\|NonStaffUnchanged\|Anonymous)$' ./alita/modules` | ✅ | ✅ green |
+| 2-03-01 | 03 | 3 | STAFF-01, STAFF-03 | T-02-13, T-02-14 | Strict lowercase duration grammar with overflow checks | unit | `go test -tags testtools -count=1 ./alita/utils/extraction` and `go test -tags testtools -race -count=1 -run '^TestStaffActionParse' ./alita/modules` | ✅ | ✅ green |
+| 2-03-02 | 03 | 3 | STAFF-01, STAFF-02, STAFF-03, STAFF-13 | T-02-13 | until_date fixed once at Confirm; timed actions never shorten | unit + dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(TimedBan\|TimedMute\|TimedNeverShortens\|OverLimitIsPermanent\|TbanTmuteNeedDuration\|DurationTokenRules\|NonStaffUnchanged\|Anonymous)$' ./alita/modules` | ✅ | ✅ green |
+| 2-04-01 | 04 | 4 | STAFF-01 | T-02-15 | Lookup errors never read as "never seen" | repo (SQLite) | `go test -tags testtools -race -count=1 -run '^TestFindUsersByUsername' ./alita/db/user` | ✅ | ✅ green |
+| 2-04-02 | 04 | 4 | STAFF-01, STAFF-03, STAFF-06, STAFF-13 | T-02-15, T-02-17, T-02-18 | Ambiguous/unknown usernames refused; variants never act in a Staff Group | unit + dispatcher | `go test -tags testtools -race -count=1 -run '^TestStaffAction(Parse\|Username\|TextMention\|BareReplyHint\|RefusedVariants\|NonStaffUnchanged\|Anonymous)' ./alita/modules` | ✅ | ✅ green |
+| 2-05-01 | 05 | 5 | STAFF-03, PLAT-01 | T-02-19, T-02-23 | Exactly one fan-out per card across taps, timers and instances | miniredis + concurrency | `go test -tags testtools -race -count=1 -run '^TestStaffAction(CardExpiresByTimer\|CardExpiryBoundary\|ConfirmExactlyOnce\|ConfirmAcrossReplicas\|TimerSkipsCancelledCard)$' ./alita/modules` | ✅ | ✅ green |
+| 2-05-02 | 05 | 5 | STAFF-03, STAFF-04, PLAT-01 | T-02-20, T-02-21, T-02-22 | Abort on changed links; one run per target | miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffAction(LinksChangedAborts\|TargetLock\|TargetLockReleased\|TargetLockForeignRelease\|OwnCardDoubleTap)$' ./alita/modules` and `make generate-docs && make check-docs && make check-translations` | ✅ | ✅ green |
+| 2-06-01 | 06 | 6 | STAFF-12, PLAT-01 | T-02-24, T-02-25, T-02-27 | Fleet-wide spacing, shared retry_after block, capped waits, local fallback | unit + miniredis | `go test -tags testtools -race -count=1 ./alita/utils/ratelimit` | ✅ | ✅ green |
+| 2-06-02 | 06 | 6 | STAFF-08, STAFF-12, PLAT-01 | T-02-24, T-02-26 | Every fan-out call paced; D-19 reasons from a live probe; panics reported | unit | `go test -tags testtools -race -count=1 -run '^TestStaffAction(RetriesOn429\|RateLimitedFails\|FailureClassification\|LookupClassification\|RecheckPaced\|RecheckRateLimited\|WorkersBounded\|WorkerPanicReported)$' ./alita/modules` | ✅ | ✅ green |
+| 2-07-01 | 07 | 7 | STAFF-08 | T-02-28 | Only done lines collapse; overflow goes to continuation; UTF-16 measured after escaping | unit (pure) | `go test -tags testtools -race -count=1 -run '^TestStaffActionSummary' ./alita/modules` | ✅ | ✅ green |
+| 2-07-02 | 07 | 7 | STAFF-08, STAFF-12 | T-02-29, T-02-30, T-02-31 | Final summary always delivered (retry, fallback); shutdown drain before DB close | unit | `go test -tags testtools -race -count=1 -run '^TestStaffAction(ProgressBatched\|FinalEditRetriesOn429\|FinalFallsBackToNewMessage\|NotModifiedIsSuccess\|OverflowContinuation\|AllSkippedTally)$\|^TestStopStaffActionsFinalizes$' ./alita/modules` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -62,11 +62,11 @@ created: "2026-10-05"
 
 ## Wave 0 Requirements
 
-- [ ] Stateful `gotgbot.BotClient` fake for staff actions (per-`(chat,user)` status, `until_date`, `is_member`, `can_send_messages`, `can_restrict_members`; ban/restrict/unban as status transitions; scripted 429 sequences; `editMessageText` failure and "not modified" injection; call-order recording): task 2-01-01 (`staff_action_fake_test.go`), extended with delays, panics and in-flight counting in task 2-06-02
-- [ ] miniredis helper for staff-action tests (`withMiniredis` and `cache.SetRedisClientForTest` exist; `newStaffActionEnv` uses them): task 2-01-01
-- [ ] `extraction.ParseDurationToken` plus tests: task 2-03-01
-- [ ] `user.FindUsersByUsername` plus tests in `alita/db/user`: task 2-04-01
-- [ ] Real-dispatcher harness test loading `LoadBans`, `LoadMutes` and `LoadStaffActions` in registry order: task 2-01-03 (`staff_action_dispatch_test.go`)
+- [x] Stateful `gotgbot.BotClient` fake for staff actions (per-`(chat,user)` status, `until_date`, `is_member`, `can_send_messages`, `can_restrict_members`; ban/restrict/unban as status transitions; scripted 429 sequences; `editMessageText` failure and "not modified" injection; call-order recording): task 2-01-01 (`staff_action_fake_test.go`), extended with delays, panics and in-flight counting in task 2-06-02
+- [x] miniredis helper for staff-action tests (`withMiniredis` and `cache.SetRedisClientForTest` exist; `newStaffActionEnv` uses them): task 2-01-01
+- [x] `extraction.ParseDurationToken` plus tests: task 2-03-01
+- [x] `user.FindUsersByUsername` plus tests in `alita/db/user`: task 2-04-01
+- [x] Real-dispatcher harness test loading `LoadBans`, `LoadMutes` and `LoadStaffActions` in registry order: task 2-01-03 (`staff_action_dispatch_test.go`)
 - Framework install: none
 
 ---
@@ -83,11 +83,28 @@ created: "2026-10-05"
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s (quick run measured at 59.5 s after wave 7 — at the limit; per-task -run patterns finish well under it)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-10-05 (validate-phase, after all 7 plans merged)
+
+## Validation Audit 2026-10-05
+
+Every per-task automated command was run against the merged phase head. Each exact-name pattern matched exactly the tests it names, and all passed under `-race`.
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Notes:
+- `make lint` could not run in this sandbox: the installed golangci-lint was built with go1.25 and the module targets go1.26.0. Each plan ran `gofmt -l` and `go vet -tags testtools ./alita/...` instead. `make test`, `make check-translations` and `make check-docs` passed.
+- Two intermittent tests were fixed at the root after wave 7:
+  - `TestLogUsersPersistsSenderChatAndReplyUsers` had a data race between tests swapping the throttle maps and the sweep/async goroutines. It was reproduced 4 times in a 100 s loop and showed 0 times after the fix.
+  - `TestTelegramPacerFleetSpacing` had a neighbour-gap assertion that broke on timer jitter. It now uses a jitter-proof lower bound. 50 `-race` runs pass, and a per-replica-only mutation fails it.
+- Manual-only rows are unchanged. They need a live Telegram bot and groups.
