@@ -26,6 +26,14 @@ import (
 // apart. The action the card undoes is the card's UndoKind.
 const staffKindUndo staffActionKind = "undo"
 
+// staffClaimUndo claims the one undo of a record. It is a test seam, like
+// staffCreateActionRecord: tests replace it to make another claimer win between
+// Confirm's last read and its claim, which no sequence of taps can do on purpose.
+// Production never reassigns it.
+var staffClaimUndo = func(actionID uint, by int64, byName string) (bool, error) {
+	return staff.ClaimUndo(actionID, by, byName)
+}
+
 // staffUndoNameRunes caps the name of the member who undid an action wherever it is
 // spliced into a message.
 const staffUndoNameRunes = 64
@@ -372,7 +380,7 @@ func (m moduleStruct) staffUndoConfirm(
 	// The claim is the last check before the run: one conditional update, so of two
 	// cards for one record, on any replica, only one ever starts.
 	presserName := staffFullName(&query.From)
-	claimed, err := staff.ClaimUndo(action.ID, card.Issuer, presserName)
+	claimed, err := staffClaimUndo(action.ID, card.Issuer, presserName)
 	if err != nil {
 		abort("staff_act_abort_check_failed")
 		return ext.EndGroups
