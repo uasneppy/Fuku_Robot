@@ -56,6 +56,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Paging uses an offset cursor, not a page number, so a page shrunk to the 3800-unit cap hides no entry: Next starts
   right after the last line shown. Callback data carries only numbers or tokens, never names or reasons, and the
   handler refuses an offset outside 0..`staffHistoryMaxOffset` as expired.
+- Undo is `a=ya&r=<record id>` (the button on a finished summary, any live Staff Group member) and `a=yc` / `a=yn&t=<token>`
+  (the undo card's Confirm and Cancel, Confirm only by the member who pressed Undo). The staff action Confirm (`xc`)
+  refuses an undo card and the undo Confirm refuses an action card, so a replica on older code never runs an undo card.
 - The history detail view is `a=dt&r=<record id>&o=<offset>` (`r` is the `staff_actions` row ID, `o` the list offset
   Back returns to). The record is loaded fresh and refused unless its `staff_chat_id` is the pressed message's chat, so a
   forged or replayed button naming another Staff Group's record shows nothing. A zero, negative, non-numeric or
@@ -83,7 +86,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `alita:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
-  signature of the sorted linked group IDs (`links_sig`) changed since the card was shown.
+  signature of the sorted linked group IDs (`links_sig`) changed since the card was shown. The same hash also holds
+  undo confirm cards (`action=undo`, `undo_of`, `undo_kind`) whose issuer is the presser of Undo. One undo per action
+  is the conditional update of `staff_actions.undo_started_at` (`ClaimUndo`), not the card, which expires.
 - `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
   TTL, taken at Confirm, renewed every 10 minutes (`staffTargetLockRenewEvery`) by the run's coordinator through a
   compare-and-set on that token while the fan-out runs (a vanished key is re-taken, another card's lock is never
@@ -156,6 +161,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
   `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
   `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
+  Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
+  on its verdict. Its one exception to the never-lift rule, a restrict or ban sent to a kicked or left target, is
+  allowed only when the live state equals what the staff action left behind. An undo touches only groups where the
+  action was applied, rechecks each one live for the presser (creator, or administrator with `can_restrict_members`,
+  through `staffGroupPrechecks` with the presser as actor), and its result is a new summary replying to the original.
+- The Undo button exists only on the final summary of a finished, finalized record, for ban, mute, unban and unmute
+  with at least one applied group (`/tban` and `/tmute` are recorded as ban and mute). When the final edit falls back to
+  a new message the button goes on it and `summary_msg_id` follows. The original summary is edited ("Undone by") and
+  replied to only when the record's `summary_chat_id` is the chat the press came from: message IDs belong to their
+  chat, so after a Staff Group migration the card is posted without a reply and nothing old is edited.
 - Staff targets are the first argument and never guessed: a numeric ID, a `text_mention` entity starting exactly at that
   UTF-16 offset, or an `@username` (4-32 of `A-Za-z0-9_`). A username resolves through `user.FindUsersByUsername` (users
   table only, case-insensitive, up to 10 rows, newest activity first) behind the `staffUserLookup` seam: no row is

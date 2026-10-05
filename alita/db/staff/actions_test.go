@@ -4,6 +4,8 @@ package staff
 
 import (
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -288,5 +290,158 @@ func TestStaffActionTally(t *testing.T) {
 	none, err := TallyActionGroups(nil)
 	if err != nil || len(none) != 0 {
 		t.Fatalf("TallyActionGroups(nil) = %v, %v, want an empty map and no error", none, err)
+	}
+}
+
+func TestStaffActionClaimUndo(t *testing.T) {
+	chat := uniqueStaffChatID()
+	cleanupActionRows(t, chat)
+	action, rows := newTestAction(chat, []int{0}, []int64{uniqueStaffChatID()})
+	if err := CreateAction(action, rows); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+
+	claimed, err := ClaimUndo(action.ID, 501, "First <b>")
+	if err != nil || !claimed {
+		t.Fatalf("first ClaimUndo = %v, %v, want true", claimed, err)
+	}
+	claimed, err = ClaimUndo(action.ID, 502, "Second")
+	if err != nil || claimed {
+		t.Fatalf("second ClaimUndo = %v, %v, want false and no error", claimed, err)
+	}
+	got, err := GetActionFresh(action.ID)
+	if err != nil || got == nil {
+		t.Fatalf("GetActionFresh = %v, %v", got, err)
+	}
+	if got.UndoBy == nil || *got.UndoBy != 501 || got.UndoByName != "First <b>" || got.UndoStartedAt == nil {
+		t.Fatalf("record after two claims = undo_by %v name %q started %v, want the first claimer's 501 and name",
+			got.UndoBy, got.UndoByName, got.UndoStartedAt)
+	}
+
+	if claimed, err := ClaimUndo(action.ID+100000, 503, "Nobody"); err != nil || claimed {
+		t.Fatalf("ClaimUndo of a missing record = %v, %v, want false and no error", claimed, err)
+	}
+
+	// Eight claimers at once on a fresh record: exactly one wins.
+	racy, racyRows := newTestAction(chat, []int{0}, []int64{uniqueStaffChatID()})
+	if err := CreateAction(racy, racyRows); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+	var (
+		wg      sync.WaitGroup
+		wins    atomic.Int32
+		failure atomic.Value
+	)
+	start := make(chan struct{})
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			claimed, err := ClaimUndo(racy.ID, int64(600+i), "Racer")
+			if err != nil {
+				failure.Store(err)
+				return
+			}
+			if claimed {
+				wins.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	if err, _ := failure.Load().(error); err != nil {
+		t.Fatalf("concurrent ClaimUndo: %v", err)
+	}
+	if wins.Load() != 1 {
+		t.Fatalf("%d of 8 concurrent claims won, want exactly 1", wins.Load())
+	}
+}
+
+func TestStaffActionFinalizeUndo(t *testing.T) {
+	chat := uniqueStaffChatID()
+	cleanupActionRows(t, chat)
+	groups := []int64{uniqueStaffChatID(), uniqueStaffChatID(), uniqueStaffChatID()}
+	action, rows := newTestAction(chat, []int{0, 1, 2}, groups)
+	if err := CreateAction(action, rows); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+	// Groups 0 and 1 were applied; group 2 was skipped by the original.
+	if err := FinalizeAction(action.ID, []ActionGroupResult{
+		{GroupChatID: groups[0], Outcome: models.StaffActionOutcomeDone, Reason: "banned"},
+		{GroupChatID: groups[1], Outcome: models.StaffActionOutcomeDone, Reason: "banned"},
+		{GroupChatID: groups[2], Outcome: models.StaffActionOutcomeSkipped, Reason: "skip_issuer_not_admin"},
+	}); err != nil {
+		t.Fatalf("FinalizeAction: %v", err)
+	}
+
+	// One result is saved as the group finishes, before the finalize.
+	if err := SaveUndoResult(action.ID, ActionGroupResult{
+		GroupChatID: groups[0], Outcome: models.StaffActionOutcomeDone, Reason: "undone_unbanned",
+	}); err != nil {
+		t.Fatalf("SaveUndoResult: %v", err)
+	}
+	if err := SaveUndoResult(action.ID, ActionGroupResult{GroupChatID: groups[0] + 1000000, Outcome: "done"}); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("SaveUndoResult for a group of no row = %v, want gorm.ErrRecordNotFound", err)
+	}
+
+	finalResults := []ActionGroupResult{
+		{GroupChatID: groups[0], Outcome: models.StaffActionOutcomeDone, Reason: "undone_unbanned"},
+		{GroupChatID: groups[1], Outcome: models.StaffActionOutcomeSkipped, Reason: "skip_changed_since", Detail: "x &amp; y"},
+	}
+	if err := FinalizeUndo(action.ID, finalResults); err != nil {
+		t.Fatalf("FinalizeUndo: %v", err)
+	}
+	first, err := GetActionFresh(action.ID)
+	if err != nil || first == nil || first.UndoFinishedAt == nil {
+		t.Fatalf("after FinalizeUndo undo_finished_at is not set: %v, %v", first, err)
+	}
+	got, err := ListActionGroupsFresh(action.ID)
+	if err != nil {
+		t.Fatalf("ListActionGroupsFresh: %v", err)
+	}
+	want := []struct{ outcome, reason, detail string }{
+		{"done", "undone_unbanned", ""},
+		{"skipped", "skip_changed_since", "x &amp; y"},
+		{"skipped", "skip_not_applied", ""},
+	}
+	for i, row := range got {
+		if row.UndoOutcome != want[i].outcome || row.UndoReason != want[i].reason || row.UndoDetail != want[i].detail {
+			t.Fatalf("group %d undo = %q / %q / %q, want %q / %q / %q", i,
+				row.UndoOutcome, row.UndoReason, row.UndoDetail, want[i].outcome, want[i].reason, want[i].detail)
+		}
+	}
+
+	// A second call is harmless and keeps the first finish time.
+	time.Sleep(10 * time.Millisecond)
+	if err := FinalizeUndo(action.ID, finalResults); err != nil {
+		t.Fatalf("second FinalizeUndo: %v", err)
+	}
+	second, err := GetActionFresh(action.ID)
+	if err != nil || second == nil || second.UndoFinishedAt == nil || !second.UndoFinishedAt.Equal(*first.UndoFinishedAt) {
+		t.Fatalf("undo_finished_at after a second FinalizeUndo = %v, want the first time %v", second.UndoFinishedAt, first.UndoFinishedAt)
+	}
+}
+
+func TestStaffActionSetSummaryMessage(t *testing.T) {
+	chat := uniqueStaffChatID()
+	cleanupActionRows(t, chat)
+	action, rows := newTestAction(chat, []int{0}, []int64{uniqueStaffChatID()})
+	if err := CreateAction(action, rows); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+
+	if err := SetSummaryMessage(action.ID, chat, 9001); err != nil {
+		t.Fatalf("SetSummaryMessage: %v", err)
+	}
+	got, err := GetActionFresh(action.ID)
+	if err != nil || got == nil {
+		t.Fatalf("GetActionFresh = %v, %v", got, err)
+	}
+	if got.SummaryChatID != chat || got.SummaryMsgID != 9001 {
+		t.Fatalf("summary = chat %d message %d, want chat %d message 9001", got.SummaryChatID, got.SummaryMsgID, chat)
+	}
+	if err := SetSummaryMessage(action.ID+100000, chat, 1); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("SetSummaryMessage of a missing record = %v, want gorm.ErrRecordNotFound", err)
 	}
 }

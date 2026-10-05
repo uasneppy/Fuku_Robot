@@ -118,6 +118,11 @@ func staffTargetDisplay(tr *i18n.Translator, card *staffActionCard) string {
 // action, target, duration (ban and mute only) and reason. It is built by
 // concatenation, so no user text goes through the translator.
 func staffActionHeader(tr *i18n.Translator, card *staffActionCard) string {
+	// An undo card reads "Undo" in front of the header of the action it undoes, so
+	// its cancel, expiry and abort edits say what was being undone.
+	if card.Kind == staffKindUndo {
+		return staffUndoHeader(tr, card)
+	}
 	reason := html.EscapeString(card.Reason)
 	if strings.TrimSpace(card.Reason) == "" {
 		reason, _ = tr.GetString("staff_act_no_reason")
@@ -308,7 +313,18 @@ func composeStaffActionSummary(
 	results []staffGroupResult,
 	final bool,
 ) (string, []string) {
-	header := staffActionHeader(tr, card)
+	return composeStaffSummary(tr, staffActionHeader(tr, card), results, final)
+}
+
+// composeStaffSummary is composeStaffActionSummary with the header as a parameter,
+// so an undo's summary can carry its own header lines. Every continuation message
+// starts with the same header.
+func composeStaffSummary(
+	tr *i18n.Translator,
+	header string,
+	results []staffGroupResult,
+	final bool,
+) (string, []string) {
 	done, skipped, failed, pending := staffSummaryTally(results)
 	head := header + "\n" + staffSummaryTallyLine(done, skipped, failed)
 
@@ -399,15 +415,31 @@ func renderStaffActionSummaryFinal(tr *i18n.Translator, card *staffActionCard, r
 // leaves out the reply markup, which removes the buttons. Telegram's "message is
 // not modified" answer is not a failure.
 func editStaffActionMessage(b *gotgbot.Bot, chatID, msgID int64, text string) error {
+	return editStaffActionMessageWithMarkup(b, chatID, msgID, text, gotgbot.InlineKeyboardMarkup{})
+}
+
+// editStaffActionMessageWithMarkup is editStaffActionMessage with a keyboard on the
+// edited message. A markup without rows removes the buttons, exactly like
+// editStaffActionMessage, so every existing edit still ends with none.
+func editStaffActionMessageWithMarkup(
+	b *gotgbot.Bot,
+	chatID, msgID int64,
+	text string,
+	markup gotgbot.InlineKeyboardMarkup,
+) error {
 	ctx, cancel := context.WithTimeout(context.Background(), staffActionEditTimeout)
 	defer cancel()
-	_, _, err := b.EditMessageTextWithContext(ctx, &gotgbot.EditMessageTextOpts{
+	opts := &gotgbot.EditMessageTextOpts{
 		ChatId:             chatID,
 		MessageId:          msgID,
 		Text:               text,
 		ParseMode:          formatting.HTML,
 		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
-	})
+	}
+	if len(markup.InlineKeyboard) > 0 {
+		opts.ReplyMarkup = markup
+	}
+	_, _, err := b.EditMessageTextWithContext(ctx, opts)
 	if err != nil && !isMessageNotModified(err) {
 		return err
 	}
@@ -470,9 +502,15 @@ var staffActionSleep = sleepStaffRetry
 // staffActionFinalAttempts times. A 429 waits out Telegram's retry_after and tries
 // again; "message is not modified" counts as success (editStaffActionMessage);
 // any other error, or running out of attempts or time, reports false.
-func editStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int64, text string) bool {
+func editStaffActionFinal(
+	ctx context.Context,
+	b *gotgbot.Bot,
+	chatID, msgID int64,
+	text string,
+	markup gotgbot.InlineKeyboardMarkup,
+) bool {
 	for attempt := 1; attempt <= staffActionFinalAttempts; attempt++ {
-		err := editStaffActionMessage(b, chatID, msgID, text)
+		err := editStaffActionMessageWithMarkup(b, chatID, msgID, text, markup)
 		if err == nil {
 			return true
 		}
@@ -486,19 +524,37 @@ func editStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int
 }
 
 // sendStaffSummaryPart posts one summary message into the Staff Group, waiting out
-// a 429 the same way the final edit does. It reports whether the message was sent.
-func sendStaffSummaryPart(ctx context.Context, b *gotgbot.Bot, chatID int64, text string) bool {
+// a 429 the same way the final edit does, with the keyboard when markup has rows. It
+// returns the sent message's ID, or false when it could not be sent.
+func sendStaffSummaryPart(
+	ctx context.Context,
+	b *gotgbot.Bot,
+	chatID int64,
+	text string,
+	markup gotgbot.InlineKeyboardMarkup,
+) (int64, bool) {
+	opts := &gotgbot.SendMessageOpts{
+		ParseMode:          formatting.HTML,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+	}
+	if len(markup.InlineKeyboard) > 0 {
+		opts.ReplyMarkup = markup
+	}
 	for attempt := 1; attempt <= staffActionFinalAttempts; attempt++ {
-		err := sendStaffNotice(b, chatID, text)
+		sent, err := b.SendMessage(chatID, text, opts)
 		if err == nil {
-			return true
+			if sent == nil {
+				return 0, true
+			}
+			return sent.MessageId, true
 		}
+		log.Warnf("[StaffActions] summary message to chat %d failed: %v", chatID, err)
 		wait, limited := staffRetryAfterWait(err)
 		if !limited || attempt == staffActionFinalAttempts || !staffActionSleep(ctx, wait) {
-			return false
+			return 0, false
 		}
 	}
-	return false
+	return 0, false
 }
 
 // staffActionDeliverPartTimeout bounds the delivery of one summary message. Before
@@ -522,28 +578,45 @@ func newStaffDeliverContext() (context.Context, context.CancelFunc) {
 // notBefore is the end of a retry_after hold that Telegram put on the card during
 // the run: the final edit waits for it (at most one capped wait) instead of
 // spending an attempt inside it. The zero time means no hold.
-func deliverStaffActionFinal(b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string, notBefore time.Time) {
+//
+// markup goes on the first final message only: the edited card, or the fallback
+// message when the edit failed. Continuation messages carry none. The return value
+// is the ID of the message that holds the summary: msgID when the edit worked, the
+// fallback's ID when it was sent instead, and 0 when neither worked.
+func deliverStaffActionFinal(
+	b *gotgbot.Bot,
+	chatID, msgID int64,
+	text string,
+	continuation []string,
+	notBefore time.Time,
+	markup gotgbot.InlineKeyboardMarkup,
+) int64 {
 	editCtx, cancelEdit := newStaffDeliverContext()
 	if remaining := time.Until(notBefore); remaining > 0 {
 		// Whether the wait elapsed or the budget ran out, the edit is tried next.
 		staffActionSleep(editCtx, min(remaining, staffActionRetryAfterCap))
 	}
-	edited := editStaffActionFinal(editCtx, b, chatID, msgID, text)
+	edited := editStaffActionFinal(editCtx, b, chatID, msgID, text, markup)
 	cancelEdit()
+	landed := msgID
 	if !edited {
 		sendCtx, cancelSend := newStaffDeliverContext()
-		sent := sendStaffSummaryPart(sendCtx, b, chatID, text)
+		sentID, sent := sendStaffSummaryPart(sendCtx, b, chatID, text, markup)
 		cancelSend()
-		if !sent {
+		landed = 0
+		if sent {
+			landed = sentID
+		} else {
 			log.Errorf("[StaffActions] the final summary could not be delivered to chat %d", chatID)
 		}
 	}
 	for i, part := range continuation {
 		partCtx, cancelPart := newStaffDeliverContext()
-		sent := sendStaffSummaryPart(partCtx, b, chatID, part)
+		_, sent := sendStaffSummaryPart(partCtx, b, chatID, part, gotgbot.InlineKeyboardMarkup{})
 		cancelPart()
 		if !sent {
 			log.Errorf("[StaffActions] continuation %d of the summary could not be delivered to chat %d", i+1, chatID)
 		}
 	}
+	return landed
 }

@@ -57,6 +57,15 @@ const (
 	// staffActDetail opens one history entry's full record; field r is the record
 	// ID and o the list offset the Back button returns to.
 	staffActDetail = "dt"
+	// staffActUndoAsk is the Undo button on a finished summary; field r is the audit
+	// record's ID.
+	staffActUndoAsk = "ya"
+	// staffActUndoConfirm is the Confirm button of an undo card; field t is the card
+	// token.
+	staffActUndoConfirm = "yc"
+	// staffActUndoCancel is the Cancel button of an undo card; field t is the card
+	// token.
+	staffActUndoCancel = "yn"
 )
 
 // staffGroupsToken stands in for the group list while the translation is
@@ -274,6 +283,13 @@ func (m moduleStruct) staffCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 		return m.staffHistoryList(b, query, tr, decoded.Fields)
 	case staffActDetail:
 		return m.staffHistoryDetail(b, query, tr, decoded.Fields)
+	case staffActUndoAsk:
+		return m.staffUndoAsk(b, query, tr, decoded.Fields)
+	case staffActUndoConfirm:
+		return m.staffUndoConfirm(b, query, tr, decoded.Fields)
+	case staffActUndoCancel:
+		// The shared Cancel renders an undo card through staffActionHeader.
+		return m.staffActionCancel(b, query, tr, decoded.Fields)
 	default:
 		text, _ := tr.GetString("staff_cb_expired")
 		answerStaffCallback(b, query, text, false)
