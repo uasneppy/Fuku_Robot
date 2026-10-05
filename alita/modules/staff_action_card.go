@@ -100,6 +100,18 @@ var releaseStaffTargetLockScript = redis.NewScript(`
 	return 0
 `)
 
+// renewStaffTargetLockScript pushes the lock back to its full TTL (ARGV[2], in
+// milliseconds) only while it still holds the renewing card's token (ARGV[1]). It
+// returns 1 when it renewed and 0 when the lock holds another value, in which case
+// nothing is written.
+var renewStaffTargetLockScript = redis.NewScript(`
+	if redis.call("GET", KEYS[1]) == ARGV[1] then
+		redis.call("PEXPIRE", KEYS[1], ARGV[2])
+		return 1
+	end
+	return 0
+`)
+
 // staffLinksSignature identifies a set of linked groups: the first 16 hex
 // characters of the sha256 of the ascending group chat IDs joined with commas. A
 // card stores it when it is shown and Confirm compares it again, so a group that
@@ -150,6 +162,25 @@ func staffTargetLockHolder(target int64) (string, error) {
 		return "", nil
 	}
 	return holder, err
+}
+
+// renewStaffTargetLock pushes the target's lock back to its full staffTargetLockTTL
+// while it still holds the token of the card that is running. It reports whether
+// the lock was this card's. It never extends another card's lock, so a run can not
+// keep a stranger's hold alive.
+func renewStaffTargetLock(target int64, token string) (held bool, err error) {
+	client := cache.GetRedisClient()
+	if client == nil {
+		return false, errStaffCardNoRedis
+	}
+	ctx, cancel := cache.ContextWithTimeout()
+	defer cancel()
+	renewed, err := renewStaffTargetLockScript.Run(ctx, client, []string{staffTargetLockKey(target)},
+		token, staffTargetLockTTL.Milliseconds()).Int()
+	if err != nil {
+		return false, err
+	}
+	return renewed == 1, nil
 }
 
 // releaseStaffTargetLock frees the target's lock when the card with token holds
