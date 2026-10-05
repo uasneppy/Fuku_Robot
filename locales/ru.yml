@@ -2499,6 +2499,7 @@ staff_act_card_cancelled: "Отменено: {name}. Ничего не сдел�
 staff_log_admin_label: "Админ"
 staff_log_user_label: "Пользователь"
 staff_log_via_staff_group: "через группу персонала"
+staff_log_undoes: "отменяет {action} от {name}"
 staff_panel_recent_button: "📜 Последние действия"
 staff_history_title: "Последние действия персонала"
 staff_history_empty: "Действий персонала пока не записано."

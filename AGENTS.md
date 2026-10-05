@@ -158,7 +158,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own
   chat. Each group where an action was applied gets one post in its log channel under the admin category
   (`staff_log.go`), sent through `staffPaced` after the group's result is set, naming the issuer and target and saying
-  "via Staff Group" but never the Staff Group's title or ID. A failed post never changes that result.
+  "via Staff Group" but never the Staff Group's title or ID. A failed post never changes that result. Undos are
+  logged the same way, as `#STAFF_UNDO` through the shared `sendStaffLogPost`: one post per group where the undo
+  succeeded, sent after that group's undo result is stored, naming the presser (not the original issuer), the target
+  and what was undone, never the Staff Group; skipped and failed groups get no post.
 - Every staff run goes through `startStaffRun` with a `staffRunSpec`. Its coordinator goroutine is the only writer of
   the run's message, and the per-group hooks (record result, log post) run in the worker after `progress.set`.
 - Staff `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` never lift a ban by accident. `restrictChatMember` and
