@@ -670,4 +670,53 @@ func TestStaffActionTargetLockRenewedDuringRun(t *testing.T) {
 			t.Fatalf("target lock holder after the run = %q, want the key gone", holder)
 		}
 	})
+
+	t.Run("re-takes a lock that vanished", func(t *testing.T) {
+		_, token, finish := heldStaffRun(t)
+
+		// Redis lost the key mid-run; nobody else holds the target.
+		if err := cache.GetRedisClient().Del(cache.Context, staffTargetLockKey(staffTestTarget)).Err(); err != nil {
+			t.Fatalf("delete the lock: %v", err)
+		}
+		deadline := time.Now().Add(time.Second)
+		for targetLockHolder(t, staffTestTarget) != token && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		if holder := targetLockHolder(t, staffTestTarget); holder != token {
+			t.Fatalf("target lock holder = %q, want the running card %q to take it back", holder, token)
+		}
+		if ttl := targetLockPTTL(t, staffTestTarget); ttl <= staffTargetLockTTL-time.Minute {
+			t.Fatalf("target lock TTL = %s, want it above %s", ttl, staffTargetLockTTL-time.Minute)
+		}
+
+		finish()
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the run = %q, want the key gone", holder)
+		}
+	})
+
+	t.Run("leaves a foreign lock alone", func(t *testing.T) {
+		const foreign = "ffffffffffffffff"
+		_, _, finish := heldStaffRun(t)
+
+		// Another card's token replaces the lock; the run must not extend or take it.
+		if err := cache.GetRedisClient().Set(cache.Context, staffTargetLockKey(staffTestTarget), foreign, 2*time.Second).Err(); err != nil {
+			t.Fatalf("overwrite the lock: %v", err)
+		}
+		t.Cleanup(func() { cache.GetRedisClient().Del(cache.Context, staffTargetLockKey(staffTestTarget)) })
+		time.Sleep(100 * time.Millisecond)
+
+		if holder := targetLockHolder(t, staffTestTarget); holder != foreign {
+			t.Fatalf("target lock holder = %q, want the foreign card to keep %q", holder, foreign)
+		}
+		if ttl := targetLockPTTL(t, staffTestTarget); ttl > 2*time.Second {
+			t.Fatalf("target lock TTL = %s, want the foreign lock left at 2s or less", ttl)
+		}
+
+		finish()
+		if holder := targetLockHolder(t, staffTestTarget); holder != foreign {
+			t.Fatalf("target lock holder after the run = %q, want the foreign lock untouched", holder)
+		}
+	})
 }
