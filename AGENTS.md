@@ -24,7 +24,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Shutdown runs LIFO within 60 s. Register new drains *after* DB-close so they run before it.
 - `StopStaffActions` is one of those drains: it cancels running staff fan-outs, marks every unfinished group
   "interrupted by restart", delivers the final summary and returns within 30 s. A delivery still waiting out a 429
-  when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines.
+  when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines. A run cancelled by the
+  shutdown skips its remaining log posts, so a group applied just before it may have no post.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
@@ -133,8 +134,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   conditional. Staff tables are never part of backup/export/import/reset.
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
-  rechecked through `recheckLink`. No write ever targets the Staff Group, and nothing is posted into linked groups in
-  Phase 2.
+  rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own
+  chat. Each group where an action was applied gets one post in its log channel under the admin category
+  (`staff_log.go`), sent through `staffPaced` after the group's result is set, naming the issuer and target and saying
+  "via Staff Group" but never the Staff Group's title or ID. A failed post never changes that result.
+- Every staff run goes through `startStaffRun` with a `staffRunSpec`. Its coordinator goroutine is the only writer of
+  the run's message, and the per-group hooks (record result, log post) run in the worker after `progress.set`.
 - Staff `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` never lift a ban by accident. `restrictChatMember` and
   `unbanChatMember` replace the target's status server-side, so per group the target's live status decides the call:
   restrict goes only to a member or a restricted target (on a kicked target it would replace the ban), the
