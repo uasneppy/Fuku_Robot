@@ -429,6 +429,10 @@ func sleepStaffRetry(ctx context.Context, d time.Duration) bool {
 	}
 }
 
+// staffActionSleep waits out one retry. It is a variable so tests can install a
+// clock that checks each wait against the deadline of its context.
+var staffActionSleep = sleepStaffRetry
+
 // editStaffActionFinal puts the final text on the card, trying up to
 // staffActionFinalAttempts times. A 429 waits out Telegram's retry_after and tries
 // again; "message is not modified" counts as success (editStaffActionMessage);
@@ -440,7 +444,7 @@ func editStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int
 			return true
 		}
 		wait, limited := staffRetryAfterWait(err)
-		if !limited || attempt == staffActionFinalAttempts || !sleepStaffRetry(ctx, wait) {
+		if !limited || attempt == staffActionFinalAttempts || !staffActionSleep(ctx, wait) {
 			log.Warnf("[StaffActions] could not edit the final summary in chat %d: %v", chatID, err)
 			return false
 		}
@@ -457,7 +461,7 @@ func sendStaffSummaryPart(ctx context.Context, b *gotgbot.Bot, chatID int64, tex
 			return true
 		}
 		wait, limited := staffRetryAfterWait(err)
-		if !limited || attempt == staffActionFinalAttempts || !sleepStaffRetry(ctx, wait) {
+		if !limited || attempt == staffActionFinalAttempts || !staffActionSleep(ctx, wait) {
 			return false
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -229,6 +230,91 @@ func TestStaffActionAllSkippedTally(t *testing.T) {
 	for _, line := range summaryGroupLines(t, summary) {
 		if strings.HasPrefix(line, "⏳") {
 			t.Fatalf("a line is still pending: %q", line)
+		}
+	}
+}
+
+// withVirtualStaffSleep installs a staffActionSleep that never sleeps. It keeps the
+// total wait it has granted per context and refuses a wait that its context cannot
+// afford: one that is already over, or longer than what is left of the deadline
+// after the waits granted before. That checks the budget-versus-wait relationship
+// at production durations without sleeping for real.
+func withVirtualStaffSleep(t *testing.T) {
+	t.Helper()
+	var mu sync.Mutex
+	granted := make(map[context.Context]time.Duration)
+	previous := staffActionSleep
+	staffActionSleep = func(ctx context.Context, d time.Duration) bool {
+		if ctx.Err() != nil {
+			return false
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if deadline, ok := ctx.Deadline(); ok && granted[ctx]+d > time.Until(deadline) {
+			return false
+		}
+		granted[ctx] += d
+		return true
+	}
+	t.Cleanup(func() { staffActionSleep = previous })
+}
+
+func TestStaffActionFinalEditLongRetryAfter(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	seedMembers(env)
+	withStaffActionTimers(t, time.Hour, time.Second)
+	withVirtualStaffSleep(t)
+	// The first edit is the Confirm tap; the next two are the final edit's 429s.
+	env.fake.script("editMessageText", env.staffChat, nil, staffFake429(45), staffFake429(45))
+
+	_, msgID := env.startRun("/ban 4242")
+	env.waitRuns()
+
+	edits := env.edits(env.staffChat, msgID)
+	if got := len(edits) - 1; got != 3 {
+		t.Fatalf("final edit attempts = %d, want 3 (two 45 s 429s waited out, then success)", got)
+	}
+	if sent := env.fake.sentTo(env.staffChat); len(sent) != 1 {
+		t.Fatalf("messages to the Staff Group = %d, want only the card: the third attempt succeeded", len(sent))
+	}
+	last := fmt.Sprint(edits[len(edits)-1].Params["text"])
+	if strings.Contains(last, "⏳") || !strings.Contains(last, "Group A") {
+		t.Fatalf("last edit is not the final summary:\n%s", last)
+	}
+}
+
+func TestStaffActionFinalPartsOwnBudget(t *testing.T) {
+	env := newStaffActionEnv(t, 0)
+	env.addTitledGroups(120)
+	withStaffActionTimers(t, time.Hour, time.Second)
+	withVirtualStaffSleep(t)
+
+	// The edit meets a 60 s 429 on all three attempts (two full waits), then the
+	// fallback and every continuation meet one 60 s 429 each before they go through.
+	env.fake.script("editMessageText", env.staffChat, nil, staffFake429(60), staffFake429(60), staffFake429(60))
+	sends := []error{nil}
+	for i := 0; i < 12; i++ {
+		sends = append(sends, staffFake429(60), nil)
+	}
+	env.fake.script("sendMessage", env.staffChat, sends...)
+
+	env.startRun("/ban 4242")
+	env.waitRuns()
+
+	texts := env.sentTexts()
+	if len(texts) < 2 {
+		t.Fatalf("messages after the card = %d, want the fallback and at least one continuation", len(texts))
+	}
+	for i, part := range texts {
+		wantFits(t, part)
+		if strings.Contains(part, "⏳") {
+			t.Fatalf("part %d still has a pending line", i)
+		}
+	}
+	all := strings.Join(texts, "\n")
+	for i := range env.groups {
+		if n := strings.Count(all, summaryTitle(i)); n != 1 {
+			t.Fatalf("group %d appears %d times across the delivered parts, want once", i, n)
 		}
 	}
 }
