@@ -238,7 +238,7 @@ func startStaffActionRun(
 		final, continuation := renderStaffActionSummaryFinal(tr, card, results)
 		// Delivery never runs on the run's own context, which a shutdown may already
 		// have cancelled: each message opens a fresh budget of its own.
-		deliverStaffActionFinal(b, chatID, msgID, final, continuation)
+		deliverStaffActionFinal(b, chatID, msgID, final, continuation, time.Time{})
 		if err := setStaffActionCardState(card.Token, staffCardDone); err != nil {
 			log.Warnf("[StaffActions] mark card %s done: %v", card.Token, err)
 		}

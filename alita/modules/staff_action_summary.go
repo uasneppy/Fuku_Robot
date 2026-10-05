@@ -416,6 +416,16 @@ func staffRetryAfterWait(err error) (time.Duration, bool) {
 	return min(time.Duration(seconds)*staffActionEditRetryUnit, staffActionRetryAfterCap), true
 }
 
+// staffRetryAfterMaxSeconds is how many seconds of Telegram's retry_after count.
+// The value is clamped to it before it is multiplied, so an absurd retry_after
+// cannot overflow time.Duration into a negative wait.
+const staffRetryAfterMaxSeconds = 3600
+
+// staffRetryAfterHold is a stub until the green step.
+func staffRetryAfterHold(err error) (time.Duration, bool) {
+	return 0, false
+}
+
 // sleepStaffRetry waits d, or less when ctx ends first, and reports whether the
 // full wait elapsed.
 func sleepStaffRetry(ctx context.Context, d time.Duration) bool {
@@ -485,7 +495,8 @@ func newStaffDeliverContext() (context.Context, context.CancelFunc) {
 // so the result always arrives. Each continuation message follows in order
 // (STAFF-08); one that cannot be sent is logged and the rest still go out. Every
 // message has its own budget, so a long wait on one never starves the next.
-func deliverStaffActionFinal(b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string) {
+func deliverStaffActionFinal(b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string, notBefore time.Time) {
+	_ = notBefore
 	editCtx, cancelEdit := newStaffDeliverContext()
 	edited := editStaffActionFinal(editCtx, b, chatID, msgID, text)
 	cancelEdit()

@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -315,6 +316,102 @@ func TestStaffActionFinalPartsOwnBudget(t *testing.T) {
 	for i := range env.groups {
 		if n := strings.Count(all, summaryTitle(i)); n != 1 {
 			t.Fatalf("group %d appears %d times across the delivered parts, want once", i, n)
+		}
+	}
+}
+
+func TestStaffActionProgressBacksOffAfter429(t *testing.T) {
+	env := newStaffActionEnv(t, 8)
+	seedMembers(env)
+	withStaffActionTimers(t, 20*time.Millisecond, 5*time.Millisecond)
+	for i, group := range env.groups {
+		env.fake.setDelay("getChatMember", group, time.Duration(i+1)*25*time.Millisecond)
+	}
+
+	_, msgID := env.startRun("/ban 4242")
+	// The next card edit is a progress edit; Telegram holds it for 40 x 5 ms.
+	env.fake.script("editMessageText", env.staffChat, staffFake429(40))
+	env.waitRuns()
+
+	times := env.fake.requestTimes("editMessageText", env.staffChat)
+	if len(times) < 3 {
+		t.Fatalf("card edits = %d, want the Confirm edit, the rate-limited one and at least one more", len(times))
+	}
+	hold := 40 * staffActionEditRetryUnit
+	for i, at := range times[2:] {
+		if gap := at.Sub(times[1]); gap < hold-10*time.Millisecond {
+			t.Fatalf("edit %d came %s after the rate-limited one, want at least %s", i+2, gap, hold)
+		}
+	}
+	if final := env.lastEditText(env.staffChat, msgID); strings.Contains(final, "⏳") {
+		t.Fatalf("final summary still has a pending line:\n%s", final)
+	}
+}
+
+func TestStaffActionFinalEditWaitsForHold(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	seedMembers(env)
+	withStaffActionTimers(t, 20*time.Millisecond, 5*time.Millisecond)
+	env.fake.setDelay("getChatMember", env.groups[0], 30*time.Millisecond)
+	env.fake.setDelay("getChatMember", env.groups[1], 90*time.Millisecond)
+
+	_, msgID := env.startRun("/ban 4242")
+	// A 500 ms hold that outlasts the fan-out.
+	env.fake.script("editMessageText", env.staffChat, staffFake429(100))
+	env.waitRuns()
+
+	edits := env.edits(env.staffChat, msgID)
+	times := env.fake.requestTimes("editMessageText", env.staffChat)
+	if len(edits) < 3 || len(times) != len(edits) {
+		t.Fatalf("card edits = %d (%d timestamps), want the Confirm edit, the rate-limited progress edit and the final one",
+			len(edits), len(times))
+	}
+	if first := fmt.Sprint(edits[1].Params["text"]); !strings.Contains(first, "⏳") {
+		t.Fatalf("the rate-limited edit was not a progress edit:\n%s", first)
+	}
+	hold := 100 * staffActionEditRetryUnit
+	for i, at := range times[2:] {
+		if gap := at.Sub(times[1]); gap < hold-15*time.Millisecond {
+			t.Fatalf("edit %d came %s after the rate-limited one, want at least %s", i+2, gap, hold)
+		}
+	}
+	if final := env.lastEditText(env.staffChat, msgID); strings.Contains(final, "⏳") || !strings.Contains(final, "Group A") {
+		t.Fatalf("last edit is not the final summary:\n%s", final)
+	}
+	if sent := env.fake.sentTo(env.staffChat); len(sent) != 1 {
+		t.Fatalf("messages to the Staff Group = %d, want only the card: the final edit's first attempt succeeded", len(sent))
+	}
+}
+
+func TestStaffRetryAfterClamp(t *testing.T) {
+	withStaffActionTimers(t, time.Hour, time.Second)
+
+	huge := staffFake429(math.MaxInt64)
+	if wait, ok := staffRetryAfterWait(huge); !ok || wait != staffActionRetryAfterCap {
+		t.Fatalf("staffRetryAfterWait(MaxInt64) = %s, %v, want %s, true", wait, ok, staffActionRetryAfterCap)
+	}
+	if hold, ok := staffRetryAfterHold(huge); !ok || hold != staffRetryAfterMaxSeconds*staffActionEditRetryUnit {
+		t.Fatalf("staffRetryAfterHold(MaxInt64) = %s, %v, want %s, true", hold, ok, staffRetryAfterMaxSeconds*staffActionEditRetryUnit)
+	}
+
+	moderate := staffFake429(30)
+	if wait, ok := staffRetryAfterWait(moderate); !ok || wait != 30*time.Second {
+		t.Fatalf("staffRetryAfterWait(30) = %s, %v, want 30s, true", wait, ok)
+	}
+	if hold, ok := staffRetryAfterHold(moderate); !ok || hold != 30*time.Second {
+		t.Fatalf("staffRetryAfterHold(30) = %s, %v, want 30s, true", hold, ok)
+	}
+
+	for name, err := range map[string]error{
+		"nil":                  nil,
+		"a 400":                staffFakeError(400, "Bad Request: x"),
+		"a 429 without a wait": &gotgbot.TelegramError{Code: 429, Description: "Too Many Requests"},
+	} {
+		if _, ok := staffRetryAfterWait(err); ok {
+			t.Fatalf("staffRetryAfterWait reports a wait for %s", name)
+		}
+		if _, ok := staffRetryAfterHold(err); ok {
+			t.Fatalf("staffRetryAfterHold reports a hold for %s", name)
 		}
 	}
 }
