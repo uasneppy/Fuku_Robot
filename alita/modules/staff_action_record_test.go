@@ -3,8 +3,11 @@
 package modules
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,5 +177,339 @@ func TestStaffActionRecordFinalize(t *testing.T) {
 	}
 	if action.CreatedAt.IsZero() {
 		t.Fatal("created_at was not set")
+	}
+}
+
+// seedTargetInGroups puts the target into every group of env with the same record.
+func seedTargetInGroups(env *staffActionEnv, m staffFakeMember) {
+	for _, group := range env.groups {
+		member := m
+		env.fake.setMember(group, staffTestTarget, member)
+	}
+}
+
+func TestStaffActionRecordEveryKind(t *testing.T) {
+	now := time.Now().Unix()
+
+	// Every kind is recorded with the state the target had before it: run the
+	// command, then read the record fresh and compare.
+	type want struct {
+		action        string
+		priorStatus   string
+		priorIsMember bool
+		priorUntil    int64
+		reason        staffReason
+	}
+	run := func(t *testing.T, env *staffActionEnv, command string) (*models.StaffAction, []models.StaffActionGroup) {
+		t.Helper()
+		_, msgID := env.startRun(command)
+		env.waitRuns()
+		action, rows := recordOfCard(t, msgID)
+		if len(rows) != len(env.groups) {
+			t.Fatalf("group rows = %d, want %d", len(rows), len(env.groups))
+		}
+		return action, rows
+	}
+	check := func(t *testing.T, action *models.StaffAction, rows []models.StaffActionGroup, w want) {
+		t.Helper()
+		if action.Action != w.action {
+			t.Fatalf("action = %q, want %q", action.Action, w.action)
+		}
+		for _, row := range rows {
+			if row.Outcome != models.StaffActionOutcomeDone || row.Reason != string(w.reason) {
+				t.Fatalf("group %d = %q %q, want done %s", row.GroupChatID, row.Outcome, row.Reason, w.reason)
+			}
+			if row.PriorStatus != w.priorStatus || row.PriorIsMember != w.priorIsMember || row.PriorUntil != w.priorUntil {
+				t.Fatalf("group %d prior = %q member=%v until=%d, want %q member=%v until=%d",
+					row.GroupChatID, row.PriorStatus, row.PriorIsMember, row.PriorUntil,
+					w.priorStatus, w.priorIsMember, w.priorUntil)
+			}
+		}
+	}
+
+	t.Run("mute over a member", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		seedTargetInGroups(env, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		action, rows := run(t, env, "/mute 4242")
+		check(t, action, rows, want{"mute", gotgbot.ChatMemberStatusMember, true, 0, staffReasonMuted})
+		for _, row := range rows {
+			if row.PriorPermissions != "" {
+				t.Fatalf("a member's prior permissions = %q, want none", row.PriorPermissions)
+			}
+		}
+	})
+
+	t.Run("mute over a shorter mute", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		shorter := now + 3600
+		seedTargetInGroups(env, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: false, UntilDate: shorter,
+		})
+		action, rows := run(t, env, "/mute 4242 1d")
+		check(t, action, rows, want{"mute", gotgbot.ChatMemberStatusRestricted, true, shorter, staffReasonMuted})
+		if action.DurationSec != 86400 || action.UntilDate == 0 {
+			t.Fatalf("mute duration %ds until %d, want one day with an end date", action.DurationSec, action.UntilDate)
+		}
+	})
+
+	t.Run("unban over a ban", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		banEnds := now + 7200
+		seedTargetInGroups(env, staffFakeMember{Status: gotgbot.ChatMemberStatusKicked, UntilDate: banEnds})
+		action, rows := run(t, env, "/unban 4242")
+		check(t, action, rows, want{"unban", gotgbot.ChatMemberStatusKicked, false, banEnds, staffReasonUnbanned})
+	})
+
+	t.Run("unmute over a partial restriction", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		// The member cannot send text (so the staff's unmute applies) but keeps
+		// polls, invites and pins: only the stored permission set can put that back.
+		partial := gotgbot.ChatPermissions{
+			CanSendMessages:       false,
+			CanSendPhotos:         false,
+			CanSendVideos:         false,
+			CanSendOtherMessages:  false,
+			CanAddWebPagePreviews: false,
+			CanSendPolls:          true,
+			CanInviteUsers:        true,
+			CanPinMessages:        true,
+		}
+		until := now + 7200
+		seedTargetInGroups(env, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, UntilDate: until, Perms: &partial,
+		})
+		action, rows := run(t, env, "/unmute 4242")
+		check(t, action, rows, want{"unmute", gotgbot.ChatMemberStatusRestricted, true, until, staffReasonUnmuted})
+
+		// The three optional flags are stored as explicit false, since the live read
+		// carries them as plain booleans.
+		wantPerms := partial
+		wantPerms.CanReactToMessages = helpersPtrFalse()
+		wantPerms.CanEditTag = helpersPtrFalse()
+		wantPerms.CanManageTopics = helpersPtrFalse()
+		for _, row := range rows {
+			if got := priorPermissionsOf(t, row); !reflect.DeepEqual(got, wantPerms) {
+				t.Fatalf("group %d prior permissions = %+v, want exactly %+v", row.GroupChatID, got, wantPerms)
+			}
+			prior, err := staffPriorFromRow(row)
+			if err != nil || prior.Perms == nil || !reflect.DeepEqual(*prior.Perms, wantPerms) {
+				t.Fatalf("staffPriorFromRow = %+v, %v, want the same permission set", prior, err)
+			}
+		}
+	})
+
+	t.Run("kick over a member", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		seedTargetInGroups(env, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		action, rows := run(t, env, "/kick 4242")
+		check(t, action, rows, want{"kick", gotgbot.ChatMemberStatusMember, true, 0, staffReasonKicked})
+	})
+
+	t.Run("over-limit ban", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		seedTargetInGroups(env, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		action, rows := run(t, env, "/ban 4242 400d")
+		check(t, action, rows, want{"ban", gotgbot.ChatMemberStatusMember, true, 0, staffReasonBanned})
+		if action.UntilDate != 0 || !action.OverLimit || action.DurationAmount != 400 || action.DurationUnit != "d" {
+			t.Fatalf("over-limit ban stored until=%d over_limit=%v as %d%s, want 0, true, 400d",
+				action.UntilDate, action.OverLimit, action.DurationAmount, action.DurationUnit)
+		}
+	})
+}
+
+// helpersPtrFalse is a pointer to false, the shape a permission flag has after it
+// went through the record.
+func helpersPtrFalse() *bool {
+	v := false
+	return &v
+}
+
+// countActionRows counts staff_actions rows of the Staff Group whose summary is
+// the card message msgID.
+func countActionRows(t *testing.T, staffChat, msgID int64) int64 {
+	t.Helper()
+	var n int64
+	err := db.DB.Model(&models.StaffAction{}).
+		Where("staff_chat_id = ? AND summary_msg_id = ?", staffChat, msgID).Count(&n).Error
+	if err != nil {
+		t.Fatalf("count staff_actions: %v", err)
+	}
+	return n
+}
+
+func TestStaffActionRecordFailureFailsClosed(t *testing.T) {
+	t.Run("record create fails", func(t *testing.T) {
+		env := newStaffActionEnv(t, 3)
+		seedMembers(env)
+		previous := staffCreateActionRecord
+		staffCreateActionRecord = func(*models.StaffAction, []models.StaffActionGroup) error {
+			return errors.New("database is down")
+		}
+		t.Cleanup(func() { staffCreateActionRecord = previous })
+
+		env.send(env.issuer, "/ban 4242")
+		token, msgID := env.card()
+		env.tap(env.issuer, staffActRunConfirm, token, msgID)
+		env.waitRuns()
+
+		if text := env.lastEditText(env.staffChat, msgID); !strings.Contains(text, staffMarker("staff_act_abort_check_failed")) {
+			t.Fatalf("card = %q, want the could-not-check abort", text)
+		}
+		for _, group := range env.groups {
+			if writes := env.writes(group); len(writes) != 0 {
+				t.Fatalf("write calls in group %d = %+v, want none without a record", group, writes)
+			}
+		}
+		if n := countActionRows(t, env.staffChat, msgID); n != 0 {
+			t.Fatalf("staff_actions rows = %d, want 0", n)
+		}
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock is still held by %q after the abort", holder)
+		}
+	})
+
+	t.Run("prior write fails in one group", func(t *testing.T) {
+		env := newStaffActionEnv(t, 3)
+		seedMembers(env)
+		failing := env.groups[1]
+		previous := staffSavePrior
+		staffSavePrior = func(actionID uint, groupChatID int64, prior staff.ActionPrior) error {
+			if groupChatID == failing {
+				return errors.New("database is down")
+			}
+			return previous(actionID, groupChatID, prior)
+		}
+		t.Cleanup(func() { staffSavePrior = previous })
+
+		summary, msgID := env.runStaffCommand("/ban 4242")
+
+		if line := summaryLine(t, summary, "Group B"); !strings.Contains(line, staffMarker("staff_act_fail_internal")) {
+			t.Fatalf("line for Group B = %q, want the internal-error reason", line)
+		}
+		if writes := env.writes(failing); len(writes) != 0 {
+			t.Fatalf("write calls in the failing group = %+v, want none: its prior state was not stored", writes)
+		}
+		wantDoneLine(t, summary, "Group A")
+		wantDoneLine(t, summary, "Group C")
+		_, rows := recordOfCard(t, msgID)
+		for _, row := range rows {
+			if row.GroupChatID == failing {
+				if row.Outcome != models.StaffActionOutcomeFailed || row.Reason != string(staffReasonFailInternal) {
+					t.Fatalf("failing group row = %q %q, want failed fail_internal", row.Outcome, row.Reason)
+				}
+				continue
+			}
+			if row.Outcome != models.StaffActionOutcomeDone {
+				t.Fatalf("group %d row = %q, want done", row.GroupChatID, row.Outcome)
+			}
+		}
+	})
+}
+
+func TestStopStaffActionsRecordsInterrupted(t *testing.T) {
+	env := newStaffActionEnv(t, 8)
+	seedMembers(env)
+	withStaffActionTimers(t, time.Hour, 5*time.Millisecond)
+	t.Cleanup(func() {
+		staffActionsMu.Lock()
+		defer staffActionsMu.Unlock()
+		staffActionsCtx, staffActionsCancel = context.WithCancel(context.Background())
+	})
+	for _, group := range env.groups {
+		env.fake.setDelay("getChatMember", group, 200*time.Millisecond)
+	}
+
+	_, msgID := env.startRun("/ban 4242")
+	time.Sleep(50 * time.Millisecond)
+	StopStaffActions()
+	env.waitRuns()
+
+	action, rows := recordOfCard(t, msgID)
+	if action.FinishedAt == nil {
+		t.Fatal("finished_at is nil after a shutdown finalized the run")
+	}
+	interrupted := 0
+	for _, row := range rows {
+		if row.Outcome == models.StaffActionOutcomePending {
+			t.Fatalf("group %d is still pending in the record", row.GroupChatID)
+		}
+		if row.Outcome == models.StaffActionOutcomeFailed && row.Reason == string(staffReasonFailInterrupted) {
+			interrupted++
+		}
+	}
+	if interrupted == 0 {
+		t.Fatalf("no group reads failed fail_interrupted: %+v", rows)
+	}
+}
+
+func TestStaffActionRecordTwice(t *testing.T) {
+	env := newStaffActionEnv(t, 3)
+	seedMembers(env)
+
+	_, firstMsg := env.startRun("/ban 4242")
+	env.waitRuns()
+	_, secondMsg := env.startRun("/unban 4242")
+	env.waitRuns()
+
+	first, firstRows := recordOfCard(t, firstMsg)
+	second, secondRows := recordOfCard(t, secondMsg)
+	if first.ID == second.ID {
+		t.Fatalf("both actions share record %d, want two separate records", first.ID)
+	}
+	if first.Action != "ban" || second.Action != "unban" {
+		t.Fatalf("actions = %q, %q, want ban then unban", first.Action, second.Action)
+	}
+	if len(firstRows) != 3 || len(secondRows) != 3 {
+		t.Fatalf("group rows = %d and %d, want 3 each", len(firstRows), len(secondRows))
+	}
+	for _, row := range secondRows {
+		if row.ActionID != second.ID {
+			t.Fatalf("group row of action %d belongs to action %d", second.ID, row.ActionID)
+		}
+	}
+}
+
+func TestStaffActionRecordAllSkipped(t *testing.T) {
+	env := newStaffActionEnv(t, 3)
+	for _, group := range env.groups {
+		env.fake.setMember(group, env.issuer.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	}
+
+	_, msgID := env.startRun("/ban 4242")
+	env.waitRuns()
+
+	action, rows := recordOfCard(t, msgID)
+	if len(rows) != 3 {
+		t.Fatalf("group rows = %d, want 3", len(rows))
+	}
+	for _, row := range rows {
+		if row.Outcome != models.StaffActionOutcomeSkipped {
+			t.Fatalf("group %d = %q, want skipped", row.GroupChatID, row.Outcome)
+		}
+	}
+	if action.FinishedAt == nil {
+		t.Fatal("finished_at is nil: an all-skipped action is still a finished record")
+	}
+	if action.Reason != "" {
+		t.Fatalf("reason = %q, want empty for a command without a reason", action.Reason)
+	}
+}
+
+func TestStaffActionRecordNoRecordOnAbort(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	seedMembers(env)
+	env.send(env.issuer, "/ban 4242")
+	token, msgID := env.card()
+	third := env.addLinkedGroup("Group C")
+	env.fake.setMember(third, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+	env.waitRuns()
+
+	if text := env.lastEditText(env.staffChat, msgID); !strings.Contains(text, staffMarker("staff_act_abort_links_changed")) {
+		t.Fatalf("card = %q, want the links-changed abort", text)
+	}
+	if n := countActionRows(t, env.staffChat, msgID); n != 0 {
+		t.Fatalf("staff_actions rows = %d, want 0: a card that aborts before the run leaves no record", n)
 	}
 }
