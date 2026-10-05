@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Staff Audit and Undo",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "4",
@@ -54,5 +54,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 03 of 9 · 22% · executing"
   },
-  "updated_at": "2026-10-05T17:22:09.998Z"
+  "updated_at": "2026-10-05T17:44:49.630Z"
 }
