@@ -1,18 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 02-staff-actions-across-groups
 source: [02-VERIFICATION.md]
 started: 2026-10-05T11:28:45Z
-updated: 2026-10-05T11:42:59Z
+updated: 2026-10-05T11:43:14Z
 ---
 
 ## Current Test
 
-number: 4
-name: Anonymous admin posts /ban in the Staff Group
-expected: |
-  Reply asking to post as yourself, no card, no action
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -30,14 +26,14 @@ result: pass
 
 ### 4. Anonymous admin posts /ban in the Staff Group
 expected: Reply asking to post as yourself, no card, no action
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 4
-passed: 3
+passed: 4
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
