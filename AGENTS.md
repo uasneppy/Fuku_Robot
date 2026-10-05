@@ -114,6 +114,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
   rechecked through `recheckLink`. No write ever targets the Staff Group, and nothing is posted into linked groups in
   Phase 2.
+- Staff `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` never lift a ban by accident. `restrictChatMember` and
+  `unbanChatMember` replace the target's status server-side, so per group the target's live status decides the call:
+  restrict goes only to a member or a restricted target (on a kicked target it would replace the ban), the
+  member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
+  `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
+  `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
 
 ## Go rules
 
