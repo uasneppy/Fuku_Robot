@@ -76,7 +76,7 @@ func replyStaffAction(b *gotgbot.Bot, msg *gotgbot.Message, text string) {
 // applied here: the card's Confirm button, pressed by the issuer, does the work.
 // Every path inside a Staff Group ends the update with ext.EndGroups, except a
 // stale gate, which falls through to the per-group command.
-func (moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec staffCommandSpec) error {
+func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec staffCommandSpec) error {
 	defer error_handling.RecoverFromPanic("handleStaffAction", "StaffActions")
 
 	msg := ctx.EffectiveMessage

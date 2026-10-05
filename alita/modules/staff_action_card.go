@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"html"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -306,18 +308,22 @@ func deleteStaffActionCard(token string) {
 	}
 }
 
-// staffActionCardKeyboard builds the card's Confirm button. ok is false when the
-// button data or its label cannot be produced, in which case the card must not be
-// sent: an empty callback or label makes Telegram reject the whole message.
+// staffActionCardKeyboard builds the card's Confirm and Cancel buttons on one
+// row (D-05). ok is false when any button data or label cannot be produced, in
+// which case the card must not be sent: an empty callback or label makes Telegram
+// reject the whole message.
 func staffActionCardKeyboard(tr *i18n.Translator, token string) (gotgbot.InlineKeyboardMarkup, bool) {
 	var keyboard gotgbot.InlineKeyboardMarkup
 	confirmData := encodeCallbackData(staffCallbackNamespace, map[string]string{"a": staffActRunConfirm, "t": token})
+	cancelData := encodeCallbackData(staffCallbackNamespace, map[string]string{"a": staffActRunCancel, "t": token})
 	confirmLabel, _ := tr.GetString("staff_btn_confirm")
-	if confirmData == "" || confirmLabel == "" {
+	cancelLabel, _ := tr.GetString("staff_btn_cancel")
+	if confirmData == "" || cancelData == "" || confirmLabel == "" || cancelLabel == "" {
 		return keyboard, false
 	}
 	keyboard.InlineKeyboard = [][]gotgbot.InlineKeyboardButton{{
 		{Text: confirmLabel, CallbackData: confirmData},
+		{Text: cancelLabel, CallbackData: cancelData},
 	}}
 	return keyboard, true
 }
@@ -421,10 +427,56 @@ func loadStaffCardForTap(
 	return card
 }
 
+// staffActionCancel handles the Cancel button. Only the issuer's tap cancels, and
+// only while the card is pending. The card is edited to say who cancelled and its
+// buttons go away; it is never deleted (D-08), so the staff can see an action was
+// considered and dropped.
+func (m moduleStruct) staffActionCancel(
+	b *gotgbot.Bot,
+	query *gotgbot.CallbackQuery,
+	tr *i18n.Translator,
+	fields map[string]string,
+) error {
+	card := loadStaffCardForTap(b, query, tr, fields)
+	if card == nil {
+		return ext.EndGroups
+	}
+
+	claim, state, err := transitionStaffActionCard(card.Token, query.From.Id, staffCardCancelled, true)
+	if err != nil {
+		log.Warnf("[StaffActions] cancel card %s: %v", card.Token, err)
+		text, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, text, true)
+		return ext.EndGroups
+	}
+	if claim != staffClaimOK {
+		answerStaffCardClaim(b, query, tr, card, claim, state)
+		return ext.EndGroups
+	}
+	answerStaffCallback(b, query, "", false)
+
+	staffTr := staffChatTranslator(card.StaffChat)
+	cancelled, _ := staffTr.GetString("staff_act_card_cancelled", i18n.TranslationParams{"name": staffUserToken})
+	cancelled = strings.Replace(cancelled, staffUserToken, html.EscapeString(staffFullName(&query.From)), 1)
+	chat := query.Message.GetChat()
+	if err := editStaffActionMessage(b, chat.Id, query.Message.GetMessageId(), staffActionHeader(staffTr, card)+"\n\n"+cancelled); err != nil {
+		log.Warnf("[StaffActions] edit cancelled card in chat %d: %v", chat.Id, err)
+	}
+	return ext.EndGroups
+}
+
+// staffFullName is a user's first name followed by their last name, if any.
+func staffFullName(u *gotgbot.User) string {
+	if u.LastName == "" {
+		return u.FirstName
+	}
+	return u.FirstName + " " + u.LastName
+}
+
 // staffActionConfirm handles the Confirm button. Only the issuer's tap moves the
 // card to running, and only once; every live check then runs before the first
 // write, and each failure ends the card with the reason shown on it.
-func (moduleStruct) staffActionConfirm(
+func (m moduleStruct) staffActionConfirm(
 	b *gotgbot.Bot,
 	query *gotgbot.CallbackQuery,
 	tr *i18n.Translator,

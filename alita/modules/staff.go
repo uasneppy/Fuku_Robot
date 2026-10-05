@@ -263,6 +263,8 @@ func (m moduleStruct) staffCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 		return m.staffPanelPage(b, query, tr, decoded.Fields)
 	case staffActRunConfirm:
 		return m.staffActionConfirm(b, query, tr, decoded.Fields)
+	case staffActRunCancel:
+		return m.staffActionCancel(b, query, tr, decoded.Fields)
 	default:
 		text, _ := tr.GetString("staff_cb_expired")
 		answerStaffCallback(b, query, text, false)
