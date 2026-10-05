@@ -68,7 +68,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   forged or replayed button naming another Staff Group's record shows nothing. A zero, negative, non-numeric or
   over-63-bit ID is answered as expired before any read. The view reads only the audit record and the current link list
   and makes no Telegram call to linked groups; an unfinished record's stale pending groups are shown as interrupted
-  without writing anything.
+  without writing anything. While `staffActionUndoable` holds it also shows the same `a=ya&r=<record id>` Undo button as
+  the summary, above Back; that press goes through `staffUndoAsk` like any other, so every undo check runs again and the
+  button grants nothing by itself. Once an undo is claimed the button is gone and the view shows who undid it and each
+  group's undo result.
 
 ## Permissions
 
