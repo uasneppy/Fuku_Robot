@@ -2580,7 +2580,7 @@ staff_help_msg: |
   × /unlinkstaff: Desvincula este grupo do seu Grupo de Staff (apenas o criador dos dois grupos).
 
   *No Grupo de Staff:*
-  × /staff: Mostra o ID de chat do Grupo de Staff e os grupos vinculados. Carregue em Desvincular ao lado de um grupo para o desvincular (apenas o criador dos dois grupos).
+  × /staff: Mostra o ID de chat do Grupo de Staff e os grupos vinculados. Carregue em Desvincular ao lado de um grupo para o desvincular (apenas o criador dos dois grupos). Carregue em Ações recentes para ver as ações de staff passadas deste Grupo de Staff e como correu em cada grupo.
 
   *Ações do staff (no Grupo de Staff):*
   × /ban utilizador [duração] [motivo]: Bane o utilizador em todos os grupos associados. O utilizador é um ID numérico, um @username que eu já tenha visto ou uma menção. A duração é um número seguido de m, h, d ou w, e mais de 366 dias significa permanente.
@@ -2593,6 +2593,8 @@ staff_help_msg: |
 
   Cada ação mostra primeiro um cartão. Só quem enviou o comando pode carregar em Confirmar ou Cancelar, e o cartão expira passados 5 minutos.
   Só atuo nos grupos associados onde é administrador com permissão para restringir membros neste momento, nunca contra os administradores ou o dono de um grupo, e o resultado indica cada grupo como feito, ignorado ou falhado.
+  Cada resumo terminado tem um botão "↩ Desfazer em todos", também oferecido em Ações recentes. Qualquer membro do Grupo de Staff pode carregar nele, quem carregou confirma, e cada grupo volta ao que era só onde essa pessoa pode restringir membros neste momento. Os grupos alterados entretanto ficam como estão. Uma expulsão não pode ser desfeita.
+  Cada ação aplicada e cada anulação é publicada no canal de registo do grupo onde foi aplicada (categoria de registo de admin).
   /sban, /dban, /skick, /dkick, /smute e /dmute não são usados aqui.
   Envie estes comandos como si próprio, não de forma anónima.
 staff_set_done: "Este grupo agora é um Grupo de Staff. ID do chat: <code>{chat_id}</code>"

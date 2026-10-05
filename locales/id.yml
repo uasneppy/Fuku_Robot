@@ -2608,7 +2608,7 @@ staff_help_msg: |
   × /unlinkstaff: Putuskan tautan grup ini dari Grup Staf-nya (hanya pembuat kedua grup).
 
   *Di Grup Staf:*
-  × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung. Tekan Putuskan di samping grup untuk memutus tautannya (hanya pembuat kedua grup).
+  × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung. Tekan Putuskan di samping grup untuk memutus tautannya (hanya pembuat kedua grup). Tekan Aksi terbaru untuk melihat aksi staf sebelumnya di Grup Staf ini dan bagaimana hasil tiap grup.
 
   *Aksi staf (di Grup Staf):*
   × /ban pengguna [durasi] [alasan]: Blokir pengguna di semua grup yang terhubung. Pengguna adalah ID numerik, @username yang pernah saya lihat, atau sebuah mention. Durasi adalah angka diikuti m, h, d, atau w, dan lebih dari 366 hari berarti permanen.
@@ -2621,6 +2621,8 @@ staff_help_msg: |
 
   Setiap aksi menampilkan kartu terlebih dahulu. Hanya orang yang mengirim perintah yang bisa menekan Konfirmasi atau Batal, dan kartu kedaluwarsa setelah 5 menit.
   Saya hanya bertindak di grup terhubung tempat Anda saat ini menjadi admin yang boleh membatasi anggota, tidak pernah terhadap admin atau pemilik grup, dan hasilnya mencantumkan setiap grup sebagai selesai, dilewati, atau gagal.
+  Setiap ringkasan yang selesai punya tombol "↩ Batalkan di semua grup", yang juga ditawarkan di Aksi terbaru. Anggota Grup Staf mana pun boleh menekannya, orang yang menekannya yang mengonfirmasi, dan setiap grup dikembalikan seperti semula hanya di tempat orang itu saat ini boleh membatasi anggota. Grup yang sudah berubah sejak itu dibiarkan. Kick tidak bisa dibatalkan.
+  Setiap aksi yang diterapkan dan setiap pembatalan diposting ke kanal log grup tempat aksi itu diterapkan (kategori log admin).
   /sban, /dban, /skick, /dkick, /smute, dan /dmute tidak dipakai di sini.
   Kirim perintah ini atas nama Anda sendiri, bukan secara anonim.
 staff_set_done: "Grup ini sekarang menjadi Grup Staf. ID obrolan: <code>{chat_id}</code>"

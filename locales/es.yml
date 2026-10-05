@@ -2618,7 +2618,7 @@ staff_help_msg: |
   × /unlinkstaff: Desvincula este grupo de su Grupo de Staff (solo el creador de ambos grupos).
 
   *En el Grupo de Staff:*
-  × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados. Pulsa Desvincular junto a un grupo para desvincularlo (solo el creador de ambos grupos).
+  × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados. Pulsa Desvincular junto a un grupo para desvincularlo (solo el creador de ambos grupos). Pulsa Acciones recientes para ver las acciones de staff pasadas de este Grupo de Staff y cómo salió cada grupo.
 
   *Acciones de staff (en el Grupo de Staff):*
   × /ban usuario [duración] [motivo]: Banea al usuario en todos los grupos vinculados. El usuario es un ID numérico, un @username que haya visto o una mención. La duración es un número seguido de m, h, d o w, y más de 366 días significa permanente.
@@ -2631,6 +2631,8 @@ staff_help_msg: |
 
   Cada acción muestra primero una tarjeta. Solo quien envió el comando puede pulsar Confirmar o Cancelar, y la tarjeta caduca a los 5 minutos.
   Solo actúo en los grupos vinculados donde eres administrador con permiso para restringir miembros en este momento, nunca contra los administradores o el propietario de un grupo, y el resultado muestra cada grupo como hecho, omitido o fallido.
+  Cada resumen terminado tiene un botón "↩ Deshacer en todos", que también se ofrece en Acciones recientes. Cualquier miembro del Grupo de Staff puede pulsarlo, quien lo pulsó lo confirma, y cada grupo vuelve a como estaba solo donde esa persona puede restringir miembros en ese momento. Los grupos que han cambiado desde entonces se dejan como están. Una expulsión no se puede deshacer.
+  Cada acción aplicada y cada deshacer se publica en el canal de registro del grupo donde se aplicó (categoría de registro de admin).
   /sban, /dban, /skick, /dkick, /smute y /dmute no se usan aquí.
   Envía estos comandos como tú mismo, no de forma anónima.
 staff_set_done: "Este grupo ahora es un Grupo de Staff. ID del chat: <code>{chat_id}</code>"
