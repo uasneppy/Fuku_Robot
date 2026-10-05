@@ -645,7 +645,7 @@ func TestStaffUndoAccess(t *testing.T) {
 
 		env.tapUndoCard(env.issuer, undoConfirmCode, token, cardMsgID)
 
-		if text, alert := env.lastAnswer(); text != staffMarker("staff_act_card_issuer_only") || !alert {
+		if text, alert := env.lastAnswer(); text != staffMarker("staff_undo_card_presser_only") || !alert {
 			t.Fatalf("answer to another member's Confirm = %q alert=%v, want the only-the-presser alert", text, alert)
 		}
 		if state := cardState(t, token); state != staffCardPending {

@@ -25,7 +25,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `StopStaffActions` is one of those drains: it cancels running staff fan-outs, marks every unfinished group
   "interrupted by restart", delivers the final summary and returns within 30 s. A delivery still waiting out a 429
   when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines. A run cancelled by the
-  shutdown skips its remaining log posts, so a group applied just before it may have no post.
+  shutdown skips its remaining log posts, so a group applied just before it may have no post. Undo runs join the
+  same drain: their final record write (`FinalizeUndo`, through `db.DB`, never the cancelled run context) and summary
+  delivery happen inside the same 30 s as a staff action's, and an unfinished group is recorded `fail_interrupted`.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
@@ -59,6 +61,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Undo is `a=ya&r=<record id>` (the button on a finished summary, any live Staff Group member) and `a=yc` / `a=yn&t=<token>`
   (the undo card's Confirm and Cancel, Confirm only by the member who pressed Undo). The staff action Confirm (`xc`)
   refuses an undo card and the undo Confirm refuses an action card, so a replica on older code never runs an undo card.
+  A press from a service identity (`staffServiceUserIDs`) is refused with "post as yourself" at Ask and Confirm before
+  any lookup, and another member's tap on an undo card gets the presser-only alert.
 - The history detail view is `a=dt&r=<record id>&o=<offset>` (`r` is the `staff_actions` row ID, `o` the list offset
   Back returns to). The record is loaded fresh and refused unless its `staff_chat_id` is the pressed message's chat, so a
   forged or replayed button naming another Staff Group's record shows nothing. A zero, negative, non-numeric or
@@ -92,7 +96,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
   TTL, taken at Confirm, renewed every 10 minutes (`staffTargetLockRenewEvery`) by the run's coordinator through a
   compare-and-set on that token while the fan-out runs (a vanished key is re-taken, another card's lock is never
-  touched), and released by compare-and-delete with that token when the run ends or the Confirm aborts.
+  touched), and released by compare-and-delete with that token when the run ends or the Confirm aborts. An undo's
+  Confirm takes the same lock, so an undo and a staff action on one person never run at once; the loser is answered
+  "target busy" and its card stays pending.
 - `alita:staff:pace:next` and `alita:staff:pace:block` are the fleet-wide Telegram pacing for staff fan-outs: a slot
   reservation plus a shared `retry_after` block. The block keeps Telegram's full `retry_after`; a call whose slot is
   more than `MaxWait` (60 s) away fails at once as rate limited, with no Telegram request and without taking the slot.
