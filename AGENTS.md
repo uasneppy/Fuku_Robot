@@ -38,6 +38,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   command chats may disable. Do not add replies for failed checks; the pipeline sends them.
 - Anonymous admins bypass `WrapCommand`. Admin commands that must work for them also need
   `RegisterAnonymousAdminHandler` + `anonPipelineHandler`.
+- The `StaffActions` module (priority 65) registers raw `handlers.NewCommand` interceptors at group 0 ahead of Bans (70)
+  and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
+  `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
+  rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
 
 ## Callbacks
@@ -62,6 +66,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Two packages are named `cache`; the loader and generation guards are in `alita/db/cache`, not `alita/utils/cache`.
 - Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:staff:*`) sit outside the `alita:cache:` prefix;
   `CLEAR_CACHE_ON_STARTUP` does not clear them.
+- `alita:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
+  1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -104,6 +110,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The staff sweeper (`StartStaffSweeper`/`StopStaffSweeper`) rechecks every Staff Group link hourly (first run 1-5 min
   after start) behind `SETNX alita:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
   conditional. Staff tables are never part of backup/export/import/reset.
+- StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
+  answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
+  rechecked through `recheckLink`. No write ever targets the Staff Group, and nothing is posted into linked groups in
+  Phase 2.
 
 ## Go rules
 
