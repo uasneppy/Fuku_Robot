@@ -276,9 +276,9 @@ func staffPanelTextFor(tr *i18n.Translator, v staffPanelView) (string, []staffLi
 // text has the help, the chat ID, the page's linked groups with their live
 // status, a legend and the time of the check, and stays within
 // staffPanelMaxUTF16 UTF-16 code units. The keyboard has the Add group button
-// first (when the bot has a username), then Refresh, then one Unlink button per
-// group shown, then Prev and Next when there are other pages. page is clamped
-// into range.
+// first (when the bot has a username), then Refresh, then Recent actions, then one
+// Unlink button per group shown, then Prev and Next when there are other pages.
+// page is clamped into range.
 func renderStaffPanel(
 	tr *i18n.Translator,
 	staffGroup models.StaffGroup,
@@ -313,6 +313,9 @@ func renderStaffPanel(
 	}
 	if refresh, ok := staffRefreshButton(tr, page); ok {
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []gotgbot.InlineKeyboardButton{refresh})
+	}
+	if recent, ok := staffRecentButton(tr); ok {
+		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []gotgbot.InlineKeyboardButton{recent})
 	}
 	for _, row := range shown {
 		if button, ok := staffUnlinkButton(tr, row.Link); ok {

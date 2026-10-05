@@ -52,6 +52,8 @@ const (
 	staffActPage          = "pg"
 	staffActRunConfirm    = "xc"
 	staffActRunCancel     = "xn"
+	// staffActRecent is the history list; field o is the offset of the first entry.
+	staffActRecent = "rc"
 )
 
 // staffGroupsToken stands in for the group list while the translation is
@@ -265,6 +267,8 @@ func (m moduleStruct) staffCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 		return m.staffActionConfirm(b, query, tr, decoded.Fields)
 	case staffActRunCancel:
 		return m.staffActionCancel(b, query, tr, decoded.Fields)
+	case staffActRecent:
+		return m.staffHistoryList(b, query, tr, decoded.Fields)
 	default:
 		text, _ := tr.GetString("staff_cb_expired")
 		answerStaffCallback(b, query, text, false)

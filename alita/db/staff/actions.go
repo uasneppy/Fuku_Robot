@@ -174,14 +174,57 @@ type ActionTally struct {
 	Done, Skipped, Failed, Pending int
 }
 
-// ListActionsFresh is not implemented yet.
+// ListActionsFresh lists one Staff Group's staff actions, newest first, straight
+// from the database. The order is the record ID descending, so two actions created
+// in the same second keep a stable order. Only rows of staffChatID are returned.
 func ListActionsFresh(staffChatID int64, offset, limit int) ([]models.StaffAction, error) {
-	return nil, nil
+	var rows []models.StaffAction
+	err := db.DB.Where("staff_chat_id = ?", staffChatID).
+		Order("id DESC").Offset(offset).Limit(limit).Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Staff] ListActionsFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "list staff actions of chat %d", staffChatID)
+	}
+	return rows, nil
 }
 
-// TallyActionGroups is not implemented yet.
+// TallyActionGroups counts the group rows of each given action by outcome in one
+// query. An action with no group rows is absent from the map, and an empty ID list
+// returns an empty map without a query.
 func TallyActionGroups(actionIDs []uint) (map[uint]ActionTally, error) {
-	return map[uint]ActionTally{}, nil
+	tallies := make(map[uint]ActionTally, len(actionIDs))
+	if len(actionIDs) == 0 {
+		return tallies, nil
+	}
+	var counts []struct {
+		ActionID uint
+		Outcome  string
+		N        int
+	}
+	err := db.DB.Model(&models.StaffActionGroup{}).
+		Select("action_id, outcome, COUNT(*) AS n").
+		Where("action_id IN ?", actionIDs).
+		Group("action_id, outcome").
+		Scan(&counts).Error
+	if err != nil {
+		log.Errorf("[Staff] TallyActionGroups: %v", err)
+		return nil, alitaerrors.Wrapf(err, "tally groups of %d staff actions", len(actionIDs))
+	}
+	for _, count := range counts {
+		tally := tallies[count.ActionID]
+		switch count.Outcome {
+		case models.StaffActionOutcomeDone:
+			tally.Done += count.N
+		case models.StaffActionOutcomeSkipped:
+			tally.Skipped += count.N
+		case models.StaffActionOutcomeFailed:
+			tally.Failed += count.N
+		default:
+			tally.Pending += count.N
+		}
+		tallies[count.ActionID] = tally
+	}
+	return tallies, nil
 }
 
 // ListActionGroupsFresh lists the per-group rows of one staff action in the order
