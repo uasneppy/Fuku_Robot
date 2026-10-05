@@ -3,13 +3,16 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
@@ -339,4 +342,300 @@ func TestStaffUndoOutsider(t *testing.T) {
 			t.Fatalf("a presser who left made %d unban call(s)", got)
 		}
 	})
+}
+
+func TestStaffUndoOnce(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	bob := env.undoPresser("Bob")
+	carol := env.undoMember("Carol", 2)
+	action, msgID := env.undoFinishedBan()
+
+	// Two cards for one record: each press is allowed, only one confirm can win.
+	bobToken, bobMsg := env.askUndo(bob, msgID, action.ID)
+	carolToken, carolMsg := env.askUndo(carol, msgID, action.ID)
+	if bobToken == carolToken || bobMsg == carolMsg {
+		t.Fatal("two presses shared one card")
+	}
+
+	env.tapUndoCard(bob, undoConfirmCode, bobToken, bobMsg)
+	env.waitRuns()
+	unbansAfterBob := env.unbansIn()
+	if unbansAfterBob != len(env.groups) {
+		t.Fatalf("unban calls after Bob's undo = %d, want one per group", unbansAfterBob)
+	}
+	writesOf := func() int {
+		total := len(env.writes(env.staffChat))
+		for _, group := range env.groups {
+			total += len(env.writes(group))
+		}
+		return total
+	}
+	writesBefore := writesOf()
+
+	env.tapUndoCard(carol, undoConfirmCode, carolToken, carolMsg)
+	env.waitRuns()
+
+	text := env.lastEditText(env.staffChat, carolMsg)
+	if !strings.Contains(text, staffMarker("staff_undo_already")) || !strings.Contains(text, "Bob") {
+		t.Fatalf("Carol's card did not say the action was already undone by Bob:\n%s", text)
+	}
+	if state := cardState(t, carolToken); state != staffCardAborted {
+		t.Fatalf("Carol's card state = %q, want %q", state, staffCardAborted)
+	}
+	if got := env.unbansIn(); got != unbansAfterBob {
+		t.Fatalf("Carol's card made %d more unban call(s), want none", got-unbansAfterBob)
+	}
+	if got := writesOf(); got != writesBefore {
+		t.Fatalf("Carol's card made %d write call(s), want none", got-writesBefore)
+	}
+	done, _ := recordOfCard(t, msgID)
+	if done.UndoBy == nil || *done.UndoBy != bob.Id {
+		t.Fatalf("record undo_by = %v, want Bob %d", done.UndoBy, bob.Id)
+	}
+
+	// The Undo button of the original answers the same.
+	before := len(env.fake.sentTo(env.staffChat))
+	env.tapData(carol, env.staffChatObj(), msgID,
+		encodeCallbackData(staffCallbackNamespace, map[string]string{"a": undoAskCode, "r": fmt.Sprint(action.ID)}))
+	if answer, _ := env.lastAnswer(); !strings.Contains(answer, staffMarker("staff_undo_already")) {
+		t.Fatalf("answer to Undo on an undone action = %q, want the already-undone text", answer)
+	}
+	if got := len(env.fake.sentTo(env.staffChat)); got != before {
+		t.Fatalf("Undo on an undone action posted %d message(s), want none", got-before)
+	}
+}
+
+func TestStaffUndoOnceAcrossReplicas(t *testing.T) {
+	a := newStaffActionEnv(t, 2)
+	b := a.otherReplica()
+	bob := a.undoPresser("Bob")
+	carol := a.undoMember("Carol", 2)
+	// Replica B sees the same live state as A: the target banned, Bob and Carol
+	// administrators with the restrict right in every group.
+	for _, group := range a.groups {
+		b.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusKicked})
+	}
+	b.undoMember("Bob", 1)
+	b.undoMember("Carol", 2)
+	action, msgID := a.undoFinishedBan()
+
+	// Both cards are created through replica A and live in the shared Redis.
+	bobToken, bobMsg := a.askUndo(bob, msgID, action.ID)
+	carolToken, carolMsg := a.askUndo(carol, msgID, action.ID)
+
+	updates := []struct {
+		env    *staffActionEnv
+		update *gotgbot.Update
+	}{
+		{a, a.callbackUpdate(bob, undoConfirmCode, bobToken, bobMsg)},
+		{b, b.callbackUpdate(carol, undoConfirmCode, carolToken, carolMsg)},
+	}
+	var ready, finished sync.WaitGroup
+	start := make(chan struct{})
+	ready.Add(len(updates))
+	finished.Add(len(updates))
+	for _, u := range updates {
+		go func() {
+			defer finished.Done()
+			ready.Done()
+			<-start
+			if err := u.env.dispatcher.ProcessUpdate(u.env.bot, u.update, nil); err != nil {
+				t.Errorf("ProcessUpdate(%d) error = %v", u.update.UpdateId, err)
+			}
+		}()
+	}
+	ready.Wait()
+	close(start)
+	finished.Wait()
+	a.waitRuns()
+
+	done, _ := recordOfCard(t, msgID)
+	if done.UndoBy == nil || (*done.UndoBy != bob.Id && *done.UndoBy != carol.Id) {
+		t.Fatalf("record undo_by = %v, want one of the two pressers", done.UndoBy)
+	}
+	if done.UndoFinishedAt == nil {
+		t.Fatal("the record has no undo_finished_at")
+	}
+
+	// Each card is read on the replica that handled its Confirm.
+	cards := []struct {
+		env   *staffActionEnv
+		msgID int64
+	}{{a, bobMsg}, {b, carolMsg}}
+	summaries, losers := 0, 0
+	for _, card := range cards {
+		edits := card.env.edits(card.env.staffChat, card.msgID)
+		text := ""
+		if len(edits) > 0 {
+			text = fmt.Sprint(edits[len(edits)-1].Params["text"])
+		}
+		switch {
+		case summaryTallyRe.MatchString(text):
+			summaries++
+		case strings.Contains(text, staffMarker("staff_undo_already")):
+			losers++
+		case len(edits) == 0 && card.env.answersContaining("staff_act_target_busy") == 1:
+			losers++
+		default:
+			t.Fatalf("a card ended neither on a summary, nor aborted as already undone, nor refused as busy (edits %d):\n%s", len(edits), text)
+		}
+	}
+	if summaries != 1 || losers != 1 {
+		t.Fatalf("cards ended on %d summary(ies) and %d loser(s), want exactly one of each", summaries, losers)
+	}
+	total := 0
+	for _, env := range []*staffActionEnv{a, b} {
+		total += env.unbansIn()
+	}
+	if total != len(a.groups) {
+		t.Fatalf("unban calls across both replicas = %d, want one per group (%d)", total, len(a.groups))
+	}
+}
+
+func TestStaffUndoTargetLock(t *testing.T) {
+	t.Run("action in flight blocks undo", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		bob := env.undoPresser("Bob")
+		action, msgID := env.undoFinishedBan()
+
+		// An unban of the same person is running: it holds the target lock.
+		for _, group := range env.groups {
+			env.fake.setDelay("getChatMember", group, 300*time.Millisecond)
+		}
+		env.startRun("/unban 4242")
+		token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+		env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+
+		if answer, alert := env.lastAnswer(); answer != staffMarker("staff_act_target_busy") || !alert {
+			t.Fatalf("answer to Confirm while an action runs = %q alert=%v, want the target-busy alert", answer, alert)
+		}
+		if started := undoStartedAt(t, action.ID); started != nil {
+			t.Fatalf("a busy Confirm claimed the record at %v", started)
+		}
+		if state := cardState(t, token); state != staffCardPending {
+			t.Fatalf("undo card state = %q, want it still pending", state)
+		}
+		env.waitRuns()
+	})
+
+	t.Run("undo in flight blocks an action", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		bob := env.undoPresser("Bob")
+		action, msgID := env.undoFinishedBan()
+		token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+
+		for _, group := range env.groups {
+			env.fake.setDelay("unbanChatMember", group, 300*time.Millisecond)
+		}
+		env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+
+		// While the undo runs, a new action on the same person cannot be confirmed.
+		env.send(env.issuer, "/ban 4242")
+		banToken, banMsg := env.card()
+		env.tap(env.issuer, staffActRunConfirm, banToken, banMsg)
+
+		if answer, alert := env.lastAnswer(); answer != staffMarker("staff_act_target_busy") || !alert {
+			t.Fatalf("answer to a new action's Confirm while an undo runs = %q alert=%v, want the target-busy alert", answer, alert)
+		}
+		if state := cardState(t, banToken); state != staffCardPending {
+			t.Fatalf("new action card state = %q, want it still pending", state)
+		}
+		env.waitRuns()
+		for _, group := range env.groups {
+			if got := env.bansOf(group, staffTestTarget); got != 1 {
+				t.Fatalf("group %d ban calls = %d, want only the first ban's", group, got)
+			}
+		}
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the undo = %q, want the key gone", holder)
+		}
+	})
+}
+
+func TestStopStaffActionsUndo(t *testing.T) {
+	env := newStaffActionEnv(t, 8)
+	seedMembers(env)
+	bob := env.undoPresser("Bob")
+	withStaffActionTimers(t, time.Hour, 5*time.Millisecond)
+	t.Cleanup(func() {
+		staffActionsMu.Lock()
+		defer staffActionsMu.Unlock()
+		staffActionsCtx, staffActionsCancel = context.WithCancel(context.Background())
+	})
+	action, msgID := env.undoFinishedBan()
+	token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+
+	for _, group := range env.groups {
+		env.fake.setDelay("getChatMember", group, 200*time.Millisecond)
+	}
+	env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+	time.Sleep(50 * time.Millisecond)
+	stopped := time.Now()
+	StopStaffActions()
+	if took := time.Since(stopped); took > 5*time.Second {
+		t.Fatalf("StopStaffActions took %s, want under 5s", took)
+	}
+	env.waitRuns()
+
+	summary := env.lastEditText(env.staffChat, cardMsgID)
+	if !strings.Contains(summary, staffMarker("staff_act_fail_interrupted")) {
+		t.Fatalf("final undo summary has no interrupted group:\n%s", summary)
+	}
+	if strings.Contains(summary, "⏳") {
+		t.Fatalf("final undo summary still has a pending line:\n%s", summary)
+	}
+	done, skipped, failed := summaryTallyOf(t, summary)
+	if done+skipped+failed != len(env.groups) {
+		t.Fatalf("tally %d+%d+%d, want %d groups", done, skipped, failed, len(env.groups))
+	}
+
+	record, rows := recordOfCard(t, msgID)
+	if record.UndoFinishedAt == nil {
+		t.Fatal("the record has no undo_finished_at after a shutdown mid-undo")
+	}
+	interrupted := 0
+	for _, row := range rows {
+		if row.UndoOutcome == "" {
+			t.Fatalf("group %d has no undo outcome: the shutdown dropped it from the record", row.GroupChatID)
+		}
+		if row.UndoReason == "fail_interrupted" {
+			interrupted++
+			if row.UndoOutcome != "failed" {
+				t.Fatalf("group %d undo = %q / %q, want failed / fail_interrupted", row.GroupChatID, row.UndoOutcome, row.UndoReason)
+			}
+		}
+	}
+	if interrupted == 0 {
+		t.Fatal("no group was recorded as interrupted by the restart")
+	}
+	if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+		t.Fatalf("target lock holder after the shutdown = %q, want the key gone", holder)
+	}
+}
+
+func TestStaffUndoNoTimeLimit(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	bob := env.undoPresser("Bob")
+	action, msgID := env.undoFinishedBan()
+
+	past := time.Now().Add(-90 * 24 * time.Hour)
+	if err := db.DB.Model(&models.StaffAction{}).Where("id = ?", action.ID).
+		Updates(map[string]any{"created_at": past, "finished_at": past}).Error; err != nil {
+		t.Fatalf("age the record: %v", err)
+	}
+
+	sentBefore := len(env.fake.sentTo(env.staffChat))
+	token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+	if got := len(env.fake.sentTo(env.staffChat)); got != sentBefore+1 {
+		t.Fatalf("Undo on a 90-day-old record posted %d message(s), want the one undo card", got-sentBefore)
+	}
+
+	env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+	env.waitRuns()
+	for _, group := range env.groups {
+		wantMember(t, env.fake, group, staffTestTarget, gotgbot.ChatMemberStatusLeft)
+	}
+	if started := undoStartedAt(t, action.ID); started == nil {
+		t.Fatal("the old record was not claimed by its undo")
+	}
 }
