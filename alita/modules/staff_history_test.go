@@ -80,9 +80,12 @@ type historyKeys struct {
 	// backList is the detail view's Back to list button; detail holds the per-entry
 	// detail buttons of a list, in order.
 	backList *gotgbot.InlineKeyboardButton
-	detail   []gotgbot.InlineKeyboardButton
-	fields   map[string]map[string]string
-	total    int
+	// undo is the detail view's Undo everywhere button, offered only while the
+	// action can still be undone.
+	undo   *gotgbot.InlineKeyboardButton
+	detail []gotgbot.InlineKeyboardButton
+	fields map[string]map[string]string
+	total  int
 }
 
 // historyKeyboardOf classifies every button of a history keyboard and fails on one
@@ -106,6 +109,8 @@ func historyKeyboardOf(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton) 
 			switch {
 			case decoded.Fields["a"] == "dt":
 				keys.detail = append(keys.detail, button)
+			case decoded.Fields["a"] == undoAskCode:
+				keys.undo = &button
 			case decoded.Fields["a"] == "rc" && strings.Contains(button.Text, staffMarker("staff_history_back_list")):
 				keys.backList = &button
 			case decoded.Fields["a"] == "rc" && strings.Contains(button.Text, staffMarker("staff_panel_next")):
@@ -600,10 +605,12 @@ func TestStaffHistoryDetail(t *testing.T) {
 		"⏭ Group C: ",
 		staffMarker("staff_act_skip_issuer_not_admin"),
 	)
-	if detailKeys.total != 1 || detailKeys.backList == nil ||
+	// A finished ban applied in two groups can still be undone, so the Undo button
+	// sits beside the one Back button.
+	if detailKeys.total != 2 || detailKeys.undo == nil || detailKeys.backList == nil ||
 		detailKeys.fields[detailKeys.backList.CallbackData]["a"] != "rc" ||
 		detailKeys.fields[detailKeys.backList.CallbackData]["o"] != "0" {
-		t.Errorf("detail keyboard = %+v, want one Back button with a=rc o=0", detailKeys)
+		t.Errorf("detail keyboard = %+v, want an Undo button and a Back button with a=rc o=0", detailKeys)
 	}
 }
 

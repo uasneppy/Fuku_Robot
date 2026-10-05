@@ -321,7 +321,8 @@ func (moduleStruct) staffHistoryList(
 // group IDs still linked to the Staff Group; a group missing from it keeps the title
 // stored at action time and is marked as no longer linked (a nil map marks none).
 // The text never exceeds the length cap and never drops a group silently
-// (fitStaffHistoryDetail). The keyboard is one Back button to the list at offset.
+// (fitStaffHistoryDetail). The keyboard is a Back button to the list at offset, below
+// an Undo everywhere button while staffActionUndoable says the action can be undone.
 func renderStaffHistoryDetail(
 	tr *i18n.Translator,
 	a *models.StaffAction,
@@ -404,6 +405,14 @@ func renderStaffHistoryDetail(
 	text := fitStaffHistoryDetail(tr, head, results, lines, undoHeader, undoResults, undoLines)
 
 	var keyboard gotgbot.InlineKeyboardMarkup
+	// The Undo button (D-15) only while the record can still be undone. Its press is
+	// handled by staffUndoAsk, which runs every check again; a button that cannot be
+	// built is left out and was logged there.
+	if staffActionUndoable(a, groups) {
+		if undo, ok := staffUndoKeyboard(tr, a.ID); ok {
+			keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, undo.InlineKeyboard...)
+		}
+	}
 	backLabel, _ := tr.GetString("staff_history_back_list")
 	if back, ok := staffHistoryButton(backLabel, map[string]string{"a": staffActRecent, "o": strconv.Itoa(offset)}); ok {
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []gotgbot.InlineKeyboardButton{back})
