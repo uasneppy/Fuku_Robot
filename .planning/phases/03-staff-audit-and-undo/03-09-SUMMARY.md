@@ -189,3 +189,9 @@ Phase 3 plans are all executed. Remaining before the phase can close: the orches
 ---
 *Phase: 03-staff-audit-and-undo*
 *Completed: 2026-10-05*
+
+## Orchestrator post-merge gate (main checkout, after merging this plan)
+
+- `TestRepositoryMigrationChain` on a throwaway PostgreSQL 16 cluster (this plan's exact Task 2 command): **PASS** (`--- PASS: TestRepositoryMigrationChain`, exit 0). This closes the step delegated above.
+- `make test-postgres-integrity` and `go test -tags testtools -race ./alita/db/staff` with `ALITA_TEST_DATABASE=true` on PostgreSQL 16: pass.
+- `CGO_ENABLED=0 go build ./...`, `make test`, `make check-translations`, `make check-docs` and `go vet -tags testtools ./...` on the merged tree: pass. `gofmt -l alita main.go` lists only the pre-existing `alita/modules/greetings_command_test.go`.
