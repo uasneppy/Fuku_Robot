@@ -84,6 +84,7 @@ func TestTelegramPacerFleetSpacing(t *testing.T) {
 
 	var calls callLog
 	var wg sync.WaitGroup
+	t0 := time.Now()
 	for i := 0; i < 6; i++ {
 		wg.Add(1)
 		go func(p *TelegramPacer) {
@@ -107,9 +108,14 @@ func TestTelegramPacerFleetSpacing(t *testing.T) {
 		starts = append(starts, calls.at(i))
 	}
 	sort.Slice(starts, func(i, j int) bool { return starts[i].Before(starts[j]) })
-	for i := 1; i < len(starts); i++ {
-		if gap := starts[i].Sub(starts[i-1]); gap < 35*time.Millisecond {
-			t.Fatalf("gap between call %d and %d = %v, want at least 35ms across the fleet", i-1, i, gap)
+	// The fleet reserves one slot per interval, so the i-th call cannot start
+	// before t0 + i*interval. A late timer wake-up only delays a call, so this
+	// bound holds under scheduler jitter where neighbour gaps do not. The 2ms
+	// slack covers the script's millisecond flooring of Redis TIME.
+	for i, start := range starts {
+		earliest := time.Duration(i)*opts.Interval - 2*time.Millisecond
+		if got := start.Sub(t0); got < earliest {
+			t.Fatalf("call %d started %v after the first request, want at least %v across the fleet", i, got, earliest)
 		}
 	}
 }
