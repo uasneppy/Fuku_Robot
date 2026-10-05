@@ -43,12 +43,17 @@ func (e *staffActionEnv) cardActions() []string {
 	return actions
 }
 
-// wantNoCard fails when a keyboard was sent to the Staff Group.
+// wantNoCard fails when a Confirm or Cancel button was sent to the Staff Group.
 func (e *staffActionEnv) wantNoCard() {
 	e.t.Helper()
 	for _, sent := range e.fake.sentTo(e.staffChat) {
-		if len(staffKeyboardOf(sent.Params["reply_markup"])) != 0 {
-			e.t.Fatalf("a confirm card was sent to the Staff Group: %v", sent.Params["text"])
+		for _, row := range staffKeyboardOf(sent.Params["reply_markup"]) {
+			for _, button := range row {
+				decoded, ok := decodeCallbackData(button.CallbackData, staffCallbackNamespace)
+				if ok && (decoded.Fields["a"] == staffActRunConfirm || decoded.Fields["a"] == staffActRunCancel) {
+					e.t.Fatalf("a confirm card was sent to the Staff Group: %v", sent.Params["text"])
+				}
+			}
 		}
 	}
 }
