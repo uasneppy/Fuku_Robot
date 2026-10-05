@@ -15,6 +15,7 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
+	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
 // staffFakeMember is the stored state of one member of one fake chat.
@@ -48,6 +49,14 @@ type staffActionFake struct {
 	chatPerms map[int64]gotgbot.ChatPermissions
 	nextMsgID int64
 	sentLog   []staffSentMessage
+
+	// gmu guards the delay, panic and in-flight bookkeeping. It is never held
+	// while a request sleeps or panics.
+	gmu         sync.Mutex
+	delays      map[string]time.Duration
+	panics      map[string]bool
+	inFlight    int
+	maxInFlight int
 }
 
 func newStaffActionFake() *staffActionFake {
@@ -57,7 +66,57 @@ func newStaffActionFake() *staffActionFake {
 		scripted:       make(map[string][]error),
 		chatPerms:      make(map[int64]gotgbot.ChatPermissions),
 		nextMsgID:      5000,
+		delays:         make(map[string]time.Duration),
+		panics:         make(map[string]bool),
 	}
+}
+
+// setDelay makes every "method" request addressed to chatID sleep for d before it
+// is answered. The sleep happens outside every lock of the fake.
+func (f *staffActionFake) setDelay(method string, chatID int64, d time.Duration) {
+	f.gmu.Lock()
+	defer f.gmu.Unlock()
+	f.delays[fmt.Sprintf("%s:%d", method, chatID)] = d
+}
+
+// setPanic makes every "method" request addressed to chatID panic.
+func (f *staffActionFake) setPanic(method string, chatID int64) {
+	f.gmu.Lock()
+	defer f.gmu.Unlock()
+	f.panics[fmt.Sprintf("%s:%d", method, chatID)] = true
+}
+
+// setBotRole sets the bot's role (staffRole*) in chatID.
+func (f *staffActionFake) setBotRole(chatID int64, role string) {
+	f.smu.Lock()
+	defer f.smu.Unlock()
+	f.botRole[chatID] = role
+}
+
+// maxConcurrent is the most requests the fake ever had in flight at once.
+func (f *staffActionFake) maxConcurrent() int {
+	f.gmu.Lock()
+	defer f.gmu.Unlock()
+	return f.maxInFlight
+}
+
+// enter counts a request as in flight and returns what the request must do
+// before it is answered.
+func (f *staffActionFake) enter(method string, chatID int64) (delay time.Duration, shouldPanic bool) {
+	f.gmu.Lock()
+	defer f.gmu.Unlock()
+	f.inFlight++
+	if f.inFlight > f.maxInFlight {
+		f.maxInFlight = f.inFlight
+	}
+	key := fmt.Sprintf("%s:%d", method, chatID)
+	return f.delays[key], f.panics[key]
+}
+
+func (f *staffActionFake) leave() {
+	f.gmu.Lock()
+	defer f.gmu.Unlock()
+	f.inFlight--
 }
 
 // setMember stores the member record of userID in chatID.
@@ -179,6 +238,14 @@ func (f *staffActionFake) RequestWithContext(
 	opts *gotgbot.RequestOpts,
 ) (json.RawMessage, error) {
 	chatID := staffParamInt(params, "chat_id")
+	delay, shouldPanic := f.enter(method, chatID)
+	defer f.leave()
+	if delay > 0 {
+		time.Sleep(delay)
+	}
+	if shouldPanic {
+		panic(fmt.Sprintf("staffActionFake: scripted panic in %s for chat %d", method, chatID))
+	}
 	if err := f.popScripted(method, chatID); err != nil {
 		f.record(method, params)
 		return nil, err
@@ -311,10 +378,28 @@ type staffActionEnv struct {
 	nextUpdate int64
 }
 
+// withFastStaffPacer installs a pacer with a 1 ms interval and a 5 ms retry_after
+// unit as staffActionPacer for the test, so a 429 costs milliseconds and not
+// seconds and the production pacer's 100 ms spacing does not slow the suite.
+func withFastStaffPacer(t *testing.T) {
+	t.Helper()
+	previous := staffActionPacer
+	staffActionPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+		NextKey:        "alita:staff:pace:next",
+		BlockKey:       "alita:staff:pace:block",
+		Interval:       time.Millisecond,
+		MaxRetries:     3,
+		MaxWait:        60 * time.Second,
+		RetryAfterUnit: 5 * time.Millisecond,
+	})
+	t.Cleanup(func() { staffActionPacer = previous })
+}
+
 func newStaffActionEnv(t *testing.T, groupCount int) *staffActionEnv {
 	t.Helper()
 	withMiniredis(t)
 	withStaffLocale(t)
+	withFastStaffPacer(t)
 
 	fake := newStaffActionFake()
 	bot := newModuleTestBot(fake.moduleBotClient)

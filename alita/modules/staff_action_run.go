@@ -11,9 +11,12 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
+	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
 // staffGroupResult is how one linked group ended. Detail carries Telegram's
@@ -37,6 +40,26 @@ var (
 
 // staffTelegramDetailRunes caps the Telegram error text shown on a failed line.
 const staffTelegramDetailRunes = 120
+
+// staffActionWorkers is how many linked groups one run processes at once.
+const staffActionWorkers = 4
+
+// staffActionPacer paces every Telegram call of a staff fan-out. Its slot
+// reservation and retry_after block live in Redis, so every replica shares one
+// budget. It is a variable so tests can install a fast one.
+var staffActionPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+	NextKey:    "alita:staff:pace:next",
+	BlockKey:   "alita:staff:pace:block",
+	Interval:   100 * time.Millisecond,
+	MaxRetries: 3,
+	MaxWait:    60 * time.Second,
+})
+
+// staffPaced runs one Telegram call under the shared pacer: it waits for its slot
+// and, on a 429, waits out Telegram's retry_after and repeats the same closure.
+func staffPaced(ctx context.Context, call func(context.Context) error) error {
+	return staffActionPacer.Do(ctx, call)
+}
 
 // pendingResults is the summary's starting point: every linked group, in order,
 // not finished yet (D-17).
@@ -88,9 +111,13 @@ func startStaffActionRun(
 	}()
 }
 
-// runStaffActionFanOut visits the linked groups one after another and returns
-// one result per group, in link order. One owner pass is shared, so the Staff
-// Group's creator is asked about once.
+// runStaffActionFanOut visits the linked groups, staffActionWorkers at a time, and
+// returns one result per group, in link order. One paced owner pass is shared, so
+// the Staff Group's creator is asked about once.
+//
+// Every slot starts pending and each worker writes only its own. A worker that
+// panics leaves its slot pending, and the sweep after the wait turns it into a
+// failed line, so no group is ever dropped from the summary (STAFF-08).
 func runStaffActionFanOut(
 	ctx context.Context,
 	b *gotgbot.Bot,
@@ -98,10 +125,28 @@ func runStaffActionFanOut(
 	links []models.StaffGroupLink,
 	newUntil int64,
 ) []staffGroupResult {
-	pass := newStaffOwnerPass()
-	results := make([]staffGroupResult, len(links))
+	pass := newPacedStaffOwnerPass(func(run func() error) error {
+		return staffPaced(ctx, func(context.Context) error { return run() })
+	})
+	results := pendingResults(links)
+
+	var workers errgroup.Group
+	workers.SetLimit(staffActionWorkers)
 	for i, link := range links {
-		results[i] = runStaffActionInGroup(ctx, b, card, link, newUntil, pass)
+		workers.Go(func() error {
+			defer error_handling.RecoverFromPanic("staffActionWorker", "StaffActions")
+			results[i] = runStaffActionInGroup(ctx, b, card, link, newUntil, pass)
+			return nil
+		})
+	}
+	_ = workers.Wait()
+
+	for i := range results {
+		if results[i].Outcome == staffOutcomePending {
+			log.Errorf("[StaffActions] group %d finished without a result; reporting it as failed", results[i].Link.GroupChatID)
+			results[i].Outcome = staffReasonOutcome(staffReasonFailInternal)
+			results[i].Reason = staffReasonFailInternal
+		}
 	}
 	return results
 }
@@ -130,14 +175,14 @@ func runStaffActionInGroup(
 	case staffRecheckRemoved, staffRecheckGone:
 		return result(staffReasonSkipLinkRemoved, "")
 	case staffRecheckUnknown:
-		return result(staffReasonFailOwnerUnknown, "")
+		return result(staffOwnerUnknownReason(b, link, pass), "")
 	}
 
 	// The only authority for the issuer in this group is this live answer.
 	issuer, err := fetchLiveMember(ctx, b, link.GroupChatID, card.Issuer)
 	if err != nil {
 		log.Warnf("[StaffActions] issuer lookup in group %d: %v", link.GroupChatID, err)
-		return result(staffReasonFailLookup, telegramErrorDetail(err))
+		return result(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
 	}
 	if reason := staffIssuerSkipReason(issuer); reason != "" {
 		return result(reason, "")
@@ -153,7 +198,7 @@ func runStaffActionInGroup(
 	target, err := fetchLiveMember(ctx, b, link.GroupChatID, card.Target)
 	if err != nil {
 		log.Warnf("[StaffActions] target lookup in group %d: %v", link.GroupChatID, err)
-		return result(staffReasonFailLookup, telegramErrorDetail(err))
+		return result(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
 	}
 
 	verdict := decideStaffAction(card.Kind, staffTargetStateFrom(target), newUntil)
@@ -162,7 +207,7 @@ func runStaffActionInGroup(
 	}
 	if err := executeStaffCall(ctx, b, link.GroupChatID, card.Target, verdict, newUntil); err != nil {
 		log.Warnf("[StaffActions] %s in group %d: %v", card.Kind, link.GroupChatID, err)
-		return result(staffReasonFailTelegram, telegramErrorDetail(err))
+		return result(classifyStaffFailure(ctx, b, link.GroupChatID, err))
 	}
 	return result(verdict.Reason, "")
 }
@@ -172,16 +217,24 @@ func runStaffActionInGroup(
 // and the command pipeline's checks answer for the chat a command was typed in,
 // never for another group.
 func fetchLiveMember(ctx context.Context, b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedChatMember, error) {
-	callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)
-	defer cancel()
-	member, err := b.GetChatMemberWithContext(callCtx, chatID, userID, nil)
+	var merged gotgbot.MergedChatMember
+	err := staffPaced(ctx, func(ctx context.Context) error {
+		callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)
+		defer cancel()
+		member, err := b.GetChatMemberWithContext(callCtx, chatID, userID, nil)
+		if err != nil {
+			return err
+		}
+		if member == nil {
+			return errors.New("getChatMember returned no member")
+		}
+		merged = member.MergeChatMember()
+		return nil
+	})
 	if err != nil {
 		return gotgbot.MergedChatMember{}, err
 	}
-	if member == nil {
-		return gotgbot.MergedChatMember{}, errors.New("getChatMember returned no member")
-	}
-	return member.MergeChatMember(), nil
+	return merged, nil
 }
 
 // staffIssuerSkipReason returns the empty reason when the issuer may restrict
@@ -211,35 +264,145 @@ func executeStaffCall(
 	verdict staffVerdict,
 	newUntil int64,
 ) error {
-	callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)
-	defer cancel()
+	// Each Telegram call is one paced unit with its own timeout. The closure is the
+	// same on every retry, so a retried call carries identical parameters,
+	// until_date included.
+	paced := func(call func(callCtx context.Context) error) error {
+		return staffPaced(ctx, func(ctx context.Context) error {
+			callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)
+			defer cancel()
+			return call(callCtx)
+		})
+	}
 	switch verdict.Call {
 	case staffCallBan:
-		_, err := b.BanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.BanChatMemberOpts{UntilDate: newUntil})
-		return err
+		return paced(func(callCtx context.Context) error {
+			_, err := b.BanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.BanChatMemberOpts{UntilDate: newUntil})
+			return err
+		})
 	case staffCallMute:
-		_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, MutedPermissions,
-			&gotgbot.RestrictChatMemberOpts{UntilDate: newUntil})
-		return err
+		return paced(func(callCtx context.Context) error {
+			_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, MutedPermissions,
+				&gotgbot.RestrictChatMemberOpts{UntilDate: newUntil})
+			return err
+		})
 	case staffCallKick:
 		// The same call per-group /kick makes: it removes a current member without
 		// leaving a ban, so they can rejoin.
-		_, err := b.UnbanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
-		return err
+		return paced(func(callCtx context.Context) error {
+			_, err := b.UnbanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
+			return err
+		})
 	case staffCallUnban:
-		_, err := b.UnbanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
-		return err
+		return paced(func(callCtx context.Context) error {
+			_, err := b.UnbanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
+			return err
+		})
 	case staffCallUnmute:
 		// Like per-group /unmute, the group's default permissions come from a live
-		// getChat and a failure there fails the group.
-		info, err := b.GetChatWithContext(callCtx, groupID, nil)
-		if err != nil {
+		// getChat and a failure there fails the group. The getChat and the restrict
+		// are two paced calls.
+		var info *gotgbot.ChatFullInfo
+		if err := paced(func(callCtx context.Context) error {
+			var err error
+			info, err = b.GetChatWithContext(callCtx, groupID, nil)
+			return err
+		}); err != nil {
 			return err
 		}
-		_, err = b.RestrictChatMemberWithContext(callCtx, groupID, targetID, resolveUnmutePermissions(info), nil)
-		return err
+		return paced(func(callCtx context.Context) error {
+			_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, resolveUnmutePermissions(info), nil)
+			return err
+		})
 	}
 	return fmt.Errorf("unknown staff call %d", verdict.Call)
+}
+
+// staffOwnerUnknownReason says why recheckLink could not judge a link: a rate
+// limit that outlasted the retries, or any other missing answer. It reads the
+// pass's memoised answers, so it makes no new call in the usual case.
+func staffOwnerUnknownReason(b *gotgbot.Bot, link models.StaffGroupLink, pass *staffOwnerPass) staffReason {
+	groupResult, _, groupErr := pass.check(b, link.GroupChatID, link.OwnerUserID)
+	if errors.Is(groupErr, ratelimit.ErrRateLimited) {
+		return staffReasonFailRateLimited
+	}
+	// recheckLink asks about the Staff Group only when the group side was not a
+	// mismatch, so this repeats its own question and nothing more.
+	if groupResult != chat_status.OwnerMismatch {
+		_, _, staffErr := pass.check(b, link.StaffChatID, link.OwnerUserID)
+		if errors.Is(staffErr, ratelimit.ErrRateLimited) {
+			return staffReasonFailRateLimited
+		}
+	}
+	return staffReasonFailOwnerUnknown
+}
+
+// probeStaffBot asks Telegram, through the pacer, for the bot's own live rights in
+// a group. Anything but a definite answer is BotMemberUnknown.
+func probeStaffBot(ctx context.Context, b *gotgbot.Bot, groupID int64) (gotgbot.MergedChatMember, chat_status.BotMemberResult) {
+	var member gotgbot.MergedChatMember
+	result := chat_status.BotMemberUnknown
+	err := staffPaced(ctx, func(context.Context) error {
+		var err error
+		member, result, err = chat_status.FetchBotMember(b, groupID)
+		return err
+	})
+	if err != nil {
+		return gotgbot.MergedChatMember{}, chat_status.BotMemberUnknown
+	}
+	return member, result
+}
+
+// isStaffClientError reports whether err is a Telegram 400 or 403, the answers a
+// missing right or a missing bot produces and the only ones worth a probe.
+func isStaffClientError(err error) bool {
+	var tgErr *gotgbot.TelegramError
+	return errors.As(err, &tgErr) && (tgErr.Code == 400 || tgErr.Code == 403)
+}
+
+// classifyStaffFailure turns a failed write call into a reason a person can act
+// on (D-19). A rate limit that outlasted the retries is its own reason. A 400 or
+// 403 is explained by a live, paced probe of the bot's rights in that group, never
+// by matching error text: the bot is gone, is not an admin, or lacks the
+// restrict right. Anything else is shown as Telegram's own, escaped text.
+func classifyStaffFailure(ctx context.Context, b *gotgbot.Bot, groupID int64, err error) (staffReason, string) {
+	if errors.Is(err, ratelimit.ErrRateLimited) {
+		return staffReasonFailRateLimited, ""
+	}
+	if isStaffClientError(err) {
+		member, result := probeStaffBot(ctx, b, groupID)
+		switch result {
+		case chat_status.BotMemberMissing:
+			return staffReasonFailGroupNotFound, ""
+		case chat_status.BotMemberFound:
+			switch member.Status {
+			case gotgbot.ChatMemberStatusAdministrator:
+				if !member.CanRestrictMembers {
+					return staffReasonFailBotNoRights, ""
+				}
+			case gotgbot.ChatMemberStatusCreator:
+				// The bot cannot own a group, so there is nothing to explain.
+			default:
+				return staffReasonFailBotNotAdmin, ""
+			}
+		}
+	}
+	return staffReasonFailTelegram, telegramErrorDetail(err)
+}
+
+// classifyStaffLookupFailure is classifyStaffFailure for a failed getChatMember of
+// the issuer or the target: a rate limit and a bot that is gone are told apart,
+// and every other failure stays "could not check members".
+func classifyStaffLookupFailure(ctx context.Context, b *gotgbot.Bot, groupID int64, err error) (staffReason, string) {
+	if errors.Is(err, ratelimit.ErrRateLimited) {
+		return staffReasonFailRateLimited, ""
+	}
+	if isStaffClientError(err) {
+		if _, result := probeStaffBot(ctx, b, groupID); result == chat_status.BotMemberMissing {
+			return staffReasonFailGroupNotFound, ""
+		}
+	}
+	return staffReasonFailLookup, telegramErrorDetail(err)
 }
 
 // telegramErrorDetail is the short, HTML-escaped text shown on a failed line:
