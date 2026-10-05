@@ -2,7 +2,6 @@ package modules
 
 import (
 	"context"
-	"errors"
 	"html"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
+	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
 const (
@@ -398,19 +398,87 @@ func editStaffActionMessage(b *gotgbot.Bot, chatID, msgID int64, text string) er
 	return nil
 }
 
-// deliverStaffActionSummary puts the final text on the card. When the card cannot
-// be edited (deleted, or any other error) the summary is posted as a new message
-// in the Staff Group, so the issuer always gets the result.
-func deliverStaffActionSummary(b *gotgbot.Bot, chatID, msgID int64, text string) {
-	err := editStaffActionMessage(b, chatID, msgID, text)
-	if err == nil {
-		return
+const (
+	// staffActionFinalAttempts is how many times the final edit is tried.
+	staffActionFinalAttempts = 3
+	// staffActionRetryAfterCap caps one wait for Telegram's retry_after.
+	staffActionRetryAfterCap = 60 * time.Second
+)
+
+// staffRetryAfterWait is how long to wait before retrying after err: Telegram's
+// retry_after times staffActionEditRetryUnit, capped. It is false when err is not
+// a 429 that names a wait.
+func staffRetryAfterWait(err error) (time.Duration, bool) {
+	seconds, ok := ratelimit.RetryAfterSeconds(err)
+	if !ok {
+		return 0, false
 	}
-	var tgErr *gotgbot.TelegramError
-	if errors.As(err, &tgErr) {
-		log.Warnf("[StaffActions] could not edit summary in chat %d: %s", chatID, tgErr.Description)
-	} else {
-		log.Warnf("[StaffActions] could not edit summary in chat %d: %v", chatID, err)
+	return min(time.Duration(seconds)*staffActionEditRetryUnit, staffActionRetryAfterCap), true
+}
+
+// sleepStaffRetry waits d, or less when ctx ends first, and reports whether the
+// full wait elapsed.
+func sleepStaffRetry(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
 	}
-	_ = sendStaffNotice(b, chatID, text)
+}
+
+// editStaffActionFinal puts the final text on the card, trying up to
+// staffActionFinalAttempts times. A 429 waits out Telegram's retry_after and tries
+// again; "message is not modified" counts as success (editStaffActionMessage);
+// any other error, or running out of attempts or time, reports false.
+func editStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int64, text string) bool {
+	for attempt := 1; attempt <= staffActionFinalAttempts; attempt++ {
+		err := editStaffActionMessage(b, chatID, msgID, text)
+		if err == nil {
+			return true
+		}
+		wait, limited := staffRetryAfterWait(err)
+		if !limited || attempt == staffActionFinalAttempts || !sleepStaffRetry(ctx, wait) {
+			log.Warnf("[StaffActions] could not edit the final summary in chat %d: %v", chatID, err)
+			return false
+		}
+	}
+	return false
+}
+
+// sendStaffSummaryPart posts one summary message into the Staff Group, waiting out
+// a 429 the same way the final edit does. It reports whether the message was sent.
+func sendStaffSummaryPart(ctx context.Context, b *gotgbot.Bot, chatID int64, text string) bool {
+	for attempt := 1; attempt <= staffActionFinalAttempts; attempt++ {
+		err := sendStaffNotice(b, chatID, text)
+		if err == nil {
+			return true
+		}
+		wait, limited := staffRetryAfterWait(err)
+		if !limited || attempt == staffActionFinalAttempts || !sleepStaffRetry(ctx, wait) {
+			return false
+		}
+	}
+	return false
+}
+
+// deliverStaffActionFinal puts a run's final summary in front of the issuer. The
+// card is edited first, with retries (STAFF-12). When it cannot be edited (deleted,
+// or any other error) the summary is posted as a new message in the Staff Group,
+// so the result always arrives. Each continuation message follows in order
+// (STAFF-08); one that cannot be sent is logged and the rest still go out. ctx
+// bounds only the waits between retries.
+func deliverStaffActionFinal(ctx context.Context, b *gotgbot.Bot, chatID, msgID int64, text string, continuation []string) {
+	if !editStaffActionFinal(ctx, b, chatID, msgID, text) {
+		if !sendStaffSummaryPart(ctx, b, chatID, text) {
+			log.Errorf("[StaffActions] the final summary could not be delivered to chat %d", chatID)
+		}
+	}
+	for i, part := range continuation {
+		if !sendStaffSummaryPart(ctx, b, chatID, part) {
+			log.Errorf("[StaffActions] continuation %d of the summary could not be delivered to chat %d", i+1, chatID)
+		}
+	}
 }
