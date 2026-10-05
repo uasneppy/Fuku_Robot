@@ -394,6 +394,8 @@ func (m moduleStruct) staffUndoConfirm(
 	// The claim is the last check before the run: one conditional update, so of two
 	// cards for one record, on any replica, only one ever starts.
 	presserName := staffFullName(&query.From)
+	// The log posts name the presser, not whoever created the card.
+	card.IssuerName = presserName
 	claimed, err := staffClaimUndo(action.ID, card.Issuer, presserName)
 	if err != nil {
 		abort("staff_act_abort_check_failed")
@@ -523,9 +525,13 @@ func startStaffUndoRun(
 		Group: func(ctx context.Context, i int, pass *staffOwnerPass) staffGroupResult {
 			return runStaffUndoInGroup(ctx, b, card, a, targets[i], pass)
 		},
-		AfterGroup: func(_ context.Context, _ int, res staffGroupResult) {
+		AfterGroup: func(ctx context.Context, _ int, res staffGroupResult) {
 			if err := staff.SaveUndoResult(a.ID, staffResultRow(res)); err != nil {
 				log.Errorf("[StaffActions] save undo result of group %d for action %d: %v", res.Link.GroupChatID, a.ID, err)
+			}
+			// The post comes after the record write and never changes the result.
+			if res.Outcome == staffOutcomeDone {
+				postStaffUndoLog(ctx, b, card, a, res.Link)
 			}
 		},
 		Render: func(tr *i18n.Translator, results []staffGroupResult, final bool) (string, []string) {

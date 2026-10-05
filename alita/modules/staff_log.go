@@ -76,14 +76,15 @@ func composeStaffActionLog(tr *i18n.Translator, card *staffActionCard) string {
 	return strings.Join(segments, " · ")
 }
 
-// postStaffActionLog posts an applied staff action to the admin log channel of the
-// group it was applied in: one paced message under the group's usual header. It
-// does nothing when the run was cancelled, the group has no log channel or its
-// admin category is off, and nothing is ever sent into the group's own chat.
+// sendStaffLogPost posts one staff log message to the admin log channel of link's
+// group: it looks up the destination, translates in the group's language and sends
+// one paced message under the group's usual header. It does nothing when the run was
+// cancelled, the group has no log channel or its admin category is off, and nothing
+// is ever sent into the group's own chat. body builds the text after the header.
 //
 // Logging never changes the group's result (D-12): a failed or rate-limited post is
 // logged at warn and nothing else happens.
-func postStaffActionLog(ctx context.Context, b *gotgbot.Bot, card *staffActionCard, link models.StaffGroupLink) {
+func sendStaffLogPost(ctx context.Context, b *gotgbot.Bot, link models.StaffGroupLink, body func(tr *i18n.Translator) string) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -92,7 +93,7 @@ func postStaffActionLog(ctx context.Context, b *gotgbot.Bot, card *staffActionCa
 	if !ok {
 		return
 	}
-	text := header + composeStaffActionLog(staffChatTranslator(link.GroupChatID), card)
+	text := header + body(staffChatTranslator(link.GroupChatID))
 	err := staffPaced(ctx, func(ctx context.Context) error {
 		callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)
 		defer cancel()
@@ -107,8 +108,68 @@ func postStaffActionLog(ctx context.Context, b *gotgbot.Bot, card *staffActionCa
 	}
 }
 
-// staffReverseKind is the action that reverses kind. Placeholder until the undo log
-// post lands: it reverses nothing yet.
+// postStaffActionLog posts an applied staff action to the admin log channel of the
+// group it was applied in, through sendStaffLogPost.
+func postStaffActionLog(ctx context.Context, b *gotgbot.Bot, card *staffActionCard, link models.StaffGroupLink) {
+	sendStaffLogPost(ctx, b, link, func(tr *i18n.Translator) string {
+		return composeStaffActionLog(tr, card)
+	})
+}
+
+// staffReverseKind is the action that reverses kind: ban and unban, mute and unmute.
+// Kick has nothing to reverse and maps to itself.
 func staffReverseKind(kind staffActionKind) staffActionKind {
+	switch kind {
+	case staffKindBan:
+		return staffKindUnban
+	case staffKindMute:
+		return staffKindUnmute
+	case staffKindUnban:
+		return staffKindBan
+	case staffKindUnmute:
+		return staffKindMute
+	}
 	return kind
+}
+
+// staffActionNameToken stands in for the undone action's name while "undoes ..." is
+// translated.
+const staffActionNameToken = "<<staff-action-name>>"
+
+// composeStaffUndoLog builds the body of an undo's log post, without the group
+// header: "#STAFF_UNDO", the reverse action's name, the presser (card.Issuer, named
+// by card.IssuerName), the target and "undoes <action> by <original issuer>", then
+// the "via Staff Group" marker, joined with " · ". Labels are translated; the user
+// text (names) is spliced in afterwards through tokens and never goes through the
+// translator. It never reads the card's Staff Group chat, so the Staff Group's ID
+// cannot reach a linked group's log channel.
+func composeStaffUndoLog(tr *i18n.Translator, card *staffActionCard, originalIssuer string) string {
+	adminLabel, _ := tr.GetString("staff_log_admin_label")
+	userLabel, _ := tr.GetString("staff_log_user_label")
+	via, _ := tr.GetString("staff_log_via_staff_group")
+	undoes, _ := tr.GetString("staff_log_undoes", i18n.TranslationParams{
+		"action": staffActionNameToken,
+		"name":   staffUserToken,
+	})
+	undoes = strings.Replace(undoes, staffActionNameToken, staffActionName(tr, card.UndoKind), 1)
+	undoes = strings.Replace(undoes, staffUserToken, html.EscapeString(staffPlainName(originalIssuer)), 1)
+
+	segments := []string{
+		"#STAFF_UNDO",
+		staffActionName(tr, staffReverseKind(card.UndoKind)),
+		adminLabel + ": " + formatting.MentionHtml(card.Issuer, card.IssuerName),
+		userLabel + ": " + staffTargetDisplay(tr, card),
+		undoes,
+		via,
+	}
+	return strings.Join(segments, " · ")
+}
+
+// postStaffUndoLog posts a successful undo to the admin log channel of the group it
+// was undone in, naming the presser and what was undone. It runs after the group's
+// undo result is stored and, like the action's post, never changes it.
+func postStaffUndoLog(ctx context.Context, b *gotgbot.Bot, card *staffActionCard, a *models.StaffAction, link models.StaffGroupLink) {
+	sendStaffLogPost(ctx, b, link, func(tr *i18n.Translator) string {
+		return composeStaffUndoLog(tr, card, a.IssuerName)
+	})
 }

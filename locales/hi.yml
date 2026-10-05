@@ -2439,6 +2439,7 @@ staff_act_card_cancelled: "{name} द्वारा रद्द किया �
 staff_log_admin_label: "एडमिन"
 staff_log_user_label: "उपयोगकर्ता"
 staff_log_via_staff_group: "स्टाफ ग्रुप के माध्यम से"
+staff_log_undoes: "{name} द्वारा किया गया {action} पूर्ववत करता है"
 staff_panel_recent_button: "📜 हाल की कार्रवाइयाँ"
 staff_history_title: "हाल की स्टाफ कार्रवाइयाँ"
 staff_history_empty: "अभी तक कोई स्टाफ कार्रवाई दर्ज नहीं हुई है।"
