@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -128,9 +129,30 @@ func GetUserIdByUserName(username string) int64 {
 	return userId
 }
 
-// FindUsersByUsername is the Staff Group target resolver for an @username.
+// FindUsersByUsername is the Staff Group target resolver for an @username. It reads
+// the users table only (never channels, never Telegram), matches case-insensitively
+// by equality (an underscore is literal), and returns up to limit rows, newest
+// last_activity first, so the caller can refuse an ambiguous name and list who
+// shares it. A leading "@" is stripped; an empty name returns (nil, nil) without a
+// query. Unlike GetUserIdByUserName it returns the database error: a failed lookup
+// must never read as "never seen". It is uncached on purpose, so a fresh username
+// change is seen.
 func FindUsersByUsername(username string, limit int) ([]models.User, error) {
-	return nil, nil
+	username = strings.TrimSpace(username)
+	username = strings.TrimSpace(strings.TrimPrefix(username, "@"))
+	if username == "" {
+		return nil, nil
+	}
+	var rows []models.User
+	err := db.DB.Where("LOWER(username) = LOWER(?)", username).
+		Order("last_activity DESC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Database] FindUsersByUsername: %v - %s", err, username)
+		return nil, fmt.Errorf("find users by username %q: %w", username, err)
+	}
+	return rows, nil
 }
 
 func GetUserInfoById(userId int64) (username, name string, found bool) {
