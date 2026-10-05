@@ -132,15 +132,15 @@ Plans:
   3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
   4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
 
-**Plans:** 1/9 plans executed
+**Plans:** 3/9 plans executed
 
 Plans:
 **Wave 1**
 - [x] 03-01-PLAN.md: Tracer. Owner confirms the one-way prior-state columns (checkpoint), then every confirmed staff action is recorded with each group's prior state (written before the Telegram write) and outcome; survives restarts and chat migration
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03-02-PLAN.md: Undo decision table, test-first: decideStaffUndo restores the prior state, skips groups changed since, never re-applies an end date inside 120 s; invariants over every combination
-- [ ] 03-03-PLAN.md: Log-channel posts for applied actions (admin category, paced, never naming the Staff Group, never changing the result); the run engine takes a spec
+- [x] 03-02-PLAN.md: Undo decision table, test-first: decideStaffUndo restores the prior state, skips groups changed since, never re-applies an end date inside 120 s; invariants over every combination
+- [x] 03-03-PLAN.md: Log-channel posts for applied actions (admin category, paced, never naming the Staff Group, never changing the result); the run engine takes a spec
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03-04-PLAN.md: "Recent actions" on /staff: paged list, newest first, 10 per page, offset cursor, members only
@@ -263,7 +263,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 |-------|----------------|--------|-----------|
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
-| 3. Staff Audit and Undo | 1/9 | In Progress|  |
+| 3. Staff Audit and Undo | 3/9 | In Progress|  |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
