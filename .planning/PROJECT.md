@@ -25,20 +25,21 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ Per-group log channels and `/report` — existing
 - ✓ Connections: manage one group's settings from PM — existing
 - ✓ Backup import and export, 7 UI languages, PostgreSQL + Redis, webhook or polling, health and metrics endpoints — existing
+- ✓ Staff Group designation: only a group's live owner can set or remove Staff Group status; channels are refused — Phase 1
+- ✓ Linking: a person who owns both groups links a group to one Staff Group (`/linkstaff` or the Add group picker), and unlinks it — Phase 1
+- ✓ Links break automatically when the same person no longer owns both groups (ownership watchers plus an hourly live sweep; errors never unlink) — Phase 1
+- ✓ `/staff` panel shows the help text and each linked group's live status, with Refresh and paging; the settings-menu button is Phase 9 — Phase 1
+  <!-- Phase 1 caveat: 10 of 11 live-Telegram UAT checks were deferred without being run (see phases/01-staff-group-links/01-UAT.md Deferred Follow-Ups). -->
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
 **Staff Group (first)**
-- [ ] A group's owner can designate it as a Staff Group, and only the owner can undo that. It must be a Telegram group, not a channel.
-- [ ] A user who owns both a group and the Staff Group can link that group to it. Each group links to at most one Staff Group.
-- [ ] A link breaks automatically as soon as the same person no longer owns both groups.
 - [ ] Any member of the Staff Group can run `/ban`, `/mute`, `/kick`, `/unban` and `/unmute`, including timed ban and mute, against an `@username` or a user ID.
 - [ ] Every Staff Group action applies to all linked groups. In each group the bot first checks that the issuing member is an admin there with the needed right. It acts where they have it and skips the rest.
 - [ ] After each action the issuer gets a per-group summary: done, skipped (not an admin there or missing the right), or failed (for example, the bot lacks rights).
 - [ ] An optional reason appears in the summary and is posted to each affected group's log channel.
-- [ ] A `/staff` panel shows the help text and the linked groups with their status. It later becomes the "Staff Group" button in the settings menu.
 
 **Raid protection (second)**
 - [ ] A lockdown stops new members (anyone joining is kicked and listed in the alert) and mutes everyone except admins and approved users.
@@ -107,11 +108,11 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Any Staff Group member can act, gated by per-group admin rights | The Staff Group holds trusted people; the per-group check is the real safeguard | — Pending |
 | Act where allowed, skip the rest, with a per-group summary | Partial success is more useful than all-or-nothing, as long as it's visible | — Pending |
 | Every action hits all linked groups | That is the core value; per-group targeting adds complexity without demand | — Pending |
-| Only a person who owns both groups can link them; one Staff Group per group; auto-unlink on ownership change | Strongest guarantee that a Staff Group can't gain control of a group it shouldn't | — Pending |
+| Only a person who owns both groups can link them; one Staff Group per group; auto-unlink on ownership change | Strongest guarantee that a Staff Group can't gain control of a group it shouldn't | ✓ Shipped — Phase 1 |
 | Lockdown = kick joiners + mute all except admins and approved users; admin-only manual lift | Stops a raid immediately and leaves the "safe again" call to a human | — Pending |
 | Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | — Pending |
 | Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | — Pending |
-| `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | — Pending |
+| `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | ✓ Panel shipped — Phase 1; menu fold-in Phase 9 |
 | Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | — Pending |
 | Every staff action needs a Confirm tap showing the resolved target | `@usernames` can be stale or recycled; owner prefers safety over speed | — Pending |
 | Staff Group members aren't protected from staff actions; only each group's admins and owner, and the bot, are | Owner's call; staff are trusted, not immune | — Pending |
@@ -122,6 +123,11 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Turnstile captcha is one solve only; math and text modes stay as fallbacks | Owner's call; fallbacks cover Cloudflare or hosting outages | — Pending |
 | `/settings` asks whether to open in the group or in private | GroupHelp-style choice | — Pending |
 | Multiple replicas: pacing, counters, challenges and lockdown state are shared, not per process | That's how the bot is deployed | — Pending |
+| Role exclusivity (a group can't be both a Staff Group and linked) is enforced by a PostgreSQL trigger with per-chat advisory locks, on top of the app checks | Closes the two-replica race the app checks alone can't; trigger rejection fails closed | ✓ Good — Phase 1 (concurrency test passes on PostgreSQL 16) |
+| Only a definite owner mismatch removes a link; any Telegram error counts as unknown and changes nothing | A 429 or timeout must never mass-unlink groups | ✓ Good — Phase 1 |
+| Exactly-once notices come from conditional writes (RowsAffected == 1 posts), not locks | Racing triggers and replicas can't double-post or contradict each other | ✓ Good — Phase 1 |
+| Hourly staff sweeper across replicas behind a Redis `SETNX` lock; runs unguarded without Redis because every staff write is conditional | Catches ownership changes Telegram never announced (bot not admin, bot down) | ✓ Good — Phase 1 |
+| Link refusals to strangers use one uniform text and never post into the named Staff Group | Prevents probing which chats are Staff Groups and spamming someone else's staff room | ✓ Good — Phase 1 |
 
 ## Evolution
 
@@ -141,4 +147,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-04 after requirements scoping*
+*Last updated: 2026-10-05 after Phase 1*

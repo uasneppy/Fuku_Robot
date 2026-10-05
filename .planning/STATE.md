@@ -1,43 +1,43 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 01
-current_phase_name: Staff Group Links
-status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-10-04T23:25:21.525Z"
-last_activity: 2026-10-04
-last_activity_desc: Phase 01 execution resumed (wave continue)
-state_head: d97ee58abae1d8a2e8ce4fd5cc1fdc0d22a9ec98
+current_phase: 2
+current_phase_name: Staff Actions Across Groups
+status: planning
+stopped_at: Phase 01 complete, ready to plan Phase 2
+last_updated: "2026-10-05T00:41:00.079Z"
+last_activity: 2026-10-05
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
+state_head: 6674b65d17381694c2a4b7d44ac7bbb7e170ba56
 progress:
   total_phases: 9
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 10
-  completed_plans: 6
-  percent: 0
+  completed_plans: 10
+  percent: 11
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-04)
+See: .planning/PROJECT.md (updated 2026-10-05)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 01 — Staff Group Links
+**Current focus:** Phase 2 — Staff Actions Across Groups
 
 ## Current Position
 
-Phase: 01 (Staff Group Links) — EXECUTING
-Plan: 1 of 10
-Status: Executing Phase 01
-Last activity: 2026-10-04 — Phase 01 execution resumed (wave continue)
+Phase: 2 — Staff Actions Across Groups
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-05 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 11%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
+- Total plans completed: 10
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -45,7 +45,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01 | 10 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -65,6 +65,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Multiple replicas are the deployment target, so fan-out pacing and detection counters go through Redis, not an in-process limiter. This closes research gap 5.
 - [Roadmap]: PLAT-03 is mapped to Phase 1, PLAT-01 to Phase 2 and PLAT-02 to Phase 7, where each first matters. All three still apply to every later phase (see ROADMAP Cross-Cutting Constraints).
 - [Roadmap]: LOCK-10 (one lockdown and one alert per raid) is in Phase 6, where concurrent auto-triggers first exist.
+- [Phase 1]: Role exclusivity is enforced by a PostgreSQL trigger with per-chat advisory locks (owner's pick), on top of in-transaction app checks.
+- [Phase 1]: Only a definite owner mismatch removes a link; Telegram errors are unknown and change nothing. Phase 2's pre-action owner recheck should reuse `staff.*Fresh` + `chat_status.CheckOwner` the same way.
+- [Phase 1]: Exactly-once Staff Group notices come from conditional writes (RowsAffected == 1 posts), not locks.
 
 ### Pending Todos
 
@@ -75,7 +78,10 @@ None yet.
 - [Phase 4]: Spike gate. Test whether approved users can be exempted from a locked default, and how joins arrive. If the exemption is impossible, the owner picks the LOCK-03 fallback before planning.
 - [Phase 7]: Spike gate. Evaluate Gemini on spam images, GIFs and stickers, then run `/gsd-ai-integration-phase`.
 - [Phase 8]: Spike gate. Test Direct Link Mini App launch from a group, and Turnstile rendering in Telegram WebViews. The owner must provide a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
-- [Phase 1/2]: Research flags (not gating). Check `chat_member` updates on ownership transfer (Phase 1), and `restrictChatMember` on banned or absent users (Phase 2).
+- [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
+- [Phase 1]: 10 of 11 live-Telegram UAT checks were deferred without being run (`phases/01-staff-group-links/01-UAT.md` Deferred Follow-Ups). CI had not run on PR #1 at phase close; the PostgreSQL trigger test passed locally against PostgreSQL 16.
+- [Phase 1]: Low, non-blocking security flag TF-01-06: a stranger's `/unlinkstaff` reply reveals whether the group is linked (`01-SECURITY.md`).
+- [Phase 2]: Research flag (not gating). Check `restrictChatMember` on banned or absent users.
 - [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) lands in Phase 4. The alert's Lift button (LOCK-06), and listing removed joiners on the alert (LOCK-01), land in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
 
 ### Quick Tasks Completed
@@ -94,6 +100,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-04T18:59:23.295Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-staff-group-links/01-CONTEXT.md
+Last session: 2026-10-05T00:42:00Z
+Stopped at: Phase 01 complete, ready to plan Phase 2
+Resume file: None

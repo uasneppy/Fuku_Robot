@@ -9,13 +9,13 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Staff Group setup and links
 
-- [ ] **SETUP-01**: A group's owner can designate that Telegram group as a Staff Group. Channels and basic groups that can't be used are refused with a reason.
-- [ ] **SETUP-02**: Only the owner of a Staff Group can remove its Staff Group status, which unlinks all its groups.
-- [ ] **SETUP-03**: A user who owns both a group and a Staff Group can link that group to the Staff Group.
-- [ ] **SETUP-04**: Linking is refused if the user doesn't own both groups (checked live), or if the group is already linked to a Staff Group.
-- [ ] **SETUP-05**: The owner of both groups can unlink a group.
-- [ ] **SETUP-06**: A link is removed automatically as soon as the same person no longer owns both groups. Ownership is re-checked before every staff action, and ownership-change updates are also watched.
-- [ ] **SETUP-07**: Links, and Staff Group status, keep working after a group upgrades to a supergroup and its chat ID changes.
+- [x] **SETUP-01**: A group's owner can designate that Telegram group as a Staff Group. Channels and basic groups that can't be used are refused with a reason.
+- [x] **SETUP-02**: Only the owner of a Staff Group can remove its Staff Group status, which unlinks all its groups.
+- [x] **SETUP-03**: A user who owns both a group and a Staff Group can link that group to the Staff Group.
+- [x] **SETUP-04**: Linking is refused if the user doesn't own both groups (checked live), or if the group is already linked to a Staff Group.
+- [x] **SETUP-05**: The owner of both groups can unlink a group.
+- [x] **SETUP-06**: A link is removed automatically as soon as the same person no longer owns both groups. Ownership is re-checked before every staff action, and ownership-change updates are also watched.
+- [x] **SETUP-07**: Links, and Staff Group status, keep working after a group upgrades to a supergroup and its chat ID changes.
 - [x] **SETUP-08**: In the Staff Group, `/staff` opens a panel with the Staff Group help text and every linked group with its status:
   - linked
   - bot is admin
@@ -169,13 +169,13 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SETUP-01 | Phase 1 | Pending |
-| SETUP-02 | Phase 1 | Pending |
-| SETUP-03 | Phase 1 | Pending |
-| SETUP-04 | Phase 1 | Pending |
-| SETUP-05 | Phase 1 | Pending |
-| SETUP-06 | Phase 1 | Pending |
-| SETUP-07 | Phase 1 | Pending |
+| SETUP-01 | Phase 1 | Complete |
+| SETUP-02 | Phase 1 | Complete |
+| SETUP-03 | Phase 1 | Complete |
+| SETUP-04 | Phase 1 | Complete |
+| SETUP-05 | Phase 1 | Complete |
+| SETUP-06 | Phase 1 | Complete |
+| SETUP-07 | Phase 1 | Complete |
 | SETUP-08 | Phase 1 | Complete |
 | SETUP-09 | Phase 3 | Pending |
 | STAFF-01 | Phase 2 | Pending |

@@ -22,7 +22,7 @@ These apply to every phase. Planners carry them into each phase's must-haves.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Staff Group Links** - Owners designate a Staff Group and link the groups they own to it; `/staff` shows each link's health
+- [x] **Phase 1: Staff Group Links** - Owners designate a Staff Group and link the groups they own to it; `/staff` shows each link's health (completed 2026-10-05)
 - [ ] **Phase 2: Staff Actions Across Groups** - Staff ban, mute, kick, unban or unmute someone in every linked group at once, after a Confirm tap, with live per-group admin checks
 - [ ] **Phase 3: Staff Audit and Undo** - Every staff action is posted to log channels, listed in `/staff`, and reversible with "Undo everywhere"
 - [ ] **Phase 4: Manual Lockdown** - `/lockdown` removes joiners and mutes non-admins in one group; `/unlockdown` restores its permissions exactly
@@ -48,7 +48,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A link and the Staff Group status keep working after a group upgrades to a supergroup and gets a new chat ID.
   5. `/staff` in the Staff Group shows the help text and each linked group's status: linked, bot is admin, bot can restrict members, owner still matches. All its text exists in all 7 languages. The in-lockdown status is added when Phase 4 ships.
 
-**Plans:** 10/10 plans executed
+**Plans:** 10/10 plans complete
 
 Plans:
 **Wave 1**
@@ -206,7 +206,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Staff Group Links | 10/10 | In Progress|  |
+| 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 0/TBD | Not started | - |
 | 3. Staff Audit and Undo | 0/TBD | Not started | - |
 | 4. Manual Lockdown | 0/TBD | Not started | - |

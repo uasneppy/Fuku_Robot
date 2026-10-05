@@ -1,7 +1,7 @@
 ---
 phase: 01-staff-group-links
 verified: 2026-10-05T00:25:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - ".planning/phases/01-staff-group-links/01-01-PLAN.md"
@@ -82,6 +82,7 @@ covered_files:
   - "migrations/20261004130000_add_staff_role_exclusivity_trigger.sql"
   - "scripts/check_test_results/main.go"
   - "scripts/check_test_results/main_test.go"
+
 covered_digest: "v2:sha256:b8c929181ca4fe8f8eaceffbea3c0c16e8ce71e9c5d7035c9a71e8aed82b1e81"
 behavior_unverified: 0
 overrides_applied: 0
