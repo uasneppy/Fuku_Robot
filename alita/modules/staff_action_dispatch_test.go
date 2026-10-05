@@ -85,6 +85,15 @@ func TestStaffActionNonStaffUnchanged(t *testing.T) {
 		{name: "unban an ID", text: "/unban 4242"},
 		{name: "unmute an ID", text: "/unmute 4242"},
 		{name: "mute as a reply", text: "/mute spam", reply: &target},
+		{name: "tban an ID", text: "/tban 4242 2d"},
+		{name: "tban with a reason", text: "/tban 4242 2d spamming"},
+		{name: "tban without a duration", text: "/tban 4242"},
+		{name: "tban as a reply", text: "/tban 2d spam", reply: &target},
+		{name: "tmute an ID", text: "/tmute 4242 1h"},
+		{name: "tmute without a duration", text: "/tmute 4242"},
+		{name: "tmute as a reply", text: "/tmute 1h spam", reply: &target},
+		{name: "ban with a duration", text: "/ban 4242 2d spam"},
+		{name: "mute with a duration", text: "/mute 4242 30m"},
 	}
 	for _, tc := range commands {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,8 +147,11 @@ func (e *staffActionEnv) wantCardOnly() {
 
 func TestStaffActionAnonymous(t *testing.T) {
 	staffChatOf := func(env *staffActionEnv) gotgbot.Chat { return env.staffChatObj() }
-	for _, command := range []string{"ban", "mute", "kick", "unban", "unmute"} {
+	for _, command := range []string{"ban", "mute", "kick", "unban", "unmute", "tban", "tmute"} {
 		text := "/" + command + " 4242"
+		if command == "tban" || command == "tmute" {
+			text += " 2d"
+		}
 		cases := []struct {
 			name  string
 			build func(env *staffActionEnv) *gotgbot.Update
@@ -184,8 +196,8 @@ func TestStaffActionAnonymous(t *testing.T) {
 	}
 
 	t.Run("sender without a user", func(t *testing.T) {
-		if len(staffActionCommands) != 5 {
-			t.Fatalf("staff commands = %d, want ban, mute, kick, unban and unmute", len(staffActionCommands))
+		if len(staffActionCommands) != 7 {
+			t.Fatalf("staff commands = %d, want ban, mute, kick, unban, unmute, tban and tmute", len(staffActionCommands))
 		}
 		for _, spec := range staffActionCommands {
 			env := newStaffActionEnv(t, 1)
