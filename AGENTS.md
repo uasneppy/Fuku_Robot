@@ -82,6 +82,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   more than `MaxWait` (60 s) away fails at once as rate limited, with no Telegram request and without taking the slot.
   Every staff fan-out Telegram call goes through `staffPaced`, and per-replica limiters must not be used for shared
   budgets.
+- `staff_actions` and `staff_action_groups` are the staff audit record (migration 20261005120000). They are read only
+  through fresh queries, never cached (so no `DeleteCache` applies to them), and never part of
+  backup/export/import/reset. A record is created at Confirm and a failed create aborts the card; each group's prior
+  state is written before its Telegram write and a failed write fails that group closed. Record writes never use the
+  run's context, which a shutdown cancels first.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -117,7 +122,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `alita:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
   must `DeleteCache` it after commit.
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
-  `migrate_to_chat_id` parameter; other per-chat settings are not migrated.
+  `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
+  never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
+  `summary_chat_id`.
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
   the caller with RowsAffected == 1 posts the Staff Group notice.
@@ -186,6 +193,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Use real fixtures: `internal/testdb.Run` (SQLite), miniredis, hand-written `gotgbot.BotClient` fakes. No mock libraries.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
+- The three harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
+  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 
 ## Commits
