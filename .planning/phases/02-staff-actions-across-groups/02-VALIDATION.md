@@ -55,6 +55,12 @@ created: "2026-10-05"
 | 2-06-02 | 06 | 6 | STAFF-08, STAFF-12, PLAT-01 | T-02-24, T-02-26 | Every fan-out call paced; D-19 reasons from a live probe; panics reported | unit | `go test -tags testtools -race -count=1 -run '^TestStaffAction(RetriesOn429\|RateLimitedFails\|FailureClassification\|LookupClassification\|RecheckPaced\|RecheckRateLimited\|WorkersBounded\|WorkerPanicReported)$' ./alita/modules` | ✅ | ✅ green |
 | 2-07-01 | 07 | 7 | STAFF-08 | T-02-28 | Only done lines collapse; overflow goes to continuation; UTF-16 measured after escaping | unit (pure) | `go test -tags testtools -race -count=1 -run '^TestStaffActionSummary' ./alita/modules` | ✅ | ✅ green |
 | 2-07-02 | 07 | 7 | STAFF-08, STAFF-12 | T-02-29, T-02-30, T-02-31 | Final summary always delivered (retry, fallback); shutdown drain before DB close | unit | `go test -tags testtools -race -count=1 -run '^TestStaffAction(ProgressBatched\|FinalEditRetriesOn429\|FinalFallsBackToNewMessage\|NotModifiedIsSuccess\|OverflowContinuation\|AllSkippedTally)$\|^TestStopStaffActionsFinalizes$' ./alita/modules` | ✅ | ✅ green |
+| 2-08-01 | 08 | 8 | STAFF-08, STAFF-12 | T-02-32, T-02-33 | Final edit, fallback and each continuation get their own delivery budget, so a 60 s retry_after cannot lose the summary | unit + virtual clock | `go test -tags testtools -race -count=1 -run '^TestStaffAction(FinalEditLongRetryAfter\|FinalPartsOwnBudget\|FinalEditRetriesOn429\|FinalFallsBackToNewMessage\|NotModifiedIsSuccess\|OverflowContinuation)$\|^TestStopStaffActionsFinalizes$' ./alita/modules` | ✅ | ✅ green |
+| 2-08-02 | 08 | 8 | STAFF-08, STAFF-12 | T-02-34, T-02-35 | Progress edits pause during a 429 hold; the final edit waits it out; retry_after clamped before it is multiplied | unit + virtual clock | `go test -tags testtools -race -count=1 -run '^TestStaffAction(ProgressBacksOffAfter429\|FinalEditWaitsForHold\|ProgressBatched)$\|^TestStaffRetryAfterClamp$' ./alita/modules` | ✅ | ✅ green |
+| 2-09-01 | 09 | 8 | STAFF-12, PLAT-01 | T-02-27, T-02-36 | A slot beyond MaxWait fails the call at once as "rate limited", without calling Telegram or taking the slot | unit + miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffActionBlockAboveMaxWaitFailsFast$' ./alita/modules` | ✅ | ✅ green |
+| 2-09-02 | 09 | 8 | STAFF-12, PLAT-01 | T-02-37, T-02-38 | Redis-down fallback refuses the same way; retry_after overflow clamped; boundary pinned | unit + miniredis | `go test -tags testtools -race -count=3 -run '^TestTelegramPacer' ./alita/utils/ratelimit` | ✅ | ✅ green |
+| 2-10-01 | 10 | 9 | PLAT-01, STAFF-12 | T-02-39, T-02-40 | The run's coordinator renews its own target lock by compare-and-set while the fan-out runs | miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffActionTargetLockRenewedDuringRun$' ./alita/modules` | ✅ | ✅ green |
+| 2-10-02 | 10 | 9 | PLAT-01, STAFF-12 | T-02-41, T-02-42 | A vanished lock is re-taken with the run's token; another card's lock is never touched; the lock is released after delivery | miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffActionTargetLock\|^TestStaffActionOwnCardDoubleTap$\|^TestStaffActionConfirm' ./alita/modules` and `make test` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -76,7 +82,7 @@ created: "2026-10-05"
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | Mute fan-out never lifts a real ban (research flag; tdlib's final status-replacement step is inferred) | STAFF-04 | Requires a live Telegram group; fakes model the inferred server semantics only | In a throwaway group, ban a test account, run a staff `/mute` and `/unmute` from the Staff Group, and confirm the account is still banned |
-| Behavior under real Telegram flood control across many groups | STAFF-12, PLAT-01 | Real rate-limit numbers are unpublished; tests script 429 responses | Link several groups, run a staff `/ban`, and confirm the summary finishes with every group marked and no group dropped (human-check in task 2-06-02) |
+| Behavior under real Telegram flood control across many groups and replicas | STAFF-12, PLAT-01 | Real rate-limit numbers are unpublished; tests script 429 responses and use a virtual clock | Link several groups, run a staff `/ban`, and confirm the summary finishes with every group marked and no group dropped (human-check in task 2-06-02). Then follow the human-check in task 2-10-02: trigger real 429s, confirm the card is not edited during `retry_after`, every card ends on a final summary, and a second Confirm on the same target answers "target busy" while the first run is going |
 | End-to-end live run: card, Confirm, per-group skips, anonymous refusal, 5-minute expiry, unchanged per-group /ban | STAFF-01..08, STAFF-13 | Real clients, real admin rights and the edit cadence cannot be reproduced by the fake | Follow the human-check in task 2-07-02 (the research-flag check is the human-check in task 2-02-02) |
 
 ---
@@ -90,7 +96,7 @@ created: "2026-10-05"
 - [x] Feedback latency < 60s (quick run measured at 59.5 s after wave 7 — at the limit; per-task -run patterns finish well under it)
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** validated 2026-10-05 (validate-phase, after all 7 plans merged)
+**Approval:** validated 2026-10-05 (validate-phase, after all 7 plans merged); re-validated 2026-10-05 after gap-closure plans 02-08 to 02-10 merged
 
 ## Validation Audit 2026-10-05
 
@@ -108,3 +114,17 @@ Notes:
   - `TestLogUsersPersistsSenderChatAndReplyUsers` had a data race between tests swapping the throttle maps and the sweep/async goroutines. It was reproduced 4 times in a 100 s loop and showed 0 times after the fix.
   - `TestTelegramPacerFleetSpacing` had a neighbour-gap assertion that broke on timer jitter. It now uses a jitter-proof lower bound. 50 `-race` runs pass, and a per-replica-only mutation fails it.
 - Manual-only rows are unchanged. They need a live Telegram bot and groups.
+
+## Validation Audit 2026-10-05 (gap closure)
+
+Audited after plans 02-08, 02-09 and 02-10 merged (closing WR-01 and WR-02). Six per-task rows were added (2-08-01 to 2-10-02). Every new automated command was run against the merged head. Each named test ran and passed under `-race`: 6 new staff tests, `TestStaffRetryAfterClamp`, the 3 `TestStaffActionTargetLockRenewedDuringRun` subtests, and the 3 new `TestTelegramPacer*` tests at `-count=3`. The combined targeted run took 17 s.
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Notes:
+- `make test` passed after each gap-closure wave (60 packages ok, 0 failures).
+- The flood-control manual-only row now also points to the human-check in task 2-10-02.
