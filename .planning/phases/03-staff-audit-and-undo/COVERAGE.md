@@ -1,0 +1,1 @@
+No external API integration: uses only the already-integrated Telegram Bot API through the existing gotgbot client (getChatMember, banChatMember, restrictChatMember, unbanChatMember, getChat, sendMessage, editMessageText, all already called by Phase 2), plus the existing PostgreSQL and Redis; no new service, SDK, endpoint or package is added (go.mod unchanged).

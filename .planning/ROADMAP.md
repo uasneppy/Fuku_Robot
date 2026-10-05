@@ -132,7 +132,33 @@ Plans:
   3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
   4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
 
-**Plans:** TBD
+**Plans:** 9 plans
+
+Plans:
+**Wave 1**
+- [ ] 03-01-PLAN.md: Tracer. Owner confirms the one-way prior-state columns (checkpoint), then every confirmed staff action is recorded with each group's prior state (written before the Telegram write) and outcome; survives restarts and chat migration
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-02-PLAN.md: Undo decision table, test-first: decideStaffUndo restores the prior state, skips groups changed since, never re-applies an end date inside 120 s; invariants over every combination
+- [ ] 03-03-PLAN.md: Log-channel posts for applied actions (admin category, paced, never naming the Staff Group, never changing the result); the run engine takes a spec
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-04-PLAN.md: "Recent actions" on /staff: paged list, newest first, 10 per page, offset cursor, members only
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03-05-PLAN.md: History detail view: per-group lines in the summary format, undo outcomes, unlinked and unfinished groups, wording for every undo reason
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03-06-PLAN.md: Tracer for "Undo everywhere": button on the final summary, confirm card replying to it, presser-only Confirm, DB claim, live per-group checks for the presser, undo summary, original marked "Undone by"
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03-07-PLAN.md: Undo lifecycle and safety: cancel, expiry, refusals, one undo per action across replicas, shared target lock, shutdown mid-undo, no time limit
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03-08-PLAN.md: Undo restores exactly the prior state end to end (independent permissions), skips changed, unapplied, unlinked and rightless groups; #STAFF_UNDO log posts
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 03-09-PLAN.md: Undo from the history detail view, /staff help and docs, final AGENTS.md pass, full phase gate with PostgreSQL migration chain
 
 ### Phase 4: Manual Lockdown
 
@@ -237,7 +263,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 |-------|----------------|--------|-----------|
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
-| 3. Staff Audit and Undo | 0/TBD | Not started | - |
+| 3. Staff Audit and Undo | 0/9 | Not started | - |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
