@@ -3,15 +3,15 @@ status: testing
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T09:08:36Z
+updated: 2026-10-06T09:09:15Z
 ---
 
 ## Current Test
 
-number: 4
-name: DECISION: undo claim spent before any group is attempted (WR-01) and history says "undone" regardless of effect (WR-02)
+number: 5
+name: make lint on a go1.26 toolchain (or CI)
 expected: |
-  Owner chooses whether D-09 ("one undo per action") covers the zero-effect case (a Staff Group member who is an admin in no linked group presses Undo and Confirm, every group is skipped, and nobody can undo that action any more), or whether the claim should be released when no group reached a Telegram write, and whether the history line should say "undone" only when at least one group's undo succeeded (alita/modules/staff_undo.go:399-428, alita/modules/staff_history.go:69-80).
+  No new lint findings in the Phase 3 files. The installed golangci-lint was built with go1.25 and cannot run on this module (go 1.26.0).
 awaiting: user response
 
 ## Tests
@@ -31,7 +31,9 @@ decision: "a — accept the documented broad left-behind predicate for an unmute
 
 ### 4. DECISION: undo claim spent before any group is attempted (WR-01) and history says "undone" regardless of effect (WR-02)
 expected: Owner chooses whether D-09 ("one undo per action") covers the zero-effect case (a Staff Group member who is an admin in no linked group presses Undo and Confirm, every group is skipped, and nobody can undo that action any more), or whether the claim should be released when no group reached a Telegram write, and whether the history line should say "undone" only when at least one group's undo succeeded (alita/modules/staff_undo.go:399-428, alita/modules/staff_history.go:69-80).
-result: [pending]
+result: issue
+reported: "Decision b: give the undo back when no group reached a Telegram write, so someone with rights can retry; show "undone" only when at least one group was actually undone (otherwise say nothing changed); a crashed undo shows interrupted, not ⏳ (WR-01 and WR-02)."
+severity: major
 
 ### 5. make lint on a go1.26 toolchain (or CI)
 expected: No new lint findings in the Phase 3 files. The installed golangci-lint was built with go1.25 and cannot run on this module (go 1.26.0).
@@ -41,9 +43,19 @@ result: [pending]
 
 total: 5
 passed: 3
-issues: 0
-pending: 2
+issues: 1
+pending: 1
 skipped: 0
 blocked: 0
 
 ## Gaps
+
+- gap_id: G-03-4
+  truth: "An undo claim is spent only when at least one group reached a Telegram write; history and the original summary say 'undone' only when at least one group was actually undone, and a crashed undo shows interrupted instead of pending"
+  status: failed
+  reason: "User reported: Decision b: give the undo back when no group reached a Telegram write, so someone with rights can retry; show 'undone' only when at least one group was actually undone (otherwise say nothing changed); a crashed undo shows interrupted, not ⏳ (WR-01 and WR-02)."
+  severity: major
+  test: 4
+  artifacts: []
+  missing: []
+
