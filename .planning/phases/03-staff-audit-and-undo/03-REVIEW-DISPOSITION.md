@@ -6,46 +6,50 @@ findings:
   - id: WR-01
     severity: warning
     disposition: open
-    title: "The one-shot undo claim is consumed even when no group was (or could be) undone"
+    title: "`Reached` is set for outcomes that provably made no write, so the claim is still burned for them"
   - id: WR-02
     severity: warning
     disposition: open
-    title: "History and the original summary say \"undone\" regardless of what the undo did; a crashed undo reads \"undone\" with ⏳ lines forever"
+    title: "\"Undo changed nothing\" is shown for groups whose outcome is unknown or probably applied"
   - id: WR-03
     severity: warning
     disposition: open
-    title: "A history page press is answered before the data is read, so a database error is a silent no-op"
+    title: "A retry after an ambiguous `ReleaseUndo` error can run `FinalizeUndo` on an already released record"
   - id: WR-04
     severity: warning
-    disposition: skipped
-    title: "The \"left behind\" predicate for an unmute accepts any non-muted state, so undo can overwrite another admin's newer restriction"
+    disposition: open
+    title: "A history page press is answered before the data is read, so a database error is a silent no-op (carried forward; was WR-03)"
   - id: IN-01
     severity: info
     disposition: open
-    title: "`staffCallRestore` is defined by arithmetic outside the iota block"
+    title: "The original summary is marked \"see the reply\" even when the undo's own summary was never delivered"
   - id: IN-02
     severity: info
-    disposition: open
-    title: "`ClaimUndo` is not bound to the Staff Group in SQL"
+    disposition: skipped
+    title: "The \"left behind\" predicate for an unmute accepts any non-muted state (carried forward; was WR-04, accepted by the owner at UAT)"
   - id: IN-03
     severity: info
     disposition: open
-    title: "`RekeyChat` bumps `updated_at` on every history row, which can flip dead runs back to \"running\""
+    title: "`ClaimUndo` is not bound to the Staff Group in SQL (carried forward; was IN-02)"
   - id: IN-04
     severity: info
     disposition: open
-    title: "Two tests synchronise with a fixed `time.Sleep(50ms)`"
+    title: "`RekeyChat` bumps `updated_at`, which now also flips dead undos back to \"running\" (carried forward; was IN-03)"
   - id: IN-05
     severity: info
     disposition: open
-    title: "The history timestamp format is English-only in every locale"
+    title: "The history timestamp format is English-only in every locale (carried forward)"
   - id: IN-06
     severity: info
     disposition: open
-    title: "The Prev offset ignores a page that was shrunk to fit the length cap"
-open: 9
-total: 10
-recorded: 2026-10-05T20:12:26.912Z
+    title: "The Prev offset ignores a page that was shrunk to fit the length cap (carried forward)"
+  - id: IN-07
+    severity: info
+    disposition: open
+    title: "`staffCallRestore` is defined by arithmetic outside the iota block (carried forward; was IN-01)"
+open: 10
+total: 11
+recorded: 2026-10-06T11:51:17.012Z
 ---
 
 # Phase 03: Code Review Disposition
@@ -55,13 +59,14 @@ recorded: 2026-10-05T20:12:26.912Z
 | WR-01 | warning | open | - |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
-| WR-04 | warning | skipped | Owner accepted the broad unmute predicate (03-UAT test 3, option a) |
+| WR-04 | warning | open | - |
 | IN-01 | info | open | - |
-| IN-02 | info | open | - |
+| IN-02 | info | skipped | Owner accepted the broad unmute predicate (03-UAT test 3, option a); was WR-04 in the first review |
 | IN-03 | info | open | - |
 | IN-04 | info | open | - |
 | IN-05 | info | open | - |
 | IN-06 | info | open | - |
+| IN-07 | info | open | - |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
