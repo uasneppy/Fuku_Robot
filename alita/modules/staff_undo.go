@@ -48,16 +48,27 @@ func staffPlainName(name string) string {
 	return name
 }
 
-// staffUndoAlreadyText is "Already undone by <name>." The name is spliced in after
-// translation. For an HTML message the name is escaped; for a callback answer, which
-// is plain text, it is not.
-func staffUndoAlreadyText(tr *i18n.Translator, name string, forHTML bool) string {
+// staffUndoClaimedText answers a press on a record whose undo was claimed, by what
+// the record says about that undo (staffUndoStateOf): it is running, it was
+// interrupted, it changed nothing, or it undid something ("Already undone by
+// <name>."). undoDone is the number of groups whose undo_outcome is done. The name is
+// spliced in after translation. For an HTML message the name is escaped; for a
+// callback answer, which is plain text, it is not.
+func staffUndoClaimedText(tr *i18n.Translator, a *models.StaffAction, undoDone int, now time.Time, forHTML bool) string {
+	name := staffPlainName(a.UndoByName)
 	if forHTML {
-		name = html.EscapeString(staffPlainName(name))
-	} else {
-		name = staffPlainName(name)
+		name = html.EscapeString(name)
 	}
-	text, _ := tr.GetString("staff_undo_already", i18n.TranslationParams{"name": staffUserToken})
+	key := "staff_undo_already"
+	switch staffUndoStateOf(a, undoDone, now) {
+	case staffUndoRunning:
+		key = "staff_undo_already_running"
+	case staffUndoInterrupted:
+		key = "staff_undo_already_interrupted"
+	case staffUndoNothing:
+		key = "staff_undo_already_nothing"
+	}
+	text, _ := tr.GetString(key, i18n.TranslationParams{"name": staffUserToken})
 	return strings.Replace(text, staffUserToken, name, 1)
 }
 
@@ -79,6 +90,55 @@ func staffActionUndoable(a *models.StaffAction, groups []models.StaffActionGroup
 		}
 	}
 	return false
+}
+
+// staffUndoState is what the record says about a staff action's undo.
+type staffUndoState int
+
+const (
+	// staffUndoNone: nobody claimed an undo.
+	staffUndoNone staffUndoState = iota
+	// staffUndoRunning: claimed, not finished, and the run wrote recently.
+	staffUndoRunning
+	// staffUndoInterrupted: claimed, not finished, and silent for longer than the
+	// target lock lives, so its run is dead.
+	staffUndoInterrupted
+	// staffUndoUndone: finished and at least one group was undone.
+	staffUndoUndone
+	// staffUndoNothing: finished and no group was undone.
+	staffUndoNothing
+)
+
+// staffUndoStateOf is the one place an undo's state is decided (owner decision b on
+// D-09): the claim alone never says "undone". undoDone is the number of groups whose
+// undo_outcome is done. An unfinished claim is running while the record's heartbeat
+// (updated_at, bumped by the claim and by every group result) is younger than
+// staffTargetLockTTL; a run renews its target lock every 10 minutes, so one silent
+// that long is dead, the same rule as the action's own state.
+func staffUndoStateOf(a *models.StaffAction, undoDone int, now time.Time) staffUndoState {
+	switch {
+	case a == nil || a.UndoStartedAt == nil:
+		return staffUndoNone
+	case a.UndoFinishedAt == nil && now.Sub(a.UpdatedAt) < staffTargetLockTTL:
+		return staffUndoRunning
+	case a.UndoFinishedAt == nil:
+		return staffUndoInterrupted
+	case undoDone > 0:
+		return staffUndoUndone
+	default:
+		return staffUndoNothing
+	}
+}
+
+// staffUndoDoneCount counts the groups whose undo changed something.
+func staffUndoDoneCount(groups []models.StaffActionGroup) int {
+	n := 0
+	for _, row := range groups {
+		if row.UndoOutcome == models.StaffActionOutcomeDone {
+			n++
+		}
+	}
+	return n
 }
 
 // staffUndoHeader is the first line of an undo card and of its summary: an undo
@@ -204,7 +264,7 @@ func (m moduleStruct) staffUndoAsk(
 		return ext.EndGroups
 	}
 	if action.UndoStartedAt != nil {
-		answerStaffCallback(b, query, staffUndoAlreadyText(tr, action.UndoByName, false), true)
+		answerStaffCallback(b, query, staffUndoClaimedText(tr, action, staffUndoDoneCount(groups), time.Now(), false), true)
 		return ext.EndGroups
 	}
 	if !staffActionUndoable(action, groups) {
@@ -374,11 +434,12 @@ func (m moduleStruct) staffUndoConfirm(
 		abort("staff_act_abort_check_failed")
 		return ext.EndGroups
 	}
-	abortAlready := func(a *models.StaffAction) {
-		abortStaffActionCard(b, staffTr, card, staffChat.Id, msgID, staffUndoAlreadyText(staffTr, a.UndoByName, true))
+	abortAlready := func(a *models.StaffAction, claimedGroups []models.StaffActionGroup) {
+		text := staffUndoClaimedText(staffTr, a, staffUndoDoneCount(claimedGroups), time.Now(), true)
+		abortStaffActionCard(b, staffTr, card, staffChat.Id, msgID, text)
 	}
 	if action.UndoStartedAt != nil {
-		abortAlready(action)
+		abortAlready(action, groups)
 		return ext.EndGroups
 	}
 	if !staffActionUndoable(action, groups) {
@@ -424,7 +485,13 @@ func (m moduleStruct) staffUndoConfirm(
 			abort("staff_act_abort_check_failed")
 			return ext.EndGroups
 		}
-		abortAlready(winner)
+		// The winner's groups are read again so the text reflects its current state.
+		winnerGroups, groupsErr := staff.ListActionGroupsFresh(winner.ID)
+		if groupsErr != nil {
+			abort("staff_act_abort_check_failed")
+			return ext.EndGroups
+		}
+		abortAlready(winner, winnerGroups)
 		return ext.EndGroups
 	}
 

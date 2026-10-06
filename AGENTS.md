@@ -66,7 +66,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (the undo card's Confirm and Cancel, Confirm only by the member who pressed Undo). The staff action Confirm (`xc`)
   refuses an undo card and the undo Confirm refuses an action card, so a replica on older code never runs an undo card.
   A press from a service identity (`staffServiceUserIDs`) is refused with "post as yourself" at Ask and Confirm before
-  any lookup, and another member's tap on an undo card gets the presser-only alert.
+  any lookup, and another member's tap on an undo card gets the presser-only alert. On a record whose undo was claimed,
+  Ask and Confirm say whether that undo is running, was interrupted, undid something or changed nothing
+  (`staffUndoStateOf`, through `staffUndoClaimedText`), and post nothing else.
 - The history detail view is `a=dt&r=<record id>&o=<offset>` (`r` is the `staff_actions` row ID, `o` the list offset
   Back returns to). The record is loaded fresh and refused unless its `staff_chat_id` is the pressed message's chat, so a
   forged or replayed button naming another Staff Group's record shows nothing. A zero, negative, non-numeric or
@@ -75,7 +77,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   without writing anything. While `staffActionUndoable` holds it also shows the same `a=ya&r=<record id>` Undo button as
   the summary, above Back; that press goes through `staffUndoAsk` like any other, so every undo check runs again and the
   button grants nothing by itself. Once an undo is claimed the button is gone and the view shows who undid it and each
-  group's undo result.
+  group's undo result. The Recent actions line and the detail view show the undo's state from the stored undo outcomes
+  (`staffUndoStateOf`, with the list's count from `TallyActionGroups`' `UndoDone`), never from the claim alone: undo
+  running, undo interrupted (unfinished with a heartbeat older than `staffTargetLockTTL`; its pending groups are shown
+  as interrupted without writing anything), undone (at least one group undone) or undo changed nothing. The Undo button
+  shows only while `staffActionUndoable` holds.
 
 ## Permissions
 

@@ -271,6 +271,13 @@ func TestStaffActionTally(t *testing.T) {
 		}
 	}
 
+	// An undo changed group 0 and skipped group 1: only the first counts as undone.
+	for i, outcome := range []string{models.StaffActionOutcomeDone, models.StaffActionOutcomeSkipped} {
+		if err := SaveUndoResult(action.ID, ActionGroupResult{GroupChatID: groups[i], Outcome: outcome}); err != nil {
+			t.Fatalf("SaveUndoResult %d: %v", i, err)
+		}
+	}
+
 	empty, noGroups := newTestAction(chat, nil, nil)
 	if err := CreateAction(empty, noGroups); err != nil {
 		t.Fatalf("CreateAction (no groups): %v", err)
@@ -280,7 +287,7 @@ func TestStaffActionTally(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TallyActionGroups: %v", err)
 	}
-	if got, want := tallies[action.ID], (ActionTally{Done: 2, Skipped: 1, Failed: 1, Pending: 1}); got != want {
+	if got, want := tallies[action.ID], (ActionTally{Done: 2, Skipped: 1, Failed: 1, Pending: 1, UndoDone: 1}); got != want {
 		t.Fatalf("tally = %+v, want %+v", got, want)
 	}
 	if _, present := tallies[empty.ID]; present {

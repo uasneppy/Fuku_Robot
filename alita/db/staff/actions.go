@@ -169,9 +169,11 @@ func GetActionFresh(id uint) (*models.StaffAction, error) {
 	return &row, nil
 }
 
-// ActionTally counts a staff action's group rows by outcome.
+// ActionTally counts a staff action's group rows by outcome. UndoDone is the number
+// of those rows whose undo_outcome is done: the groups an undo really changed.
 type ActionTally struct {
 	Done, Skipped, Failed, Pending int
+	UndoDone                       int
 }
 
 // ListActionsFresh lists one Staff Group's staff actions, newest first, straight
@@ -188,8 +190,8 @@ func ListActionsFresh(staffChatID int64, offset, limit int) ([]models.StaffActio
 	return rows, nil
 }
 
-// TallyActionGroups counts the group rows of each given action by outcome in one
-// query. An action with no group rows is absent from the map, and an empty ID list
+// TallyActionGroups counts the group rows of each given action by outcome, and by
+// undone, in one query. An action with no group rows is absent from the map, and an empty ID list
 // returns an empty map without a query.
 func TallyActionGroups(actionIDs []uint) (map[uint]ActionTally, error) {
 	tallies := make(map[uint]ActionTally, len(actionIDs))
@@ -197,14 +199,15 @@ func TallyActionGroups(actionIDs []uint) (map[uint]ActionTally, error) {
 		return tallies, nil
 	}
 	var counts []struct {
-		ActionID uint
-		Outcome  string
-		N        int
+		ActionID    uint
+		Outcome     string
+		UndoOutcome string
+		N           int
 	}
 	err := db.DB.Model(&models.StaffActionGroup{}).
-		Select("action_id, outcome, COUNT(*) AS n").
+		Select("action_id, outcome, undo_outcome, COUNT(*) AS n").
 		Where("action_id IN ?", actionIDs).
-		Group("action_id, outcome").
+		Group("action_id, outcome, undo_outcome").
 		Scan(&counts).Error
 	if err != nil {
 		log.Errorf("[Staff] TallyActionGroups: %v", err)
@@ -221,6 +224,9 @@ func TallyActionGroups(actionIDs []uint) (map[uint]ActionTally, error) {
 			tally.Failed += count.N
 		default:
 			tally.Pending += count.N
+		}
+		if count.UndoOutcome == models.StaffActionOutcomeDone {
+			tally.UndoDone += count.N
 		}
 		tallies[count.ActionID] = tally
 	}

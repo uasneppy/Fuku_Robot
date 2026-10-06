@@ -732,7 +732,7 @@ func TestStaffUndoAccess(t *testing.T) {
 		env.waitRuns()
 
 		text := env.lastEditText(env.staffChat, cardMsgID)
-		if !strings.Contains(text, staffMarker("staff_undo_already")) || !strings.Contains(text, "Winner") {
+		if !strings.Contains(text, staffMarker("staff_undo_already_running")) || !strings.Contains(text, "Winner") {
 			t.Fatalf("the losing card did not name the winner:\n%s", text)
 		}
 		for _, group := range env.groups {
