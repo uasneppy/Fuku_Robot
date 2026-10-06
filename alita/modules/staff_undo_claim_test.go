@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
 
@@ -146,8 +148,8 @@ func TestStaffUndoNothingChanged(t *testing.T) {
 	unbansBefore := env.unbansIn()
 	env.tapData(carol, env.staffChatObj(), msgID,
 		encodeCallbackData(staffCallbackNamespace, map[string]string{"a": undoAskCode, "r": fmt.Sprint(action.ID)}))
-	if text, alert := env.lastAnswer(); !strings.Contains(text, "Bob") || !alert {
-		t.Fatalf("answer to Undo after a tried undo = %q alert=%v, want an alert naming Bob", text, alert)
+	if text, alert := env.lastAnswer(); !strings.Contains(text, "Bob") || !alert || !strings.Contains(text, staffMarker("staff_undo_already_nothing")) {
+		t.Fatalf("answer to Undo after a tried undo = %q alert=%v, want an alert saying Bob's undo changed nothing", text, alert)
 	}
 	if got := len(env.fake.sentTo(env.staffChat)); got != sentBefore {
 		t.Fatalf("Undo after a tried undo posted %d message(s), want none", got-sentBefore)
@@ -188,4 +190,98 @@ func TestStaffUndoPanicKeepsClaim(t *testing.T) {
 	if !strings.Contains(original, staffMarker("staff_undo_marker_nothing")) {
 		t.Fatalf("the original summary does not say the undo changed nothing:\n%s", original)
 	}
+}
+
+// writeUndoClaim stores an undo claim by "Bob" straight into the record, the way a
+// run leaves it: the claim, the finish time (none for a run still going), the undo
+// outcome of each group in order, and the heartbeat. updated_at goes through
+// UpdateColumn so GORM does not move it.
+func writeUndoClaim(t *testing.T, actionID uint, groupIDs []int64, finished bool, outcomes []string, heartbeat time.Time) {
+	t.Helper()
+	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	values := map[string]any{"undo_by": int64(4040), "undo_by_name": "Bob", "undo_started_at": started}
+	if finished {
+		values["undo_finished_at"] = started.Add(time.Minute)
+	}
+	if err := db.DB.Model(&models.StaffAction{}).Where("id = ?", actionID).Updates(values).Error; err != nil {
+		t.Fatalf("write the undo claim: %v", err)
+	}
+	for i, group := range groupIDs {
+		err := db.DB.Model(&models.StaffActionGroup{}).Where("action_id = ? AND group_chat_id = ?", actionID, group).
+			Update("undo_outcome", outcomes[i]).Error
+		if err != nil {
+			t.Fatalf("write the undo outcome of group %d: %v", group, err)
+		}
+	}
+	if err := db.DB.Model(&models.StaffAction{}).Where("id = ?", actionID).UpdateColumn("updated_at", heartbeat).Error; err != nil {
+		t.Fatalf("set updated_at: %v", err)
+	}
+}
+
+// pressUndoButton presses the Undo button of record id on message msgID as from and
+// returns the answer, whether it was an alert, and how many messages the press
+// posted to the Staff Group.
+func (e *staffActionEnv) pressUndoButton(from gotgbot.User, msgID int64, id uint) (string, bool, int) {
+	e.t.Helper()
+	before := len(e.fake.sentTo(e.staffChat))
+	e.tapData(from, e.staffChatObj(), msgID,
+		encodeCallbackData(staffCallbackNamespace, map[string]string{"a": undoAskCode, "r": fmt.Sprint(id)}))
+	text, alert := e.lastAnswer()
+	return text, alert, len(e.fake.sentTo(e.staffChat)) - before
+}
+
+func TestStaffUndoClaimedTexts(t *testing.T) {
+	cases := []struct {
+		name      string
+		finished  bool
+		outcomes  []string
+		heartbeat time.Duration
+		marker    string
+	}{
+		{"running", false, []string{"", ""}, 0, staffMarker("staff_undo_already_running")},
+		{"interrupted", false, []string{"", ""}, 2 * time.Hour, staffMarker("staff_undo_already_interrupted")},
+		{"changed nothing", true, []string{"failed", "failed"}, time.Hour, staffMarker("staff_undo_already_nothing")},
+		{"undone", true, []string{"done", "skipped"}, time.Hour, staffMarker("staff_undo_already")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newStaffActionEnv(t, 2)
+			carol := env.undoMember("Carol", 2)
+			action, msgID := env.undoFinishedBan()
+			writeUndoClaim(t, action.ID, env.groups, tc.finished, tc.outcomes, time.Now().Add(-tc.heartbeat))
+			writesBefore := len(env.writes(env.groups[0])) + len(env.writes(env.groups[1]))
+
+			text, alert, posted := env.pressUndoButton(carol, msgID, action.ID)
+
+			if !strings.Contains(text, tc.marker) || !strings.Contains(text, "Bob") || !alert || posted != 0 {
+				t.Fatalf("answer %q alert=%v posted=%d, want an alert with %s naming Bob and no card", text, alert, posted, tc.marker)
+			}
+			if got := len(env.writes(env.groups[0])) + len(env.writes(env.groups[1])); got != writesBefore {
+				t.Fatalf("Undo on a claimed record made %d write call(s), want none", got-writesBefore)
+			}
+		})
+	}
+
+	t.Run("Confirm after the claim", func(t *testing.T) {
+		env := newStaffActionEnv(t, 2)
+		carol := env.undoMember("Carol", 2)
+		action, msgID := env.undoFinishedBan()
+		token, cardMsgID := env.askUndo(carol, msgID, action.ID)
+		writeUndoClaim(t, action.ID, env.groups, true, []string{"failed", "failed"}, time.Now().Add(-time.Hour))
+		writesBefore := len(env.writes(env.groups[0])) + len(env.writes(env.groups[1]))
+
+		env.tapUndoCard(carol, undoConfirmCode, token, cardMsgID)
+		env.waitRuns()
+
+		text := env.lastEditText(env.staffChat, cardMsgID)
+		if !strings.Contains(text, staffMarker("staff_undo_already_nothing")) || !strings.Contains(text, "Bob") {
+			t.Fatalf("the card does not say Bob's undo changed nothing:\n%s", text)
+		}
+		if state := cardState(t, token); state != staffCardAborted {
+			t.Fatalf("card state = %q, want %q", state, staffCardAborted)
+		}
+		if got := len(env.writes(env.groups[0])) + len(env.writes(env.groups[1])); got != writesBefore {
+			t.Fatalf("Confirm on a claimed record made %d write call(s), want none", got-writesBefore)
+		}
+	})
 }
