@@ -1,18 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T13:08:41Z
+updated: 2026-10-06T13:11:11Z
 ---
 
 ## Current Test
 
-number: 8
-name: OPTIONAL DECISION: "changed nothing" wording for groups whose write may have applied (code review WR-02)
-expected: |
-  Owner chooses (a) keep "Undo by <name> changed nothing" when the only non-skipped groups ended in a panic, an interruption or a timeout, or (b) use a neutral "tried, result not confirmed, check the groups" wording for those outcomes.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -31,7 +27,9 @@ decision: "a — accept the documented broad left-behind predicate for an unmute
 
 ### 4. DECISION: undo claim spent before any group is attempted (WR-01) and history says "undone" regardless of effect (WR-02)
 expected: Owner chooses whether D-09 ("one undo per action") covers the zero-effect case (a Staff Group member who is an admin in no linked group presses Undo and Confirm, every group is skipped, and nobody can undo that action any more), or whether the claim should be released when no group reached a Telegram write, and whether the history line should say "undone" only when at least one group's undo succeeded (alita/modules/staff_undo.go:399-428, alita/modules/staff_history.go:69-80).
-result: issue
+result: pass
+resolved_by: "03-10, 03-11, 03-12 (gap G-03-4)"
+reverified_by: "test 6, live re-run after gap closure, passed 2026-10-06"
 reported: "Decision b: give the undo back when no group reached a Telegram write, so someone with rights can retry; show 'undone' only when at least one group was actually undone (otherwise say nothing changed); a crashed undo shows interrupted, not ⏳ (WR-01 and WR-02)."
 severity: major
 
@@ -51,14 +49,15 @@ decision: "a — keep the rule as written: the claim is kept whenever a group's 
 
 ### 8. OPTIONAL DECISION: "changed nothing" wording for groups whose write may have applied (code review WR-02)
 expected: Owner chooses (a) keep "Undo by <name> changed nothing" when the only non-skipped groups ended in a panic, an interruption or a timeout, or (b) use a neutral "tried, result not confirmed, check the groups" wording for those outcomes.
-result: [pending]
+result: pass
+decision: "a — keep 'changed nothing' when no group was confirmed undone, including panics, interruptions and timeouts (code review WR-02 accepted)"
 
 ## Summary
 
 total: 8
-passed: 6
-issues: 1
-pending: 1
+passed: 8
+issues: 0
+pending: 0
 skipped: 0
 blocked: 0
 

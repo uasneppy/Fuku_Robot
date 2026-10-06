@@ -9,7 +9,7 @@ findings:
     title: "`Reached` is set for outcomes that provably made no write, so the claim is still burned for them"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: skipped
     title: "\"Undo changed nothing\" is shown for groups whose outcome is unknown or probably applied"
   - id: WR-03
     severity: warning
@@ -47,7 +47,7 @@ findings:
     severity: info
     disposition: open
     title: "`staffCallRestore` is defined by arithmetic outside the iota block (carried forward; was IN-01)"
-open: 9
+open: 8
 total: 11
 recorded: 2026-10-06T11:51:17.012Z
 ---
@@ -57,7 +57,7 @@ recorded: 2026-10-06T11:51:17.012Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | WR-01 | warning | skipped | Owner kept the rule: any attempted write keeps the claim (03-UAT test 7, option a) |
-| WR-02 | warning | open | - |
+| WR-02 | warning | skipped | Owner kept "changed nothing" for unconfirmed outcomes (03-UAT test 8, option a) |
 | WR-03 | warning | open | - |
 | WR-04 | warning | open | - |
 | IN-01 | info | open | - |
