@@ -3,27 +3,22 @@ status: testing
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-05T20:35:00Z
+updated: 2026-10-06T09:04:19Z
 ---
 
 ## Current Test
 
-number: 1
-name: Live Telegram restore check (03-VALIDATION.md Manual-Only rows 1 and 2; 03-09 Task 2 human-check)
+number: 2
+name: Log-channel posts end to end (03-VALIDATION.md Manual-Only row 3)
 expected: |
-  Link two test supergroups, each with a log channel, to a test Staff Group.
-  In group A restrict a test account to text-only for 1 day, run a staff /ban, Confirm, then Undo everywhere and Confirm.
-  In group B ban the account for 2 hours with the per-group /ban, run a staff /unban, then Undo it.
-  Group A: restricted again, text allowed and media blocked, ending at the original time.
-  Group B: banned again until the original end time.
-  /staff, Recent actions and the entry's detail: both actions show as undone and the detail lists each group's result and undo result.
+  Each linked group's log channel has a #STAFF_BAN or #STAFF_UNBAN post and a #STAFF_UNDO post naming the issuer and the presser, the target, the reason and "via Staff Group", and never the Staff Group's title or ID.
 awaiting: user response
 
 ## Tests
 
 ### 1. Live Telegram restore check (03-VALIDATION.md Manual-Only rows 1 and 2; 03-09 Task 2 human-check)
 expected: Group A is restricted again with text allowed and media blocked, ending at the original time. Group B is banned again until the original end time. In /staff, Recent actions and the entry's detail, both actions show as undone and the detail lists each group's result and undo result. (Research A2, A3: fakes cannot prove live Telegram behaviour.)
-result: [pending]
+result: pass
 
 ### 2. Log-channel posts end to end (03-VALIDATION.md Manual-Only row 3)
 expected: Each linked group's log channel has a #STAFF_BAN or #STAFF_UNBAN post and a #STAFF_UNDO post naming the issuer and the presser, the target, the reason and "via Staff Group", and never the Staff Group's title or ID.
@@ -44,9 +39,9 @@ result: [pending]
 ## Summary
 
 total: 5
-passed: 0
+passed: 1
 issues: 0
-pending: 5
+pending: 4
 skipped: 0
 blocked: 0
 
