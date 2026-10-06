@@ -629,6 +629,55 @@ func TestStopStaffActionsUndo(t *testing.T) {
 			t.Fatalf("target lock holder after the shutdown = %q, want the key gone", holder)
 		}
 	})
+
+	t.Run("a write reached keeps the claim", func(t *testing.T) {
+		env := newStaffActionEnv(t, 8)
+		seedMembers(env)
+		bob := env.undoPresser("Bob")
+		withStaffActionTimers(t, time.Hour, 5*time.Millisecond)
+		resetStaffActionsContext(t)
+		action, msgID := env.undoFinishedBan()
+		token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+
+		for _, group := range env.groups {
+			env.fake.setDelay("unbanChatMember", group, 200*time.Millisecond)
+		}
+		unbans := env.requestCounts("unbanChatMember", env.groups)
+		env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+		env.waitForStaffRequest("unbanChatMember", env.groups, unbans)
+		StopStaffActions()
+		env.waitRuns()
+
+		summary := env.lastEditText(env.staffChat, cardMsgID)
+		if strings.Contains(summary, "⏳") {
+			t.Fatalf("final undo summary still has a pending line:\n%s", summary)
+		}
+		// A group reached its write before the shutdown, so the undo is spent and its
+		// record is finalized.
+		record, rows := recordOfCard(t, msgID)
+		if record.UndoStartedAt == nil || record.UndoFinishedAt == nil {
+			t.Fatalf("record undo_started_at = %v, undo_finished_at = %v, want both set", record.UndoStartedAt, record.UndoFinishedAt)
+		}
+		undone := 0
+		for _, row := range rows {
+			if row.UndoOutcome == "" {
+				t.Fatalf("group %d has no undo outcome: the shutdown dropped it from the record", row.GroupChatID)
+			}
+			if row.UndoOutcome == "done" {
+				undone++
+			}
+		}
+		if undone == 0 {
+			t.Fatal("no group was recorded as undone, although one reached its write")
+		}
+		original := env.lastEditText(env.staffChat, msgID)
+		if !strings.Contains(original, staffMarker("staff_undo_marker")) {
+			t.Fatalf("the original summary was not marked as undone:\n%s", original)
+		}
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the shutdown = %q, want the key gone", holder)
+		}
+	})
 }
 
 func TestStaffUndoNoTimeLimit(t *testing.T) {
