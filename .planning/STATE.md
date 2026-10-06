@@ -92,6 +92,7 @@ None yet.
 
 ### Blockers/Concerns
 
+- [Cross-phase]: The shutdown manager gives each handler only 10 s (`alita/utils/shutdown/graceful.go:83`), while `StopStaffActions` waits up to 30 s (`staffActionStopWait`). A slow staff action or undo run can therefore be cut off before `FinalizeAction`/`FinalizeUndo` and summary delivery, and the DB closes under it. Found by the G-03-4 diagnosis (`.planning/debug/undo-claim-spent-and-undone-label.md`); not yet planned.
 - [Phase 4]: Spike gate. Test whether approved users can be exempted from a locked default, and how joins arrive. If the exemption is impossible, the owner picks the LOCK-03 fallback before planning.
 - [Phase 7]: Spike gate. Evaluate Gemini on spam images, GIFs and stickers, then run `/gsd-ai-integration-phase`.
 - [Phase 8]: Spike gate. Test Direct Link Mini App launch from a group, and Turnstile rendering in Telegram WebViews. The owner must provide a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
