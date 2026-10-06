@@ -1,18 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T09:09:15Z
+updated: 2026-10-06T09:10:23Z
 ---
 
 ## Current Test
 
-number: 5
-name: make lint on a go1.26 toolchain (or CI)
-expected: |
-  No new lint findings in the Phase 3 files. The installed golangci-lint was built with go1.25 and cannot run on this module (go 1.26.0).
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -37,15 +33,16 @@ severity: major
 
 ### 5. make lint on a go1.26 toolchain (or CI)
 expected: No new lint findings in the Phase 3 files. The installed golangci-lint was built with go1.25 and cannot run on this module (go 1.26.0).
-result: [pending]
+result: skipped
+reason: "Not run: needs a go1.26 build of golangci-lint or CI; left as an open item"
 
 ## Summary
 
 total: 5
 passed: 3
 issues: 1
-pending: 1
-skipped: 0
+pending: 0
+skipped: 1
 blocked: 0
 
 ## Gaps
