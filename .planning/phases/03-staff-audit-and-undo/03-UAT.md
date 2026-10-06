@@ -32,7 +32,7 @@ decision: "a — accept the documented broad left-behind predicate for an unmute
 ### 4. DECISION: undo claim spent before any group is attempted (WR-01) and history says "undone" regardless of effect (WR-02)
 expected: Owner chooses whether D-09 ("one undo per action") covers the zero-effect case (a Staff Group member who is an admin in no linked group presses Undo and Confirm, every group is skipped, and nobody can undo that action any more), or whether the claim should be released when no group reached a Telegram write, and whether the history line should say "undone" only when at least one group's undo succeeded (alita/modules/staff_undo.go:399-428, alita/modules/staff_history.go:69-80).
 result: issue
-reported: "Decision b: give the undo back when no group reached a Telegram write, so someone with rights can retry; show "undone" only when at least one group was actually undone (otherwise say nothing changed); a crashed undo shows interrupted, not ⏳ (WR-01 and WR-02)."
+reported: "Decision b: give the undo back when no group reached a Telegram write, so someone with rights can retry; show 'undone' only when at least one group was actually undone (otherwise say nothing changed); a crashed undo shows interrupted, not ⏳ (WR-01 and WR-02)."
 severity: major
 
 ### 5. make lint on a go1.26 toolchain (or CI)
