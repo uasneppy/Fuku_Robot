@@ -312,7 +312,7 @@ Undo this action in the 3 group(s) where it was applied? Each group is checked a
 | **No Groups Applied** | Good | Refusal: "This action cannot be undone." (staff_undo_not_available key) |
 | **Undo Running** | Good | Summary updated every 2.5s with per-group status (inherits Phase 02 coordinator logic) |
 | **Undo Interrupted** | Good | After shutdown: groups marked "interrupted by restart"; record has finished_at set; user is told nothing was undone and to try again (staff_undo_abort_restarting key) |
-| **Undo Success (done)** | Good | Per-group ✅ lines; original summary edited to "↩ Undoned by {name}, see the reply"; undo result is a reply message with tally |
+| **Undo Success (done)** | Good | Per-group ✅ lines; original summary edited to "↩ Undone by {name}, see the reply"; undo result is a reply message with tally |
 | **Undo Success (changed nothing)** | Good | Summary still delivered with tally showing ⏭/❌ only; original marked "↩ Undo by {name} changed nothing, see the reply."; undo can be re-tried (staff_undo_marker_nothing key) |
 | **Undo Permission Denied** | Good | Per-group skip reasons: "you're not an admin there", "bot isn't an admin", "not in group" (inherited from Phase 02 decision table) |
 | **Group Changed Since** | Good | Skip reason: "changed since the action, so it was left as it is" (staff_undo_skip_changed_since key) |
@@ -466,5 +466,5 @@ No deviations from abstract 6-pillar standards are detected. All copywriting is 
 Each top fix was checked against the code before this review was committed:
 
 1. **Localize history timestamps:** confirmed. `staff_history.go` formats the history line, the detail header and the "undone at" time with Go's `"2 Jan 15:04"`, so month names are English in every locale. A small polish item, not a defect.
-2. **Consistent undo state markers:** the two texts differ on purpose. `staff_history_undone` ("↩ undone") is the compact marker on a one-line Recent actions entry, and `staff_undo_marker` ("↩ Undone by {name}, see the reply.") is the full marker on the original summary. Neither string contains "Undoned"; that spelling came from the audit report, not the code. No change is needed.
+2. **Consistent undo state markers:** the two texts differ on purpose. `staff_history_undone` ("↩ undone") is the compact marker on a one-line Recent actions entry, and `staff_undo_marker` ("↩ Undone by {name}, see the reply.") is the full marker on the original summary. Neither string contains the "Undoned" typo quoted in the audit report; the table above now quotes the real text. No change is needed.
 3. **Interim feedback during undo Confirm:** the premise does not hold. The Confirm press is answered at once (`answerStaffCallback`), and after the claim the card is edited straight into the pending summary with a ⏳ line per group, which the run then updates. The card never sits unchanged while the per-group checks run.
