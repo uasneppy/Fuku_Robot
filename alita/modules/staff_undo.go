@@ -416,7 +416,7 @@ func (m moduleStruct) staffUndoConfirm(
 	for i, t := range targets {
 		pendingLinks[i] = t.Link
 	}
-	pending, _ := composeStaffSummary(staffTr, staffUndoSummaryHeader(staffTr, card, notApplied), pendingResults(pendingLinks), false)
+	pending, _ := composeStaffSummary(staffTr, staffUndoSummaryHeader(staffTr, card, notApplied, false), pendingResults(pendingLinks), false)
 	if err := editStaffActionMessage(b, staffChat.Id, msgID, pending); err != nil {
 		log.Warnf("[StaffActions] edit undo card %s into summary: %v", card.Token, err)
 	}
@@ -425,14 +425,15 @@ func (m moduleStruct) staffUndoConfirm(
 	return ext.EndGroups
 }
 
-// editStaffUndoneOriginal adds "Undone by <name>, see the reply" to the original
-// summary and removes its Undo button (D-08). It runs at the end of the undo, after
-// the undo's own summary was delivered. It acts only when the record's summary chat
-// is the Staff Group the undo came from: a message ID belongs to the chat it was
-// sent to, and after a Staff Group migration the stored one points nowhere in the
-// new chat. The edit has a delivery budget of its own, never the run's context,
-// which a shutdown may already have cancelled. A failed edit is logged and nothing
-// else changes.
+// editStaffUndoneOriginal adds "Undone by <name>, see the reply" (markerKey
+// staff_undo_marker), or "Undo by <name> changed nothing, see the reply" (markerKey
+// staff_undo_marker_nothing), to the original summary and removes its Undo button
+// (D-08). It runs at the end of the undo, after the undo's own summary was
+// delivered. It acts only when the record's summary chat is the Staff Group the undo
+// came from: a message ID belongs to the chat it was sent to, and after a Staff
+// Group migration the stored one points nowhere in the new chat. The edit has a
+// delivery budget of its own, never the run's context, which a shutdown may already
+// have cancelled. A failed edit is logged and nothing else changes.
 func editStaffUndoneOriginal(
 	b *gotgbot.Bot,
 	tr *i18n.Translator,
@@ -440,11 +441,12 @@ func editStaffUndoneOriginal(
 	groups []models.StaffActionGroup,
 	staffChatID int64,
 	presserName string,
+	markerKey string,
 ) {
 	if a.SummaryChatID != staffChatID || a.SummaryMsgID == 0 {
 		return
 	}
-	marker, _ := tr.GetString("staff_undo_marker", i18n.TranslationParams{"name": staffUserToken})
+	marker, _ := tr.GetString(markerKey, i18n.TranslationParams{"name": staffUserToken})
 	marker = strings.Replace(marker, staffUserToken, html.EscapeString(staffPlainName(presserName)), 1)
 	header := staffActionHeader(tr, staffCardFromRecord(a)) + "\n" + marker
 	text, _ := composeStaffSummary(tr, header, staffResultsFromRecord(groups), true)
@@ -494,11 +496,17 @@ func staffUndoTargets(groups []models.StaffActionGroup, links []models.StaffGrou
 }
 
 // staffUndoSummaryHeader is the header of an undo's summary: the undo header and,
-// when some groups were not part of it, the line that counts them.
-func staffUndoSummaryHeader(tr *i18n.Translator, card *staffActionCard, notApplied int) string {
+// when some groups were not part of it, the line that counts them. released adds the
+// line saying no group was changed and the action can still be undone, which only
+// the final summary of a given-back undo carries.
+func staffUndoSummaryHeader(tr *i18n.Translator, card *staffActionCard, notApplied int, released bool) string {
 	header := staffUndoHeader(tr, card)
 	if notApplied > 0 {
 		note, _ := tr.GetString("staff_undo_not_applied_note", i18n.TranslationParams{"count": notApplied})
+		header += "\n" + note
+	}
+	if released {
+		note, _ := tr.GetString("staff_undo_released_note")
 		header += "\n" + note
 	}
 	return header
@@ -536,9 +544,12 @@ func startStaffUndoRun(
 	for i, t := range targets {
 		links[i] = t.Link
 	}
-	// released is written by Finish and read by Delivered. Both run on the run's
-	// coordinator goroutine after the fan-out ended, so no lock is needed.
+	// released and undone are written by Finish and read by Render and Delivered. All
+	// of them run on the run's coordinator goroutine after the fan-out ended (Render
+	// also runs there for progress edits, before Finish, when both are still zero),
+	// so no lock is needed.
 	released := false
+	undone := 0
 	startStaffRun(b, staffRunSpec{
 		Card:   card,
 		Links:  links,
@@ -557,9 +568,10 @@ func startStaffUndoRun(
 			}
 		},
 		Render: func(tr *i18n.Translator, results []staffGroupResult, final bool) (string, []string) {
-			return composeStaffSummary(tr, staffUndoSummaryHeader(tr, card, notApplied), results, final)
+			return composeStaffSummary(tr, staffUndoSummaryHeader(tr, card, notApplied, final && released), results, final)
 		},
 		Finish: func(results []staffGroupResult) gotgbot.InlineKeyboardMarkup {
+			undone, _, _, _ = staffSummaryTally(results)
 			// An undo that reached no Telegram write in any group changed nothing, so
 			// it gives the action's one undo back. Written with db.DB, never the run's
 			// context, and while the run still holds the target lock. One retry after
@@ -606,7 +618,13 @@ func startStaffUndoRun(
 			if released {
 				return
 			}
-			editStaffUndoneOriginal(b, staffChatTranslator(card.StaffChat), a, groups, chatID, card.IssuerName)
+			// "Undone by" only when at least one group was undone; when writes were
+			// tried and none succeeded the original says nothing changed (D-08).
+			markerKey := "staff_undo_marker_nothing"
+			if undone > 0 {
+				markerKey = "staff_undo_marker"
+			}
+			editStaffUndoneOriginal(b, staffChatTranslator(card.StaffChat), a, groups, chatID, card.IssuerName, markerKey)
 		},
 	})
 }

@@ -2593,7 +2593,7 @@ staff_help_msg: |
 
   Cada ação mostra primeiro um cartão. Só quem enviou o comando pode carregar em Confirmar ou Cancelar, e o cartão expira passados 5 minutos.
   Só atuo nos grupos associados onde é administrador com permissão para restringir membros neste momento, nunca contra os administradores ou o dono de um grupo, e o resultado indica cada grupo como feito, ignorado ou falhado.
-  Cada resumo terminado tem um botão "↩ Desfazer em todos", também oferecido em Ações recentes. Qualquer membro do Grupo de Staff pode carregar nele, quem carregou confirma, e cada grupo volta ao que era só onde essa pessoa pode restringir membros neste momento. Os grupos alterados entretanto ficam como estão. Uma expulsão não pode ser desfeita.
+  Cada resumo terminado tem um botão "↩ Desfazer em todos", também oferecido em Ações recentes. Qualquer membro do Grupo de Staff pode carregar nele, quem carregou confirma, e cada grupo volta ao que era só onde essa pessoa pode restringir membros neste momento. Os grupos alterados entretanto ficam como estão. Uma expulsão não pode ser desfeita. Se um desfazer não conseguir alterar nenhum grupo, por exemplo porque quem carregou não pode restringir membros em nenhum deles, nada é gasto e quem puder pode carregar em Desfazer outra vez. Depois de um desfazer ter tentado alterar um grupo, a ação não pode ser desfeita de novo.
   Cada ação aplicada e cada anulação é publicada no canal de registo do grupo onde foi aplicada (categoria de registo de admin).
   /sban, /dban, /skick, /dkick, /smute e /dmute não são usados aqui.
   Envie estes comandos como si próprio, não de forma anónima.
@@ -2751,6 +2751,8 @@ staff_undo_button: "↩ Desfazer em todos"
 staff_undo_label: "Desfazer"
 staff_undo_card_applies: "Desfazer esta ação nos {count} grupo(s) onde foi aplicada? Cada grupo é verificado de novo antes. Nada acontece até tocar em Confirmar."
 staff_undo_marker: "↩ Desfeita por {name}, veja a resposta."
+staff_undo_marker_nothing: "↩ O desfazer de {name} não alterou nada, veja a resposta."
+staff_undo_released_note: "Nenhum grupo foi alterado, então esta ação ainda pode ser desfeita por quem puder restringir membros nos seus grupos."
 staff_undo_not_applied_note: "{count} outro(s) grupo(s) foram deixados como estavam: a ação não foi aplicada lá."
 staff_undo_already: "Já foi desfeita por {name}."
 staff_undo_not_available: "Esta ação não pode ser desfeita."

@@ -2547,7 +2547,7 @@ staff_help_msg: |
 
   Chaque action affiche d'abord une carte. Seule la personne qui a envoyé la commande peut appuyer sur Confirmer ou Annuler, et la carte expire après 5 minutes.
   Je n'agis que dans les groupes liés où vous êtes administrateur avec le droit de restreindre des membres à cet instant, jamais contre les administrateurs ou le propriétaire d'un groupe, et le résultat indique chaque groupe comme fait, ignoré ou échoué.
-  Chaque résumé terminé a un bouton "↩ Annuler partout", également proposé dans Actions récentes. Tout membre du groupe Staff peut appuyer dessus, la personne qui a appuyé confirme, et chaque groupe est remis comme avant uniquement là où cette personne peut restreindre des membres à cet instant. Les groupes modifiés depuis sont laissés tels quels. Une expulsion ne peut pas être annulée.
+  Chaque résumé terminé a un bouton "↩ Annuler partout", également proposé dans Actions récentes. Tout membre du groupe Staff peut appuyer dessus, la personne qui a appuyé confirme, et chaque groupe est remis comme avant uniquement là où cette personne peut restreindre des membres à cet instant. Les groupes modifiés depuis sont laissés tels quels. Une expulsion ne peut pas être annulée. Si une annulation ne peut modifier aucun groupe, par exemple parce que la personne qui a appuyé ne peut restreindre des membres dans aucun d'eux, rien n'est consommé et quelqu'un qui le peut pourra appuyer de nouveau sur Annuler. Dès qu'une annulation a tenté de modifier un groupe, l'action ne peut plus être annulée une seconde fois.
   Chaque action appliquée et chaque annulation est publiée dans le canal de journal du groupe concerné (catégorie de journal admin).
   /sban, /dban, /skick, /dkick, /smute et /dmute ne sont pas utilisées ici.
   Envoyez ces commandes en votre nom, pas de façon anonyme.
@@ -2705,6 +2705,8 @@ staff_undo_button: "↩ Annuler partout"
 staff_undo_label: "Annuler"
 staff_undo_card_applies: "Annuler cette action dans les {count} groupe(s) où elle a été appliquée ? Chaque groupe est revérifié d'abord. Rien ne se passe tant que vous n'avez pas appuyé sur Confirmer."
 staff_undo_marker: "↩ Annulée par {name}, voir la réponse."
+staff_undo_marker_nothing: "↩ L'annulation de {name} n'a rien changé, voir la réponse."
+staff_undo_released_note: "Aucun groupe n'a été modifié, cette action peut donc encore être annulée par quelqu'un qui peut restreindre des membres dans ses groupes."
 staff_undo_not_applied_note: "{count} autre(s) groupe(s) ont été laissés tels quels : l'action n'y a pas été appliquée."
 staff_undo_already: "Déjà annulée par {name}."
 staff_undo_not_available: "Cette action ne peut pas être annulée."

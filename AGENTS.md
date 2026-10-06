@@ -99,7 +99,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is the conditional update of `staff_actions.undo_started_at` (`ClaimUndo`), not the card, which expires. The claim is
   given back by `ReleaseUndo` (one conditional update scoped to that claim's `undo_by` and `undo_started_at`, which also
   clears the groups' undo columns) when no group of the run reached its Telegram write (`staffGroupResult.Reached`, set
-  once `executeStaffUndoCall` returned, whatever it returned), and kept once any group did.
+  once `executeStaffUndoCall` returned, whatever it returned, and for every group `sweepPending` swept after a panic,
+  which may have reached its write before it was lost), and kept once any group did.
 - `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
   TTL, taken at Confirm, renewed every 10 minutes (`staffTargetLockRenewEvery`) by the run's coordinator through a
   compare-and-set on that token while the fan-out runs (a vanished key is re-taken, another card's lock is never
@@ -187,8 +188,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a new message the button goes on it and `summary_msg_id` follows. The original summary is edited ("Undone by") and
   replied to only when the record's `summary_chat_id` is the chat the press came from: message IDs belong to their
   chat, so after a Staff Group migration the card is posted without a reply and nothing old is edited. That edit is
-  made at the end of the undo run, after the undo's own summary is delivered and on its own budget, not at Confirm,
-  and the original is left alone with its Undo button when the claim was given back.
+  made at the end of the undo run, after the undo's own summary is delivered and on its own budget, not at Confirm.
+  The original reads "Undone by" only when at least one group was undone and "changed nothing" when writes were tried
+  and none succeeded, and loses its Undo button in both cases; it is left alone with its Undo button when the claim
+  was given back, and the undo's own summary then says no group was changed and the action can still be undone.
 - Staff targets are the first argument and never guessed: a numeric ID, a `text_mention` entity starting exactly at that
   UTF-16 offset, or an `@username` (4-32 of `A-Za-z0-9_`). A username resolves through `user.FindUsersByUsername` (users
   table only, case-insensitive, up to 10 rows, newest activity first) behind the `staffUserLookup` seam: no row is

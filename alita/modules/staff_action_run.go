@@ -139,6 +139,9 @@ func (p *staffActionProgress) snapshot() (results []staffGroupResult, dirty bool
 // reason, and returns the final results. A worker that panicked, or a group a
 // shutdown cut off, would otherwise stay pending and be dropped from the summary
 // (STAFF-08).
+//
+// A group that never reported may have reached its Telegram write before it was
+// lost, so every swept group counts as reached and an undo keeps its claim (D-09).
 func (p *staffActionProgress) sweepPending(reason staffReason) []staffGroupResult {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -148,6 +151,7 @@ func (p *staffActionProgress) sweepPending(reason staffReason) []staffGroupResul
 				p.results[i].Link.GroupChatID, reason)
 			p.results[i].Outcome = staffReasonOutcome(reason)
 			p.results[i].Reason = reason
+			p.results[i].Reached = true
 		}
 	}
 	results := make([]staffGroupResult, len(p.results))
