@@ -1,42 +1,21 @@
 ---
 phase: 03-staff-audit-and-undo
-reviewed: 2026-10-05T00:00:00Z
+reviewed: 2026-10-06T00:00:00Z
 depth: standard
-files_reviewed: 42
+files_reviewed: 20
 files_reviewed_list:
   - AGENTS.md
-  - alita/db/models/staff_action.go
   - alita/db/staff/actions.go
   - alita/db/staff/actions_test.go
-  - alita/db/staff/rekey.go
-  - alita/db/staff/rekey_test.go
-  - alita/db/staff/testmain_test.go
-  - alita/db/testmain_test.go
-  - alita/modules/staff.go
-  - alita/modules/staff_action_card.go
-  - alita/modules/staff_action_decide.go
-  - alita/modules/staff_action_fake_test.go
-  - alita/modules/staff_action_record.go
-  - alita/modules/staff_action_record_test.go
   - alita/modules/staff_action_run.go
-  - alita/modules/staff_action_summary.go
-  - alita/modules/staff_action_test.go
-  - alita/modules/staff_action_undo_decide_test.go
-  - alita/modules/staff_helpers_test.go
   - alita/modules/staff_history.go
   - alita/modules/staff_history_test.go
   - alita/modules/staff_history_undo_test.go
-  - alita/modules/staff_log.go
-  - alita/modules/staff_log_test.go
-  - alita/modules/staff_panel.go
-  - alita/modules/staff_panel_render_test.go
   - alita/modules/staff_undo.go
+  - alita/modules/staff_undo_claim_test.go
   - alita/modules/staff_undo_lifecycle_test.go
-  - alita/modules/staff_undo_log_test.go
-  - alita/modules/staff_undo_restore_test.go
+  - alita/modules/staff_undo_shutdown_test.go
   - alita/modules/staff_undo_test.go
-  - alita/modules/test_harness_test.go
-  - alita/utils/actionlog/actionlog.go
   - docs/src/content/docs/commands/staff/index.md
   - locales/en.yml
   - locales/es.yml
@@ -45,85 +24,110 @@ files_reviewed_list:
   - locales/id.yml
   - locales/pt.yml
   - locales/ru.yml
-  - migrations/20261005120000_add_staff_actions.sql
 findings:
   critical: 0
   warning: 4
-  info: 6
-  total: 10
+  info: 7
+  total: 11
 status: issues_found
 ---
 
-# Phase 03: Code Review Report
+# Phase 03: Code Review Report (re-review after gap-closure plans 03-10, 03-11, 03-12)
 
-**Reviewed:** 2026-10-05
+**Reviewed:** 2026-10-06
 **Depth:** standard
-**Files Reviewed:** 42
+**Files Reviewed:** 20
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the staff audit record (migration, models, repository), write-ahead prior-state capture, log-channel posts, the Recent actions history and the Undo flow (ask, card, confirm, claim, run, decision table).
+Re-review of the changes since `d45631a` (`ReleaseUndo` and the `Reached` marker, `joinStaffRuns` and the shutdown drain for an undo Confirm, `staffUndoStateOf` with its history and answer texts, the `TallyActionGroups` regrouping, the end-of-run original-summary edit). I read the changed files in full and checked the diffs.
 
-Checked and found sound:
+**Resolution of the earlier findings**
 
-- **Record-chat binding:** every press path binds the record to the pressed message's chat. Undo Ask, undo Confirm and history Detail compare `staff_chat_id` to `query.Message` chat, and History List filters by chat.
-- **Forged data:** callback data carries only numeric IDs or a 16-hex token. Tokens are regex-checked, the card's Staff chat is compared, `Kind` is checked in both Confirm handlers, and the issuer is compared inside the Lua compare-and-set.
-- **Per-group authority:** it is read live through `staffGroupPrechecks` with the presser as actor. `decideStaffUndo` keeps the "never lift a ban by accident" invariant: restore or re-ban reaches a kicked or left target only when the live state equals what the staff action left.
-- **Migration:** it parses with the repo's statement splitter (line comments, with `;` and `'` inside them, are handled) and matches the models column for column. Locale placeholders are consistent across all 7 files, which I checked with a script.
-- **Build and tests:** `go build`, `go vet -tags testtools`, `make check-translations` and `go test -tags testtools` over `alita/db/...`, `alita/i18n` and the staff, undo and history tests in `alita/modules` all pass.
+- **WR-01 (claim spent by an undo that changed nothing; shutdown can miss an undo Confirm): mostly resolved.**
+  - The "presser administers no group" case, which was the main trigger, is fixed: every group skips before a write, so `ReleaseUndo` gives the claim back and clears the group undo columns in one transaction.
+  - The shutdown window is closed. `joinStaffRuns` registers before the claim, the `runStarted` defer returns the registration on every non-start path, and a Confirm after the cancel is refused before it claims.
+  - Residual: outcomes that provably made no write (a pacer refusal, a context cancelled while waiting for a slot, a 429) still burn the claim, because `Reached` is set whatever the call returned. See WR-01 below.
+- **WR-02 (history and answers say "undone" whatever the undo did; a crashed undo stays pending): resolved for what it named.**
+  - `staffUndoStateOf` is the single decision point, and `staff_history_undone_by` was replaced by `staff_history_undo_by` everywhere.
+  - A dead undo's pending groups render as interrupted without a write, and the original summary is edited only at the end of the run, from the real count of groups undone.
+  - Residual: the replacement wording "changed nothing" claims more than the record knows. See WR-02 below.
+- **WR-03 (history page answered before the data is read): still open.** Carried forward as WR-04 below.
+- **WR-04 (unmute "left behind" predicate): unchanged, accepted by the owner at UAT.** Carried as IN-02.
+- **IN-01, IN-02, IN-03, IN-05, IN-06: still open.** Carried as IN-07, IN-03, IN-04, IN-05 and IN-06. The old IN-04 (50 ms sleeps) is not in this review's scope.
 
-No security or data-loss defects found. The remaining issues are about the one-shot undo claim, misleading status after an undo, one silent failure path and a loose "left behind" predicate.
+**Checked and found sound**
+
+- **`ReleaseUndo` match conditions.** It matches on `id`, `undo_by`, the exact claim time and `undo_finished_at IS NULL`. `ClaimUndo` returns the stored value, truncated to the microsecond in UTC, which is exact for `TIMESTAMP WITH TIME ZONE`. It clears the parent and all group undo columns in one `db.DB.Transaction`, and `RowsAffected != 1` returns without writing. The tests cover another presser, another claim time, and a finalized claim.
+- **`StaffActionRunsWG` pairing.**
+  - Early returns before `joinStaffRuns` never Add.
+  - After it, the deferred `Done` runs while `runStarted` is false. It covers the shutdown abort, the claim error, a lost claim and a panic before the run starts.
+  - Once `runStarted = true`, the coordinator goroutine owns the `Done`. That defer is registered first, so it runs after the target-lock release and the panic recovery.
+  - `startStaffRun` still pairs through `joinStaffRuns`.
+- **`sweepPending` marking swept groups `Reached`.** A panicked worker keeps the claim (fail closed), and `TestStaffUndoPanicKeepsClaim` proves it.
+- **The end-of-run original edit.** It runs from `Delivered` on its own `newStaffDeliverContext` budget, not the cancelled run context. It is skipped when the claim was released.
+- **`TallyActionGroups`.** The extra `undo_outcome` grouping only splits rows, and the per-outcome counts stay additive.
+- **Locales.** `make check-translations` passes, and `make check-docs` shows no drift. I checked placeholders by script: `{name}` and `{time}` match in all 7 files for every new key. Every key used in Go exists in all 7 locales. `staff_history_undone_by` has no remaining reference.
+- **Build and tests.** `go vet -tags testtools ./alita/...` is clean. `go test -tags testtools -race -run 'Undo|History|Release|Tally|Claim'` over `alita/db/staff` and `alita/modules` passes.
+- **Test quality.** The new tests use the real SQLite harness, miniredis and the hand-written Telegram fake, and they assert persisted rows, edits and writes. The only sleeps are 5 ms polling loops with a deadline.
+
+No security or data-loss defects. The remaining issues are a still-too-broad "reached" notion, an over-claiming label, one rare record-corrupting retry path and one carried silent failure.
 
 ## Warnings
 
-### WR-01: The one-shot undo claim is consumed even when no group was (or could be) undone
+### WR-01: `Reached` is set for outcomes that provably made no write, so the claim is still burned for them
 
-**File:** `alita/modules/staff_undo.go:394-428` (claim), `alita/db/staff/actions.go:270-285` (`ClaimUndo`), `alita/modules/staff_undo.go:549-556` (finalize)
-**Issue:** `ClaimUndo` sets `undo_started_at` permanently, before any group is attempted. `staffActionUndoable` and the Ask handler then refuse any later attempt. The record keeps the claim whatever the run does, so these cases burn it with nothing changed:
-- A Staff Group member who is an administrator in none of the linked groups presses Undo and Confirm. Ask and Confirm only require live Staff Group membership (D-06). Every group is then skipped `skip_issuer_not_admin`, and nobody with real authority can undo that action any more.
-- A shutdown, a 429 outlasting the pacer, a Redis hiccup or a Telegram outage turns the groups into `fail_*` results. `startStaffRun` uses `staffActionsContext()`, so a Confirm tapped after `StopStaffActions` cancelled the context claims the undo and then marks every group `fail_interrupted` without a single call.
-- Confirm runs outside `staffActionRunsWG` until `startStaffRun` calls `Add`. A shutdown between the claim (line 399) and `Add` leaves a claimed undo with no run and no finalize.
+**File:** `alita/modules/staff_undo.go:762-777`, `alita/modules/staff_undo.go:667-682`; `alita/utils/ratelimit/telegram_pacer.go:138-173`
+**Issue:** `runStaffUndoInGroup` marks the group `Reached` as soon as `executeStaffUndoCall` returns, whatever it returned. Three results mean Telegram did not change the group, yet they keep the claim:
+- `ratelimit.ErrRateLimited` from a pacer refusal ("next slot is X away, over the cap"), which the pacer documents as "no Telegram request is made".
+- `ErrRateLimited` after 429s. A 429 is rejected, not applied.
+- A context cancelled while the call waits for its pacer slot, or before the HTTP request goes out. `classifyStaffFailure` returns `fail_interrupted` for it.
 
-The failed groups cannot be retried either: `staffActionUndoable` is false once `UndoStartedAt != nil`. That is the same outcome as a deliberate "exactly once", but here it comes from a no-op or transient failure rather than from a completed undo.
+Consequences:
+- A Staff Group member who presses Undo while the fleet pacer is saturated, or just as the bot shuts down with a group waiting for its slot, burns the action's only undo with nothing changed.
+- The record then reads "undo changed nothing / cannot be undone again" (`staff_undo_already_nothing`, `staff_history_undo_nothing`), and the original loses its Undo button.
+- AGENTS.md says the claim is given back "when the shutdown cut every group off before its write". That holds only for cuts before the call, not for cuts inside the paced call.
+- The staff help text promises "nothing is used up" only for an undo that cannot change any group. This is the same class of outcome with a different cause.
 
-**Fix:** Keep exactly-once for groups that were actually written, but release or narrow the claim when nothing was. Options, cheapest first:
+**Fix:** Set `Reached` only when a request could have been applied. In `runStaffUndoInGroup`, keep the claim for any other error, but not when the error is definitely no-write:
 ```go
-// in Finish, after FinalizeUndo: if no group reached a Telegram write
-// (every result is skip_issuer_*/fail_interrupted/fail_rate_limited/fail_lookup/fail_owner_unknown),
-// reopen the record so the undo can be asked again:
-//   UPDATE staff_actions SET undo_started_at=NULL, undo_by=NULL, undo_by_name='', undo_finished_at=NULL
-//   WHERE id=? AND NOT EXISTS (SELECT 1 FROM staff_action_groups WHERE action_id=? AND undo_outcome='done')
+if err := executeStaffUndoCall(...); err != nil {
+    reason, detail := classifyStaffFailure(ctx, b, link.GroupChatID, err)
+    res := result(reason, detail)
+    res.Reached = !(errors.Is(err, ratelimit.ErrRateLimited) || (ctx.Err() != nil && errors.Is(err, ctx.Err())))
+    return res
+}
 ```
-A sturdier option is a per-group claim: a conditional update `undo_outcome '' -> 'pending'` per group, so groups that were skipped or failed stay undoable by a later press. At minimum, refuse to start the run (before claiming) when `staffActionsContext().Err() != nil`, and require that the presser can restrict members in at least one applied group before the claim is taken.
+Also keep `Reached` true for a timeout, which may have been applied. Add a test with a pacer refusal and one with a shutdown during the slot wait. Update the AGENTS.md sentence to match.
 
-### WR-02: History and the original summary say "undone" regardless of what the undo did; a crashed undo reads "undone" with ⏳ lines forever
+### WR-02: "Undo changed nothing" is shown for groups whose outcome is unknown or probably applied
 
-**File:** `alita/modules/staff_history.go:69-80`, `alita/modules/staff_history.go:369-380`, `alita/modules/staff_undo.go:414-416`
+**File:** `alita/modules/staff_undo.go:702-714` (marker choice), `alita/modules/staff_undo.go:118-131` (`staffUndoNothing`), `alita/modules/staff_undo_claim_test.go:162-193`
 **Issue:**
-- `staffHistoryState` checks `a.UndoStartedAt != nil` first, so the list line reads "↩ undone" for any claimed undo. That includes one where every group was skipped or failed (see WR-01), and one that is still running.
-- `renderStaffHistoryDetail` only converts pending groups to "interrupted" when `a.FinishedAt == nil` (the action's own run). A crashed undo has `undo_started_at` set and `undo_finished_at` NULL. `staffUndoResultsFromRecord` renders its pending groups as ⏳ forever, and the header says "Undone by …".
-- `editStaffUndoneOriginal` edits the original summary to "Undone by X, see the reply" before the first group is attempted, so the permanent history message claims an undo that may do nothing.
+- `staffUndoStateOf` and the `Delivered` hook equate `undone == 0` with "changed nothing". The groups behind it can include `fail_internal` (a worker that panicked in or after the write), `fail_interrupted` (cancelled mid-call), and `fail_telegram` after a timeout, where the request may have been applied.
+- `TestStaffUndoPanicKeepsClaim` asserts exactly this. Its own comment says "the run never learns whether the write happened", yet it requires the permanent original summary to read "Undo by X changed nothing" with no Undo button, and the history to say "undo changed nothing / cannot be undone again".
+- This is the reverse of the earlier WR-02: the audit trail now asserts a negative it cannot verify, and tells staff there is nothing to check.
 
-This is audit-record accuracy: the record is the accountability trail and it reports success it cannot vouch for.
+**Fix:** Make the third state "attempted, nothing confirmed". Count groups that failed with an unknown-effect reason (`fail_internal`, `fail_interrupted`, a timeout `fail_telegram`) and use the neutral wording ("undo tried, result not confirmed, check the groups") for them. Reserve "changed nothing" for undos whose every attempted group failed with a definite Telegram rejection (400, 403), or whose every group skipped. This needs `staffUndoStateOf` to receive a second count, and a key in all 7 locales.
 
-**Fix:**
-```go
-case a.UndoStartedAt != nil && a.UndoFinishedAt == nil && now.Sub(a.UpdatedAt) < staffTargetLockTTL:
-    text, _ = tr.GetString("staff_history_undo_running")
-case a.UndoStartedAt != nil && a.UndoFinishedAt == nil:
-    text, _ = tr.GetString("staff_history_undo_interrupted")
-case a.UndoStartedAt != nil:
-    // "undone" only if at least one group's undo_outcome is done; otherwise "undo attempted, nothing changed"
-```
-Apply the same dead-run conversion of pending undo groups to failed/interrupted in `renderStaffHistoryDetail`, and move the "Undone" marker on the original to the run's final delivery, once at least one group is done. Add the new keys to all 7 locale files.
+### WR-03: A retry after an ambiguous `ReleaseUndo` error can run `FinalizeUndo` on an already released record
 
-### WR-03: A history page press is answered before the data is read, so a database error is a silent no-op
+**File:** `alita/modules/staff_undo.go:667-682`, `alita/db/staff/actions.go:308-345`
+**Issue:** `Finish` calls `ReleaseUndo` up to twice. If the first call's transaction committed but returned an error (a lost connection after COMMIT), the second call finds no matching claim and returns `(false, nil)`. The `default` branch logs "no longer matched; keeping it" and falls through to `FinalizeUndo`. That function writes the groups' undo results and sets `undo_finished_at` on a record whose `undo_started_at` is now NULL. Afterwards:
+- `staffActionUndoable` is true (no claim) and the record has a stale `undo_finished_at`.
+- The next claim reads as finished at once, so `staffUndoStateOf` says "undone" or "changed nothing" while the new run is going.
+- The new run's own `ReleaseUndo` never matches, because it needs `undo_finished_at IS NULL`.
 
-**File:** `alita/modules/staff_history.go:295-310`
-**Issue:** `staffHistoryList` calls `answerStaffCallback(b, query, "", false)` at line 295, then reads `ListActionsFresh` and `TallyActionGroups`. On error it logs and returns `ext.EndGroups`. The press was already answered with an empty toast and the message is not edited, so the user sees nothing and cannot tell a failure from a slow bot. `staffHistoryDetail` does it correctly (reads, then answers), so the two handlers are inconsistent.
+It is rare, but the code comments call this path fail-closed, and it is not.
 
-**Fix:** Read first, answer once on the matching path:
+**Fix:** After an errored first attempt, do not treat `(false, nil)` as "claim kept". Re-read the record: if `undo_started_at` is NULL or differs from `claimedAt`, treat the claim as released and return without finalizing. Alternatively, make `FinalizeUndo` conditional on the claim (`WHERE id = ? AND undo_started_at IS NOT NULL`) and fail when the parent matched no row.
+
+### WR-04: A history page press is answered before the data is read, so a database error is a silent no-op (carried forward; was WR-03)
+
+**File:** `alita/modules/staff_history.go:307-325`
+**Issue:** Unchanged by this phase's fixes. `staffHistoryList` calls `answerStaffCallback(b, query, "", false)` at line 307, then reads `ListActionsFresh` and `TallyActionGroups`. On error it only logs and returns `ext.EndGroups`. The user gets an empty toast and the message does not change. `staffHistoryDetail` reads first and answers after, so the two handlers disagree.
+**Fix:** Read both first and answer once per path:
 ```go
 rows, err := staff.ListActionsFresh(chat.Id, offset, staffHistoryPageSize+1)
 if err == nil { tallies, err = staff.TallyActionGroups(ids) }
@@ -136,53 +140,52 @@ if err != nil {
 answerStaffCallback(b, query, "", false)
 ```
 
-### WR-04: The "left behind" predicate for an unmute accepts any non-muted state, so undo can overwrite another admin's newer restriction
-
-**File:** `alita/modules/staff_action_decide.go:375-381`
-**Issue:** D-04 says undo acts only when the live state is exactly what the staff action left. For `staffKindUnmute` the predicate returns true for any `member`, any `left`, and any `restricted` target that is not fully muted (`!live.Muted`). If another admin applies a partial restriction after the unmute (for example no media), `live` is `restricted` with `CanSendMessages == true`, so `!live.Muted` holds. Undo then restores the older mute through `staffUndoRestore` and replaces the newer decision. A `member` who was kicked and rejoined, or a `left` target who was banned and unbanned, is likewise indistinguishable from "untouched". The ban, mute and unban columns compare end date or status and are tighter.
-
-**Fix:** Record what the unmute applied. Persist the applied permission set (or a hash of it) in the group row, as `prior_permissions` does for the prior state, and require equality in `staffUndoLeftBehind`. At minimum, for a live `restricted` target, require that the live permissions equal the group's default permissions that `resolveUnmutePermissions` produced at action time, instead of accepting `!live.Muted`.
-
 ## Info
 
-### IN-01: `staffCallRestore` is defined by arithmetic outside the iota block
+### IN-01: The original summary is marked "see the reply" even when the undo's own summary was never delivered
 
-**File:** `alita/modules/staff_action_decide.go:300`
-**Issue:** `const staffCallRestore staffAPICall = staffCallUnmute + 1` sits apart from the iota block of calls. A new call added after `staffCallUnmute` in the block would silently equal `staffCallRestore`. Go would flag the duplicate case in `executeStaffUndoCall`, but only if that switch contains both.
-**Fix:** Add `staffCallRestore` to the iota block, with a comment that only `decideStaffUndo` returns it.
+**File:** `alita/modules/staff_undo.go:702-715`
+**Issue:** `Delivered` ignores its `landedMsgID`. When delivery failed entirely (`landed == 0`), the original is still edited to "Undone by X, see the reply" with its Undo button removed, and there is no reply. The record is unaffected.
+**Fix:** Take `landed` and skip the edit when it is 0, or use marker text that does not point to a reply.
 
-### IN-02: `ClaimUndo` is not bound to the Staff Group in SQL
+### IN-02: The "left behind" predicate for an unmute accepts any non-muted state (carried forward; was WR-04, accepted by the owner at UAT)
 
-**File:** `alita/db/staff/actions.go:270-273`
-**Issue:** The claim is `WHERE id = ? AND undo_started_at IS NULL`. Chat binding is enforced only by the callers (Ask and Confirm both check `StaffChatID`). A future caller that skips that check could claim another Staff Group's record. This is defense in depth only, not a present defect.
-**Fix:** Add a `staffChatID` parameter and `AND staff_chat_id = ?` to the conditional update.
+**File:** `alita/modules/staff_action_decide.go:375-381`
+**Issue:** Unchanged and out of this round's file set. Undo can overwrite another admin's newer partial restriction on an unmuted target.
+**Fix:** Recorded as accepted; if it is ever reopened, persist the applied permission set and compare it.
 
-### IN-03: `RekeyChat` bumps `updated_at` on every history row, which can flip dead runs back to "running"
+### IN-03: `ClaimUndo` is not bound to the Staff Group in SQL (carried forward; was IN-02)
 
-**File:** `alita/db/staff/rekey.go:48-53`
-**Issue:** The `staff_actions.staff_chat_id` update writes `updated_at = now` to every row of the old chat. `staffHistoryState` treats `finished_at IS NULL` with `updated_at` younger than the 30-minute lock TTL as "running". After a chat migration, every old crashed record reads "running" for 30 minutes instead of "interrupted".
-**Fix:** For this table, update only `staff_chat_id` and leave `updated_at` alone, for example `Update(u.column, newChatID)` with `UpdateColumn`, which skips the timestamp.
+**File:** `alita/db/staff/actions.go:280-298`
+**Issue:** `WHERE id = ? AND undo_started_at IS NULL` does not bind `staff_chat_id`. The callers check it, so this is defense in depth only. `ReleaseUndo` is bound by `undo_by` and the claim time.
+**Fix:** Add a `staffChatID` parameter and `AND staff_chat_id = ?`.
 
-### IN-04: Two tests synchronise with a fixed `time.Sleep(50ms)`
+### IN-04: `RekeyChat` bumps `updated_at`, which now also flips dead undos back to "running" (carried forward; was IN-03)
 
-**File:** `alita/modules/staff_undo_lifecycle_test.go:572`, `alita/modules/staff_action_record_test.go:423`
-**Issue:** Both tests sleep 50 ms and then call `StopStaffActions`, assuming the run has reached its delayed `getChatMember` calls. Under `-race` or a loaded CI host the run may not have started, so the "interrupted" assertions become flaky.
-**Fix:** Poll for the observable condition, such as the first delayed `getChatMember` call recorded by the fake, instead of sleeping.
+**File:** `alita/db/staff/rekey.go:53`
+**Issue:** `staffUndoStateOf` and `staffHistoryState` use `updated_at` as the heartbeat. The re-key writes `updated_at = now` on every record of the old chat, so for 30 minutes after a Staff Group migration every crashed action or undo reads "running" instead of "interrupted". The new undo states make the effect wider.
+**Fix:** Use `UpdateColumn` on `staff_chat_id` alone (no `updated_at`) for `staff_actions`.
 
-### IN-05: The history timestamp format is English-only in every locale
+### IN-05: The history timestamp format is English-only in every locale (carried forward)
 
-**File:** `alita/modules/staff_history.go:124`, `alita/modules/staff_history.go:359`, `alita/modules/staff_history.go:376`
-**Issue:** `Format("2 Jan 15:04")` emits English month abbreviations, so es, fr, hi, id, pt and ru users see "5 Oct". The rest of the feature is localized.
-**Fix:** Use a numeric format such as `2006-01-02 15:04`, or a locale key for the month names.
+**File:** `alita/modules/staff_history.go:136`, `alita/modules/staff_history.go:372`, `alita/modules/staff_history.go:389`
+**Issue:** `Format("2 Jan 15:04")` prints English month abbreviations in all 7 locales.
+**Fix:** Use a numeric format such as `2006-01-02 15:04`.
 
-### IN-06: The Prev offset ignores a page that was shrunk to fit the length cap
+### IN-06: The Prev offset ignores a page that was shrunk to fit the length cap (carried forward)
 
 **File:** `alita/modules/staff_history.go:197`
-**Issue:** Next starts right after the last line shown, so pages can start at offsets that are not multiples of 10. Prev always goes back `staffHistoryPageSize` (10), so from a shrunk page it lands in the middle of the previous page and entries appear on two pages with shifting numbers. No entry is hidden.
-**Fix:** Carry the previous page's start in the callback (`"p"` field), or accept the overlap and document it.
+**Issue:** Pages start at arbitrary offsets after a shrink, and Prev always steps back 10, so entries can appear on two pages. No entry is hidden.
+**Fix:** Carry the previous page's start in the callback, or document the overlap.
+
+### IN-07: `staffCallRestore` is defined by arithmetic outside the iota block (carried forward; was IN-01)
+
+**File:** `alita/modules/staff_action_decide.go:300`
+**Issue:** `staffCallUnmute + 1` would collide with any call later added to the iota block.
+**Fix:** Move it into the iota block and comment that only `decideStaffUndo` returns it.
 
 ---
 
-_Reviewed: 2026-10-05_
+_Reviewed: 2026-10-06_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
