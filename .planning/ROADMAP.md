@@ -132,7 +132,7 @@ Plans:
   3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
   4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
 
-**Plans:** 9/9 plans executed
+**Plans:** 9/12 plans executed
 
 Plans:
 **Wave 1**
@@ -159,6 +159,15 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [x] 03-09-PLAN.md: Undo from the history detail view, /staff help and docs, final AGENTS.md pass, full phase gate with PostgreSQL migration chain
+
+**Wave 9** *(gap closure G-03-4, blocked on Wave 8 completion)*
+- [ ] 03-10-PLAN.md: Gap G-03-4, claim half (WR-01). An undo that reached no Telegram write gives its claim back (ReleaseUndo); the original summary is marked at the end of the run, "Undone by" or "changed nothing"; help text and docs
+
+**Wave 10** *(gap closure G-03-4, blocked on Wave 9 completion)*
+- [ ] 03-11-PLAN.md: Gap G-03-4, shutdown half (WR-01). The undo Confirm joins the shutdown drain before it claims and refuses to claim once the shutdown began
+
+**Wave 11** *(gap closure G-03-4, blocked on Wave 10 completion)*
+- [ ] 03-12-PLAN.md: Gap G-03-4, label half (WR-02). Recent actions, the detail view and the Undo answers say undone, running, interrupted or changed nothing from the stored undo outcomes; full phase gate
 
 ### Phase 4: Manual Lockdown
 
