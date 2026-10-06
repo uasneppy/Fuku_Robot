@@ -28,6 +28,10 @@ type staffGroupResult struct {
 	Outcome staffOutcome
 	Reason  staffReason
 	Detail  string
+	// Reached is true when the run got as far as this group's Telegram write call,
+	// whatever the call returned. Only an undo run reads it: an undo claim is given
+	// back only when no group reached its write.
+	Reached bool
 }
 
 var (

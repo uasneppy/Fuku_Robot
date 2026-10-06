@@ -26,11 +26,11 @@ import (
 // apart. The action the card undoes is the card's UndoKind.
 const staffKindUndo staffActionKind = "undo"
 
-// staffClaimUndo claims the one undo of a record. It is a test seam, like
-// staffCreateActionRecord: tests replace it to make another claimer win between
-// Confirm's last read and its claim, which no sequence of taps can do on purpose.
-// Production never reassigns it.
-var staffClaimUndo = func(actionID uint, by int64, byName string) (bool, error) {
+// staffClaimUndo claims the one undo of a record and returns the claim time the run
+// later hands to staff.ReleaseUndo. It is a test seam, like staffCreateActionRecord:
+// tests replace it to make another claimer win between Confirm's last read and its
+// claim, which no sequence of taps can do on purpose. Production never reassigns it.
+var staffClaimUndo = func(actionID uint, by int64, byName string) (time.Time, bool, error) {
 	return staff.ClaimUndo(actionID, by, byName)
 }
 
@@ -396,7 +396,7 @@ func (m moduleStruct) staffUndoConfirm(
 	presserName := staffFullName(&query.From)
 	// The log posts name the presser, not whoever created the card.
 	card.IssuerName = presserName
-	claimed, err := staffClaimUndo(action.ID, card.Issuer, presserName)
+	claimedAt, claimed, err := staffClaimUndo(action.ID, card.Issuer, presserName)
 	if err != nil {
 		abort("staff_act_abort_check_failed")
 		return ext.EndGroups
@@ -411,10 +411,6 @@ func (m moduleStruct) staffUndoConfirm(
 		return ext.EndGroups
 	}
 
-	// The original summary stays as history and gains the "Undone" line. This is best
-	// effort: the undo has been claimed and goes on whatever happens to the edit.
-	editStaffUndoneOriginal(b, staffTr, action, groups, staffChat.Id, presserName)
-
 	targets, notApplied := staffUndoTargets(groups, links)
 	pendingLinks := make([]models.StaffGroupLink, len(targets))
 	for i, t := range targets {
@@ -425,15 +421,18 @@ func (m moduleStruct) staffUndoConfirm(
 		log.Warnf("[StaffActions] edit undo card %s into summary: %v", card.Token, err)
 	}
 	runStarted = true
-	startStaffUndoRun(b, card, action, targets, notApplied, staffChat.Id, msgID)
+	startStaffUndoRun(b, card, action, groups, targets, notApplied, claimedAt, staffChat.Id, msgID)
 	return ext.EndGroups
 }
 
 // editStaffUndoneOriginal adds "Undone by <name>, see the reply" to the original
-// summary and removes its Undo button (D-08). It acts only when the record's
-// summary chat is the Staff Group the undo came from: a message ID belongs to the
-// chat it was sent to, and after a Staff Group migration the stored one points
-// nowhere in the new chat. A failed edit is logged and the undo goes on.
+// summary and removes its Undo button (D-08). It runs at the end of the undo, after
+// the undo's own summary was delivered. It acts only when the record's summary chat
+// is the Staff Group the undo came from: a message ID belongs to the chat it was
+// sent to, and after a Staff Group migration the stored one points nowhere in the
+// new chat. The edit has a delivery budget of its own, never the run's context,
+// which a shutdown may already have cancelled. A failed edit is logged and nothing
+// else changes.
 func editStaffUndoneOriginal(
 	b *gotgbot.Bot,
 	tr *i18n.Translator,
@@ -449,8 +448,11 @@ func editStaffUndoneOriginal(
 	marker = strings.Replace(marker, staffUserToken, html.EscapeString(staffPlainName(presserName)), 1)
 	header := staffActionHeader(tr, staffCardFromRecord(a)) + "\n" + marker
 	text, _ := composeStaffSummary(tr, header, staffResultsFromRecord(groups), true)
-	if err := editStaffActionMessage(b, staffChatID, a.SummaryMsgID, text); err != nil {
-		log.Warnf("[StaffActions] mark original summary of action %d as undone: %v", a.ID, err)
+	ctx, cancel := newStaffDeliverContext()
+	defer cancel()
+	// An empty markup removes the Undo button.
+	if !editStaffActionFinal(ctx, b, staffChatID, a.SummaryMsgID, text, gotgbot.InlineKeyboardMarkup{}) {
+		log.Warnf("[StaffActions] could not mark the original summary of action %d as undone", a.ID)
 	}
 }
 
@@ -502,21 +504,41 @@ func staffUndoSummaryHeader(tr *i18n.Translator, card *staffActionCard, notAppli
 	return header
 }
 
+// anyStaffGroupReached reports whether any group of an undo run got as far as its
+// Telegram write call.
+func anyStaffGroupReached(results []staffGroupResult) bool {
+	for _, res := range results {
+		if res.Reached {
+			return true
+		}
+	}
+	return false
+}
+
 // startStaffUndoRun runs a claimed undo as a staffRunSpec on the same engine the
-// staff actions use. Each group goes through runStaffUndoInGroup, its result is
-// stored as the group finishes, and the record is finalized once at the end.
+// staff actions use. Each group goes through runStaffUndoInGroup and its result is
+// stored as the group finishes. At the end the claim is given back when no group
+// reached a Telegram write (owner decision b on D-09), and otherwise the record is
+// finalized once. The original summary is edited after the undo's own summary is
+// delivered, and only when the claim was kept (D-08). claimedAt is the claim time
+// staff.ClaimUndo returned, which names this run's claim to staff.ReleaseUndo.
 func startStaffUndoRun(
 	b *gotgbot.Bot,
 	card *staffActionCard,
 	a *models.StaffAction,
+	groups []models.StaffActionGroup,
 	targets []staffUndoTarget,
 	notApplied int,
+	claimedAt time.Time,
 	chatID, msgID int64,
 ) {
 	links := make([]models.StaffGroupLink, len(targets))
 	for i, t := range targets {
 		links[i] = t.Link
 	}
+	// released is written by Finish and read by Delivered. Both run on the run's
+	// coordinator goroutine after the fan-out ended, so no lock is needed.
+	released := false
 	startStaffRun(b, staffRunSpec{
 		Card:   card,
 		Links:  links,
@@ -538,6 +560,27 @@ func startStaffUndoRun(
 			return composeStaffSummary(tr, staffUndoSummaryHeader(tr, card, notApplied), results, final)
 		},
 		Finish: func(results []staffGroupResult) gotgbot.InlineKeyboardMarkup {
+			// An undo that reached no Telegram write in any group changed nothing, so
+			// it gives the action's one undo back. Written with db.DB, never the run's
+			// context, and while the run still holds the target lock. One retry after
+			// an error. Anything but a confirmed release falls through to the
+			// finalize below, so the claim is kept (fail closed, D-09).
+			if !anyStaffGroupReached(results) {
+				var err error
+				for attempt := 0; attempt < 2; attempt++ {
+					if released, err = staff.ReleaseUndo(a.ID, card.Issuer, claimedAt); err == nil {
+						break
+					}
+				}
+				switch {
+				case err != nil:
+					log.Errorf("[StaffActions] give back the undo of action %d: %v", a.ID, err)
+				case released:
+					return gotgbot.InlineKeyboardMarkup{}
+				default:
+					log.Warnf("[StaffActions] the undo claim of action %d no longer matched; keeping it", a.ID)
+				}
+			}
 			rows := make([]staff.ActionGroupResult, len(results))
 			for i, res := range results {
 				rows[i] = staffResultRow(res)
@@ -556,6 +599,14 @@ func startStaffUndoRun(
 			}
 			// An undo cannot itself be undone, so its summary never has a button.
 			return gotgbot.InlineKeyboardMarkup{}
+		},
+		Delivered: func(int64) {
+			// The original keeps its text and its Undo button when the claim was given
+			// back: nothing was undone.
+			if released {
+				return
+			}
+			editStaffUndoneOriginal(b, staffChatTranslator(card.StaffChat), a, groups, chatID, card.IssuerName)
 		},
 	})
 }
@@ -606,12 +657,19 @@ func runStaffUndoInGroup(
 	if ctx.Err() != nil {
 		return result(staffReasonFailInterrupted, "")
 	}
+	// From here the write call has been made, whatever it returns: the group counts as
+	// reached, so the run keeps its undo claim (D-09).
+	reached := func(reason staffReason, detail string) staffGroupResult {
+		res := result(reason, detail)
+		res.Reached = true
+		return res
+	}
 	if err := executeStaffUndoCall(ctx, b, link.GroupChatID, card.Target, verdict); err != nil {
 		log.Warnf("[StaffActions] undo of %s in group %d: %v", card.UndoKind, link.GroupChatID, err)
 		reason, detail := classifyStaffFailure(ctx, b, link.GroupChatID, err)
-		return result(reason, detail)
+		return reached(reason, detail)
 	}
-	return result(verdict.Reason, "")
+	return reached(verdict.Reason, "")
 }
 
 // executeStaffUndoCall makes the one write call an undo verdict asks for. Like
