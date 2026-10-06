@@ -65,7 +65,9 @@ blocked: 0
 
 - gap_id: G-03-4
   truth: "An undo claim is spent only when at least one group reached a Telegram write; history and the original summary say 'undone' only when at least one group was actually undone, and a crashed undo shows interrupted instead of pending"
-  status: failed
+  status: resolved
+  resolved_by: 03-10-PLAN.md, 03-11-PLAN.md, 03-12-PLAN.md
+  resolved_at: 2026-10-06
   reason: "User reported: Decision b: give the undo back when no group reached a Telegram write, so someone with rights can retry; show 'undone' only when at least one group was actually undone (otherwise say nothing changed); a crashed undo shows interrupted, not ⏳ (WR-01 and WR-02)."
   severity: major
   test: 4
