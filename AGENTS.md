@@ -30,7 +30,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `db.DB`, never the cancelled run context) and summary delivery happen inside the same 30 s as a staff action's, and an
   unfinished group is recorded `fail_interrupted`. An undo Confirm joins `staffActionRunsWG` (`joinStaffRuns`) before it
   claims, so `StopStaffActions` waits for a Confirm that has already claimed, and its run gives the claim back when the
-  shutdown cut every group off before its write.
+  shutdown cut every group off before its write. Once `StopStaffActions` has cancelled the run context an undo Confirm
+  claims nothing and aborts its card with the restart text (`staff_undo_abort_restarting`).
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers

@@ -2781,6 +2781,7 @@ staff_undo_card_applies: "Batalkan tindakan ini di {count} grup tempat tindakan 
 staff_undo_marker: "↩ Dibatalkan oleh {name}, lihat balasannya."
 staff_undo_marker_nothing: "↩ Pembatalan oleh {name} tidak mengubah apa pun, lihat balasannya."
 staff_undo_released_note: "Tidak ada grup yang diubah, jadi aksi ini masih bisa dibatalkan oleh orang yang bisa membatasi anggota di grupnya."
+staff_undo_abort_restarting: "Bot sedang memulai ulang. Tidak ada yang dibatalkan; tekan Batalkan lagi dalam semenit."
 staff_undo_not_applied_note: "{count} grup lain dibiarkan apa adanya: tindakan tidak diterapkan di sana."
 staff_undo_already: "Sudah dibatalkan oleh {name}."
 staff_undo_not_available: "Tindakan ini tidak dapat dibatalkan."

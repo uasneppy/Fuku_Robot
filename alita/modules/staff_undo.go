@@ -401,6 +401,12 @@ func (m moduleStruct) staffUndoConfirm(
 			staffActionRunsWG.Done()
 		}
 	}()
+	// Once the shutdown cancelled the run context nothing may be claimed: the run
+	// would only cut every group off, and the action keeps its one undo (D-09).
+	if runCtx.Err() != nil {
+		abort("staff_undo_abort_restarting")
+		return ext.EndGroups
+	}
 
 	// The claim is the last check before the run: one conditional update, so of two
 	// cards for one record, on any replica, only one ever starts.

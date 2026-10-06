@@ -2791,6 +2791,7 @@ staff_undo_card_applies: "¿Deshacer esta acción en los {count} grupo(s) donde 
 staff_undo_marker: "↩ Deshecha por {name}, mira la respuesta."
 staff_undo_marker_nothing: "↩ El deshacer de {name} no cambió nada, mira la respuesta."
 staff_undo_released_note: "No se cambió ningún grupo, así que alguien que pueda restringir miembros en sus grupos todavía puede deshacer esta acción."
+staff_undo_abort_restarting: "El bot se está reiniciando. No se deshizo nada; vuelve a pulsar Deshacer en un minuto."
 staff_undo_not_applied_note: "{count} grupo(s) más se dejaron como estaban: la acción no se aplicó allí."
 staff_undo_already: "Ya fue deshecha por {name}."
 staff_undo_not_available: "Esta acción no se puede deshacer."
