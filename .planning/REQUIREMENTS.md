@@ -22,7 +22,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
   - bot can restrict members
   - owner still matches
   - currently in lockdown
-- [ ] **SETUP-09**: The `/staff` panel lists recent staff actions: who, what, target, when, reason, and per-group outcome.
+- [x] **SETUP-09**: The `/staff` panel lists recent staff actions: who, what, target, when, reason, and per-group outcome.
 
 ### Staff actions
 
@@ -41,8 +41,8 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **STAFF-06**: Posts from anonymous admins in the Staff Group are refused with "post as yourself", because they can't be authorised per group.
 - [x] **STAFF-07**: The bot never acts against a target who is an admin or the owner of a given group, or against the bot itself. Such groups are skipped with that reason. Staff Group membership alone does not protect anyone.
 - [x] **STAFF-08**: The issuer sees one summary message, updated as groups complete. Each group is marked done, skipped (with reason) or failed (with reason, e.g. the bot lacks rights or is rate limited). No group is silently dropped.
-- [ ] **STAFF-09**: Each applied action and its reason are posted to the log channel of every group where it was applied.
-- [ ] **STAFF-10**: Every staff action is recorded with:
+- [x] **STAFF-09**: Each applied action and its reason are posted to the log channel of every group where it was applied.
+- [x] **STAFF-10**: Every staff action is recorded with:
   - the issuer
   - the target
   - the action
@@ -50,7 +50,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
   - the reason
   - the time
   - the per-group outcomes
-- [ ] **STAFF-11**: The summary has an "Undo everywhere" button. A Staff Group member who is an admin with restrict rights in a group can reverse the action there. The same per-group checks and the same summary apply.
+- [x] **STAFF-11**: The summary has an "Undo everywhere" button. A Staff Group member who is an admin with restrict rights in a group can reverse the action there. The same per-group checks and the same summary apply.
 - [x] **STAFF-12**: The fan-out stays within Telegram's rate limits, waits and retries when Telegram says to, and reports a group as failed instead of dropping it.
 - [x] **STAFF-13**: The `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` commands keep their existing per-group behaviour everywhere except inside a Staff Group.
 
@@ -177,7 +177,7 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | SETUP-06 | Phase 1 | Complete |
 | SETUP-07 | Phase 1 | Complete |
 | SETUP-08 | Phase 1 | Complete |
-| SETUP-09 | Phase 3 | Pending |
+| SETUP-09 | Phase 3 | Complete |
 | STAFF-01 | Phase 2 | Complete |
 | STAFF-02 | Phase 2 | Complete |
 | STAFF-03 | Phase 2 | Complete |
@@ -186,9 +186,9 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | STAFF-06 | Phase 2 | Complete |
 | STAFF-07 | Phase 2 | Complete |
 | STAFF-08 | Phase 2 | Complete |
-| STAFF-09 | Phase 3 | Pending |
-| STAFF-10 | Phase 3 | Pending |
-| STAFF-11 | Phase 3 | Pending |
+| STAFF-09 | Phase 3 | Complete |
+| STAFF-10 | Phase 3 | Complete |
+| STAFF-11 | Phase 3 | Complete |
 | STAFF-12 | Phase 2 | Complete |
 | STAFF-13 | Phase 2 | Complete |
 | LOCK-01 | Phase 4 | Pending |

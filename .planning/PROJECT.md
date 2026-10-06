@@ -33,14 +33,13 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ Staff actions: any Staff Group member runs `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` (timed ban and mute, optional reason) against an `@username`, a numeric ID or a mention, behind a Confirm card only the issuer can tap — Phase 2
 - ✓ Every staff action fans out to all linked groups with a live per-group check of the issuer's restrict right; it acts where allowed, skips the rest, never touches the Staff Group, and never lifts a ban by accident — Phase 2
 - ✓ One live summary per action: every group is marked done, skipped or failed with its reason, and none is dropped, under Telegram rate limits across replicas — Phase 2
+- ✓ Each applied staff action and its reason are posted to the admin log channel of every group where it was applied, naming the issuer and target and "via Staff Group" but never the Staff Group itself — Phase 3
+- ✓ Every staff action is recorded (issuer, target, action, duration, reason, each group's prior state and outcome), and `/staff` has a Recent actions list with a per-action detail view — Phase 3
+- ✓ The summary has an "Undo everywhere" button: any Staff Group member can undo ban, mute, unban or unmute after a Confirm tap, with a live per-group restrict check for the presser; undo restores each group's prior state and skips a group whose status changed since — Phase 3
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
-
-**Staff Group (first)**
-- [ ] Each applied staff action and its reason are posted to the log channel of every group where it was applied. (The reason already shows on the card and in the summary since Phase 2.)
-- [ ] Every staff action is recorded, and the summary gets an "Undo everywhere" button plus a recent-actions list in `/staff`.
 
 **Raid protection (second)**
 - [ ] A lockdown stops new members (anyone joining is kicked and listed in the alert) and mutes everyone except admins and approved users.
@@ -117,7 +116,7 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | — Pending |
 | Every staff action needs a Confirm tap showing the resolved target | `@usernames` can be stale or recycled; owner prefers safety over speed | ✓ Shipped — Phase 2 (5-minute card, issuer-only Confirm) |
 | Staff Group members aren't protected from staff actions; only each group's admins and owner, and the bot, are | Owner's call; staff are trusted, not immune | ✓ Shipped — Phase 2 |
-| Undo-everywhere button and a recent-actions list in `/staff` are in v1, backed by an audit record | Mistakes are reversible and accountable | — Pending |
+| Undo-everywhere button and a recent-actions list in `/staff` are in v1, backed by an audit record | Mistakes are reversible and accountable | ✓ Shipped — Phase 3 (live UAT passed) |
 | Old `/antiraid` is retired; its auto-threshold carries over to join-surge detection | One raid system, not two | — Pending |
 | Auto-triggers are on by default with conservative thresholds | Protection from day one; admins tune or disable per group | — Pending |
 | Images are classified by Gemini `gemini-3.5-flash-lite` (owner's key); text stays on TypeSafe | Owner's choice of provider; TypeSafe is text-only | — Pending |
@@ -134,6 +133,12 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Staff fan-out goes through a fleet-wide Redis pacer; a call whose slot is more than 60 s away fails at once as "rate limited" | One flood must not freeze every staff run on every replica, and a refused group is reported, never dropped | ✓ Good — Phase 2 (edge case WR-03 at `retry_after` = 60 left open) |
 | One staff run per target, held by a Redis lock the run renews every 10 minutes | A second Confirm on the same person must not race a slow first run | ✓ Good — Phase 2 |
 | Each summary message has its own delivery budget, and progress edits pause during a 429 | The final summary must still arrive when Telegram makes the bot wait | ✓ Good — Phase 2 |
+| The staff audit record lives in PostgreSQL, is read fresh (never cached) and is kept forever, outside backup, export, import and reset | An audit trail must not be stale, pruned or rewritten by an import | ✓ Good — Phase 3 |
+| A record is created at Confirm and each group's prior state is written before its Telegram write; a failed write fails closed | Undo can only restore what was recorded, so nothing acts unrecorded | ✓ Good — Phase 3 |
+| Undo restores each group's recorded prior state and skips a group whose live status no longer matches what the action left behind | Undo must never lift a ban or mute an admin put there later | ✓ Good — Phase 3 (unmute undo uses the broad "left behind" check, WR-04, owner accepted) |
+| One undo per action through a conditional database claim, given back when no group reached its Telegram write; any attempted write keeps it | A crash or refusal before any write must not burn the only undo, and a possibly applied write must never allow a second one | ✓ Good — Phase 3 (UAT tests 4 and 7) |
+| Undo state shown everywhere comes from the stored per-group undo outcomes (running, interrupted, undone, changed nothing), never from the claim alone | The history must say what actually happened; unconfirmed outcomes read "changed nothing" | ✓ Good — Phase 3 (UAT tests 6 and 8) |
+| Staff log posts use the existing `admin` log category | No new settings or migration; a group that turns admin logs off gets no staff posts | ✓ Good — Phase 3 |
 
 ## Evolution
 
@@ -153,4 +158,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-05 after Phase 2*
+*Last updated: 2026-10-06 after Phase 3*
