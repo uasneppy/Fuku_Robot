@@ -17,7 +17,7 @@ findings:
     title: "A history page press is answered before the data is read, so a database error is a silent no-op"
   - id: WR-04
     severity: warning
-    disposition: open
+    disposition: skipped
     title: "The \"left behind\" predicate for an unmute accepts any non-muted state, so undo can overwrite another admin's newer restriction"
   - id: IN-01
     severity: info
@@ -43,7 +43,7 @@ findings:
     severity: info
     disposition: open
     title: "The Prev offset ignores a page that was shrunk to fit the length cap"
-open: 10
+open: 9
 total: 10
 recorded: 2026-10-05T20:12:26.912Z
 ---
@@ -55,7 +55,7 @@ recorded: 2026-10-05T20:12:26.912Z
 | WR-01 | warning | open | - |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
+| WR-04 | warning | skipped | Owner accepted the broad unmute predicate (03-UAT test 3, option a) |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
