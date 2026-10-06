@@ -1,7 +1,7 @@
 # Phase 4: Manual Lockdown - Context
 
 **Gathered:** 2026-10-06
-**Status:** Ready for planning (one open item: the spike 1 result, see D-02)
+**Status:** Ready for planning (spike 1 answered 2026-10-06, see D-02)
 
 <domain>
 ## Phase Boundary
@@ -26,10 +26,8 @@ Not in this phase:
 ## Implementation Decisions
 
 ### Approved users (LOCK-03)
-- **D-01:** **Fallback if Telegram can't exempt approved users: they are muted like everyone else.** Only admins can talk during a lockdown. The lock notice (D-15) says that approved users are muted too. Telegram enforces it on its own, so it keeps working when the bot is slow, rate-limited or down.
-- **D-02:** **Spike 1 is a 2-minute check the owner does in the Telegram app. Its result is still open.** The owner gives the planner the result before `/gsd-plan-phase 4`. The check: in a supergroup the owner owns, go to Permissions, turn OFF "Send messages" for all members, then add a user under Exceptions and try to switch "Send messages" back ON for just that user. The research and Telegram's "restricted for all members" UI both point to "can't".
-  - **Branch "can't" (expected):** D-01 applies. Locking makes no per-user calls.
-  - **Branch "works":** each approved user who is a plain member gets a per-user exception at lock time, and it is cleared at the lift so they become a plain member again. Someone muted on purpose is never given an exception. **Stop and raise this with the owner before planning on this branch:** if per-user permissions can override a locked default, then every member who already holds a per-user restriction that allows sending would also keep talking. That includes anyone ever unmuted or passed through captcha, because those paths write per-user permissions. Locking the defaults would then leak.
+- **D-01:** **Approved users are muted like everyone else** (Telegram can't exempt them, D-02). Only admins can talk during a lockdown. The lock notice (D-15) says that approved users are muted too. Telegram enforces it on its own, so it keeps working when the bot is slow, rate-limited or down.
+- **D-02:** **Spike 1 result: Telegram can't exempt one user from a locked default.** The owner ran the check on 2026-10-06 in a supergroup they own: with "Send messages" turned off for all members, the "Send messages" toggle for a user added under Exceptions is greyed out. D-01 applies. Locking makes no per-user calls, and no approved-user exception is planned.
 - **D-03:** **Spike 2 is designed away, not gated.** The join guard handles all three ways a join can arrive: the `chat_member` update, the `new_chat_members` service message, and `chat_join_request`. A join delivered twice is acted on once. The ban is never gated on a Redis claim (Pitfall 10: `claimRecentJoinProcessing` fails closed). An automated test proves the guard stops greetings and captcha for a banned joiner. Live join delivery and EndGroups behaviour are UAT items.
 
 ### Removing joiners (LOCK-01)
@@ -47,7 +45,7 @@ Not in this phase:
 - **D-13:** **Both commands act at once, with no Confirm tap.** `/lockdown [reason]` takes an optional reason.
 - **D-14:** **`/lockdown` during an active lockdown starts nothing.** It replies with the existing one: since when, who started it, and the reason (ROADMAP criterion 3).
 - **D-15:** **The group sees a public notice on lock and on lift.**
-  - Lock: the group is in lockdown, only admins can talk, and new members are removed until it lifts. It also says who locked it, gives the reason if there is one, and says that approved users are muted too when D-01 applies.
+  - Lock: the group is in lockdown, only admins can talk, and new members are removed until it lifts. It also says who locked it, gives the reason if there is one, and says that approved users are muted too (D-01).
   - Lift: "Lockdown lifted by Name", how many joiners were unbanned, and any that couldn't be.
 - **D-16:** **`/lockdownstatus` is a new read-only command for any admin of the group.** It shows whether the group is locked, since when, who locked it, the reason, how many joiners have been removed so far, and the D-19 warning when permissions were changed by hand. It never changes anything. The name can't be confused with `/lock`, `/locks` or `/locktypes`.
 - **D-17:** **`/staff` marks a locked group with one marker on its row**, like "🔒 in lockdown since 5 Oct 12:04". The reason and who locked it are not shown there. They stay in `/lockdownstatus`, and Phase 5's alert brings them to the Staff Group.
@@ -125,7 +123,7 @@ Not in this phase:
   - It has its own `antiraid` callback namespace. A new namespace must not start with `antiraid`, because prefix routing would swallow it.
   - `trackJoinScript` is for Phase 6.
 - `alita/modules/captcha.go`: `SendCaptcha` and `unmuteCaptchaUser`. D-09 leaves pending attempts in place.
-- `alita/db/approvals/repository.go`: `IsUserApproved`, `GetApprovedUsersContext`. Needed only on D-02's "works" branch, and to word the D-15 notice.
+- `alita/db/approvals/repository.go`: `IsUserApproved`, `GetApprovedUsersContext`. Not needed for locking: D-02 rules out per-user exceptions, and the D-15 notice always says approved users are muted too.
 - `alita/modules/anonymous_admin_router.go` (`RegisterAnonymousAdminHandler`) and `alita/modules/moderation.go:349` (`anonPipelineHandler`): for D-12.
 - `alita/modules/staff_panel.go`: `renderStaffRow`, `staffRowStatuses` and `buildStaffPanelRows`, where the D-17 marker goes.
 - `alita/modules/staff_action_run.go:182` `staffPaced`: the fleet-wide Redis pacer pattern for bans, unbans and declines.
@@ -152,10 +150,10 @@ Not in this phase:
 <specifics>
 ## Specific Ideas
 
-- The lock notice says: the group is in lockdown, only admins can talk, and new members are removed until it lifts. It names who locked it and gives the reason, and adds "approved users are muted too" when D-01 applies.
+- The lock notice says: the group is in lockdown, only admins can talk, and new members are removed until it lifts. It names who locked it and gives the reason, and adds "approved users are muted too" (D-01).
 - The lift notice reads "Lockdown lifted by Name". It gives the number of joiners unbanned and lists any that couldn't be, and notes when a manual permission change was replaced (D-18).
 - The `/staff` row marker reads "🔒 in lockdown since 5 Oct 12:04", in the same time style as Phase 3's history lines.
-- The owner's spike 1 check is in D-02. It needs only the Telegram app, not the bot.
+- The owner's spike 1 check (D-02) came back "can't": the per-user toggle is greyed out once the default is locked.
 
 </specifics>
 

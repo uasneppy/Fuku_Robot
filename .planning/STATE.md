@@ -96,7 +96,6 @@ None yet.
 ### Blockers/Concerns
 
 - [Cross-phase]: The shutdown manager gives each handler only 10 s (`alita/utils/shutdown/graceful.go:83`), while `StopStaffActions` waits up to 30 s (`staffActionStopWait`). A slow staff action or undo run can therefore be cut off before `FinalizeAction`/`FinalizeUndo` and summary delivery, and the DB closes under it. Found by the G-03-4 diagnosis (`.planning/debug/resolved/undo-claim-spent-and-undone-label.md`); not yet planned.
-- [Phase 4]: Spike gate. Test whether approved users can be exempted from a locked default, and how joins arrive. If the exemption is impossible, the owner picks the LOCK-03 fallback before planning.
 - [Phase 7]: Spike gate. Evaluate Gemini on spam images, GIFs and stickers, then run `/gsd-ai-integration-phase`.
 - [Phase 8]: Spike gate. Test Direct Link Mini App launch from a group, and Turnstile rendering in Telegram WebViews. The owner must provide a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
 - [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
@@ -104,6 +103,7 @@ None yet.
 - [Phase 1]: Low, non-blocking security flag TF-01-06: a stranger's `/unlinkstaff` reply reveals whether the group is linked (`01-SECURITY.md`).
 - [Phase 2]: Open code-review finding WR-03 (warning): at a `retry_after` of exactly 60 s, all but the first concurrent paced call fail as "rate limited" instead of waiting. Those groups are still reported. Nine info notes are open too (`02-REVIEW-DISPOSITION.md`).
 - [Phase 3]: Open code-review warnings WR-03 (a retry after an ambiguous `ReleaseUndo` error can run `FinalizeUndo` on a released record) and WR-04 (a history page press is answered before the data is read, so a DB error is a silent no-op), plus 6 info notes (`03-REVIEW-DISPOSITION.md`). The owner accepted WR-01, WR-02 and IN-02 in UAT.
+- [Phase 4]: Spike 1 answered by the owner: Telegram greys out a per-user "Send messages" exception once the default is locked, so approved users are muted during a lockdown like everyone else (LOCK-03 fallback, 04-CONTEXT D-01/D-02). Spike 2 (join paths) is designed away, with live join delivery checked in UAT.
 - [Phase 2]: `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` is flaky (2 of 6 verifier runs red): two runs straddle a wall-clock second in `until_date`. Test-only; it can turn `make test` red intermittently.
 - [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) lands in Phase 4. The alert's Lift button (LOCK-06), and listing removed joiners on the alert (LOCK-01), land in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
 

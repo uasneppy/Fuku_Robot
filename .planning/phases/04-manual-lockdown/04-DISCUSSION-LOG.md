@@ -40,6 +40,8 @@
 | Not checked yet | Open item. The owner reports the result before planning, and CONTEXT.md describes both branches. | ✓ |
 
 **User's choice:** Not checked yet.
+
+**Follow-up (2026-10-06):** The owner ran the check: "Greyed out". Branch "can't" applies; D-02 in 04-CONTEXT.md records the result.
 **Notes:** CONTEXT.md D-02 adds a warning for the "works" branch: if per-user permissions can override a locked default, every member with a per-user restriction that allows sending would also talk. The lockdown would then leak, so the owner must be consulted before planning on that branch.
 
 ---
