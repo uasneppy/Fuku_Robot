@@ -183,7 +183,32 @@ Plans:
   4. A lockdown never lifts on its own. It survives bot restarts and a Redis flush, and every bot replica enforces it. Only an admin of the group can lift it with `/unlockdown`, and anyone else is refused.
   5. Lifting the lockdown restores the group's permissions exactly as they were before. Anyone unmuted during the lockdown, by `/unmute` or by passing the captcha, can still talk after it lifts.
 
-**Plans:** TBD
+**Plans:** 8 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md: Tracer. `/lockdown` stores the exact getChat permissions, then locks; `/unlockdown` restores them byte for byte; live authority (owner or admin with restrict), refusals that record nothing, one active lockdown per chat on SQLite and PostgreSQL
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md: `/lockdownstatus` (since, who, why, removed count, hand-edit warning); the lift replaces hand edits, stays locked when the restore fails, lifts once; anonymous admins always prove who they are
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-03-PLAN.md: Joiners recorded by the group -7 guard and banned until the lift by a paced, DB-driven worker (no welcome or captcha); the lift unbans only the lockdown's own bans and posts one tally
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-04-PLAN.md: Every join path handled once (service messages, cross-path dedupe, re-joins, mixed messages, D-24 approvals); only admin-added users get in, bots never; no goodbye for removed joiners
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 04-05-PLAN.md: Join requests declined during a lockdown and the Accept button refuses; a lockdown stays inside its own group; `/antiraid` steps aside while one is active
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 04-06-PLAN.md: Restart mid-lift resumes, stale claims released, unconfirmed locks settled, Redis flush or outage changes nothing, a lockdown never lifts on its own
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 04-07-PLAN.md: Unmuting during a lockdown (`/unmute`, button, captcha pass, staff `/unmute`) gives the pre-lockdown permissions, so the user talks after the lift
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 04-08-PLAN.md: `/staff` marks locked groups (SETUP-08); a staff ban on a lockdown joiner survives the lift; lockdown locale parity test, final AGENTS.md pass and full phase gate
 
 ### Phase 5: Lockdown Alerts and Response
 
@@ -273,7 +298,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
-| 4. Manual Lockdown | 0/TBD | Not started | - |
+| 4. Manual Lockdown | 0/8 | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
