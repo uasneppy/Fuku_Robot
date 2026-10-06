@@ -2825,5 +2825,8 @@ staff_undo_released_note: "No group was changed, so this action can still be und
 staff_undo_abort_restarting: "The bot is restarting. Nothing was undone; press Undo again in a minute."
 staff_undo_not_applied_note: "{count} other group(s) were left alone: the action was not applied there."
 staff_undo_already: "Already undone by {name}."
+staff_undo_already_running: "An undo by {name} is running right now."
+staff_undo_already_interrupted: "An undo by {name} was interrupted by a restart. This action cannot be undone again; check its groups by hand."
+staff_undo_already_nothing: "An undo by {name} already ran and changed nothing. This action cannot be undone again."
 staff_undo_not_available: "This action cannot be undone."
 staff_undo_card_presser_only: "Only the staff member who pressed Undo can confirm or cancel it."

@@ -2759,5 +2759,8 @@ staff_undo_released_note: "Nenhum grupo foi alterado, então esta ação ainda p
 staff_undo_abort_restarting: "O bot está reiniciando. Nada foi desfeito; toque em Desfazer novamente em um minuto."
 staff_undo_not_applied_note: "{count} outro(s) grupo(s) foram deixados como estavam: a ação não foi aplicada lá."
 staff_undo_already: "Já foi desfeita por {name}."
+staff_undo_already_running: "Um desfazer de {name} está em andamento agora."
+staff_undo_already_interrupted: "Um desfazer de {name} foi interrompido por uma reinicialização. Esta ação não pode ser desfeita de novo; confira os grupos manualmente."
+staff_undo_already_nothing: "Um desfazer de {name} já foi executado e não mudou nada. Esta ação não pode ser desfeita de novo."
 staff_undo_not_available: "Esta ação não pode ser desfeita."
 staff_undo_card_presser_only: "Só o membro do staff que carregou em Desfazer o pode confirmar ou cancelar."
