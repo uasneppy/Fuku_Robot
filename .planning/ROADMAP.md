@@ -132,7 +132,7 @@ Plans:
   3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
   4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
 
-**Plans:** 11/12 plans executed
+**Plans:** 12/12 plans executed
 
 Plans:
 **Wave 1**
@@ -167,7 +167,7 @@ Plans:
 - [x] 03-11-PLAN.md: Gap G-03-4, shutdown half (WR-01). The undo Confirm joins the shutdown drain before it claims and refuses to claim once the shutdown began
 
 **Wave 11** *(gap closure G-03-4, blocked on Wave 10 completion)*
-- [ ] 03-12-PLAN.md: Gap G-03-4, label half (WR-02). Recent actions, the detail view and the Undo answers say undone, running, interrupted or changed nothing from the stored undo outcomes; full phase gate
+- [x] 03-12-PLAN.md: Gap G-03-4, label half (WR-02). Recent actions, the detail view and the Undo answers say undone, running, interrupted or changed nothing from the stored undo outcomes; full phase gate
 
 ### Phase 4: Manual Lockdown
 
@@ -272,7 +272,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 |-------|----------------|--------|-----------|
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
-| 3. Staff Audit and Undo | 11/12 | In Progress|  |
+| 3. Staff Audit and Undo | 12/12 | In Progress|  |
 | 4. Manual Lockdown | 0/TBD | Not started | - |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
