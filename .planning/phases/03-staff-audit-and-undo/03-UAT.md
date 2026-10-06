@@ -1,14 +1,18 @@
 ---
-status: diagnosed
+status: testing
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T09:10:23Z
+updated: 2026-10-06T11:56:11Z
 ---
 
 ## Current Test
 
-[testing complete]
+number: 5
+name: make lint on a go1.26 toolchain (or CI)
+expected: |
+  No new lint findings in the Phase 3 files.
+awaiting: user response
 
 ## Tests
 
@@ -33,16 +37,28 @@ severity: major
 
 ### 5. make lint on a go1.26 toolchain (or CI)
 expected: No new lint findings in the Phase 3 files. The installed golangci-lint was built with go1.25 and cannot run on this module (go 1.26.0).
-result: skipped
-reason: "Not run: needs a go1.26 build of golangci-lint or CI; left as an open item"
+result: [pending]
+note: "Round 1: skipped (needs a go1.26 build of golangci-lint or CI). Re-opened by the post-gap-closure verification (03-VERIFICATION.md human_verification)."
+
+### 6. Live re-run of test 4 after gap closure (03-10..03-12; 03-12 human-check)
+expected: In a test Staff Group with two linked test supergroups. (a) A Staff Group member who is an admin in neither group presses Undo on a finished ban and confirms: every group is skipped, the undo's summary says no group was changed and the action can still be undone, the original summary keeps its text and its Undo button, and history shows no undo. (b) A member with restrict rights then presses Undo on the same summary and confirms: the ban is lifted in both groups, the original reads "Undone by <name>" and loses its button, and history shows the entry as undone. (c) An undo that fails in every group (for example after removing the bot's restrict right): the original reads "Undo by <name> changed nothing" and the entry reads "undo changed nothing". (d) Stopping the bot mid-undo and restarting shows "undo interrupted" and the groups as "interrupted by restart", not a stuck hourglass.
+result: [pending]
+
+### 7. OPTIONAL DECISION: pacer-refused, 429 and mid-wait-cancelled calls count as "reached" (code review WR-01)
+expected: Owner chooses (a) accept the rule as written and documented (the claim is kept whenever a group's write call was attempted, whatever it returned, which fails closed), or (b) a small follow-up plan so outcomes that provably made no write (ratelimit.ErrRateLimited, a context cancelled while waiting for a pacer slot) give the claim back.
+result: [pending]
+
+### 8. OPTIONAL DECISION: "changed nothing" wording for groups whose write may have applied (code review WR-02)
+expected: Owner chooses (a) keep "Undo by <name> changed nothing" when the only non-skipped groups ended in a panic, an interruption or a timeout, or (b) use a neutral "tried, result not confirmed, check the groups" wording for those outcomes.
+result: [pending]
 
 ## Summary
 
-total: 5
+total: 8
 passed: 3
 issues: 1
-pending: 0
-skipped: 1
+pending: 4
+skipped: 0
 blocked: 0
 
 ## Gaps

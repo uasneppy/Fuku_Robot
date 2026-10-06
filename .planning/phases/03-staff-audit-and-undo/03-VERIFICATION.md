@@ -1,8 +1,8 @@
 ---
 phase: 03-staff-audit-and-undo
-verified: 2026-10-05T20:30:00Z
+verified: 2026-10-06T12:00:00Z
 status: human_needed
-score: 4/6 must-haves verified
+score: 12/12 must-haves verified
 covered_files:
   - .planning/phases/03-staff-audit-and-undo/03-01-PLAN.md
   - .planning/phases/03-staff-audit-and-undo/03-01-SUMMARY.md
@@ -22,6 +22,12 @@ covered_files:
   - .planning/phases/03-staff-audit-and-undo/03-08-SUMMARY.md
   - .planning/phases/03-staff-audit-and-undo/03-09-PLAN.md
   - .planning/phases/03-staff-audit-and-undo/03-09-SUMMARY.md
+  - .planning/phases/03-staff-audit-and-undo/03-10-PLAN.md
+  - .planning/phases/03-staff-audit-and-undo/03-10-SUMMARY.md
+  - .planning/phases/03-staff-audit-and-undo/03-11-PLAN.md
+  - .planning/phases/03-staff-audit-and-undo/03-11-SUMMARY.md
+  - .planning/phases/03-staff-audit-and-undo/03-12-PLAN.md
+  - .planning/phases/03-staff-audit-and-undo/03-12-SUMMARY.md
   - alita/db/models/staff_action.go
   - alita/db/staff/actions.go
   - alita/db/staff/rekey.go
@@ -37,124 +43,153 @@ covered_files:
   - alita/modules/staff_undo.go
   - alita/utils/actionlog/actionlog.go
   - migrations/20261005120000_add_staff_actions.sql
-covered_digest: "v2:sha256:afc0ed90ded1873bda4be2d54d65fa8ff2dffbafa605b351efc5fa75903814ee"
-behavior_unverified: 1
-overrides_applied: 0
-behavior_unverified_items:
-  - truth: "Undo puts the exact prior state back on live Telegram: restrictChatMember with use_independent_chat_permissions on a restricted prior, a restore or re-ban sent to a kicked or left target (research A2, A3)"
-    test: "Link two test supergroups, each with a log channel, to a test Staff Group. In group A restrict a test account to text-only for 1 day, run a staff /ban, Confirm, then Undo everywhere and Confirm. In group B ban the account for 2 hours with the per-group /ban, run a staff /unban, then Undo it."
-    expected: "Group A: restricted again, text allowed and media blocked, ending at the original time. Group B: banned again until the original end time."
-    why_human: "Telegram's server-side semantics for restrict/ban on kicked or left users and for independent chat permissions exist only in the hand-written fake. Presence and wiring are proven, the live effect is not."
+covered_digest: "v2:sha256:0aeff01275aaacd9ea42953425a0793a65a865fd6640f3a5ea92d074e1debcea"
+behavior_unverified: 0
+overrides_applied: 1
+overrides:
+  - must_have: "D-02/D-04 undo restores exactly the recorded prior state and never overrules a later decision (unmute undo uses the broad left-behind predicate)"
+    reason: "Owner accepted the documented broad left-behind predicate for an unmute undo at UAT test 3 (option a); no gap plan."
+    accepted_by: "owner (03-UAT.md test 3)"
+    accepted_at: "2026-10-06T09:10:23Z"
+re_verification:
+  previous_status: human_needed
+  previous_score: 4/6
+  gaps_closed:
+    - "G-03-4: the one-undo claim is spent by an undo that changed nothing (03-10, WR-01 main trigger)"
+    - "G-03-4: the shutdown can miss an undo Confirm, and a Confirm after the shutdown claims and runs (03-11)"
+    - "G-03-4: history, answers and the original summary say 'undone' whatever the undo did; a crashed undo shows pending (03-12, WR-02)"
+  gaps_remaining: []
+  regressions: []
+behavior_unverified_items: []
 human_verification:
-  - test: "Live Telegram restore check (03-VALIDATION.md Manual-Only rows 1 and 2; 03-09 Task 2 human-check)"
-    expected: "See behavior_unverified_items above. Also open /staff, Recent actions and the entry's detail: both actions show as undone and the detail lists each group's result and undo result."
-    why_human: "Fakes cannot prove live Telegram behaviour (research A2, A3)."
-  - test: "Log-channel posts end to end (03-VALIDATION.md Manual-Only row 3)"
-    expected: "Each linked group's log channel has a #STAFF_BAN or #STAFF_UNBAN post and a #STAFF_UNDO post naming the issuer and the presser, the target, the reason and 'via Staff Group', and never the Staff Group's title or ID."
-    why_human: "Needs real channels. The fake proves the text and the routing, not delivery into a real channel."
-  - test: "DECISION: undo of an unmute and D-04 (code review WR-04)"
-    expected: "Owner chooses: (a) accept the documented broad 'left behind' predicate for unmute (member, left, or restricted-but-able-to-send), or (b) open a gap-closure plan that stores what the unmute applied and requires equality."
-    why_human: "staffUndoLeftBehind (staff_action_decide.go:375-381) lets an undo of an unmute re-apply the old mute over a later partial restriction by another admin, or over a target who was kicked and rejoined. D-04 says 'on any difference ... skipped'. Research A5 and plan 03-02 chose the broad predicate on purpose because Telegram may report member, left or restricted for a target restricted to the group's default permissions. This is a locked-decision trade-off, so it is the owner's call."
-  - test: "DECISION: the undo claim is spent before any group is attempted (code review WR-01) and history says 'undone' regardless of effect (WR-02)"
-    expected: "Owner chooses whether D-09 ('one undo per action ... staff fix them by hand') covers the zero-effect case (a Staff Group member who is an admin in no linked group presses Undo and Confirm, every group is skipped, and nobody can undo that action any more), or whether the claim should be released when no group reached a Telegram write, and whether the history line should say 'undone' only when at least one group's undo succeeded."
-    why_human: "Both are real in the code (staff_undo.go:399-428, staff_history.go:69-80). D-09 states the one-shot rule without exempting a no-op undo, so this is a judgment call, not a clear violation."
+  - test: "Re-run UAT test 4 live (03-12 plan asks for it). In a test Staff Group with two linked test supergroups, (a) have a Staff Group member who is an admin in neither group press Undo on a finished ban and Confirm; (b) then have a member with restrict rights press Undo on the same summary, Confirm, and let it finish; (c) /staff, Recent actions, and the detail view."
+    expected: "(a) Every group is skipped, the undo's summary says no group was changed and the action can still be undone, the original summary keeps its text and its Undo button, and history shows no undo. (b) The Undo button still works and the ban is lifted in both groups; the original then reads 'Undone by <name>' and loses its button; history shows the entry as undone. Also trigger an undo that fails in every group (for example remove the bot's restrict right first): the original reads 'Undo by <name> changed nothing' and the entry reads 'undo changed nothing'. Stopping the bot mid-undo and restarting shows 'undo interrupted' and groups as 'interrupted by restart', not a stuck hourglass."
+    why_human: "The claim, release and label paths were proven only against the real SQLite database, miniredis and the hand-written Telegram fake. How real Telegram answers (permission errors, retry_after, a restart mid-run) can't be reproduced by a fake. UAT test 1 (restore on live Telegram) passed before gap closure; the restore call itself (decideStaffUndo, executeStaffUndoCall) is unchanged by 03-10..03-12, but the claim lifecycle around it is new."
   - test: "make lint on a go1.26 toolchain (or CI)"
     expected: "No new lint findings in the Phase 3 files."
-    why_human: "The installed golangci-lint was built with go1.25 and cannot run on this module (go 1.26.0). 03-VALIDATION.md and AGENTS.md require it at the end of the phase."
+    why_human: "The installed golangci-lint was built with go1.25 and refuses this module (go 1.26.0). UAT test 5 is still skipped. AGENTS.md and ROADMAP require it at the end of every phase."
+  - test: "OPTIONAL DECISION: pacer-refused, 429 and mid-wait-cancelled calls count as 'reached' (code review WR-01)"
+    expected: "Owner decides whether to accept the rule as written and documented (the claim is kept whenever a group's write call was attempted, whatever it returned, which fails closed), or to open a small follow-up plan so that outcomes that provably made no write (ratelimit.ErrRateLimited, a context cancelled while waiting for a slot) give the claim back."
+    why_human: "The code, the plan prohibition ('whatever that call returned'), AGENTS.md and the staff docs all say the same thing, so it is not a breach of any must-have. It is narrower than the literal wording of owner decision b in a rare case (a saturated fleet pacer, or a shutdown during a slot wait), so the owner should confirm."
+  - test: "OPTIONAL DECISION: 'changed nothing' wording for groups whose write may have applied (code review WR-02)"
+    expected: "Owner decides whether 'Undo by X changed nothing' is acceptable when the only non-skipped groups ended in a panic, an interruption or a timeout, or whether those get a neutral 'tried, result not confirmed, check the groups' wording."
+    why_human: "Owner decision b literally says 'otherwise say nothing changed', and plan 03-10 specifies the wording for the all-tried-and-failed case, so the code matches the decision. The over-claim only affects groups whose outcome is unknown (the code review shows TestStaffUndoPanicKeepsClaim asserts it)."
 ---
 
 # Phase 3: Staff Audit and Undo Verification Report
 
 **Phase Goal:** As a staff member, I want to log, list and undo every staff action, so that mistakes can be reversed and we stay accountable.
-**Verified:** 2026-10-05T20:30:00Z
+**Verified:** 2026-10-06T12:00:00Z
 **Status:** human_needed
-**Re-verification:** No, initial verification
+**Re-verification:** Yes, after gap closure (plans 03-10, 03-11, 03-12 against G-03-4)
 
 ## Goal Achievement
 
-The code delivers all four roadmap criteria. I found no missing, stubbed or unwired artifact and no blocker. The status is `human_needed` because live-Telegram behaviour is modeled only in the fake, and because three deviations from locked decisions or from the audit's honesty need an owner decision (WR-04, WR-01, WR-02). None of them blocks a criterion as the roadmap words it.
+Gap G-03-4 is closed. I read the merged code rather than the summaries. The four roadmap criteria still hold and the three gap-closure plans deliver what their `must_haves` say. I found no regression against the earlier must-haves, and no blocker. The status stays `human_needed` for two reasons: the plan for 03-12 asks for UAT test 4 to be re-run on live Telegram, and `make lint` has never run. Two optional owner decisions arise from the code review (WR-01 and WR-02), and neither breaches a must-have.
+
+I did not trust the summaries or the 03-REVIEW.md text. I checked each point against the source, and ran the Phase 3 test families again with the race detector.
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | SC1: every group where a staff action was applied gets a log-channel post with action, target, issuer and reason | ✓ VERIFIED | `startStaffActionRun` AfterGroup (`staff_action_run.go:353-359`) saves the group result, then calls `postStaffActionLog` only when `res.Outcome == staffOutcomeDone`. `composeStaffActionLog` (`staff_log.go:62-77`) builds hashtag, issuer mention, target, duration (ban/mute), reason (escaped, capped at 300 runes) and "via Staff Group", and never reads `card.StaffChat`. `sendStaffLogPost` goes through `actionlog.Destination` (admin category, no post if the group has no channel or the category is off) and `staffPaced`, and a failed post is only logged, so it cannot change the result. Tests `TestStaffActionLogPosts`, `...CategoryOff`, `...FailureKeepsDone`, `...RateLimitedKeepsDone`, `...Paced`, `...ReasonCapped`, `...NoneWhenNothingApplied`, `...SharedChannel` pass (my own run). Residual: a shutdown skips remaining log posts (`ctx.Err()` guard) and AGENTS.md documents it. |
-| 2 | SC2: every staff action is recorded with issuer, target, action, duration, reason, time and per-group outcomes; the record survives restarts | ✓ VERIFIED | Migration `20261005120000_add_staff_actions.sql` creates `staff_actions` (issuer, target, action with CHECK incl. kick, reason, duration_sec/amount/unit, over_limit, until_date, created_at, finished_at, undo_*) and `staff_action_groups` (outcome, reason, detail, prior_*, applied_at, undo_*). Models match column for column and `TableName()` returns the migration names. `staffActionConfirm` (`staff_action_card.go:903-911`) creates the record before the run and aborts the card when the create fails. Each group's prior state is written before its Telegram write and a failed save fails that group closed (`staff_action_run.go:527-534`). Results are saved per group and finalized in one transaction through `db.DB`, never the run context (`staff/actions.go:135-155`). `StopStaffActions` is registered in `main.go:218` before DB close in LIFO order. PostgreSQL chain and integrity checks passed per the orchestrator. Tests `TestStaffActionRecordCreate/RoundTrip/PerGroup/Finalize/EveryKind/FailureFailsClosed/NoRecordOnAbort`, `TestStaffActionRecordsPriorState`, `TestStopStaffActionsRecordsInterrupted` pass. |
-| 3 | SC3: `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group | ✓ VERIFIED (WR-02 caveat) | The panel keyboard carries the Recent actions button (`staff_panel.go:317`), routed in `staffCallback` (`staff.go:282-289`). `staffHistoryLine` renders icon and action, target name and ID, duration, reason, issuer, time and the ✅/⏭/❌ tally; `renderStaffHistoryDetail` lists every group in the summary's line format, marks unlinked groups and shows the undo's per-group results. Access needs a live Staff Group member (`staffHistoryGate`), reads are scoped by `staff_chat_id`, and 10 entries per page, newest first, with offset paging. Tests `TestStaffHistory*` (list, detail, access, length cap, callback budget, unlinked, unfinished, same-second, shrunk page) pass. Caveat: the list line and detail header say "undone" for any claimed undo, even one where every group was skipped or failed (WR-02, see decision item). The per-group undo lines stay truthful. |
-| 4 | SC4: "Undo everywhere" reverses the action in each group where the presser is a Staff Group member and an admin with restrict rights; other groups are skipped with the reason; the result is in the same done/skipped/failed summary; an outsider can't undo anything | ✓ VERIFIED against the fake (see Truth 6) | Undo button exists only on the final summary of a finalized, non-kick record with at least one applied group (`staff_action_run.go:363-376`, `staffActionUndoable`). `staffUndoAsk` and `staffUndoConfirm` both re-check live Staff Group membership, the record's `staff_chat_id` against the pressed chat, and refuse service identities; only the presser can confirm (compare-and-set on the card issuer). Per group, `staffGroupPrechecks` runs with the presser as actor: link owner recheck, live `getChatMember` creator or admin with `can_restrict_members` (never the admin cache), bot and service guards, live target. Only `done` groups are visited. `decideStaffUndo` is the only place undo calls are chosen and `executeStaffUndoCall` switches only on the verdict. The undo takes the same per-target lock as an action. `ClaimUndo` is one conditional update, so an undo runs once. Results use the same ✅/⏭/❌ renderer, overflow rules and `staffPaced`. Note: D-08 (locked) delivers the result as a reply to the original summary, which is edited with "Undone by", not inside the same message. The roadmap's "same summary" is read there as the same format and rules, which the code does. Tests `TestStaffUndoAccess/Outsider/PresserRights/PresserNeedsTheRestrictRight/OnlyApplied/NotAppliedOriginally/LinkRemoved/Once/OnceAcrossReplicas/TargetLock/Order/AfterRekey/ButtonRules`, `TestStopStaffActionsUndo` pass. |
-| 5 | D-02/D-04 (plan 03-02 prohibition): undo restores exactly the recorded prior state and never overrules a later decision | ? UNCERTAIN (owner decision, WR-04) | Verified for ban, mute and unban: `staffUndoLeftBehind` compares status and end date (with the 30-second permanent-ban rule), and restore uses the stored permission set and original `until`. `decideStaffUndo` skips target admins, missing prior state, ended restrictions (120 s margin) and any mismatch (`skip_changed_since`). For undo of an unmute the predicate accepts any `member`, any `left` and any `restricted` target that is not fully muted (`staff_action_decide.go:375-381`), so a later partial restriction by another admin, or a kick and rejoin, would be overwritten by the old mute. I confirmed WR-04 in the code. It is a deliberate choice recorded in research A5 and in plan 03-02's truth ("an unmute left them a member, left, or restricted but able to send"), but it contradicts the prohibition's "any difference ... skips the group", which the plan marked `resolved`. |
-| 6 | Live Telegram semantics of restore and re-ban (research A2, A3) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Artifacts present and wired (`staffCallRestore` with `UseIndependentChatPermissions`, re-ban with `UntilDate`). No test can exercise Telegram's own behaviour; the fake models it. See human verification. |
+| 1 | SC1: every group where a staff action was applied gets a log-channel post with action, target, issuer and reason | ✓ VERIFIED (regression check) | `staff_action_run.go:376-381` posts only for `staffOutcomeDone`, after the group result is saved. The log tests (`TestStaffActionLog*`) pass under `-race`. Undo posts go through `postStaffUndoLog` (`staff_undo.go:653-655`). |
+| 2 | SC2: every staff action is recorded with issuer, target, action, duration, reason, time and per-group outcomes; it survives restarts | ✓ VERIFIED (regression check) | Migration `20261005120000_add_staff_actions.sql` is still the highest migration file and is unchanged by the gap closure (the diff since `d45631a` touches no migration). `StopStaffActions` is registered in `main.go:218`. `TestStaffActionRecord*` and `TestStopStaffActionsRecordsInterrupted` pass. |
+| 3 | SC3: `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group | ✓ VERIFIED | `staffHistoryLine` and `renderStaffHistoryDetail` (`staff_history.go:72-139`, `335-440`). The earlier caveat (a claimed undo read "undone") is gone: the state now comes from `staffUndoStateOf` and the tally's `UndoDone` (`actions.go:196-234`). `TestStaffHistory*` pass. |
+| 4 | SC4: "Undo everywhere" reverses the action in each group where the presser is a Staff Group member and a restrict-rights admin; others are skipped with the reason; same summary; an outsider can't undo | ✓ VERIFIED against the fake | `runStaffUndoInGroup` runs `staffGroupPrechecks` with the presser as actor, then `decideStaffUndo`, then `executeStaffUndoCall` (`staff_undo.go:726-778`). Access, presser-rights, outsider, once, target-lock and rekey tests pass. The restore call path is unchanged by the gap closure (`staff_action_decide.go` has no diff since `d45631a`). |
+| 5 | D-02/D-04: undo restores the recorded prior state and never overrules a later decision | ✓ PASSED (override) | Verified for ban, mute and unban. The unmute column keeps the broad left-behind predicate (`staff_action_decide.go:375-381`). The owner accepted it at UAT test 3, so I record it as an override instead of a gap. |
+| 6 | Live Telegram semantics of restore and re-ban (research A2, A3) | ✓ VERIFIED by owner UAT (human evidence) | `03-UAT.md` test 1 records `result: pass` for the live restore check and test 2 for the log-channel posts. I cannot reproduce live Telegram myself. The restore code path is unchanged since, so the earlier pass still applies; the new claim lifecycle needs its own live pass (human item 1). |
+| 7 | G-03-4 / 03-10: a Staff Group member who is an admin in no linked group presses Undo and Confirm; no write is made, the claim is given back, and a member with rights can retry | ✓ VERIFIED | `Finish` calls `staff.ReleaseUndo(a.ID, card.Issuer, claimedAt)` when `!anyStaffGroupReached(results)` (`staff_undo.go:667-678`). `ReleaseUndo` (`actions.go:308-345`) matches the record ID, `undo_by`, the exact claim time and `undo_finished_at IS NULL`, then clears the parent and every group's undo columns in one `db.DB` transaction. `TestStaffUndoClaimReleased` and `TestStaffActionReleaseUndo` pass. |
+| 8 | 03-10: an undo that gave its claim back never edits the original; the undo summary says nothing changed and the action can still be undone | ✓ VERIFIED | `Delivered` returns at once when `released` (`staff_undo.go:705-707`); `staffUndoSummaryHeader(..., final && released)` adds `staff_undo_released_note` (`staff_undo.go:586-596`). Covered by `TestStaffUndoClaimReleased`. |
+| 9 | 03-10 / D-09: once any group reached its write, the claim is kept; a panicked group counts as reached; "Undone by" only at the end of the run and only if at least one group was undone | ✓ VERIFIED | `res.Reached = true` is set in `reached()` after the write call returns (`staff_undo.go:767-777`); `sweepPending` sets it for swept groups (`staff_action_run.go:154`); `Delivered` picks `staff_undo_marker` or `staff_undo_marker_nothing` from `undone` (`staff_undo.go:710-714`). `TestStaffUndoNothingChanged`, `TestStaffUndoPanicKeepsClaim` and `TestStaffUndoTracer` pass. |
+| 10 | 03-11: an undo Confirm joins the shutdown drain before it claims; a Confirm after the shutdown claims nothing; the wait group stays balanced | ✓ VERIFIED | `joinStaffRuns()` runs before the claim (`staff_undo.go:459`). A deferred `staffActionRunsWG.Done()` covers every path where `runStarted` stays false (`staff_undo.go:460-464`). A cancelled run context aborts with `staff_undo_abort_restarting` before any claim (`staff_undo.go:467-470`). The started run's coordinator owns the matching `Done` (`staff_action_run.go:253-257`). `startStaffRun` keeps its old behaviour through the same pair (`staff_action_run.go:244-246`). `TestStaffUndoShutdownWindow`, `TestStaffUndoConfirmAfterStop` and `TestStopStaffActionsUndo` pass. |
+| 11 | 03-12: Recent actions, the detail view and the Ask and Confirm answers derive an undo's state from stored outcomes (running, interrupted, undone, changed nothing), never from the claim alone | ✓ VERIFIED | `staffUndoStateOf` (`staff_undo.go:118-131`) is the only decision point; `staffHistoryState`, the detail header and `staffUndoClaimedText` all call it (`staff_history.go:72-139, 373, 382`; `staff_undo.go:57-73, 267, 438`). `ActionTally.UndoDone` is filled by the same single query (`actions.go:196-234`). `TestStaffHistoryUndoStates`, `TestStaffHistoryUndoNothingLine`, `TestStaffActionTally` and `TestStaffUndoClaimedTexts` pass. |
+| 12 | 03-12: a crashed undo (claimed, unfinished, heartbeat older than `staffTargetLockTTL`) shows its unfinished groups as interrupted and viewing it writes nothing | ✓ VERIFIED | The conversion runs only on the in-memory `undoResults` when `state == staffUndoInterrupted` (`staff_history.go:383-401`); nothing in the view writes. `TestStaffHistoryDetailUndoOutcome` (crashed case checks the row's `UndoOutcome` stays empty) passes. |
 
-**Score:** 4/6 truths verified (1 present, behavior-unverified; 1 uncertain, owner decision)
+**Score:** 12/12 truths verified (1 by override, 1 by owner's recorded live UAT, 0 present-but-behavior-unverified)
 
-### Judgment on the orchestrator's questions
+### Is G-03-4 closed?
 
-- **WR-04 against D-04:** the unmute column is a real, narrow departure from D-04's absolute wording. It does not remove or add any restriction beyond what staff itself had placed and then lifted, it needs another admin to act between the unmute and the undo, and the presser still needs live restrict rights in that group. I classify it as an accepted-limitation candidate, not a blocker, and ask the owner to confirm. The fix, if wanted, is to persist the permission set the unmute applied and compare it.
-- **WR-01:** real, but D-09 ("one undo per action ... groups skipped during an undo stay as they are ... no retry undo button") covers the partial-undo case by design. The zero-effect case (no rights anywhere, transient outage, shutdown before `staffActionRunsWG.Add`) is the part D-09 did not consider. Owner decision.
-- **WR-02:** real. It weakens the audit's honesty for the all-skipped and crashed-undo cases but does not touch criteria 3 or 4 as worded, because the detail view shows each group's own undo result. Owner decision. I did not count it as a gap.
+Yes. The gap listed eight missing items. Each one exists in the merged code:
+
+| Missing item from UAT | Where it is now |
+|-----------------------|-----------------|
+| Record per group that the run reached its write | `staffGroupResult.Reached` (`staff_action_run.go:31-34`), set in `runStaffUndoInGroup` and `sweepPending` |
+| Release the claim when no group reached a write, scoped to the claim | `staff.ReleaseUndo` in `Finish` (`staff_undo.go:667-678`) while the run still holds the target lock |
+| Refuse to claim after the shutdown began; register before the claim | `joinStaffRuns` and the `runCtx.Err()` check (`staff_undo.go:455-470`) |
+| Count undo outcomes; four states | `ActionTally.UndoDone`; `staffUndoStateOf` |
+| Move the original's edit to the end of the run, with a "changed nothing" marker and no edit when released | `Delivered` hook (`staff_undo.go:702-715`) |
+| "Already" text distinguishes running, undone, changed nothing | `staffUndoClaimedText` |
+| Detail view shows a dead undo's pending groups as interrupted, display only | `staff_history.go:383-401` |
+| Locale keys in 7 files, AGENTS.md and docs, regression tests | All ten new keys exist in all 7 locale files (grep count 7 each), `make check-translations` passes, AGENTS.md lines 24-32, 82-83, 105-111 and 198-203 and the staff docs page state the rule, and the named tests exist and pass |
+
+`staff_history_undone_by` has no remaining reference in `alita/` or `locales/`.
+
+### Judgment on the code review's new warnings
+
+| Finding | Is it real in the source? | Contradicts a must-have or the owner's decision? | Classification |
+|---------|---------------------------|--------------------------------------------------|----------------|
+| WR-01: `Reached` is set whatever `executeStaffUndoCall` returned | Yes. `reached()` wraps both the error and the success return (`staff_undo.go:767-777`). `staffPaced` returns `ErrRateLimited` without a Telegram request when the slot is over `MaxWait` (`telegram_pacer.go:152-173`), and a cancelled context during the slot wait returns `ctx.Err()`; both then keep the claim. No test covers a pacer refusal. | Not a must-have breach. 03-10's prohibition says the claim must not be given back once a group reached a write "whatever that call returned"; AGENTS.md (lines 105-111) and the docs say the same, and the error direction is fail closed. It is narrower than owner decision b's wording only in a rare case. AGENTS.md line 31-32 ("when the shutdown cut every group off before its write") over-states it slightly for a cut inside a paced call. | Warning, optional owner decision (human item 3). Not a gap. |
+| WR-02: "changed nothing" is shown when the unfinished groups ended in a panic, interruption or timeout | Yes. `Delivered` and `staffUndoStateOf` treat `undone == 0` as "changed nothing"; `TestStaffUndoPanicKeepsClaim` asserts the original reads `staff_undo_marker_nothing` after a panic whose write may have applied. | No. Owner decision b says "otherwise say nothing changed", and 03-10 specifies the marker for the all-tried-and-failed case. It over-claims for groups whose effect is unknown. | Warning, optional owner decision (human item 4). Not a gap. |
+| WR-03: after an ambiguous `ReleaseUndo` error, the retry returns `(false, nil)` and the code falls through to `FinalizeUndo` | Yes. The loop breaks on `err == nil` (`staff_undo.go:669-673`); the `default` case only logs and falls through (`staff_undo.go:679-681`); `FinalizeUndo` then sets `undo_finished_at` with no condition on the claim (`actions.go:406-409`), so a record with no claim and a stale finish time results. | No must-have covers a commit-then-error on the first attempt. It needs a double fault (a transaction that committed but returned an error, then a retry). It does not affect any scenario the owner reported. | Warning, recommended small follow-up (make `FinalizeUndo` conditional on the claim, or re-read the record after an errored first attempt). Not a gap. |
+| WR-04 (was WR-03): history page press answered before the data is read | Yes, unchanged at `staff_history.go:307-325`. | No. Pre-existing, outside G-03-4, and the owner did not raise it. | Warning, carried forward. |
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `migrations/20261005120000_add_staff_actions.sql` | Audit tables, append-only, timestamp above all existing | ✓ VERIFIED | Highest filename, no `BEGIN/COMMIT`, idempotent statements. PostgreSQL chain passed (orchestrator). |
-| `alita/db/models/staff_action.go` | Models match migration | ✓ VERIFIED | Columns and CHECK constraints match. |
-| `alita/db/staff/actions.go` | Fresh reads, conditional claim, per-group and finalize writes | ✓ VERIFIED | Never cached, so no `DeleteCache` applies. All writes use `db.DB`. |
-| `alita/db/staff/rekey.go` | Re-key `staff_actions.staff_chat_id` only | ✓ VERIFIED | Line 48-53. IN-03 (bumps `updated_at`) is noted below. |
-| `alita/modules/staff_action_record.go` | Prior-state capture, record build and map-back | ✓ VERIFIED | |
-| `alita/modules/staff_log.go` | Action and undo log posts | ✓ VERIFIED | |
-| `alita/modules/staff_undo.go` | Ask, Confirm, run, restore call | ✓ VERIFIED | |
-| `alita/modules/staff_history.go` | List and detail views | ✓ VERIFIED | |
-| `alita/modules/staff_action_decide.go` | `decideStaffUndo` | ✓ VERIFIED | See Truth 5 for the unmute predicate. |
-| `locales/*.yml` (7) | New keys in every locale | ✓ VERIFIED | 32 matching keys in each of the seven files; `make check-translations` passes. |
-| `docs/.../commands/staff/index.md`, `AGENTS.md` | Rules and docs updated | ✓ VERIFIED | Undo, history and audit rules are present. |
+| `alita/db/staff/actions.go` | `ClaimUndo` returns the claim time; `ReleaseUndo`; `ActionTally.UndoDone` | ✓ VERIFIED | `ClaimUndo` truncates to the microsecond UTC (`actions.go:280-298`); `ReleaseUndo` at `308-345`; the tally at `172-234`. Never cached, so no `DeleteCache` applies. |
+| `alita/modules/staff_action_run.go` | `Reached`, `joinStaffRuns`, `startJoinedStaffRun` | ✓ VERIFIED | `staff_action_run.go:31-34, 231-256`. |
+| `alita/modules/staff_undo.go` | `staffUndoStateOf`, `staffUndoClaimedText`, release in `Finish`, end-of-run original edit, drain join | ✓ VERIFIED | See Truths 7-12. |
+| `alita/modules/staff_history.go` | four-state segment and display-only conversion | ✓ VERIFIED | `staff_history.go:72-139, 373-401`. |
+| `alita/modules/staff_undo_claim_test.go`, `staff_undo_shutdown_test.go`, `staff_history_test.go`, `actions_test.go` | named regression tests | ✓ VERIFIED | All 13 named tests exist, use the real SQLite harness, miniredis and the hand-written Telegram fake, and pass. |
+| `locales/*.yml` (7), `AGENTS.md`, `docs/.../commands/staff/index.md` | new keys, rules, help text | ✓ VERIFIED | Grep shows 7 of 7 locales for every new key; `make check-translations` passes. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `staffActionConfirm` | `staff.CreateAction` | `staffCreateActionRecord` before `startStaffActionRun` | WIRED | Fails closed. |
-| `runStaffActionInGroup` | `staff.SavePrior` | write-ahead before `executeStaffCall` | WIRED | |
-| `startStaffActionRun` AfterGroup | `postStaffActionLog` | only for done groups, after the result is stored | WIRED | |
-| `startStaffActionRun` Finish | `FinalizeAction` and `staffUndoKeyboard` | button only when finalized and ≥1 done group | WIRED | |
-| `staffCallback` | `staffHistoryList/Detail`, `staffUndoAsk/Confirm`, shared Cancel | action codes `rc`, `dt`, `ya`, `yc`, `yn` | WIRED | |
-| `staffUndoConfirm` | `ClaimUndo`, target lock, `startStaffUndoRun` | conditional update then shared engine | WIRED | |
-| `runStaffUndoInGroup` | `staffGroupPrechecks`, `decideStaffUndo`, `executeStaffUndoCall` | presser as actor | WIRED | |
-| Panel keyboard | `staffRecentButton` | Recent actions button | WIRED | `staff_panel.go:317` |
-| `main.go` shutdown | `StopStaffActions` | LIFO, after DB-close registration | WIRED | Undo runs join the same wait group via `startStaffRun`. |
+| `startStaffUndoRun` Finish | `staff.ReleaseUndo` | presser and `claimedAt` returned by `ClaimUndo` | WIRED | `staff_undo.go:670`. |
+| `runStaffUndoInGroup` | `anyStaffGroupReached` in Finish | `Reached` marker on the result | WIRED | `staff_undo.go:767-777, 599-608`. |
+| `staffUndoConfirm` | `joinStaffRuns`, `startJoinedStaffRun` | registered before the claim, same context passed on | WIRED | `staff_undo.go:459, 508, 640`. |
+| `StopStaffActions` | undo runs | same `staffActionRunsWG` | WIRED | `staff_action_run.go:85`; `main.go:218`. |
+| `staffHistoryLine` / detail / Ask / Confirm | `staffUndoStateOf` | one decision point | WIRED | `staff_history.go:74, 138, 373, 382`; `staff_undo.go:63`. |
+| `TallyActionGroups` | `ActionTally.UndoDone` | grouping by `undo_outcome` | WIRED | `actions.go:207-231`. |
+| Earlier links (record create, prior-state write-ahead, log posts, `staffCallback` routes, panel button) | | | WIRED (regression check) | Tests for all of them pass. |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|---------------|--------|--------------------|--------|
-| History list | `rows`, `tallies` | `ListActionsFresh`, `TallyActionGroups` (SQL) | Yes | ✓ FLOWING |
-| History detail | `a`, `groups`, `linked` | `GetActionFresh`, `ListActionGroupsFresh`, `ListLinksByStaffFresh` | Yes | ✓ FLOWING |
-| Undo run | `prior`, `applied`, `live` | stored group row, `a.UntilDate`, live `getChatMember` | Yes | ✓ FLOWING |
-| Log post | issuer, target, reason | `staffActionCard` filled at Confirm from the live press | Yes | ✓ FLOWING |
+| History list state | `t.UndoDone` | SQL `GROUP BY action_id, outcome, undo_outcome` | Yes | ✓ FLOWING |
+| Detail undo block | `groups[].UndoOutcome`, `a.UndoStartedAt/FinishedAt/UpdatedAt` | `GetActionFresh`, `ListActionGroupsFresh` | Yes | ✓ FLOWING |
+| Undo Finish | `results[].Reached` | set after the real write call, or by the panic sweep | Yes | ✓ FLOWING |
+| Original-summary marker | `undone` | `staffSummaryTally(results)` | Yes | ✓ FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Phase 3 test families (undo, history, log, record, stop) | `go test -tags testtools -count=1 -run '^TestStaff(Undo\|History\|ActionLog\|ActionRecord)\|^TestStopStaffActions' ./alita/modules ./alita/db/staff` | `ok` for both packages, no FAIL or SKIP lines, 70 named tests | ✓ PASS |
+| Phase 3 test families, including the 13 gap-closure tests | `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestStaff(Undo\|History\|ActionLog\|ActionRecord\|ActionTally\|ActionReleaseUndo)\|^TestStopStaffActions' ./alita/modules ./alita/db/staff` | `ok alita/modules 36.6s`, `ok alita/db/staff 1.1s` | ✓ PASS |
 | Production build | `CGO_ENABLED=0 go build ./...` | exit 0 | ✓ PASS |
-| Locale parity | `make check-translations` | "All translations are present" | ✓ PASS |
-| Behavior-dependent invariants (exactly-once undo, shutdown finalizes undo, interrupted record) | the named tests above (`TestStaffUndoOnce`, `TestStaffUndoOnceAcrossReplicas`, `TestStopStaffActionsUndo`, `TestStopStaffActionsRecordsInterrupted`) | pass | ✓ PASS |
+| Locale parity | `make check-translations` | "All translations are present!" | ✓ PASS |
+| Debt markers in the changed source | grep for TBD, FIXME, XXX in `staff_undo.go`, `staff_history.go`, `actions.go`, `staff_action_run.go` | none | ✓ PASS |
+| Full suite | not re-run by me, per the single-run rule; the orchestrator's `make test` (-race, -tags testtools) on head `4f9ce77` exited 0 with 60 packages ok | accepted as supplementary evidence | n/a |
 
-The orchestrator's own evidence (full `make test`, PostgreSQL migration chain, integrity check, `go vet`, `make check-docs`) is accepted as supplementary. I did not rerun the full suite, per the single-run rule.
+The behavior-dependent truths (claim given back, claim kept after a panic, the shutdown window, a Confirm after the shutdown, a crashed undo reading interrupted) each have a named test that exercises the transition, and those tests passed in my run. None of them rests on symbol presence.
 
 ### Probe Execution
 
-Step 7c: SKIPPED. The phase declares no `probe-*.sh` scripts and none exist for it.
+Step 7c: SKIPPED. The phase declares no `probe-*.sh` scripts and none exist.
 
 ### Requirements Coverage
 
-| Requirement | Source Plan | Description | Status | Evidence |
-|-------------|-------------|-------------|--------|----------|
-| STAFF-09 | 03-03, 03-08 | Each applied action and its reason posted to the log channel of every group where it was applied | ✓ SATISFIED (live channel check pending) | Truth 1 |
-| STAFF-10 | 03-01 | Every staff action recorded with issuer, target, action, duration, reason, time, per-group outcomes | ✓ SATISFIED | Truth 2 |
-| STAFF-11 | 03-02, 03-06, 03-07, 03-08, 03-09 | "Undo everywhere" with per-group live checks and the same summary | ✓ SATISFIED in code, live semantics pending | Truths 4, 5, 6 |
-| SETUP-09 | 03-04, 03-05, 03-09 | `/staff` lists recent actions with who, what, target, when, reason, per-group outcome | ✓ SATISFIED | Truth 3 |
+| Requirement | Source Plans | Description | Status | Evidence |
+|-------------|--------------|-------------|--------|----------|
+| STAFF-09 | 03-03, 03-08 | Each applied action and its reason posted to the log channel of every group where it was applied | ✓ SATISFIED | Truth 1; live log-channel check passed at UAT test 2 |
+| STAFF-10 | 03-01, 03-12 | Every staff action recorded with issuer, target, action, duration, reason, time, per-group outcomes | ✓ SATISFIED | Truth 2 |
+| STAFF-11 | 03-02, 03-06..03-12 | "Undo everywhere" with per-group live checks and the same summary | ✓ SATISFIED in code; live re-run of the new claim lifecycle pending (human item 1) | Truths 4, 5, 7-12 |
+| SETUP-09 | 03-04, 03-05, 03-09, 03-12 | `/staff` lists recent actions with who, what, target, when, reason, per-group outcome | ✓ SATISFIED | Truths 3, 11, 12 |
 
 All four IDs appear in plan frontmatter and in REQUIREMENTS.md. Nothing in REQUIREMENTS.md maps to Phase 3 without a plan, so there are no orphans. REQUIREMENTS.md still shows the four boxes unchecked and the traceability rows "Pending". Update them when the phase closes.
 
@@ -162,32 +197,29 @@ All four IDs appear in plan frontmatter and in REQUIREMENTS.md. Nothing in REQUI
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| (Phase 3 files) | - | `TBD`, `FIXME`, `XXX` markers | none found | grep over the Phase 3 source and migration returned nothing |
-| `alita/modules/staff_history.go` | 295-310 | Press answered with an empty toast before the data is read (WR-03) | ⚠️ Warning | A database error on a history page press is silent. The detail handler does it correctly. |
-| `alita/modules/staff_history.go` | 124, 359, 376 | `Format("2 Jan 15:04")` is English-only (IN-05) | ℹ️ Info | Month names are not localized. |
-| `alita/db/staff/rekey.go` | 48-53 | Re-key bumps `updated_at` on every history row (IN-03) | ℹ️ Info | After a migration, old crashed records read "running" for up to 30 minutes. |
-| `alita/modules/staff_history.go` | 197 | Prev ignores a shrunk page (IN-06) | ℹ️ Info | Entries can appear on two pages. None are hidden. |
-| `alita/modules/staff_action_decide.go` | 300 | `staffCallRestore` defined by arithmetic outside the iota block (IN-01) | ℹ️ Info | |
-| `alita/db/staff/actions.go` | 270-273 | `ClaimUndo` not bound to the Staff Group in SQL (IN-02) | ℹ️ Info | Callers bind it today. |
-| Tests | - | Two tests sleep a fixed 50 ms (IN-04) | ℹ️ Info | Possible flake under `-race` load. |
-
-WR-01, WR-02 and WR-04 are listed under Human Verification as decisions. All ten review findings are still `open` in `03-REVIEW-DISPOSITION.md`.
+| `alita/modules/staff_undo.go` | 667-682 | Falls through to `FinalizeUndo` after an ambiguous release (WR-03) | ⚠️ Warning | Rare double fault leaves a record with no claim and a stale finish time. |
+| `alita/modules/staff_undo.go` | 762-777 | `Reached` set for pacer refusals, 429s and mid-wait cancels (WR-01) | ⚠️ Warning | Keeps the claim in a rare case where nothing was written. Fails closed. |
+| `alita/modules/staff_undo.go` | 702-714 | "Changed nothing" for groups of unknown effect (WR-02) | ⚠️ Warning | Over-claims for panicked or interrupted groups. |
+| `alita/modules/staff_undo.go` | 702-715 | `Delivered` ignores `landedMsgID`, so the original says "see the reply" when no reply landed (review IN-01) | ℹ️ Info | The record is unaffected. |
+| `alita/modules/staff_history.go` | 307-325 | History press answered before the read (WR-04, carried) | ⚠️ Warning | A database error on a page press is a silent no-op. |
+| `alita/db/staff/rekey.go` | 53 | Re-key bumps `updated_at`, which flips dead undos to "running" for 30 minutes (review IN-04) | ℹ️ Info | The undo states widen this existing effect. |
+| `alita/modules/staff_history.go` | 136, 372, 389 | English-only timestamp format; Prev ignores a shrunk page; `ClaimUndo` not bound to the Staff Group in SQL; `staffCallRestore` arithmetic (review IN-03, IN-05..IN-07) | ℹ️ Info | Carried forward, no effect on any criterion. |
+| Phase 3 files | - | TBD, FIXME, XXX | none found | |
 
 ### Human Verification Required
 
 See the `human_verification` frontmatter. In short:
 
-1. **Live restore test** (Telegram A2 and A3) from 03-09 Task 2 and 03-VALIDATION.md.
-2. **Log-channel inspection** in two real channels, checking that the Staff Group's title and ID never appear.
-3. **Decision on WR-04:** accept the broad unmute "left behind" predicate, or plan a fix.
-4. **Decision on WR-01 and WR-02:** accept D-09 as written for the zero-effect undo and the "undone" label, or plan a fix.
-5. **`make lint`** on a go1.26 toolchain or in CI.
+1. **Re-run UAT test 4 on live Telegram** (the 03-12 plan asks for it): the no-rights undo gives the claim back, a member with rights can retry, the labels read undone, changed nothing or interrupted correctly, and a restart mid-undo shows interrupted.
+2. **`make lint`** on a go1.26 toolchain or in CI (UAT test 5, still skipped).
+3. **Optional decision on WR-01:** accept "reached means the write call was attempted" or open a small follow-up for pacer refusals and mid-wait cancels.
+4. **Optional decision on WR-02:** accept "changed nothing" for unknown-effect groups or add a neutral wording.
 
 ### Gaps Summary
 
-There are no gaps that block the phase goal. All four roadmap criteria are met in the code and by passing behavioral tests, and every requirement ID is accounted for. What remains is evidence the codebase cannot give: live Telegram behaviour, real log channels and a lint run. Also open are three owner decisions where the implementation is weaker than the locked wording (D-04 for unmute undo, D-09 for a no-op undo, honest "undone" status). If the owner declines to accept any of them, run `/gsd-plan-phase --gaps` for that item. WR-03 and the info items can be folded into that plan or deferred.
+There are no gaps. G-03-4 is closed, no earlier must-have regressed, and every requirement ID is accounted for. What remains needs a person: a live Telegram re-run of the gap-closure flow, a lint run on a go1.26 toolchain, and two optional wording and edge-case decisions that the code, plans and docs already agree on. WR-03 (retry after an ambiguous release) and WR-04 (silent history press error) are worth folding into a small follow-up, but neither blocks the phase.
 
 ---
 
-_Verified: 2026-10-05T20:30:00Z_
+_Verified: 2026-10-06T12:00:00Z_
 _Verifier: Claude (gsd-verifier)_
