@@ -3,15 +3,15 @@ status: testing
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T11:56:11Z
+updated: 2026-10-06T13:07:02Z
 ---
 
 ## Current Test
 
-number: 5
-name: make lint on a go1.26 toolchain (or CI)
+number: 6
+name: Live re-run of test 4 after gap closure (03-10..03-12; 03-12 human-check)
 expected: |
-  No new lint findings in the Phase 3 files.
+  In a test Staff Group with two linked test supergroups. (a) A Staff Group member who is an admin in neither group presses Undo on a finished ban and confirms: every group is skipped, the undo's summary says no group was changed and the action can still be undone, the original summary keeps its text and its Undo button, and history shows no undo. (b) A member with restrict rights then presses Undo on the same summary and confirms: the ban is lifted in both groups, the original reads "Undone by <name>" and loses its button, and history shows the entry as undone. (c) An undo that fails in every group (for example after removing the bot's restrict right): the original reads "Undo by <name> changed nothing" and the entry reads "undo changed nothing". (d) Stopping the bot mid-undo and restarting shows "undo interrupted" and the groups as "interrupted by restart", not a stuck hourglass.
 awaiting: user response
 
 ## Tests
@@ -37,7 +37,7 @@ severity: major
 
 ### 5. make lint on a go1.26 toolchain (or CI)
 expected: No new lint findings in the Phase 3 files. The installed golangci-lint was built with go1.25 and cannot run on this module (go 1.26.0).
-result: [pending]
+result: pass
 note: "Round 1: skipped (needs a go1.26 build of golangci-lint or CI). Re-opened by the post-gap-closure verification (03-VERIFICATION.md human_verification)."
 
 ### 6. Live re-run of test 4 after gap closure (03-10..03-12; 03-12 human-check)
@@ -55,9 +55,9 @@ result: [pending]
 ## Summary
 
 total: 8
-passed: 3
+passed: 4
 issues: 1
-pending: 4
+pending: 3
 skipped: 0
 blocked: 0
 
