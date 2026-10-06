@@ -3,15 +3,15 @@ status: testing
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T09:04:19Z
+updated: 2026-10-06T09:04:51Z
 ---
 
 ## Current Test
 
-number: 2
-name: Log-channel posts end to end (03-VALIDATION.md Manual-Only row 3)
+number: 3
+name: DECISION: undo of an unmute and D-04 (code review WR-04)
 expected: |
-  Each linked group's log channel has a #STAFF_BAN or #STAFF_UNBAN post and a #STAFF_UNDO post naming the issuer and the presser, the target, the reason and "via Staff Group", and never the Staff Group's title or ID.
+  Owner chooses (a) accept the documented broad "left behind" predicate for unmute (member, left, or restricted-but-able-to-send), or (b) open a gap-closure plan that stores what the unmute applied and requires equality. Today staffUndoLeftBehind (alita/modules/staff_action_decide.go:375-381) lets an undo of an unmute re-apply the old mute over a later partial restriction by another admin, or over a target who was kicked and rejoined.
 awaiting: user response
 
 ## Tests
@@ -22,7 +22,7 @@ result: pass
 
 ### 2. Log-channel posts end to end (03-VALIDATION.md Manual-Only row 3)
 expected: Each linked group's log channel has a #STAFF_BAN or #STAFF_UNBAN post and a #STAFF_UNDO post naming the issuer and the presser, the target, the reason and "via Staff Group", and never the Staff Group's title or ID.
-result: [pending]
+result: pass
 
 ### 3. DECISION: undo of an unmute and D-04 (code review WR-04)
 expected: Owner chooses (a) accept the documented broad "left behind" predicate for unmute (member, left, or restricted-but-able-to-send), or (b) open a gap-closure plan that stores what the unmute applied and requires equality. Today staffUndoLeftBehind (alita/modules/staff_action_decide.go:375-381) lets an undo of an unmute re-apply the old mute over a later partial restriction by another admin, or over a target who was kicked and rejoined.
@@ -39,9 +39,9 @@ result: [pending]
 ## Summary
 
 total: 5
-passed: 1
+passed: 2
 issues: 0
-pending: 4
+pending: 3
 skipped: 0
 blocked: 0
 
