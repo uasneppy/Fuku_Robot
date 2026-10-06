@@ -391,6 +391,23 @@ func (m moduleStruct) staffUndoConfirm(
 		return ext.EndGroups
 	}
 
+	// The run joins the shutdown drain before it claims, so a StopStaffActions that
+	// starts between the claim and the run's start waits for it instead of returning
+	// over a claim nobody will finish. The registration is given back here on every
+	// path that does not start the run; the started run's coordinator owns the Done.
+	runCtx := joinStaffRuns()
+	defer func() {
+		if !runStarted {
+			staffActionRunsWG.Done()
+		}
+	}()
+	// Once the shutdown cancelled the run context nothing may be claimed: the run
+	// would only cut every group off, and the action keeps its one undo (D-09).
+	if runCtx.Err() != nil {
+		abort("staff_undo_abort_restarting")
+		return ext.EndGroups
+	}
+
 	// The claim is the last check before the run: one conditional update, so of two
 	// cards for one record, on any replica, only one ever starts.
 	presserName := staffFullName(&query.From)
@@ -421,7 +438,7 @@ func (m moduleStruct) staffUndoConfirm(
 		log.Warnf("[StaffActions] edit undo card %s into summary: %v", card.Token, err)
 	}
 	runStarted = true
-	startStaffUndoRun(b, card, action, groups, targets, notApplied, claimedAt, staffChat.Id, msgID)
+	startStaffUndoRun(b, runCtx, card, action, groups, targets, notApplied, claimedAt, staffChat.Id, msgID)
 	return ext.EndGroups
 }
 
@@ -529,9 +546,12 @@ func anyStaffGroupReached(results []staffGroupResult) bool {
 // reached a Telegram write (owner decision b on D-09), and otherwise the record is
 // finalized once. The original summary is edited after the undo's own summary is
 // delivered, and only when the claim was kept (D-08). claimedAt is the claim time
-// staff.ClaimUndo returned, which names this run's claim to staff.ReleaseUndo.
+// staff.ClaimUndo returned, which names this run's claim to staff.ReleaseUndo. runCtx
+// is the context joinStaffRuns returned before the claim; the run's coordinator owns
+// the matching wait-group Done.
 func startStaffUndoRun(
 	b *gotgbot.Bot,
+	runCtx context.Context,
 	card *staffActionCard,
 	a *models.StaffAction,
 	groups []models.StaffActionGroup,
@@ -550,7 +570,7 @@ func startStaffUndoRun(
 	// so no lock is needed.
 	released := false
 	undone := 0
-	startStaffRun(b, staffRunSpec{
+	startJoinedStaffRun(b, runCtx, staffRunSpec{
 		Card:   card,
 		Links:  links,
 		ChatID: chatID,

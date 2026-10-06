@@ -28,7 +28,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   shutdown skips its remaining log posts, so a group applied just before it may have no post. Undo runs join the
   same drain: their final record write (`FinalizeUndo`, or `ReleaseUndo` when no group reached its write, both through
   `db.DB`, never the cancelled run context) and summary delivery happen inside the same 30 s as a staff action's, and an
-  unfinished group is recorded `fail_interrupted`.
+  unfinished group is recorded `fail_interrupted`. An undo Confirm joins `staffActionRunsWG` (`joinStaffRuns`) before it
+  claims, so `StopStaffActions` waits for a Confirm that has already claimed, and its run gives the claim back when the
+  shutdown cut every group off before its write. Once `StopStaffActions` has cancelled the run context an undo Confirm
+  claims nothing and aborts its card with the restart text (`staff_undo_abort_restarting`).
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers

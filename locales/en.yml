@@ -2819,6 +2819,7 @@ staff_undo_card_applies: "Undo this action in the {count} group(s) where it was 
 staff_undo_marker: "↩ Undone by {name}, see the reply."
 staff_undo_marker_nothing: "↩ Undo by {name} changed nothing, see the reply."
 staff_undo_released_note: "No group was changed, so this action can still be undone by someone who can restrict members in its groups."
+staff_undo_abort_restarting: "The bot is restarting. Nothing was undone; press Undo again in a minute."
 staff_undo_not_applied_note: "{count} other group(s) were left alone: the action was not applied there."
 staff_undo_already: "Already undone by {name}."
 staff_undo_not_available: "This action cannot be undone."

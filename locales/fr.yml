@@ -2707,6 +2707,7 @@ staff_undo_card_applies: "Annuler cette action dans les {count} groupe(s) où el
 staff_undo_marker: "↩ Annulée par {name}, voir la réponse."
 staff_undo_marker_nothing: "↩ L'annulation de {name} n'a rien changé, voir la réponse."
 staff_undo_released_note: "Aucun groupe n'a été modifié, cette action peut donc encore être annulée par quelqu'un qui peut restreindre des membres dans ses groupes."
+staff_undo_abort_restarting: "Le bot redémarre. Rien n'a été annulé ; appuyez de nouveau sur Annuler dans une minute."
 staff_undo_not_applied_note: "{count} autre(s) groupe(s) ont été laissés tels quels : l'action n'y a pas été appliquée."
 staff_undo_already: "Déjà annulée par {name}."
 staff_undo_not_available: "Cette action ne peut pas être annulée."
