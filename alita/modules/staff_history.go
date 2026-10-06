@@ -61,20 +61,32 @@ func staffHistoryDuration(tr *i18n.Translator, a *models.StaffAction) string {
 	return strconv.FormatInt(a.DurationAmount, 10) + html.EscapeString(a.DurationUnit)
 }
 
-// staffHistoryState is the closing segment of an entry. An undo that was claimed
-// reads "undone". A run that never finished reads "running" while its last update
-// is younger than the target lock's lifetime, and "interrupted" after that, since a
-// run that long dead will not write again. A finished record that was not undone
-// has no state segment.
-func staffHistoryState(tr *i18n.Translator, a *models.StaffAction, now time.Time) string {
+// staffHistoryState is the closing segment of an entry. A claimed undo reads by its
+// stored outcome (staffUndoStateOf): "undo running", "undo interrupted" (unfinished
+// and silent longer than the target lock lives), "undone" (finished, at least one
+// group undone, undoDone) or "undo changed nothing" (finished, none undone). Without
+// a claim, a run that never finished reads "running" while its last update is younger
+// than the target lock's lifetime, and "interrupted" after that, since a run that
+// long dead will not write again. A finished record that was not undone has no state
+// segment.
+func staffHistoryState(tr *i18n.Translator, a *models.StaffAction, undoDone int, now time.Time) string {
 	var text string
-	switch {
-	case a.UndoStartedAt != nil:
+	switch staffUndoStateOf(a, undoDone, now) {
+	case staffUndoRunning:
+		text, _ = tr.GetString("staff_history_undo_running")
+	case staffUndoInterrupted:
+		text, _ = tr.GetString("staff_history_undo_interrupted")
+	case staffUndoUndone:
 		text, _ = tr.GetString("staff_history_undone")
-	case a.FinishedAt == nil && now.Sub(a.UpdatedAt) < staffTargetLockTTL:
-		text, _ = tr.GetString("staff_history_running")
-	case a.FinishedAt == nil:
-		text, _ = tr.GetString("staff_history_interrupted")
+	case staffUndoNothing:
+		text, _ = tr.GetString("staff_history_undo_nothing")
+	default:
+		switch {
+		case a.FinishedAt == nil && now.Sub(a.UpdatedAt) < staffTargetLockTTL:
+			text, _ = tr.GetString("staff_history_running")
+		case a.FinishedAt == nil:
+			text, _ = tr.GetString("staff_history_interrupted")
+		}
 	}
 	return text
 }
@@ -123,7 +135,7 @@ func staffHistoryLine(tr *i18n.Translator, index int, a *models.StaffAction, t s
 
 	segment(a.CreatedAt.UTC().Format("2 Jan 15:04"))
 	segment(fmt.Sprintf("✅%d ⏭%d ❌%d", t.Done, t.Skipped, t.Failed))
-	if state := staffHistoryState(tr, a, now); state != "" {
+	if state := staffHistoryState(tr, a, t.UndoDone, now); state != "" {
 		segment(state)
 	}
 	return sb.String()
@@ -336,6 +348,7 @@ func renderStaffHistoryDetail(
 		card.Reason = string([]rune(card.Reason)[:staffHistoryDetailReasonRunes]) + "…"
 	}
 	results := staffResultsFromRecord(groups)
+	undoDone := staffUndoDoneCount(groups)
 	// A run that never finished and has not written for longer than the target lock
 	// lives is dead: its pending groups read as failed "interrupted by restart".
 	// This is display only, nothing is written.
@@ -357,7 +370,7 @@ func renderStaffHistoryDetail(
 	head := staffActionHeader(tr, card) + "\n" +
 		strings.Replace(by, staffUserToken, issuer, 1) + " · " +
 		a.CreatedAt.UTC().Format("2 Jan 15:04") + " UTC"
-	if state := staffHistoryState(tr, a, now); state != "" {
+	if state := staffHistoryState(tr, a, undoDone, now); state != "" {
 		head += " · " + state
 	}
 	head += "\n" + staffSummaryTallyLine(done, skipped, failed)
@@ -366,17 +379,28 @@ func renderStaffHistoryDetail(
 	// for each group the action was applied in.
 	var undoHeader string
 	var undoResults []staffGroupResult
-	if a.UndoStartedAt != nil {
+	if state := staffUndoStateOf(a, undoDone, now); state != staffUndoNone {
 		undoBy := staffHistoryCut(a.UndoByName, staffHistoryNameRunes)
 		if undoBy == "" && a.UndoBy != nil {
 			undoBy = strconv.FormatInt(*a.UndoBy, 10)
 		}
-		text, _ := tr.GetString("staff_history_undone_by", i18n.TranslationParams{
+		text, _ := tr.GetString("staff_history_undo_by", i18n.TranslationParams{
 			"name": staffUserToken,
 			"time": a.UndoStartedAt.UTC().Format("2 Jan 15:04"),
 		})
 		undoHeader = strings.Replace(text, staffUserToken, undoBy, 1)
 		undoResults = staffUndoResultsFromRecord(groups)
+		// A dead undo has no one left to write its pending groups: they read as failed
+		// "interrupted by restart", like the action's own groups above. Display only,
+		// nothing is written.
+		if state == staffUndoInterrupted {
+			for i := range undoResults {
+				if undoResults[i].Outcome == staffOutcomePending {
+					undoResults[i].Outcome = staffOutcomeFailed
+					undoResults[i].Reason = staffReasonFailInterrupted
+				}
+			}
+		}
 	}
 
 	unlinked, _ := tr.GetString("staff_history_unlinked")

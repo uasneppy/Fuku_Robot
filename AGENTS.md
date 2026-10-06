@@ -75,7 +75,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   without writing anything. While `staffActionUndoable` holds it also shows the same `a=ya&r=<record id>` Undo button as
   the summary, above Back; that press goes through `staffUndoAsk` like any other, so every undo check runs again and the
   button grants nothing by itself. Once an undo is claimed the button is gone and the view shows who undid it and each
-  group's undo result.
+  group's undo result. The Recent actions line and the detail view show the undo's state from the stored undo outcomes
+  (`staffUndoStateOf`, with the list's count from `TallyActionGroups`' `UndoDone`), never from the claim alone: undo
+  running, undo interrupted (unfinished with a heartbeat older than `staffTargetLockTTL`; its pending groups are shown
+  as interrupted without writing anything), undone (at least one group undone) or undo changed nothing. The Undo button
+  shows only while `staffActionUndoable` holds.
 
 ## Permissions
 

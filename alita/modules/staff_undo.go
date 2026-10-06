@@ -81,6 +81,55 @@ func staffActionUndoable(a *models.StaffAction, groups []models.StaffActionGroup
 	return false
 }
 
+// staffUndoState is what the record says about a staff action's undo.
+type staffUndoState int
+
+const (
+	// staffUndoNone: nobody claimed an undo.
+	staffUndoNone staffUndoState = iota
+	// staffUndoRunning: claimed, not finished, and the run wrote recently.
+	staffUndoRunning
+	// staffUndoInterrupted: claimed, not finished, and silent for longer than the
+	// target lock lives, so its run is dead.
+	staffUndoInterrupted
+	// staffUndoUndone: finished and at least one group was undone.
+	staffUndoUndone
+	// staffUndoNothing: finished and no group was undone.
+	staffUndoNothing
+)
+
+// staffUndoStateOf is the one place an undo's state is decided (owner decision b on
+// D-09): the claim alone never says "undone". undoDone is the number of groups whose
+// undo_outcome is done. An unfinished claim is running while the record's heartbeat
+// (updated_at, bumped by the claim and by every group result) is younger than
+// staffTargetLockTTL; a run renews its target lock every 10 minutes, so one silent
+// that long is dead, the same rule as the action's own state.
+func staffUndoStateOf(a *models.StaffAction, undoDone int, now time.Time) staffUndoState {
+	switch {
+	case a == nil || a.UndoStartedAt == nil:
+		return staffUndoNone
+	case a.UndoFinishedAt == nil && now.Sub(a.UpdatedAt) < staffTargetLockTTL:
+		return staffUndoRunning
+	case a.UndoFinishedAt == nil:
+		return staffUndoInterrupted
+	case undoDone > 0:
+		return staffUndoUndone
+	default:
+		return staffUndoNothing
+	}
+}
+
+// staffUndoDoneCount counts the groups whose undo changed something.
+func staffUndoDoneCount(groups []models.StaffActionGroup) int {
+	n := 0
+	for _, row := range groups {
+		if row.UndoOutcome == models.StaffActionOutcomeDone {
+			n++
+		}
+	}
+	return n
+}
+
 // staffUndoHeader is the first line of an undo card and of its summary: an undo
 // arrow and "Undo" in front of the header of the action being undone. It is built
 // from a copy of the card whose Kind is the undone action, so the icon, target,

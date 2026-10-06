@@ -101,7 +101,7 @@ func TestStaffHistoryDetailUndo(t *testing.T) {
 	// Reopened, the detail view shows the undo and offers none.
 	text, keyboard := env.detailKeyboardOf(env.issuer, 6101, record.ID)
 	wantNoUndoButton(t, keyboard)
-	wantInOrder(t, text, staffMarker("staff_history_undone_by"), "Bob")
+	wantInOrder(t, text, staffMarker("staff_history_undo_by"), "Bob")
 	if got := strings.Count(text, staffMarker("staff_undo_unbanned")); got != 2 {
 		t.Errorf("detail shows %d unbanned lines, want 2:\n%s", got, text)
 	}

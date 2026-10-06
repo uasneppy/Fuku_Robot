@@ -154,13 +154,14 @@ func TestStaffHistoryLine(t *testing.T) {
 	created := time.Date(2026, 10, 5, 12, 4, 30, 0, time.UTC)
 	finished := created.Add(time.Minute)
 	undone := created.Add(time.Hour)
+	undoneAt := undone.Add(time.Minute)
 
 	ban := models.StaffAction{
 		ID: 9, IssuerName: "Alice", TargetUserID: 123, TargetName: "Name", Action: "ban",
 		Reason: "spamming", DurationSec: 172800, DurationAmount: 2, DurationUnit: "d",
-		CreatedAt: created, FinishedAt: &finished, UndoStartedAt: &undone,
+		CreatedAt: created, FinishedAt: &finished, UndoStartedAt: &undone, UndoFinishedAt: &undoneAt,
 	}
-	line := staffHistoryLine(tr, 1, &ban, staff.ActionTally{Done: 4, Skipped: 1, Failed: 1}, now)
+	line := staffHistoryLine(tr, 1, &ban, staff.ActionTally{Done: 4, Skipped: 1, Failed: 1, UndoDone: 1}, now)
 	for _, want := range []string{
 		"🔨", staffMarker("staff_act_name_ban"), "Name", "(<code>123</code>)", "2d", "spamming",
 		staffMarker("staff_history_by"), "Alice", "5 Oct 12:04", "✅4 ⏭1 ❌1", staffMarker("staff_history_undone"),
@@ -205,6 +206,49 @@ func TestStaffHistoryLine(t *testing.T) {
 			t.Errorf("line %q lacks the no-reason text", got)
 		}
 	})
+}
+
+// TestStaffHistoryUndoStates checks that the list line carries exactly one undo
+// marker, chosen by the stored undo outcome and the heartbeat, never by the claim.
+func TestStaffHistoryUndoStates(t *testing.T) {
+	tr := panelMarkerTranslator(t)
+	now := time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)
+	created := now.Add(-3 * time.Hour)
+	finished := created.Add(time.Minute)
+	claimed := now.Add(-time.Hour)
+	undoFinished := claimed.Add(time.Minute)
+
+	record := func(startedAt, finishedAt *time.Time, updated time.Time) *models.StaffAction {
+		return &models.StaffAction{
+			ID: 1, Action: "ban", TargetUserID: 5, CreatedAt: created, UpdatedAt: updated, FinishedAt: &finished,
+			UndoStartedAt: startedAt, UndoFinishedAt: finishedAt,
+		}
+	}
+	markers := []string{
+		staffMarker("staff_history_undone"), staffMarker("staff_history_undo_running"),
+		staffMarker("staff_history_undo_interrupted"), staffMarker("staff_history_undo_nothing"),
+	}
+	rows := []struct {
+		name   string
+		action *models.StaffAction
+		tally  staff.ActionTally
+		want   string
+	}{
+		{"no claim", record(nil, nil, now), staff.ActionTally{Done: 2}, ""},
+		{"claimed a minute ago", record(&claimed, nil, now.Add(-time.Minute)), staff.ActionTally{Done: 2}, staffMarker("staff_history_undo_running")},
+		{"claimed, quiet 29 minutes", record(&claimed, nil, now.Add(-29*time.Minute)), staff.ActionTally{Done: 2}, staffMarker("staff_history_undo_running")},
+		{"claimed, quiet 31 minutes", record(&claimed, nil, now.Add(-31*time.Minute)), staff.ActionTally{Done: 2, UndoDone: 1}, staffMarker("staff_history_undo_interrupted")},
+		{"finished, one group undone", record(&claimed, &undoFinished, now.Add(-time.Hour)), staff.ActionTally{Done: 2, UndoDone: 1}, staffMarker("staff_history_undone")},
+		{"finished, no group undone", record(&claimed, &undoFinished, now.Add(-time.Hour)), staff.ActionTally{Done: 2}, staffMarker("staff_history_undo_nothing")},
+	}
+	for _, row := range rows {
+		line := staffHistoryLine(tr, 1, row.action, row.tally, now)
+		for _, marker := range markers {
+			if got, want := strings.Contains(line, marker), marker == row.want; got != want {
+				t.Errorf("%s: line %q contains %s = %v, want %v", row.name, line, marker, got, want)
+			}
+		}
+	}
 }
 
 func TestStaffHistoryList(t *testing.T) {
