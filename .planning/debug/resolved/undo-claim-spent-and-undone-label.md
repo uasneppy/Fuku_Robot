@@ -1,8 +1,8 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "UAT gap G-03-4 (phase 03, test 4): undo claim spent before any group is attempted (WR-01); history and original summary say 'undone' regardless of effect (WR-02); crashed undo shows pending forever"
 created: 2026-10-06T00:00:00Z
-updated: 2026-10-06T09:30:00Z
+updated: 2026-10-06T13:30:00Z
 goal: find_root_cause_only
 ---
 
@@ -12,7 +12,7 @@ hypothesis: CONFIRMED (all three parts reproduced with real fixtures, see Eviden
 bug_class: Bohrbug (deterministic design gap; reproduces on every run with the given inputs)
 test: done; scratch test alita/modules/zz_scratch_g034_test.go was run and deleted (worktree has no source changes)
 expecting: n/a
-next_action: Return ROOT CAUSE FOUND to the orchestrator; /gsd-plan-phase --gaps writes the fix plan.
+next_action: none; resolved by 03-10..03-12 and confirmed in UAT test 6.
 
 reasoning_checkpoint:
   hypothesis: |
@@ -235,6 +235,25 @@ root_cause: |
   action's FinishedAt == nil and rewrites only the action's own rows. An undo always has FinishedAt set, so undo
   rows with undo_outcome '' are mapped to pending by staffUndoResultsFromRecord (staff_action_record.go:208-226)
   and rendered ⏳ forever.
-fix: (not applied: goal is find_root_cause_only)
-verification: Root cause verified by reproduction (T1-T4 above); no fix applied.
-files_changed: []
+fix: |
+  Applied through phase 03 gap-closure plans 03-10, 03-11 and 03-12 (gap G-03-4), per the user's UAT decision (test 4 "b"):
+  (1) staffGroupResult.Reached marks each group whose undo Telegram call returned; staff.ReleaseUndo (one conditional
+  update scoped to the claim's undo_by and undo_started_at) gives the claim back when no group reached its write, and the
+  claim is kept once any group did. The undo Confirm joins staffActionRunsWG (joinStaffRuns) before it claims and claims
+  nothing once StopStaffActions has cancelled the run context (staff_undo_abort_restarting).
+  (2) TallyActionGroups counts undo outcomes (UndoDone); staffUndoStateOf derives running / interrupted / undone /
+  changed nothing from the stored undo outcomes, used by the Recent actions line, the detail view and Ask/Confirm.
+  The original summary is edited at the end of the run: "Undone by" only when at least one group was undone,
+  "changed nothing" when writes were tried and none succeeded, left alone with its Undo button when the claim was given back.
+  (3) An unfinished undo whose heartbeat is older than staffTargetLockTTL shows as interrupted, its pending groups
+  rendered as interrupted without writing anything.
+verification: |
+  Unit and lifecycle tests in staff_undo_claim_test.go, staff_undo_lifecycle_test.go, staff_undo_shutdown_test.go,
+  staff_history_undo_test.go and actions_test.go (make test green after each plan). Confirmed live by the user in
+  03-UAT.md test 6 (re-run of test 4 after gap closure), passed 2026-10-06.
+files_changed:
+  - alita/db/staff/actions.go
+  - alita/modules/staff_action_run.go
+  - alita/modules/staff_history.go
+  - alita/modules/staff_undo.go
+  - locales/*.yml (all 7)
