@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
@@ -53,6 +53,26 @@ blocked: 0
   reason: "User reported: Decision b: give the undo back when no group reached a Telegram write, so someone with rights can retry; show 'undone' only when at least one group was actually undone (otherwise say nothing changed); a crashed undo shows interrupted, not ⏳ (WR-01 and WR-02)."
   severity: major
   test: 4
-  artifacts: []
-  missing: []
+  root_cause: "The undo flow treats 'an undo was claimed' as 'the action was undone'. staffUndoConfirm takes the D-09 latch (staff.ClaimUndo sets undo_started_at) and edits the original summary to 'Undone by X' before any group runs; Finish only calls FinalizeUndo and never looks at per-group results, no code ever releases the claim, and the run never records whether a group reached its Telegram write. Every 'undone' label (staffHistoryState, the detail header, editStaffUndoneOriginal, staffUndoAlreadyText) keys off the claim alone, and ActionTally counts no undo outcomes. The detail view's dead-run conversion applies only to the action's own run, so an unfinished undo's empty undo_outcome rows render as pending forever. The claim is also taken without checking staffActionsContext().Err() and before staffActionRunsWG.Add, so a Confirm racing shutdown claims and then fails every group without a call."
+  artifacts:
+    - path: "alita/modules/staff_undo.go"
+      issue: "Claim and 'Undone' edit at Confirm before any group (394-416); Finish makes no claim or label decision (540-559); runStaffUndoInGroup (570-615) never records reaching executeStaffUndoCall; staffActionUndoable, Ask and Confirm refuse forever once claimed; staffUndoAlreadyText says undone regardless"
+    - path: "alita/db/staff/actions.go"
+      issue: "ClaimUndo (270-285) has no matching release; ActionTally/TallyActionGroups (172-228) do not count undo_outcome"
+    - path: "alita/modules/staff_history.go"
+      issue: "staffHistoryState (69-80) keys only on UndoStartedAt; renderStaffHistoryDetail dead-run conversion (338-349) is tied to the action, and the undo header (360-378) says 'Undone by' unconditionally"
+    - path: "alita/modules/staff_action_record.go"
+      issue: "staffUndoResultsFromRecord (208-226) maps an empty undo_outcome to pending with no staleness check"
+    - path: "alita/modules/staff_action_run.go"
+      issue: "startStaffRun adds to staffActionRunsWG only after Confirm has claimed; staffGroupPrechecks returns fail_interrupted with no call on a cancelled context"
+  missing:
+    - "Record per group that the run reached its Telegram write (set right before executeStaffUndoCall, whatever it returns; a panic-swept group counts as reached)"
+    - "In Finish, release the claim when no group reached a write: one conditional update through db.DB scoped to this claim (undo_by, undo_started_at) that clears the undo columns on the action and its group rows, while the run still holds the target lock"
+    - "Refuse to claim when staffActionsContext().Err() != nil, and register the run in staffActionRunsWG before the claim (Done on abort)"
+    - "Count undo outcomes in ActionTally and give staffHistoryState four states: undone (at least one group done), changed nothing (finished, none done), running (unfinished, recent heartbeat), interrupted (unfinished, heartbeat older than staffTargetLockTTL)"
+    - "Move editStaffUndoneOriginal to the end of the run on a fresh budget: 'Undone by X' when at least one group was undone, a 'changed nothing' marker when writes were tried and none succeeded, and leave the original and its Undo button alone when the claim was released"
+    - "Make the Ask/Confirm 'already' text distinguish running, undone and changed nothing"
+    - "Detail view: an unfinished undo whose heartbeat (updated_at) is older than staffTargetLockTTL shows its pending groups as interrupted, display only, no write"
+    - "Locale keys in all 7 files; AGENTS.md and the staff docs page updated in the same commit; regression tests for: presser admin nowhere, Confirm after StopStaffActions, the shutdown window, and a crashed undo; update TestStaffUndoAllSkipped, TestStopStaffActionsUndo, TestStaffUndoOriginalEditFails, TestStaffUndoTracer, TestStaffHistoryDetailUndoOutcome"
+  debug_session: .planning/debug/undo-claim-spent-and-undone-label.md
 
