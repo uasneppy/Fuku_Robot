@@ -3,15 +3,15 @@ status: testing
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T13:07:45Z
+updated: 2026-10-06T13:08:41Z
 ---
 
 ## Current Test
 
-number: 7
-name: OPTIONAL DECISION: pacer-refused, 429 and mid-wait-cancelled calls count as "reached" (code review WR-01)
+number: 8
+name: OPTIONAL DECISION: "changed nothing" wording for groups whose write may have applied (code review WR-02)
 expected: |
-  Owner chooses (a) accept the rule as written and documented (the claim is kept whenever a group's write call was attempted, whatever it returned, which fails closed), or (b) a small follow-up plan so outcomes that provably made no write (ratelimit.ErrRateLimited, a context cancelled while waiting for a pacer slot) give the claim back.
+  Owner chooses (a) keep "Undo by <name> changed nothing" when the only non-skipped groups ended in a panic, an interruption or a timeout, or (b) use a neutral "tried, result not confirmed, check the groups" wording for those outcomes.
 awaiting: user response
 
 ## Tests
@@ -46,7 +46,8 @@ result: pass
 
 ### 7. OPTIONAL DECISION: pacer-refused, 429 and mid-wait-cancelled calls count as "reached" (code review WR-01)
 expected: Owner chooses (a) accept the rule as written and documented (the claim is kept whenever a group's write call was attempted, whatever it returned, which fails closed), or (b) a small follow-up plan so outcomes that provably made no write (ratelimit.ErrRateLimited, a context cancelled while waiting for a pacer slot) give the claim back.
-result: [pending]
+result: pass
+decision: "a — keep the rule as written: the claim is kept whenever a group's write call was attempted, whatever it returned (fails closed; code review WR-01 accepted)"
 
 ### 8. OPTIONAL DECISION: "changed nothing" wording for groups whose write may have applied (code review WR-02)
 expected: Owner chooses (a) keep "Undo by <name> changed nothing" when the only non-skipped groups ended in a panic, an interruption or a timeout, or (b) use a neutral "tried, result not confirmed, check the groups" wording for those outcomes.
@@ -55,9 +56,9 @@ result: [pending]
 ## Summary
 
 total: 8
-passed: 5
+passed: 6
 issues: 1
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 

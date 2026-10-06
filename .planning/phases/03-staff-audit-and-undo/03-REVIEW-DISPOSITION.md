@@ -5,7 +5,7 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: skipped
     title: "`Reached` is set for outcomes that provably made no write, so the claim is still burned for them"
   - id: WR-02
     severity: warning
@@ -47,7 +47,7 @@ findings:
     severity: info
     disposition: open
     title: "`staffCallRestore` is defined by arithmetic outside the iota block (carried forward; was IN-01)"
-open: 10
+open: 9
 total: 11
 recorded: 2026-10-06T11:51:17.012Z
 ---
@@ -56,7 +56,7 @@ recorded: 2026-10-06T11:51:17.012Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
+| WR-01 | warning | skipped | Owner kept the rule: any attempted write keeps the claim (03-UAT test 7, option a) |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
 | WR-04 | warning | open | - |
