@@ -228,15 +228,30 @@ type staffRunSpec struct {
 	Delivered func(landedMsgID int64)
 }
 
-// startStaffRun runs spec in the background: it fans out over spec.Links, keeps the
-// message current, then puts the final summary on it and marks the card done. One
-// coordinator goroutine per run is the only writer of the message.
-func startStaffRun(b *gotgbot.Bot, spec staffRunSpec) {
-	card := spec.Card
-	// Added before the context is read, so a shutdown that cancels it afterwards
-	// still finds this run in the wait group.
+// joinStaffRuns registers one run with staffActionRunsWG and returns the context the
+// run starts with. The registration comes before the context is read, so a shutdown
+// that cancels the context afterwards still finds the run in the wait group. The
+// caller hands the context to startJoinedStaffRun, whose coordinator then owns the
+// matching Done, or calls staffActionRunsWG.Done itself when the run never starts.
+// It is the one place a run registers.
+func joinStaffRuns() context.Context {
 	staffActionRunsWG.Add(1)
-	ctx := staffActionsContext()
+	return staffActionsContext()
+}
+
+// startStaffRun registers spec with the shutdown drain and runs it, for a caller
+// that has nothing to do between the two.
+func startStaffRun(b *gotgbot.Bot, spec staffRunSpec) {
+	startJoinedStaffRun(b, joinStaffRuns(), spec)
+}
+
+// startJoinedStaffRun runs spec in the background: it fans out over spec.Links, keeps
+// the message current, then puts the final summary on it and marks the card done. One
+// coordinator goroutine per run is the only writer of the message. ctx is the context
+// joinStaffRuns returned for this run, and the coordinator gives the registration back
+// when it ends.
+func startJoinedStaffRun(b *gotgbot.Bot, ctx context.Context, spec staffRunSpec) {
+	card := spec.Card
 	go func() {
 		defer staffActionRunsWG.Done()
 		defer error_handling.RecoverFromPanic("staffActionRun", "StaffActions")
