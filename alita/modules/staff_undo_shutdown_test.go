@@ -20,6 +20,55 @@ func resetStaffActionsContextAfter(t *testing.T) {
 	})
 }
 
+func TestStaffUndoConfirmAfterStop(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	bob := env.undoPresser("Bob")
+	resetStaffActionsContextAfter(t)
+	action, msgID := env.undoFinishedBan()
+	token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+
+	bobLookups := make([]int, len(env.groups))
+	targetLookups := make([]int, len(env.groups))
+	writes := make([]int, len(env.groups))
+	for i, group := range env.groups {
+		bobLookups[i] = env.memberLookups(group, bob.Id)
+		targetLookups[i] = env.memberLookups(group, staffTestTarget)
+		writes[i] = len(env.writes(group))
+	}
+	originalEdits := len(env.edits(env.staffChat, msgID))
+
+	StopStaffActions()
+	env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+	env.waitRuns()
+
+	if text := env.lastEditText(env.staffChat, cardMsgID); !strings.Contains(text, staffMarker("staff_undo_abort_restarting")) {
+		t.Errorf("undo card after the shutdown lacks the restart text:\n%s", text)
+	}
+	if state := cardState(t, token); state != staffCardAborted {
+		t.Errorf("undo card state = %q, want %q", state, staffCardAborted)
+	}
+	if started := undoStartedAt(t, action.ID); started != nil {
+		t.Errorf("a Confirm after the shutdown claimed the record at %v", started)
+	}
+	for i, group := range env.groups {
+		if got := env.memberLookups(group, bob.Id); got != bobLookups[i] {
+			t.Errorf("group %d: %d new lookup(s) of the presser after the shutdown, want none", group, got-bobLookups[i])
+		}
+		if got := env.memberLookups(group, staffTestTarget); got != targetLookups[i] {
+			t.Errorf("group %d: %d new lookup(s) of the target after the shutdown, want none", group, got-targetLookups[i])
+		}
+		if got := len(env.writes(group)); got != writes[i] {
+			t.Errorf("group %d: %d new write call(s) after the shutdown, want none", group, got-writes[i])
+		}
+	}
+	if got := len(env.edits(env.staffChat, msgID)); got != originalEdits {
+		t.Errorf("the original summary was edited %d time(s) by a Confirm after the shutdown, want none", got-originalEdits)
+	}
+	if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+		t.Errorf("target lock holder after the refused Confirm = %q, want the key gone", holder)
+	}
+}
+
 func TestStaffUndoShutdownWindow(t *testing.T) {
 	env := newStaffActionEnv(t, 2)
 	bob := env.undoPresser("Bob")
