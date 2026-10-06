@@ -267,8 +267,12 @@ func SetSummaryMessage(actionID uint, chatID, msgID int64) error {
 // was claimed, and reports whether this call won: exactly one caller ever sees
 // true for a record, on any replica. It outlives the Redis confirm card, which
 // expires after an hour, so an old card can never start a second undo.
-func ClaimUndo(actionID uint, by int64, byName string) (claimed bool, err error) {
-	now := time.Now()
+//
+// claimedAt is the claim time that was stored, cut to the microsecond so the value
+// round-trips exactly through PostgreSQL's microsecond timestamps. ReleaseUndo names
+// this exact claim by it.
+func ClaimUndo(actionID uint, by int64, byName string) (claimedAt time.Time, claimed bool, err error) {
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	result := db.DB.Model(&models.StaffAction{}).
 		Where("id = ? AND undo_started_at IS NULL", actionID).
 		Updates(map[string]any{
@@ -279,9 +283,59 @@ func ClaimUndo(actionID uint, by int64, byName string) (claimed bool, err error)
 		})
 	if result.Error != nil {
 		log.Errorf("[Staff] ClaimUndo: %v", result.Error)
-		return false, alitaerrors.Wrapf(result.Error, "claim undo of staff action %d", actionID)
+		return time.Time{}, false, alitaerrors.Wrapf(result.Error, "claim undo of staff action %d", actionID)
 	}
-	return result.RowsAffected == 1, nil
+	if result.RowsAffected != 1 {
+		return time.Time{}, false, nil
+	}
+	return now, true, nil
+}
+
+// ReleaseUndo gives the one undo of an action back (owner decision b on D-09) when
+// the run that claimed it reached no Telegram write in any group. It matches only
+// that claim: the record ID, the claimer, the exact claim time from ClaimUndo and an
+// undo not yet finished, so it can never clear another presser's claim or a finished
+// undo. In one transaction it clears the parent's undo columns and every group's
+// undo outcome, reason and detail, and reports whether it did; false with no error
+// means the claim no longer matched and nothing was written. The record is never
+// cached, so there is nothing to invalidate.
+func ReleaseUndo(actionID uint, by int64, claimedAt time.Time) (released bool, err error) {
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		// A map, so the empty and NULL values are written.
+		result := tx.Model(&models.StaffAction{}).
+			Where("id = ? AND undo_by = ? AND undo_started_at = ? AND undo_finished_at IS NULL", actionID, by, claimedAt).
+			Updates(map[string]any{
+				"undo_by":          nil,
+				"undo_by_name":     "",
+				"undo_started_at":  nil,
+				"undo_finished_at": nil,
+				"updated_at":       now,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
+		if err := tx.Model(&models.StaffActionGroup{}).
+			Where("action_id = ?", actionID).
+			Updates(map[string]any{
+				"undo_outcome": "",
+				"undo_reason":  "",
+				"undo_detail":  "",
+				"updated_at":   now,
+			}).Error; err != nil {
+			return err
+		}
+		released = true
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Staff] ReleaseUndo: %v", err)
+		return false, alitaerrors.Wrapf(err, "release undo of staff action %d", actionID)
+	}
+	return released, nil
 }
 
 // writeUndoResult stores one group's undo outcome inside tx. It fails with

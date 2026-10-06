@@ -552,65 +552,132 @@ func TestStaffUndoTargetLock(t *testing.T) {
 	})
 }
 
-func TestStopStaffActionsUndo(t *testing.T) {
-	env := newStaffActionEnv(t, 8)
-	seedMembers(env)
-	bob := env.undoPresser("Bob")
-	withStaffActionTimers(t, time.Hour, 5*time.Millisecond)
-	t.Cleanup(func() {
-		staffActionsMu.Lock()
-		defer staffActionsMu.Unlock()
-		staffActionsCtx, staffActionsCancel = context.WithCancel(context.Background())
-	})
-	action, msgID := env.undoFinishedBan()
-	token, cardMsgID := env.askUndo(bob, msgID, action.ID)
-
-	for _, group := range env.groups {
-		env.fake.setDelay("getChatMember", group, 200*time.Millisecond)
-	}
-	env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
-	time.Sleep(50 * time.Millisecond)
-	stopped := time.Now()
-	StopStaffActions()
-	if took := time.Since(stopped); took > 5*time.Second {
-		t.Fatalf("StopStaffActions took %s, want under 5s", took)
-	}
-	env.waitRuns()
-
-	summary := env.lastEditText(env.staffChat, cardMsgID)
-	if !strings.Contains(summary, staffMarker("staff_act_fail_interrupted")) {
-		t.Fatalf("final undo summary has no interrupted group:\n%s", summary)
-	}
-	if strings.Contains(summary, "⏳") {
-		t.Fatalf("final undo summary still has a pending line:\n%s", summary)
-	}
-	done, skipped, failed := summaryTallyOf(t, summary)
-	if done+skipped+failed != len(env.groups) {
-		t.Fatalf("tally %d+%d+%d, want %d groups", done, skipped, failed, len(env.groups))
-	}
-
-	record, rows := recordOfCard(t, msgID)
-	if record.UndoFinishedAt == nil {
-		t.Fatal("the record has no undo_finished_at after a shutdown mid-undo")
-	}
-	interrupted := 0
-	for _, row := range rows {
-		if row.UndoOutcome == "" {
-			t.Fatalf("group %d has no undo outcome: the shutdown dropped it from the record", row.GroupChatID)
-		}
-		if row.UndoReason == "fail_interrupted" {
-			interrupted++
-			if row.UndoOutcome != "failed" {
-				t.Fatalf("group %d undo = %q / %q, want failed / fail_interrupted", row.GroupChatID, row.UndoOutcome, row.UndoReason)
+// waitForStaffRequest polls until the fake has seen more requests of method to the
+// given groups than counts says (one count per group), or fails after 5 s.
+func (e *staffActionEnv) waitForStaffRequest(method string, groups []int64, counts []int) {
+	e.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for i, group := range groups {
+			if len(e.fake.requestTimes(method, group)) > counts[i] {
+				return
 			}
 		}
+		time.Sleep(5 * time.Millisecond)
 	}
-	if interrupted == 0 {
-		t.Fatal("no group was recorded as interrupted by the restart")
+	e.t.Fatalf("no %s request reached the linked groups within 5s", method)
+}
+
+// requestCounts is how many requests of method each group has seen so far.
+func (e *staffActionEnv) requestCounts(method string, groups []int64) []int {
+	counts := make([]int, len(groups))
+	for i, group := range groups {
+		counts[i] = len(e.fake.requestTimes(method, group))
 	}
-	if holder := targetLockHolder(t, staffTestTarget); holder != "" {
-		t.Fatalf("target lock holder after the shutdown = %q, want the key gone", holder)
+	return counts
+}
+
+func TestStopStaffActionsUndo(t *testing.T) {
+	// resetStaffActionsContext puts a live context back after StopStaffActions
+	// cancelled the shared one.
+	resetStaffActionsContext := func(t *testing.T) {
+		t.Helper()
+		t.Cleanup(func() {
+			staffActionsMu.Lock()
+			defer staffActionsMu.Unlock()
+			staffActionsCtx, staffActionsCancel = context.WithCancel(context.Background())
+		})
 	}
+
+	t.Run("cut off before any write gives the claim back", func(t *testing.T) {
+		env := newStaffActionEnv(t, 8)
+		seedMembers(env)
+		bob := env.undoPresser("Bob")
+		withStaffActionTimers(t, time.Hour, 5*time.Millisecond)
+		resetStaffActionsContext(t)
+		action, msgID := env.undoFinishedBan()
+		token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+
+		for _, group := range env.groups {
+			env.fake.setDelay("getChatMember", group, 200*time.Millisecond)
+		}
+		lookups := env.requestCounts("getChatMember", env.groups)
+		env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+		env.waitForStaffRequest("getChatMember", env.groups, lookups)
+		stopped := time.Now()
+		StopStaffActions()
+		if took := time.Since(stopped); took > 5*time.Second {
+			t.Fatalf("StopStaffActions took %s, want under 5s", took)
+		}
+		env.waitRuns()
+
+		summary := env.lastEditText(env.staffChat, cardMsgID)
+		if !strings.Contains(summary, staffMarker("staff_act_fail_interrupted")) {
+			t.Fatalf("final undo summary has no interrupted group:\n%s", summary)
+		}
+		if strings.Contains(summary, "⏳") {
+			t.Fatalf("final undo summary still has a pending line:\n%s", summary)
+		}
+		done, skipped, failed := summaryTallyOf(t, summary)
+		if done+skipped+failed != len(env.groups) {
+			t.Fatalf("tally %d+%d+%d, want %d groups", done, skipped, failed, len(env.groups))
+		}
+
+		// No group reached its write, so the action's one undo was given back.
+		wantUndoClaimGivenBack(t, msgID)
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the shutdown = %q, want the key gone", holder)
+		}
+	})
+
+	t.Run("a write reached keeps the claim", func(t *testing.T) {
+		env := newStaffActionEnv(t, 8)
+		seedMembers(env)
+		bob := env.undoPresser("Bob")
+		withStaffActionTimers(t, time.Hour, 5*time.Millisecond)
+		resetStaffActionsContext(t)
+		action, msgID := env.undoFinishedBan()
+		token, cardMsgID := env.askUndo(bob, msgID, action.ID)
+
+		for _, group := range env.groups {
+			env.fake.setDelay("unbanChatMember", group, 200*time.Millisecond)
+		}
+		unbans := env.requestCounts("unbanChatMember", env.groups)
+		env.tapUndoCard(bob, undoConfirmCode, token, cardMsgID)
+		env.waitForStaffRequest("unbanChatMember", env.groups, unbans)
+		StopStaffActions()
+		env.waitRuns()
+
+		summary := env.lastEditText(env.staffChat, cardMsgID)
+		if strings.Contains(summary, "⏳") {
+			t.Fatalf("final undo summary still has a pending line:\n%s", summary)
+		}
+		// A group reached its write before the shutdown, so the undo is spent and its
+		// record is finalized.
+		record, rows := recordOfCard(t, msgID)
+		if record.UndoStartedAt == nil || record.UndoFinishedAt == nil {
+			t.Fatalf("record undo_started_at = %v, undo_finished_at = %v, want both set", record.UndoStartedAt, record.UndoFinishedAt)
+		}
+		undone := 0
+		for _, row := range rows {
+			if row.UndoOutcome == "" {
+				t.Fatalf("group %d has no undo outcome: the shutdown dropped it from the record", row.GroupChatID)
+			}
+			if row.UndoOutcome == "done" {
+				undone++
+			}
+		}
+		if undone == 0 {
+			t.Fatal("no group was recorded as undone, although one reached its write")
+		}
+		original := env.lastEditText(env.staffChat, msgID)
+		if !strings.Contains(original, staffMarker("staff_undo_marker")) {
+			t.Fatalf("the original summary was not marked as undone:\n%s", original)
+		}
+		if holder := targetLockHolder(t, staffTestTarget); holder != "" {
+			t.Fatalf("target lock holder after the shutdown = %q, want the key gone", holder)
+		}
+	})
 }
 
 func TestStaffUndoNoTimeLimit(t *testing.T) {

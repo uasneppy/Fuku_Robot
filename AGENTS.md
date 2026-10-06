@@ -26,8 +26,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   "interrupted by restart", delivers the final summary and returns within 30 s. A delivery still waiting out a 429
   when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines. A run cancelled by the
   shutdown skips its remaining log posts, so a group applied just before it may have no post. Undo runs join the
-  same drain: their final record write (`FinalizeUndo`, through `db.DB`, never the cancelled run context) and summary
-  delivery happen inside the same 30 s as a staff action's, and an unfinished group is recorded `fail_interrupted`.
+  same drain: their final record write (`FinalizeUndo`, or `ReleaseUndo` when no group reached its write, both through
+  `db.DB`, never the cancelled run context) and summary delivery happen inside the same 30 s as a staff action's, and an
+  unfinished group is recorded `fail_interrupted`.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
@@ -95,7 +96,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
   signature of the sorted linked group IDs (`links_sig`) changed since the card was shown. The same hash also holds
   undo confirm cards (`action=undo`, `undo_of`, `undo_kind`) whose issuer is the presser of Undo. One undo per action
-  is the conditional update of `staff_actions.undo_started_at` (`ClaimUndo`), not the card, which expires.
+  is the conditional update of `staff_actions.undo_started_at` (`ClaimUndo`), not the card, which expires. The claim is
+  given back by `ReleaseUndo` (one conditional update scoped to that claim's `undo_by` and `undo_started_at`, which also
+  clears the groups' undo columns) when no group of the run reached its Telegram write (`staffGroupResult.Reached`, set
+  once `executeStaffUndoCall` returned, whatever it returned, and for every group `sweepPending` swept after a panic,
+  which may have reached its write before it was lost), and kept once any group did.
 - `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
   TTL, taken at Confirm, renewed every 10 minutes (`staffTargetLockRenewEvery`) by the run's coordinator through a
   compare-and-set on that token while the fan-out runs (a vanished key is re-taken, another card's lock is never
@@ -182,7 +187,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   with at least one applied group (`/tban` and `/tmute` are recorded as ban and mute). When the final edit falls back to
   a new message the button goes on it and `summary_msg_id` follows. The original summary is edited ("Undone by") and
   replied to only when the record's `summary_chat_id` is the chat the press came from: message IDs belong to their
-  chat, so after a Staff Group migration the card is posted without a reply and nothing old is edited.
+  chat, so after a Staff Group migration the card is posted without a reply and nothing old is edited. That edit is
+  made at the end of the undo run, after the undo's own summary is delivered and on its own budget, not at Confirm.
+  The original reads "Undone by" only when at least one group was undone and "changed nothing" when writes were tried
+  and none succeeded, and loses its Undo button in both cases; it is left alone with its Undo button when the claim
+  was given back, and the undo's own summary then says no group was changed and the action can still be undone.
 - Staff targets are the first argument and never guessed: a numeric ID, a `text_mention` entity starting exactly at that
   UTF-16 offset, or an `@username` (4-32 of `A-Za-z0-9_`). A username resolves through `user.FindUsersByUsername` (users
   table only, case-insensitive, up to 10 rows, newest activity first) behind the `staffUserLookup` seam: no row is

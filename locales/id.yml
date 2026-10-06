@@ -2621,7 +2621,7 @@ staff_help_msg: |
 
   Setiap aksi menampilkan kartu terlebih dahulu. Hanya orang yang mengirim perintah yang bisa menekan Konfirmasi atau Batal, dan kartu kedaluwarsa setelah 5 menit.
   Saya hanya bertindak di grup terhubung tempat Anda saat ini menjadi admin yang boleh membatasi anggota, tidak pernah terhadap admin atau pemilik grup, dan hasilnya mencantumkan setiap grup sebagai selesai, dilewati, atau gagal.
-  Setiap ringkasan yang selesai punya tombol "↩ Batalkan di semua grup", yang juga ditawarkan di Aksi terbaru. Anggota Grup Staf mana pun boleh menekannya, orang yang menekannya yang mengonfirmasi, dan setiap grup dikembalikan seperti semula hanya di tempat orang itu saat ini boleh membatasi anggota. Grup yang sudah berubah sejak itu dibiarkan. Kick tidak bisa dibatalkan.
+  Setiap ringkasan yang selesai punya tombol "↩ Batalkan di semua grup", yang juga ditawarkan di Aksi terbaru. Anggota Grup Staf mana pun boleh menekannya, orang yang menekannya yang mengonfirmasi, dan setiap grup dikembalikan seperti semula hanya di tempat orang itu saat ini boleh membatasi anggota. Grup yang sudah berubah sejak itu dibiarkan. Kick tidak bisa dibatalkan. Jika pembatalan tidak bisa mengubah grup mana pun, misalnya karena orang yang menekannya tidak bisa membatasi anggota di satu pun, tidak ada yang terpakai dan orang yang bisa boleh menekan Batalkan lagi. Setelah pembatalan mencoba mengubah sebuah grup, aksi itu tidak bisa dibatalkan lagi.
   Setiap aksi yang diterapkan dan setiap pembatalan diposting ke kanal log grup tempat aksi itu diterapkan (kategori log admin).
   /sban, /dban, /skick, /dkick, /smute, dan /dmute tidak dipakai di sini.
   Kirim perintah ini atas nama Anda sendiri, bukan secara anonim.
@@ -2779,6 +2779,8 @@ staff_undo_button: "↩ Batalkan di semua grup"
 staff_undo_label: "Batalkan"
 staff_undo_card_applies: "Batalkan tindakan ini di {count} grup tempat tindakan itu diterapkan? Setiap grup diperiksa lagi terlebih dahulu. Tidak ada yang terjadi sampai Anda menekan Konfirmasi."
 staff_undo_marker: "↩ Dibatalkan oleh {name}, lihat balasannya."
+staff_undo_marker_nothing: "↩ Pembatalan oleh {name} tidak mengubah apa pun, lihat balasannya."
+staff_undo_released_note: "Tidak ada grup yang diubah, jadi aksi ini masih bisa dibatalkan oleh orang yang bisa membatasi anggota di grupnya."
 staff_undo_not_applied_note: "{count} grup lain dibiarkan apa adanya: tindakan tidak diterapkan di sana."
 staff_undo_already: "Sudah dibatalkan oleh {name}."
 staff_undo_not_available: "Tindakan ini tidak dapat dibatalkan."

@@ -2631,7 +2631,7 @@ staff_help_msg: |
 
   Cada acción muestra primero una tarjeta. Solo quien envió el comando puede pulsar Confirmar o Cancelar, y la tarjeta caduca a los 5 minutos.
   Solo actúo en los grupos vinculados donde eres administrador con permiso para restringir miembros en este momento, nunca contra los administradores o el propietario de un grupo, y el resultado muestra cada grupo como hecho, omitido o fallido.
-  Cada resumen terminado tiene un botón "↩ Deshacer en todos", que también se ofrece en Acciones recientes. Cualquier miembro del Grupo de Staff puede pulsarlo, quien lo pulsó lo confirma, y cada grupo vuelve a como estaba solo donde esa persona puede restringir miembros en ese momento. Los grupos que han cambiado desde entonces se dejan como están. Una expulsión no se puede deshacer.
+  Cada resumen terminado tiene un botón "↩ Deshacer en todos", que también se ofrece en Acciones recientes. Cualquier miembro del Grupo de Staff puede pulsarlo, quien lo pulsó lo confirma, y cada grupo vuelve a como estaba solo donde esa persona puede restringir miembros en ese momento. Los grupos que han cambiado desde entonces se dejan como están. Una expulsión no se puede deshacer. Si un deshacer no puede cambiar ningún grupo, por ejemplo porque quien lo pulsó no puede restringir miembros en ninguno, no se gasta nada y alguien que pueda podrá pulsar Deshacer de nuevo. Cuando un deshacer ya ha intentado cambiar un grupo, la acción no se puede deshacer otra vez.
   Cada acción aplicada y cada deshacer se publica en el canal de registro del grupo donde se aplicó (categoría de registro de admin).
   /sban, /dban, /skick, /dkick, /smute y /dmute no se usan aquí.
   Envía estos comandos como tú mismo, no de forma anónima.
@@ -2789,6 +2789,8 @@ staff_undo_button: "↩ Deshacer en todos"
 staff_undo_label: "Deshacer"
 staff_undo_card_applies: "¿Deshacer esta acción en los {count} grupo(s) donde se aplicó? Cada grupo se comprueba de nuevo antes. No pasa nada hasta que pulses Confirmar."
 staff_undo_marker: "↩ Deshecha por {name}, mira la respuesta."
+staff_undo_marker_nothing: "↩ El deshacer de {name} no cambió nada, mira la respuesta."
+staff_undo_released_note: "No se cambió ningún grupo, así que alguien que pueda restringir miembros en sus grupos todavía puede deshacer esta acción."
 staff_undo_not_applied_note: "{count} grupo(s) más se dejaron como estaban: la acción no se aplicó allí."
 staff_undo_already: "Ya fue deshecha por {name}."
 staff_undo_not_available: "Esta acción no se puede deshacer."

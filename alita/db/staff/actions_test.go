@@ -301,11 +301,11 @@ func TestStaffActionClaimUndo(t *testing.T) {
 		t.Fatalf("CreateAction: %v", err)
 	}
 
-	claimed, err := ClaimUndo(action.ID, 501, "First <b>")
-	if err != nil || !claimed {
-		t.Fatalf("first ClaimUndo = %v, %v, want true", claimed, err)
+	claimedAt, claimed, err := ClaimUndo(action.ID, 501, "First <b>")
+	if err != nil || !claimed || claimedAt.IsZero() {
+		t.Fatalf("first ClaimUndo = %v, %v, %v, want a claim time and true", claimedAt, claimed, err)
 	}
-	claimed, err = ClaimUndo(action.ID, 502, "Second")
+	_, claimed, err = ClaimUndo(action.ID, 502, "Second")
 	if err != nil || claimed {
 		t.Fatalf("second ClaimUndo = %v, %v, want false and no error", claimed, err)
 	}
@@ -317,8 +317,11 @@ func TestStaffActionClaimUndo(t *testing.T) {
 		t.Fatalf("record after two claims = undo_by %v name %q started %v, want the first claimer's 501 and name",
 			got.UndoBy, got.UndoByName, got.UndoStartedAt)
 	}
+	if !got.UndoStartedAt.Equal(claimedAt) {
+		t.Fatalf("stored undo_started_at = %v, want exactly the claim time %v ClaimUndo returned", got.UndoStartedAt, claimedAt)
+	}
 
-	if claimed, err := ClaimUndo(action.ID+100000, 503, "Nobody"); err != nil || claimed {
+	if _, claimed, err := ClaimUndo(action.ID+100000, 503, "Nobody"); err != nil || claimed {
 		t.Fatalf("ClaimUndo of a missing record = %v, %v, want false and no error", claimed, err)
 	}
 
@@ -338,7 +341,7 @@ func TestStaffActionClaimUndo(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			claimed, err := ClaimUndo(racy.ID, int64(600+i), "Racer")
+			_, claimed, err := ClaimUndo(racy.ID, int64(600+i), "Racer")
 			if err != nil {
 				failure.Store(err)
 				return
@@ -420,6 +423,123 @@ func TestStaffActionFinalizeUndo(t *testing.T) {
 	second, err := GetActionFresh(action.ID)
 	if err != nil || second == nil || second.UndoFinishedAt == nil || !second.UndoFinishedAt.Equal(*first.UndoFinishedAt) {
 		t.Fatalf("undo_finished_at after a second FinalizeUndo = %v, want the first time %v", second.UndoFinishedAt, first.UndoFinishedAt)
+	}
+}
+
+func TestStaffActionReleaseUndo(t *testing.T) {
+	chat := uniqueStaffChatID()
+	cleanupActionRows(t, chat)
+	groups := []int64{uniqueStaffChatID(), uniqueStaffChatID()}
+	action, rows := newTestAction(chat, []int{0, 1}, groups)
+	if err := CreateAction(action, rows); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+	if err := FinalizeAction(action.ID, []ActionGroupResult{
+		{GroupChatID: groups[0], Outcome: models.StaffActionOutcomeDone, Reason: "banned"},
+		{GroupChatID: groups[1], Outcome: models.StaffActionOutcomeSkipped, Reason: "skip_issuer_not_admin"},
+	}); err != nil {
+		t.Fatalf("FinalizeAction: %v", err)
+	}
+
+	claimedAt, claimed, err := ClaimUndo(action.ID, 501, "Bob")
+	if err != nil || !claimed || claimedAt.IsZero() {
+		t.Fatalf("ClaimUndo = %v, %v, %v, want a claim time and true", claimedAt, claimed, err)
+	}
+	if err := SaveUndoResult(action.ID, ActionGroupResult{
+		GroupChatID: groups[0], Outcome: models.StaffActionOutcomeSkipped, Reason: "skip_issuer_not_admin", Detail: "x &amp; y",
+	}); err != nil {
+		t.Fatalf("SaveUndoResult: %v", err)
+	}
+
+	// wantClaimKept fails unless the claim and the group's undo columns are as the
+	// claim and SaveUndoResult left them.
+	wantClaimKept := func(step string) {
+		t.Helper()
+		got, err := GetActionFresh(action.ID)
+		if err != nil || got == nil {
+			t.Fatalf("%s: GetActionFresh = %v, %v", step, got, err)
+		}
+		if got.UndoBy == nil || *got.UndoBy != 501 || got.UndoByName != "Bob" ||
+			got.UndoStartedAt == nil || !got.UndoStartedAt.Equal(claimedAt) || got.UndoFinishedAt != nil {
+			t.Fatalf("%s: record = undo_by %v name %q started %v finished %v, want Bob's untouched claim",
+				step, got.UndoBy, got.UndoByName, got.UndoStartedAt, got.UndoFinishedAt)
+		}
+		groupRows, err := ListActionGroupsFresh(action.ID)
+		if err != nil {
+			t.Fatalf("%s: ListActionGroupsFresh: %v", step, err)
+		}
+		first := groupRows[0]
+		if first.UndoOutcome != "skipped" || first.UndoReason != "skip_issuer_not_admin" || first.UndoDetail != "x &amp; y" {
+			t.Fatalf("%s: group 0 undo = %q / %q / %q, want the saved result", step, first.UndoOutcome, first.UndoReason, first.UndoDetail)
+		}
+	}
+
+	// Another presser, or another claim time, never matches this claim.
+	if released, err := ReleaseUndo(action.ID, 502, claimedAt); err != nil || released {
+		t.Fatalf("ReleaseUndo by another presser = %v, %v, want false and no error", released, err)
+	}
+	wantClaimKept("after a release by another presser")
+	if released, err := ReleaseUndo(action.ID, 501, claimedAt.Add(time.Microsecond)); err != nil || released {
+		t.Fatalf("ReleaseUndo of another claim time = %v, %v, want false and no error", released, err)
+	}
+	wantClaimKept("after a release of another claim time")
+
+	released, err := ReleaseUndo(action.ID, 501, claimedAt)
+	if err != nil || !released {
+		t.Fatalf("ReleaseUndo of the claim = %v, %v, want true", released, err)
+	}
+	got, err := GetActionFresh(action.ID)
+	if err != nil || got == nil {
+		t.Fatalf("GetActionFresh = %v, %v", got, err)
+	}
+	if got.UndoBy != nil || got.UndoByName != "" || got.UndoStartedAt != nil || got.UndoFinishedAt != nil {
+		t.Fatalf("record after the release = undo_by %v name %q started %v finished %v, want all empty",
+			got.UndoBy, got.UndoByName, got.UndoStartedAt, got.UndoFinishedAt)
+	}
+	groupRows, err := ListActionGroupsFresh(action.ID)
+	if err != nil {
+		t.Fatalf("ListActionGroupsFresh: %v", err)
+	}
+	wantOriginal := []struct{ outcome, reason string }{{"done", "banned"}, {"skipped", "skip_issuer_not_admin"}}
+	for i, row := range groupRows {
+		if row.UndoOutcome != "" || row.UndoReason != "" || row.UndoDetail != "" {
+			t.Fatalf("group %d undo = %q / %q / %q after the release, want every undo column empty", i, row.UndoOutcome, row.UndoReason, row.UndoDetail)
+		}
+		if row.Outcome != wantOriginal[i].outcome || row.Reason != wantOriginal[i].reason {
+			t.Fatalf("group %d original = %q / %q after the release, want %q / %q untouched",
+				i, row.Outcome, row.Reason, wantOriginal[i].outcome, wantOriginal[i].reason)
+		}
+	}
+
+	if released, err := ReleaseUndo(action.ID, 501, claimedAt); err != nil || released {
+		t.Fatalf("second ReleaseUndo = %v, %v, want false and no error", released, err)
+	}
+	if _, claimed, err := ClaimUndo(action.ID, 503, "Carol"); err != nil || !claimed {
+		t.Fatalf("ClaimUndo after a release = %v, %v, want Carol to win", claimed, err)
+	}
+
+	// A claim that was finalized is a spent undo: it is never released.
+	spent, spentRows := newTestAction(chat, []int{0}, []int64{uniqueStaffChatID()})
+	if err := CreateAction(spent, spentRows); err != nil {
+		t.Fatalf("CreateAction: %v", err)
+	}
+	spentAt, claimed, err := ClaimUndo(spent.ID, 501, "Bob")
+	if err != nil || !claimed {
+		t.Fatalf("ClaimUndo = %v, %v, want true", claimed, err)
+	}
+	if err := FinalizeUndo(spent.ID, nil); err != nil {
+		t.Fatalf("FinalizeUndo: %v", err)
+	}
+	if released, err := ReleaseUndo(spent.ID, 501, spentAt); err != nil || released {
+		t.Fatalf("ReleaseUndo of a finalized undo = %v, %v, want false and no error", released, err)
+	}
+	after, err := GetActionFresh(spent.ID)
+	if err != nil || after == nil || after.UndoStartedAt == nil || after.UndoFinishedAt == nil || after.UndoBy == nil || *after.UndoBy != 501 {
+		t.Fatalf("a finalized undo after ReleaseUndo = %+v, %v, want its claim kept", after, err)
+	}
+
+	if released, err := ReleaseUndo(action.ID+100000, 501, claimedAt); err != nil || released {
+		t.Fatalf("ReleaseUndo of a missing record = %v, %v, want false and no error", released, err)
 	}
 }
 

@@ -191,6 +191,26 @@ func TestStaffUndoTracer(t *testing.T) {
 	originalEdits := env.edits(env.staffChat, msgID)
 	wantNoKeyboard(t, originalEdits[len(originalEdits)-1])
 
+	// D-08: the original is marked only at the end of the run, after the last write
+	// to a linked group.
+	env.fake.mu.Lock()
+	lastUnban, lastOriginalEdit := -1, -1
+	for i, call := range env.fake.calls {
+		switch call.Method {
+		case "unbanChatMember":
+			lastUnban = i
+		case "editMessageText":
+			if staffParamInt(call.Params, "message_id") == msgID {
+				lastOriginalEdit = i
+			}
+		}
+	}
+	env.fake.mu.Unlock()
+	if lastUnban < 0 || lastOriginalEdit <= lastUnban {
+		t.Fatalf("the original's last edit is call %d, the last unban call %d: the original must be marked after the last group write",
+			lastOriginalEdit, lastUnban)
+	}
+
 	undone, rows := recordOfCard(t, msgID)
 	if undone.UndoBy == nil || *undone.UndoBy != presser.Id || undone.UndoByName != "Bob" {
 		t.Fatalf("record undo_by = %v name %q, want %d Bob", undone.UndoBy, undone.UndoByName, presser.Id)
@@ -378,16 +398,24 @@ func TestStaffUndoButtonOnFallback(t *testing.T) {
 func TestStaffUndoOriginalEditFails(t *testing.T) {
 	env := newStaffActionEnv(t, 2)
 	presser := env.undoPresser("Bob")
+	// No progress edit gets in between the scripted ones.
+	withStaffActionTimers(t, time.Hour, 5*time.Millisecond)
 	_, msgID := env.startRun("/ban 4242")
 	env.waitRuns()
 	action, _ := recordOfCard(t, msgID)
 
 	token, cardMsgID := env.askUndo(presser, msgID, action.ID)
-	// The first edit after the claim is the original summary's.
-	env.fake.script("editMessageText", env.staffChat, staffFakeError(400, "Bad Request: message can't be edited"))
+	originalEditsBefore := len(env.edits(env.staffChat, msgID))
+	// After Confirm the Staff Group is edited three times: the pending summary, the
+	// final summary and, at the end of the run, the original. The third one fails.
+	env.fake.script("editMessageText", env.staffChat, nil, nil,
+		staffFakeError(400, "Bad Request: message can't be edited"))
 	env.tapUndoCard(presser, undoConfirmCode, token, cardMsgID)
 	env.waitRuns()
 
+	if got := len(env.edits(env.staffChat, msgID)) - originalEditsBefore; got != 1 {
+		t.Fatalf("the original summary got %d edit attempt(s), want exactly one", got)
+	}
 	summary := env.lastEditText(env.staffChat, cardMsgID)
 	if strings.Contains(summary, "⏳") || !strings.Contains(summary, "✅ 2 · ⏭ 0 · ❌ 0") {
 		t.Fatalf("the undo did not end on a final summary after the original could not be edited:\n%s", summary)
@@ -476,15 +504,8 @@ func TestStaffUndoAllSkipped(t *testing.T) {
 		}
 		wantMember(t, env.fake, group, staffTestTarget, gotgbot.ChatMemberStatusKicked)
 	}
-	done, rows := recordOfCard(t, msgID)
-	if done.UndoFinishedAt == nil {
-		t.Fatal("the record has no undo_finished_at")
-	}
-	for _, row := range rows {
-		if row.UndoOutcome != "skipped" || row.UndoReason != "skip_issuer_not_admin" {
-			t.Fatalf("group %d undo = %q / %q, want skipped / skip_issuer_not_admin", row.GroupChatID, row.UndoOutcome, row.UndoReason)
-		}
-	}
+	// Nothing was changed, so the action's one undo was given back.
+	wantUndoClaimGivenBack(t, msgID)
 }
 
 func TestStaffUndoPresserNeedsTheRestrictRight(t *testing.T) {
@@ -699,9 +720,9 @@ func TestStaffUndoAccess(t *testing.T) {
 		// Another replica's Confirm claims the record after this one's last read and
 		// before its claim: this one loses.
 		previous := staffClaimUndo
-		staffClaimUndo = func(id uint, by int64, name string) (bool, error) {
-			if _, err := staff.ClaimUndo(id, 4040, "Winner"); err != nil {
-				return false, err
+		staffClaimUndo = func(id uint, by int64, name string) (time.Time, bool, error) {
+			if _, _, err := staff.ClaimUndo(id, 4040, "Winner"); err != nil {
+				return time.Time{}, false, err
 			}
 			return previous(id, by, name)
 		}
