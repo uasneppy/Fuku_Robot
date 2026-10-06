@@ -3,15 +3,15 @@ status: testing
 phase: 03-staff-audit-and-undo
 source: [03-VERIFICATION.md]
 started: 2026-10-05T20:35:00Z
-updated: 2026-10-06T13:07:02Z
+updated: 2026-10-06T13:07:45Z
 ---
 
 ## Current Test
 
-number: 6
-name: Live re-run of test 4 after gap closure (03-10..03-12; 03-12 human-check)
+number: 7
+name: OPTIONAL DECISION: pacer-refused, 429 and mid-wait-cancelled calls count as "reached" (code review WR-01)
 expected: |
-  In a test Staff Group with two linked test supergroups. (a) A Staff Group member who is an admin in neither group presses Undo on a finished ban and confirms: every group is skipped, the undo's summary says no group was changed and the action can still be undone, the original summary keeps its text and its Undo button, and history shows no undo. (b) A member with restrict rights then presses Undo on the same summary and confirms: the ban is lifted in both groups, the original reads "Undone by <name>" and loses its button, and history shows the entry as undone. (c) An undo that fails in every group (for example after removing the bot's restrict right): the original reads "Undo by <name> changed nothing" and the entry reads "undo changed nothing". (d) Stopping the bot mid-undo and restarting shows "undo interrupted" and the groups as "interrupted by restart", not a stuck hourglass.
+  Owner chooses (a) accept the rule as written and documented (the claim is kept whenever a group's write call was attempted, whatever it returned, which fails closed), or (b) a small follow-up plan so outcomes that provably made no write (ratelimit.ErrRateLimited, a context cancelled while waiting for a pacer slot) give the claim back.
 awaiting: user response
 
 ## Tests
@@ -42,7 +42,7 @@ note: "Round 1: skipped (needs a go1.26 build of golangci-lint or CI). Re-opened
 
 ### 6. Live re-run of test 4 after gap closure (03-10..03-12; 03-12 human-check)
 expected: In a test Staff Group with two linked test supergroups. (a) A Staff Group member who is an admin in neither group presses Undo on a finished ban and confirms: every group is skipped, the undo's summary says no group was changed and the action can still be undone, the original summary keeps its text and its Undo button, and history shows no undo. (b) A member with restrict rights then presses Undo on the same summary and confirms: the ban is lifted in both groups, the original reads "Undone by <name>" and loses its button, and history shows the entry as undone. (c) An undo that fails in every group (for example after removing the bot's restrict right): the original reads "Undo by <name> changed nothing" and the entry reads "undo changed nothing". (d) Stopping the bot mid-undo and restarting shows "undo interrupted" and the groups as "interrupted by restart", not a stuck hourglass.
-result: [pending]
+result: pass
 
 ### 7. OPTIONAL DECISION: pacer-refused, 429 and mid-wait-cancelled calls count as "reached" (code review WR-01)
 expected: Owner chooses (a) accept the rule as written and documented (the claim is kept whenever a group's write call was attempted, whatever it returned, which fails closed), or (b) a small follow-up plan so outcomes that provably made no write (ratelimit.ErrRateLimited, a context cancelled while waiting for a pacer slot) give the claim back.
@@ -55,9 +55,9 @@ result: [pending]
 ## Summary
 
 total: 8
-passed: 4
+passed: 5
 issues: 1
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
