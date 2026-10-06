@@ -732,12 +732,13 @@ func TestStaffHistoryDetailUndoOutcome(t *testing.T) {
 	env := newStaffActionEnv(t, 3)
 	record := banRecordWithSkip(t, env)
 	groupA, groupB, groupC := env.groups[0], env.groups[1], env.groups[2]
-	data := func(id int) string {
-		return detailData(t, strconv.FormatUint(uint64(record.ID), 10), strconv.Itoa(id))
+	data := func() string {
+		return detailData(t, strconv.FormatUint(uint64(record.ID), 10), "0")
 	}
 
 	started := time.Date(2026, 10, 5, 14, 30, 0, 0, time.UTC)
 	finished := started.Add(time.Minute)
+	// setUndo writes the claim with Updates, which moves updated_at to now.
 	setUndo := func(finishedAt *time.Time) {
 		t.Helper()
 		err := db.DB.Model(&models.StaffAction{}).Where("id = ?", record.ID).Updates(map[string]any{
@@ -745,6 +746,12 @@ func TestStaffHistoryDetailUndoOutcome(t *testing.T) {
 		}).Error
 		if err != nil {
 			t.Fatalf("mark undo: %v", err)
+		}
+	}
+	setUpdated := func(at time.Time) {
+		t.Helper()
+		if err := db.DB.Model(&models.StaffAction{}).Where("id = ?", record.ID).UpdateColumn("updated_at", at).Error; err != nil {
+			t.Fatalf("set updated_at: %v", err)
 		}
 	}
 	setGroup := func(group int64, outcome, reason string) {
@@ -756,40 +763,116 @@ func TestStaffHistoryDetailUndoOutcome(t *testing.T) {
 			t.Fatalf("mark undo result of group %d: %v", group, err)
 		}
 	}
-
-	setUndo(&finished)
-	setGroup(groupA, models.StaffActionOutcomeDone, "undone_unbanned")
-	setGroup(groupB, models.StaffActionOutcomeSkipped, "skip_changed_since")
-	setGroup(groupC, models.StaffActionOutcomeSkipped, "skip_not_applied")
-
-	text, _ := env.pressDetail(env.issuer, env.staffChatObj(), 6020, data(0))
-	before, after, found := strings.Cut(text, staffMarker("staff_history_undone_by"))
-	if !found {
-		t.Fatalf("detail %q lacks the undone-by line", text)
-	}
-	wantInOrder(t, after, "Bob", "5 Oct 14:30")
-	if !strings.Contains(before, "⏭ Group C") {
-		t.Errorf("the original block %q must still show Group C's skip", before)
-	}
-	lineA := lineStartingWith(after, "✅ Group A")
-	if !strings.Contains(lineA, staffMarker("staff_undo_unbanned")) {
-		t.Errorf("Group A's undo line = %q, want the unbanned wording", lineA)
-	}
-	lineB := lineStartingWith(after, "⏭ Group B")
-	if !strings.Contains(lineB, staffMarker("staff_undo_skip_changed_since")) {
-		t.Errorf("Group B's undo line = %q, want the changed-since wording", lineB)
-	}
-	if strings.Contains(after, "Group C") {
-		t.Errorf("Group C was never banned, so it must have no undo line: %q", after)
+	// view opens the detail and splits it at the undo header into the head and the
+	// undo block.
+	msg := int64(6020)
+	view := func() (head, undo string) {
+		t.Helper()
+		msg++
+		text, _ := env.pressDetail(env.issuer, env.staffChatObj(), msg, data())
+		head, undo, found := strings.Cut(text, staffMarker("staff_history_undo_by"))
+		if !found {
+			t.Fatalf("detail %q lacks the undo header", text)
+		}
+		return head, undo
 	}
 
-	// An undo still running: no finish time, and Group B has no result yet.
-	setUndo(nil)
-	setGroup(groupB, "", "")
-	text, _ = env.pressDetail(env.issuer, env.staffChatObj(), 6021, data(0))
-	_, after, found = strings.Cut(text, staffMarker("staff_history_undone_by"))
-	if !found || !strings.Contains(after, "⏳ Group B") {
-		t.Errorf("a running undo shows %q after the header, want Group B as ⏳", after)
+	// an undo that changed a group reads undone.
+	{
+		setUndo(&finished)
+		setGroup(groupA, models.StaffActionOutcomeDone, "undone_unbanned")
+		setGroup(groupB, models.StaffActionOutcomeSkipped, "skip_changed_since")
+		setGroup(groupC, models.StaffActionOutcomeSkipped, "skip_not_applied")
+
+		head, undo := view()
+		if !strings.Contains(head, staffMarker("staff_history_undone")) {
+			t.Errorf("the head %q lacks the undone mark", head)
+		}
+		if !strings.Contains(head, "⏭ Group C") {
+			t.Errorf("the original block %q must still show Group C's skip", head)
+		}
+		wantInOrder(t, undo, "Bob", "5 Oct 14:30")
+		lineA := lineStartingWith(undo, "✅ Group A")
+		if !strings.Contains(lineA, staffMarker("staff_undo_unbanned")) {
+			t.Errorf("Group A's undo line = %q, want the unbanned wording", lineA)
+		}
+		lineB := lineStartingWith(undo, "⏭ Group B")
+		if !strings.Contains(lineB, staffMarker("staff_undo_skip_changed_since")) {
+			t.Errorf("Group B's undo line = %q, want the changed-since wording", lineB)
+		}
+		if strings.Contains(undo, "Group C") {
+			t.Errorf("Group C was never banned, so it must have no undo line: %q", undo)
+		}
+	}
+
+	// an undo still running shows its pending group and reads running.
+	{
+		setUndo(nil)
+		setGroup(groupB, "", "")
+
+		head, undo := view()
+		if !strings.Contains(undo, "⏳ Group B") {
+			t.Errorf("a running undo shows %q after the header, want Group B as ⏳", undo)
+		}
+		if !strings.Contains(head, staffMarker("staff_history_undo_running")) || strings.Contains(head, staffMarker("staff_history_undone")) {
+			t.Errorf("the head %q of a running undo must read running, not undone", head)
+		}
+	}
+
+	// a crashed undo reads interrupted and writes nothing.
+	{
+		setUpdated(time.Now().Add(-2 * time.Hour))
+
+		head, undo := view()
+		lineB := lineStartingWith(undo, "❌ Group B")
+		if lineB == "" || !strings.Contains(lineB, staffMarker("staff_act_fail_interrupted")) {
+			t.Errorf("a dead undo shows %q after the header, want Group B as failed: interrupted", undo)
+		}
+		if !strings.Contains(head, staffMarker("staff_history_undo_interrupted")) || strings.Contains(head, staffMarker("staff_history_undone")) {
+			t.Errorf("the head %q of a dead undo must read interrupted, not undone", head)
+		}
+		rows, err := staff.ListActionGroupsFresh(record.ID)
+		if err != nil {
+			t.Fatalf("ListActionGroupsFresh: %v", err)
+		}
+		for _, row := range rows {
+			if row.GroupChatID == groupB && row.UndoOutcome != "" {
+				t.Errorf("Group B's undo outcome = %q after viewing, want it still empty: the view never writes", row.UndoOutcome)
+			}
+		}
+	}
+
+	// an undo that changed no group reads changed nothing.
+	{
+		setUndo(&finished)
+		setGroup(groupA, models.StaffActionOutcomeFailed, "fail_telegram")
+		setGroup(groupB, models.StaffActionOutcomeSkipped, "skip_changed_since")
+
+		head, _ := view()
+		if !strings.Contains(head, staffMarker("staff_history_undo_nothing")) || strings.Contains(head, staffMarker("staff_history_undone")) {
+			t.Errorf("the head %q of an undo that changed nothing must read so, not undone", head)
+		}
+	}
+}
+
+// TestStaffHistoryUndoNothingLine runs a real undo whose every write is refused and
+// checks the Recent actions line says it changed nothing.
+func TestStaffHistoryUndoNothingLine(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	bob := env.undoPresser("Bob")
+	action, msgID := env.undoFinishedBan()
+	for _, group := range env.groups {
+		env.fake.script("unbanChatMember", group, staffFakeError(400, "Bad Request: CHAT_ADMIN_REQUIRED"))
+	}
+	env.runUndo(bob, msgID, action.ID)
+
+	text, _ := env.pressHistory(env.issuer, env.staffChatObj(), "0")
+	lines := historyEntryLines(text)
+	if len(lines) != 1 {
+		t.Fatalf("history has %d entries, want 1:\n%s", len(lines), text)
+	}
+	if !strings.Contains(lines[0], staffMarker("staff_history_undo_nothing")) || strings.Contains(lines[0], staffMarker("staff_history_undone")) {
+		t.Errorf("the entry %q must say the undo changed nothing and never undone", lines[0])
 	}
 }
 
