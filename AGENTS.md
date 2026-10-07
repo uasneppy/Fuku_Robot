@@ -237,6 +237,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `lockdownActiveLookup`, a test seam. The greetings Accept button (`joinRequestHandler`, `a=accept`) answers an alert
   (`greetings_join_request_lockdown`) and approves nothing while a lockdown is active or cannot be read; Decline and Ban
   still work.
+- A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
+  calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
+  Antiraid's join handler (`onJoin`, group `-5`) returns at once while a lockdown is active in the chat (until Phase 6
+  retires it), so it neither temp-bans a user an admin added nor counts joins toward its auto trigger, and each joiner is
+  handled once, by the lockdown; a lockdown it cannot read does not stop it.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
   only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched. Joiners still pending when the lift starts are
