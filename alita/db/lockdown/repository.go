@@ -187,6 +187,38 @@ func DeleteUnconfirmed(id uint) (bool, error) {
 	return result.RowsAffected == 1, nil
 }
 
+// ListUnconfirmedFresh reads, straight from the database, the active lockdowns whose
+// lock Telegram never confirmed (locked_at NULL) and that have not changed since
+// before, oldest ID first. They are what a bot that stopped between storing a lockdown
+// and the lock call leaves behind, and the worker settles them from the live
+// permissions. A row younger than the cut-off may still be in its own /lockdown call.
+func ListUnconfirmedFresh(before time.Time) ([]models.ChatLockdown, error) {
+	var rows []models.ChatLockdown
+	err := db.DB.
+		Where("state = ? AND locked_at IS NULL AND updated_at < ?", models.LockdownStateActive, before.UTC()).
+		Order("id").
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListUnconfirmedFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list unconfirmed lockdowns")
+	}
+	return rows, nil
+}
+
+// TouchLockdown moves updated_at of a lockdown row to now and changes nothing else. It
+// is how an unconfirmed row whose permissions could not be read is put back, so it is
+// tried again after another grace period and not on every cycle.
+func TouchLockdown(id uint) error {
+	result := db.DB.Model(&models.ChatLockdown{}).
+		Where("id = ?", id).
+		UpdateColumn("updated_at", now())
+	if result.Error != nil {
+		log.Errorf("[Lockdown] TouchLockdown: %v", result.Error)
+		return alitaerrors.Wrapf(result.Error, "touch lockdown %d", id)
+	}
+	return nil
+}
+
 // BeginLift moves an active lockdown to lifting and records who lifted it. It is
 // the one-lifter guarantee: a single conditional update matches only while the row
 // is active, so exactly one caller ever sees true. manualChange records that the

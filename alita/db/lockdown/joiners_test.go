@@ -458,3 +458,81 @@ func TestHasJoinerBanFresh(t *testing.T) {
 		})
 	}
 }
+
+// seedClaimedJoiner records a joiner row and puts it straight into a claimed state
+// with the given attempts, claimed that long ago.
+func seedClaimedJoiner(t *testing.T, ld *models.ChatLockdown, userID int64, path, state string, attempts int, claimedAgo time.Duration) uint {
+	t.Helper()
+	rec := newJoinRecord(ld, userID)
+	rec.Path = path
+	row := mustRecord(t, rec)
+	claimed := time.Now().UTC().Add(-claimedAgo)
+	err := db.DB.Model(&models.LockdownJoiner{}).Where("id = ?", row.ID).
+		Updates(map[string]any{"state": state, "attempts": attempts, "claimed_at": claimed}).Error
+	if err != nil {
+		t.Fatalf("seed claimed joiner %d: %v", userID, err)
+	}
+	return row.ID
+}
+
+func TestReleaseStaleClaims(t *testing.T) {
+	activeChat := uniqueLockdownChatID(t)
+	liftingChat := uniqueLockdownChatID(t)
+	cleanupLockdowns(t, activeChat, liftingChat)
+	active := mustStart(t, activeChat)
+	lifting := mustStart(t, liftingChat)
+	if won, err := BeginLift(lifting.ID, 7, "Lifter", false); err != nil || !won {
+		t.Fatalf("BeginLift = %v, %v, want true, nil", won, err)
+	}
+
+	const stale = 5 * time.Minute
+	activeActing := seedClaimedJoiner(t, active, 7001, models.JoinPathMember, models.JoinerStateActing, 2, stale)
+	activeRequest := seedClaimedJoiner(t, active, 7002, models.JoinPathRequest, models.JoinerStateActing, 1, stale)
+	activeUnbanning := seedClaimedJoiner(t, active, 7003, models.JoinPathMember, models.JoinerStateUnbanning, 1, stale)
+	activeFresh := seedClaimedJoiner(t, active, 7004, models.JoinPathMember, models.JoinerStateActing, 0, 0)
+	liftingBan := seedClaimedJoiner(t, lifting, 7101, models.JoinPathMember, models.JoinerStateActing, 2, stale)
+	liftingRequest := seedClaimedJoiner(t, lifting, 7102, models.JoinPathRequest, models.JoinerStateActing, 0, stale)
+	liftingUnbanning := seedClaimedJoiner(t, lifting, 7103, models.JoinPathMember, models.JoinerStateUnbanning, 2, stale)
+	liftingFresh := seedClaimedJoiner(t, lifting, 7104, models.JoinPathMember, models.JoinerStateUnbanning, 0, time.Minute)
+	untouched := mustRecord(t, newJoinRecord(active, 7005))
+
+	released, err := ReleaseStaleClaims(time.Now().UTC().Add(-2 * time.Minute))
+	if err != nil {
+		t.Fatalf("ReleaseStaleClaims error = %v, want none", err)
+	}
+	if released != 6 {
+		t.Errorf("ReleaseStaleClaims released %d rows, want the 6 stale ones", released)
+	}
+
+	tests := []struct {
+		name     string
+		id       uint
+		state    string
+		attempts int
+		claimed  bool
+	}{
+		{"stale acting ban of an active lockdown is retried", activeActing, models.JoinerStatePending, 2, false},
+		{"stale acting request of an active lockdown is retried", activeRequest, models.JoinerStatePending, 1, false},
+		{"stale unbanning goes back to banned", activeUnbanning, models.JoinerStateBanned, 1, false},
+		{"fresh acting claim stays", activeFresh, models.JoinerStateActing, 0, true},
+		{"stale acting ban of a lifting lockdown is banned", liftingBan, models.JoinerStateBanned, 2, false},
+		{"stale acting request of a lifting lockdown is cancelled", liftingRequest, models.JoinerStateCancelled, 0, false},
+		{"stale unbanning of a lifting lockdown is banned", liftingUnbanning, models.JoinerStateBanned, 2, false},
+		{"unbanning claimed a minute ago stays", liftingFresh, models.JoinerStateUnbanning, 0, true},
+		{"a row nobody claimed is untouched", untouched.ID, models.JoinerStatePending, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := readJoiner(t, tt.id)
+			if row.State != tt.state || row.Attempts != tt.attempts || (row.ClaimedAt != nil) != tt.claimed {
+				t.Errorf("row = state %q, attempts %d, claimed %v; want state %q, attempts %d, claimed %v",
+					row.State, row.Attempts, row.ClaimedAt != nil, tt.state, tt.attempts, tt.claimed)
+			}
+		})
+	}
+
+	again, err := ReleaseStaleClaims(time.Now().UTC().Add(-2 * time.Minute))
+	if err != nil || again != 0 {
+		t.Errorf("a second ReleaseStaleClaims = %d, %v, want 0, nil: released rows are not released twice", again, err)
+	}
+}

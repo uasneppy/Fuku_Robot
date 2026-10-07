@@ -62,6 +62,98 @@ const (
 	lockdownMaxAttempts = 3
 )
 
+// lockdownStaleClaim is how old a claim (acting or unbanning with claimed_at) must be
+// before it is taken to belong to a worker that stopped. It is far above the 10 s a
+// Telegram call may take, so a live claim is never released. A variable so a test can
+// shorten it.
+var lockdownStaleClaim = 2 * time.Minute
+
+// lockdownReleaseStale gives back the claims older than lockdownStaleClaim on every
+// lockdown, on any replica. No attempt is counted for a release. A failure is logged
+// and the next cycle tries again.
+func lockdownReleaseStale() {
+	released, err := lockdown.ReleaseStaleClaims(time.Now().Add(-lockdownStaleClaim))
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not release stale claims: %v", err)
+		return
+	}
+	if released > 0 {
+		log.Warnf("[Lockdown] released %d stale claim(s) of a worker that stopped", released)
+	}
+}
+
+// lockdownUnconfirmedGrace is how long a lockdown row may stay unconfirmed (locked_at
+// NULL) before it is taken to be a /lockdown that stopped half way and is settled from
+// the live permissions. It is far above the time one lock call takes, so a row whose
+// own /lockdown is still running is never touched. A variable so a test can shorten it.
+var lockdownUnconfirmedGrace = time.Minute
+
+// settleUnconfirmedLockdown decides what an unconfirmed lockdown really is by reading
+// the group's live permissions, paced like every worker call. Permissions equal to the
+// locked set mean the lock took effect: the row is confirmed and nothing is announced,
+// because the admin who typed /lockdown never got an answer and nothing more can be
+// said. Anything else means the lock never took effect, and the row is deleted so the
+// group is free to be locked again. A permissions answer that cannot be read touches
+// the row, so it is retried after another grace period, and returns the error. confirmed
+// and deleted are both false when the row changed under it (another replica settled it
+// first), which is not an error.
+func settleUnconfirmedLockdown(ctx context.Context, b *gotgbot.Bot, ld *models.ChatLockdown) (confirmed bool, deleted bool, err error) {
+	var chat lockdownChat
+	err = lockdownPaced(ctx, func(callCtx context.Context) error {
+		var fetchErr error
+		chat, fetchErr = fetchLockdownChat(callCtx, b, ld.ChatID)
+		return fetchErr
+	})
+	if err == nil && !lockdownHasPermissions(chat.Permissions) {
+		err = errors.New("getChat returned no permissions")
+	}
+	var same bool
+	if err == nil {
+		same, err = samePermissions(string(chat.Permissions), ld.LockedPermissions)
+	}
+	if err != nil {
+		if ctx.Err() == nil {
+			if touchErr := lockdown.TouchLockdown(ld.ID); touchErr != nil {
+				log.Errorf("[Lockdown] unconfirmed lockdown %d could not be put back: %v", ld.ID, touchErr)
+			}
+		}
+		return false, false, err
+	}
+
+	if same {
+		confirmed, err = lockdown.ConfirmLocked(ld.ID)
+		return confirmed, false, err
+	}
+	deleted, err = lockdown.DeleteUnconfirmed(ld.ID)
+	return false, deleted, err
+}
+
+// lockdownSettleUnconfirmed settles every lockdown that stayed unconfirmed for longer
+// than lockdownUnconfirmedGrace, on any replica. Settling never posts a message. It
+// reports whether any row was confirmed or deleted.
+func lockdownSettleUnconfirmed(ctx context.Context, b *gotgbot.Bot) bool {
+	rows, err := lockdown.ListUnconfirmedFresh(time.Now().Add(-lockdownUnconfirmedGrace))
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not list unconfirmed lockdowns: %v", err)
+		return false
+	}
+	progress := false
+	for _, ld := range rows {
+		if ctx.Err() != nil {
+			break
+		}
+		confirmed, deleted, err := settleUnconfirmedLockdown(ctx, b, &ld)
+		if err != nil {
+			log.Warnf("[Lockdown] unconfirmed lockdown %d of chat %d could not be settled: %v", ld.ID, ld.ChatID, err)
+			continue
+		}
+		if confirmed || deleted {
+			progress = true
+		}
+	}
+	return progress
+}
+
 // lockdownTallyListMax is how many joiners the lift's tally names when they could not
 // be unbanned; the rest are counted. A variable so a test can shrink it.
 var lockdownTallyListMax = 25
@@ -83,11 +175,13 @@ func wakeLockdownWorker() {
 	}
 }
 
-// Lifecycle state of the worker goroutine.
+// Lifecycle state of the worker goroutine. Each run has its own done channel rather
+// than a shared WaitGroup, so a worker that was cut off at shutdown and is still
+// finishing a call never shares state with the next one.
 var (
 	lockdownWorkerMu     sync.Mutex
 	lockdownWorkerCancel context.CancelFunc
-	lockdownWorkerWG     sync.WaitGroup
+	lockdownWorkerDone   chan struct{}
 )
 
 // StartLockdownWorker starts the background worker that bans recorded joiners and
@@ -100,10 +194,11 @@ func StartLockdownWorker(b *gotgbot.Bot) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	lockdownWorkerCancel = cancel
-	lockdownWorkerWG.Add(1)
+	lockdownWorkerDone = done
 	go func() {
-		defer lockdownWorkerWG.Done()
+		defer close(done)
 		defer error_handling.RecoverFromPanic("lockdownWorker", "Lockdown")
 		lockdownWorkerLoop(ctx, b)
 	}()
@@ -111,10 +206,14 @@ func StartLockdownWorker(b *gotgbot.Bot) {
 
 // StopLockdownWorker cancels the worker and waits for it for at most
 // lockdownWorkerStopWait, so no cycle is still writing when shutdown closes the
-// database. It is safe to call when the worker is not running, and more than once.
+// database. A call that is blocked in Telegram does not hold shutdown up: the wait
+// ends and the row it was working on is resumed from the database, by a restart or by
+// another replica once its claim is two minutes old. It is safe to call when the
+// worker is not running, and more than once.
 func StopLockdownWorker() {
 	lockdownWorkerMu.Lock()
 	cancel := lockdownWorkerCancel
+	done := lockdownWorkerDone
 	lockdownWorkerMu.Unlock()
 	if cancel == nil {
 		return
@@ -123,12 +222,6 @@ func StopLockdownWorker() {
 
 	// Wait without holding the mutex: a cycle that is mid-call must not wedge
 	// shutdown behind a lock.
-	done := make(chan struct{})
-	go func() {
-		defer error_handling.RecoverFromPanic("lockdownWorkerStop", "Lockdown")
-		lockdownWorkerWG.Wait()
-		close(done)
-	}()
 	select {
 	case <-done:
 	case <-time.After(lockdownWorkerStopWait):
@@ -136,7 +229,10 @@ func StopLockdownWorker() {
 	}
 
 	lockdownWorkerMu.Lock()
-	lockdownWorkerCancel = nil
+	if lockdownWorkerDone == done {
+		lockdownWorkerCancel = nil
+		lockdownWorkerDone = nil
+	}
 	lockdownWorkerMu.Unlock()
 }
 
@@ -165,10 +261,14 @@ func lockdownWorkerLoop(ctx context.Context, b *gotgbot.Bot) {
 // spinning on it.
 func runLockdownCycle(ctx context.Context, b *gotgbot.Bot) bool {
 	defer error_handling.RecoverFromPanic("lockdownCycle", "Lockdown")
+	// First of all, give back what a worker that stopped left claimed, so the steps
+	// below see it as work again.
+	lockdownReleaseStale()
+	settled := lockdownSettleUnconfirmed(ctx, b)
 	banned := lockdownBanPending(ctx, b)
 	deleted := lockdownDeleteJoinMessages(ctx, b)
 	lifted := lockdownProcessLifts(ctx, b)
-	return banned || deleted || lifted
+	return settled || banned || deleted || lifted
 }
 
 // lockdownCallOutcome is how one Telegram call of the worker ended.
@@ -539,7 +639,7 @@ func lockdownPostTally(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdo
 }
 
 // moveLockdownJoiner moves a row and logs a failed write; the row then stays in its
-// claimed state until a later plan's stale-claim recovery returns it.
+// claimed state until the stale-claim release returns it two minutes later.
 func moveLockdownJoiner(id uint, from, to, detail string, countAttempt bool) {
 	if _, err := lockdown.MoveJoiner(id, from, to, detail, countAttempt); err != nil {
 		log.Errorf("[Lockdown] joiner row %d could not move from %s to %s: %v", id, from, to, err)
