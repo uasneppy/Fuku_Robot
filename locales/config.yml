@@ -31,3 +31,4 @@ alt_names:
   Federations: [fed, feds, fban, unfban, newfed, joinfed]
   LogChannels: [setlog, logchannel, logcategories]
   Staff: [staff, setstaff, unsetstaff, linkstaff, unlinkstaff]
+  Lockdown: [lockdown, unlockdown, lockdownstatus]

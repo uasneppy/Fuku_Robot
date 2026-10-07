@@ -2764,3 +2764,27 @@ staff_undo_already_interrupted: "Um desfazer de {name} foi interrompido por uma 
 staff_undo_already_nothing: "Um desfazer de {name} já foi executado e não mudou nada. Esta ação não pode ser desfeita de novo."
 staff_undo_not_available: "Esta ação não pode ser desfeita."
 staff_undo_card_presser_only: "Só o membro do staff que carregou em Desfazer o pode confirmar ou cancelar."
+lockdown_help_msg: |
+  Um bloqueio para um raid neste grupo: todos, exceto os administradores, ficam silenciados até que um administrador o levante.
+
+  × /lockdown [motivo]: Bloqueia este grupo. Só os administradores podem falar, incluindo os utilizadores aprovados, e os novos membros são removidos até ao levantamento.
+  × /unlockdown: Levanta o bloqueio. Cada permissão volta exatamente a como estava antes do bloqueio, e as pessoas que removi são desbanidas.
+
+  Só o dono do grupo, ou um administrador que possa restringir membros, pode usar estes comandos, e eu verifico isso em tempo real. Tenho de ser administrador com permissão para restringir membros, e o grupo tem de ser um supergrupo.
+  Um bloqueio nunca termina sozinho. Dura até que um administrador o levante.
+lockdown_started: "🔒 Este grupo está em bloqueio. Só os administradores podem falar, e quem entrar é removido até que um administrador use /unlockdown."
+lockdown_note_approved_muted: "Os utilizadores aprovados também estão silenciados."
+lockdown_started_by: "Bloqueado por {name}."
+lockdown_reason_line: "Motivo: {reason}"
+lockdown_already_active: "Este grupo já está em bloqueio desde {since}, iniciado por {name}."
+lockdown_lifted: "🔓 Bloqueio levantado por {name}. As permissões do grupo voltaram ao que eram antes do bloqueio."
+lockdown_not_active: "Este grupo não está em bloqueio."
+lockdown_check_failed: "Não consegui verificar os seus direitos aqui neste momento. Nada foi alterado. Tente novamente daqui a pouco."
+lockdown_state_failed: "Não consegui concluir isso neste momento, por isso nada foi alterado. Tente novamente daqui a pouco."
+lockdown_basic_group: "O bloqueio precisa de um supergrupo. Atualize este grupo para supergrupo e execute /lockdown novamente."
+lockdown_bot_cannot_restrict: "Não posso bloquear este grupo: preciso de ser administrador com permissão para restringir membros."
+lockdown_bot_check_failed: "Não consegui verificar os meus próprios direitos neste grupo neste momento. Nada foi alterado. Tente novamente daqui a pouco."
+lockdown_permissions_unreadable: "Não consegui ler as permissões deste grupo, por isso não o vou bloquear para não arriscar perdê-las. Nada foi alterado. {detail}"
+lockdown_lock_failed: "O Telegram recusou o bloqueio, por isso nada foi alterado: {detail}"
+lockdown_note_no_delete: "Não posso apagar mensagens aqui, por isso as mensagens de entrada vão ficar."
+lockdown_note_no_invite: "Não posso gerir pedidos de adesão aqui, por isso os novos pedidos ficam pendentes em vez de serem recusados."

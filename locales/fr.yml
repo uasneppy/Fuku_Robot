@@ -2718,3 +2718,27 @@ staff_undo_already_interrupted: "Une annulation par {name} a été interrompue p
 staff_undo_already_nothing: "Une annulation par {name} a déjà eu lieu et n'a rien changé. Cette action ne peut plus être annulée."
 staff_undo_not_available: "Cette action ne peut pas être annulée."
 staff_undo_card_presser_only: "Seul le membre du staff qui a demandé cette annulation peut la confirmer ou l'abandonner."
+lockdown_help_msg: |
+  Un verrouillage arrête un raid dans ce groupe : tout le monde sauf les admins est rendu muet jusqu'à ce qu'un admin le lève.
+
+  × /lockdown [raison] : Verrouille ce groupe. Seuls les admins peuvent parler, utilisateurs approuvés compris, et les nouveaux membres sont retirés jusqu'à la levée.
+  × /unlockdown : Lève le verrouillage. Chaque permission revient exactement comme avant le verrouillage, et les personnes que j'ai retirées sont débannies.
+
+  Seul le propriétaire du groupe, ou un admin qui peut restreindre des membres, peut utiliser ces commandes, et je le vérifie en direct. Je dois être admin avec le droit de restreindre des membres, et le groupe doit être un supergroupe.
+  Un verrouillage ne se termine jamais tout seul. Il dure jusqu'à ce qu'un admin le lève.
+lockdown_started: "🔒 Ce groupe est verrouillé. Seuls les admins peuvent parler, et toute personne qui rejoint est retirée jusqu'à ce qu'un admin utilise /unlockdown."
+lockdown_note_approved_muted: "Les utilisateurs approuvés sont aussi rendus muets."
+lockdown_started_by: "Verrouillé par {name}."
+lockdown_reason_line: "Raison : {reason}"
+lockdown_already_active: "Ce groupe est déjà verrouillé depuis {since}, par {name}."
+lockdown_lifted: "🔓 Verrouillage levé par {name}. Les permissions du groupe sont revenues à ce qu'elles étaient avant le verrouillage."
+lockdown_not_active: "Ce groupe n'est pas verrouillé."
+lockdown_check_failed: "Je n'ai pas pu vérifier vos droits ici pour le moment. Rien n'a changé. Réessayez dans un instant."
+lockdown_state_failed: "Je n'ai pas pu terminer cela pour le moment, donc rien n'a changé. Réessayez dans un instant."
+lockdown_basic_group: "Le verrouillage nécessite un supergroupe. Passez ce groupe en supergroupe puis relancez /lockdown."
+lockdown_bot_cannot_restrict: "Je ne peux pas verrouiller ce groupe : je dois être admin avec le droit de restreindre des membres."
+lockdown_bot_check_failed: "Je n'ai pas pu vérifier mes propres droits dans ce groupe pour le moment. Rien n'a changé. Réessayez dans un instant."
+lockdown_permissions_unreadable: "Je n'ai pas pu lire les permissions de ce groupe, je ne le verrouille donc pas pour ne pas risquer de les perdre. Rien n'a changé. {detail}"
+lockdown_lock_failed: "Telegram a refusé le verrouillage, donc rien n'a changé : {detail}"
+lockdown_note_no_delete: "Je ne peux pas supprimer de messages ici, les messages d'arrivée resteront donc."
+lockdown_note_no_invite: "Je ne peux pas gérer les demandes d'adhésion ici, les nouvelles demandes restent donc en attente au lieu d'être refusées."

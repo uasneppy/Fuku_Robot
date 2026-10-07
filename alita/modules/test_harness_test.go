@@ -361,6 +361,8 @@ func TestMain(m *testing.M) {
 		&models.StaffGroupLink{},
 		&models.StaffAction{},
 		&models.StaffActionGroup{},
+		&models.ChatLockdown{},
+		&models.LockdownJoiner{},
 	); err != nil {
 		fmt.Printf("AutoMigrate failed: %v\n", err)
 		os.Exit(1)

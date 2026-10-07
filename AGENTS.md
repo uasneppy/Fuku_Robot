@@ -89,6 +89,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `helpers.CheckFunc` replies and is valid only inside `WrapCommand`.
 - `IsUserAdmin` returns false for channel and non-positive IDs. Never pass a chat ID as a user ID.
 - `*ForUpdate` predicates are memoised per update. Watchers only, never after a state change in the same update.
+- `/lockdown` and `/unlockdown` authority is `requireLockdownAuthority`, a live `getChatMember` of the sender (creator,
+  or administrator with `can_restrict_members`), never the admin cache, the Telegram service IDs or a chat's AnonAdmin
+  setting; a failed lookup refuses. Lockdowns need a supergroup, and `/lockdown` is refused, with nothing recorded,
+  unless the bot is an administrator with `can_restrict_members` and the group's permissions are readable.
 
 ## Data
 
@@ -126,6 +130,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   backup/export/import/reset. A record is created at Confirm and a failed create aborts the card; each group's prior
   state is written before its Telegram write and a failed write fails that group closed. Record writes never use the
   run's context, which a shutdown cancels first.
+- `chat_lockdowns` and `chat_lockdown_joiners` (migration 20261006120000) are lockdown state. They are read only through
+  fresh queries, never cached (so no `DeleteCache` applies, and a cache added later needs `skipLocal` and a
+  `DeleteCache` on every write), and never part of backup/export/import/reset. One active lockdown per chat is the
+  `uk_chat_lockdowns_active` partial unique index plus `lockdown.Start`'s `ON CONFLICT DO NOTHING`. `pre_permissions` is
+  the raw `permissions` JSON of the `getChat` answer read before the lock call, replayed verbatim with
+  `use_independent_chat_permissions`, never re-read and never passed through the typed `gotgbot.ChatPermissions` (its
+  `omitempty` bools and `*bool` defaults lose a right that was explicitly off). `locked_at` stays NULL until Telegram
+  confirmed the lock, and a lock Telegram refused deletes its unconfirmed row.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -254,7 +266,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The three harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
-  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows.
+  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The same three
+  lists plus `alita/db/lockdown/testmain_test.go` include the lockdown models, and `lockdownCleanup` deletes lockdown rows.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 
 ## Commits

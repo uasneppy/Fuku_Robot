@@ -2792,3 +2792,27 @@ staff_undo_already_interrupted: "Pembatalan oleh {name} terhenti karena restart.
 staff_undo_already_nothing: "Pembatalan oleh {name} sudah berjalan dan tidak mengubah apa pun. Tindakan ini tidak bisa dibatalkan lagi."
 staff_undo_not_available: "Tindakan ini tidak dapat dibatalkan."
 staff_undo_card_presser_only: "Hanya anggota staf yang memulai pembatalan ini yang bisa mengonfirmasi atau membatalkannya."
+lockdown_help_msg: |
+  Lockdown menghentikan raid di grup ini: semua orang kecuali admin dibisukan sampai seorang admin mencabutnya.
+
+  × /lockdown [alasan]: Kunci grup ini. Hanya admin yang bisa bicara, pengguna yang disetujui pun dibisukan, dan anggota baru dikeluarkan sampai lockdown dicabut.
+  × /unlockdown: Cabut lockdown. Setiap izin kembali persis seperti sebelum lockdown, dan orang yang saya keluarkan di-unban.
+
+  Hanya pemilik grup, atau admin yang bisa membatasi anggota, yang dapat memakai perintah ini, dan saya memeriksanya secara langsung. Saya harus menjadi admin yang bisa membatasi anggota, dan grup harus berupa supergrup.
+  Lockdown tidak pernah berakhir dengan sendirinya. Ia bertahan sampai seorang admin mencabutnya.
+lockdown_started: "🔒 Grup ini dalam lockdown. Hanya admin yang bisa bicara, dan siapa pun yang bergabung akan dikeluarkan sampai admin menjalankan /unlockdown."
+lockdown_note_approved_muted: "Pengguna yang disetujui juga dibisukan."
+lockdown_started_by: "Dikunci oleh {name}."
+lockdown_reason_line: "Alasan: {reason}"
+lockdown_already_active: "Grup ini sudah dalam lockdown sejak {since}, dimulai oleh {name}."
+lockdown_lifted: "🔓 Lockdown dicabut oleh {name}. Izin grup kembali seperti sebelum lockdown."
+lockdown_not_active: "Grup ini tidak sedang dalam lockdown."
+lockdown_check_failed: "Saya tidak bisa memeriksa hak Anda di sini saat ini. Tidak ada yang berubah. Coba lagi sebentar lagi."
+lockdown_state_failed: "Saya tidak bisa menyelesaikannya saat ini, jadi tidak ada yang diubah. Coba lagi sebentar lagi."
+lockdown_basic_group: "Lockdown memerlukan supergrup. Tingkatkan grup ini menjadi supergrup lalu jalankan /lockdown lagi."
+lockdown_bot_cannot_restrict: "Saya tidak bisa mengunci grup ini: saya harus menjadi admin yang bisa membatasi anggota."
+lockdown_bot_check_failed: "Saya tidak bisa memeriksa hak saya sendiri di grup ini saat ini. Tidak ada yang berubah. Coba lagi sebentar lagi."
+lockdown_permissions_unreadable: "Saya tidak bisa membaca izin grup ini, jadi saya tidak akan menguncinya agar izinnya tidak hilang. Tidak ada yang berubah. {detail}"
+lockdown_lock_failed: "Telegram menolak penguncian, jadi tidak ada yang berubah: {detail}"
+lockdown_note_no_delete: "Saya tidak bisa menghapus pesan di sini, jadi pesan bergabung akan tetap ada."
+lockdown_note_no_invite: "Saya tidak bisa mengelola permintaan bergabung di sini, jadi permintaan baru tetap tertunda dan tidak ditolak."

@@ -1,0 +1,301 @@
+//go:build testtools
+
+package modules
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+
+	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/models"
+)
+
+// lockdownTestPrePermissions is a group's default permissions as getChat answers
+// them: all 16 keys, in this order, with a mix a typed struct would lose. Reactions
+// are false while sending is true, which an omitempty bool cannot tell from "unset".
+const lockdownTestPrePermissions = `{"can_send_messages":true,"can_send_audios":true,"can_send_documents":false,` +
+	`"can_send_photos":true,"can_send_videos":true,"can_send_video_notes":true,"can_send_voice_notes":false,` +
+	`"can_send_polls":false,"can_send_other_messages":true,"can_add_web_page_previews":false,` +
+	`"can_react_to_messages":false,"can_edit_tag":false,"can_change_info":false,"can_invite_users":true,` +
+	`"can_pin_messages":false,"can_manage_topics":false}`
+
+// lockdownFake is the staff fake plus the three things a lockdown needs from
+// Telegram: a raw permissions member on getChat, a setChatPermissions that stores
+// what it was sent byte for byte, and a scriptable answer for the bot's own
+// getChatMember. Every call is recorded exactly once.
+type lockdownFake struct {
+	*staffActionFake
+
+	lmu       sync.Mutex
+	rawPerms  map[int64]string
+	chatTypes map[int64]string
+	botJSON   map[int64]string
+	// onSetPermissions runs at the moment a setChatPermissions request arrives,
+	// before it is answered.
+	onSetPermissions func(chatID int64)
+}
+
+func newLockdownFake() *lockdownFake {
+	return &lockdownFake{
+		staffActionFake: newStaffActionFake(),
+		rawPerms:        make(map[int64]string),
+		chatTypes:       make(map[int64]string),
+		botJSON:         make(map[int64]string),
+	}
+}
+
+// setChatPermsRaw stores the permissions member getChat answers for chatID.
+func (f *lockdownFake) setChatPermsRaw(chatID int64, raw string) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	f.rawPerms[chatID] = raw
+}
+
+// clearChatPerms makes getChat answer chatID without a permissions member.
+func (f *lockdownFake) clearChatPerms(chatID int64) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	delete(f.rawPerms, chatID)
+}
+
+// chatPermsRaw returns the permissions the fake holds for chatID, exactly as stored.
+func (f *lockdownFake) chatPermsRaw(chatID int64) string {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	return f.rawPerms[chatID]
+}
+
+// setChatType sets the type getChat reports for chatID.
+func (f *lockdownFake) setChatType(chatID int64, typ string) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	f.chatTypes[chatID] = typ
+}
+
+// setBotMember sets the raw getChatMember answer for the bot in chatID.
+func (f *lockdownFake) setBotMember(chatID int64, rawJSON string) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	f.botJSON[chatID] = rawJSON
+}
+
+// setOnSetPermissions installs the hook that runs when setChatPermissions arrives.
+func (f *lockdownFake) setOnSetPermissions(hook func(chatID int64)) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	f.onSetPermissions = hook
+}
+
+// lockdownBotAdminJSON is a getChatMember answer for the bot as an administrator
+// holding exactly the named rights.
+func lockdownBotAdminJSON(canRestrict, canDelete, canInvite bool) string {
+	return fmt.Sprintf(
+		`{"status":"administrator","user":{"id":%d,"is_bot":true,"first_name":"Alita"},"can_be_edited":false,`+
+			`"is_anonymous":false,"can_manage_chat":true,"can_delete_messages":%t,"can_manage_video_chats":false,`+
+			`"can_restrict_members":%t,"can_promote_members":false,"can_change_info":false,"can_invite_users":%t}`,
+		staffTestBotID, canDelete, canRestrict, canInvite)
+}
+
+// lockdownParamText is a request parameter as text: raw JSON and strings as they
+// are, anything else marshalled.
+func lockdownParamText(value any) string {
+	switch v := value.(type) {
+	case json.RawMessage:
+		return string(v)
+	case []byte:
+		return string(v)
+	case string:
+		return v
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		panic(fmt.Sprintf("lockdownFake: marshal parameter: %v", err))
+	}
+	return string(raw)
+}
+
+// RequestWithContext implements gotgbot.BotClient. It answers setChatPermissions,
+// getChat and the bot's getChatMember itself and hands every other method to the
+// staff fake.
+func (f *lockdownFake) RequestWithContext(
+	ctx context.Context,
+	token, method string,
+	params map[string]any,
+	opts *gotgbot.RequestOpts,
+) (json.RawMessage, error) {
+	chatID := staffParamInt(params, "chat_id")
+
+	switch method {
+	case "setChatPermissions":
+		if err := f.popScripted(method, chatID); err != nil {
+			f.record(method, params)
+			return nil, err
+		}
+		f.record(method, params)
+		f.lmu.Lock()
+		hook := f.onSetPermissions
+		f.lmu.Unlock()
+		if hook != nil {
+			hook(chatID)
+		}
+		f.lmu.Lock()
+		f.rawPerms[chatID] = lockdownParamText(params["permissions"])
+		f.lmu.Unlock()
+		return json.RawMessage(`true`), nil
+
+	case "getChat":
+		if err := f.popScripted(method, chatID); err != nil {
+			f.record(method, params)
+			return nil, err
+		}
+		f.record(method, params)
+		f.lmu.Lock()
+		defer f.lmu.Unlock()
+		typ := "supergroup"
+		if custom, ok := f.chatTypes[chatID]; ok {
+			typ = custom
+		}
+		answer := fmt.Sprintf(`{"id":%d,"type":%q,"title":"Test Chat"`, chatID, typ)
+		if raw, ok := f.rawPerms[chatID]; ok {
+			answer += `,"permissions":` + raw
+		}
+		return json.RawMessage(answer + `}`), nil
+
+	case "getChatMember":
+		if staffParamInt(params, "user_id") == staffTestBotID {
+			f.lmu.Lock()
+			raw, ok := f.botJSON[chatID]
+			f.lmu.Unlock()
+			if ok {
+				if err := f.popScripted(method, chatID); err != nil {
+					f.record(method, params)
+					return nil, err
+				}
+				f.record(method, params)
+				return json.RawMessage(raw), nil
+			}
+		}
+	}
+	return f.staffActionFake.RequestWithContext(ctx, token, method, params, opts)
+}
+
+// lockdownEnv is one supergroup with an administrator who may restrict members, a
+// real dispatcher with the Lockdown module loaded, and miniredis behind it.
+type lockdownEnv struct {
+	t          *testing.T
+	fake       *lockdownFake
+	bot        *gotgbot.Bot
+	dispatcher *ext.Dispatcher
+	chat       gotgbot.Chat
+	admin      gotgbot.User
+
+	mu         sync.Mutex
+	nextUpdate int64
+}
+
+// lockdownCleanup deletes the lockdown rows of the given chats when the test ends,
+// joiners first.
+func lockdownCleanup(t *testing.T, chatIDs ...int64) {
+	t.Helper()
+	t.Cleanup(func() {
+		if len(chatIDs) == 0 {
+			return
+		}
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.LockdownJoiner{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatLockdown{})
+	})
+}
+
+func newLockdownEnv(t *testing.T) *lockdownEnv {
+	t.Helper()
+	withMiniredis(t)
+	withStaffLocale(t)
+
+	fake := newLockdownFake()
+	bot := newModuleTestBot(fake.moduleBotClient)
+	bot.BotClient = fake
+
+	env := &lockdownEnv{
+		t:          t,
+		fake:       fake,
+		bot:        bot,
+		chat:       gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Lock Chat"},
+		admin:      gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Ad<b>min"},
+		nextUpdate: 100,
+	}
+	lockdownCleanup(t, env.chat.Id)
+
+	fake.setMember(env.chat.Id, env.admin.Id, staffFakeMember{
+		Status:             gotgbot.ChatMemberStatusAdministrator,
+		CanRestrictMembers: true,
+	})
+	fake.setChatPermsRaw(env.chat.Id, lockdownTestPrePermissions)
+
+	env.dispatcher = ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+	LoadLockdown(env.dispatcher)
+	return env
+}
+
+func (e *lockdownEnv) updateID() int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.nextUpdate++
+	return e.nextUpdate
+}
+
+// send runs a message in the lockdown chat as from through the real dispatcher.
+func (e *lockdownEnv) send(from gotgbot.User, text string) {
+	e.t.Helper()
+	id := e.updateID()
+	update := &gotgbot.Update{
+		UpdateId: id,
+		Message: &gotgbot.Message{
+			MessageId: id,
+			Date:      1,
+			Chat:      e.chat,
+			From:      &from,
+			Text:      text,
+		},
+	}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+}
+
+// replies returns the messages the bot sent to the lockdown chat, in order.
+func (e *lockdownEnv) replies() []staffSentMessage {
+	return e.fake.sentTo(e.chat.Id)
+}
+
+// lastReply is the text of the last message the bot sent to the lockdown chat.
+func (e *lockdownEnv) lastReply() string {
+	e.t.Helper()
+	sent := e.replies()
+	if len(sent) == 0 {
+		e.t.Fatal("the bot sent nothing to the lockdown chat")
+	}
+	return fmt.Sprint(sent[len(sent)-1].Params["text"])
+}
+
+// calls returns the recorded calls of method addressed to the lockdown chat.
+func (e *lockdownEnv) calls(method string) []moduleBotCall {
+	return callsToChat(e.fake.staffBotClient, method, e.chat.Id)
+}
+
+// wantReplyHas fails unless the last reply contains every want.
+func (e *lockdownEnv) wantReplyHas(wants ...string) {
+	e.t.Helper()
+	reply := e.lastReply()
+	for _, want := range wants {
+		if !strings.Contains(reply, want) {
+			e.t.Errorf("last reply %q does not contain %q", reply, want)
+		}
+	}
+}
