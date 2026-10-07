@@ -361,18 +361,42 @@ func lockdownDeclineOne(ctx context.Context, b *gotgbot.Bot, row models.Lockdown
 	return false
 }
 
-// lockdownBanOne bans one claimed joiner and records the result. It reports whether
+// lockdownBanOne bans one claimed joiner and records the result. It looks at the
+// joiner's live status first, in the same paced unit as the ban: banChatMember on a
+// kicked user replaces the end date of that ban, so a ban someone placed after the guard
+// recorded the joiner (an admin's /ban, a staff fan-out) would otherwise be turned into
+// the lockdown's own and lifted. A joiner who is already kicked on a date other than
+// the row's ban_until is therefore kept, with no ban call (D-05); one who is kicked on
+// the row's own ban_until is the lockdown's ban whose answer was lost, and is recorded as
+// banned. A status that cannot be read is a failed call, never a ban. It reports whether
 // the row reached a final state for this stage.
 func lockdownBanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJoiner) bool {
+	var deliberate bool
 	err := lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()
+		deliberate = false
+		live, lookupErr := b.GetChatMemberWithContext(call, row.ChatID, row.UserID, nil)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if live == nil {
+			return errors.New("getChatMember returned no member")
+		}
+		if member := live.MergeChatMember(); member.Status == gotgbot.ChatMemberStatusKicked {
+			deliberate = !isLockdownBan(member, row.BanUntil)
+			return nil
+		}
 		_, banErr := b.BanChatMemberWithContext(call, row.ChatID, row.UserID, &gotgbot.BanChatMemberOpts{UntilDate: row.BanUntil})
 		return banErr
 	})
 
 	switch lockdownClassify(ctx, err) {
 	case lockdownCallDone:
+		if deliberate {
+			moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStateKept, "", false)
+			return true
+		}
 		moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStateBanned, "", false)
 		return true
 	case lockdownCallRetryFree:

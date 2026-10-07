@@ -230,7 +230,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
   DB-driven loop on every replica that claims rows with conditional updates) makes every write and bans with
   `until_date` = the row's `ban_until`, 330 days after the join, the marker that tells the lockdown's own ban from a
-  deliberate one. A failed record write lets the joiner in, still muted by the locked default permissions, because an
+  deliberate one. Before every ban `lockdownBanOne` reads the joiner's live `getChatMember` in the same paced unit: a
+  joiner already kicked on another end date (an admin's or a staff `/ban` placed after the guard recorded them) is
+  moved to `kept` with no ban call, because `banChatMember` on a kicked user would replace that ban's end date with the
+  marker and the lift would then remove it; one kicked on the row's own `ban_until` is the lockdown's ban whose answer
+  was lost and is recorded `banned`; an unreadable status is a failed call and never a ban. A failed record write lets the joiner in, still muted by the locked default permissions, because an
   unrecorded ban would never be lifted.
 - The lockdown guard handles the other join paths in the same group `-7`: the `new_chat_members` service message
   (`lockdownOnJoinMessage`, registered with `SetAllowBot` because a bot or an anonymous admin can add users; a
