@@ -266,6 +266,11 @@ func ClearJoinMsg(id uint) error {
 	return nil
 }
 
+// ReleaseStaleClaims is a placeholder until the stale-claim release is written.
+func ReleaseStaleClaims(before time.Time) (int64, error) {
+	return 0, nil
+}
+
 // joinerBanTolerance is how many seconds a live ban's end date may differ from a
 // row's ban_until and still match it. It is the repository's copy of the module's
 // lockdownBanUntilTolerance, which cannot be imported from here.
