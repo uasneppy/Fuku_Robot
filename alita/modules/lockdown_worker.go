@@ -58,6 +58,10 @@ const (
 	lockdownMaxAttempts = 3
 )
 
+// lockdownTallyListMax is how many joiners the lift's tally names when they could not
+// be unbanned; the rest are counted. A variable so a test can shrink it.
+var lockdownTallyListMax = 25
+
 // lockdownWake wakes the worker of this replica when its own guard records a joiner.
 // Other replicas pick the work up at their next tick.
 var lockdownWake = make(chan struct{}, 1)
