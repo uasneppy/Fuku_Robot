@@ -166,6 +166,17 @@ func lockdownSplice(text string, pairs ...string) string {
 	return text
 }
 
+// lockdownJoinLines joins the non-empty lines of a reply with newlines.
+func lockdownJoinLines(lines []string) string {
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line != "" {
+			kept = append(kept, line)
+		}
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
 // lockdownMention renders a person for a group message: a mention that escapes the
 // name, or the escaped name alone when there is no user ID.
 func lockdownMention(userID int64, name string) string {
@@ -381,12 +392,13 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	return reply(lockdownSplice(text, lockdownNameToken, lockdownMention(actor.Id, name)))
 }
 
-// LoadLockdown registers /lockdown and /unlockdown.
+// LoadLockdown registers /lockdown, /unlockdown and /lockdownstatus.
 func LoadLockdown(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(lockdownModule.moduleName, true)
 
 	helpers.WrapCommand(dispatcher, lockdownDesc, pipelineHandler(lockdownModule.lockdown))
 	helpers.WrapCommand(dispatcher, unlockdownDesc, pipelineHandler(lockdownModule.unlockdown))
+	helpers.WrapCommand(dispatcher, lockdownStatusDesc, pipelineHandler(lockdownModule.lockdownStatus))
 }
 
 func init() {

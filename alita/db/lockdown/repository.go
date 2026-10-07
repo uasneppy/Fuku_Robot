@@ -101,14 +101,50 @@ func GetFresh(id uint) (*models.ChatLockdown, error) {
 	return &row, nil
 }
 
-// GetCurrentFresh is not written yet; this scaffolding only lets the tests compile.
+// GetCurrentFresh reads the lockdown a status command reports, straight from the
+// database: the chat's active row, else its lifting row with the highest ID. A lifted
+// lockdown is over and never current. It returns (nil, nil) when the chat has
+// neither.
 func GetCurrentFresh(chatID int64) (*models.ChatLockdown, error) {
-	return nil, nil
+	active, err := GetActiveFresh(chatID)
+	if err != nil || active != nil {
+		return active, err
+	}
+	var rows []models.ChatLockdown
+	err = db.DB.Where("chat_id = ? AND state = ?", chatID, models.LockdownStateLifting).
+		Order("id DESC").Limit(1).Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] GetCurrentFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "get current lockdown of chat %d", chatID)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
 }
 
-// TallyJoiners is not written yet; this scaffolding only lets the tests compile.
+// TallyJoiners counts the joiner rows of one lockdown by state, straight from the
+// database. A state with no rows is absent from the map, and a lockdown with no
+// joiner rows gets an empty map.
 func TallyJoiners(lockdownID uint) (map[string]int64, error) {
-	return nil, nil
+	var counts []struct {
+		State string
+		N     int64
+	}
+	err := db.DB.Model(&models.LockdownJoiner{}).
+		Select("state, COUNT(*) AS n").
+		Where("lockdown_id = ?", lockdownID).
+		Group("state").
+		Scan(&counts).Error
+	if err != nil {
+		log.Errorf("[Lockdown] TallyJoiners: %v", err)
+		return nil, alitaerrors.Wrapf(err, "tally joiners of lockdown %d", lockdownID)
+	}
+	tally := make(map[string]int64, len(counts))
+	for _, count := range counts {
+		tally[count.State] = count.N
+	}
+	return tally, nil
 }
 
 // ConfirmLocked records that Telegram confirmed the lock. It matches only an active

@@ -2797,6 +2797,7 @@ lockdown_help_msg: |
 
   × /lockdown [alasan]: Kunci grup ini. Hanya admin yang bisa bicara, pengguna yang disetujui pun dibisukan, dan anggota baru dikeluarkan sampai lockdown dicabut.
   × /unlockdown: Cabut lockdown. Setiap izin kembali persis seperti sebelum lockdown, dan orang yang saya keluarkan di-unban.
+  × /lockdownstatus: Tampilkan apakah grup ini terkunci, sejak kapan, oleh siapa dan mengapa (admin mana pun).
 
   Hanya pemilik grup, atau admin yang bisa membatasi anggota, yang dapat memakai perintah ini, dan saya memeriksanya secara langsung. Saya harus menjadi admin yang bisa membatasi anggota, dan grup harus berupa supergrup.
   Lockdown tidak pernah berakhir dengan sendirinya. Ia bertahan sampai seorang admin mencabutnya.
@@ -2816,3 +2817,12 @@ lockdown_permissions_unreadable: "Saya tidak bisa membaca izin grup ini, jadi sa
 lockdown_lock_failed: "Telegram menolak penguncian, jadi tidak ada yang berubah: {detail}"
 lockdown_note_no_delete: "Saya tidak bisa menghapus pesan di sini, jadi pesan bergabung akan tetap ada."
 lockdown_note_no_invite: "Saya tidak bisa mengelola permintaan bergabung di sini, jadi permintaan baru tetap tertunda dan tidak ditolak."
+lockdown_status_active: "🔒 Dalam lockdown sejak {since}, dimulai oleh {name}."
+lockdown_status_removed: "Anggota baru yang dikeluarkan sejauh ini: {count}"
+lockdown_status_ban_failed: "Anggota baru yang tidak bisa saya keluarkan: {count}"
+lockdown_status_declined: "Permintaan bergabung yang ditolak: {count}"
+lockdown_status_manual_change: "⚠️ Seseorang mengubah izin grup secara manual selama lockdown. Anggota baru tetap dikeluarkan, dan /unlockdown akan mengembalikan izin dari sebelum lockdown."
+lockdown_status_unconfirmed: "Telegram belum mengonfirmasi penguncian."
+lockdown_status_lifting: "Lockdown dicabut oleh {name}; meng-unban orang yang dikeluarkan: {done} dari {total} selesai."
+lockdown_status_permissions_unknown: "Saya tidak bisa membaca izin grup saat ini untuk memeriksa perubahan."
+lockdown_status_failed: "Saya tidak bisa membaca status lockdown saat ini. Coba lagi sebentar lagi."

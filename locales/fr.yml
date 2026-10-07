@@ -2723,6 +2723,7 @@ lockdown_help_msg: |
 
   × /lockdown [raison] : Verrouille ce groupe. Seuls les admins peuvent parler, utilisateurs approuvés compris, et les nouveaux membres sont retirés jusqu'à la levée.
   × /unlockdown : Lève le verrouillage. Chaque permission revient exactement comme avant le verrouillage, et les personnes que j'ai retirées sont débannies.
+  × /lockdownstatus : Indique si ce groupe est verrouillé, depuis quand, par qui et pourquoi (n'importe quel admin).
 
   Seul le propriétaire du groupe, ou un admin qui peut restreindre des membres, peut utiliser ces commandes, et je le vérifie en direct. Je dois être admin avec le droit de restreindre des membres, et le groupe doit être un supergroupe.
   Un verrouillage ne se termine jamais tout seul. Il dure jusqu'à ce qu'un admin le lève.
@@ -2742,3 +2743,12 @@ lockdown_permissions_unreadable: "Je n'ai pas pu lire les permissions de ce grou
 lockdown_lock_failed: "Telegram a refusé le verrouillage, donc rien n'a changé : {detail}"
 lockdown_note_no_delete: "Je ne peux pas supprimer de messages ici, les messages d'arrivée resteront donc."
 lockdown_note_no_invite: "Je ne peux pas gérer les demandes d'adhésion ici, les nouvelles demandes restent donc en attente au lieu d'être refusées."
+lockdown_status_active: "🔒 En verrouillage depuis {since}, lancé par {name}."
+lockdown_status_removed: "Arrivants retirés jusqu'ici : {count}"
+lockdown_status_ban_failed: "Arrivants que je n'ai pas pu retirer : {count}"
+lockdown_status_declined: "Demandes d'adhésion refusées : {count}"
+lockdown_status_manual_change: "⚠️ Quelqu'un a modifié les permissions du groupe à la main pendant le verrouillage. Les nouveaux membres sont toujours retirés, et /unlockdown remettra les permissions d'avant le verrouillage."
+lockdown_status_unconfirmed: "Telegram n'a pas encore confirmé le verrouillage."
+lockdown_status_lifting: "Verrouillage levé par {name} ; débannissement des personnes retirées : {done} sur {total} faits."
+lockdown_status_permissions_unknown: "Je n'ai pas pu lire les permissions du groupe pour vérifier les changements."
+lockdown_status_failed: "Je n'ai pas pu lire l'état du verrouillage pour le moment. Réessaie dans un instant."
