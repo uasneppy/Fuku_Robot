@@ -183,7 +183,7 @@ Plans:
   4. A lockdown never lifts on its own. It survives bot restarts and a Redis flush, and every bot replica enforces it. Only an admin of the group can lift it with `/unlockdown`, and anyone else is refused.
   5. Lifting the lockdown restores the group's permissions exactly as they were before. Anyone unmuted during the lockdown, by `/unmute` or by passing the captcha, can still talk after it lifts.
 
-**Plans:** 7/8 plans executed
+**Plans:** 8/8 plans executed
 
 Plans:
 **Wave 1**
@@ -208,7 +208,7 @@ Plans:
 - [x] 04-07-PLAN.md: Unmuting during a lockdown (`/unmute`, button, captcha pass, staff `/unmute`) gives the pre-lockdown permissions, so the user talks after the lift
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 04-08-PLAN.md: `/staff` marks locked groups (SETUP-08); a staff ban on a lockdown joiner survives the lift; lockdown locale parity test, final AGENTS.md pass and full phase gate
+- [x] 04-08-PLAN.md: `/staff` marks locked groups (SETUP-08); a staff ban on a lockdown joiner survives the lift; lockdown locale parity test, final AGENTS.md pass and full phase gate
 
 ### Phase 5: Lockdown Alerts and Response
 
@@ -298,7 +298,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
-| 4. Manual Lockdown | 7/8 | In Progress|  |
+| 4. Manual Lockdown | 8/8 | In Progress|  |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
