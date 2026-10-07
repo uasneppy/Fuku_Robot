@@ -101,6 +101,16 @@ func GetFresh(id uint) (*models.ChatLockdown, error) {
 	return &row, nil
 }
 
+// GetCurrentFresh is not written yet; this scaffolding only lets the tests compile.
+func GetCurrentFresh(chatID int64) (*models.ChatLockdown, error) {
+	return nil, nil
+}
+
+// TallyJoiners is not written yet; this scaffolding only lets the tests compile.
+func TallyJoiners(lockdownID uint) (map[string]int64, error) {
+	return nil, nil
+}
+
 // ConfirmLocked records that Telegram confirmed the lock. It matches only an active
 // row that is not confirmed yet, and reports whether this call wrote the time.
 func ConfirmLocked(id uint) (bool, error) {
