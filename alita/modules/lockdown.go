@@ -311,6 +311,20 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	if err != nil {
 		return failed()
 	}
+	// A row whose lock Telegram never confirmed, and that is older than the time one
+	// /lockdown takes, is a command that stopped half way. It is settled from the live
+	// permissions before anything is said or started: a lock that took effect is
+	// reported as the lockdown that runs, a lock that never did is dropped and a new
+	// lockdown starts. A younger row may still be its own command's, and is left alone.
+	if active != nil && active.LockedAt == nil && time.Since(active.UpdatedAt) > lockdownUnconfirmedGrace {
+		if _, _, settleErr := settleUnconfirmedLockdown(context.Background(), b, active); settleErr != nil {
+			log.Warnf("[Lockdown] unconfirmed lockdown %d of chat %d could not be settled: %v", active.ID, chat.Id, settleErr)
+			return refuse("lockdown_permissions_unreadable", telegramErrorDetail(settleErr))
+		}
+		if active, err = lockdown.GetActiveFresh(chat.Id); err != nil {
+			return failed()
+		}
+	}
 	if active != nil {
 		return reply(lockdownAlreadyActiveText(tr, active))
 	}

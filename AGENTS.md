@@ -34,7 +34,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   claims nothing and aborts its card with the restart text (`staff_undo_abort_restarting`).
 - `StopLockdownWorker` is another drain registered after DB-close. It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
-  loses nothing, and a restart or a second replica picks the rows up again.
+  loses nothing, and a restart or a second replica picks the rows up again. A claim (an acting or unbanning joiner row
+  with `claimed_at`) older than 2 minutes (`lockdownStaleClaim`) belongs to a worker that stopped: the first cycle of any
+  replica releases it through `lockdown.ReleaseStaleClaims`, before any other step and without counting an attempt.
+  Acting goes back to pending in an active lockdown, to banned (a ban) or cancelled (a join request) in a lifting one,
+  and unbanning goes back to banned, so a restart resumes every ban, decline and unban and the live check at the lift
+  keeps a repeated unban safe.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
@@ -158,7 +163,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   failed restore keeps the lockdown active and unbans nobody, a failed record write does the same, and nothing ever ends
   a lockdown except a lift that Telegram confirmed. `manual_change` is set when the live permissions differ from
   `locked_permissions` at the lift (compared by granted rights, not by bytes, and not at all before the lock was
-  confirmed); it never blocks the lift.
+  confirmed); it never blocks the lift. An unconfirmed row (`locked_at` NULL) not changed for over a minute
+  (`lockdownUnconfirmedGrace`) is a `/lockdown` that stopped half way: the worker's cycle (`lockdownSettleUnconfirmed`,
+  and `/lockdown` itself when it meets such a row, through `settleUnconfirmedLockdown`) reads the live permissions and
+  confirms the row when they equal the locked set, or deletes it otherwise, and never announces either; a failed read
+  touches the row (`TouchLockdown`) and retries after another grace period. A younger unconfirmed row is left alone,
+  because its own `/lockdown` may still be locking. A lockdown works without Redis: its state is only in PostgreSQL,
+  the guard never needs Redis, and the pacer falls back to one replica's interval. Nothing but a confirmed
+  `/unlockdown` ever ends a lockdown: no TTL, timer, Redis expiry, restart, worker cycle or expired ban lifts one, and
+  `BeginLift` is reached only through `lockdownBeginLift` in `unlockdown`.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→

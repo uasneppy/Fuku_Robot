@@ -82,6 +82,78 @@ func lockdownReleaseStale() {
 	}
 }
 
+// lockdownUnconfirmedGrace is how long a lockdown row may stay unconfirmed (locked_at
+// NULL) before it is taken to be a /lockdown that stopped half way and is settled from
+// the live permissions. It is far above the time one lock call takes, so a row whose
+// own /lockdown is still running is never touched. A variable so a test can shorten it.
+var lockdownUnconfirmedGrace = time.Minute
+
+// settleUnconfirmedLockdown decides what an unconfirmed lockdown really is by reading
+// the group's live permissions, paced like every worker call. Permissions equal to the
+// locked set mean the lock took effect: the row is confirmed and nothing is announced,
+// because the admin who typed /lockdown never got an answer and nothing more can be
+// said. Anything else means the lock never took effect, and the row is deleted so the
+// group is free to be locked again. A permissions answer that cannot be read touches
+// the row, so it is retried after another grace period, and returns the error. confirmed
+// and deleted are both false when the row changed under it (another replica settled it
+// first), which is not an error.
+func settleUnconfirmedLockdown(ctx context.Context, b *gotgbot.Bot, ld *models.ChatLockdown) (confirmed bool, deleted bool, err error) {
+	var chat lockdownChat
+	err = lockdownPaced(ctx, func(callCtx context.Context) error {
+		var fetchErr error
+		chat, fetchErr = fetchLockdownChat(callCtx, b, ld.ChatID)
+		return fetchErr
+	})
+	if err == nil && !lockdownHasPermissions(chat.Permissions) {
+		err = errors.New("getChat returned no permissions")
+	}
+	var same bool
+	if err == nil {
+		same, err = samePermissions(string(chat.Permissions), ld.LockedPermissions)
+	}
+	if err != nil {
+		if ctx.Err() == nil {
+			if touchErr := lockdown.TouchLockdown(ld.ID); touchErr != nil {
+				log.Errorf("[Lockdown] unconfirmed lockdown %d could not be put back: %v", ld.ID, touchErr)
+			}
+		}
+		return false, false, err
+	}
+
+	if same {
+		confirmed, err = lockdown.ConfirmLocked(ld.ID)
+		return confirmed, false, err
+	}
+	deleted, err = lockdown.DeleteUnconfirmed(ld.ID)
+	return false, deleted, err
+}
+
+// lockdownSettleUnconfirmed settles every lockdown that stayed unconfirmed for longer
+// than lockdownUnconfirmedGrace, on any replica. Settling never posts a message. It
+// reports whether any row was confirmed or deleted.
+func lockdownSettleUnconfirmed(ctx context.Context, b *gotgbot.Bot) bool {
+	rows, err := lockdown.ListUnconfirmedFresh(time.Now().Add(-lockdownUnconfirmedGrace))
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not list unconfirmed lockdowns: %v", err)
+		return false
+	}
+	progress := false
+	for _, ld := range rows {
+		if ctx.Err() != nil {
+			break
+		}
+		confirmed, deleted, err := settleUnconfirmedLockdown(ctx, b, &ld)
+		if err != nil {
+			log.Warnf("[Lockdown] unconfirmed lockdown %d of chat %d could not be settled: %v", ld.ID, ld.ChatID, err)
+			continue
+		}
+		if confirmed || deleted {
+			progress = true
+		}
+	}
+	return progress
+}
+
 // lockdownTallyListMax is how many joiners the lift's tally names when they could not
 // be unbanned; the rest are counted. A variable so a test can shrink it.
 var lockdownTallyListMax = 25
@@ -192,10 +264,11 @@ func runLockdownCycle(ctx context.Context, b *gotgbot.Bot) bool {
 	// First of all, give back what a worker that stopped left claimed, so the steps
 	// below see it as work again.
 	lockdownReleaseStale()
+	settled := lockdownSettleUnconfirmed(ctx, b)
 	banned := lockdownBanPending(ctx, b)
 	deleted := lockdownDeleteJoinMessages(ctx, b)
 	lifted := lockdownProcessLifts(ctx, b)
-	return banned || deleted || lifted
+	return settled || banned || deleted || lifted
 }
 
 // lockdownCallOutcome is how one Telegram call of the worker ended.
