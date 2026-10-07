@@ -245,6 +245,53 @@ func TestStaffPanelRenderStableOrder(t *testing.T) {
 	}
 }
 
+func TestRenderStaffRowLockdownMarker(t *testing.T) {
+	tr := panelMarkerTranslator(t)
+	marker := staffMarker("staff_panel_row_lockdown")
+	since := time.Date(2026, time.October, 5, 12, 4, 33, 0, time.UTC)
+
+	t.Run("a locked row carries one lockdown line with the UTC time", func(t *testing.T) {
+		row := panelRows(1, func(int) string { return "Alpha" })[0]
+		row.LockedSince = since
+		text := renderStaffRow(tr, row)
+		if strings.Count(text, marker) != 1 {
+			t.Fatalf("row %q must carry the lockdown line exactly once", text)
+		}
+		if !strings.Contains(text, "5 Oct 12:04") {
+			t.Errorf("row %q must show the confirmation time as 5 Oct 12:04", text)
+		}
+	})
+
+	t.Run("a row's local zone does not change the printed time", func(t *testing.T) {
+		row := panelRows(1, func(int) string { return "Alpha" })[0]
+		row.LockedSince = since.In(time.FixedZone("UTC+9", 9*60*60))
+		if text := renderStaffRow(tr, row); !strings.Contains(text, "5 Oct 12:04") {
+			t.Errorf("row %q must print the UTC time 5 Oct 12:04", text)
+		}
+	})
+
+	t.Run("a row that is not locked has no lockdown line", func(t *testing.T) {
+		row := panelRows(1, func(int) string { return "Alpha" })[0]
+		if text := renderStaffRow(tr, row); strings.Contains(text, marker) {
+			t.Errorf("row %q must carry no lockdown line when LockedSince is zero", text)
+		}
+	})
+
+	t.Run("a locked row the bot left shows both the problem and the lockdown", func(t *testing.T) {
+		row := panelRows(1, func(int) string { return "Alpha" })[0]
+		row.Health = models.StaffHealthBotMissing
+		row.HealthKnown = true
+		row.LockedSince = since
+		text := renderStaffRow(tr, row)
+		if !strings.Contains(text, staffMarker("staff_panel_reason_bot_missing")) {
+			t.Errorf("row %q must carry the bot-missing reason", text)
+		}
+		if !strings.Contains(text, marker) {
+			t.Errorf("row %q must carry the lockdown line too", text)
+		}
+	})
+}
+
 func TestStaffPanelRenderFitsInEveryLocale(t *testing.T) {
 	titles := map[string]func(int) string{
 		// The worst case for escaping: every rune becomes a 5-unit entity.
@@ -278,6 +325,9 @@ func TestStaffPanelRenderFitsInEveryLocale(t *testing.T) {
 				rows[i].Health = healths[i%len(healths)]
 				if i%5 == 0 {
 					rows[i].OwnerState = chat_status.OwnerUnknown
+				}
+				if i%3 == 0 {
+					rows[i].LockedSince = time.Date(2026, time.October, 5, 12, 4, 0, 0, time.UTC)
 				}
 			}
 			for page := 0; page < 5; page++ {

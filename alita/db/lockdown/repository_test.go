@@ -487,3 +487,72 @@ func TestListUnconfirmed(t *testing.T) {
 		}
 	}
 }
+
+// mustConfirm confirms the lock of a started lockdown.
+func mustConfirm(t *testing.T, id uint) {
+	t.Helper()
+	if ok, err := ConfirmLocked(id); err != nil || !ok {
+		t.Fatalf("ConfirmLocked(%d) = %v, %v, want true", id, ok, err)
+	}
+}
+
+func TestListActiveByChats(t *testing.T) {
+	t.Run("an empty list returns an empty map", func(t *testing.T) {
+		got, err := ListActiveByChatsFresh(nil)
+		if err != nil || got == nil || len(got) != 0 {
+			t.Errorf("ListActiveByChatsFresh(nil) = %v, %v, want an empty non-nil map", got, err)
+		}
+	})
+
+	t.Run("only confirmed active rows of the given chats are returned", func(t *testing.T) {
+		confirmed := uniqueLockdownChatID(t)
+		unconfirmed := uniqueLockdownChatID(t)
+		lifting := uniqueLockdownChatID(t)
+		lifted := uniqueLockdownChatID(t)
+		never := uniqueLockdownChatID(t)
+		other := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, confirmed, unconfirmed, lifting, lifted, never, other)
+
+		confirmedRow := mustStart(t, confirmed)
+		mustConfirm(t, confirmedRow.ID)
+		mustStart(t, unconfirmed)
+
+		liftingRow := mustStart(t, lifting)
+		mustConfirm(t, liftingRow.ID)
+		if ok, err := BeginLift(liftingRow.ID, 7, "Lifter", false); err != nil || !ok {
+			t.Fatalf("BeginLift = %v, %v", ok, err)
+		}
+
+		liftedRow := mustStart(t, lifted)
+		mustConfirm(t, liftedRow.ID)
+		if ok, err := BeginLift(liftedRow.ID, 7, "Lifter", false); err != nil || !ok {
+			t.Fatalf("BeginLift lifted = %v, %v", ok, err)
+		}
+		if ok, err := FinishLift(liftedRow.ID); err != nil || !ok {
+			t.Fatalf("FinishLift = %v, %v", ok, err)
+		}
+
+		// A confirmed lockdown of a chat that is not asked about must not appear.
+		otherRow := mustStart(t, other)
+		mustConfirm(t, otherRow.ID)
+
+		got, err := ListActiveByChatsFresh([]int64{confirmed, unconfirmed, lifting, lifted, never})
+		if err != nil {
+			t.Fatalf("ListActiveByChatsFresh error = %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("ListActiveByChatsFresh = %v, want only the confirmed active chat", got)
+		}
+		fresh, err := GetFresh(confirmedRow.ID)
+		if err != nil || fresh == nil || fresh.LockedAt == nil {
+			t.Fatalf("GetFresh = %v, %v", fresh, err)
+		}
+		at, ok := got[confirmed]
+		if !ok {
+			t.Fatalf("the confirmed chat is absent from %v", got)
+		}
+		if !at.Equal(*fresh.LockedAt) {
+			t.Errorf("locked_at = %v, want %v", at, *fresh.LockedAt)
+		}
+	})
+}
