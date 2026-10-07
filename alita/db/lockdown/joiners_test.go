@@ -421,3 +421,40 @@ func TestJoinMsgs(t *testing.T) {
 		}
 	})
 }
+
+func TestHasJoinerBanFresh(t *testing.T) {
+	chat := uniqueLockdownChatID(t)
+	otherChat := uniqueLockdownChatID(t)
+	cleanupLockdowns(t, chat, otherChat)
+	ld := mustStart(t, chat)
+	const until int64 = 1_900_000_000
+	rec := newJoinRecord(ld, 9600)
+	rec.State = models.JoinerStateBanned
+	rec.BanUntil = until
+	mustRecord(t, rec)
+
+	tests := []struct {
+		name  string
+		chat  int64
+		user  int64
+		until int64
+		want  bool
+	}{
+		{"the exact end date", chat, 9600, until, true},
+		{"2 s earlier", chat, 9600, until - 2, true},
+		{"2 s later", chat, 9600, until + 2, true},
+		{"3 s earlier", chat, 9600, until - 3, false},
+		{"3 s later", chat, 9600, until + 3, false},
+		{"a permanent ban", chat, 9600, 0, false},
+		{"another chat", otherChat, 9600, until, false},
+		{"another user", chat, 9601, until, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := HasJoinerBanFresh(tt.chat, tt.user, tt.until)
+			if err != nil || got != tt.want {
+				t.Errorf("HasJoinerBanFresh(%d, %d, %d) = %v, %v, want %v, nil", tt.chat, tt.user, tt.until, got, err, tt.want)
+			}
+		})
+	}
+}

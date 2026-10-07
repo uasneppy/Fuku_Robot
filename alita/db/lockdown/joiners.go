@@ -265,3 +265,8 @@ func ClearJoinMsg(id uint) error {
 	}
 	return nil
 }
+
+// HasJoinerBanFresh is a compile-only stub; the next commit gives it its behaviour.
+func HasJoinerBanFresh(chatID, userID, until int64) (bool, error) {
+	return false, nil
+}

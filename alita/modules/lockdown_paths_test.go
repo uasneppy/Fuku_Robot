@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 
 	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/greetings"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
 
@@ -379,4 +381,164 @@ func TestLockdownGuardServiceMessageVariants(t *testing.T) {
 			t.Errorf("banChatMember calls = %d, want none", len(bans))
 		}
 	})
+}
+
+// performerLookups counts the getChatMember calls about userID in the env's chat.
+func (e *lockdownEnv) performerLookups(userID int64) int {
+	count := 0
+	for _, call := range e.calls("getChatMember") {
+		if staffParamInt(call.Params, "user_id") == userID {
+			count++
+		}
+	}
+	return count
+}
+
+func TestLockdownAdminAddedJoinerExempt(t *testing.T) {
+	t.Run("a live administrator adds a human", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		env.loadJoinModules()
+		env.enableJoinWelcome(false)
+		env.lockAsAdmin("raid")
+		messages, photos, _ := env.chatSends()
+
+		guest := env.newJoiner("Guest")
+		env.join(guest, env.admin, "")
+
+		if row := env.joinerRow(guest.Id); row.State != models.JoinerStateExempt || row.PerformerID != env.admin.Id {
+			t.Errorf("row = %+v, want exempt, performed by the administrator", row)
+		}
+		messagesAfter, photosAfter, _ := env.chatSends()
+		if (messagesAfter-messages)+(photosAfter-photos) != 1 {
+			t.Error("no welcome followed: an exempt joiner is let through to the greetings")
+		}
+		env.cycle()
+		if bans := env.bansOf(guest.Id); len(bans) != 0 {
+			t.Errorf("banChatMember calls = %d, want none", len(bans))
+		}
+	})
+
+	t.Run("a live administrator adds a bot", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		env.loadJoinModules()
+		env.enableJoinWelcome(false)
+		env.lockAsAdmin("raid")
+		messages, photos, restricts := env.chatSends()
+
+		helper := gotgbot.User{Id: env.newJoiner("").Id, IsBot: true, FirstName: "Helper", Username: "helper_bot"}
+		env.join(helper, env.admin, "")
+
+		if row := env.joinerRow(helper.Id); row.State != models.JoinerStatePending || !row.IsBot {
+			t.Errorf("row = %+v, want a pending bot row: a bot never gets in during a lockdown", row)
+		}
+		env.wantNoJoinWelcome(messages, photos, restricts)
+		env.cycle()
+		if bans := env.bansOf(helper.Id); len(bans) != 1 {
+			t.Errorf("banChatMember calls = %d, want 1", len(bans))
+		}
+	})
+
+	t.Run("a plain member adds a human", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		env.lockAsAdmin("raid")
+
+		plain := env.newJoiner("Plain")
+		env.fake.setMember(env.chat.Id, plain.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		guest := env.newJoiner("Guest")
+		env.join(guest, plain, "")
+
+		if row := env.joinerRow(guest.Id); row.State != models.JoinerStatePending {
+			t.Errorf("row = %+v, want pending: only an administrator's invite exempts", row)
+		}
+		env.cycle()
+		if bans := env.bansOf(guest.Id); len(bans) != 1 {
+			t.Errorf("banChatMember calls = %d, want 1", len(bans))
+		}
+	})
+
+	t.Run("a performer whose live lookup fails", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		env.lockAsAdmin("raid")
+		lookupsBefore := env.performerLookups(env.admin.Id)
+		env.fake.script("getChatMember", env.chat.Id, errors.New("telegram is down"))
+
+		guest := env.newJoiner("Guest")
+		env.join(guest, env.admin, "")
+
+		if got := env.performerLookups(env.admin.Id) - lookupsBefore; got != 1 {
+			t.Errorf("live lookups of the performer = %d, want exactly 1", got)
+		}
+		if row := env.joinerRow(guest.Id); row.State != models.JoinerStatePending {
+			t.Errorf("row = %+v, want pending: a performer who cannot be checked never exempts", row)
+		}
+		env.cycle()
+		if bans := env.bansOf(guest.Id); len(bans) != 1 {
+			t.Errorf("banChatMember calls = %d, want 1", len(bans))
+		}
+	})
+
+	t.Run("the anonymous admin identity adds a human", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		env.lockAsAdmin("raid")
+		anonymous := gotgbot.User{Id: lockdownGroupAnonymousBot, IsBot: true, FirstName: "Group"}
+		lookupsBefore := env.performerLookups(anonymous.Id)
+
+		guest := env.newJoiner("Guest")
+		env.join(guest, anonymous, "")
+
+		if row := env.joinerRow(guest.Id); row.State != models.JoinerStateExempt {
+			t.Errorf("row = %+v, want exempt: an anonymous administrator added them", row)
+		}
+		if got := env.performerLookups(anonymous.Id) - lookupsBefore; got != 0 {
+			t.Errorf("live lookups of the anonymous identity = %d, want none", got)
+		}
+		env.cycle()
+		if bans := env.bansOf(guest.Id); len(bans) != 0 {
+			t.Errorf("banChatMember calls = %d, want none", len(bans))
+		}
+	})
+}
+
+func TestLockdownSuppressesGoodbye(t *testing.T) {
+	env := newLockdownEnv(t)
+	env.loadJoinModules()
+	if err := greetings.SetGoodbyeToggle(env.chat.Id, true); err != nil {
+		t.Fatalf("enable goodbye: %v", err)
+	}
+	env.lockAsAdmin("raid")
+
+	raider := env.newJoiner("Raider")
+	env.join(raider, raider, "https://t.me/+abc")
+	env.cycle()
+	row := env.joinerRow(raider.Id)
+	if row.State != models.JoinerStateBanned {
+		t.Fatalf("setup: state = %q, want banned", row.State)
+	}
+	botUser := gotgbot.User{Id: staffTestBotID, IsBot: true, FirstName: "Alita"}
+	kick := func(user, from gotgbot.User, until int64) {
+		env.memberUpdate(from, gotgbot.ChatMemberMember{User: user}, gotgbot.ChatMemberBanned{User: user, UntilDate: until}, false)
+	}
+
+	sent := len(env.replies())
+	kick(raider, botUser, row.BanUntil)
+	if got := len(env.replies()); got != sent {
+		t.Errorf("messages sent after the lockdown's own ban = %d, want none: no goodbye for a removed joiner", got-sent)
+	}
+
+	// Control: a ban that is not the lockdown's own still gets the group's goodbye.
+	other := env.newJoiner("Other")
+	kick(other, env.admin, 0)
+	if got := len(env.replies()); got != sent+1 {
+		t.Fatalf("messages sent after a deliberate ban = %d, want 1 goodbye", got-sent)
+	}
+
+	// A joiner whose ban was replaced by one of another length is a deliberate ban too.
+	replaced := env.newJoiner("Replaced")
+	env.join(replaced, replaced, "https://t.me/+abc")
+	env.cycle()
+	replacedRow := env.joinerRow(replaced.Id)
+	kick(replaced, env.admin, replacedRow.BanUntil+3600)
+	if got := len(env.replies()); got != sent+2 {
+		t.Errorf("messages sent after a replaced ban = %d, want a second goodbye", got-sent-1)
+	}
 }
