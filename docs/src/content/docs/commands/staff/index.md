@@ -14,7 +14,7 @@ A Staff Group is one group of trusted admins that manages your other groups.
 - `/unlinkstaff`: Unlink this group from its Staff Group (creator of both groups only).
 
 ### In the Staff Group:
-- `/staff`: Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only). Press Recent actions to see past staff actions of this Staff Group and how each group went.
+- `/staff`: Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only). Press Recent actions to see past staff actions of this Staff Group and how each group went. A 🔒 line marks a linked group that is in lockdown; its admins can see why with /lockdownstatus there.
 
 ### Staff actions (in the Staff Group):
 - `/ban user [duration] [reason]`: Ban the user in every linked group. The user is a numeric ID, an @username I have seen, or a mention. The duration is a number followed by m, h, d or w, and more than 366 days means permanent.
@@ -48,7 +48,7 @@ This module can be accessed using the following aliases:
 | Command | Description | Disableable |
 |---------|-------------|-------------|
 | `/setstaff` | Make this group your Staff Group (group creator only). | ❌ |
-| `/staff` | Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only). Press Recent actions to see past staff actions of this Staff Group and how each group went. | ❌ |
+| `/staff` | Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only). Press Recent actions to see past staff actions of this Staff Group and how each group went. A 🔒 line marks a linked group that is in lockdown; its admins can see why with /lockdownstatus there. | ❌ |
 | `/unsetstaff` | Remove Staff status and unlink every group (group creator only). | ❌ |
 
 ## Usage Examples
