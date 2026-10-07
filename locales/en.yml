@@ -1134,6 +1134,7 @@ mutes_mute_admin_error: Why would I mute an admin? That sounds like a pretty dum
 mutes_mute_admin_polite_error: I don't think you'd want me to mute an admin.
 mutes_restrict_self_error: Why would I restrict myself?
 mutes_unmute_message: "Alright!\nI'll allow %s to speak again."
+mutes_unmute_lockdown_note: "This group is in lockdown, so they can talk once an admin runs /unlockdown."
 
 # Warns module missing strings
 warns_mode_updated_ban: "Updated warn mode to: ban"

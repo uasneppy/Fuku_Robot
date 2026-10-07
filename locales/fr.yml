@@ -255,6 +255,7 @@ mutes_mute_admin_error: Pourquoi rendrais-je un admin muet ? Ça semble être un
 mutes_mute_admin_polite_error: Je ne pense pas que vous voudriez que je rende un admin muet.
 mutes_restrict_self_error: Pourquoi me restreindrais-je moi-même ?
 mutes_unmute_message: "D'accord !\nJe vais permettre à %s de parler à nouveau."
+mutes_unmute_lockdown_note: "Ce groupe est en verrouillage, donc cette personne pourra parler dès qu'un admin exécutera /unlockdown."
 mutes_extended_docs: |
   <b>Format de temps pour les mutes temporaires :</b>
   • <code>m</code> = minutes (ex., <code>30m</code>)
