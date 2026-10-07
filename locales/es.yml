@@ -2830,6 +2830,7 @@ lockdown_bot_cannot_restrict: "No puedo bloquear este grupo: necesito ser admin 
 lockdown_bot_check_failed: "No pude comprobar mis propios permisos en este grupo ahora mismo. No se cambió nada. Inténtalo de nuevo en un momento."
 lockdown_permissions_unreadable: "No pude leer los permisos de este grupo, así que no lo bloquearé para no arriesgarme a perderlos. No se cambió nada. {detail}"
 lockdown_lock_failed: "Telegram rechazó el bloqueo, así que no se cambió nada: {detail}"
+lockdown_lock_unknown: "No pude confirmar si el bloqueo se aplicó: {detail}\nMantuve el bloqueo registrado para no perder los permisos del grupo. En aproximadamente un minuto revisaré los permisos reales del grupo y confirmaré el bloqueo o lo descartaré. Envía /lockdownstatus para ver cómo va, o /unlockdown para devolver los permisos ahora."
 lockdown_note_no_delete: "No puedo borrar mensajes aquí, así que los mensajes de entrada se quedarán."
 lockdown_note_no_invite: "No puedo gestionar solicitudes de unión aquí, así que las nuevas solicitudes quedan pendientes en lugar de rechazarse."
 lockdown_status_active: "🔒 En bloqueo desde {since}, iniciado por {name}."

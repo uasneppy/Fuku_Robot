@@ -42,6 +42,9 @@ type lockdownFake struct {
 	// onSetPermissions runs at the moment a setChatPermissions request arrives,
 	// before it is answered.
 	onSetPermissions func(chatID int64)
+	// failAfterSetPermissions, when set, is returned by the next setChatPermissions
+	// request after it was applied: the lock took effect and the caller never learns it.
+	failAfterSetPermissions error
 }
 
 func newLockdownFake() *lockdownFake {
@@ -93,6 +96,14 @@ func (f *lockdownFake) setOnSetPermissions(hook func(chatID int64)) {
 	f.lmu.Lock()
 	defer f.lmu.Unlock()
 	f.onSetPermissions = hook
+}
+
+// setFailAfterSetPermissions makes the next setChatPermissions take effect and then
+// fail with err, the way a timeout or a dropped connection hides an applied request.
+func (f *lockdownFake) setFailAfterSetPermissions(err error) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	f.failAfterSetPermissions = err
 }
 
 // lockdownBotAdminJSON is a getChatMember answer for the bot as an administrator
@@ -149,7 +160,12 @@ func (f *lockdownFake) RequestWithContext(
 		}
 		f.lmu.Lock()
 		f.rawPerms[chatID] = lockdownParamText(params["permissions"])
+		lost := f.failAfterSetPermissions
+		f.failAfterSetPermissions = nil
 		f.lmu.Unlock()
+		if lost != nil {
+			return nil, lost
+		}
 		return json.RawMessage(`true`), nil
 
 	case "getChat":

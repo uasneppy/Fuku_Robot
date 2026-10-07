@@ -2746,6 +2746,7 @@ lockdown_bot_cannot_restrict: "Je ne peux pas verrouiller ce groupe : je dois ê
 lockdown_bot_check_failed: "Je n'ai pas pu vérifier mes propres droits dans ce groupe pour le moment. Rien n'a changé. Réessayez dans un instant."
 lockdown_permissions_unreadable: "Je n'ai pas pu lire les permissions de ce groupe, je ne le verrouille donc pas pour ne pas risquer de les perdre. Rien n'a changé. {detail}"
 lockdown_lock_failed: "Telegram a refusé le verrouillage, donc rien n'a changé : {detail}"
+lockdown_lock_unknown: "Je n'ai pas pu confirmer si le verrouillage a pris effet : {detail}\nJ'ai conservé le verrouillage enregistré pour ne pas perdre les permissions du groupe. Dans environ une minute, je vérifierai les permissions réelles du groupe et je confirmerai le verrouillage ou je l'abandonnerai. Envoie /lockdownstatus pour voir où il en est, ou /unlockdown pour remettre les permissions maintenant."
 lockdown_note_no_delete: "Je ne peux pas supprimer de messages ici, les messages d'arrivée resteront donc."
 lockdown_note_no_invite: "Je ne peux pas gérer les demandes d'adhésion ici, les nouvelles demandes restent donc en attente au lieu d'être refusées."
 lockdown_status_active: "🔒 En verrouillage depuis {since}, lancé par {name}."

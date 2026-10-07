@@ -2792,6 +2792,7 @@ lockdown_bot_cannot_restrict: "Não posso bloquear este grupo: preciso de ser ad
 lockdown_bot_check_failed: "Não consegui verificar os meus próprios direitos neste grupo neste momento. Nada foi alterado. Tente novamente daqui a pouco."
 lockdown_permissions_unreadable: "Não consegui ler as permissões deste grupo, por isso não o vou bloquear para não arriscar perdê-las. Nada foi alterado. {detail}"
 lockdown_lock_failed: "O Telegram recusou o bloqueio, por isso nada foi alterado: {detail}"
+lockdown_lock_unknown: "Não consegui confirmar se o bloqueio teve efeito: {detail}\nMantive o bloqueio registado para não perder as permissões do grupo. Daqui a cerca de um minuto vou verificar as permissões reais do grupo e confirmar o bloqueio ou descartá-lo. Envia /lockdownstatus para ver como está, ou /unlockdown para repor as permissões já."
 lockdown_note_no_delete: "Não posso apagar mensagens aqui, por isso as mensagens de entrada vão ficar."
 lockdown_note_no_invite: "Não posso gerir pedidos de adesão aqui, por isso os novos pedidos ficam pendentes em vez de serem recusados."
 lockdown_status_active: "🔒 Em bloqueio desde {since}, iniciado por {name}."

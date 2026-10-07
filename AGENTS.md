@@ -158,7 +158,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the raw `permissions` JSON of the `getChat` answer read before the lock call, replayed verbatim with
   `use_independent_chat_permissions`, never re-read and never passed through the typed `gotgbot.ChatPermissions` (its
   `omitempty` bools and `*bool` defaults lose a right that was explicitly off). `locked_at` stays NULL until Telegram
-  confirmed the lock, and a lock Telegram refused deletes its unconfirmed row. A lift restores the snapshot first and
+  confirmed the lock, and a lock Telegram refused with a 4xx answer (`lockdownDefinitiveRefusal`) deletes its unconfirmed
+  row. Any other failure of the lock call (a timeout, a dropped connection, an unreadable answer, a 5xx) may have taken
+  effect, so `/lockdown` keeps the row, which holds the only copy of the permissions to restore, and answers
+  `lockdown_lock_unknown`; the worker settles that row from the live permissions like any half-started lockdown, and
+  `/unlockdown` can restore from it at once. A lift restores the snapshot first and
   only then records it through the `BeginLift` conditional update, so one lifter wins when two admins lift together; a
   failed restore keeps the lockdown active and unbans nobody, a failed record write does the same, and nothing ever ends
   a lockdown except a lift that Telegram confirmed. `manual_change` is set when the live permissions differ from

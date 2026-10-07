@@ -2858,6 +2858,7 @@ lockdown_bot_cannot_restrict: "I can't lock this group: I need to be an admin wh
 lockdown_bot_check_failed: "I couldn't check my own rights in this group right now. Nothing changed. Try again in a moment."
 lockdown_permissions_unreadable: "I couldn't read this group's permissions, so I won't lock it and risk losing them. Nothing changed. {detail}"
 lockdown_lock_failed: "Telegram refused the lock, so nothing changed: {detail}"
+lockdown_lock_unknown: "I couldn't confirm whether the lock took effect: {detail}\nI kept the lockdown on record so the group's permissions are not lost. In about a minute I'll check the group's live permissions and either confirm the lockdown or drop it. Send /lockdownstatus to see where it stands, or /unlockdown to put the permissions back now."
 lockdown_note_no_delete: "I can't delete messages here, so join messages will stay."
 lockdown_note_no_invite: "I can't manage join requests here, so new requests stay pending instead of being declined."
 lockdown_status_active: "🔒 In lockdown since {since}, started by {name}."

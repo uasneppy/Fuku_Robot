@@ -374,6 +374,15 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	if err := setLockdownPermissions(bg, b, chat.Id, lockdownLockedPermissions); err != nil {
 		log.Warnf("[Lockdown] lock call for chat %d failed: %v", chat.Id, err)
+		if !lockdownDefinitiveRefusal(err) {
+			// A timeout, a dropped connection or an answer that cannot be read does not
+			// say the lock failed: it may have taken effect, and this row holds the only
+			// copy of the permissions to restore. It is kept unconfirmed, and the worker
+			// settles it from the live permissions after the grace period (a lock that
+			// took effect is confirmed, one that did not is dropped), while /unlockdown
+			// can already restore the stored permissions.
+			return refuse("lockdown_lock_unknown", telegramErrorDetail(err))
+		}
 		if _, delErr := lockdown.DeleteUnconfirmed(row.ID); delErr != nil {
 			log.Errorf("[Lockdown] lockdown %d could not be removed after a refused lock: %v", row.ID, delErr)
 		}
@@ -404,6 +413,16 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		parts = append(parts, lockdownText(tr, "lockdown_note_no_invite"))
 	}
 	return reply(strings.TrimSpace(strings.Join(parts, "\n")))
+}
+
+// lockdownDefinitiveRefusal reports whether err is Telegram's own refusal of a request:
+// an answer with a 4xx code (not enough rights, bad request, a rate limit), none of
+// which applies the request. Anything else, a 5xx answer included, a timeout, a dropped
+// connection or an answer that cannot be decoded, leaves it unknown whether the request
+// took effect.
+func lockdownDefinitiveRefusal(err error) bool {
+	var tgErr *gotgbot.TelegramError
+	return errors.As(err, &tgErr) && tgErr.Code >= 400 && tgErr.Code < 500
 }
 
 // unlockdown lifts the group's lockdown. The order is the safety property: it sends
