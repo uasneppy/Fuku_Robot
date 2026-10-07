@@ -142,6 +142,16 @@ func lockdownReasonFromArgs(args []string) string {
 	return lockdownCapRunes(strings.TrimSpace(strings.Join(args, " ")), lockdownReasonMaxRunes)
 }
 
+// lockdownCommandArgs is the words after the command itself, empty when the message
+// has no words at all.
+func lockdownCommandArgs(ctx *ext.Context) []string {
+	args := ctx.Args()
+	if len(args) == 0 {
+		return nil
+	}
+	return args[1:]
+}
+
 // lockdownTime renders a moment the way the staff history does, in UTC.
 func lockdownTime(t time.Time) string {
 	return t.UTC().Format("2 Jan 15:04") + " UTC"
@@ -274,7 +284,7 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	row := &models.ChatLockdown{
 		ChatID:            chat.Id,
 		TriggerKind:       models.LockdownTriggerManual,
-		Reason:            lockdownReasonFromArgs(ctx.Args()[1:]),
+		Reason:            lockdownReasonFromArgs(lockdownCommandArgs(ctx)),
 		StartedBy:         actor.Id,
 		StartedByName:     name,
 		PrePermissions:    string(chatInfo.Permissions),
