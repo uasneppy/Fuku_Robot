@@ -3,7 +3,7 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Manual Lockdown
 status: executing
-stopped_at: Phase 4 planned (8 plans), ready to execute
+stopped_at: Phase 4 executed (8/8 plans, review fixes in); verification human_needed (04-UAT.md, 13 checks)
 last_updated: "2026-10-07T00:43:49.448Z"
 last_activity: 2026-10-07
 last_activity_desc: Phase 04 execution started
@@ -104,6 +104,9 @@ None yet.
 - [Phase 2]: Open code-review finding WR-03 (warning): at a `retry_after` of exactly 60 s, all but the first concurrent paced call fail as "rate limited" instead of waiting. Those groups are still reported. Nine info notes are open too (`02-REVIEW-DISPOSITION.md`).
 - [Phase 3]: Open code-review warnings WR-03 (a retry after an ambiguous `ReleaseUndo` error can run `FinalizeUndo` on a released record) and WR-04 (a history page press is answered before the data is read, so a DB error is a silent no-op), plus 6 info notes (`03-REVIEW-DISPOSITION.md`). The owner accepted WR-01, WR-02 and IN-02 in UAT.
 - [Phase 4]: Spike 1 answered by the owner: Telegram greys out a per-user "Send messages" exception once the default is locked, so approved users are muted during a lockdown like everyone else (LOCK-03 fallback, 04-CONTEXT D-01/D-02). Spike 2 (join paths) is designed away, with live join delivery checked in UAT.
+- [Phase 4]: The PostgreSQL 16 checks (migration chain and `TestStartLockdownOneActivePerChat`) never ran: the executor sandbox refuses `su postgres`. All lockdown repository tests ran on SQLite; it is UAT item 1 in `04-UAT.md`.
+- [Phase 4]: Code review info notes IN-01..IN-04 are open (`04-REVIEW-DISPOSITION.md`); CR-01, WR-01 and WR-02 were fixed before verification.
+- [Pre-existing, found in Phase 4]: after the anonymous-admin proof, `verifyAnonymousAdmin` clears the callback query, so `RequireGroup` finds no chat and the `ban` family silently does nothing (`.planning/phases/04-manual-lockdown/deferred-items.md`). Lockdown commands work around it; the shared fix is not planned yet.
 - [Phase 2]: `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` is flaky (2 of 6 verifier runs red): two runs straddle a wall-clock second in `until_date`. Test-only; it can turn `make test` red intermittently.
 - [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) lands in Phase 4. The alert's Lift button (LOCK-06), and listing removed joiners on the alert (LOCK-01), land in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
 
@@ -123,6 +126,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-06T22:38:14.000Z
-Stopped at: Phase 4 planned (8 plans), ready to execute
+Last session: 2026-10-07T04:29:32.000Z
+Stopped at: Phase 4 executed (8/8 plans, review fixes in); verification human_needed (04-UAT.md, 13 checks)
 Resume file: None
