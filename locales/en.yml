@@ -1368,6 +1368,7 @@ greetings_join_request_accepted: "Accepted %s in Chat ✅"
 greetings_join_request_declined: "Declined %s to join chat ❌"
 greetings_join_request_banned: "✅ Successfully Banned! %s"
 greetings_join_request_already_handled: "The join request from %s was already handled or withdrawn."
+greetings_join_request_lockdown: "This group is in lockdown, so I won't approve join requests now. Approve it after /unlockdown, or from Telegram's own request list."
 greetings_auto_approve_enabled: "I'm auto-approving new chat join requests now."
 greetings_auto_approve_disabled: "I'm not auto-approving new chat join requests now.."
 greetings_auto_approve_disable: "I won't auto-approve new join requests!"
@@ -2840,6 +2841,7 @@ lockdown_help_msg: |
   Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
   A lockdown never ends on its own. It stays until an admin lifts it.
   Anonymous admins are asked to confirm who they are first.
+  Join requests are declined while the group is locked; people can ask again after the lift.
 lockdown_started: "🔒 This group is in lockdown. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
 lockdown_note_approved_muted: "Approved users are muted too."
 lockdown_started_by: "Locked by {name}."

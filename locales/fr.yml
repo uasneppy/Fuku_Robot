@@ -660,6 +660,7 @@ greetings_join_request_accepted: "%s accepté dans le chat ✅"
 greetings_join_request_declined: "Demande de %s de rejoindre le chat refusée ❌"
 greetings_join_request_banned: "✅ Banni avec succès ! %s"
 greetings_join_request_already_handled: "La demande d'adhésion de %s a déjà été traitée ou retirée."
+greetings_join_request_lockdown: "Ce groupe est en verrouillage, donc je n'approuve pas les demandes d'adhésion pour le moment. Approuvez-la après /unlockdown, ou depuis la liste de demandes de Telegram."
 greetings_auto_approve_enabled: "J'approuve automatiquement les nouvelles demandes de rejointe maintenant."
 greetings_auto_approve_disabled: "Je n'approuve pas automatiquement les nouvelles demandes de rejointe actuellement."
 greetings_auto_approve_disable: "Je n'approuverai pas automatiquement les nouvelles demandes de rejointe !"
@@ -2728,6 +2729,7 @@ lockdown_help_msg: |
   Seul le propriétaire du groupe, ou un admin qui peut restreindre des membres, peut utiliser ces commandes, et je le vérifie en direct. Je dois être admin avec le droit de restreindre des membres, et le groupe doit être un supergroupe.
   Un verrouillage ne se termine jamais tout seul. Il dure jusqu'à ce qu'un admin le lève.
   Les admins anonymes doivent d'abord confirmer qui ils sont.
+  Les demandes d'adhésion sont refusées tant que le groupe est verrouillé ; les personnes peuvent redemander après la levée.
 lockdown_started: "🔒 Ce groupe est verrouillé. Seuls les admins peuvent parler, et toute personne qui rejoint est retirée jusqu'à ce qu'un admin utilise /unlockdown."
 lockdown_note_approved_muted: "Les utilisateurs approuvés sont aussi rendus muets."
 lockdown_started_by: "Verrouillé par {name}."

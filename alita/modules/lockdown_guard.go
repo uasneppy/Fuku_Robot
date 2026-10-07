@@ -7,6 +7,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/chatjoinrequest"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
@@ -118,7 +119,7 @@ func (m moduleStruct) lockdownOnJoinMember(b *gotgbot.Bot, ctx *ext.Context) err
 		return ext.ContinueGroups
 	}
 
-	active, err := lockdown.GetActiveFresh(chat.Id)
+	active, err := lockdownActiveLookup(chat.Id)
 	if err != nil {
 		// Fail open: the joiner is still muted by the locked default permissions.
 		log.Errorf("[Lockdown] join guard could not read the lockdown of chat %d: %v", chat.Id, err)
@@ -186,7 +187,7 @@ func (m moduleStruct) lockdownOnJoinMessage(b *gotgbot.Bot, ctx *ext.Context) er
 		return ext.ContinueGroups
 	}
 
-	active, err := lockdown.GetActiveFresh(chat.Id)
+	active, err := lockdownActiveLookup(chat.Id)
 	if err != nil {
 		// Fail open: the joiners are still muted by the locked default permissions.
 		log.Errorf("[Lockdown] join guard could not read the lockdown of chat %d: %v", chat.Id, err)
@@ -274,6 +275,89 @@ func (m moduleStruct) lockdownOnJoinMessage(b *gotgbot.Bot, ctx *ext.Context) er
 		return ext.EndGroups
 	}
 	return ext.ContinueGroups
+}
+
+// lockdownOnJoinRequest is the guard for a chat_join_request. While a confirmed
+// lockdown holds the chat it records the request as a joiner row (path request) and
+// ends handling, so auto-approve and the approve card never see it; the worker
+// declines the request, and the person can ask again after the lift (D-06). The path
+// fails closed, unlike the join paths: when the lockdown cannot be read or the row
+// cannot be stored the request is left pending, which is harmless, rather than
+// handed on to auto-approve. A chat with no confirmed lockdown is none of the
+// guard's business (ext.ContinueGroups).
+func (m moduleStruct) lockdownOnJoinRequest(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("lockdownOnJoinRequest", "Lockdown")
+
+	request := ctx.ChatJoinRequest
+	if request == nil || request.Chat.Type != "supergroup" {
+		return ext.ContinueGroups
+	}
+
+	active, err := lockdownActiveLookup(request.Chat.Id)
+	if err != nil {
+		log.Errorf("[Lockdown] join guard could not read the lockdown of chat %d, leaving the request of user %d pending: %v",
+			request.Chat.Id, request.From.Id, err)
+		return ext.EndGroups
+	}
+	if active == nil || active.LockedAt == nil {
+		return ext.ContinueGroups
+	}
+
+	rec := lockdown.JoinRecord{
+		LockdownID:  active.ID,
+		ChatID:      request.Chat.Id,
+		UserID:      request.From.Id,
+		FirstName:   lockdownCapRunes(request.From.FirstName, lockdownNameMaxRunes),
+		Username:    lockdownCapRunes(request.From.Username, lockdownNameMaxRunes),
+		IsBot:       request.From.IsBot,
+		Path:        models.JoinPathRequest,
+		State:       models.JoinerStatePending,
+		PerformerID: request.From.Id,
+	}
+	if request.InviteLink != nil {
+		rec.InviteLink = request.InviteLink.InviteLink
+	}
+	if !recordLockdownRequest(active, rec) {
+		// The lift started while the request was being recorded, so the lockdown no
+		// longer holds it and the group's own join-request handling applies.
+		return ext.ContinueGroups
+	}
+	return ext.EndGroups
+}
+
+// recordLockdownRequest stores the joiner row of a join request and reports whether
+// the lockdown holds the request (true) or the lift got there first (false). A new
+// request is a new row; a person with a finished row (declined earlier, or let in and
+// gone again) gets it reclaimed at once with no dedupe window, because Telegram
+// delivers each request once; a request whose row is still pending or being worked on
+// is the same one. A failed read or write holds the request (fail closed).
+func recordLockdownRequest(ld *models.ChatLockdown, rec lockdown.JoinRecord) bool {
+	for range lockdownRecordLooks {
+		row, recorded, err := lockdownRecordJoin(rec)
+		if err != nil {
+			log.Errorf("[Lockdown] join request of user %d in chat %d was not recorded, leaving it pending: %v", rec.UserID, rec.ChatID, err)
+			return true
+		}
+		if recorded {
+			return !lockdownPendingHeld(ld, row.ID, rec.UserID, false)
+		}
+		if !slices.Contains(lockdownReclaimStates, row.State) {
+			// Pending or being worked on: the worker declines it.
+			wakeLockdownWorker()
+			return true
+		}
+		// The margin keeps a row changed this very moment reclaimable: any age will do.
+		won, reclaimErr := lockdown.ReclaimJoin(row.ID, lockdownReclaimStates, time.Now().Add(time.Second), rec)
+		if reclaimErr != nil {
+			log.Errorf("[Lockdown] joiner row %d could not be reclaimed for the request of user %d, leaving it pending: %v", row.ID, rec.UserID, reclaimErr)
+			return true
+		}
+		if won {
+			return !lockdownPendingHeld(ld, row.ID, rec.UserID, true)
+		}
+	}
+	// Another delivery or replica kept winning the row; it is handling this request.
+	return true
 }
 
 const (
@@ -481,6 +565,10 @@ func loadLockdownGuard(dispatcher *ext.Dispatcher) {
 	)
 	dispatcher.AddHandlerToGroup(
 		handlers.NewChatMember(lockdownKickedFilter, lockdownModule.lockdownOnKicked),
+		lockdownModule.handlerGroup,
+	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewChatJoinRequest(chatjoinrequest.All, lockdownModule.lockdownOnJoinRequest),
 		lockdownModule.handlerGroup,
 	)
 }

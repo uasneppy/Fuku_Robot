@@ -1293,6 +1293,7 @@ greetings_join_request_accepted: "Diterima %s di Obrolan ✅"
 greetings_join_request_declined: "Ditolak %s untuk bergabung dengan obrolan ❌"
 greetings_join_request_banned: "✅ Berhasil Diblokir! %s"
 greetings_join_request_already_handled: "Permintaan bergabung dari %s sudah ditangani atau dibatalkan."
+greetings_join_request_lockdown: "Grup ini sedang dalam lockdown, jadi saya tidak menyetujui permintaan bergabung sekarang. Setujui setelah /unlockdown, atau dari daftar permintaan Telegram sendiri."
 greetings_auto_approve_enabled: "Saya menyetujui permintaan bergabung obrolan baru secara otomatis sekarang."
 greetings_auto_approve_disabled: "Saya tidak menyetujui permintaan bergabung obrolan baru secara otomatis sekarang.."
 greetings_auto_approve_disable: "Saya tidak akan menyetujui permintaan bergabung baru secara otomatis!"
@@ -2802,6 +2803,7 @@ lockdown_help_msg: |
   Hanya pemilik grup, atau admin yang bisa membatasi anggota, yang dapat memakai perintah ini, dan saya memeriksanya secara langsung. Saya harus menjadi admin yang bisa membatasi anggota, dan grup harus berupa supergrup.
   Lockdown tidak pernah berakhir dengan sendirinya. Ia bertahan sampai seorang admin mencabutnya.
   Admin anonim diminta mengonfirmasi identitasnya terlebih dahulu.
+  Permintaan bergabung ditolak selama grup terkunci; orang dapat meminta lagi setelah lockdown dicabut.
 lockdown_started: "🔒 Grup ini dalam lockdown. Hanya admin yang bisa bicara, dan siapa pun yang bergabung akan dikeluarkan sampai admin menjalankan /unlockdown."
 lockdown_note_approved_muted: "Pengguna yang disetujui juga dibisukan."
 lockdown_started_by: "Dikunci oleh {name}."

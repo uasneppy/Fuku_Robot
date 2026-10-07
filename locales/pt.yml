@@ -1264,6 +1264,7 @@ greetings_join_request_accepted: "Aceito %s no Chat ✅"
 greetings_join_request_declined: "Recusado %s para entrar no chat ❌"
 greetings_join_request_banned: "✅ Banido com Sucesso! %s"
 greetings_join_request_already_handled: "A solicitação de entrada de %s já foi tratada ou retirada."
+greetings_join_request_lockdown: "Este grupo está em bloqueio, então não aprovo solicitações de entrada agora. Aprove depois de /unlockdown, ou pela lista de solicitações do próprio Telegram."
 greetings_auto_approve_enabled: "Estou aprovando automaticamente novas solicitações de entrada no chat agora."
 greetings_auto_approve_disabled: "Não estou aprovando automaticamente novas solicitações de entrada no chat agora.."
 greetings_auto_approve_disable: "Não vou aprovar automaticamente novas solicitações de entrada!"
@@ -2774,6 +2775,7 @@ lockdown_help_msg: |
   Só o dono do grupo, ou um administrador que possa restringir membros, pode usar estes comandos, e eu verifico isso em tempo real. Tenho de ser administrador com permissão para restringir membros, e o grupo tem de ser um supergrupo.
   Um bloqueio nunca termina sozinho. Dura até que um administrador o levante.
   Os administradores anónimos são primeiro convidados a confirmar quem são.
+  Os pedidos de entrada são recusados enquanto o grupo está bloqueado; as pessoas podem pedir de novo depois do levantamento.
 lockdown_started: "🔒 Este grupo está em bloqueio. Só os administradores podem falar, e quem entrar é removido até que um administrador use /unlockdown."
 lockdown_note_approved_muted: "Os utilizadores aprovados também estão silenciados."
 lockdown_started_by: "Bloqueado por {name}."
