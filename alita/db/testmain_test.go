@@ -78,6 +78,8 @@ func TestMain(m *testing.M) {
 			&models.StaffGroupLink{},
 			&models.StaffAction{},
 			&models.StaffActionGroup{},
+			&models.ChatLockdown{},
+			&models.LockdownJoiner{},
 		)
 		if err != nil {
 			fmt.Printf("AutoMigrate failed: %v\n", err)
