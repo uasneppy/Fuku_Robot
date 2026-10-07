@@ -360,6 +360,62 @@ func (e *lockdownEnv) join(user, performer gotgbot.User, inviteLink string) {
 	}
 }
 
+// memberUpdate runs a chat_member update in the lockdown chat through the real
+// dispatcher: oldMember became newMember, performed by from.
+func (e *lockdownEnv) memberUpdate(from gotgbot.User, oldMember, newMember gotgbot.ChatMember, viaJoinRequest bool) {
+	e.t.Helper()
+	id := e.updateID()
+	update := &gotgbot.Update{
+		UpdateId: id,
+		ChatMember: &gotgbot.ChatMemberUpdated{
+			Chat:           e.chat,
+			From:           from,
+			Date:           1,
+			OldChatMember:  oldMember,
+			NewChatMember:  newMember,
+			ViaJoinRequest: viaJoinRequest,
+		},
+	}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+}
+
+// serviceJoin runs a new_chat_members service message in the lockdown chat through
+// the real dispatcher: from sent it (senderChat is set for an anonymous admin) and
+// members are the users it names. It returns the message's ID.
+func (e *lockdownEnv) serviceJoin(from gotgbot.User, senderChat *gotgbot.Chat, members ...gotgbot.User) int64 {
+	e.t.Helper()
+	id := e.updateID()
+	update := &gotgbot.Update{
+		UpdateId: id,
+		Message: &gotgbot.Message{
+			MessageId:      id,
+			Date:           1,
+			Chat:           e.chat,
+			From:           &from,
+			SenderChat:     senderChat,
+			NewChatMembers: members,
+		},
+	}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+	return id
+}
+
+// ageJoiner moves the updated_at of a joiner row back by the given time with a
+// direct update, so a test can show what happens to a delivery that comes later than
+// the dedupe window without sleeping through it.
+func ageJoiner(t *testing.T, rowID uint, by time.Duration) {
+	t.Helper()
+	err := db.DB.Model(&models.LockdownJoiner{}).Where("id = ?", rowID).
+		UpdateColumn("updated_at", time.Now().UTC().Add(-by)).Error
+	if err != nil {
+		t.Fatalf("age joiner row %d: %v", rowID, err)
+	}
+}
+
 // cycle runs one worker cycle and reports whether it made progress.
 func (e *lockdownEnv) cycle() bool {
 	e.t.Helper()

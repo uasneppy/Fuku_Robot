@@ -6,6 +6,8 @@ package lockdown
 // matter how many replicas run a worker.
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -180,4 +182,112 @@ func ListJoinersInState(lockdownID uint, state string, limit int) ([]models.Lock
 		return nil, alitaerrors.Wrapf(err, "list %s joiners of lockdown %d", state, lockdownID)
 	}
 	return rows, nil
+}
+
+// ReclaimJoin takes a finished joiner row back for a new join of the same user: one
+// conditional update that matches only while the row is in one of fromStates and its
+// updated_at is older than notAfter. It rewrites the row from rec (state, path, end
+// date, performer, link, request flag, join message, names) and clears the attempts,
+// the detail and the claim, so the new join starts clean and a fresh dedupe window
+// opens. It reports whether this call won, which is true for exactly one of two
+// racing callers.
+func ReclaimJoin(id uint, fromStates []string, notAfter time.Time, rec JoinRecord) (bool, error) {
+	state := rec.State
+	if state == "" {
+		state = models.JoinerStatePending
+	}
+	result := db.DB.Model(&models.LockdownJoiner{}).
+		Where("id = ? AND state IN ? AND updated_at < ?", id, fromStates, notAfter.UTC()).
+		Updates(map[string]any{
+			"state":            state,
+			"join_path":        rec.Path,
+			"ban_until":        rec.BanUntil,
+			"performer_id":     rec.PerformerID,
+			"invite_link":      rec.InviteLink,
+			"via_join_request": rec.ViaJoinRequest,
+			"join_msg_id":      rec.JoinMsgID,
+			"first_name":       rec.FirstName,
+			"username":         rec.Username,
+			"attempts":         0,
+			"detail":           "",
+			"claimed_at":       nil,
+			"updated_at":       now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ReclaimJoin: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "reclaim joiner row %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// SetJoinMsg records the ID of the join service message on a row that has none yet.
+// The first message wins. updated_at is left alone: a second delivery of a join does
+// not open a new dedupe window.
+func SetJoinMsg(id uint, msgID int64) error {
+	result := db.DB.Model(&models.LockdownJoiner{}).
+		Where("id = ? AND join_msg_id = 0", id).
+		UpdateColumn("join_msg_id", msgID)
+	if result.Error != nil {
+		log.Errorf("[Lockdown] SetJoinMsg: %v", result.Error)
+		return alitaerrors.Wrapf(result.Error, "set join message of joiner row %d", id)
+	}
+	return nil
+}
+
+// ListJoinMsgsToDeleteFresh reads up to limit banned joiner rows that still carry a
+// join service message to delete, of lockdowns that are active or lifting, oldest ID
+// first. The message is deleted only after the ban, so only banned rows are listed.
+func ListJoinMsgsToDeleteFresh(limit int) ([]models.LockdownJoiner, error) {
+	var rows []models.LockdownJoiner
+	err := db.DB.
+		Joins("JOIN chat_lockdowns ON chat_lockdowns.id = chat_lockdown_joiners.lockdown_id").
+		Where("chat_lockdown_joiners.state = ? AND chat_lockdown_joiners.join_msg_id <> 0 AND chat_lockdowns.state IN ?",
+			models.JoinerStateBanned, []string{models.LockdownStateActive, models.LockdownStateLifting}).
+		Order("chat_lockdown_joiners.id").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListJoinMsgsToDeleteFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list join messages to delete")
+	}
+	return rows, nil
+}
+
+// ClearJoinMsg forgets the join service message of a row once the worker handled it.
+// updated_at is left alone, for the reason given on SetJoinMsg.
+func ClearJoinMsg(id uint) error {
+	result := db.DB.Model(&models.LockdownJoiner{}).
+		Where("id = ?", id).
+		UpdateColumn("join_msg_id", 0)
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ClearJoinMsg: %v", result.Error)
+		return alitaerrors.Wrapf(result.Error, "clear join message of joiner row %d", id)
+	}
+	return nil
+}
+
+// joinerBanTolerance is how many seconds a live ban's end date may differ from a
+// row's ban_until and still match it. It is the repository's copy of the module's
+// lockdownBanUntilTolerance, which cannot be imported from here.
+const joinerBanTolerance int64 = 2
+
+// HasJoinerBanFresh reports whether the chat has a joiner row for the user whose
+// ban_until is within joinerBanTolerance seconds of until, read straight from the
+// database. It is how a "user was banned" update is recognised as the lockdown's own
+// ban: only the lockdown ends a ban on such a date. An until of 0 (a permanent ban)
+// never matches and costs no query.
+func HasJoinerBanFresh(chatID, userID, until int64) (bool, error) {
+	if until == 0 {
+		return false, nil
+	}
+	var count int64
+	err := db.DB.Model(&models.LockdownJoiner{}).
+		Where("chat_id = ? AND user_id = ? AND ban_until BETWEEN ? AND ?",
+			chatID, userID, until-joinerBanTolerance, until+joinerBanTolerance).
+		Count(&count).Error
+	if err != nil {
+		log.Errorf("[Lockdown] HasJoinerBanFresh: %v", err)
+		return false, alitaerrors.Wrapf(err, "look up a lockdown ban of user %d in chat %d", userID, chatID)
+	}
+	return count > 0, nil
 }

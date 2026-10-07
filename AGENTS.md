@@ -188,7 +188,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Approved users skip antiflood, locks, blacklists, and captcha.
 - Antiflood counters are in-process (per replica). Antiraid is Redis-only and does nothing without Redis.
 - Fed-ban lookups cache per `(fed, user)` with a negative sentinel; every ban/unban write must invalidate it.
-- A join arrives as both `ChatMemberUpdated` and a service message; dedupe through `claimRecentJoinProcessing`.
+- A join arrives as both `ChatMemberUpdated` and a service message; dedupe through `claimRecentJoinProcessing`
+  (the lockdown guard, which runs first, dedupes by its joiner row instead and never gates a ban on Redis).
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `alita:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -211,6 +212,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   conditional updates) makes every write and bans with `until_date` = the row's `ban_until`, 330 days after the join,
   the marker that tells the lockdown's own ban from a deliberate one. A failed record write lets the joiner in, still
   muted by the locked default permissions, because an unrecorded ban would never be lifted.
+- The lockdown guard handles the other join paths in the same group `-7`: the `new_chat_members` service message
+  (`lockdownOnJoinMessage`, registered with `SetAllowBot` because a bot or an anonymous admin can add users; a
+  service message's performer is its sender, or the anonymous admin when `sender_chat` is the group or `from` is the
+  Group Anonymous Bot) and the kicked update (`lockdownOnKicked`). Join requests are not handled by the guard yet.
+  Deduplication is the `(lockdown_id, user_id)` row alone and never Redis (it does not use `claimRecentJoinProcessing`):
+  the first path to insert decides, a second delivery within 20 s (`lockdownJoinDedupeWindow`) of the row's last change
+  is the same join, and an older finished row (`lockdownReclaimStates`) is a re-join, reclaimed by one conditional
+  update with a new `ban_until`. Only a user added by a live creator or administrator, or by an anonymous admin, is
+  exempt, and bots never are (D-07, D-08); a failed performer lookup bans. The chat_member path may turn a still
+  pending row exempt, because that update shows an admin added or approved the user; once the worker claimed the row
+  the ban stands until the lift (D-24). The service message's `NewChatMembers` is filtered in place to the users let in
+  and the bot itself, so greetings welcome only them, and the update ends when nobody is left. The join message ID is
+  stored only when every user in it was banned, and the worker deletes it after the ban (best effort, no delete right
+  just leaves it). A kicked update whose `until_date` matches a joiner row's `ban_until` (2 s) ends handling, so no
+  goodbye is sent and captcha rows are left alone for the lockdown's own ban; any other ban still gets the goodbye.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
   only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched. Joiners still pending when the lift starts are
