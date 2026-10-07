@@ -1,7 +1,9 @@
 package modules
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"html"
 	"strings"
@@ -43,6 +45,8 @@ const (
 const (
 	lockdownReasonToken = "<<lockdown-reason>>"
 	lockdownNameToken   = "<<lockdown-name>>"
+	// lockdownDetailToken stands in for Telegram's already escaped error text.
+	lockdownDetailToken = "<<lockdown-detail>>"
 )
 
 var (
@@ -114,6 +118,14 @@ func requireLockdownAuthority(needRestrict bool) helpers.CheckFunc {
 		}
 		return refuse("chat_status_user_admin_cmd_error")
 	}
+}
+
+// lockdownHasPermissions reports whether a getChat permissions member is present
+// and is a JSON object. A group whose permissions cannot be read is never locked,
+// because the lift could not put them back.
+func lockdownHasPermissions(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) > 0 && trimmed[0] == '{' && json.Valid(trimmed)
 }
 
 // lockdownCapRunes cuts s to at most n runes.
@@ -216,6 +228,18 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 	failed := func() error { return reply(lockdownText(tr, "lockdown_state_failed")) }
+	// refuse answers a refusal whose text carries Telegram's own words; nothing has
+	// been written when it runs.
+	refuse := func(key, detail string) error {
+		text := lockdownText(tr, key, i18n.TranslationParams{"detail": lockdownDetailToken})
+		return reply(strings.TrimSpace(lockdownSplice(text, lockdownDetailToken, detail)))
+	}
+
+	// A basic group cannot honour "banned until the lift", so it is refused before
+	// anything is read or written.
+	if chat.Type != "supergroup" {
+		return refuse("lockdown_basic_group", "")
+	}
 
 	active, err := lockdown.GetActiveFresh(chat.Id)
 	if err != nil {
@@ -225,11 +249,25 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return reply(lockdownAlreadyActiveText(tr, active))
 	}
 
+	// The bot's own rights are read live. An unknown answer fails closed.
+	botMember, botResult, botErr := chat_status.FetchBotMember(b, chat.Id)
+	if botResult == chat_status.BotMemberUnknown {
+		log.Warnf("[Lockdown] bot rights check in chat %d failed: %v", chat.Id, botErr)
+		return refuse("lockdown_bot_check_failed", "")
+	}
+	if botResult == chat_status.BotMemberMissing ||
+		botMember.Status != gotgbot.ChatMemberStatusAdministrator || !botMember.CanRestrictMembers {
+		return refuse("lockdown_bot_cannot_restrict", "")
+	}
+
 	bg := context.Background()
 	chatInfo, err := fetchLockdownChat(bg, b, chat.Id)
 	if err != nil {
 		log.Warnf("[Lockdown] getChat for chat %d failed: %v", chat.Id, err)
-		return failed()
+		return refuse("lockdown_permissions_unreadable", telegramErrorDetail(err))
+	}
+	if !lockdownHasPermissions(chatInfo.Permissions) {
+		return refuse("lockdown_permissions_unreadable", "")
 	}
 
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
@@ -259,7 +297,7 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		if _, delErr := lockdown.DeleteUnconfirmed(row.ID); delErr != nil {
 			log.Errorf("[Lockdown] lockdown %d could not be removed after a refused lock: %v", row.ID, delErr)
 		}
-		return failed()
+		return refuse("lockdown_lock_failed", telegramErrorDetail(err))
 	}
 	if _, err := lockdown.ConfirmLocked(row.ID); err != nil {
 		if _, retryErr := lockdown.ConfirmLocked(row.ID); retryErr != nil {
@@ -277,6 +315,13 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 	if line := lockdownReasonLine(tr, row.Reason); line != "" {
 		parts = append(parts, line)
+	}
+	// A missing delete or invite right never blocks the lock; it only adds a note.
+	if !botMember.CanDeleteMessages {
+		parts = append(parts, lockdownText(tr, "lockdown_note_no_delete"))
+	}
+	if !botMember.CanInviteUsers {
+		parts = append(parts, lockdownText(tr, "lockdown_note_no_invite"))
 	}
 	return reply(strings.TrimSpace(strings.Join(parts, "\n")))
 }

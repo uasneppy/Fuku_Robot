@@ -1,0 +1,24 @@
+---
+title: Lockdown Commands
+description: Complete guide to Lockdown module commands and features
+---
+
+# 📦 Lockdown Commands
+
+A lockdown stops a raid in this group: everyone but the admins is muted until an admin lifts it.
+
+- `/lockdown [reason]`: Lock this group. Only admins can talk, approved users included, and new members are removed until the lift.
+- `/unlockdown`: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
+
+Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
+A lockdown never ends on its own. It stays until an admin lifts it.
+
+
+## Module Aliases
+
+This module can be accessed using the following aliases:
+
+- `lockdown`
+- `unlockdown`
+- `lockdownstatus`
+
