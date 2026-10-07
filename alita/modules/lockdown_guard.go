@@ -427,6 +427,41 @@ func lockdownReclaim(ld *models.ChatLockdown, row *models.LockdownJoiner, rec lo
 	return lockdownPendingHeld(ld, row.ID, rec.UserID, true), true
 }
 
+// lockdownKickedFilter selects a member who was banned: the user was a member and the
+// new status is kicked.
+func lockdownKickedFilter(u *gotgbot.ChatMemberUpdated) bool {
+	wasMember, isMember := chat_status.ExtractJoinLeftStatusChange(u)
+	return wasMember && !isMember && u.NewChatMember.MergeChatMember().Status == gotgbot.ChatMemberStatusKicked
+}
+
+// lockdownOnKicked ends handling of the update that reports the lockdown's own ban,
+// so the greetings module sends no goodbye for a raider the lockdown removed and
+// leaves captcha rows alone (the joiner never got a challenge). The ban is
+// recognised by its end date: a joiner row of this chat and user whose ban_until the
+// update's until_date matches. The update's sender is the bot for every bot ban, so
+// it says nothing. Any other ban, and a lookup that fails (logged), continues, so a
+// deliberate ban still gets the group's goodbye. It reads no lockdown state, so it
+// works during the lift as well.
+func (m moduleStruct) lockdownOnKicked(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("lockdownOnKicked", "Lockdown")
+
+	chat := ctx.EffectiveChat
+	update := ctx.ChatMember
+	if chat == nil || update == nil {
+		return ext.ContinueGroups
+	}
+	banned := update.NewChatMember.MergeChatMember()
+	own, err := lockdown.HasJoinerBanFresh(chat.Id, banned.User.Id, banned.UntilDate)
+	if err != nil {
+		log.Errorf("[Lockdown] ban of user %d in chat %d could not be matched to a joiner: %v", banned.User.Id, chat.Id, err)
+		return ext.ContinueGroups
+	}
+	if own {
+		return ext.EndGroups
+	}
+	return ext.ContinueGroups
+}
+
 // loadLockdownGuard registers the join guard at the lockdown module's handler group,
 // ahead of fed-ban, antiraid, greetings and captcha. The service message handler also
 // accepts messages sent by bots, because a bot or an anonymous administrator can add
@@ -438,6 +473,10 @@ func loadLockdownGuard(dispatcher *ext.Dispatcher) {
 	)
 	dispatcher.AddHandlerToGroup(
 		handlers.NewMessage(func(m *gotgbot.Message) bool { return m.NewChatMembers != nil }, lockdownModule.lockdownOnJoinMessage).SetAllowBot(true),
+		lockdownModule.handlerGroup,
+	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewChatMember(lockdownKickedFilter, lockdownModule.lockdownOnKicked),
 		lockdownModule.handlerGroup,
 	)
 }

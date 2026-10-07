@@ -266,7 +266,28 @@ func ClearJoinMsg(id uint) error {
 	return nil
 }
 
-// HasJoinerBanFresh is a compile-only stub; the next commit gives it its behaviour.
+// joinerBanTolerance is how many seconds a live ban's end date may differ from a
+// row's ban_until and still match it. It is the repository's copy of the module's
+// lockdownBanUntilTolerance, which cannot be imported from here.
+const joinerBanTolerance int64 = 2
+
+// HasJoinerBanFresh reports whether the chat has a joiner row for the user whose
+// ban_until is within joinerBanTolerance seconds of until, read straight from the
+// database. It is how a "user was banned" update is recognised as the lockdown's own
+// ban: only the lockdown ends a ban on such a date. An until of 0 (a permanent ban)
+// never matches and costs no query.
 func HasJoinerBanFresh(chatID, userID, until int64) (bool, error) {
-	return false, nil
+	if until == 0 {
+		return false, nil
+	}
+	var count int64
+	err := db.DB.Model(&models.LockdownJoiner{}).
+		Where("chat_id = ? AND user_id = ? AND ban_until BETWEEN ? AND ?",
+			chatID, userID, until-joinerBanTolerance, until+joinerBanTolerance).
+		Count(&count).Error
+	if err != nil {
+		log.Errorf("[Lockdown] HasJoinerBanFresh: %v", err)
+		return false, alitaerrors.Wrapf(err, "look up a lockdown ban of user %d in chat %d", userID, chatID)
+	}
+	return count > 0, nil
 }
