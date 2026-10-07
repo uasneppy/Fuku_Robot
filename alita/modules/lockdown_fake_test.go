@@ -404,6 +404,23 @@ func (e *lockdownEnv) serviceJoin(from gotgbot.User, senderChat *gotgbot.Chat, m
 	return id
 }
 
+// addChat adds a second supergroup to the env: it has its own raw permissions, and
+// the env's administrator is a live administrator there who may restrict members. Its
+// lockdown rows are deleted when the test ends. Everything the env's helpers do still
+// addresses the first chat; tests drive the second one through the per-chat helpers of
+// the isolation test.
+func (e *lockdownEnv) addChat() gotgbot.Chat {
+	e.t.Helper()
+	chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Second Lock Chat"}
+	lockdownCleanup(e.t, chat.Id)
+	e.fake.setMember(chat.Id, e.admin.Id, staffFakeMember{
+		Status:             gotgbot.ChatMemberStatusAdministrator,
+		CanRestrictMembers: true,
+	})
+	e.fake.setChatPermsRaw(chat.Id, lockdownTestPrePermissions)
+	return chat
+}
+
 // joinRequest runs a chat_join_request update in the lockdown chat through the real
 // dispatcher: from asked to join, through inviteLink when it is not empty.
 func (e *lockdownEnv) joinRequest(from gotgbot.User, inviteLink string) {
