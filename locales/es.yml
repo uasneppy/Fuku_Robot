@@ -2620,7 +2620,7 @@ staff_help_msg: |
   × /unlinkstaff: Desvincula este grupo de su Grupo de Staff (solo el creador de ambos grupos).
 
   *En el Grupo de Staff:*
-  × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados. Pulsa Desvincular junto a un grupo para desvincularlo (solo el creador de ambos grupos). Pulsa Acciones recientes para ver las acciones de staff pasadas de este Grupo de Staff y cómo salió cada grupo.
+  × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados. Pulsa Desvincular junto a un grupo para desvincularlo (solo el creador de ambos grupos). Pulsa Acciones recientes para ver las acciones de staff pasadas de este Grupo de Staff y cómo salió cada grupo. Una línea con 🔒 marca un grupo vinculado que está en bloqueo; sus admins pueden ver el motivo con /lockdownstatus allí.
 
   *Acciones de staff (en el Grupo de Staff):*
   × /ban usuario [duración] [motivo]: Banea al usuario en todos los grupos vinculados. El usuario es un ID numérico, un @username que haya visto o una mención. La duración es un número seguido de m, h, d o w, y más de 366 días significa permanente.
@@ -2686,6 +2686,7 @@ staff_panel_unlink_button: "Desvincular {group}"
 staff_unlink_confirm_prompt: "¿Seguro que quieres desvincular {group}? Los comandos de Staff dejarán de llegar a él."
 staff_cb_denied: "Este botón no pertenece a este chat."
 staff_panel_row_status: "El bot es admin: {bot} | Puede restringir miembros: {restrict} | El propietario coincide: {owner}"
+staff_panel_row_lockdown: "🔒 en bloqueo desde {since}"
 staff_panel_reason_bot_missing: "Problema: el bot no está en este grupo."
 staff_panel_reason_bot_not_admin: "Problema: el bot no es administrador en este grupo."
 staff_panel_reason_bot_cannot_restrict: "Problema: el bot no puede restringir miembros en este grupo."

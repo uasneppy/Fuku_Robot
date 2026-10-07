@@ -108,6 +108,11 @@ type staffTargetState struct {
 	Muted bool
 	// Until is the end of the ban or restriction as a Unix time; 0 is permanent.
 	Until int64
+	// LockdownBan is true when the target's current ban is a lockdown's own ban: its
+	// end date is a lockdown joiner's ban_until. A staff ban must then replace it even
+	// when it ends sooner, or the lockdown's lift would lift the staff ban too (D-05).
+	// It is set only for a staff ban on a kicked target with an end date.
+	LockdownBan bool
 }
 
 // staffTargetStateFrom reads the fields the decision table needs from a merged
@@ -203,10 +208,16 @@ func decideStaffAction(kind staffActionKind, st staffTargetState, newUntil int64
 }
 
 // decideStaffBan is the ban column: a ban reaches a group the target is not in
-// (D-10), upgrades a shorter ban (D-13) and never shortens one (D-12).
+// (D-10), upgrades a shorter ban (D-13) and never shortens one (D-12). The one
+// exception to never shortening is a lockdown's own ban (LockdownBan): it is
+// replaced even by a shorter or equal staff ban, which then carries its own end date,
+// so the lockdown's lift leaves it alone (D-05).
 func decideStaffBan(st staffTargetState, newUntil int64) staffVerdict {
 	switch st.Status {
 	case gotgbot.ChatMemberStatusKicked:
+		if st.LockdownBan {
+			return staffVerdict{Call: staffCallBan, Reason: staffReasonBanned}
+		}
 		if staffEndsLater(newUntil, st.Until) {
 			return staffVerdict{Call: staffCallBan, Reason: staffReasonBanned}
 		}

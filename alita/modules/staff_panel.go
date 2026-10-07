@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
@@ -49,6 +50,10 @@ type staffLinkRow struct {
 	// OwnerState is OwnerMatch when the live owner check passed and OwnerUnknown
 	// when it could not be completed.
 	OwnerState chat_status.OwnerResult
+	// LockedSince is when the group's lockdown was confirmed; the zero time means
+	// the group is not locked. It carries no reason and no name, because those
+	// belong to the group's own admins (D-17).
+	LockedSince time.Time
 }
 
 // staffStatus is one yes / no / unknown answer shown as an icon in a panel row.
@@ -149,8 +154,11 @@ func staffRowReason(tr *i18n.Translator, row staffLinkRow) string {
 }
 
 // renderStaffRow renders one linked group: the escaped title and ID, its status
-// line, and a reason line when it is broken. The title is written straight into
-// the text, never through the translator.
+// line, a reason line when it is broken, and one lockdown line when the group is
+// locked. The title is written straight into the text, never through the
+// translator. The lockdown line shows only when it began (UTC), never why or who
+// started it (D-17), and it is independent of the reason line, so a locked group the
+// bot left shows both (D-22).
 func renderStaffRow(tr *i18n.Translator, row staffLinkRow) string {
 	bot, restrict, owner := staffRowStatuses(row)
 	status, _ := tr.GetString("staff_panel_row_status", i18n.TranslationParams{
@@ -167,6 +175,13 @@ func renderStaffRow(tr *i18n.Translator, row staffLinkRow) string {
 	if reason := staffRowReason(tr, row); reason != "" {
 		sb.WriteString("\n")
 		sb.WriteString(reason)
+	}
+	if !row.LockedSince.IsZero() {
+		locked, _ := tr.GetString("staff_panel_row_lockdown", i18n.TranslationParams{
+			"since": row.LockedSince.UTC().Format("2 Jan 15:04"),
+		})
+		sb.WriteString("\n")
+		sb.WriteString(locked)
 	}
 	return sb.String()
 }
@@ -443,6 +458,27 @@ func buildStaffPanelRows(ctx context.Context, b *gotgbot.Bot, links []models.Sta
 	return rows
 }
 
+// markLockedRows sets LockedSince on every row whose group has a confirmed active
+// lockdown, from one batch query over all the rows' groups, so renderStaffPanel stays
+// pure. A failed query is logged and the panel is shown without markers.
+func markLockedRows(rows []staffLinkRow) {
+	if len(rows) == 0 {
+		return
+	}
+	ids := make([]int64, len(rows))
+	for i, row := range rows {
+		ids[i] = row.Link.GroupChatID
+	}
+	locked, err := lockdown.ListActiveByChatsFresh(ids)
+	if err != nil {
+		log.Warnf("[Staff] panel: lockdown lookup failed, showing no lockdown markers: %v", err)
+		return
+	}
+	for i := range rows {
+		rows[i].LockedSince = locked[rows[i].Link.GroupChatID]
+	}
+}
+
 // buildStaffPanel loads the linked groups of staffGroup straight from the
 // database, checks each live and renders the given page. It is shared by /staff,
 // Refresh and the buttons that re-render the panel in place.
@@ -459,6 +495,7 @@ func buildStaffPanel(
 	ctx, cancel := context.WithTimeout(context.Background(), staffPanelBuildTimeout)
 	defer cancel()
 	rows := buildStaffPanelRows(ctx, b, links)
+	markLockedRows(rows)
 	text, keyboard := renderStaffPanel(tr, staffGroup, rows, b.Username, page, time.Now())
 	return text, keyboard, nil
 }

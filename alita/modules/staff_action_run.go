@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
@@ -517,6 +518,10 @@ func staffGroupPrechecks(
 	return target, staffGroupResult{}, true
 }
 
+// staffLockdownBanLookup reports whether a live ban of the user in the chat that ends
+// at until is a lockdown's own ban. It is a test seam over lockdown.HasJoinerBanFresh.
+var staffLockdownBanLookup = lockdown.HasJoinerBanFresh
+
 // runStaffActionInGroup is the whole per-group check chain of a staff action: the
 // shared prechecks, then the decision and the write. The order is part of the safety
 // contract: a group that fails any step gets no write call, and the issuer's rights
@@ -539,7 +544,21 @@ func runStaffActionInGroup(
 		return skipped
 	}
 
-	verdict := decideStaffAction(card.Kind, staffTargetStateFrom(target), newUntil)
+	state := staffTargetStateFrom(target)
+	// Only a staff ban on a banned target with an end date can meet a lockdown's own
+	// ban, so no other kind pays the query. A failed lookup fails this group closed:
+	// guessing "not a lockdown ban" would swallow the ban and let the lift remove it,
+	// and guessing the other way would shorten a deliberate ban.
+	if card.Kind == staffKindBan && state.Status == gotgbot.ChatMemberStatusKicked && state.Until != 0 {
+		isLockdownBan, err := staffLockdownBanLookup(link.GroupChatID, card.Target, state.Until)
+		if err != nil {
+			log.Errorf("[StaffActions] lockdown ban lookup in group %d: %v", link.GroupChatID, err)
+			return result(staffReasonFailInternal, "")
+		}
+		state.LockdownBan = isLockdownBan
+	}
+
+	verdict := decideStaffAction(card.Kind, state, newUntil)
 	if verdict.Call == staffCallNone {
 		return result(verdict.Reason, "")
 	}

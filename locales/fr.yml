@@ -2536,7 +2536,7 @@ staff_help_msg: |
   × /unlinkstaff : Dissocier ce groupe de son groupe Staff (créateur des deux groupes uniquement).
 
   *Dans le groupe Staff :*
-  × /staff : Afficher l'ID de discussion du groupe Staff et ses groupes liés. Appuyez sur Dissocier à côté d'un groupe pour le dissocier (créateur des deux groupes uniquement). Appuyez sur Actions récentes pour voir les actions passées du staff de ce groupe Staff et comment chaque groupe s'est déroulé.
+  × /staff : Afficher l'ID de discussion du groupe Staff et ses groupes liés. Appuyez sur Dissocier à côté d'un groupe pour le dissocier (créateur des deux groupes uniquement). Appuyez sur Actions récentes pour voir les actions passées du staff de ce groupe Staff et comment chaque groupe s'est déroulé. Une ligne 🔒 marque un groupe lié qui est en verrouillage ; ses administrateurs peuvent en voir la raison avec /lockdownstatus dans ce groupe.
 
   *Actions du staff (dans le groupe Staff) :*
   × /ban utilisateur [durée] [motif] : Bannir l'utilisateur dans tous les groupes liés. L'utilisateur est un ID numérique, un @username que j'ai déjà vu ou une mention. La durée est un nombre suivi de m, h, d ou w, et plus de 366 jours signifie définitif.
@@ -2602,6 +2602,7 @@ staff_panel_unlink_button: "Dissocier {group}"
 staff_unlink_confirm_prompt: "Voulez-vous vraiment dissocier {group} ? Les commandes Staff ne l'atteindront plus."
 staff_cb_denied: "Ce bouton n'appartient pas à ce chat."
 staff_panel_row_status: "Le bot est admin : {bot} | Peut restreindre des membres : {restrict} | Le propriétaire correspond : {owner}"
+staff_panel_row_lockdown: "🔒 en verrouillage depuis le {since}"
 staff_panel_reason_bot_missing: "Problème : le bot n'est pas dans ce groupe."
 staff_panel_reason_bot_not_admin: "Problème : le bot n'est pas administrateur dans ce groupe."
 staff_panel_reason_bot_cannot_restrict: "Problème : le bot ne peut pas restreindre de membres dans ce groupe."

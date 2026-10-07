@@ -116,6 +116,45 @@ func TestStaffActionDecisionTable(t *testing.T) {
 	})
 }
 
+// TestDecideStaffBanLockdownJoiner covers the one case where a ban that does not end
+// later is still sent: the live ban is a lockdown's own ban, which the lockdown's lift
+// would remove, so the staff ban has to replace it (D-05).
+func TestDecideStaffBanLockdownJoiner(t *testing.T) {
+	const until = int64(2_000_000_000)
+	lockdownBanned := staffTargetState{Status: gotgbot.ChatMemberStatusKicked, Until: until, LockdownBan: true}
+	deliberateBan := staffTargetState{Status: gotgbot.ChatMemberStatusKicked, Until: until}
+
+	rows := []struct {
+		name     string
+		kind     staffActionKind
+		state    staffTargetState
+		newUntil int64
+		want     staffVerdict
+	}{
+		{"a shorter staff ban replaces a lockdown ban", staffKindBan, lockdownBanned, until - 1000,
+			staffVerdict{staffCallBan, staffReasonBanned}},
+		{"the same shorter ban over a deliberate ban is skipped", staffKindBan, deliberateBan, until - 1000,
+			staffVerdict{staffCallNone, staffReasonSkipAlreadyBanned}},
+		{"a permanent staff ban replaces a lockdown ban", staffKindBan, lockdownBanned, 0,
+			staffVerdict{staffCallBan, staffReasonBanned}},
+		{"a mute on a lockdown-banned target is still skipped as not in group", staffKindMute, lockdownBanned, until - 1000,
+			staffVerdict{staffCallNone, staffReasonSkipNotInGroup}},
+		{"a kick on a lockdown-banned target is still skipped as not in group", staffKindKick, lockdownBanned, 0,
+			staffVerdict{staffCallNone, staffReasonSkipNotInGroup}},
+		{"an unmute on a lockdown-banned target is still skipped as not in group", staffKindUnmute, lockdownBanned, 0,
+			staffVerdict{staffCallNone, staffReasonSkipNotInGroup}},
+		{"an unban on a lockdown-banned target is unchanged", staffKindUnban, lockdownBanned, 0,
+			staffVerdict{staffCallUnban, staffReasonUnbanned}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			if got := decideStaffAction(row.kind, row.state, row.newUntil); got != row.want {
+				t.Fatalf("decideStaffAction(%s, %+v, %d) = %+v, want %+v", row.kind, row.state, row.newUntil, got, row.want)
+			}
+		})
+	}
+}
+
 // TestStaffActionDecisionInvariants walks every kind against every live status
 // and checks the rules that keep a staff action from lifting a ban or touching an
 // administrator, whatever the table says.
@@ -148,6 +187,14 @@ func TestStaffActionDecisionInvariants(t *testing.T) {
 					Status: gotgbot.ChatMemberStatusRestricted, IsMember: isMember, Muted: muted, Until: until,
 				})
 			}
+		}
+	}
+
+	// A kicked target with an end date may also be under a lockdown's own ban.
+	for _, st := range append([]staffTargetState(nil), states...) {
+		if st.Status == gotgbot.ChatMemberStatusKicked && st.Until != 0 {
+			st.LockdownBan = true
+			states = append(states, st)
 		}
 	}
 
@@ -184,8 +231,14 @@ func TestStaffActionDecisionInvariants(t *testing.T) {
 					v.Call != staffCallNone && v.Call != staffCallBan && v.Call != staffCallUnban {
 					t.Fatalf("a kicked target got a call that is not ban or unban: %s", label)
 				}
-				if st.Status == gotgbot.ChatMemberStatusKicked && v.Call == staffCallBan && !staffEndsLater(newUntil, st.Until) {
+				if st.Status == gotgbot.ChatMemberStatusKicked && v.Call == staffCallBan &&
+					!st.LockdownBan && !staffEndsLater(newUntil, st.Until) {
 					t.Fatalf("a ban that does not end later was sent over an existing ban: %s", label)
+				}
+				// (5b) a ban over a lockdown's own ban is always sent, so the lift keeps it.
+				if kind == staffKindBan && st.Status == gotgbot.ChatMemberStatusKicked && st.LockdownBan &&
+					v.Call != staffCallBan {
+					t.Fatalf("a staff ban over a lockdown ban was not sent: %s", label)
 				}
 				// (6) a done reason stands exactly for a call that was made.
 				if done := staffReasonOutcome(v.Reason) == staffOutcomeDone; done != (v.Call != staffCallNone) {

@@ -214,17 +214,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
   the caller with RowsAffected == 1 posts the Staff Group notice.
+- The `/staff` panel marks a linked group whose lockdown is confirmed with one `staff_panel_row_lockdown` line (the
+  confirmation time in UTC, `staffLinkRow.LockedSince`), also when the bot has left that group. `buildStaffPanel` loads
+  every locked group with one `lockdown.ListActiveByChatsFresh` call after `buildStaffPanelRows`, so `renderStaffPanel`
+  stays pure; an unconfirmed lockdown, a lift in progress and a lifted one show nothing, a failed query shows the panel
+  unmarked, and the row never carries the reason or who started it (they stay in the group's own `/lockdownstatus`).
 - The staff sweeper (`StartStaffSweeper`/`StopStaffSweeper`) rechecks every Staff Group link hourly (first run 1-5 min
   after start) behind `SETNX alita:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
   conditional. Staff tables are never part of backup/export/import/reset.
 - The lockdown join guard (handler group `-7`, `lockdownOnJoinMember`) reads the lockdown fresh from PostgreSQL, records
   the joiner row first and only then ends the update with `ext.EndGroups`, so no welcome, captcha challenge or captcha
-  attempt follows. It never gates a ban on Redis, never uses the cached admin predicates (a performer is judged by a live
-  `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or administrator added), and never
-  makes a Telegram write: the worker (`StartLockdownWorker`, a DB-driven loop on every replica that claims rows with
-  conditional updates) makes every write and bans with `until_date` = the row's `ban_until`, 330 days after the join,
-  the marker that tells the lockdown's own ban from a deliberate one. A failed record write lets the joiner in, still
-  muted by the locked default permissions, because an unrecorded ban would never be lifted.
+  attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
+  every join path lets the joiner through. It never gates a ban on Redis, never uses the cached admin predicates (a
+  performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or
+  administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
+  DB-driven loop on every replica that claims rows with conditional updates) makes every write and bans with
+  `until_date` = the row's `ban_until`, 330 days after the join, the marker that tells the lockdown's own ban from a
+  deliberate one. A failed record write lets the joiner in, still muted by the locked default permissions, because an
+  unrecorded ban would never be lifted.
 - The lockdown guard handles the other join paths in the same group `-7`: the `new_chat_members` service message
   (`lockdownOnJoinMessage`, registered with `SetAllowBot` because a bot or an anonymous admin can add users; a
   service message's performer is its sender, or the anonymous admin when `sender_chat` is the group or `from` is the
@@ -252,12 +259,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   still work.
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
-  Antiraid's join handler (`onJoin`, group `-5`) returns at once while a lockdown is active in the chat (until Phase 6
-  retires it), so it neither temp-bans a user an admin added nor counts joins toward its auto trigger, and each joiner is
-  handled once, by the lockdown; a lockdown it cannot read does not stop it.
+  Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown (`locked_at` set) is active in
+  the chat (until Phase 6 retires it), so it neither temp-bans a user an admin added nor counts joins toward its auto
+  trigger, and each joiner is handled once, by the lockdown; a lockdown it cannot read does not stop it.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
   only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
-  else, a deliberate `/ban` or `/tban` included, is kept and never touched. Joiners still pending when the lift starts are
+  else, a deliberate `/ban` or `/tban` included, is kept and never touched (a staff `/ban` or `/tban` over a lockdown's
+  ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). Joiners still pending when
+  the lift starts are
   cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
   replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
@@ -285,7 +294,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
   `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
   `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
-  Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
+  Its one exception to "a ban never shortens a ban" is a lockdown's own ban: for a staff ban (`/ban`, `/tban`) on a
+  kicked target with an end date, `runStaffActionInGroup` asks `staffLockdownBanLookup` (`lockdown.HasJoinerBanFresh`
+  on the live `until_date`) and sets `staffTargetState.LockdownBan`, and `decideStaffBan` then sends the ban even when
+  it ends sooner, so the staff ban gets its own end date and the lockdown's lift keeps it (D-05). A failed lookup
+  fails that group as an internal error with no write. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
   on its verdict. Its one exception to the never-lift rule, a restrict or ban sent to a kicked or left target, is
   allowed only when the live state equals what the staff action left behind. An undo touches only groups where the
   action was applied, rechecks each one live for the presser (creator, or administrator with `can_restrict_members`,
@@ -352,8 +365,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The three harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
-  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The same three
-  lists plus `alita/db/lockdown/testmain_test.go` include the lockdown models, and `lockdownCleanup` deletes lockdown rows.
+  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown models
+  are in `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` and `alita/db/lockdown/testmain_test.go`
+  (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 
 ## Commits

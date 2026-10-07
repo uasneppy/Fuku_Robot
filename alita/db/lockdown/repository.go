@@ -86,6 +86,35 @@ func GetActiveFresh(chatID int64) (*models.ChatLockdown, error) {
 	return &row, nil
 }
 
+// ListActiveByChatsFresh reads, in one query straight from the database, when each of
+// the given chats' lockdowns was confirmed. Only an active lockdown whose lock
+// Telegram confirmed (locked_at set) counts: unconfirmed rows, lifts in progress and
+// lifted rows are absent, and so is every chat that was not asked about. The /staff
+// panel uses it to mark locked groups, and it returns only the time, never a reason or
+// a name. An empty input returns an empty map without a query.
+func ListActiveByChatsFresh(chatIDs []int64) (map[int64]time.Time, error) {
+	locked := make(map[int64]time.Time, len(chatIDs))
+	if len(chatIDs) == 0 {
+		return locked, nil
+	}
+	var rows []struct {
+		ChatID   int64
+		LockedAt time.Time
+	}
+	err := db.DB.Model(&models.ChatLockdown{}).
+		Select("chat_id, locked_at").
+		Where("chat_id IN ? AND state = ? AND locked_at IS NOT NULL", chatIDs, models.LockdownStateActive).
+		Scan(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListActiveByChatsFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list active lockdowns of chats")
+	}
+	for _, row := range rows {
+		locked[row.ChatID] = row.LockedAt.UTC()
+	}
+	return locked, nil
+}
+
 // GetFresh reads one lockdown by its row ID straight from the database. It returns
 // (nil, nil) when there is no such row.
 func GetFresh(id uint) (*models.ChatLockdown, error) {
