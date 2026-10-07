@@ -158,6 +158,11 @@ func TestLockdownStopDuringCall(t *testing.T) {
 	waitUntil(t, 3*time.Second, "the lift to finish under a new worker", func() bool {
 		return env.freshRow(ld.ID).State == models.LockdownStateLifted
 	})
+	// The tally follows the record that the lift finished.
+	waitUntil(t, 3*time.Second, "the tally to be posted", func() bool {
+		return env.messagesWith(staffMarker("lockdown_lift_tally")+" 2") >= 1
+	})
+	StopLockdownWorker()
 	for _, user := range users {
 		if row := env.joinerRow(user.Id); row.State != models.JoinerStateUnbanned {
 			t.Errorf("joiner %d state = %q, want unbanned", user.Id, row.State)

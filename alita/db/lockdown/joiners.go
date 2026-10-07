@@ -266,9 +266,71 @@ func ClearJoinMsg(id uint) error {
 	return nil
 }
 
-// ReleaseStaleClaims is a placeholder until the stale-claim release is written.
+// ReleaseStaleClaims gives back every claim a worker made before the cut-off and never
+// finished, because the worker stopped (a restart, a crash, a call that never came
+// back). The claim is cleared and no attempt is counted, so the work is simply tried
+// again by whichever replica gets to it first:
+//
+//   - an acting row of an active lockdown goes back to pending (the ban or decline is
+//     repeated, which is idempotent);
+//   - an acting join request of a lifting lockdown is cancelled, because a lift never
+//     declines anyone;
+//   - any other acting row of a lifting lockdown goes to banned, and the lift's live
+//     check of the member decides whether the ban really landed;
+//   - an unbanning row goes back to banned, and the same live check makes a repeated
+//     unban safe.
+//
+// The four updates run in one transaction and match disjoint rows. It returns how many
+// rows it released.
 func ReleaseStaleClaims(before time.Time) (int64, error) {
-	return 0, nil
+	cutoff := before.UTC()
+	inLockdownState := "lockdown_id IN (SELECT id FROM chat_lockdowns WHERE state = ?)"
+	steps := []struct {
+		where string
+		args  []any
+		to    string
+	}{
+		{
+			"state = ? AND claimed_at < ? AND " + inLockdownState,
+			[]any{models.JoinerStateActing, cutoff, models.LockdownStateActive},
+			models.JoinerStatePending,
+		},
+		{
+			"state = ? AND claimed_at < ? AND join_path = ? AND " + inLockdownState,
+			[]any{models.JoinerStateActing, cutoff, models.JoinPathRequest, models.LockdownStateLifting},
+			models.JoinerStateCancelled,
+		},
+		{
+			"state = ? AND claimed_at < ? AND " + inLockdownState,
+			[]any{models.JoinerStateActing, cutoff, models.LockdownStateLifting},
+			models.JoinerStateBanned,
+		},
+		{
+			"state = ? AND claimed_at < ?",
+			[]any{models.JoinerStateUnbanning, cutoff},
+			models.JoinerStateBanned,
+		},
+	}
+
+	var released int64
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		released = 0
+		for _, step := range steps {
+			result := tx.Model(&models.LockdownJoiner{}).
+				Where(step.where, step.args...).
+				Updates(map[string]any{"state": step.to, "claimed_at": nil, "updated_at": now()})
+			if result.Error != nil {
+				return result.Error
+			}
+			released += result.RowsAffected
+		}
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Lockdown] ReleaseStaleClaims: %v", err)
+		return 0, alitaerrors.Wrap(err, "release stale joiner claims")
+	}
+	return released, nil
 }
 
 // joinerBanTolerance is how many seconds a live ban's end date may differ from a
