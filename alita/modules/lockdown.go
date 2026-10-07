@@ -351,9 +351,14 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	return reply(strings.TrimSpace(strings.Join(parts, "\n")))
 }
 
-// unlockdown lifts the group's lockdown: it sends the stored raw permissions back,
-// marks the lockdown lifting with who lifted it, finishes it at once when no joiner
-// is left to unban, and only then announces the lift.
+// unlockdown lifts the group's lockdown. The order is the safety property: it sends
+// the stored raw permissions back first, and only when Telegram confirmed that does
+// it record the lift (who lifted, and whether the live permissions had been changed
+// by hand) through the one conditional update that lets exactly one caller win. A
+// failed restore or a failed record write leaves the lockdown active, so nothing
+// ends a lockdown that was not really lifted, and nothing is announced as lifted
+// before it is. Once the lift is recorded it finishes at once when no joiner is left
+// to unban.
 func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	chat := ctx.EffectiveChat
 	msg := ctx.EffectiveMessage
@@ -367,33 +372,66 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
-	row, err := lockdown.GetActiveFresh(chat.Id)
+	// The chat's active lockdown, else one still being lifted. Neither makes a
+	// Telegram call.
+	row, err := lockdown.GetCurrentFresh(chat.Id)
 	if err != nil {
 		return reply(lockdownText(tr, "lockdown_state_failed"))
 	}
 	if row == nil {
 		return reply(lockdownText(tr, "lockdown_not_active"))
 	}
+	if row.State == models.LockdownStateLifting {
+		var lifterID int64
+		if row.LiftedBy != nil {
+			lifterID = *row.LiftedBy
+		}
+		text := lockdownText(tr, "lockdown_lift_in_progress", i18n.TranslationParams{"name": lockdownNameToken})
+		return reply(lockdownSplice(text, lockdownNameToken, lockdownMention(lifterID, row.LiftedByName)))
+	}
 
-	if err := setLockdownPermissions(context.Background(), b, chat.Id, row.PrePermissions); err != nil {
+	bg := context.Background()
+
+	// Was the group reopened by hand? A failed read only skips the comparison and
+	// never blocks the lift. Before Telegram confirmed the lock the permissions may
+	// not have changed yet, so there is nothing to compare.
+	manualChange := false
+	if row.LockedAt != nil {
+		live, err := fetchLockdownChat(bg, b, chat.Id)
+		if err != nil {
+			log.Warnf("[Lockdown] getChat for chat %d before the lift failed: %v", chat.Id, err)
+		} else if lockdownHasPermissions(live.Permissions) {
+			if same, cmpErr := samePermissions(string(live.Permissions), row.LockedPermissions); cmpErr == nil {
+				manualChange = !same
+			}
+		}
+	}
+
+	// Restore first. A refusal leaves the lockdown active and unbans nobody.
+	if err := setLockdownPermissions(bg, b, chat.Id, row.PrePermissions); err != nil {
 		log.Warnf("[Lockdown] restore for chat %d failed: %v", chat.Id, err)
-		return reply(lockdownText(tr, "lockdown_state_failed"))
+		text := lockdownText(tr, "lockdown_restore_failed", i18n.TranslationParams{"detail": lockdownDetailToken})
+		return reply(strings.TrimSpace(lockdownSplice(text, lockdownDetailToken, telegramErrorDetail(err))))
 	}
 
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
-	won, err := lockdown.BeginLift(row.ID, actor.Id, name, false)
+	won, err := lockdownBeginLift(row.ID, actor.Id, name, manualChange)
 	if err != nil {
-		return reply(lockdownText(tr, "lockdown_state_failed"))
+		return reply(lockdownText(tr, "lockdown_lift_record_failed"))
 	}
 	if !won {
-		return reply(lockdownText(tr, "lockdown_not_active"))
+		return reply(lockdownText(tr, "lockdown_already_lifted"))
 	}
 	if _, err := lockdown.FinishLift(row.ID); err != nil {
 		log.Errorf("[Lockdown] lockdown %d lift was not finished: %v", row.ID, err)
 	}
 
 	text := lockdownText(tr, "lockdown_lifted", i18n.TranslationParams{"name": lockdownNameToken})
-	return reply(lockdownSplice(text, lockdownNameToken, lockdownMention(actor.Id, name)))
+	lines := []string{lockdownSplice(text, lockdownNameToken, lockdownMention(actor.Id, name))}
+	if manualChange {
+		lines = append(lines, lockdownText(tr, "lockdown_lifted_manual_change"))
+	}
+	return reply(lockdownJoinLines(lines))
 }
 
 // LoadLockdown registers /lockdown, /unlockdown and /lockdownstatus.

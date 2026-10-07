@@ -2752,3 +2752,8 @@ lockdown_status_unconfirmed: "Telegram n'a pas encore confirmé le verrouillage.
 lockdown_status_lifting: "Verrouillage levé par {name} ; débannissement des personnes retirées : {done} sur {total} faits."
 lockdown_status_permissions_unknown: "Je n'ai pas pu lire les permissions du groupe pour vérifier les changements."
 lockdown_status_failed: "Je n'ai pas pu lire l'état du verrouillage pour le moment. Réessaie dans un instant."
+lockdown_lifted_manual_change: "Quelqu'un a modifié les permissions du groupe à la main pendant le verrouillage ; j'ai remis celles d'avant le verrouillage."
+lockdown_restore_failed: "Je n'ai pas pu remettre les permissions du groupe, donc le verrouillage reste actif et personne n'a été débanni : {detail}\nVérifie que je suis admin avec le droit de restreindre des membres, puis relance /unlockdown."
+lockdown_lift_record_failed: "Les permissions sont revenues, mais je n'ai pas pu enregistrer la levée. Relance /unlockdown."
+lockdown_already_lifted: "Ce verrouillage a déjà été levé."
+lockdown_lift_in_progress: "Le verrouillage a déjà été levé par {name} ; les personnes retirées sont encore en cours de débannissement."
