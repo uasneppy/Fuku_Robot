@@ -9,12 +9,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
 // lockdownTestPrePermissions is a group's default permissions as getChat answers
@@ -233,10 +235,28 @@ func seedLockdownJoiner(t *testing.T, lockdownID uint, chatID, userID int64, sta
 	return joiner
 }
 
+// withFastLockdownPacer installs a pacer with a 1 ms interval and a 5 ms retry_after
+// unit as lockdownPacer for the test, so a 429 costs milliseconds and the production
+// pacer's 100 ms spacing does not slow the suite.
+func withFastLockdownPacer(t *testing.T) {
+	t.Helper()
+	previous := lockdownPacer
+	lockdownPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+		NextKey:        "alita:lockdown:pace:next",
+		BlockKey:       "alita:lockdown:pace:block",
+		Interval:       time.Millisecond,
+		MaxRetries:     3,
+		MaxWait:        60 * time.Second,
+		RetryAfterUnit: 5 * time.Millisecond,
+	})
+	t.Cleanup(func() { lockdownPacer = previous })
+}
+
 func newLockdownEnv(t *testing.T) *lockdownEnv {
 	t.Helper()
 	withMiniredis(t)
 	withStaffLocale(t)
+	withFastLockdownPacer(t)
 
 	fake := newLockdownFake()
 	bot := newModuleTestBot(fake.moduleBotClient)
@@ -307,6 +327,48 @@ func (e *lockdownEnv) lastReply() string {
 // calls returns the recorded calls of method addressed to the lockdown chat.
 func (e *lockdownEnv) calls(method string) []moduleBotCall {
 	return callsToChat(e.fake.staffBotClient, method, e.chat.Id)
+}
+
+// loadJoinModules loads the greetings and captcha modules on the env's dispatcher, so
+// a test can show they are never reached for a joiner of a locked group.
+func (e *lockdownEnv) loadJoinModules() {
+	e.t.Helper()
+	LoadGreetings(e.dispatcher)
+	LoadCaptcha(e.dispatcher)
+}
+
+// join runs a chat_member update in the lockdown chat: user went from left to member,
+// performed by performer, through inviteLink when it is not empty.
+func (e *lockdownEnv) join(user, performer gotgbot.User, inviteLink string) {
+	e.t.Helper()
+	id := e.updateID()
+	update := &gotgbot.Update{
+		UpdateId: id,
+		ChatMember: &gotgbot.ChatMemberUpdated{
+			Chat:          e.chat,
+			From:          performer,
+			Date:          1,
+			OldChatMember: gotgbot.ChatMemberLeft{User: user},
+			NewChatMember: gotgbot.ChatMemberMember{User: user},
+		},
+	}
+	if inviteLink != "" {
+		update.ChatMember.InviteLink = &gotgbot.ChatInviteLink{InviteLink: inviteLink, Creator: performer}
+	}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+}
+
+// cycle runs one worker cycle and reports whether it made progress.
+func (e *lockdownEnv) cycle() bool {
+	e.t.Helper()
+	return runLockdownCycle(context.Background(), e.bot)
+}
+
+// newJoiner returns a user with a fresh ID and the given first name.
+func (e *lockdownEnv) newJoiner(firstName string) gotgbot.User {
+	return gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: firstName}
 }
 
 // wantReplyHas fails unless the last reply contains every want.

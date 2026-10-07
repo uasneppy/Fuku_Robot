@@ -32,11 +32,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   claims, so `StopStaffActions` waits for a Confirm that has already claimed, and its run gives the claim back when the
   shutdown cut every group off before its write. Once `StopStaffActions` has cancelled the run context an undo Confirm
   claims nothing and aborts its card with the restart text (`staff_undo_abort_restarting`).
+- `StopLockdownWorker` is another drain registered after DB-close. It cancels the lockdown worker and waits at most
+  5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
+  loses nothing, and a restart or a second replica picks the rows up again.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
 
-- Group numbers are execution order: `-10` captcha sweeper · `-6` fed-ban · `-5` antiraid ·
+- Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard · `-6` fed-ban · `-5` antiraid ·
   `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
   `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel.
@@ -111,8 +114,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`alita/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `alita/db/cache`, not `alita/utils/cache`.
-- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:staff:*`) sit outside the `alita:cache:` prefix;
-  `CLEAR_CACHE_ON_STARTUP` does not clear them.
+- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:staff:*`, `alita:lockdown:*`) sit outside the
+  `alita:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them.
 - `alita:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
@@ -134,6 +137,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   more than `MaxWait` (60 s) away fails at once as rate limited, with no Telegram request and without taking the slot.
   Every staff fan-out Telegram call goes through `staffPaced`, and per-replica limiters must not be used for shared
   budgets.
+- `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
+  unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
+  with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
+  once as rate limited and the joiner row goes back without counting an attempt.
 - `staff_actions` and `staff_action_groups` are the staff audit record (migration 20261005120000). They are read only
   through fresh queries, never cached (so no `DeleteCache` applies to them), and never part of
   backup/export/import/reset. A record is created at Confirm and a failed create aborts the card; each group's prior
@@ -196,6 +203,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The staff sweeper (`StartStaffSweeper`/`StopStaffSweeper`) rechecks every Staff Group link hourly (first run 1-5 min
   after start) behind `SETNX alita:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
   conditional. Staff tables are never part of backup/export/import/reset.
+- The lockdown join guard (handler group `-7`, `lockdownOnJoinMember`) reads the lockdown fresh from PostgreSQL, records
+  the joiner row first and only then ends the update with `ext.EndGroups`, so no welcome, captcha challenge or captcha
+  attempt follows. It never gates a ban on Redis, never uses the cached admin predicates (a performer is judged by a live
+  `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or administrator added), and never
+  makes a Telegram write: the worker (`StartLockdownWorker`, a DB-driven loop on every replica that claims rows with
+  conditional updates) makes every write and bans with `until_date` = the row's `ban_until`, 330 days after the join,
+  the marker that tells the lockdown's own ban from a deliberate one. A failed record write lets the joiner in, still
+  muted by the locked default permissions, because an unrecorded ban would never be lifted.
+- The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
+  only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
+  else, a deliberate `/ban` or `/tban` included, is kept and never touched. Joiners still pending when the lift starts are
+  cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
+  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
   rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own

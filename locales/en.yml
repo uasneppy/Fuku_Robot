@@ -2870,3 +2870,8 @@ lockdown_restore_failed: "I couldn't put the group's permissions back, so the lo
 lockdown_lift_record_failed: "The permissions are back, but I couldn't record the lift. Run /unlockdown again."
 lockdown_already_lifted: "This lockdown was already lifted."
 lockdown_lift_in_progress: "The lockdown was already lifted by {name}; removed joiners are still being unbanned."
+lockdown_lifted_unbanning: "Unbanning {count} removed joiners now; I'll post here when it's done."
+lockdown_lift_tally: "Lockdown lift finished: {count} removed joiners were unbanned and can rejoin."
+lockdown_lift_tally_kept: "{count} were left as they are because someone had already unbanned them or banned them on purpose."
+lockdown_lift_tally_failed: "I couldn't unban {count}:"
+lockdown_lift_tally_more: "…and {count} more."

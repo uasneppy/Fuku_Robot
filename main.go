@@ -218,6 +218,14 @@ func main() {
 		modules.StopStaffActions()
 		return nil
 	})
+	// Also registered after the DB-close handler, so LIFO stops the lockdown worker
+	// before the database closes. It waits at most 5 s: every lockdown row resumes
+	// from the database, so a worker cut off here loses nothing.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping lockdown worker...")
+		modules.StopLockdownWorker()
+		return nil
+	})
 
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")
@@ -431,6 +439,7 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 		log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 	}
 	modules.StartStaffSweeper(b)
+	modules.StartLockdownWorker(b)
 	log.Infof("[Modules] Loaded modules: %s", alita.ListModules())
 
 	config.AppConfig.WorkingMode = mode

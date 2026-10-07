@@ -2832,3 +2832,8 @@ lockdown_restore_failed: "Saya tidak bisa mengembalikan izin grup, jadi lockdown
 lockdown_lift_record_failed: "Izin sudah kembali, tetapi saya tidak bisa mencatat pencabutan. Jalankan /unlockdown lagi."
 lockdown_already_lifted: "Lockdown ini sudah dicabut."
 lockdown_lift_in_progress: "Lockdown sudah dicabut oleh {name}; orang yang dikeluarkan masih sedang di-unban."
+lockdown_lifted_unbanning: "Sedang meng-unban {count} orang yang dikeluarkan; saya akan memberi kabar di sini setelah selesai."
+lockdown_lift_tally: "Pencabutan lockdown selesai: {count} orang yang dikeluarkan sudah di-unban dan bisa bergabung lagi."
+lockdown_lift_tally_kept: "{count} dibiarkan apa adanya karena seseorang sudah meng-unban atau sengaja mem-ban mereka."
+lockdown_lift_tally_failed: "Saya tidak bisa meng-unban {count}:"
+lockdown_lift_tally_more: "…dan {count} lainnya."

@@ -2842,3 +2842,8 @@ lockdown_restore_failed: "No pude devolver los permisos del grupo, así que el b
 lockdown_lift_record_failed: "Los permisos han vuelto, pero no pude registrar el levantamiento. Ejecuta /unlockdown de nuevo."
 lockdown_already_lifted: "Este bloqueo ya fue levantado."
 lockdown_lift_in_progress: "El bloqueo ya fue levantado por {name}; todavía se está desbaneando a las personas expulsadas."
+lockdown_lifted_unbanning: "Desbaneando ahora a {count} personas expulsadas; publicaré aquí cuando termine."
+lockdown_lift_tally: "Levantamiento del bloqueo terminado: se desbaneó a {count} personas expulsadas y pueden volver a unirse."
+lockdown_lift_tally_kept: "{count} se dejaron como están porque alguien ya las había desbaneado o las había baneado a propósito."
+lockdown_lift_tally_failed: "No pude desbanear a {count}:"
+lockdown_lift_tally_more: "…y {count} más."
