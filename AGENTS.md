@@ -215,7 +215,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The lockdown guard handles the other join paths in the same group `-7`: the `new_chat_members` service message
   (`lockdownOnJoinMessage`, registered with `SetAllowBot` because a bot or an anonymous admin can add users; a
   service message's performer is its sender, or the anonymous admin when `sender_chat` is the group or `from` is the
-  Group Anonymous Bot) and the kicked update (`lockdownOnKicked`). Join requests are not handled by the guard yet.
+  Group Anonymous Bot) and the kicked update (`lockdownOnKicked`).
   Deduplication is the `(lockdown_id, user_id)` row alone and never Redis (it does not use `claimRecentJoinProcessing`):
   the first path to insert decides, a second delivery within 20 s (`lockdownJoinDedupeWindow`) of the row's last change
   is the same join, and an older finished row (`lockdownReclaimStates`) is a re-join, reclaimed by one conditional
@@ -227,6 +227,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stored only when every user in it was banned, and the worker deletes it after the ban (best effort, no delete right
   just leaves it). A kicked update whose `until_date` matches a joiner row's `ban_until` (2 s) ends handling, so no
   goodbye is sent and captcha rows are left alone for the lockdown's own ban; any other ban still gets the goodbye.
+- Join requests during a lockdown (`lockdownOnJoinRequest`, group `-7`, `chat_join_request`) are recorded as a joiner row
+  with `join_path` request and declined by the worker (`lockdownDeclineOne`, paced, three attempts; a request Telegram
+  reports gone counts as declined), never by the handler. The handler always ends the update, so `pendingJoins` (group 0)
+  never auto-approves and posts no approve card, and the request path fails closed: a failed lockdown read or row write
+  leaves the request pending instead of handing it on (the join paths fail open, because a joiner is still muted).
+  A new request from someone with a finished row is reclaimed at once, with no dedupe window, because Telegram delivers
+  each request once; requests still pending at the lift are cancelled. The guard reads the lockdown through
+  `lockdownActiveLookup`, a test seam. The greetings Accept button (`joinRequestHandler`, `a=accept`) answers an alert
+  (`greetings_join_request_lockdown`) and approves nothing while a lockdown is active or cannot be read; Decline and Ban
+  still work.
+- A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
+  calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
+  Antiraid's join handler (`onJoin`, group `-5`) returns at once while a lockdown is active in the chat (until Phase 6
+  retires it), so it neither temp-bans a user an admin added nor counts joins toward its auto trigger, and each joiner is
+  handled once, by the lockdown; a lockdown it cannot read does not stop it.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
   only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched. Joiners still pending when the lift starts are

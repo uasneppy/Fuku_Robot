@@ -196,8 +196,9 @@ func lockdownClassify(ctx context.Context, err error) lockdownCallOutcome {
 }
 
 // lockdownBanPending bans the pending joiners of confirmed active lockdowns, oldest
-// first. Each row is claimed first, so one replica bans a joiner exactly once; the
-// ban ends on the row's ban_until, which marks it as the lockdown's own.
+// first, and declines the pending join requests (lockdownDeclineOne). Each row is
+// claimed first, so one replica handles a joiner exactly once; a ban ends on the
+// row's ban_until, which marks it as the lockdown's own.
 func lockdownBanPending(ctx context.Context, b *gotgbot.Bot) bool {
 	rows, err := lockdown.ListPendingFresh(lockdownWorkerBatch)
 	if err != nil {
@@ -213,11 +214,51 @@ func lockdownBanPending(ctx context.Context, b *gotgbot.Bot) bool {
 		if err != nil || !won {
 			continue
 		}
-		if lockdownBanOne(ctx, b, row) {
+		handle := lockdownBanOne
+		if row.JoinPath == models.JoinPathRequest {
+			handle = lockdownDeclineOne
+		}
+		if handle(ctx, b, row) {
 			progress = true
 		}
 	}
 	return progress
+}
+
+// lockdownDeclineOne declines one claimed join request and records the result: a
+// request Telegram reports as already gone counts as declined, a rate limit or a
+// shutdown puts the row back without costing an attempt, and any other failure costs
+// one, the third being final (decline_failed). The person can request again after
+// the lift, or at once during the lockdown to be declined again. It reports whether
+// the row reached a final state for this stage.
+func lockdownDeclineOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJoiner) bool {
+	err := lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		_, declineErr := b.DeclineChatJoinRequestWithContext(call, row.ChatID, row.UserID, nil)
+		return declineErr
+	})
+
+	if isJoinRequestGone(err) {
+		moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStateDeclined, "", false)
+		return true
+	}
+	switch lockdownClassify(ctx, err) {
+	case lockdownCallDone:
+		moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStateDeclined, "", false)
+		return true
+	case lockdownCallRetryFree:
+		moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStatePending, "", false)
+		return false
+	}
+
+	log.Warnf("[Lockdown] decline of the join request of user %d in chat %d failed: %v", row.UserID, row.ChatID, err)
+	if row.Attempts+1 >= lockdownMaxAttempts {
+		moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStateDeclineFailed, telegramErrorDetail(err), true)
+		return true
+	}
+	moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStatePending, telegramErrorDetail(err), true)
+	return false
 }
 
 // lockdownBanOne bans one claimed joiner and records the result. It reports whether
