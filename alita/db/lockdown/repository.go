@@ -187,6 +187,16 @@ func DeleteUnconfirmed(id uint) (bool, error) {
 	return result.RowsAffected == 1, nil
 }
 
+// ListUnconfirmedFresh is a placeholder until the unconfirmed-lock settling is written.
+func ListUnconfirmedFresh(before time.Time) ([]models.ChatLockdown, error) {
+	return nil, nil
+}
+
+// TouchLockdown is a placeholder until the unconfirmed-lock settling is written.
+func TouchLockdown(id uint) error {
+	return nil
+}
+
 // BeginLift moves an active lockdown to lifting and records who lifted it. It is
 // the one-lifter guarantee: a single conditional update matches only while the row
 // is active, so exactly one caller ever sees true. manualChange records that the

@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -414,4 +415,75 @@ func TestLockdownRepositoryTransitions(t *testing.T) {
 			t.Errorf("GetActiveFresh = %v, %v, want nil, nil", row, err)
 		}
 	})
+}
+
+// ageRow moves created_at and updated_at of a lockdown row back by the given time.
+func ageRow(t *testing.T, id uint, by time.Duration) {
+	t.Helper()
+	at := time.Now().UTC().Add(-by)
+	err := db.DB.Model(&models.ChatLockdown{}).Where("id = ?", id).
+		UpdateColumns(map[string]any{"created_at": at, "updated_at": at}).Error
+	if err != nil {
+		t.Fatalf("age lockdown %d: %v", id, err)
+	}
+}
+
+func TestListUnconfirmed(t *testing.T) {
+	oldChat := uniqueLockdownChatID(t)
+	youngChat := uniqueLockdownChatID(t)
+	confirmedChat := uniqueLockdownChatID(t)
+	liftingChat := uniqueLockdownChatID(t)
+	cleanupLockdowns(t, oldChat, youngChat, confirmedChat, liftingChat)
+
+	old := mustStart(t, oldChat)
+	ageRow(t, old.ID, 5*time.Minute)
+	young := mustStart(t, youngChat)
+	ageRow(t, young.ID, 10*time.Second)
+	confirmed := mustStart(t, confirmedChat)
+	if ok, err := ConfirmLocked(confirmed.ID); err != nil || !ok {
+		t.Fatalf("ConfirmLocked = %v, %v, want true, nil", ok, err)
+	}
+	ageRow(t, confirmed.ID, 5*time.Minute)
+	liftingRow := mustStart(t, liftingChat)
+	if ok, err := BeginLift(liftingRow.ID, 7, "Lifter", false); err != nil || !ok {
+		t.Fatalf("BeginLift = %v, %v, want true, nil", ok, err)
+	}
+	ageRow(t, liftingRow.ID, 5*time.Minute)
+
+	rows, err := ListUnconfirmedFresh(time.Now().UTC().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("ListUnconfirmedFresh error = %v, want none", err)
+	}
+	var got []uint
+	for _, row := range rows {
+		if row.ChatID == oldChat || row.ChatID == youngChat || row.ChatID == confirmedChat || row.ChatID == liftingChat {
+			got = append(got, row.ID)
+		}
+	}
+	if len(got) != 1 || got[0] != old.ID {
+		t.Errorf("unconfirmed rows = %v, want only the active, unconfirmed row older than the cut-off (%d)", got, old.ID)
+	}
+
+	if err := TouchLockdown(old.ID); err != nil {
+		t.Fatalf("TouchLockdown error = %v, want none", err)
+	}
+	touched, err := GetFresh(old.ID)
+	if err != nil || touched == nil {
+		t.Fatalf("GetFresh = %v, %v, want the row", touched, err)
+	}
+	if time.Since(touched.UpdatedAt) > time.Minute {
+		t.Errorf("updated_at = %v after TouchLockdown, want about now", touched.UpdatedAt)
+	}
+	if touched.LockedAt != nil || touched.State != models.LockdownStateActive {
+		t.Errorf("row = %+v after TouchLockdown, want only updated_at changed", touched)
+	}
+	rows, err = ListUnconfirmedFresh(time.Now().UTC().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("ListUnconfirmedFresh error = %v, want none", err)
+	}
+	for _, row := range rows {
+		if row.ID == old.ID {
+			t.Error("a touched row is listed again at once, want it left alone for another grace period")
+		}
+	}
 }
