@@ -183,14 +183,14 @@ Plans:
   4. A lockdown never lifts on its own. It survives bot restarts and a Redis flush, and every bot replica enforces it. Only an admin of the group can lift it with `/unlockdown`, and anyone else is refused.
   5. Lifting the lockdown restores the group's permissions exactly as they were before. Anyone unmuted during the lockdown, by `/unmute` or by passing the captcha, can still talk after it lifts.
 
-**Plans:** 1/8 plans executed
+**Plans:** 2/8 plans executed
 
 Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md: Tracer. `/lockdown` stores the exact getChat permissions, then locks; `/unlockdown` restores them byte for byte; live authority (owner or admin with restrict), refusals that record nothing, one active lockdown per chat on SQLite and PostgreSQL
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 04-02-PLAN.md: `/lockdownstatus` (since, who, why, removed count, hand-edit warning); the lift replaces hand edits, stays locked when the restore fails, lifts once; anonymous admins always prove who they are
+- [x] 04-02-PLAN.md: `/lockdownstatus` (since, who, why, removed count, hand-edit warning); the lift replaces hand edits, stays locked when the restore fails, lifts once; anonymous admins always prove who they are
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 04-03-PLAN.md: Joiners recorded by the group -7 guard and banned until the lift by a paced, DB-driven worker (no welcome or captcha); the lift unbans only the lockdown's own bans and posts one tally
@@ -298,7 +298,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
-| 4. Manual Lockdown | 1/8 | In Progress|  |
+| 4. Manual Lockdown | 2/8 | In Progress|  |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
