@@ -4,6 +4,7 @@ package lockdown
 
 import (
 	"testing"
+	"time"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -213,4 +214,210 @@ func TestJoinerClaims(t *testing.T) {
 		}
 	})
 
+}
+
+// reclaimStates are the finished states a re-join may take a row back from.
+var reclaimStates = []string{
+	models.JoinerStateBanned,
+	models.JoinerStateBanFailed,
+	models.JoinerStateExempt,
+	models.JoinerStateDeclined,
+	models.JoinerStateDeclineFailed,
+	models.JoinerStateCancelled,
+}
+
+// setJoinerColumns writes columns of a joiner row directly, so a test can put a row
+// in a state and age no repository function would produce.
+func setJoinerColumns(t *testing.T, id uint, columns map[string]any) {
+	t.Helper()
+	if err := db.DB.Model(&models.LockdownJoiner{}).Where("id = ?", id).UpdateColumns(columns).Error; err != nil {
+		t.Fatalf("set joiner %d columns: %v", id, err)
+	}
+}
+
+func TestReclaimJoin(t *testing.T) {
+	newRecord := func(ld *models.ChatLockdown, userID int64) JoinRecord {
+		return JoinRecord{
+			LockdownID:     ld.ID,
+			ChatID:         ld.ChatID,
+			UserID:         userID,
+			FirstName:      "Again",
+			Username:       "again",
+			Path:           models.JoinPathService,
+			InviteLink:     "https://t.me/+again",
+			ViaJoinRequest: true,
+			PerformerID:    777,
+			State:          models.JoinerStatePending,
+			BanUntil:       1_950_000_000,
+			JoinMsgID:      4242,
+		}
+	}
+
+	t.Run("wins from every listed state and resets the row", func(t *testing.T) {
+		for i, from := range reclaimStates {
+			chat := uniqueLockdownChatID(t)
+			cleanupLockdowns(t, chat)
+			ld := mustStart(t, chat)
+			row := mustRecord(t, newJoinRecord(ld, int64(9100+i)))
+			claimed := time.Now().UTC()
+			setJoinerColumns(t, row.ID, map[string]any{
+				"state": from, "attempts": 2, "detail": "old failure", "claimed_at": claimed,
+				"join_msg_id": 11, "updated_at": time.Now().UTC().Add(-time.Minute),
+			})
+
+			won, err := ReclaimJoin(row.ID, reclaimStates, time.Now().Add(-20*time.Second), newRecord(ld, row.UserID))
+			if err != nil || !won {
+				t.Fatalf("ReclaimJoin from %s = %v, %v, want true, nil", from, won, err)
+			}
+			got := readJoiner(t, row.ID)
+			if got.State != models.JoinerStatePending || got.JoinPath != models.JoinPathService ||
+				got.BanUntil != 1_950_000_000 || got.PerformerID != 777 || got.InviteLink != "https://t.me/+again" ||
+				!got.ViaJoinRequest || got.JoinMsgID != 4242 || got.FirstName != "Again" || got.Username != "again" {
+				t.Errorf("from %s: row = %+v, want every field of the new record", from, got)
+			}
+			if got.Attempts != 0 || got.Detail != "" || got.ClaimedAt != nil {
+				t.Errorf("from %s: attempts = %d, detail = %q, claimed_at = %v, want 0, empty, nil", from, got.Attempts, got.Detail, got.ClaimedAt)
+			}
+			if !got.UpdatedAt.After(time.Now().Add(-10 * time.Second)) {
+				t.Errorf("from %s: updated_at = %v, want about now: the reclaim opens a new dedupe window", from, got.UpdatedAt)
+			}
+		}
+	})
+
+	t.Run("loses from a state that is not listed", func(t *testing.T) {
+		for i, from := range []string{models.JoinerStatePending, models.JoinerStateActing, models.JoinerStateUnbanning, models.JoinerStateKept} {
+			chat := uniqueLockdownChatID(t)
+			cleanupLockdowns(t, chat)
+			ld := mustStart(t, chat)
+			row := mustRecord(t, newJoinRecord(ld, int64(9200+i)))
+			setJoinerColumns(t, row.ID, map[string]any{"state": from, "updated_at": time.Now().UTC().Add(-time.Minute)})
+
+			won, err := ReclaimJoin(row.ID, reclaimStates, time.Now(), newRecord(ld, row.UserID))
+			if err != nil || won {
+				t.Errorf("ReclaimJoin from %s = %v, %v, want false, nil", from, won, err)
+			}
+			if got := readJoiner(t, row.ID); got.State != from || got.JoinPath != models.JoinPathMember {
+				t.Errorf("from %s: row = %+v, want it untouched", from, got)
+			}
+		}
+	})
+
+	t.Run("loses while the row changed after the cut-off", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chat)
+		ld := mustStart(t, chat)
+		row := mustRecord(t, newJoinRecord(ld, 9300))
+		setJoinerColumns(t, row.ID, map[string]any{"state": models.JoinerStateBanned, "updated_at": time.Now().UTC().Add(-5 * time.Second)})
+
+		won, err := ReclaimJoin(row.ID, reclaimStates, time.Now().Add(-20*time.Second), newRecord(ld, row.UserID))
+		if err != nil || won {
+			t.Fatalf("ReclaimJoin inside the window = %v, %v, want false, nil", won, err)
+		}
+		if got := readJoiner(t, row.ID); got.State != models.JoinerStateBanned {
+			t.Errorf("state = %q, want banned: a join inside the dedupe window is the same join", got.State)
+		}
+
+		won, err = ReclaimJoin(row.ID, reclaimStates, time.Now(), newRecord(ld, row.UserID))
+		if err != nil || !won {
+			t.Fatalf("ReclaimJoin with a cut-off after the change = %v, %v, want true, nil", won, err)
+		}
+		if again, _ := ReclaimJoin(row.ID, reclaimStates, time.Now().Add(time.Hour), newRecord(ld, row.UserID)); again {
+			t.Error("a second reclaim of the now pending row won, want exactly one winner")
+		}
+	})
+}
+
+func TestJoinMsgs(t *testing.T) {
+	t.Run("SetJoinMsg only sets an unset message ID and leaves the dedupe window alone", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chat)
+		ld := mustStart(t, chat)
+		row := mustRecord(t, newJoinRecord(ld, 9400))
+		aged := time.Now().UTC().Add(-time.Minute)
+		setJoinerColumns(t, row.ID, map[string]any{"updated_at": aged})
+
+		if err := SetJoinMsg(row.ID, 77); err != nil {
+			t.Fatalf("SetJoinMsg error = %v", err)
+		}
+		got := readJoiner(t, row.ID)
+		if got.JoinMsgID != 77 {
+			t.Errorf("join_msg_id = %d, want 77", got.JoinMsgID)
+		}
+		if got.UpdatedAt.After(aged.Add(5 * time.Second)) {
+			t.Errorf("updated_at = %v, want it unchanged: a second delivery does not open a new window", got.UpdatedAt)
+		}
+		if err := SetJoinMsg(row.ID, 88); err != nil {
+			t.Fatalf("second SetJoinMsg error = %v", err)
+		}
+		if got := readJoiner(t, row.ID); got.JoinMsgID != 77 {
+			t.Errorf("join_msg_id = %d, want it to stay 77: the first message wins", got.JoinMsgID)
+		}
+	})
+
+	t.Run("ListJoinMsgsToDeleteFresh and ClearJoinMsg", func(t *testing.T) {
+		chatActive := uniqueLockdownChatID(t)
+		chatLifting := uniqueLockdownChatID(t)
+		chatLifted := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chatActive, chatLifting, chatLifted)
+
+		active := mustStart(t, chatActive)
+		lifting := mustStart(t, chatLifting)
+		lifted := mustStart(t, chatLifted)
+		if won, err := BeginLift(lifting.ID, 1, "Admin", false); err != nil || !won {
+			t.Fatalf("BeginLift(lifting) = %v, %v", won, err)
+		}
+		if won, err := BeginLift(lifted.ID, 1, "Admin", false); err != nil || !won {
+			t.Fatalf("BeginLift(lifted) = %v, %v", won, err)
+		}
+		if done, err := FinishLift(lifted.ID); err != nil || !done {
+			t.Fatalf("FinishLift = %v, %v", done, err)
+		}
+
+		withMsg := func(ld *models.ChatLockdown, userID int64, state string, msg int64) *models.LockdownJoiner {
+			rec := newJoinRecord(ld, userID)
+			rec.State = state
+			rec.JoinMsgID = msg
+			return mustRecord(t, rec)
+		}
+		wantA := withMsg(active, 9501, models.JoinerStateBanned, 301)
+		wantB := withMsg(active, 9502, models.JoinerStateBanned, 302)
+		withMsg(active, 9503, models.JoinerStateBanned, 0)
+		withMsg(active, 9504, models.JoinerStatePending, 303)
+		withMsg(active, 9505, models.JoinerStateBanFailed, 304)
+		wantC := withMsg(lifting, 9506, models.JoinerStateBanned, 305)
+		withMsg(lifted, 9507, models.JoinerStateBanned, 306)
+
+		listOurs := func(limit int) []uint {
+			rows, err := ListJoinMsgsToDeleteFresh(limit)
+			if err != nil {
+				t.Fatalf("ListJoinMsgsToDeleteFresh error = %v", err)
+			}
+			var ours []uint
+			for _, row := range rows {
+				switch row.ChatID {
+				case chatActive, chatLifting, chatLifted:
+					ours = append(ours, row.ID)
+				}
+			}
+			return ours
+		}
+		ours := listOurs(1000)
+		if len(ours) != 3 || ours[0] != wantA.ID || ours[1] != wantB.ID || ours[2] != wantC.ID {
+			t.Errorf("rows to delete = %v, want [%d %d %d]: banned rows with a message of an active or lifting lockdown, by ID",
+				ours, wantA.ID, wantB.ID, wantC.ID)
+		}
+		if limited, err := ListJoinMsgsToDeleteFresh(1); err != nil || len(limited) > 1 {
+			t.Errorf("ListJoinMsgsToDeleteFresh(1) = %d rows, %v, want at most 1", len(limited), err)
+		}
+
+		if err := ClearJoinMsg(wantA.ID); err != nil {
+			t.Fatalf("ClearJoinMsg error = %v", err)
+		}
+		if got := readJoiner(t, wantA.ID); got.JoinMsgID != 0 || got.State != models.JoinerStateBanned {
+			t.Errorf("row after ClearJoinMsg = %+v, want join_msg_id 0 and still banned", got)
+		}
+		if ours := listOurs(1000); len(ours) != 2 || ours[0] != wantB.ID || ours[1] != wantC.ID {
+			t.Errorf("rows to delete after the clear = %v, want [%d %d]", ours, wantB.ID, wantC.ID)
+		}
+	})
 }

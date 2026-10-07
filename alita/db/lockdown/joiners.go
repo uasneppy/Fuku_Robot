@@ -6,6 +6,8 @@ package lockdown
 // matter how many replicas run a worker.
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -180,4 +182,24 @@ func ListJoinersInState(lockdownID uint, state string, limit int) ([]models.Lock
 		return nil, alitaerrors.Wrapf(err, "list %s joiners of lockdown %d", state, lockdownID)
 	}
 	return rows, nil
+}
+
+// ReclaimJoin is a compile-only stub; the next commit gives it its behaviour.
+func ReclaimJoin(id uint, fromStates []string, notAfter time.Time, rec JoinRecord) (bool, error) {
+	return false, nil
+}
+
+// SetJoinMsg is a compile-only stub; the next commit gives it its behaviour.
+func SetJoinMsg(id uint, msgID int64) error {
+	return nil
+}
+
+// ListJoinMsgsToDeleteFresh is a compile-only stub; the next commit gives it its behaviour.
+func ListJoinMsgsToDeleteFresh(limit int) ([]models.LockdownJoiner, error) {
+	return nil, nil
+}
+
+// ClearJoinMsg is a compile-only stub; the next commit gives it its behaviour.
+func ClearJoinMsg(id uint) error {
+	return nil
 }
