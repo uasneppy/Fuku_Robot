@@ -2804,6 +2804,7 @@ lockdown_help_msg: |
 
   Hanya pemilik grup, atau admin yang bisa membatasi anggota, yang dapat memakai perintah ini, dan saya memeriksanya secara langsung. Saya harus menjadi admin yang bisa membatasi anggota, dan grup harus berupa supergrup.
   Lockdown tidak pernah berakhir dengan sendirinya. Ia bertahan sampai seorang admin mencabutnya.
+  Ban yang saya berikan kepada orang yang bergabung berlangsung 330 hari sejak setiap bergabung. Jika lockdown berlangsung lebih lama, ban itu habis dengan sendirinya dan orang bisa kembali; ringkasan pencabutan menyebutkan berapa orangnya.
   Admin anonim diminta mengonfirmasi identitasnya terlebih dahulu.
   Permintaan bergabung ditolak selama grup terkunci; orang dapat meminta lagi setelah lockdown dicabut.
 lockdown_started: "🔒 Grup ini dalam lockdown. Hanya admin yang bisa bicara, dan siapa pun yang bergabung akan dikeluarkan sampai admin menjalankan /unlockdown."
@@ -2840,5 +2841,6 @@ lockdown_lift_in_progress: "Lockdown sudah dicabut oleh {name}; orang yang dikel
 lockdown_lifted_unbanning: "Sedang meng-unban {count} orang yang dikeluarkan; saya akan memberi kabar di sini setelah selesai."
 lockdown_lift_tally: "Pencabutan lockdown selesai: {count} orang yang dikeluarkan sudah di-unban dan bisa bergabung lagi."
 lockdown_lift_tally_kept: "{count} dibiarkan apa adanya karena seseorang sudah meng-unban atau sengaja mem-ban mereka."
+lockdown_lift_tally_expired: "{count} sudah tidak diblokir: ban 330 hari yang saya berikan saat mereka bergabung sudah habis, jadi saya biarkan apa adanya."
 lockdown_lift_tally_failed: "Saya tidak bisa meng-unban {count}:"
 lockdown_lift_tally_more: "…dan {count} lainnya."

@@ -46,6 +46,12 @@ const (
 	JoinerStateUnbanFailed = "unban_failed"
 )
 
+// JoinerDetailBanExpired is the detail of a kept joiner row whose lockdown ban had
+// already run out when the lift reached it: the person was no longer banned and the
+// ban's end date had passed. The state check on chat_lockdown_joiners has no state for
+// it, so it is a kept row with this detail, which is never Telegram's escaped text.
+const JoinerDetailBanExpired = "ban_expired"
+
 // How a joiner reached the group, as stored in chat_lockdown_joiners.join_path.
 const (
 	// JoinPathMember is the chat_member update.

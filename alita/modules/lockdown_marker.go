@@ -38,3 +38,12 @@ const lockdownBanSpan = 330 * 24 * time.Hour
 func lockdownBanUntil(now time.Time) int64 {
 	return now.Add(lockdownBanSpan).Unix()
 }
+
+// lockdownBanExpired reports whether a live chat member who is not under the
+// lockdown's own ban is one whose ban ran out on its own: no longer in the group
+// (status left, which is what a lapsed ban leaves) and past the row's ban_until. The
+// lockdown has no end date, so a lockdown that outlasts lockdownBanSpan outlasts its
+// own bans, and the lift reports those people apart from the ones left on purpose.
+func lockdownBanExpired(m gotgbot.MergedChatMember, banUntil int64, now time.Time) bool {
+	return m.Status == gotgbot.ChatMemberStatusLeft && banUntil != 0 && now.Unix() > banUntil
+}

@@ -168,6 +168,21 @@ func CancelPending(lockdownID uint) (int64, error) {
 	return result.RowsAffected, nil
 }
 
+// CountJoinersWithDetail counts the joiner rows of one lockdown that are in state and
+// carry exactly detail, straight from the database. The lift's tally uses it to tell
+// the kept rows whose ban had run out from the other kept rows.
+func CountJoinersWithDetail(lockdownID uint, state, detail string) (int64, error) {
+	var count int64
+	err := db.DB.Model(&models.LockdownJoiner{}).
+		Where("lockdown_id = ? AND state = ? AND detail = ?", lockdownID, state, detail).
+		Count(&count).Error
+	if err != nil {
+		log.Errorf("[Lockdown] CountJoinersWithDetail: %v", err)
+		return 0, alitaerrors.Wrapf(err, "count joiners of lockdown %d in state %s", lockdownID, state)
+	}
+	return count, nil
+}
+
 // ListJoinersInState reads up to limit joiner rows of one lockdown in one state,
 // oldest ID first, which is the order they were recorded in.
 func ListJoinersInState(lockdownID uint, state string, limit int) ([]models.LockdownJoiner, error) {

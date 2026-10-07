@@ -2776,6 +2776,7 @@ lockdown_help_msg: |
 
   Só o dono do grupo, ou um administrador que possa restringir membros, pode usar estes comandos, e eu verifico isso em tempo real. Tenho de ser administrador com permissão para restringir membros, e o grupo tem de ser um supergrupo.
   Um bloqueio nunca termina sozinho. Dura até que um administrador o levante.
+  Os banimentos que aplico a quem entra duram 330 dias a contar de cada entrada. Se um bloqueio durar mais do que isso, esses banimentos terminam sozinhos e as pessoas podem voltar; o resumo do levantamento diz quantas.
   Os administradores anónimos são primeiro convidados a confirmar quem são.
   Os pedidos de entrada são recusados enquanto o grupo está bloqueado; as pessoas podem pedir de novo depois do levantamento.
 lockdown_started: "🔒 Este grupo está em bloqueio. Só os administradores podem falar, e quem entrar é removido até que um administrador use /unlockdown."
@@ -2812,5 +2813,6 @@ lockdown_lift_in_progress: "O bloqueio já foi levantado por {name}; as pessoas 
 lockdown_lifted_unbanning: "A desbanir agora {count} pessoas removidas; publicarei aqui quando terminar."
 lockdown_lift_tally: "Levantamento do bloqueio concluído: {count} pessoas removidas foram desbanidas e podem voltar a entrar."
 lockdown_lift_tally_kept: "{count} foram deixadas como estão porque alguém já as tinha desbanido ou banido de propósito."
+lockdown_lift_tally_expired: "{count} já não estavam banidas: o banimento de 330 dias que lhes dei quando entraram já tinha terminado, por isso deixei-as como estão."
 lockdown_lift_tally_failed: "Não consegui desbanir {count}:"
 lockdown_lift_tally_more: "…e mais {count}."

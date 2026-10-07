@@ -13,6 +13,7 @@ A lockdown stops a raid in this group: everyone but the admins is muted until an
 
 Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
 A lockdown never ends on its own. It stays until an admin lifts it.
+The bans I place on joiners last 330 days from each join. If a lockdown lasts longer than that, those bans run out by themselves and the people can come back; the lift summary says how many.
 Anonymous admins are asked to confirm who they are first.
 Join requests are declined while the group is locked; people can ask again after the lift.
 

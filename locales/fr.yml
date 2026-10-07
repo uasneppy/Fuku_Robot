@@ -2730,6 +2730,7 @@ lockdown_help_msg: |
 
   Seul le propriétaire du groupe, ou un admin qui peut restreindre des membres, peut utiliser ces commandes, et je le vérifie en direct. Je dois être admin avec le droit de restreindre des membres, et le groupe doit être un supergroupe.
   Un verrouillage ne se termine jamais tout seul. Il dure jusqu'à ce qu'un admin le lève.
+  Les bannissements que j'applique aux arrivants durent 330 jours à partir de chaque arrivée. Si un verrouillage dure plus longtemps, ces bannissements expirent d'eux-mêmes et les personnes peuvent revenir ; le résumé de la levée indique combien.
   Les admins anonymes doivent d'abord confirmer qui ils sont.
   Les demandes d'adhésion sont refusées tant que le groupe est verrouillé ; les personnes peuvent redemander après la levée.
 lockdown_started: "🔒 Ce groupe est verrouillé. Seuls les admins peuvent parler, et toute personne qui rejoint est retirée jusqu'à ce qu'un admin utilise /unlockdown."
@@ -2766,5 +2767,6 @@ lockdown_lift_in_progress: "Le verrouillage a déjà été levé par {name} ; le
 lockdown_lifted_unbanning: "Débannissement de {count} personnes retirées en cours ; je publierai ici quand ce sera terminé."
 lockdown_lift_tally: "Levée du verrouillage terminée : {count} personnes retirées ont été débannies et peuvent revenir."
 lockdown_lift_tally_kept: "{count} ont été laissées telles quelles car quelqu'un les avait déjà débannies ou bannies volontairement."
+lockdown_lift_tally_expired: "{count} n'étaient plus bannies : le bannissement de 330 jours que je leur avais appliqué à leur arrivée avait déjà expiré, donc je les ai laissées telles quelles."
 lockdown_lift_tally_failed: "Je n'ai pas pu débannir {count} :"
 lockdown_lift_tally_more: "…et {count} de plus."

@@ -543,7 +543,11 @@ func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJo
 	}
 
 	if !isLockdownBan(member, row.BanUntil) {
-		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateKept, "", false)
+		detail := ""
+		if lockdownBanExpired(member, row.BanUntil, time.Now()) {
+			detail = models.JoinerDetailBanExpired
+		}
+		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateKept, detail, false)
 		return true
 	}
 
@@ -612,7 +616,8 @@ func lockdownFailureLines(lockdownID uint, failed int64) (lines []string, more i
 
 // lockdownPostTally posts the one message that closes a lift, in the chat's language:
 // how many removed joiners were unbanned, how many were left as they are because the
-// ban was no longer the lockdown's own, and each joiner who could not be unbanned by
+// ban was no longer the lockdown's own, how many were no longer banned because the
+// lockdown's 330-day ban had run out, and each joiner who could not be unbanned by
 // name and ID. A lockdown whose lift had nothing to report posts nothing. Only the
 // replica that won FinishLift calls it.
 func lockdownPostTally(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdown) {
@@ -627,11 +632,22 @@ func lockdownPostTally(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdo
 	if unbanned+kept+failed == 0 {
 		return
 	}
+	// Kept rows whose ban had run out on its own are told apart from the ones left on
+	// purpose. A count that cannot be read leaves them in the kept line.
+	expired, err := lockdown.CountJoinersWithDetail(ld.ID, models.JoinerStateKept, models.JoinerDetailBanExpired)
+	if err != nil {
+		log.Warnf("[Lockdown] expired bans of lockdown %d could not be counted: %v", ld.ID, err)
+		expired = 0
+	}
+	kept -= expired
 
 	tr := staffChatTranslator(ld.ChatID)
 	lines := []string{lockdownText(tr, "lockdown_lift_tally", i18n.TranslationParams{"count": unbanned})}
 	if kept > 0 {
 		lines = append(lines, lockdownText(tr, "lockdown_lift_tally_kept", i18n.TranslationParams{"count": kept}))
+	}
+	if expired > 0 {
+		lines = append(lines, lockdownText(tr, "lockdown_lift_tally_expired", i18n.TranslationParams{"count": expired}))
 	}
 	list := ""
 	if failed > 0 {

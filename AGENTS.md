@@ -277,6 +277,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the lift starts are
   cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
   replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
+- A lockdown has no end date but its bans do: each joiner's ban lasts `lockdownBanSpan` (330 days) from the join, so a
+  lockdown that outlasts that stops banning the raiders it removed (Telegram bans of 30 s to 366 days are the only
+  finite ones, and a longer one would be permanent and look like a deliberate ban). This is an accepted limit; the
+  worker does not re-ban, and the help text says so. At the lift a joiner who is `left` with a `ban_until` in the past
+  (`lockdownBanExpired`) is moved to `kept` with detail `models.JoinerDetailBanExpired` (the joiner state check has no
+  state for it, and migrations are append-only), and the tally reports those as `lockdown_lift_tally_expired`, apart
+  from the `kept` ones someone unbanned early or banned on purpose; it never says they were left on purpose.
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
   active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute

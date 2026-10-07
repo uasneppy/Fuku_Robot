@@ -2814,6 +2814,7 @@ lockdown_help_msg: |
 
   Solo el creador del grupo, o un admin que pueda restringir miembros, puede usar estos comandos, y lo compruebo en el momento. Debo ser admin con permiso para restringir miembros y el grupo debe ser un supergrupo.
   Un bloqueo nunca termina solo. Dura hasta que un admin lo levante.
+  Los baneos que pongo a quienes se unen duran 330 días desde cada unión. Si un bloqueo dura más, esos baneos terminan solos y las personas pueden volver; el resumen del levantamiento indica cuántas.
   A los admins anónimos se les pide primero que confirmen quiénes son.
   Las solicitudes de unión se rechazan mientras el grupo está bloqueado; las personas pueden volver a pedirlo tras el levantamiento.
 lockdown_started: "🔒 Este grupo está en bloqueo. Solo los admins pueden hablar y quien se una será expulsado hasta que un admin use /unlockdown."
@@ -2850,5 +2851,6 @@ lockdown_lift_in_progress: "El bloqueo ya fue levantado por {name}; todavía se 
 lockdown_lifted_unbanning: "Desbaneando ahora a {count} personas expulsadas; publicaré aquí cuando termine."
 lockdown_lift_tally: "Levantamiento del bloqueo terminado: se desbaneó a {count} personas expulsadas y pueden volver a unirse."
 lockdown_lift_tally_kept: "{count} se dejaron como están porque alguien ya las había desbaneado o las había baneado a propósito."
+lockdown_lift_tally_expired: "{count} ya no estaban baneadas: el baneo de 330 días que les puse al unirse ya había terminado, así que las dejé como están."
 lockdown_lift_tally_failed: "No pude desbanear a {count}:"
 lockdown_lift_tally_more: "…y {count} más."

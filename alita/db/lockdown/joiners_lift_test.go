@@ -5,6 +5,7 @@ package lockdown
 import (
 	"testing"
 
+	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
 
@@ -76,5 +77,35 @@ func TestListLiftingFresh(t *testing.T) {
 	}
 	if len(ours) != 1 || ours[0] != lifting.ID {
 		t.Errorf("lifting lockdowns of our chats = %v, want only [%d]: an active lockdown is not lifting", ours, lifting.ID)
+	}
+}
+
+func TestCountJoinersWithDetail(t *testing.T) {
+	chat := uniqueLockdownChatID(t)
+	other := uniqueLockdownChatID(t)
+	cleanupLockdowns(t, chat, other)
+	ld := mustStart(t, chat)
+	otherLd := mustStart(t, other)
+
+	record := func(target *models.ChatLockdown, userID int64, state, detail string) {
+		rec := newJoinRecord(target, userID)
+		rec.State = state
+		row := mustRecord(t, rec)
+		if err := db.DB.Model(&models.LockdownJoiner{}).Where("id = ?", row.ID).UpdateColumn("detail", detail).Error; err != nil {
+			t.Fatalf("set detail of joiner %d: %v", row.ID, err)
+		}
+	}
+	record(ld, 911, models.JoinerStateKept, models.JoinerDetailBanExpired)
+	record(ld, 912, models.JoinerStateKept, models.JoinerDetailBanExpired)
+	record(ld, 913, models.JoinerStateKept, "")
+	record(ld, 914, models.JoinerStateUnbanFailed, models.JoinerDetailBanExpired)
+	record(otherLd, 915, models.JoinerStateKept, models.JoinerDetailBanExpired)
+
+	got, err := CountJoinersWithDetail(ld.ID, models.JoinerStateKept, models.JoinerDetailBanExpired)
+	if err != nil || got != 2 {
+		t.Errorf("CountJoinersWithDetail = %d, %v, want 2, nil: only this lockdown's kept rows with that detail", got, err)
+	}
+	if none, err := CountJoinersWithDetail(ld.ID, models.JoinerStateBanned, models.JoinerDetailBanExpired); err != nil || none != 0 {
+		t.Errorf("CountJoinersWithDetail for another state = %d, %v, want 0, nil", none, err)
 	}
 }
