@@ -404,6 +404,64 @@ func (e *lockdownEnv) serviceJoin(from gotgbot.User, senderChat *gotgbot.Chat, m
 	return id
 }
 
+// joinRequest runs a chat_join_request update in the lockdown chat through the real
+// dispatcher: from asked to join, through inviteLink when it is not empty.
+func (e *lockdownEnv) joinRequest(from gotgbot.User, inviteLink string) {
+	e.t.Helper()
+	id := e.updateID()
+	request := &gotgbot.ChatJoinRequest{
+		Chat:       e.chat,
+		From:       from,
+		UserChatId: from.Id,
+		Date:       1,
+	}
+	if inviteLink != "" {
+		request.InviteLink = &gotgbot.ChatInviteLink{InviteLink: inviteLink, Creator: e.admin}
+	}
+	update := &gotgbot.Update{UpdateId: id, ChatJoinRequest: request}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+}
+
+// pressJoinRequest presses a button of a join-request card (action is accept,
+// decline or ban) on message msgID of the lockdown chat, through the real dispatcher.
+func (e *lockdownEnv) pressJoinRequest(from gotgbot.User, msgID int64, action string, userID int64) {
+	e.t.Helper()
+	data := encodeCallbackData("join_request", map[string]string{"a": action, "u": fmt.Sprint(userID)})
+	if data == "" {
+		e.t.Fatalf("callback data for join request action %s did not encode", action)
+	}
+	id := e.updateID()
+	update := &gotgbot.Update{
+		UpdateId: id,
+		CallbackQuery: &gotgbot.CallbackQuery{
+			Id:           fmt.Sprintf("cb-%d", id),
+			From:         from,
+			Message:      gotgbot.Message{MessageId: msgID, Date: 1, Chat: e.chat},
+			Data:         data,
+			ChatInstance: "lockdown-test",
+		},
+	}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+}
+
+// lastAnswer returns the text and alert flag of the last answerCallbackQuery.
+func (e *lockdownEnv) lastAnswer() (text string, alert bool) {
+	e.t.Helper()
+	calls := e.fake.callsFor("answerCallbackQuery")
+	if len(calls) == 0 {
+		e.t.Fatal("no callback query was answered")
+	}
+	last := calls[len(calls)-1]
+	if value, ok := last.Params["text"]; ok {
+		text = fmt.Sprint(value)
+	}
+	return text, staffParamBool(last.Params, "show_alert")
+}
+
 // ageJoiner moves the updated_at of a joiner row back by the given time with a
 // direct update, so a test can show what happens to a delivery that comes later than
 // the dedupe window without sleeping through it.

@@ -92,6 +92,10 @@ func lockdownNeedsPerformerLookup(in lockdownJoinInput) bool {
 // test can make the write fail; production code never reassigns it.
 var lockdownRecordJoin = lockdown.RecordJoin
 
+// lockdownActiveLookup is the guard's read of a chat's active lockdown. It is a
+// variable only so a test can make the read fail; production code never reassigns it.
+var lockdownActiveLookup = lockdown.GetActiveFresh
+
 // lockdownJoinFilter selects a user who became a member of a chat: the same test the
 // greetings module uses for its welcome.
 func lockdownJoinFilter(u *gotgbot.ChatMemberUpdated) bool {
