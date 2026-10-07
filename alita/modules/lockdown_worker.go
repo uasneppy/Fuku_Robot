@@ -3,15 +3,19 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
+	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
@@ -61,6 +65,11 @@ const (
 // lockdownTallyListMax is how many joiners the lift's tally names when they could not
 // be unbanned; the rest are counted. A variable so a test can shrink it.
 var lockdownTallyListMax = 25
+
+// lockdownListToken stands in for the tally's list of failed unbans until the
+// translated text is assembled, so names and Telegram's reasons are never run through
+// the translator's printf-style pass.
+const lockdownListToken = "<<lockdown-list>>"
 
 // lockdownWake wakes the worker of this replica when its own guard records a joiner.
 // Other replicas pick the work up at their next tick.
@@ -156,7 +165,9 @@ func lockdownWorkerLoop(ctx context.Context, b *gotgbot.Bot) {
 // spinning on it.
 func runLockdownCycle(ctx context.Context, b *gotgbot.Bot) bool {
 	defer error_handling.RecoverFromPanic("lockdownCycle", "Lockdown")
-	return lockdownBanPending(ctx, b)
+	banned := lockdownBanPending(ctx, b)
+	lifted := lockdownProcessLifts(ctx, b)
+	return banned || lifted
 }
 
 // lockdownCallOutcome is how one Telegram call of the worker ended.
@@ -234,6 +245,216 @@ func lockdownBanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJoin
 	}
 	moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStatePending, telegramErrorDetail(err), true)
 	return false
+}
+
+// lockdownProcessLifts works through every lockdown that is being lifted: joiners
+// still pending are cancelled and never banned, the lockdown's own bans are unbanned
+// in the order they were recorded, and the lockdown is finished once nothing is left,
+// with one tally. It reports whether any row made progress.
+func lockdownProcessLifts(ctx context.Context, b *gotgbot.Bot) bool {
+	lifts, err := lockdown.ListLiftingFresh()
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not list lifting lockdowns: %v", err)
+		return false
+	}
+	progress := false
+	for _, ld := range lifts {
+		if ctx.Err() != nil {
+			break
+		}
+		if lockdownProcessLift(ctx, b, ld) {
+			progress = true
+		}
+	}
+	return progress
+}
+
+// lockdownProcessLift is one cycle of one lift.
+func lockdownProcessLift(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdown) bool {
+	progress := false
+	if cancelled, err := lockdown.CancelPending(ld.ID); err != nil {
+		log.Errorf("[Lockdown] pending joiners of lockdown %d were not cancelled: %v", ld.ID, err)
+	} else if cancelled > 0 {
+		progress = true
+	}
+
+	rows, err := lockdown.ListJoinersInState(ld.ID, models.JoinerStateBanned, lockdownWorkerBatch)
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not list banned joiners of lockdown %d: %v", ld.ID, err)
+		return progress
+	}
+	for _, row := range rows {
+		if ctx.Err() != nil {
+			return progress
+		}
+		won, err := lockdown.ClaimJoiner(row.ID, models.JoinerStateBanned, models.JoinerStateUnbanning)
+		if err != nil || !won {
+			continue
+		}
+		if lockdownUnbanOne(ctx, b, row) {
+			progress = true
+		}
+	}
+	if ctx.Err() != nil {
+		return progress
+	}
+
+	// One conditional update: it matches only while no joiner row is unfinished, and
+	// only the replica that wins it posts the tally.
+	finished, err := lockdown.FinishLift(ld.ID)
+	if err != nil {
+		log.Errorf("[Lockdown] lockdown %d lift was not finished: %v", ld.ID, err)
+		return progress
+	}
+	if finished {
+		lockdownPostTally(ctx, b, ld)
+		progress = true
+	}
+	return progress
+}
+
+// lockdownUnbanOne lifts the lockdown's ban on one claimed joiner, if it is still the
+// lockdown's own. It looks at the live member first: only a member that is kicked
+// with this row's ban_until (isLockdownBan) is unbanned, with only_if_banned so the
+// call can never remove a member; anyone else, a deliberate ban included, is kept and
+// never touched. It reports whether the row reached a final state.
+func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJoiner) bool {
+	var member gotgbot.MergedChatMember
+	err := lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		live, lookupErr := b.GetChatMemberWithContext(call, row.ChatID, row.UserID, nil)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if live == nil {
+			return errors.New("getChatMember returned no member")
+		}
+		member = live.MergeChatMember()
+		return nil
+	})
+	if err != nil {
+		return lockdownUnbanFailed(ctx, row, err)
+	}
+
+	if !isLockdownBan(member, row.BanUntil) {
+		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateKept, "", false)
+		return true
+	}
+
+	err = lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		_, unbanErr := b.UnbanChatMemberWithContext(call, row.ChatID, row.UserID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
+		return unbanErr
+	})
+	if err != nil {
+		return lockdownUnbanFailed(ctx, row, err)
+	}
+	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateUnbanned, "", false)
+	return true
+}
+
+// lockdownUnbanFailed records a failed look-up or unban of a claimed row. A rate
+// limit or a shutdown puts the row back without costing an attempt; any other failure
+// costs one, and the third is final (unban_failed, named in the tally).
+func lockdownUnbanFailed(ctx context.Context, row models.LockdownJoiner, err error) bool {
+	if lockdownClassify(ctx, err) == lockdownCallRetryFree {
+		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateBanned, "", false)
+		return false
+	}
+	log.Warnf("[Lockdown] unban of user %d in chat %d failed: %v", row.UserID, row.ChatID, err)
+	if row.Attempts+1 >= lockdownMaxAttempts {
+		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateUnbanFailed, telegramErrorDetail(err), true)
+		return true
+	}
+	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateBanned, telegramErrorDetail(err), true)
+	return false
+}
+
+// lockdownTallyMaxRunes bounds the failure list of the tally, far under Telegram's
+// 4096-character limit, so a long list never makes the tally itself fail to send.
+const lockdownTallyMaxRunes = 3000
+
+// lockdownFailureLines renders the joiners that could not be unbanned, in the order
+// they were recorded, one line each: a mention of the name, the ID in code tags and
+// Telegram's stored reason. It stops at lockdownTallyListMax lines or the size bound
+// and reports how many of failed it left out.
+func lockdownFailureLines(lockdownID uint, failed int64) (lines []string, more int64) {
+	rows, err := lockdown.ListJoinersInState(lockdownID, models.JoinerStateUnbanFailed, lockdownTallyListMax)
+	if err != nil {
+		log.Errorf("[Lockdown] failed unbans of lockdown %d could not be listed: %v", lockdownID, err)
+		return nil, failed
+	}
+	used := 0
+	for _, row := range rows {
+		name := row.FirstName
+		if name == "" {
+			name = fmt.Sprint(row.UserID)
+		}
+		line := fmt.Sprintf("%s (<code>%d</code>)", lockdownMention(row.UserID, name), row.UserID)
+		if row.Detail != "" {
+			line += ": " + row.Detail
+		}
+		used += utf8.RuneCountInString(line) + 1
+		if used > lockdownTallyMaxRunes {
+			break
+		}
+		lines = append(lines, line)
+	}
+	return lines, failed - int64(len(lines))
+}
+
+// lockdownPostTally posts the one message that closes a lift, in the chat's language:
+// how many removed joiners were unbanned, how many were left as they are because the
+// ban was no longer the lockdown's own, and each joiner who could not be unbanned by
+// name and ID. A lockdown whose lift had nothing to report posts nothing. Only the
+// replica that won FinishLift calls it.
+func lockdownPostTally(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdown) {
+	tally, err := lockdown.TallyJoiners(ld.ID)
+	if err != nil {
+		log.Warnf("[Lockdown] tally of lockdown %d could not be read: %v", ld.ID, err)
+		return
+	}
+	unbanned := tally[models.JoinerStateUnbanned]
+	kept := tally[models.JoinerStateKept]
+	failed := tally[models.JoinerStateUnbanFailed]
+	if unbanned+kept+failed == 0 {
+		return
+	}
+
+	tr := staffChatTranslator(ld.ChatID)
+	lines := []string{lockdownText(tr, "lockdown_lift_tally", i18n.TranslationParams{"count": unbanned})}
+	if kept > 0 {
+		lines = append(lines, lockdownText(tr, "lockdown_lift_tally_kept", i18n.TranslationParams{"count": kept}))
+	}
+	list := ""
+	if failed > 0 {
+		lines = append(lines,
+			lockdownText(tr, "lockdown_lift_tally_failed", i18n.TranslationParams{"count": failed}),
+			lockdownListToken)
+		failureLines, more := lockdownFailureLines(ld.ID, failed)
+		if more > 0 {
+			failureLines = append(failureLines, lockdownText(tr, "lockdown_lift_tally_more", i18n.TranslationParams{"count": more}))
+		}
+		list = lockdownJoinLines(failureLines)
+	}
+	// The names and reasons are user-controlled text, so the list goes in after the
+	// translation, in place of its token.
+	text := lockdownSplice(lockdownJoinLines(lines), lockdownListToken, list)
+
+	err = lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		_, sendErr := b.SendMessageWithContext(call, ld.ChatID, text, &gotgbot.SendMessageOpts{
+			ParseMode:          formatting.HTML,
+			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+		})
+		return sendErr
+	})
+	if err != nil {
+		log.Warnf("[Lockdown] lift tally for chat %d was not delivered: %v", ld.ChatID, err)
+	}
 }
 
 // moveLockdownJoiner moves a row and logs a failed write; the row then stays in its

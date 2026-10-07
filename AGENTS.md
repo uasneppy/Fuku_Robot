@@ -211,6 +211,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   conditional updates) makes every write and bans with `until_date` = the row's `ban_until`, 330 days after the join,
   the marker that tells the lockdown's own ban from a deliberate one. A failed record write lets the joiner in, still
   muted by the locked default permissions, because an unrecorded ban would never be lifted.
+- The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
+  only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
+  else, a deliberate `/ban` or `/tban` included, is kept and never touched. Joiners still pending when the lift starts are
+  cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
+  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
   rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own

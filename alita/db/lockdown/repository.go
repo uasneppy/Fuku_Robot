@@ -123,6 +123,18 @@ func GetCurrentFresh(chatID int64) (*models.ChatLockdown, error) {
 	return &rows[0], nil
 }
 
+// ListLiftingFresh reads every lockdown that is being lifted, oldest first, straight
+// from the database: the lifts the worker still has joiners to unban for.
+func ListLiftingFresh() ([]models.ChatLockdown, error) {
+	var rows []models.ChatLockdown
+	err := db.DB.Where("state = ?", models.LockdownStateLifting).Order("id").Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListLiftingFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list lifting lockdowns")
+	}
+	return rows, nil
+}
+
 // TallyJoiners counts the joiner rows of one lockdown by state, straight from the
 // database. A state with no rows is absent from the map, and a lockdown with no
 // joiner rows gets an empty map.

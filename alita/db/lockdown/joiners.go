@@ -151,3 +151,33 @@ func DeletePendingJoin(id uint) (bool, error) {
 	}
 	return result.RowsAffected == 1, nil
 }
+
+// CancelPending moves every pending joiner row of a lockdown to cancelled and
+// returns how many it moved. It is what a lift does with joiners that were recorded
+// but not yet banned: they are never banned.
+func CancelPending(lockdownID uint) (int64, error) {
+	result := db.DB.Model(&models.LockdownJoiner{}).
+		Where("lockdown_id = ? AND state = ?", lockdownID, models.JoinerStatePending).
+		Updates(map[string]any{"state": models.JoinerStateCancelled, "claimed_at": nil, "updated_at": now()})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] CancelPending: %v", result.Error)
+		return 0, alitaerrors.Wrapf(result.Error, "cancel pending joiners of lockdown %d", lockdownID)
+	}
+	return result.RowsAffected, nil
+}
+
+// ListJoinersInState reads up to limit joiner rows of one lockdown in one state,
+// oldest ID first, which is the order they were recorded in.
+func ListJoinersInState(lockdownID uint, state string, limit int) ([]models.LockdownJoiner, error) {
+	var rows []models.LockdownJoiner
+	err := db.DB.
+		Where("lockdown_id = ? AND state = ?", lockdownID, state).
+		Order("id").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListJoinersInState: %v", err)
+		return nil, alitaerrors.Wrapf(err, "list %s joiners of lockdown %d", state, lockdownID)
+	}
+	return rows, nil
+}

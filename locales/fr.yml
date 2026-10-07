@@ -2758,3 +2758,8 @@ lockdown_restore_failed: "Je n'ai pas pu remettre les permissions du groupe, don
 lockdown_lift_record_failed: "Les permissions sont revenues, mais je n'ai pas pu enregistrer la levée. Relance /unlockdown."
 lockdown_already_lifted: "Ce verrouillage a déjà été levé."
 lockdown_lift_in_progress: "Le verrouillage a déjà été levé par {name} ; les personnes retirées sont encore en cours de débannissement."
+lockdown_lifted_unbanning: "Débannissement de {count} personnes retirées en cours ; je publierai ici quand ce sera terminé."
+lockdown_lift_tally: "Levée du verrouillage terminée : {count} personnes retirées ont été débannies et peuvent revenir."
+lockdown_lift_tally_kept: "{count} ont été laissées telles quelles car quelqu'un les avait déjà débannies ou bannies volontairement."
+lockdown_lift_tally_failed: "Je n'ai pas pu débannir {count} :"
+lockdown_lift_tally_more: "…et {count} de plus."

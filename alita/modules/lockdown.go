@@ -463,7 +463,8 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	if !won {
 		return reply(lockdownText(tr, "lockdown_already_lifted"))
 	}
-	if _, err := lockdown.FinishLift(row.ID); err != nil {
+	finished, err := lockdown.FinishLift(row.ID)
+	if err != nil {
 		log.Errorf("[Lockdown] lockdown %d lift was not finished: %v", row.ID, err)
 	}
 
@@ -471,6 +472,16 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	lines := []string{lockdownSplice(text, lockdownNameToken, lockdownMention(actor.Id, name))}
 	if manualChange {
 		lines = append(lines, lockdownText(tr, "lockdown_lifted_manual_change"))
+	}
+	if !finished {
+		// Joiners are left to handle: the worker cancels the ones not yet banned,
+		// unbans the lockdown's own bans and posts the tally.
+		wakeLockdownWorker()
+		if tally, tallyErr := lockdown.TallyJoiners(row.ID); tallyErr != nil {
+			log.Errorf("[Lockdown] joiners of lockdown %d could not be counted: %v", row.ID, tallyErr)
+		} else if removed := tally[models.JoinerStateBanned]; removed > 0 {
+			lines = append(lines, lockdownText(tr, "lockdown_lifted_unbanning", i18n.TranslationParams{"count": removed}))
+		}
 	}
 	return reply(lockdownJoinLines(lines))
 }

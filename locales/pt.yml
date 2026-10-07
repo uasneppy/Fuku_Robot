@@ -2804,3 +2804,8 @@ lockdown_restore_failed: "Não consegui repor as permissões do grupo, por isso 
 lockdown_lift_record_failed: "As permissões voltaram, mas não consegui registar o levantamento. Executa /unlockdown outra vez."
 lockdown_already_lifted: "Este bloqueio já foi levantado."
 lockdown_lift_in_progress: "O bloqueio já foi levantado por {name}; as pessoas removidas ainda estão a ser desbanidas."
+lockdown_lifted_unbanning: "A desbanir agora {count} pessoas removidas; publicarei aqui quando terminar."
+lockdown_lift_tally: "Levantamento do bloqueio concluído: {count} pessoas removidas foram desbanidas e podem voltar a entrar."
+lockdown_lift_tally_kept: "{count} foram deixadas como estão porque alguém já as tinha desbanido ou banido de propósito."
+lockdown_lift_tally_failed: "Não consegui desbanir {count}:"
+lockdown_lift_tally_more: "…e mais {count}."

@@ -2579,3 +2579,8 @@ lockdown_restore_failed: "Мне не удалось вернуть разреш
 lockdown_lift_record_failed: "Разрешения возвращены, но я не смог записать снятие блокировки. Выполните /unlockdown ещё раз."
 lockdown_already_lifted: "Эта блокировка уже снята."
 lockdown_lift_in_progress: "Блокировка уже снята: {name}; удалённых участников всё ещё разбанивают."
+lockdown_lifted_unbanning: "Разбаниваю удалённых участников: {count}. Напишу здесь, когда закончу."
+lockdown_lift_tally: "Снятие блокировки завершено: разбанено удалённых участников — {count}, они могут вернуться."
+lockdown_lift_tally_kept: "Оставлено без изменений: {count} — кто-то уже разбанил их или забанил намеренно."
+lockdown_lift_tally_failed: "Не удалось разбанить ({count}):"
+lockdown_lift_tally_more: "…и ещё {count}."

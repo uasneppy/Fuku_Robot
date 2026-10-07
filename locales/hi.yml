@@ -2519,3 +2519,8 @@ lockdown_restore_failed: "मैं ग्रुप की अनुमतिय
 lockdown_lift_record_failed: "अनुमतियां वापस आ गई हैं, लेकिन मैं लॉकडाउन हटाने को दर्ज नहीं कर सका। /unlockdown दोबारा चलाएं।"
 lockdown_already_lifted: "यह लॉकडाउन पहले ही हटाया जा चुका है।"
 lockdown_lift_in_progress: "लॉकडाउन पहले ही {name} ने हटा दिया है; निकाले गए सदस्यों को अभी अनबैन किया जा रहा है।"
+lockdown_lifted_unbanning: "{count} निकाले गए सदस्यों को अभी अनबैन किया जा रहा है; काम पूरा होने पर मैं यहाँ बताऊँगा।"
+lockdown_lift_tally: "लॉकडाउन हटाना पूरा हुआ: {count} निकाले गए सदस्यों को अनबैन कर दिया गया है और वे दोबारा जुड़ सकते हैं।"
+lockdown_lift_tally_kept: "{count} को जैसा था वैसा ही छोड़ा गया, क्योंकि किसी ने उन्हें पहले ही अनबैन कर दिया था या जानबूझकर बैन किया था।"
+lockdown_lift_tally_failed: "मैं {count} को अनबैन नहीं कर सका:"
+lockdown_lift_tally_more: "…और {count} और।"
