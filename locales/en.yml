@@ -2830,3 +2830,20 @@ staff_undo_already_interrupted: "An undo by {name} was interrupted by a restart.
 staff_undo_already_nothing: "An undo by {name} already ran and changed nothing. This action cannot be undone again."
 staff_undo_not_available: "This action cannot be undone."
 staff_undo_card_presser_only: "Only the staff member who pressed Undo can confirm or cancel it."
+lockdown_help_msg: |
+  A lockdown stops a raid in this group: everyone but the admins is muted until an admin lifts it.
+
+  × /lockdown [reason]: Lock this group. Only admins can talk, approved users included, and new members are removed until the lift.
+  × /unlockdown: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
+
+  Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
+  A lockdown never ends on its own. It stays until an admin lifts it.
+lockdown_started: "🔒 This group is in lockdown. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
+lockdown_note_approved_muted: "Approved users are muted too."
+lockdown_started_by: "Locked by {name}."
+lockdown_reason_line: "Reason: {reason}"
+lockdown_already_active: "This group is already in lockdown since {since}, started by {name}."
+lockdown_lifted: "🔓 Lockdown lifted by {name}. The group's permissions are back to what they were before the lockdown."
+lockdown_not_active: "This group is not in lockdown."
+lockdown_check_failed: "I couldn't check your rights here right now. Nothing changed. Try again in a moment."
+lockdown_state_failed: "I couldn't complete that right now, so nothing was changed. Try again in a moment."

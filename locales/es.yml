@@ -2802,3 +2802,20 @@ staff_undo_already_interrupted: "Un deshacer de {name} fue interrumpido por un r
 staff_undo_already_nothing: "Un deshacer de {name} ya se ejecutó y no cambió nada. Esta acción no se puede deshacer de nuevo."
 staff_undo_not_available: "Esta acción no se puede deshacer."
 staff_undo_card_presser_only: "Solo el miembro del staff que pulsó Deshacer puede confirmarlo o cancelarlo."
+lockdown_help_msg: |
+  Un bloqueo detiene una raid en este grupo: todos menos los admins quedan silenciados hasta que un admin lo levante.
+
+  × /lockdown [motivo]: Bloquea este grupo. Solo los admins pueden hablar, también los usuarios aprobados, y los miembros nuevos son expulsados hasta que se levante.
+  × /unlockdown: Levanta el bloqueo. Cada permiso vuelve exactamente a como estaba antes del bloqueo y las personas que expulsé son desbaneadas.
+
+  Solo el creador del grupo, o un admin que pueda restringir miembros, puede usar estos comandos, y lo compruebo en el momento. Debo ser admin con permiso para restringir miembros y el grupo debe ser un supergrupo.
+  Un bloqueo nunca termina solo. Dura hasta que un admin lo levante.
+lockdown_started: "🔒 Este grupo está en bloqueo. Solo los admins pueden hablar y quien se una será expulsado hasta que un admin use /unlockdown."
+lockdown_note_approved_muted: "Los usuarios aprobados también están silenciados."
+lockdown_started_by: "Bloqueado por {name}."
+lockdown_reason_line: "Motivo: {reason}"
+lockdown_already_active: "Este grupo ya está en bloqueo desde {since}, iniciado por {name}."
+lockdown_lifted: "🔓 Bloqueo levantado por {name}. Los permisos del grupo han vuelto a como estaban antes del bloqueo."
+lockdown_not_active: "Este grupo no está en bloqueo."
+lockdown_check_failed: "No pude comprobar tus permisos ahora mismo. No se cambió nada. Inténtalo de nuevo en un momento."
+lockdown_state_failed: "No pude completar eso ahora mismo, así que no se cambió nada. Inténtalo de nuevo en un momento."
