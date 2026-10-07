@@ -2769,9 +2769,11 @@ lockdown_help_msg: |
 
   × /lockdown [motivo]: Bloqueia este grupo. Só os administradores podem falar, incluindo os utilizadores aprovados, e os novos membros são removidos até ao levantamento.
   × /unlockdown: Levanta o bloqueio. Cada permissão volta exatamente a como estava antes do bloqueio, e as pessoas que removi são desbanidas.
+  × /lockdownstatus: Mostra se este grupo está bloqueado, desde quando, por quem e porquê (qualquer administrador).
 
   Só o dono do grupo, ou um administrador que possa restringir membros, pode usar estes comandos, e eu verifico isso em tempo real. Tenho de ser administrador com permissão para restringir membros, e o grupo tem de ser um supergrupo.
   Um bloqueio nunca termina sozinho. Dura até que um administrador o levante.
+  Os administradores anónimos são primeiro convidados a confirmar quem são.
 lockdown_started: "🔒 Este grupo está em bloqueio. Só os administradores podem falar, e quem entrar é removido até que um administrador use /unlockdown."
 lockdown_note_approved_muted: "Os utilizadores aprovados também estão silenciados."
 lockdown_started_by: "Bloqueado por {name}."
@@ -2788,3 +2790,17 @@ lockdown_permissions_unreadable: "Não consegui ler as permissões deste grupo, 
 lockdown_lock_failed: "O Telegram recusou o bloqueio, por isso nada foi alterado: {detail}"
 lockdown_note_no_delete: "Não posso apagar mensagens aqui, por isso as mensagens de entrada vão ficar."
 lockdown_note_no_invite: "Não posso gerir pedidos de adesão aqui, por isso os novos pedidos ficam pendentes em vez de serem recusados."
+lockdown_status_active: "🔒 Em bloqueio desde {since}, iniciado por {name}."
+lockdown_status_removed: "Novos membros removidos até agora: {count}"
+lockdown_status_ban_failed: "Novos membros que não consegui remover: {count}"
+lockdown_status_declined: "Pedidos de adesão recusados: {count}"
+lockdown_status_manual_change: "⚠️ Alguém alterou as permissões do grupo à mão durante o bloqueio. Os novos membros continuam a ser removidos, e /unlockdown repõe as permissões de antes do bloqueio."
+lockdown_status_unconfirmed: "O Telegram ainda não confirmou o bloqueio."
+lockdown_status_lifting: "Bloqueio levantado por {name}; a desbanir as pessoas removidas: {done} de {total} concluídas."
+lockdown_status_permissions_unknown: "Não consegui ler as permissões do grupo agora para verificar alterações."
+lockdown_status_failed: "Não consegui ler o estado do bloqueio agora. Tenta novamente daqui a pouco."
+lockdown_lifted_manual_change: "Alguém alterou as permissões do grupo à mão durante o bloqueio; repus as de antes do bloqueio."
+lockdown_restore_failed: "Não consegui repor as permissões do grupo, por isso o bloqueio continua e ninguém foi desbanido: {detail}\nCertifica-te de que sou administrador com permissão para restringir membros e executa /unlockdown outra vez."
+lockdown_lift_record_failed: "As permissões voltaram, mas não consegui registar o levantamento. Executa /unlockdown outra vez."
+lockdown_already_lifted: "Este bloqueio já foi levantado."
+lockdown_lift_in_progress: "O bloqueio já foi levantado por {name}; as pessoas removidas ainda estão a ser desbanidas."

@@ -9,9 +9,11 @@ A lockdown stops a raid in this group: everyone but the admins is muted until an
 
 - `/lockdown [reason]`: Lock this group. Only admins can talk, approved users included, and new members are removed until the lift.
 - `/unlockdown`: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
+- `/lockdownstatus`: Show whether this group is locked, since when, by whom and why (any admin).
 
 Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
 A lockdown never ends on its own. It stays until an admin lifts it.
+Anonymous admins are asked to confirm who they are first.
 
 
 ## Module Aliases

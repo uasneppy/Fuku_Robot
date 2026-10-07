@@ -2835,9 +2835,11 @@ lockdown_help_msg: |
 
   × /lockdown [reason]: Lock this group. Only admins can talk, approved users included, and new members are removed until the lift.
   × /unlockdown: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
+  × /lockdownstatus: Show whether this group is locked, since when, by whom and why (any admin).
 
   Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
   A lockdown never ends on its own. It stays until an admin lifts it.
+  Anonymous admins are asked to confirm who they are first.
 lockdown_started: "🔒 This group is in lockdown. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
 lockdown_note_approved_muted: "Approved users are muted too."
 lockdown_started_by: "Locked by {name}."
@@ -2854,3 +2856,17 @@ lockdown_permissions_unreadable: "I couldn't read this group's permissions, so I
 lockdown_lock_failed: "Telegram refused the lock, so nothing changed: {detail}"
 lockdown_note_no_delete: "I can't delete messages here, so join messages will stay."
 lockdown_note_no_invite: "I can't manage join requests here, so new requests stay pending instead of being declined."
+lockdown_status_active: "🔒 In lockdown since {since}, started by {name}."
+lockdown_status_removed: "Joiners removed so far: {count}"
+lockdown_status_ban_failed: "Joiners I could not remove: {count}"
+lockdown_status_declined: "Join requests declined: {count}"
+lockdown_status_manual_change: "⚠️ Someone changed the group's permissions by hand during the lockdown. New members are still removed, and /unlockdown will put back the permissions from before the lockdown."
+lockdown_status_unconfirmed: "Telegram has not confirmed the lock yet."
+lockdown_status_lifting: "Lockdown lifted by {name}; unbanning removed joiners: {done} of {total} done."
+lockdown_status_permissions_unknown: "I couldn't read the group's permissions right now to check for changes."
+lockdown_status_failed: "I couldn't read the lockdown state right now. Try again in a moment."
+lockdown_lifted_manual_change: "Someone changed the group's permissions by hand during the lockdown; I put back the ones from before the lockdown."
+lockdown_restore_failed: "I couldn't put the group's permissions back, so the lockdown is still on and nobody was unbanned: {detail}\nMake sure I am an admin who can restrict members, then run /unlockdown again."
+lockdown_lift_record_failed: "The permissions are back, but I couldn't record the lift. Run /unlockdown again."
+lockdown_already_lifted: "This lockdown was already lifted."
+lockdown_lift_in_progress: "The lockdown was already lifted by {name}; removed joiners are still being unbanned."

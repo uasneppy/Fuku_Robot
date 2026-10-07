@@ -55,13 +55,49 @@ var (
 	// of the sender, never the admin cache.
 	lockdownDesc = helpers.CommandDescriptor{
 		Name:           "lockdown",
-		RequiredChecks: []helpers.CheckFunc{helpers.RequireGroup(), requireLockdownAuthority(true)},
+		RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireLockdownAuthority(true)},
 	}
 	unlockdownDesc = helpers.CommandDescriptor{
 		Name:           "unlockdown",
-		RequiredChecks: []helpers.CheckFunc{helpers.RequireGroup(), requireLockdownAuthority(true)},
+		RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireLockdownAuthority(true)},
 	}
 )
+
+// lockdownRefuse replies to the command message with a translated refusal and returns
+// false. It does not use chat_status.PermissionResponder: that finds the chat through
+// the update, and the anonymous-admin proof clears the callback query from the update
+// before it re-runs the command, so after the proof it finds no chat and the refusal
+// would be lost.
+func lockdownRefuse(c *helpers.CommandContext, key string) bool {
+	if c.Msg == nil || c.Tr == nil {
+		return false
+	}
+	text, err := c.Tr.GetString(key)
+	if err != nil || text == "" {
+		log.Errorf("[Lockdown] refusal text %s: %v", key, err)
+		return false
+	}
+	if _, err := c.Msg.Reply(c.Bot, text, nil); err != nil {
+		log.Warnf("[Lockdown] refusal reply: %v", err)
+	}
+	return false
+}
+
+// requireLockdownGroup refuses a private chat. It reads the chat the command context
+// carries, not the update, for the reason given on lockdownRefuse: helpers.RequireGroup
+// reads the update and would refuse every command re-run after the anonymous-admin proof.
+func requireLockdownGroup() helpers.CheckFunc {
+	return func(c *helpers.CommandContext) bool {
+		if c.Chat != nil && c.Chat.Type != "private" {
+			return true
+		}
+		return lockdownRefuse(c, "chat_status_group_only_error")
+	}
+}
+
+// lockdownBeginLift is the call that records a lift. It is a variable only so a test
+// can make the record write fail; production code never reassigns it.
+var lockdownBeginLift = lockdown.BeginLift
 
 // lockdownLiveMember asks Telegram, live and uncached, for one member of a group.
 func lockdownLiveMember(b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedChatMember, error) {
@@ -81,15 +117,23 @@ func lockdownLiveMember(b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedCha
 // requireLockdownAuthority admits only the group's creator, or an administrator
 // holding can_restrict_members when needRestrict is set, judged by a live
 // getChatMember of the sender. The admin cache, the Telegram service IDs and the
-// chat's AnonAdmin setting never authorize: a failed lookup refuses. It replies
-// through the permission responder, so it is valid only inside the command pipeline.
+// chat's AnonAdmin setting never authorize: a failed lookup refuses. An anonymous
+// admin always gets the proof button, even when the chat's AnonAdmin mode is on, and
+// the check refuses that first message; the person who taps the button is the sender
+// of the re-run, so they are checked live here like anyone else and are the one
+// recorded. It replies to the command message itself (lockdownRefuse), so it is valid
+// only inside the command pipeline.
 func requireLockdownAuthority(needRestrict bool) helpers.CheckFunc {
 	return func(c *helpers.CommandContext) bool {
 		if c.User == nil || c.Chat == nil || c.Ctx == nil {
 			return false
 		}
-		refuse := func(key string) bool {
-			chat_status.NewPermissionResponder(c.Bot).Respond(c.Ctx, key, "", chat_status.WithReply())
+		refuse := func(key string) bool { return lockdownRefuse(c, key) }
+
+		if sender := c.Ctx.EffectiveSender; sender != nil && sender.IsAnonymousAdmin() {
+			if err := chat_status.PromptAnonAdminProof(c.Bot, c.Chat, c.Msg); err != nil {
+				log.Errorf("[Lockdown] anonymous admin proof prompt in chat %d: %v", c.Chat.Id, err)
+			}
 			return false
 		}
 
@@ -164,6 +208,17 @@ func lockdownSplice(text string, pairs ...string) string {
 		text = strings.ReplaceAll(text, pairs[i], pairs[i+1])
 	}
 	return text
+}
+
+// lockdownJoinLines joins the non-empty lines of a reply with newlines.
+func lockdownJoinLines(lines []string) string {
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line != "" {
+			kept = append(kept, line)
+		}
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 // lockdownMention renders a person for a group message: a mention that escapes the
@@ -336,9 +391,14 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	return reply(strings.TrimSpace(strings.Join(parts, "\n")))
 }
 
-// unlockdown lifts the group's lockdown: it sends the stored raw permissions back,
-// marks the lockdown lifting with who lifted it, finishes it at once when no joiner
-// is left to unban, and only then announces the lift.
+// unlockdown lifts the group's lockdown. The order is the safety property: it sends
+// the stored raw permissions back first, and only when Telegram confirmed that does
+// it record the lift (who lifted, and whether the live permissions had been changed
+// by hand) through the one conditional update that lets exactly one caller win. A
+// failed restore or a failed record write leaves the lockdown active, so nothing
+// ends a lockdown that was not really lifted, and nothing is announced as lifted
+// before it is. Once the lift is recorded it finishes at once when no joiner is left
+// to unban.
 func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	chat := ctx.EffectiveChat
 	msg := ctx.EffectiveMessage
@@ -352,43 +412,82 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
-	row, err := lockdown.GetActiveFresh(chat.Id)
+	// The chat's active lockdown, else one still being lifted. Neither makes a
+	// Telegram call.
+	row, err := lockdown.GetCurrentFresh(chat.Id)
 	if err != nil {
 		return reply(lockdownText(tr, "lockdown_state_failed"))
 	}
 	if row == nil {
 		return reply(lockdownText(tr, "lockdown_not_active"))
 	}
+	if row.State == models.LockdownStateLifting {
+		var lifterID int64
+		if row.LiftedBy != nil {
+			lifterID = *row.LiftedBy
+		}
+		text := lockdownText(tr, "lockdown_lift_in_progress", i18n.TranslationParams{"name": lockdownNameToken})
+		return reply(lockdownSplice(text, lockdownNameToken, lockdownMention(lifterID, row.LiftedByName)))
+	}
 
-	if err := setLockdownPermissions(context.Background(), b, chat.Id, row.PrePermissions); err != nil {
+	bg := context.Background()
+
+	// Was the group reopened by hand? A failed read only skips the comparison and
+	// never blocks the lift. Before Telegram confirmed the lock the permissions may
+	// not have changed yet, so there is nothing to compare.
+	manualChange := false
+	if row.LockedAt != nil {
+		live, err := fetchLockdownChat(bg, b, chat.Id)
+		if err != nil {
+			log.Warnf("[Lockdown] getChat for chat %d before the lift failed: %v", chat.Id, err)
+		} else if lockdownHasPermissions(live.Permissions) {
+			if same, cmpErr := samePermissions(string(live.Permissions), row.LockedPermissions); cmpErr == nil {
+				manualChange = !same
+			}
+		}
+	}
+
+	// Restore first. A refusal leaves the lockdown active and unbans nobody.
+	if err := setLockdownPermissions(bg, b, chat.Id, row.PrePermissions); err != nil {
 		log.Warnf("[Lockdown] restore for chat %d failed: %v", chat.Id, err)
-		return reply(lockdownText(tr, "lockdown_state_failed"))
+		text := lockdownText(tr, "lockdown_restore_failed", i18n.TranslationParams{"detail": lockdownDetailToken})
+		return reply(strings.TrimSpace(lockdownSplice(text, lockdownDetailToken, telegramErrorDetail(err))))
 	}
 
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
-	won, err := lockdown.BeginLift(row.ID, actor.Id, name, false)
+	won, err := lockdownBeginLift(row.ID, actor.Id, name, manualChange)
 	if err != nil {
-		return reply(lockdownText(tr, "lockdown_state_failed"))
+		return reply(lockdownText(tr, "lockdown_lift_record_failed"))
 	}
 	if !won {
-		return reply(lockdownText(tr, "lockdown_not_active"))
+		return reply(lockdownText(tr, "lockdown_already_lifted"))
 	}
 	if _, err := lockdown.FinishLift(row.ID); err != nil {
 		log.Errorf("[Lockdown] lockdown %d lift was not finished: %v", row.ID, err)
 	}
 
 	text := lockdownText(tr, "lockdown_lifted", i18n.TranslationParams{"name": lockdownNameToken})
-	return reply(lockdownSplice(text, lockdownNameToken, lockdownMention(actor.Id, name)))
+	lines := []string{lockdownSplice(text, lockdownNameToken, lockdownMention(actor.Id, name))}
+	if manualChange {
+		lines = append(lines, lockdownText(tr, "lockdown_lifted_manual_change"))
+	}
+	return reply(lockdownJoinLines(lines))
 }
 
-// LoadLockdown registers /lockdown and /unlockdown.
+// LoadLockdown registers /lockdown, /unlockdown and /lockdownstatus.
 func LoadLockdown(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(lockdownModule.moduleName, true)
 
 	helpers.WrapCommand(dispatcher, lockdownDesc, pipelineHandler(lockdownModule.lockdown))
 	helpers.WrapCommand(dispatcher, unlockdownDesc, pipelineHandler(lockdownModule.unlockdown))
+	helpers.WrapCommand(dispatcher, lockdownStatusDesc, pipelineHandler(lockdownModule.lockdownStatus))
 }
 
 func init() {
 	RegisterLegacyModule("Lockdown", 238, LoadLockdown)
+	// An anonymous admin proves who they are first; the proof re-enters here as the
+	// person who tapped, and the same live check runs for them.
+	RegisterAnonymousAdminHandler("lockdown", anonPipelineHandler(lockdownDesc, lockdownModule.lockdown))
+	RegisterAnonymousAdminHandler("unlockdown", anonPipelineHandler(unlockdownDesc, lockdownModule.unlockdown))
+	RegisterAnonymousAdminHandler("lockdownstatus", anonPipelineHandler(lockdownStatusDesc, lockdownModule.lockdownStatus))
 }

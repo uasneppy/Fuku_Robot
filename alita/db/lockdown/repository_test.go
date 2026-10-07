@@ -168,6 +168,141 @@ func TestStartLockdownOneActivePerChat(t *testing.T) {
 	})
 }
 
+// mustJoiner writes one joiner row of a lockdown directly.
+func mustJoiner(t *testing.T, lockdownID uint, chatID, userID int64, state string) {
+	t.Helper()
+	joiner := &models.LockdownJoiner{
+		LockdownID: lockdownID,
+		ChatID:     chatID,
+		UserID:     userID,
+		FirstName:  "Joiner",
+		State:      state,
+	}
+	if err := db.DB.Create(joiner).Error; err != nil {
+		t.Fatalf("create joiner %d in state %s: %v", userID, state, err)
+	}
+}
+
+func TestLockdownCurrentAndTally(t *testing.T) {
+	t.Run("a chat that was never locked has no current lockdown", func(t *testing.T) {
+		row, err := GetCurrentFresh(uniqueLockdownChatID(t))
+		if err != nil || row != nil {
+			t.Errorf("GetCurrentFresh = %v, %v, want nil, nil", row, err)
+		}
+	})
+
+	t.Run("the active row is current", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chat)
+		active := mustStart(t, chat)
+
+		row, err := GetCurrentFresh(chat)
+		if err != nil || row == nil || row.ID != active.ID {
+			t.Fatalf("GetCurrentFresh = %v, %v, want the active row %d", row, err, active.ID)
+		}
+		if row.State != models.LockdownStateActive {
+			t.Errorf("State = %q, want active", row.State)
+		}
+	})
+
+	t.Run("the active row wins over a lifting one", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chat)
+		first := mustStart(t, chat)
+		if began, err := BeginLift(first.ID, 7, "Lifter", false); err != nil || !began {
+			t.Fatalf("BeginLift = %v, %v", began, err)
+		}
+		second := mustStart(t, chat)
+
+		row, err := GetCurrentFresh(chat)
+		if err != nil || row == nil || row.ID != second.ID {
+			t.Fatalf("GetCurrentFresh = %v, %v, want the active row %d", row, err, second.ID)
+		}
+	})
+
+	t.Run("without an active row the newest lifting row is current and lifted rows are ignored", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chat)
+		older := mustStart(t, chat)
+		if began, err := BeginLift(older.ID, 7, "Lifter", false); err != nil || !began {
+			t.Fatalf("BeginLift older = %v, %v", began, err)
+		}
+		newer := mustStart(t, chat)
+		if began, err := BeginLift(newer.ID, 8, "Lifter", false); err != nil || !began {
+			t.Fatalf("BeginLift newer = %v, %v", began, err)
+		}
+		done := mustStart(t, chat)
+		if began, err := BeginLift(done.ID, 9, "Lifter", false); err != nil || !began {
+			t.Fatalf("BeginLift done = %v, %v", began, err)
+		}
+		if finished, err := FinishLift(done.ID); err != nil || !finished {
+			t.Fatalf("FinishLift = %v, %v", finished, err)
+		}
+
+		row, err := GetCurrentFresh(chat)
+		if err != nil || row == nil || row.ID != newer.ID {
+			t.Fatalf("GetCurrentFresh = %v, %v, want the newest lifting row %d", row, err, newer.ID)
+		}
+	})
+
+	t.Run("only lifted rows leave no current lockdown", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chat)
+		done := mustStart(t, chat)
+		if began, err := BeginLift(done.ID, 9, "Lifter", false); err != nil || !began {
+			t.Fatalf("BeginLift = %v, %v", began, err)
+		}
+		if finished, err := FinishLift(done.ID); err != nil || !finished {
+			t.Fatalf("FinishLift = %v, %v", finished, err)
+		}
+
+		row, err := GetCurrentFresh(chat)
+		if err != nil || row != nil {
+			t.Errorf("GetCurrentFresh = %v, %v, want nil, nil", row, err)
+		}
+	})
+
+	t.Run("tally counts one lockdown by state", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupLockdowns(t, chat)
+		first := mustStart(t, chat)
+		if began, err := BeginLift(first.ID, 7, "Lifter", false); err != nil || !began {
+			t.Fatalf("BeginLift = %v, %v", began, err)
+		}
+		second := mustStart(t, chat)
+
+		mustJoiner(t, second.ID, chat, 601, models.JoinerStateBanned)
+		mustJoiner(t, second.ID, chat, 602, models.JoinerStateBanned)
+		mustJoiner(t, second.ID, chat, 603, models.JoinerStateBanFailed)
+		mustJoiner(t, second.ID, chat, 604, models.JoinerStateDeclined)
+		mustJoiner(t, first.ID, chat, 601, models.JoinerStateBanned)
+		mustJoiner(t, first.ID, chat, 605, models.JoinerStateUnbanned)
+
+		got, err := TallyJoiners(second.ID)
+		if err != nil {
+			t.Fatalf("TallyJoiners error = %v", err)
+		}
+		want := map[string]int64{
+			models.JoinerStateBanned:    2,
+			models.JoinerStateBanFailed: 1,
+			models.JoinerStateDeclined:  1,
+		}
+		if len(got) != len(want) {
+			t.Errorf("TallyJoiners = %v, want %v", got, want)
+		}
+		for state, count := range want {
+			if got[state] != count {
+				t.Errorf("TallyJoiners[%s] = %d, want %d", state, got[state], count)
+			}
+		}
+
+		empty, err := TallyJoiners(first.ID + 100000)
+		if err != nil || len(empty) != 0 {
+			t.Errorf("TallyJoiners of an unknown lockdown = %v, %v, want an empty map", empty, err)
+		}
+	})
+}
+
 func TestLockdownRepositoryTransitions(t *testing.T) {
 	t.Run("confirm happens once", func(t *testing.T) {
 		chat := uniqueLockdownChatID(t)

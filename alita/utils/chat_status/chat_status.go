@@ -3,6 +3,7 @@ package chat_status
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -76,6 +77,21 @@ func checkAnonAdmin(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message, se
 		log.Error(err)
 	}
 	return false, true
+}
+
+// PromptAnonAdminProof always asks an anonymous admin to prove who they are, whatever
+// the chat's AnonAdmin setting. It is for commands that must check the real person
+// live: it stores the original message and replies with the proof button, and the
+// person who taps it is the one the command then runs as. checkAnonAdmin, which
+// lets a chat's AnonAdmin mode skip the proof, is unchanged. It returns the error of
+// the reply that carries the button.
+func PromptAnonAdminProof(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message) error {
+	if b == nil || chat == nil || msg == nil {
+		return errors.New("anonymous admin proof needs a bot, a chat and a message")
+	}
+	setAnonAdminCache(chat.Id, msg)
+	_, err := sendAnonAdminKeyboard(b, msg, chat)
+	return err
 }
 
 func extractChatFromContext(ctx *ext.Context, chat *gotgbot.Chat) *gotgbot.Chat {

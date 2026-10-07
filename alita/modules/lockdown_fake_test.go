@@ -213,6 +213,26 @@ func lockdownCleanup(t *testing.T, chatIDs ...int64) {
 	})
 }
 
+// seedLockdownJoiner writes one joiner row of a lockdown directly, in the given
+// state, with the first name "Joiner<userID>". The join guard that writes these rows
+// in production arrives in a later plan; tests seed them to show what a status
+// command reads.
+func seedLockdownJoiner(t *testing.T, lockdownID uint, chatID, userID int64, state string) models.LockdownJoiner {
+	t.Helper()
+	joiner := models.LockdownJoiner{
+		LockdownID: lockdownID,
+		ChatID:     chatID,
+		UserID:     userID,
+		FirstName:  fmt.Sprintf("Joiner%d", userID),
+		JoinPath:   models.JoinPathMember,
+		State:      state,
+	}
+	if err := db.DB.Create(&joiner).Error; err != nil {
+		t.Fatalf("seed joiner %d in state %s: %v", userID, state, err)
+	}
+	return joiner
+}
+
 func newLockdownEnv(t *testing.T) *lockdownEnv {
 	t.Helper()
 	withMiniredis(t)

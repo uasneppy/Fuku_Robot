@@ -93,6 +93,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   or administrator with `can_restrict_members`), never the admin cache, the Telegram service IDs or a chat's AnonAdmin
   setting; a failed lookup refuses. Lockdowns need a supergroup, and `/lockdown` is refused, with nothing recorded,
   unless the bot is an administrator with `can_restrict_members` and the group's permissions are readable.
+  `/lockdownstatus` uses the same live check without needing `can_restrict_members` (any creator or administrator).
+  An anonymous admin always gets `chat_status.PromptAnonAdminProof`, whatever the chat's AnonAdmin setting
+  (`checkAnonAdmin`'s shortcut is not used); after the proof the tapper is the sender, is checked live like anyone
+  else, and is the one recorded as having locked or lifted. `lockdown`, `unlockdown` and `lockdownstatus` are
+  registered with `RegisterAnonymousAdminHandler` for that re-entry. After the proof the update no longer carries the
+  callback query, so `chat_status.extractChatFromContext` (behind `helpers.RequireGroup` and `PermissionResponder`)
+  finds no chat and fails silently: the lockdown commands use their own `requireLockdownGroup` and `lockdownRefuse`,
+  which read `c.Chat` and reply through `c.Msg`. Keep every check and refusal of an anonymous-capable command off
+  `ctx.Update`.
 
 ## Data
 
@@ -137,7 +146,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the raw `permissions` JSON of the `getChat` answer read before the lock call, replayed verbatim with
   `use_independent_chat_permissions`, never re-read and never passed through the typed `gotgbot.ChatPermissions` (its
   `omitempty` bools and `*bool` defaults lose a right that was explicitly off). `locked_at` stays NULL until Telegram
-  confirmed the lock, and a lock Telegram refused deletes its unconfirmed row.
+  confirmed the lock, and a lock Telegram refused deletes its unconfirmed row. A lift restores the snapshot first and
+  only then records it through the `BeginLift` conditional update, so one lifter wins when two admins lift together; a
+  failed restore keeps the lockdown active and unbans nobody, a failed record write does the same, and nothing ever ends
+  a lockdown except a lift that Telegram confirmed. `manual_change` is set when the live permissions differ from
+  `locked_permissions` at the lift (compared by granted rights, not by bytes, and not at all before the lock was
+  confirmed); it never blocks the lift.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
