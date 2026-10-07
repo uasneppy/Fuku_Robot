@@ -166,8 +166,9 @@ func lockdownWorkerLoop(ctx context.Context, b *gotgbot.Bot) {
 func runLockdownCycle(ctx context.Context, b *gotgbot.Bot) bool {
 	defer error_handling.RecoverFromPanic("lockdownCycle", "Lockdown")
 	banned := lockdownBanPending(ctx, b)
+	deleted := lockdownDeleteJoinMessages(ctx, b)
 	lifted := lockdownProcessLifts(ctx, b)
-	return banned || lifted
+	return banned || deleted || lifted
 }
 
 // lockdownCallOutcome is how one Telegram call of the worker ended.
@@ -245,6 +246,45 @@ func lockdownBanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJoin
 	}
 	moveLockdownJoiner(row.ID, models.JoinerStateActing, models.JoinerStatePending, telegramErrorDetail(err), true)
 	return false
+}
+
+// lockdownDeleteJoinMessages deletes the join service messages the guard stored on
+// rows whose joiner is banned now, so the announcement of a removed raider does not
+// stay in the group. It runs after the bans and is best effort: a delete that fails
+// (the bot has no delete right, the message is gone) leaves the message and is
+// logged at debug, and a rate limit or a shutdown leaves the row for the next cycle.
+// It reports whether any row was handled.
+func lockdownDeleteJoinMessages(ctx context.Context, b *gotgbot.Bot) bool {
+	rows, err := lockdown.ListJoinMsgsToDeleteFresh(lockdownWorkerBatch)
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not list join messages to delete: %v", err)
+		return false
+	}
+	progress := false
+	for _, row := range rows {
+		if ctx.Err() != nil {
+			break
+		}
+		err := lockdownPaced(ctx, func(callCtx context.Context) error {
+			call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+			defer cancel()
+			_, delErr := b.DeleteMessageWithContext(call, row.ChatID, row.JoinMsgID, nil)
+			return delErr
+		})
+		if lockdownClassify(ctx, err) == lockdownCallRetryFree {
+			// The same pacer limits every row, so the rest would only be refused too.
+			break
+		}
+		if err != nil {
+			log.Debugf("[Lockdown] join message %d of chat %d was not deleted: %v", row.JoinMsgID, row.ChatID, err)
+		}
+		if clearErr := lockdown.ClearJoinMsg(row.ID); clearErr != nil {
+			log.Errorf("[Lockdown] join message of joiner row %d could not be cleared: %v", row.ID, clearErr)
+			continue
+		}
+		progress = true
+	}
+	return progress
 }
 
 // lockdownProcessLifts works through every lockdown that is being lifted: joiners

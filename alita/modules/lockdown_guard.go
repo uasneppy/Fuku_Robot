@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"slices"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -163,11 +164,142 @@ func (m moduleStruct) lockdownOnJoinMember(b *gotgbot.Bot, ctx *ext.Context) err
 	return ext.EndGroups
 }
 
+// lockdownOnJoinMessage is the join guard for the new_chat_members service message.
+// It decides every user the message names, records each one the same way the
+// chat_member path does and keeps only the users it let in (and the bot itself) in
+// ctx.EffectiveMessage.NewChatMembers, which later handlers share, so greetings
+// welcome only them. A message that holds nobody it let in ends update handling; one
+// that does continues. When every user in the message was banned the message's ID is
+// stored on their rows and the worker deletes it after the bans. The performer is
+// the message's sender, or the anonymous admin identity (sender_chat equal to the
+// group, or the Group Anonymous Bot); it is judged by one live getChatMember.
+func (m moduleStruct) lockdownOnJoinMessage(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("lockdownOnJoinMessage", "Lockdown")
+
+	chat := ctx.EffectiveChat
+	msg := ctx.EffectiveMessage
+	if chat == nil || msg == nil || len(msg.NewChatMembers) == 0 || chat.Type != "supergroup" {
+		return ext.ContinueGroups
+	}
+
+	active, err := lockdown.GetActiveFresh(chat.Id)
+	if err != nil {
+		// Fail open: the joiners are still muted by the locked default permissions.
+		log.Errorf("[Lockdown] join guard could not read the lockdown of chat %d: %v", chat.Id, err)
+		return ext.ContinueGroups
+	}
+	if active == nil || active.LockedAt == nil {
+		return ext.ContinueGroups
+	}
+
+	var performerID int64
+	if msg.From != nil {
+		performerID = msg.From.Id
+	}
+	anonymous := (msg.SenderChat != nil && msg.SenderChat.Id == chat.Id) || performerID == lockdownGroupAnonymousBot
+
+	members := append([]gotgbot.User(nil), msg.NewChatMembers...)
+	inputs := make([]lockdownJoinInput, len(members))
+	needsLookup := false
+	for i, member := range members {
+		inputs[i] = lockdownJoinInput{
+			Path:                    models.JoinPathService,
+			PerformerID:             performerID,
+			MemberID:                member.Id,
+			MemberIsBot:             member.IsBot,
+			BotID:                   b.Id,
+			PerformerAnonymousAdmin: anonymous,
+		}
+		needsLookup = needsLookup || lockdownNeedsPerformerLookup(inputs[i])
+	}
+	if needsLookup && performerID > 0 {
+		// A failed lookup leaves the status empty, which is never exempt.
+		if live, lookupErr := lockdownLiveMember(b, chat.Id, performerID); lookupErr != nil {
+			log.Warnf("[Lockdown] join guard could not check performer %d in chat %d: %v", performerID, chat.Id, lookupErr)
+		} else {
+			for i := range inputs {
+				inputs[i].PerformerStatus = live.Status
+			}
+		}
+	}
+
+	verdicts := make([]lockdownJoinVerdict, len(members))
+	banned, allBanned := 0, true
+	for i := range members {
+		verdicts[i] = decideLockdownJoin(inputs[i])
+		switch verdicts[i] {
+		case lockdownJoinIgnore:
+		case lockdownJoinBan:
+			banned++
+		default:
+			allBanned = false
+		}
+	}
+	var joinMsgID int64
+	if allBanned && banned > 0 {
+		joinMsgID = msg.MessageId
+	}
+
+	kept := make([]gotgbot.User, 0, len(members))
+	for i, member := range members {
+		if verdicts[i] == lockdownJoinIgnore {
+			kept = append(kept, member)
+			continue
+		}
+		rec := lockdown.JoinRecord{
+			LockdownID:  active.ID,
+			ChatID:      chat.Id,
+			UserID:      member.Id,
+			FirstName:   lockdownCapRunes(member.FirstName, lockdownNameMaxRunes),
+			Username:    lockdownCapRunes(member.Username, lockdownNameMaxRunes),
+			IsBot:       member.IsBot,
+			Path:        models.JoinPathService,
+			PerformerID: performerID,
+			JoinMsgID:   joinMsgID,
+		}
+		if recordLockdownJoin(b, active, rec, verdicts[i]) {
+			kept = append(kept, member)
+		}
+	}
+
+	// Later handlers share this message, so the filtered list is assigned in place.
+	if len(kept) != len(members) {
+		msg.NewChatMembers = kept
+	}
+	if len(kept) == 0 {
+		return ext.EndGroups
+	}
+	return ext.ContinueGroups
+}
+
+const (
+	// lockdownJoinDedupeWindow is how long after a joiner row last changed a second
+	// delivery of a join counts as the same join. A delivery that comes later is a
+	// new join: the person was unbanned or their request was handled in between.
+	lockdownJoinDedupeWindow = 20 * time.Second
+	// lockdownRecordLooks is how many times recordLockdownJoin looks at a row again
+	// after losing a race for it. A real race needs one look.
+	lockdownRecordLooks = 3
+)
+
+// lockdownReclaimStates are the finished joiner states a later join of the same user
+// may take a row back from. A row still pending or acting is being processed.
+var lockdownReclaimStates = []string{
+	models.JoinerStateBanned,
+	models.JoinerStateBanFailed,
+	models.JoinerStateExempt,
+	models.JoinerStateDeclined,
+	models.JoinerStateDeclineFailed,
+	models.JoinerStateCancelled,
+}
+
 // recordLockdownJoin stores the joiner row the verdict calls for and reports whether
 // the joiner is let in (true) or handled by the lockdown (false). The row is written
 // before anything else can happen to the joiner, so a ban is never placed without a
 // record the lift can find; when the write fails the joiner is let in, still muted by
 // the locked default permissions, because an unrecorded ban would never be lifted.
+// Deduplication is the (lockdown, user) row alone, never anything held in Redis: a
+// join seen again is decided by the row the first delivery wrote.
 func recordLockdownJoin(b *gotgbot.Bot, ld *models.ChatLockdown, rec lockdown.JoinRecord, verdict lockdownJoinVerdict) bool {
 	switch verdict {
 	case lockdownJoinExempt:
@@ -180,43 +312,132 @@ func recordLockdownJoin(b *gotgbot.Bot, ld *models.ChatLockdown, rec lockdown.Jo
 		return true
 	}
 
-	row, recorded, err := lockdownRecordJoin(rec)
-	if err != nil {
-		log.Errorf("[Lockdown] joiner %d of chat %d was not recorded, letting them in: %v", rec.UserID, rec.ChatID, err)
-		return true
+	for range lockdownRecordLooks {
+		row, recorded, err := lockdownRecordJoin(rec)
+		if err != nil {
+			log.Errorf("[Lockdown] joiner %d of chat %d was not recorded, letting them in: %v", rec.UserID, rec.ChatID, err)
+			return true
+		}
+		if recorded {
+			if verdict == lockdownJoinExempt {
+				return true
+			}
+			return lockdownPendingHeld(ld, row.ID, rec.UserID, false)
+		}
+		if letIn, done := lockdownExistingJoin(ld, row, rec, verdict); done {
+			return letIn
+		}
 	}
-	if !recorded {
-		// A row exists already: a second delivery of the same join, or a rejoin. Plan
-		// 04-04 adds the rejoin and cross-path rules; an exempt row stays exempt and
-		// anything else is handled by the lockdown.
-		return row.State == models.JoinerStateExempt
-	}
-	if verdict == lockdownJoinExempt {
-		return true
-	}
+	// Another delivery or replica kept winning the row; it is handling this join.
+	return false
+}
 
-	// The lift may have started between the read of the lockdown and the insert. A
-	// pending row of a lockdown that is no longer active would never be banned, so
-	// the guard withdraws it and lets the joiner go.
+// lockdownPendingHeld runs after a pending row was written. The lift may have started
+// between the read of the lockdown and the write, and a pending row of a lockdown
+// that is no longer active would never be banned (and would keep the lift from
+// finishing), so the guard withdraws it and lets the joiner go: false means the
+// lockdown holds the joiner, true that they are let in. A reclaimed row is cancelled
+// rather than deleted, because it carries an earlier join's history.
+func lockdownPendingHeld(ld *models.ChatLockdown, rowID uint, userID int64, reclaimed bool) bool {
 	current, err := lockdown.GetFresh(ld.ID)
 	if err == nil && (current == nil || current.State != models.LockdownStateActive) {
-		if _, delErr := lockdown.DeletePendingJoin(row.ID); delErr != nil {
-			log.Errorf("[Lockdown] pending joiner row %d could not be withdrawn: %v", row.ID, delErr)
+		var withdrawErr error
+		if reclaimed {
+			_, withdrawErr = lockdown.MoveJoiner(rowID, models.JoinerStatePending, models.JoinerStateCancelled, "", false)
+		} else {
+			_, withdrawErr = lockdown.DeletePendingJoin(rowID)
+		}
+		if withdrawErr != nil {
+			log.Errorf("[Lockdown] pending joiner row %d could not be withdrawn: %v", rowID, withdrawErr)
 		}
 		return true
 	}
 	if err != nil {
-		log.Errorf("[Lockdown] lockdown %d could not be re-read after recording joiner %d: %v", ld.ID, rec.UserID, err)
+		log.Errorf("[Lockdown] lockdown %d could not be re-read after recording joiner %d: %v", ld.ID, userID, err)
 	}
 	wakeLockdownWorker()
 	return false
 }
 
+// lockdownExistingJoin decides a join whose (lockdown, user) row already exists, from
+// the row alone. done false means the call lost a race for the row and the caller
+// should look at it again; otherwise letIn says whether the joiner is let in.
+//
+//   - A row from a join request met by a member or service join is a different event
+//     and is reclaimed whatever its age.
+//   - A row that is exempt and changed within lockdownJoinDedupeWindow lets the joiner in.
+//   - On the chat_member path, an exempt verdict turns a still pending row exempt: that
+//     update shows an admin added or approved the user (D-24). Once the worker claimed
+//     the row the ban stands until the lift.
+//   - Any other row that changed within the window is the same join delivered twice,
+//     and so is an older row still pending or acting: it is handled. When this
+//     delivery carries the join service message the row remembers it.
+//   - An older finished row is a new join (the person was unbanned, or their request
+//     was handled) and is reclaimed.
+func lockdownExistingJoin(ld *models.ChatLockdown, row *models.LockdownJoiner, rec lockdown.JoinRecord, verdict lockdownJoinVerdict) (letIn, done bool) {
+	now := time.Now()
+	fresh := !row.UpdatedAt.Before(now.Add(-lockdownJoinDedupeWindow))
+	finished := slices.Contains(lockdownReclaimStates, row.State)
+
+	if row.JoinPath == models.JoinPathRequest && rec.Path != models.JoinPathRequest && finished {
+		return lockdownReclaim(ld, row, rec, verdict, now)
+	}
+	if row.State == models.JoinerStateExempt && fresh {
+		return true, true
+	}
+	if rec.Path == models.JoinPathMember && verdict == lockdownJoinExempt && row.State == models.JoinerStatePending {
+		moved, err := lockdown.MoveJoiner(row.ID, models.JoinerStatePending, models.JoinerStateExempt, "", false)
+		if err != nil {
+			log.Errorf("[Lockdown] joiner row %d could not be made exempt: %v", row.ID, err)
+			return false, true
+		}
+		return moved, true
+	}
+	if fresh || !finished {
+		switch row.State {
+		case models.JoinerStatePending, models.JoinerStateActing, models.JoinerStateBanned:
+			if rec.JoinMsgID != 0 {
+				if err := lockdown.SetJoinMsg(row.ID, rec.JoinMsgID); err != nil {
+					log.Errorf("[Lockdown] join message of joiner row %d was not stored: %v", row.ID, err)
+				} else {
+					wakeLockdownWorker()
+				}
+			}
+		}
+		return false, true
+	}
+	return lockdownReclaim(ld, row, rec, verdict, now.Add(-lockdownJoinDedupeWindow))
+}
+
+// lockdownReclaim takes a finished row back for a new join. notAfter is the cut-off
+// the row's last change must be older than. done false means another caller won.
+func lockdownReclaim(ld *models.ChatLockdown, row *models.LockdownJoiner, rec lockdown.JoinRecord, verdict lockdownJoinVerdict, notAfter time.Time) (letIn, done bool) {
+	won, err := lockdown.ReclaimJoin(row.ID, lockdownReclaimStates, notAfter, rec)
+	if err != nil {
+		// Fail open, like a failed insert: a ban the lift cannot find is never undone.
+		log.Errorf("[Lockdown] joiner row %d could not be reclaimed for user %d, letting them in: %v", row.ID, rec.UserID, err)
+		return true, true
+	}
+	if !won {
+		return false, false
+	}
+	if verdict == lockdownJoinExempt {
+		return true, true
+	}
+	return lockdownPendingHeld(ld, row.ID, rec.UserID, true), true
+}
+
 // loadLockdownGuard registers the join guard at the lockdown module's handler group,
-// ahead of fed-ban, antiraid, greetings and captcha.
+// ahead of fed-ban, antiraid, greetings and captcha. The service message handler also
+// accepts messages sent by bots, because a bot or an anonymous administrator can add
+// users.
 func loadLockdownGuard(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandlerToGroup(
 		handlers.NewChatMember(lockdownJoinFilter, lockdownModule.lockdownOnJoinMember),
+		lockdownModule.handlerGroup,
+	)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewMessage(func(m *gotgbot.Message) bool { return m.NewChatMembers != nil }, lockdownModule.lockdownOnJoinMessage).SetAllowBot(true),
 		lockdownModule.handlerGroup,
 	)
 }
