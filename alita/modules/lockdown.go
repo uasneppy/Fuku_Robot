@@ -63,6 +63,10 @@ var (
 	}
 )
 
+// lockdownBeginLift is the call that records a lift. It is a variable only so a test
+// can make the record write fail; production code never reassigns it.
+var lockdownBeginLift = lockdown.BeginLift
+
 // lockdownLiveMember asks Telegram, live and uncached, for one member of a group.
 func lockdownLiveMember(b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedChatMember, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), lockdownLiveCheckTimeout)
