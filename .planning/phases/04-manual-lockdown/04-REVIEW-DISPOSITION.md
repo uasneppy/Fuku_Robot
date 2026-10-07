@@ -5,15 +5,15 @@ titles: json
 findings:
   - id: CR-01
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "The worker's ban overwrites a deliberate ban, and the lift then removes it (violates D-05)"
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "An ambiguous lock failure deletes the only copy of the pre-lockdown permissions and says \"nothing changed\""
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Joiner bans expire after 330 days, so a lockdown can outlive its own enforcement"
   - id: IN-01
     severity: info
@@ -31,18 +31,18 @@ findings:
     severity: info
     disposition: open
     title: "Fed-ban enforcement is skipped for banned joiners of a locked group, and a \"request gone\" is recorded as declined"
-open: 7
+open: 4
 total: 7
-recorded: 2026-10-07T04:02:34.741Z
+recorded: 2026-10-07T04:19:19.425Z
 ---
 
 # Phase 04: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
+| CR-01 | critical | fixed | 04-REVIEW-FIX.md |
+| WR-01 | warning | fixed | 04-REVIEW-FIX.md |
+| WR-02 | warning | fixed | 04-REVIEW-FIX.md |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
