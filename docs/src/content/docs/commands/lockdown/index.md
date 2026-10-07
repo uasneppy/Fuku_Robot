@@ -13,6 +13,7 @@ A lockdown stops a raid in this group: everyone but the admins is muted until an
 
 Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
 A lockdown never ends on its own. It stays until an admin lifts it.
+Anonymous admins are asked to confirm who they are first.
 
 
 ## Module Aliases

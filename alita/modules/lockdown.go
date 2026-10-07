@@ -85,8 +85,12 @@ func lockdownLiveMember(b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedCha
 // requireLockdownAuthority admits only the group's creator, or an administrator
 // holding can_restrict_members when needRestrict is set, judged by a live
 // getChatMember of the sender. The admin cache, the Telegram service IDs and the
-// chat's AnonAdmin setting never authorize: a failed lookup refuses. It replies
-// through the permission responder, so it is valid only inside the command pipeline.
+// chat's AnonAdmin setting never authorize: a failed lookup refuses. An anonymous
+// admin always gets the proof button, even when the chat's AnonAdmin mode is on, and
+// the check refuses that first message; the person who taps the button is the sender
+// of the re-run, so they are checked live here like anyone else and are the one
+// recorded. It replies through the permission responder, so it is valid only inside
+// the command pipeline.
 func requireLockdownAuthority(needRestrict bool) helpers.CheckFunc {
 	return func(c *helpers.CommandContext) bool {
 		if c.User == nil || c.Chat == nil || c.Ctx == nil {
@@ -94,6 +98,13 @@ func requireLockdownAuthority(needRestrict bool) helpers.CheckFunc {
 		}
 		refuse := func(key string) bool {
 			chat_status.NewPermissionResponder(c.Bot).Respond(c.Ctx, key, "", chat_status.WithReply())
+			return false
+		}
+
+		if sender := c.Ctx.EffectiveSender; sender != nil && sender.IsAnonymousAdmin() {
+			if err := chat_status.PromptAnonAdminProof(c.Bot, c.Chat, c.Msg); err != nil {
+				log.Errorf("[Lockdown] anonymous admin proof prompt in chat %d: %v", c.Chat.Id, err)
+			}
 			return false
 		}
 
@@ -445,4 +456,9 @@ func LoadLockdown(dispatcher *ext.Dispatcher) {
 
 func init() {
 	RegisterLegacyModule("Lockdown", 238, LoadLockdown)
+	// An anonymous admin proves who they are first; the proof re-enters here as the
+	// person who tapped, and the same live check runs for them.
+	RegisterAnonymousAdminHandler("lockdown", anonPipelineHandler(lockdownDesc, lockdownModule.lockdown))
+	RegisterAnonymousAdminHandler("unlockdown", anonPipelineHandler(unlockdownDesc, lockdownModule.unlockdown))
+	RegisterAnonymousAdminHandler("lockdownstatus", anonPipelineHandler(lockdownStatusDesc, lockdownModule.lockdownStatus))
 }

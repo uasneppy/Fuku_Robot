@@ -2839,6 +2839,7 @@ lockdown_help_msg: |
 
   Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
   A lockdown never ends on its own. It stays until an admin lifts it.
+  Anonymous admins are asked to confirm who they are first.
 lockdown_started: "🔒 This group is in lockdown. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
 lockdown_note_approved_muted: "Approved users are muted too."
 lockdown_started_by: "Locked by {name}."

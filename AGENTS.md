@@ -93,6 +93,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   or administrator with `can_restrict_members`), never the admin cache, the Telegram service IDs or a chat's AnonAdmin
   setting; a failed lookup refuses. Lockdowns need a supergroup, and `/lockdown` is refused, with nothing recorded,
   unless the bot is an administrator with `can_restrict_members` and the group's permissions are readable.
+  `/lockdownstatus` uses the same live check without needing `can_restrict_members` (any creator or administrator).
+  An anonymous admin always gets `chat_status.PromptAnonAdminProof`, whatever the chat's AnonAdmin setting
+  (`checkAnonAdmin`'s shortcut is not used); after the proof the tapper is the sender, is checked live like anyone
+  else, and is the one recorded as having locked or lifted. `lockdown`, `unlockdown` and `lockdownstatus` are
+  registered with `RegisterAnonymousAdminHandler` for that re-entry. After the proof the update no longer carries the
+  callback query, so `extractChatFromContext` falls back to the context's `EffectiveChat`; a new check or reply that
+  needs the chat must go through it (or `c.Chat`), never read `ctx.Update` fields itself.
 
 ## Data
 

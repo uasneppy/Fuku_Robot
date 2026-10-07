@@ -2811,6 +2811,7 @@ lockdown_help_msg: |
 
   Solo el creador del grupo, o un admin que pueda restringir miembros, puede usar estos comandos, y lo compruebo en el momento. Debo ser admin con permiso para restringir miembros y el grupo debe ser un supergrupo.
   Un bloqueo nunca termina solo. Dura hasta que un admin lo levante.
+  A los admins anónimos se les pide primero que confirmen quiénes son.
 lockdown_started: "🔒 Este grupo está en bloqueo. Solo los admins pueden hablar y quien se una será expulsado hasta que un admin use /unlockdown."
 lockdown_note_approved_muted: "Los usuarios aprobados también están silenciados."
 lockdown_started_by: "Bloqueado por {name}."
