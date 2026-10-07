@@ -1062,6 +1062,7 @@ mutes_mute_admin_error: Mengapa saya membisukan admin? Itu terdengar seperti ide
 mutes_mute_admin_polite_error: Saya rasa Anda tidak ingin saya membisukan admin.
 mutes_restrict_self_error: Mengapa saya membatasi diri saya sendiri?
 mutes_unmute_message: "Baik!\nSaya akan izinkan %s untuk berbicara lagi."
+mutes_unmute_lockdown_note: "Grup ini sedang dalam lockdown, jadi mereka bisa berbicara setelah admin menjalankan /unlockdown."
 
 # Warns module missing strings
 warns_mode_updated_ban: "Mode peringatan diperbarui ke: blokir"

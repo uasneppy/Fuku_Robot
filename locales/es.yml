@@ -1071,6 +1071,7 @@ mutes_mute_admin_error: ¿Por qué silenciaría a un administrador? Eso suena co
 mutes_mute_admin_polite_error: No creo que quieras que silencie a un administrador.
 mutes_restrict_self_error: ¿Por qué me restringiría a mí mismo?
 mutes_unmute_message: "¡Bien!\nPermitiré a %s hablar de nuevo."
+mutes_unmute_lockdown_note: "Este grupo está en cierre, así que podrá hablar cuando un administrador ejecute /unlockdown."
 
 # Warns module missing strings
 warns_mode_updated_ban: "Modo de advertencia actualizado a: ban"

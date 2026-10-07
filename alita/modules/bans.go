@@ -814,7 +814,11 @@ func (moduleStruct) unrestrictButtonHandler(b *gotgbot.Bot, ctx *ext.Context) er
 			log.Error(err)
 			return err
 		}
-		unmutePermissions := resolveUnmutePermissions(c)
+		unmutePermissions, err := resolveUnmutePermissions(c)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
 
 		_, err = chat.RestrictMember(b, userId,
 			unmutePermissions,

@@ -663,8 +663,15 @@ func executeStaffCall(
 		}); err != nil {
 			return err
 		}
+		// During a lockdown of that group this is its stored pre-lockdown set, not the
+		// locked defaults getChat just answered; a failed lockdown read fails the group
+		// before any restrict is sent.
+		perms, err := resolveUnmutePermissions(info)
+		if err != nil {
+			return err
+		}
 		return paced(func(callCtx context.Context) error {
-			_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, resolveUnmutePermissions(info), nil)
+			_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, perms, nil)
 			return err
 		})
 	}

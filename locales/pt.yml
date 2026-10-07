@@ -1033,6 +1033,7 @@ mutes_mute_admin_error: Por que eu silenciaria um admin? Isso parece uma ideia b
 mutes_mute_admin_polite_error: Eu não acho que você quer que eu silencie um admin.
 mutes_restrict_self_error: Por que eu me restringiria?
 mutes_unmute_message: "Certo!\nVou permitir que %s fale novamente."
+mutes_unmute_lockdown_note: "Este grupo está em lockdown, então a pessoa poderá falar assim que um admin executar /unlockdown."
 
 # Warns module missing strings
 warns_mode_updated_ban: "Modo de aviso atualizado para: ban"

@@ -260,6 +260,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   else, a deliberate `/ban` or `/tban` included, is kept and never touched. Joiners still pending when the lift starts are
   cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
   replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
+- `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
+  active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
+  the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute
+  path goes through it: `/unmute`, the unrestrict button's Unmute, a captcha pass and staff `/unmute` (and so the undo of a
+  staff mute). It reads the lockdown fresh through the `lockdownSnapshotLookup` seam, only for a chat with a non-zero ID,
+  and only an active row counts. None of them may restrict or announce an unmute when it returns an error: `/unmute` and
+  the button report the error, a captcha pass schedules its retry, and staff `/unmute` fails that group. The `/unmute`
+  reply adds `mutes_unmute_lockdown_note` during a lockdown.
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
   rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own

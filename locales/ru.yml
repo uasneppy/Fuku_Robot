@@ -847,6 +847,7 @@ mutes_mute_admin_error: Зачем мне заглушать администр�
 mutes_mute_admin_polite_error: Я не думаю, что вы хотите, чтобы я заглушил администратора.
 mutes_restrict_self_error: Зачем мне ограничивать самого себя?
 mutes_unmute_message: "Ладно!\nЯ позволю %s снова говорить."
+mutes_unmute_lockdown_note: "Эта группа в режиме блокировки, поэтому говорить можно будет, как только админ выполнит /unlockdown."
 
 # Warns module missing strings
 warns_mode_updated_ban: "Обновлён режим предупреждений на: ban"
