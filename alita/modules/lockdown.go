@@ -23,8 +23,9 @@ import (
 	"github.com/divkix/Alita_Robot/alita/utils/helpers"
 )
 
-// lockdownModule groups the lockdown commands. Its handlerGroup is the guard group
-// a later plan uses for the join guard.
+// lockdownModule groups the lockdown commands and the join guard. Its handlerGroup
+// (-7) is the guard's group: it runs before fed-ban (-6) and antiraid (-5), so a
+// joiner is handled once, by the lockdown.
 var lockdownModule = moduleStruct{
 	moduleName:   "Lockdown",
 	handlerGroup: -7,
@@ -474,10 +475,12 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	return reply(lockdownJoinLines(lines))
 }
 
-// LoadLockdown registers /lockdown, /unlockdown and /lockdownstatus.
+// LoadLockdown registers /lockdown, /unlockdown and /lockdownstatus, and the join
+// guard that handles everyone who joins a locked group.
 func LoadLockdown(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(lockdownModule.moduleName, true)
 
+	loadLockdownGuard(dispatcher)
 	helpers.WrapCommand(dispatcher, lockdownDesc, pipelineHandler(lockdownModule.lockdown))
 	helpers.WrapCommand(dispatcher, unlockdownDesc, pipelineHandler(lockdownModule.unlockdown))
 	helpers.WrapCommand(dispatcher, lockdownStatusDesc, pipelineHandler(lockdownModule.lockdownStatus))
