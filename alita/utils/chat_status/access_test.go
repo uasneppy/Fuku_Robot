@@ -227,20 +227,6 @@ func TestExtractChatFromContext(t *testing.T) {
 		t.Fatalf("extractChatFromContext(chat_join_request) = %#v, want chat id 60", got)
 	}
 
-	// After the anonymous-admin proof the update carries no callback query and no
-	// message, and only the context's effective chat names the chat.
-	provenCtx := ext.NewContext(
-		&gotgbot.Bot{User: gotgbot.User{Id: 1, IsBot: true}},
-		&gotgbot.Update{CallbackQuery: &gotgbot.CallbackQuery{
-			Message: gotgbot.Message{Chat: gotgbot.Chat{Id: 70, Type: "supergroup"}},
-		}},
-		nil,
-	)
-	provenCtx.CallbackQuery = nil
-	if got := extractChatFromContext(provenCtx, nil); got == nil || got.Id != 70 {
-		t.Fatalf("extractChatFromContext(after anonymous-admin proof) = %#v, want chat id 70", got)
-	}
-
 	if got := extractChatFromContext(nil, nil); got != nil {
 		t.Fatalf("extractChatFromContext(nil, nil) = %#v, want nil", got)
 	}

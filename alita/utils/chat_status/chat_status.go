@@ -121,11 +121,7 @@ func extractChatFromContext(ctx *ext.Context, chat *gotgbot.Chat) *gotgbot.Chat 
 	if update.ChatJoinRequest != nil {
 		return &update.ChatJoinRequest.Chat
 	}
-	// The anonymous-admin proof clears the callback query from the update before it
-	// re-runs the original command, so the chat survives only as the context's
-	// effective chat. Without this fallback every check and refusal after the proof
-	// sees no chat and fails silently.
-	return ctx.EffectiveChat
+	return nil
 }
 
 func getUserMemberWithCache(b *gotgbot.Bot, chat *gotgbot.Chat, userId int64, funcName string) (gotgbot.MergedChatMember, bool) {

@@ -98,8 +98,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`checkAnonAdmin`'s shortcut is not used); after the proof the tapper is the sender, is checked live like anyone
   else, and is the one recorded as having locked or lifted. `lockdown`, `unlockdown` and `lockdownstatus` are
   registered with `RegisterAnonymousAdminHandler` for that re-entry. After the proof the update no longer carries the
-  callback query, so `extractChatFromContext` falls back to the context's `EffectiveChat`; a new check or reply that
-  needs the chat must go through it (or `c.Chat`), never read `ctx.Update` fields itself.
+  callback query, so `chat_status.extractChatFromContext` (behind `helpers.RequireGroup` and `PermissionResponder`)
+  finds no chat and fails silently: the lockdown commands use their own `requireLockdownGroup` and `lockdownRefuse`,
+  which read `c.Chat` and reply through `c.Msg`. Keep every check and refusal of an anonymous-capable command off
+  `ctx.Update`.
 
 ## Data
 

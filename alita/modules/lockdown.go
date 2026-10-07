@@ -55,13 +55,45 @@ var (
 	// of the sender, never the admin cache.
 	lockdownDesc = helpers.CommandDescriptor{
 		Name:           "lockdown",
-		RequiredChecks: []helpers.CheckFunc{helpers.RequireGroup(), requireLockdownAuthority(true)},
+		RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireLockdownAuthority(true)},
 	}
 	unlockdownDesc = helpers.CommandDescriptor{
 		Name:           "unlockdown",
-		RequiredChecks: []helpers.CheckFunc{helpers.RequireGroup(), requireLockdownAuthority(true)},
+		RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireLockdownAuthority(true)},
 	}
 )
+
+// lockdownRefuse replies to the command message with a translated refusal and returns
+// false. It does not use chat_status.PermissionResponder: that finds the chat through
+// the update, and the anonymous-admin proof clears the callback query from the update
+// before it re-runs the command, so after the proof it finds no chat and the refusal
+// would be lost.
+func lockdownRefuse(c *helpers.CommandContext, key string) bool {
+	if c.Msg == nil || c.Tr == nil {
+		return false
+	}
+	text, err := c.Tr.GetString(key)
+	if err != nil || text == "" {
+		log.Errorf("[Lockdown] refusal text %s: %v", key, err)
+		return false
+	}
+	if _, err := c.Msg.Reply(c.Bot, text, nil); err != nil {
+		log.Warnf("[Lockdown] refusal reply: %v", err)
+	}
+	return false
+}
+
+// requireLockdownGroup refuses a private chat. It reads the chat the command context
+// carries, not the update, for the reason given on lockdownRefuse: helpers.RequireGroup
+// reads the update and would refuse every command re-run after the anonymous-admin proof.
+func requireLockdownGroup() helpers.CheckFunc {
+	return func(c *helpers.CommandContext) bool {
+		if c.Chat != nil && c.Chat.Type != "private" {
+			return true
+		}
+		return lockdownRefuse(c, "chat_status_group_only_error")
+	}
+}
 
 // lockdownBeginLift is the call that records a lift. It is a variable only so a test
 // can make the record write fail; production code never reassigns it.
@@ -89,17 +121,14 @@ func lockdownLiveMember(b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedCha
 // admin always gets the proof button, even when the chat's AnonAdmin mode is on, and
 // the check refuses that first message; the person who taps the button is the sender
 // of the re-run, so they are checked live here like anyone else and are the one
-// recorded. It replies through the permission responder, so it is valid only inside
-// the command pipeline.
+// recorded. It replies to the command message itself (lockdownRefuse), so it is valid
+// only inside the command pipeline.
 func requireLockdownAuthority(needRestrict bool) helpers.CheckFunc {
 	return func(c *helpers.CommandContext) bool {
 		if c.User == nil || c.Chat == nil || c.Ctx == nil {
 			return false
 		}
-		refuse := func(key string) bool {
-			chat_status.NewPermissionResponder(c.Bot).Respond(c.Ctx, key, "", chat_status.WithReply())
-			return false
-		}
+		refuse := func(key string) bool { return lockdownRefuse(c, key) }
 
 		if sender := c.Ctx.EffectiveSender; sender != nil && sender.IsAnonymousAdmin() {
 			if err := chat_status.PromptAnonAdminProof(c.Bot, c.Chat, c.Msg); err != nil {

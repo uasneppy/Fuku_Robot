@@ -19,7 +19,7 @@ import (
 // (the creator or any administrator), never the admin cache.
 var lockdownStatusDesc = helpers.CommandDescriptor{
 	Name:           "lockdownstatus",
-	RequiredChecks: []helpers.CheckFunc{helpers.RequireGroup(), requireLockdownAuthority(false)},
+	RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireLockdownAuthority(false)},
 }
 
 // lockdownStatus tells an admin whether the group is locked, since when (UTC), by
