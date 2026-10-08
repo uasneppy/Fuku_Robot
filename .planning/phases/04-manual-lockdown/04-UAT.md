@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:15:38Z
+updated: 2026-10-08T13:17:03Z
 ---
 
 ## Current Test
 
-number: 7
-name: Lock a group that is linked to a Staff Group, open /staff in the Staff Group, then lift and press Refresh
+number: 8
+name: With auto-approve on and join requests required, run /lockdown and request to join from a second account; then with auto-approve off tap Accept on a posted approve card during a lockdown; run /unlockdown and try again
 expected: |
-  A '🔒 in lockdown since <date> UTC' line appears on that group's row only, with no reason and no name, and disappears after the lift and refresh
+  The request is declined within seconds, requesting again is declined again, Accept shows the lockdown alert and approves nothing, and after the lift new requests behave normally
 awaiting: user response
 
 ## Tests
@@ -51,7 +51,7 @@ result: pass
 ### 7. Lock a group that is linked to a Staff Group, open /staff in the Staff Group, then lift and press Refresh
 expected: A '🔒 in lockdown since <date> UTC' line appears on that group's row only, with no reason and no name, and disappears after the lift and refresh
 why_human: Live panel rendering in a real Staff Group (SETUP-08 deferred status).
-result: [pending]
+result: pass
 
 ### 8. With auto-approve on and join requests required, run /lockdown and request to join from a second account; then with auto-approve off tap Accept on a posted approve card during a lockdown; run /unlockdown and try again
 expected: The request is declined within seconds, requesting again is declined again, Accept shows the lockdown alert and approves nothing, and after the lift new requests behave normally
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 6
+passed: 7
 issues: 0
-pending: 7
+pending: 6
 skipped: 0
 blocked: 0
 
