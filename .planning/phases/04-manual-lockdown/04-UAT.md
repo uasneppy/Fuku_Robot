@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:11:02Z
+updated: 2026-10-08T13:12:16Z
 ---
 
 ## Current Test
 
-number: 4
-name: In a test supergroup run /lockdown, then join through (a) a normal invite link, (b) a join-request link and (c) an admin adding the user directly. Also repeat with a bot account being added by an admin.
+number: 5
+name: Leave a join request pending, run /lockdown, then approve that request from Telegram's own request list as an admin.
 expected: |
-  Each normal joiner is banned once with no welcome and no captcha, the join request is declined, the admin-added human stays, the bot is banned; all banned joiners can rejoin after /unlockdown.
+  The person gets in. If the accepted D-24 race bans them instead, /unlockdown unbans them.
 awaiting: user response
 
 ## Tests
@@ -36,7 +36,7 @@ note: "Owner confirmed the Permissions screen matched after /unlockdown; no raw 
 ### 4. In a test supergroup run /lockdown, then join through (a) a normal invite link, (b) a join-request link and (c) an admin adding the user directly. Also repeat with a bot account being added by an admin.
 expected: Each normal joiner is banned once with no welcome and no captcha, the join request is declined, the admin-added human stays, the bot is banned; all banned joiners can rejoin after /unlockdown.
 why_human: Live delivery order and duplicate delivery of chat_member, new_chat_members and chat_join_request (D-03) cannot be reproduced by the fake dispatcher. ext.EndGroups on a real update is only proven in the fake.
-result: [pending]
+result: pass
 
 ### 5. Leave a join request pending, run /lockdown, then approve that request from Telegram's own request list as an admin.
 expected: The person gets in. If the accepted D-24 race bans them instead, /unlockdown unbans them.
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 3
+passed: 4
 issues: 0
-pending: 10
+pending: 9
 skipped: 0
 blocked: 0
 
