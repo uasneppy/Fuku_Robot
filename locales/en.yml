@@ -2714,7 +2714,7 @@ staff_panel_unlink_button: "Unlink {group}"
 staff_unlink_confirm_prompt: "Are you sure you want to unlink {group}? Staff commands will no longer reach it."
 staff_cb_denied: "This button does not belong to this chat."
 staff_panel_row_status: "Bot is admin: {bot} | Can restrict members: {restrict} | Owner matches: {owner}"
-staff_panel_row_lockdown: "🔒 in lockdown since {since}"
+staff_panel_row_lockdown: "🔒 In lockdown since {since}"
 staff_panel_reason_bot_missing: "Problem: the bot is not in this group."
 staff_panel_reason_bot_not_admin: "Problem: the bot is not an admin in this group."
 staff_panel_reason_bot_cannot_restrict: "Problem: the bot cannot restrict members in this group."
@@ -2836,9 +2836,9 @@ staff_undo_card_presser_only: "Only the staff member who pressed Undo can confir
 lockdown_help_msg: |
   A lockdown stops a raid in this group: everyone but the admins is muted until an admin lifts it.
 
-  × /lockdown [reason]: Lock this group. Only admins can talk, approved users included, and new members are removed until the lift.
-  × /unlockdown: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
-  × /lockdownstatus: Show whether this group is locked, since when, by whom and why (any admin).
+  × <code>/lockdown [reason]</code>: Lock this group at once, with no confirm step. Only admins can talk, approved users included, and new members are removed until the lift.
+  × <code>/unlockdown</code>: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
+  × <code>/lockdownstatus</code>: Show whether this group is locked, since when, by whom and why (any admin).
 
   Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
   A lockdown never ends on its own. It stays until an admin lifts it.
@@ -2862,15 +2862,15 @@ lockdown_lock_failed: "Telegram refused the lock, so nothing changed. Make sure 
 lockdown_lock_unknown: "⚠️ I couldn't confirm whether the lock took effect. Send /lockdownstatus to check, or /unlockdown to put the permissions back now."
 lockdown_note_no_delete: "I can't delete messages here, so join messages will stay."
 lockdown_note_no_invite: "I can't manage join requests here, so new requests stay pending instead of being declined."
-lockdown_status_active: "🔒 In lockdown since {since}, started by {name}."
+lockdown_status_active: "<b>🔒 In lockdown since {since}</b>, started by {name}."
 lockdown_status_removed: "Joiners removed so far: {count}"
 lockdown_status_ban_failed: "⚠️ Joiners I could not remove: {count}"
 lockdown_status_declined: "Join requests declined: {count}"
 lockdown_status_manual_change: "⚠️ Someone changed the group's permissions by hand during the lockdown. New members are still removed, and /unlockdown will put back the permissions from before the lockdown."
 lockdown_status_unconfirmed: "Telegram has not confirmed the lock yet."
 lockdown_status_lifting: "Lockdown lifted by {name}; unbanning removed joiners: {done} of {total} done."
-lockdown_status_permissions_unknown: "I couldn't read the group's permissions right now to check for changes."
-lockdown_status_failed: "I couldn't read the lockdown state right now. Try again in a moment."
+lockdown_status_permissions_unknown: "I couldn't read the group's permissions, so I can't tell whether someone changed them."
+lockdown_status_failed: "I couldn't read the lockdown state. Send /lockdownstatus again."
 lockdown_lifted_manual_change: "Someone changed the group's permissions by hand during the lockdown; I put back the ones from before the lockdown."
 lockdown_restore_failed: "⚠️ I couldn't put the group's permissions back, so the lockdown is still on and nobody was unbanned. Make sure I am an admin who can restrict members, then run /unlockdown again."
 lockdown_lift_record_failed: "⚠️ The permissions are back, but I couldn't record the lift. Run /unlockdown again."

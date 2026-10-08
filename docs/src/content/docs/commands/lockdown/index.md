@@ -7,7 +7,7 @@ description: Complete guide to Lockdown module commands and features
 
 A lockdown stops a raid in this group: everyone but the admins is muted until an admin lifts it.
 
-- `/lockdown [reason]`: Lock this group. Only admins can talk, approved users included, and new members are removed until the lift.
+- `/lockdown [reason]`: Lock this group at once, with no confirm step. Only admins can talk, approved users included, and new members are removed until the lift.
 - `/unlockdown`: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
 - `/lockdownstatus`: Show whether this group is locked, since when, by whom and why (any admin).
 

@@ -2602,7 +2602,7 @@ staff_panel_unlink_button: "Dissocier {group}"
 staff_unlink_confirm_prompt: "Voulez-vous vraiment dissocier {group} ? Les commandes Staff ne l'atteindront plus."
 staff_cb_denied: "Ce bouton n'appartient pas à ce chat."
 staff_panel_row_status: "Le bot est admin : {bot} | Peut restreindre des membres : {restrict} | Le propriétaire correspond : {owner}"
-staff_panel_row_lockdown: "🔒 en verrouillage depuis le {since}"
+staff_panel_row_lockdown: "🔒 En verrouillage depuis le {since}"
 staff_panel_reason_bot_missing: "Problème : le bot n'est pas dans ce groupe."
 staff_panel_reason_bot_not_admin: "Problème : le bot n'est pas administrateur dans ce groupe."
 staff_panel_reason_bot_cannot_restrict: "Problème : le bot ne peut pas restreindre de membres dans ce groupe."
@@ -2724,9 +2724,9 @@ staff_undo_card_presser_only: "Seul le membre du staff qui a demandé cette annu
 lockdown_help_msg: |
   Un verrouillage arrête un raid dans ce groupe : tout le monde sauf les admins est rendu muet jusqu'à ce qu'un admin le lève.
 
-  × /lockdown [raison] : Verrouille ce groupe. Seuls les admins peuvent parler, utilisateurs approuvés compris, et les nouveaux membres sont retirés jusqu'à la levée.
-  × /unlockdown : Lève le verrouillage. Chaque permission revient exactement comme avant le verrouillage, et les personnes que j'ai retirées sont débannies.
-  × /lockdownstatus : Indique si ce groupe est verrouillé, depuis quand, par qui et pourquoi (n'importe quel admin).
+  × <code>/lockdown [raison]</code> : Verrouille ce groupe immédiatement, sans étape de confirmation. Seuls les admins peuvent parler, utilisateurs approuvés compris, et les nouveaux membres sont retirés jusqu'à la levée.
+  × <code>/unlockdown</code> : Lève le verrouillage. Chaque permission revient exactement comme avant le verrouillage, et les personnes que j'ai retirées sont débannies.
+  × <code>/lockdownstatus</code> : Indique si ce groupe est verrouillé, depuis quand, par qui et pourquoi (n'importe quel admin).
 
   Seul le propriétaire du groupe, ou un admin qui peut restreindre des membres, peut utiliser ces commandes, et je le vérifie en direct. Je dois être admin avec le droit de restreindre des membres, et le groupe doit être un supergroupe.
   Un verrouillage ne se termine jamais tout seul. Il dure jusqu'à ce qu'un admin le lève.
@@ -2750,15 +2750,15 @@ lockdown_lock_failed: "Telegram a refusé le verrouillage, donc rien n'a changé
 lockdown_lock_unknown: "⚠️ Je n'ai pas pu confirmer si le verrouillage a pris effet. Envoie /lockdownstatus pour vérifier, ou /unlockdown pour remettre les permissions maintenant."
 lockdown_note_no_delete: "Je ne peux pas supprimer de messages ici, les messages d'arrivée resteront donc."
 lockdown_note_no_invite: "Je ne peux pas gérer les demandes d'adhésion ici, les nouvelles demandes restent donc en attente au lieu d'être refusées."
-lockdown_status_active: "🔒 En verrouillage depuis {since}, lancé par {name}."
+lockdown_status_active: "<b>🔒 En verrouillage depuis {since}</b>, lancé par {name}."
 lockdown_status_removed: "Arrivants retirés jusqu'ici : {count}"
 lockdown_status_ban_failed: "⚠️ Arrivants que je n'ai pas pu retirer : {count}"
 lockdown_status_declined: "Demandes d'adhésion refusées : {count}"
 lockdown_status_manual_change: "⚠️ Quelqu'un a modifié les permissions du groupe à la main pendant le verrouillage. Les nouveaux membres sont toujours retirés, et /unlockdown remettra les permissions d'avant le verrouillage."
 lockdown_status_unconfirmed: "Telegram n'a pas encore confirmé le verrouillage."
 lockdown_status_lifting: "Verrouillage levé par {name} ; débannissement des personnes retirées : {done} sur {total} faits."
-lockdown_status_permissions_unknown: "Je n'ai pas pu lire les permissions du groupe pour vérifier les changements."
-lockdown_status_failed: "Je n'ai pas pu lire l'état du verrouillage pour le moment. Réessaie dans un instant."
+lockdown_status_permissions_unknown: "Je n'ai pas pu lire les permissions du groupe, je ne peux donc pas savoir si quelqu'un les a modifiées."
+lockdown_status_failed: "Je n'ai pas pu lire l'état du verrouillage. Renvoie /lockdownstatus."
 lockdown_lifted_manual_change: "Quelqu'un a modifié les permissions du groupe à la main pendant le verrouillage ; j'ai remis celles d'avant le verrouillage."
 lockdown_restore_failed: "⚠️ Je n'ai pas pu remettre les permissions du groupe, donc le verrouillage reste actif et personne n'a été débanni. Vérifie que je suis admin avec le droit de restreindre des membres, puis relance /unlockdown."
 lockdown_lift_record_failed: "⚠️ Les permissions sont revenues, mais je n'ai pas pu enregistrer la levée. Relance /unlockdown."

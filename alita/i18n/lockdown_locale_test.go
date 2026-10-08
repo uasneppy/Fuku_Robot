@@ -119,6 +119,49 @@ func TestLockdownWarningLines(t *testing.T) {
 	}
 }
 
+// TestLockdownStringsHaveBalancedTags checks the HTML in the lockdown strings in all 7
+// locales. An unbalanced <b> or <code> makes Telegram refuse the whole message, which
+// would fail silently in production. Each help bullet must also start with a <code>
+// span, so a tap on the command copies it instead of sending it.
+func TestLockdownStringsHaveBalancedTags(t *testing.T) {
+	var failures []string
+	for _, lang := range staffLocales {
+		data := loadStaffLocale(t, lang)
+		keys := lockdownKeys(data)
+		keys["staff_panel_row_lockdown"] = struct{}{}
+		for key := range keys {
+			text, _ := data[key].(string)
+			for _, tag := range []string{"b", "code"} {
+				opened := strings.Count(text, "<"+tag+">")
+				closed := strings.Count(text, "</"+tag+">")
+				if opened != closed {
+					failures = append(failures, fmt.Sprintf("%s: %s has %d <%s> and %d </%s>", lang, key, opened, tag, closed, tag))
+				}
+			}
+		}
+
+		help, _ := data["lockdown_help_msg"].(string)
+		bullets := 0
+		for _, line := range strings.Split(help, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmed, "×") {
+				continue
+			}
+			bullets++
+			if !strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(trimmed, "×")), "<code>/") {
+				failures = append(failures, fmt.Sprintf("%s: help bullet %q does not start with a <code> command", lang, trimmed))
+			}
+		}
+		if bullets != 3 {
+			failures = append(failures, fmt.Sprintf("%s: lockdown_help_msg has %d command bullets, want 3", lang, bullets))
+		}
+	}
+	sort.Strings(failures)
+	for _, failure := range failures {
+		t.Error(failure)
+	}
+}
+
 // TestLockdownRepliesCarryNoTelegramDetail checks that no lockdown string has a
 // {detail} slot in any locale: Telegram's own error text goes to the log, never to
 // the group.

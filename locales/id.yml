@@ -2676,7 +2676,7 @@ staff_panel_unlink_button: "Putuskan {group}"
 staff_unlink_confirm_prompt: "Yakin ingin memutus tautan {group}? Perintah Staf tidak akan lagi menjangkaunya."
 staff_cb_denied: "Tombol ini bukan milik obrolan ini."
 staff_panel_row_status: "Bot adalah admin: {bot} | Dapat membatasi anggota: {restrict} | Pemilik cocok: {owner}"
-staff_panel_row_lockdown: "🔒 dalam lockdown sejak {since}"
+staff_panel_row_lockdown: "🔒 Dalam lockdown sejak {since}"
 staff_panel_reason_bot_missing: "Masalah: bot tidak ada di grup ini."
 staff_panel_reason_bot_not_admin: "Masalah: bot bukan admin di grup ini."
 staff_panel_reason_bot_cannot_restrict: "Masalah: bot tidak dapat membatasi anggota di grup ini."
@@ -2798,9 +2798,9 @@ staff_undo_card_presser_only: "Hanya anggota staf yang memulai pembatalan ini ya
 lockdown_help_msg: |
   Lockdown menghentikan raid di grup ini: semua orang kecuali admin dibisukan sampai seorang admin mencabutnya.
 
-  × /lockdown [alasan]: Kunci grup ini. Hanya admin yang bisa bicara, pengguna yang disetujui pun dibisukan, dan anggota baru dikeluarkan sampai lockdown dicabut.
-  × /unlockdown: Cabut lockdown. Setiap izin kembali persis seperti sebelum lockdown, dan orang yang saya keluarkan di-unban.
-  × /lockdownstatus: Tampilkan apakah grup ini terkunci, sejak kapan, oleh siapa dan mengapa (admin mana pun).
+  × <code>/lockdown [alasan]</code>: Kunci grup ini seketika, tanpa langkah konfirmasi. Hanya admin yang bisa bicara, pengguna yang disetujui pun dibisukan, dan anggota baru dikeluarkan sampai lockdown dicabut.
+  × <code>/unlockdown</code>: Cabut lockdown. Setiap izin kembali persis seperti sebelum lockdown, dan orang yang saya keluarkan di-unban.
+  × <code>/lockdownstatus</code>: Tampilkan apakah grup ini terkunci, sejak kapan, oleh siapa dan mengapa (admin mana pun).
 
   Hanya pemilik grup, atau admin yang bisa membatasi anggota, yang dapat memakai perintah ini, dan saya memeriksanya secara langsung. Saya harus menjadi admin yang bisa membatasi anggota, dan grup harus berupa supergrup.
   Lockdown tidak pernah berakhir dengan sendirinya. Ia bertahan sampai seorang admin mencabutnya.
@@ -2824,15 +2824,15 @@ lockdown_lock_failed: "Telegram menolak penguncian, jadi tidak ada yang berubah.
 lockdown_lock_unknown: "⚠️ Saya tidak bisa memastikan apakah penguncian berlaku. Kirim /lockdownstatus untuk memeriksa, atau /unlockdown untuk mengembalikan izin sekarang."
 lockdown_note_no_delete: "Saya tidak bisa menghapus pesan di sini, jadi pesan bergabung akan tetap ada."
 lockdown_note_no_invite: "Saya tidak bisa mengelola permintaan bergabung di sini, jadi permintaan baru tetap tertunda dan tidak ditolak."
-lockdown_status_active: "🔒 Dalam lockdown sejak {since}, dimulai oleh {name}."
+lockdown_status_active: "<b>🔒 Dalam lockdown sejak {since}</b>, dimulai oleh {name}."
 lockdown_status_removed: "Anggota baru yang dikeluarkan sejauh ini: {count}"
 lockdown_status_ban_failed: "⚠️ Anggota baru yang tidak bisa saya keluarkan: {count}"
 lockdown_status_declined: "Permintaan bergabung yang ditolak: {count}"
 lockdown_status_manual_change: "⚠️ Seseorang mengubah izin grup secara manual selama lockdown. Anggota baru tetap dikeluarkan, dan /unlockdown akan mengembalikan izin dari sebelum lockdown."
 lockdown_status_unconfirmed: "Telegram belum mengonfirmasi penguncian."
 lockdown_status_lifting: "Lockdown dicabut oleh {name}; meng-unban orang yang dikeluarkan: {done} dari {total} selesai."
-lockdown_status_permissions_unknown: "Saya tidak bisa membaca izin grup saat ini untuk memeriksa perubahan."
-lockdown_status_failed: "Saya tidak bisa membaca status lockdown saat ini. Coba lagi sebentar lagi."
+lockdown_status_permissions_unknown: "Saya tidak bisa membaca izin grup, jadi saya tidak tahu apakah ada yang mengubahnya."
+lockdown_status_failed: "Saya tidak bisa membaca status lockdown. Kirim /lockdownstatus lagi."
 lockdown_lifted_manual_change: "Seseorang mengubah izin grup secara manual selama lockdown; saya mengembalikan izin dari sebelum lockdown."
 lockdown_restore_failed: "⚠️ Saya tidak bisa mengembalikan izin grup, jadi lockdown masih aktif dan tidak ada yang di-unban. Pastikan saya admin yang bisa membatasi anggota, lalu jalankan /unlockdown lagi."
 lockdown_lift_record_failed: "⚠️ Izin sudah kembali, tetapi saya tidak bisa mencatat pencabutan. Jalankan /unlockdown lagi."
