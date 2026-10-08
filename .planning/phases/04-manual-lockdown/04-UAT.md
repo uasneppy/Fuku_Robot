@@ -8,10 +8,10 @@ updated: 2026-10-08T13:09:57Z
 
 ## Current Test
 
-number: 1
-name: Run the PostgreSQL 16 checks that the executors could not run: apply the whole migration chain, then TestStartLockdownOneActivePerChat against that database (the command is in 04-08-SUMMARY.md under 'Items for the orchestrator')
+number: 3
+name: In a real supergroup set unusual default permissions (text on, photos off, reactions off, invite on), run /lockdown, compare the Permissions screen, run /unlockdown and compare again. Save the raw getChat permissions answers as a test fixture.
 expected: |
-  '--- PASS: TestRepositoryMigrationChain', a 'lockdown repository backend: postgres' line, '--- PASS: TestStartLockdownOneActivePerChat', and no '--- SKIP'
+  The Permissions screen after /unlockdown is identical to before. Locked: members cannot send anything, admins still can.
 awaiting: user response
 
 ## Tests
