@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-07T04:29:21Z
+updated: 2026-10-08T13:09:08Z
 ---
 
 ## Current Test
 
-number: 1
-name: Run the PostgreSQL 16 checks that the executors could not run: apply the whole migration chain, then TestStartLockdownOneActivePerChat against that database (the command is in 04-08-SUMMARY.md under 'Items for the orchestrator')
+number: 2
+name: Run make lint on a machine whose golangci-lint is built with Go 1.26
 expected: |
-  '--- PASS: TestRepositoryMigrationChain', a 'lockdown repository backend: postgres' line, '--- PASS: TestStartLockdownOneActivePerChat', and no '--- SKIP'
+  Exit 0 with no new issues in the phase's files
 awaiting: user response
 
 ## Tests
@@ -19,7 +19,8 @@ awaiting: user response
 ### 1. Run the PostgreSQL 16 checks that the executors could not run: apply the whole migration chain, then TestStartLockdownOneActivePerChat against that database (the command is in 04-08-SUMMARY.md under 'Items for the orchestrator')
 expected: '--- PASS: TestRepositoryMigrationChain', a 'lockdown repository backend: postgres' line, '--- PASS: TestStartLockdownOneActivePerChat', and no '--- SKIP'
 why_human: Needs 'su postgres' for a throwaway cluster, which the sandbox refuses (it was refused for the executors and was not circumvented here). Every lockdown repository test so far ran on SQLite, so the uk_chat_lockdowns_active partial unique index, ON CONFLICT DO NOTHING without a target, the NOT EXISTS in FinishLift and the IN (SELECT ...) in ReleaseStaleClaims are unproven on the production database.
-result: [pending]
+result: pass
+evidence: "Run by Claude from the main checkout on a throwaway PostgreSQL 16 cluster at the owner's request: --- PASS TestRepositoryMigrationChain; lockdown repository backend: postgres; --- PASS TestStartLockdownOneActivePerChat (5 subtests incl. eight concurrent starts and a raw duplicate insert refused by the index); no SKIP."
 
 ### 2. Run make lint on a machine whose golangci-lint is built with Go 1.26
 expected: Exit 0 with no new issues in the phase's files
@@ -84,9 +85,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 0
+passed: 1
 issues: 0
-pending: 13
+pending: 12
 skipped: 0
 blocked: 0
 
