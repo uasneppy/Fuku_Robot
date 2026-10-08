@@ -94,9 +94,9 @@
       ],
       "directory": null,
       "worktree": null,
-      "dispatched_worktree": null,
-      "dispatched_branch": null,
-      "dispatched_base": null,
+      "dispatched_worktree": "/home/user/Fuku_Robot/.claude/worktrees/agent-a5160cde1fbf5868d",
+      "dispatched_branch": "worktree-agent-a5160cde1fbf5868d",
+      "dispatched_base": "dab6c0b426af8b4d3e5bc19f1a4b2a2d36a2e411",
       "wave": 0,
       "commit": null,
       "failure_reason": null
