@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:14:57Z
+updated: 2026-10-08T13:15:38Z
 ---
 
 ## Current Test
 
-number: 6
-name: During a lockdown let a joiner be banned, read getChatMember for them and compare until_date with the stored ban_until (join row), then lift.
+number: 7
+name: Lock a group that is linked to a Staff Group, open /staff in the Staff Group, then lift and press Refresh
 expected: |
-  until_date is within 2 s of the stored value, and the joiner is unbanned at the lift
+  A '🔒 in lockdown since <date> UTC' line appears on that group's row only, with no reason and no name, and disappears after the lift and refresh
 awaiting: user response
 
 ## Tests
@@ -46,7 +46,7 @@ result: pass
 ### 6. During a lockdown let a joiner be banned, read getChatMember for them and compare until_date with the stored ban_until (join row), then lift.
 expected: until_date is within 2 s of the stored value, and the joiner is unbanned at the lift
 why_human: Telegram's until_date echo and rounding (research A2) is assumed by isLockdownBan; if it is off, every lift would keep every raider banned.
-result: [pending]
+result: pass
 
 ### 7. Lock a group that is linked to a Staff Group, open /staff in the Staff Group, then lift and press Refresh
 expected: A '🔒 in lockdown since <date> UTC' line appears on that group's row only, with no reason and no name, and disappears after the lift and refresh
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 5
+passed: 6
 issues: 0
-pending: 8
+pending: 7
 skipped: 0
 blocked: 0
 
