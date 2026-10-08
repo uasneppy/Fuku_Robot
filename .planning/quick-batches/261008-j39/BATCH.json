@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "batch_id": "261008-j39",
+  "created_at": "2026-10-08T13:44:43.298Z",
+  "options": {},
+  "base_revision": "81dda52ff7056665cc3ac1c9db9fd2ac1d015c80",
+  "items": [
+    {
+      "quick_id": "261008-j3a",
+      "client_id": null,
+      "description": "Fix the pre-existing anonymous-admin bug: after the anonymous-admin proof tap, verifyAnonymousAdmin clears the callback query, so chat_status.extractChatFromContext (behind helpers.RequireGroup and PermissionResponder) finds no chat and the per-group ban family (and other anonymous-capable admin commands behind RequireGroup) silently does nothing. See .planning/phases/04-manual-lockdown/deferred-items.md and the AGENTS.md Permissions bullet; the lockdown commands work around it with requireLockdownGroup/lockdownRefuse. Fix the shared path so the re-entered command finds its chat, with a real-fixture test proving /ban works after the proof tap.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261008-j3b",
+      "client_id": null,
+      "description": "Close the shutdown timing gap: the shutdown manager gives each handler only 10 s (alita/utils/shutdown/graceful.go), while StopStaffActions waits up to 30 s (staffActionStopWait), so a slow staff action or undo run can be cut off before FinalizeAction/FinalizeUndo and summary delivery while the DB closes under it. Give the staff drain (and the lockdown worker drain) the time AGENTS.md promises, within the 60 s overall shutdown budget, with a test. See .planning/debug/resolved/undo-claim-spent-and-undone-label.md and the STATE.md concern.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261008-j3c",
+      "client_id": null,
+      "description": "Make the flaky test TestStaffActionNonStaffUnchanged/tmute_as_a_reply robust: it fails when two runs straddle a wall-clock second in until_date. Test-only change; never skip or disable the test. Prove it with repeated -race runs (-count=20).",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261008-j3d",
+      "client_id": null,
+      "description": "Lockdown copy polish from .planning/phases/04-manual-lockdown/04-UI-REVIEW.md (top fixes 2 and 3 and the WARNING items; fix 1 is withdrawn): stop showing raw Telegram error text through the {detail} slot in lockdown_lock_unknown, lockdown_lock_failed, lockdown_permissions_unreadable and lockdown_restore_failed (log it instead and give one next step), add a warning marker to failure lines (lockdown_lift_tally_failed, lockdown_restore_failed, lockdown_lift_record_failed), use <code> for commands in lockdown_help_msg, and make the \"in lockdown\" casing consistent. Update all 7 locale files, run make check-translations and make generate-docs/check-docs, and keep existing tests green.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    }
+  ]
+}
