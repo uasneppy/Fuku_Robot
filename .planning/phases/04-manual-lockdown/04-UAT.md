@@ -1,18 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:34:59Z
+updated: 2026-10-08T13:35:24Z
 ---
 
 ## Current Test
 
-number: 13
-name: In a real group with a captcha pending, run /lockdown, let the user pass the captcha, run /unmute on another muted user, then /unlockdown
-expected: |
-  Both users can talk after the lift (LOCK-08)
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -81,14 +77,14 @@ result: pass
 ### 13. In a real group with a captcha pending, run /lockdown, let the user pass the captcha, run /unmute on another muted user, then /unlockdown
 expected: Both users can talk after the lift (LOCK-08)
 why_human: Real per-user restriction semantics (a user's own restriction copied from the snapshot while the default is locked) is what keeps them from being muted after the lift; the fake cannot prove how Telegram combines the two.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 13
-passed: 12
+passed: 13
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
