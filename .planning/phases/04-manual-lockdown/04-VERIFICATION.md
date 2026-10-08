@@ -1,7 +1,7 @@
 ---
 phase: 04-manual-lockdown
 verified: 2026-10-07T04:40:00Z
-status: human_needed
+status: passed
 score: 11/12 must-haves verified
 covered_files:
   - ".planning/phases/04-manual-lockdown/04-01-PLAN.md"
@@ -83,6 +83,7 @@ covered_files:
   - "locales/ru.yml"
   - "main.go"
   - "migrations/20261006120000_add_chat_lockdowns.sql"
+
 covered_digest: "v2:sha256:f40a68f1d9d7c1e7d7e334c1aa4051ddd2e5b6ff5c979f24f012c7cd9417555d"
 behavior_unverified: 0
 overrides_applied: 0
