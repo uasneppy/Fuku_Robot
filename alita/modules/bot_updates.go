@@ -109,7 +109,10 @@ func adminCacheAutoUpdate(b *gotgbot.Bot, ctx *ext.Context) error {
 // When an anonymous admin presses the verify button, this function:
 // 1. Verifies they are actually an admin in the chat
 // 2. Retrieves the original command from cache
-// 3. Executes the appropriate command handler with the context rebuilt as the message
+// 3. Refuses the tap as an invalid request unless the callback's chat, the proof
+// button's chat and the cached command's chat are the same chat, so the chat the tapper
+// was verified admin in is the only chat any later check or action can use
+// 4. Executes the appropriate command handler with the context rebuilt as the message
 // update the admin would have sent: the cached command is the update's message and
 // EffectiveChat is that command's chat, with the tapper as the sender
 func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
@@ -181,6 +184,19 @@ func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 			"msgId":  msgId,
 		}).Error("getAnonAdminCache: nil message from cache")
 		return ext.EndGroups
+	}
+
+	// Callback data is client-controlled: a proof button only ever lives in the chat of
+	// the command it proves, so any other combination is forged. Fail closed before
+	// anything is deleted or run.
+	if msg.Chat.Id != chatId || qmsg.GetChat().Id != chatId {
+		log.WithFields(log.Fields{
+			"chatId":       chatId,
+			"msgId":        msgId,
+			"cachedChatId": msg.Chat.Id,
+			"buttonChatId": qmsg.GetChat().Id,
+		}).Warn("[BotUpdates] anon_admin proof tap names different chats")
+		return answerInvalidCallback(b, ctx, query)
 	}
 
 	_, err = qmsg.Delete(b, nil)

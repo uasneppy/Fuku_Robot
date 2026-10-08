@@ -13,3 +13,5 @@
   `lockdownRefuse`). Making `extractChatFromContext` fall back to `ctx.EffectiveChat` fixes the flow but breaks
   `TestUnapproveAllCallbackCancelInvalidAndUnavailableMessage` (a callback with no message must find no chat), so a
   fix needs that test's expectation reviewed or a narrower fallback.
+  **RESOLVED by quick task 261008-j3a:** `verifyAnonymousAdmin` now rebuilds the update as the cached command's message
+  update with `EffectiveChat` set to its chat; `extractChatFromContext` is unchanged, and the lockdown workaround stays.

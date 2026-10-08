@@ -58,7 +58,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `RegisterAnonymousAdminHandler` + `anonPipelineHandler`. After the proof tap, `verifyAnonymousAdmin` swaps the callback
   update for a message update carrying the cached command and points `EffectiveChat` at that command's chat, so the
   re-entered command, the `RequiredChecks` that `anonPipelineHandler` re-runs, and `PermissionResponder` see the
-  command's chat as if the admin had sent it, with the tapper as the sender.
+  command's chat as if the admin had sent it, with the tapper as the sender. `verifyAnonymousAdmin` refuses the tap as
+  an invalid request, deleting and running nothing, unless the callback's `c`, the proof button's chat and the cached
+  command's chat are the same chat.
 - The `StaffActions` module (priority 65) registers raw `handlers.NewCommand` interceptors at group 0 ahead of Bans (70)
   and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
