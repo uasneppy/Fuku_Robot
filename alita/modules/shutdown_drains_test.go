@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/utils/shutdown"
 )
@@ -75,6 +76,61 @@ func TestShutdownWaitsForStaffRunSummary(t *testing.T) {
 		}
 		if strings.Contains(obs.summary, "⏳") {
 			t.Errorf("card still had a pending line at database close:\n%s", obs.summary)
+		}
+	default:
+		t.Fatal("the database-close probe never ran")
+	}
+}
+
+// TestShutdownWaitsForLockdownWorker holds the lockdown worker inside an unban call
+// and runs a real shutdown.Manager. The DB-close probe must only see the joiner row
+// written once the blocked call settled, which needs the drain's own allowance.
+func TestShutdownWaitsForLockdownWorker(t *testing.T) {
+	env := newLockdownEnv(t)
+	ld, _ := env.lockAndBan("Ann", "Bob")
+	env.send(env.admin, "/unlockdown")
+	if row := env.freshRow(ld.ID); row.State != models.LockdownStateLifting {
+		t.Fatalf("State after /unlockdown = %q, want lifting", row.State)
+	}
+
+	previousTick, previousWait := lockdownWorkerTick, lockdownWorkerStopWait
+	lockdownWorkerTick = 10 * time.Millisecond
+	lockdownWorkerStopWait = 3 * time.Second
+	t.Cleanup(func() {
+		StopLockdownWorker()
+		lockdownWorkerTick, lockdownWorkerStopWait = previousTick, previousWait
+	})
+	env.fake.setDelay("unbanChatMember", env.chat.Id, 300*time.Millisecond)
+
+	StartLockdownWorker(env.bot)
+	waitUntil(t, 5*time.Second, "the worker to be inside its first unban call", func() bool {
+		return len(env.fake.requestTimes("unbanChatMember", env.chat.Id)) >= 1
+	})
+
+	type observation struct {
+		unbanning int
+		err       error
+	}
+	observed := make(chan observation, 1)
+	m := shutdown.NewManager()
+	// The probe stands for the DB-close handler and must not call t.Fatal.
+	m.RegisterHandler(func() error {
+		rows, err := lockdown.ListJoinersInState(ld.ID, models.JoinerStateUnbanning, 10)
+		observed <- observation{unbanning: len(rows), err: err}
+		return nil
+	})
+	RegisterLockdownWorkerDrain(m)
+
+	if code := m.RunForTest(10*time.Second, 50*time.Millisecond); code != 0 {
+		t.Fatalf("shutdown exit code = %d, want 0", code)
+	}
+	select {
+	case obs := <-observed:
+		if obs.err != nil {
+			t.Fatalf("probe could not read the joiner rows: %v", obs.err)
+		}
+		if obs.unbanning != 0 {
+			t.Errorf("%d joiner row(s) still unbanning when the database-close handler ran, want 0", obs.unbanning)
 		}
 	default:
 		t.Fatal("the database-close probe never ran")

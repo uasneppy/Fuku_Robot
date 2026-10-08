@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -325,5 +326,98 @@ func TestWaitForShutdownUsesSignalHooks(t *testing.T) {
 	}
 	if len(exitCodes) != 1 || exitCodes[0] != 0 {
 		t.Fatalf("expected one successful exit, got %v", exitCodes)
+	}
+}
+
+// blockUntilCleanup returns a handler that blocks until the test ends.
+func blockUntilCleanup(t *testing.T) func() error {
+	t.Helper()
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	return func() error {
+		<-release
+		return nil
+	}
+}
+
+func TestShutdownHandlerTimeoutOutlastsDefault(t *testing.T) {
+	m := NewManager()
+	var slowDone atomic.Bool
+	probeSawSlowDone := make(chan bool, 1)
+
+	// Registered first, so it runs last, like the DB-close handler.
+	m.RegisterHandler(func() error {
+		probeSawSlowDone <- slowDone.Load()
+		return nil
+	})
+	m.RegisterHandlerWithTimeout(func() error {
+		time.Sleep(150 * time.Millisecond)
+		slowDone.Store(true)
+		return nil
+	}, time.Second)
+
+	if code := m.runHandlers(5*time.Second, 20*time.Millisecond); code != 0 {
+		t.Fatalf("runHandlers = %d, want 0", code)
+	}
+	select {
+	case done := <-probeSawSlowDone:
+		if !done {
+			t.Error("the probe ran before the slow handler finished: its own timeout was not used")
+		}
+	default:
+		t.Fatal("the earlier-registered probe never ran")
+	}
+}
+
+func TestShutdownDefaultHandlerTimeoutStillApplies(t *testing.T) {
+	registrations := map[string]func(m *Manager, h func() error){
+		"RegisterHandler":              func(m *Manager, h func() error) { m.RegisterHandler(h) },
+		"RegisterHandlerWithTimeout0":  func(m *Manager, h func() error) { m.RegisterHandlerWithTimeout(h, 0) },
+		"RegisterHandlerWithTimeout<0": func(m *Manager, h func() error) { m.RegisterHandlerWithTimeout(h, -time.Second) },
+	}
+	for name, register := range registrations {
+		t.Run(name, func(t *testing.T) {
+			m := NewManager()
+			var probeRan atomic.Bool
+			m.RegisterHandler(func() error {
+				probeRan.Store(true)
+				return nil
+			})
+			register(m, blockUntilCleanup(t))
+
+			started := time.Now()
+			code := m.runHandlers(5*time.Second, 20*time.Millisecond)
+			if took := time.Since(started); took > time.Second {
+				t.Errorf("runHandlers took %s, want the blocked handler skipped after about 20ms", took)
+			}
+			if code != 0 {
+				t.Errorf("runHandlers = %d, want 0", code)
+			}
+			if !probeRan.Load() {
+				t.Error("the earlier-registered probe did not run after the blocked handler was skipped")
+			}
+		})
+	}
+}
+
+func TestShutdownHandlerTimeoutBoundedByBudget(t *testing.T) {
+	m := NewManager()
+	var probeRan atomic.Bool
+	m.RegisterHandler(func() error {
+		probeRan.Store(true)
+		return nil
+	})
+	m.RegisterHandlerWithTimeout(blockUntilCleanup(t), 10*time.Second)
+
+	started := time.Now()
+	code := m.runHandlers(50*time.Millisecond, 20*time.Millisecond)
+	if took := time.Since(started); took > time.Second {
+		t.Errorf("runHandlers took %s, want it cut by the 50ms budget", took)
+	}
+	if code != 1 {
+		t.Errorf("runHandlers = %d, want 1 when the budget ran out", code)
+	}
+	if probeRan.Load() {
+		t.Error("the probe ran after the global budget ended")
 	}
 }

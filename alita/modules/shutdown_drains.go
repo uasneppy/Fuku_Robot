@@ -23,3 +23,15 @@ func RegisterStaffActionsDrain(m *shutdown.Manager) {
 		return nil
 	}, staffActionStopWait+shutdownDrainGrace)
 }
+
+// RegisterLockdownWorkerDrain registers StopLockdownWorker with an allowance of
+// lockdownWorkerStopWait plus shutdownDrainGrace. Register it after the DB-close handler
+// so LIFO runs it first. Its allowance follows the worker's own wait, so a future change
+// of that wait cannot be cut short by the manager's default.
+func RegisterLockdownWorkerDrain(m *shutdown.Manager) {
+	m.RegisterHandlerWithTimeout(func() error {
+		log.Info("[Shutdown] Stopping lockdown worker...")
+		StopLockdownWorker()
+		return nil
+	}, lockdownWorkerStopWait+shutdownDrainGrace)
+}
