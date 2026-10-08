@@ -99,7 +99,6 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Cross-phase]: The shutdown manager gives each handler only 10 s (`alita/utils/shutdown/graceful.go:83`), while `StopStaffActions` waits up to 30 s (`staffActionStopWait`). A slow staff action or undo run can therefore be cut off before `FinalizeAction`/`FinalizeUndo` and summary delivery, and the DB closes under it. Found by the G-03-4 diagnosis (`.planning/debug/resolved/undo-claim-spent-and-undone-label.md`); not yet planned.
 - [Phase 7]: Spike gate. Evaluate Gemini on spam images, GIFs and stickers, then run `/gsd-ai-integration-phase`.
 - [Phase 8]: Spike gate. Test Direct Link Mini App launch from a group, and Turnstile rendering in Telegram WebViews. The owner must provide a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
 - [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
@@ -108,16 +107,22 @@ None yet.
 - [Phase 2]: Open code-review finding WR-03 (warning): at a `retry_after` of exactly 60 s, all but the first concurrent paced call fail as "rate limited" instead of waiting. Those groups are still reported. Nine info notes are open too (`02-REVIEW-DISPOSITION.md`).
 - [Phase 3]: Open code-review warnings WR-03 (a retry after an ambiguous `ReleaseUndo` error can run `FinalizeUndo` on a released record) and WR-04 (a history page press is answered before the data is read, so a DB error is a silent no-op), plus 6 info notes (`03-REVIEW-DISPOSITION.md`). The owner accepted WR-01, WR-02 and IN-02 in UAT.
 - [Phase 4]: Spike 1 answered by the owner: Telegram greys out a per-user "Send messages" exception once the default is locked, so approved users are muted during a lockdown like everyone else (LOCK-03 fallback, 04-CONTEXT D-01/D-02). Spike 2 (join paths) is designed away, with live join delivery checked in UAT.
-- [Phase 4]: Code review info notes IN-01..IN-04 are open (`04-REVIEW-DISPOSITION.md`); CR-01, WR-01 and WR-02 were fixed before verification. UI review (18/24) left copy polish open: `{detail}` slots that show raw Telegram text, no ⚠️/❌ marker on failure lines, and help text without `<code>` (`04-UI-REVIEW.md`).
-- [Pre-existing, found in Phase 4]: after the anonymous-admin proof, `verifyAnonymousAdmin` clears the callback query, so `RequireGroup` finds no chat and the `ban` family silently does nothing (`.planning/phases/04-manual-lockdown/deferred-items.md`). Lockdown commands work around it; the shared fix is not planned yet.
-- [Phase 2]: `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` is flaky (2 of 6 verifier runs red): two runs straddle a wall-clock second in `until_date`. Test-only; it can turn `make test` red intermittently.
+- [Phase 4]: Code review info notes IN-01..IN-04 are open (`04-REVIEW-DISPOSITION.md`); CR-01, WR-01 and WR-02 were fixed before verification. UI review copy fixes landed in quick task 261008-j3d.
 - [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) shipped in Phase 4. The alert's Lift button (LOCK-06), and listing removed joiners on the alert (LOCK-01), land in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
+- [Quick 261008-j3b]: Shutdown follow-ups not fixed: `DrainAISpamChecks` waits up to 30 s but keeps the 10 s allowance; in polling mode the 60 s budget can still cut the staff drain short; `render.yaml`, `app.json`/Procfile and `railway.toml` keep their platforms' 30 s stop limits.
+- [Quick 261008-j3a]: Follow-up candidate: an anonymous admin's ban-family command also gets a stray `chat_status_restrict_cmd_error` reply before the proof tap (pre-existing).
+- [Phase 4]: Intermittent data race between the lockdown worker (`lockdown.ListJoinMsgsToDeleteFresh`) and `TestPostInitSetsCommandsAndStartupMessage` in `main_test.go`, seen only under heavy parallel load (did not reproduce in 6 runs or in the final `make test`). Test-harness race, not yet fixed.
+- [Tooling]: `make lint` needs a golangci-lint built with Go 1.26; the sandbox's is built with Go 1.25, so the quick batch was linted only with `go vet` and `gofmt`.
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261004-w9v | Load AGENTS.md from .claude/CLAUDE.md and correct the locale list in CLAUDE.md and the codebase map | 2026-10-04 | c85d648 | [261004-w9v-load-agents-md-from-claude-claude-md-and](./quick/261004-w9v-load-agents-md-from-claude-claude-md-and/) |
+| 261008-j3a | Fix anonymous-admin commands doing nothing after the proof tap | 2026-10-08 | 686f960 | .planning/quick/261008-j3a-fix-the-pre-existing-anonymous-admin-bug-after-the-anonymous |
+| 261008-j3b | Give the staff and lockdown shutdown drains their full wait | 2026-10-08 | 6f7da31 | .planning/quick/261008-j3b-close-the-shutdown-timing-gap-the-shutdown-manager-gives-eac |
+| 261008-j3c | Make TestStaffActionNonStaffUnchanged robust to second boundaries | 2026-10-08 | 077ee2e | .planning/quick/261008-j3c-make-the-flaky-test-teststaffactionnonstaffunchanged-tmute-a |
+| 261008-j3d | Lockdown copy polish: no raw Telegram errors, warning markers, code-formatted help | 2026-10-08 | 924b5e6 | .planning/quick/261008-j3d-lockdown-copy-polish-from-planning-phases-04-manual-lockdown |
 
 ## Deferred Items
 
