@@ -178,10 +178,13 @@ func TestLockdownLiftRestoreFailure(t *testing.T) {
 	row := env.lockAsAdmin("raid")
 	env.fake.script("setChatPermissions", env.chat.Id,
 		staffFakeError(400, "Bad Request: not enough rights to change chat permissions"))
+	hook := captureLockdownLogs(t)
 
 	env.send(env.admin, "/unlockdown")
 
-	env.wantReplyHas(staffMarker("lockdown_restore_failed"), "not enough rights to change chat permissions")
+	env.wantReplyHas(staffMarker("lockdown_restore_failed"))
+	env.wantReplyLacks("not enough rights to change chat permissions")
+	wantLockdownLogged(t, hook, "not enough rights to change chat permissions")
 	stuck := env.freshRow(row.ID)
 	if stuck.State != models.LockdownStateActive {
 		t.Errorf("State = %q, want active: a failed restore must not end the lockdown", stuck.State)

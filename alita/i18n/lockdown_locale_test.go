@@ -85,3 +85,32 @@ func TestLockdownLocaleKeys(t *testing.T) {
 		t.Error(failure)
 	}
 }
+
+// lockdownWarningMarker is U+26A0 U+FE0F, the mark lockdown_status_manual_change
+// already starts with.
+const lockdownWarningMarker = "\u26a0\ufe0f"
+
+// lockdownWarningKeys are the lines that report something the bot failed to do. A
+// refusal where nothing changed carries no marker.
+var lockdownWarningKeys = []string{
+	"lockdown_restore_failed",
+}
+
+// TestLockdownWarningLines checks that every failure line starts with the warning
+// marker in all 7 locales, so a failure reads differently from a routine line.
+func TestLockdownWarningLines(t *testing.T) {
+	var failures []string
+	for _, lang := range staffLocales {
+		data := loadStaffLocale(t, lang)
+		for _, key := range lockdownWarningKeys {
+			text, _ := data[key].(string)
+			if !strings.HasPrefix(text, lockdownWarningMarker) {
+				failures = append(failures, fmt.Sprintf("%s: %s does not start with the warning marker", lang, key))
+			}
+		}
+	}
+	sort.Strings(failures)
+	for _, failure := range failures {
+		t.Error(failure)
+	}
+}

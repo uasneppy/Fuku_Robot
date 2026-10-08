@@ -2872,7 +2872,7 @@ lockdown_status_lifting: "Lockdown lifted by {name}; unbanning removed joiners: 
 lockdown_status_permissions_unknown: "I couldn't read the group's permissions right now to check for changes."
 lockdown_status_failed: "I couldn't read the lockdown state right now. Try again in a moment."
 lockdown_lifted_manual_change: "Someone changed the group's permissions by hand during the lockdown; I put back the ones from before the lockdown."
-lockdown_restore_failed: "I couldn't put the group's permissions back, so the lockdown is still on and nobody was unbanned: {detail}\nMake sure I am an admin who can restrict members, then run /unlockdown again."
+lockdown_restore_failed: "⚠️ I couldn't put the group's permissions back, so the lockdown is still on and nobody was unbanned. Make sure I am an admin who can restrict members, then run /unlockdown again."
 lockdown_lift_record_failed: "The permissions are back, but I couldn't record the lift. Run /unlockdown again."
 lockdown_already_lifted: "This lockdown was already lifted."
 lockdown_lift_in_progress: "The lockdown was already lifted by {name}; removed joiners are still being unbanned."

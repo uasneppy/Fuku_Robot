@@ -2806,7 +2806,7 @@ lockdown_status_lifting: "Bloqueio levantado por {name}; a desbanir as pessoas r
 lockdown_status_permissions_unknown: "Não consegui ler as permissões do grupo agora para verificar alterações."
 lockdown_status_failed: "Não consegui ler o estado do bloqueio agora. Tenta novamente daqui a pouco."
 lockdown_lifted_manual_change: "Alguém alterou as permissões do grupo à mão durante o bloqueio; repus as de antes do bloqueio."
-lockdown_restore_failed: "Não consegui repor as permissões do grupo, por isso o bloqueio continua e ninguém foi desbanido: {detail}\nCertifica-te de que sou administrador com permissão para restringir membros e executa /unlockdown outra vez."
+lockdown_restore_failed: "⚠️ Não consegui repor as permissões do grupo, por isso o bloqueio continua e ninguém foi desbanido. Certifica-te de que sou administrador com permissão para restringir membros e executa /unlockdown outra vez."
 lockdown_lift_record_failed: "As permissões voltaram, mas não consegui registar o levantamento. Executa /unlockdown outra vez."
 lockdown_already_lifted: "Este bloqueio já foi levantado."
 lockdown_lift_in_progress: "O bloqueio já foi levantado por {name}; as pessoas removidas ainda estão a ser desbanidas."

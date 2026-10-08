@@ -7,12 +7,38 @@ import (
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/approvals"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
+
+// captureLockdownLogs records every log entry of the test and makes sure warn level
+// is enabled, so a [Lockdown] warning is visible whatever level the suite runs at.
+func captureLockdownLogs(t *testing.T) *logrustest.Hook {
+	t.Helper()
+	hook := logrustest.NewGlobal()
+	t.Cleanup(hook.Reset)
+	if previous := log.GetLevel(); previous < log.WarnLevel {
+		log.SetLevel(log.WarnLevel)
+		t.Cleanup(func() { log.SetLevel(previous) })
+	}
+	return hook
+}
+
+// wantLockdownLogged fails unless some entry at warn level or worse carries text.
+func wantLockdownLogged(t *testing.T, hook *logrustest.Hook, text string) {
+	t.Helper()
+	for _, entry := range hook.AllEntries() {
+		if entry.Level <= log.WarnLevel && strings.Contains(entry.Message, text) {
+			return
+		}
+	}
+	t.Errorf("no log entry at warn level or worse contains %q", text)
+}
 
 // newOutsider is a user with a random ID who is not the environment's admin.
 func (e *lockdownEnv) newOutsider() gotgbot.User {

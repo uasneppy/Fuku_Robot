@@ -484,8 +484,7 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	// Restore first. A refusal leaves the lockdown active and unbans nobody.
 	if err := setLockdownPermissions(bg, b, chat.Id, row.PrePermissions); err != nil {
 		log.Warnf("[Lockdown] restore for chat %d failed: %v", chat.Id, err)
-		text := lockdownText(tr, "lockdown_restore_failed", i18n.TranslationParams{"detail": lockdownDetailToken})
-		return reply(strings.TrimSpace(lockdownSplice(text, lockdownDetailToken, telegramErrorDetail(err))))
+		return reply(lockdownText(tr, "lockdown_restore_failed"))
 	}
 
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)

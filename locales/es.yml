@@ -2844,7 +2844,7 @@ lockdown_status_lifting: "Bloqueo levantado por {name}; desbaneando a las person
 lockdown_status_permissions_unknown: "No pude leer los permisos del grupo ahora mismo para comprobar si hubo cambios."
 lockdown_status_failed: "No pude leer el estado del bloqueo ahora mismo. Inténtalo de nuevo en un momento."
 lockdown_lifted_manual_change: "Alguien cambió los permisos del grupo a mano durante el bloqueo; he devuelto los de antes del bloqueo."
-lockdown_restore_failed: "No pude devolver los permisos del grupo, así que el bloqueo sigue activo y nadie fue desbaneado: {detail}\nAsegúrate de que soy admin con permiso para restringir miembros y ejecuta /unlockdown de nuevo."
+lockdown_restore_failed: "⚠️ No pude devolver los permisos del grupo, así que el bloqueo sigue activo y nadie fue desbaneado. Asegúrate de que soy admin con permiso para restringir miembros y ejecuta /unlockdown de nuevo."
 lockdown_lift_record_failed: "Los permisos han vuelto, pero no pude registrar el levantamiento. Ejecuta /unlockdown de nuevo."
 lockdown_already_lifted: "Este bloqueo ya fue levantado."
 lockdown_lift_in_progress: "El bloqueo ya fue levantado por {name}; todavía se está desbaneando a las personas expulsadas."
