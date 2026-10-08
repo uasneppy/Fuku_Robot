@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Manual Lockdown",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "5",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 04 of 9 · 33% · executing"
+    "label": "Advance to the next step (plan phase 5)",
+    "reason": "Phase 5 of 9 — needs a plan"
   },
-  "updated_at": "2026-10-07T00:43:49.463Z"
+  "updated_at": "2026-10-08T13:41:04.708Z"
 }

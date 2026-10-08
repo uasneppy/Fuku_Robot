@@ -36,18 +36,21 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ Each applied staff action and its reason are posted to the admin log channel of every group where it was applied, naming the issuer and target and "via Staff Group" but never the Staff Group itself — Phase 3
 - ✓ Every staff action is recorded (issuer, target, action, duration, reason, each group's prior state and outcome), and `/staff` has a Recent actions list with a per-action detail view — Phase 3
 - ✓ The summary has an "Undo everywhere" button: any Staff Group member can undo ban, mute, unban or unmute after a Confirm tap, with a live per-group restrict check for the presser; undo restores each group's prior state and skips a group whose status changed since — Phase 3
+- ✓ `/lockdown` locks one group: its default permissions drop to all-off, everyone but its admins is muted (approved users too, because Telegram cannot exempt them), and anyone who joins or asks to join is banned or declined until the lift — Phase 4
+- ✓ `/unlockdown` (a live owner or restrict-capable admin, anonymous admins after a proof tap) restores the exact pre-lockdown permissions, unbans only the lockdown's own bans, and posts one tally; `/lockdownstatus` shows since when, why and who — Phase 4
+- ✓ A lockdown lives in PostgreSQL only: it survives restarts and Redis being cleared, never lifts on its own, touches only its own group, and shows as 🔒 on the linked group's `/staff` row — Phase 4
+- ✓ Unmuting during a lockdown (`/unmute`, the Unmute button, a captcha pass, staff `/unmute`) uses the stored pre-lockdown permissions, so nobody stays muted after the lift — Phase 4
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
 **Raid protection (second)**
-- [ ] A lockdown stops new members (anyone joining is kicked and listed in the alert) and mutes everyone except admins and approved users.
-- [ ] A lockdown can be triggered by a join surge, a message or media flood (messages, photos, GIFs, stickers, mostly from new members), a burst of AI spam verdicts, or a manual `/lockdown`.
+- [ ] The lockdown alert lists the accounts the lockdown removed (the lockdown itself shipped in Phase 4).
+- [ ] A lockdown can be triggered by a join surge, a message or media flood (messages, photos, GIFs, stickers, mostly from new members), or a burst of AI spam verdicts (manual `/lockdown` shipped in Phase 4).
 - [ ] Detection uses fast rule-based rates (joins, floods) to trigger lockdown. AI only assists by classifying borderline text and images.
 - [ ] Each lockdown posts an alert to both the Staff Group and the attacked group's log channel. The alert has a "Lift lockdown" button and a "Ban N recent joiners" button for the accounts that joined in the burst.
-- [ ] Only an admin of the locked group can lift it, wherever they press the button. A lockdown never lifts on its own.
-- [ ] A lockdown applies only to the attacked group, not to every linked group.
+- [ ] Only an admin of the locked group can lift it with the alert's button, wherever they press it (`/unlockdown` and never lifting on its own shipped in Phase 4).
 
 **Web captcha (third)**
 - [ ] New members verify through Cloudflare Turnstile on a Telegram Mini App page the bot hosts, with server-side token verification.
@@ -109,7 +112,7 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Act where allowed, skip the rest, with a per-group summary | Partial success is more useful than all-or-nothing, as long as it's visible | ✓ Shipped — Phase 2 |
 | Every action hits all linked groups | That is the core value; per-group targeting adds complexity without demand | ✓ Shipped — Phase 2 |
 | Only a person who owns both groups can link them; one Staff Group per group; auto-unlink on ownership change | Strongest guarantee that a Staff Group can't gain control of a group it shouldn't | ✓ Shipped — Phase 1 |
-| Lockdown = kick joiners + mute all except admins and approved users; admin-only manual lift | Stops a raid immediately and leaves the "safe again" call to a human | — Pending |
+| Lockdown = kick joiners + mute all except admins and approved users; admin-only manual lift | Stops a raid immediately and leaves the "safe again" call to a human | ⚠️ Revised — Phase 4: approved users are muted too (Telegram has no per-user exception to a locked default, spike 1, D-01/D-02); joiners are banned until the lift instead of kicked; the manual lift shipped |
 | Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | — Pending |
 | Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | — Pending |
 | `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | ✓ Panel shipped — Phase 1; menu fold-in Phase 9 |
@@ -139,6 +142,10 @@ My trusted staff can protect every one of my communities from one place. We act 
 | One undo per action through a conditional database claim, given back when no group reached its Telegram write; any attempted write keeps it | A crash or refusal before any write must not burn the only undo, and a possibly applied write must never allow a second one | ✓ Good — Phase 3 (UAT tests 4 and 7) |
 | Undo state shown everywhere comes from the stored per-group undo outcomes (running, interrupted, undone, changed nothing), never from the claim alone | The history must say what actually happened; unconfirmed outcomes read "changed nothing" | ✓ Good — Phase 3 (UAT tests 6 and 8) |
 | Staff log posts use the existing `admin` log category | No new settings or migration; a group that turns admin logs off gets no staff posts | ✓ Good — Phase 3 |
+| The lockdown snapshot is the raw `getChat` permissions JSON, replayed verbatim with `use_independent_chat_permissions` | The typed struct's `omitempty` bools lose rights that were explicitly off; the lift must restore exactly | ✓ Good — Phase 4 (UAT test 3) |
+| Lockdown state lives only in PostgreSQL; the join guard records and a DB-driven worker on every replica makes every Telegram write, paced fleet-wide | Survives restarts and Redis loss, and a raid never pins a handler | ✓ Good — Phase 4 (UAT test 11) |
+| A lockdown's own ban is marked by a 330-day `until_date`, and the lift unbans only joiners whose live ban carries it | A deliberate `/ban` or staff ban placed during the lockdown must survive the lift | ✓ Good — Phase 4 (UAT tests 6 and 10); bans run out after 330 days, an accepted limit |
+| A request approved from Telegram's own list during a lockdown may still be banned first (D-24); the greetings Accept button refuses during a lockdown (D-25) | Accepted residual race; `/unlockdown` unbans them | ✓ Good — Phase 4 (UAT tests 5 and 8) |
 
 ## Evolution
 
@@ -158,4 +165,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-06 after Phase 3*
+*Last updated: 2026-10-08 after Phase 4*

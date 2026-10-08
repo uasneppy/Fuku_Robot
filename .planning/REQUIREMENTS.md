@@ -56,15 +56,15 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Lockdown
 
-- [ ] **LOCK-01**: While a group is in lockdown, anyone who joins is removed immediately. They can rejoin after the lockdown lifts, and they're listed on the alert.
-- [ ] **LOCK-02**: While a group is in lockdown, everyone except its admins is muted.
-- [ ] **LOCK-03**: Approved users stay able to talk during a lockdown. If the Telegram test shows this isn't possible, the owner decides the fallback before lockdown is built.
-- [ ] **LOCK-04**: A lockdown affects only the group it was triggered in.
-- [ ] **LOCK-05**: A lockdown never lifts on its own. It survives bot restarts and Redis being cleared.
-- [ ] **LOCK-06**: Only an admin of the locked group can lift it, either with the alert's "Lift lockdown" button (wherever the alert was posted) or with `/unlockdown` in that group.
-- [ ] **LOCK-07**: Lifting a lockdown restores the group's permissions exactly as they were before it was locked.
-- [ ] **LOCK-08**: Unmuting someone during a lockdown, including by passing the captcha or `/unmute`, doesn't leave them muted after the lockdown lifts.
-- [ ] **LOCK-09**: An admin can start a lockdown manually with `/lockdown` and see the current lockdown status (active or not, since when, why).
+- [x] **LOCK-01**: While a group is in lockdown, anyone who joins is removed immediately. They can rejoin after the lockdown lifts, and they're listed on the alert.
+- [x] **LOCK-02**: While a group is in lockdown, everyone except its admins is muted.
+- [x] **LOCK-03**: Approved users stay able to talk during a lockdown. If the Telegram test shows this isn't possible, the owner decides the fallback before lockdown is built.
+- [x] **LOCK-04**: A lockdown affects only the group it was triggered in.
+- [x] **LOCK-05**: A lockdown never lifts on its own. It survives bot restarts and Redis being cleared.
+- [x] **LOCK-06**: Only an admin of the locked group can lift it, either with the alert's "Lift lockdown" button (wherever the alert was posted) or with `/unlockdown` in that group.
+- [x] **LOCK-07**: Lifting a lockdown restores the group's permissions exactly as they were before it was locked.
+- [x] **LOCK-08**: Unmuting someone during a lockdown, including by passing the captcha or `/unmute`, doesn't leave them muted after the lockdown lifts.
+- [x] **LOCK-09**: An admin can start a lockdown manually with `/lockdown` and see the current lockdown status (active or not, since when, why).
 - [ ] **LOCK-10**: A group can have at most one active lockdown. Several triggers firing at once create a single lockdown and a single alert.
 - [ ] **LOCK-11**: Each lockdown posts one alert to the group's Staff Group (if linked) and to its log channel. The alert shows:
   - the trigger and the counts behind it
@@ -191,15 +191,15 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | STAFF-11 | Phase 3 | Complete |
 | STAFF-12 | Phase 2 | Complete |
 | STAFF-13 | Phase 2 | Complete |
-| LOCK-01 | Phase 4 | Pending |
-| LOCK-02 | Phase 4 | Pending |
-| LOCK-03 | Phase 4 | Pending |
-| LOCK-04 | Phase 4 | Pending |
-| LOCK-05 | Phase 4 | Pending |
-| LOCK-06 | Phase 4 | Pending |
-| LOCK-07 | Phase 4 | Pending |
-| LOCK-08 | Phase 4 | Pending |
-| LOCK-09 | Phase 4 | Pending |
+| LOCK-01 | Phase 4 | Complete |
+| LOCK-02 | Phase 4 | Complete |
+| LOCK-03 | Phase 4 | Complete |
+| LOCK-04 | Phase 4 | Complete |
+| LOCK-05 | Phase 4 | Complete |
+| LOCK-06 | Phase 4 | Complete |
+| LOCK-07 | Phase 4 | Complete |
+| LOCK-08 | Phase 4 | Complete |
+| LOCK-09 | Phase 4 | Complete |
 | LOCK-10 | Phase 6 | Pending |
 | LOCK-11 | Phase 5 | Pending |
 | LOCK-12 | Phase 5 | Pending |

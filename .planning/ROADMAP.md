@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Staff Group Links** - Owners designate a Staff Group and link the groups they own to it; `/staff` shows each link's health (completed 2026-10-05)
 - [x] **Phase 2: Staff Actions Across Groups** - Staff ban, mute, kick, unban or unmute someone in every linked group at once, after a Confirm tap, with live per-group admin checks (completed 2026-10-05)
 - [x] **Phase 3: Staff Audit and Undo** - Every staff action is posted to log channels, listed in `/staff`, and reversible with "Undo everywhere" (completed 2026-10-06)
-- [ ] **Phase 4: Manual Lockdown** - `/lockdown` removes joiners and mutes non-admins in one group; `/unlockdown` restores its permissions exactly
+- [x] **Phase 4: Manual Lockdown** - `/lockdown` removes joiners and mutes non-admins in one group; `/unlockdown` restores its permissions exactly (completed 2026-10-08)
 - [ ] **Phase 5: Lockdown Alerts and Response** - Each lockdown alerts the Staff Group and log channel with Lift, "Ban N recent joiners" and "Revoke link" buttons
 - [ ] **Phase 6: Automatic Raid Detection** - Join surges and new-member floods lock a group automatically; the old `/antiraid` is retired
 - [ ] **Phase 7: AI-Assisted Raid Detection** - TypeSafe (text) and Gemini (images) spam verdicts feed a burst trigger, while rules still decide
@@ -183,7 +183,7 @@ Plans:
   4. A lockdown never lifts on its own. It survives bot restarts and a Redis flush, and every bot replica enforces it. Only an admin of the group can lift it with `/unlockdown`, and anyone else is refused.
   5. Lifting the lockdown restores the group's permissions exactly as they were before. Anyone unmuted during the lockdown, by `/unmute` or by passing the captcha, can still talk after it lifts.
 
-**Plans:** 8/8 plans executed
+**Plans:** 8/8 plans complete
 
 Plans:
 **Wave 1**
@@ -298,7 +298,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
-| 4. Manual Lockdown | 8/8 | In Progress|  |
+| 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 0/TBD | Not started | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
