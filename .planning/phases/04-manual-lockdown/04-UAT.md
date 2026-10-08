@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:26:38Z
+updated: 2026-10-08T13:27:06Z
 ---
 
 ## Current Test
 
-number: 9
-name: Lock two real groups, lift one
+number: 10
+name: Lock a group, let a test account be banned by the lockdown, send /tban <id> 1d from the Staff Group, lift the lockdown
 expected: |
-  The other keeps its restricted permissions, its removed joiners and its /staff marker
+  The account is still banned in that group after the lift
 awaiting: user response
 
 ## Tests
@@ -61,7 +61,7 @@ result: pass
 ### 9. Lock two real groups, lift one
 expected: The other keeps its restricted permissions, its removed joiners and its /staff marker
 why_human: Cross-group isolation (LOCK-04) is proven in the fake; a live two-group run confirms nothing leaks in real Telegram.
-result: [pending]
+result: pass
 
 ### 10. Lock a group, let a test account be banned by the lockdown, send /tban <id> 1d from the Staff Group, lift the lockdown
 expected: The account is still banned in that group after the lift
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 8
+passed: 9
 issues: 0
-pending: 5
+pending: 4
 skipped: 0
 blocked: 0
 
