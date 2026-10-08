@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:27:06Z
+updated: 2026-10-08T13:33:44Z
 ---
 
 ## Current Test
 
-number: 10
-name: Lock a group, let a test account be banned by the lockdown, send /tban <id> 1d from the Staff Group, lift the lockdown
+number: 11
+name: Restart drills: (1) restart the bot with joiners pending and (2) restart in the middle of a lift with many banned joiners, then (3) flush Redis during a lockdown, ideally with two replicas running
 expected: |
-  The account is still banned in that group after the lift
+  Pending joiners are banned after the restart, the lift resumes and posts one tally, a Redis flush changes nothing, and both replicas enforce the lockdown without banning anyone twice
 awaiting: user response
 
 ## Tests
@@ -66,7 +66,7 @@ result: pass
 ### 10. Lock a group, let a test account be banned by the lockdown, send /tban <id> 1d from the Staff Group, lift the lockdown
 expected: The account is still banned in that group after the lift
 why_human: The staff-ban-over-lockdown-ban branch (D-05) is proven with a fake; the real until_date semantics of banChatMember on a kicked user are assumed.
-result: [pending]
+result: pass
 
 ### 11. Restart drills: (1) restart the bot with joiners pending and (2) restart in the middle of a lift with many banned joiners, then (3) flush Redis during a lockdown, ideally with two replicas running
 expected: Pending joiners are banned after the restart, the lift resumes and posts one tally, a Redis flush changes nothing, and both replicas enforce the lockdown without banning anyone twice
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 9
+passed: 10
 issues: 0
-pending: 4
+pending: 3
 skipped: 0
 blocked: 0
 
