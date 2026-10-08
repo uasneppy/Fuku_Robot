@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:09:08Z
+updated: 2026-10-08T13:09:57Z
 ---
 
 ## Current Test
 
-number: 2
-name: Run make lint on a machine whose golangci-lint is built with Go 1.26
+number: 1
+name: Run the PostgreSQL 16 checks that the executors could not run: apply the whole migration chain, then TestStartLockdownOneActivePerChat against that database (the command is in 04-08-SUMMARY.md under 'Items for the orchestrator')
 expected: |
-  Exit 0 with no new issues in the phase's files
+  '--- PASS: TestRepositoryMigrationChain', a 'lockdown repository backend: postgres' line, '--- PASS: TestStartLockdownOneActivePerChat', and no '--- SKIP'
 awaiting: user response
 
 ## Tests
@@ -25,7 +25,7 @@ evidence: "Run by Claude from the main checkout on a throwaway PostgreSQL 16 clu
 ### 2. Run make lint on a machine whose golangci-lint is built with Go 1.26
 expected: Exit 0 with no new issues in the phase's files
 why_human: The installed golangci-lint is built with go1.25 and refuses the go1.26.0 module, so the lint gate has never run on Phase 4 code.
-result: [pending]
+result: pass
 
 ### 3. In a real supergroup set unusual default permissions (text on, photos off, reactions off, invite on), run /lockdown, compare the Permissions screen, run /unlockdown and compare again. Save the raw getChat permissions answers as a test fixture.
 expected: The Permissions screen after /unlockdown is identical to before. Locked: members cannot send anything, admins still can.
@@ -85,9 +85,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 1
+passed: 2
 issues: 0
-pending: 12
+pending: 11
 skipped: 0
 blocked: 0
 
