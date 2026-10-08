@@ -94,6 +94,10 @@ const lockdownWarningMarker = "\u26a0\ufe0f"
 // refusal where nothing changed carries no marker.
 var lockdownWarningKeys = []string{
 	"lockdown_restore_failed",
+	"lockdown_lock_unknown",
+	"lockdown_lift_record_failed",
+	"lockdown_lift_tally_failed",
+	"lockdown_status_ban_failed",
 }
 
 // TestLockdownWarningLines checks that every failure line starts with the warning
@@ -106,6 +110,28 @@ func TestLockdownWarningLines(t *testing.T) {
 			text, _ := data[key].(string)
 			if !strings.HasPrefix(text, lockdownWarningMarker) {
 				failures = append(failures, fmt.Sprintf("%s: %s does not start with the warning marker", lang, key))
+			}
+		}
+	}
+	sort.Strings(failures)
+	for _, failure := range failures {
+		t.Error(failure)
+	}
+}
+
+// TestLockdownRepliesCarryNoTelegramDetail checks that no lockdown string has a
+// {detail} slot in any locale: Telegram's own error text goes to the log, never to
+// the group.
+func TestLockdownRepliesCarryNoTelegramDetail(t *testing.T) {
+	var failures []string
+	for _, lang := range staffLocales {
+		data := loadStaffLocale(t, lang)
+		for key := range lockdownKeys(data) {
+			text, _ := data[key].(string)
+			for _, name := range staffPlaceholders(text) {
+				if name == "detail" {
+					failures = append(failures, fmt.Sprintf("%s: %s has a {detail} placeholder", lang, key))
+				}
 			}
 		}
 	}

@@ -46,8 +46,6 @@ const (
 const (
 	lockdownReasonToken = "<<lockdown-reason>>"
 	lockdownNameToken   = "<<lockdown-name>>"
-	// lockdownDetailToken stands in for Telegram's already escaped error text.
-	lockdownDetailToken = "<<lockdown-detail>>"
 )
 
 var (
@@ -294,17 +292,14 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 	failed := func() error { return reply(lockdownText(tr, "lockdown_state_failed")) }
-	// refuse answers a refusal whose text carries Telegram's own words; nothing has
-	// been written when it runs.
-	refuse := func(key, detail string) error {
-		text := lockdownText(tr, key, i18n.TranslationParams{"detail": lockdownDetailToken})
-		return reply(strings.TrimSpace(lockdownSplice(text, lockdownDetailToken, detail)))
-	}
+	// refuse answers a refusal. Telegram's own words never reach the group: the
+	// call sites log them before they refuse.
+	refuse := func(key string) error { return reply(lockdownText(tr, key)) }
 
 	// A basic group cannot honour "banned until the lift", so it is refused before
 	// anything is read or written.
 	if chat.Type != "supergroup" {
-		return refuse("lockdown_basic_group", "")
+		return refuse("lockdown_basic_group")
 	}
 
 	active, err := lockdown.GetActiveFresh(chat.Id)
@@ -319,7 +314,7 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	if active != nil && active.LockedAt == nil && time.Since(active.UpdatedAt) > lockdownUnconfirmedGrace {
 		if _, _, settleErr := settleUnconfirmedLockdown(context.Background(), b, active); settleErr != nil {
 			log.Warnf("[Lockdown] unconfirmed lockdown %d of chat %d could not be settled: %v", active.ID, chat.Id, settleErr)
-			return refuse("lockdown_permissions_unreadable", telegramErrorDetail(settleErr))
+			return refuse("lockdown_permissions_unreadable")
 		}
 		if active, err = lockdown.GetActiveFresh(chat.Id); err != nil {
 			return failed()
@@ -333,21 +328,22 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	botMember, botResult, botErr := chat_status.FetchBotMember(b, chat.Id)
 	if botResult == chat_status.BotMemberUnknown {
 		log.Warnf("[Lockdown] bot rights check in chat %d failed: %v", chat.Id, botErr)
-		return refuse("lockdown_bot_check_failed", "")
+		return refuse("lockdown_bot_check_failed")
 	}
 	if botResult == chat_status.BotMemberMissing ||
 		botMember.Status != gotgbot.ChatMemberStatusAdministrator || !botMember.CanRestrictMembers {
-		return refuse("lockdown_bot_cannot_restrict", "")
+		return refuse("lockdown_bot_cannot_restrict")
 	}
 
 	bg := context.Background()
 	chatInfo, err := fetchLockdownChat(bg, b, chat.Id)
 	if err != nil {
 		log.Warnf("[Lockdown] getChat for chat %d failed: %v", chat.Id, err)
-		return refuse("lockdown_permissions_unreadable", telegramErrorDetail(err))
+		return refuse("lockdown_permissions_unreadable")
 	}
 	if !lockdownHasPermissions(chatInfo.Permissions) {
-		return refuse("lockdown_permissions_unreadable", "")
+		log.Warnf("[Lockdown] getChat for chat %d returned no permissions", chat.Id)
+		return refuse("lockdown_permissions_unreadable")
 	}
 
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
@@ -381,12 +377,12 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 			// settles it from the live permissions after the grace period (a lock that
 			// took effect is confirmed, one that did not is dropped), while /unlockdown
 			// can already restore the stored permissions.
-			return refuse("lockdown_lock_unknown", telegramErrorDetail(err))
+			return refuse("lockdown_lock_unknown")
 		}
 		if _, delErr := lockdown.DeleteUnconfirmed(row.ID); delErr != nil {
 			log.Errorf("[Lockdown] lockdown %d could not be removed after a refused lock: %v", row.ID, delErr)
 		}
-		return refuse("lockdown_lock_failed", telegramErrorDetail(err))
+		return refuse("lockdown_lock_failed")
 	}
 	if _, err := lockdown.ConfirmLocked(row.ID); err != nil {
 		if _, retryErr := lockdown.ConfirmLocked(row.ID); retryErr != nil {
@@ -490,6 +486,7 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
 	won, err := lockdownBeginLift(row.ID, actor.Id, name, manualChange)
 	if err != nil {
+		log.Errorf("[Lockdown] lift of lockdown %d could not be recorded: %v", row.ID, err)
 		return reply(lockdownText(tr, "lockdown_lift_record_failed"))
 	}
 	if !won {

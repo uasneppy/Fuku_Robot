@@ -411,6 +411,7 @@ func TestLockdownSettlesUnconfirmedLock(t *testing.T) {
 		env.send(env.admin, "/lockdown again")
 
 		env.wantReplyHas(staffMarker("lockdown_permissions_unreadable"))
+		env.wantReplyLacks("Internal Server Error")
 		if rows := env.lockdownRows(); len(rows) != 1 || rows[0].ID != old.ID {
 			t.Errorf("lockdown rows = %+v, want the old row kept", rows)
 		}

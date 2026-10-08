@@ -44,7 +44,7 @@ func TestLockdownLockOutcomeUnknown(t *testing.T) {
 		env.send(env.admin, "/lockdown raid")
 
 		env.wantReplyHas(staffMarker("lockdown_lock_unknown"))
-		env.wantReplyLacks(staffMarker("lockdown_lock_failed"))
+		env.wantReplyLacks(staffMarker("lockdown_lock_failed"), "deadline exceeded", "unable to execute setChatPermissions")
 		if got := env.fake.chatPermsRaw(env.chat.Id); got != lockdownLockedPermissions {
 			t.Fatalf("setup: the group permissions = %q, want the locked set (the lock took effect)", got)
 		}
@@ -79,10 +79,13 @@ func TestLockdownLockOutcomeUnknown(t *testing.T) {
 	t.Run("lock not applied and the worker drops the row", func(t *testing.T) {
 		env := newLockdownEnv(t)
 		env.fake.script("setChatPermissions", env.chat.Id, staffFakeError(502, "Bad Gateway"))
+		hook := captureLockdownLogs(t)
 
 		env.send(env.admin, "/lockdown raid")
 
 		env.wantReplyHas(staffMarker("lockdown_lock_unknown"))
+		env.wantReplyLacks("Bad Gateway")
+		wantLockdownLogged(t, hook, "Bad Gateway")
 		row := env.unconfirmedRowAfterUnknownLock()
 		ageLockdown(t, row.ID, 2*time.Minute)
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -356,10 +357,20 @@ func TestLockdownLiftRecordFailure(t *testing.T) {
 	lockdownBeginLift = func(uint, int64, string, bool) (bool, error) {
 		return false, errors.New("database is down")
 	}
+	hook := captureLockdownLogs(t)
 
 	env.send(env.admin, "/unlockdown")
 
 	env.wantReplyHas(staffMarker("lockdown_lift_record_failed"))
+	errorLogged := false
+	for _, entry := range hook.AllEntries() {
+		if entry.Level <= log.ErrorLevel && strings.Contains(entry.Message, "database is down") {
+			errorLogged = true
+		}
+	}
+	if !errorLogged {
+		t.Error("no error-level log entry carries the failed lift record write")
+	}
 	if lifted := env.repliesWith(staffMarker("lockdown_lifted")); len(lifted) != 0 {
 		t.Errorf("replies announcing a lift = %v, want none: nothing was recorded", lifted)
 	}
