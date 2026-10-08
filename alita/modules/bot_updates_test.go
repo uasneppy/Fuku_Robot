@@ -413,6 +413,15 @@ func TestVerifyAnonymousAdminRestoresCachedMessageAndDeletesButton(t *testing.T)
 	if ctx.EffectiveMessage.SenderChat != nil {
 		t.Fatal("SenderChat was not cleared before command replay")
 	}
+	if ctx.Message == nil || ctx.Message.MessageId != cached.MessageId || ctx.Message.Text != cached.Text {
+		t.Fatalf("ctx.Message = %#v, want the cached command message", ctx.Message)
+	}
+	if ctx.EffectiveChat == nil || ctx.EffectiveChat.Id != chat.Id {
+		t.Fatalf("EffectiveChat = %#v, want the command's chat %d", ctx.EffectiveChat, chat.Id)
+	}
+	if !chat_status.RequireGroup(bot, ctx, nil) {
+		t.Fatal("RequireGroup(nil chat) = false, want the re-entered command to find its chat")
+	}
 }
 
 func TestBotUpdatesLoadersRegisterExpectedHandlers(t *testing.T) {
