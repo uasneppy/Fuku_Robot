@@ -21,8 +21,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `AUTO_MIGRATE=true`. Never add DB access to an `init()` that can run before `alita/db`'s.
 - `--version`, `--health`, and `*.test` binaries (unless `ALITA_TEST_DATABASE=true`) skip DB init. Guard new pre-`main`
   side effects with `isCliModeActive`.
-- Shutdown runs LIFO within 60 s. Register new drains *after* DB-close so they run before it.
-- `StopStaffActions` is one of those drains: it cancels running staff fan-outs, marks every unfinished group
+- Shutdown runs LIFO within 60 s. Register new drains *after* DB-close so they run before it. Each handler gets 10 s
+  (`defaultHandlerTimeout`) unless registered with `RegisterHandlerWithTimeout`; a drain whose own wait is longer is
+  registered with that wait plus `shutdownDrainGrace` (1 s), so its own timer ends it and the DB close never runs under
+  it. The 60 s budget still bounds everything and exits with code 1 wherever it runs out, so deploy manifests must allow
+  more than 60 s between SIGTERM and SIGKILL (`stop_grace_period: 75s` in `docker-compose.yml`).
+- `StopStaffActions` is one of those drains, registered through `RegisterStaffActionsDrain` (`staffActionStopWait` plus
+  grace). In webhook mode the drains before it (HTTP stop 10 s, AI spam 10 s, lockdown 6 s) still leave its 31 s inside
+  the 60 s; in polling mode the updater's extra 10 s can let the global budget cut it short. It cancels running staff fan-outs, marks every unfinished group
   "interrupted by restart", delivers the final summary and returns within 30 s. A delivery still waiting out a 429
   when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines. A run cancelled by the
   shutdown skips its remaining log posts, so a group applied just before it may have no post. Undo runs join the
@@ -32,7 +38,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   claims, so `StopStaffActions` waits for a Confirm that has already claimed, and its run gives the claim back when the
   shutdown cut every group off before its write. Once `StopStaffActions` has cancelled the run context an undo Confirm
   claims nothing and aborts its card with the restart text (`staff_undo_abort_restarting`).
-- `StopLockdownWorker` is another drain registered after DB-close. It cancels the lockdown worker and waits at most
+- `StopLockdownWorker` is another drain registered after DB-close, through `RegisterLockdownWorkerDrain`
+  (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
   loses nothing, and a restart or a second replica picks the rows up again. A claim (an acting or unbanning joiner row
   with `claimed_at`) older than 2 minutes (`lockdownStaleClaim`) belongs to a worker that stopped: the first cycle of any

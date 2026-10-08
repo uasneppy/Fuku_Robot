@@ -212,20 +212,14 @@ func main() {
 	})
 	// Also registered after the DB-close handler, so LIFO cancels the staff fan-outs
 	// and lets them deliver their final summaries before the database closes: their
-	// workers still write links through recheckLink while they wind down.
-	shutdownManager.RegisterHandler(func() error {
-		log.Info("[Shutdown] Stopping staff actions...")
-		modules.StopStaffActions()
-		return nil
-	})
+	// workers still write links through recheckLink while they wind down. It gets the
+	// staff wait plus a grace period, not the 10 s default.
+	modules.RegisterStaffActionsDrain(shutdownManager)
 	// Also registered after the DB-close handler, so LIFO stops the lockdown worker
 	// before the database closes. It waits at most 5 s: every lockdown row resumes
-	// from the database, so a worker cut off here loses nothing.
-	shutdownManager.RegisterHandler(func() error {
-		log.Info("[Shutdown] Stopping lockdown worker...")
-		modules.StopLockdownWorker()
-		return nil
-	})
+	// from the database, so a worker cut off here loses nothing. It gets the worker's
+	// wait plus a grace period, not the 10 s default.
+	modules.RegisterLockdownWorkerDrain(shutdownManager)
 
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")
