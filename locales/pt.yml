@@ -2648,7 +2648,7 @@ staff_panel_unlink_button: "Desvincular {group}"
 staff_unlink_confirm_prompt: "Tem a certeza de que quer desvincular {group}? Os comandos de Staff deixarão de o alcançar."
 staff_cb_denied: "Este botão não pertence a este chat."
 staff_panel_row_status: "O bot é admin: {bot} | Pode restringir membros: {restrict} | O dono confere: {owner}"
-staff_panel_row_lockdown: "🔒 em bloqueio desde {since}"
+staff_panel_row_lockdown: "🔒 Em bloqueio desde {since}"
 staff_panel_reason_bot_missing: "Problema: o bot não está neste grupo."
 staff_panel_reason_bot_not_admin: "Problema: o bot não é administrador neste grupo."
 staff_panel_reason_bot_cannot_restrict: "Problema: o bot não pode restringir membros neste grupo."
@@ -2770,9 +2770,9 @@ staff_undo_card_presser_only: "Só o membro do staff que carregou em Desfazer o 
 lockdown_help_msg: |
   Um bloqueio para um raid neste grupo: todos, exceto os administradores, ficam silenciados até que um administrador o levante.
 
-  × /lockdown [motivo]: Bloqueia este grupo. Só os administradores podem falar, incluindo os utilizadores aprovados, e os novos membros são removidos até ao levantamento.
-  × /unlockdown: Levanta o bloqueio. Cada permissão volta exatamente a como estava antes do bloqueio, e as pessoas que removi são desbanidas.
-  × /lockdownstatus: Mostra se este grupo está bloqueado, desde quando, por quem e porquê (qualquer administrador).
+  × <code>/lockdown [motivo]</code>: Bloqueia este grupo de imediato, sem passo de confirmação. Só os administradores podem falar, incluindo os utilizadores aprovados, e os novos membros são removidos até ao levantamento.
+  × <code>/unlockdown</code>: Levanta o bloqueio. Cada permissão volta exatamente a como estava antes do bloqueio, e as pessoas que removi são desbanidas.
+  × <code>/lockdownstatus</code>: Mostra se este grupo está bloqueado, desde quando, por quem e porquê (qualquer administrador).
 
   Só o dono do grupo, ou um administrador que possa restringir membros, pode usar estes comandos, e eu verifico isso em tempo real. Tenho de ser administrador com permissão para restringir membros, e o grupo tem de ser um supergrupo.
   Um bloqueio nunca termina sozinho. Dura até que um administrador o levante.
@@ -2791,28 +2791,28 @@ lockdown_state_failed: "Não consegui concluir isso neste momento, por isso nada
 lockdown_basic_group: "O bloqueio precisa de um supergrupo. Atualize este grupo para supergrupo e execute /lockdown novamente."
 lockdown_bot_cannot_restrict: "Não posso bloquear este grupo: preciso de ser administrador com permissão para restringir membros."
 lockdown_bot_check_failed: "Não consegui verificar os meus próprios direitos neste grupo neste momento. Nada foi alterado. Tente novamente daqui a pouco."
-lockdown_permissions_unreadable: "Não consegui ler as permissões deste grupo, por isso não o vou bloquear para não arriscar perdê-las. Nada foi alterado. {detail}"
-lockdown_lock_failed: "O Telegram recusou o bloqueio, por isso nada foi alterado: {detail}"
-lockdown_lock_unknown: "Não consegui confirmar se o bloqueio teve efeito: {detail}\nMantive o bloqueio registado para não perder as permissões do grupo. Daqui a cerca de um minuto vou verificar as permissões reais do grupo e confirmar o bloqueio ou descartá-lo. Envia /lockdownstatus para ver como está, ou /unlockdown para repor as permissões já."
+lockdown_permissions_unreadable: "Não consegui ler as permissões deste grupo, por isso não o vou bloquear para não arriscar perdê-las. Nada foi alterado. Envia /lockdown outra vez para tentar de novo."
+lockdown_lock_failed: "O Telegram recusou o bloqueio, por isso nada foi alterado. Certifica-te de que ainda sou administrador com permissão para restringir membros e envia /lockdown outra vez."
+lockdown_lock_unknown: "⚠️ Não consegui confirmar se o bloqueio teve efeito. Envia /lockdownstatus para verificar, ou /unlockdown para repor as permissões já."
 lockdown_note_no_delete: "Não posso apagar mensagens aqui, por isso as mensagens de entrada vão ficar."
 lockdown_note_no_invite: "Não posso gerir pedidos de adesão aqui, por isso os novos pedidos ficam pendentes em vez de serem recusados."
-lockdown_status_active: "🔒 Em bloqueio desde {since}, iniciado por {name}."
+lockdown_status_active: "<b>🔒 Em bloqueio desde {since}</b>, iniciado por {name}."
 lockdown_status_removed: "Novos membros removidos até agora: {count}"
-lockdown_status_ban_failed: "Novos membros que não consegui remover: {count}"
+lockdown_status_ban_failed: "⚠️ Novos membros que não consegui remover: {count}"
 lockdown_status_declined: "Pedidos de adesão recusados: {count}"
 lockdown_status_manual_change: "⚠️ Alguém alterou as permissões do grupo à mão durante o bloqueio. Os novos membros continuam a ser removidos, e /unlockdown repõe as permissões de antes do bloqueio."
 lockdown_status_unconfirmed: "O Telegram ainda não confirmou o bloqueio."
 lockdown_status_lifting: "Bloqueio levantado por {name}; a desbanir as pessoas removidas: {done} de {total} concluídas."
-lockdown_status_permissions_unknown: "Não consegui ler as permissões do grupo agora para verificar alterações."
-lockdown_status_failed: "Não consegui ler o estado do bloqueio agora. Tenta novamente daqui a pouco."
+lockdown_status_permissions_unknown: "Não consegui ler as permissões do grupo, por isso não sei dizer se alguém as alterou."
+lockdown_status_failed: "Não consegui ler o estado do bloqueio. Envia /lockdownstatus outra vez."
 lockdown_lifted_manual_change: "Alguém alterou as permissões do grupo à mão durante o bloqueio; repus as de antes do bloqueio."
-lockdown_restore_failed: "Não consegui repor as permissões do grupo, por isso o bloqueio continua e ninguém foi desbanido: {detail}\nCertifica-te de que sou administrador com permissão para restringir membros e executa /unlockdown outra vez."
-lockdown_lift_record_failed: "As permissões voltaram, mas não consegui registar o levantamento. Executa /unlockdown outra vez."
+lockdown_restore_failed: "⚠️ Não consegui repor as permissões do grupo, por isso o bloqueio continua e ninguém foi desbanido. Certifica-te de que sou administrador com permissão para restringir membros e executa /unlockdown outra vez."
+lockdown_lift_record_failed: "⚠️ As permissões voltaram, mas não consegui registar o levantamento. Executa /unlockdown outra vez."
 lockdown_already_lifted: "Este bloqueio já foi levantado."
 lockdown_lift_in_progress: "O bloqueio já foi levantado por {name}; as pessoas removidas ainda estão a ser desbanidas."
 lockdown_lifted_unbanning: "A desbanir agora {count} pessoas removidas; publicarei aqui quando terminar."
 lockdown_lift_tally: "Levantamento do bloqueio concluído: {count} pessoas removidas foram desbanidas e podem voltar a entrar."
 lockdown_lift_tally_kept: "{count} foram deixadas como estão porque alguém já as tinha desbanido ou banido de propósito."
 lockdown_lift_tally_expired: "{count} já não estavam banidas: o banimento de 330 dias que lhes dei quando entraram já tinha terminado, por isso deixei-as como estão."
-lockdown_lift_tally_failed: "Não consegui desbanir {count}:"
+lockdown_lift_tally_failed: "⚠️ Não consegui desbanir {count}:"
 lockdown_lift_tally_more: "…e mais {count}."

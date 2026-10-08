@@ -7,12 +7,38 @@ import (
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/approvals"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
+
+// captureLockdownLogs records every log entry of the test and makes sure warn level
+// is enabled, so a [Lockdown] warning is visible whatever level the suite runs at.
+func captureLockdownLogs(t *testing.T) *logrustest.Hook {
+	t.Helper()
+	hook := logrustest.NewGlobal()
+	t.Cleanup(hook.Reset)
+	if previous := log.GetLevel(); previous < log.WarnLevel {
+		log.SetLevel(log.WarnLevel)
+		t.Cleanup(func() { log.SetLevel(previous) })
+	}
+	return hook
+}
+
+// wantLockdownLogged fails unless some entry at warn level or worse carries text.
+func wantLockdownLogged(t *testing.T, hook *logrustest.Hook, text string) {
+	t.Helper()
+	for _, entry := range hook.AllEntries() {
+		if entry.Level <= log.WarnLevel && strings.Contains(entry.Message, text) {
+			return
+		}
+	}
+	t.Errorf("no log entry at warn level or worse contains %q", text)
+}
 
 // newOutsider is a user with a random ID who is not the environment's admin.
 func (e *lockdownEnv) newOutsider() gotgbot.User {
@@ -145,8 +171,12 @@ func TestLockdownRefusals(t *testing.T) {
 		name  string
 		setup func(env *lockdownEnv)
 		want  string
-		// detail is text of Telegram's own answer the reply must carry.
-		detail string
+		// rawDetail is text of Telegram's own answer. It must stay out of the reply and
+		// go to the [Lockdown] log.
+		rawDetail string
+		// logged is text a [Lockdown] log entry must carry for a refusal with no
+		// Telegram answer.
+		logged string
 	}{
 		{
 			name:  "basic group",
@@ -176,21 +206,22 @@ func TestLockdownRefusals(t *testing.T) {
 			setup: func(env *lockdownEnv) {
 				env.fake.script("getChat", env.chat.Id, staffFakeError(500, "Internal Server Error"))
 			},
-			want:   staffMarker("lockdown_permissions_unreadable"),
-			detail: "Internal Server Error",
+			want:      staffMarker("lockdown_permissions_unreadable"),
+			rawDetail: "Internal Server Error",
 		},
 		{
-			name:  "no permissions",
-			setup: func(env *lockdownEnv) { env.fake.clearChatPerms(env.chat.Id) },
-			want:  staffMarker("lockdown_permissions_unreadable"),
+			name:   "no permissions",
+			setup:  func(env *lockdownEnv) { env.fake.clearChatPerms(env.chat.Id) },
+			want:   staffMarker("lockdown_permissions_unreadable"),
+			logged: "returned no permissions",
 		},
 		{
 			name: "lock call refused",
 			setup: func(env *lockdownEnv) {
 				env.fake.script("setChatPermissions", env.chat.Id, staffFakeError(400, "Bad Request: not enough rights"))
 			},
-			want:   staffMarker("lockdown_lock_failed"),
-			detail: "not enough rights",
+			want:      staffMarker("lockdown_lock_failed"),
+			rawDetail: "not enough rights",
 		},
 	}
 
@@ -199,12 +230,17 @@ func TestLockdownRefusals(t *testing.T) {
 			env := newLockdownEnv(t)
 			tc.setup(env)
 			unchanged := env.fake.chatPermsRaw(env.chat.Id)
+			hook := captureLockdownLogs(t)
 
 			env.send(env.admin, "/lockdown")
 
 			env.wantReplyHas(tc.want)
-			if tc.detail != "" {
-				env.wantReplyHas(tc.detail)
+			if tc.rawDetail != "" {
+				env.wantReplyLacks(tc.rawDetail)
+				wantLockdownLogged(t, hook, tc.rawDetail)
+			}
+			if tc.logged != "" {
+				wantLockdownLogged(t, hook, tc.logged)
 			}
 			env.wantNothingRecorded()
 			if got := env.fake.chatPermsRaw(env.chat.Id); got != unchanged {
