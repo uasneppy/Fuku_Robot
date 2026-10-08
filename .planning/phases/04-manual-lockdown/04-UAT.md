@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:09:57Z
+updated: 2026-10-08T13:11:02Z
 ---
 
 ## Current Test
 
-number: 3
-name: In a real supergroup set unusual default permissions (text on, photos off, reactions off, invite on), run /lockdown, compare the Permissions screen, run /unlockdown and compare again. Save the raw getChat permissions answers as a test fixture.
+number: 4
+name: In a test supergroup run /lockdown, then join through (a) a normal invite link, (b) a join-request link and (c) an admin adding the user directly. Also repeat with a bot account being added by an admin.
 expected: |
-  The Permissions screen after /unlockdown is identical to before. Locked: members cannot send anything, admins still can.
+  Each normal joiner is banned once with no welcome and no captcha, the join request is declined, the admin-added human stays, the bot is banned; all banned joiners can rejoin after /unlockdown.
 awaiting: user response
 
 ## Tests
@@ -30,7 +30,8 @@ result: pass
 ### 3. In a real supergroup set unusual default permissions (text on, photos off, reactions off, invite on), run /lockdown, compare the Permissions screen, run /unlockdown and compare again. Save the raw getChat permissions answers as a test fixture.
 expected: The Permissions screen after /unlockdown is identical to before. Locked: members cannot send anything, admins still can.
 why_human: The raw getChat permissions shape and the setChatPermissions replay (research A1) can only be confirmed against real Telegram. The phase's central promise (settings survive) rests on it.
-result: [pending]
+result: pass
+note: "Owner confirmed the Permissions screen matched after /unlockdown; no raw getChat fixture was supplied."
 
 ### 4. In a test supergroup run /lockdown, then join through (a) a normal invite link, (b) a join-request link and (c) an admin adding the user directly. Also repeat with a bot account being added by an admin.
 expected: Each normal joiner is banned once with no welcome and no captcha, the join request is declined, the admin-added human stays, the bot is banned; all banned joiners can rejoin after /unlockdown.
@@ -85,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 2
+passed: 3
 issues: 0
-pending: 11
+pending: 10
 skipped: 0
 blocked: 0
 
