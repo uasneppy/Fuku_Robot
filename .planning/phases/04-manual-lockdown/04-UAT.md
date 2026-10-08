@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:33:44Z
+updated: 2026-10-08T13:34:25Z
 ---
 
 ## Current Test
 
-number: 11
-name: Restart drills: (1) restart the bot with joiners pending and (2) restart in the middle of a lift with many banned joiners, then (3) flush Redis during a lockdown, ideally with two replicas running
+number: 12
+name: As an anonymous admin run /lockdown, tap the proof button, then do the same for /unlockdown and /lockdownstatus, with the group's AnonAdmin mode on and off
 expected: |
-  Pending joiners are banned after the restart, the lift resumes and posts one tally, a Redis flush changes nothing, and both replicas enforce the lockdown without banning anyone twice
+  The proof button always appears, the tapper is the one named as locking or lifting, and a non-admin tapper is refused
 awaiting: user response
 
 ## Tests
@@ -71,7 +71,7 @@ result: pass
 ### 11. Restart drills: (1) restart the bot with joiners pending and (2) restart in the middle of a lift with many banned joiners, then (3) flush Redis during a lockdown, ideally with two replicas running
 expected: Pending joiners are banned after the restart, the lift resumes and posts one tally, a Redis flush changes nothing, and both replicas enforce the lockdown without banning anyone twice
 why_human: Restart, Redis-loss and multi-replica behaviour are proven with an in-process worker and miniredis, not with real processes.
-result: [pending]
+result: pass
 
 ### 12. As an anonymous admin run /lockdown, tap the proof button, then do the same for /unlockdown and /lockdownstatus, with the group's AnonAdmin mode on and off
 expected: The proof button always appears, the tapper is the one named as locking or lifting, and a non-admin tapper is refused
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 10
+passed: 11
 issues: 0
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
