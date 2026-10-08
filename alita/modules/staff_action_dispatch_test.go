@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -67,6 +68,44 @@ func normalizedCalls(client *moduleBotClient, chatID int64) []string {
 	return out
 }
 
+// comparableCalls renders the calls of a client like normalizedCalls, except that
+// an until_date is rendered as the token "until=set" ("until=none" when absent)
+// and returned separately in call order. The absolute value cannot be compared as
+// text: extraction.ExtractTime reads the wall clock on each call, so two runs that
+// straddle a second boundary differ by one without any difference in behavior.
+func comparableCalls(t *testing.T, client *moduleBotClient, chatID int64) ([]string, []int64) {
+	t.Helper()
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	placeholder := strconv.FormatInt(chatID, 10)
+	var lines []string
+	var until []int64
+	for _, call := range client.calls {
+		text := strings.ReplaceAll(fmt.Sprint(call.Params["text"]), placeholder, "<chat>")
+		untilToken := "none"
+		if value, ok := call.Params["until_date"]; ok {
+			parsed, err := strconv.ParseInt(fmt.Sprint(value), 10, 64)
+			if err != nil {
+				t.Fatalf("until_date %v of %s is not an integer: %v", value, call.Method, err)
+			}
+			untilToken = "set"
+			until = append(until, parsed)
+		}
+		lines = append(lines, fmt.Sprintf("%s|user=%v|until=%s|text=%s", call.Method, call.Params["user_id"], untilToken, text))
+	}
+	return lines, until
+}
+
+// staffDispatchRun is one dispatch of a command: its comparable calls, the
+// until_date values they carried, and the wall-clock second range (Unix seconds)
+// that bracketed the dispatch.
+type staffDispatchRun struct {
+	lines []string
+	until []int64
+	from  int64
+	to    int64
+}
+
 func TestStaffActionNonStaffUnchanged(t *testing.T) {
 	withStaffLocale(t)
 	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
@@ -76,6 +115,8 @@ func TestStaffActionNonStaffUnchanged(t *testing.T) {
 		name  string
 		text  string
 		reply *gotgbot.User
+		// timed marks the cases that send an until_date.
+		timed bool
 	}{
 		{name: "ban an ID", text: "/ban 4242"},
 		{name: "ban without an argument", text: "/ban"},
@@ -85,13 +126,13 @@ func TestStaffActionNonStaffUnchanged(t *testing.T) {
 		{name: "unban an ID", text: "/unban 4242"},
 		{name: "unmute an ID", text: "/unmute 4242"},
 		{name: "mute as a reply", text: "/mute spam", reply: &target},
-		{name: "tban an ID", text: "/tban 4242 2d"},
-		{name: "tban with a reason", text: "/tban 4242 2d spamming"},
+		{name: "tban an ID", text: "/tban 4242 2d", timed: true},
+		{name: "tban with a reason", text: "/tban 4242 2d spamming", timed: true},
 		{name: "tban without a duration", text: "/tban 4242"},
-		{name: "tban as a reply", text: "/tban 2d spam", reply: &target},
-		{name: "tmute an ID", text: "/tmute 4242 1h"},
+		{name: "tban as a reply", text: "/tban 2d spam", reply: &target, timed: true},
+		{name: "tmute an ID", text: "/tmute 4242 1h", timed: true},
 		{name: "tmute without a duration", text: "/tmute 4242"},
-		{name: "tmute as a reply", text: "/tmute 1h spam", reply: &target},
+		{name: "tmute as a reply", text: "/tmute 1h spam", reply: &target, timed: true},
 		{name: "ban with a duration", text: "/ban 4242 2d spam"},
 		{name: "mute with a duration", text: "/mute 4242 30m"},
 		{name: "ban by username", text: "/ban @spam_bot 2d spam"},
@@ -105,22 +146,44 @@ func TestStaffActionNonStaffUnchanged(t *testing.T) {
 	}
 	for _, tc := range commands {
 		t.Run(tc.name, func(t *testing.T) {
-			var runs [2][]string
+			var runs [2]staffDispatchRun
 			for i, withStaff := range []bool{false, true} {
 				client := newModuleBotClient()
 				bot := newModuleTestBot(client)
 				chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Plain Chat"}
 				dispatcher := staffDispatcher(t, withStaff)
-				if err := dispatcher.ProcessUpdate(bot, staffCommandUpdate(900, chat, admin, tc.text, tc.reply), nil); err != nil {
+				runs[i].from = time.Now().Unix()
+				err := dispatcher.ProcessUpdate(bot, staffCommandUpdate(900, chat, admin, tc.text, tc.reply), nil)
+				runs[i].to = time.Now().Unix()
+				if err != nil {
 					t.Fatalf("ProcessUpdate (staff modules loaded: %t) error = %v", withStaff, err)
 				}
-				runs[i] = normalizedCalls(client, chat.Id)
+				runs[i].lines, runs[i].until = comparableCalls(t, client, chat.Id)
 			}
-			if len(runs[0]) == 0 {
+			if len(runs[0].lines) == 0 {
 				t.Fatal("the baseline dispatcher made no Telegram call, so the comparison proves nothing")
 			}
-			if !slices.Equal(runs[0], runs[1]) {
-				t.Fatalf("Telegram calls differ with StaffActions loaded:\nwithout: %q\nwith:    %q", runs[0], runs[1])
+			if tc.timed && len(runs[0].until) == 0 {
+				t.Fatal("the baseline sent no until_date for a timed case, so the clock-window comparison proves nothing")
+			}
+			if !slices.Equal(runs[0].lines, runs[1].lines) {
+				t.Fatalf("Telegram calls differ with StaffActions loaded:\nwithout: %q\nwith:    %q", runs[0].lines, runs[1].lines)
+			}
+			if len(runs[0].until) != len(runs[1].until) {
+				t.Fatalf("until_date count differs with StaffActions loaded: without %d, with %d", len(runs[0].until), len(runs[1].until))
+			}
+			// Each run's until_date is the clock at its ExtractTime call plus the
+			// duration, and that clock reading lies inside the run's from..to window.
+			// So the two runs asked for the same duration exactly when the delta lies
+			// in [with.from-without.to, with.to-without.from]. Any real difference is
+			// at least a minute, the smallest duration unit, and cannot fit.
+			low, high := runs[1].from-runs[0].to, runs[1].to-runs[0].from
+			for k := range runs[0].until {
+				delta := runs[1].until[k] - runs[0].until[k]
+				if delta < low || delta > high {
+					t.Fatalf("until_date of call %d differs with StaffActions loaded: without %d (run window %d..%d), with %d (run window %d..%d), delta %d outside [%d, %d]",
+						k, runs[0].until[k], runs[0].from, runs[0].to, runs[1].until[k], runs[1].from, runs[1].to, delta, low, high)
+				}
 			}
 		})
 	}
