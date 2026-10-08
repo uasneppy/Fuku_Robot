@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:12:16Z
+updated: 2026-10-08T13:14:57Z
 ---
 
 ## Current Test
 
-number: 5
-name: Leave a join request pending, run /lockdown, then approve that request from Telegram's own request list as an admin.
+number: 6
+name: During a lockdown let a joiner be banned, read getChatMember for them and compare until_date with the stored ban_until (join row), then lift.
 expected: |
-  The person gets in. If the accepted D-24 race bans them instead, /unlockdown unbans them.
+  until_date is within 2 s of the stored value, and the joiner is unbanned at the lift
 awaiting: user response
 
 ## Tests
@@ -41,7 +41,7 @@ result: pass
 ### 5. Leave a join request pending, run /lockdown, then approve that request from Telegram's own request list as an admin.
 expected: The person gets in. If the accepted D-24 race bans them instead, /unlockdown unbans them.
 why_human: Depends on Telegram's update order (research A3/A5); the residual race is accepted by the owner (D-24) but its real outcome was never seen.
-result: [pending]
+result: pass
 
 ### 6. During a lockdown let a joiner be banned, read getChatMember for them and compare until_date with the stored ban_until (join row), then lift.
 expected: until_date is within 2 s of the stored value, and the joiner is unbanned at the lift
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 4
+passed: 5
 issues: 0
-pending: 9
+pending: 8
 skipped: 0
 blocked: 0
 
