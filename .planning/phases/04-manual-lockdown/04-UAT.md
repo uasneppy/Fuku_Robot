@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:34:25Z
+updated: 2026-10-08T13:34:59Z
 ---
 
 ## Current Test
 
-number: 12
-name: As an anonymous admin run /lockdown, tap the proof button, then do the same for /unlockdown and /lockdownstatus, with the group's AnonAdmin mode on and off
+number: 13
+name: In a real group with a captcha pending, run /lockdown, let the user pass the captcha, run /unmute on another muted user, then /unlockdown
 expected: |
-  The proof button always appears, the tapper is the one named as locking or lifting, and a non-admin tapper is refused
+  Both users can talk after the lift (LOCK-08)
 awaiting: user response
 
 ## Tests
@@ -76,7 +76,7 @@ result: pass
 ### 12. As an anonymous admin run /lockdown, tap the proof button, then do the same for /unlockdown and /lockdownstatus, with the group's AnonAdmin mode on and off
 expected: The proof button always appears, the tapper is the one named as locking or lifting, and a non-admin tapper is refused
 why_human: The anonymous-admin flow is proven with the fake; a real tap on the real proof button is a live check.
-result: [pending]
+result: pass
 
 ### 13. In a real group with a captcha pending, run /lockdown, let the user pass the captcha, run /unmute on another muted user, then /unlockdown
 expected: Both users can talk after the lift (LOCK-08)
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 11
+passed: 12
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 
