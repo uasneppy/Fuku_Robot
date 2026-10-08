@@ -3,15 +3,15 @@ status: testing
 phase: 04-manual-lockdown
 source: [04-VERIFICATION.md]
 started: 2026-10-07T04:29:21Z
-updated: 2026-10-08T13:17:03Z
+updated: 2026-10-08T13:26:38Z
 ---
 
 ## Current Test
 
-number: 8
-name: With auto-approve on and join requests required, run /lockdown and request to join from a second account; then with auto-approve off tap Accept on a posted approve card during a lockdown; run /unlockdown and try again
+number: 9
+name: Lock two real groups, lift one
 expected: |
-  The request is declined within seconds, requesting again is declined again, Accept shows the lockdown alert and approves nothing, and after the lift new requests behave normally
+  The other keeps its restricted permissions, its removed joiners and its /staff marker
 awaiting: user response
 
 ## Tests
@@ -56,7 +56,7 @@ result: pass
 ### 8. With auto-approve on and join requests required, run /lockdown and request to join from a second account; then with auto-approve off tap Accept on a posted approve card during a lockdown; run /unlockdown and try again
 expected: The request is declined within seconds, requesting again is declined again, Accept shows the lockdown alert and approves nothing, and after the lift new requests behave normally
 why_human: Whether a declined person can request again at once (research A11) and the Accept button alert in a real client are live behaviours.
-result: [pending]
+result: pass
 
 ### 9. Lock two real groups, lift one
 expected: The other keeps its restricted permissions, its removed joiners and its /staff marker
@@ -86,9 +86,9 @@ result: [pending]
 ## Summary
 
 total: 13
-passed: 7
+passed: 8
 issues: 0
-pending: 6
+pending: 5
 skipped: 0
 blocked: 0
 
