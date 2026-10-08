@@ -84,18 +84,18 @@ func TestShouldUpdateExpiresInactiveKeys(t *testing.T) {
 	}
 }
 
+// resetUsersThrottleCaches empties the users throttle maps in place. The sweep
+// goroutine started by init and the async writers spawned by logUsers read these
+// package variables, so a test must never reassign them.
+func resetUsersThrottleCaches(t *testing.T) {
+	t.Helper()
+	userUpdateCache.Clear()
+	chatUpdateCache.Clear()
+	channelUpdateCache.Clear()
+}
+
 func TestLogUsersPersistsSenderChatAndReplyUsers(t *testing.T) {
-	oldUserUpdateCache := userUpdateCache
-	oldChatUpdateCache := chatUpdateCache
-	oldChannelUpdateCache := channelUpdateCache
-	userUpdateCache = &sync.Map{}
-	chatUpdateCache = &sync.Map{}
-	channelUpdateCache = &sync.Map{}
-	t.Cleanup(func() {
-		userUpdateCache = oldUserUpdateCache
-		chatUpdateCache = oldChatUpdateCache
-		channelUpdateCache = oldChannelUpdateCache
-	})
+	resetUsersThrottleCaches(t)
 
 	client := newModuleBotClient()
 	bot := newModuleTestBot(client)
@@ -122,17 +122,7 @@ func TestLogUsersPersistsSenderChatAndReplyUsers(t *testing.T) {
 }
 
 func TestLogUsersPersistsAnonymousChannelSender(t *testing.T) {
-	oldUserUpdateCache := userUpdateCache
-	oldChatUpdateCache := chatUpdateCache
-	oldChannelUpdateCache := channelUpdateCache
-	userUpdateCache = &sync.Map{}
-	chatUpdateCache = &sync.Map{}
-	channelUpdateCache = &sync.Map{}
-	t.Cleanup(func() {
-		userUpdateCache = oldUserUpdateCache
-		chatUpdateCache = oldChatUpdateCache
-		channelUpdateCache = oldChannelUpdateCache
-	})
+	resetUsersThrottleCaches(t)
 
 	client := newModuleBotClient()
 	bot := newModuleTestBot(client)

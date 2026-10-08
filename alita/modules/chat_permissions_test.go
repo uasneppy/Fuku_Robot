@@ -112,7 +112,10 @@ func TestResolveUnmutePermissions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := resolveUnmutePermissions(tc.input)
+			got, err := resolveUnmutePermissions(tc.input)
+			if err != nil {
+				t.Fatalf("resolveUnmutePermissions() error = %v, want none", err)
+			}
 
 			if got.CanSendMessages != tc.wantPerm.CanSendMessages {
 				t.Errorf("CanSendMessages = %v, want %v", got.CanSendMessages, tc.wantPerm.CanSendMessages)

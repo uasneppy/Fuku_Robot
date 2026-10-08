@@ -21,6 +21,7 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/db/antiraid"
 	"github.com/divkix/Alita_Robot/alita/db/lang"
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
@@ -438,6 +439,12 @@ func banRaidMember(bot *gotgbot.Bot, chat *gotgbot.Chat, userID int64, actionTim
 	}
 }
 
+// onJoin handles the join service message: it bans a joiner while raid mode is on
+// and counts joins toward the auto trigger. Until Phase 6 retires it, antiraid steps
+// aside while a lockdown is active in the chat, so each joiner is handled once, by the
+// lockdown (the guard at group -7 already ran and kept only the users it let in): no
+// temp-ban of a user an admin added, and no join counting. A lockdown that cannot be
+// read does not stop antiraid, which carries on as before.
 func (a *antiRaidStruct) onJoin(bot *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
@@ -446,6 +453,13 @@ func (a *antiRaidStruct) onJoin(bot *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.ContinueGroups
 	}
 	if chat.Type != "group" && chat.Type != "supergroup" {
+		return ext.ContinueGroups
+	}
+
+	active, lockErr := lockdown.GetActiveFresh(chat.Id)
+	if lockErr != nil {
+		log.WithError(lockErr).Warnf("[AntiRaid] Could not read the lockdown of chat %d, carrying on", chat.Id)
+	} else if active != nil && active.LockedAt != nil {
 		return ext.ContinueGroups
 	}
 

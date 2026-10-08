@@ -109,7 +109,12 @@ func adminCacheAutoUpdate(b *gotgbot.Bot, ctx *ext.Context) error {
 // When an anonymous admin presses the verify button, this function:
 // 1. Verifies they are actually an admin in the chat
 // 2. Retrieves the original command from cache
-// 3. Executes the appropriate command handler with restored context
+// 3. Refuses the tap as an invalid request unless the callback's chat, the proof
+// button's chat and the cached command's chat are the same chat, so the chat the tapper
+// was verified admin in is the only chat any later check or action can use
+// 4. Executes the appropriate command handler with the context rebuilt as the message
+// update the admin would have sent: the cached command is the update's message and
+// EffectiveChat is that command's chat, with the tapper as the sender
 func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 	defer error_handling.RecoverFromPanic("bot_updates", "verifyAnonymousAdmin")
 
@@ -181,15 +186,37 @@ func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
+	// Callback data is client-controlled: a proof button only ever lives in the chat of
+	// the command it proves, so any other combination is forged. Fail closed before
+	// anything is deleted or run.
+	if msg.Chat.Id != chatId || qmsg.GetChat().Id != chatId {
+		log.WithFields(log.Fields{
+			"chatId":       chatId,
+			"msgId":        msgId,
+			"cachedChatId": msg.Chat.Id,
+			"buttonChatId": qmsg.GetChat().Id,
+		}).Warn("[BotUpdates] anon_admin proof tap names different chats")
+		return answerInvalidCallback(b, ctx, query)
+	}
+
 	_, err = qmsg.Delete(b, nil)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	ctx.EffectiveMessage = msg            // set the message to the message that was originally used when command was given
-	ctx.EffectiveMessage.SenderChat = nil // make senderChat nil to avoid chat_status.isAnonAdmin to mistaken user for GroupAnonymousBot
-	ctx.CallbackQuery = nil               // callback query is not needed anymore
+	// The re-entered command must look exactly like the message the admin sent, so every
+	// chat-derived check, refusal and action uses the command's own chat. The update is
+	// rebuilt (not mutated) as a message update: with the callback query dropped and no
+	// message left, chat_status could not find the chat and the command stopped silently.
+	// SenderChat is cleared so chat_status.isAnonAdmin does not take the tapper for
+	// GroupAnonymousBot.
+	updateID := ctx.UpdateId
+	msg.SenderChat = nil
+	ctx.Update = &gotgbot.Update{UpdateId: updateID, Message: msg}
+	ctx.EffectiveMessage = msg
+	chatCopy := msg.Chat
+	ctx.EffectiveChat = &chatCopy
 	fromCopy := query.From
 	ctx.EffectiveUser = &fromCopy
 	ctx.EffectiveSender = &gotgbot.Sender{User: &fromCopy, ChatId: chatId}
