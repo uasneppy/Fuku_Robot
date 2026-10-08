@@ -55,7 +55,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - New commands use `helpers.WrapCommand(dispatcher, CommandDescriptor{...}, handler)`. Set `Disableable: true` for any
   command chats may disable. Do not add replies for failed checks; the pipeline sends them.
 - Anonymous admins bypass `WrapCommand`. Admin commands that must work for them also need
-  `RegisterAnonymousAdminHandler` + `anonPipelineHandler`.
+  `RegisterAnonymousAdminHandler` + `anonPipelineHandler`. After the proof tap, `verifyAnonymousAdmin` swaps the callback
+  update for a message update carrying the cached command and points `EffectiveChat` at that command's chat, so the
+  re-entered command, the `RequiredChecks` that `anonPipelineHandler` re-runs, and `PermissionResponder` see the
+  command's chat as if the admin had sent it, with the tapper as the sender. `verifyAnonymousAdmin` refuses the tap as
+  an invalid request, deleting and running nothing, unless the callback's `c`, the proof button's chat and the cached
+  command's chat are the same chat.
 - The `StaffActions` module (priority 65) registers raw `handlers.NewCommand` interceptors at group 0 ahead of Bans (70)
   and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
@@ -105,11 +110,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   An anonymous admin always gets `chat_status.PromptAnonAdminProof`, whatever the chat's AnonAdmin setting
   (`checkAnonAdmin`'s shortcut is not used); after the proof the tapper is the sender, is checked live like anyone
   else, and is the one recorded as having locked or lifted. `lockdown`, `unlockdown` and `lockdownstatus` are
-  registered with `RegisterAnonymousAdminHandler` for that re-entry. After the proof the update no longer carries the
-  callback query, so `chat_status.extractChatFromContext` (behind `helpers.RequireGroup` and `PermissionResponder`)
-  finds no chat and fails silently: the lockdown commands use their own `requireLockdownGroup` and `lockdownRefuse`,
-  which read `c.Chat` and reply through `c.Msg`. Keep every check and refusal of an anonymous-capable command off
-  `ctx.Update`.
+  registered with `RegisterAnonymousAdminHandler` for that re-entry. Their own `requireLockdownGroup` and
+  `lockdownRefuse` read `c.Chat` and reply through `c.Msg`; they predate the re-entry fix described under Handlers and
+  stay.
 
 ## Data
 
