@@ -11,6 +11,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/logchannels"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
 
@@ -356,6 +357,257 @@ func TestLockdownBanAuthority(t *testing.T) {
 		}
 		if runs := env.banRuns(); len(runs) != 0 {
 			t.Errorf("%d ban runs, want none", len(runs))
+		}
+	})
+}
+
+// logBanPosts is the text of every #LOCKDOWN_BAN message the log channel received.
+func (e *lockdownEnv) logBanPosts(channelID int64) []string {
+	var posts []string
+	for _, sent := range e.fake.sentTo(channelID) {
+		if text := fmt.Sprint(sent.Params["text"]); strings.Contains(text, "#LOCKDOWN_BAN") {
+			posts = append(posts, text)
+		}
+	}
+	return posts
+}
+
+// cyclesUntilRunEnds runs worker cycles, at most limit of them, until no run is running.
+// A failing account costs one attempt per cycle, so a run with one can need several.
+func (e *lockdownEnv) cyclesUntilRunEnds(limit int) {
+	e.t.Helper()
+	for i := 0; i < limit; i++ {
+		e.cycle()
+		running := false
+		for _, run := range e.banRuns() {
+			if run.State == models.BanRunStateRunning {
+				running = true
+			}
+		}
+		if !running {
+			return
+		}
+	}
+	e.t.Fatalf("a ban run was still running after %d cycles", limit)
+}
+
+func TestLockdownBanResult(t *testing.T) {
+	t.Run("full report", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+
+		// Joined before the lock: a member, an admin and an account someone else kicked.
+		p1, p2, p3 := env.newJoiner("P1"), env.newJoiner("P2"), env.newJoiner("P3")
+		env.join(p1, p1, "")
+		env.join(p2, p2, "")
+		env.join(p3, p3, "")
+		env.fake.setMember(env.chat.Id, p2.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator})
+		env.fake.setMember(env.chat.Id, p3.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusKicked})
+
+		env.send(env.admin, "/lockdown raid")
+		time.Sleep(3 * time.Millisecond)
+		// Ascending IDs in join order, so the run reaches them in the order they joined
+		// whether the database scans the joiner rows by row or by user.
+		base := uniqueLinkOwnerID()
+		j1 := gotgbot.User{Id: base + 1, FirstName: "J1"}
+		e := gotgbot.User{Id: base + 2, FirstName: "E"}
+		r := gotgbot.User{Id: base + 3, FirstName: "R"}
+		f := gotgbot.User{Id: base + 4, FirstName: "F<b>"}
+		env.join(j1, j1, "")
+		env.join(e, env.admin, "")
+		env.joinRequest(r, "")
+		env.join(f, f, "")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+
+		// The run reaches P1, J1, R and F in that order (burst row order); F's three
+		// attempts are the only calls Telegram refuses.
+		refusal := staffFakeError(400, "Bad Request: user not found")
+		env.fake.script("banChatMember", env.chat.Id, nil, nil, nil, refusal, refusal, refusal)
+		card := env.confirmBan(a, env.admin)
+		env.cyclesUntilRunEnds(6)
+
+		text := env.lastCardText(staffChat.Id, card.msg.MessageID)
+		for _, want := range []string{
+			staffMarker("lockdown_ban_result") + " ",
+			" 3 3 1",
+			staffMarker("lockdown_ban_result_requests") + " 1",
+			staffMarker("lockdown_ban_skip_admin") + " 1",
+			staffMarker("lockdown_ban_skip_banned") + " 1",
+			staffMarker("lockdown_ban_skip_let_in") + " 1",
+			staffMarker("lockdown_ban_failed_line") + " 1",
+			"F&lt;b&gt;",
+			fmt.Sprintf("<code>%d</code>", f.Id),
+			"Bad Request: user not found",
+		} {
+			if !strings.Contains(text, want) {
+				t.Errorf("result card = %q, want it to contain %q", text, want)
+			}
+		}
+		for _, unwanted := range []string{
+			staffMarker("lockdown_ban_skip_approved"),
+			staffMarker("lockdown_ban_stopped"),
+			"<<lockdown",
+		} {
+			if strings.Contains(text, unwanted) {
+				t.Errorf("result card = %q, want it without %q", text, unwanted)
+			}
+		}
+		env.wantBannedForGood(p1.Id, "P1")
+		env.wantBannedForGood(j1.Id, "J1")
+		env.wantBannedForGood(r.Id, "the declined requester")
+		env.wantNotBanned(p2.Id, "the admin")
+		env.wantNotBanned(e.Id, "the user an admin let in")
+	})
+
+	t.Run("failed list is cut", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		var failing []gotgbot.User
+		for i := 0; i < 12; i++ {
+			user := env.newJoiner(fmt.Sprintf("Failing%d", i))
+			env.join(user, user, "")
+			failing = append(failing, user)
+		}
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		refusal := staffFakeError(400, "Bad Request: no")
+		for i := 0; i < 12*3; i++ {
+			env.fake.script("banChatMember", env.chat.Id, refusal)
+		}
+		card := env.confirmBan(a, env.admin)
+		env.cyclesUntilRunEnds(6)
+
+		text := env.lastCardText(staffChat.Id, card.msg.MessageID)
+		if !strings.Contains(text, staffMarker("lockdown_ban_failed_line")+" 12") {
+			t.Fatalf("result card = %q, want %q with 12", text, staffMarker("lockdown_ban_failed_line"))
+		}
+		listed := 0
+		for _, user := range failing {
+			if strings.Contains(text, fmt.Sprintf("<code>%d</code>", user.Id)) {
+				listed++
+			}
+		}
+		if listed != 10 {
+			t.Errorf("%d failed accounts listed, want 10", listed)
+		}
+		if !strings.Contains(text, staffMarker("lockdown_lift_tally_more")+" 2") {
+			t.Errorf("result card = %q, want %q with the 2 left out", text, staffMarker("lockdown_lift_tally_more"))
+		}
+	})
+
+	t.Run("log post", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		logChannel := uniqueModuleChatID()
+		setStaffLogChannel(t, env.chat.Id, logChannel)
+
+		j1 := env.newJoiner("J1")
+		env.join(j1, j1, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+
+		env.confirmBan(a, env.admin)
+		env.cycleUntilIdle()
+		posts := env.logBanPosts(logChannel)
+		if len(posts) != 1 {
+			t.Fatalf("%d #LOCKDOWN_BAN posts after the first run, want exactly 1", len(posts))
+		}
+		for _, want := range []string{
+			staffMarker("lockdown_ban_log") + " 1 0 0",
+			"Ad&lt;b&gt;min",
+			fmt.Sprintf("tg://user?id=%d", env.admin.Id),
+			staffMarker("staff_log_admin_label"),
+		} {
+			if !strings.Contains(posts[0], want) {
+				t.Errorf("log post = %q, want it to contain %q", posts[0], want)
+			}
+		}
+
+		// More cycles post nothing more; a second run posts its own.
+		env.cycle()
+		env.cycle()
+		if got := len(env.logBanPosts(logChannel)); got != 1 {
+			t.Fatalf("%d #LOCKDOWN_BAN posts after extra cycles, want still 1", got)
+		}
+		j2 := env.newJoiner("J2")
+		env.join(j2, j2, "")
+		env.confirmBan(a, env.admin)
+		env.cycleUntilIdle()
+		if got := len(env.logBanPosts(logChannel)); got != 2 {
+			t.Errorf("%d #LOCKDOWN_BAN posts after the second run, want 2", got)
+		}
+	})
+
+	t.Run("no audit", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		setStaffLogChannel(t, env.chat.Id, uniqueModuleChatID())
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+
+		var before, after int64
+		if err := db.DB.Model(&models.StaffAction{}).Count(&before).Error; err != nil {
+			t.Fatalf("count staff actions: %v", err)
+		}
+		env.confirmBan(a, env.admin)
+		env.cycleUntilIdle()
+		if err := db.DB.Model(&models.StaffAction{}).Count(&after).Error; err != nil {
+			t.Fatalf("count staff actions: %v", err)
+		}
+		if after != before {
+			t.Errorf("%d staff_actions rows after the run, were %d: a response ban writes no audit record", after, before)
+		}
+		env.wantBannedForGood(raider.Id, "the raider")
+	})
+
+	t.Run("category off", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		logChannel := uniqueModuleChatID()
+		setStaffLogChannel(t, env.chat.Id, logChannel)
+		if err := logchannels.SetCategory(env.chat.Id, logchannels.CategoryAdmin, false); err != nil {
+			t.Fatalf("turn the admin category off: %v", err)
+		}
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+
+		card := env.confirmBan(a, env.admin)
+		env.cycleUntilIdle()
+
+		if posts := env.logBanPosts(logChannel); len(posts) != 0 {
+			t.Errorf("%d #LOCKDOWN_BAN posts with the admin category off, want none", len(posts))
+		}
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateDone {
+			t.Errorf("ban runs = %+v, want the run done", runs)
+		}
+		if text := env.lastCardText(staffChat.Id, card.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_result")) {
+			t.Errorf("card = %q, want the result", text)
+		}
+	})
+
+	t.Run("a stopped run that handled nothing posts nothing", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		logChannel := uniqueModuleChatID()
+		setStaffLogChannel(t, env.chat.Id, logChannel)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		env.confirmBan(a, env.admin)
+
+		env.send(env.admin, "/unlockdown")
+		env.cycleUntilIdle()
+
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateStopped {
+			t.Fatalf("ban runs = %+v, want the run stopped", runs)
+		}
+		if posts := env.logBanPosts(logChannel); len(posts) != 0 {
+			t.Errorf("%d #LOCKDOWN_BAN posts for a run that handled nobody, want none", len(posts))
 		}
 	})
 }
