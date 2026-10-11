@@ -261,3 +261,119 @@ func TestBeginAlertBurst(t *testing.T) {
 		}
 	})
 }
+
+// queuedBurstRow writes a queued burst row of ld for userID and returns it.
+func queuedBurstRow(t *testing.T, ld *models.ChatLockdown, userID int64) models.ChatLockdownBurst {
+	t.Helper()
+	row := preRow(ld, userID, "Q", time.Now().UTC().Add(-time.Minute))
+	row.State = models.BurstStateQueued
+	if err := db.DB.Create(&row).Error; err != nil {
+		t.Fatalf("seed burst row %d: %v", userID, err)
+	}
+	return row
+}
+
+func readBurst(t *testing.T, id uint) models.ChatLockdownBurst {
+	t.Helper()
+	var row models.ChatLockdownBurst
+	if err := db.DB.First(&row, id).Error; err != nil {
+		t.Fatalf("read burst row %d: %v", id, err)
+	}
+	return row
+}
+
+func TestBurstClaims(t *testing.T) {
+	startLockdown := func(t *testing.T) *models.ChatLockdown {
+		t.Helper()
+		chat := uniqueLockdownChatID(t)
+		cleanupBurstLockdowns(t, chat)
+		ld := mustStart(t, chat)
+		mustConfirm(t, ld.ID)
+		return ld
+	}
+
+	t.Run("ClaimBurst moves queued to acting once", func(t *testing.T) {
+		ld := startLockdown(t)
+		row := queuedBurstRow(t, ld, 9201)
+
+		won, err := ClaimBurst(row.ID, models.BurstStateQueued, models.BurstStateActing)
+		if err != nil || !won {
+			t.Fatalf("first ClaimBurst = %v, %v, want true", won, err)
+		}
+		got := readBurst(t, row.ID)
+		if got.State != models.BurstStateActing || got.ClaimedAt == nil {
+			t.Errorf("row = %q, claim %v, want acting with claimed_at set", got.State, got.ClaimedAt)
+		}
+		if won, err := ClaimBurst(row.ID, models.BurstStateQueued, models.BurstStateActing); err != nil || won {
+			t.Errorf("second ClaimBurst = %v, %v, want false: the row is no longer queued", won, err)
+		}
+	})
+
+	t.Run("MoveBurst is conditional on the from-state", func(t *testing.T) {
+		ld := startLockdown(t)
+		row := queuedBurstRow(t, ld, 9202)
+		if won, err := ClaimBurst(row.ID, models.BurstStateQueued, models.BurstStateActing); err != nil || !won {
+			t.Fatalf("setup: ClaimBurst = %v, %v", won, err)
+		}
+
+		if moved, err := MoveBurst(row.ID, models.BurstStateQueued, models.BurstStateBanned, "", "", false); err != nil || moved {
+			t.Errorf("MoveBurst from the wrong state = %v, %v, want false", moved, err)
+		}
+		if got := readBurst(t, row.ID); got.State != models.BurstStateActing {
+			t.Errorf("row state = %q after a refused move, want acting", got.State)
+		}
+
+		moved, err := MoveBurst(row.ID, models.BurstStateActing, models.BurstStateSkipped, "admin", "", false)
+		if err != nil || !moved {
+			t.Fatalf("MoveBurst to skipped = %v, %v, want true", moved, err)
+		}
+		got := readBurst(t, row.ID)
+		if got.State != models.BurstStateSkipped || got.Reason != "admin" || got.ClaimedAt != nil || got.Attempts != 0 {
+			t.Errorf("row = %q / %q, claim %v, %d attempt(s), want skipped / admin, no claim, no attempt", got.State, got.Reason, got.ClaimedAt, got.Attempts)
+		}
+	})
+
+	t.Run("MoveBurst counts an attempt only when asked", func(t *testing.T) {
+		ld := startLockdown(t)
+		row := queuedBurstRow(t, ld, 9203)
+		claim := func() {
+			t.Helper()
+			if won, err := ClaimBurst(row.ID, models.BurstStateQueued, models.BurstStateActing); err != nil || !won {
+				t.Fatalf("ClaimBurst = %v, %v, want true", won, err)
+			}
+		}
+
+		claim()
+		if moved, err := MoveBurst(row.ID, models.BurstStateActing, models.BurstStateQueued, "", "", false); err != nil || !moved {
+			t.Fatalf("MoveBurst back = %v, %v", moved, err)
+		}
+		if got := readBurst(t, row.ID); got.Attempts != 0 || got.State != models.BurstStateQueued {
+			t.Errorf("row = %q with %d attempt(s), want queued with 0", got.State, got.Attempts)
+		}
+
+		claim()
+		if moved, err := MoveBurst(row.ID, models.BurstStateActing, models.BurstStateQueued, "", "boom", true); err != nil || !moved {
+			t.Fatalf("MoveBurst counting = %v, %v", moved, err)
+		}
+		if got := readBurst(t, row.ID); got.Attempts != 1 || got.Detail != "boom" {
+			t.Errorf("row = %d attempt(s), detail %q, want 1 and boom", got.Attempts, got.Detail)
+		}
+	})
+
+	t.Run("GetJoinerOfUserFresh", func(t *testing.T) {
+		ld := startLockdown(t)
+		other := startLockdown(t)
+		mustRecord(t, newJoinRecord(ld, 9204))
+
+		got, err := GetJoinerOfUserFresh(ld.ID, 9204)
+		if err != nil || got == nil || got.UserID != 9204 || got.LockdownID != ld.ID {
+			t.Fatalf("GetJoinerOfUserFresh = %+v, %v, want the lockdown's row", got, err)
+		}
+		if got, err := GetJoinerOfUserFresh(ld.ID, 9205); err != nil || got != nil {
+			t.Errorf("GetJoinerOfUserFresh for an unknown user = %+v, %v, want nil, nil", got, err)
+		}
+		if got, err := GetJoinerOfUserFresh(other.ID, 9204); err != nil || got != nil {
+			t.Errorf("GetJoinerOfUserFresh in another lockdown = %+v, %v, want nil, nil", got, err)
+		}
+	})
+}
