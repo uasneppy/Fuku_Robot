@@ -223,7 +223,7 @@ Plans:
   4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
   5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
 
-**Plans:** 9/14 plans executed
+**Plans:** 11/14 plans executed
 
 Plans:
 **Wave 1**
@@ -250,10 +250,10 @@ Plans:
 - [x] 05-09-PLAN.md: The invite link the burst used on the alert, with a pointer when the bot cannot revoke it
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 05-10-PLAN.md: "Ban N recent joiners": button, asker-only card, DB-driven run, result; approved users read fresh
+- [x] 05-10-PLAN.md: "Ban N recent joiners": button, asker-only card, DB-driven run, result; approved users read fresh
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 05-11-PLAN.md: Ban again during a raid (new accounts only, resume, stop at the lift); full result with skip reasons and declined requests; one #LOCKDOWN_BAN log post
+- [x] 05-11-PLAN.md: Ban again during a raid (new accounts only, resume, stop at the lift); full result with skip reasons and declined requests; one #LOCKDOWN_BAN log post
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 05-12-PLAN.md: "Revoke link" for bot-created links by admins with the invite right; every copy says who revoked it; plain-word refusals
@@ -338,7 +338,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
-| 5. Lockdown Alerts and Response | 9/14 | In Progress|  |
+| 5. Lockdown Alerts and Response | 11/14 | In Progress|  |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
