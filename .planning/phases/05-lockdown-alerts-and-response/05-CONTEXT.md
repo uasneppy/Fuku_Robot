@@ -69,6 +69,13 @@ Out of scope:
   - Reminders stop at the lift.
 - **D-16:** A reminder says "Still locked since T", the reason, the number of joiners removed so far and the number still pending. It carries the same three buttons and no sample.
 
+### Amendments after research (owner, 2026-10-11)
+- **D-17 (replaces D-02's source):** The pre-lockdown part of the burst comes from a new dedicated Redis tracker. It holds each group's joins from the last 10 minutes and is written by the group -7 join handlers: one pipelined ZADD per join, best effort, empty without Redis. Antiraid's 60-second list is not used. Phase 6 can reuse the tracker.
+- **D-18 (refines D-13/D-14):** "Revoke link" is shown only for an invite link the bot created, which arrives in full. Any other link (other admins' links reach the bot cut short) is shown with a line saying to revoke it in Telegram's group settings.
+- **D-19 (refines D-08):** A lift from the alert's button posts the same public "Lockdown lifted by X" notice and tally in the locked group as `/unlockdown`. Both go through one shared lift function.
+- **D-20 (refines D-01):** The log channel copy of the alert respects that channel's `admin` log category switch, as staff log posts do. The Staff Group copy is always sent.
+- **D-21 (refines D-09, Claude's call on the research recommendation):** Declined join-request rows are included in "Ban N recent joiners" and reported separately in the result.
+
 ### Claude's Discretion
 - The table and column layout for alert messages and reminder bookkeeping, following the append-only migration rules. The existing `chat_lockdowns.trigger_kind` and the joiner rows' `invite_link`, `first_name`, `username` and `is_bot` are already there for this.
 - The callback namespace and the token scheme, within the 64-byte `callbackcodec` cap. Callback data carries only IDs or tokens.
