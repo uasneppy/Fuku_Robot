@@ -112,7 +112,10 @@ func moveLockdownBurst(id uint, from, to, reason, detail string, countAttempt bo
 // without an attempt.
 //
 // One paced unit then reads the live status and, when decideLockdownResponseBan says
-// ban, sends banChatMember with empty options: no end date and no message removal. A
+// ban, reads the lockdown once more and sends banChatMember with empty options: no end
+// date and no message removal. When the lockdown is no longer active by then (a lift
+// recorded while the unit waited for its slot) nothing is sent: the joiner row is
+// restored and the account goes back to the queue without an attempt. A
 // ban moves the burst row to banned (reason request for a declined join request) and
 // the joiner row to kept with detail response_ban, which the lift leaves banned. Every
 // other outcome puts the joiner row back in the state and detail it came from. A rate
@@ -179,11 +182,14 @@ func lockdownResponseBanOne(
 	var (
 		ban        bool
 		skipReason string
+		// ended is set when the lockdown stopped being active while the account waited for
+		// its slot, so no ban was sent.
+		ended bool
 	)
 	err = lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()
-		ban, skipReason = false, ""
+		ban, skipReason, ended = false, "", false
 		live, lookupErr := b.GetChatMemberWithContext(call, ld.ChatID, row.UserID, nil)
 		if lookupErr != nil {
 			return lookupErr
@@ -195,12 +201,30 @@ func lockdownResponseBanOne(
 		if !ban {
 			return nil
 		}
+		// The caller read the lockdown before this unit waited for its slot, which can take
+		// up to a minute during a raid. A lift recorded in that wait must not get a ban for
+		// good it will never take back (D-12), so the lockdown is read once more right
+		// before the call. An unreadable lockdown fails the call: nobody is banned without it.
+		current, readErr := lockdown.GetFresh(ld.ID)
+		if readErr != nil {
+			return readErr
+		}
+		if current == nil || current.State != models.LockdownStateActive {
+			ban, ended = false, true
+			return nil
+		}
 		_, banErr := b.BanChatMemberWithContext(call, ld.ChatID, row.UserID, &gotgbot.BanChatMemberOpts{})
 		return banErr
 	})
 
 	switch lockdownClassify(ctx, err) {
 	case lockdownCallDone:
+		if ended {
+			// The run stops at its next account; the account goes back unhandled, with the
+			// joiner row as it was found.
+			restoreJoiner()
+			return requeue()
+		}
 		if !ban {
 			restoreJoiner()
 			return skip(skipReason)

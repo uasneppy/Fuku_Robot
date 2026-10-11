@@ -474,7 +474,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   terminal state is never queued again; approved users are never queued and stay unhandled), and its N counts only those.
   A restart resumes a run on any replica (`ReleaseStaleBurstClaims` returns an abandoned claim to the queue). A run of a
   lockdown that is no longer active is stopped, not left: the lockdown is read again before every account, so a lift
-  that starts in the middle of a batch ends the run at the next account, `UnqueueBanRun` gives the queued accounts back
+  that starts in the middle of a batch ends the run at the next account (and `lockdownResponseBanOne` reads it once more
+  inside the paced unit, right before `banChatMember`, because the wait for a slot can take a minute: a lockdown no
+  longer active then restores the joiner row, queues the account again without an attempt and sends no ban), `UnqueueBanRun` gives the queued accounts back
   (unhandled, no run; an acting row is left to its call in flight), the run moves to `stopped` through the same
   conditional finish and its card ends with `lockdown_ban_stopped`. The report counts banned (with the declined join
   requests among them on their own line), skipped with one line per reason (admin, approved, already banned, let in by an

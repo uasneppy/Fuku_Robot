@@ -44,6 +44,9 @@ type lockdownFake struct {
 	// onSetPermissions runs at the moment a setChatPermissions request arrives,
 	// before it is answered.
 	onSetPermissions func(chatID int64)
+	// onGetMember runs when a getChatMember request for a user other than the bot
+	// arrives, before it is answered.
+	onGetMember func(chatID, userID int64)
 	// failAfterSetPermissions, when set, is returned by the next setChatPermissions
 	// request after it was applied: the lock took effect and the caller never learns it.
 	failAfterSetPermissions error
@@ -117,6 +120,14 @@ func (f *lockdownFake) setOnSetPermissions(hook func(chatID int64)) {
 	f.lmu.Lock()
 	defer f.lmu.Unlock()
 	f.onSetPermissions = hook
+}
+
+// setOnGetMember installs the hook that runs when a getChatMember request for a user
+// other than the bot arrives.
+func (f *lockdownFake) setOnGetMember(hook func(chatID, userID int64)) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	f.onGetMember = hook
 }
 
 // setFailAfterSetPermissions makes the next setChatPermissions take effect and then
@@ -208,6 +219,14 @@ func (f *lockdownFake) RequestWithContext(
 		return json.RawMessage(answer + `}`), nil
 
 	case "getChatMember":
+		if staffParamInt(params, "user_id") != staffTestBotID {
+			f.lmu.Lock()
+			hook := f.onGetMember
+			f.lmu.Unlock()
+			if hook != nil {
+				hook(chatID, staffParamInt(params, "user_id"))
+			}
+		}
 		if staffParamInt(params, "user_id") == staffTestBotID {
 			f.lmu.Lock()
 			raw, ok := f.botJSON[chatID]

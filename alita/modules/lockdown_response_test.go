@@ -519,6 +519,49 @@ func TestLockdownBanRaces(t *testing.T) {
 		}
 	})
 
+	t.Run("lift recorded while the account waits for its slot", func(t *testing.T) {
+		env := responseEnv(t)
+		ld := env.lockAsAdmin("raid")
+		j5 := env.newJoiner("J5")
+		env.join(j5, j5, "https://t.me/+abc")
+		before := env.joinerRow(j5.Id)
+		if before.State != models.JoinerStatePending {
+			t.Fatalf("setup: joiner = %q, want pending", before.State)
+		}
+		env.fake.setMember(env.chat.Id, j5.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		row := env.queuedBurst(ld, j5.Id, models.BurstSourceJoiner, false)
+
+		// The caller read an active lockdown; the lift is recorded while the paced unit
+		// runs, after the account's live status was read and before the ban call.
+		env.fake.setOnGetMember(func(chatID, userID int64) {
+			if userID != j5.Id {
+				return
+			}
+			err := db.DB.Model(&models.ChatLockdown{}).
+				Where("id = ?", ld.ID).
+				Update("state", models.LockdownStateLifting).Error
+			if err != nil {
+				t.Errorf("record the lift: %v", err)
+			}
+		})
+		t.Cleanup(func() { env.fake.setOnGetMember(nil) })
+
+		if env.responseBan(ld, row, nil) {
+			t.Error("lockdownResponseBanOne = true, want false: the account goes back to the queue")
+		}
+
+		if got := len(env.bansOf(j5.Id)); got != 0 {
+			t.Fatalf("banChatMember calls = %d, want none: a lifting lockdown gets no ban for good", got)
+		}
+		got := env.burstRowOf(j5.Id)
+		if got.State != models.BurstStateQueued || got.Attempts != 0 || got.ClaimedAt != nil {
+			t.Errorf("burst row = %q, %d attempt(s), claim %v, want back in the queue with no attempt", got.State, got.Attempts, got.ClaimedAt)
+		}
+		if after := env.joinerRow(j5.Id); after.State != before.State || after.Detail != before.Detail {
+			t.Errorf("joiner row = %q / %q, want it restored to %q / %q", after.State, after.Detail, before.State, before.Detail)
+		}
+	})
+
 	t.Run("response ban first", func(t *testing.T) {
 		env := responseEnv(t)
 		ld := env.lockAsAdmin("raid")
