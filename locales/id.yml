@@ -2898,3 +2898,5 @@ lockdown_revoke_failed: "Telegram menolak mencabut tautan. Tidak ada yang beruba
 lockdown_revoke_no_rights: "Saya perlu hak untuk mengundang pengguna lewat tautan di grup yang dikunci agar bisa mencabutnya. Tidak ada yang berubah."
 lockdown_revoke_not_found: "Telegram mengatakan tautan ini sudah tidak berfungsi atau bukan saya yang membuatnya. Cabut di tautan undangan grup di Telegram."
 lockdown_revoke_busy: "Telegram sedang membatasi saya sekarang. Tidak ada yang berubah. Coba lagi dalam semenit."
+lockdown_reminder_title: "⏰ <b>{group} masih dikunci</b> sejak {since}."
+lockdown_reminder_counts: "Anggota baru yang dikeluarkan sejauh ini: {removed}. Masih menunggu: {pending}."

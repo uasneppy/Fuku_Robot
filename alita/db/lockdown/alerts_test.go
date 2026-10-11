@@ -3,6 +3,7 @@
 package lockdown
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -598,7 +599,7 @@ func TestRecordLinkRevoked(t *testing.T) {
 		if won, err := RecordLinkRevoked(ld.ID, 77, "Rev", link); err != nil || !won {
 			t.Fatalf("first RecordLinkRevoked = %v, %v, want true", won, err)
 		}
-		if ok, err := RecordAlertSynced(rows[0].ID); err != nil || !ok {
+		if ok, err := RecordAlertSynced(rows[0].ID, true); err != nil || !ok {
 			t.Fatalf("RecordAlertSynced = %v, %v, want true", ok, err)
 		}
 
@@ -671,7 +672,7 @@ func TestAlertSync(t *testing.T) {
 		if ok, err := ClaimAlertSync(rows[0].ID); err != nil || !ok {
 			t.Fatalf("ClaimAlertSync after a release = %v, %v, want true", ok, err)
 		}
-		if ok, err := RecordAlertSynced(rows[0].ID); err != nil || !ok {
+		if ok, err := RecordAlertSynced(rows[0].ID, true); err != nil || !ok {
 			t.Fatalf("RecordAlertSynced = %v, %v, want true", ok, err)
 		}
 		done := readAlert(t, rows[0].ID)
@@ -711,4 +712,209 @@ func TestAlertSync(t *testing.T) {
 			t.Errorf("listed %v for a lifting lockdown, want none", got)
 		}
 	})
+}
+
+// reminderSlots is one reminder copy per destination for seq.
+func reminderSlots(ld *models.ChatLockdown, seq int) []models.ChatLockdownAlert {
+	return []models.ChatLockdownAlert{
+		alertSlot(ld, models.AlertKindReminder, seq, models.AlertDestStaff, -100111),
+		alertSlot(ld, models.AlertKindReminder, seq, models.AlertDestLog, -100222),
+	}
+}
+
+// reminderRows are the reminder copies of ld, oldest first.
+func reminderRows(t *testing.T, ld *models.ChatLockdown) []models.ChatLockdownAlert {
+	t.Helper()
+	var rows []models.ChatLockdownAlert
+	for _, row := range readAlertRows(t, ld.ID) {
+		if row.Kind == models.AlertKindReminder {
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}
+
+func TestReminderSlots(t *testing.T) {
+	t.Run("planned once per seq and destination", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		mustBegin(t, ld,
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111),
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestLog, -100222),
+		)
+		if planned, err := ReminderPlanned(ld.ID, 1); err != nil || planned {
+			t.Fatalf("ReminderPlanned before planning = %v, %v, want false", planned, err)
+		}
+
+		inserted, err := PlanReminderSlots(ld.ID, 1, reminderSlots(ld, 99))
+		if err != nil || inserted != 2 {
+			t.Fatalf("PlanReminderSlots = %d, %v, want 2 rows", inserted, err)
+		}
+		rows := reminderRows(t, ld)
+		if len(rows) != 2 {
+			t.Fatalf("%d reminder rows, want 2: %+v", len(rows), rows)
+		}
+		for _, row := range rows {
+			if row.Seq != 1 || row.State != models.AlertStatePending || row.Kind != models.AlertKindReminder {
+				t.Errorf("row = %+v, want a pending reminder of seq 1 (the seq argument wins)", row)
+			}
+		}
+		if planned, err := ReminderPlanned(ld.ID, 1); err != nil || !planned {
+			t.Errorf("ReminderPlanned(1) = %v, %v, want true", planned, err)
+		}
+		if planned, err := ReminderPlanned(ld.ID, 2); err != nil || planned {
+			t.Errorf("ReminderPlanned(2) = %v, %v, want false", planned, err)
+		}
+
+		again, err := PlanReminderSlots(ld.ID, 1, reminderSlots(ld, 1))
+		if err != nil || again != 0 {
+			t.Errorf("a repeated PlanReminderSlots = %d, %v, want 0 rows", again, err)
+		}
+		if got := len(reminderRows(t, ld)); got != 2 {
+			t.Errorf("%d reminder rows after a repeat, want still 2", got)
+		}
+	})
+
+	t.Run("a lockdown that is not active gets none", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		mustBegin(t, ld, alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111))
+		mustLift(t, ld.ID)
+
+		inserted, err := PlanReminderSlots(ld.ID, 1, reminderSlots(ld, 1))
+		if err != nil || inserted != 0 {
+			t.Errorf("PlanReminderSlots for a lifting lockdown = %d, %v, want 0 rows", inserted, err)
+		}
+		if got := len(reminderRows(t, ld)); got != 0 {
+			t.Errorf("%d reminder rows for a lifting lockdown, want none", got)
+		}
+	})
+
+	t.Run("superseded reminders lose their buttons", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		rows := mustBegin(t, ld,
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111),
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestLog, -100222),
+		)
+		for i, row := range rows {
+			mustPost(t, row.ID, int64(900+i))
+		}
+		for seq := 1; seq <= 2; seq++ {
+			if _, err := PlanReminderSlots(ld.ID, seq, reminderSlots(ld, seq)); err != nil {
+				t.Fatalf("PlanReminderSlots(%d): %v", seq, err)
+			}
+		}
+		for i, row := range reminderRows(t, ld) {
+			mustPost(t, row.ID, int64(950+i))
+		}
+		byKey := map[string]models.ChatLockdownAlert{}
+		for _, row := range reminderRows(t, ld) {
+			byKey[fmt.Sprintf("%s%d", row.Dest, row.Seq)] = row
+		}
+
+		if err := SupersedeReminders(ld.ID, models.AlertDestStaff, 2); err != nil {
+			t.Fatalf("SupersedeReminders: %v", err)
+		}
+
+		first := readAlert(t, byKey[models.AlertDestStaff+"1"].ID)
+		if first.ButtonsLive || !first.EditPending {
+			t.Errorf("staff reminder 1 = %+v, want buttons_live false and edit_pending true", first)
+		}
+		for name, id := range map[string]uint{
+			"staff reminder 2": byKey[models.AlertDestStaff+"2"].ID,
+			"log reminder 1":   byKey[models.AlertDestLog+"1"].ID,
+			"log reminder 2":   byKey[models.AlertDestLog+"2"].ID,
+			"staff alert":      rows[0].ID,
+			"log alert":        rows[1].ID,
+		} {
+			if row := readAlert(t, id); !row.ButtonsLive || row.EditPending {
+				t.Errorf("%s = %+v, want it left alone: buttons live, no edit pending", name, row)
+			}
+		}
+
+		if err := SupersedeReminders(ld.ID, models.AlertDestStaff, 2); err != nil {
+			t.Fatalf("a repeated SupersedeReminders: %v", err)
+		}
+	})
+
+	t.Run("listing and destinations", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		other := confirmedLockdown(t)
+		if kinds, err := AlertDestKinds(ld.ID); err != nil || len(kinds) != 0 {
+			t.Fatalf("AlertDestKinds before the alert = %v, %v, want none", kinds, err)
+		}
+		listed := func(want *models.ChatLockdown) bool {
+			all, err := ListRemindableFresh(1000)
+			if err != nil {
+				t.Fatalf("ListRemindableFresh: %v", err)
+			}
+			for _, row := range all {
+				if row.ID == want.ID {
+					return true
+				}
+			}
+			return false
+		}
+		if listed(ld) {
+			t.Fatal("ListRemindableFresh lists a lockdown whose alert is not decided")
+		}
+
+		mustBegin(t, ld,
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111),
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestLog, -100222),
+		)
+		if !listed(ld) {
+			t.Fatal("ListRemindableFresh does not list a confirmed lockdown with its alert decided")
+		}
+		if listed(other) {
+			t.Error("ListRemindableFresh lists another lockdown whose alert is not decided")
+		}
+		kinds, err := AlertDestKinds(ld.ID)
+		if err != nil || len(kinds) != 2 || kinds[0] != models.AlertDestLog || kinds[1] != models.AlertDestStaff {
+			t.Errorf("AlertDestKinds = %v, %v, want log and staff once each", kinds, err)
+		}
+
+		// A reminder does not add a destination.
+		if _, err := PlanReminderSlots(ld.ID, 1, reminderSlots(ld, 1)); err != nil {
+			t.Fatalf("PlanReminderSlots: %v", err)
+		}
+		if kinds, err := AlertDestKinds(ld.ID); err != nil || len(kinds) != 2 {
+			t.Errorf("AlertDestKinds after a reminder = %v, %v, want still 2", kinds, err)
+		}
+
+		mustLift(t, ld.ID)
+		if listed(ld) {
+			t.Error("ListRemindableFresh lists a lifting lockdown")
+		}
+	})
+}
+
+func TestAlertSyncKeepsAMarkSetDuringTheEdit(t *testing.T) {
+	ld := confirmedLockdown(t)
+	rows := postedCopies(t, ld, alertSlot(ld, models.AlertKindReminder, 1, models.AlertDestStaff, -100111))
+	if err := SupersedeReminders(ld.ID, models.AlertDestStaff, 2); err != nil {
+		t.Fatalf("SupersedeReminders: %v", err)
+	}
+	// The mark was set (buttons now off) and a refresh claims the copy.
+	if ok, err := ClaimAlertSync(rows[0].ID); err != nil || !ok {
+		t.Fatalf("ClaimAlertSync = %v, %v, want true", ok, err)
+	}
+
+	// A refresh that edited the copy while its buttons were still on must not clear the mark.
+	if ok, err := RecordAlertSynced(rows[0].ID, true); err != nil || !ok {
+		t.Fatalf("RecordAlertSynced(live) = %v, %v, want the claim released", ok, err)
+	}
+	kept := readAlert(t, rows[0].ID)
+	if !kept.EditPending || kept.ClaimedAt != nil || kept.Attempts != 0 {
+		t.Fatalf("copy = %+v, want edit_pending kept, no claim and 0 attempts", kept)
+	}
+
+	// The refresh that edited it with its buttons off clears the mark.
+	if ok, err := ClaimAlertSync(rows[0].ID); err != nil || !ok {
+		t.Fatalf("second ClaimAlertSync = %v, %v, want true", ok, err)
+	}
+	if ok, err := RecordAlertSynced(rows[0].ID, false); err != nil || !ok {
+		t.Fatalf("RecordAlertSynced(off) = %v, %v, want true", ok, err)
+	}
+	if done := readAlert(t, rows[0].ID); done.EditPending || done.ClaimedAt != nil {
+		t.Errorf("copy = %+v, want edit_pending cleared", done)
+	}
 }

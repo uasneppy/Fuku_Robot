@@ -281,6 +281,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Revoke button after a revoke, Lift and Ban stay), bounded by `lockdownAlertBatch` per cycle. A rate limit or a shutdown
   gives the claim back free, a gone message closes the copy, and the third failed edit gives the refresh up
   (`RecordAlertSynced`) so a copy never loops. The close step appends the same footers before the lifted footer.
+  `RecordAlertSynced(id, buttonsLive)` clears `edit_pending` only while `buttons_live` still has the value the edit was
+  made with, and the sync step reads the copy again after claiming it, so a mark set while an edit ran (a reminder
+  taking the previous one's buttons off) survives and the next cycle edits the copy again.
+- Reminders: every `lockdownReminderEvery` (1 hour, counted from `alert_started_at`, never from the lock) the worker
+  (`lockdownPlanReminders`, right before the poster in `runLockdownCycle`) plans one reminder copy per alert destination:
+  kind `reminder`, `seq = floor((now - alert_started_at) / lockdownReminderEvery)`, inserted by
+  `lockdown.PlanReminderSlots` with `ON CONFLICT DO NOTHING` on the slot key, so exactly one row exists per reminder and
+  destination whichever replica plans it. Only the current seq is ever planned (no backlog after downtime, and an
+  alert older than this feature does not fire a burst), and a pending reminder behind the current seq is marked failed
+  with detail `superseded` instead of posted. The destinations are the alert's destination kinds
+  (`lockdown.AlertDestKinds`) resolved again by `lockdownAlertDestinations`, so a Staff Group unlinked since, a kind the
+  alert never went to and a log channel whose `admin` category is now off get none. Reminders use the alert's claims,
+  retries and stale-claim release, so the duplicate-over-lost rule above holds: a reminder claimed in `posting` for over
+  2 minutes is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
+  then, in which case it is superseded and lost on purpose. Posting a reminder calls `lockdown.SupersedeReminders`: the
+  older reminders of that destination get `buttons_live` false and `edit_pending` true and lose their buttons through the
+  sync step; the original alert copy keeps its buttons until the lift. Planning stops with the lockdown being active
+  (`PlanReminderSlots` checks it in its transaction, the poster lists only active lockdowns), and the lift's close step
+  edits every alert and reminder copy to the lifted footer.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→

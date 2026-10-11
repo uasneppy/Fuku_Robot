@@ -2585,3 +2585,5 @@ lockdown_revoke_failed: "Telegram ने लिंक रद्द करने 
 lockdown_revoke_no_rights: "लिंक रद्द करने के लिए मुझे लॉक किए गए ग्रुप में लिंक से उपयोगकर्ताओं को आमंत्रित करने का अधिकार चाहिए। कुछ नहीं बदला।"
 lockdown_revoke_not_found: "Telegram के अनुसार यह लिंक अब काम नहीं करता या इसे मैंने नहीं बनाया। इसे Telegram में ग्रुप के आमंत्रण लिंक में जाकर रद्द करें।"
 lockdown_revoke_busy: "Telegram अभी मुझ पर रेट लिमिट लगा रहा है। कुछ नहीं बदला। एक मिनट बाद फिर कोशिश करें।"
+lockdown_reminder_title: "⏰ <b>{group} अभी भी लॉक है</b>, {since} से।"
+lockdown_reminder_counts: "अब तक हटाए गए नए सदस्य: {removed}। अभी लंबित: {pending}।"
