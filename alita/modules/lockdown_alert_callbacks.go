@@ -196,10 +196,21 @@ func (m moduleStruct) lockdownLiftConfirm(
 
 	name := lockdownCapRunes(staffFullName(&query.From), lockdownNameMaxRunes)
 	res := liftLockdownRow(context.Background(), b, ld, query.From.Id, name)
-	if res.Outcome != lockdownLiftDone {
-		// The outcomes other than a done lift are told on the card by the next step.
-		log.Warnf("[Lockdown] lift of lockdown %d from its alert ended with outcome %d", ld.ID, res.Outcome)
-		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_check_failed"))
+	switch res.Outcome {
+	case lockdownLiftRestoreFailed:
+		editStaffCallbackMessage(b, query, lockdownGroupText(tr, "lockdown_alert_restore_failed", ld))
+		return ext.EndGroups
+	case lockdownLiftRecordFailed:
+		editStaffCallbackMessage(b, query, lockdownGroupText(tr, "lockdown_alert_record_failed", ld))
+		return ext.EndGroups
+	case lockdownLiftLost:
+		// Another admin recorded the lift first; who and when are read fresh.
+		current, err := lockdown.GetFresh(ld.ID)
+		if err != nil || current == nil {
+			log.Warnf("[Lockdown] lockdown %d could not be read after a lost lift: %v", ld.ID, err)
+			current = ld
+		}
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, current, true))
 		return ext.EndGroups
 	}
 
@@ -241,6 +252,6 @@ func (m moduleStruct) lockdownCardCancel(
 		return ext.EndGroups
 	}
 	answerStaffCallback(b, query, "", false)
-	editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_check_failed"))
+	editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_cancelled"))
 	return ext.EndGroups
 }
