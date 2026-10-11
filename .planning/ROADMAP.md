@@ -223,7 +223,7 @@ Plans:
   4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
   5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
 
-**Plans:** 6/14 plans executed
+**Plans:** 7/14 plans executed
 
 Plans:
 **Wave 1**
@@ -243,7 +243,7 @@ Plans:
 - [x] 05-06-PLAN.md: The alert in the log channel (admin category) with a working Lift; delivery retries, rate limits, stale claims, concurrent replicas, the settle path
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 05-07-PLAN.md: The burst on the alert: the tracker snapshot saved with the lockdown, up to 10 accounts with name, @username and ID, bots marked, the trigger's counts
+- [x] 05-07-PLAN.md: The burst on the alert: the tracker snapshot saved with the lockdown, up to 10 accounts with name, @username and ID, bots marked, the trigger's counts
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 05-08-PLAN.md: The ban policy core: per-account decision and ban with no end date, admins, approved users, people an admin let in (D-22) and the bot skipped, safe beside the worker and the lift; ban run storage
@@ -338,7 +338,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
-| 5. Lockdown Alerts and Response | 6/14 | In Progress|  |
+| 5. Lockdown Alerts and Response | 7/14 | In Progress|  |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
