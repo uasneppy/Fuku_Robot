@@ -76,6 +76,8 @@ Out of scope:
 - **D-20 (refines D-01):** The log channel copy of the alert respects that channel's `admin` log category switch, as staff log posts do. The Staff Group copy is always sent.
 - **D-21 (refines D-09, Claude's call on the research recommendation):** Declined join-request rows are included in "Ban N recent joiners" and reported separately in the result.
 
+- **D-22 (refines D-09, owner, 2026-10-11):** "Ban N recent joiners" skips every joiner the lockdown recorded as exempt, meaning one a live creator or administrator, or an anonymous admin, added or approved (Phase 4 D-07/D-24). These joiners are reported as skipped with the reason "let in by an admin". This applies on top of D-09's live admin, approved-user and bot exclusions.
+
 ### Claude's Discretion
 - The table and column layout for alert messages and reminder bookkeeping, following the append-only migration rules. The existing `chat_lockdowns.trigger_kind` and the joiner rows' `invite_link`, `first_name`, `username` and `is_bot` are already there for this.
 - The callback namespace and the token scheme, within the 64-byte `callbackcodec` cap. Callback data carries only IDs or tokens.
