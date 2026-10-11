@@ -44,12 +44,12 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 		return ext.EndGroups
 	}
 
-	id, err := strconv.ParseUint(fields["r"], 10, 63)
-	if err != nil || id == 0 {
+	id, ok := lockdownParseCopyID(fields)
+	if !ok {
 		answerStaffCallback(b, query, lockdownText(fallback, "lockdown_alert_expired"), false)
 		return ext.EndGroups
 	}
-	slot, err := lockdown.GetAlertSlotFresh(uint(id))
+	slot, err := lockdown.GetAlertSlotFresh(id)
 	if err != nil {
 		answerStaffCallback(b, query, lockdownText(fallback, "lockdown_alert_check_failed"), true)
 		return ext.EndGroups
@@ -92,6 +92,40 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 	}
 	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
 	return ext.EndGroups
+}
+
+// lockdownParseCopyID reads the alert copy row ID r: an integer from 1 to the largest
+// 63-bit value. Anything else is not ok, and the dispatcher answers it as no longer valid
+// before any read.
+func lockdownParseCopyID(fields map[string]string) (uint, bool) {
+	id, err := strconv.ParseUint(fields["r"], 10, 63)
+	if err != nil || id == 0 {
+		return 0, false
+	}
+	return uint(id), true
+}
+
+// lockdownParseAsker reads the asker u: a positive 63-bit integer.
+func lockdownParseAsker(fields map[string]string) (int64, bool) {
+	asker, err := strconv.ParseInt(fields["u"], 10, 64)
+	if err != nil || asker <= 0 {
+		return 0, false
+	}
+	return asker, true
+}
+
+// lockdownParseCardFields reads a Confirm card's asker u and expiry e (unix minutes).
+// Both must be positive 63-bit integers; anything else is not ok.
+func lockdownParseCardFields(fields map[string]string) (asker int64, expiryMinute int64, ok bool) {
+	asker, ok = lockdownParseAsker(fields)
+	if !ok {
+		return 0, 0, false
+	}
+	expiryMinute, err := strconv.ParseInt(fields["e"], 10, 64)
+	if err != nil || expiryMinute <= 0 {
+		return 0, 0, false
+	}
+	return asker, expiryMinute, true
 }
 
 // lockdownStalePress answers a press on any button of a lockdown that is lifting or
@@ -220,8 +254,19 @@ func (m moduleStruct) lockdownLiftConfirm(
 	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
 	ld *models.ChatLockdown, fields map[string]string,
 ) error {
-	if fields["u"] != strconv.FormatInt(query.From.Id, 10) {
+	asker, expiryMinute, ok := lockdownParseCardFields(fields)
+	if !ok {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
+		return ext.EndGroups
+	}
+	if asker != query.From.Id {
 		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_not_yours"), true)
+		return ext.EndGroups
+	}
+	// Expiry is lazy: the minute travels in the data, no timer and no Redis key.
+	if expiryMinute < time.Now().Unix()/60 {
+		answerStaffCallback(b, query, "", false)
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_card_expired"))
 		return ext.EndGroups
 	}
 	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_working"), false)
@@ -288,7 +333,12 @@ func lockdownPostLiftNotice(b *gotgbot.Bot, ld *models.ChatLockdown, text string
 func (m moduleStruct) lockdownCardCancel(
 	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator, fields map[string]string,
 ) error {
-	if fields["u"] != strconv.FormatInt(query.From.Id, 10) {
+	asker, ok := lockdownParseAsker(fields)
+	if !ok {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
+		return ext.EndGroups
+	}
+	if asker != query.From.Id {
 		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_not_yours"), true)
 		return ext.EndGroups
 	}
