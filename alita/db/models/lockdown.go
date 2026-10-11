@@ -83,8 +83,14 @@ type ChatLockdown struct {
 	LiftStartedAt     *time.Time `gorm:"column:lift_started_at" json:"lift_started_at,omitempty"`
 	LiftedAt          *time.Time `gorm:"column:lifted_at" json:"lifted_at,omitempty"`
 	ManualChange      bool       `gorm:"column:manual_change;not null;default:false" json:"manual_change,omitempty"`
-	CreatedAt         time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt         time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	// ChatTitle is the locked group's title when the lockdown started, so an alert
+	// names the group without a getChat. Empty for a lockdown from before it was kept.
+	ChatTitle string `gorm:"column:chat_title;not null;default:''" json:"chat_title,omitempty"`
+	// AlertStartedAt is when the lockdown's alert was decided. It is the exactly-once
+	// gate (lockdown.BeginAlert): nil until the one conditional update that decides it.
+	AlertStartedAt *time.Time `gorm:"column:alert_started_at" json:"alert_started_at,omitempty"`
+	CreatedAt      time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
 
 // TableName returns the migration's table name for ChatLockdown.
@@ -120,4 +126,64 @@ type LockdownJoiner struct {
 // TableName returns the migration's table name for LockdownJoiner.
 func (LockdownJoiner) TableName() string {
 	return "chat_lockdown_joiners"
+}
+
+// Kinds of a lockdown alert copy, as stored in chat_lockdown_alerts.kind.
+const (
+	// AlertKindAlert is the first alert of a lockdown.
+	AlertKindAlert = "alert"
+	// AlertKindReminder is a later reminder that the lockdown still runs.
+	AlertKindReminder = "reminder"
+)
+
+// Destinations of a lockdown alert copy, as stored in chat_lockdown_alerts.dest.
+const (
+	// AlertDestStaff is the Staff Group the locked group is linked to.
+	AlertDestStaff = "staff"
+	// AlertDestLog is the locked group's own log channel.
+	AlertDestLog = "log"
+)
+
+// States of a lockdown alert copy, as stored in chat_lockdown_alerts.state.
+const (
+	// AlertStatePending means the copy was planned and is waiting to be posted.
+	AlertStatePending = "pending"
+	// AlertStatePosting means a worker claimed the copy and its send is running.
+	AlertStatePosting = "posting"
+	// AlertStatePosted means the copy was sent; message_id and body are what was sent.
+	AlertStatePosted = "posted"
+	// AlertStateFailed means the copy could not be sent and will not be tried again.
+	AlertStateFailed = "failed"
+)
+
+// ChatLockdownAlert is one copy of a lockdown's alert or reminder in one
+// destination. The slot (LockdownID, Kind, Seq, Dest) is unique, so a copy is never
+// planned twice. MessageID and Body are what was posted, kept so a later edit starts
+// from exactly the text that was sent. The row is never cached and never part of
+// backup, export, import or reset; its link to the lockdown exists in SQL only.
+type ChatLockdownAlert struct {
+	ID          uint       `gorm:"primaryKey;autoIncrement" json:"-"`
+	LockdownID  uint       `gorm:"column:lockdown_id;not null;uniqueIndex:uk_chat_lockdown_alerts_slot,priority:1;index:idx_chat_lockdown_alerts_lockdown_state,priority:1" json:"lockdown_id,omitempty"`
+	ChatID      int64      `gorm:"column:chat_id;not null" json:"chat_id,omitempty"`
+	Kind        string     `gorm:"column:kind;size:8;not null;uniqueIndex:uk_chat_lockdown_alerts_slot,priority:2;check:chk_chat_lockdown_alert_kind,kind IN ('alert','reminder')" json:"kind,omitempty"`
+	Seq         int        `gorm:"column:seq;not null;default:0;uniqueIndex:uk_chat_lockdown_alerts_slot,priority:3" json:"seq,omitempty"`
+	Dest        string     `gorm:"column:dest;size:8;not null;uniqueIndex:uk_chat_lockdown_alerts_slot,priority:4;check:chk_chat_lockdown_alert_dest,dest IN ('staff','log')" json:"dest,omitempty"`
+	DestChatID  int64      `gorm:"column:dest_chat_id;not null" json:"dest_chat_id,omitempty"`
+	State       string     `gorm:"column:state;size:8;not null;default:'pending';index:idx_chat_lockdown_alerts_lockdown_state,priority:2;index:idx_chat_lockdown_alerts_state;check:chk_chat_lockdown_alert_state,state IN ('pending','posting','posted','failed')" json:"state,omitempty"`
+	MessageID   int64      `gorm:"column:message_id;not null;default:0" json:"message_id,omitempty"`
+	Body        string     `gorm:"column:body;not null;default:''" json:"body,omitempty"`
+	Link        string     `gorm:"column:link;not null;default:''" json:"link,omitempty"`
+	ButtonsLive bool       `gorm:"column:buttons_live;not null;default:true" json:"buttons_live,omitempty"`
+	EditPending bool       `gorm:"column:edit_pending;not null;default:false" json:"edit_pending,omitempty"`
+	ClosedAt    *time.Time `gorm:"column:closed_at" json:"closed_at,omitempty"`
+	Attempts    int        `gorm:"column:attempts;not null;default:0" json:"attempts,omitempty"`
+	ClaimedAt   *time.Time `gorm:"column:claimed_at" json:"claimed_at,omitempty"`
+	Detail      string     `gorm:"column:detail;not null;default:''" json:"detail,omitempty"`
+	CreatedAt   time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+// TableName returns the migration's table name for ChatLockdownAlert.
+func (ChatLockdownAlert) TableName() string {
+	return "chat_lockdown_alerts"
 }

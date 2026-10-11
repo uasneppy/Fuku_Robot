@@ -2531,3 +2531,5 @@ lockdown_lift_tally_kept: "{count} को जैसा था वैसा ह�
 lockdown_lift_tally_expired: "{count} अब बैन नहीं थे: जुड़ते समय मैंने उन्हें जो 330 दिन का बैन दिया था वह पहले ही खत्म हो चुका था, इसलिए उन्हें जैसा था वैसा ही छोड़ा गया।"
 lockdown_lift_tally_failed: "⚠️ मैं {count} को अनबैन नहीं कर सका:"
 lockdown_lift_tally_more: "…और {count} और।"
+lockdown_alert_title: "🚨 <b>{group} में लॉकडाउन</b>"
+lockdown_alert_trigger_manual: "{name} ने {time} पर /lockdown से शुरू किया।"

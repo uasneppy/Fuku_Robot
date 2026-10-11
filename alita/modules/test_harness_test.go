@@ -363,6 +363,7 @@ func TestMain(m *testing.M) {
 		&models.StaffActionGroup{},
 		&models.ChatLockdown{},
 		&models.LockdownJoiner{},
+		&models.ChatLockdownAlert{},
 	); err != nil {
 		fmt.Printf("AutoMigrate failed: %v\n", err)
 		os.Exit(1)

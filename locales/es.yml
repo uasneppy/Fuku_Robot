@@ -2854,3 +2854,5 @@ lockdown_lift_tally_kept: "{count} se dejaron como están porque alguien ya las 
 lockdown_lift_tally_expired: "{count} ya no estaban baneadas: el baneo de 330 días que les puse al unirse ya había terminado, así que las dejé como están."
 lockdown_lift_tally_failed: "⚠️ No pude desbanear a {count}:"
 lockdown_lift_tally_more: "…y {count} más."
+lockdown_alert_title: "🚨 <b>Bloqueo en {group}</b>"
+lockdown_alert_trigger_manual: "Iniciado con /lockdown por {name} a las {time}."

@@ -186,6 +186,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the guard never needs Redis, and the pacer falls back to one replica's interval. Nothing but a confirmed
   `/unlockdown` ever ends a lockdown: no TTL, timer, Redis expiry, restart, worker cycle or expired ban lifts one, and
   `BeginLift` is reached only through `lockdownBeginLift` in `unlockdown`.
+- `chat_lockdown_alerts` and the `chat_lockdowns` columns `chat_title` and `alert_started_at` (migration
+  20261011120000) are the lockdown alerts. They are read only through fresh queries, never cached (so no `DeleteCache`
+  applies), and never part of backup/export/import/reset. One row per posted copy, unique on
+  `(lockdown_id, kind, seq, dest)`; `message_id` and `body` are the exact text posted, so later edits start from it. The
+  alert of a lockdown is decided once by the conditional `lockdown.BeginAlert` (`alert_started_at IS NULL`, in a
+  transaction that also creates the copy rows), run only by the lockdown worker (`lockdownPlanAlerts`) for every
+  confirmed active lockdown without `alert_started_at`, so `/lockdown`, the settle step and a restart share one path
+  (`/lockdown` only wakes the worker). A group with no Staff Group link still gets stamped, so a link made later never
+  receives an old alert. Copies are claimed with a conditional update and posted through `lockdownPaced`
+  (`lockdownPostAlerts`); only a pending copy of an active lockdown is listed, so a lifted lockdown's copy is never
+  sent. The locked group itself never gets an alert, and `chat_title` is stored at `lockdown.Start` (empty before this
+  migration, shown as the chat ID).
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -392,7 +404,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The three harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
   `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown models
   are in `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` and `alita/db/lockdown/testmain_test.go`
-  (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
+  (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows. The Phase 5 models (`ChatLockdownAlert`
+  and later) are added to the harness lists of the packages whose tests use them, today `alita/modules/test_harness_test.go`.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 
 ## Commits

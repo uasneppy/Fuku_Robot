@@ -2591,3 +2591,5 @@ lockdown_lift_tally_kept: "Оставлено без изменений: {count}
 lockdown_lift_tally_expired: "Уже не были забанены: {count} — их бан на 330 дней, выданный при входе, уже истёк, поэтому я оставил их как есть."
 lockdown_lift_tally_failed: "⚠️ Не удалось разбанить ({count}):"
 lockdown_lift_tally_more: "…и ещё {count}."
+lockdown_alert_title: "🚨 <b>Блокировка в {group}</b>"
+lockdown_alert_trigger_manual: "Запущено командой /lockdown: {name}, {time}."

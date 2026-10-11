@@ -1,0 +1,200 @@
+package lockdown
+
+// Lockdown alert state (chat_lockdowns.alert_started_at, chat_lockdown_alerts) is
+// operational state shared by every replica's worker. It is always read fresh from the
+// database and never cached, so no cache key is read here and none needs
+// invalidation. Writes use db.DB without a request context, so a cancelled context
+// never loses a record write, and every claim or move is one conditional update whose
+// RowsAffected == 1 says which caller won.
+
+import (
+	"errors"
+
+	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
+
+	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/models"
+	alitaerrors "github.com/divkix/Alita_Robot/alita/utils/errors"
+)
+
+// AlertPlan is what one lockdown's alert decision creates: one copy row per
+// destination. Slots must carry LockdownID, ChatID, Kind, Seq, Dest and DestChatID;
+// BeginAlert makes them pending.
+type AlertPlan struct {
+	Slots []models.ChatLockdownAlert
+}
+
+// BeginAlert decides the alert of a lockdown exactly once. One conditional update sets
+// alert_started_at while the lockdown is active, its lock confirmed and no alert was
+// decided yet; the caller whose update matched (RowsAffected == 1) creates every slot
+// of the plan in the same transaction, so a lockdown is never decided without its
+// copies and never decided twice, on any replica. false with no error means another
+// caller decided it first (or the lockdown is not eligible) and nothing was written. A
+// plan with no slots still stamps the lockdown, so a destination that appears later
+// never gets a stale alert.
+func BeginAlert(lockdownID uint, plan AlertPlan) (bool, error) {
+	won := false
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		won = false
+		stamp := now()
+		result := tx.Model(&models.ChatLockdown{}).
+			Where("id = ? AND state = ? AND locked_at IS NOT NULL AND alert_started_at IS NULL",
+				lockdownID, models.LockdownStateActive).
+			Updates(map[string]any{"alert_started_at": stamp, "updated_at": stamp})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
+		for i := range plan.Slots {
+			slot := plan.Slots[i]
+			slot.ID = 0
+			slot.LockdownID = lockdownID
+			slot.State = models.AlertStatePending
+			slot.CreatedAt = stamp
+			slot.UpdatedAt = stamp
+			if err := tx.Create(&slot).Error; err != nil {
+				return err
+			}
+		}
+		won = true
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Lockdown] BeginAlert: %v", err)
+		return false, alitaerrors.Wrapf(err, "begin alert of lockdown %d", lockdownID)
+	}
+	return won, nil
+}
+
+// ListAlertsToPlanFresh reads up to limit active lockdowns whose lock Telegram
+// confirmed and whose alert was not decided yet, oldest ID first, straight from the
+// database.
+func ListAlertsToPlanFresh(limit int) ([]models.ChatLockdown, error) {
+	var rows []models.ChatLockdown
+	err := db.DB.
+		Where("state = ? AND locked_at IS NOT NULL AND alert_started_at IS NULL", models.LockdownStateActive).
+		Order("id").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListAlertsToPlanFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list lockdowns whose alert is not decided")
+	}
+	return rows, nil
+}
+
+// ListPendingAlertSlotsFresh reads up to limit pending copy rows of active lockdowns,
+// oldest ID first, straight from the database. A lockdown that is lifting or lifted
+// has no pending copy listed, so a copy planned before a lift is never sent after it.
+func ListPendingAlertSlotsFresh(limit int) ([]models.ChatLockdownAlert, error) {
+	var rows []models.ChatLockdownAlert
+	err := db.DB.
+		Where("state = ? AND lockdown_id IN (SELECT id FROM chat_lockdowns WHERE state = ?)",
+			models.AlertStatePending, models.LockdownStateActive).
+		Order("id").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListPendingAlertSlotsFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list pending alert copies")
+	}
+	return rows, nil
+}
+
+// GetAlertSlotFresh reads one copy row by its ID straight from the database. It
+// returns (nil, nil) when there is no such row.
+func GetAlertSlotFresh(id uint) (*models.ChatLockdownAlert, error) {
+	var row models.ChatLockdownAlert
+	err := db.DB.Where("id = ?", id).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		log.Errorf("[Lockdown] GetAlertSlotFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "get alert copy %d", id)
+	}
+	return &row, nil
+}
+
+// ClaimAlertSlot moves a copy from pending to posting and stamps claimed_at, in one
+// conditional update, and reports whether this call won the claim.
+func ClaimAlertSlot(id uint) (bool, error) {
+	stamp := now()
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ?", id, models.AlertStatePending).
+		Updates(map[string]any{"state": models.AlertStatePosting, "claimed_at": stamp, "updated_at": stamp})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ClaimAlertSlot: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "claim alert copy %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// RecordAlertPosted records a sent copy: it moves a posting row to posted and stores
+// the message ID, the exact text sent and the link shown in it, with the attempt
+// counter back at zero and the claim and detail cleared. It reports whether this call
+// moved the row.
+func RecordAlertPosted(id uint, messageID int64, body, link string) (bool, error) {
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ?", id, models.AlertStatePosting).
+		Updates(map[string]any{
+			"state":      models.AlertStatePosted,
+			"message_id": messageID,
+			"body":       body,
+			"link":       link,
+			"attempts":   0,
+			"claimed_at": nil,
+			"detail":     "",
+			"updated_at": now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] RecordAlertPosted: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "record posted alert copy %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// ReleaseAlertSlot gives a claimed copy back: posting to pending, claim cleared, detail
+// replaced. countAttempt adds one to the attempt counter. It reports whether this call
+// moved the row.
+func ReleaseAlertSlot(id uint, detail string, countAttempt bool) (bool, error) {
+	updates := map[string]any{
+		"state":      models.AlertStatePending,
+		"claimed_at": nil,
+		"detail":     detail,
+		"updated_at": now(),
+	}
+	if countAttempt {
+		updates["attempts"] = gorm.Expr("attempts + 1")
+	}
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ?", id, models.AlertStatePosting).
+		Updates(updates)
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ReleaseAlertSlot: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "release alert copy %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// FailAlertSlot ends a claimed copy for good: posting to failed, claim cleared, detail
+// replaced, one attempt counted. It reports whether this call moved the row.
+func FailAlertSlot(id uint, detail string) (bool, error) {
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ?", id, models.AlertStatePosting).
+		Updates(map[string]any{
+			"state":      models.AlertStateFailed,
+			"claimed_at": nil,
+			"detail":     detail,
+			"attempts":   gorm.Expr("attempts + 1"),
+			"updated_at": now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] FailAlertSlot: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "fail alert copy %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}

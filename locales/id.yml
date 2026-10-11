@@ -2844,3 +2844,5 @@ lockdown_lift_tally_kept: "{count} dibiarkan apa adanya karena seseorang sudah m
 lockdown_lift_tally_expired: "{count} sudah tidak diblokir: ban 330 hari yang saya berikan saat mereka bergabung sudah habis, jadi saya biarkan apa adanya."
 lockdown_lift_tally_failed: "⚠️ Saya tidak bisa meng-unban {count}:"
 lockdown_lift_tally_more: "…dan {count} lainnya."
+lockdown_alert_title: "🚨 <b>Lockdown di {group}</b>"
+lockdown_alert_trigger_manual: "Dimulai dengan /lockdown oleh {name} pada {time}."

@@ -36,6 +36,8 @@ const (
 	lockdownReasonMaxRunes = 300
 	// lockdownNameMaxRunes caps a name stored on a lockdown row.
 	lockdownNameMaxRunes = 64
+	// lockdownTitleMaxRunes caps the group title stored on a lockdown row.
+	lockdownTitleMaxRunes = 128
 	// lockdownLiveCheckTimeout bounds the live getChatMember of the command's sender.
 	lockdownLiveCheckTimeout = 5 * time.Second
 )
@@ -353,6 +355,7 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		Reason:            lockdownReasonFromArgs(lockdownCommandArgs(ctx)),
 		StartedBy:         actor.Id,
 		StartedByName:     name,
+		ChatTitle:         lockdownCapRunes(chat.Title, lockdownTitleMaxRunes),
 		PrePermissions:    string(chatInfo.Permissions),
 		LockedPermissions: lockdownLockedPermissions,
 	}
@@ -389,6 +392,9 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Errorf("[Lockdown] lockdown %d is locked but not confirmed: %v", row.ID, retryErr)
 		}
 	}
+	// The alert is decided and posted by the worker, so a lock confirmed here, one
+	// confirmed by the settle step and a crash in between are one code path.
+	wakeLockdownWorker()
 
 	parts := []string{
 		lockdownText(tr, "lockdown_started"),
