@@ -579,7 +579,7 @@ func TestBanRunStart(t *testing.T) {
 		}
 	})
 
-	t.Run("finish, tally, card and listings", func(t *testing.T) {
+	t.Run("finish, tally and listings", func(t *testing.T) {
 		ld := raidLockdown(t)
 		run := newBanRun(ld)
 		if started, queued, err := StartBanRun(run, nil); err != nil || !started || queued != 4 {
@@ -643,13 +643,6 @@ func TestBanRunStart(t *testing.T) {
 		}
 		if got := readBanRun(t, run.ID); got.State != models.BanRunStateDone || got.FinishedAt == nil {
 			t.Errorf("run = %q, finished %v, want done with a finish time", got.State, got.FinishedAt)
-		}
-
-		if err := SetBanRunCard(run.ID, -100123, 4242); err != nil {
-			t.Fatalf("SetBanRunCard: %v", err)
-		}
-		if got := readBanRun(t, run.ID); got.CardChatID != -100123 || got.CardMsgID != 4242 {
-			t.Errorf("run card = %d / %d, want -100123 / 4242", got.CardChatID, got.CardMsgID)
 		}
 	})
 }

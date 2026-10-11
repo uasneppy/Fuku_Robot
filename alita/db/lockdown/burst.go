@@ -247,18 +247,6 @@ func ListRunningBanRunsFresh() ([]models.ChatLockdownBanRun, error) {
 	return runs, nil
 }
 
-// SetBanRunCard stores where the run's progress card was posted.
-func SetBanRunCard(runID uint, chatID, msgID int64) error {
-	result := db.DB.Model(&models.ChatLockdownBanRun{}).
-		Where("id = ?", runID).
-		Updates(map[string]any{"card_chat_id": chatID, "card_msg_id": msgID, "updated_at": now()})
-	if result.Error != nil {
-		log.Errorf("[Lockdown] SetBanRunCard: %v", result.Error)
-		return alitaerrors.Wrapf(result.Error, "set the card of ban run %d", runID)
-	}
-	return nil
-}
-
 // FinishBanRun moves a running ban run to state (done or stopped) with its finish time,
 // in one conditional update that matches only while the run is running, so a run
 // finishes exactly once. Done also requires that no burst row of the run is queued or
