@@ -29,7 +29,7 @@ const (
 	lockdownBanSkipSelf = "bot_self"
 	// lockdownBanSkipLetIn is the reason of an account the lockdown recorded as exempt,
 	// because a live creator or administrator (or an anonymous admin) let them in.
-	lockdownBanSkipLetIn = "let_in"
+	lockdownBanSkipLetIn = models.BurstReasonLetIn
 	// lockdownBanReasonRequest marks a banned burst row whose account was a join request
 	// the lockdown declined, so the report can say so.
 	lockdownBanReasonRequest = "request"

@@ -249,6 +249,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   has no pre row (any state), with the counts behind them; names, usernames and IDs are escaped and spliced in after the
   translator. The response columns (`state`, `reason`, `detail`, `run_id`, `attempts`, `claimed_at`) are moved by the
   ban run, not by the alert.
+- `chat_lockdown_ban_runs` (migration 20261011140000) is one row per "Ban N recent joiners" run. One running run per
+  lockdown is the `uk_chat_lockdown_ban_runs_running` partial unique index plus `lockdown.StartBanRun`'s
+  `ON CONFLICT DO NOTHING` (a refused insert writes nothing). It is read fresh, never cached (so no `DeleteCache`
+  applies), and never part of backup/export/import/reset. A run queues only unhandled burst rows (state `''`) that are
+  not approved users or the bot (the caller passes them as `exclude`), copies the lockdown's joiner rows into the burst
+  first, and marks the unhandled rows of joiners recorded exempt skipped `let_in`; rows an earlier run handled are never
+  touched. A run with nothing to queue is done at once, `FinishBanRun` finishes a run exactly once (done only while no
+  row of the run is queued or acting), and `ReleaseStaleBurstClaims` returns a dead worker's acting rows to the queue.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
