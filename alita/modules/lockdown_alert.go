@@ -52,6 +52,10 @@ const (
 	lockdownActLiftConfirm = "lc"
 	// lockdownActCancel is the confirm card's Cancel button.
 	lockdownActCancel = "x"
+	// lockdownActBanAsk is the alert's Ban N recent joiners button.
+	lockdownActBanAsk = "bn"
+	// lockdownActBanConfirm is the Ban confirm card's Confirm button.
+	lockdownActBanConfirm = "bc"
 )
 
 // lockdownCardLifetime is how long a confirm card's Confirm button stays valid. It is
@@ -59,23 +63,59 @@ const (
 // works with Redis down. A variable so a test can shorten it.
 var lockdownCardLifetime = 5 * time.Minute
 
-// lockdownAlertKeyboard is the keyboard an alert copy is posted with: one row holding
-// the Lift lockdown button. A button whose data does not encode is left out and logged,
+// lockdownAlertKeyboard is the keyboard an alert copy is posted with: a row holding the
+// Lift lockdown button and a second row holding the Ban recent joiners button. The Ban
+// label carries the number of accounts a run started now would act on (approved users,
+// the bot and people an admin let in are left out), or a generic label when that number
+// is 0 or cannot be read. A button whose data does not encode is left out and logged,
 // because a dead button is never sent; with no button left it returns nil.
-func lockdownAlertKeyboard(tr *i18n.Translator, slot *models.ChatLockdownAlert, ld *models.ChatLockdown) *gotgbot.InlineKeyboardMarkup {
-	data := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+func lockdownAlertKeyboard(b *gotgbot.Bot, tr *i18n.Translator, slot *models.ChatLockdownAlert, ld *models.ChatLockdown) *gotgbot.InlineKeyboardMarkup {
+	copyID := strconv.FormatUint(uint64(slot.ID), 10)
+	var rows [][]gotgbot.InlineKeyboardButton
+
+	if data := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
 		"a": lockdownActLiftAsk,
-		"r": strconv.FormatUint(uint64(slot.ID), 10),
-	})
-	if data == "" {
+		"r": copyID,
+	}); data != "" {
+		rows = append(rows, []gotgbot.InlineKeyboardButton{
+			{Text: lockdownText(tr, "lockdown_alert_btn_lift"), CallbackData: data},
+		})
+	} else {
 		log.Errorf("[Lockdown] the Lift button of alert copy %d (lockdown %d) did not encode and is left out", slot.ID, ld.ID)
+	}
+
+	if data := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+		"a": lockdownActBanAsk,
+		"r": copyID,
+	}); data != "" {
+		rows = append(rows, []gotgbot.InlineKeyboardButton{
+			{Text: lockdownBanButtonLabel(b, tr, ld), CallbackData: data},
+		})
+	} else {
+		log.Errorf("[Lockdown] the Ban button of alert copy %d (lockdown %d) did not encode and is left out", slot.ID, ld.ID)
+	}
+
+	if len(rows) == 0 {
 		return nil
 	}
-	return &gotgbot.InlineKeyboardMarkup{
-		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{
-			{Text: lockdownText(tr, "lockdown_alert_btn_lift"), CallbackData: data},
-		}},
+	return &gotgbot.InlineKeyboardMarkup{InlineKeyboard: rows}
+}
+
+// lockdownBanButtonLabel is the Ban button's text: the candidate count when it is above
+// 0, the generic label when it is 0 or the approved users or the count cannot be read.
+func lockdownBanButtonLabel(b *gotgbot.Bot, tr *i18n.Translator, ld *models.ChatLockdown) string {
+	excluded, err := lockdownBanExcluded(b, ld.ChatID)
+	if err != nil {
+		log.Warnf("[Lockdown] the approved users of chat %d could not be read for the Ban button: %v", ld.ChatID, err)
+		return lockdownText(tr, "lockdown_alert_btn_ban_any")
 	}
+	count, err := lockdown.CountBanCandidatesFresh(ld.ID, excluded)
+	if err != nil || count <= 0 {
+		return lockdownText(tr, "lockdown_alert_btn_ban_any")
+	}
+	return lockdownText(tr, "lockdown_alert_btn_ban", i18n.TranslationParams{
+		"count": strconv.FormatInt(count, 10),
+	})
 }
 
 // lockdownLogChat is the locked group as actionlog.Destination wants it, to resolve the
@@ -412,7 +452,7 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 		ParseMode:          formatting.HTML,
 		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
 	}
-	if keyboard := lockdownAlertKeyboard(tr, slot, ld); keyboard != nil {
+	if keyboard := lockdownAlertKeyboard(b, tr, slot, ld); keyboard != nil {
 		opts.ReplyMarkup = *keyboard
 	}
 	var sent *gotgbot.Message
