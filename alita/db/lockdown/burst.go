@@ -8,6 +8,7 @@ package lockdown
 
 import (
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -32,6 +33,46 @@ type BurstAccount struct {
 type BurstCounts struct {
 	Before int64
 	Since  int64
+}
+
+// ClaimBurst moves a burst row from one state to another and stamps claimed_at, in one
+// conditional update that matches only while the row is still in the from state. It
+// reports whether this call won the claim, so one worker handles an account exactly once.
+func ClaimBurst(id uint, from, to string) (bool, error) {
+	stamp := now()
+	result := db.DB.Model(&models.ChatLockdownBurst{}).
+		Where("id = ? AND state = ?", id, from).
+		Updates(map[string]any{"state": to, "claimed_at": stamp, "updated_at": stamp})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ClaimBurst: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "claim burst row %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// MoveBurst moves a burst row from one state to another in one conditional update that
+// matches only while the row is in the from state, and releases its claim. reason and
+// detail replace the stored ones. countAttempt adds one to the attempt counter. It
+// reports whether this call moved the row.
+func MoveBurst(id uint, from, to, reason, detail string, countAttempt bool) (bool, error) {
+	updates := map[string]any{
+		"state":      to,
+		"reason":     reason,
+		"detail":     detail,
+		"claimed_at": nil,
+		"updated_at": now(),
+	}
+	if countAttempt {
+		updates["attempts"] = gorm.Expr("attempts + 1")
+	}
+	result := db.DB.Model(&models.ChatLockdownBurst{}).
+		Where("id = ? AND state = ?", id, from).
+		Updates(updates)
+	if result.Error != nil {
+		log.Errorf("[Lockdown] MoveBurst: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "move burst row %d from %s to %s", id, from, to)
+	}
+	return result.RowsAffected == 1, nil
 }
 
 // BurstSampleFresh reads the burst of a lockdown straight from the database: the first

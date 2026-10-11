@@ -6,6 +6,7 @@ package lockdown
 // matter how many replicas run a worker.
 
 import (
+	"errors"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -181,6 +182,21 @@ func CountJoinersWithDetail(lockdownID uint, state, detail string) (int64, error
 		return 0, alitaerrors.Wrapf(err, "count joiners of lockdown %d in state %s", lockdownID, state)
 	}
 	return count, nil
+}
+
+// GetJoinerOfUserFresh reads the joiner row the lockdown recorded for one user, straight
+// from the database. It returns (nil, nil) when the lockdown has none.
+func GetJoinerOfUserFresh(lockdownID uint, userID int64) (*models.LockdownJoiner, error) {
+	var row models.LockdownJoiner
+	err := db.DB.Where("lockdown_id = ? AND user_id = ?", lockdownID, userID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		log.Errorf("[Lockdown] GetJoinerOfUserFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "read joiner %d of lockdown %d", userID, lockdownID)
+	}
+	return &row, nil
 }
 
 // ListJoinersInState reads up to limit joiner rows of one lockdown in one state,

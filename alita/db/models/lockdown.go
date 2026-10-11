@@ -52,6 +52,11 @@ const (
 // it, so it is a kept row with this detail, which is never Telegram's escaped text.
 const JoinerDetailBanExpired = "ban_expired"
 
+// JoinerDetailResponseBan is the detail of a kept joiner row that "Ban N recent
+// joiners" banned for good, with no end date. The lift leaves such an account banned
+// and counts it as left alone on purpose, and /lockdownstatus still counts it as removed.
+const JoinerDetailResponseBan = "response_ban"
+
 // How a joiner reached the group, as stored in chat_lockdown_joiners.join_path.
 const (
 	// JoinPathMember is the chat_member update.

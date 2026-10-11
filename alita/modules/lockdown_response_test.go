@@ -299,9 +299,14 @@ func TestLockdownResponseBanOne(t *testing.T) {
 		}
 
 		self := env.queuedBurst(ld, env.bot.Id, models.BurstSourcePre, true)
+		// /lockdown itself looked at the bot's own rights, so count from here.
+		lookups := len(env.memberCallsOf("getChatMember", env.bot.Id))
 		env.responseBan(ld, self, nil)
-		if got := len(env.memberCallsOf("getChatMember", env.bot.Id)) + len(env.bansOf(env.bot.Id)); got != 0 {
-			t.Errorf("Telegram calls for the bot itself = %d, want none", got)
+		if got := len(env.memberCallsOf("getChatMember", env.bot.Id)) - lookups; got != 0 {
+			t.Errorf("getChatMember calls for the bot itself = %d, want none", got)
+		}
+		if got := len(env.bansOf(env.bot.Id)); got != 0 {
+			t.Errorf("banChatMember calls for the bot itself = %d, want none", got)
 		}
 		if got := env.burstRowOf(env.bot.Id); got.State != models.BurstStateSkipped || got.Reason != lockdownBanSkipSelf {
 			t.Errorf("burst row of the bot = %q / %q, want skipped / bot_self", got.State, got.Reason)
