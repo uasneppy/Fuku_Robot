@@ -2621,7 +2621,7 @@ staff_help_msg: |
 
   *En el Grupo de Staff:*
   × /staff: Muestra el ID de chat del Grupo de Staff y sus grupos vinculados. Pulsa Desvincular junto a un grupo para desvincularlo (solo el creador de ambos grupos). Pulsa Acciones recientes para ver las acciones de staff pasadas de este Grupo de Staff y cómo salió cada grupo. Una línea con 🔒 marca un grupo vinculado que está en bloqueo; sus admins pueden ver el motivo con /lockdownstatus allí.
-  Cuando un grupo vinculado entra en bloqueo, su alerta y sus recordatorios cada hora aparecen aquí, con los botones Levantar bloqueo, Banear a los recién llegados y Revocar enlace, que solo pueden usar los admins de ese grupo.
+  × Cuando un grupo vinculado entra en bloqueo, su alerta y sus recordatorios cada hora aparecen aquí, con los botones Levantar bloqueo, Banear a los recién llegados y Revocar enlace, que solo pueden usar los admins de ese grupo.
 
   *Acciones de staff (en el Grupo de Staff):*
   × /ban usuario [duración] [motivo]: Banea al usuario en todos los grupos vinculados. El usuario es un ID numérico, un @username que haya visto o una mención. La duración es un número seguido de m, h, d o w, y más de 366 días significa permanente.
@@ -2825,7 +2825,7 @@ lockdown_help_msg: |
 
   🚫 Banear a los recién llegados: banea para siempre las cuentas de la oleada, así que no podrán volver a entrar, y no puedo deshacerlo. Quedan fuera los admins, los usuarios aprobados y las personas que un admin dejó entrar. Una pulsación posterior banea solo las cuentas nuevas.
 
-  ⛔ Revocar enlace: revoca el enlace de invitación que usó la raid, si lo creé yo; los enlaces de otros admins hay que revocarlos en Telegram. Solo el creador del grupo o un admin que pueda invitar usuarios.
+  ⛔ Revocar enlace: revoca el enlace de invitación que usó la raid, si lo creé yo; los enlaces de otros admins hay que revocarlos en Telegram. Solo el creador del grupo o un admin que pueda invitar usuarios. Solo se ofrece una revocación por bloqueo; si la raid pasa a otro enlace, revócalo en los ajustes del grupo en Telegram.
 
   Cada botón pide una confirmación que solo puede dar quien lo pulsó. Pulsa los botones como tú mismo, no como admin anónimo ni como canal. Mientras el grupo siga bloqueado publico un recordatorio cada hora; los recordatorios terminan cuando se levanta el bloqueo.
 lockdown_started: "🔒 Este grupo está en bloqueo. Solo los admins pueden hablar y quien se una será expulsado hasta que un admin use /unlockdown."

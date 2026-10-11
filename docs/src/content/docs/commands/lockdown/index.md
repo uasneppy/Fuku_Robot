@@ -23,7 +23,7 @@ When this group is locked, I post an alert to its Staff Group (if it is linked) 
 
 🚫 Ban recent joiners: bans the accounts of the burst for good, so they can't rejoin, and I can't undo it. Admins, approved users and people an admin let in are left out. A later press bans only new accounts.
 
-⛔ Revoke link: revokes the invite link the raid used, if I created it; other admins' links must be revoked in Telegram. Only the group owner or an admin who can invite users.
+⛔ Revoke link: revokes the invite link the raid used, if I created it; other admins' links must be revoked in Telegram. Only the group owner or an admin who can invite users. Only one revoke is offered per lockdown; if the raid moves to another link I made, revoke it in the group's settings in Telegram.
 
 Every button asks for a confirmation that only the person who pressed it can give. Press the buttons as yourself, not as an anonymous admin or a channel. While the group stays locked I post a reminder every hour; reminders stop when the lockdown is lifted.
 

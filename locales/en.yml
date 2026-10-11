@@ -2649,7 +2649,7 @@ staff_help_msg: |
 
   *In the Staff Group:*
   × /staff: Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only). Press Recent actions to see past staff actions of this Staff Group and how each group went. A 🔒 line marks a linked group that is in lockdown; its admins can see why with /lockdownstatus there.
-  When a linked group is locked down, its alert and hourly reminders appear here, with Lift, Ban recent joiners and Revoke link buttons that only that group's admins can use.
+  × When a linked group is locked down, its alert and hourly reminders appear here, with Lift, Ban recent joiners and Revoke link buttons that only that group's admins can use.
 
   *Staff actions (in the Staff Group):*
   × /ban user [duration] [reason]: Ban the user in every linked group. The user is a numeric ID, an @username I have seen, or a mention. The duration is a number followed by m, h, d or w, and more than 366 days means permanent.
@@ -2853,7 +2853,7 @@ lockdown_help_msg: |
 
   🚫 Ban recent joiners: bans the accounts of the burst for good, so they can't rejoin, and I can't undo it. Admins, approved users and people an admin let in are left out. A later press bans only new accounts.
 
-  ⛔ Revoke link: revokes the invite link the raid used, if I created it; other admins' links must be revoked in Telegram. Only the group owner or an admin who can invite users.
+  ⛔ Revoke link: revokes the invite link the raid used, if I created it; other admins' links must be revoked in Telegram. Only the group owner or an admin who can invite users. Only one revoke is offered per lockdown; if the raid moves to another link I made, revoke it in the group's settings in Telegram.
 
   Every button asks for a confirmation that only the person who pressed it can give. Press the buttons as yourself, not as an anonymous admin or a channel. While the group stays locked I post a reminder every hour; reminders stop when the lockdown is lifted.
 lockdown_started: "🔒 This group is in lockdown. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
