@@ -2,8 +2,10 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"html"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -14,6 +16,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
+	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
 // The lockdown| buttons act on another group than the one they sit in, so nothing the
@@ -495,6 +498,36 @@ func lockdownInviteAuthority(b *gotgbot.Bot, chatID, userID int64) (ok bool, ref
 	return false, "lockdown_revoke_not_admin"
 }
 
+// lockdownRevokeRefusalKey is the locale key of the plain sentence that tells staff why a
+// revoke failed. A rate limit (the pacer refused, or Telegram kept answering 429) is
+// "busy"; an answer with code 403, or one that says the bot lacks the right, is "no
+// rights"; an answer that says the link is unknown, expired or not the bot's is "not
+// found"; anything else, a 5xx answer or a dropped connection included, is the generic
+// refusal. Telegram's raw text never reaches the card.
+func lockdownRevokeRefusalKey(err error) string {
+	if errors.Is(err, ratelimit.ErrRateLimited) {
+		return "lockdown_revoke_busy"
+	}
+	var tgErr *gotgbot.TelegramError
+	if !errors.As(err, &tgErr) {
+		return "lockdown_revoke_failed"
+	}
+	text := strings.ToLower(tgErr.Description)
+	switch {
+	case tgErr.Code == 429:
+		return "lockdown_revoke_busy"
+	case tgErr.Code == 403,
+		strings.Contains(text, "not enough rights"),
+		strings.Contains(text, "chat_admin_required"):
+		return "lockdown_revoke_no_rights"
+	case strings.Contains(text, "invite_hash"),
+		strings.Contains(text, "not found"),
+		strings.Contains(text, "expired"):
+		return "lockdown_revoke_not_found"
+	}
+	return "lockdown_revoke_failed"
+}
+
 // lockdownRevokeAlreadyText says who revoked the link. asHTML escapes the name and
 // mentions the person, for a card; otherwise it is plain text, for a toast.
 func lockdownRevokeAlreadyText(tr *i18n.Translator, ld *models.ChatLockdown, asHTML bool) string {
@@ -628,8 +661,9 @@ func (m moduleStruct) lockdownRevokeConfirm(
 		return err
 	})
 	if revokeErr != nil {
+		// Telegram's own text stays in the log; the card gets a plain sentence.
 		log.Warnf("[Lockdown] revoking the invite link of lockdown %d failed: %v", ld.ID, revokeErr)
-		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_revoke_failed"))
+		editStaffCallbackMessage(b, query, lockdownText(tr, lockdownRevokeRefusalKey(revokeErr)))
 		return ext.EndGroups
 	}
 
