@@ -599,8 +599,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   tests never touch them.
 - `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
   prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
-  `TestBanRunStart` (one running ban run per lockdown, the partial unique index). Add a test there when a new
-  guarantee rests on a partial unique index or a conditional update.
+  `TestBanRunStart` (one running ban run per lockdown, the partial unique index), plus the Phase 5 conditional updates:
+  `TestRecordLinkRevoked` (one revoke wins), `TestReminderSlots` (`PlanReminderSlots`, one reminder row per
+  destination through the slot unique index and `ON CONFLICT DO NOTHING`), `TestBanRunStart` and `TestUnqueueBanRun`
+  (`FinishBanRun`'s `NOT EXISTS` guard and its single finish), `TestAlertSync` and
+  `TestAlertSyncKeepsAMarkSetDuringTheEdit` (`RecordAlertSynced`'s parameterised `CASE`), `TestAlertClose`
+  (`ClaimAlertClose`'s `CASE` over the old row) and `TestBanRunReport` (one report claim wins, steps settled
+  separately). The pattern is anchored with `$`, so list the real top-level test function names. Add a test there when
+  a new guarantee rests on a partial unique index or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 
 ## Commits
