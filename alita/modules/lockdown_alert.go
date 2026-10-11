@@ -261,11 +261,19 @@ func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount,
 	return lockdownSplice(lockdownJoinLines(lines), lockdownSampleToken, strings.Join(listed, "\n"))
 }
 
+// lockdownLinkRevocable reports whether the bot could revoke an invite link it saw:
+// the link is not empty and was not cut short. Telegram reports a link made by another
+// admin cut short with "..." (or "…"), and a bot can revoke only a link in full.
+func lockdownLinkRevocable(link string) bool {
+	return link != "" && !strings.Contains(link, "...") && !strings.Contains(link, "…")
+}
+
 // lockdownRenderLinkLine is the invite-link part of an alert: the link most of the burst
-// used with how many joined through it, and, when other links were used too, how many
-// others. links is TopInviteLinksFresh's answer, most used first. It returns the text,
-// empty when no link was reported, and the top link as the alert shows it. The link is
-// HTML-escaped in code tags and spliced in after the translator.
+// used with how many joined through it, a pointer to Telegram's own settings when that
+// link was cut short and so cannot be revoked by the bot, and, when other links were used
+// too, how many others. links is TopInviteLinksFresh's answer, most used first. It
+// returns the text, empty when no link was reported, and the top link as the alert shows
+// it. The link is HTML-escaped in code tags and spliced in after the translator.
 func lockdownRenderLinkLine(tr *i18n.Translator, links []lockdown.InviteLinkCount) (text, top string) {
 	if len(links) == 0 {
 		return "", ""
@@ -278,6 +286,9 @@ func lockdownRenderLinkLine(tr *i18n.Translator, links []lockdown.InviteLinkCoun
 		}),
 		lockdownLinkToken, "<code>"+html.EscapeString(top)+"</code>",
 	)}
+	if !lockdownLinkRevocable(top) {
+		lines = append(lines, lockdownText(tr, "lockdown_alert_link_foreign"))
+	}
 	if others := len(links) - 1; others > 0 {
 		lines = append(lines, lockdownText(tr, "lockdown_alert_link_others", i18n.TranslationParams{
 			"count": strconv.Itoa(others),
