@@ -2852,3 +2852,4 @@ lockdown_ban_nothing: "Não há mais ninguém para banir: todas as contas da ond
 lockdown_ban_busy: "Já há um banimento de recém-chegados em andamento para este bloqueio."
 lockdown_ban_check_failed: "Não consegui ler os usuários aprovados do grupo bloqueado, então não banii ninguém. Tente de novo em instantes."
 lockdown_ban_start_failed: "Não consegui iniciar o banimento de recém-chegados, então não banii ninguém. Tente de novo em instantes."
+lockdown_ban_stopped: "⚠️ Interrompido: o bloqueio foi levantado antes de todas as contas serem processadas."

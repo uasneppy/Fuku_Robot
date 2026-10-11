@@ -278,6 +278,27 @@ func FinishBanRun(runID uint, state string) (bool, error) {
 	return result.RowsAffected == 1, nil
 }
 
+// UnqueueBanRun gives back every account of the run that no worker has taken yet: its
+// queued rows go back to unhandled (empty state, no run, no claim), so a later run can
+// take them. Rows in a final state (banned, skipped, failed) stay with the run, and so
+// does an acting row, which belongs to a call in flight on some replica and is moved by
+// that call or by the stale-claim release. It reports how many rows it gave back.
+func UnqueueBanRun(runID uint) (int64, error) {
+	result := db.DB.Model(&models.ChatLockdownBurst{}).
+		Where("run_id = ? AND state = ?", runID, models.BurstStateQueued).
+		Updates(map[string]any{
+			"state":      models.BurstStateNone,
+			"run_id":     nil,
+			"claimed_at": nil,
+			"updated_at": now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] UnqueueBanRun: %v", result.Error)
+		return 0, alitaerrors.Wrapf(result.Error, "unqueue ban run %d", runID)
+	}
+	return result.RowsAffected, nil
+}
+
 // TallyBanRun counts the burst rows of one run by state and then by reason.
 func TallyBanRun(runID uint) (map[string]map[string]int64, error) {
 	var rows []struct {

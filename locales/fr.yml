@@ -2806,3 +2806,4 @@ lockdown_ban_nothing: "Il n'y a plus personne à bannir : tous les comptes de la
 lockdown_ban_busy: "Un bannissement des nouveaux arrivants est déjà en cours pour ce verrouillage."
 lockdown_ban_check_failed: "Je n'ai pas pu lire les utilisateurs approuvés du groupe verrouillé, je n'ai donc banni personne. Réessayez dans un instant."
 lockdown_ban_start_failed: "Je n'ai pas pu lancer le bannissement des nouveaux arrivants, je n'ai donc banni personne. Réessayez dans un instant."
+lockdown_ban_stopped: "⚠️ Arrêté : le verrouillage a été levé avant que tous les comptes soient traités."

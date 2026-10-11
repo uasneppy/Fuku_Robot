@@ -239,11 +239,11 @@ func lockdownBanExcluded(b *gotgbot.Bot, chatID int64) ([]int64, error) {
 	return append(excluded, b.Id), nil
 }
 
-// lockdownProcessBanRuns advances every running ban run of an active lockdown by one
-// batch: the queued accounts are claimed one at a time and handed to
-// lockdownResponseBanOne, and a run with nothing left open is finished. A run whose
-// lockdown is no longer active is left untouched here. It reports whether any account
-// reached a final state or any run finished.
+// lockdownProcessBanRuns advances every running ban run by one batch: the queued accounts
+// are claimed one at a time and handed to lockdownResponseBanOne, and a run with nothing
+// left open is finished. A run whose lockdown is no longer active is stopped instead
+// (lockdownStopBanRun). It reports whether any account reached a final state or any run
+// finished.
 func lockdownProcessBanRuns(ctx context.Context, b *gotgbot.Bot) bool {
 	runs, err := lockdown.ListRunningBanRunsFresh()
 	if err != nil {
@@ -265,8 +265,12 @@ func lockdownProcessBanRuns(ctx context.Context, b *gotgbot.Bot) bool {
 // lockdownProcessBanRun is lockdownProcessBanRuns for one run.
 func lockdownProcessBanRun(ctx context.Context, b *gotgbot.Bot, run *models.ChatLockdownBanRun) bool {
 	ld, err := lockdown.GetFresh(run.LockdownID)
-	if err != nil || ld == nil || ld.State != models.LockdownStateActive {
+	if err != nil {
+		log.Warnf("[Lockdown] the lockdown of ban run %d could not be read, so the run waits: %v", run.ID, err)
 		return false
+	}
+	if ld == nil || ld.State != models.LockdownStateActive {
+		return lockdownStopBanRun(ctx, b, run, ld)
 	}
 	// The approved users are read fresh on every pass. When they cannot be read the run
 	// waits, because an account banned for good without the list could be an approved one.
@@ -285,6 +289,17 @@ func lockdownProcessBanRun(ctx context.Context, b *gotgbot.Bot, run *models.Chat
 		if ctx.Err() != nil {
 			return progress
 		}
+		// The lockdown is read again before every account: a lift that starts in the
+		// middle of a batch stops the run at the next account, because a lifting
+		// lockdown must not get a ban for good it will never take back (D-12).
+		current, err := lockdown.GetFresh(run.LockdownID)
+		if err != nil {
+			log.Warnf("[Lockdown] the lockdown of ban run %d could not be read, so the run waits: %v", run.ID, err)
+			return progress
+		}
+		if current == nil || current.State != models.LockdownStateActive {
+			return lockdownStopBanRun(ctx, b, run, current) || progress
+		}
 		won, err := lockdown.ClaimBurst(row.ID, models.BurstStateQueued, models.BurstStateActing)
 		if err != nil || !won {
 			continue
@@ -302,10 +317,38 @@ func lockdownProcessBanRun(ctx context.Context, b *gotgbot.Bot, run *models.Chat
 		return progress
 	}
 	if finished {
-		lockdownBanRunResult(ctx, b, run, ld)
+		lockdownBanRunResult(ctx, b, run, ld, false)
 		progress = true
 	}
 	return progress
+}
+
+// lockdownStopBanRun ends a run whose lockdown is no longer active (lifting, lifted or
+// gone): its queued accounts go back to unhandled, the run moves to stopped through the
+// same conditional finish as a normal end, and the replica that won it edits the card
+// with how far the run got and says it stopped. An account whose call is in flight on
+// another replica (acting) is left to that call or to the stale-claim release. A failed
+// write is logged and retried on the next cycle. It reports whether this call stopped the
+// run.
+func lockdownStopBanRun(ctx context.Context, b *gotgbot.Bot, run *models.ChatLockdownBanRun, ld *models.ChatLockdown) bool {
+	if _, err := lockdown.UnqueueBanRun(run.ID); err != nil {
+		log.Errorf("[Lockdown] ban run %d could not give back its queued accounts: %v", run.ID, err)
+		return false
+	}
+	finished, err := lockdown.FinishBanRun(run.ID, models.BanRunStateStopped)
+	if err != nil {
+		log.Errorf("[Lockdown] ban run %d could not be stopped: %v", run.ID, err)
+		return false
+	}
+	if !finished {
+		return false
+	}
+	if ld == nil {
+		log.Warnf("[Lockdown] ban run %d stopped, but its lockdown is gone, so there is no card to report on", run.ID)
+		return true
+	}
+	lockdownBanRunResult(ctx, b, run, ld, true)
+	return true
 }
 
 // lockdownBanRunTranslator is the translator of the chat a run's card lives in: the Staff
@@ -331,7 +374,7 @@ func lockdownTallySum(tally map[string]map[string]int64, state string) int64 {
 // banned, skipped and failed. It runs on the replica whose FinishBanRun won, once per
 // run, through the lockdown pacer. A run with no card, or a failed edit, is logged at
 // warn and changes nothing: the accounts' states are already stored.
-func lockdownBanRunResult(ctx context.Context, b *gotgbot.Bot, run *models.ChatLockdownBanRun, ld *models.ChatLockdown) {
+func lockdownBanRunResult(ctx context.Context, b *gotgbot.Bot, run *models.ChatLockdownBanRun, ld *models.ChatLockdown, stopped bool) {
 	if run.CardChatID == 0 || run.CardMsgID == 0 {
 		log.Warnf("[Lockdown] ban run %d finished with no card to report on", run.ID)
 		return
@@ -341,8 +384,9 @@ func lockdownBanRunResult(ctx context.Context, b *gotgbot.Bot, run *models.ChatL
 		log.Warnf("[Lockdown] the result of ban run %d could not be counted: %v", run.ID, err)
 		return
 	}
+	tr := lockdownBanRunTranslator(run, ld)
 	text := lockdownSplice(
-		lockdownText(lockdownBanRunTranslator(run, ld), "lockdown_ban_result", i18n.TranslationParams{
+		lockdownText(tr, "lockdown_ban_result", i18n.TranslationParams{
 			"group":   lockdownGroupToken,
 			"banned":  strconv.FormatInt(lockdownTallySum(tally, models.BurstStateBanned), 10),
 			"skipped": strconv.FormatInt(lockdownTallySum(tally, models.BurstStateSkipped), 10),
@@ -350,6 +394,9 @@ func lockdownBanRunResult(ctx context.Context, b *gotgbot.Bot, run *models.ChatL
 		}),
 		lockdownGroupToken, lockdownGroupLabel(ld),
 	)
+	if stopped {
+		text += "\n" + lockdownText(tr, "lockdown_ban_stopped")
+	}
 	err = lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()

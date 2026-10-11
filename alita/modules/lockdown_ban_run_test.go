@@ -174,6 +174,52 @@ func TestLockdownBanRun(t *testing.T) {
 			t.Errorf("card = %q, want it to say %q", text, staffMarker("lockdown_ban_stopped"))
 		}
 	})
+
+	t.Run("lift starts in the middle of a batch", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		raiders := []gotgbot.User{env.newJoiner("R1"), env.newJoiner("R2"), env.newJoiner("R3")}
+		for _, user := range raiders {
+			env.join(user, user, "")
+		}
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		card := env.confirmBan(a, env.admin)
+		forGood := make(map[int64]int)
+		for _, user := range raiders {
+			forGood[user.Id] = env.forGoodBansOf(user.Id)
+		}
+
+		// The lift is recorded after the worker read the lockdown and the approved users,
+		// and before it reaches the first account.
+		previous := lockdownApprovedLookup
+		lockdownApprovedLookup = func(chatID int64) (map[int64]bool, error) {
+			approved, err := previous(chatID)
+			err2 := db.DB.Model(&models.ChatLockdown{}).
+				Where("chat_id = ? AND state = ?", env.chat.Id, models.LockdownStateActive).
+				Update("state", models.LockdownStateLifting).Error
+			if err2 != nil {
+				t.Errorf("start the lift: %v", err2)
+			}
+			return approved, err
+		}
+		t.Cleanup(func() { lockdownApprovedLookup = previous })
+
+		env.cycle()
+		lockdownApprovedLookup = previous
+
+		for _, user := range raiders {
+			if got := env.forGoodBansOf(user.Id); got != forGood[user.Id] {
+				t.Errorf("user %d got %d bans for good after the lift started, want none", user.Id, got-forGood[user.Id])
+			}
+		}
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateStopped {
+			t.Fatalf("ban runs = %+v, want the run stopped", runs)
+		}
+		if text := env.lastCardText(staffChat.Id, card.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_stopped")) {
+			t.Errorf("card = %q, want it to say %q", text, staffMarker("lockdown_ban_stopped"))
+		}
+	})
 }
 
 func TestLockdownBanAuthority(t *testing.T) {

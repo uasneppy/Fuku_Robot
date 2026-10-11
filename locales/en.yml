@@ -2918,3 +2918,4 @@ lockdown_ban_nothing: "There is nobody left to ban: every account in the burst w
 lockdown_ban_busy: "A ban of recent joiners is already running for this lockdown."
 lockdown_ban_check_failed: "I couldn't read the approved users of the locked group, so I banned nobody. Try again in a moment."
 lockdown_ban_start_failed: "I couldn't start the ban of recent joiners, so I banned nobody. Try again in a moment."
+lockdown_ban_stopped: "⚠️ Stopped: the lockdown was lifted before every account was handled."

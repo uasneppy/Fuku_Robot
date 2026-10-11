@@ -2890,3 +2890,4 @@ lockdown_ban_nothing: "No queda nadie a quien banear: todas las cuentas de la ol
 lockdown_ban_busy: "Ya hay un baneo de recién llegados en curso para este bloqueo."
 lockdown_ban_check_failed: "No pude leer los usuarios aprobados del grupo bloqueado, así que no baneé a nadie. Inténtalo de nuevo en un momento."
 lockdown_ban_start_failed: "No pude iniciar el baneo de recién llegados, así que no baneé a nadie. Inténtalo de nuevo en un momento."
+lockdown_ban_stopped: "⚠️ Detenido: el bloqueo se levantó antes de que se procesaran todas las cuentas."
