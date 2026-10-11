@@ -754,3 +754,45 @@ func TestUnqueueBanRun(t *testing.T) {
 		t.Errorf("CountBanCandidatesFresh = %d, %v, want 2: d and e are unhandled again", count, err)
 	}
 }
+
+func TestListBurstOfRunFresh(t *testing.T) {
+	const a, b, c, d = int64(9701), int64(9702), int64(9703), int64(9704)
+
+	chat := uniqueLockdownChatID(t)
+	cleanupBurstLockdowns(t, chat)
+	cleanupBanRuns(t, chat)
+	ld := mustStart(t, chat)
+	mustConfirm(t, ld.ID)
+
+	joined := time.Now().UTC().Add(-5 * time.Minute)
+	for _, userID := range []int64{a, b, c, d} {
+		row := preRow(ld, userID, "Raider", joined)
+		if err := db.DB.Create(&row).Error; err != nil {
+			t.Fatalf("seed pre row %d: %v", userID, err)
+		}
+	}
+	run := newBanRun(ld)
+	if started, queued, err := StartBanRun(run, nil); err != nil || !started || queued != 4 {
+		t.Fatalf("StartBanRun = %v, %d, %v, want true, 4, nil", started, queued, err)
+	}
+	for _, userID := range []int64{a, b, c} {
+		row := burstRowOfUser(t, ld.ID, userID)
+		if won, err := MoveBurst(row.ID, models.BurstStateQueued, models.BurstStateFailed, "", "Bad Request: no", true); err != nil || !won {
+			t.Fatalf("setup: MoveBurst(%d) = %v, %v", userID, won, err)
+		}
+	}
+
+	rows, err := ListBurstOfRunFresh(run.ID, models.BurstStateFailed, 2)
+	if err != nil || len(rows) != 2 || rows[0].UserID != a || rows[1].UserID != b {
+		t.Errorf("ListBurstOfRunFresh(failed, 2) = %+v, %v, want a and b, in the order they were queued", rows, err)
+	}
+	if len(rows) > 0 && rows[0].Detail != "Bad Request: no" {
+		t.Errorf("detail = %q, want Telegram's stored reason", rows[0].Detail)
+	}
+	if rows, err := ListBurstOfRunFresh(run.ID, models.BurstStateQueued, 10); err != nil || len(rows) != 1 || rows[0].UserID != d {
+		t.Errorf("ListBurstOfRunFresh(queued) = %+v, %v, want d alone", rows, err)
+	}
+	if rows, err := ListBurstOfRunFresh(run.ID+1000, models.BurstStateFailed, 10); err != nil || len(rows) != 0 {
+		t.Errorf("ListBurstOfRunFresh(other run) = %+v, %v, want none", rows, err)
+	}
+}

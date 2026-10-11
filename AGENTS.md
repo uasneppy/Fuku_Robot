@@ -398,14 +398,26 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   failed read into "not approved": when the read fails the Ask answers `lockdown_ban_check_failed` and posts no card, a
   Confirm starts no run, and a running run waits (the next pass reads again), so nobody is banned without the list. N
   and the run's queue leave out approved users, the bot and, through `CountBanCandidatesFresh`, joiners an admin let in.
-  Confirm calls `lockdown.StartBanRun` with the card's chat and message stored on the run in the same insert, and edits
-  the card to "Banning N…". The lockdown worker executes the run (`lockdownProcessBanRuns`, after `lockdownBanPending` in
-  every cycle, in batches of `lockdownWorkerBatch`) through `lockdownResponseBanOne`, and the replica whose
-  `FinishBanRun` wins edits the card with banned, skipped and failed (`lockdownBanRunResult`). A run of a lockdown that
-  is no longer active is left untouched. `lockdownReleaseStale` also returns stale burst claims to the queue. These bans
-  are not in the staff audit and cannot be undone. The card and button say only that the accounts are banned for good
-  and cannot rejoin, which is exactly what the call does (no `revoke_messages` is sent, so nothing is said about their
-  messages).
+  Confirm edits the card to "Banning N…" first and then calls `lockdown.StartBanRun` with the card's chat and message
+  stored on the run in the same insert, so the worker's result edit can never be overwritten by the running text. The
+  lockdown worker executes the run (`lockdownProcessBanRuns`, after `lockdownBanPending` in every cycle, in batches of
+  `lockdownWorkerBatch`) through `lockdownResponseBanOne`, and the replica whose `FinishBanRun` wins edits the card
+  (`lockdownBanRunResult`, text from `lockdownBanResultText`) and sends the one `#LOCKDOWN_BAN` post. The button stays
+  until the lift: a later press starts a new run that handles only accounts no earlier press handled (a burst row in a
+  terminal state is never queued again; approved users are never queued and stay unhandled), and its N counts only those.
+  A restart resumes a run on any replica (`ReleaseStaleBurstClaims` returns an abandoned claim to the queue). A run of a
+  lockdown that is no longer active is stopped, not left: the lockdown is read again before every account, so a lift
+  that starts in the middle of a batch ends the run at the next account, `UnqueueBanRun` gives the queued accounts back
+  (unhandled, no run; an acting row is left to its call in flight), the run moves to `stopped` through the same
+  conditional finish and its card ends with `lockdown_ban_stopped`. The report counts banned (with the declined join
+  requests among them on their own line), skipped with one line per reason (admin, approved, already banned, let in by an
+  admin) and failed, naming up to 10 failed accounts with their ID and Telegram's stored reason and counting the rest.
+  The `#LOCKDOWN_BAN` post goes to the locked group's log channel under the admin category through `actionlog.Destination`
+  and the lockdown pacer, names the admin who pressed Ban, is not localized in its hashtag, and is sent only for a run
+  that handled at least one account; a failed post changes nothing and nothing is posted when the category is off.
+  `lockdownReleaseStale` also returns stale burst claims to the queue. These bans write nothing to the staff audit and
+  cannot be undone. The card and button say only that the accounts are banned for good and cannot rejoin, which is
+  exactly what the call does (no `revoke_messages` is sent, so nothing is said about their messages).
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
   active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute
