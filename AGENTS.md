@@ -375,7 +375,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   it is under the lockdown's own ban, which the new ban upgrades). The joiner row is claimed to acting before the
   call and moved to `kept` with detail `response_ban` after it, so the worker's marker ban and the lift's unban never
   touch it; on a skip, a failure or a rate limit the joiner row goes back to the state and detail it came from, and a
-  row held by the worker or the lift (acting, unbanning) puts the account back in the queue without an attempt.
+  row held by the worker or the lift (acting, unbanning) puts the account back in the queue without an attempt. The
+  lift never unbans a response ban and its tally counts it among the ones left alone on purpose, while
+  `/lockdownstatus` still counts it as removed (`lockdownRemovedSoFar`: banned plus kept with detail `response_ban`).
+  Kept rows are not reclaimed on a re-join (`lockdownReclaimStates`), so someone an admin unbans by hand during the
+  lockdown and who joins again is not banned again and gets no new joiner row, still muted by the locked defaults; this
+  is an accepted limit (research Pitfall 3).
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
   active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute
