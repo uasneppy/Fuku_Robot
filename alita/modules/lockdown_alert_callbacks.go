@@ -2,8 +2,10 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"html"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -14,6 +16,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
+	"github.com/divkix/Alita_Robot/alita/utils/ratelimit"
 )
 
 // The lockdown| buttons act on another group than the one they sit in, so nothing the
@@ -91,6 +94,10 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 		return m.lockdownBanAsk(b, query, tr, slot, ld)
 	case lockdownActBanConfirm:
 		return m.lockdownBanConfirm(b, query, tr, slot, ld, fields)
+	case lockdownActRevokeAsk:
+		return m.lockdownRevokeAsk(b, query, tr, slot, ld)
+	case lockdownActRevokeConfirm:
+		return m.lockdownRevokeConfirm(b, query, tr, slot, ld, fields)
 	case lockdownActCancel:
 		return m.lockdownCardCancel(b, query, tr, fields)
 	}
@@ -467,6 +474,219 @@ func (m moduleStruct) lockdownBanConfirm(
 		return ext.EndGroups
 	}
 
+	wakeLockdownWorker()
+	return ext.EndGroups
+}
+
+// lockdownInviteAuthority judges who pressed Revoke link: a live getChatMember of the
+// locked chat (taken from the lockdown row), creator or administrator with
+// can_invite_users. The right that matters is the one to manage invite links, not the
+// restrict right of the Lift and Ban buttons. The admin cache never authorizes, and a
+// failed lookup refuses. When it refuses, refusalKey is the locale key of the reason.
+func lockdownInviteAuthority(b *gotgbot.Bot, chatID, userID int64) (ok bool, refusalKey string) {
+	member, err := lockdownLiveMember(b, chatID, userID)
+	if err != nil {
+		log.Warnf("[Lockdown] live check of user %d in chat %d for Revoke link failed: %v", userID, chatID, err)
+		return false, "lockdown_alert_check_failed"
+	}
+	switch {
+	case member.Status == gotgbot.ChatMemberStatusCreator:
+		return true, ""
+	case member.Status == gotgbot.ChatMemberStatusAdministrator && member.CanInviteUsers:
+		return true, ""
+	}
+	return false, "lockdown_revoke_not_admin"
+}
+
+// lockdownRevokeRefusalKey is the locale key of the plain sentence that tells staff why a
+// revoke failed. A rate limit (the pacer refused, or Telegram kept answering 429) is
+// "busy"; an answer with code 403, or one that says the bot lacks the right, is "no
+// rights"; an answer that says the link is unknown, expired or not the bot's is "not
+// found"; anything else, a 5xx answer or a dropped connection included, is the generic
+// refusal. Telegram's raw text never reaches the card.
+func lockdownRevokeRefusalKey(err error) string {
+	if errors.Is(err, ratelimit.ErrRateLimited) {
+		return "lockdown_revoke_busy"
+	}
+	var tgErr *gotgbot.TelegramError
+	if !errors.As(err, &tgErr) {
+		return "lockdown_revoke_failed"
+	}
+	text := strings.ToLower(tgErr.Description)
+	switch {
+	case tgErr.Code == 429:
+		return "lockdown_revoke_busy"
+	case tgErr.Code == 403,
+		strings.Contains(text, "not enough rights"),
+		strings.Contains(text, "chat_admin_required"):
+		return "lockdown_revoke_no_rights"
+	case strings.Contains(text, "invite_hash"),
+		strings.Contains(text, "not found"),
+		strings.Contains(text, "expired"):
+		return "lockdown_revoke_not_found"
+	}
+	return "lockdown_revoke_failed"
+}
+
+// lockdownRevokeAlreadyText says who revoked the link. asHTML escapes the name and
+// mentions the person, for a card; otherwise it is plain text, for a toast.
+func lockdownRevokeAlreadyText(tr *i18n.Translator, ld *models.ChatLockdown, asHTML bool) string {
+	text := lockdownText(tr, "lockdown_revoke_already", i18n.TranslationParams{"name": lockdownNameToken})
+	name := ld.LinkRevokedByName
+	switch {
+	case !asHTML:
+	case ld.LinkRevokedBy != nil:
+		name = lockdownMention(*ld.LinkRevokedBy, name)
+	default:
+		name = html.EscapeString(name)
+	}
+	return lockdownSplice(text, lockdownNameToken, name)
+}
+
+// lockdownRevokeAsk answers the alert's Revoke link button. The link is the one stored on
+// the pressed copy, never anything from the callback data, and a copy whose link the bot
+// could not revoke is answered as no longer valid. A revoked lockdown is answered with
+// who revoked it. Otherwise the presser must be a live creator or administrator with
+// can_invite_users of the locked group, and gets a confirm card, a reply to the alert
+// that only they can use. Nothing is stored until Confirm.
+func (m moduleStruct) lockdownRevokeAsk(
+	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
+	slot *models.ChatLockdownAlert, ld *models.ChatLockdown,
+) error {
+	if ld.State != models.LockdownStateActive {
+		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false), false)
+		return ext.EndGroups
+	}
+	if !lockdownLinkRevocable(slot.Link) {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
+		return ext.EndGroups
+	}
+	if ld.LinkRevokedAt != nil {
+		answerStaffCallback(b, query, lockdownRevokeAlreadyText(tr, ld, false), false)
+		return ext.EndGroups
+	}
+	if ok, key := lockdownInviteAuthority(b, ld.ChatID, query.From.Id); !ok {
+		answerStaffCallback(b, query, lockdownText(tr, key), true)
+		return ext.EndGroups
+	}
+
+	asker := strconv.FormatInt(query.From.Id, 10)
+	copyID := strconv.FormatUint(uint64(slot.ID), 10)
+	expiry := strconv.FormatInt(time.Now().Add(lockdownCardLifetime).Unix()/60, 10)
+	confirmData := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+		"a": lockdownActRevokeConfirm, "r": copyID, "u": asker, "e": expiry,
+	})
+	cancelData := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+		"a": lockdownActCancel, "r": copyID, "u": asker,
+	})
+	if confirmData == "" || cancelData == "" {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_check_failed"), true)
+		return ext.EndGroups
+	}
+
+	text := lockdownSplice(
+		lockdownText(tr, "lockdown_revoke_ask", i18n.TranslationParams{
+			"link":  lockdownLinkToken,
+			"group": lockdownGroupToken,
+		}),
+		lockdownLinkToken, "<code>"+html.EscapeString(slot.Link)+"</code>",
+		lockdownGroupToken, lockdownGroupLabel(ld),
+	)
+	answerStaffCallback(b, query, "", false)
+	if _, err := b.SendMessage(query.Message.GetChat().Id, text, &gotgbot.SendMessageOpts{
+		ParseMode:          formatting.HTML,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId:                query.Message.GetMessageId(),
+			AllowSendingWithoutReply: true,
+		},
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{
+			{Text: lockdownText(tr, "lockdown_alert_btn_confirm"), CallbackData: confirmData},
+			{Text: lockdownText(tr, "lockdown_alert_btn_cancel"), CallbackData: cancelData},
+		}}},
+	}); err != nil {
+		log.Warnf("[Lockdown] revoke confirm card for lockdown %d could not be posted: %v", ld.ID, err)
+	}
+	return ext.EndGroups
+}
+
+// lockdownRevokeConfirm revokes the raid's invite link for the person who asked. The
+// card's u field must be the presser; the lockdown, the link's state and the presser's
+// rights are read again, the revoke is one paced revokeChatInviteLink of the link stored
+// on the pressed copy, and the revoke is recorded (RecordLinkRevoked, which marks the
+// live copies for a refresh) only after Telegram confirmed it. A refusal is told on the
+// card, which is edited and never deleted, and records nothing.
+func (m moduleStruct) lockdownRevokeConfirm(
+	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
+	slot *models.ChatLockdownAlert, ld *models.ChatLockdown, fields map[string]string,
+) error {
+	asker, expiryMinute, ok := lockdownParseCardFields(fields)
+	if !ok {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
+		return ext.EndGroups
+	}
+	if asker != query.From.Id {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_not_yours"), true)
+		return ext.EndGroups
+	}
+	if expiryMinute < time.Now().Unix()/60 {
+		answerStaffCallback(b, query, "", false)
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_card_expired"))
+		return ext.EndGroups
+	}
+	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_working"), false)
+
+	if ld.State != models.LockdownStateActive {
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+		return ext.EndGroups
+	}
+	if ld.LinkRevokedAt != nil {
+		editStaffCallbackMessage(b, query, lockdownRevokeAlreadyText(tr, ld, true))
+		return ext.EndGroups
+	}
+	if !lockdownLinkRevocable(slot.Link) {
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_expired"))
+		return ext.EndGroups
+	}
+	if ok, key := lockdownInviteAuthority(b, ld.ChatID, query.From.Id); !ok {
+		editStaffCallbackMessage(b, query, lockdownText(tr, key))
+		return ext.EndGroups
+	}
+
+	ctx := context.Background()
+	revokeErr := lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		_, err := b.RevokeChatInviteLinkWithContext(call, ld.ChatID, slot.Link, nil)
+		return err
+	})
+	if revokeErr != nil {
+		// Telegram's own text stays in the log; the card gets a plain sentence.
+		log.Warnf("[Lockdown] revoking the invite link of lockdown %d failed: %v", ld.ID, revokeErr)
+		editStaffCallbackMessage(b, query, lockdownText(tr, lockdownRevokeRefusalKey(revokeErr)))
+		return ext.EndGroups
+	}
+
+	name := lockdownCapRunes(staffFullName(&query.From), lockdownNameMaxRunes)
+	won, err := lockdown.RecordLinkRevoked(ld.ID, query.From.Id, name, slot.Link)
+	if err != nil {
+		// The link is revoked on Telegram's side, so the card says so; the copies keep
+		// their Revoke button until a later press finds the link already revoked.
+		log.Errorf("[Lockdown] the revoke of lockdown %d's invite link was done but not recorded: %v", ld.ID, err)
+	}
+	if err == nil && !won {
+		// Another admin's revoke was recorded first; who and when are read fresh.
+		current, readErr := lockdown.GetFresh(ld.ID)
+		if readErr == nil && current != nil && current.LinkRevokedAt != nil {
+			editStaffCallbackMessage(b, query, lockdownRevokeAlreadyText(tr, current, true))
+			return ext.EndGroups
+		}
+	}
+
+	editStaffCallbackMessage(b, query, lockdownSplice(
+		lockdownText(tr, "lockdown_revoke_done", i18n.TranslationParams{"name": lockdownNameToken}),
+		lockdownNameToken, lockdownMention(query.From.Id, name),
+	))
 	wakeLockdownWorker()
 	return ext.EndGroups
 }

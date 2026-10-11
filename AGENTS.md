@@ -119,7 +119,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   on a second row of the alert (the label carries N, or a generic label when N is 0 or unreadable) and, on its confirm
   card, Confirm `a=bc&r=..&u=<asker>&e=<expiry>` and the shared Cancel `a=x`. Both need the same live authority (creator,
   or administrator with `can_restrict_members` of the locked chat) at the ask and at Confirm, and only the asker may
-  confirm.
+  confirm. The namespace also carries "Revoke link": `a=rk&r=..` on a third row of the alert, shown only when the
+  copy's stored link is one the bot can revoke (`lockdownLinkRevocable`: a link in full, so one the bot made) and no
+  revoke was recorded yet, and, on its confirm card, Confirm `a=rc&r=..&u=<asker>&e=<expiry>` and the shared Cancel
+  `a=x`. Its authority is `lockdownInviteAuthority`, a live `getChatMember` of the lockdown row's chat (creator, or
+  administrator with `can_invite_users`; the restrict right is not enough, and a failed lookup refuses) at the ask and
+  at Confirm, and only the asker may confirm. The link revoked is always the one stored on the pressed copy, never
+  anything from the callback data. Confirm calls `revokeChatInviteLink` through `lockdownPaced` first and records the
+  revoke (`lockdown.RecordLinkRevoked`) only after Telegram confirmed it; a failed revoke edits the card and records
+  nothing.
 
 ## Permissions
 
@@ -261,6 +269,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   first, and marks the unhandled rows of joiners recorded exempt skipped `let_in`; rows an earlier run handled are never
   touched. A run with nothing to queue is done at once, `FinishBanRun` finishes a run exactly once (done only while no
   row of the run is queued or acting), and `ReleaseStaleBurstClaims` returns a dead worker's acting rows to the queue.
+- `chat_lockdowns.link_revoked_at`, `link_revoked_by`, `link_revoked_by_name` and `link_revoked_link` (migration
+  20261011150000) record the one revoke of the raid's invite link a lockdown can have. `lockdown.RecordLinkRevoked` is a
+  conditional update (`link_revoked_at IS NULL`), so one confirm wins, and in the same transaction it marks every posted,
+  open copy with live buttons `edit_pending`. The columns are read fresh, never cached, and never part of
+  backup/export/import/reset.
+- Alert copies marked `edit_pending` are refreshed by `lockdownSyncAlertCopies` (a step of `runLockdownCycle`, before the
+  close step): `ListAlertSlotsToSyncFresh` lists posted, open, unclaimed copies of active lockdowns, `ClaimAlertSync`
+  claims one with the close claim's `claimed_at`, and the copy is edited to its stored `body` plus the footers
+  (`lockdownAlertFooters`, today the "Link revoked by X" line) with the keyboard `lockdownAlertKeyboard` gives it now (no
+  Revoke button after a revoke, Lift and Ban stay), bounded by `lockdownAlertBatch` per cycle. A rate limit or a shutdown
+  gives the claim back free, a gone message closes the copy, and the third failed edit gives the refresh up
+  (`RecordAlertSynced`) so a copy never loops. The close step appends the same footers before the lifted footer.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→

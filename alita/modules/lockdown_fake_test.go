@@ -39,6 +39,8 @@ type lockdownFake struct {
 	rawPerms  map[int64]string
 	chatTypes map[int64]string
 	botJSON   map[int64]string
+	// memberRaw holds the raw getChatMember answer of a non-bot user, by (chat, user).
+	memberRaw map[[2]int64]string
 	// onSetPermissions runs at the moment a setChatPermissions request arrives,
 	// before it is answered.
 	onSetPermissions func(chatID int64)
@@ -53,7 +55,26 @@ func newLockdownFake() *lockdownFake {
 		rawPerms:        make(map[int64]string),
 		chatTypes:       make(map[int64]string),
 		botJSON:         make(map[int64]string),
+		memberRaw:       make(map[[2]int64]string),
 	}
+}
+
+// setMemberRaw sets the raw getChatMember answer for userID (not the bot) in chatID. It
+// is consulted before the staff fake's member records.
+func (f *lockdownFake) setMemberRaw(chatID, userID int64, rawJSON string) {
+	f.lmu.Lock()
+	defer f.lmu.Unlock()
+	f.memberRaw[[2]int64{chatID, userID}] = rawJSON
+}
+
+// lockdownAdminJSON is a getChatMember answer for userID as an administrator holding
+// exactly the named rights.
+func lockdownAdminJSON(userID int64, canRestrict, canInvite bool) string {
+	return fmt.Sprintf(
+		`{"status":"administrator","user":{"id":%d,"is_bot":false,"first_name":"Admin%d"},"can_be_edited":false,`+
+			`"is_anonymous":false,"can_manage_chat":true,"can_delete_messages":false,"can_manage_video_chats":false,`+
+			`"can_restrict_members":%t,"can_promote_members":false,"can_change_info":false,"can_invite_users":%t}`,
+		userID, userID, canRestrict, canInvite)
 }
 
 // setChatPermsRaw stores the permissions member getChat answers for chatID.
@@ -199,7 +220,30 @@ func (f *lockdownFake) RequestWithContext(
 				f.record(method, params)
 				return json.RawMessage(raw), nil
 			}
+		} else {
+			f.lmu.Lock()
+			raw, ok := f.memberRaw[[2]int64{chatID, staffParamInt(params, "user_id")}]
+			f.lmu.Unlock()
+			if ok {
+				if err := f.popScripted(method, chatID); err != nil {
+					f.record(method, params)
+					return nil, err
+				}
+				f.record(method, params)
+				return json.RawMessage(raw), nil
+			}
 		}
+
+	case "revokeChatInviteLink":
+		if err := f.popScripted(method, chatID); err != nil {
+			f.record(method, params)
+			return nil, err
+		}
+		f.record(method, params)
+		return json.RawMessage(fmt.Sprintf(
+			`{"invite_link":%q,"creator":{"id":%d,"is_bot":true,"first_name":"Alita"},`+
+				`"creates_join_request":false,"is_primary":false,"is_revoked":true}`,
+			fmt.Sprint(params["invite_link"]), staffTestBotID)), nil
 	}
 	return f.staffActionFake.RequestWithContext(ctx, token, method, params, opts)
 }
