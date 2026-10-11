@@ -102,6 +102,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   running, undo interrupted (unfinished with a heartbeat older than `staffTargetLockTTL`; its pending groups are shown
   as interrupted without writing anything), undone (at least one group undone) or undo changed nothing. The Undo button
   shows only while `staffActionUndoable` holds.
+- The `lockdown|v1` namespace is the lockdown alert's buttons (`lockdownAlertCallback`, registered with
+  `callbackquery.Prefix("lockdown|")`). Field `r` is the alert copy row's ID: the handler loads that row and its lockdown
+  fresh and takes the locked chat from the lockdown row, never from the chat the button sits in or from the callback
+  data. Lift is `a=lk&r=..` on the alert; its press shows a confirm card that replies to the alert, with Confirm
+  `a=lc&r=..&u=<asker>&e=<expiry, unix minutes>` and Cancel `a=x&r=..&u=<asker>`. The card is stateless (asker and expiry
+  travel in the data, so it works without Redis; `e` is written now and not yet checked) and only the asker may
+  confirm or cancel it. Authority is
+  `lockdownButtonAuthority`, a live `getChatMember` of the locked chat (creator, or administrator with
+  `can_restrict_members`) at the ask and again at Confirm, never the admin cache, never membership of the Staff Group;
+  a failed lookup refuses. Cards are edited to a final text and never deleted.
 
 ## Permissions
 
@@ -185,7 +195,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   because its own `/lockdown` may still be locking. A lockdown works without Redis: its state is only in PostgreSQL,
   the guard never needs Redis, and the pacer falls back to one replica's interval. Nothing but a confirmed
   `/unlockdown` ever ends a lockdown: no TTL, timer, Redis expiry, restart, worker cycle or expired ban lifts one, and
-  `BeginLift` is reached only through `lockdownBeginLift` in `unlockdown`.
+  `BeginLift` is reached only through `lockdownBeginLift` in `liftLockdownRow`, the one lift path shared by `/unlockdown`
+  and the alert's Lift Confirm (restore the stored permissions, then one conditional record, then `FinishLift`). The
+  button path also posts the public `lockdown_lifted` notice in the locked group, through `lockdownPaced`.
 - `chat_lockdown_alerts` and the `chat_lockdowns` columns `chat_title` and `alert_started_at` (migration
   20261011120000) are the lockdown alerts. They are read only through fresh queries, never cached (so no `DeleteCache`
   applies), and never part of backup/export/import/reset. One row per posted copy, unique on
