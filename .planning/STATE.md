@@ -111,7 +111,6 @@ None yet.
 - [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) shipped in Phase 4. The alert's Lift button (LOCK-06), and listing removed joiners on the alert (LOCK-01), land in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
 - [Quick 261008-j3b]: Shutdown follow-ups not fixed: `DrainAISpamChecks` waits up to 30 s but keeps the 10 s allowance; in polling mode the 60 s budget can still cut the staff drain short; `render.yaml`, `app.json`/Procfile and `railway.toml` keep their platforms' 30 s stop limits.
 - [Quick 261008-j3a]: Follow-up candidate: an anonymous admin's ban-family command also gets a stray `chat_status_restrict_cmd_error` reply before the proof tap (pre-existing).
-- [Phase 4]: Intermittent data race between the lockdown worker (`lockdown.ListJoinMsgsToDeleteFresh`) and `TestPostInitSetsCommandsAndStartupMessage` in `main_test.go`, seen only under heavy parallel load (did not reproduce in 6 runs or in the final `make test`). Test-harness race, not yet fixed.
 - [Tooling]: `make lint` needs a golangci-lint built with Go 1.26; the sandbox's is built with Go 1.25, so the quick batch was linted only with `go vet` and `gofmt`.
 
 ### Quick Tasks Completed
