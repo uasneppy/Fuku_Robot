@@ -15,6 +15,7 @@ A Staff Group is one group of trusted admins that manages your other groups.
 
 ### In the Staff Group:
 - `/staff`: Show the Staff Group chat ID and its linked groups. Press Unlink next to a group to unlink it (creator of both groups only). Press Recent actions to see past staff actions of this Staff Group and how each group went. A 🔒 line marks a linked group that is in lockdown; its admins can see why with /lockdownstatus there.
+When a linked group is locked down, its alert and hourly reminders appear here, with Lift, Ban recent joiners and Revoke link buttons that only that group's admins can use.
 
 ### Staff actions (in the Staff Group):
 - `/ban user [duration] [reason]`: Ban the user in every linked group. The user is a numeric ID, an @username I have seen, or a mention. The duration is a number followed by m, h, d or w, and more than 366 days means permanent.

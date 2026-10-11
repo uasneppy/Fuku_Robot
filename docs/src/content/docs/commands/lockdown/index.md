@@ -17,6 +17,16 @@ The bans I place on joiners last 330 days from each join. If a lockdown lasts lo
 Anonymous admins are asked to confirm who they are first.
 Join requests are declined while the group is locked; people can ask again after the lift.
 
+When this group is locked, I post an alert to its Staff Group (if it is linked) and to its log channel (if the admin log category is on): the trigger, how many joined just before and since, up to 10 of those accounts, and the invite link most of them used.
+
+🔓 Lift lockdown: lifts the lockdown like `/unlockdown`. Only the group owner or an admin who can restrict members, checked live; being in the Staff Group is not enough.
+
+🚫 Ban recent joiners: bans the accounts of the burst for good, so they can't rejoin, and I can't undo it. Admins, approved users and people an admin let in are left out. A later press bans only new accounts.
+
+⛔ Revoke link: revokes the invite link the raid used, if I created it; other admins' links must be revoked in Telegram. Only the group owner or an admin who can invite users.
+
+Every button asks for a confirmation that only the person who pressed it can give. Press the buttons as yourself, not as an anonymous admin or a channel. While the group stays locked I post a reminder every hour; reminders stop when the lockdown is lifted.
+
 
 ## Module Aliases
 
