@@ -312,6 +312,105 @@ func ReleaseStaleAlertClaims(before time.Time) (int64, error) {
 	return released, nil
 }
 
+// RecordLinkRevoked records that Telegram revoked the raid's invite link at an admin's
+// request, once per lockdown: one conditional update sets the four link_revoked columns
+// while link_revoked_at is still NULL, and the caller whose update matched also marks
+// every posted, open copy that still has live buttons edit_pending, in the same
+// transaction, so the worker (lockdownSyncAlertCopies) refreshes them. false with no
+// error means another caller recorded a revoke first (or there is no such lockdown) and
+// nothing was written.
+func RecordLinkRevoked(lockdownID uint, by int64, byName, link string) (bool, error) {
+	won := false
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		won = false
+		stamp := now()
+		result := tx.Model(&models.ChatLockdown{}).
+			Where("id = ? AND link_revoked_at IS NULL", lockdownID).
+			Updates(map[string]any{
+				"link_revoked_at":      stamp,
+				"link_revoked_by":      by,
+				"link_revoked_by_name": byName,
+				"link_revoked_link":    link,
+				"updated_at":           stamp,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
+		marked := tx.Model(&models.ChatLockdownAlert{}).
+			Where("lockdown_id = ? AND state = ? AND closed_at IS NULL AND buttons_live = ?",
+				lockdownID, models.AlertStatePosted, true).
+			Updates(map[string]any{"edit_pending": true, "updated_at": stamp})
+		if marked.Error != nil {
+			return marked.Error
+		}
+		won = true
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Lockdown] RecordLinkRevoked: %v", err)
+		return false, alitaerrors.Wrapf(err, "record link revoke of lockdown %d", lockdownID)
+	}
+	return won, nil
+}
+
+// ListAlertSlotsToSyncFresh reads up to limit posted copies that need their message
+// refreshed: edit_pending, not closed, not claimed, and belonging to a lockdown that is
+// still active (a copy of a lockdown that is lifting or lifted is closed instead, which
+// includes everything a refresh would add). Oldest ID first, straight from the database.
+func ListAlertSlotsToSyncFresh(limit int) ([]models.ChatLockdownAlert, error) {
+	var rows []models.ChatLockdownAlert
+	err := db.DB.
+		Where("state = ? AND edit_pending = ? AND closed_at IS NULL AND claimed_at IS NULL AND lockdown_id IN (SELECT id FROM chat_lockdowns WHERE state = ?)",
+			models.AlertStatePosted, true, models.LockdownStateActive).
+		Order("id").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListAlertSlotsToSyncFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list alert copies to sync")
+	}
+	return rows, nil
+}
+
+// ClaimAlertSync claims a posted, open, unclaimed, edit_pending copy for a refresh by
+// stamping claimed_at, in one conditional update, and reports whether this call won the
+// claim. The column is the close claim's, so a copy is never refreshed and closed at the
+// same time, and ReleaseStaleAlertClaims and ReleaseAlertClose give it back too.
+func ClaimAlertSync(id uint) (bool, error) {
+	stamp := now()
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ? AND edit_pending = ? AND closed_at IS NULL AND claimed_at IS NULL",
+			id, models.AlertStatePosted, true).
+		Updates(map[string]any{"claimed_at": stamp, "updated_at": stamp})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ClaimAlertSync: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "claim alert copy %d for a refresh", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// RecordAlertSynced records a refreshed copy (or one given up on): edit_pending and the
+// claim are cleared and the attempt counter goes back to zero. It reports whether this
+// call moved the row; a closed copy is left alone.
+func RecordAlertSynced(id uint) (bool, error) {
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ? AND closed_at IS NULL", id, models.AlertStatePosted).
+		Updates(map[string]any{
+			"edit_pending": false,
+			"claimed_at":   nil,
+			"attempts":     0,
+			"updated_at":   now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] RecordAlertSynced: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "record refreshed alert copy %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
 // ReleaseAlertClose gives a claimed, still open copy back for another try: the claim is
 // cleared, and countAttempt adds one to the attempt counter. It reports whether this
 // call moved the row.

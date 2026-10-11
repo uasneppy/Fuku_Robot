@@ -94,8 +94,16 @@ type ChatLockdown struct {
 	// AlertStartedAt is when the lockdown's alert was decided. It is the exactly-once
 	// gate (lockdown.BeginAlert): nil until the one conditional update that decides it.
 	AlertStartedAt *time.Time `gorm:"column:alert_started_at" json:"alert_started_at,omitempty"`
-	CreatedAt      time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt      time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	// LinkRevokedAt is when an admin revoked the raid's invite link from the alert; nil
+	// until Telegram confirmed it. One revoke is recorded per lockdown
+	// (lockdown.RecordLinkRevoked), by LinkRevokedBy (LinkRevokedByName is their name when
+	// they pressed it) and for LinkRevokedLink.
+	LinkRevokedAt     *time.Time `gorm:"column:link_revoked_at" json:"link_revoked_at,omitempty"`
+	LinkRevokedBy     *int64     `gorm:"column:link_revoked_by" json:"link_revoked_by,omitempty"`
+	LinkRevokedByName string     `gorm:"column:link_revoked_by_name;not null;default:''" json:"link_revoked_by_name,omitempty"`
+	LinkRevokedLink   string     `gorm:"column:link_revoked_link;not null;default:''" json:"link_revoked_link,omitempty"`
+	CreatedAt         time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt         time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
 
 // TableName returns the migration's table name for ChatLockdown.

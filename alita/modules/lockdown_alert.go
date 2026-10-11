@@ -56,6 +56,10 @@ const (
 	lockdownActBanAsk = "bn"
 	// lockdownActBanConfirm is the Ban confirm card's Confirm button.
 	lockdownActBanConfirm = "bc"
+	// lockdownActRevokeAsk is the alert's Revoke link button.
+	lockdownActRevokeAsk = "rk"
+	// lockdownActRevokeConfirm is the Revoke confirm card's Confirm button.
+	lockdownActRevokeConfirm = "rc"
 )
 
 // lockdownCardLifetime is how long a confirm card's Confirm button stays valid. It is
@@ -64,8 +68,9 @@ const (
 var lockdownCardLifetime = 5 * time.Minute
 
 // lockdownAlertKeyboard is the keyboard an alert copy is posted with: a row holding the
-// Lift lockdown button and a second row holding the Ban recent joiners button. The Ban
-// label carries the number of accounts a run started now would act on (approved users,
+// Lift lockdown button, a second row holding the Ban recent joiners button and, while
+// the copy's stored link is one the bot can revoke and none was revoked yet, a third row
+// holding the Revoke link button. The Ban label carries the number of accounts a run started now would act on (approved users,
 // the bot and people an admin let in are left out), or a generic label when that number
 // is 0 or cannot be read. A button whose data does not encode is left out and logged,
 // because a dead button is never sent; with no button left it returns nil.
@@ -93,6 +98,21 @@ func lockdownAlertKeyboard(b *gotgbot.Bot, tr *i18n.Translator, slot *models.Cha
 		})
 	} else {
 		log.Errorf("[Lockdown] the Ban button of alert copy %d (lockdown %d) did not encode and is left out", slot.ID, ld.ID)
+	}
+
+	// Revoke only for a link the bot could revoke (shown in full, so it made it) and only
+	// until a revoke was recorded: after that no copy offers it again.
+	if lockdownLinkRevocable(slot.Link) && ld.LinkRevokedAt == nil {
+		if data := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+			"a": lockdownActRevokeAsk,
+			"r": copyID,
+		}); data != "" {
+			rows = append(rows, []gotgbot.InlineKeyboardButton{
+				{Text: lockdownText(tr, "lockdown_alert_btn_revoke"), CallbackData: data},
+			})
+		} else {
+			log.Errorf("[Lockdown] the Revoke button of alert copy %d (lockdown %d) did not encode and is left out", slot.ID, ld.ID)
+		}
 	}
 
 	if len(rows) == 0 {
@@ -452,6 +472,9 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 		ParseMode:          formatting.HTML,
 		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
 	}
+	// The copy is stored with the link its text shows, and its Revoke button revokes
+	// exactly that link; the keyboard is built from the same value.
+	slot.Link = link
 	if keyboard := lockdownAlertKeyboard(b, tr, slot, ld); keyboard != nil {
 		opts.ReplyMarkup = *keyboard
 	}
@@ -505,6 +528,137 @@ func lockdownLiftedFooter(tr *i18n.Translator, ld *models.ChatLockdown) string {
 		"time": lockdownTime(when),
 	})
 	return lockdownSplice(text, lockdownNameToken, lifter)
+}
+
+// lockdownAlertFooters are the lines added under an alert's stored text for what
+// happened to its lockdown while it was active: today, that an admin revoked the raid's
+// invite link, with who and when. The name is user-controlled, so it goes in after
+// translation, escaped. The lifted footer is separate (lockdownLiftedFooter) and always
+// comes last.
+func lockdownAlertFooters(tr *i18n.Translator, ld *models.ChatLockdown) []string {
+	var footers []string
+	if ld.LinkRevokedAt != nil {
+		reviser := html.EscapeString(ld.LinkRevokedByName)
+		if ld.LinkRevokedBy != nil {
+			reviser = lockdownMention(*ld.LinkRevokedBy, ld.LinkRevokedByName)
+		}
+		text := lockdownText(tr, "lockdown_alert_link_revoked", i18n.TranslationParams{
+			"name": lockdownNameToken,
+			"time": lockdownTime(*ld.LinkRevokedAt),
+		})
+		footers = append(footers, lockdownSplice(text, lockdownNameToken, reviser))
+	}
+	return footers
+}
+
+// lockdownCopyText is the text of a posted copy as it is edited later: the exact text
+// that was posted, then the footers for what happened since and, once its lockdown is
+// lifting or lifted, the lifted footer.
+func lockdownCopyText(tr *i18n.Translator, slot *models.ChatLockdownAlert, ld *models.ChatLockdown, lifted bool) string {
+	parts := append([]string{slot.Body}, lockdownAlertFooters(tr, ld)...)
+	if lifted {
+		parts = append(parts, lockdownLiftedFooter(tr, ld))
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// lockdownSyncAlertCopies refreshes the posted copies of active lockdowns that were
+// marked edit_pending (today by a recorded link revoke): each is edited to its stored
+// text plus the footers, with the keyboard it would be posted with now, through the
+// lockdown pacer. A copy is claimed first, so one replica edits it once. An edit that
+// worked and a message that already shows that text clear the mark; a message that is
+// gone closes the copy; a rate limit or a shutdown gives the claim back without costing
+// an attempt and ends the step; any other failure costs an attempt and the third one
+// gives the refresh up (logged at warn), so a copy never loops. It takes at most
+// lockdownAlertBatch copies per cycle and reports whether any copy was refreshed or
+// ended.
+func lockdownSyncAlertCopies(ctx context.Context, b *gotgbot.Bot) bool {
+	slots, err := lockdown.ListAlertSlotsToSyncFresh(lockdownAlertBatch)
+	if err != nil {
+		log.Errorf("[Lockdown] alert copies to refresh could not be listed: %v", err)
+		return false
+	}
+	progress := false
+	for i := range slots {
+		if ctx.Err() != nil {
+			return progress
+		}
+		slot := &slots[i]
+		claimed, err := lockdown.ClaimAlertSync(slot.ID)
+		if err != nil || !claimed {
+			continue
+		}
+		done, stop := lockdownSyncClaimed(ctx, b, slot)
+		if done {
+			progress = true
+		}
+		if stop {
+			// The same pacer limits every copy, so the rest would only be refused too.
+			break
+		}
+	}
+	return progress
+}
+
+// lockdownSyncClaimed edits one claimed copy and records the result. done reports
+// whether the copy was refreshed or ended; stop that the step should end for this cycle.
+func lockdownSyncClaimed(ctx context.Context, b *gotgbot.Bot, slot *models.ChatLockdownAlert) (done, stop bool) {
+	ld, err := lockdown.GetFresh(slot.LockdownID)
+	if err != nil || ld == nil || ld.State != models.LockdownStateActive {
+		// A lockdown that left the active state is closed, not refreshed; the claim goes
+		// back and the close step takes the copy.
+		releaseAlertClose(slot.ID, false)
+		return false, false
+	}
+	recordSynced := func() bool {
+		if _, err := lockdown.RecordAlertSynced(slot.ID); err != nil {
+			log.Errorf("[Lockdown] alert copy %d was refreshed but not recorded: %v", slot.ID, err)
+			return false
+		}
+		return true
+	}
+
+	tr := lockdownSlotTranslator(slot)
+	opts := &gotgbot.EditMessageTextOpts{
+		Text:               lockdownCopyText(tr, slot, ld, false),
+		ChatId:             slot.DestChatID,
+		MessageId:          slot.MessageID,
+		ParseMode:          formatting.HTML,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+	}
+	if slot.ButtonsLive {
+		if keyboard := lockdownAlertKeyboard(b, tr, slot, ld); keyboard != nil {
+			opts.ReplyMarkup = *keyboard
+		}
+	}
+	editErr := lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		_, _, err := b.EditMessageTextWithContext(call, opts)
+		return err
+	})
+
+	switch {
+	case lockdownClassify(ctx, editErr) == lockdownCallDone, isMessageNotModified(editErr):
+		return recordSynced(), false
+	case lockdownClassify(ctx, editErr) == lockdownCallRetryFree:
+		releaseAlertClose(slot.ID, false)
+		return false, true
+	case lockdownEditGone(editErr):
+		if _, err := lockdown.RecordAlertClosed(slot.ID, "gone"); err != nil {
+			log.Errorf("[Lockdown] alert copy %d is gone but not recorded closed: %v", slot.ID, err)
+			return false, false
+		}
+		return true, false
+	}
+
+	log.Warnf("[Lockdown] refreshing alert copy %d in chat %d failed: %v", slot.ID, slot.DestChatID, editErr)
+	if slot.Attempts+1 >= lockdownMaxAttempts {
+		log.Warnf("[Lockdown] alert copy %d keeps its old text: the refresh failed %d times", slot.ID, lockdownMaxAttempts)
+		return recordSynced(), false
+	}
+	releaseAlertClose(slot.ID, true)
+	return false, false
 }
 
 // lockdownEditGone reports whether err says the message to edit no longer exists or can
@@ -598,7 +752,7 @@ func lockdownCloseClaimed(ctx context.Context, b *gotgbot.Bot, slot *models.Chat
 	}
 
 	tr := lockdownSlotTranslator(slot)
-	text := slot.Body + "\n\n" + lockdownLiftedFooter(tr, ld)
+	text := lockdownCopyText(tr, slot, ld, true)
 	err := lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()
