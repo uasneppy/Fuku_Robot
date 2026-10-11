@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -395,4 +396,235 @@ func TestLockdownResponseBanOne(t *testing.T) {
 			t.Errorf("joiner state = %q, want back to pending", joiner.State)
 		}
 	})
+}
+
+// liftUntilDone sends /unlockdown and runs worker cycles until the lockdown is no
+// longer lifting.
+func (e *lockdownEnv) liftUntilDone(ld *models.ChatLockdown) {
+	e.t.Helper()
+	e.send(e.admin, "/unlockdown")
+	for range 10 {
+		e.cycle()
+		row, err := lockdown.GetFresh(ld.ID)
+		if err != nil {
+			e.t.Fatalf("read lockdown: %v", err)
+		}
+		if row != nil && row.State == models.LockdownStateLifted {
+			return
+		}
+	}
+	e.t.Fatal("the lockdown was not lifted after 10 worker cycles")
+}
+
+func TestLockdownBanSurvivesLift(t *testing.T) {
+	env := responseEnv(t)
+	ld, users := env.lockAndBan("J1", "J2", "J3")
+	j1, j2, j3 := users[0], users[1], users[2]
+
+	for _, user := range []gotgbot.User{j1, j2} {
+		row := env.queuedBurst(ld, user.Id, models.BurstSourceJoiner, false)
+		if !env.responseBan(ld, row, nil) {
+			t.Fatalf("lockdownResponseBanOne for %d = false, want true", user.Id)
+		}
+		if got := env.joinerRow(user.Id); got.State != models.JoinerStateKept || got.Detail != models.JoinerDetailResponseBan {
+			t.Fatalf("joiner %d = %q / %q, want kept / response_ban", user.Id, got.State, got.Detail)
+		}
+	}
+
+	env.liftUntilDone(ld)
+
+	for _, user := range []gotgbot.User{j1, j2} {
+		if unbans := env.unbansOf(user.Id); len(unbans) != 0 {
+			t.Errorf("unbanChatMember calls for %d = %d, want none: a ban for good survives the lift", user.Id, len(unbans))
+		}
+		live := env.fake.member(env.chat.Id, user.Id)
+		if live == nil || live.Status != gotgbot.ChatMemberStatusKicked || live.UntilDate != 0 {
+			t.Errorf("member %d in the chat = %+v, want still kicked with no end date", user.Id, live)
+		}
+	}
+	if unbans := env.unbansOf(j3.Id); len(unbans) != 1 {
+		t.Errorf("unbanChatMember calls for the third joiner = %d, want 1: the lockdown's own ban is lifted as before", len(unbans))
+	}
+	if got := env.messagesWith(staffMarker("lockdown_lift_tally_kept") + " 2"); got != 1 {
+		t.Errorf("tally messages naming the 2 bans left alone = %d, want 1", got)
+	}
+}
+
+func TestLockdownBanRaces(t *testing.T) {
+	t.Run("worker holds the row", func(t *testing.T) {
+		env := responseEnv(t)
+		ld := env.lockAsAdmin("raid")
+		j1 := env.newJoiner("J1")
+		env.join(j1, j1, "https://t.me/+abc")
+		joiner := env.joinerRow(j1.Id)
+
+		// The worker is mid-ban: its claim is fresh.
+		won, err := lockdown.ClaimJoiner(joiner.ID, models.JoinerStatePending, models.JoinerStateActing)
+		if err != nil || !won {
+			t.Fatalf("setup: ClaimJoiner = %v, %v", won, err)
+		}
+		row := env.queuedBurst(ld, j1.Id, models.BurstSourceJoiner, false)
+
+		if env.responseBan(ld, row, nil) {
+			t.Error("lockdownResponseBanOne = true, want false: the worker holds the row")
+		}
+
+		calls := len(env.memberCallsOf("getChatMember", j1.Id)) + len(env.bansOf(j1.Id))
+		if calls != 0 {
+			t.Errorf("Telegram calls for the account = %d, want none while the worker holds it", calls)
+		}
+		got := env.burstRowOf(j1.Id)
+		if got.State != models.BurstStateQueued || got.Attempts != 0 || got.ClaimedAt != nil {
+			t.Errorf("burst row = %q, %d attempt(s), claim %v, want back in the queue with no attempt", got.State, got.Attempts, got.ClaimedAt)
+		}
+		if held := env.joinerRow(j1.Id); held.State != models.JoinerStateActing {
+			t.Errorf("joiner row = %q, want still acting: the response must not touch the worker's claim", held.State)
+		}
+
+		// The worker finished: the lockdown's own ban is in place.
+		if moved, err := lockdown.MoveJoiner(joiner.ID, models.JoinerStateActing, models.JoinerStateBanned, "", false); err != nil || !moved {
+			t.Fatalf("setup: MoveJoiner = %v, %v", moved, err)
+		}
+		env.fake.setMember(env.chat.Id, j1.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusKicked, UntilDate: joiner.BanUntil})
+
+		row = env.claimBurst(got.ID)
+		if !env.responseBan(ld, row, nil) {
+			t.Error("second lockdownResponseBanOne = false, want true")
+		}
+
+		bans := env.bansOf(j1.Id)
+		if len(bans) != 1 {
+			t.Fatalf("banChatMember calls = %d, want 1", len(bans))
+		}
+		wantEmptyBan(t, bans[0])
+		if after := env.joinerRow(j1.Id); after.State != models.JoinerStateKept || after.Detail != models.JoinerDetailResponseBan {
+			t.Errorf("joiner row = %q / %q, want kept / response_ban", after.State, after.Detail)
+		}
+	})
+
+	t.Run("response ban first", func(t *testing.T) {
+		env := responseEnv(t)
+		ld := env.lockAsAdmin("raid")
+		j4 := env.newJoiner("J4")
+		env.join(j4, j4, "https://t.me/+abc")
+		if row := env.joinerRow(j4.Id); row.State != models.JoinerStatePending {
+			t.Fatalf("setup: joiner = %q, want pending", row.State)
+		}
+		env.fake.setMember(env.chat.Id, j4.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		row := env.queuedBurst(ld, j4.Id, models.BurstSourceJoiner, false)
+
+		if !env.responseBan(ld, row, nil) {
+			t.Fatal("lockdownResponseBanOne = false, want true")
+		}
+		env.cycle()
+
+		bans := env.bansOf(j4.Id)
+		if len(bans) != 1 {
+			t.Fatalf("banChatMember calls after a full cycle = %d, want 1: the worker must not ban them again", len(bans))
+		}
+		wantEmptyBan(t, bans[0])
+		if got := env.joinerRow(j4.Id); got.State != models.JoinerStateKept {
+			t.Errorf("joiner state after the cycle = %q, want kept", got.State)
+		}
+		live := env.fake.member(env.chat.Id, j4.Id)
+		if live == nil || live.UntilDate != 0 {
+			t.Errorf("member in the chat = %+v, want banned with no end date", live)
+		}
+	})
+
+	t.Run("lift holds the row", func(t *testing.T) {
+		env := responseEnv(t)
+		ld, users := env.lockAndBan("J")
+		joiner := env.joinerRow(users[0].Id)
+		if won, err := lockdown.ClaimJoiner(joiner.ID, models.JoinerStateBanned, models.JoinerStateUnbanning); err != nil || !won {
+			t.Fatalf("setup: ClaimJoiner = %v, %v", won, err)
+		}
+		row := env.queuedBurst(ld, users[0].Id, models.BurstSourceJoiner, false)
+		bansBefore := len(env.bansOf(users[0].Id))
+		lookups := len(env.memberCallsOf("getChatMember", users[0].Id))
+
+		if env.responseBan(ld, row, nil) {
+			t.Error("lockdownResponseBanOne = true, want false: the lift holds the row")
+		}
+
+		if got := len(env.bansOf(users[0].Id)) - bansBefore; got != 0 {
+			t.Errorf("banChatMember calls = %d, want none", got)
+		}
+		if got := len(env.memberCallsOf("getChatMember", users[0].Id)) - lookups; got != 0 {
+			t.Errorf("getChatMember calls = %d, want none", got)
+		}
+		if got := env.burstRowOf(users[0].Id); got.State != models.BurstStateQueued || got.Attempts != 0 {
+			t.Errorf("burst row = %q with %d attempt(s), want queued with none", got.State, got.Attempts)
+		}
+	})
+
+	t.Run("turned exempt after queueing", func(t *testing.T) {
+		env := responseEnv(t)
+		ld := env.lockAsAdmin("raid")
+		j5 := env.newJoiner("J5")
+		env.join(j5, j5, "https://t.me/+abc")
+		joiner := env.joinerRow(j5.Id)
+		row := env.queuedBurst(ld, j5.Id, models.BurstSourceJoiner, false)
+		// An admin approves the user after the run was queued (the chat_member path).
+		if moved, err := lockdown.MoveJoiner(joiner.ID, models.JoinerStatePending, models.JoinerStateExempt, "", false); err != nil || !moved {
+			t.Fatalf("setup: MoveJoiner = %v, %v", moved, err)
+		}
+
+		env.responseBan(ld, row, nil)
+
+		if got := len(env.memberCallsOf("getChatMember", j5.Id)) + len(env.bansOf(j5.Id)); got != 0 {
+			t.Errorf("Telegram calls for the account = %d, want none", got)
+		}
+		if got := env.burstRowOf(j5.Id); got.State != models.BurstStateSkipped || got.Reason != lockdownBanSkipLetIn {
+			t.Errorf("burst row = %q / %q, want skipped / let_in", got.State, got.Reason)
+		}
+		if got := env.joinerRow(j5.Id); got.State != models.JoinerStateExempt {
+			t.Errorf("joiner state = %q, want still exempt", got.State)
+		}
+	})
+
+	// Characterization of the known limit (research Pitfall 3): a kept row is not
+	// reclaimed, so someone an admin unbans by hand and who joins again is not banned
+	// again and gets no new joiner row.
+	t.Run("unbanned by hand, then rejoins", func(t *testing.T) {
+		env := responseEnv(t)
+		ld, users := env.lockAndBan("J1")
+		j1 := users[0]
+		row := env.queuedBurst(ld, j1.Id, models.BurstSourceJoiner, false)
+		if !env.responseBan(ld, row, nil) {
+			t.Fatal("lockdownResponseBanOne = false, want true")
+		}
+		kept := env.joinerRow(j1.Id)
+		bans := len(env.bansOf(j1.Id))
+
+		env.fake.setMember(env.chat.Id, j1.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusLeft})
+		ageJoiner(t, kept.ID, time.Hour)
+		env.join(j1, j1, "https://t.me/+abc")
+		env.cycle()
+
+		if rows := env.joinerRows(j1.Id); len(rows) != 1 || rows[0].ID != kept.ID || rows[0].State != models.JoinerStateKept {
+			t.Errorf("joiner rows after the rejoin = %+v, want the one kept row, not reclaimed", rows)
+		}
+		if got := len(env.bansOf(j1.Id)); got != bans {
+			t.Errorf("banChatMember calls grew by %d after the rejoin, want none (the known limit)", got-bans)
+		}
+	})
+}
+
+func TestLockdownStatusCountsResponseBans(t *testing.T) {
+	env := responseEnv(t)
+	ld, users := env.lockAndBan("J1", "J2")
+
+	env.askStatus(env.admin)
+	env.wantReplyHas(staffMarker("lockdown_status_removed") + " 2")
+
+	for _, user := range users {
+		row := env.queuedBurst(ld, user.Id, models.BurstSourceJoiner, false)
+		if !env.responseBan(ld, row, nil) {
+			t.Fatalf("lockdownResponseBanOne for %d = false, want true", user.Id)
+		}
+	}
+
+	env.askStatus(env.admin)
+	env.wantReplyHas(staffMarker("lockdown_status_removed") + " 2")
 }
