@@ -2551,3 +2551,7 @@ lockdown_alert_restore_failed: "⚠️ मैं {group} की अनुमत�
 lockdown_alert_record_failed: "⚠️ {group} की अनुमतियाँ वापस आ गई हैं, लेकिन मैं लॉकडाउन हटाना दर्ज नहीं कर सका। हटाएँ बटन फिर दबाएँ या ग्रुप में /unlockdown चलाएँ।"
 lockdown_alert_cancelled: "रद्द किया गया। कुछ नहीं बदला।"
 lockdown_alert_card_expired: "यह पुष्टि समाप्त हो गई। कुछ नहीं बदला। अलर्ट पर बटन फिर से दबाएँ।"
+lockdown_alert_counts: "लॉकडाउन से पहले के 10 मिनट में जुड़े: {before}। उसके बाद जुड़े: {since}।"
+lockdown_alert_sample_title: "इस बाढ़ के खाते:"
+lockdown_alert_sample_more: "…और {count} और।"
+lockdown_alert_bot_mark: "बॉट"

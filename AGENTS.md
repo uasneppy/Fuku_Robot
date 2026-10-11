@@ -238,6 +238,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Telegram's reason), a rate limit or a shutdown costs no attempt, each copy has its own claim and attempts so one
   failing destination never holds the other back, and a lockdown confirmed by the settle step is alerted in the same
   cycle (the plan step runs after `lockdownSettleUnconfirmed`).
+- `chat_lockdown_burst` (migration 20261011130000) holds one row per account of a lockdown's burst, unique on
+  `(lockdown_id, user_id)`. It is read fresh, never cached (so no `DeleteCache` applies), and never part of
+  backup/export/import/reset. The tracker's pre-lockdown snapshot (source `pre`, the joins in
+  `(locked_at - lockdownRecentWindow, locked_at]` read through `lockdownRecentLookup`) is saved there by
+  `lockdown.BeginAlert`, in the transaction that decides the alert (`AlertPlan.Burst`, `ON CONFLICT DO NOTHING`, only
+  for the winner), so the alert, the Ban button and the reminders never need Redis afterwards. A failed tracker read or
+  no Redis saves nothing and the alert still posts (before count 0). The alert lists up to `lockdownAlertSampleMax` (10)
+  accounts through `lockdown.BurstSampleFresh`: the pre rows by join time, then the lockdown's joiner rows whose user
+  has no pre row (any state), with the counts behind them; names, usernames and IDs are escaped and spliced in after the
+  translator. The response columns (`state`, `reason`, `detail`, `run_id`, `attempts`, `claimed_at`) are moved by the
+  ban run, not by the alert.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→

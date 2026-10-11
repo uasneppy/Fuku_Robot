@@ -2902,3 +2902,7 @@ lockdown_alert_restore_failed: "⚠️ I couldn't put the permissions of {group}
 lockdown_alert_record_failed: "⚠️ The permissions of {group} are back, but I couldn't record the lift. Press Lift again or run /unlockdown in the group."
 lockdown_alert_cancelled: "Cancelled. Nothing changed."
 lockdown_alert_card_expired: "This confirmation expired. Nothing changed. Press the button on the alert again."
+lockdown_alert_counts: "Joined in the 10 minutes before the lockdown: {before}. Joined since: {since}."
+lockdown_alert_sample_title: "Accounts in the burst:"
+lockdown_alert_sample_more: "…and {count} more."
+lockdown_alert_bot_mark: "bot"

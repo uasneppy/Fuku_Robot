@@ -187,3 +187,63 @@ type ChatLockdownAlert struct {
 func (ChatLockdownAlert) TableName() string {
 	return "chat_lockdown_alerts"
 }
+
+// Where an account of a lockdown's burst came from, as stored in
+// chat_lockdown_burst.source.
+const (
+	// BurstSourcePre is an account that joined in the minutes before the lock, copied
+	// from the recent-joins tracker when the alert was decided.
+	BurstSourcePre = "pre"
+	// BurstSourceJoiner is an account the lockdown itself recorded, copied from
+	// chat_lockdown_joiners by the ban run.
+	BurstSourceJoiner = "joiner"
+)
+
+// What a ban run did with an account of the burst, as stored in
+// chat_lockdown_burst.state. The response states are moved by the ban run.
+const (
+	// BurstStateNone means no response has touched the account.
+	BurstStateNone = ""
+	// BurstStateQueued means a ban run took the account and has not reached it yet.
+	BurstStateQueued = "queued"
+	// BurstStateActing means a worker claimed the account and its ban call is running.
+	BurstStateActing = "acting"
+	// BurstStateBanned means the account was banned.
+	BurstStateBanned = "banned"
+	// BurstStateSkipped means the run left the account alone, with a reason.
+	BurstStateSkipped = "skipped"
+	// BurstStateFailed means the ban call failed.
+	BurstStateFailed = "failed"
+)
+
+// ChatLockdownBurst is one account of a lockdown's burst: someone who joined in the
+// minutes before the lock (source pre, saved from the recent-joins tracker when the
+// alert was decided) or while the lockdown was active (source joiner). The state,
+// reason, detail, run, attempt and claim columns are what a ban run moves per account.
+// (LockdownID, UserID) is unique. The row is never cached and never part of backup,
+// export, import or reset; its link to the lockdown exists in SQL only.
+type ChatLockdownBurst struct {
+	ID         uint       `gorm:"primaryKey;autoIncrement" json:"-"`
+	LockdownID uint       `gorm:"column:lockdown_id;not null;uniqueIndex:uk_chat_lockdown_burst_user,priority:1;index:idx_chat_lockdown_burst_lockdown_state,priority:1" json:"lockdown_id,omitempty"`
+	ChatID     int64      `gorm:"column:chat_id;not null" json:"chat_id,omitempty"`
+	UserID     int64      `gorm:"column:user_id;not null;uniqueIndex:uk_chat_lockdown_burst_user,priority:2" json:"user_id,omitempty"`
+	FirstName  string     `gorm:"column:first_name;not null;default:''" json:"first_name,omitempty"`
+	Username   string     `gorm:"column:username;not null;default:''" json:"username,omitempty"`
+	IsBot      bool       `gorm:"column:is_bot;not null;default:false" json:"is_bot,omitempty"`
+	InviteLink string     `gorm:"column:invite_link;not null;default:''" json:"invite_link,omitempty"`
+	Source     string     `gorm:"column:source;size:8;not null;default:'pre';check:chk_chat_lockdown_burst_source,source IN ('pre','joiner')" json:"source,omitempty"`
+	JoinedAt   *time.Time `gorm:"column:joined_at" json:"joined_at,omitempty"`
+	State      string     `gorm:"column:state;size:8;not null;default:'';index:idx_chat_lockdown_burst_lockdown_state,priority:2;check:chk_chat_lockdown_burst_state,state IN ('','queued','acting','banned','skipped','failed')" json:"state,omitempty"`
+	Reason     string     `gorm:"column:reason;size:16;not null;default:''" json:"reason,omitempty"`
+	Detail     string     `gorm:"column:detail;not null;default:''" json:"detail,omitempty"`
+	RunID      *int64     `gorm:"column:run_id" json:"run_id,omitempty"`
+	Attempts   int        `gorm:"column:attempts;not null;default:0" json:"attempts,omitempty"`
+	ClaimedAt  *time.Time `gorm:"column:claimed_at" json:"claimed_at,omitempty"`
+	CreatedAt  time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt  time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+// TableName returns the migration's table name for ChatLockdownBurst.
+func (ChatLockdownBurst) TableName() string {
+	return "chat_lockdown_burst"
+}

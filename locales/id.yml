@@ -2864,3 +2864,7 @@ lockdown_alert_restore_failed: "⚠️ Saya tidak bisa mengembalikan izin {group
 lockdown_alert_record_failed: "⚠️ Izin {group} sudah kembali, tetapi saya tidak bisa mencatat pencabutannya. Tekan Cabut lagi atau jalankan /unlockdown di grup."
 lockdown_alert_cancelled: "Dibatalkan. Tidak ada yang berubah."
 lockdown_alert_card_expired: "Konfirmasi ini kedaluwarsa. Tidak ada yang berubah. Tekan lagi tombol pada peringatan."
+lockdown_alert_counts: "Bergabung dalam 10 menit sebelum lockdown: {before}. Bergabung sejak itu: {since}."
+lockdown_alert_sample_title: "Akun dalam lonjakan:"
+lockdown_alert_sample_more: "…dan {count} lagi."
+lockdown_alert_bot_mark: "bot"
