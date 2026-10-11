@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,9 @@ const (
 	lockdownLinkToken = "<<lockdown-link>>"
 	// lockdownAlertSampleMax is how many accounts of the burst an alert lists.
 	lockdownAlertSampleMax = 10
+	// lockdownDetailSuperseded is the detail of a reminder copy that was never posted
+	// because a newer reminder was due by the time its turn came.
+	lockdownDetailSuperseded = "superseded"
 )
 
 // The lockdown| callback namespace: the buttons of an alert and of the confirm cards
@@ -61,6 +65,11 @@ const (
 	// lockdownActRevokeConfirm is the Revoke confirm card's Confirm button.
 	lockdownActRevokeConfirm = "rc"
 )
+
+// lockdownReminderEvery is how often a lockdown nobody lifted is announced again,
+// counted from the moment its alert was decided (alert_started_at), not from the lock.
+// A variable so a test can age an alert instead of sleeping.
+var lockdownReminderEvery = time.Hour
 
 // lockdownCardLifetime is how long a confirm card's Confirm button stays valid. It is
 // written into the button as an expiry minute, so the card needs no stored state and
@@ -254,6 +263,90 @@ func lockdownPlanAlerts(ctx context.Context, b *gotgbot.Bot) bool {
 	return progress
 }
 
+// lockdownReminderSeq is the sequence number of the reminder due at now: how many whole
+// lockdownReminderEvery periods passed since the lockdown's alert was decided. It is 0
+// while the first period is not over, and for a lockdown whose alert was not decided.
+// Only the current number is ever planned, so a long outage never owes a backlog.
+func lockdownReminderSeq(ld *models.ChatLockdown, now time.Time) int {
+	if ld.AlertStartedAt == nil || lockdownReminderEvery <= 0 {
+		return 0
+	}
+	elapsed := now.Sub(*ld.AlertStartedAt)
+	if elapsed < 0 {
+		return 0
+	}
+	return int(elapsed / lockdownReminderEvery)
+}
+
+// lockdownPlanReminders plans the reminder that is due for every confirmed active
+// lockdown whose alert was decided. The destinations are the alert's destination kinds,
+// each resolved again now (lockdownAlertDestinations): a Staff Group the group was
+// unlinked from, a log channel whose admin category is off and a kind the alert never
+// went to get no reminder. The copies are inserted with ON CONFLICT DO NOTHING, so
+// whichever replica plans first creates them and the others add nothing. It reports
+// whether any copy was planned here.
+func lockdownPlanReminders(ctx context.Context, _ *gotgbot.Bot) bool {
+	rows, err := lockdown.ListRemindableFresh(lockdownWorkerBatch)
+	if err != nil {
+		log.Errorf("[Lockdown] lockdowns that may need a reminder could not be listed: %v", err)
+		return false
+	}
+	now := time.Now()
+	progress := false
+	for i := range rows {
+		if ctx.Err() != nil {
+			return progress
+		}
+		ld := &rows[i]
+		seq := lockdownReminderSeq(ld, now)
+		if seq < 1 {
+			continue
+		}
+		planned, err := lockdown.ReminderPlanned(ld.ID, seq)
+		if err != nil {
+			log.Warnf("[Lockdown] reminder %d of lockdown %d could not be looked up: %v", seq, ld.ID, err)
+			continue
+		}
+		if planned {
+			continue
+		}
+		kinds, err := lockdown.AlertDestKinds(ld.ID)
+		if err != nil {
+			log.Warnf("[Lockdown] the alert destinations of lockdown %d could not be read: %v", ld.ID, err)
+			continue
+		}
+		if len(kinds) == 0 {
+			continue
+		}
+		slots, err := lockdownAlertDestinations(ld)
+		if err != nil {
+			log.Warnf("[Lockdown] reminder destinations of lockdown %d could not be read: %v", ld.ID, err)
+			continue
+		}
+		var plan []models.ChatLockdownAlert
+		for _, slot := range slots {
+			if !slices.Contains(kinds, slot.Dest) {
+				continue
+			}
+			slot.Kind = models.AlertKindReminder
+			slot.Seq = seq
+			plan = append(plan, slot)
+		}
+		if len(plan) == 0 {
+			continue
+		}
+		inserted, err := lockdown.PlanReminderSlots(ld.ID, seq, plan)
+		if err != nil {
+			log.Warnf("[Lockdown] reminder %d of lockdown %d could not be planned: %v", seq, ld.ID, err)
+			continue
+		}
+		if inserted > 0 {
+			progress = true
+		}
+	}
+	return progress
+}
+
 // lockdownSlotTranslator is the translator of the chat a copy is posted in: the Staff
 // Group for a staff copy, the locked group (whose log channel gets it) for a log copy.
 func lockdownSlotTranslator(slot *models.ChatLockdownAlert) *i18n.Translator {
@@ -398,6 +491,28 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, li
 	return lockdownJoinLines(lines), link
 }
 
+// lockdownRenderReminder is the text of a lockdown's hourly reminder: which group is still
+// locked and since when, and the reason. It carries no burst sample. It also returns the
+// invite link the text shows, to be stored on the copy, empty when none is shown. The
+// group and the reason are user-controlled, so they go in after translation, in place of
+// their tokens. The footers for what happened since (a revoked link) are not part of it:
+// the post adds them to what it sends, as a refresh does.
+func lockdownRenderReminder(tr *i18n.Translator, ld *models.ChatLockdown) (text, link string) {
+	lockedAt := ld.CreatedAt
+	if ld.LockedAt != nil {
+		lockedAt = *ld.LockedAt
+	}
+	title := lockdownSplice(
+		lockdownText(tr, "lockdown_reminder_title", i18n.TranslationParams{
+			"group": lockdownGroupToken,
+			"since": lockdownTime(lockedAt),
+		}),
+		lockdownGroupToken, lockdownGroupLabel(ld),
+	)
+	lines := []string{title, lockdownReasonLine(tr, ld.Reason)}
+	return lockdownJoinLines(lines), ""
+}
+
 // lockdownPostAlerts posts the pending copies of active lockdowns, oldest first. Each
 // copy is claimed first, so one replica sends it exactly once; the message ID and the
 // exact text sent are recorded so later edits start from what was posted. A rate limit
@@ -446,7 +561,22 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 	}
 
 	tr := lockdownSlotTranslator(slot)
-	text, link := lockdownRenderAlert(tr, ld)
+	reminder := slot.Kind == models.AlertKindReminder
+	var text, link string
+	if reminder {
+		// A reminder that is behind the current one (its send failed or waited out an
+		// outage) is never posted late: only the current reminder is ever sent.
+		if slot.Seq < lockdownReminderSeq(ld, time.Now()) {
+			if _, err := lockdown.FailAlertSlot(slot.ID, lockdownDetailSuperseded); err != nil {
+				log.Errorf("[Lockdown] reminder copy %d could not be ended: %v", slot.ID, err)
+				return false
+			}
+			return true
+		}
+		text, link = lockdownRenderReminder(tr, ld)
+	} else {
+		text, link = lockdownRenderAlert(tr, ld)
+	}
 	if slot.Dest == models.AlertDestLog {
 		// The log channel's owner chose which categories it receives, and may have
 		// changed that since the alert was decided: nothing is sent to a channel that
@@ -478,12 +608,18 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 	if keyboard := lockdownAlertKeyboard(b, tr, slot, ld); keyboard != nil {
 		opts.ReplyMarkup = *keyboard
 	}
+	// A reminder posted after a revoke shows the revoked footer at once. The stored body
+	// stays without it, because a later refresh appends the footers to the stored body.
+	sendText := text
+	if reminder {
+		sendText = lockdownCopyText(tr, &models.ChatLockdownAlert{Body: text}, ld, false)
+	}
 	var sent *gotgbot.Message
 	sendErr := lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()
 		var callErr error
-		sent, callErr = b.SendMessageWithContext(call, slot.DestChatID, text, opts)
+		sent, callErr = b.SendMessageWithContext(call, slot.DestChatID, sendText, opts)
 		return callErr
 	})
 	switch lockdownClassify(ctx, sendErr) {
@@ -491,6 +627,12 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 		if _, err := lockdown.RecordAlertPosted(slot.ID, sent.MessageId, text, link); err != nil {
 			log.Errorf("[Lockdown] alert copy %d was sent but not recorded: %v", slot.ID, err)
 			return false
+		}
+		if reminder {
+			// Only the newest reminder and the original alert keep their buttons.
+			if err := lockdown.SupersedeReminders(slot.LockdownID, slot.Dest, slot.Seq); err != nil {
+				log.Warnf("[Lockdown] the older reminders of lockdown %d keep their buttons: %v", slot.LockdownID, err)
+			}
 		}
 		return true
 	case lockdownCallRetryFree:
@@ -583,9 +725,15 @@ func lockdownSyncAlertCopies(ctx context.Context, b *gotgbot.Bot) bool {
 		if ctx.Err() != nil {
 			return progress
 		}
-		slot := &slots[i]
-		claimed, err := lockdown.ClaimAlertSync(slot.ID)
+		claimed, err := lockdown.ClaimAlertSync(slots[i].ID)
 		if err != nil || !claimed {
+			continue
+		}
+		// The copy is read again once it is claimed: a reminder that took its buttons off
+		// after the list was read must be edited without them.
+		slot, err := lockdown.GetAlertSlotFresh(slots[i].ID)
+		if err != nil || slot == nil {
+			releaseAlertClose(slots[i].ID, false)
 			continue
 		}
 		done, stop := lockdownSyncClaimed(ctx, b, slot)
@@ -610,8 +758,9 @@ func lockdownSyncClaimed(ctx context.Context, b *gotgbot.Bot, slot *models.ChatL
 		releaseAlertClose(slot.ID, false)
 		return false, false
 	}
+	// The mark is cleared only if the copy's buttons are still as this edit left them.
 	recordSynced := func() bool {
-		if _, err := lockdown.RecordAlertSynced(slot.ID); err != nil {
+		if _, err := lockdown.RecordAlertSynced(slot.ID, slot.ButtonsLive); err != nil {
 			log.Errorf("[Lockdown] alert copy %d was refreshed but not recorded: %v", slot.ID, err)
 			return false
 		}

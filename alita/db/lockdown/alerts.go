@@ -392,14 +392,18 @@ func ClaimAlertSync(id uint) (bool, error) {
 	return result.RowsAffected == 1, nil
 }
 
-// RecordAlertSynced records a refreshed copy (or one given up on): edit_pending and the
-// claim are cleared and the attempt counter goes back to zero. It reports whether this
-// call moved the row; a closed copy is left alone.
-func RecordAlertSynced(id uint) (bool, error) {
+// RecordAlertSynced records a refreshed copy (or one given up on): the claim is cleared
+// and the attempt counter goes back to zero. buttonsLive is whether the refresh kept the
+// copy's buttons, the value of buttons_live the edit was made with; edit_pending is
+// cleared only while the row still has that value. A mark set while the edit ran (a
+// reminder that took the previous one's buttons off) therefore survives and the next
+// cycle edits the copy again, so no edit is lost. It reports whether this call moved the
+// row; a closed copy is left alone.
+func RecordAlertSynced(id uint, buttonsLive bool) (bool, error) {
 	result := db.DB.Model(&models.ChatLockdownAlert{}).
 		Where("id = ? AND state = ? AND closed_at IS NULL", id, models.AlertStatePosted).
 		Updates(map[string]any{
-			"edit_pending": false,
+			"edit_pending": gorm.Expr("CASE WHEN buttons_live = ? THEN ? ELSE edit_pending END", buttonsLive, false),
 			"claimed_at":   nil,
 			"attempts":     0,
 			"updated_at":   now(),
@@ -430,4 +434,115 @@ func ReleaseAlertClose(id uint, countAttempt bool) (bool, error) {
 		return false, alitaerrors.Wrapf(result.Error, "release alert copy %d from closing", id)
 	}
 	return result.RowsAffected == 1, nil
+}
+
+// ListRemindableFresh reads up to limit active lockdowns whose lock Telegram confirmed
+// and whose alert was decided, oldest ID first, straight from the database. They are the
+// lockdowns that may owe a reminder.
+func ListRemindableFresh(limit int) ([]models.ChatLockdown, error) {
+	var rows []models.ChatLockdown
+	err := db.DB.
+		Where("state = ? AND locked_at IS NOT NULL AND alert_started_at IS NOT NULL", models.LockdownStateActive).
+		Order("id").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListRemindableFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list lockdowns that may need a reminder")
+	}
+	return rows, nil
+}
+
+// AlertDestKinds reads the distinct destinations ("log" and "staff", sorted) the alert
+// of a lockdown was planned for, from its alert copies in any state. A reminder goes
+// only to these.
+func AlertDestKinds(lockdownID uint) ([]string, error) {
+	var kinds []string
+	err := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("lockdown_id = ? AND kind = ?", lockdownID, models.AlertKindAlert).
+		Distinct().
+		Order("dest").
+		Pluck("dest", &kinds).Error
+	if err != nil {
+		log.Errorf("[Lockdown] AlertDestKinds: %v", err)
+		return nil, alitaerrors.Wrapf(err, "read the alert destinations of lockdown %d", lockdownID)
+	}
+	return kinds, nil
+}
+
+// ReminderPlanned reports whether any reminder copy of the lockdown exists for seq, in
+// any state.
+func ReminderPlanned(lockdownID uint, seq int) (bool, error) {
+	var count int64
+	err := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("lockdown_id = ? AND kind = ? AND seq = ?", lockdownID, models.AlertKindReminder, seq).
+		Count(&count).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ReminderPlanned: %v", err)
+		return false, alitaerrors.Wrapf(err, "look up reminder %d of lockdown %d", seq, lockdownID)
+	}
+	return count > 0, nil
+}
+
+// PlanReminderSlots creates the pending reminder copies of one sequence number, one per
+// slot, in one transaction, and returns how many rows it inserted. Each slot is inserted
+// with ON CONFLICT DO NOTHING on the (lockdown, kind, seq, dest) key, so whichever
+// replica plans first creates a row and every other gets 0 for it: a reminder exists
+// once per destination. The slot's kind and seq are set here (kind reminder, seq as
+// given). Nothing is inserted unless the lockdown is still active.
+func PlanReminderSlots(lockdownID uint, seq int, slots []models.ChatLockdownAlert) (int64, error) {
+	var inserted int64
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		inserted = 0
+		var active int64
+		if err := tx.Model(&models.ChatLockdown{}).
+			Where("id = ? AND state = ? AND alert_started_at IS NOT NULL", lockdownID, models.LockdownStateActive).
+			Count(&active).Error; err != nil {
+			return err
+		}
+		if active != 1 {
+			return nil
+		}
+		stamp := now()
+		for i := range slots {
+			slot := slots[i]
+			slot.ID = 0
+			slot.LockdownID = lockdownID
+			slot.Kind = models.AlertKindReminder
+			slot.Seq = seq
+			slot.State = models.AlertStatePending
+			slot.ButtonsLive = true
+			slot.EditPending = false
+			slot.CreatedAt = stamp
+			slot.UpdatedAt = stamp
+			result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&slot)
+			if result.Error != nil {
+				return result.Error
+			}
+			inserted += result.RowsAffected
+		}
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Lockdown] PlanReminderSlots: %v", err)
+		return 0, alitaerrors.Wrapf(err, "plan reminder %d of lockdown %d", seq, lockdownID)
+	}
+	return inserted, nil
+}
+
+// SupersedeReminders takes the buttons off the posted reminders of one destination that
+// are older than seq: buttons_live goes false and edit_pending true, so the worker's
+// refresh (lockdownSyncAlertCopies) edits them without a keyboard. The original alert
+// copies (kind alert), the reminder of seq itself and other destinations are left alone,
+// and so is a copy that is closed or already has no buttons.
+func SupersedeReminders(lockdownID uint, dest string, seq int) error {
+	err := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("lockdown_id = ? AND kind = ? AND dest = ? AND seq < ? AND state = ? AND closed_at IS NULL AND buttons_live = ?",
+			lockdownID, models.AlertKindReminder, dest, seq, models.AlertStatePosted, true).
+		Updates(map[string]any{"buttons_live": false, "edit_pending": true, "updated_at": now()}).Error
+	if err != nil {
+		log.Errorf("[Lockdown] SupersedeReminders: %v", err)
+		return alitaerrors.Wrapf(err, "take the buttons off the older reminders of lockdown %d", lockdownID)
+	}
+	return nil
 }
