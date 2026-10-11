@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -189,4 +190,188 @@ func TestLockdownAlertLift(t *testing.T) {
 	if len(edits) == 0 || !strings.Contains(fmt.Sprint(edits[len(edits)-1].Params["text"]), staffMarker("lockdown_alert_lift_done")) {
 		t.Errorf("card edits = %+v, want the card edited to %q", edits, staffMarker("lockdown_alert_lift_done"))
 	}
+}
+
+// liftCard is a confirm card the env's admin asked for: the lockdown, the card's message
+// and the data of its two buttons.
+type liftCard struct {
+	row       *models.ChatLockdown
+	staffChat gotgbot.Chat
+	msgID     int64
+	confirm   string
+	cancel    string
+}
+
+// askToLiftLockdown locks the env's chat, lets the worker post the alert in a new Staff
+// Group, and has the env's admin press Lift. It returns the confirm card that resulted.
+func askToLiftLockdown(t *testing.T, env *lockdownEnv) liftCard {
+	t.Helper()
+	staffChat := linkLockdownStaffGroup(env)
+	row := env.lockAsAdmin("raid")
+	env.cycle()
+
+	alerts := env.fake.sentTo(staffChat.Id)
+	if len(alerts) != 1 {
+		t.Fatalf("%d messages reached the Staff Group, want exactly the alert", len(alerts))
+	}
+	liftData := lockdownButtonData(t, alerts[0].Params["reply_markup"], "lk")
+	pressLockdownButton(env, env.admin, staffChat, alerts[0].MessageID, liftData)
+
+	posted := env.fake.sentTo(staffChat.Id)
+	if len(posted) != 2 {
+		t.Fatalf("%d messages in the Staff Group, want the alert and one confirm card", len(posted))
+	}
+	card := posted[1]
+	return liftCard{
+		row:       row,
+		staffChat: staffChat,
+		msgID:     card.MessageID,
+		confirm:   lockdownButtonData(t, card.Params["reply_markup"], "lc"),
+		cancel:    lockdownButtonData(t, card.Params["reply_markup"], "x"),
+	}
+}
+
+// cardEdits returns the text of every edit of message msgID of chatID, in order.
+func (e *lockdownEnv) cardEdits(chatID, msgID int64) []string {
+	var texts []string
+	for _, call := range e.staffCalls("editMessageText", chatID) {
+		if staffParamInt(call.Params, "message_id") == msgID {
+			texts = append(texts, fmt.Sprint(call.Params["text"]))
+		}
+	}
+	return texts
+}
+
+// wantCardEdited fails unless the last edit of the card contains want.
+func (e *lockdownEnv) wantCardEdited(card liftCard, want string) {
+	e.t.Helper()
+	edits := e.cardEdits(card.staffChat.Id, card.msgID)
+	if len(edits) == 0 {
+		e.t.Fatalf("the confirm card was never edited, want a text with %q", want)
+	}
+	if last := edits[len(edits)-1]; !strings.Contains(last, want) {
+		e.t.Errorf("confirm card reads %q, want %q", last, want)
+	}
+}
+
+// wantStillActive fails unless the lockdown row is still active with no lifter.
+func (e *lockdownEnv) wantStillActive(row *models.ChatLockdown) {
+	e.t.Helper()
+	current := e.freshRow(row.ID)
+	if current.State != models.LockdownStateActive || current.LiftedBy != nil {
+		e.t.Errorf("row = %+v, want it still active with no lifter", current)
+	}
+}
+
+func TestLockdownAlertLiftOutcomes(t *testing.T) {
+	t.Run("restore fails", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		card := askToLiftLockdown(t, env)
+		env.fake.script("setChatPermissions", env.chat.Id,
+			staffFakeError(400, "Bad Request: not enough rights to change chat permissions"))
+
+		pressLockdownButton(env, env.admin, card.staffChat, card.msgID, card.confirm)
+
+		env.wantCardEdited(card, staffMarker("lockdown_alert_restore_failed"))
+		env.wantStillActive(card.row)
+		if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 0 {
+			t.Errorf("%d lift notices reached the locked group after a failed restore, want none", len(got))
+		}
+		if got := env.fake.chatPermsRaw(env.chat.Id); got != lockdownLockedPermissions {
+			t.Errorf("permissions = %q, want the group to stay locked", got)
+		}
+	})
+
+	t.Run("record fails", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		card := askToLiftLockdown(t, env)
+		previous := lockdownBeginLift
+		t.Cleanup(func() { lockdownBeginLift = previous })
+		lockdownBeginLift = func(uint, int64, string, bool) (bool, error) {
+			return false, errors.New("database is down")
+		}
+
+		pressLockdownButton(env, env.admin, card.staffChat, card.msgID, card.confirm)
+
+		env.wantCardEdited(card, staffMarker("lockdown_alert_record_failed"))
+		env.wantStillActive(card.row)
+		if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 0 {
+			t.Errorf("%d lift notices reached the locked group though nothing was recorded, want none", len(got))
+		}
+	})
+
+	t.Run("someone lifted first", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		card := askToLiftLockdown(t, env)
+		env.send(env.admin, "/unlockdown")
+
+		pressLockdownButton(env, env.admin, card.staffChat, card.msgID, card.confirm)
+
+		env.wantCardEdited(card, staffMarker("lockdown_alert_already_lifted"))
+		restores := 0
+		for _, call := range env.calls("setChatPermissions") {
+			if lockdownParamText(call.Params["permissions"]) == lockdownTestPrePermissions {
+				restores++
+			}
+		}
+		if restores != 1 {
+			t.Errorf("%d restores of the stored permissions in total, want exactly 1", restores)
+		}
+		if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 1 {
+			t.Errorf("%d lift notices in the locked group, want only /unlockdown's", len(got))
+		}
+	})
+
+	t.Run("lost the race", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		card := askToLiftLockdown(t, env)
+		// Another admin records the lift between this lift's restore and its record.
+		var once sync.Once
+		env.fake.setOnSetPermissions(func(int64) {
+			once.Do(func() {
+				if won, err := lockdown.BeginLift(card.row.ID, 4242, "Bea", false); err != nil || !won {
+					t.Errorf("setup: BeginLift = %v, %v, want true", won, err)
+				}
+			})
+		})
+
+		pressLockdownButton(env, env.admin, card.staffChat, card.msgID, card.confirm)
+
+		env.wantCardEdited(card, staffMarker("lockdown_alert_already_lifted"))
+		lifted := env.freshRow(card.row.ID)
+		if lifted.LiftedBy == nil || *lifted.LiftedBy != 4242 {
+			t.Errorf("LiftedBy = %v, want 4242, the admin who recorded first", lifted.LiftedBy)
+		}
+		if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 0 {
+			t.Errorf("%d lift notices from the losing lift, want none", len(got))
+		}
+	})
+
+	t.Run("cancel", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		card := askToLiftLockdown(t, env)
+		other := env.newOutsider()
+		env.fake.setMember(env.chat.Id, other.Id, staffFakeMember{
+			Status:             gotgbot.ChatMemberStatusAdministrator,
+			CanRestrictMembers: true,
+		})
+		setsBefore := len(env.calls("setChatPermissions"))
+
+		pressLockdownButton(env, other, card.staffChat, card.msgID, card.cancel)
+
+		if text, _ := env.lastAnswer(); !strings.Contains(text, staffMarker("lockdown_alert_not_yours")) {
+			t.Errorf("other admin's answer = %q, want %q", text, staffMarker("lockdown_alert_not_yours"))
+		}
+		if edits := env.cardEdits(card.staffChat.Id, card.msgID); len(edits) != 0 {
+			t.Fatalf("the card was edited %d times by someone who did not ask, want none", len(edits))
+		}
+
+		pressLockdownButton(env, env.admin, card.staffChat, card.msgID, card.cancel)
+
+		env.wantCardEdited(card, staffMarker("lockdown_alert_cancelled"))
+		env.wantStillActive(card.row)
+		if got := len(env.calls("setChatPermissions")); got != setsBefore {
+			t.Errorf("setChatPermissions calls = %d, were %d: Cancel changes nothing", got, setsBefore)
+		}
+	})
 }
