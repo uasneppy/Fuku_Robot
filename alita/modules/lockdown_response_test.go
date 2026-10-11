@@ -4,11 +4,13 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"gorm.io/gorm"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
@@ -39,8 +41,23 @@ func (e *lockdownEnv) queuedBurst(ld *models.ChatLockdown, userID int64, source 
 		Source:     source,
 		State:      models.BurstStateQueued,
 	}
-	if err := db.DB.Create(&row).Error; err != nil {
-		e.t.Fatalf("seed burst row of %d: %v", userID, err)
+	// The alert's tracker snapshot may already have saved this user's burst row (a join
+	// in the same instant as locked_at counts as pre-lockdown), so reuse that row and
+	// reset it to the queued state the test asks for instead of inserting a duplicate.
+	var existing models.ChatLockdownBurst
+	err := db.DB.Where("lockdown_id = ? AND user_id = ?", ld.ID, userID).Take(&existing).Error
+	switch {
+	case err == nil:
+		row.ID = existing.ID
+		if err := db.DB.Model(&existing).Select("first_name", "is_bot", "source", "state").Updates(&row).Error; err != nil {
+			e.t.Fatalf("reset burst row of %d: %v", userID, err)
+		}
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		if err := db.DB.Create(&row).Error; err != nil {
+			e.t.Fatalf("seed burst row of %d: %v", userID, err)
+		}
+	default:
+		e.t.Fatalf("read burst row of %d: %v", userID, err)
 	}
 	return e.claimBurst(row.ID)
 }

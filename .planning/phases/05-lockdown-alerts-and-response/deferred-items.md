@@ -11,3 +11,8 @@
   row for the user. The 05-10 tests avoid this with a 3 ms sleep after the lock. Not caused by 05-11 (the failing
   paths do not run a ban run or its card), so it was not changed here. Fix: sleep a few milliseconds in `lockAsAdmin`,
   or have `queuedBurst` update an existing row instead of creating one.
+
+  **Resolved by the orchestrator after wave 9:** `queuedBurst` now reuses and resets a burst row the alert snapshot
+  already saved for that user instead of inserting a duplicate. The same flake had also hit `TestLockdownBanSurvivesLift`
+  in the wave 8 `make test` gate. `TestLockdownBanRaces`, `TestLockdownResponseBanOne` and
+  `TestLockdownBanSurvivesLift` then passed 15 runs in a row under `-race`.
