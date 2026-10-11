@@ -1,11 +1,11 @@
 package lockdown
 
-// Lockdown alert state (chat_lockdowns.alert_started_at, chat_lockdown_alerts) is
-// operational state shared by every replica's worker. It is always read fresh from the
-// database and never cached, so no cache key is read here and none needs
-// invalidation. Writes use db.DB without a request context, so a cancelled context
-// never loses a record write, and every claim or move is one conditional update whose
-// RowsAffected == 1 says which caller won.
+// Lockdown alert state (chat_lockdowns.alert_started_at, chat_lockdown_alerts and the
+// burst rows BeginAlert saves with it) is operational state shared by every replica's
+// worker. It is always read fresh from the database and never cached, so no cache key
+// is read here and none needs invalidation. Writes use db.DB without a request
+// context, so a cancelled context never loses a record write, and every claim or move
+// is one conditional update whose RowsAffected == 1 says which caller won.
 
 import (
 	"errors"
@@ -13,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -20,17 +21,21 @@ import (
 )
 
 // AlertPlan is what one lockdown's alert decision creates: one copy row per
-// destination. Slots must carry LockdownID, ChatID, Kind, Seq, Dest and DestChatID;
-// BeginAlert makes them pending.
+// destination, and the burst rows saved from the recent-joins tracker. Slots must carry
+// LockdownID, ChatID, Kind, Seq, Dest and DestChatID; BeginAlert makes them pending.
+// Burst rows must carry ChatID, UserID, the names and Source; BeginAlert sets their
+// lockdown. An empty Burst inserts nothing.
 type AlertPlan struct {
 	Slots []models.ChatLockdownAlert
+	Burst []models.ChatLockdownBurst
 }
 
 // BeginAlert decides the alert of a lockdown exactly once. One conditional update sets
 // alert_started_at while the lockdown is active, its lock confirmed and no alert was
 // decided yet; the caller whose update matched (RowsAffected == 1) creates every slot
-// of the plan in the same transaction, so a lockdown is never decided without its
-// copies and never decided twice, on any replica. false with no error means another
+// and every burst row of the plan in the same transaction, so a lockdown is never
+// decided without its copies and never decided twice, on any replica. A burst row for a
+// user the lockdown already has one for is skipped (ON CONFLICT DO NOTHING). false with no error means another
 // caller decided it first (or the lockdown is not eligible) and nothing was written. A
 // plan with no slots still stamps the lockdown, so a destination that appears later
 // never gets a stale alert.
@@ -57,6 +62,19 @@ func BeginAlert(lockdownID uint, plan AlertPlan) (bool, error) {
 			slot.CreatedAt = stamp
 			slot.UpdatedAt = stamp
 			if err := tx.Create(&slot).Error; err != nil {
+				return err
+			}
+		}
+		for i := range plan.Burst {
+			row := plan.Burst[i]
+			row.ID = 0
+			row.LockdownID = lockdownID
+			if row.Source == "" {
+				row.Source = models.BurstSourcePre
+			}
+			row.CreatedAt = stamp
+			row.UpdatedAt = stamp
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
 				return err
 			}
 		}

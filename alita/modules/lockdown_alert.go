@@ -31,6 +31,11 @@ const (
 	// lockdownGroupToken stands in for the locked group's name until the translated
 	// text is assembled, so a group title is never run through the translator.
 	lockdownGroupToken = "<<lockdown-group>>"
+	// lockdownSampleToken stands in for the burst sample's account lines until the
+	// translated text is assembled, so a name is never run through the translator.
+	lockdownSampleToken = "<<lockdown-sample>>"
+	// lockdownAlertSampleMax is how many accounts of the burst an alert lists.
+	lockdownAlertSampleMax = 10
 )
 
 // The lockdown| callback namespace: the buttons of an alert and of the confirm cards
@@ -113,12 +118,50 @@ func lockdownAlertDestinations(ld *models.ChatLockdown) ([]models.ChatLockdownAl
 	return slots, nil
 }
 
+// lockdownBurstSnapshot reads the recent-joins tracker for the ten minutes before the
+// lock (locked_at minus lockdownRecentWindow, up to locked_at) and returns its joins as
+// pre-lockdown burst rows, to be saved with the alert in the same transaction, so
+// nothing later needs Redis. Joins after locked_at are the lockdown's own joiner rows.
+// The tracker is best effort: without Redis it returns nothing, and a failed read is
+// logged at warn and treated as empty, because the alert must still post. The bot's
+// own ID is skipped.
+func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.ChatLockdownBurst {
+	if ld.LockedAt == nil {
+		return nil
+	}
+	lockedAt := *ld.LockedAt
+	joins, err := lockdownRecentLookup(ld.ChatID, lockedAt.Add(-lockdownRecentWindow), lockedAt)
+	if err != nil {
+		log.Warnf("[Lockdown] the recent joins of chat %d could not be read for the alert of lockdown %d: %v", ld.ChatID, ld.ID, err)
+		return nil
+	}
+	rows := make([]models.ChatLockdownBurst, 0, len(joins))
+	for _, join := range joins {
+		if b != nil && join.UserID == b.Id {
+			continue
+		}
+		joinedAt := join.At.UTC()
+		rows = append(rows, models.ChatLockdownBurst{
+			ChatID:     ld.ChatID,
+			UserID:     join.UserID,
+			FirstName:  join.Name,
+			Username:   join.Username,
+			IsBot:      join.Bot,
+			InviteLink: join.Link,
+			Source:     models.BurstSourcePre,
+			JoinedAt:   &joinedAt,
+		})
+	}
+	return rows
+}
+
 // lockdownPlanAlerts decides the alert of every confirmed active lockdown that has
-// none yet. Whoever wins lockdown.BeginAlert for a lockdown creates its copies; a
-// lockdown with no destination is still stamped, so a Staff Group linked later never
-// gets an alert for a lockdown that began before the link. It reports whether any
-// lockdown was decided here.
-func lockdownPlanAlerts(ctx context.Context, _ *gotgbot.Bot) bool {
+// none yet. Whoever wins lockdown.BeginAlert for a lockdown creates its copies and
+// saves the tracker's pre-lockdown joins as its burst rows; a lockdown with no
+// destination is still stamped, so a Staff Group linked later never gets an alert for
+// a lockdown that began before the link. It reports whether any lockdown was decided
+// here.
+func lockdownPlanAlerts(ctx context.Context, b *gotgbot.Bot) bool {
 	rows, err := lockdown.ListAlertsToPlanFresh(lockdownWorkerBatch)
 	if err != nil {
 		log.Errorf("[Lockdown] alerts to plan could not be listed: %v", err)
@@ -135,7 +178,8 @@ func lockdownPlanAlerts(ctx context.Context, _ *gotgbot.Bot) bool {
 			log.Warnf("[Lockdown] alert destinations of lockdown %d could not be read: %v", ld.ID, err)
 			continue
 		}
-		won, err := lockdown.BeginAlert(ld.ID, lockdown.AlertPlan{Slots: slots})
+		burst := lockdownBurstSnapshot(b, ld)
+		won, err := lockdown.BeginAlert(ld.ID, lockdown.AlertPlan{Slots: slots, Burst: burst})
 		if err != nil {
 			log.Warnf("[Lockdown] alert of lockdown %d could not be decided: %v", ld.ID, err)
 			continue
@@ -166,10 +210,59 @@ func lockdownGroupLabel(ld *models.ChatLockdown) string {
 	return "<b>" + html.EscapeString(ld.ChatTitle) + "</b>"
 }
 
+// lockdownRenderSampleAccount is one line of the burst sample: a bullet, the name
+// (capped and escaped), the @username when there is one, the ID in code tags and a
+// translated mark for a bot. Every user string is escaped here and never passes through
+// the translator.
+func lockdownRenderSampleAccount(tr *i18n.Translator, account lockdown.BurstAccount) string {
+	var line strings.Builder
+	line.WriteString("• ")
+	line.WriteString(html.EscapeString(lockdownCapRunes(account.FirstName, lockdownNameMaxRunes)))
+	if account.Username != "" {
+		line.WriteString(" @")
+		line.WriteString(html.EscapeString(lockdownCapRunes(account.Username, lockdownRecentUsernameMaxRunes)))
+	}
+	line.WriteString(" (<code>")
+	line.WriteString(strconv.FormatInt(account.UserID, 10))
+	line.WriteString("</code>)")
+	if account.IsBot {
+		line.WriteString(" · ")
+		line.WriteString(lockdownText(tr, "lockdown_alert_bot_mark"))
+	}
+	return line.String()
+}
+
+// lockdownRenderSample is the burst part of an alert: the counts behind the trigger,
+// then, when the burst is not empty, a title, one line per listed account and an "and N
+// more" line for the accounts not listed. The account lines hold user text, so they are
+// built outside the translator and spliced in after it, in place of a token.
+func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount, counts lockdown.BurstCounts) string {
+	lines := []string{lockdownText(tr, "lockdown_alert_counts", i18n.TranslationParams{
+		"before": strconv.FormatInt(counts.Before, 10),
+		"since":  strconv.FormatInt(counts.Since, 10),
+	})}
+	total := counts.Before + counts.Since
+	if total == 0 {
+		return lockdownJoinLines(lines)
+	}
+	lines = append(lines, lockdownText(tr, "lockdown_alert_sample_title"), lockdownSampleToken)
+	if rest := total - int64(len(accounts)); rest > 0 {
+		lines = append(lines, lockdownText(tr, "lockdown_alert_sample_more", i18n.TranslationParams{
+			"count": strconv.FormatInt(rest, 10),
+		}))
+	}
+	listed := make([]string, 0, len(accounts))
+	for _, account := range accounts {
+		listed = append(listed, lockdownRenderSampleAccount(tr, account))
+	}
+	return lockdownSplice(lockdownJoinLines(lines), lockdownSampleToken, strings.Join(listed, "\n"))
+}
+
 // lockdownRenderAlert is the text of a lockdown's first alert: which group, how the
-// lockdown was triggered (by whom and when) and the reason. The group, the name and the
-// reason are user-controlled, so they go in after translation, in place of their
-// tokens.
+// lockdown was triggered (by whom and when), the reason, and the burst behind it (the
+// counts and a sample of its accounts, read fresh from the database; a failed read
+// leaves them out and the alert still posts). The group, the name and the reason are
+// user-controlled, so they go in after translation, in place of their tokens.
 func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) string {
 	lockedAt := ld.CreatedAt
 	if ld.LockedAt != nil {
@@ -186,7 +279,14 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) string {
 		}),
 		lockdownNameToken, lockdownMention(ld.StartedBy, ld.StartedByName),
 	)
-	return lockdownJoinLines([]string{title, trigger, lockdownReasonLine(tr, ld.Reason)})
+	lines := []string{title, trigger, lockdownReasonLine(tr, ld.Reason)}
+	accounts, counts, err := lockdown.BurstSampleFresh(ld.ID, lockdownAlertSampleMax)
+	if err != nil {
+		log.Warnf("[Lockdown] the burst of lockdown %d could not be read for its alert: %v", ld.ID, err)
+	} else {
+		lines = append(lines, lockdownRenderSample(tr, accounts, counts))
+	}
+	return lockdownJoinLines(lines)
 }
 
 // lockdownPostAlerts posts the pending copies of active lockdowns, oldest first. Each

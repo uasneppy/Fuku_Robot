@@ -11,5 +11,5 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(testdb.Run(m, &models.ChatLockdown{}, &models.LockdownJoiner{}, &models.ChatLockdownAlert{}))
+	os.Exit(testdb.Run(m, &models.ChatLockdown{}, &models.LockdownJoiner{}, &models.ChatLockdownAlert{}, &models.ChatLockdownBurst{}))
 }

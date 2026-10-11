@@ -2611,3 +2611,7 @@ lockdown_alert_restore_failed: "⚠️ Мне не удалось вернуть
 lockdown_alert_record_failed: "⚠️ Разрешения {group} возвращены, но я не смог записать снятие блокировки. Нажмите «Снять блокировку» ещё раз или выполните /unlockdown в группе."
 lockdown_alert_cancelled: "Отменено. Ничего не изменилось."
 lockdown_alert_card_expired: "Это подтверждение истекло. Ничего не изменилось. Нажмите кнопку на оповещении ещё раз."
+lockdown_alert_counts: "Вступили за 10 минут до блокировки: {before}. Вступили после: {since}."
+lockdown_alert_sample_title: "Аккаунты волны:"
+lockdown_alert_sample_more: "…и ещё {count}."
+lockdown_alert_bot_mark: "бот"

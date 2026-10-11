@@ -2790,3 +2790,7 @@ lockdown_alert_restore_failed: "⚠️ Je n'ai pas pu remettre les permissions d
 lockdown_alert_record_failed: "⚠️ Les permissions de {group} sont revenues, mais je n'ai pas pu enregistrer la levée. Appuyez de nouveau sur Lever ou exécutez /unlockdown dans le groupe."
 lockdown_alert_cancelled: "Annulé. Rien n'a changé."
 lockdown_alert_card_expired: "Cette confirmation a expiré. Rien n'a changé. Appuie à nouveau sur le bouton de l'alerte."
+lockdown_alert_counts: "Arrivés dans les 10 minutes avant le verrouillage : {before}. Arrivés depuis : {since}."
+lockdown_alert_sample_title: "Comptes de la vague :"
+lockdown_alert_sample_more: "…et {count} de plus."
+lockdown_alert_bot_mark: "bot"
