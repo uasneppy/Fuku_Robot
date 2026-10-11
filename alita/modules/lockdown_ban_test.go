@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -267,6 +268,231 @@ func TestLockdownBanRecentJoiners(t *testing.T) {
 		}
 		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateDone {
 			t.Errorf("ban runs = %+v, want one done run", runs)
+		}
+	})
+}
+
+// failApprovedLookup makes the approved users unreadable until the returned function is
+// called (or the test ends).
+func failApprovedLookup(t *testing.T) (restore func()) {
+	t.Helper()
+	previous := lockdownApprovedLookup
+	lockdownApprovedLookup = func(int64) (map[int64]bool, error) {
+		return nil, errors.New("approvals unreachable")
+	}
+	restored := false
+	restore = func() {
+		if !restored {
+			lockdownApprovedLookup = previous
+			restored = true
+		}
+	}
+	t.Cleanup(restore)
+	return restore
+}
+
+// lastCardText is the text of the last edit of a card, or "" when it was never edited.
+func (e *lockdownEnv) lastCardText(chatID, msgID int64) string {
+	edits := e.cardEdits(chatID, msgID)
+	if len(edits) == 0 {
+		return ""
+	}
+	return edits[len(edits)-1]
+}
+
+func TestLockdownBanCount(t *testing.T) {
+	t.Run("excluded from N", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+
+		raiders := []gotgbot.User{env.newJoiner("R1"), env.newJoiner("R2"), env.newJoiner("R3")}
+		for _, user := range raiders {
+			env.join(user, user, "")
+		}
+		approved := env.newJoiner("Approved")
+		env.join(approved, approved, "")
+		if err := approvals.AddApprovedUser(env.chat.Id, approved.Id, env.admin.Id, ""); err != nil {
+			t.Fatalf("approve: %v", err)
+		}
+
+		env.send(env.admin, "/lockdown raid")
+		rows := env.lockdownRows()
+		if len(rows) != 1 {
+			t.Fatalf("%d lockdown rows, want 1", len(rows))
+		}
+		// The bot's own ID in the burst, as the tracker could hold it.
+		botRow := models.ChatLockdownBurst{
+			LockdownID: rows[0].ID,
+			ChatID:     env.chat.Id,
+			UserID:     staffTestBotID,
+			FirstName:  "Bot",
+			Source:     models.BurstSourcePre,
+		}
+		if err := db.DB.Create(&botRow).Error; err != nil {
+			t.Fatalf("seed the bot's burst row: %v", err)
+		}
+		time.Sleep(3 * time.Millisecond)
+		letIn := env.newJoiner("LetIn")
+		env.join(letIn, env.admin, "")
+		env.cycle()
+
+		a := lastAlert(t, env, staffChat)
+		keyboard := staffKeyboardOf(a.alert.Params["reply_markup"])
+		if len(keyboard) != 2 {
+			t.Fatalf("alert keyboard = %+v, want two rows", keyboard)
+		}
+		if label := keyboard[1][0].Text; !strings.Contains(label, staffMarker("lockdown_alert_btn_ban")+" 3") {
+			t.Errorf("Ban button label = %q, want N = 3", label)
+		}
+		card := env.askBan(a, env.admin)
+		if text := fmt.Sprint(card.msg.Params["text"]); !strings.Contains(text, staffMarker("lockdown_ban_ask")+" 3 ") {
+			t.Errorf("card text = %q, want N = 3", text)
+		}
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+		if text := env.lastCardText(staffChat.Id, card.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_running")+" 3 ") {
+			t.Errorf("running card = %q, want N = 3", text)
+		}
+		env.cycleUntilIdle()
+		for _, user := range raiders {
+			env.wantBannedForGood(user.Id, "a raider")
+		}
+		env.wantNotBanned(approved.Id, "the approved user")
+		env.wantNotBanned(letIn.Id, "the user an admin let in")
+		env.wantNotBanned(staffTestBotID, "the bot")
+	})
+
+	t.Run("approved read fails at Ask", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+
+		failApprovedLookup(t)
+		sent := len(env.fake.sentTo(staffChat.Id))
+		pressLockdownButton(env, env.admin, staffChat, a.alert.MessageID, a.banData)
+
+		if text, _ := env.lastAnswer(); !strings.Contains(text, staffMarker("lockdown_ban_check_failed")) {
+			t.Errorf("answer = %q, want %q", text, staffMarker("lockdown_ban_check_failed"))
+		}
+		if got := len(env.fake.sentTo(staffChat.Id)); got != sent {
+			t.Errorf("%d messages in the Staff Group, were %d: no card may be posted", got, sent)
+		}
+		if runs := env.banRuns(); len(runs) != 0 {
+			t.Errorf("%d ban runs, want none", len(runs))
+		}
+	})
+
+	t.Run("approved read fails at Confirm", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		card := env.askBan(a, env.admin)
+
+		failApprovedLookup(t)
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+
+		if text := env.lastCardText(staffChat.Id, card.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_check_failed")) {
+			t.Errorf("card = %q, want %q", text, staffMarker("lockdown_ban_check_failed"))
+		}
+		if runs := env.banRuns(); len(runs) != 0 {
+			t.Errorf("%d ban runs, want none", len(runs))
+		}
+	})
+
+	t.Run("approved read fails during the run", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		first, second := env.newJoiner("R1"), env.newJoiner("R2")
+		env.join(first, first, "")
+		env.join(second, second, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		card := env.askBan(a, env.admin)
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+
+		restore := failApprovedLookup(t)
+		env.cycleUntilIdle()
+		for _, user := range []gotgbot.User{first, second} {
+			got := len(env.memberCallsOf("getChatMember", user.Id)) + len(env.memberCallsOf("banChatMember", user.Id))
+			if got != 0 {
+				t.Errorf("%d Telegram calls for %d while the approved users were unreadable, want none", got, user.Id)
+			}
+		}
+		for _, row := range env.burstRows() {
+			if row.State != models.BurstStateQueued {
+				t.Errorf("burst row of %d = %s, want it still queued", row.UserID, row.State)
+			}
+		}
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateRunning {
+			t.Fatalf("ban runs = %+v, want the run still running", runs)
+		}
+
+		restore()
+		env.cycleUntilIdle()
+		env.wantBannedForGood(first.Id, "R1")
+		env.wantBannedForGood(second.Id, "R2")
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateDone {
+			t.Errorf("ban runs = %+v, want the run done", runs)
+		}
+	})
+
+	t.Run("nothing left", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		card := env.askBan(a, env.admin)
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+		env.cycleUntilIdle()
+		env.wantBannedForGood(raider.Id, "the raider")
+
+		sent := len(env.fake.sentTo(staffChat.Id))
+		pressLockdownButton(env, env.admin, staffChat, a.alert.MessageID, a.banData)
+		if text, _ := env.lastAnswer(); !strings.Contains(text, staffMarker("lockdown_ban_nothing")) {
+			t.Errorf("answer = %q, want %q", text, staffMarker("lockdown_ban_nothing"))
+		}
+		if got := len(env.fake.sentTo(staffChat.Id)); got != sent {
+			t.Errorf("%d messages in the Staff Group, were %d: no card may be posted", got, sent)
+		}
+		if runs := env.banRuns(); len(runs) != 1 {
+			t.Errorf("%d ban runs, want only the first", len(runs))
+		}
+	})
+
+	t.Run("already running", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		second := env.newOutsider()
+		env.fake.setMember(env.chat.Id, second.Id, staffFakeMember{
+			Status:             gotgbot.ChatMemberStatusAdministrator,
+			CanRestrictMembers: true,
+		})
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+
+		cardA := env.askBan(a, env.admin)
+		cardB := env.askBan(a, second)
+		pressLockdownButton(env, env.admin, staffChat, cardA.msg.MessageID, cardA.confirm)
+		pressLockdownButton(env, second, staffChat, cardB.msg.MessageID, cardB.confirm)
+
+		if text := env.lastCardText(staffChat.Id, cardB.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_busy")) {
+			t.Errorf("second admin's card = %q, want %q", text, staffMarker("lockdown_ban_busy"))
+		}
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].StartedBy != env.admin.Id {
+			t.Errorf("ban runs = %+v, want exactly the first admin's run", runs)
+		}
+		env.cycleUntilIdle()
+		env.wantBannedForGood(raider.Id, "the raider")
+		if got := len(env.memberCallsOf("banChatMember", raider.Id)); got != 1 {
+			t.Errorf("%d banChatMember calls for the raider, want 1", got)
 		}
 	})
 }
