@@ -389,10 +389,11 @@ func (m moduleStruct) lockdownBanAsk(
 
 // lockdownBanConfirm starts the ban run for the person who asked. The card's u field must
 // be the presser; the lockdown, the presser's rights and the approved users are read
-// again live. StartBanRun queues the burst (approved users and the bot left out; people
-// an admin let in are marked skipped there), stores the card with the run so the worker
-// can report on it, and the card is edited to the running text. The worker does the
-// bans. Every refusal is told on the card, which is edited and never deleted.
+// again live. The card is edited to the running text first, then StartBanRun queues the
+// burst (approved users and the bot left out; people an admin let in are marked skipped
+// there) and stores the card with the run so the worker can report on it. The worker does
+// the bans and edits the card last, with the result. Every refusal is told on the card,
+// which is edited and never deleted.
 func (m moduleStruct) lockdownBanConfirm(
 	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
 	slot *models.ChatLockdownAlert, ld *models.ChatLockdown, fields map[string]string,
@@ -428,6 +429,20 @@ func (m moduleStruct) lockdownBanConfirm(
 		return ext.EndGroups
 	}
 
+	// The card shows the running text before the run exists. The worker is the only one
+	// that edits the card after that (with the result), and it cannot start before
+	// StartBanRun below, so this edit can never land on top of a finished run's result.
+	// A refusal below overwrites the running text with its own. With nobody to count the
+	// card is left as it is and StartBanRun alone decides (busy or nothing left).
+	count, err := lockdown.CountBanCandidatesFresh(ld.ID, excluded)
+	if err != nil {
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_check_failed"))
+		return ext.EndGroups
+	}
+	if count > 0 {
+		editStaffCallbackMessage(b, query, lockdownBanText(tr, "lockdown_ban_running", ld, count))
+	}
+
 	// The card's place is stored with the run in the same insert, so a worker that picks
 	// the run up at once already knows where to report.
 	run := &models.ChatLockdownBanRun{
@@ -452,7 +467,6 @@ func (m moduleStruct) lockdownBanConfirm(
 		return ext.EndGroups
 	}
 
-	editStaffCallbackMessage(b, query, lockdownBanText(tr, "lockdown_ban_running", ld, queued))
 	wakeLockdownWorker()
 	return ext.EndGroups
 }
