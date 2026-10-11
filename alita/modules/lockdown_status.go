@@ -73,7 +73,7 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 		parts = append(parts, lockdownText(tr, "lockdown_status_unconfirmed"))
 	}
 	parts = append(parts, lockdownText(tr, "lockdown_status_removed",
-		i18n.TranslationParams{"count": tally[models.JoinerStateBanned]}))
+		i18n.TranslationParams{"count": lockdownRemovedSoFar(row.ID, tally)}))
 	if count := tally[models.JoinerStateBanFailed]; count > 0 {
 		parts = append(parts, lockdownText(tr, "lockdown_status_ban_failed", i18n.TranslationParams{"count": count}))
 	}
@@ -88,6 +88,20 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 	return reply(lockdownJoinLines(parts))
+}
+
+// lockdownRemovedSoFar is how many joiners a lockdown removed: the joiners under its
+// own ban plus the ones "Ban N recent joiners" banned for good, which the run moves to
+// kept with detail response_ban and which are still removed people. A read error is
+// logged and leaves the banned count alone.
+func lockdownRemovedSoFar(lockdownID uint, tally map[string]int64) int64 {
+	removed := tally[models.JoinerStateBanned]
+	forGood, err := lockdown.CountJoinersWithDetail(lockdownID, models.JoinerStateKept, models.JoinerDetailResponseBan)
+	if err != nil {
+		log.Warnf("[Lockdown] response bans of lockdown %d could not be counted: %v", lockdownID, err)
+		return removed
+	}
+	return removed + forGood
 }
 
 // lockdownLiftingStatusText is the status of a lockdown whose permissions were

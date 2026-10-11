@@ -249,6 +249,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   has no pre row (any state), with the counts behind them; names, usernames and IDs are escaped and spliced in after the
   translator. The response columns (`state`, `reason`, `detail`, `run_id`, `attempts`, `claimed_at`) are moved by the
   ban run, not by the alert.
+- `chat_lockdown_ban_runs` (migration 20261011140000) is one row per "Ban N recent joiners" run. One running run per
+  lockdown is the `uk_chat_lockdown_ban_runs_running` partial unique index plus `lockdown.StartBanRun`'s
+  `ON CONFLICT DO NOTHING` (a refused insert writes nothing). It is read fresh, never cached (so no `DeleteCache`
+  applies), and never part of backup/export/import/reset. A run queues only unhandled burst rows (state `''`) that are
+  not approved users or the bot (the caller passes them as `exclude`), copies the lockdown's joiner rows into the burst
+  first, and marks the unhandled rows of joiners recorded exempt skipped `let_in`; rows an earlier run handled are never
+  touched. A run with nothing to queue is done at once, `FinishBanRun` finishes a run exactly once (done only while no
+  row of the run is queued or acting), and `ReleaseStaleBurstClaims` returns a dead worker's acting rows to the queue.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -367,6 +375,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   gone ("message to edit not found", "message can't be edited", `MESSAGE_ID_INVALID`) or unmodified copy counts as closed;
   a rate limit or shutdown gives the claim back without an attempt and ends the step for that cycle; any other failure
   costs an attempt and the third closes the copy with Telegram's reason.
+- "Ban N recent joiners" decides each account of the burst with `decideLockdownResponseBan` from its live status and
+  bans with empty options (no end date, no `revoke_messages`) through `lockdownPaced`, in `lockdownResponseBanOne` only.
+  A live creator or administrator, an approved user, the bot itself and a joiner recorded exempt (let in by an admin,
+  D-22: skipped `let_in` from a fresh read, with no Telegram call, also when the row turned exempt after the run was
+  queued) are never banned, and a ban someone else placed is never shortened (a kicked account is banned again only when
+  it is under the lockdown's own ban, which the new ban upgrades). The joiner row is claimed to acting before the
+  call and moved to `kept` with detail `response_ban` after it, so the worker's marker ban and the lift's unban never
+  touch it; on a skip, a failure or a rate limit the joiner row goes back to the state and detail it came from, and a
+  row held by the worker or the lift (acting, unbanning) puts the account back in the queue without an attempt. The
+  lift never unbans a response ban and its tally counts it among the ones left alone on purpose, while
+  `/lockdownstatus` still counts it as removed (`lockdownRemovedSoFar`: banned plus kept with detail `response_ban`).
+  Kept rows are not reclaimed on a re-join (`lockdownReclaimStates`), so someone an admin unbans by hand during the
+  lockdown and who joins again is not banned again and gets no new joiner row, still muted by the locked defaults; this
+  is an accepted limit (research Pitfall 3).
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
   active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute

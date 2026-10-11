@@ -52,6 +52,11 @@ const (
 // it, so it is a kept row with this detail, which is never Telegram's escaped text.
 const JoinerDetailBanExpired = "ban_expired"
 
+// JoinerDetailResponseBan is the detail of a kept joiner row that "Ban N recent
+// joiners" banned for good, with no end date. The lift leaves such an account banned
+// and counts it as left alone on purpose, and /lockdownstatus still counts it as removed.
+const JoinerDetailResponseBan = "response_ban"
+
 // How a joiner reached the group, as stored in chat_lockdown_joiners.join_path.
 const (
 	// JoinPathMember is the chat_member update.
@@ -216,6 +221,11 @@ const (
 	BurstStateFailed = "failed"
 )
 
+// BurstReasonLetIn is the reason of a skipped burst row whose account the lockdown
+// recorded as exempt, because a live admin let them in. The ban run sets it when it
+// starts, so no Telegram call is ever made for them.
+const BurstReasonLetIn = "let_in"
+
 // ChatLockdownBurst is one account of a lockdown's burst: someone who joined in the
 // minutes before the lock (source pre, saved from the recent-joins tracker when the
 // alert was decided) or while the lockdown was active (source joiner). The state,
@@ -246,4 +256,41 @@ type ChatLockdownBurst struct {
 // TableName returns the migration's table name for ChatLockdownBurst.
 func (ChatLockdownBurst) TableName() string {
 	return "chat_lockdown_burst"
+}
+
+// States of a "Ban N recent joiners" run, as stored in chat_lockdown_ban_runs.state.
+const (
+	// BanRunStateRunning means the run is queueing and banning accounts. At most one run
+	// per lockdown is running, enforced by the uk_chat_lockdown_ban_runs_running partial
+	// unique index.
+	BanRunStateRunning = "running"
+	// BanRunStateDone means every account of the run reached a final state.
+	BanRunStateDone = "done"
+	// BanRunStateStopped means the run ended early (the lockdown was lifted, or an admin
+	// stopped it) with accounts left unhandled.
+	BanRunStateStopped = "stopped"
+)
+
+// ChatLockdownBanRun is one run of "Ban N recent joiners" for one lockdown. CardChatID
+// and CardMsgID are where the run's progress card lives (CardDest says whether that is
+// the Staff Group or the locked group's log channel). The row is never cached and never
+// part of backup, export, import or reset; its link to the lockdown exists in SQL only.
+type ChatLockdownBanRun struct {
+	ID            uint       `gorm:"primaryKey;autoIncrement" json:"-"`
+	LockdownID    uint       `gorm:"column:lockdown_id;not null;uniqueIndex:uk_chat_lockdown_ban_runs_running,where:state = 'running'" json:"lockdown_id,omitempty"`
+	ChatID        int64      `gorm:"column:chat_id;not null" json:"chat_id,omitempty"`
+	StartedBy     int64      `gorm:"column:started_by;not null" json:"started_by,omitempty"`
+	StartedByName string     `gorm:"column:started_by_name;not null;default:''" json:"started_by_name,omitempty"`
+	CardChatID    int64      `gorm:"column:card_chat_id;not null;default:0" json:"card_chat_id,omitempty"`
+	CardMsgID     int64      `gorm:"column:card_msg_id;not null;default:0" json:"card_msg_id,omitempty"`
+	CardDest      string     `gorm:"column:card_dest;size:8;not null;default:'staff';check:chk_chat_lockdown_ban_run_dest,card_dest IN ('staff','log')" json:"card_dest,omitempty"`
+	State         string     `gorm:"column:state;size:8;not null;default:'running';check:chk_chat_lockdown_ban_run_state,state IN ('running','done','stopped')" json:"state,omitempty"`
+	FinishedAt    *time.Time `gorm:"column:finished_at" json:"finished_at,omitempty"`
+	CreatedAt     time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt     time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+// TableName returns the migration's table name for ChatLockdownBanRun.
+func (ChatLockdownBanRun) TableName() string {
+	return "chat_lockdown_ban_runs"
 }
