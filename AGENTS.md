@@ -264,6 +264,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   first, and marks the unhandled rows of joiners recorded exempt skipped `let_in`; rows an earlier run handled are never
   touched. A run with nothing to queue is done at once, `FinishBanRun` finishes a run exactly once (done only while no
   row of the run is queued or acting), and `ReleaseStaleBurstClaims` returns a dead worker's acting rows to the queue.
+  The columns `report_card_done_at`, `report_log_done_at`, `reported_at`, `report_claimed_at` and `report_attempts`
+  (migration 20261011160000) carry the delivery of a finished run's result; a run with nothing to queue is stored
+  already reported, and runs that finished before the migration were marked reported by it.
 - `chat_lockdowns.link_revoked_at`, `link_revoked_by`, `link_revoked_by_name` and `link_revoked_link` (migration
   20261011150000) record the one revoke of the raid's invite link a lockdown can have. `lockdown.RecordLinkRevoked` is a
   conditional update (`link_revoked_at IS NULL`), so one confirm wins, and in the same transaction it marks every posted,
@@ -457,8 +460,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Confirm edits the card to "Banning N…" first and then calls `lockdown.StartBanRun` with the card's chat and message
   stored on the run in the same insert, so the worker's result edit can never be overwritten by the running text. The
   lockdown worker executes the run (`lockdownProcessBanRuns`, after `lockdownBanPending` in every cycle, in batches of
-  `lockdownWorkerBatch`) through `lockdownResponseBanOne`, and the replica whose `FinishBanRun` wins edits the card
-  (`lockdownBanRunResult`, text from `lockdownBanResultText`) and sends the one `#LOCKDOWN_BAN` post. The button stays
+  `lockdownWorkerBatch`) through `lockdownResponseBanOne`, and the result of a finished run is delivered by
+  `lockdownReportBanRuns`, a step of `runLockdownCycle` right after it, which resumes from the database like the alert
+  close step: a run (done or stopped) with `reported_at` NULL is claimed (`ClaimBanRunReport`, `report_claimed_at`), so
+  one replica delivers it; the card edit (text from `lockdownBanResultText`) and the one `#LOCKDOWN_BAN` post are
+  separate steps, each recorded once settled (`RecordBanRunReportStep`), so a step that was delivered is never repeated
+  while the other is retried and the post is not sent twice once recorded. A rate limit or a shutdown gives the claim
+  back without an attempt and ends the step for the cycle, any other failure costs an attempt on `report_attempts`
+  (back to zero when a step settles) and the third gives that step up with a warning, and `lockdownReleaseStale` returns
+  a claim older than `lockdownStaleClaim` through `ReleaseStaleBanRunReportClaims`, so a crash between the send and the
+  record can repeat a step (duplicate accepted over a lost one). The button stays
   until the lift: a later press starts a new run that handles only accounts no earlier press handled (a burst row in a
   terminal state is never queued again; approved users are never queued and stay unhandled), and its N counts only those.
   A restart resumes a run on any replica (`ReleaseStaleBurstClaims` returns an abandoned claim to the queue). A run of a
@@ -470,7 +481,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   admin) and failed, naming up to 10 failed accounts with their ID and Telegram's stored reason and counting the rest.
   The `#LOCKDOWN_BAN` post goes to the locked group's log channel under the admin category through `actionlog.Destination`
   and the lockdown pacer, names the admin who pressed Ban, is not localized in its hashtag, and is sent only for a run
-  that handled at least one account; a failed post changes nothing and nothing is posted when the category is off.
+  that handled at least one account; a failed post is retried as above and nothing is posted when the category is off.
   `lockdownReleaseStale` also returns stale burst claims to the queue. These bans write nothing to the staff audit and
   cannot be undone. The card and button say only that the accounts are banned for good and cannot rejoin, which is
   exactly what the call does (no `revoke_messages` is sent, so nothing is said about their messages).

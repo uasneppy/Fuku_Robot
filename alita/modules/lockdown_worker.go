@@ -96,6 +96,13 @@ func lockdownReleaseStale() {
 	if releasedBurst > 0 {
 		log.Warnf("[Lockdown] released %d stale burst claim(s) of a worker that stopped", releasedBurst)
 	}
+	releasedReports, err := lockdown.ReleaseStaleBanRunReportClaims(cutoff)
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not release stale ban run report claims: %v", err)
+	}
+	if releasedReports > 0 {
+		log.Warnf("[Lockdown] released %d stale ban run report claim(s) of a worker that stopped", releasedReports)
+	}
 }
 
 // lockdownUnconfirmedGrace is how long a lockdown row may stay unconfirmed (locked_at
@@ -286,11 +293,12 @@ func runLockdownCycle(ctx context.Context, b *gotgbot.Bot) bool {
 	posted := lockdownPostAlerts(ctx, b)
 	banned := lockdownBanPending(ctx, b)
 	responded := lockdownProcessBanRuns(ctx, b)
+	reported := lockdownReportBanRuns(ctx, b)
 	deleted := lockdownDeleteJoinMessages(ctx, b)
 	lifted := lockdownProcessLifts(ctx, b)
 	synced := lockdownSyncAlertCopies(ctx, b)
 	closed := lockdownCloseAlerts(ctx, b)
-	return settled || planned || reminded || posted || banned || responded || deleted || lifted || synced || closed
+	return settled || planned || reminded || posted || banned || responded || reported || deleted || lifted || synced || closed
 }
 
 // lockdownCallOutcome is how one Telegram call of the worker ended.

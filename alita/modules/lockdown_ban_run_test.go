@@ -611,3 +611,193 @@ func TestLockdownBanResult(t *testing.T) {
 		}
 	})
 }
+
+// finishedRun reads the one ban run of the env's chat.
+func (e *lockdownEnv) finishedRun() models.ChatLockdownBanRun {
+	e.t.Helper()
+	runs := e.banRuns()
+	if len(runs) != 1 {
+		e.t.Fatalf("ban runs = %+v, want exactly one", runs)
+	}
+	return runs[0]
+}
+
+// cyclesUntilReported runs worker cycles, at most limit of them, until the env's one ban
+// run has its report settled. A delivery that fails costs an attempt per cycle and makes
+// no progress, so waiting for an idle cycle would stop too early.
+func (e *lockdownEnv) cyclesUntilReported(limit int) {
+	e.t.Helper()
+	for i := 0; i < limit; i++ {
+		if e.finishedRun().ReportedAt != nil {
+			return
+		}
+		e.cycle()
+	}
+	if e.finishedRun().ReportedAt == nil {
+		e.t.Fatalf("the report of the ban run was still open after %d cycles", limit)
+	}
+}
+
+func TestLockdownBanReportResumes(t *testing.T) {
+	// finishedUnreported runs a ban run whose card edit is rate limited, so the run ends
+	// with its report undelivered, and returns the env, the card and the log channel.
+	finishedUnreported := func(t *testing.T) (*lockdownEnv, gotgbot.Chat, banCard, int64) {
+		t.Helper()
+		env, staffChat := banEnv(t)
+		logChannel := uniqueModuleChatID()
+		setStaffLogChannel(t, env.chat.Id, logChannel)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		card := env.confirmBan(a, env.admin)
+
+		limited := staffFake429(1)
+		env.fake.script("editMessageText", staffChat.Id, limited, limited, limited, limited)
+		env.cycle()
+		return env, staffChat, card, logChannel
+	}
+
+	t.Run("a rate limited result is delivered by a later cycle", func(t *testing.T) {
+		env, staffChat, card, logChannel := finishedUnreported(t)
+
+		run := env.finishedRun()
+		if run.State != models.BanRunStateDone || run.ReportedAt != nil || run.ReportClaimedAt != nil || run.ReportAttempts != 0 {
+			t.Fatalf("run = %+v, want it done, unreported, unclaimed, with no attempt counted for a rate limit", run)
+		}
+		if run.ReportCardDoneAt != nil || run.ReportLogDoneAt != nil {
+			t.Fatalf("run = %+v, want no step settled while the card edit is rate limited", run)
+		}
+
+		env.cyclesUntilReported(6)
+
+		run = env.finishedRun()
+		if run.ReportedAt == nil || run.ReportClaimedAt != nil {
+			t.Fatalf("run = %+v, want it reported with the claim cleared", run)
+		}
+		if text := env.lastCardText(staffChat.Id, card.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_result")) || !strings.Contains(text, " 1 0 0") {
+			t.Errorf("card = %q, want the result with banned 1", text)
+		}
+		if got := len(env.logBanPosts(logChannel)); got != 1 {
+			t.Errorf("%d #LOCKDOWN_BAN posts, want exactly 1", got)
+		}
+		env.cycle()
+		env.cycle()
+		if got := len(env.logBanPosts(logChannel)); got != 1 {
+			t.Errorf("%d #LOCKDOWN_BAN posts after more cycles, want still 1", got)
+		}
+	})
+
+	t.Run("a worker that stopped mid-delivery is replaced", func(t *testing.T) {
+		env, staffChat, card, logChannel := finishedUnreported(t)
+		run := env.finishedRun()
+		err := db.DB.Model(&models.ChatLockdownBanRun{}).Where("id = ?", run.ID).
+			Update("report_claimed_at", time.Now().UTC().Add(-3*time.Minute)).Error
+		if err != nil {
+			t.Fatalf("leave the report claimed: %v", err)
+		}
+
+		env.cyclesUntilReported(6)
+
+		if run = env.finishedRun(); run.ReportedAt == nil {
+			t.Fatalf("run = %+v, want the stale claim released and the report delivered", run)
+		}
+		if text := env.lastCardText(staffChat.Id, card.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_result")) {
+			t.Errorf("card = %q, want the result", text)
+		}
+		if got := len(env.logBanPosts(logChannel)); got != 1 {
+			t.Errorf("%d #LOCKDOWN_BAN posts, want exactly 1", got)
+		}
+	})
+
+	t.Run("a post that fails is retried and the delivered card edit is not repeated", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		logChannel := uniqueModuleChatID()
+		setStaffLogChannel(t, env.chat.Id, logChannel)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		card := env.confirmBan(a, env.admin)
+		refusal := staffFakeError(400, "Bad Request: chat not found")
+		env.fake.script("sendMessage", logChannel, refusal, refusal)
+		edits := len(env.cardEdits(staffChat.Id, card.msg.MessageID))
+
+		env.cycle()
+		run := env.finishedRun()
+		if run.ReportedAt != nil || run.ReportCardDoneAt == nil || run.ReportLogDoneAt != nil || run.ReportAttempts != 1 {
+			t.Fatalf("run = %+v, want the card delivered, the post failed once and the report open", run)
+		}
+
+		env.cyclesUntilReported(6)
+
+		if run = env.finishedRun(); run.ReportedAt == nil {
+			t.Fatalf("run = %+v, want the report delivered", run)
+		}
+		if got := len(env.logBanPosts(logChannel)); got != 1 {
+			t.Errorf("%d #LOCKDOWN_BAN posts, want exactly 1", got)
+		}
+		if got := len(env.cardEdits(staffChat.Id, card.msg.MessageID)) - edits; got != 1 {
+			t.Errorf("%d edits of the card for the result, want exactly 1: a delivered step is not repeated", got)
+		}
+	})
+
+	t.Run("a post that keeps failing is given up after three attempts", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		logChannel := uniqueModuleChatID()
+		setStaffLogChannel(t, env.chat.Id, logChannel)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		env.confirmBan(a, env.admin)
+		refusal := staffFakeError(400, "Bad Request: chat not found")
+		env.fake.script("sendMessage", logChannel, refusal, refusal, refusal)
+
+		env.cyclesUntilReported(6)
+
+		run := env.finishedRun()
+		if run.ReportedAt == nil || run.ReportClaimedAt != nil {
+			t.Fatalf("run = %+v, want the report settled after three failed posts", run)
+		}
+		if got := len(env.logBanPosts(logChannel)); got != 0 {
+			t.Errorf("%d #LOCKDOWN_BAN posts, want none: all three attempts failed", got)
+		}
+		before := len(env.fake.sentTo(logChannel))
+		env.cycle()
+		env.cycle()
+		if got := len(env.fake.sentTo(logChannel)); got != before {
+			t.Errorf("%d sends to the log channel after the give-up, were %d: a settled report is not tried again", got, before)
+		}
+	})
+
+	t.Run("a stopped run reports too", func(t *testing.T) {
+		env, staffChat := banEnv(t)
+		raider := env.newJoiner("R")
+		env.join(raider, raider, "")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+		a := lastAlert(t, env, staffChat)
+		card := env.confirmBan(a, env.admin)
+		limited := staffFake429(1)
+		env.fake.script("editMessageText", staffChat.Id, limited, limited, limited, limited)
+
+		env.send(env.admin, "/unlockdown")
+		env.cycle()
+		if run := env.finishedRun(); run.State != models.BanRunStateStopped || run.ReportedAt != nil {
+			t.Fatalf("run = %+v, want it stopped with its report undelivered", run)
+		}
+
+		env.cyclesUntilReported(6)
+
+		if run := env.finishedRun(); run.ReportedAt == nil {
+			t.Fatalf("run = %+v, want the stopped report delivered", run)
+		}
+		if text := env.lastCardText(staffChat.Id, card.msg.MessageID); !strings.Contains(text, staffMarker("lockdown_ban_stopped")) {
+			t.Errorf("card = %q, want it to say %q", text, staffMarker("lockdown_ban_stopped"))
+		}
+	})
+}

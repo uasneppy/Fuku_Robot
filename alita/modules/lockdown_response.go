@@ -276,7 +276,7 @@ func lockdownProcessBanRun(ctx context.Context, b *gotgbot.Bot, run *models.Chat
 		return false
 	}
 	if ld == nil || ld.State != models.LockdownStateActive {
-		return lockdownStopBanRun(ctx, b, run, ld)
+		return lockdownStopBanRun(run)
 	}
 	// The approved users are read fresh on every pass. When they cannot be read the run
 	// waits, because an account banned for good without the list could be an approved one.
@@ -304,7 +304,7 @@ func lockdownProcessBanRun(ctx context.Context, b *gotgbot.Bot, run *models.Chat
 			return progress
 		}
 		if current == nil || current.State != models.LockdownStateActive {
-			return lockdownStopBanRun(ctx, b, run, current) || progress
+			return lockdownStopBanRun(run) || progress
 		}
 		won, err := lockdown.ClaimBurst(row.ID, models.BurstStateQueued, models.BurstStateActing)
 		if err != nil || !won {
@@ -323,20 +323,20 @@ func lockdownProcessBanRun(ctx context.Context, b *gotgbot.Bot, run *models.Chat
 		return progress
 	}
 	if finished {
-		lockdownBanRunResult(ctx, b, run, ld, false)
+		// The result is delivered by lockdownReportBanRuns, which resumes from the database.
 		progress = true
 	}
 	return progress
 }
 
 // lockdownStopBanRun ends a run whose lockdown is no longer active (lifting, lifted or
-// gone): its queued accounts go back to unhandled, the run moves to stopped through the
-// same conditional finish as a normal end, and the replica that won it edits the card
-// with how far the run got and says it stopped. An account whose call is in flight on
-// another replica (acting) is left to that call or to the stale-claim release. A failed
-// write is logged and retried on the next cycle. It reports whether this call stopped the
-// run.
-func lockdownStopBanRun(ctx context.Context, b *gotgbot.Bot, run *models.ChatLockdownBanRun, ld *models.ChatLockdown) bool {
+// gone): its queued accounts go back to unhandled, and the run moves to stopped through
+// the same conditional finish as a normal end. The result card is then edited by
+// lockdownReportBanRuns, which says how far the run got and that it stopped. An account
+// whose call is in flight on another replica (acting) is left to that call or to the
+// stale-claim release. A failed write is logged and retried on the next cycle. It reports
+// whether this call stopped the run.
+func lockdownStopBanRun(run *models.ChatLockdownBanRun) bool {
 	if _, err := lockdown.UnqueueBanRun(run.ID); err != nil {
 		log.Errorf("[Lockdown] ban run %d could not give back its queued accounts: %v", run.ID, err)
 		return false
@@ -346,15 +346,7 @@ func lockdownStopBanRun(ctx context.Context, b *gotgbot.Bot, run *models.ChatLoc
 		log.Errorf("[Lockdown] ban run %d could not be stopped: %v", run.ID, err)
 		return false
 	}
-	if !finished {
-		return false
-	}
-	if ld == nil {
-		log.Warnf("[Lockdown] ban run %d stopped, but its lockdown is gone, so there is no card to report on", run.ID)
-		return true
-	}
-	lockdownBanRunResult(ctx, b, run, ld, true)
-	return true
+	return finished
 }
 
 // lockdownBanRunTranslator is the translator of the chat a run's card lives in: the Staff
@@ -470,39 +462,169 @@ func lockdownBanResultText(
 		lockdownListToken, list)
 }
 
-// lockdownBanRunResult reports how a run ended: the card is edited to
-// lockdownBanResultText and the locked group's log channel gets the one #LOCKDOWN_BAN
-// post. It runs on the replica whose FinishBanRun won, once per run, through the
-// lockdown pacer. A run with no card, a failed edit and a failed post are logged at warn
-// and change nothing: the accounts' states are already stored. Nothing is written to the
-// staff audit.
-func lockdownBanRunResult(ctx context.Context, b *gotgbot.Bot, run *models.ChatLockdownBanRun, ld *models.ChatLockdown, stopped bool) {
-	tally, err := lockdown.TallyBanRun(run.ID)
+// lockdownReportBanRuns delivers the result of every finished ban run whose report is
+// not settled: the card is edited to lockdownBanResultText and the locked group's log
+// channel gets the one #LOCKDOWN_BAN post. It follows the alert close step: a run is
+// claimed first so one replica delivers it, a rate limit or a shutdown gives the claim
+// back without costing an attempt and ends the step for the cycle, and the stale-claim
+// release in lockdownReleaseStale covers a worker that stopped. At most lockdownAlertBatch
+// runs are taken per cycle. It reports whether any step of any run was settled.
+func lockdownReportBanRuns(ctx context.Context, b *gotgbot.Bot) bool {
+	runs, err := lockdown.ListUnreportedBanRunsFresh(lockdownAlertBatch)
 	if err != nil {
-		log.Warnf("[Lockdown] the result of ban run %d could not be counted: %v", run.ID, err)
-		return
+		log.Errorf("[Lockdown] ban runs whose report is not delivered could not be listed: %v", err)
+		return false
 	}
-	if run.CardChatID == 0 || run.CardMsgID == 0 {
-		log.Warnf("[Lockdown] ban run %d finished with no card to report on", run.ID)
-	} else {
-		text := lockdownBanResultText(lockdownBanRunTranslator(run, ld), ld, run, tally, stopped)
-		err = lockdownPaced(ctx, func(callCtx context.Context) error {
-			call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
-			defer cancel()
-			_, _, editErr := b.EditMessageTextWithContext(call, &gotgbot.EditMessageTextOpts{
-				Text:               text,
-				ChatId:             run.CardChatID,
-				MessageId:          run.CardMsgID,
-				ParseMode:          formatting.HTML,
-				LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
-			})
-			return editErr
-		})
-		if err != nil && !isMessageNotModified(err) {
-			log.Warnf("[Lockdown] the result card of ban run %d could not be edited: %v", run.ID, err)
+	progress := false
+	for i := range runs {
+		if ctx.Err() != nil {
+			return progress
+		}
+		done, stop := lockdownReportBanRun(ctx, b, runs[i].ID)
+		if done {
+			progress = true
+		}
+		if stop {
+			// The same pacer limits every delivery, so the rest would only be refused too.
+			break
 		}
 	}
-	lockdownBanLogPost(ctx, b, ld, run, tally)
+	return progress
+}
+
+// releaseBanRunReport gives a claimed report back, logging a failure.
+func releaseBanRunReport(runID uint, countAttempt bool) {
+	if _, err := lockdown.ReleaseBanRunReport(runID, countAttempt); err != nil {
+		log.Errorf("[Lockdown] the report of ban run %d could not be given back: %v", runID, err)
+	}
+}
+
+// lockdownReportBanRun claims and delivers the report of one run. The card edit and the
+// log post are separate steps, each recorded once settled, so a step that was delivered is
+// never repeated (the #LOCKDOWN_BAN post is sent at most once after it was recorded)
+// while the other is retried. A step that failed lockdownMaxAttempts times is given up on
+// and logged at warn, so a run never loops. The accounts' states are already stored, and
+// nothing is written to the staff audit. done reports whether a step was settled; stop
+// that the step should end for this cycle.
+func lockdownReportBanRun(ctx context.Context, b *gotgbot.Bot, runID uint) (done, stop bool) {
+	claimed, err := lockdown.ClaimBanRunReport(runID)
+	if err != nil || !claimed {
+		return false, false
+	}
+	// The run is read again once it is claimed, so the steps another replica settled
+	// before this claim are not repeated.
+	run, err := lockdown.GetBanRunFresh(runID)
+	if err != nil || run == nil {
+		releaseBanRunReport(runID, false)
+		return false, false
+	}
+	ld, err := lockdown.GetFresh(run.LockdownID)
+	if err != nil {
+		releaseBanRunReport(runID, false)
+		return false, false
+	}
+	settle := func(step string) bool {
+		if _, err := lockdown.RecordBanRunReportStep(runID, step); err != nil {
+			log.Errorf("[Lockdown] the %s step of the report of ban run %d was delivered but not recorded: %v", step, runID, err)
+			return false
+		}
+		run.ReportAttempts = 0
+		return true
+	}
+	if ld == nil {
+		log.Warnf("[Lockdown] ban run %d finished, but its lockdown is gone, so there is nothing to report on", runID)
+		a := settle(lockdown.BanRunReportCardStep)
+		c := settle(lockdown.BanRunReportLogStep)
+		return a || c, false
+	}
+	tally, err := lockdown.TallyBanRun(runID)
+	if err != nil {
+		log.Warnf("[Lockdown] the result of ban run %d could not be counted: %v", runID, err)
+		releaseBanRunReport(runID, false)
+		return false, false
+	}
+
+	// fail handles a step whose delivery failed for another reason than a rate limit or a
+	// shutdown: it costs an attempt, and the last of lockdownMaxAttempts gives the step up.
+	fail := func(step string, cause error) (settled bool) {
+		log.Warnf("[Lockdown] the %s step of the report of ban run %d failed: %v", step, runID, cause)
+		if run.ReportAttempts+1 >= lockdownMaxAttempts {
+			log.Warnf("[Lockdown] the %s step of the report of ban run %d is given up after %d attempts", step, runID, lockdownMaxAttempts)
+			return settle(step)
+		}
+		releaseBanRunReport(runID, true)
+		return false
+	}
+
+	if run.ReportCardDoneAt == nil {
+		outcome, cause := lockdownBanRunEditCard(ctx, b, run, ld, tally)
+		switch outcome {
+		case lockdownCallDone:
+			if !settle(lockdown.BanRunReportCardStep) {
+				return done, false
+			}
+			done = true
+		case lockdownCallRetryFree:
+			releaseBanRunReport(runID, false)
+			return done, true
+		default:
+			if !fail(lockdown.BanRunReportCardStep, cause) {
+				return done, false
+			}
+			done = true
+		}
+	}
+	if run.ReportLogDoneAt == nil {
+		outcome, cause := lockdownBanLogPost(ctx, b, ld, run, tally)
+		switch outcome {
+		case lockdownCallDone:
+			if !settle(lockdown.BanRunReportLogStep) {
+				return done, false
+			}
+			done = true
+		case lockdownCallRetryFree:
+			releaseBanRunReport(runID, false)
+			return done, true
+		default:
+			if !fail(lockdown.BanRunReportLogStep, cause) {
+				return done, false
+			}
+			done = true
+		}
+	}
+	return done, false
+}
+
+// lockdownBanRunEditCard edits the run's card to the result through the lockdown pacer. A
+// run with no card, an edit Telegram reports as not modified and a card that is gone all
+// count as delivered (lockdownCallDone); a rate limit or a shutdown is
+// lockdownCallRetryFree; any other failure is lockdownCallFailed with its cause.
+func lockdownBanRunEditCard(
+	ctx context.Context, b *gotgbot.Bot, run *models.ChatLockdownBanRun, ld *models.ChatLockdown,
+	tally map[string]map[string]int64,
+) (lockdownCallOutcome, error) {
+	if run.CardChatID == 0 || run.CardMsgID == 0 {
+		log.Warnf("[Lockdown] ban run %d finished with no card to report on", run.ID)
+		return lockdownCallDone, nil
+	}
+	text := lockdownBanResultText(lockdownBanRunTranslator(run, ld), ld, run, tally, run.State == models.BanRunStateStopped)
+	err := lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		_, _, editErr := b.EditMessageTextWithContext(call, &gotgbot.EditMessageTextOpts{
+			Text:               text,
+			ChatId:             run.CardChatID,
+			MessageId:          run.CardMsgID,
+			ParseMode:          formatting.HTML,
+			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+		})
+		return editErr
+	})
+	switch {
+	case isMessageNotModified(err), lockdownEditGone(err):
+		return lockdownCallDone, nil
+	}
+	return lockdownClassify(ctx, err), err
 }
 
 // lockdownBanLogPost posts the one record of a ban run in the locked group's log channel,
@@ -510,22 +632,26 @@ func lockdownBanRunResult(ctx context.Context, b *gotgbot.Bot, run *models.ChatL
 // banned, skipped and failed, in the locked group's language. The hashtag is not
 // localized. It posts nothing for a run that handled no account, when the group has no
 // log channel or its admin category is off, and nothing is ever sent into the group
-// itself. A failed post is logged at warn and changes nothing. The text says only that
-// accounts were banned: no claim is made about their messages.
-func lockdownBanLogPost(ctx context.Context, b *gotgbot.Bot, ld *models.ChatLockdown, run *models.ChatLockdownBanRun, tally map[string]map[string]int64) {
+// itself; those count as delivered (lockdownCallDone). A rate limit or a shutdown is
+// lockdownCallRetryFree; any other failure is lockdownCallFailed with its cause. The text
+// says only that accounts were banned: no claim is made about their messages.
+func lockdownBanLogPost(
+	ctx context.Context, b *gotgbot.Bot, ld *models.ChatLockdown, run *models.ChatLockdownBanRun,
+	tally map[string]map[string]int64,
+) (lockdownCallOutcome, error) {
 	if ctx.Err() != nil {
-		return
+		return lockdownCallRetryFree, ctx.Err()
 	}
 	banned := lockdownTallySum(tally, models.BurstStateBanned)
 	skipped := lockdownTallySum(tally, models.BurstStateSkipped)
 	failed := lockdownTallySum(tally, models.BurstStateFailed)
 	if banned+skipped+failed == 0 {
-		return
+		return lockdownCallDone, nil
 	}
 	chat := &gotgbot.Chat{Id: ld.ChatID, Title: ld.ChatTitle, Type: "supergroup"}
 	channelID, header, ok := actionlog.Destination(chat, logchannels.CategoryAdmin)
 	if !ok {
-		return
+		return lockdownCallDone, nil
 	}
 	tr := staffChatTranslator(ld.ChatID)
 	adminLabel, _ := tr.GetString("staff_log_admin_label")
@@ -547,7 +673,5 @@ func lockdownBanLogPost(ctx context.Context, b *gotgbot.Bot, ld *models.ChatLock
 		})
 		return sendErr
 	})
-	if err != nil {
-		log.Warnf("[Lockdown] the log post of ban run %d could not be sent: %v", run.ID, err)
-	}
+	return lockdownClassify(ctx, err), err
 }

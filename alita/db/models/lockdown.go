@@ -294,8 +294,17 @@ type ChatLockdownBanRun struct {
 	CardDest      string     `gorm:"column:card_dest;size:8;not null;default:'staff';check:chk_chat_lockdown_ban_run_dest,card_dest IN ('staff','log')" json:"card_dest,omitempty"`
 	State         string     `gorm:"column:state;size:8;not null;default:'running';check:chk_chat_lockdown_ban_run_state,state IN ('running','done','stopped')" json:"state,omitempty"`
 	FinishedAt    *time.Time `gorm:"column:finished_at" json:"finished_at,omitempty"`
-	CreatedAt     time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt     time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	// The delivery of the finished run's report (migration 20261011160000). The card edit
+	// and the log post are settled separately (delivered, or given up on after
+	// the attempt budget); ReportedAt is set once both are, and ReportClaimedAt
+	// is the worker's claim while it delivers.
+	ReportCardDoneAt *time.Time `gorm:"column:report_card_done_at" json:"report_card_done_at,omitempty"`
+	ReportLogDoneAt  *time.Time `gorm:"column:report_log_done_at" json:"report_log_done_at,omitempty"`
+	ReportedAt       *time.Time `gorm:"column:reported_at" json:"reported_at,omitempty"`
+	ReportClaimedAt  *time.Time `gorm:"column:report_claimed_at" json:"report_claimed_at,omitempty"`
+	ReportAttempts   int        `gorm:"column:report_attempts;not null;default:0" json:"report_attempts,omitempty"`
+	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
 
 // TableName returns the migration's table name for ChatLockdownBanRun.

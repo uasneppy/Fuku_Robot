@@ -200,14 +200,17 @@ func StartBanRun(run *models.ChatLockdownBanRun, exclude []int64) (started bool,
 		started = true
 
 		if queued == 0 {
+			// Nothing was queued, so there is no result to report: the caller answers on
+			// the card itself, and the report step must not edit it again.
 			finished := tx.Model(&models.ChatLockdownBanRun{}).
 				Where("id = ?", run.ID).
-				Updates(map[string]any{"state": models.BanRunStateDone, "finished_at": stamp, "updated_at": stamp})
+				Updates(map[string]any{"state": models.BanRunStateDone, "finished_at": stamp, "reported_at": stamp, "updated_at": stamp})
 			if finished.Error != nil {
 				return finished.Error
 			}
 			run.State = models.BanRunStateDone
 			run.FinishedAt = &stamp
+			run.ReportedAt = &stamp
 		}
 		return nil
 	})
@@ -276,6 +279,139 @@ func FinishBanRun(runID uint, state string) (bool, error) {
 		return false, alitaerrors.Wrapf(result.Error, "finish ban run %d", runID)
 	}
 	return result.RowsAffected == 1, nil
+}
+
+// The report of a finished ban run is delivered in two steps, the card edit and the log
+// post, each settled on its own (report_card_done_at, report_log_done_at) so a step that
+// was delivered is never repeated while the other is retried. A worker claims the run
+// with report_claimed_at; reported_at is set when both steps are settled.
+
+// BanRunReportCardStep and BanRunReportLogStep name the two steps of a report delivery.
+const (
+	BanRunReportCardStep = "card"
+	BanRunReportLogStep  = "log"
+)
+
+// ListUnreportedBanRunsFresh reads up to limit finished (done or stopped) ban runs whose
+// report is not settled and not claimed, oldest first, on any replica.
+func ListUnreportedBanRunsFresh(limit int) ([]models.ChatLockdownBanRun, error) {
+	var runs []models.ChatLockdownBanRun
+	err := db.DB.
+		Where("state <> ? AND reported_at IS NULL AND report_claimed_at IS NULL", models.BanRunStateRunning).
+		Order("id").
+		Limit(limit).
+		Find(&runs).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListUnreportedBanRunsFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list ban runs whose report is not delivered")
+	}
+	return runs, nil
+}
+
+// GetBanRunFresh reads one ban run straight from the database; nil with no error means
+// there is no such run.
+func GetBanRunFresh(runID uint) (*models.ChatLockdownBanRun, error) {
+	var run models.ChatLockdownBanRun
+	err := db.DB.Where("id = ?", runID).Limit(1).Find(&run).Error
+	if err != nil {
+		log.Errorf("[Lockdown] GetBanRunFresh: %v", err)
+		return nil, alitaerrors.Wrapf(err, "read ban run %d", runID)
+	}
+	if run.ID == 0 {
+		return nil, nil
+	}
+	return &run, nil
+}
+
+// ClaimBanRunReport claims a finished run's report for delivery by stamping
+// report_claimed_at in one conditional update that matches only while the run is finished,
+// its report is not settled and nobody holds the claim. It reports whether this call won,
+// so only the winner edits the card and sends the post.
+func ClaimBanRunReport(runID uint) (bool, error) {
+	stamp := now()
+	result := db.DB.Model(&models.ChatLockdownBanRun{}).
+		Where("id = ? AND state <> ? AND reported_at IS NULL AND report_claimed_at IS NULL", runID, models.BanRunStateRunning).
+		Updates(map[string]any{"report_claimed_at": stamp, "updated_at": stamp})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ClaimBanRunReport: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "claim the report of ban run %d", runID)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// RecordBanRunReportStep settles one step of a claimed report (BanRunReportCardStep or
+// BanRunReportLogStep), whether it was delivered or given up on, and sets the attempt
+// counter back to zero so one step cannot use up the other's attempts. It matches only
+// while the claim is held, and a step already settled keeps its first time. When both
+// steps are settled the same transaction sets reported_at and clears the claim, and
+// reported is true. It reports false with no error when the claim was no longer held.
+func RecordBanRunReportStep(runID uint, step string) (reported bool, err error) {
+	column := "report_card_done_at"
+	if step == BanRunReportLogStep {
+		column = "report_log_done_at"
+	}
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		reported = false
+		stamp := now()
+		settled := tx.Model(&models.ChatLockdownBanRun{}).
+			Where("id = ? AND reported_at IS NULL AND report_claimed_at IS NOT NULL", runID).
+			Updates(map[string]any{
+				column:            gorm.Expr("COALESCE("+column+", ?)", stamp),
+				"report_attempts": 0,
+				"updated_at":      stamp,
+			})
+		if settled.Error != nil {
+			return settled.Error
+		}
+		if settled.RowsAffected != 1 {
+			return nil
+		}
+		both := tx.Model(&models.ChatLockdownBanRun{}).
+			Where("id = ? AND reported_at IS NULL AND report_card_done_at IS NOT NULL AND report_log_done_at IS NOT NULL", runID).
+			Updates(map[string]any{"reported_at": stamp, "report_claimed_at": nil, "updated_at": stamp})
+		if both.Error != nil {
+			return both.Error
+		}
+		reported = both.RowsAffected == 1
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Lockdown] RecordBanRunReportStep: %v", err)
+		return false, alitaerrors.Wrapf(err, "record the %s step of the report of ban run %d", step, runID)
+	}
+	return reported, nil
+}
+
+// ReleaseBanRunReport gives a claimed report back for another try: the claim is cleared,
+// and countAttempt adds one to report_attempts. It reports whether this call moved the
+// row.
+func ReleaseBanRunReport(runID uint, countAttempt bool) (bool, error) {
+	updates := map[string]any{"report_claimed_at": nil, "updated_at": now()}
+	if countAttempt {
+		updates["report_attempts"] = gorm.Expr("report_attempts + 1")
+	}
+	result := db.DB.Model(&models.ChatLockdownBanRun{}).
+		Where("id = ? AND reported_at IS NULL AND report_claimed_at IS NOT NULL", runID).
+		Updates(updates)
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ReleaseBanRunReport: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "release the report of ban run %d", runID)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// ReleaseStaleBanRunReportClaims gives back every report claim made before the cut-off
+// and never settled, because the worker stopped, without counting an attempt. It returns
+// how many claims it released.
+func ReleaseStaleBanRunReportClaims(before time.Time) (int64, error) {
+	result := db.DB.Model(&models.ChatLockdownBanRun{}).
+		Where("reported_at IS NULL AND report_claimed_at < ?", before.UTC()).
+		Updates(map[string]any{"report_claimed_at": nil, "updated_at": now()})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ReleaseStaleBanRunReportClaims: %v", result.Error)
+		return 0, alitaerrors.Wrap(result.Error, "release stale ban run report claims")
+	}
+	return result.RowsAffected, nil
 }
 
 // ListBurstOfRunFresh reads up to limit burst rows of one run that are in state, in the

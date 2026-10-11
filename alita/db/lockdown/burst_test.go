@@ -538,6 +538,18 @@ func TestBanRunStart(t *testing.T) {
 		if got := readBanRun(t, run.ID); got.State != models.BanRunStateDone || got.FinishedAt == nil {
 			t.Errorf("run = %q, finished %v, want done with a finish time", got.State, got.FinishedAt)
 		}
+		if got := readBanRun(t, run.ID); got.ReportedAt == nil {
+			t.Error("run has no reported_at, want it set: a run with nothing queued has no result to deliver")
+		}
+		if unreported, err := ListUnreportedBanRunsFresh(1000); err != nil {
+			t.Errorf("ListUnreportedBanRunsFresh: %v", err)
+		} else {
+			for _, r := range unreported {
+				if r.ID == run.ID {
+					t.Error("ListUnreportedBanRunsFresh lists a run with nothing queued, want it left out")
+				}
+			}
+		}
 		// A done run no longer blocks a new one.
 		if started, _, err := StartBanRun(newBanRun(ld), nil); err != nil || !started {
 			t.Errorf("StartBanRun after a done run = %v, %v, want true", started, err)
@@ -795,4 +807,166 @@ func TestListBurstOfRunFresh(t *testing.T) {
 	if rows, err := ListBurstOfRunFresh(run.ID+1000, models.BurstStateFailed, 10); err != nil || len(rows) != 0 {
 		t.Errorf("ListBurstOfRunFresh(other run) = %+v, %v, want none", rows, err)
 	}
+}
+
+// unhandledBurstRow seeds a burst row no response has touched, which StartBanRun queues.
+func unhandledBurstRow(t *testing.T, ld *models.ChatLockdown, userID int64) {
+	t.Helper()
+	row := preRow(ld, userID, "U", time.Now().UTC().Add(-time.Minute))
+	if err := db.DB.Create(&row).Error; err != nil {
+		t.Fatalf("seed burst row %d: %v", userID, err)
+	}
+}
+
+// finishedBanRun starts a run over one queued account and finishes it as state, the
+// precondition of every report delivery test.
+func finishedBanRun(t *testing.T, state string) *models.ChatLockdownBanRun {
+	t.Helper()
+	chat := uniqueLockdownChatID(t)
+	cleanupBurstLockdowns(t, chat)
+	cleanupBanRuns(t, chat)
+	ld := mustStart(t, chat)
+	mustConfirm(t, ld.ID)
+	unhandledBurstRow(t, ld, 9601)
+	run := newBanRun(ld)
+	if started, _, err := StartBanRun(run, nil); err != nil || !started {
+		t.Fatalf("StartBanRun = %v, %v", started, err)
+	}
+	if state == models.BanRunStateDone {
+		row := burstRowOfUser(t, ld.ID, 9601)
+		if moved, err := MoveBurst(row.ID, models.BurstStateQueued, models.BurstStateBanned, "", "", false); err != nil || !moved {
+			t.Fatalf("MoveBurst = %v, %v", moved, err)
+		}
+	}
+	if finished, err := FinishBanRun(run.ID, state); err != nil || !finished {
+		t.Fatalf("FinishBanRun(%s) = %v, %v, want true", state, finished, err)
+	}
+	return run
+}
+
+// listsUnreported reports whether ListUnreportedBanRunsFresh includes the run.
+func listsUnreported(t *testing.T, id uint) bool {
+	t.Helper()
+	runs, err := ListUnreportedBanRunsFresh(1000)
+	if err != nil {
+		t.Fatalf("ListUnreportedBanRunsFresh: %v", err)
+	}
+	for _, r := range runs {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func TestBanRunReport(t *testing.T) {
+	t.Run("a running run is not reported", func(t *testing.T) {
+		chat := uniqueLockdownChatID(t)
+		cleanupBurstLockdowns(t, chat)
+		cleanupBanRuns(t, chat)
+		ld := mustStart(t, chat)
+		mustConfirm(t, ld.ID)
+		unhandledBurstRow(t, ld, 9602)
+		run := newBanRun(ld)
+		if started, _, err := StartBanRun(run, nil); err != nil || !started {
+			t.Fatalf("StartBanRun = %v, %v", started, err)
+		}
+		if listsUnreported(t, run.ID) {
+			t.Error("ListUnreportedBanRunsFresh lists a running run, want only finished ones")
+		}
+		if won, err := ClaimBanRunReport(run.ID); err != nil || won {
+			t.Errorf("ClaimBanRunReport of a running run = %v, %v, want false", won, err)
+		}
+	})
+
+	t.Run("one claim wins", func(t *testing.T) {
+		run := finishedBanRun(t, models.BanRunStateDone)
+		if !listsUnreported(t, run.ID) {
+			t.Fatal("ListUnreportedBanRunsFresh leaves out a finished, unreported run")
+		}
+		if won, err := ClaimBanRunReport(run.ID); err != nil || !won {
+			t.Fatalf("first ClaimBanRunReport = %v, %v, want true", won, err)
+		}
+		if won, err := ClaimBanRunReport(run.ID); err != nil || won {
+			t.Errorf("second ClaimBanRunReport = %v, %v, want false: one replica delivers", won, err)
+		}
+		if listsUnreported(t, run.ID) {
+			t.Error("ListUnreportedBanRunsFresh lists a claimed run, want it left to the claim holder")
+		}
+	})
+
+	t.Run("steps are settled separately", func(t *testing.T) {
+		run := finishedBanRun(t, models.BanRunStateStopped)
+		if reported, err := RecordBanRunReportStep(run.ID, BanRunReportCardStep); err != nil || reported {
+			t.Fatalf("a step without a claim = %v, %v, want false: nothing is recorded for a claim not held", reported, err)
+		}
+		if won, err := ClaimBanRunReport(run.ID); err != nil || !won {
+			t.Fatalf("ClaimBanRunReport = %v, %v, want true", won, err)
+		}
+		if _, err := ReleaseBanRunReport(run.ID, true); err != nil {
+			t.Fatalf("ReleaseBanRunReport: %v", err)
+		}
+		if got := readBanRun(t, run.ID); got.ReportAttempts != 1 || got.ReportClaimedAt != nil {
+			t.Fatalf("run = attempts %d, claim %v, want 1 attempt and no claim", got.ReportAttempts, got.ReportClaimedAt)
+		}
+		if won, _ := ClaimBanRunReport(run.ID); !won {
+			t.Fatal("a released report was not claimable again")
+		}
+
+		reported, err := RecordBanRunReportStep(run.ID, BanRunReportCardStep)
+		if err != nil || reported {
+			t.Fatalf("card step = %v, %v, want settled but not yet reported", reported, err)
+		}
+		got := readBanRun(t, run.ID)
+		if got.ReportCardDoneAt == nil || got.ReportLogDoneAt != nil || got.ReportedAt != nil || got.ReportClaimedAt == nil || got.ReportAttempts != 0 {
+			t.Fatalf("run = %+v, want the card settled, attempts back to 0 and the claim kept", got)
+		}
+		firstStamp := *got.ReportCardDoneAt
+		if reported, err := RecordBanRunReportStep(run.ID, BanRunReportCardStep); err != nil || reported {
+			t.Errorf("card step again = %v, %v, want false", reported, err)
+		}
+		if again := readBanRun(t, run.ID); again.ReportCardDoneAt == nil || !again.ReportCardDoneAt.Equal(firstStamp) {
+			t.Errorf("card settled at %v after a repeat, want the first time %v kept", again.ReportCardDoneAt, firstStamp)
+		}
+
+		reported, err = RecordBanRunReportStep(run.ID, BanRunReportLogStep)
+		if err != nil || !reported {
+			t.Fatalf("log step = %v, %v, want both settled and reported", reported, err)
+		}
+		got = readBanRun(t, run.ID)
+		if got.ReportedAt == nil || got.ReportClaimedAt != nil {
+			t.Errorf("run = reported %v, claim %v, want reported with the claim cleared", got.ReportedAt, got.ReportClaimedAt)
+		}
+		if listsUnreported(t, run.ID) {
+			t.Error("ListUnreportedBanRunsFresh lists a reported run")
+		}
+		if won, _ := ClaimBanRunReport(run.ID); won {
+			t.Error("a reported run can be claimed again, want never")
+		}
+	})
+
+	t.Run("stale claims are released without an attempt", func(t *testing.T) {
+		run := finishedBanRun(t, models.BanRunStateDone)
+		if won, _ := ClaimBanRunReport(run.ID); !won {
+			t.Fatal("ClaimBanRunReport lost")
+		}
+		if released, err := ReleaseStaleBanRunReportClaims(time.Now().UTC().Add(-2 * time.Minute)); err != nil {
+			t.Fatalf("ReleaseStaleBanRunReportClaims: %v", err)
+		} else if released != 0 {
+			t.Errorf("released %d claim(s) younger than the cut-off, want 0", released)
+		}
+		old := time.Now().UTC().Add(-10 * time.Minute)
+		if err := db.DB.Model(&models.ChatLockdownBanRun{}).Where("id = ?", run.ID).Update("report_claimed_at", old).Error; err != nil {
+			t.Fatalf("age the claim: %v", err)
+		}
+		if released, err := ReleaseStaleBanRunReportClaims(time.Now().UTC().Add(-2 * time.Minute)); err != nil || released < 1 {
+			t.Fatalf("ReleaseStaleBanRunReportClaims = %d, %v, want the stale claim released", released, err)
+		}
+		if got := readBanRun(t, run.ID); got.ReportClaimedAt != nil || got.ReportAttempts != 0 {
+			t.Errorf("run = claim %v, attempts %d, want no claim and no attempt", got.ReportClaimedAt, got.ReportAttempts)
+		}
+		if !listsUnreported(t, run.ID) {
+			t.Error("a released run is not listed again")
+		}
+	})
 }
