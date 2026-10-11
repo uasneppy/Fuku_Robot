@@ -236,3 +236,193 @@ func TestLockdownRevokeLink(t *testing.T) {
 		}
 	})
 }
+
+// wantNothingRevoked fails when the lockdown records a revoke or a cycle edits a copy.
+func (s *revokeScene) wantNothingRevoked() {
+	s.env.t.Helper()
+	if row := s.env.freshRow(s.row.ID); row.LinkRevokedAt != nil || row.LinkRevokedBy != nil || row.LinkRevokedLink != "" {
+		s.env.t.Errorf("lockdown row = %+v, want no revoke recorded", row)
+	}
+	s.env.cycle()
+	if got := len(s.env.alertEdits(s.staff.Id, s.staffMsg.MessageID)); got != 0 {
+		s.env.t.Errorf("staff copy was edited %d times, want none", got)
+	}
+	if got := len(s.env.alertEdits(s.channel, s.logMsg.MessageID)); got != 0 {
+		s.env.t.Errorf("log copy was edited %d times, want none", got)
+	}
+}
+
+// askAndConfirm presses Revoke as from and, when a card came, confirms it. It returns
+// the card.
+func (s *revokeScene) askAndConfirm(from gotgbot.User) staffSentMessage {
+	s.env.t.Helper()
+	card, ok := s.ask(from)
+	if !ok {
+		s.env.t.Fatal("no confirm card came")
+	}
+	s.press(from, card.MessageID, lockdownButtonData(s.env.t, card.Params["reply_markup"], "rc"))
+	return card
+}
+
+func TestLockdownRevokeLinkRefusals(t *testing.T) {
+	// Refusals by authority: no card, no call, nothing recorded.
+	authority := []struct {
+		name  string
+		setup func(s *revokeScene) gotgbot.User
+		want  string
+	}{
+		{
+			name: "restrict right only",
+			setup: func(s *revokeScene) gotgbot.User {
+				user := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Restrictor"}
+				s.env.fake.setMemberRaw(s.env.chat.Id, user.Id, lockdownAdminJSON(user.Id, true, false))
+				return user
+			},
+			want: "lockdown_revoke_not_admin",
+		},
+		{
+			name: "staff member",
+			setup: func(s *revokeScene) gotgbot.User {
+				user := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Pat"}
+				s.env.fake.setMember(s.env.chat.Id, user.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+				return user
+			},
+			want: "lockdown_revoke_not_admin",
+		},
+		{
+			name: "service identity",
+			setup: func(s *revokeScene) gotgbot.User {
+				return gotgbot.User{Id: 1087968824, FirstName: "Group"}
+			},
+			want: "lockdown_alert_post_as_yourself",
+		},
+		{
+			name: "lookup fails",
+			setup: func(s *revokeScene) gotgbot.User {
+				s.env.fake.script("getChatMember", s.env.chat.Id, staffFakeError(500, "Internal Server Error"))
+				return s.asker
+			},
+			want: "lockdown_alert_check_failed",
+		},
+	}
+	for _, tc := range authority {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newRevokeScene(t, revokeTestLink)
+			from := tc.setup(s)
+
+			answers := s.env.answerTotal()
+			if _, ok := s.ask(from); ok {
+				t.Fatal("a refused press got a confirm card")
+			}
+			if s.env.answerTotal() != answers+1 {
+				t.Fatalf("a refused press made %d answers, want 1", s.env.answerTotal()-answers)
+			}
+			if text, _ := s.env.lastAnswer(); !strings.Contains(text, staffMarker(tc.want)) {
+				t.Errorf("answer = %q, want %q", text, staffMarker(tc.want))
+			}
+			if got := len(s.revokeCalls()); got != 0 {
+				t.Errorf("%d revokeChatInviteLink calls, want none", got)
+			}
+			s.wantNothingRevoked()
+		})
+	}
+
+	t.Run("confirm checks authority again", func(t *testing.T) {
+		s := newRevokeScene(t, revokeTestLink)
+		card, ok := s.ask(s.asker)
+		if !ok {
+			t.Fatal("no confirm card came")
+		}
+		// The asker loses the invite right between Ask and Confirm.
+		s.env.fake.setMemberRaw(s.env.chat.Id, s.asker.Id, lockdownAdminJSON(s.asker.Id, true, false))
+		s.press(s.asker, card.MessageID, lockdownButtonData(t, card.Params["reply_markup"], "rc"))
+
+		if got := s.cardText(card); !strings.Contains(got, staffMarker("lockdown_revoke_not_admin")) {
+			t.Errorf("card reads %q, want %q", got, staffMarker("lockdown_revoke_not_admin"))
+		}
+		if got := len(s.revokeCalls()); got != 0 {
+			t.Errorf("%d revokeChatInviteLink calls, want none", got)
+		}
+		s.wantNothingRevoked()
+	})
+
+	// Refusals by Telegram: the card says why in plain words, the raw text stays out of it.
+	telegram := []struct {
+		name     string
+		failures []error
+		want     string
+		hidden   string
+	}{
+		{
+			name:     "no rights",
+			failures: []error{staffFakeError(400, "Bad Request: CHAT_ADMIN_REQUIRED")},
+			want:     "lockdown_revoke_no_rights",
+			hidden:   "CHAT_ADMIN_REQUIRED",
+		},
+		{
+			name:     "not the bot's",
+			failures: []error{staffFakeError(400, "Bad Request: INVITE_HASH_EXPIRED")},
+			want:     "lockdown_revoke_not_found",
+			hidden:   "INVITE_HASH_EXPIRED",
+		},
+		{
+			name:     "server error",
+			failures: []error{staffFakeError(500, "Internal Server Error: secret detail")},
+			want:     "lockdown_revoke_failed",
+			hidden:   "secret detail",
+		},
+		{
+			name:     "rate limited",
+			failures: []error{staffFake429(1), staffFake429(1), staffFake429(1), staffFake429(1)},
+			want:     "lockdown_revoke_busy",
+			hidden:   "Too Many Requests",
+		},
+	}
+	for _, tc := range telegram {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newRevokeScene(t, revokeTestLink)
+			s.env.fake.script("revokeChatInviteLink", s.env.chat.Id, tc.failures...)
+
+			card := s.askAndConfirm(s.asker)
+
+			if tc.name != "rate limited" {
+				if got := len(s.revokeCalls()); got != 1 {
+					t.Errorf("%d revokeChatInviteLink calls, want exactly 1", got)
+				}
+			}
+			text := s.cardText(card)
+			if !strings.Contains(text, staffMarker(tc.want)) {
+				t.Errorf("card reads %q, want %q", text, staffMarker(tc.want))
+			}
+			if strings.Contains(text, tc.hidden) {
+				t.Errorf("card %q shows Telegram's raw text %q", text, tc.hidden)
+			}
+			s.wantNothingRevoked()
+		})
+	}
+
+	t.Run("retry after a refusal", func(t *testing.T) {
+		s := newRevokeScene(t, revokeTestLink)
+		s.env.fake.script("revokeChatInviteLink", s.env.chat.Id, staffFakeError(500, "Internal Server Error"))
+
+		failed := s.askAndConfirm(s.asker)
+		if got := s.cardText(failed); !strings.Contains(got, staffMarker("lockdown_revoke_failed")) {
+			t.Fatalf("first card reads %q, want %q", got, staffMarker("lockdown_revoke_failed"))
+		}
+		if row := s.env.freshRow(s.row.ID); row.LinkRevokedAt != nil {
+			t.Fatalf("a refused revoke was recorded: %+v", row)
+		}
+
+		retried := s.askAndConfirm(s.asker)
+		if got := s.cardText(retried); !strings.Contains(got, staffMarker("lockdown_revoke_done")) {
+			t.Errorf("second card reads %q, want %q", got, staffMarker("lockdown_revoke_done"))
+		}
+		if got := len(s.revokeCalls()); got != 2 {
+			t.Errorf("%d revokeChatInviteLink calls, want 2 (one refused, one done)", got)
+		}
+		row := s.env.freshRow(s.row.ID)
+		if row.LinkRevokedAt == nil || row.LinkRevokedBy == nil || *row.LinkRevokedBy != s.asker.Id {
+			t.Errorf("lockdown row = %+v, want the revoke recorded once for %d", row, s.asker.Id)
+		}
+	})
+}
