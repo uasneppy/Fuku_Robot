@@ -430,6 +430,45 @@ func TestAlertClose(t *testing.T) {
 		}
 	})
 
+	t.Run("attempts left by failed refreshes do not count against the close", func(t *testing.T) {
+		ld, ids := postedCopies(t)
+		// Two refreshes failed (attempts 2, still marked), then the lockdown was lifted.
+		if err := db.DB.Model(&models.ChatLockdownAlert{}).Where("id = ?", ids[0]).
+			Updates(map[string]any{"edit_pending": true, "attempts": 2}).Error; err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+		// A copy with no mark keeps the attempts it has (they are the close's own).
+		if err := db.DB.Model(&models.ChatLockdownAlert{}).Where("id = ?", ids[1]).
+			Update("attempts", 2).Error; err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+		mustLift(t, ld.ID)
+
+		if ok, err := ClaimAlertClose(ids[0]); err != nil || !ok {
+			t.Fatalf("ClaimAlertClose = %v, %v, want true", ok, err)
+		}
+		if row := readAlert(t, ids[0]); row.Attempts != 0 || row.EditPending || row.ClaimedAt == nil {
+			t.Errorf("marked copy after the claim = attempts %d, edit_pending %v, claim %v, want 0, false, a claim", row.Attempts, row.EditPending, row.ClaimedAt)
+		}
+		// The close fails once and is released; the next claim keeps counting.
+		if ok, err := ReleaseAlertClose(ids[0], true); err != nil || !ok {
+			t.Fatalf("ReleaseAlertClose = %v, %v, want true", ok, err)
+		}
+		if ok, _ := ClaimAlertClose(ids[0]); !ok {
+			t.Fatal("ClaimAlertClose after a release = false, want true")
+		}
+		if row := readAlert(t, ids[0]); row.Attempts != 1 {
+			t.Errorf("attempts after a failed close and a new claim = %d, want 1: the close's own count survives", row.Attempts)
+		}
+
+		if ok, _ := ClaimAlertClose(ids[1]); !ok {
+			t.Fatal("ClaimAlertClose of the unmarked copy = false, want true")
+		}
+		if row := readAlert(t, ids[1]); row.Attempts != 2 {
+			t.Errorf("unmarked copy attempts after the claim = %d, want its own 2 kept", row.Attempts)
+		}
+	})
+
 	t.Run("release clears the claim and counts an attempt only when asked", func(t *testing.T) {
 		ld, ids := postedCopies(t)
 		mustLift(t, ld.ID)

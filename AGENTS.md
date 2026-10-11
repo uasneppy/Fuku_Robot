@@ -438,7 +438,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stored `body` plus "Lifted by X at T" (`lockdown_alert_lifted_footer`, the lifter and `lift_started_at` read from the
   lockdown row) with no buttons (`lockdownCloseAlerts`, run after `lockdownProcessLifts` in every cycle, so a restart and
   a second replica finish it). A copy is claimed through `lockdown.ClaimAlertClose` (it reuses `claimed_at`, which a
-  posted copy has no other use for), listed only while its lockdown is not active, newest first and at most
+  posted copy has no other use for; `attempts` is one counter for post, refresh and close, so a claim of a copy still
+  marked `edit_pending` resets it to zero and clears the mark in the same update, and the close is then read again, so
+  refreshes that failed before the lift cannot use up the close's attempts), listed only while its lockdown is not active, newest first and at most
   `lockdownAlertBatch` per cycle, and recorded with `closed_at` by `RecordAlertClosed`, so it is edited exactly once. A
   gone ("message to edit not found", "message can't be edited", `MESSAGE_ID_INVALID`) or unmodified copy counts as closed;
   a rate limit or shutdown gives the claim back without an attempt and ends the step for that cycle; any other failure

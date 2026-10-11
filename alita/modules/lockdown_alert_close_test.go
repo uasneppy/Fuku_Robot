@@ -9,6 +9,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
 
@@ -176,6 +177,43 @@ func TestLockdownAlertClosedAtLift(t *testing.T) {
 		env.cycle()
 		if got := len(env.alertEdits(staffChat.Id, alert.MessageID)); got != 3 {
 			t.Errorf("%d edit attempts, want 3: a given-up copy is not tried again", got)
+		}
+	})
+}
+
+func TestLockdownAlertCloseAttempts(t *testing.T) {
+	t.Run("failed refreshes do not use up the close attempts", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		_, staffChat, alert := lockedWithAlert(t, env)
+		rows := env.alertRows()
+		if len(rows) != 1 {
+			t.Fatalf("%d alert rows, want 1", len(rows))
+		}
+		// Two refreshes of the copy failed before the lift: it is still marked and has
+		// spent two of its three attempts.
+		err := db.DB.Model(&models.ChatLockdownAlert{}).Where("id = ?", rows[0].ID).
+			Updates(map[string]any{"edit_pending": true, "attempts": 2}).Error
+		if err != nil {
+			t.Fatalf("leave the copy with failed refreshes: %v", err)
+		}
+		env.fake.script("editMessageText", staffChat.Id, staffFakeError(400, "Bad Request: can't parse entities"))
+
+		env.send(env.admin, "/unlockdown")
+		env.cycle()
+
+		rows = env.alertRows()
+		if len(rows) != 1 || rows[0].ClosedAt != nil || rows[0].Attempts != 1 {
+			t.Fatalf("alert rows = %+v, want the copy still open after one failed close, with 1 attempt", rows)
+		}
+		if !strings.Contains(fmt.Sprint(alert.Params["reply_markup"]), "lockdown") {
+			t.Fatalf("setup: the alert has no buttons: %v", alert.Params["reply_markup"])
+		}
+
+		env.cycle()
+
+		env.wantLiftedAlert(staffChat, alert)
+		if rows = env.alertRows(); len(rows) != 1 || rows[0].Detail != "" {
+			t.Errorf("alert rows = %+v, want the copy closed by a successful edit with no failure detail", rows)
 		}
 	})
 }

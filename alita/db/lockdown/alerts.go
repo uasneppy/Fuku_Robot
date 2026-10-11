@@ -240,11 +240,23 @@ func ListAlertSlotsToCloseFresh(limit int) ([]models.ChatLockdownAlert, error) {
 // ClaimAlertClose claims a posted, open, unclaimed copy for closing by stamping
 // claimed_at, in one conditional update, and reports whether this call won the claim. A
 // posted copy has no other claim, so the column is reused.
+//
+// The attempts counter is shared with the refresh (one counter for the post, the refresh
+// and the close), so attempts left by refreshes that failed before the lift belong to a
+// step that no longer matters: the close text already holds everything a refresh would
+// add. A copy still marked edit_pending therefore starts its close at zero attempts and
+// loses the mark in the same update; a close that fails after that keeps counting from
+// its own first attempt, because the mark is gone by the next claim.
 func ClaimAlertClose(id uint) (bool, error) {
 	stamp := now()
 	result := db.DB.Model(&models.ChatLockdownAlert{}).
 		Where("id = ? AND state = ? AND closed_at IS NULL AND claimed_at IS NULL", id, models.AlertStatePosted).
-		Updates(map[string]any{"claimed_at": stamp, "updated_at": stamp})
+		Updates(map[string]any{
+			"claimed_at":   stamp,
+			"attempts":     gorm.Expr("CASE WHEN edit_pending THEN 0 ELSE attempts END"),
+			"edit_pending": false,
+			"updated_at":   stamp,
+		})
 	if result.Error != nil {
 		log.Errorf("[Lockdown] ClaimAlertClose: %v", result.Error)
 		return false, alitaerrors.Wrapf(result.Error, "claim alert copy %d for closing", id)

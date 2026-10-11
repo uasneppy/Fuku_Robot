@@ -885,9 +885,15 @@ func lockdownCloseAlerts(ctx context.Context, b *gotgbot.Bot) bool {
 		if ctx.Err() != nil {
 			return progress
 		}
-		slot := &slots[i]
-		claimed, err := lockdown.ClaimAlertClose(slot.ID)
+		claimed, err := lockdown.ClaimAlertClose(slots[i].ID)
 		if err != nil || !claimed {
+			continue
+		}
+		// The copy is read again once it is claimed: the claim resets the attempts that
+		// failed refreshes left, and the close must count from what the row holds now.
+		slot, err := lockdown.GetAlertSlotFresh(slots[i].ID)
+		if err != nil || slot == nil {
+			releaseAlertClose(slots[i].ID, false)
 			continue
 		}
 		ld, err := lockdown.GetFresh(slot.LockdownID)
@@ -916,7 +922,13 @@ func lockdownCloseSlotNow(ctx context.Context, b *gotgbot.Bot, slot *models.Chat
 	if err != nil || !claimed {
 		return false
 	}
-	lockdownCloseClaimed(ctx, b, slot, ld)
+	// Read again after the claim, which resets the attempts failed refreshes left.
+	fresh, err := lockdown.GetAlertSlotFresh(slot.ID)
+	if err != nil || fresh == nil {
+		releaseAlertClose(slot.ID, false)
+		return true
+	}
+	lockdownCloseClaimed(ctx, b, fresh, ld)
 	return true
 }
 
