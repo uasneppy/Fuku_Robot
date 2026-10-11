@@ -539,3 +539,176 @@ func TestReleaseStaleAlertClaims(t *testing.T) {
 		t.Errorf("second ReleaseStaleAlertClaims = %d, %v, want 0 released", again, err)
 	}
 }
+
+// postedCopies decides the alert of a fresh confirmed lockdown with the given slots and
+// posts every one of them, returning the rows oldest first.
+func postedCopies(t *testing.T, ld *models.ChatLockdown, slots ...models.ChatLockdownAlert) []models.ChatLockdownAlert {
+	t.Helper()
+	rows := mustBegin(t, ld, slots...)
+	for i, row := range rows {
+		mustPost(t, row.ID, int64(900+i))
+	}
+	return readAlertRows(t, ld.ID)
+}
+
+func TestRecordLinkRevoked(t *testing.T) {
+	const link = "https://t.me/+FullLink1"
+
+	t.Run("records once and marks the live copies", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		rows := mustBegin(t, ld,
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111),
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestLog, -100222),
+			alertSlot(ld, models.AlertKindReminder, 1, models.AlertDestStaff, -100111),
+			alertSlot(ld, models.AlertKindReminder, 2, models.AlertDestStaff, -100111),
+		)
+		// rows 0 and 1 are posted and open; row 2 stays pending; row 3 is posted and closed.
+		mustPost(t, rows[0].ID, 901)
+		mustPost(t, rows[1].ID, 902)
+		mustPost(t, rows[3].ID, 904)
+		if ok, err := ClaimAlertClose(rows[3].ID); err != nil || !ok {
+			t.Fatalf("ClaimAlertClose = %v, %v, want true", ok, err)
+		}
+		if ok, err := RecordAlertClosed(rows[3].ID, ""); err != nil || !ok {
+			t.Fatalf("RecordAlertClosed = %v, %v, want true", ok, err)
+		}
+
+		won, err := RecordLinkRevoked(ld.ID, 77, "Rev", link)
+		if err != nil || !won {
+			t.Fatalf("first RecordLinkRevoked = %v, %v, want true", won, err)
+		}
+		got, err := GetFresh(ld.ID)
+		if err != nil || got == nil {
+			t.Fatalf("GetFresh = %v, %v", got, err)
+		}
+		if got.LinkRevokedAt == nil || got.LinkRevokedBy == nil || *got.LinkRevokedBy != 77 ||
+			got.LinkRevokedByName != "Rev" || got.LinkRevokedLink != link {
+			t.Errorf("revoke record = %+v, want at set, by 77, name Rev, link %s", got, link)
+		}
+		for i, wantPending := range []bool{true, true, false, false} {
+			if gotPending := readAlert(t, rows[i].ID).EditPending; gotPending != wantPending {
+				t.Errorf("copy %d edit_pending = %v, want %v", i, gotPending, wantPending)
+			}
+		}
+	})
+
+	t.Run("a second call records nothing", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		rows := postedCopies(t, ld, alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111))
+		if won, err := RecordLinkRevoked(ld.ID, 77, "Rev", link); err != nil || !won {
+			t.Fatalf("first RecordLinkRevoked = %v, %v, want true", won, err)
+		}
+		if ok, err := RecordAlertSynced(rows[0].ID); err != nil || !ok {
+			t.Fatalf("RecordAlertSynced = %v, %v, want true", ok, err)
+		}
+
+		won, err := RecordLinkRevoked(ld.ID, 88, "Other", "https://t.me/+Other")
+		if err != nil || won {
+			t.Fatalf("second RecordLinkRevoked = %v, %v, want false, nil", won, err)
+		}
+		got, err := GetFresh(ld.ID)
+		if err != nil || got == nil || got.LinkRevokedBy == nil || *got.LinkRevokedBy != 77 ||
+			got.LinkRevokedLink != link || got.LinkRevokedByName != "Rev" {
+			t.Errorf("revoke record after a second call = %+v, want the first one", got)
+		}
+		if readAlert(t, rows[0].ID).EditPending {
+			t.Error("a lost call marked a copy for an edit")
+		}
+	})
+
+	t.Run("no such lockdown", func(t *testing.T) {
+		if won, err := RecordLinkRevoked(1<<40, 77, "Rev", link); err != nil || won {
+			t.Errorf("RecordLinkRevoked = %v, %v, want false, nil", won, err)
+		}
+	})
+}
+
+func TestAlertSync(t *testing.T) {
+	const link = "https://t.me/+FullLink1"
+
+	t.Run("lists claims and records", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		rows := postedCopies(t, ld,
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111),
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestLog, -100222),
+		)
+		listed := func() []uint {
+			all, err := ListAlertSlotsToSyncFresh(100)
+			if err != nil {
+				t.Fatalf("ListAlertSlotsToSyncFresh: %v", err)
+			}
+			return idsOf(all, ld.ID)
+		}
+		if got := listed(); len(got) != 0 {
+			t.Fatalf("listed %v before any revoke, want none", got)
+		}
+
+		if won, err := RecordLinkRevoked(ld.ID, 77, "Rev", link); err != nil || !won {
+			t.Fatalf("RecordLinkRevoked = %v, %v, want true", won, err)
+		}
+		if got, want := listed(), []uint{rows[0].ID, rows[1].ID}; !sameIDs(got, want) {
+			t.Fatalf("listed %v, want %v oldest first", got, want)
+		}
+
+		if ok, err := ClaimAlertSync(rows[0].ID); err != nil || !ok {
+			t.Fatalf("first ClaimAlertSync = %v, %v, want true", ok, err)
+		}
+		if ok, err := ClaimAlertSync(rows[0].ID); err != nil || ok {
+			t.Fatalf("second ClaimAlertSync = %v, %v, want false", ok, err)
+		}
+		if got, want := listed(), []uint{rows[1].ID}; !sameIDs(got, want) {
+			t.Fatalf("listed %v with the first claimed, want %v", got, want)
+		}
+
+		// A released claim is listed again and keeps its edit.
+		if ok, err := ReleaseAlertClose(rows[0].ID, true); err != nil || !ok {
+			t.Fatalf("ReleaseAlertClose = %v, %v, want true", ok, err)
+		}
+		if got, want := listed(), []uint{rows[0].ID, rows[1].ID}; !sameIDs(got, want) {
+			t.Fatalf("listed %v after a release, want %v", got, want)
+		}
+
+		if ok, err := ClaimAlertSync(rows[0].ID); err != nil || !ok {
+			t.Fatalf("ClaimAlertSync after a release = %v, %v, want true", ok, err)
+		}
+		if ok, err := RecordAlertSynced(rows[0].ID); err != nil || !ok {
+			t.Fatalf("RecordAlertSynced = %v, %v, want true", ok, err)
+		}
+		done := readAlert(t, rows[0].ID)
+		if done.EditPending || done.ClaimedAt != nil || done.Attempts != 0 {
+			t.Errorf("synced copy = %+v, want edit_pending false, no claim and 0 attempts", done)
+		}
+		if got, want := listed(), []uint{rows[1].ID}; !sameIDs(got, want) {
+			t.Fatalf("listed %v after a sync, want %v", got, want)
+		}
+	})
+
+	t.Run("a lifted lockdown and a closed copy are not listed", func(t *testing.T) {
+		ld := confirmedLockdown(t)
+		rows := postedCopies(t, ld,
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111),
+			alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestLog, -100222),
+		)
+		if won, err := RecordLinkRevoked(ld.ID, 77, "Rev", link); err != nil || !won {
+			t.Fatalf("RecordLinkRevoked = %v, %v, want true", won, err)
+		}
+		if ok, err := ClaimAlertClose(rows[0].ID); err != nil || !ok {
+			t.Fatalf("ClaimAlertClose = %v, %v, want true", ok, err)
+		}
+		if ok, err := RecordAlertClosed(rows[0].ID, ""); err != nil || !ok {
+			t.Fatalf("RecordAlertClosed = %v, %v, want true", ok, err)
+		}
+		if closed := readAlert(t, rows[0].ID); closed.EditPending {
+			t.Errorf("a closed copy kept edit_pending: %+v", closed)
+		}
+		mustLift(t, ld.ID)
+
+		all, err := ListAlertSlotsToSyncFresh(100)
+		if err != nil {
+			t.Fatalf("ListAlertSlotsToSyncFresh: %v", err)
+		}
+		if got := idsOf(all, ld.ID); len(got) != 0 {
+			t.Errorf("listed %v for a lifting lockdown, want none", got)
+		}
+	})
+}
