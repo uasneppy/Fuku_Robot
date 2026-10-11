@@ -186,8 +186,9 @@ func TestLockdownAlertDestinations(t *testing.T) {
 		if err := logchannels.SetCategory(env.chat.Id, logchannels.CategoryAdmin, false); err != nil {
 			t.Fatalf("turn the admin category off: %v", err)
 		}
-		env.cycle()
-		env.cycle()
+		for range lockdownMaxAttempts {
+			env.cycle()
+		}
 
 		if got := len(env.fake.sentTo(channel)); got != 0 {
 			t.Errorf("%d copies reached a log channel whose admin category was turned off, want none", got)
