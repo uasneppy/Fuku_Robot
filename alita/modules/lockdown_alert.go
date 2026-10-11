@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"strconv"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -27,6 +29,43 @@ const (
 	// text is assembled, so a group title is never run through the translator.
 	lockdownGroupToken = "<<lockdown-group>>"
 )
+
+// The lockdown| callback namespace: the buttons of an alert and of the confirm cards
+// they open. Field a is the action, r the alert copy row's ID, and Confirm and Cancel
+// also carry the asker u and, on Confirm, the expiry e in unix minutes.
+const (
+	lockdownCallbackNamespace = "lockdown"
+	// lockdownActLiftAsk is the alert's Lift lockdown button.
+	lockdownActLiftAsk = "lk"
+	// lockdownActLiftConfirm is the confirm card's Confirm button.
+	lockdownActLiftConfirm = "lc"
+	// lockdownActCancel is the confirm card's Cancel button.
+	lockdownActCancel = "x"
+)
+
+// lockdownCardLifetime is how long a confirm card's Confirm button stays valid. It is
+// written into the button as an expiry minute, so the card needs no stored state and
+// works with Redis down. A variable so a test can shorten it.
+var lockdownCardLifetime = 5 * time.Minute
+
+// lockdownAlertKeyboard is the keyboard an alert copy is posted with: one row holding
+// the Lift lockdown button. A button whose data does not encode is left out and logged,
+// because a dead button is never sent; with no button left it returns nil.
+func lockdownAlertKeyboard(tr *i18n.Translator, slot *models.ChatLockdownAlert, ld *models.ChatLockdown) *gotgbot.InlineKeyboardMarkup {
+	data := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+		"a": lockdownActLiftAsk,
+		"r": strconv.FormatUint(uint64(slot.ID), 10),
+	})
+	if data == "" {
+		log.Errorf("[Lockdown] the Lift button of alert copy %d (lockdown %d) did not encode and is left out", slot.ID, ld.ID)
+		return nil
+	}
+	return &gotgbot.InlineKeyboardMarkup{
+		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{
+			{Text: lockdownText(tr, "lockdown_alert_btn_lift"), CallbackData: data},
+		}},
+	}
+}
 
 // lockdownAlertDestinations lists the copies a lockdown's alert is posted as: one for
 // the Staff Group the locked group is linked to, read uncached at decision time. A
@@ -174,16 +213,21 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 		return false
 	}
 
-	text := lockdownRenderAlert(lockdownSlotTranslator(slot), ld)
+	tr := lockdownSlotTranslator(slot)
+	text := lockdownRenderAlert(tr, ld)
+	opts := &gotgbot.SendMessageOpts{
+		ParseMode:          formatting.HTML,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+	}
+	if keyboard := lockdownAlertKeyboard(tr, slot, ld); keyboard != nil {
+		opts.ReplyMarkup = *keyboard
+	}
 	var sent *gotgbot.Message
 	sendErr := lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()
 		var callErr error
-		sent, callErr = b.SendMessageWithContext(call, slot.DestChatID, text, &gotgbot.SendMessageOpts{
-			ParseMode:          formatting.HTML,
-			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
-		})
+		sent, callErr = b.SendMessageWithContext(call, slot.DestChatID, text, opts)
 		return callErr
 	})
 	switch lockdownClassify(ctx, sendErr) {

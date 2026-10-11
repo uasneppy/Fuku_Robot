@@ -12,6 +12,8 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lang"
@@ -96,8 +98,9 @@ func requireLockdownGroup() helpers.CheckFunc {
 	}
 }
 
-// lockdownBeginLift is the call that records a lift. It is a variable only so a test
-// can make the record write fail; production code never reassigns it.
+// lockdownBeginLift is the call that records a lift, reached only through
+// liftLockdownRow. It is a variable only so a test can make the record write fail;
+// production code never reassigns it.
 var lockdownBeginLift = lockdown.BeginLift
 
 // lockdownLiveMember asks Telegram, live and uncached, for one member of a group.
@@ -427,14 +430,9 @@ func lockdownDefinitiveRefusal(err error) bool {
 	return errors.As(err, &tgErr) && tgErr.Code >= 400 && tgErr.Code < 500
 }
 
-// unlockdown lifts the group's lockdown. The order is the safety property: it sends
-// the stored raw permissions back first, and only when Telegram confirmed that does
-// it record the lift (who lifted, and whether the live permissions had been changed
-// by hand) through the one conditional update that lets exactly one caller win. A
-// failed restore or a failed record write leaves the lockdown active, so nothing
-// ends a lockdown that was not really lifted, and nothing is announced as lifted
-// before it is. Once the lift is recorded it finishes at once when no joiner is left
-// to unban.
+// unlockdown lifts the group's lockdown through liftLockdownRow, which restores the
+// stored permissions before it records the lift, so nothing is announced as lifted
+// before it is.
 func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	chat := ctx.EffectiveChat
 	msg := ctx.EffectiveMessage
@@ -466,16 +464,68 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return reply(lockdownSplice(text, lockdownNameToken, lockdownMention(lifterID, row.LiftedByName)))
 	}
 
-	bg := context.Background()
+	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
+	res := liftLockdownRow(context.Background(), b, row, actor.Id, name)
+	switch res.Outcome {
+	case lockdownLiftRestoreFailed:
+		return reply(lockdownText(tr, "lockdown_restore_failed"))
+	case lockdownLiftRecordFailed:
+		return reply(lockdownText(tr, "lockdown_lift_record_failed"))
+	case lockdownLiftLost:
+		return reply(lockdownText(tr, "lockdown_already_lifted"))
+	}
+	return reply(lockdownLiftedText(tr, actor.Id, name, res))
+}
 
+// lockdownLiftOutcome is how one lift attempt ended.
+type lockdownLiftOutcome int
+
+const (
+	// lockdownLiftDone means the permissions were restored and this caller recorded
+	// the lift.
+	lockdownLiftDone lockdownLiftOutcome = iota
+	// lockdownLiftRestoreFailed means Telegram did not confirm the restore. The
+	// lockdown stays active and nobody is unbanned.
+	lockdownLiftRestoreFailed
+	// lockdownLiftRecordFailed means the lift could not be recorded. The lockdown
+	// stays active.
+	lockdownLiftRecordFailed
+	// lockdownLiftLost means the permissions were restored but another caller
+	// recorded the lift first.
+	lockdownLiftLost
+)
+
+// lockdownLiftResult is what liftLockdownRow reports. Finished and Unbanning are only
+// meaningful for lockdownLiftDone.
+type lockdownLiftResult struct {
+	Outcome lockdownLiftOutcome
+	// ManualChange is true when the live permissions were not the locked set.
+	ManualChange bool
+	// Finished is true when no joiner was left to handle, so the lockdown is lifted.
+	Finished bool
+	// Unbanning is how many removed joiners the worker is now unbanning.
+	Unbanning int64
+}
+
+// liftLockdownRow lifts the lockdown of row for the actor. It is the only caller of the
+// lockdownBeginLift seam, shared by /unlockdown and the alert's Lift Confirm. The order
+// is the safety property: it sends the stored raw permissions back first, and only when
+// Telegram confirmed that does it record the lift (who lifted, and whether the live
+// permissions had been changed by hand) through the one conditional update that lets
+// exactly one caller win. A failed restore or a failed record write leaves the
+// lockdown active, so nothing ends a lockdown that was not really lifted. Once the lift
+// is recorded it finishes at once when no joiner is left to unban; otherwise it wakes
+// the worker. The caller has already judged the actor's authority and that the
+// lockdown is active.
+func liftLockdownRow(ctx context.Context, b *gotgbot.Bot, row *models.ChatLockdown, actorID int64, actorName string) lockdownLiftResult {
 	// Was the group reopened by hand? A failed read only skips the comparison and
 	// never blocks the lift. Before Telegram confirmed the lock the permissions may
 	// not have changed yet, so there is nothing to compare.
 	manualChange := false
 	if row.LockedAt != nil {
-		live, err := fetchLockdownChat(bg, b, chat.Id)
+		live, err := fetchLockdownChat(ctx, b, row.ChatID)
 		if err != nil {
-			log.Warnf("[Lockdown] getChat for chat %d before the lift failed: %v", chat.Id, err)
+			log.Warnf("[Lockdown] getChat for chat %d before the lift failed: %v", row.ChatID, err)
 		} else if lockdownHasPermissions(live.Permissions) {
 			if same, cmpErr := samePermissions(string(live.Permissions), row.LockedPermissions); cmpErr == nil {
 				manualChange = !same
@@ -484,41 +534,50 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	// Restore first. A refusal leaves the lockdown active and unbans nobody.
-	if err := setLockdownPermissions(bg, b, chat.Id, row.PrePermissions); err != nil {
-		log.Warnf("[Lockdown] restore for chat %d failed: %v", chat.Id, err)
-		return reply(lockdownText(tr, "lockdown_restore_failed"))
+	if err := setLockdownPermissions(ctx, b, row.ChatID, row.PrePermissions); err != nil {
+		log.Warnf("[Lockdown] restore for chat %d failed: %v", row.ChatID, err)
+		return lockdownLiftResult{Outcome: lockdownLiftRestoreFailed, ManualChange: manualChange}
 	}
 
-	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
-	won, err := lockdownBeginLift(row.ID, actor.Id, name, manualChange)
+	won, err := lockdownBeginLift(row.ID, actorID, actorName, manualChange)
 	if err != nil {
 		log.Errorf("[Lockdown] lift of lockdown %d could not be recorded: %v", row.ID, err)
-		return reply(lockdownText(tr, "lockdown_lift_record_failed"))
+		return lockdownLiftResult{Outcome: lockdownLiftRecordFailed, ManualChange: manualChange}
 	}
 	if !won {
-		return reply(lockdownText(tr, "lockdown_already_lifted"))
+		return lockdownLiftResult{Outcome: lockdownLiftLost, ManualChange: manualChange}
 	}
-	finished, err := lockdown.FinishLift(row.ID)
+	res := lockdownLiftResult{Outcome: lockdownLiftDone, ManualChange: manualChange}
+	res.Finished, err = lockdown.FinishLift(row.ID)
 	if err != nil {
 		log.Errorf("[Lockdown] lockdown %d lift was not finished: %v", row.ID, err)
 	}
-
-	text := lockdownText(tr, "lockdown_lifted", i18n.TranslationParams{"name": lockdownNameToken})
-	lines := []string{lockdownSplice(text, lockdownNameToken, lockdownMention(actor.Id, name))}
-	if manualChange {
-		lines = append(lines, lockdownText(tr, "lockdown_lifted_manual_change"))
-	}
-	if !finished {
+	if !res.Finished {
 		// Joiners are left to handle: the worker cancels the ones not yet banned,
 		// unbans the lockdown's own bans and posts the tally.
 		wakeLockdownWorker()
 		if tally, tallyErr := lockdown.TallyJoiners(row.ID); tallyErr != nil {
 			log.Errorf("[Lockdown] joiners of lockdown %d could not be counted: %v", row.ID, tallyErr)
-		} else if removed := tally[models.JoinerStateBanned]; removed > 0 {
-			lines = append(lines, lockdownText(tr, "lockdown_lifted_unbanning", i18n.TranslationParams{"count": removed}))
+		} else {
+			res.Unbanning = tally[models.JoinerStateBanned]
 		}
 	}
-	return reply(lockdownJoinLines(lines))
+	return res
+}
+
+// lockdownLiftedText is the public notice of a lift that was recorded: who lifted it,
+// a note when the permissions had been changed by hand, and how many removed joiners
+// are being unbanned.
+func lockdownLiftedText(tr *i18n.Translator, actorID int64, actorName string, res lockdownLiftResult) string {
+	text := lockdownText(tr, "lockdown_lifted", i18n.TranslationParams{"name": lockdownNameToken})
+	lines := []string{lockdownSplice(text, lockdownNameToken, lockdownMention(actorID, actorName))}
+	if res.ManualChange {
+		lines = append(lines, lockdownText(tr, "lockdown_lifted_manual_change"))
+	}
+	if !res.Finished && res.Unbanning > 0 {
+		lines = append(lines, lockdownText(tr, "lockdown_lifted_unbanning", i18n.TranslationParams{"count": res.Unbanning}))
+	}
+	return lockdownJoinLines(lines)
 }
 
 // LoadLockdown registers /lockdown, /unlockdown and /lockdownstatus, and the join
@@ -530,6 +589,7 @@ func LoadLockdown(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, lockdownDesc, pipelineHandler(lockdownModule.lockdown))
 	helpers.WrapCommand(dispatcher, unlockdownDesc, pipelineHandler(lockdownModule.unlockdown))
 	helpers.WrapCommand(dispatcher, lockdownStatusDesc, pipelineHandler(lockdownModule.lockdownStatus))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("lockdown|"), lockdownModule.lockdownAlertCallback))
 }
 
 func init() {
