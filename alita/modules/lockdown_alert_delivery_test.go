@@ -3,9 +3,12 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -280,4 +283,224 @@ func TestLockdownAlertLiftFromLogChannel(t *testing.T) {
 			t.Errorf("copy row %+v is not closed, want both closed", copyRow)
 		}
 	}
+}
+
+// forceAlertClaim sets the claim of a copy row directly: its state (when state is not
+// empty) and a claim time claimedAgo in the past, as a worker that stopped would have
+// left it.
+func (e *lockdownEnv) forceAlertClaim(id uint, state string, claimedAgo time.Duration) {
+	e.t.Helper()
+	updates := map[string]any{"claimed_at": time.Now().UTC().Add(-claimedAgo)}
+	if state != "" {
+		updates["state"] = state
+	}
+	if err := db.DB.Model(&models.ChatLockdownAlert{}).Where("id = ?", id).UpdateColumns(updates).Error; err != nil {
+		e.t.Fatalf("force the claim of alert copy %d: %v", id, err)
+	}
+}
+
+// deliveryEnv is an env with a Staff Group and a log channel, whose /lockdown has been
+// typed but whose alert has not been worked on yet.
+func deliveryEnv(t *testing.T) (env *lockdownEnv, staffChat gotgbot.Chat, channel int64) {
+	t.Helper()
+	env = newLockdownEnv(t)
+	staffChat = linkLockdownStaffGroup(env)
+	channel = uniqueModuleChatID()
+	setStaffLogChannel(t, env.chat.Id, channel)
+	env.send(env.admin, "/lockdown raid")
+	return env, staffChat, channel
+}
+
+func TestLockdownAlertDelivery(t *testing.T) {
+	t.Run("fails three times", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+		env.fake.script("sendMessage", staffChat.Id,
+			staffFakeError(400, "Bad Request: chat not found"),
+			staffFakeError(400, "Bad Request: chat not found"),
+			staffFakeError(400, "Bad Request: chat not found"))
+
+		env.cycle()
+		if got := len(env.fake.sentTo(channel)); got != 1 {
+			t.Fatalf("%d copies reached the log channel in the first cycle, want 1: one failing destination holds the other back", got)
+		}
+		env.cycle()
+		env.cycle()
+
+		row := env.alertRowTo(staffChat.Id)
+		if row.State != models.AlertStateFailed || row.Attempts != 3 || row.Detail == "" {
+			t.Errorf("staff copy = %+v, want failed after 3 attempts with Telegram's reason", row)
+		}
+		if got := env.alertRowTo(channel); got.State != models.AlertStatePosted {
+			t.Errorf("log copy = %+v, want posted", got)
+		}
+
+		env.cycle()
+		env.cycle()
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 0 {
+			t.Errorf("%d messages reached the Staff Group after the copy was given up, want none", got)
+		}
+	})
+
+	t.Run("rate limited", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+		env.fake.script("sendMessage", staffChat.Id,
+			staffFake429(1), staffFake429(1), staffFake429(1), staffFake429(1))
+
+		env.cycle()
+
+		row := env.alertRowTo(staffChat.Id)
+		if row.State != models.AlertStatePending || row.Attempts != 0 {
+			t.Fatalf("staff copy after a rate limit = %+v, want pending with 0 attempts", row)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 1 {
+			t.Errorf("%d copies reached the log channel, want 1", got)
+		}
+
+		env.cycle()
+
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 1 {
+			t.Errorf("%d copies reached the Staff Group after the rate limit passed, want 1", got)
+		}
+		if row := env.alertRowTo(staffChat.Id); row.State != models.AlertStatePosted {
+			t.Errorf("staff copy = %+v, want posted", row)
+		}
+	})
+
+	t.Run("stale claim", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+		if !lockdownPlanAlerts(t.Context(), env.bot) {
+			t.Fatal("lockdownPlanAlerts decided nothing, want the alert decided")
+		}
+		row := env.alertRowTo(staffChat.Id)
+		env.forceAlertClaim(row.ID, models.AlertStatePosting, 3*time.Minute)
+
+		env.cycle()
+		env.cycle()
+
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 1 {
+			t.Errorf("%d copies reached the Staff Group, want exactly 1 from the released claim", got)
+		}
+		after := env.alertRowTo(staffChat.Id)
+		if after.State != models.AlertStatePosted || after.Attempts != 0 {
+			t.Errorf("staff copy = %+v, want posted with the release not counted as an attempt", after)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 1 {
+			t.Errorf("%d copies reached the log channel, want 1", got)
+		}
+	})
+
+	t.Run("live claim kept", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+		if !lockdownPlanAlerts(t.Context(), env.bot) {
+			t.Fatal("lockdownPlanAlerts decided nothing, want the alert decided")
+		}
+		row := env.alertRowTo(staffChat.Id)
+		env.forceAlertClaim(row.ID, models.AlertStatePosting, 10*time.Second)
+
+		env.cycle()
+		env.cycle()
+
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 0 {
+			t.Errorf("%d copies reached the Staff Group while another worker holds the claim, want none", got)
+		}
+		if after := env.alertRowTo(staffChat.Id); after.State != models.AlertStatePosting || after.ClaimedAt == nil {
+			t.Errorf("staff copy = %+v, want it still claimed", after)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 1 {
+			t.Errorf("%d copies reached the log channel, want 1", got)
+		}
+	})
+
+	t.Run("stale close claim", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+		env.cycle()
+		staffCopies := env.fake.sentTo(staffChat.Id)
+		if len(staffCopies) != 1 || len(env.fake.sentTo(channel)) != 1 {
+			t.Fatalf("%d staff and %d log copies posted, want 1 each", len(staffCopies), len(env.fake.sentTo(channel)))
+		}
+		env.send(env.admin, "/unlockdown")
+		staffRow := env.alertRowTo(staffChat.Id)
+		env.forceAlertClaim(staffRow.ID, "", 3*time.Minute)
+
+		env.cycle()
+		env.cycle()
+
+		edits := env.alertEdits(staffChat.Id, staffCopies[0].MessageID)
+		if len(edits) != 1 {
+			t.Fatalf("%d edits of the Staff Group copy, want exactly 1 once the stale close claim was released", len(edits))
+		}
+		for _, row := range env.alertRows() {
+			if row.ClosedAt == nil || row.ClaimedAt != nil {
+				t.Errorf("copy row %+v, want closed with no claim", row)
+			}
+		}
+	})
+
+	t.Run("concurrent cycles", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+
+		var wg sync.WaitGroup
+		for range 2 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				runLockdownCycle(context.Background(), env.bot)
+			}()
+		}
+		wg.Wait()
+		// A cycle that lost a race leaves its copy for the next one; nothing is posted twice.
+		env.cycle()
+		env.cycle()
+
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 1 {
+			t.Errorf("%d copies reached the Staff Group, want exactly 1", got)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 1 {
+			t.Errorf("%d copies reached the log channel, want exactly 1", got)
+		}
+		if rows := env.alertRows(); len(rows) != 2 {
+			t.Errorf("%d copy rows, want 2: %+v", len(rows), rows)
+		}
+	})
+}
+
+func TestLockdownAlertAfterSettle(t *testing.T) {
+	t.Run("lock took effect", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := linkLockdownStaffGroup(env)
+		row := env.seedUnconfirmed(2 * time.Minute)
+		env.fake.setChatPermsRaw(env.chat.Id, lockdownLockedPermissions)
+
+		env.cycle()
+
+		if settled := env.freshRow(row.ID); settled.LockedAt == nil || settled.AlertStartedAt == nil {
+			t.Fatalf("row = %+v, want it confirmed and its alert decided in the same cycle", settled)
+		}
+		sent := env.fake.sentTo(staffChat.Id)
+		if len(sent) != 1 {
+			t.Fatalf("%d alerts reached the Staff Group, want 1", len(sent))
+		}
+		if text := fmt.Sprint(sent[0].Params["text"]); !strings.Contains(text, staffMarker("lockdown_alert_title")) {
+			t.Errorf("alert %q does not contain the alert title", text)
+		}
+	})
+
+	t.Run("lock never applied", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := linkLockdownStaffGroup(env)
+		env.seedUnconfirmed(2 * time.Minute)
+
+		env.cycle()
+		env.cycle()
+
+		if rows := env.lockdownRows(); len(rows) != 0 {
+			t.Fatalf("lockdown rows = %+v, want none: the lock never took effect", rows)
+		}
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 0 {
+			t.Errorf("%d alerts reached the Staff Group for a lockdown that never took effect, want none", got)
+		}
+		if rows := env.alertRows(); len(rows) != 0 {
+			t.Errorf("copy rows = %+v, want none", rows)
+		}
+	})
 }

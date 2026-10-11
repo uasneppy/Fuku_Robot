@@ -4,6 +4,7 @@ package lockdown
 
 import (
 	"testing"
+	"time"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -462,4 +463,79 @@ func TestAlertClose(t *testing.T) {
 			t.Error("a released copy is not listed to close again, want it listed")
 		}
 	})
+}
+
+// ageAlertClaim moves the claim time of a copy row back by claimedAgo.
+func ageAlertClaim(t *testing.T, id uint, claimedAgo time.Duration) {
+	t.Helper()
+	err := db.DB.Model(&models.ChatLockdownAlert{}).Where("id = ?", id).
+		UpdateColumn("claimed_at", time.Now().UTC().Add(-claimedAgo)).Error
+	if err != nil {
+		t.Fatalf("age the claim of alert copy %d: %v", id, err)
+	}
+}
+
+func TestReleaseStaleAlertClaims(t *testing.T) {
+	ld := confirmedLockdown(t)
+	rows := mustBegin(t, ld,
+		alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestStaff, -100111),
+		alertSlot(ld, models.AlertKindAlert, 0, models.AlertDestLog, -100222),
+		alertSlot(ld, models.AlertKindReminder, 1, models.AlertDestStaff, -100111),
+		alertSlot(ld, models.AlertKindReminder, 1, models.AlertDestLog, -100222),
+	)
+	staleSend, liveSend, staleClose, liveClose := rows[0].ID, rows[1].ID, rows[2].ID, rows[3].ID
+
+	// A copy whose send stopped half way: posting, with one failed try before.
+	if ok, _ := ClaimAlertSlot(staleSend); !ok {
+		t.Fatal("ClaimAlertSlot(staleSend) = false, want true")
+	}
+	if ok, err := ReleaseAlertSlot(staleSend, "earlier failure", true); err != nil || !ok {
+		t.Fatalf("ReleaseAlertSlot = %v, %v, want true", ok, err)
+	}
+	if ok, _ := ClaimAlertSlot(staleSend); !ok {
+		t.Fatal("second ClaimAlertSlot(staleSend) = false, want true")
+	}
+	ageAlertClaim(t, staleSend, 3*time.Minute)
+
+	// A send that is still running.
+	if ok, _ := ClaimAlertSlot(liveSend); !ok {
+		t.Fatal("ClaimAlertSlot(liveSend) = false, want true")
+	}
+	ageAlertClaim(t, liveSend, 10*time.Second)
+
+	// Posted copies whose close stopped half way, and one whose close is still running.
+	mustPost(t, staleClose, 7001)
+	mustPost(t, liveClose, 7002)
+	for _, id := range []uint{staleClose, liveClose} {
+		if ok, _ := ClaimAlertClose(id); !ok {
+			t.Fatalf("ClaimAlertClose(%d) = false, want true", id)
+		}
+	}
+	ageAlertClaim(t, staleClose, 3*time.Minute)
+	ageAlertClaim(t, liveClose, 10*time.Second)
+
+	released, err := ReleaseStaleAlertClaims(time.Now().Add(-2 * time.Minute))
+	if err != nil {
+		t.Fatalf("ReleaseStaleAlertClaims error = %v", err)
+	}
+	if released != 2 {
+		t.Errorf("released = %d, want 2", released)
+	}
+
+	if row := readAlert(t, staleSend); row.State != models.AlertStatePending || row.ClaimedAt != nil || row.Attempts != 1 || row.Detail != "earlier failure" {
+		t.Errorf("stale send = %+v, want pending, unclaimed, attempts still 1 and the earlier detail kept", row)
+	}
+	if row := readAlert(t, liveSend); row.State != models.AlertStatePosting || row.ClaimedAt == nil {
+		t.Errorf("live send = %+v, want it still posting with its claim", row)
+	}
+	if row := readAlert(t, staleClose); row.State != models.AlertStatePosted || row.ClaimedAt != nil || row.ClosedAt != nil || row.MessageID != 7001 {
+		t.Errorf("stale close = %+v, want posted, open, unclaimed, message ID kept", row)
+	}
+	if row := readAlert(t, liveClose); row.State != models.AlertStatePosted || row.ClaimedAt == nil {
+		t.Errorf("live close = %+v, want it still claimed", row)
+	}
+
+	if again, err := ReleaseStaleAlertClaims(time.Now().Add(-2 * time.Minute)); err != nil || again != 0 {
+		t.Errorf("second ReleaseStaleAlertClaims = %d, %v, want 0 released", again, err)
+	}
 }
