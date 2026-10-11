@@ -2840,3 +2840,6 @@ lockdown_alert_counts: "Entraram nos 10 minutos antes do bloqueio: {before}. Ent
 lockdown_alert_sample_title: "Contas da onda:"
 lockdown_alert_sample_more: "…e mais {count}."
 lockdown_alert_bot_mark: "bot"
+lockdown_alert_link_line: "Link de convite usado: {link} ({count} entraram por ele)"
+lockdown_alert_link_others: "+{count} outros links"
+lockdown_alert_link_foreign: "Este link foi criado por outro administrador, então não posso revogá-lo: revogue-o nos links de convite do grupo no Telegram."

@@ -2615,3 +2615,6 @@ lockdown_alert_counts: "Вступили за 10 минут до блокиро�
 lockdown_alert_sample_title: "Аккаунты волны:"
 lockdown_alert_sample_more: "…и ещё {count}."
 lockdown_alert_bot_mark: "бот"
+lockdown_alert_link_line: "Использованная ссылка-приглашение: {link} (по ней вошли: {count})"
+lockdown_alert_link_others: "+{count} других ссылок"
+lockdown_alert_link_foreign: "Эту ссылку создал другой администратор, поэтому я не могу её отозвать: отзовите её в пригласительных ссылках группы в Telegram."

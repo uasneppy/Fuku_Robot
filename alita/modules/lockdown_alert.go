@@ -34,6 +34,9 @@ const (
 	// lockdownSampleToken stands in for the burst sample's account lines until the
 	// translated text is assembled, so a name is never run through the translator.
 	lockdownSampleToken = "<<lockdown-sample>>"
+	// lockdownLinkToken stands in for an invite link until the translated text is
+	// assembled, so a link is never run through the translator.
+	lockdownLinkToken = "<<lockdown-link>>"
 	// lockdownAlertSampleMax is how many accounts of the burst an alert lists.
 	lockdownAlertSampleMax = 10
 )
@@ -258,12 +261,50 @@ func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount,
 	return lockdownSplice(lockdownJoinLines(lines), lockdownSampleToken, strings.Join(listed, "\n"))
 }
 
+// lockdownLinkRevocable reports whether the bot could revoke an invite link it saw:
+// the link is not empty and was not cut short. Telegram reports a link made by another
+// admin cut short with "..." (or "…"), and a bot can revoke only a link in full.
+func lockdownLinkRevocable(link string) bool {
+	return link != "" && !strings.Contains(link, "...") && !strings.Contains(link, "…")
+}
+
+// lockdownRenderLinkLine is the invite-link part of an alert: the link most of the burst
+// used with how many joined through it, a pointer to Telegram's own settings when that
+// link was cut short and so cannot be revoked by the bot, and, when other links were used
+// too, how many others. links is TopInviteLinksFresh's answer, most used first. It
+// returns the text, empty when no link was reported, and the top link as the alert shows
+// it. The link is HTML-escaped in code tags and spliced in after the translator.
+func lockdownRenderLinkLine(tr *i18n.Translator, links []lockdown.InviteLinkCount) (text, top string) {
+	if len(links) == 0 {
+		return "", ""
+	}
+	top = links[0].Link
+	lines := []string{lockdownSplice(
+		lockdownText(tr, "lockdown_alert_link_line", i18n.TranslationParams{
+			"link":  lockdownLinkToken,
+			"count": strconv.FormatInt(links[0].Count, 10),
+		}),
+		lockdownLinkToken, "<code>"+html.EscapeString(top)+"</code>",
+	)}
+	if !lockdownLinkRevocable(top) {
+		lines = append(lines, lockdownText(tr, "lockdown_alert_link_foreign"))
+	}
+	if others := len(links) - 1; others > 0 {
+		lines = append(lines, lockdownText(tr, "lockdown_alert_link_others", i18n.TranslationParams{
+			"count": strconv.Itoa(others),
+		}))
+	}
+	return lockdownJoinLines(lines), top
+}
+
 // lockdownRenderAlert is the text of a lockdown's first alert: which group, how the
-// lockdown was triggered (by whom and when), the reason, and the burst behind it (the
-// counts and a sample of its accounts, read fresh from the database; a failed read
-// leaves them out and the alert still posts). The group, the name and the reason are
-// user-controlled, so they go in after translation, in place of their tokens.
-func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) string {
+// lockdown was triggered (by whom and when), the reason, the burst behind it (the
+// counts and a sample of its accounts) and the invite link it used, all read fresh from
+// the database; a failed read leaves that part out and the alert still posts. The group,
+// the name, the reason and the link are user-controlled, so they go in after
+// translation, in place of their tokens. It also returns the link the alert shows, to
+// be stored on the copy, empty when none is shown.
+func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, link string) {
 	lockedAt := ld.CreatedAt
 	if ld.LockedAt != nil {
 		lockedAt = *ld.LockedAt
@@ -286,7 +327,15 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) string {
 	} else {
 		lines = append(lines, lockdownRenderSample(tr, accounts, counts))
 	}
-	return lockdownJoinLines(lines)
+	links, err := lockdown.TopInviteLinksFresh(ld.ID)
+	if err != nil {
+		log.Warnf("[Lockdown] the invite links of lockdown %d could not be read for its alert: %v", ld.ID, err)
+	} else {
+		var linkLine string
+		linkLine, link = lockdownRenderLinkLine(tr, links)
+		lines = append(lines, linkLine)
+	}
+	return lockdownJoinLines(lines), link
 }
 
 // lockdownPostAlerts posts the pending copies of active lockdowns, oldest first. Each
@@ -337,7 +386,7 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 	}
 
 	tr := lockdownSlotTranslator(slot)
-	text := lockdownRenderAlert(tr, ld)
+	text, link := lockdownRenderAlert(tr, ld)
 	if slot.Dest == models.AlertDestLog {
 		// The log channel's owner chose which categories it receives, and may have
 		// changed that since the alert was decided: nothing is sent to a channel that
@@ -376,7 +425,7 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 	})
 	switch lockdownClassify(ctx, sendErr) {
 	case lockdownCallDone:
-		if _, err := lockdown.RecordAlertPosted(slot.ID, sent.MessageId, text, ""); err != nil {
+		if _, err := lockdown.RecordAlertPosted(slot.ID, sent.MessageId, text, link); err != nil {
 			log.Errorf("[Lockdown] alert copy %d was sent but not recorded: %v", slot.ID, err)
 			return false
 		}

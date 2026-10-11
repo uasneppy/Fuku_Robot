@@ -2906,3 +2906,6 @@ lockdown_alert_counts: "Joined in the 10 minutes before the lockdown: {before}. 
 lockdown_alert_sample_title: "Accounts in the burst:"
 lockdown_alert_sample_more: "…and {count} more."
 lockdown_alert_bot_mark: "bot"
+lockdown_alert_link_line: "Invite link used: {link} ({count} joined through it)"
+lockdown_alert_link_others: "+{count} other links"
+lockdown_alert_link_foreign: "This link was made by another admin, so I can't revoke it: revoke it in the group's invite links in Telegram."

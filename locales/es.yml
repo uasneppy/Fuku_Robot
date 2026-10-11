@@ -2878,3 +2878,6 @@ lockdown_alert_counts: "Se unieron en los 10 minutos anteriores al bloqueo: {bef
 lockdown_alert_sample_title: "Cuentas de la oleada:"
 lockdown_alert_sample_more: "…y {count} más."
 lockdown_alert_bot_mark: "bot"
+lockdown_alert_link_line: "Enlace de invitación usado: {link} ({count} entraron con él)"
+lockdown_alert_link_others: "+{count} enlaces más"
+lockdown_alert_link_foreign: "Este enlace lo creó otro administrador, así que no puedo revocarlo: revócalo en los enlaces de invitación del grupo en Telegram."
