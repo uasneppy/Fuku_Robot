@@ -179,3 +179,89 @@ func TestLockdownAlertClosedAtLift(t *testing.T) {
 		}
 	})
 }
+
+func TestLockdownAlertStaleButtons(t *testing.T) {
+	t.Run("lift button of a lifted lockdown", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		_, staffChat, alert := lockedWithAlert(t, env)
+		liftData := lockdownButtonData(t, alert.Params["reply_markup"], "lk")
+		env.send(env.admin, "/unlockdown")
+		sets := len(env.calls("setChatPermissions"))
+
+		pressLockdownButton(env, env.admin, staffChat, alert.MessageID, liftData)
+
+		if text, _ := env.lastAnswer(); !strings.Contains(text, staffMarker("lockdown_alert_already_lifted")) {
+			t.Errorf("answer = %q, want %q", text, staffMarker("lockdown_alert_already_lifted"))
+		}
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 1 {
+			t.Errorf("%d messages in the Staff Group, want only the alert: no card for a lifted lockdown", got)
+		}
+		if got := len(env.calls("setChatPermissions")); got != sets {
+			t.Errorf("setChatPermissions calls = %d, were %d: a stale press changes nothing", got, sets)
+		}
+		env.wantLiftedAlert(staffChat, alert)
+
+		env.cycle()
+		if got := len(env.alertEdits(staffChat.Id, alert.MessageID)); got != 1 {
+			t.Errorf("%d edits of the alert after a cycle, want exactly 1: the press already closed it", got)
+		}
+	})
+
+	t.Run("confirm card of a lockdown lifted meanwhile", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		card := askToLiftLockdown(t, env)
+		env.send(env.admin, "/unlockdown")
+		sets := len(env.calls("setChatPermissions"))
+
+		pressLockdownButton(env, env.admin, card.staffChat, card.msgID, card.confirm)
+
+		env.wantCardEdited(card, staffMarker("lockdown_alert_already_lifted"))
+		if got := len(env.calls("setChatPermissions")); got != sets {
+			t.Errorf("setChatPermissions calls = %d, were %d: Confirm on a lifted lockdown writes nothing", got, sets)
+		}
+		if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 1 {
+			t.Errorf("%d lift notices in the locked group, want only /unlockdown's", len(got))
+		}
+	})
+
+	t.Run("an old alert never touches a newer lockdown", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		_, staffChat, alertA := lockedWithAlert(t, env)
+		liftA := lockdownButtonData(t, alertA.Params["reply_markup"], "lk")
+		env.send(env.admin, "/unlockdown")
+		env.cycle()
+
+		second := env.lockAsAdmin("second wave")
+		env.cycle()
+		alerts := env.fake.sentTo(staffChat.Id)
+		if len(alerts) != 2 {
+			t.Fatalf("%d messages in the Staff Group, want alert A and alert B", len(alerts))
+		}
+		alertB := alerts[1]
+		sets := len(env.calls("setChatPermissions"))
+
+		pressLockdownButton(env, env.admin, staffChat, alertA.MessageID, liftA)
+
+		if text, _ := env.lastAnswer(); !strings.Contains(text, staffMarker("lockdown_alert_already_lifted")) {
+			t.Errorf("answer = %q, want %q", text, staffMarker("lockdown_alert_already_lifted"))
+		}
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 2 {
+			t.Errorf("%d messages in the Staff Group, want still 2: the old button posts no card", got)
+		}
+		if got := len(env.calls("setChatPermissions")); got != sets {
+			t.Errorf("setChatPermissions calls = %d, were %d: the old button must not touch the newer lockdown", got, sets)
+		}
+		current := env.freshRow(second.ID)
+		if current.State != models.LockdownStateActive || current.LiftedBy != nil {
+			t.Errorf("newer lockdown = %+v, want it still active with no lifter", current)
+		}
+		if got := len(env.alertEdits(staffChat.Id, alertB.MessageID)); got != 0 {
+			t.Errorf("%d edits of the newer alert, want none", got)
+		}
+		for _, row := range env.alertRows() {
+			if row.LockdownID == second.ID && row.ClosedAt != nil {
+				t.Errorf("newer lockdown's copy %+v was closed by an old button", row)
+			}
+		}
+	})
+}
