@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/models"
 )
 
 func skipIfNoDb(t *testing.T) {
@@ -217,5 +218,59 @@ func TestDuplicateApprovalIsError(t *testing.T) {
 	err := AddApprovedUser(chatID, 7777, 1, "other reason")
 	if err == nil {
 		t.Fatalf("AddApprovedUser() duplicate = nil, expected error")
+	}
+}
+
+func TestListApprovedIDsFresh(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := int64(-999999999999801)
+	otherChatID := int64(-999999999999802)
+	emptyChatID := int64(-999999999999803)
+
+	t.Cleanup(func() {
+		_ = RemoveAllApprovedUsers(chatID)
+		_ = RemoveAllApprovedUsers(otherChatID)
+	})
+
+	if err := AddApprovedUser(chatID, 501, 1, ""); err != nil {
+		t.Fatalf("AddApprovedUser() error = %v", err)
+	}
+	if err := AddApprovedUser(chatID, 502, 1, ""); err != nil {
+		t.Fatalf("AddApprovedUser() error = %v", err)
+	}
+	if err := AddApprovedUser(otherChatID, 503, 1, ""); err != nil {
+		t.Fatalf("AddApprovedUser() error = %v", err)
+	}
+
+	ids, err := ListApprovedIDsFresh(chatID)
+	if err != nil {
+		t.Fatalf("ListApprovedIDsFresh() error = %v", err)
+	}
+	if len(ids) != 2 || !ids[501] || !ids[502] {
+		t.Errorf("ListApprovedIDsFresh() = %v, want exactly users 501 and 502", ids)
+	}
+	if ids[503] {
+		t.Errorf("ListApprovedIDsFresh() lists user 503 of another chat")
+	}
+
+	empty, err := ListApprovedIDsFresh(emptyChatID)
+	if err != nil {
+		t.Fatalf("ListApprovedIDsFresh(empty chat) error = %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Errorf("ListApprovedIDsFresh(empty chat) = %v, want an empty map", empty)
+	}
+
+	// A row written straight to the table is seen at once: nothing is cached in front.
+	if err := db.DB.Create(&models.ApprovedUsers{ChatID: chatID, UserID: 504, ApprovedBy: 1}).Error; err != nil {
+		t.Fatalf("create approved row: %v", err)
+	}
+	ids, err = ListApprovedIDsFresh(chatID)
+	if err != nil {
+		t.Fatalf("ListApprovedIDsFresh() after a direct write error = %v", err)
+	}
+	if !ids[504] {
+		t.Errorf("ListApprovedIDsFresh() = %v, want user 504 written straight through db.DB", ids)
 	}
 }

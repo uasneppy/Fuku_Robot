@@ -226,6 +226,7 @@ func lockdownCleanup(t *testing.T, chatIDs ...int64) {
 		if len(chatIDs) == 0 {
 			return
 		}
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatLockdownBanRun{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.LockdownJoiner{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatLockdown{})
 	})
