@@ -223,7 +223,7 @@ Plans:
   4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
   5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
 
-**Plans:** 3/14 plans executed
+**Plans:** 5/14 plans executed
 
 Plans:
 **Wave 1**
@@ -236,8 +236,8 @@ Plans:
 - [x] 05-03-PLAN.md: Every copy closes at the lift ("Lifted by X at T", no buttons); stale buttons do nothing; repository tests for the gate and claims
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 05-04-PLAN.md: Lift button safety: service identities, forged chats, no restrict right, demotion; card expiry; 64-byte callbacks; works without Redis
-- [ ] 05-05-PLAN.md: The 10-minute Redis join tracker (D-17) written by both group -7 join paths, best effort
+- [x] 05-04-PLAN.md: Lift button safety: service identities, forged chats, no restrict right, demotion; card expiry; 64-byte callbacks; works without Redis
+- [x] 05-05-PLAN.md: The 10-minute Redis join tracker (D-17) written by both group -7 join paths, best effort
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 05-06-PLAN.md: The alert in the log channel (admin category) with a working Lift; delivery retries, rate limits, stale claims, concurrent replicas, the settle path
@@ -338,7 +338,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
-| 5. Lockdown Alerts and Response | 3/14 | In Progress|  |
+| 5. Lockdown Alerts and Response | 5/14 | In Progress|  |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
