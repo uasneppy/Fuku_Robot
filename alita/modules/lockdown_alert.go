@@ -43,6 +43,9 @@ const (
 	// lockdownDetailSuperseded is the detail of a reminder copy that was never posted
 	// because a newer reminder was due by the time its turn came.
 	lockdownDetailSuperseded = "superseded"
+	// lockdownDetailNoLongerLinked is the detail of a staff copy that was never posted
+	// because the locked group is not linked to that Staff Group any more.
+	lockdownDetailNoLongerLinked = "no longer linked"
 )
 
 // The lockdown| callback namespace: the buttons of an alert and of the confirm cards
@@ -617,6 +620,25 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 			return false
 		}
 		text = header + text
+	}
+	if slot.Dest == models.AlertDestStaff {
+		// The Staff Group was chosen when the copy was planned. A group unlinked since, or
+		// linked to another Staff Group, must not have its alert land in a former one, so
+		// the link is read fresh once more right before the send.
+		link, linkErr := staff.GetLinkOfGroupFresh(ld.ChatID)
+		if linkErr != nil {
+			// Nothing is known about the link, so nothing is sent; the copy waits.
+			log.Warnf("[Lockdown] the Staff Group link of chat %d could not be read for alert copy %d: %v", ld.ChatID, slot.ID, linkErr)
+			release("", false)
+			return false
+		}
+		if link == nil || link.StaffChatID != slot.DestChatID {
+			if _, err := lockdown.FailAlertSlot(slot.ID, lockdownDetailNoLongerLinked); err != nil {
+				log.Errorf("[Lockdown] alert copy %d could not be ended: %v", slot.ID, err)
+				return false
+			}
+			return true
+		}
 	}
 	opts := &gotgbot.SendMessageOpts{
 		ParseMode:          formatting.HTML,

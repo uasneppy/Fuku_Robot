@@ -16,6 +16,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/logchannels"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/db/staff"
 )
 
 // alertRowTo returns the env's alert copy row posted (or planned) for destChatID, or
@@ -338,6 +339,62 @@ func TestLockdownAlertDelivery(t *testing.T) {
 		env.cycle()
 		if got := len(env.fake.sentTo(staffChat.Id)); got != 0 {
 			t.Errorf("%d messages reached the Staff Group after the copy was given up, want none", got)
+		}
+	})
+
+	t.Run("unlinked before the post", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+		if !lockdownPlanAlerts(t.Context(), env.bot) {
+			t.Fatal("lockdownPlanAlerts decided nothing, want the alert decided")
+		}
+		link, err := staff.GetLinkOfGroupFresh(env.chat.Id)
+		if err != nil || link == nil {
+			t.Fatalf("setup: link = %+v, %v", link, err)
+		}
+		if deleted, err := staff.DeleteLink(link.ID); err != nil || !deleted {
+			t.Fatalf("setup: DeleteLink = %v, %v", deleted, err)
+		}
+
+		env.cycle()
+
+		row := env.alertRowTo(staffChat.Id)
+		if row.State != models.AlertStateFailed || row.Detail != lockdownDetailNoLongerLinked || row.MessageID != 0 {
+			t.Errorf("staff copy = %+v, want failed with %q and nothing sent", row, lockdownDetailNoLongerLinked)
+		}
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 0 {
+			t.Errorf("%d messages reached the former Staff Group, want none", got)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 1 {
+			t.Errorf("%d copies reached the log channel, want 1: the unlink does not hold it back", got)
+		}
+	})
+
+	t.Run("linked to another Staff Group before the post", func(t *testing.T) {
+		env, staffChat, _ := deliveryEnv(t)
+		if !lockdownPlanAlerts(t.Context(), env.bot) {
+			t.Fatal("lockdownPlanAlerts decided nothing, want the alert decided")
+		}
+		link, err := staff.GetLinkOfGroupFresh(env.chat.Id)
+		if err != nil || link == nil {
+			t.Fatalf("setup: link = %+v, %v", link, err)
+		}
+		if deleted, err := staff.DeleteLink(link.ID); err != nil || !deleted {
+			t.Fatalf("setup: DeleteLink = %v, %v", deleted, err)
+		}
+		other := newLockdownStaffGroup(env)
+		linkLockdownGroupTo(env, other)
+
+		env.cycle()
+
+		row := env.alertRowTo(staffChat.Id)
+		if row.State != models.AlertStateFailed || row.Detail != lockdownDetailNoLongerLinked {
+			t.Errorf("staff copy = %+v, want failed with %q", row, lockdownDetailNoLongerLinked)
+		}
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 0 {
+			t.Errorf("%d messages reached the former Staff Group, want none", got)
+		}
+		if got := len(env.fake.sentTo(other.Id)); got != 0 {
+			t.Errorf("%d messages reached the new Staff Group, want none: its copy was never planned", got)
 		}
 	})
 

@@ -390,7 +390,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   through `actionlog.Destination`, which also gives the usual group header the log copy starts with and stores in its
   `body`); the log copy is in the locked group's language. The locked group itself never gets an alert. The log
   destination is checked again just before a log copy is sent: a channel that no longer takes the `admin` category gets
-  nothing, and the copy is ended as failed after three tries. Copies are claimed with a conditional update and posted
+  nothing, and the copy is ended as failed after three tries. A staff copy is checked the same way against a fresh
+  `staff.GetLinkOfGroupFresh`: when the group is no longer linked, or linked to another Staff Group than the copy's
+  destination, the copy is ended as failed at once with the detail `no longer linked` and nothing is sent; an unreadable
+  link leaves the copy pending without an attempt. Copies are claimed with a conditional update and posted
   through `lockdownPaced` (`lockdownPostAlerts`); only a pending copy of an active lockdown is listed, so a lifted
   lockdown's copy is never sent. The alert shows the trigger, the counts, a sample of up to 10 accounts and the invite
   link (see `chat_lockdown_burst`), and every name, username and link is escaped and spliced in after the translator.
