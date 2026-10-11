@@ -2770,3 +2770,5 @@ lockdown_lift_tally_kept: "{count} ont été laissées telles quelles car quelqu
 lockdown_lift_tally_expired: "{count} n'étaient plus bannies : le bannissement de 330 jours que je leur avais appliqué à leur arrivée avait déjà expiré, donc je les ai laissées telles quelles."
 lockdown_lift_tally_failed: "⚠️ Je n'ai pas pu débannir {count} :"
 lockdown_lift_tally_more: "…et {count} de plus."
+lockdown_alert_title: "🚨 <b>Verrouillage dans {group}</b>"
+lockdown_alert_trigger_manual: "Lancé avec /lockdown par {name} à {time}."

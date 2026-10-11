@@ -2882,3 +2882,5 @@ lockdown_lift_tally_kept: "{count} were left as they are because someone had alr
 lockdown_lift_tally_expired: "{count} were no longer banned: the 330-day ban I gave them when they joined had already run out, so I left them as they are."
 lockdown_lift_tally_failed: "⚠️ I couldn't unban {count}:"
 lockdown_lift_tally_more: "…and {count} more."
+lockdown_alert_title: "🚨 <b>Lockdown in {group}</b>"
+lockdown_alert_trigger_manual: "Started with /lockdown by {name} at {time}."

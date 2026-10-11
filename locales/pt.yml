@@ -2816,3 +2816,5 @@ lockdown_lift_tally_kept: "{count} foram deixadas como estão porque alguém já
 lockdown_lift_tally_expired: "{count} já não estavam banidas: o banimento de 330 dias que lhes dei quando entraram já tinha terminado, por isso deixei-as como estão."
 lockdown_lift_tally_failed: "⚠️ Não consegui desbanir {count}:"
 lockdown_lift_tally_more: "…e mais {count}."
+lockdown_alert_title: "🚨 <b>Bloqueio em {group}</b>"
+lockdown_alert_trigger_manual: "Iniciado com /lockdown por {name} às {time}."
