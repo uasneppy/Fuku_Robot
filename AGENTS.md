@@ -166,6 +166,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   more than `MaxWait` (60 s) away fails at once as rate limited, with no Telegram request and without taking the slot.
   Every staff fan-out Telegram call goes through `staffPaced`, and per-replica limiters must not be used for shared
   budgets.
+- `alita:lockdown:recent:<chat>` is the best-effort 10-minute join tracker (`lockdown_recent.go`): a sorted set scored by
+  join time in unix milliseconds, written by both group `-7` join handlers (`lockdownOnJoinMember`,
+  `lockdownOnJoinMessage`) for every supergroup join before they read the lockdown, whether or not one is active. Join
+  requests and the bot's own join are not tracked. A member is compact JSON (`i` id, `n` name, `u` username, `b` bot,
+  `l` invite link; the chat_member path carries the link, the service message does not), so the two deliveries of one
+  join are merged by user ID at read time (`readLockdownRecentJoins`, behind the `lockdownRecentLookup` seam: earliest
+  time wins, a non-empty link, name or username fills in). One pipelined round trip under 250 ms
+  (`lockdownRecentTimeout`) adds, trims to 10 minutes, keeps the newest 500 (`lockdownRecentCap`) and sets a 700 s TTL.
+  It is empty without Redis and is never a ban decision. Plan 05-07 saves its snapshot with a lockdown's alert, and
+  Phase 6 may reuse it. Antiraid's 60-second join list is not used for this.
 - `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
@@ -267,7 +277,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The lockdown join guard (handler group `-7`, `lockdownOnJoinMember`) reads the lockdown fresh from PostgreSQL, records
   the joiner row first and only then ends the update with `ext.EndGroups`, so no welcome, captcha challenge or captcha
   attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
-  every join path lets the joiner through. It never gates a ban on Redis, never uses the cached admin predicates (a
+  every join path lets the joiner through. Its write to the `alita:lockdown:recent:<chat>` tracker comes first, is best
+  effort and its result is ignored. It never gates a ban on Redis, never uses the cached admin predicates (a
   performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or
   administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
   DB-driven loop on every replica that claims rows with conditional updates) makes every write and bans with
