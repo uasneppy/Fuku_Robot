@@ -87,6 +87,10 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 		return m.lockdownLiftAsk(b, query, tr, slot, ld)
 	case lockdownActLiftConfirm:
 		return m.lockdownLiftConfirm(b, query, tr, ld, fields)
+	case lockdownActBanAsk:
+		return m.lockdownBanAsk(b, query, tr, slot, ld)
+	case lockdownActBanConfirm:
+		return m.lockdownBanConfirm(b, query, tr, slot, ld, fields)
 	case lockdownActCancel:
 		return m.lockdownCardCancel(b, query, tr, fields)
 	}
@@ -303,6 +307,152 @@ func (m moduleStruct) lockdownLiftConfirm(
 	editStaffCallbackMessage(b, query, lockdownGroupText(tr, "lockdown_alert_lift_done", ld,
 		lockdownNameToken, lockdownMention(query.From.Id, name)))
 	lockdownPostLiftNotice(b, ld, lockdownLiftedText(staffChatTranslator(ld.ChatID), query.From.Id, name, res))
+	wakeLockdownWorker()
+	return ext.EndGroups
+}
+
+// lockdownBanText translates a Ban card key with the account count and the locked
+// group's label, which goes in after the translation.
+func lockdownBanText(tr *i18n.Translator, key string, ld *models.ChatLockdown, count int64) string {
+	text := lockdownText(tr, key, i18n.TranslationParams{
+		"count": strconv.FormatInt(count, 10),
+		"group": lockdownGroupToken,
+	})
+	return lockdownSplice(text, lockdownGroupToken, lockdownGroupLabel(ld))
+}
+
+// lockdownBanAsk answers the alert's Ban recent joiners button. The presser must be a
+// live creator or administrator with can_restrict_members of the locked group. The
+// approved users are read fresh: when they cannot be read nothing is offered, because a
+// permanent ban must not be able to reach an approved user. The card says how many
+// accounts a run would act on and is a reply to the pressed message; only the asker can
+// confirm it. Nothing is stored until Confirm.
+func (m moduleStruct) lockdownBanAsk(
+	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
+	slot *models.ChatLockdownAlert, ld *models.ChatLockdown,
+) error {
+	if ld.State != models.LockdownStateActive {
+		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false), false)
+		return ext.EndGroups
+	}
+	if ok, key := lockdownButtonAuthority(b, ld.ChatID, query.From.Id); !ok {
+		answerStaffCallback(b, query, lockdownText(tr, key), true)
+		return ext.EndGroups
+	}
+	excluded, err := lockdownBanExcluded(b, ld.ChatID)
+	if err != nil {
+		log.Warnf("[Lockdown] the approved users of chat %d could not be read for a Ban press: %v", ld.ChatID, err)
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_ban_check_failed"), true)
+		return ext.EndGroups
+	}
+	count, err := lockdown.CountBanCandidatesFresh(ld.ID, excluded)
+	if err != nil {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_check_failed"), true)
+		return ext.EndGroups
+	}
+	if count == 0 {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_ban_nothing"), true)
+		return ext.EndGroups
+	}
+
+	asker := strconv.FormatInt(query.From.Id, 10)
+	copyID := strconv.FormatUint(uint64(slot.ID), 10)
+	expiry := strconv.FormatInt(time.Now().Add(lockdownCardLifetime).Unix()/60, 10)
+	confirmData := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+		"a": lockdownActBanConfirm, "r": copyID, "u": asker, "e": expiry,
+	})
+	cancelData := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
+		"a": lockdownActCancel, "r": copyID, "u": asker,
+	})
+	if confirmData == "" || cancelData == "" {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_check_failed"), true)
+		return ext.EndGroups
+	}
+
+	answerStaffCallback(b, query, "", false)
+	if _, err := b.SendMessage(query.Message.GetChat().Id, lockdownBanText(tr, "lockdown_ban_ask", ld, count), &gotgbot.SendMessageOpts{
+		ParseMode:          formatting.HTML,
+		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId:                query.Message.GetMessageId(),
+			AllowSendingWithoutReply: true,
+		},
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{
+			{Text: lockdownText(tr, "lockdown_alert_btn_confirm"), CallbackData: confirmData},
+			{Text: lockdownText(tr, "lockdown_alert_btn_cancel"), CallbackData: cancelData},
+		}}},
+	}); err != nil {
+		log.Warnf("[Lockdown] ban confirm card for lockdown %d could not be posted: %v", ld.ID, err)
+	}
+	return ext.EndGroups
+}
+
+// lockdownBanConfirm starts the ban run for the person who asked. The card's u field must
+// be the presser; the lockdown, the presser's rights and the approved users are read
+// again live. StartBanRun queues the burst (approved users and the bot left out; people
+// an admin let in are marked skipped there), stores the card with the run so the worker
+// can report on it, and the card is edited to the running text. The worker does the
+// bans. Every refusal is told on the card, which is edited and never deleted.
+func (m moduleStruct) lockdownBanConfirm(
+	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
+	slot *models.ChatLockdownAlert, ld *models.ChatLockdown, fields map[string]string,
+) error {
+	asker, expiryMinute, ok := lockdownParseCardFields(fields)
+	if !ok {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
+		return ext.EndGroups
+	}
+	if asker != query.From.Id {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_not_yours"), true)
+		return ext.EndGroups
+	}
+	if expiryMinute < time.Now().Unix()/60 {
+		answerStaffCallback(b, query, "", false)
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_card_expired"))
+		return ext.EndGroups
+	}
+	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_working"), false)
+
+	if ld.State != models.LockdownStateActive {
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+		return ext.EndGroups
+	}
+	if ok, key := lockdownButtonAuthority(b, ld.ChatID, query.From.Id); !ok {
+		editStaffCallbackMessage(b, query, lockdownText(tr, key))
+		return ext.EndGroups
+	}
+	excluded, err := lockdownBanExcluded(b, ld.ChatID)
+	if err != nil {
+		log.Warnf("[Lockdown] the approved users of chat %d could not be read for a Ban confirm: %v", ld.ChatID, err)
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_ban_check_failed"))
+		return ext.EndGroups
+	}
+
+	// The card's place is stored with the run in the same insert, so a worker that picks
+	// the run up at once already knows where to report.
+	run := &models.ChatLockdownBanRun{
+		LockdownID:    ld.ID,
+		ChatID:        ld.ChatID,
+		StartedBy:     query.From.Id,
+		StartedByName: lockdownCapRunes(staffFullName(&query.From), lockdownNameMaxRunes),
+		CardChatID:    query.Message.GetChat().Id,
+		CardMsgID:     query.Message.GetMessageId(),
+		CardDest:      slot.Dest,
+	}
+	started, queued, err := lockdown.StartBanRun(run, excluded)
+	switch {
+	case err != nil:
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_ban_start_failed"))
+		return ext.EndGroups
+	case !started:
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_ban_busy"))
+		return ext.EndGroups
+	case queued == 0:
+		editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_ban_nothing"))
+		return ext.EndGroups
+	}
+
+	editStaffCallbackMessage(b, query, lockdownBanText(tr, "lockdown_ban_running", ld, queued))
 	wakeLockdownWorker()
 	return ext.EndGroups
 }

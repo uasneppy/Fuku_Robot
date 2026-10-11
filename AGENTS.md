@@ -115,7 +115,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   not active (lifting or lifted) is judged before anything else (`lockdownStalePress`): it answers "Already lifted by X at
   T", changes nothing, posts no card, and closes that copy at once (`lockdownCloseSlotNow`, or edits a confirm card to the
   same text). The copy row names its own lockdown, so it never looks at the chat's current lockdown and an old alert's
-  button cannot reach a newer lockdown of the same group.
+  button cannot reach a newer lockdown of the same group. The same namespace carries "Ban N recent joiners": `a=bn&r=..`
+  on a second row of the alert (the label carries N, or a generic label when N is 0 or unreadable) and, on its confirm
+  card, Confirm `a=bc&r=..&u=<asker>&e=<expiry>` and the shared Cancel `a=x`. Both need the same live authority (creator,
+  or administrator with `can_restrict_members` of the locked chat) at the ask and at Confirm, and only the asker may
+  confirm.
 
 ## Permissions
 
@@ -389,6 +393,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Kept rows are not reclaimed on a re-join (`lockdownReclaimStates`), so someone an admin unbans by hand during the
   lockdown and who joins again is not banned again and gets no new joiner row, still muted by the locked defaults; this
   is an accepted limit (research Pitfall 3).
+- The "Ban N recent joiners" button is wired end to end. Approved users are read fresh from the database through
+  `approvals.ListApprovedIDsFresh` (the `lockdownApprovedLookup` seam), never the cached `IsUserApproved`, which turns a
+  failed read into "not approved": when the read fails the Ask answers `lockdown_ban_check_failed` and posts no card, a
+  Confirm starts no run, and a running run waits (the next pass reads again), so nobody is banned without the list. N
+  and the run's queue leave out approved users, the bot and, through `CountBanCandidatesFresh`, joiners an admin let in.
+  Confirm calls `lockdown.StartBanRun` with the card's chat and message stored on the run in the same insert, and edits
+  the card to "Banning N…". The lockdown worker executes the run (`lockdownProcessBanRuns`, after `lockdownBanPending` in
+  every cycle, in batches of `lockdownWorkerBatch`) through `lockdownResponseBanOne`, and the replica whose
+  `FinishBanRun` wins edits the card with banned, skipped and failed (`lockdownBanRunResult`). A run of a lockdown that
+  is no longer active is left untouched. `lockdownReleaseStale` also returns stale burst claims to the queue. These bans
+  are not in the staff audit and cannot be undone. The card and button say only that the accounts are banned for good
+  and cannot rejoin, which is exactly what the call does (no `revoke_messages` is sent, so nothing is said about their
+  messages).
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
   active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute

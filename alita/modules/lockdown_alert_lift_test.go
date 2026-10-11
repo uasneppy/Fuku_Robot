@@ -81,8 +81,8 @@ func TestLockdownAlertLift(t *testing.T) {
 	}
 	alert := alerts[0]
 	keyboard := staffKeyboardOf(alert.Params["reply_markup"])
-	if len(keyboard) != 1 || len(keyboard[0]) != 1 {
-		t.Fatalf("alert keyboard = %+v, want exactly one button", keyboard)
+	if len(keyboard) != 2 || len(keyboard[0]) != 1 || len(keyboard[1]) != 1 {
+		t.Fatalf("alert keyboard = %+v, want the Lift button and, on a second row, the Ban button", keyboard)
 	}
 	if !strings.Contains(keyboard[0][0].Text, staffMarker("lockdown_alert_btn_lift")) {
 		t.Errorf("button label = %q, want %q", keyboard[0][0].Text, staffMarker("lockdown_alert_btn_lift"))
