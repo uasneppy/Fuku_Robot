@@ -412,7 +412,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownAlertFooters`, today the "Link revoked by X" line) with the keyboard `lockdownAlertKeyboard` gives it now (no
   Revoke button after a revoke, Lift and Ban stay), bounded by `lockdownAlertBatch` per cycle. A rate limit or a shutdown
   gives the claim back free, a gone message closes the copy, and the third failed edit gives the refresh up
-  (`RecordAlertSynced`) so a copy never loops. The close step appends the same footers before the lifted footer.
+  (`RecordAlertSynced`) so a copy never loops. The close step appends the same footers before the lifted footer. A copy posted after a revoke (alert or reminder,
+  `lockdownPostAlertSlot`) is sent with the same footers at once, while its stored `body` stays without them.
   `RecordAlertSynced(id, buttonsLive)` clears `edit_pending` only while `buttons_live` still has the value the edit was
   made with, and the sync step reads the copy again after claiming it, so a mark set while an edit ran (a reminder
   taking the previous one's buttons off) survives and the next cycle edits the copy again.

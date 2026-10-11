@@ -398,6 +398,39 @@ func TestLockdownAlertDelivery(t *testing.T) {
 		}
 	})
 
+	t.Run("posted after a revoke shows the footer", func(t *testing.T) {
+		env, staffChat, channel := deliveryEnv(t)
+		if !lockdownPlanAlerts(t.Context(), env.bot) {
+			t.Fatal("lockdownPlanAlerts decided nothing, want the alert decided")
+		}
+		row, err := lockdown.GetActiveFresh(env.chat.Id)
+		if err != nil || row == nil {
+			t.Fatalf("setup: active lockdown = %+v, %v", row, err)
+		}
+		// An admin revokes the raid's link while both copies still wait to be posted.
+		if won, err := lockdown.RecordLinkRevoked(row.ID, env.admin.Id, "Rev<oker", "https://t.me/+Raid"); err != nil || !won {
+			t.Fatalf("setup: RecordLinkRevoked = %v, %v", won, err)
+		}
+
+		env.cycle()
+
+		for name, chatID := range map[string]int64{"staff": staffChat.Id, "log": channel} {
+			sent := env.fake.sentTo(chatID)
+			if len(sent) != 1 {
+				t.Fatalf("%d messages reached the %s destination, want 1", len(sent), name)
+			}
+			text := fmt.Sprint(sent[0].Params["text"])
+			if !strings.Contains(text, staffMarker("lockdown_alert_link_revoked")) || !strings.Contains(text, "Rev&lt;oker") {
+				t.Errorf("%s copy = %q, want it to carry the revoked footer naming the admin", name, text)
+			}
+		}
+		for _, copyRow := range env.alertRows() {
+			if copyRow.State != models.AlertStatePosted || strings.Contains(copyRow.Body, staffMarker("lockdown_alert_link_revoked")) {
+				t.Errorf("copy row = %+v, want posted with the stored body free of the footer", copyRow)
+			}
+		}
+	})
+
 	t.Run("rate limited", func(t *testing.T) {
 		env, staffChat, channel := deliveryEnv(t)
 		env.fake.script("sendMessage", staffChat.Id,

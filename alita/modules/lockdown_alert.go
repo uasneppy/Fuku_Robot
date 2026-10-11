@@ -650,12 +650,11 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 	if keyboard := lockdownAlertKeyboard(b, tr, slot, ld); keyboard != nil {
 		opts.ReplyMarkup = *keyboard
 	}
-	// A reminder posted after a revoke shows the revoked footer at once. The stored body
-	// stays without it, because a later refresh appends the footers to the stored body.
-	sendText := text
-	if reminder {
-		sendText = lockdownCopyText(tr, &models.ChatLockdownAlert{Body: text}, ld, false)
-	}
+	// A copy posted after a revoke (an alert as well as a reminder) shows the revoked
+	// footer at once, because the revoke marked only the copies that were posted by then.
+	// The stored body stays without it, because a later refresh appends the footers to the
+	// stored body.
+	sendText := lockdownCopyText(tr, &models.ChatLockdownAlert{Body: text}, ld, false)
 	var sent *gotgbot.Message
 	sendErr := lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
