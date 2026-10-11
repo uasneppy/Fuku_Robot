@@ -77,6 +77,64 @@ func TestLockdownAlertInviteLink(t *testing.T) {
 		}
 	})
 
+	t.Run("foreign link", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := lockdownBurstEnv(env)
+
+		user := env.newJoiner("Foreign")
+		env.join(user, user, "https://t.me/+DdDd...")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+
+		text := alertText(t, env, staffChat)
+		line := staffMarker("lockdown_alert_link_line") + " <code>https://t.me/+DdDd...</code> 1"
+		foreign := staffMarker("lockdown_alert_link_foreign")
+		at, foreignAt := strings.Index(text, line), strings.Index(text, foreign)
+		if at < 0 {
+			t.Fatalf("alert %q does not contain the link line %q", text, line)
+		}
+		if foreignAt < at {
+			t.Errorf("alert %q must carry %q after the link line", text, foreign)
+		}
+		if got := postedLink(t, env); got != "https://t.me/+DdDd..." {
+			t.Errorf("stored link = %q, want the link the alert shows", got)
+		}
+	})
+
+	t.Run("revocable", func(t *testing.T) {
+		for link, want := range map[string]bool{
+			"https://t.me/+DdDd...":     false,
+			"https://t.me/+EeEe…":       false,
+			"https://t.me/+FullLink1":   true,
+			"":                          false,
+			"https://t.me/joinchat/Abc": true,
+		} {
+			if got := lockdownLinkRevocable(link); got != want {
+				t.Errorf("lockdownLinkRevocable(%q) = %v, want %v", link, got, want)
+			}
+		}
+	})
+
+	t.Run("escaped", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := lockdownBurstEnv(env)
+
+		user := env.newJoiner("Escaper")
+		env.join(user, user, "https://t.me/+a<b>&\"<<lockdown-link>>")
+		env.send(env.admin, "/lockdown raid")
+		env.cycle()
+
+		text := alertText(t, env, staffChat)
+		if want := "<code>https://t.me/+a&lt;b&gt;&amp;&#34;&lt;&lt;lockdown-link&gt;&gt;</code>"; !strings.Contains(text, want) {
+			t.Errorf("alert %q does not contain the escaped link %q", text, want)
+		}
+		for _, raw := range []string{"+a<b>", "<<lockdown-link>>"} {
+			if strings.Contains(text, raw) {
+				t.Errorf("alert %q contains the raw link text %q", text, raw)
+			}
+		}
+	})
+
 	t.Run("no link", func(t *testing.T) {
 		env := newLockdownEnv(t)
 		staffChat := lockdownBurstEnv(env)
