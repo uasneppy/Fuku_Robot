@@ -119,6 +119,9 @@ func (m moduleStruct) lockdownOnJoinMember(b *gotgbot.Bot, ctx *ext.Context) err
 		return ext.ContinueGroups
 	}
 
+	// Best effort and first: the tracker never decides or delays what the guard does.
+	trackLockdownRecentJoins(chat.Id, lockdownMemberJoins(b, update))
+
 	active, err := lockdownActiveLookup(chat.Id)
 	if err != nil {
 		// Fail open: the joiner is still muted by the locked default permissions.
@@ -186,6 +189,9 @@ func (m moduleStruct) lockdownOnJoinMessage(b *gotgbot.Bot, ctx *ext.Context) er
 	if chat == nil || msg == nil || len(msg.NewChatMembers) == 0 || chat.Type != "supergroup" {
 		return ext.ContinueGroups
 	}
+
+	// Best effort and first: the tracker never decides or delays what the guard does.
+	trackLockdownRecentJoins(chat.Id, lockdownMessageJoins(b, msg.NewChatMembers))
 
 	active, err := lockdownActiveLookup(chat.Id)
 	if err != nil {
