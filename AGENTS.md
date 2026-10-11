@@ -111,7 +111,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   confirm or cancel it. Authority is
   `lockdownButtonAuthority`, a live `getChatMember` of the locked chat (creator, or administrator with
   `can_restrict_members`) at the ask and again at Confirm, never the admin cache, never membership of the Staff Group;
-  a failed lookup refuses. Cards are edited to a final text and never deleted.
+  a failed lookup refuses. Cards are edited to a final text and never deleted. A press on a button of a lockdown that is
+  not active (lifting or lifted) is judged before anything else (`lockdownStalePress`): it answers "Already lifted by X at
+  T", changes nothing, posts no card, and closes that copy at once (`lockdownCloseSlotNow`, or edits a confirm card to the
+  same text). The copy row names its own lockdown, so it never looks at the chat's current lockdown and an old alert's
+  button cannot reach a newer lockdown of the same group.
 
 ## Permissions
 
