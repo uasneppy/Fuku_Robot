@@ -62,6 +62,13 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 		return ext.EndGroups
 	}
 
+	// A button of a lockdown that is lifting or lifted does nothing but say so. This runs
+	// before any action and before any lookup of the chat's current lockdown: the copy row
+	// names its own lockdown, so an old alert can never reach a newer one.
+	if ld.State != models.LockdownStateActive {
+		return m.lockdownStalePress(b, query, tr, slot, ld)
+	}
+
 	switch fields["a"] {
 	case lockdownActLiftAsk:
 		return m.lockdownLiftAsk(b, query, tr, slot, ld)
@@ -71,6 +78,24 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 		return m.lockdownCardCancel(b, query, tr, fields)
 	}
 	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
+	return ext.EndGroups
+}
+
+// lockdownStalePress answers a press on any button of a lockdown that is lifting or
+// lifted: "Already lifted by X at T", and nothing else. When the pressed message is the
+// alert copy itself it is closed at once (edited to its lifted state, buttons gone);
+// otherwise it is a confirm card, which is edited to the same text. No card is posted,
+// nothing is lifted and the chat's current lockdown is never looked at.
+func (m moduleStruct) lockdownStalePress(
+	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
+	slot *models.ChatLockdownAlert, ld *models.ChatLockdown,
+) error {
+	answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false), false)
+	if query.Message.GetChat().Id == slot.DestChatID && query.Message.GetMessageId() == slot.MessageID {
+		lockdownCloseSlotNow(context.Background(), b, slot, ld)
+		return ext.EndGroups
+	}
+	editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
 	return ext.EndGroups
 }
 

@@ -2828,6 +2828,7 @@ lockdown_alert_not_yours: "Só quem apertou o botão pode confirmar ou cancelar 
 lockdown_alert_working: "Trabalhando nisso…"
 lockdown_alert_lift_done: "🔓 Bloqueio em {group} levantado por {name}."
 lockdown_alert_already_lifted: "Já levantado por {name} às {time}."
+lockdown_alert_lifted_footer: "🔓 Levantado por {name} às {time}."
 lockdown_alert_expired: "Este botão não é mais válido."
 lockdown_alert_restore_failed: "⚠️ Não consegui devolver as permissões de {group}, então o bloqueio continua ativo e ninguém foi desbanido. Confira se sou admin lá com permissão para restringir membros e tente de novo."
 lockdown_alert_record_failed: "⚠️ As permissões de {group} voltaram, mas não consegui registrar o levantamento. Aperte Levantar de novo ou execute /unlockdown no grupo."

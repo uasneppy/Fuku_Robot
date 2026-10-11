@@ -111,7 +111,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   confirm or cancel it. Authority is
   `lockdownButtonAuthority`, a live `getChatMember` of the locked chat (creator, or administrator with
   `can_restrict_members`) at the ask and again at Confirm, never the admin cache, never membership of the Staff Group;
-  a failed lookup refuses. Cards are edited to a final text and never deleted.
+  a failed lookup refuses. Cards are edited to a final text and never deleted. A press on a button of a lockdown that is
+  not active (lifting or lifted) is judged before anything else (`lockdownStalePress`): it answers "Already lifted by X at
+  T", changes nothing, posts no card, and closes that copy at once (`lockdownCloseSlotNow`, or edits a confirm card to the
+  same text). The copy row names its own lockdown, so it never looks at the chat's current lockdown and an old alert's
+  button cannot reach a newer lockdown of the same group.
 
 ## Permissions
 
@@ -318,6 +322,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownBanExpired`) is moved to `kept` with detail `models.JoinerDetailBanExpired` (the joiner state check has no
   state for it, and migrations are append-only), and the tally reports those as `lockdown_lift_tally_expired`, apart
   from the `kept` ones someone unbanned early or banned on purpose; it never says they were left on purpose.
+- At the lift, whether it came from `/unlockdown` or from the alert's button, the worker edits every posted alert copy to its
+  stored `body` plus "Lifted by X at T" (`lockdown_alert_lifted_footer`, the lifter and `lift_started_at` read from the
+  lockdown row) with no buttons (`lockdownCloseAlerts`, run after `lockdownProcessLifts` in every cycle, so a restart and
+  a second replica finish it). A copy is claimed through `lockdown.ClaimAlertClose` (it reuses `claimed_at`, which a
+  posted copy has no other use for), listed only while its lockdown is not active, newest first and at most
+  `lockdownAlertBatch` per cycle, and recorded with `closed_at` by `RecordAlertClosed`, so it is edited exactly once. A
+  gone ("message to edit not found", "message can't be edited", `MESSAGE_ID_INVALID`) or unmodified copy counts as closed;
+  a rate limit or shutdown gives the claim back without an attempt and ends the step for that cycle; any other failure
+  costs an attempt and the third closes the copy with Telegram's reason.
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
   active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute

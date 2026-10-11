@@ -2782,6 +2782,7 @@ lockdown_alert_not_yours: "Seule la personne qui a appuyé sur le bouton peut co
 lockdown_alert_working: "En cours…"
 lockdown_alert_lift_done: "🔓 Verrouillage dans {group} levé par {name}."
 lockdown_alert_already_lifted: "Déjà levé par {name} à {time}."
+lockdown_alert_lifted_footer: "🔓 Levé par {name} à {time}."
 lockdown_alert_expired: "Ce bouton n'est plus valide."
 lockdown_alert_restore_failed: "⚠️ Je n'ai pas pu remettre les permissions de {group}, donc le verrouillage est toujours actif et personne n'a été débanni. Vérifiez que je suis admin là-bas avec le droit de restreindre des membres, puis réessayez."
 lockdown_alert_record_failed: "⚠️ Les permissions de {group} sont revenues, mais je n'ai pas pu enregistrer la levée. Appuyez de nouveau sur Lever ou exécutez /unlockdown dans le groupe."

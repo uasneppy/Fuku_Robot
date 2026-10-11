@@ -270,7 +270,8 @@ func runLockdownCycle(ctx context.Context, b *gotgbot.Bot) bool {
 	banned := lockdownBanPending(ctx, b)
 	deleted := lockdownDeleteJoinMessages(ctx, b)
 	lifted := lockdownProcessLifts(ctx, b)
-	return settled || planned || posted || banned || deleted || lifted
+	closed := lockdownCloseAlerts(ctx, b)
+	return settled || planned || posted || banned || deleted || lifted || closed
 }
 
 // lockdownCallOutcome is how one Telegram call of the worker ended.

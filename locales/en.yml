@@ -2894,6 +2894,7 @@ lockdown_alert_not_yours: "Only the person who pressed the button can confirm or
 lockdown_alert_working: "Working on it…"
 lockdown_alert_lift_done: "🔓 Lockdown in {group} lifted by {name}."
 lockdown_alert_already_lifted: "Already lifted by {name} at {time}."
+lockdown_alert_lifted_footer: "🔓 Lifted by {name} at {time}."
 lockdown_alert_expired: "This button is no longer valid."
 lockdown_alert_restore_failed: "⚠️ I couldn't put the permissions of {group} back, so the lockdown is still on and nobody was unbanned. Make sure I am an admin there who can restrict members, then try again."
 lockdown_alert_record_failed: "⚠️ The permissions of {group} are back, but I couldn't record the lift. Press Lift again or run /unlockdown in the group."
