@@ -223,33 +223,46 @@ Plans:
   4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
   5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
 
-**Plans:** 9 plans
+**Plans:** 14 plans
 
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md: Tracer. A lockdown of a linked group posts one alert in the Staff Group (exactly-once gate, worker-posted copies); an admin of the locked group lifts from its button through the shared lift function; every copy closes at the lift, stale buttons do nothing
+- [ ] 05-01-PLAN.md: Tracer. A lockdown of a linked group posts one alert in its Staff Group (exactly-once gate, worker-posted copy, stored text)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05-02-PLAN.md: Lift button safety. Service identities, forged chats, admins without the restrict right and demoted admins refused; asker-only, expiring confirm card; 64-byte callbacks; works without Redis
-- [ ] 05-03-PLAN.md: The alert in the log channel (admin category) with a working Lift; delivery retries, rate limits, stale claims, concurrent replicas and the settle path
+- [ ] 05-02-PLAN.md: The alert's Lift button: live authority, asker-only confirm card, the shared lift function with /unlockdown, the public lift notice
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 05-04-PLAN.md: The burst on the alert. A 10-minute Redis join tracker (D-17) saved at the alert; up to 10 accounts with name, @username and ID, bots marked, and the trigger's counts
+- [ ] 05-03-PLAN.md: Every copy closes at the lift ("Lifted by X at T", no buttons); stale buttons do nothing; repository tests for the gate and claims
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 05-05-PLAN.md: "Ban N recent joiners": confirm card, DB-driven permanent bans except admins, approved users and the bot; the lift keeps them; races with the worker and the lift closed
+- [ ] 05-04-PLAN.md: Lift button safety: service identities, forged chats, no restrict right, demotion; card expiry; 64-byte callbacks; works without Redis
+- [ ] 05-05-PLAN.md: The 10-minute Redis join tracker (D-17) written by both group -7 join paths, best effort
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 05-06-PLAN.md: Ban again during a raid (only new accounts, one run at a time, resume, stop at the lift); full result with reasons and declined requests; one #LOCKDOWN_BAN log post
+- [ ] 05-06-PLAN.md: The alert in the log channel (admin category) with a working Lift; delivery retries, rate limits, stale claims, concurrent replicas, the settle path
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 05-07-PLAN.md: The invite link the burst used on the alert; "Revoke link" for bot-created links by admins with the invite right; plain-word refusals
+- [ ] 05-07-PLAN.md: The burst on the alert: the tracker snapshot saved with the lockdown, up to 10 accounts with name, @username and ID, bots marked, the trigger's counts
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 05-08-PLAN.md: Hourly reminders with fresh counts and live buttons; the previous reminder loses its buttons; none after the lift, no backlog after downtime
+- [ ] 05-08-PLAN.md: The ban policy core: per-account decision and ban with no end date, admins, approved users, people an admin let in (D-22) and the bot skipped, safe beside the worker and the lift; ban run storage
+- [ ] 05-09-PLAN.md: The invite link the burst used on the alert, with a pointer when the bot cannot revoke it
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 05-09-PLAN.md: Help text and docs in all 7 languages, final AGENTS.md pass, full phase gate
+- [ ] 05-10-PLAN.md: "Ban N recent joiners": button, asker-only card, DB-driven run, result; approved users read fresh
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 05-11-PLAN.md: Ban again during a raid (new accounts only, resume, stop at the lift); full result with skip reasons and declined requests; one #LOCKDOWN_BAN log post
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 05-12-PLAN.md: "Revoke link" for bot-created links by admins with the invite right; every copy says who revoked it; plain-word refusals
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 05-13-PLAN.md: Hourly reminders with fresh counts and live buttons; the previous reminder loses its buttons; none after the lift, no backlog after downtime
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 05-14-PLAN.md: Help text and docs in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
 
 ### Phase 6: Automatic Raid Detection
 
@@ -325,7 +338,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
-| 5. Lockdown Alerts and Response | 0/9 | Planned | - |
+| 5. Lockdown Alerts and Response | 0/14 | Planned | - |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
