@@ -2611,6 +2611,7 @@ staff_help_msg: |
 
   *Di Grup Staf:*
   × /staff: Tampilkan ID obrolan Grup Staf dan grup-grup yang terhubung. Tekan Putuskan di samping grup untuk memutus tautannya (hanya pembuat kedua grup). Tekan Aksi terbaru untuk melihat aksi staf sebelumnya di Grup Staf ini dan bagaimana hasil tiap grup. Baris 🔒 menandai grup terhubung yang sedang dalam lockdown; admin grup itu bisa melihat alasannya dengan /lockdownstatus di sana.
+  Saat grup terhubung terkena lockdown, peringatan dan pengingat per jamnya muncul di sini, dengan tombol Cabut lockdown, Blokir anggota baru, dan Cabut tautan yang hanya bisa dipakai admin grup itu.
 
   *Aksi staf (di Grup Staf):*
   × /ban pengguna [durasi] [alasan]: Blokir pengguna di semua grup yang terhubung. Pengguna adalah ID numerik, @username yang pernah saya lihat, atau sebuah mention. Durasi adalah angka diikuti m, h, d, atau w, dan lebih dari 366 hari berarti permanen.
@@ -2807,6 +2808,16 @@ lockdown_help_msg: |
   Ban yang saya berikan kepada orang yang bergabung berlangsung 330 hari sejak setiap bergabung. Jika lockdown berlangsung lebih lama, ban itu habis dengan sendirinya dan orang bisa kembali; ringkasan pencabutan menyebutkan berapa orangnya.
   Admin anonim diminta mengonfirmasi identitasnya terlebih dahulu.
   Permintaan bergabung ditolak selama grup terkunci; orang dapat meminta lagi setelah lockdown dicabut.
+
+  Saat grup ini terkunci, saya mengirim peringatan ke Grup Staf-nya (jika terhubung) dan ke kanal lognya (jika kategori log admin aktif): pemicunya, berapa orang yang bergabung sesaat sebelum dan sejak itu, hingga 10 akun di antaranya, serta tautan undangan yang dipakai sebagian besar dari mereka.
+
+  🔓 Cabut lockdown: mencabut lockdown seperti <code>/unlockdown</code>. Hanya pemilik grup atau admin yang bisa membatasi anggota, diperiksa secara langsung; berada di Grup Staf saja tidak cukup.
+
+  🚫 Blokir anggota baru: memblokir akun-akun lonjakan itu selamanya, sehingga tidak bisa bergabung lagi, dan saya tidak bisa membatalkannya. Admin, pengguna yang disetujui, dan orang yang dimasukkan admin tidak diikutkan. Penekanan berikutnya hanya memblokir akun baru.
+
+  ⛔ Cabut tautan: mencabut tautan undangan yang dipakai raid, jika saya yang membuatnya; tautan buatan admin lain harus dicabut di Telegram. Hanya pemilik grup atau admin yang bisa mengundang pengguna.
+
+  Setiap tombol meminta konfirmasi yang hanya bisa diberikan oleh orang yang menekannya. Tekan tombol atas nama Anda sendiri, bukan sebagai admin anonim atau kanal. Selama grup tetap terkunci, saya mengirim pengingat setiap jam; pengingat berhenti saat lockdown dicabut.
 lockdown_started: "🔒 Grup ini dalam lockdown. Hanya admin yang bisa bicara, dan siapa pun yang bergabung akan dikeluarkan sampai admin menjalankan /unlockdown."
 lockdown_note_approved_muted: "Pengguna yang disetujui juga dibisukan."
 lockdown_started_by: "Dikunci oleh {name}."

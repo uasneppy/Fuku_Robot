@@ -2583,6 +2583,7 @@ staff_help_msg: |
 
   *No Grupo de Staff:*
   × /staff: Mostra o ID de chat do Grupo de Staff e os grupos vinculados. Carregue em Desvincular ao lado de um grupo para o desvincular (apenas o criador dos dois grupos). Carregue em Ações recentes para ver as ações de staff passadas deste Grupo de Staff e como correu em cada grupo. Uma linha com 🔒 marca um grupo vinculado que está em bloqueio; os admins desse grupo podem ver o motivo com /lockdownstatus lá.
+  Quando um grupo vinculado entra em bloqueio, o seu alerta e os lembretes de hora a hora aparecem aqui, com os botões Levantar bloqueio, Banir recém-chegados e Revogar link, que só os administradores desse grupo podem usar.
 
   *Ações do staff (no Grupo de Staff):*
   × /ban utilizador [duração] [motivo]: Bane o utilizador em todos os grupos associados. O utilizador é um ID numérico, um @username que eu já tenha visto ou uma menção. A duração é um número seguido de m, h, d ou w, e mais de 366 dias significa permanente.
@@ -2779,6 +2780,16 @@ lockdown_help_msg: |
   Os banimentos que aplico a quem entra duram 330 dias a contar de cada entrada. Se um bloqueio durar mais do que isso, esses banimentos terminam sozinhos e as pessoas podem voltar; o resumo do levantamento diz quantas.
   Os administradores anónimos são primeiro convidados a confirmar quem são.
   Os pedidos de entrada são recusados enquanto o grupo está bloqueado; as pessoas podem pedir de novo depois do levantamento.
+
+  Quando este grupo está bloqueado, publico um alerta no seu Grupo de Staff (se estiver vinculado) e no seu canal de registo (se a categoria de registo de admin estiver ativa): o que o desencadeou, quantas pessoas entraram mesmo antes e desde então, até 10 dessas contas e o link de convite que a maioria usou.
+
+  🔓 Levantar bloqueio: levanta o bloqueio como <code>/unlockdown</code>. Só o dono do grupo ou um administrador que possa restringir membros, verificado em tempo real; estar no Grupo de Staff não chega.
+
+  🚫 Banir recém-chegados: bane para sempre as contas da vaga, por isso não podem voltar a entrar, e eu não posso desfazer isso. Ficam de fora os administradores, os utilizadores aprovados e as pessoas que um administrador deixou entrar. Um toque posterior bane apenas as contas novas.
+
+  ⛔ Revogar link: revoga o link de convite que o raid usou, se fui eu a criá-lo; os links de outros administradores têm de ser revogados no Telegram. Só o dono do grupo ou um administrador que possa convidar utilizadores.
+
+  Cada botão pede uma confirmação que só quem o carregou pode dar. Carregue nos botões como si próprio, não como administrador anónimo nem como canal. Enquanto o grupo continuar bloqueado, publico um lembrete a cada hora; os lembretes terminam quando o bloqueio é levantado.
 lockdown_started: "🔒 Este grupo está em bloqueio. Só os administradores podem falar, e quem entrar é removido até que um administrador use /unlockdown."
 lockdown_note_approved_muted: "Os utilizadores aprovados também estão silenciados."
 lockdown_started_by: "Bloqueado por {name}."

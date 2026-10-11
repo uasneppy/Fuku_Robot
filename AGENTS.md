@@ -103,31 +103,43 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   as interrupted without writing anything), undone (at least one group undone) or undo changed nothing. The Undo button
   shows only while `staffActionUndoable` holds.
 - The `lockdown|v1` namespace is the lockdown alert's buttons (`lockdownAlertCallback`, registered with
-  `callbackquery.Prefix("lockdown|")`). Field `r` is the alert copy row's ID: the handler loads that row and its lockdown
-  fresh and takes the locked chat from the lockdown row, never from the chat the button sits in or from the callback
-  data. Lift is `a=lk&r=..` on the alert; its press shows a confirm card that replies to the alert, with Confirm
-  `a=lc&r=..&u=<asker>&e=<expiry, unix minutes>` and Cancel `a=x&r=..&u=<asker>`. The card is stateless (asker and expiry
-  travel in the data, so it works without Redis; `e` is written now and not yet checked) and only the asker may
-  confirm or cancel it. Authority is
-  `lockdownButtonAuthority`, a live `getChatMember` of the locked chat (creator, or administrator with
-  `can_restrict_members`) at the ask and again at Confirm, never the admin cache, never membership of the Staff Group;
-  a failed lookup refuses. Cards are edited to a final text and never deleted. A press on a button of a lockdown that is
-  not active (lifting or lifted) is judged before anything else (`lockdownStalePress`): it answers "Already lifted by X at
-  T", changes nothing, posts no card, and closes that copy at once (`lockdownCloseSlotNow`, or edits a confirm card to the
-  same text). The copy row names its own lockdown, so it never looks at the chat's current lockdown and an old alert's
-  button cannot reach a newer lockdown of the same group. The same namespace carries "Ban N recent joiners": `a=bn&r=..`
-  on a second row of the alert (the label carries N, or a generic label when N is 0 or unreadable) and, on its confirm
-  card, Confirm `a=bc&r=..&u=<asker>&e=<expiry>` and the shared Cancel `a=x`. Both need the same live authority (creator,
-  or administrator with `can_restrict_members` of the locked chat) at the ask and at Confirm, and only the asker may
-  confirm. The namespace also carries "Revoke link": `a=rk&r=..` on a third row of the alert, shown only when the
-  copy's stored link is one the bot can revoke (`lockdownLinkRevocable`: a link in full, so one the bot made) and no
-  revoke was recorded yet, and, on its confirm card, Confirm `a=rc&r=..&u=<asker>&e=<expiry>` and the shared Cancel
-  `a=x`. Its authority is `lockdownInviteAuthority`, a live `getChatMember` of the lockdown row's chat (creator, or
-  administrator with `can_invite_users`; the restrict right is not enough, and a failed lookup refuses) at the ask and
-  at Confirm, and only the asker may confirm. The link revoked is always the one stored on the pressed copy, never
-  anything from the callback data. Confirm calls `revokeChatInviteLink` through `lockdownPaced` first and records the
-  revoke (`lockdown.RecordLinkRevoked`) only after Telegram confirmed it; a failed revoke edits the card and records
-  nothing.
+  `callbackquery.Prefix("lockdown|")` and `SetAllowChannel(true)`: gotgbot drops a callback from a channel message
+  otherwise, and the buttons on the log channel copy would be dead). Field `r` is the alert copy row's ID: the handler
+  loads that row and its lockdown fresh and takes the locked chat from the lockdown row, never from the chat the button
+  sits in or from the callback data. Every press is checked in this order, each step refusing before the next runs: a
+  Telegram service identity (`staffServiceUserIDs`) is answered "post as yourself" (`lockdown_alert_post_as_yourself`)
+  before any read; `r` must parse (`lockdownParseCopyID`, 1 up to the largest 63-bit value) and name an existing copy,
+  else "no longer valid"; the copy row is honoured only on the chat it was posted in (`dest_chat_id` equals the pressed
+  message's chat), else "no longer valid" with no lockdown read and no presser lookup; the lockdown must exist; a
+  lockdown that is not active makes the press stale (below); only then does the action run. Every path answers the
+  callback query exactly once.
+- Actions: Lift is `a=lk&r=..` (first row of the alert), Ban recent joiners is `a=bn&r=..` (second row; the label
+  carries N, or a generic label when N is 0 or unreadable) and Revoke link is `a=rk&r=..` (third row). Each ask posts a
+  confirm card that replies to the pressed message, with Confirm `a=lc`, `a=bc` or `a=rc` (`&r=..&u=<asker>&e=<expiry>`)
+  and the shared Cancel `a=x&r=..&u=<asker>`. The cards are stateless: the asker `u` and the expiry minute `e` (unix
+  minutes, five minutes ahead, `lockdownCardLifetime`) travel in the data, so they work without Redis, and only the
+  asker may confirm or cancel (another user is answered "not yours" and nothing is edited). `lockdownParseAsker` and
+  `lockdownParseCardFields` accept only positive 63-bit integers for `u` and `e`: a Confirm with a bad field is answered
+  "no longer valid" before any presser lookup, and Cancel needs only a valid `u`. Expiry is lazy, with no timer and no
+  Redis key: a Confirm whose `e` is before the current unix minute edits the card to `lockdown_alert_card_expired` and
+  lifts, bans or revokes nothing. Cards are edited to a final text and never deleted.
+- Authority is a live `getChatMember` of the locked chat, at the ask and again at Confirm; never the admin cache, never
+  membership of the Staff Group and never the chat the button sits in, and a failed lookup refuses
+  (`lockdown_alert_check_failed`). Lift and Ban need the creator or an administrator with `can_restrict_members`
+  (`lockdownButtonAuthority`): an administrator without that right is answered `lockdown_alert_no_restrict`, anyone
+  else `lockdown_alert_not_admin`. Revoke needs the creator or an administrator with `can_invite_users`
+  (`lockdownInviteAuthority`); the restrict right is not enough.
+- A press on a button of a lockdown that is not active (lifting or lifted) is judged before any action
+  (`lockdownStalePress`): it answers "Already lifted by X at T", changes nothing, posts no card, and closes that copy at
+  once (`lockdownCloseSlotNow`, or edits a confirm card to the same text). The copy row names its own lockdown, so the
+  handler never looks at the chat's current lockdown and an old alert's button cannot reach a newer lockdown of the
+  same group.
+- Revoke link is shown only while the copy's stored link is one the bot can revoke (`lockdownLinkRevocable`: a link in
+  full, so one the bot made) and no revoke was recorded. The link revoked is always the one stored on the pressed copy,
+  never anything from the callback data. Confirm calls `revokeChatInviteLink` through `lockdownPaced` first and records
+  the revoke (`lockdown.RecordLinkRevoked`) only after Telegram confirmed it; a refused revoke edits the card with a
+  plain reason (`lockdownRevokeRefusalKey`: busy, no rights, link not found, or a generic line; Telegram's own text goes
+  to the log only) and records nothing.
 
 ## Permissions
 
@@ -186,8 +198,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   join are merged by user ID at read time (`readLockdownRecentJoins`, behind the `lockdownRecentLookup` seam: earliest
   time wins, a non-empty link, name or username fills in). One pipelined round trip under 250 ms
   (`lockdownRecentTimeout`) adds, trims to 10 minutes, keeps the newest 500 (`lockdownRecentCap`) and sets a 700 s TTL.
-  It is empty without Redis and is never a ban decision. Plan 05-07 saves its snapshot with a lockdown's alert, and
-  Phase 6 may reuse it. Antiraid's 60-second join list is not used for this.
+  It is empty without Redis and is never a ban decision. The joins of the 10 minutes before the lock are saved with the
+  lockdown's alert (`chat_lockdown_burst`), and Phase 6 may reuse the tracker. Antiraid's 60-second join list is not
+  used for this.
 - `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
@@ -225,31 +238,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and the alert's Lift Confirm (restore the stored permissions, then one conditional record, then `FinishLift`). The
   button path also posts the public `lockdown_lifted` notice in the locked group, through `lockdownPaced`.
 - `chat_lockdown_alerts` and the `chat_lockdowns` columns `chat_title` and `alert_started_at` (migration
-  20261011120000) are the lockdown alerts. They are read only through fresh queries, never cached (so no `DeleteCache`
-  applies), and never part of backup/export/import/reset. One row per posted copy, unique on
-  `(lockdown_id, kind, seq, dest)`; `message_id` and `body` are the exact text posted, so later edits start from it. The
-  alert of a lockdown is decided once by the conditional `lockdown.BeginAlert` (`alert_started_at IS NULL`, in a
-  transaction that also creates the copy rows), run only by the lockdown worker (`lockdownPlanAlerts`) for every
-  confirmed active lockdown without `alert_started_at`, so `/lockdown`, the settle step and a restart share one path
-  (`/lockdown` only wakes the worker). A group with no Staff Group link still gets stamped, so a link made later never
-  receives an old alert. Copies are claimed with a conditional update and posted through `lockdownPaced`
-  (`lockdownPostAlerts`); only a pending copy of an active lockdown is listed, so a lifted lockdown's copy is never
-  sent. The alert goes to the linked Staff Group (always) and to the group's log channel only when its `admin` category is on
-  (`lockdownAlertDestinations`, through `actionlog.Destination`, which also gives the usual group header the log copy
-  starts with and is stored in its `body`); the log copy is in the locked group's language. The locked group itself never
-  gets an alert. Destinations are decided once when the alert is decided, so a Staff Group linked or a log channel set
-  later gets no copy of that alert. The destination is checked again just before a log copy is sent: a channel that no
-  longer takes the `admin` category gets nothing, and the copy is ended as failed after three tries. The `lockdown|`
-  callback handler is registered with `SetAllowChannel(true)`, because gotgbot drops a callback from a channel message
-  otherwise and the Lift button on the log copy would be dead. `chat_title` is stored at `lockdown.Start` (empty before
-  this migration, shown as the chat ID).
-- The alert copies resume like joiner rows. A copy claimed (`posting`) or close-claimed (`posted` with `claimed_at`) for
-  over 2 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
-  `lockdown.ReleaseStaleAlertClaims`, without counting an attempt, so a crash between the send and the record can post a
-  second copy (accepted over a lost one). A send is tried three times (`lockdownMaxAttempts`, then `FailAlertSlot` with
-  Telegram's reason), a rate limit or a shutdown costs no attempt, each copy has its own claim and attempts so one
-  failing destination never holds the other back, and a lockdown confirmed by the settle step is alerted in the same
-  cycle (the plan step runs after `lockdownSettleUnconfirmed`).
+  20261011120000) are the lockdown alerts. One row per posted copy, an alert or a reminder (`kind`), unique on
+  `(lockdown_id, kind, seq, dest)`; `message_id` and `body` are the exact text posted, so later edits start from it,
+  and `link` is the invite link the copy shows, which its Revoke button revokes. The claim (`claimed_at`, `attempts`,
+  `detail`), `buttons_live`, `edit_pending` and `closed_at` columns carry the delivery, refresh and close state
+  described under Subsystem traps. The rows are read only through fresh queries, never cached (so no `DeleteCache`
+  applies), and never part of backup/export/import/reset. `chat_title` is stored at `lockdown.Start` (empty before this
+  migration, shown as the chat ID).
 - `chat_lockdown_burst` (migration 20261011130000) holds one row per account of a lockdown's burst, unique on
   `(lockdown_id, user_id)`. It is read fresh, never cached (so no `DeleteCache` applies), and never part of
   backup/export/import/reset. The tracker's pre-lockdown snapshot (source `pre`, the joins in
@@ -274,32 +269,6 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   conditional update (`link_revoked_at IS NULL`), so one confirm wins, and in the same transaction it marks every posted,
   open copy with live buttons `edit_pending`. The columns are read fresh, never cached, and never part of
   backup/export/import/reset.
-- Alert copies marked `edit_pending` are refreshed by `lockdownSyncAlertCopies` (a step of `runLockdownCycle`, before the
-  close step): `ListAlertSlotsToSyncFresh` lists posted, open, unclaimed copies of active lockdowns, `ClaimAlertSync`
-  claims one with the close claim's `claimed_at`, and the copy is edited to its stored `body` plus the footers
-  (`lockdownAlertFooters`, today the "Link revoked by X" line) with the keyboard `lockdownAlertKeyboard` gives it now (no
-  Revoke button after a revoke, Lift and Ban stay), bounded by `lockdownAlertBatch` per cycle. A rate limit or a shutdown
-  gives the claim back free, a gone message closes the copy, and the third failed edit gives the refresh up
-  (`RecordAlertSynced`) so a copy never loops. The close step appends the same footers before the lifted footer.
-  `RecordAlertSynced(id, buttonsLive)` clears `edit_pending` only while `buttons_live` still has the value the edit was
-  made with, and the sync step reads the copy again after claiming it, so a mark set while an edit ran (a reminder
-  taking the previous one's buttons off) survives and the next cycle edits the copy again.
-- Reminders: every `lockdownReminderEvery` (1 hour, counted from `alert_started_at`, never from the lock) the worker
-  (`lockdownPlanReminders`, right before the poster in `runLockdownCycle`) plans one reminder copy per alert destination:
-  kind `reminder`, `seq = floor((now - alert_started_at) / lockdownReminderEvery)`, inserted by
-  `lockdown.PlanReminderSlots` with `ON CONFLICT DO NOTHING` on the slot key, so exactly one row exists per reminder and
-  destination whichever replica plans it. Only the current seq is ever planned (no backlog after downtime, and an
-  alert older than this feature does not fire a burst), and a pending reminder behind the current seq is marked failed
-  with detail `superseded` instead of posted. The destinations are the alert's destination kinds
-  (`lockdown.AlertDestKinds`) resolved again by `lockdownAlertDestinations`, so a Staff Group unlinked since, a kind the
-  alert never went to and a log channel whose `admin` category is now off get none. Reminders use the alert's claims,
-  retries and stale-claim release, so the duplicate-over-lost rule above holds: a reminder claimed in `posting` for over
-  2 minutes is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
-  then, in which case it is superseded and lost on purpose. Posting a reminder calls `lockdown.SupersedeReminders`: the
-  older reminders of that destination get `buttons_live` false and `edit_pending` true and lose their buttons through the
-  sync step; the original alert copy keeps its buttons until the lift. Planning stops with the lockdown being active
-  (`PlanReminderSlots` checks it in its transaction, the poster lists only active lockdowns), and the lift's close step
-  edits every alert and reminder copy to the lifted footer.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -409,6 +378,54 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownBanExpired`) is moved to `kept` with detail `models.JoinerDetailBanExpired` (the joiner state check has no
   state for it, and migrations are append-only), and the tally reports those as `lockdown_lift_tally_expired`, apart
   from the `kept` ones someone unbanned early or banned on purpose; it never says they were left on purpose.
+- The alert of a lockdown is decided once, by the conditional `lockdown.BeginAlert` (`alert_started_at IS NULL`, in a
+  transaction that also creates the copy rows and saves the burst snapshot), and only the lockdown worker runs it
+  (`lockdownPlanAlerts`, for every confirmed active lockdown without `alert_started_at`), so `/lockdown`, the settle
+  step and a restart share one path (`/lockdown` only wakes the worker). A group with no destination still gets
+  stamped, so a Staff Group linked or a log channel set later never receives an old alert. The alert goes to the linked
+  Staff Group (always) and to the group's log channel only when its `admin` category is on (`lockdownAlertDestinations`,
+  through `actionlog.Destination`, which also gives the usual group header the log copy starts with and stores in its
+  `body`); the log copy is in the locked group's language. The locked group itself never gets an alert. The log
+  destination is checked again just before a log copy is sent: a channel that no longer takes the `admin` category gets
+  nothing, and the copy is ended as failed after three tries. Copies are claimed with a conditional update and posted
+  through `lockdownPaced` (`lockdownPostAlerts`); only a pending copy of an active lockdown is listed, so a lifted
+  lockdown's copy is never sent. The alert shows the trigger, the counts, a sample of up to 10 accounts and the invite
+  link (see `chat_lockdown_burst`), and every name, username and link is escaped and spliced in after the translator.
+- The alert copies resume like joiner rows. A copy claimed (`posting`) or close-claimed (`posted` with `claimed_at`) for
+  over 2 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
+  `lockdown.ReleaseStaleAlertClaims`, without counting an attempt, so a crash between the send and the record can post a
+  second copy (accepted over a lost one). A send is tried three times (`lockdownMaxAttempts`, then `FailAlertSlot` with
+  Telegram's reason), a rate limit or a shutdown costs no attempt, each copy has its own claim and attempts so one
+  failing destination never holds the other back, and a lockdown confirmed by the settle step is alerted in the same
+  cycle (the plan step runs after `lockdownSettleUnconfirmed`).
+- Alert copies marked `edit_pending` are refreshed by `lockdownSyncAlertCopies` (a step of `runLockdownCycle`, before the
+  close step): `ListAlertSlotsToSyncFresh` lists posted, open, unclaimed copies of active lockdowns, `ClaimAlertSync`
+  claims one with the close claim's `claimed_at`, and the copy is edited to its stored `body` plus the footers
+  (`lockdownAlertFooters`, today the "Link revoked by X" line) with the keyboard `lockdownAlertKeyboard` gives it now (no
+  Revoke button after a revoke, Lift and Ban stay), bounded by `lockdownAlertBatch` per cycle. A rate limit or a shutdown
+  gives the claim back free, a gone message closes the copy, and the third failed edit gives the refresh up
+  (`RecordAlertSynced`) so a copy never loops. The close step appends the same footers before the lifted footer.
+  `RecordAlertSynced(id, buttonsLive)` clears `edit_pending` only while `buttons_live` still has the value the edit was
+  made with, and the sync step reads the copy again after claiming it, so a mark set while an edit ran (a reminder
+  taking the previous one's buttons off) survives and the next cycle edits the copy again.
+- Reminders: every `lockdownReminderEvery` (1 hour, counted from `alert_started_at`, never from the lock) the worker
+  (`lockdownPlanReminders`, right before the poster in `runLockdownCycle`) plans one reminder copy per alert destination:
+  kind `reminder`, `seq = floor((now - alert_started_at) / lockdownReminderEvery)`, inserted by
+  `lockdown.PlanReminderSlots` with `ON CONFLICT DO NOTHING` on the slot key, so exactly one row exists per reminder and
+  destination whichever replica plans it. Only the current seq is ever planned (no backlog after downtime, and an
+  alert older than this feature does not fire a burst), and a pending reminder behind the current seq is marked failed
+  with detail `superseded` instead of posted. The destinations are the alert's destination kinds
+  (`lockdown.AlertDestKinds`) resolved again by `lockdownAlertDestinations`, so a Staff Group unlinked since, a kind the
+  alert never went to and a log channel whose `admin` category is now off get none. Reminders use the alert's claims,
+  retries and stale-claim release, so the duplicate-over-lost rule above holds: a reminder claimed in `posting` for over
+  2 minutes is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
+  then, in which case it is superseded and lost on purpose. Posting a reminder calls `lockdown.SupersedeReminders`: the
+  older reminders of that destination get `buttons_live` false and `edit_pending` true and lose their buttons through the
+  sync step; the original alert copy keeps its buttons until the lift. Planning stops with the lockdown being active
+  (`PlanReminderSlots` checks it in its transaction, the poster lists only active lockdowns), and the lift's close step
+  edits every alert and reminder copy to the lifted footer. A reminder shows the reason, the joiners removed so far
+  (`lockdownRemovedSoFar`, response bans included), the ones still pending and the alert's link line, with no sample;
+  its Ban label is counted when the reminder is posted.
 - At the lift, whether it came from `/unlockdown` or from the alert's button, the worker edits every posted alert copy to its
   stored `body` plus "Lifted by X at T" (`lockdown_alert_lifted_footer`, the lifter and `lift_started_at` read from the
   lockdown row) with no buttons (`lockdownCloseAlerts`, run after `lockdownProcessLifts` in every cycle, so a restart and
@@ -552,11 +569,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Use real fixtures: `internal/testdb.Run` (SQLite), miniredis, hand-written `gotgbot.BotClient` fakes. No mock libraries.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
-- The three harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
-  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown models
-  are in `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` and `alita/db/lockdown/testmain_test.go`
-  (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows. The Phase 5 models (`ChatLockdownAlert`
-  and later) are added to the harness lists of the packages whose tests use them, today `alita/modules/test_harness_test.go`.
+- The harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
+  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown
+  models are in `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` and
+  `alita/db/lockdown/testmain_test.go` (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
+  The Phase 5 models (`ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun`) are in
+  `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go` only; the `alita/db` package's own
+  tests never touch them.
+- `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
+  prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
+  `TestBanRunStart` (one running ban run per lockdown, the partial unique index). Add a test there when a new
+  guarantee rests on a partial unique index or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 
 ## Commits
