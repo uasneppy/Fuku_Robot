@@ -589,7 +589,9 @@ func LoadLockdown(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, lockdownDesc, pipelineHandler(lockdownModule.lockdown))
 	helpers.WrapCommand(dispatcher, unlockdownDesc, pipelineHandler(lockdownModule.unlockdown))
 	helpers.WrapCommand(dispatcher, lockdownStatusDesc, pipelineHandler(lockdownModule.lockdownStatus))
-	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("lockdown|"), lockdownModule.lockdownAlertCallback))
+	// The alert's Lift button also sits on the copy posted in the group's log channel,
+	// and gotgbot drops a callback from a channel message unless the handler allows it.
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("lockdown|"), lockdownModule.lockdownAlertCallback).SetAllowChannel(true))
 }
 
 func init() {

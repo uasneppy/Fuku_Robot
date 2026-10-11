@@ -9,6 +9,7 @@ package lockdown
 
 import (
 	"errors"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -253,6 +254,44 @@ func RecordAlertClosed(id uint, detail string) (bool, error) {
 		return false, alitaerrors.Wrapf(result.Error, "record closed alert copy %d", id)
 	}
 	return result.RowsAffected == 1, nil
+}
+
+// ReleaseStaleAlertClaims gives back every alert copy claim a worker made before the
+// cut-off and never finished, because the worker stopped (a restart, a crash, a call
+// that never came back). No attempt is counted, so any replica tries the copy again:
+//
+//   - a posting copy goes back to pending (its send is repeated, which can post a second
+//     copy when the first send reached Telegram; a duplicate alert is accepted over a
+//     lost one);
+//   - a posted, open copy with a close claim loses the claim and is closed again.
+//
+// The two updates run in one transaction and match disjoint rows. It returns how many
+// rows it released.
+func ReleaseStaleAlertClaims(before time.Time) (int64, error) {
+	cutoff := before.UTC()
+	var released int64
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		released = 0
+		sending := tx.Model(&models.ChatLockdownAlert{}).
+			Where("state = ? AND claimed_at < ?", models.AlertStatePosting, cutoff).
+			Updates(map[string]any{"state": models.AlertStatePending, "claimed_at": nil, "updated_at": now()})
+		if sending.Error != nil {
+			return sending.Error
+		}
+		closing := tx.Model(&models.ChatLockdownAlert{}).
+			Where("state = ? AND closed_at IS NULL AND claimed_at < ?", models.AlertStatePosted, cutoff).
+			Updates(map[string]any{"claimed_at": nil, "updated_at": now()})
+		if closing.Error != nil {
+			return closing.Error
+		}
+		released = sending.RowsAffected + closing.RowsAffected
+		return nil
+	})
+	if err != nil {
+		log.Errorf("[Lockdown] ReleaseStaleAlertClaims: %v", err)
+		return 0, alitaerrors.Wrap(err, "release stale alert copy claims")
+	}
+	return released, nil
 }
 
 // ReleaseAlertClose gives a claimed, still open copy back for another try: the claim is

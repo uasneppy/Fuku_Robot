@@ -12,9 +12,11 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
+	"github.com/divkix/Alita_Robot/alita/db/logchannels"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
+	"github.com/divkix/Alita_Robot/alita/utils/actionlog"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 )
 
@@ -68,10 +70,20 @@ func lockdownAlertKeyboard(tr *i18n.Translator, slot *models.ChatLockdownAlert, 
 	}
 }
 
+// lockdownLogChat is the locked group as actionlog.Destination wants it, to resolve the
+// group's log channel and the header its posts start with. A lockdown only exists in a
+// supergroup, and the stored title may be empty for a lockdown from before titles were
+// kept.
+func lockdownLogChat(ld *models.ChatLockdown) *gotgbot.Chat {
+	return &gotgbot.Chat{Id: ld.ChatID, Title: ld.ChatTitle, Type: "supergroup"}
+}
+
 // lockdownAlertDestinations lists the copies a lockdown's alert is posted as: one for
-// the Staff Group the locked group is linked to, read uncached at decision time. A
-// group with no link has no copy. The locked group itself is never a destination. A
-// failed lookup is returned, so the cycle retries and nothing is decided.
+// the Staff Group the locked group is linked to, read uncached at decision time, and one
+// for the group's log channel when its admin category is on (the same resolver as every
+// log post, actionlog.Destination). A group with neither has no copy. The locked group
+// itself is never a destination. A failed lookup of the link is returned, so the cycle
+// retries and nothing is decided.
 func lockdownAlertDestinations(ld *models.ChatLockdown) ([]models.ChatLockdownAlert, error) {
 	var slots []models.ChatLockdownAlert
 	link, err := staff.GetLinkOfGroupFresh(ld.ChatID)
@@ -86,6 +98,16 @@ func lockdownAlertDestinations(ld *models.ChatLockdown) ([]models.ChatLockdownAl
 			Seq:        0,
 			Dest:       models.AlertDestStaff,
 			DestChatID: link.StaffChatID,
+		})
+	}
+	if channelID, _, ok := actionlog.Destination(lockdownLogChat(ld), logchannels.CategoryAdmin); ok {
+		slots = append(slots, models.ChatLockdownAlert{
+			LockdownID: ld.ID,
+			ChatID:     ld.ChatID,
+			Kind:       models.AlertKindAlert,
+			Seq:        0,
+			Dest:       models.AlertDestLog,
+			DestChatID: channelID,
 		})
 	}
 	return slots, nil
@@ -216,6 +238,27 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 
 	tr := lockdownSlotTranslator(slot)
 	text := lockdownRenderAlert(tr, ld)
+	if slot.Dest == models.AlertDestLog {
+		// The log channel's owner chose which categories it receives, and may have
+		// changed that since the alert was decided: nothing is sent to a channel that
+		// would not get it now. The header is the one every log post starts with. The
+		// lookup cannot tell a turned-off category from a failed read, so the copy is
+		// tried again on the usual attempt budget before it is ended.
+		channelID, header, ok := actionlog.Destination(lockdownLogChat(ld), logchannels.CategoryAdmin)
+		if !ok || channelID != slot.DestChatID {
+			const detail = "log channel no longer receives admin posts"
+			if slot.Attempts+1 >= lockdownMaxAttempts {
+				if _, err := lockdown.FailAlertSlot(slot.ID, detail); err != nil {
+					log.Errorf("[Lockdown] alert copy %d could not be ended: %v", slot.ID, err)
+					return false
+				}
+				return true
+			}
+			release(detail, true)
+			return false
+		}
+		text = header + text
+	}
 	opts := &gotgbot.SendMessageOpts{
 		ParseMode:          formatting.HTML,
 		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},

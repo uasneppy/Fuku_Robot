@@ -222,8 +222,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`/lockdown` only wakes the worker). A group with no Staff Group link still gets stamped, so a link made later never
   receives an old alert. Copies are claimed with a conditional update and posted through `lockdownPaced`
   (`lockdownPostAlerts`); only a pending copy of an active lockdown is listed, so a lifted lockdown's copy is never
-  sent. The locked group itself never gets an alert, and `chat_title` is stored at `lockdown.Start` (empty before this
-  migration, shown as the chat ID).
+  sent. The alert goes to the linked Staff Group (always) and to the group's log channel only when its `admin` category is on
+  (`lockdownAlertDestinations`, through `actionlog.Destination`, which also gives the usual group header the log copy
+  starts with and is stored in its `body`); the log copy is in the locked group's language. The locked group itself never
+  gets an alert. Destinations are decided once when the alert is decided, so a Staff Group linked or a log channel set
+  later gets no copy of that alert. The destination is checked again just before a log copy is sent: a channel that no
+  longer takes the `admin` category gets nothing, and the copy is ended as failed after three tries. The `lockdown|`
+  callback handler is registered with `SetAllowChannel(true)`, because gotgbot drops a callback from a channel message
+  otherwise and the Lift button on the log copy would be dead. `chat_title` is stored at `lockdown.Start` (empty before
+  this migration, shown as the chat ID).
+- The alert copies resume like joiner rows. A copy claimed (`posting`) or close-claimed (`posted` with `claimed_at`) for
+  over 2 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
+  `lockdown.ReleaseStaleAlertClaims`, without counting an attempt, so a crash between the send and the record can post a
+  second copy (accepted over a lost one). A send is tried three times (`lockdownMaxAttempts`, then `FailAlertSlot` with
+  Telegram's reason), a rate limit or a shutdown costs no attempt, each copy has its own claim and attempts so one
+  failing destination never holds the other back, and a lockdown confirmed by the settle step is alerted in the same
+  cycle (the plan step runs after `lockdownSettleUnconfirmed`).
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
