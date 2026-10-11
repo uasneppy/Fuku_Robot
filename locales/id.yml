@@ -2851,6 +2851,8 @@ lockdown_alert_lift_ask: "Cabut lockdown di {group}? Izinnya kembali seperti seb
 lockdown_alert_btn_confirm: "Konfirmasi"
 lockdown_alert_btn_cancel: "Batal"
 lockdown_alert_not_admin: "Hanya admin grup yang dikunci yang dapat membatasi anggota yang bisa melakukan ini. Tidak ada yang berubah."
+lockdown_alert_post_as_yourself: "Tekan tombol sebagai diri Anda sendiri, bukan sebagai grup atau channel."
+lockdown_alert_no_restrict: "Anda admin grup yang dikunci, tetapi ini memerlukan hak untuk membatasi anggota. Tidak ada yang berubah."
 lockdown_alert_check_failed: "Saya tidak bisa memeriksa hak Anda di grup yang dikunci saat ini. Tidak ada yang berubah. Coba lagi sebentar lagi."
 lockdown_alert_not_yours: "Hanya orang yang menekan tombol yang dapat mengonfirmasi atau membatalkan ini."
 lockdown_alert_working: "Sedang diproses…"

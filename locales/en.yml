@@ -2889,6 +2889,8 @@ lockdown_alert_lift_ask: "Lift the lockdown in {group}? Its permissions go back 
 lockdown_alert_btn_confirm: "Confirm"
 lockdown_alert_btn_cancel: "Cancel"
 lockdown_alert_not_admin: "Only an admin of the locked group who can restrict members can do this. Nothing changed."
+lockdown_alert_post_as_yourself: "Press the button as yourself, not as the group or a channel."
+lockdown_alert_no_restrict: "You are an admin of the locked group, but this needs the right to restrict members. Nothing changed."
 lockdown_alert_check_failed: "I couldn't check your rights in the locked group right now. Nothing changed. Try again in a moment."
 lockdown_alert_not_yours: "Only the person who pressed the button can confirm or cancel this."
 lockdown_alert_working: "Working on it…"

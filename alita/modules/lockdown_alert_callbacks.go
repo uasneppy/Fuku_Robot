@@ -37,6 +37,13 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 	fields := decoded.Fields
 	fallback := ctxTr(ctx)
 
+	// A Telegram service identity is refused before any read or lookup. A callback's
+	// sender is the real pressing user, so this is defence in depth (D-05).
+	if staffServiceUserIDs[query.From.Id] {
+		answerStaffCallback(b, query, lockdownText(fallback, "lockdown_alert_post_as_yourself"), true)
+		return ext.EndGroups
+	}
+
 	id, err := strconv.ParseUint(fields["r"], 10, 63)
 	if err != nil || id == 0 {
 		answerStaffCallback(b, query, lockdownText(fallback, "lockdown_alert_expired"), false)
@@ -48,6 +55,12 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 		return ext.EndGroups
 	}
 	if slot == nil {
+		answerStaffCallback(b, query, lockdownText(fallback, "lockdown_alert_expired"), false)
+		return ext.EndGroups
+	}
+	// A copy row is honoured only on the chat it was posted in, so forged or replayed
+	// data never reaches a lookup.
+	if slot.DestChatID != query.Message.GetChat().Id {
 		answerStaffCallback(b, query, lockdownText(fallback, "lockdown_alert_expired"), false)
 		return ext.EndGroups
 	}
@@ -110,8 +123,11 @@ func lockdownButtonAuthority(b *gotgbot.Bot, chatID, userID int64) (ok bool, ref
 		log.Warnf("[Lockdown] live check of user %d in chat %d for an alert button failed: %v", userID, chatID, err)
 		return false, "lockdown_alert_check_failed"
 	}
-	if staffIssuerSkipReason(member) == "" {
+	switch staffIssuerSkipReason(member) {
+	case "":
 		return true, ""
+	case staffReasonSkipIssuerNoRight:
+		return false, "lockdown_alert_no_restrict"
 	}
 	return false, "lockdown_alert_not_admin"
 }

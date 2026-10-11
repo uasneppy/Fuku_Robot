@@ -2538,6 +2538,8 @@ lockdown_alert_lift_ask: "{group} में लॉकडाउन हटाए�
 lockdown_alert_btn_confirm: "पुष्टि करें"
 lockdown_alert_btn_cancel: "रद्द करें"
 lockdown_alert_not_admin: "यह केवल लॉक किए गए ग्रुप का वही एडमिन कर सकता है जो सदस्यों को प्रतिबंधित कर सकता है। कुछ नहीं बदला।"
+lockdown_alert_post_as_yourself: "बटन अपने नाम से दबाएँ, ग्रुप या चैनल के रूप में नहीं।"
+lockdown_alert_no_restrict: "आप लॉक किए गए ग्रुप के एडमिन हैं, लेकिन इसके लिए सदस्यों को प्रतिबंधित करने का अधिकार चाहिए। कुछ नहीं बदला।"
 lockdown_alert_check_failed: "मैं अभी लॉक किए गए ग्रुप में आपके अधिकार जाँच नहीं सका। कुछ नहीं बदला। थोड़ी देर बाद फिर कोशिश करें।"
 lockdown_alert_not_yours: "इसे केवल बटन दबाने वाला व्यक्ति ही पुष्ट या रद्द कर सकता है।"
 lockdown_alert_working: "काम जारी है…"

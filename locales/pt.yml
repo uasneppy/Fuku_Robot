@@ -2823,6 +2823,8 @@ lockdown_alert_lift_ask: "Levantar o bloqueio em {group}? As permissões voltam 
 lockdown_alert_btn_confirm: "Confirmar"
 lockdown_alert_btn_cancel: "Cancelar"
 lockdown_alert_not_admin: "Só um admin do grupo bloqueado que possa restringir membros pode fazer isto. Nada mudou."
+lockdown_alert_post_as_yourself: "Toque no botão como você mesmo, não como o grupo ou um canal."
+lockdown_alert_no_restrict: "Você é admin do grupo bloqueado, mas isto exige o direito de restringir membros. Nada mudou."
 lockdown_alert_check_failed: "Não consegui verificar seus direitos no grupo bloqueado agora. Nada mudou. Tente de novo daqui a pouco."
 lockdown_alert_not_yours: "Só quem apertou o botão pode confirmar ou cancelar isto."
 lockdown_alert_working: "Trabalhando nisso…"
