@@ -2871,3 +2871,4 @@ lockdown_revoke_no_rights: "Preciso do direito de convidar usuários por link no
 lockdown_revoke_not_found: "O Telegram diz que este link não funciona mais ou não foi criado por mim. Revogue-o nos links de convite do grupo no Telegram."
 lockdown_revoke_busy: "O Telegram está limitando minhas requisições agora. Nada mudou. Tente novamente em um minuto."
 lockdown_reminder_title: "⏰ <b>{group} continua bloqueado</b> desde {since}."
+lockdown_reminder_counts: "Novos membros removidos até agora: {removed}. Ainda pendentes: {pending}."

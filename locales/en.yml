@@ -2937,3 +2937,4 @@ lockdown_revoke_no_rights: "I need the right to invite users via link in the loc
 lockdown_revoke_not_found: "Telegram says this link no longer works or was not made by me. Revoke it in the group's invite links in Telegram."
 lockdown_revoke_busy: "Telegram is rate limiting me right now. Nothing changed. Try again in a minute."
 lockdown_reminder_title: "⏰ <b>{group} is still locked</b> since {since}."
+lockdown_reminder_counts: "Joiners removed so far: {removed}. Still pending: {pending}."

@@ -492,11 +492,14 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, li
 }
 
 // lockdownRenderReminder is the text of a lockdown's hourly reminder: which group is still
-// locked and since when, and the reason. It carries no burst sample. It also returns the
-// invite link the text shows, to be stored on the copy, empty when none is shown. The
-// group and the reason are user-controlled, so they go in after translation, in place of
-// their tokens. The footers for what happened since (a revoked link) are not part of it:
-// the post adds them to what it sends, as a refresh does.
+// locked and since when, the reason, how many joiners the lockdown removed so far (its own
+// bans plus the response bans, the number /lockdownstatus gives) and how many are still
+// pending, and the invite link line of the alert. It carries no burst sample. It also
+// returns the invite link the text shows, to be stored on the copy, empty when none is
+// shown. The group, the reason and the link are user-controlled, so they go in after
+// translation, in place of their tokens. A failed read leaves that line out and the
+// reminder still posts. The footers for what happened since (a revoked link) are not part
+// of it: the post adds them to what it sends, as a refresh does.
 func lockdownRenderReminder(tr *i18n.Translator, ld *models.ChatLockdown) (text, link string) {
 	lockedAt := ld.CreatedAt
 	if ld.LockedAt != nil {
@@ -510,7 +513,24 @@ func lockdownRenderReminder(tr *i18n.Translator, ld *models.ChatLockdown) (text,
 		lockdownGroupToken, lockdownGroupLabel(ld),
 	)
 	lines := []string{title, lockdownReasonLine(tr, ld.Reason)}
-	return lockdownJoinLines(lines), ""
+	tally, err := lockdown.TallyJoiners(ld.ID)
+	if err != nil {
+		log.Warnf("[Lockdown] the joiners of lockdown %d could not be counted for its reminder: %v", ld.ID, err)
+	} else {
+		lines = append(lines, lockdownText(tr, "lockdown_reminder_counts", i18n.TranslationParams{
+			"removed": strconv.FormatInt(lockdownRemovedSoFar(ld.ID, tally), 10),
+			"pending": strconv.FormatInt(tally[models.JoinerStatePending]+tally[models.JoinerStateActing], 10),
+		}))
+	}
+	links, err := lockdown.TopInviteLinksFresh(ld.ID)
+	if err != nil {
+		log.Warnf("[Lockdown] the invite links of lockdown %d could not be read for its reminder: %v", ld.ID, err)
+	} else {
+		var linkLine string
+		linkLine, link = lockdownRenderLinkLine(tr, links)
+		lines = append(lines, linkLine)
+	}
+	return lockdownJoinLines(lines), link
 }
 
 // lockdownPostAlerts posts the pending copies of active lockdowns, oldest first. Each

@@ -2646,3 +2646,4 @@ lockdown_revoke_no_rights: "Чтобы отозвать ссылку, мне н�
 lockdown_revoke_not_found: "Telegram сообщает, что эта ссылка больше не работает или создана не мной. Отзовите её в пригласительных ссылках группы в Telegram."
 lockdown_revoke_busy: "Telegram сейчас ограничивает мои запросы. Ничего не изменилось. Повторите через минуту."
 lockdown_reminder_title: "⏰ <b>{group} всё ещё заблокирована</b> с {since}."
+lockdown_reminder_counts: "Удалено новичков на данный момент: {removed}. Ещё в ожидании: {pending}."
