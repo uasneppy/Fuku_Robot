@@ -9,6 +9,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 )
 
@@ -366,6 +367,24 @@ func TestLockdownRevokeLinkRefusals(t *testing.T) {
 			hidden:   "INVITE_HASH_EXPIRED",
 		},
 		{
+			name:     "chat not found is not a dead link",
+			failures: []error{staffFakeError(400, "Bad Request: chat not found")},
+			want:     "lockdown_revoke_failed",
+			hidden:   "chat not found",
+		},
+		{
+			name:     "bot removed is not a missing right",
+			failures: []error{staffFakeError(403, "Forbidden: bot was kicked from the supergroup chat")},
+			want:     "lockdown_revoke_failed",
+			hidden:   "kicked",
+		},
+		{
+			name:     "forbidden for lack of rights",
+			failures: []error{staffFakeError(403, "Forbidden: not enough rights to manage chat invite link")},
+			want:     "lockdown_revoke_no_rights",
+			hidden:   "not enough rights",
+		},
+		{
 			name:     "server error",
 			failures: []error{staffFakeError(500, "Internal Server Error: secret detail")},
 			want:     "lockdown_revoke_failed",
@@ -400,6 +419,41 @@ func TestLockdownRevokeLinkRefusals(t *testing.T) {
 			s.wantNothingRevoked()
 		})
 	}
+
+	t.Run("a refusal after another admin's revoke says so", func(t *testing.T) {
+		s := newRevokeScene(t, revokeTestLink)
+		card, ok := s.ask(s.asker)
+		if !ok {
+			t.Fatal("no confirm card came")
+		}
+		// Another admin's revoke is recorded after this Confirm loaded the lockdown and
+		// before Telegram answers; Telegram then refuses this admin's call.
+		winner := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Winner"}
+		s.env.fake.setOnGetMember(func(chatID, userID int64) {
+			if userID != s.asker.Id {
+				return
+			}
+			s.env.fake.setOnGetMember(nil)
+			if won, err := lockdown.RecordLinkRevoked(s.row.ID, winner.Id, winner.FirstName, revokeTestLink); err != nil || !won {
+				t.Errorf("setup: RecordLinkRevoked = %v, %v", won, err)
+			}
+		})
+		t.Cleanup(func() { s.env.fake.setOnGetMember(nil) })
+		s.env.fake.script("revokeChatInviteLink", s.env.chat.Id, staffFakeError(400, "Bad Request: INVITE_HASH_EXPIRED"))
+
+		s.press(s.asker, card.MessageID, lockdownButtonData(t, card.Params["reply_markup"], "rc"))
+
+		text := s.cardText(card)
+		if !strings.Contains(text, staffMarker("lockdown_revoke_already")) || !strings.Contains(text, "Winner") {
+			t.Errorf("card reads %q, want %q naming the admin who revoked", text, staffMarker("lockdown_revoke_already"))
+		}
+		if strings.Contains(text, staffMarker("lockdown_revoke_not_found")) {
+			t.Errorf("card reads %q, want no claim that the link no longer works", text)
+		}
+		if row := s.env.freshRow(s.row.ID); row.LinkRevokedBy == nil || *row.LinkRevokedBy != winner.Id {
+			t.Errorf("lockdown row = %+v, want the first admin's revoke kept", row)
+		}
+	})
 
 	t.Run("retry after a refusal", func(t *testing.T) {
 		s := newRevokeScene(t, revokeTestLink)

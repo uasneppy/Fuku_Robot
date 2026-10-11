@@ -500,10 +500,12 @@ func lockdownInviteAuthority(b *gotgbot.Bot, chatID, userID int64) (ok bool, ref
 
 // lockdownRevokeRefusalKey is the locale key of the plain sentence that tells staff why a
 // revoke failed. A rate limit (the pacer refused, or Telegram kept answering 429) is
-// "busy"; an answer with code 403, or one that says the bot lacks the right, is "no
-// rights"; an answer that says the link is unknown, expired or not the bot's is "not
-// found"; anything else, a 5xx answer or a dropped connection included, is the generic
-// refusal. Telegram's raw text never reaches the card.
+// "busy". Only descriptions that name the cause are mapped: "not enough rights" and
+// CHAT_ADMIN_REQUIRED mean "no rights"; INVITE_HASH_* and "invite link not found" mean
+// the link is unknown, expired or not the bot's ("not found"). Everything else, a bare 403
+// (the bot may have been removed from the chat), "chat not found", a 5xx answer or a
+// dropped connection included, is the generic refusal rather than a wrong cause. Telegram's
+// raw text never reaches the card.
 func lockdownRevokeRefusalKey(err error) string {
 	if errors.Is(err, ratelimit.ErrRateLimited) {
 		return "lockdown_revoke_busy"
@@ -516,13 +518,11 @@ func lockdownRevokeRefusalKey(err error) string {
 	switch {
 	case tgErr.Code == 429:
 		return "lockdown_revoke_busy"
-	case tgErr.Code == 403,
-		strings.Contains(text, "not enough rights"),
+	case strings.Contains(text, "not enough rights"),
 		strings.Contains(text, "chat_admin_required"):
 		return "lockdown_revoke_no_rights"
 	case strings.Contains(text, "invite_hash"),
-		strings.Contains(text, "not found"),
-		strings.Contains(text, "expired"):
+		strings.Contains(text, "invite link not found"):
 		return "lockdown_revoke_not_found"
 	}
 	return "lockdown_revoke_failed"
@@ -663,6 +663,13 @@ func (m moduleStruct) lockdownRevokeConfirm(
 	if revokeErr != nil {
 		// Telegram's own text stays in the log; the card gets a plain sentence.
 		log.Warnf("[Lockdown] revoking the invite link of lockdown %d failed: %v", ld.ID, revokeErr)
+		// Two admins confirming together can see Telegram refuse the second call because the
+		// first already revoked the link. The lockdown is read again, and a recorded revoke
+		// is told as such instead of a misleading "no longer works".
+		if current, readErr := lockdown.GetFresh(ld.ID); readErr == nil && current != nil && current.LinkRevokedAt != nil {
+			editStaffCallbackMessage(b, query, lockdownRevokeAlreadyText(tr, current, true))
+			return ext.EndGroups
+		}
 		editStaffCallbackMessage(b, query, lockdownText(tr, lockdownRevokeRefusalKey(revokeErr)))
 		return ext.EndGroups
 	}

@@ -138,8 +138,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   full, so one the bot made) and no revoke was recorded. The link revoked is always the one stored on the pressed copy,
   never anything from the callback data. Confirm calls `revokeChatInviteLink` through `lockdownPaced` first and records
   the revoke (`lockdown.RecordLinkRevoked`) only after Telegram confirmed it; a refused revoke edits the card with a
-  plain reason (`lockdownRevokeRefusalKey`: busy, no rights, link not found, or a generic line; Telegram's own text goes
-  to the log only) and records nothing.
+  plain reason (`lockdownRevokeRefusalKey`: busy, no rights, link not found, or a generic line; only descriptions that
+  name the cause are mapped, so a bare 403 or "chat not found" gets the generic line; Telegram's own text goes to the log
+  only) and records nothing, except that a refusal met after another admin's revoke was recorded (the lockdown is read
+  again) shows `lockdown_revoke_already` instead.
 
 ## Permissions
 
