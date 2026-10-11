@@ -14,7 +14,9 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
+	"github.com/divkix/Alita_Robot/alita/db/logchannels"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/db/staff"
 )
 
 // ageAlert moves the alert_started_at of a lockdown back by the given time with a
@@ -277,6 +279,286 @@ func TestLockdownReminders(t *testing.T) {
 			default:
 				t.Errorf("unexpected reminder row %+v", row)
 			}
+		}
+	})
+}
+
+// lastTo is the last message sent to chatID so far.
+func (e *lockdownEnv) lastTo(chatID int64) staffSentMessage {
+	e.t.Helper()
+	sent := e.fake.sentTo(chatID)
+	if len(sent) == 0 {
+		e.t.Fatalf("nothing was sent to chat %d", chatID)
+	}
+	return sent[len(sent)-1]
+}
+
+// wantKeyboardActions fails unless the keyboard of markup holds exactly the lockdown
+// actions in want, in any order.
+func wantKeyboardActions(t *testing.T, name string, markup any, want ...string) {
+	t.Helper()
+	var got []string
+	for _, row := range staffKeyboardOf(markup) {
+		for _, button := range row {
+			if decoded, ok := decodeCallbackData(button.CallbackData, "lockdown"); ok {
+				got = append(got, decoded.Fields["a"])
+			}
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("%s keyboard actions = %v, want %v", name, got, want)
+		return
+	}
+	for _, action := range want {
+		found := false
+		for _, have := range got {
+			found = found || have == action
+		}
+		if !found {
+			t.Errorf("%s keyboard actions = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestLockdownReminderContent(t *testing.T) {
+	t.Run("counts", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := lockdownBurstEnv(env)
+		row := env.lockAsAdmin("spam <wave>")
+		env.cycle()
+		for i := 0; i < 3; i++ {
+			seedLockdownJoiner(t, row.ID, env.chat.Id, uniqueLinkOwnerID(), models.JoinerStateBanned)
+		}
+		seedLockdownJoiner(t, row.ID, env.chat.Id, uniqueLinkOwnerID(), models.JoinerStatePending)
+		for i := 0; i < 2; i++ {
+			kept := seedLockdownJoiner(t, row.ID, env.chat.Id, uniqueLinkOwnerID(), models.JoinerStateKept)
+			if err := db.DB.Model(&models.LockdownJoiner{}).Where("id = ?", kept.ID).
+				UpdateColumn("detail", models.JoinerDetailResponseBan).Error; err != nil {
+				t.Fatalf("mark joiner %d as a response ban: %v", kept.ID, err)
+			}
+		}
+		ageAlert(t, row.ID, 61*time.Minute)
+
+		env.cycle()
+
+		reminder := env.lastTo(staffChat.Id)
+		text := fmt.Sprint(reminder.Params["text"])
+		for _, want := range []string{
+			staffMarker("lockdown_reminder_title"),
+			lockdownTime(*row.LockedAt),
+			staffMarker("lockdown_reason_line"),
+			"spam &lt;wave&gt;",
+			staffMarker("lockdown_reminder_counts") + " 5 1",
+		} {
+			if !strings.Contains(text, want) {
+				t.Errorf("reminder %q does not contain %q", text, want)
+			}
+		}
+		if strings.Contains(text, staffMarker("lockdown_alert_sample_title")) || strings.Contains(text, staffMarker("lockdown_alert_counts")) {
+			t.Errorf("reminder %q carries the burst sample, want none (D-16)", text)
+		}
+	})
+
+	t.Run("buttons", func(t *testing.T) {
+		s := newRevokeScene(t, revokeTestLink)
+		env := s.env
+
+		// Someone joins during the lockdown and is banned by it: the reminder's Ban count is fresh.
+		extra := env.newJoiner("Late")
+		env.join(extra, extra, revokeTestLink)
+		env.cycle()
+		ageAlert(t, s.row.ID, 61*time.Minute)
+		env.cycle()
+
+		alertKeyboard := staffKeyboardOf(s.staffMsg.Params["reply_markup"])
+		reminder := env.lastTo(s.staff.Id)
+		if reminder.MessageID == s.staffMsg.MessageID {
+			t.Fatal("no reminder was posted to the Staff Group")
+		}
+		wantKeyboardActions(t, "reminder", reminder.Params["reply_markup"], "lk", "bn", "rk")
+		keyboard := staffKeyboardOf(reminder.Params["reply_markup"])
+		if len(keyboard) != 3 {
+			t.Fatalf("reminder keyboard = %+v, want Lift, Ban and Revoke on three rows", keyboard)
+		}
+		if got, was := keyboard[1][0].Text, alertKeyboard[1][0].Text; got == was || !strings.Contains(got, staffMarker("lockdown_alert_btn_ban")+" 3") {
+			t.Errorf("reminder Ban label = %q (the alert's was %q), want a fresh count of 3", got, was)
+		}
+		if rows := env.reminderRows(); len(rows) != 2 || rows[0].Link != revokeTestLink {
+			t.Fatalf("reminder rows = %+v, want two copies that stored the link %s", rows, revokeTestLink)
+		}
+
+		// Revoke works from the reminder like from the alert.
+		before := len(env.fake.sentTo(s.staff.Id))
+		s.press(s.asker, reminder.MessageID, lockdownButtonData(t, reminder.Params["reply_markup"], "rk"))
+		if len(env.fake.sentTo(s.staff.Id)) != before+1 {
+			t.Fatal("a live administrator with can_invite_users got no confirm card from the reminder")
+		}
+		card := env.lastTo(s.staff.Id)
+		s.press(s.asker, card.MessageID, lockdownButtonData(t, card.Params["reply_markup"], "rc"))
+		if got := len(s.revokeCalls()); got != 1 {
+			t.Fatalf("%d revokeChatInviteLink calls, want 1", got)
+		}
+		env.cycle()
+		edits := env.alertEdits(s.staff.Id, reminder.MessageID)
+		if len(edits) != 1 || !strings.Contains(fmt.Sprint(edits[0].Params["text"]), staffMarker("lockdown_alert_link_revoked")) {
+			t.Fatalf("reminder edits = %+v, want one with the revoked footer", edits)
+		}
+		wantKeyboardActions(t, "refreshed reminder", edits[0].Params["reply_markup"], "lk", "bn")
+
+		// The next reminder has no Revoke button and says the link was revoked, once.
+		ageAlert(t, s.row.ID, 121*time.Minute)
+		env.cycle()
+		env.cycle()
+		next := env.lastTo(s.staff.Id)
+		if next.MessageID == card.MessageID || next.MessageID == reminder.MessageID {
+			t.Fatal("no second reminder was posted to the Staff Group")
+		}
+		wantKeyboardActions(t, "second reminder", next.Params["reply_markup"], "lk", "bn")
+		if text := fmt.Sprint(next.Params["text"]); strings.Count(text, staffMarker("lockdown_alert_link_revoked")) != 1 {
+			t.Errorf("second reminder %q, want the revoked footer exactly once", text)
+		}
+		if got := len(env.alertEdits(s.staff.Id, next.MessageID)); got != 0 {
+			t.Errorf("second reminder was edited %d times, want none: its footer was posted with it", got)
+		}
+	})
+
+	t.Run("lift from a reminder", func(t *testing.T) {
+		s := newReminderScene(t)
+		env := s.env
+		ageAlert(t, s.row.ID, 61*time.Minute)
+		env.cycle()
+		reminder := env.lastTo(s.staff.Id)
+		liftData := lockdownButtonData(t, reminder.Params["reply_markup"], "lk")
+
+		member := env.newOutsider()
+		before := len(env.fake.sentTo(s.staff.Id))
+		pressLockdownButton(env, member, s.staff, reminder.MessageID, liftData)
+		if text, _ := env.lastAnswer(); !strings.Contains(text, staffMarker("lockdown_alert_not_admin")) {
+			t.Errorf("refusal answer = %q, want %q", text, staffMarker("lockdown_alert_not_admin"))
+		}
+		if got := len(env.fake.sentTo(s.staff.Id)); got != before {
+			t.Fatalf("%d messages in the Staff Group after a refused press, were %d: no card", got, before)
+		}
+
+		pressLockdownButton(env, env.admin, s.staff, reminder.MessageID, liftData)
+		card := env.lastTo(s.staff.Id)
+		if reply, ok := card.Params["reply_parameters"].(*gotgbot.ReplyParameters); !ok || reply.MessageId != reminder.MessageID {
+			t.Fatalf("card reply_parameters = %+v, want a reply to the reminder %d", card.Params["reply_parameters"], reminder.MessageID)
+		}
+		pressLockdownButton(env, env.admin, s.staff, card.MessageID, lockdownButtonData(t, card.Params["reply_markup"], "lc"))
+
+		if lifted := env.freshRow(s.row.ID); lifted.LiftedBy == nil || *lifted.LiftedBy != env.admin.Id {
+			t.Fatalf("LiftedBy = %v, want %d", lifted.LiftedBy, env.admin.Id)
+		}
+		env.cycleUntilIdle()
+		for _, copyRow := range env.alertRows() {
+			if copyRow.ClosedAt == nil {
+				t.Errorf("copy row %+v is not closed after the lift", copyRow)
+			}
+		}
+		edits := env.alertEdits(s.staff.Id, reminder.MessageID)
+		if len(edits) == 0 || !strings.Contains(fmt.Sprint(edits[len(edits)-1].Params["text"]), staffMarker("lockdown_alert_lifted_footer")) {
+			t.Errorf("reminder edits = %+v, want the last to carry the lifted footer", edits)
+		}
+	})
+
+	t.Run("ban from a reminder", func(t *testing.T) {
+		s := newRevokeScene(t, revokeTestLink)
+		env := s.env
+		ageAlert(t, s.row.ID, 61*time.Minute)
+		env.cycle()
+		reminder := env.lastTo(s.staff.Id)
+
+		a := banAlert{
+			staffChat: s.staff,
+			alert:     reminder,
+			banData:   lockdownButtonData(t, reminder.Params["reply_markup"], "bn"),
+		}
+		card := env.askBan(a, env.admin)
+		pressLockdownButton(env, env.admin, s.staff, card.msg.MessageID, card.confirm)
+		env.cycleUntilIdle()
+
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateDone || runs[0].CardMsgID != card.msg.MessageID {
+			t.Fatalf("ban runs = %+v, want one done run with the reminder's card", runs)
+		}
+		for _, row := range env.burstRows() {
+			if row.State != models.BurstStateBanned {
+				t.Errorf("burst row %+v, want every account banned by the run", row)
+			}
+		}
+	})
+}
+
+func TestLockdownReminderDestinations(t *testing.T) {
+	t.Run("unlinked", func(t *testing.T) {
+		s := newReminderScene(t)
+		env := s.env
+		link, err := staff.GetLinkOfGroupFresh(env.chat.Id)
+		if err != nil || link == nil {
+			t.Fatalf("GetLinkOfGroupFresh = %v, %v, want the link", link, err)
+		}
+		if deleted, err := staff.DeleteLink(link.ID); err != nil || !deleted {
+			t.Fatalf("DeleteLink = %v, %v, want true", deleted, err)
+		}
+		ageAlert(t, s.row.ID, 61*time.Minute)
+
+		env.cycle()
+		env.cycle()
+
+		if got := len(env.fake.sentTo(s.staff.Id)); got != 1 {
+			t.Errorf("%d messages in the Staff Group the group was unlinked from, want only the old alert", got)
+		}
+		if got := len(env.fake.sentTo(s.channel)); got != 2 {
+			t.Errorf("%d messages in the log channel, want the alert and one reminder", got)
+		}
+		if rows := env.reminderRows(); len(rows) != 1 || rows[0].Dest != models.AlertDestLog {
+			t.Errorf("reminder rows = %+v, want only the log copy", rows)
+		}
+	})
+
+	t.Run("linked later", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := newLockdownStaffGroup(env)
+		channel := uniqueModuleChatID()
+		setStaffLogChannel(t, env.chat.Id, channel)
+		row := env.lockAsAdmin("raid")
+		env.cycle()
+		linkLockdownGroupTo(env, staffChat)
+		ageAlert(t, row.ID, 61*time.Minute)
+
+		env.cycle()
+		env.cycle()
+
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 0 {
+			t.Errorf("%d messages reached a Staff Group linked after the alert, want none", got)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 2 {
+			t.Errorf("%d messages in the log channel, want the alert and one reminder", got)
+		}
+		if rows := env.reminderRows(); len(rows) != 1 || rows[0].Dest != models.AlertDestLog {
+			t.Errorf("reminder rows = %+v, want only the log copy", rows)
+		}
+	})
+
+	t.Run("category off later", func(t *testing.T) {
+		s := newReminderScene(t)
+		env := s.env
+		if err := logchannels.SetCategory(env.chat.Id, logchannels.CategoryAdmin, false); err != nil {
+			t.Fatalf("turn the admin category off: %v", err)
+		}
+		ageAlert(t, s.row.ID, 61*time.Minute)
+
+		env.cycle()
+		env.cycle()
+
+		if got := len(env.fake.sentTo(s.staff.Id)); got != 2 {
+			t.Errorf("%d messages in the Staff Group, want the alert and one reminder", got)
+		}
+		if got := len(env.fake.sentTo(s.channel)); got != 1 {
+			t.Errorf("%d messages in a log channel whose admin category is off, want only the old alert", got)
+		}
+		if rows := env.reminderRows(); len(rows) != 1 || rows[0].Dest != models.AlertDestStaff {
+			t.Errorf("reminder rows = %+v, want only the staff copy", rows)
 		}
 	})
 }
