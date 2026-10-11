@@ -677,3 +677,80 @@ func TestReleaseStaleBurstClaims(t *testing.T) {
 		t.Errorf("queued row = %q, want queued", got.State)
 	}
 }
+
+func TestUnqueueBanRun(t *testing.T) {
+	const a, b, c, d, e, f = int64(9601), int64(9602), int64(9603), int64(9604), int64(9605), int64(9606)
+
+	chat := uniqueLockdownChatID(t)
+	cleanupBurstLockdowns(t, chat)
+	cleanupBanRuns(t, chat)
+	ld := mustStart(t, chat)
+	mustConfirm(t, ld.ID)
+
+	joined := time.Now().UTC().Add(-5 * time.Minute)
+	for _, userID := range []int64{a, b, c, d, e} {
+		row := preRow(ld, userID, "Raider", joined)
+		if err := db.DB.Create(&row).Error; err != nil {
+			t.Fatalf("seed pre row %d: %v", userID, err)
+		}
+	}
+	exempt := newJoinRecord(ld, f)
+	exempt.State = models.JoinerStateExempt
+	mustRecord(t, exempt)
+
+	run := newBanRun(ld)
+	if started, queued, err := StartBanRun(run, nil); err != nil || !started || queued != 5 {
+		t.Fatalf("StartBanRun = %v, %d, %v, want true, 5, nil", started, queued, err)
+	}
+	// a is banned, b failed, c is being banned by a call in flight, d and e wait.
+	move := func(userID int64, to string) {
+		t.Helper()
+		row := burstRowOfUser(t, ld.ID, userID)
+		if won, err := MoveBurst(row.ID, models.BurstStateQueued, to, "", "", false); err != nil || !won {
+			t.Fatalf("setup: MoveBurst(%d to %s) = %v, %v", userID, to, won, err)
+		}
+	}
+	move(a, models.BurstStateBanned)
+	move(b, models.BurstStateFailed)
+	if won, err := ClaimBurst(burstRowOfUser(t, ld.ID, c).ID, models.BurstStateQueued, models.BurstStateActing); err != nil || !won {
+		t.Fatalf("setup: ClaimBurst(c) = %v, %v", won, err)
+	}
+
+	unqueued, err := UnqueueBanRun(run.ID)
+	if err != nil || unqueued != 2 {
+		t.Fatalf("UnqueueBanRun = %d, %v, want 2: only the queued rows d and e", unqueued, err)
+	}
+	for _, userID := range []int64{d, e} {
+		row := burstRowOfUser(t, ld.ID, userID)
+		if row.State != models.BurstStateNone || row.RunID != nil || row.ClaimedAt != nil {
+			t.Errorf("burst row of %d = %q, run %v, claim %v, want unhandled with no run and no claim", userID, row.State, row.RunID, row.ClaimedAt)
+		}
+	}
+	for userID, want := range map[int64]string{
+		a: models.BurstStateBanned,
+		b: models.BurstStateFailed,
+		c: models.BurstStateActing,
+		f: models.BurstStateSkipped,
+	} {
+		row := burstRowOfUser(t, ld.ID, userID)
+		if row.State != want || row.RunID == nil || *row.RunID != int64(run.ID) {
+			t.Errorf("burst row of %d = %q, run %v, want %q still on run %d", userID, row.State, row.RunID, want, run.ID)
+		}
+	}
+
+	// A stopped finish does not wait for the acting row, and happens once.
+	if finished, err := FinishBanRun(run.ID, models.BanRunStateStopped); err != nil || !finished {
+		t.Errorf("FinishBanRun stopped = %v, %v, want true although a row is still acting", finished, err)
+	}
+	if finished, err := FinishBanRun(run.ID, models.BanRunStateStopped); err != nil || finished {
+		t.Errorf("second FinishBanRun = %v, %v, want false: a run finishes exactly once", finished, err)
+	}
+	if got := readBanRun(t, run.ID); got.State != models.BanRunStateStopped || got.FinishedAt == nil {
+		t.Errorf("run = %q, finished %v, want stopped with a finish time", got.State, got.FinishedAt)
+	}
+
+	// The accounts it gave back are unhandled, so a later run could take them.
+	if count, err := CountBanCandidatesFresh(ld.ID, nil); err != nil || count != 2 {
+		t.Errorf("CountBanCandidatesFresh = %d, %v, want 2: d and e are unhandled again", count, err)
+	}
+}
