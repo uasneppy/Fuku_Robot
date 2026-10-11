@@ -223,7 +223,7 @@ Plans:
   4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
   5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
 
-**Plans:** 12/14 plans executed
+**Plans:** 13/14 plans executed
 
 Plans:
 **Wave 1**
@@ -259,7 +259,7 @@ Plans:
 - [x] 05-12-PLAN.md: "Revoke link" for bot-created links by admins with the invite right; every copy says who revoked it; plain-word refusals
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 05-13-PLAN.md: Hourly reminders with fresh counts and live buttons; the previous reminder loses its buttons; none after the lift, no backlog after downtime
+- [x] 05-13-PLAN.md: Hourly reminders with fresh counts and live buttons; the previous reminder loses its buttons; none after the lift, no backlog after downtime
 
 **Wave 12** *(blocked on Wave 11 completion)*
 - [ ] 05-14-PLAN.md: Help text and docs in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
@@ -338,7 +338,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
-| 5. Lockdown Alerts and Response | 12/14 | In Progress|  |
+| 5. Lockdown Alerts and Response | 13/14 | In Progress|  |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
