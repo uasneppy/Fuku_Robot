@@ -2794,3 +2794,5 @@ lockdown_alert_counts: "Arrivés dans les 10 minutes avant le verrouillage : {be
 lockdown_alert_sample_title: "Comptes de la vague :"
 lockdown_alert_sample_more: "…et {count} de plus."
 lockdown_alert_bot_mark: "bot"
+lockdown_alert_link_line: "Lien d'invitation utilisé : {link} ({count} sont arrivés par ce lien)"
+lockdown_alert_link_others: "+{count} autres liens"
