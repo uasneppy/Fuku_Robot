@@ -223,11 +223,11 @@ Plans:
   4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
   5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
 
-**Plans:** 14 plans
+**Plans:** 1/14 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md: Tracer. A lockdown of a linked group posts one alert in its Staff Group (exactly-once gate, worker-posted copy, stored text)
+- [x] 05-01-PLAN.md: Tracer. A lockdown of a linked group posts one alert in its Staff Group (exactly-once gate, worker-posted copy, stored text)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-02-PLAN.md: The alert's Lift button: live authority, asker-only confirm card, the shared lift function with /unlockdown, the public lift notice
@@ -338,7 +338,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
-| 5. Lockdown Alerts and Response | 0/14 | Planned | - |
+| 5. Lockdown Alerts and Response | 1/14 | In Progress|  |
 | 6. Automatic Raid Detection | 0/TBD | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
