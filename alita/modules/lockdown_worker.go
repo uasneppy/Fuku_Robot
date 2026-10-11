@@ -69,16 +69,25 @@ const (
 var lockdownStaleClaim = 2 * time.Minute
 
 // lockdownReleaseStale gives back the claims older than lockdownStaleClaim on every
-// lockdown, on any replica. No attempt is counted for a release. A failure is logged
-// and the next cycle tries again.
+// lockdown, on any replica: the joiner rows' and the alert copies' (a send or a close
+// that a worker that stopped left claimed). No attempt is counted for a release. A
+// failure is logged and the next cycle tries again; the two steps do not depend on each
+// other.
 func lockdownReleaseStale() {
-	released, err := lockdown.ReleaseStaleClaims(time.Now().Add(-lockdownStaleClaim))
+	cutoff := time.Now().Add(-lockdownStaleClaim)
+	released, err := lockdown.ReleaseStaleClaims(cutoff)
 	if err != nil {
 		log.Errorf("[Lockdown] worker could not release stale claims: %v", err)
-		return
 	}
 	if released > 0 {
 		log.Warnf("[Lockdown] released %d stale claim(s) of a worker that stopped", released)
+	}
+	releasedAlerts, err := lockdown.ReleaseStaleAlertClaims(cutoff)
+	if err != nil {
+		log.Errorf("[Lockdown] worker could not release stale alert copy claims: %v", err)
+	}
+	if releasedAlerts > 0 {
+		log.Warnf("[Lockdown] released %d stale alert copy claim(s) of a worker that stopped", releasedAlerts)
 	}
 }
 
