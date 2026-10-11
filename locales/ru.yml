@@ -2603,6 +2603,7 @@ lockdown_alert_not_yours: "Подтвердить или отменить это
 lockdown_alert_working: "Выполняю…"
 lockdown_alert_lift_done: "🔓 Блокировка в {group} снята: {name}."
 lockdown_alert_already_lifted: "Уже снято: {name}, {time}."
+lockdown_alert_lifted_footer: "🔓 Снято: {name}, {time}."
 lockdown_alert_expired: "Эта кнопка больше недействительна."
 lockdown_alert_restore_failed: "⚠️ Мне не удалось вернуть разрешения {group}, поэтому блокировка всё ещё действует и никто не разбанен. Убедитесь, что я там админ с правом ограничивать участников, и попробуйте снова."
 lockdown_alert_record_failed: "⚠️ Разрешения {group} возвращены, но я не смог записать снятие блокировки. Нажмите «Снять блокировку» ещё раз или выполните /unlockdown в группе."

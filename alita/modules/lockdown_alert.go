@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -253,4 +254,146 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 	}
 	release(detail, true)
 	return false
+}
+
+// lockdownLiftedFooter is the line added under an alert's stored text once its lockdown
+// is lifting or lifted: who lifted it and when, read from the lockdown row. The name is
+// user-controlled, so it goes in after translation, escaped.
+func lockdownLiftedFooter(tr *i18n.Translator, ld *models.ChatLockdown) string {
+	when := ld.UpdatedAt
+	if ld.LiftStartedAt != nil {
+		when = *ld.LiftStartedAt
+	}
+	lifter := html.EscapeString(ld.LiftedByName)
+	if ld.LiftedBy != nil {
+		lifter = lockdownMention(*ld.LiftedBy, ld.LiftedByName)
+	}
+	text := lockdownText(tr, "lockdown_alert_lifted_footer", i18n.TranslationParams{
+		"name": lockdownNameToken,
+		"time": lockdownTime(when),
+	})
+	return lockdownSplice(text, lockdownNameToken, lifter)
+}
+
+// lockdownEditGone reports whether err says the message to edit no longer exists or can
+// no longer be edited: Telegram's "message to edit not found", "message can't be
+// edited" and MESSAGE_ID_INVALID. Such a copy cannot be changed, so it counts as closed.
+// The text is matched case-insensitively.
+func lockdownEditGone(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	for _, gone := range []string{"message to edit not found", "message can't be edited", "message_id_invalid"} {
+		if strings.Contains(text, gone) {
+			return true
+		}
+	}
+	return false
+}
+
+// lockdownCloseAlerts closes the posted copies of lockdowns that are no longer active:
+// each is edited to its stored text plus the lifted footer, with no buttons. It runs
+// whatever lifted the lockdown (/unlockdown or the alert's button), covers a restart,
+// takes newest copies first and at most lockdownAlertBatch per cycle, so the 5 s wait
+// of StopLockdownWorker holds. It reports whether any copy was closed.
+func lockdownCloseAlerts(ctx context.Context, b *gotgbot.Bot) bool {
+	slots, err := lockdown.ListAlertSlotsToCloseFresh(lockdownAlertBatch)
+	if err != nil {
+		log.Errorf("[Lockdown] alert copies to close could not be listed: %v", err)
+		return false
+	}
+	progress := false
+	for i := range slots {
+		if ctx.Err() != nil {
+			return progress
+		}
+		slot := &slots[i]
+		claimed, err := lockdown.ClaimAlertClose(slot.ID)
+		if err != nil || !claimed {
+			continue
+		}
+		ld, err := lockdown.GetFresh(slot.LockdownID)
+		if err != nil || ld == nil || ld.State == models.LockdownStateActive {
+			releaseAlertClose(slot.ID, false)
+			continue
+		}
+		closed, stop := lockdownCloseClaimed(ctx, b, slot, ld)
+		if closed {
+			progress = true
+		}
+		if stop {
+			// The same pacer limits every copy, so the rest would only be refused too.
+			break
+		}
+	}
+	return progress
+}
+
+// lockdownCloseSlotNow closes one copy at once, for a press on a button of a lockdown
+// that is lifting or lifted: the same claim, edit and record as the worker's step. It
+// returns false when the claim was lost, because the worker (or another press) owns the
+// copy and will close it.
+func lockdownCloseSlotNow(ctx context.Context, b *gotgbot.Bot, slot *models.ChatLockdownAlert, ld *models.ChatLockdown) bool {
+	claimed, err := lockdown.ClaimAlertClose(slot.ID)
+	if err != nil || !claimed {
+		return false
+	}
+	lockdownCloseClaimed(ctx, b, slot, ld)
+	return true
+}
+
+// releaseAlertClose gives a claimed copy back, logging a failure.
+func releaseAlertClose(id uint, countAttempt bool) {
+	if _, err := lockdown.ReleaseAlertClose(id, countAttempt); err != nil {
+		log.Errorf("[Lockdown] alert copy %d could not be given back after closing: %v", id, err)
+	}
+}
+
+// lockdownCloseClaimed edits a claimed copy to its stored text plus the lifted footer,
+// without buttons, through the lockdown pacer, and records the result. An edit that
+// worked, a message that already shows that text and a message that is gone all close
+// the copy. A rate limit or a shutdown gives the claim back without costing an attempt
+// and reports stop; any other failure costs an attempt and the third one closes the
+// copy with Telegram's reason. closed reports whether the copy was closed.
+func lockdownCloseClaimed(ctx context.Context, b *gotgbot.Bot, slot *models.ChatLockdownAlert, ld *models.ChatLockdown) (closed, stop bool) {
+	record := func(detail string) bool {
+		if _, err := lockdown.RecordAlertClosed(slot.ID, detail); err != nil {
+			log.Errorf("[Lockdown] alert copy %d was edited but not recorded closed: %v", slot.ID, err)
+			return false
+		}
+		return true
+	}
+
+	tr := lockdownSlotTranslator(slot)
+	text := slot.Body + "\n\n" + lockdownLiftedFooter(tr, ld)
+	err := lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancel()
+		_, _, editErr := b.EditMessageTextWithContext(call, &gotgbot.EditMessageTextOpts{
+			Text:               text,
+			ChatId:             slot.DestChatID,
+			MessageId:          slot.MessageID,
+			ParseMode:          formatting.HTML,
+			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+		})
+		return editErr
+	})
+
+	switch {
+	case lockdownClassify(ctx, err) == lockdownCallDone, isMessageNotModified(err):
+		return record(""), false
+	case lockdownClassify(ctx, err) == lockdownCallRetryFree:
+		releaseAlertClose(slot.ID, false)
+		return false, true
+	case lockdownEditGone(err):
+		return record("gone"), false
+	}
+
+	log.Warnf("[Lockdown] closing alert copy %d in chat %d failed: %v", slot.ID, slot.DestChatID, err)
+	if slot.Attempts+1 >= lockdownMaxAttempts {
+		return record(telegramErrorDetail(err)), false
+	}
+	releaseAlertClose(slot.ID, true)
+	return false, false
 }

@@ -198,3 +198,80 @@ func FailAlertSlot(id uint, detail string) (bool, error) {
 	}
 	return result.RowsAffected == 1, nil
 }
+
+// ListAlertSlotsToCloseFresh reads up to limit posted copies that still need closing:
+// not closed, not claimed, and belonging to a lockdown that is no longer active (lifting
+// or lifted). Newest ID first, so the alerts staff see last are fixed first. It reads
+// straight from the database.
+func ListAlertSlotsToCloseFresh(limit int) ([]models.ChatLockdownAlert, error) {
+	var rows []models.ChatLockdownAlert
+	err := db.DB.
+		Where("state = ? AND closed_at IS NULL AND claimed_at IS NULL AND lockdown_id IN (SELECT id FROM chat_lockdowns WHERE state <> ?)",
+			models.AlertStatePosted, models.LockdownStateActive).
+		Order("id DESC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] ListAlertSlotsToCloseFresh: %v", err)
+		return nil, alitaerrors.Wrap(err, "list alert copies to close")
+	}
+	return rows, nil
+}
+
+// ClaimAlertClose claims a posted, open, unclaimed copy for closing by stamping
+// claimed_at, in one conditional update, and reports whether this call won the claim. A
+// posted copy has no other claim, so the column is reused.
+func ClaimAlertClose(id uint) (bool, error) {
+	stamp := now()
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ? AND closed_at IS NULL AND claimed_at IS NULL", id, models.AlertStatePosted).
+		Updates(map[string]any{"claimed_at": stamp, "updated_at": stamp})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ClaimAlertClose: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "claim alert copy %d for closing", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// RecordAlertClosed records a closed copy: closed_at is stamped, the claim and the live
+// buttons are cleared and detail is stored. It reports whether this call closed the row;
+// a copy closed already is left alone.
+func RecordAlertClosed(id uint, detail string) (bool, error) {
+	stamp := now()
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND closed_at IS NULL", id).
+		Updates(map[string]any{
+			"closed_at":    stamp,
+			"claimed_at":   nil,
+			"buttons_live": false,
+			"edit_pending": false,
+			"detail":       detail,
+			"updated_at":   stamp,
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] RecordAlertClosed: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "record closed alert copy %d", id)
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// ReleaseAlertClose gives a claimed, still open copy back for another try: the claim is
+// cleared, and countAttempt adds one to the attempt counter. It reports whether this
+// call moved the row.
+func ReleaseAlertClose(id uint, countAttempt bool) (bool, error) {
+	updates := map[string]any{
+		"claimed_at": nil,
+		"updated_at": now(),
+	}
+	if countAttempt {
+		updates["attempts"] = gorm.Expr("attempts + 1")
+	}
+	result := db.DB.Model(&models.ChatLockdownAlert{}).
+		Where("id = ? AND state = ? AND closed_at IS NULL AND claimed_at IS NOT NULL", id, models.AlertStatePosted).
+		Updates(updates)
+	if result.Error != nil {
+		log.Errorf("[Lockdown] ReleaseAlertClose: %v", result.Error)
+		return false, alitaerrors.Wrapf(result.Error, "release alert copy %d from closing", id)
+	}
+	return result.RowsAffected == 1, nil
+}

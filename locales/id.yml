@@ -2856,6 +2856,7 @@ lockdown_alert_not_yours: "Hanya orang yang menekan tombol yang dapat mengonfirm
 lockdown_alert_working: "Sedang diproses…"
 lockdown_alert_lift_done: "🔓 Lockdown di {group} dicabut oleh {name}."
 lockdown_alert_already_lifted: "Sudah dicabut oleh {name} pada {time}."
+lockdown_alert_lifted_footer: "🔓 Dicabut oleh {name} pada {time}."
 lockdown_alert_expired: "Tombol ini sudah tidak berlaku."
 lockdown_alert_restore_failed: "⚠️ Saya tidak bisa mengembalikan izin {group}, jadi lockdown masih aktif dan tidak ada yang di-unban. Pastikan saya admin di sana yang dapat membatasi anggota, lalu coba lagi."
 lockdown_alert_record_failed: "⚠️ Izin {group} sudah kembali, tetapi saya tidak bisa mencatat pencabutannya. Tekan Cabut lagi atau jalankan /unlockdown di grup."
