@@ -113,7 +113,11 @@ func TestPostInitSetsCommandsAndStartupMessage(t *testing.T) {
 	}
 	db.DB = testDB
 	t.Cleanup(func() {
+		modules.StopStaffSweeper()
 		modules.StopCaptchaLifecycle()
+		// postInit starts the lockdown worker, whose cycle reads db.DB; stop it
+		// before restoring the handle so the restore cannot race a running cycle.
+		modules.StopLockdownWorker()
 		db.DB = previousDB
 	})
 

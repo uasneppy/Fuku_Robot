@@ -225,7 +225,11 @@ func moderationUnmute(m *moduleStruct) *moderationCommand {
 				log.Error(err)
 				return err
 			}
-			unmutePermissions := resolveUnmutePermissions(chat)
+			unmutePermissions, err := resolveUnmutePermissions(chat)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
 			_, err = c.Chat.RestrictMember(c.Bot, t.userID, unmutePermissions, nil)
 			return err
 		},
@@ -237,10 +241,17 @@ func moderationUnmute(m *moduleStruct) *moderationCommand {
 			}
 
 			temp, _ := c.Tr.GetString("mutes_unmute_message")
-			_, err = c.Msg.Reply(c.Bot,
-				fmt.Sprintf(temp, formatting.MentionHtml(muteUser.Id, muteUser.FirstName)),
-				formatting.Shtml(),
-			)
+			text := fmt.Sprintf(temp, formatting.MentionHtml(muteUser.Id, muteUser.FirstName))
+			// During a lockdown the user is still muted by the locked default
+			// permissions, so say they can talk once it lifts. A failed read only
+			// skips the note: the unmute itself already went through.
+			if active, lookupErr := lockdownSnapshotLookup(c.Chat.Id); lookupErr != nil {
+				log.Errorf("[Mutes] unmute reply: read lockdown of chat %d: %v", c.Chat.Id, lookupErr)
+			} else if active != nil {
+				note, _ := c.Tr.GetString("mutes_unmute_lockdown_note")
+				text += "\n" + note
+			}
+			_, err = c.Msg.Reply(c.Bot, text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err

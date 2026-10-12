@@ -282,12 +282,16 @@ func TestExcludedKeysNeverServedLocally(t *testing.T) {
 	}
 }
 
-func TestSkipLocalMatchesOnlyCaptchaPendingKeys(t *testing.T) {
-	if !skipLocal(CacheKey("captcha_pending", int64(-1001))) {
-		t.Fatal("captcha_pending key not excluded")
+func TestSkipLocalMatchesFreshnessCriticalKeys(t *testing.T) {
+	for _, prefix := range []string{"captcha_pending", "staff_group", "staff_link_of"} {
+		if !skipLocal(CacheKey(prefix, int64(-1001))) {
+			t.Errorf("%s key not excluded from the local layer", prefix)
+		}
 	}
-	if skipLocal(CacheKey("captcha_settings", int64(-1001))) {
-		t.Fatal("captcha_settings key excluded, want it cached locally")
+	for _, prefix := range []string{"captcha_settings", "staff_groupx", "staff_link_ofx"} {
+		if skipLocal(CacheKey(prefix, int64(-1001))) {
+			t.Errorf("%s key excluded, want it cached locally", prefix)
+		}
 	}
 }
 

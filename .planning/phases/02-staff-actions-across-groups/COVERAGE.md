@@ -1,0 +1,1 @@
+No external API integration: uses only the already-integrated Telegram Bot API through the existing gotgbot client, plus the existing PostgreSQL and Redis; no new service, SDK, endpoint or package is added (go.mod unchanged).

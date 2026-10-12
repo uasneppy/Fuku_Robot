@@ -42,6 +42,8 @@ var (
 	beforeLocalSetHook func(key string)
 
 	captchaPendingPrefix = CacheKey("captcha_pending") + ":"
+	staffGroupPrefix     = CacheKey("staff_group") + ":"
+	staffLinkOfPrefix    = CacheKey("staff_link_of") + ":"
 )
 
 // skipLocal reports whether key must never be served from process memory.
@@ -52,7 +54,14 @@ var (
 func skipLocal(key string) bool {
 	// Captcha pending flag gates whether a new member's messages are held;
 	// a replica must see a flag set elsewhere immediately.
-	return strings.HasPrefix(key, captchaPendingPrefix)
+	//
+	// Staff Group gates decide authority-adjacent routing (is this chat a Staff
+	// Group, which Staff Group manages this group) and must never be stale on
+	// another replica. The trailing colon in each prefix keeps a key such as
+	// "staff_groupx" from matching.
+	return strings.HasPrefix(key, captchaPendingPrefix) ||
+		strings.HasPrefix(key, staffGroupPrefix) ||
+		strings.HasPrefix(key, staffLinkOfPrefix)
 }
 
 func localSettings() (ttl, size int) {

@@ -1393,7 +1393,11 @@ func unmuteCaptchaUser(bot *gotgbot.Bot, chatID, userID int64) error {
 	if err != nil {
 		return err
 	}
-	_, err = bot.RestrictChatMember(chatID, userID, resolveUnmutePermissions(chat), nil)
+	perms, err := resolveUnmutePermissions(chat)
+	if err != nil {
+		return err
+	}
+	_, err = bot.RestrictChatMember(chatID, userID, perms, nil)
 	return err
 }
 

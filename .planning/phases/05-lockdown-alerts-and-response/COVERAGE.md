@@ -1,0 +1,1 @@
+No external API integration: only the already-integrated Telegram Bot API through gotgbot (methods sendMessage, editMessageText, answerCallbackQuery, getChatMember, getChat, setChatPermissions, banChatMember, unbanChatMember and revokeChatInviteLink, all generated in the pinned gotgbot module), PostgreSQL and Redis; no new service, SDK, endpoint or package (go.mod unchanged).

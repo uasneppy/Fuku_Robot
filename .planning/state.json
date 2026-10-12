@@ -1,0 +1,58 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "Staff Group Links",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Staff Actions Across Groups",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Staff Audit and Undo",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Manual Lockdown",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Lockdown Alerts and Response",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Automatic Raid Detection",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "AI-Assisted Raid Detection",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Turnstile Web Captcha",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "Settings Menu",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 5 of 9 · 44% · executing"
+  },
+  "updated_at": "2026-10-11T15:24:32.212Z"
+}

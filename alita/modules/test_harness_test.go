@@ -357,6 +357,15 @@ func TestMain(m *testing.M) {
 		&models.FederationSub{},
 		&models.LogChannel{},
 		&models.AISpamSettings{},
+		&models.StaffGroup{},
+		&models.StaffGroupLink{},
+		&models.StaffAction{},
+		&models.StaffActionGroup{},
+		&models.ChatLockdown{},
+		&models.LockdownJoiner{},
+		&models.ChatLockdownAlert{},
+		&models.ChatLockdownBurst{},
+		&models.ChatLockdownBanRun{},
 	); err != nil {
 		fmt.Printf("AutoMigrate failed: %v\n", err)
 		os.Exit(1)
