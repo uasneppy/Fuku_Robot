@@ -2772,7 +2772,7 @@ lockdown_help_msg: |
   Um bloqueio para um raid neste grupo: todos, exceto os administradores, ficam silenciados até que um administrador o levante.
 
   × <code>/lockdown [motivo]</code>: Bloqueia este grupo de imediato, sem passo de confirmação. Só os administradores podem falar, incluindo os utilizadores aprovados, e os novos membros são removidos até ao levantamento.
-  × <code>/unlockdown</code>: Levanta o bloqueio. Cada permissão volta exatamente a como estava antes do bloqueio, e as pessoas que removi são desbanidas.
+  × <code>/unlockdown</code>: Levanta o bloqueio. Cada permissão volta exatamente a como estava antes do bloqueio, e as pessoas que removi são desbanidas, exceto as contas banidas para sempre com Banir recém-chegados.
   × <code>/lockdownstatus</code>: Mostra se este grupo está bloqueado, desde quando, por quem e porquê (qualquer administrador).
 
   Só o dono do grupo, ou um administrador que possa restringir membros, pode usar estes comandos, e eu verifico isso em tempo real. Tenho de ser administrador com permissão para restringir membros, e o grupo tem de ser um supergrupo.
@@ -2785,7 +2785,7 @@ lockdown_help_msg: |
 
   🔓 Levantar bloqueio: levanta o bloqueio como <code>/unlockdown</code>. Só o dono do grupo ou um administrador que possa restringir membros, verificado em tempo real; estar no Grupo de Staff não chega.
 
-  🚫 Banir recém-chegados: bane para sempre as contas da vaga, por isso não podem voltar a entrar, e eu não posso desfazer isso. Ficam de fora os administradores, os utilizadores aprovados e as pessoas que um administrador deixou entrar. Um toque posterior bane apenas as contas novas.
+  🚫 Banir recém-chegados: bane para sempre as contas da vaga, por isso não podem voltar a entrar, e eu não posso desfazer isso. Ficam de fora os administradores, os utilizadores aprovados e as pessoas que um administrador deixou entrar. Um toque posterior bane apenas as contas novas. Só o dono do grupo ou um administrador que possa restringir membros, verificado em tempo real.
 
   ⛔ Revogar link: revoga o link de convite que o raid usou, se fui eu a criá-lo; os links de outros administradores têm de ser revogados no Telegram. Só o dono do grupo ou um administrador que possa convidar utilizadores. Só é oferecida uma revogação por bloqueio; se o raid passar para outro link, revogue-o nas definições do grupo no Telegram.
 

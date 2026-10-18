@@ -2800,7 +2800,7 @@ lockdown_help_msg: |
   Lockdown menghentikan raid di grup ini: semua orang kecuali admin dibisukan sampai seorang admin mencabutnya.
 
   × <code>/lockdown [alasan]</code>: Kunci grup ini seketika, tanpa langkah konfirmasi. Hanya admin yang bisa bicara, pengguna yang disetujui pun dibisukan, dan anggota baru dikeluarkan sampai lockdown dicabut.
-  × <code>/unlockdown</code>: Cabut lockdown. Setiap izin kembali persis seperti sebelum lockdown, dan orang yang saya keluarkan di-unban.
+  × <code>/unlockdown</code>: Cabut lockdown. Setiap izin kembali persis seperti sebelum lockdown, dan orang yang saya keluarkan di-unban, kecuali akun yang diblokir selamanya lewat Blokir anggota baru.
   × <code>/lockdownstatus</code>: Tampilkan apakah grup ini terkunci, sejak kapan, oleh siapa dan mengapa (admin mana pun).
 
   Hanya pemilik grup, atau admin yang bisa membatasi anggota, yang dapat memakai perintah ini, dan saya memeriksanya secara langsung. Saya harus menjadi admin yang bisa membatasi anggota, dan grup harus berupa supergrup.
@@ -2813,7 +2813,7 @@ lockdown_help_msg: |
 
   🔓 Cabut lockdown: mencabut lockdown seperti <code>/unlockdown</code>. Hanya pemilik grup atau admin yang bisa membatasi anggota, diperiksa secara langsung; berada di Grup Staf saja tidak cukup.
 
-  🚫 Blokir anggota baru: memblokir akun-akun lonjakan itu selamanya, sehingga tidak bisa bergabung lagi, dan saya tidak bisa membatalkannya. Admin, pengguna yang disetujui, dan orang yang dimasukkan admin tidak diikutkan. Penekanan berikutnya hanya memblokir akun baru.
+  🚫 Blokir anggota baru: memblokir akun-akun lonjakan itu selamanya, sehingga tidak bisa bergabung lagi, dan saya tidak bisa membatalkannya. Admin, pengguna yang disetujui, dan orang yang dimasukkan admin tidak diikutkan. Penekanan berikutnya hanya memblokir akun baru. Hanya pemilik grup atau admin yang bisa membatasi anggota, diperiksa secara langsung.
 
   ⛔ Cabut tautan: mencabut tautan undangan yang dipakai raid, jika saya yang membuatnya; tautan buatan admin lain harus dicabut di Telegram. Hanya pemilik grup atau admin yang bisa mengundang pengguna. Hanya satu pencabutan yang ditawarkan per lockdown; jika raid pindah ke tautan lain, cabut lewat pengaturan grup di Telegram.
 

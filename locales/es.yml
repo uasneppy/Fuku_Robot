@@ -2810,7 +2810,7 @@ lockdown_help_msg: |
   Un bloqueo detiene una raid en este grupo: todos menos los admins quedan silenciados hasta que un admin lo levante.
 
   × <code>/lockdown [motivo]</code>: Bloquea este grupo al instante, sin paso de confirmación. Solo los admins pueden hablar, también los usuarios aprobados, y los miembros nuevos son expulsados hasta que se levante.
-  × <code>/unlockdown</code>: Levanta el bloqueo. Cada permiso vuelve exactamente a como estaba antes del bloqueo y las personas que expulsé son desbaneadas.
+  × <code>/unlockdown</code>: Levanta el bloqueo. Cada permiso vuelve exactamente a como estaba antes del bloqueo y las personas que expulsé son desbaneadas, salvo las cuentas baneadas para siempre con Banear a los recién llegados.
   × <code>/lockdownstatus</code>: Muestra si este grupo está bloqueado, desde cuándo, por quién y por qué (cualquier admin).
 
   Solo el creador del grupo, o un admin que pueda restringir miembros, puede usar estos comandos, y lo compruebo en el momento. Debo ser admin con permiso para restringir miembros y el grupo debe ser un supergrupo.
@@ -2823,7 +2823,7 @@ lockdown_help_msg: |
 
   🔓 Levantar bloqueo: levanta el bloqueo como <code>/unlockdown</code>. Solo el creador del grupo o un admin que pueda restringir miembros, comprobado en el momento; estar en el Grupo de Staff no basta.
 
-  🚫 Banear a los recién llegados: banea para siempre las cuentas de la oleada, así que no podrán volver a entrar, y no puedo deshacerlo. Quedan fuera los admins, los usuarios aprobados y las personas que un admin dejó entrar. Una pulsación posterior banea solo las cuentas nuevas.
+  🚫 Banear a los recién llegados: banea para siempre las cuentas de la oleada, así que no podrán volver a entrar, y no puedo deshacerlo. Quedan fuera los admins, los usuarios aprobados y las personas que un admin dejó entrar. Una pulsación posterior banea solo las cuentas nuevas. Solo el creador del grupo o un admin que pueda restringir miembros, comprobado en el momento.
 
   ⛔ Revocar enlace: revoca el enlace de invitación que usó la raid, si lo creé yo; los enlaces de otros admins hay que revocarlos en Telegram. Solo el creador del grupo o un admin que pueda invitar usuarios. Solo se ofrece una revocación por bloqueo; si la raid pasa a otro enlace, revócalo en los ajustes del grupo en Telegram.
 

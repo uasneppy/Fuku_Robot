@@ -8,7 +8,7 @@ description: Complete guide to Lockdown module commands and features
 A lockdown stops a raid in this group: everyone but the admins is muted until an admin lifts it.
 
 - `/lockdown [reason]`: Lock this group at once, with no confirm step. Only admins can talk, approved users included, and new members are removed until the lift.
-- `/unlockdown`: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned.
+- `/unlockdown`: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned, except the accounts banned for good with Ban recent joiners.
 - `/lockdownstatus`: Show whether this group is locked, since when, by whom and why (any admin).
 
 Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
@@ -21,7 +21,7 @@ When this group is locked, I post an alert to its Staff Group (if it is linked) 
 
 🔓 Lift lockdown: lifts the lockdown like `/unlockdown`. Only the group owner or an admin who can restrict members, checked live; being in the Staff Group is not enough.
 
-🚫 Ban recent joiners: bans the accounts of the burst for good, so they can't rejoin, and I can't undo it. Admins, approved users and people an admin let in are left out. A later press bans only new accounts.
+🚫 Ban recent joiners: bans the accounts of the burst for good, so they can't rejoin, and I can't undo it. Admins, approved users and people an admin let in are left out. A later press bans only new accounts. Only the group owner or an admin who can restrict members, checked live.
 
 ⛔ Revoke link: revokes the invite link the raid used, if I created it; other admins' links must be revoked in Telegram. Only the group owner or an admin who can invite users. Only one revoke is offered per lockdown; if the raid moves to another link I made, revoke it in the group's settings in Telegram.
 

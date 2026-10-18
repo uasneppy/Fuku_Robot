@@ -2726,7 +2726,7 @@ lockdown_help_msg: |
   Un verrouillage arrête un raid dans ce groupe : tout le monde sauf les admins est rendu muet jusqu'à ce qu'un admin le lève.
 
   × <code>/lockdown [raison]</code> : Verrouille ce groupe immédiatement, sans étape de confirmation. Seuls les admins peuvent parler, utilisateurs approuvés compris, et les nouveaux membres sont retirés jusqu'à la levée.
-  × <code>/unlockdown</code> : Lève le verrouillage. Chaque permission revient exactement comme avant le verrouillage, et les personnes que j'ai retirées sont débannies.
+  × <code>/unlockdown</code> : Lève le verrouillage. Chaque permission revient exactement comme avant le verrouillage, et les personnes que j'ai retirées sont débannies, sauf les comptes bannis définitivement avec Bannir les nouveaux arrivants.
   × <code>/lockdownstatus</code> : Indique si ce groupe est verrouillé, depuis quand, par qui et pourquoi (n'importe quel admin).
 
   Seul le propriétaire du groupe, ou un admin qui peut restreindre des membres, peut utiliser ces commandes, et je le vérifie en direct. Je dois être admin avec le droit de restreindre des membres, et le groupe doit être un supergroupe.
@@ -2739,7 +2739,7 @@ lockdown_help_msg: |
 
   🔓 Lever le verrouillage : lève le verrouillage comme <code>/unlockdown</code>. Réservé au propriétaire du groupe ou à un admin qui peut restreindre des membres, vérifié en direct ; être dans le groupe Staff ne suffit pas.
 
-  🚫 Bannir les nouveaux arrivants : bannit définitivement les comptes de la vague, ils ne pourront donc pas revenir, et je ne peux pas l'annuler. Les admins, les utilisateurs approuvés et les personnes qu'un admin a laissées entrer sont exclus. Un appui ultérieur ne bannit que les nouveaux comptes.
+  🚫 Bannir les nouveaux arrivants : bannit définitivement les comptes de la vague, ils ne pourront donc pas revenir, et je ne peux pas l'annuler. Les admins, les utilisateurs approuvés et les personnes qu'un admin a laissées entrer sont exclus. Un appui ultérieur ne bannit que les nouveaux comptes. Réservé au propriétaire du groupe ou à un admin qui peut restreindre des membres, vérifié en direct.
 
   ⛔ Révoquer le lien : révoque le lien d'invitation utilisé par le raid, si c'est moi qui l'ai créé ; les liens des autres admins doivent être révoqués dans Telegram. Réservé au propriétaire du groupe ou à un admin qui peut inviter des utilisateurs. Une seule révocation est proposée par verrouillage ; si le raid passe à un autre lien, révoquez-le dans les paramètres du groupe dans Telegram.
 
