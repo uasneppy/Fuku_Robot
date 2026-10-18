@@ -66,14 +66,14 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **LOCK-08**: Unmuting someone during a lockdown, including by passing the captcha or `/unmute`, doesn't leave them muted after the lockdown lifts.
 - [x] **LOCK-09**: An admin can start a lockdown manually with `/lockdown` and see the current lockdown status (active or not, since when, why).
 - [ ] **LOCK-10**: A group can have at most one active lockdown. Several triggers firing at once create a single lockdown and a single alert.
-- [ ] **LOCK-11**: Each lockdown posts one alert to the group's Staff Group (if linked) and to its log channel. The alert shows:
+- [x] **LOCK-11**: Each lockdown posts one alert to the group's Staff Group (if linked) and to its log channel. The alert shows:
   - the trigger and the counts behind it
   - a sample of the accounts that joined during the burst
   - a "Lift lockdown" button
   - a "Ban N recent joiners" button
-- [ ] **LOCK-12**: An admin of the locked group can press "Ban N recent joiners" to ban the accounts that joined during the burst. Admins and approved users are excluded, and the result is reported.
-- [ ] **LOCK-13**: The alert shows which invite link the burst used, where Telegram reports it. It has a "Revoke link" button that only admins of that group can use.
-- [ ] **LOCK-14**: While a group stays locked, the alert is re-posted periodically as a reminder until someone lifts it.
+- [x] **LOCK-12**: An admin of the locked group can press "Ban N recent joiners" to ban the accounts that joined during the burst. Admins and approved users are excluded, and the result is reported.
+- [x] **LOCK-13**: The alert shows which invite link the burst used, where Telegram reports it. It has a "Revoke link" button that only admins of that group can use.
+- [x] **LOCK-14**: While a group stays locked, the alert is re-posted periodically as a reminder until someone lifts it.
 - [ ] **LOCK-15**: The old `/antiraid` mode is retired. Its commands point to `/lockdown`, the existing auto-threshold setting carries over to join-surge detection, and the temp-ban timings are dropped.
 
 ### Raid detection
@@ -201,10 +201,10 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | LOCK-08 | Phase 4 | Complete |
 | LOCK-09 | Phase 4 | Complete |
 | LOCK-10 | Phase 6 | Pending |
-| LOCK-11 | Phase 5 | Pending |
-| LOCK-12 | Phase 5 | Pending |
-| LOCK-13 | Phase 5 | Pending |
-| LOCK-14 | Phase 5 | Pending |
+| LOCK-11 | Phase 5 | Complete |
+| LOCK-12 | Phase 5 | Complete |
+| LOCK-13 | Phase 5 | Complete |
+| LOCK-14 | Phase 5 | Complete |
 | LOCK-15 | Phase 6 | Pending |
 | RAID-01 | Phase 6 | Pending |
 | RAID-02 | Phase 6 | Pending |

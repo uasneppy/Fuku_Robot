@@ -40,17 +40,18 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ `/unlockdown` (a live owner or restrict-capable admin, anonymous admins after a proof tap) restores the exact pre-lockdown permissions, unbans only the lockdown's own bans, and posts one tally; `/lockdownstatus` shows since when, why and who — Phase 4
 - ✓ A lockdown lives in PostgreSQL only: it survives restarts and Redis being cleared, never lifts on its own, touches only its own group, and shows as 🔒 on the linked group's `/staff` row — Phase 4
 - ✓ Unmuting during a lockdown (`/unmute`, the Unmute button, a captcha pass, staff `/unmute`) uses the stored pre-lockdown permissions, so nobody stays muted after the lift — Phase 4
+- ✓ Each lockdown posts one alert to the linked Staff Group and to the log channel (when its admin category is on): trigger, counts, up to 10 accounts from the burst including the ones the lockdown removed, and the invite link the burst used — Phase 5
+- ✓ The alert's "Lift lockdown" works only for a live admin of the locked group with the restrict right, wherever it is pressed (Staff Group or log channel), through the same lift path as `/unlockdown`; a press on a lifted lockdown says so and changes nothing — Phase 5
+- ✓ "Ban N recent joiners" bans the burst for good, skipping admins, approved users, the bot and joiners an admin let in, reports banned/skipped/failed and posts one `#LOCKDOWN_BAN`; the bans survive the lift — Phase 5
+- ✓ "Revoke link" revokes the raid's invite link (bot-made links only) for a live admin with the invite right; hourly reminders repeat the alert until the lift — Phase 5
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
 **Raid protection (second)**
-- [ ] The lockdown alert lists the accounts the lockdown removed (the lockdown itself shipped in Phase 4).
 - [ ] A lockdown can be triggered by a join surge, a message or media flood (messages, photos, GIFs, stickers, mostly from new members), or a burst of AI spam verdicts (manual `/lockdown` shipped in Phase 4).
 - [ ] Detection uses fast rule-based rates (joins, floods) to trigger lockdown. AI only assists by classifying borderline text and images.
-- [ ] Each lockdown posts an alert to both the Staff Group and the attacked group's log channel. The alert has a "Lift lockdown" button and a "Ban N recent joiners" button for the accounts that joined in the burst.
-- [ ] Only an admin of the locked group can lift it with the alert's button, wherever they press it (`/unlockdown` and never lifting on its own shipped in Phase 4).
 
 **Web captcha (third)**
 - [ ] New members verify through Cloudflare Turnstile on a Telegram Mini App page the bot hosts, with server-side token verification.
@@ -146,6 +147,9 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Lockdown state lives only in PostgreSQL; the join guard records and a DB-driven worker on every replica makes every Telegram write, paced fleet-wide | Survives restarts and Redis loss, and a raid never pins a handler | ✓ Good — Phase 4 (UAT test 11) |
 | A lockdown's own ban is marked by a 330-day `until_date`, and the lift unbans only joiners whose live ban carries it | A deliberate `/ban` or staff ban placed during the lockdown must survive the lift | ✓ Good — Phase 4 (UAT tests 6 and 10); bans run out after 330 days, an accepted limit |
 | A request approved from Telegram's own list during a lockdown may still be banned first (D-24); the greetings Accept button refuses during a lockdown (D-25) | Accepted residual race; `/unlockdown` unbans them | ✓ Good — Phase 4 (UAT tests 5 and 8) |
+| Alert buttons use stateless `lockdown|v1` callbacks (copy row ID, asker and expiry minute in the data) and judge every press by a live `getChatMember` of the locked chat, never Staff Group membership | Works without Redis, from the log channel too, and a forged or old button can reach nothing | ✓ Good — Phase 5 |
+| Every alert, reminder, close, ban-run and ban-result delivery is a database row claimed with a conditional update and resumed by the worker on any replica | A restart, a 429 or a dead replica never loses or doubles a notice (duplicate accepted over lost after a crash) | ✓ Good — Phase 5 (code review WR-01 made the ban result resumable too) |
+| "Ban N recent joiners" bans are permanent, outside the staff audit and not undoable; only bot-made invite links get a Revoke button, one revoke per lockdown | Owner's call (D-10, D-11, D-18); a cut-short link cannot be revoked by the bot | ✓ Good — Phase 5 (live UAT accepted by the owner) |
 
 ## Evolution
 
@@ -165,4 +169,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-08 after Phase 4*
+*Last updated: 2026-10-18 after Phase 5*
