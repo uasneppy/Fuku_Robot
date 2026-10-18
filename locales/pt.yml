@@ -2900,3 +2900,6 @@ lockdown_auto_started_join_surge: "🔒 Bloqueei este grupo automaticamente: {co
 lockdown_auto_started_flood: "🔒 Bloqueei este grupo automaticamente: chegaram {count} mensagens em {window} segundos, {percent}% delas de membros novos. Só os administradores podem falar, e quem entrar é removido até que um administrador use /unlockdown."
 lockdown_trigger_join_surge: "Onda de entradas: {count} entradas em {window} s."
 lockdown_trigger_flood: "Flood: {count} mensagens em {window} s, {percent}% de membros novos."
+lockdown_auto_cant_lock_rights: "⚠️ Detetei um raide em {group} ({trigger}), mas não consigo bloqueá-lo: preciso de ser administrador com permissão para restringir membros."
+lockdown_auto_cant_lock_basic: "⚠️ Detetei um raide em {group} ({trigger}), mas não consigo bloqueá-lo porque não é um supergrupo."
+lockdown_auto_cant_lock_refused: "⚠️ Detetei um raide em {group} ({trigger}), mas o Telegram recusou o bloqueio. Verifica se ainda sou administrador com permissão para restringir membros."

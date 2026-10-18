@@ -2615,3 +2615,6 @@ lockdown_auto_started_join_surge: "🔒 मैंने इस ग्रुप �
 lockdown_auto_started_flood: "🔒 मैंने इस ग्रुप को अपने आप लॉक कर दिया: {window} सेकंड में {count} संदेश आए, जिनमें से {percent}% नए सदस्यों के थे। केवल एडमिन बोल सकते हैं, और जो भी जुड़ेगा उसे तब तक निकाल दिया जाएगा जब तक कोई एडमिन /unlockdown न चलाए।"
 lockdown_trigger_join_surge: "जॉइन की बाढ़: {window} सेकंड में {count} जॉइन।"
 lockdown_trigger_flood: "फ़्लड: {window} सेकंड में {count} संदेश, {percent}% नए सदस्यों से।"
+lockdown_auto_cant_lock_rights: "⚠️ मैंने {group} में रेड का पता लगाया ({trigger}), लेकिन मैं इसे लॉक नहीं कर सकता: मुझे सदस्यों को प्रतिबंधित कर सकने वाला एडमिन होना चाहिए।"
+lockdown_auto_cant_lock_basic: "⚠️ मैंने {group} में रेड का पता लगाया ({trigger}), लेकिन मैं इसे लॉक नहीं कर सकता क्योंकि यह सुपरग्रुप नहीं है।"
+lockdown_auto_cant_lock_refused: "⚠️ मैंने {group} में रेड का पता लगाया ({trigger}), लेकिन Telegram ने लॉक अस्वीकार कर दिया। जांचें कि मैं अब भी सदस्यों को प्रतिबंधित कर सकने वाला एडमिन हूं।"

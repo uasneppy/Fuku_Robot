@@ -9,8 +9,11 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
+	"github.com/divkix/Alita_Robot/alita/db/logchannels"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
+	"github.com/divkix/Alita_Robot/alita/utils/actionlog"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 )
@@ -37,6 +40,19 @@ const (
 	// raidPostTimeout bounds one public notice or one warning copy, the wait for its pacer
 	// slot included.
 	raidPostTimeout = 30 * time.Second
+
+	// raidPartWarn is the key part of the once-a-day "I saw a raid I cannot lock" gate:
+	// alita:raid:{<chat>}:warn, SET NX with a raidWarnEvery expiry (D-19).
+	raidPartWarn = "warn"
+
+	// raidWarnEvery is how long one warning silences the next for the same group, across
+	// replicas.
+	raidWarnEvery = 24 * time.Hour
+
+	// raidTriggerToken stands in for the trigger sentence until the translated warning is
+	// assembled, so the sentence (it holds a percent sign) never meets the translator's
+	// legacy printf pass.
+	raidTriggerToken = "<<raid-trigger>>"
 )
 
 // raidSetLatch sets the remaining life of the chat's fire latch to d, best effort: the
@@ -172,10 +188,31 @@ func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 
 	// Only the call that won the latch and lockdown.Start gets here with Started, so the
 	// notice is posted once per lockdown; a lockdown another trigger or an admin started
-	// is already answered. A failed post changes nothing about the lockdown.
-	if res.Outcome == lockdownStartStarted {
+	// is already answered. A raid the bot cannot stop is reported, at most once a day. The
+	// other failures may pass at once and say nothing. A failed post changes nothing about
+	// the lockdown or its absence.
+	switch res.Outcome {
+	case lockdownStartStarted:
 		raidPostNotice(b, chat, trig, res)
+	case lockdownStartNotSupergroup, lockdownStartBotCannotRestrict, lockdownStartLockFailed:
+		raidWarnCannotLock(b, chat, trig, res.Outcome)
 	}
+}
+
+// raidSend posts an HTML message to chatID through the lockdown pacer under
+// raidPostTimeout, link previews off. It reports the error; the callers only log it.
+func raidSend(b *gotgbot.Bot, chatID int64, text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), raidPostTimeout)
+	defer cancel()
+	return lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancelCall := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancelCall()
+		_, sendErr := b.SendMessageWithContext(call, chatID, text, &gotgbot.SendMessageOpts{
+			ParseMode:          formatting.HTML,
+			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+		})
+		return sendErr
+	})
 }
 
 // lockdownTriggerSentence is the time-less sentence saying what an automatic trigger saw:
@@ -235,20 +272,82 @@ func raidPostNotice(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, res lo
 	if !res.BotMember.CanInviteUsers {
 		lines = append(lines, lockdownText(tr, "lockdown_note_no_invite"))
 	}
-	text := lockdownJoinLines(lines)
-
-	ctx, cancel := context.WithTimeout(context.Background(), raidPostTimeout)
-	defer cancel()
-	err := lockdownPaced(ctx, func(callCtx context.Context) error {
-		call, cancelCall := context.WithTimeout(callCtx, lockdownCallTimeout)
-		defer cancelCall()
-		_, sendErr := b.SendMessageWithContext(call, chat.Id, text, &gotgbot.SendMessageOpts{
-			ParseMode:          formatting.HTML,
-			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
-		})
-		return sendErr
-	})
-	if err != nil {
+	if err := raidSend(b, chat.Id, lockdownJoinLines(lines)); err != nil {
 		log.Warnf("[RaidDetection] the notice of the automatic lockdown in chat %d was not delivered: %v", chat.Id, err)
+	}
+}
+
+// raidWarnCannotLock tells staff that the bot saw a raid it cannot stop: the group is not a
+// supergroup, the bot is not an administrator who can restrict members, or Telegram refused
+// the lock. No lockdown exists in any of those cases. One copy goes to the group's Staff
+// Group (written in the Staff Group's language) and one to its log channel when the admin
+// category is on (in the group's language, starting with the usual log header), each through
+// the lockdown pacer.
+//
+// One SET NX with a 24 hour expiry gates both copies for the group, across replicas, so a
+// sustained raid warns once a day; a Redis error or a lost SetNX sends nothing. The
+// failures that may pass at once (bot rights or permissions unreadable, a database error, a
+// lock whose answer was lost) are not passed in and warn nobody. The group's title is
+// escaped and spliced in after translation. A lookup that fails skips that copy, and a
+// failed send is only logged.
+func raidWarnCannotLock(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, outcome lockdownStartOutcome) {
+	var key string
+	switch outcome {
+	case lockdownStartBotCannotRestrict:
+		key = "lockdown_auto_cant_lock_rights"
+	case lockdownStartNotSupergroup:
+		key = "lockdown_auto_cant_lock_basic"
+	case lockdownStartLockFailed:
+		key = "lockdown_auto_cant_lock_refused"
+	default:
+		return
+	}
+
+	client := raidRedis()
+	if client == nil {
+		return
+	}
+	gateCtx, cancelGate := context.WithTimeout(cache.Context, raidRedisTimeout)
+	won, err := client.SetNX(gateCtx, raidKey(chat.Id, raidPartWarn), "1", raidWarnEvery).Result()
+	cancelGate()
+	if err != nil {
+		log.Debugf("[RaidDetection] warning gate of chat %d failed: %v", chat.Id, err)
+		return
+	}
+	if !won {
+		return
+	}
+
+	group := lockdownGroupLabel(&models.ChatLockdown{
+		ChatID:    chat.Id,
+		ChatTitle: lockdownCapRunes(chat.Title, lockdownTitleMaxRunes),
+	})
+	render := func(tr *i18n.Translator) string {
+		text := lockdownText(tr, key, i18n.TranslationParams{
+			"group":   lockdownGroupToken,
+			"trigger": raidTriggerToken,
+		})
+		return lockdownSplice(text,
+			lockdownGroupToken, group,
+			raidTriggerToken, lockdownTriggerSentence(tr, trig.Kind, trig.Count, trig.Window, trig.Percent),
+		)
+	}
+
+	link, err := staff.GetLinkOfGroupFresh(chat.Id)
+	switch {
+	case err != nil:
+		log.Warnf("[RaidDetection] the Staff Group link of chat %d could not be read for the warning: %v", chat.Id, err)
+	case link != nil:
+		if err := raidSend(b, link.StaffChatID, render(staffChatTranslator(link.StaffChatID))); err != nil {
+			log.Warnf("[RaidDetection] the warning for chat %d was not delivered to its Staff Group %d: %v",
+				chat.Id, link.StaffChatID, err)
+		}
+	}
+
+	if channelID, header, ok := actionlog.Destination(chat, logchannels.CategoryAdmin); ok {
+		if err := raidSend(b, channelID, header+render(staffChatTranslator(chat.Id))); err != nil {
+			log.Warnf("[RaidDetection] the warning for chat %d was not delivered to its log channel %d: %v",
+				chat.Id, channelID, err)
+		}
 	}
 }

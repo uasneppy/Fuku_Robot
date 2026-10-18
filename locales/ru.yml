@@ -2675,3 +2675,6 @@ lockdown_auto_started_join_surge: "🔒 Я автоматически забло
 lockdown_auto_started_flood: "🔒 Я автоматически заблокировал эту группу: за {window} секунд пришло {count} сообщений, {percent}% из них от новых участников. Говорить могут только админы, а каждый вошедший удаляется, пока админ не выполнит /unlockdown."
 lockdown_trigger_join_surge: "Наплыв участников: {count} входов за {window} с."
 lockdown_trigger_flood: "Флуд: {count} сообщений за {window} с, {percent}% от новых участников."
+lockdown_auto_cant_lock_rights: "⚠️ Я обнаружил рейд в {group} ({trigger}), но не могу заблокировать группу: мне нужны права администратора на ограничение участников."
+lockdown_auto_cant_lock_basic: "⚠️ Я обнаружил рейд в {group} ({trigger}), но не могу заблокировать группу, потому что это не супергруппа."
+lockdown_auto_cant_lock_refused: "⚠️ Я обнаружил рейд в {group} ({trigger}), но Telegram отклонил блокировку. Проверьте, что я по-прежнему администратор с правом ограничивать участников."
