@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"html"
@@ -16,6 +17,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/logchannels"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
+	"github.com/divkix/Alita_Robot/alita/db/user"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/actionlog"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
@@ -200,6 +202,10 @@ func lockdownAlertDestinations(ld *models.ChatLockdown) ([]models.ChatLockdownAl
 // The tracker is best effort: without Redis it returns nothing, and a failed read is
 // logged at warn and treated as empty, because the alert must still post. The bot's
 // own ID is skipped.
+//
+// For a lockdown the flood trigger started it adds the flooding accounts too (D-17): the
+// recently joined accounts that posted in the flood window, saved at the moment the
+// trigger fired, however long ago they joined (lockdownMergeFlooders).
 func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.ChatLockdownBurst {
 	if ld.LockedAt == nil {
 		return nil
@@ -208,7 +214,10 @@ func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.Cha
 	joins, err := lockdownRecentLookup(ld.ChatID, lockedAt.Add(-lockdownRecentWindow), lockedAt)
 	if err != nil {
 		log.Warnf("[Lockdown] the recent joins of chat %d could not be read for the alert of lockdown %d: %v", ld.ChatID, ld.ID, err)
-		return nil
+		joins = nil
+	}
+	if ld.TriggerKind == models.LockdownTriggerFlood {
+		joins = lockdownMergeFlooders(b, ld, joins)
 	}
 	rows := make([]models.ChatLockdownBurst, 0, len(joins))
 	for _, join := range joins {
@@ -228,6 +237,71 @@ func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.Cha
 		})
 	}
 	return rows
+}
+
+// lockdownMergeFlooders adds the flooding accounts of a flood lockdown to the tracker's
+// joins. The flooders come from the snapshot the trigger saved when it fired
+// (raidFloodersLookup; no Redis or no snapshot adds nothing, a failed read is logged at warn
+// and adds nothing, because the alert must still post). They are merged by user ID: an
+// account the tracker also saw keeps the tracker's name, username, link and bot flag, and
+// the earlier of the two join times wins. A flooder the tracker never saw is named from the
+// users table with one query (a failed read leaves the names empty, and the account is still
+// saved), with the name and username capped as the tracker caps them. The bot itself is
+// skipped. The result is ordered by join time, then user ID.
+func lockdownMergeFlooders(b *gotgbot.Bot, ld *models.ChatLockdown, joins []lockdownRecentJoin) []lockdownRecentJoin {
+	flooders, err := raidFloodersLookup(ld.ChatID)
+	if err != nil {
+		log.Warnf("[Lockdown] the flooding accounts of chat %d could not be read for the alert of lockdown %d: %v", ld.ChatID, ld.ID, err)
+		return joins
+	}
+	if len(flooders) == 0 {
+		return joins
+	}
+
+	merged := slices.Clone(joins)
+	index := make(map[int64]int, len(merged)+len(flooders))
+	for i, join := range merged {
+		index[join.UserID] = i
+	}
+	var unnamed []int64
+	for _, flooder := range flooders {
+		if b != nil && flooder.UserID == b.Id {
+			continue
+		}
+		if i, seen := index[flooder.UserID]; seen {
+			if flooder.At.Before(merged[i].At) {
+				merged[i].At = flooder.At
+			}
+			continue
+		}
+		index[flooder.UserID] = len(merged)
+		merged = append(merged, flooder)
+		unnamed = append(unnamed, flooder.UserID)
+	}
+
+	if len(unnamed) > 0 {
+		names, err := user.FindUsersByIDs(unnamed)
+		if err != nil {
+			log.Warnf("[Lockdown] the names of the flooding accounts of chat %d could not be read for the alert of lockdown %d: %v", ld.ChatID, ld.ID, err)
+		}
+		for _, id := range unnamed {
+			row, found := names[id]
+			if !found {
+				continue
+			}
+			i := index[id]
+			merged[i].Name = lockdownCapRunes(row.Name, lockdownNameMaxRunes)
+			merged[i].Username = lockdownCapRunes(row.UserName, lockdownRecentUsernameMaxRunes)
+		}
+	}
+
+	slices.SortFunc(merged, func(x, y lockdownRecentJoin) int {
+		if c := x.At.Compare(y.At); c != 0 {
+			return c
+		}
+		return cmp.Compare(x.UserID, y.UserID)
+	})
+	return merged
 }
 
 // lockdownPlanAlerts decides the alert of every confirmed active lockdown that has
@@ -393,10 +467,16 @@ func lockdownRenderSampleAccount(tr *i18n.Translator, account lockdown.BurstAcco
 
 // lockdownRenderSample is the burst part of an alert: the counts behind the trigger,
 // then, when the burst is not empty, a title, one line per listed account and an "and N
-// more" line for the accounts not listed. The account lines hold user text, so they are
+// more" line for the accounts not listed. The counts line of a flood lockdown says that
+// the listed accounts are the flooding accounts as well as the joins just before the lock;
+// every other kind says only who joined. The account lines hold user text, so they are
 // built outside the translator and spliced in after it, in place of a token.
-func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount, counts lockdown.BurstCounts) string {
-	lines := []string{lockdownText(tr, "lockdown_alert_counts", i18n.TranslationParams{
+func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount, counts lockdown.BurstCounts, kind string) string {
+	countsKey := "lockdown_alert_counts"
+	if kind == models.LockdownTriggerFlood {
+		countsKey = "lockdown_alert_counts_flood"
+	}
+	lines := []string{lockdownText(tr, countsKey, i18n.TranslationParams{
 		"before": strconv.FormatInt(counts.Before, 10),
 		"since":  strconv.FormatInt(counts.Since, 10),
 	})}
@@ -508,7 +588,7 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, li
 	if err != nil {
 		log.Warnf("[Lockdown] the burst of lockdown %d could not be read for its alert: %v", ld.ID, err)
 	} else {
-		lines = append(lines, lockdownRenderSample(tr, accounts, counts))
+		lines = append(lines, lockdownRenderSample(tr, accounts, counts, ld.TriggerKind))
 	}
 	links, err := lockdown.TopInviteLinksFresh(ld.ID)
 	if err != nil {

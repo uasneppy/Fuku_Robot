@@ -2627,6 +2627,7 @@ lockdown_alert_record_failed: "⚠️ Разрешения {group} возвра�
 lockdown_alert_cancelled: "Отменено. Ничего не изменилось."
 lockdown_alert_card_expired: "Это подтверждение истекло. Ничего не изменилось. Нажмите кнопку на оповещении ещё раз."
 lockdown_alert_counts: "Вступили за 10 минут до блокировки: {before}. Вступили после: {since}."
+lockdown_alert_counts_flood: "Аккаунты, устроившие флуд, и вступившие за 10 минут до блокировки: {before}. Вступили после: {since}."
 lockdown_alert_sample_title: "Аккаунты волны:"
 lockdown_alert_sample_more: "…и ещё {count}."
 lockdown_alert_bot_mark: "бот"

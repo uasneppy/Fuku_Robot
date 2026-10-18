@@ -56,6 +56,18 @@ const (
 	raidPartFloodNew = "fn"
 	// raidPartFloodAccounts is the sorted set of the new members who sent them.
 	raidPartFloodAccounts = "fa"
+
+	// raidPartFlooders is the snapshot of the flooding accounts taken when the flood trigger
+	// fires: a sorted set of user IDs scored by the time of their join in unix milliseconds
+	// (D-17).
+	raidPartFlooders = "flooders"
+	// raidFloodersTTL is how long the snapshot lives. The lockdown worker reads it when it
+	// decides the alert, normally within a cycle; 15 minutes also covers the settle path's
+	// one-minute grace and a restart.
+	raidFloodersTTL = 15 * time.Minute
+	// raidFloodersMax is the most accounts the snapshot keeps (the newest to have sent an
+	// item).
+	raidFloodersMax = 500
 )
 
 // raidFloodCap is the most members each of the item sets keeps per chat (the newest). It
@@ -270,3 +282,88 @@ func (m moduleStruct) raidFloodWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 	return ext.ContinueGroups
 }
+
+// raidFloodersScript copies the flooding accounts into the snapshot set when the flood
+// trigger fires (D-17, research Pitfall 10). The flood sets only keep the last 30 seconds,
+// and the join list of the lockdown tracker only the last 10 minutes, so an account that
+// joined hours ago and flooded now would be on neither once the alert is decided. It
+// replaces any older snapshot, takes the newest members of the accounts set (at most the
+// given maximum) and keeps each whose join is within the recent window, scored by that
+// join time, then sets the TTL. It returns how many accounts it kept.
+//
+// KEYS: 1 flood accounts, 2 joined set, 3 flooders snapshot. ARGV: 1 now (ms), 2 recent
+// window (ms), 3 maximum accounts, 4 TTL (ms).
+var raidFloodersScript = redis.NewScript(`
+redis.call('DEL', KEYS[3])
+local now = tonumber(ARGV[1])
+local cutoff = now - tonumber(ARGV[2])
+local ids = redis.call('ZREVRANGE', KEYS[1], 0, tonumber(ARGV[3]) - 1)
+local kept = 0
+for _, id in ipairs(ids) do
+  local joinedAt = redis.call('ZSCORE', KEYS[2], id)
+  if joinedAt and tonumber(joinedAt) > cutoff then
+    redis.call('ZADD', KEYS[3], joinedAt, id)
+    kept = kept + 1
+  end
+end
+if kept > 0 then redis.call('PEXPIRE', KEYS[3], ARGV[4]) end
+return kept
+`)
+
+// raidSnapshotFlooders saves the chat's flooding accounts with their join times, for the
+// alert of the lockdown the flood trigger is about to start. It returns how many accounts
+// it saved. Without Redis it saves nothing and returns (0, nil). One script call under
+// raidRedisTimeout; an error is returned for the caller to log, and the lockdown starts
+// without a snapshot.
+func raidSnapshotFlooders(chatID int64) (int, error) {
+	client := raidRedis()
+	if client == nil {
+		return 0, nil
+	}
+	keys := []string{
+		raidKey(chatID, raidPartFloodAccounts),
+		raidKey(chatID, raidPartJoined),
+		raidKey(chatID, raidPartFlooders),
+	}
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	return raidFloodersScript.Run(ctx, client, keys,
+		raidNow().UnixMilli(),
+		raidRecentWindow.Milliseconds(),
+		raidFloodersMax,
+		raidFloodersTTL.Milliseconds(),
+	).Int()
+}
+
+// readRaidFlooders returns the chat's flooder snapshot, oldest join first, each as a
+// lockdownRecentJoin whose At is the join time and which carries no name: the snapshot
+// holds IDs only. Without Redis it returns nothing and no error; no snapshot is the same.
+func readRaidFlooders(chatID int64) ([]lockdownRecentJoin, error) {
+	client := raidRedis()
+	if client == nil {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	entries, err := client.ZRangeWithScores(ctx, raidKey(chatID, raidPartFlooders), 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	flooders := make([]lockdownRecentJoin, 0, len(entries))
+	for _, entry := range entries {
+		raw, ok := entry.Member.(string)
+		if !ok {
+			continue
+		}
+		userID, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || userID == 0 {
+			continue
+		}
+		flooders = append(flooders, lockdownRecentJoin{UserID: userID, At: time.UnixMilli(int64(entry.Score))})
+	}
+	return flooders, nil
+}
+
+// raidFloodersLookup is the snapshot read of the flooding accounts. It is a variable only
+// so a test can see whether it is called; production code never reassigns it.
+var raidFloodersLookup = readRaidFlooders

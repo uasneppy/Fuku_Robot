@@ -2806,6 +2806,7 @@ lockdown_alert_record_failed: "⚠️ Les permissions de {group} sont revenues, 
 lockdown_alert_cancelled: "Annulé. Rien n'a changé."
 lockdown_alert_card_expired: "Cette confirmation a expiré. Rien n'a changé. Appuie à nouveau sur le bouton de l'alerte."
 lockdown_alert_counts: "Arrivés dans les 10 minutes avant le verrouillage : {before}. Arrivés depuis : {since}."
+lockdown_alert_counts_flood: "Comptes qui ont inondé le groupe et arrivées dans les 10 minutes avant le verrouillage : {before}. Arrivés depuis : {since}."
 lockdown_alert_sample_title: "Comptes de la vague :"
 lockdown_alert_sample_more: "…et {count} de plus."
 lockdown_alert_bot_mark: "bot"

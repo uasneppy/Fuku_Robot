@@ -232,6 +232,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidFloodScript`) adds the item, trims all three to 30 s, caps the first two at 2000 (`raidFloodCap`), sets
   `PEXPIRE` 2 minutes on each and returns their sizes; a member is new when `:joined` scores them within 24 h
   (`ZSCORE`). It is Redis only, like the join counter.
+- `alita:raid:{<chat>}:flooders` is the flood alert's snapshot (`raid_flood.go`, D-17). When a flood trigger fires,
+  `raidFire` calls `raidSnapshotFlooders` after the latch, the active check and the quiet period and before
+  `startLockdownRow`: one Lua script (`raidFloodersScript`) replaces the key with the newest accounts of `:fa` (at most
+  `raidFloodersMax` = 500) whose `:joined` score is within 24 h, scored by that join time, with a 15-minute TTL
+  (`raidFloodersTTL`). A failed snapshot is logged at debug and the lockdown still starts. `lockdownBurstSnapshot` reads
+  it for a lockdown whose `trigger_kind` is `flood` only (`raidFloodersLookup`, a test seam; no Redis or no snapshot adds
+  nothing) and `lockdownMergeFlooders` merges it with the 10-minute tracker's joins by user ID (the tracker's name,
+  username, link and bot flag win; the earliest time wins), names the rest from the users table with one
+  `user.FindUsersByIDs` query (a failed read leaves them unnamed but still saved) and skips the bot. They are saved as
+  `pre` burst rows by `lockdown.BeginAlert`'s winner, so a flooder who joined hours before the lock is on the alert's
+  sample and in "Ban N recent joiners" (through the unchanged Phase 5 ban run and its exclusions), and a Redis flush
+  after the alert changes nothing. A flood alert's counts line is `lockdown_alert_counts_flood`
+  (`lockdownRenderSample` takes the trigger kind); the join-surge and manual alerts keep `lockdown_alert_counts`.
 - Automatic lockdowns are announced in `raid_trigger.go`, every post through `lockdownPaced` under `raidPostTimeout`
   (30 s), and a failed post is only logged: it never changes the lockdown or its absence. The call of `raidFire` that
   got `lockdownStartStarted` posts one public notice in the locked group (`raidPostNotice`, the group's language: the

@@ -155,10 +155,23 @@ func FindUsersByUsername(username string, limit int) ([]models.User, error) {
 	return rows, nil
 }
 
-// FindUsersByIDs is compile scaffolding for the RED commit of plan 06-09; the next commit
-// gives it its body.
+// FindUsersByIDs reads the users rows of many IDs in one uncached query and returns them
+// by user ID. An ID with no row is absent from the map, and an empty input returns an
+// empty map without querying. A database error is returned, never reported as "no rows".
 func FindUsersByIDs(ids []int64) (map[int64]models.User, error) {
-	return map[int64]models.User{}, nil
+	found := make(map[int64]models.User, len(ids))
+	if len(ids) == 0 {
+		return found, nil
+	}
+	var rows []models.User
+	if err := db.DB.Where("user_id IN ?", ids).Find(&rows).Error; err != nil {
+		log.Errorf("[Database] FindUsersByIDs: %v - %d ids", err, len(ids))
+		return nil, fmt.Errorf("find users by %d ids: %w", len(ids), err)
+	}
+	for _, row := range rows {
+		found[row.UserId] = row
+	}
+	return found, nil
 }
 
 func GetUserInfoById(userId int64) (username, name string, found bool) {
