@@ -160,6 +160,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   registered with `RegisterAnonymousAdminHandler` for that re-entry. Their own `requireLockdownGroup` and
   `lockdownRefuse` read `c.Chat` and reply through `c.Msg`; they predate the re-entry fix described under Handlers and
   stay.
+- `/autolockdown` (`autolockdownApply`) shows or changes the automatic lockdown triggers. Its authority is the same live
+  `getChatMember` check, chosen by whether arguments follow (`requireAutoLockdownAuthority`): with none, any live creator
+  or administrator may view; with any, only the creator or an administrator with `can_restrict_members` may change, and
+  a refusal, a bad argument, a basic group or a failed save writes nothing. The grammar is exactly `joins|flood` then
+  `on`, `off` or a whole number 3..500 (a number sets the threshold and turns the trigger on; `on` and `off` keep it).
+  Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
+  arguments then pick view or change for the tapper. The command is not `Disableable`.
 
 ## Data
 
@@ -226,7 +233,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and it is never part of backup/export/import/reset. The migration carries every non-zero
   `antiraid_settings.auto_antiraid_threshold` over as the join threshold, clamped by `LEAST(GREATEST(x, 3), 500)`: a
   value below 3 becomes 3 (D-18) and the old `/autoantiraid` values above 500 become 500 (D-22), so the copy satisfies
-  the `CHECK` and cannot abort startup.
+  the `CHECK` and cannot abort startup. The key `raid_detection:*` is listed in `skipLocal` (D-12), so another replica
+  never serves it from the in-process layer after a change. Writes are four column-targeted upserts, one per trigger
+  and kind (`SetJoinEnabled`, `SetJoinThreshold`, `SetFloodEnabled`, `SetFloodThreshold`; a threshold also turns its
+  trigger on), each `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of only its own columns plus `updated_at` followed by
+  `cache.DeleteCache`, so two admins changing the two triggers never clobber each other, a Go `false` is always written,
+  and a threshold outside 3..500 returns `ErrThresholdOutOfRange` before any write.
 - `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at

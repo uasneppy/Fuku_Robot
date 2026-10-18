@@ -10,6 +10,7 @@ import (
 	"errors"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/cache"
@@ -70,14 +71,75 @@ func GetSettings(ctx context.Context, chatID int64) (*models.ChatRaidDetection, 
 // MinThreshold..MaxThreshold. Nothing is written.
 var ErrThresholdOutOfRange = errors.New("raid detection threshold out of range")
 
-// SetJoinEnabled is scaffolding for the RED commit: it writes nothing yet.
-func SetJoinEnabled(chatID int64, enabled bool) error { return nil }
+// Column sets of the four writes. Each write touches only its own columns plus updated_at,
+// so two admins changing the two triggers at once never overwrite each other, and a Go
+// false is always written (an upsert of named columns, not an UpdateRecord that skips
+// zero values).
+var (
+	joinEnabledColumns    = []string{"join_enabled", "updated_at"}
+	joinThresholdColumns  = []string{"join_enabled", "join_threshold", "updated_at"}
+	floodEnabledColumns   = []string{"flood_enabled", "updated_at"}
+	floodThresholdColumns = []string{"flood_enabled", "flood_threshold", "updated_at"}
+)
 
-// SetJoinThreshold is scaffolding for the RED commit: it writes nothing yet.
-func SetJoinThreshold(chatID int64, threshold int) error { return nil }
+// thresholdInRange reports whether threshold is a value a chat may store.
+func thresholdInRange(threshold int) bool {
+	return threshold >= MinThreshold && threshold <= MaxThreshold
+}
 
-// SetFloodEnabled is scaffolding for the RED commit: it writes nothing yet.
-func SetFloodEnabled(chatID int64, enabled bool) error { return nil }
+// upsertSettings writes row with one INSERT ... ON CONFLICT (chat_id) DO UPDATE that
+// updates only columns, then drops the cached read of the chat's settings. A chat's first
+// write inserts the other trigger's defaults (row is Defaults with its own columns set).
+// A failed write is returned wrapped and leaves the cache alone.
+func upsertSettings(row *models.ChatRaidDetection, columns []string) error {
+	if db.DB == nil {
+		return alitaerrors.Wrap(errors.New("database not initialized"), "write raid detection settings")
+	}
+	err := db.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "chat_id"}},
+		DoUpdates: clause.AssignmentColumns(columns),
+	}).Create(row).Error
+	if err != nil {
+		return alitaerrors.Wrapf(err, "write raid detection settings of chat %d", row.ChatID)
+	}
+	cache.DeleteCache(cache.CacheKey("raid_detection", row.ChatID))
+	return nil
+}
 
-// SetFloodThreshold is scaffolding for the RED commit: it writes nothing yet.
-func SetFloodThreshold(chatID int64, threshold int) error { return nil }
+// SetJoinEnabled switches the join surge trigger on or off and keeps its threshold.
+func SetJoinEnabled(chatID int64, enabled bool) error {
+	row := Defaults(chatID)
+	row.JoinEnabled = enabled
+	return upsertSettings(row, joinEnabledColumns)
+}
+
+// SetJoinThreshold sets the join surge threshold and turns the trigger on. A threshold
+// outside MinThreshold..MaxThreshold returns ErrThresholdOutOfRange before any write.
+func SetJoinThreshold(chatID int64, threshold int) error {
+	if !thresholdInRange(threshold) {
+		return ErrThresholdOutOfRange
+	}
+	row := Defaults(chatID)
+	row.JoinEnabled = true
+	row.JoinThreshold = threshold
+	return upsertSettings(row, joinThresholdColumns)
+}
+
+// SetFloodEnabled switches the flood trigger on or off and keeps its threshold.
+func SetFloodEnabled(chatID int64, enabled bool) error {
+	row := Defaults(chatID)
+	row.FloodEnabled = enabled
+	return upsertSettings(row, floodEnabledColumns)
+}
+
+// SetFloodThreshold sets the flood threshold and turns the trigger on. A threshold
+// outside MinThreshold..MaxThreshold returns ErrThresholdOutOfRange before any write.
+func SetFloodThreshold(chatID int64, threshold int) error {
+	if !thresholdInRange(threshold) {
+		return ErrThresholdOutOfRange
+	}
+	row := Defaults(chatID)
+	row.FloodEnabled = true
+	row.FloodThreshold = threshold
+	return upsertSettings(row, floodThresholdColumns)
+}
