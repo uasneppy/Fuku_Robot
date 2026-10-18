@@ -31,7 +31,7 @@ This document explains the directory structure of Alita Robot, helping developer
       - runner.go Custom SQL migration engine
     - monitoring/ Database pool metrics
       - metrics.go Metrics collection
-    - {'{domain}'}/ Per-feature database repositories (admin, antiflood, antiraid, etc.)
+    - {'{domain}'}/ Per-feature database repositories (admin, antiflood, raiddetection, etc.)
       - repository.go Domain-specific DB operations
       - optimized.go Cached SELECT queries (hot reads)
     - backup/ Export/import chat data
@@ -55,7 +55,14 @@ This document explains the directory structure of Alita Robot, helping developer
     - greetings.go Welcome/goodbye messages
     - warns.go Warning system
     - captcha.go CAPTCHA verification
-    - antiraid.go Anti-raid protection
+    - antiraid.go Retired raid mode: pointer commands, the /autoantiraid alias, the retired-button answer, the one-time key sweep
+    - lockdown_guard.go Lockdown join guard (group -7); counts joins for the join surge trigger
+    - raid_counters.go Redis join counter and the alita:raid:* keys
+    - raid_join.go Join surge trigger
+    - raid_flood.go Message flood counter (group -4) and the flood alert snapshot
+    - raid_trigger.go Fires an automatic lockdown: latch, quiet period, public notice, cannot-lock warning
+    - lockdown_start.go Shared start path of /lockdown and the automatic triggers
+    - autolockdown.go /autolockdown command for the trigger settings
     - antiflood.go Flood detection and control
     - approvals.go User approval system
     - blacklists.go Blacklisted word detection
