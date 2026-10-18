@@ -283,12 +283,12 @@ func TestExcludedKeysNeverServedLocally(t *testing.T) {
 }
 
 func TestSkipLocalMatchesFreshnessCriticalKeys(t *testing.T) {
-	for _, prefix := range []string{"captcha_pending", "staff_group", "staff_link_of"} {
+	for _, prefix := range []string{"captcha_pending", "staff_group", "staff_link_of", "raid_detection"} {
 		if !skipLocal(CacheKey(prefix, int64(-1001))) {
 			t.Errorf("%s key not excluded from the local layer", prefix)
 		}
 	}
-	for _, prefix := range []string{"captcha_settings", "staff_groupx", "staff_link_ofx"} {
+	for _, prefix := range []string{"captcha_settings", "staff_groupx", "staff_link_ofx", "raid_detectionx"} {
 		if skipLocal(CacheKey(prefix, int64(-1001))) {
 			t.Errorf("%s key excluded, want it cached locally", prefix)
 		}
