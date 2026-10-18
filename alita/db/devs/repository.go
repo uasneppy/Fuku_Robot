@@ -13,7 +13,6 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/aispam"
 	"github.com/divkix/Alita_Robot/alita/db/antiflood"
-	"github.com/divkix/Alita_Robot/alita/db/antiraid"
 	"github.com/divkix/Alita_Robot/alita/db/approvals"
 	"github.com/divkix/Alita_Robot/alita/db/blacklists"
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
@@ -29,6 +28,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/notes"
 	"github.com/divkix/Alita_Robot/alita/db/pins"
+	"github.com/divkix/Alita_Robot/alita/db/raiddetection"
 	"github.com/divkix/Alita_Robot/alita/db/reactions"
 	"github.com/divkix/Alita_Robot/alita/db/reports"
 	"github.com/divkix/Alita_Robot/alita/db/rules"
@@ -182,7 +182,7 @@ func LoadAllStats() string {
 	approvedUsers, approvalChats := approvals.LoadApprovalsStats()
 	warnedUsers, warnChats := warns.LoadWarnsStats()
 	lockedPerms, lockChats := locks.LoadLocksStats()
-	raidChats, autoRaidChats := antiraid.LoadAntiRaidStats()
+	raidCustom, raidJoinOff, raidFloodOff := raiddetection.LoadRaidDetectionStats()
 	logChannelChats := logchannels.LoadLogChannelStats()
 	reactionsNum, reactionChats := reactions.LoadReactionsStats()
 	aiSpamChats := aispam.LoadAISpamStats()
@@ -286,9 +286,10 @@ func LoadAllStats() string {
 			comma(lockedPerms),
 			comma(lockChats),
 		) +
-		"\n<b>AntiRaid:</b>" +
-		fmt.Sprintf("\n    <b>Configured:</b> %s chats", comma(raidChats)) +
-		fmt.Sprintf("\n    <b>Auto AntiRaid:</b> %s chats", comma(autoRaidChats)) +
+		"\n<b>Raid detection:</b>" +
+		fmt.Sprintf("\n    <b>Custom settings:</b> %s chats", comma(raidCustom)) +
+		fmt.Sprintf("\n    <b>Join surge off:</b> %s chats", comma(raidJoinOff)) +
+		fmt.Sprintf("\n    <b>Flood off:</b> %s chats", comma(raidFloodOff)) +
 		fmt.Sprintf("\n<b>Log Channels:</b> %s chats linked", comma(logChannelChats)) +
 		fmt.Sprintf(
 			"\n<b>Reactions:</b> %s reactions in %s chats",
