@@ -98,6 +98,9 @@ var lockdownWarningKeys = []string{
 	"lockdown_lift_record_failed",
 	"lockdown_lift_tally_failed",
 	"lockdown_status_ban_failed",
+	"lockdown_auto_cant_lock_rights",
+	"lockdown_auto_cant_lock_basic",
+	"lockdown_auto_cant_lock_refused",
 }
 
 // TestLockdownWarningLines checks that every failure line starts with the warning

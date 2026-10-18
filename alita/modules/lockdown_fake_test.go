@@ -13,6 +13,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/alicebob/miniredis/v2"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -276,6 +277,9 @@ type lockdownEnv struct {
 	dispatcher *ext.Dispatcher
 	chat       gotgbot.Chat
 	admin      gotgbot.User
+	// redis is the in-process Redis server behind the env, so a test can fast-forward its
+	// clock to expire a key (the once-a-day raid warning).
+	redis *miniredis.Miniredis
 
 	mu         sync.Mutex
 	nextUpdate int64
@@ -334,7 +338,7 @@ func withFastLockdownPacer(t *testing.T) {
 
 func newLockdownEnv(t *testing.T) *lockdownEnv {
 	t.Helper()
-	withMiniredis(t)
+	redisServer := withMiniredisServer(t)
 	withStaffLocale(t)
 	withFastLockdownPacer(t)
 
@@ -344,6 +348,7 @@ func newLockdownEnv(t *testing.T) *lockdownEnv {
 
 	env := &lockdownEnv{
 		t:          t,
+		redis:      redisServer,
 		fake:       fake,
 		bot:        bot,
 		chat:       gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Lock Chat"},
