@@ -277,7 +277,7 @@ Plans:
   4. When several triggers fire at once, the group gets exactly one lockdown and one alert. This holds even when different bot replicas handle the joins and messages.
   5. `/antiraid` and its old timing commands now point admins to `/lockdown`. A group's old auto-threshold becomes its join-surge threshold, and the old raid mode no longer temp-bans anyone.
 
-**Plans:** 12/13 plans executed
+**Plans:** 13/13 plans executed
 
 Plans:
 **Wave 1**
@@ -309,7 +309,7 @@ Plans:
 - [x] 06-12-PLAN.md: The docs pages describe the automatic triggers and the retired raid mode
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 06-13-PLAN.md: Help text in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
+- [x] 06-13-PLAN.md: Help text in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
 
 ### Phase 7: AI-Assisted Raid Detection
 
@@ -371,7 +371,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
-| 6. Automatic Raid Detection | 12/13 | In Progress|  |
+| 6. Automatic Raid Detection | 13/13 | In Progress|  |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |
