@@ -61,13 +61,24 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 	if row.LockedAt != nil {
 		since = *row.LockedAt
 	}
-	active := lockdownText(tr, "lockdown_status_active", i18n.TranslationParams{
-		"since": lockdownTime(since),
-		"name":  lockdownNameToken,
-	})
-	parts := []string{lockdownSplice(active, lockdownNameToken, lockdownMention(row.StartedBy, row.StartedByName))}
-	if line := lockdownReasonLine(tr, row.Reason); line != "" {
-		parts = append(parts, line)
+	var parts []string
+	if lockdownStartedAutomatically(row) {
+		// An automatic lockdown was started by the bot on a trigger, so it says that and
+		// names the trigger, rendered from the row's trigger columns in the reader's
+		// language, instead of "started by" the bot; it has no reason.
+		parts = []string{
+			lockdownText(tr, "lockdown_status_active_auto", i18n.TranslationParams{"since": lockdownTime(since)}),
+			lockdownTriggerSentence(tr, row.TriggerKind, row.TriggerCount, row.TriggerWindow, row.TriggerPercent),
+		}
+	} else {
+		active := lockdownText(tr, "lockdown_status_active", i18n.TranslationParams{
+			"since": lockdownTime(since),
+			"name":  lockdownNameToken,
+		})
+		parts = []string{lockdownSplice(active, lockdownNameToken, lockdownMention(row.StartedBy, row.StartedByName))}
+		if line := lockdownReasonLine(tr, row.Reason); line != "" {
+			parts = append(parts, line)
+		}
 	}
 	if row.LockedAt == nil {
 		parts = append(parts, lockdownText(tr, "lockdown_status_unconfirmed"))
@@ -88,6 +99,16 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 	return reply(lockdownJoinLines(parts))
+}
+
+// lockdownStartedAutomatically reports whether the bot locked the group on its own: the
+// lockdown's trigger is a join surge or a flood. Any other kind, a manual lockdown
+// included, reads as it always did.
+func lockdownStartedAutomatically(ld *models.ChatLockdown) bool {
+	if ld == nil {
+		return false
+	}
+	return ld.TriggerKind == models.LockdownTriggerJoinSurge || ld.TriggerKind == models.LockdownTriggerFlood
 }
 
 // lockdownRemovedSoFar is how many joiners a lockdown removed: the joiners under its

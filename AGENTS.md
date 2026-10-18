@@ -461,6 +461,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   60% of them from members who joined in the last 24 h, from at least 3 such accounts; the windows, the 60% and the
   3-account floor are code constants. It then calls `raidFire` with `trigger_kind` `flood`, the item count, window 30
   and the percent. Without Redis it is inert.
+- An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge` or `flood`) is described as such to
+  admins. `/lockdownstatus` opens with `lockdown_status_active_auto` and the trigger sentence
+  (`lockdownTriggerSentence`, from the row's trigger columns, never from `reason`) instead of "started by" the bot, and
+  `/lockdown` during one answers `lockdown_already_active_auto` plus the same sentence and starts nothing
+  (`lockdownAlreadyActiveText`); every other kind, a manual lockdown included, reads as before.
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
   Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown (`locked_at` set) is active in
