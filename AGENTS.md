@@ -52,7 +52,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Handlers
 
 - Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard · `-6` fed-ban · `-5` antiraid ·
-  `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
+  `-4` raid flood counter · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
   `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel.
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
@@ -212,6 +212,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   still works. `alita:raid:{<chat>}:fire` is a `SET NX EX 60` latch that only sheds load while a trigger starts a
   lockdown; exactly one lockdown is still `uk_chat_lockdowns_active` plus `lockdown.Start`. Do not reuse
   `alita:lockdown:recent:<chat>` for counting: its JSON members count one join twice.
+- `alita:raid:{<chat>}:fi`, `:fn` and `:fa` are the message flood counter of automatic raid detection
+  (`raid_flood.go`): three sorted sets scored in unix ms, the window's item keys (`m:<message id>`, or `g:<media group
+  id>` so an album is one item), the item keys sent by new members and those members' user IDs. One Lua script
+  (`raidFloodScript`) adds the item, trims all three to 30 s, caps the first two at 2000 (`raidFloodCap`), sets
+  `PEXPIRE` 2 minutes on each and returns their sizes; a member is new when `:joined` scores them within 24 h
+  (`ZSCORE`). It is Redis only, like the join counter.
 - `chat_raid_detection` (migration 20261018130000) holds one chat's automatic raid detection settings: the join surge
   and flood switches and thresholds (`CHECK` 3..500, defaults 15 and 30). A missing row means the defaults, both triggers
   on (`raiddetection.Defaults`); the Go model carries no `default:` tag on its booleans, because GORM's Create would
@@ -407,6 +413,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
   status it read and whether it asked), so a join or a join message still makes at most one performer lookup. Settings come from
   `raidSettingsLookup`, a test seam; an unreadable read counts nothing.
+- The flood trigger is counted by the group `-4` watcher (`raidFloodWatcher`, registered in `LoadLockdown`), which returns
+  `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still see every message, and deletes
+  nothing: the lockdown's muting stops the flood. What counts (`raidFloodItemKey`) is any user content in a supergroup:
+  text that is not a command (a `bot_command` entity at offset 0, or a text starting with `/` and a non-space
+  character, which gotgbot's command handler also runs), photo, GIF (animation, checked before the
+  document Telegram also sets), sticker, video, video note, voice, audio, document, poll, contact, location, venue, dice
+  and story, forwards and replies included; an album counts once. Commands, service messages, edited messages, channel
+  posts and bot senders never count (gotgbot drops the last three before the watcher). Who never counts: a sender with
+  `sender_chat` set (an anonymous administrator, a channel, a linked channel's automatic forward: gotgbot's `IsBot` is
+  false for all of them), a Telegram service ID (`staffServiceUserIDs`), the bot, an approved user
+  (`IsApprovedForUpdate`) and an administrator by the cached list (`antifloodModule.userIsFloodExempt`; its bounded live
+  fallback assumes an administrator when saturated, which only lowers the counts). Checks run cheapest first (chat type,
+  sender, item, Redis, settings, approvals, admin list, then one script call under 250 ms; an error is no information).
+  The rule is `raidFloodCounts`: at least the chat's threshold (default 30) of items in the fixed 30 s window, at least
+  60% of them from members who joined in the last 24 h, from at least 3 such accounts; the windows, the 60% and the
+  3-account floor are code constants. It then calls `raidFire` with `trigger_kind` `flood`, the item count, window 30
+  and the percent. Without Redis it is inert.
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
   Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown (`locked_at` set) is active in

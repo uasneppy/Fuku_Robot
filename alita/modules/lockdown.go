@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lang"
@@ -544,6 +545,11 @@ func LoadLockdown(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(lockdownModule.moduleName, true)
 
 	loadLockdownGuard(dispatcher)
+	// The flood watcher sits at group -4: after the join guard (-7), fed-ban (-6) and
+	// antiraid (-5), before the staff watchers (-3), aispam, antiflood, locks and
+	// blacklists, so a message those later end was already counted. It never ends a
+	// message's handling.
+	dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, lockdownModule.raidFloodWatcher), raidFloodGroup)
 	helpers.WrapCommand(dispatcher, lockdownDesc, pipelineHandler(lockdownModule.lockdown))
 	helpers.WrapCommand(dispatcher, unlockdownDesc, pipelineHandler(lockdownModule.unlockdown))
 	helpers.WrapCommand(dispatcher, lockdownStatusDesc, pipelineHandler(lockdownModule.lockdownStatus))
