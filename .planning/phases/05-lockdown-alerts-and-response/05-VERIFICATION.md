@@ -4,6 +4,34 @@ verified: 2026-10-18T05:40:00Z
 status: human_needed
 score: 5/5 must-haves verified
 covered_files:
+  - .planning/phases/05-lockdown-alerts-and-response/05-01-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-01-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-02-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-02-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-03-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-03-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-04-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-04-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-05-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-05-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-06-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-06-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-07-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-07-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-08-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-08-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-09-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-09-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-10-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-10-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-11-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-11-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-12-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-12-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-13-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-13-SUMMARY.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-14-PLAN.md
+  - .planning/phases/05-lockdown-alerts-and-response/05-14-SUMMARY.md
   - alita/db/lockdown/alerts.go
   - alita/db/lockdown/burst.go
   - alita/db/lockdown/links.go
@@ -12,7 +40,7 @@ covered_files:
   - alita/modules/lockdown_recent.go
   - alita/modules/lockdown_response.go
   - alita/modules/lockdown_worker.go
-covered_digest: "v2:sha256:d9839c9ea9ef1adc1bf90ae9c5e52b5ef65bda9a392f8a0c6d21c068d6e23dbc"
+covered_digest: "v2:sha256:1bc11562b8cb006093f725315c0cfa29fb3419178f80fa4b03b0c3adfa994de5"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
