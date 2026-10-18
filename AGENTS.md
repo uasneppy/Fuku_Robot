@@ -238,7 +238,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/unlockdown` ever ends a lockdown: no TTL, timer, Redis expiry, restart, worker cycle or expired ban lifts one, and
   `BeginLift` is reached only through `lockdownBeginLift` in `liftLockdownRow`, the one lift path shared by `/unlockdown`
   and the alert's Lift Confirm (restore the stored permissions, then one conditional record, then `FinishLift`). The
-  button path also posts the public `lockdown_lifted` notice in the locked group, through `lockdownPaced`.
+  button path also posts the public `lockdown_lifted` notice in the locked group, through `lockdownPaced`. The
+  `chat_lockdowns` columns `trigger_count`, `trigger_window` (seconds) and `trigger_percent` (migration 20261018120000,
+  with `idx_chat_lockdowns_chat_lift` on `(chat_id, lift_started_at)`) record the numbers behind an automatic trigger:
+  `trigger_kind` is `manual`, `join_surge` or `flood`, and all three numbers are 0 for a manual lockdown. The numbers are
+  columns and never part of `reason`, so each destination renders them in its own language
+  (`lockdownAlertTriggerLine`).
 - `chat_lockdown_alerts` and the `chat_lockdowns` columns `chat_title` and `alert_started_at` (migration
   20261011120000) are the lockdown alerts. One row per posted copy, an alert or a reminder (`kind`), unique on
   `(lockdown_id, kind, seq, dest)`; `message_id` and `body` are the exact text posted, so later edits start from it,
@@ -364,6 +369,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `lockdownActiveLookup`, a test seam. The greetings Accept button (`joinRequestHandler`, `a=accept`) answers an alert
   (`greetings_join_request_lockdown`) and approves nothing while a lockdown is active or cannot be read; Decline and Ban
   still work.
+- `startLockdownRow` (`lockdown_start.go`) is the one start path, shared by `/lockdown` and every automatic trigger, so a
+  trigger's lockdown is exactly a `/lockdown`: the live bot-rights check, the raw permissions snapshot, the insert behind
+  `uk_chat_lockdowns_active`, the lock call, the confirmation and the worker wake. Of two simultaneous callers for one
+  chat exactly one gets `lockdownStartStarted` and the other `lockdownStartAlreadyActive` with the running row. It judges
+  no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent.
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
   Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown (`locked_at` set) is active in
