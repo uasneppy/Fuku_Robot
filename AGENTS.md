@@ -392,16 +392,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `uk_chat_lockdowns_active`, the lock call, the confirmation and the worker wake. Of two simultaneous callers for one
   chat exactly one gets `lockdownStartStarted` and the other `lockdownStartAlreadyActive` with the running row. It judges
   no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent.
-- The join surge trigger is counted by the `chat_member` join guard (`lockdownOnJoinMember`, group `-7`) through
-  `raidCountMemberJoin`, right after the lockdown join tracker write and before the lockdown is read, so the join that
-  tips the threshold is handled by the lockdown it starts. It is best effort and Redis only, and a count never bans,
+- The join surge trigger is counted by both group `-7` join guards, `lockdownOnJoinMember` through
+  `raidCountMemberJoin` and `lockdownOnJoinMessage` (the `new_chat_members` service message) through
+  `raidCountMessageJoins`, right after the lockdown join tracker write and before the lockdown is read, so the join
+  that tips the threshold is handled by the lockdown it starts. The service message's accounts go to Redis in one
+  script call, and the account is the set member, so the two deliveries of one join count once. Both counters and both
+  guard handlers build their `lockdownJoinInput` with `lockdownMemberJoinInput` and `lockdownMessageJoinInputs`, so
+  the performer rule cannot drift. It is best effort and Redis only, and a count never bans,
   restricts or deletes anything: when `raidJoinCounts` holds (not the bot, not a request, not an approved user, not
   added by the anonymous admin or by a live creator or administrator) and the chat's different accounts joined within
   60 s reach its threshold, `raidFire` starts the lockdown through `startLockdownRow` exactly as `/lockdown` does, with
   `trigger_kind` `join_surge`, the bot as starter, an empty `reason` and the numbers in the trigger columns. The
   trigger runs synchronously in the handler (no goroutine, no drain); a crash half way leaves an unconfirmed row the
   worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
-  status it read and whether it asked), so a join still makes at most one performer lookup. Settings come from
+  status it read and whether it asked), so a join or a join message still makes at most one performer lookup. Settings come from
   `raidSettingsLookup`, a test seam; an unreadable read counts nothing.
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
