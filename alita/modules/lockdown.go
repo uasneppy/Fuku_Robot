@@ -329,75 +329,33 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return reply(lockdownAlreadyActiveText(tr, active))
 	}
 
-	// The bot's own rights are read live. An unknown answer fails closed.
-	botMember, botResult, botErr := chat_status.FetchBotMember(b, chat.Id)
-	if botResult == chat_status.BotMemberUnknown {
-		log.Warnf("[Lockdown] bot rights check in chat %d failed: %v", chat.Id, botErr)
-		return refuse("lockdown_bot_check_failed")
-	}
-	if botResult == chat_status.BotMemberMissing ||
-		botMember.Status != gotgbot.ChatMemberStatusAdministrator || !botMember.CanRestrictMembers {
-		return refuse("lockdown_bot_cannot_restrict")
-	}
-
-	bg := context.Background()
-	chatInfo, err := fetchLockdownChat(bg, b, chat.Id)
-	if err != nil {
-		log.Warnf("[Lockdown] getChat for chat %d failed: %v", chat.Id, err)
-		return refuse("lockdown_permissions_unreadable")
-	}
-	if !lockdownHasPermissions(chatInfo.Permissions) {
-		log.Warnf("[Lockdown] getChat for chat %d returned no permissions", chat.Id)
-		return refuse("lockdown_permissions_unreadable")
-	}
-
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
-	row := &models.ChatLockdown{
-		ChatID:            chat.Id,
-		TriggerKind:       models.LockdownTriggerManual,
-		Reason:            lockdownReasonFromArgs(lockdownCommandArgs(ctx)),
-		StartedBy:         actor.Id,
-		StartedByName:     name,
-		ChatTitle:         lockdownCapRunes(chat.Title, lockdownTitleMaxRunes),
-		PrePermissions:    string(chatInfo.Permissions),
-		LockedPermissions: lockdownLockedPermissions,
-	}
-	started, err := lockdown.Start(row)
-	if err != nil {
+	res := startLockdownRow(context.Background(), b, lockdownStartParams{
+		Chat:        chat,
+		TriggerKind: models.LockdownTriggerManual,
+		Reason:      lockdownReasonFromArgs(lockdownCommandArgs(ctx)),
+		StarterID:   actor.Id,
+		StarterName: name,
+	})
+	switch res.Outcome {
+	case lockdownStartNotSupergroup:
+		return refuse("lockdown_basic_group")
+	case lockdownStartBotCheckFailed:
+		return refuse("lockdown_bot_check_failed")
+	case lockdownStartBotCannotRestrict:
+		return refuse("lockdown_bot_cannot_restrict")
+	case lockdownStartPermissionsUnreadable:
+		return refuse("lockdown_permissions_unreadable")
+	case lockdownStartStateFailed:
 		return failed()
-	}
-	if !started {
-		existing, err := lockdown.GetActiveFresh(chat.Id)
-		if err != nil || existing == nil {
-			return failed()
-		}
-		return reply(lockdownAlreadyActiveText(tr, existing))
-	}
-
-	if err := setLockdownPermissions(bg, b, chat.Id, lockdownLockedPermissions); err != nil {
-		log.Warnf("[Lockdown] lock call for chat %d failed: %v", chat.Id, err)
-		if !lockdownDefinitiveRefusal(err) {
-			// A timeout, a dropped connection or an answer that cannot be read does not
-			// say the lock failed: it may have taken effect, and this row holds the only
-			// copy of the permissions to restore. It is kept unconfirmed, and the worker
-			// settles it from the live permissions after the grace period (a lock that
-			// took effect is confirmed, one that did not is dropped), while /unlockdown
-			// can already restore the stored permissions.
-			return refuse("lockdown_lock_unknown")
-		}
-		if _, delErr := lockdown.DeleteUnconfirmed(row.ID); delErr != nil {
-			log.Errorf("[Lockdown] lockdown %d could not be removed after a refused lock: %v", row.ID, delErr)
-		}
+	case lockdownStartAlreadyActive:
+		return reply(lockdownAlreadyActiveText(tr, res.Row))
+	case lockdownStartLockUnknown:
+		return refuse("lockdown_lock_unknown")
+	case lockdownStartLockFailed:
 		return refuse("lockdown_lock_failed")
 	}
-	if _, err := lockdown.ConfirmLocked(row.ID); err != nil {
-		if _, retryErr := lockdown.ConfirmLocked(row.ID); retryErr != nil {
-			log.Errorf("[Lockdown] lockdown %d is locked but not confirmed: %v", row.ID, retryErr)
-		}
-	}
-	// The alert is decided and posted by the worker, so a lock confirmed here, one
-	// confirmed by the settle step and a crash in between are one code path.
-	wakeLockdownWorker()
+	row, botMember := res.Row, res.BotMember
 
 	parts := []string{
 		lockdownText(tr, "lockdown_started"),

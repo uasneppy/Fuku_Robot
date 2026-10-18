@@ -453,6 +453,40 @@ func lockdownRenderLinkLine(tr *i18n.Translator, links []lockdown.InviteLinkCoun
 	return lockdownJoinLines(lines), top
 }
 
+// lockdownAlertTriggerLine is the alert's line saying how the lockdown was triggered. A
+// join surge names its count and window, a flood its count, window and the percent from
+// new members; any other kind, a manual lockdown included, names who started it with
+// /lockdown. The numbers come from the row's trigger columns, never from the reason, so
+// each destination reads them in its own language. They are passed as strings built with
+// strconv and by name only, so the translator's legacy printf pass never meets the
+// percent sign. The starter's name is user-controlled and goes in after translation.
+func lockdownAlertTriggerLine(tr *i18n.Translator, ld *models.ChatLockdown, lockedAt time.Time) string {
+	count := strconv.Itoa(ld.TriggerCount)
+	window := strconv.Itoa(ld.TriggerWindow)
+	switch ld.TriggerKind {
+	case models.LockdownTriggerJoinSurge:
+		return lockdownText(tr, "lockdown_alert_trigger_join_surge", i18n.TranslationParams{
+			"count":  count,
+			"window": window,
+			"time":   lockdownTime(lockedAt),
+		})
+	case models.LockdownTriggerFlood:
+		return lockdownText(tr, "lockdown_alert_trigger_flood", i18n.TranslationParams{
+			"count":   count,
+			"window":  window,
+			"percent": strconv.Itoa(ld.TriggerPercent),
+			"time":    lockdownTime(lockedAt),
+		})
+	}
+	return lockdownSplice(
+		lockdownText(tr, "lockdown_alert_trigger_manual", i18n.TranslationParams{
+			"name": lockdownNameToken,
+			"time": lockdownTime(lockedAt),
+		}),
+		lockdownNameToken, lockdownMention(ld.StartedBy, ld.StartedByName),
+	)
+}
+
 // lockdownRenderAlert is the text of a lockdown's first alert: which group, how the
 // lockdown was triggered (by whom and when), the reason, the burst behind it (the
 // counts and a sample of its accounts) and the invite link it used, all read fresh from
@@ -469,14 +503,7 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, li
 		lockdownText(tr, "lockdown_alert_title", i18n.TranslationParams{"group": lockdownGroupToken}),
 		lockdownGroupToken, lockdownGroupLabel(ld),
 	)
-	trigger := lockdownSplice(
-		lockdownText(tr, "lockdown_alert_trigger_manual", i18n.TranslationParams{
-			"name": lockdownNameToken,
-			"time": lockdownTime(lockedAt),
-		}),
-		lockdownNameToken, lockdownMention(ld.StartedBy, ld.StartedByName),
-	)
-	lines := []string{title, trigger, lockdownReasonLine(tr, ld.Reason)}
+	lines := []string{title, lockdownAlertTriggerLine(tr, ld, lockedAt), lockdownReasonLine(tr, ld.Reason)}
 	accounts, counts, err := lockdown.BurstSampleFresh(ld.ID, lockdownAlertSampleMax)
 	if err != nil {
 		log.Warnf("[Lockdown] the burst of lockdown %d could not be read for its alert: %v", ld.ID, err)
