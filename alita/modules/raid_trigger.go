@@ -120,8 +120,9 @@ type raidTrigger struct {
 //
 // After the latch it stays silent, with no Telegram call, while the chat has an active
 // lockdown and for raidLiftQuiet after an admin started lifting one (D-15); a failed read
-// of either shortens the latch to raidRetryLatch. After the start the latch is cut or
-// stretched by outcome (raidOutcomeLatch).
+// of either shortens the latch to raidRetryLatch. A flood trigger then copies its flooding
+// accounts into a short-lived snapshot for the alert (raidSnapshotFlooders). After the
+// start the latch is cut or stretched by outcome (raidOutcomeLatch).
 func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	client := raidRedis()
 	if client == nil {
@@ -166,6 +167,18 @@ func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 		log.Infof("[RaidDetection] trigger %s in chat %d ignored: its lockdown was lifted less than %s ago",
 			trig.Kind, chat.Id, raidLiftQuiet)
 		return
+	}
+
+	// A flood is described by the accounts that flooded, and the sets that know them keep
+	// only 30 seconds, so they are copied now, before the lockdown row exists, for the alert
+	// the worker decides later (D-17). It is best effort: without the snapshot the alert
+	// still lists the tracker's joins.
+	if trig.Kind == models.LockdownTriggerFlood {
+		if saved, snapErr := raidSnapshotFlooders(chat.Id); snapErr != nil {
+			log.Debugf("[RaidDetection] the flooding accounts of chat %d could not be saved: %v", chat.Id, snapErr)
+		} else {
+			log.Debugf("[RaidDetection] %d flooding accounts of chat %d saved for the alert", saved, chat.Id)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), raidFireTimeout)

@@ -2852,6 +2852,7 @@ lockdown_alert_record_failed: "⚠️ As permissões de {group} voltaram, mas n�
 lockdown_alert_cancelled: "Cancelado. Nada mudou."
 lockdown_alert_card_expired: "Esta confirmação expirou. Nada mudou. Toque novamente no botão do alerta."
 lockdown_alert_counts: "Entraram nos 10 minutos antes do bloqueio: {before}. Entraram desde então: {since}."
+lockdown_alert_counts_flood: "Contas que inundaram o grupo e entradas nos 10 minutos antes do bloqueio: {before}. Entraram desde então: {since}."
 lockdown_alert_sample_title: "Contas da onda:"
 lockdown_alert_sample_more: "…e mais {count}."
 lockdown_alert_bot_mark: "bot"
