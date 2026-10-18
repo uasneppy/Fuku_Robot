@@ -210,7 +210,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidJoinedCap`), sets a 25 h TTL and returns how many different accounts joined in the last 60 s. It is best effort
   and Redis only: without Redis automatic detection is inert on that replica (one info log per process) and `/lockdown`
   still works. `alita:raid:{<chat>}:fire` is a `SET NX EX 60` latch that only sheds load while a trigger starts a
-  lockdown; exactly one lockdown is still `uk_chat_lockdowns_active` plus `lockdown.Start`. Do not reuse
+  lockdown; exactly one lockdown is still `uk_chat_lockdowns_active` plus `lockdown.Start`, and one alert still
+  `lockdown.BeginAlert`, however many triggers and replicas fire at once. After the latch `raidFire` reads the chat's
+  active lockdown fresh and stays silent, with no Telegram call, while one exists, and for 10 minutes (`raidLiftQuiet`)
+  after `lockdown.RecentlyLiftedFresh` finds a lift of the chat started (`lift_started_at` in PostgreSQL, so a Redis
+  flush does not end it, and real time); an unreadable answer shortens the latch to 10 s. The latch then lasts 60 s
+  after a started, already-active or unknown-lock outcome, 10 s (`raidRetryLatch`) after a failed bot-rights check,
+  unreadable permissions or failed state write, and 10 minutes (`raidCantLockLatch`) when the group is not a
+  supergroup, the bot cannot restrict members or Telegram refused the lock. Do not reuse
   `alita:lockdown:recent:<chat>` for counting: its JSON members count one join twice.
 - `alita:raid:{<chat>}:fi`, `:fn` and `:fa` are the message flood counter of automatic raid detection
   (`raid_flood.go`): three sorted sets scored in unix ms, the window's item keys (`m:<message id>`, or `g:<media group
