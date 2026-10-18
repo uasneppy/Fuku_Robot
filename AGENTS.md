@@ -51,8 +51,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Handlers
 
-- Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard · `-6` fed-ban ·
-  `-4` raid flood counter · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
+- Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
+  before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts, never ends an update; there is no
+  antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
   `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel.
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
@@ -166,7 +167,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a refusal, a bad argument, a basic group or a failed save writes nothing. The grammar is exactly `joins|flood` then
   `on`, `off` or a whole number 3..500 (a number sets the threshold and turns the trigger on; `on` and `off` keep it).
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
-  arguments then pick view or change for the tapper. The command is not `Disableable`.
+  arguments then pick view or change for the tapper. The command is not `Disableable`. `/autoantiraid` is its alias for
+  the join threshold (see the retired raid mode under Subsystem traps) with exactly the same checks and anonymous-admin
+  re-entry, so neither is ever decided by the cached admin list.
 
 ## Data
 
@@ -209,7 +212,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   time wins, a non-empty link, name or username fills in). One pipelined round trip under 250 ms
   (`lockdownRecentTimeout`) adds, trims to 10 minutes, keeps the newest 500 (`lockdownRecentCap`) and sets a 700 s TTL.
   It is empty without Redis and is never a ban decision. The joins of the 10 minutes before the lock are saved with the
-  lockdown's alert (`chat_lockdown_burst`), and the burst of a flood lockdown. The raid join counter does not use it.
+  lockdown's alert (`chat_lockdown_burst`); a flood lockdown also saves its flooders there (`alita:raid:{<chat>}:flooders`
+  below). The raid join counter does not use it.
 - `alita:raid:{<chat>}:joined` is the join counter of automatic raid detection (`raid_counters.go`): a sorted set whose
   member is the user ID and whose score is that account's latest join in unix milliseconds, so the `chat_member` update
   and the service message of one join are one member and a re-join refreshes the account. One Lua script
@@ -270,7 +274,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and kind (`SetJoinEnabled`, `SetJoinThreshold`, `SetFloodEnabled`, `SetFloodThreshold`; a threshold also turns its
   trigger on), each `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of only its own columns plus `updated_at` followed by
   `cache.DeleteCache`, so two admins changing the two triggers never clobber each other, a Go `false` is always written,
-  and a threshold outside 3..500 returns `ErrThresholdOutOfRange` before any write.
+  and a threshold outside 3..500 returns `ErrThresholdOutOfRange` before any write. The developer `/stats` counts the
+  rows through `raiddetection.LoadRaidDetectionStats` (chats with a row, and the chats with each trigger off).
 - `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
@@ -723,8 +728,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `alita/db/lockdown/testmain_test.go` (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
   The Phase 5 models (`ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun`) are in
   `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go` only; the `alita/db` package's own
-  tests never touch them. `ChatRaidDetection` is in `alita/modules/test_harness_test.go`, and `raidCleanup` deletes
-  its rows and their cached copies.
+  tests never touch them. The Phase 6 model `ChatRaidDetection` is in `alita/modules/test_harness_test.go`,
+  `alita/db/raiddetection/testmain_test.go` and `alita/db/devs/testmain_test.go` (the developer `/stats` reads it), and
+  `raidCleanup` in the modules tests deletes its rows and their cached copies.
 - `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
   prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
   `TestBanRunStart` (one running ban run per lockdown, the partial unique index), plus the Phase 5 conditional updates:
@@ -733,8 +739,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`FinishBanRun`'s `NOT EXISTS` guard and its single finish), `TestAlertSync` and
   `TestAlertSyncKeepsAMarkSetDuringTheEdit` (`RecordAlertSynced`'s parameterised `CASE`), `TestAlertClose`
   (`ClaimAlertClose`'s `CASE` over the old row) and `TestBanRunReport` (one report claim wins, steps settled
-  separately). The pattern is anchored with `$`, so list the real top-level test function names. Add a test there when
-  a new guarantee rests on a partial unique index or a conditional update.
+  separately). The Phase 6 guarantees are `TestRaidDetectionSettings` (`./alita/db/raiddetection`: the `CHECK` 3..500
+  and the column-targeted upserts that never clobber each other) and `TestRaidDetectionCarryOver`
+  (`./alita/db/migrations`: the clamped carry-over of `antiraid_settings.auto_antiraid_threshold`, which executes
+  migration 20261018130000 against the schema the migration-chain step already built, so it must run after that step).
+  The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
+  target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 
 ## Commits
