@@ -3,16 +3,21 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/approvals"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
 // floodBurstEnv is a ban env (lockdown env, Staff Group, burst and approval cleanup) with
@@ -132,6 +137,172 @@ func TestRaidFloodBurst(t *testing.T) {
 			if ago := locked.Sub(*burst.JoinedAt); ago < 2*time.Hour+55*time.Minute || ago > 3*time.Hour+5*time.Minute {
 				t.Errorf("burst row of %d joined %s before the lock, want about 3 hours", burst.UserID, ago)
 			}
+		}
+	})
+
+	t.Run("ban the flooders", func(t *testing.T) {
+		env, staffChat := floodBurstEnv(t)
+		flooders := env.seedFlooders(4, 3*time.Hour, true)
+		established := env.floodTheChat(flooders)
+		env.cycle()
+
+		a := lastAlert(t, env, staffChat)
+		keyboard := staffKeyboardOf(a.alert.Params["reply_markup"])
+		if len(keyboard) < 2 || len(keyboard[1]) != 1 {
+			t.Fatalf("alert keyboard = %+v, want a second row with the Ban button", keyboard)
+		}
+		if label := keyboard[1][0].Text; !strings.Contains(label, staffMarker("lockdown_alert_btn_ban")+" 4") {
+			t.Errorf("Ban button label = %q, want it to carry %q with 4", label, staffMarker("lockdown_alert_btn_ban"))
+		}
+
+		card := env.askBan(a, env.admin)
+		if text := fmt.Sprint(card.msg.Params["text"]); !strings.Contains(text, staffMarker("lockdown_ban_ask")+" 4 ") {
+			t.Errorf("card text = %q, want %q with 4", text, staffMarker("lockdown_ban_ask"))
+		}
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+		env.cycleUntilIdle()
+
+		for i, account := range flooders {
+			env.wantBannedForGood(account.user.Id, fmt.Sprintf("flooder %d", i+1))
+			if row := env.burstRowOf(account.user.Id); row.State != models.BurstStateBanned {
+				t.Errorf("burst row of flooder %d = %s, want %s", i+1, row.State, models.BurstStateBanned)
+			}
+		}
+		env.wantNotBanned(established.Id, "the established member")
+		env.wantNotBanned(staffTestBotID, "the bot itself")
+		if runs := env.banRuns(); len(runs) != 1 || runs[0].State != models.BanRunStateDone {
+			t.Errorf("ban runs = %+v, want one done run", runs)
+		}
+	})
+
+	t.Run("surge alert unchanged", func(t *testing.T) {
+		env, staffChat := floodBurstEnv(t)
+		var reads atomic.Int32
+		previous := raidFloodersLookup
+		raidFloodersLookup = func(chatID int64) ([]lockdownRecentJoin, error) {
+			reads.Add(1)
+			return previous(chatID)
+		}
+		t.Cleanup(func() { raidFloodersLookup = previous })
+
+		env.selfJoins(15)
+		row := env.activeLockdown()
+		if row == nil || row.TriggerKind != models.LockdownTriggerJoinSurge {
+			t.Fatalf("active lockdown = %+v, want one started by the join surge", row)
+		}
+		env.cycle()
+
+		text := alertText(t, env, staffChat)
+		if want := staffMarker("lockdown_alert_counts") + " 15 "; !strings.Contains(text, want) {
+			t.Errorf("alert %q does not contain the join counts %q", text, want)
+		}
+		if strings.Contains(text, staffMarker("lockdown_alert_counts_flood")) {
+			t.Errorf("alert %q uses the flood counts line for a join surge", text)
+		}
+		if got := reads.Load(); got != 0 {
+			t.Errorf("the flooders snapshot was read %d times for a join surge, want 0", got)
+		}
+	})
+
+	t.Run("snapshot gone", func(t *testing.T) {
+		env, staffChat := floodBurstEnv(t)
+		first, second := env.newJoiner("Joiner1"), env.newJoiner("Joiner2")
+		env.join(first, first, "")
+		env.join(second, second, "")
+		flooders := env.seedFlooders(4, 3*time.Hour, true)
+		env.floodTheChat(flooders)
+		if row := env.activeLockdown(); row == nil || row.TriggerKind != models.LockdownTriggerFlood {
+			t.Fatalf("active lockdown = %+v, want one started by the flood", row)
+		}
+
+		client := cache.GetRedisClient()
+		key := raidKey(env.chat.Id, raidPartFlooders)
+		if saved, err := client.ZCard(context.Background(), key).Result(); err != nil || saved != 4 {
+			t.Fatalf("the snapshot holds %d accounts (error %v), want 4: the case would prove nothing", saved, err)
+		}
+		if err := client.Del(context.Background(), key).Err(); err != nil {
+			t.Fatalf("delete the snapshot: %v", err)
+		}
+		env.cycle()
+
+		text := alertText(t, env, staffChat)
+		if want := staffMarker("lockdown_alert_counts_flood") + " 2 0"; !strings.Contains(text, want) {
+			t.Errorf("alert %q does not contain the counts %q: the tracker's two joins only", text, want)
+		}
+		for _, joiner := range []gotgbot.User{first, second} {
+			if want := fmt.Sprintf("<code>%d</code>", joiner.Id); !strings.Contains(text, want) {
+				t.Errorf("alert %q does not list the tracker's joiner %q", text, want)
+			}
+		}
+		for _, account := range flooders {
+			if unwanted := fmt.Sprintf("<code>%d</code>", account.user.Id); strings.Contains(text, unwanted) {
+				t.Errorf("alert %q lists flooder %d although the snapshot was gone", text, account.user.Id)
+			}
+		}
+		if rows := env.burstRows(); len(rows) != 2 {
+			t.Errorf("%d burst rows, want the tracker's 2", len(rows))
+		}
+	})
+
+	t.Run("names unknown", func(t *testing.T) {
+		env, staffChat := floodBurstEnv(t)
+		flooders := env.seedFlooders(4, 3*time.Hour, false)
+		env.floodTheChat(flooders)
+		env.cycle()
+
+		text := alertText(t, env, staffChat)
+		for _, account := range flooders {
+			if want := fmt.Sprintf("<code>%d</code>", account.user.Id); !strings.Contains(text, want) {
+				t.Errorf("alert %q does not list the unnamed flooder %q", text, want)
+			}
+		}
+		if strings.Contains(text, "@flooder") || strings.Contains(text, "Flood") {
+			t.Errorf("alert %q shows a name for accounts the users table does not know", text)
+		}
+		if got := sampleLines(text); got != 4 {
+			t.Errorf("%d account lines, want 4\n%s", got, text)
+		}
+		if rows := env.burstRows(); len(rows) != 4 {
+			t.Errorf("%d burst rows, want 4", len(rows))
+		}
+	})
+
+	t.Run("exempt senders and the bot are not saved", func(t *testing.T) {
+		env, staffChat := floodBurstEnv(t)
+		flooders := env.seedFlooders(4, 3*time.Hour, true)
+
+		approved := env.newJoiner("Approved")
+		if err := approvals.AddApprovedUser(env.chat.Id, approved.Id, env.admin.Id, ""); err != nil {
+			t.Fatalf("approve %d: %v", approved.Id, err)
+		}
+		seedRecentJoin(env, approved.Id, 2*time.Hour)
+		seedRecentJoin(env, env.admin.Id, time.Hour)
+		env.sendItems([]gotgbot.User{approved, env.admin}, 8)
+		env.floodTheChat(flooders)
+		if row := env.activeLockdown(); row == nil || row.TriggerKind != models.LockdownTriggerFlood {
+			t.Fatalf("active lockdown = %+v, want one started by the flood", row)
+		}
+
+		// Even a snapshot that held the bot would not put it on the alert.
+		err := cache.GetRedisClient().ZAdd(context.Background(), raidKey(env.chat.Id, raidPartFlooders),
+			redis.Z{Score: float64(raidNow().Add(-time.Hour).UnixMilli()), Member: fmt.Sprint(staffTestBotID)}).Err()
+		if err != nil {
+			t.Fatalf("add the bot to the snapshot: %v", err)
+		}
+		env.cycle()
+
+		rows := env.burstRows()
+		if len(rows) != 4 {
+			t.Fatalf("%d burst rows, want only the 4 flooders", len(rows))
+		}
+		for _, row := range rows {
+			switch row.UserID {
+			case approved.Id, env.admin.Id, staffTestBotID:
+				t.Errorf("burst rows hold %d, who is approved, an admin or the bot", row.UserID)
+			}
+		}
+		if want := staffMarker("lockdown_alert_counts_flood") + " 4 0"; !strings.Contains(alertText(t, env, staffChat), want) {
+			t.Errorf("alert does not contain the counts %q", want)
 		}
 	})
 }
