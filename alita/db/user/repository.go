@@ -155,6 +155,12 @@ func FindUsersByUsername(username string, limit int) ([]models.User, error) {
 	return rows, nil
 }
 
+// FindUsersByIDs is compile scaffolding for the RED commit of plan 06-09; the next commit
+// gives it its body.
+func FindUsersByIDs(ids []int64) (map[int64]models.User, error) {
+	return map[int64]models.User{}, nil
+}
+
 func GetUserInfoById(userId int64) (username, name string, found bool) {
 	user := checkUserInfo(userId)
 	if user != nil {
