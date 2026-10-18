@@ -264,11 +264,17 @@ func lockdownReasonLine(tr *i18n.Translator, reason string) string {
 }
 
 // lockdownAlreadyActiveText tells the existing lockdown: since when, who started it
-// and the reason.
+// and the reason. An automatic lockdown says the bot locked it on its own and names the
+// trigger with its numbers instead.
 func lockdownAlreadyActiveText(tr *i18n.Translator, row *models.ChatLockdown) string {
 	since := row.CreatedAt
 	if row.LockedAt != nil {
 		since = *row.LockedAt
+	}
+	if lockdownStartedAutomatically(row) {
+		text := lockdownText(tr, "lockdown_already_active_auto", i18n.TranslationParams{"since": lockdownTime(since)})
+		sentence := lockdownTriggerSentence(tr, row.TriggerKind, row.TriggerCount, row.TriggerWindow, row.TriggerPercent)
+		return strings.TrimSpace(text + "\n" + sentence)
 	}
 	text := lockdownText(tr, "lockdown_already_active", i18n.TranslationParams{
 		"since": lockdownTime(since),

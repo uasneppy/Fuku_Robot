@@ -522,7 +522,8 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, li
 }
 
 // lockdownRenderReminder is the text of a lockdown's hourly reminder: which group is still
-// locked and since when, the reason, how many joiners the lockdown removed so far (its own
+// locked and since when, the reason (for an automatic lockdown the trigger sentence with
+// its numbers instead), how many joiners the lockdown removed so far (its own
 // bans plus the response bans, the number /lockdownstatus gives) and how many are still
 // pending, and the invite link line of the alert. It carries no burst sample. It also
 // returns the invite link the text shows, to be stored on the copy, empty when none is
@@ -542,7 +543,13 @@ func lockdownRenderReminder(tr *i18n.Translator, ld *models.ChatLockdown) (text,
 		}),
 		lockdownGroupToken, lockdownGroupLabel(ld),
 	)
-	lines := []string{title, lockdownReasonLine(tr, ld.Reason)}
+	// An automatic lockdown has no reason: the trigger sentence, rendered from the row's
+	// trigger columns, takes its place.
+	reasonOrTrigger := lockdownReasonLine(tr, ld.Reason)
+	if lockdownStartedAutomatically(ld) {
+		reasonOrTrigger = lockdownTriggerSentence(tr, ld.TriggerKind, ld.TriggerCount, ld.TriggerWindow, ld.TriggerPercent)
+	}
+	lines := []string{title, reasonOrTrigger}
 	tally, err := lockdown.TallyJoiners(ld.ID)
 	if err != nil {
 		log.Warnf("[Lockdown] the joiners of lockdown %d could not be counted for its reminder: %v", ld.ID, err)
