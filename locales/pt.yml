@@ -2382,36 +2382,14 @@ approvals_list_reason: " (motivo: %s)"
 
 # AntiRaid module strings
 antiraid_help_msg: |
-  Proteja seu grupo de ataques de spam-join com o AntiRaid.
-  *Comandos de Admin:*
-  /antiraid: Mostra estado atual + botões ativar/desativar.
-  /antiraid on: Ativa modo raid pelo tempo configurado.
-  /antiraid <duration>: Ativa por duração personalizada (ex. 3h, 30m).
-  /antiraid off: Desativa modo raid imediatamente.
-  /raidtime <time>: Define duração do raid (padrão: 6h).
-  /raidactiontime <time>: Define duração do ban temporário (padrão: 1h).
-  /autoantiraid <N>: Ativação automática se N+ entradas/min.
-  /autoantiraid off: Desativa gatilho automático.
-antiraid_active_status: "AntiRaid ATIVO | Expira: {expires_in} | Raid: {raid_time} | Ação: {action_time} | Auto: {auto_threshold}"
-antiraid_inactive_status: "AntiRaid INATIVO | Raid: {raid_time} | Ação: {action_time} | Auto: {auto_threshold}"
-antiraid_enabled: "AntiRaid ativado por {duration}."
-antiraid_disabled: "AntiRaid desativado."
-antiraid_already_active: "AntiRaid já está ativo."
-antiraid_not_active: "AntiRaid não está ativo."
-antiraid_invalid_duration: "Duração inválida. Use um formato como: 30m, 2h, 1d, 1w"
-antiraid_duration_must_be_positive: "A duração deve ser positiva."
-antiraid_raidtime_usage: "Uso: /raidtime <duration> (ex., 6h)"
-antiraid_raidtime_no_change: "O tempo de raid já é {duration}."
-antiraid_raidtime_set: "Tempo de raid definido para {duration}."
-antiraid_raidactiontime_usage: "Uso: /raidactiontime <duration> (ex., 1h)"
-antiraid_raidactiontime_no_change: "O tempo de ação do raid já é {duration}."
-antiraid_raidactiontime_set: "Tempo de ação do raid definido para {duration}."
-antiraid_auto_disabled: "Auto-AntiRaid está desativado."
-antiraid_auto_enabled: "Limite do Auto-AntiRaid: {threshold} entradas/min."
-antiraid_invalid_threshold: "Limite inválido. Dê um número positivo ou 'off'."
-antiraid_auto_triggered: "Raid automático ativado! %s usuários entraram/min — novos entrantes banidos temporariamente."
-antiraid_btn_enable: "Ativar AntiRaid"
-antiraid_btn_disable: "Desativar AntiRaid"
+  O antigo modo raid foi desativado e ninguém mais é banido temporariamente. Bloqueio um grupo automaticamente quando um raid começa, e os admins podem bloqueá-lo manualmente.
+
+  × <code>/autolockdown</code>: Ver ou alterar os gatilhos automáticos, a onda de entradas e a enxurrada de mensagens.
+  × <code>/lockdown</code> e <code>/unlockdown</code>: Bloquear este grupo manualmente e levantar o bloqueio.
+  × <code>/autoantiraid N|off</code>: Continua definindo o limite da onda de entradas (de 3 a 500 entradas em 60 segundos) e o ativa, ou desativa a onda de entradas.
+
+  <code>/antiraid</code>, <code>/raidtime</code> e <code>/raidactiontime</code> agora só apontam para cá e não alteram nada.
+  O antigo limite automático de um grupo passou a ser o seu limite da onda de entradas.
 
 # Rose feature-parity keys (federations, log channels, extras)
 federations_help_msg: |

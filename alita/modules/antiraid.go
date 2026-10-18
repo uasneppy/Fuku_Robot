@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -11,8 +12,13 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/divkix/Alita_Robot/alita/db/lang"
 	"github.com/divkix/Alita_Robot/alita/i18n"
+	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
+	"github.com/divkix/Alita_Robot/alita/utils/errors"
 	"github.com/divkix/Alita_Robot/alita/utils/helpers"
 )
 
@@ -88,22 +94,81 @@ func (m moduleStruct) antiraidRetiredCallback(b *gotgbot.Bot, ctx *ext.Context) 
 	return ext.EndGroups
 }
 
-// antiraidSweepOnce makes the startup sweep of the retired keys run once per process.
+// The sweep of the keys the old raid mode left in Redis. Nothing reads them any more,
+// so a late or missed sweep only wastes memory. During a rolling deploy an old replica
+// can still temp-ban until it stops and write new keys; the next start's sweep clears
+// what it left.
+const (
+	// antiraidKeyPattern matches every key of the retired raid mode (state and joins).
+	antiraidKeyPattern = "alita:antiraid:*"
+	// antiraidSweepScanCount is the SCAN batch size and so the UNLINK batch size.
+	antiraidSweepScanCount = 100
+	// antiraidSweepTimeout bounds the whole sweep.
+	antiraidSweepTimeout = 30 * time.Second
+)
+
+// antiraidSweepOnce makes the startup sweep run once per process.
 var antiraidSweepOnce sync.Once
 
-// sweepRetiredAntiRaidKeys is compile scaffolding for its test: it removes nothing yet.
+// sweepRetiredAntiRaidKeys removes every alita:antiraid:* key with SCAN and UNLINK in
+// batches and returns how many it removed. Without Redis it returns 0 and no error at
+// once. A Redis error stops the sweep and is returned with the count so far.
 func sweepRetiredAntiRaidKeys(ctx context.Context) (int, error) {
-	return 0, nil
+	rdb := cache.GetRedisClient()
+	if rdb == nil {
+		return 0, nil
+	}
+	removed := 0
+	var cursor uint64
+	for {
+		keys, next, err := rdb.Scan(ctx, cursor, antiraidKeyPattern, antiraidSweepScanCount).Result()
+		if err != nil {
+			return removed, errors.Wrap(err, "scan the retired antiraid keys")
+		}
+		if len(keys) > 0 {
+			n, err := rdb.Unlink(ctx, keys...).Result()
+			if err != nil {
+				return removed, errors.Wrap(err, "unlink the retired antiraid keys")
+			}
+			removed += int(n)
+		}
+		if next == 0 {
+			return removed, nil
+		}
+		cursor = next
+	}
+}
+
+// startRetiredAntiRaidSweep runs the sweep once per process, in its own goroutine so
+// startup never waits for Redis.
+func startRetiredAntiRaidSweep() {
+	antiraidSweepOnce.Do(func() {
+		go func() {
+			defer error_handling.RecoverFromPanic("sweepRetiredAntiRaidKeys", "AntiRaid")
+			ctx, cancel := context.WithTimeout(context.Background(), antiraidSweepTimeout)
+			defer cancel()
+			removed, err := sweepRetiredAntiRaidKeys(ctx)
+			if err != nil {
+				log.Warnf("[AntiRaid] Sweep of the retired raid mode keys stopped after %d keys: %v", removed, err)
+				return
+			}
+			if removed > 0 {
+				log.Infof("[AntiRaid] Removed %d retired raid mode keys from Redis", removed)
+			}
+		}()
+	})
 }
 
 // LoadAntiRaid registers the pointer commands, the /autoantiraid alias and the answer
-// to an old antiraid button.
+// to an old antiraid button, and starts the one-time sweep of the retired Redis keys.
 func LoadAntiRaid(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(antiRaidModule.moduleName, true)
 
 	helpers.WrapCommand(dispatcher, antiraidRetiredDesc, pipelineHandler(antiRaidModule.antiraidRetired))
 	helpers.WrapCommand(dispatcher, autoantiraidDesc, pipelineHandler(antiRaidModule.autoantiraid))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("antiraid"), antiRaidModule.antiraidRetiredCallback))
+
+	startRetiredAntiRaidSweep()
 }
 
 func init() {
