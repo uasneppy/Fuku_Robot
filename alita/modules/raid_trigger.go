@@ -2,13 +2,17 @@ package modules
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
+	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 )
 
 const (
@@ -29,6 +33,10 @@ const (
 	// (not a supergroup, no restrict right, or a lock Telegram refused), so a sustained
 	// raid does not repeat the same failing calls on every join.
 	raidCantLockLatch = 10 * time.Minute
+
+	// raidPostTimeout bounds one public notice or one warning copy, the wait for its pacer
+	// slot included.
+	raidPostTimeout = 30 * time.Second
 )
 
 // raidSetLatch sets the remaining life of the chat's fire latch to d, best effort: the
@@ -161,4 +169,86 @@ func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	}
 	log.Infof("[RaidDetection] trigger %s fired in chat %d (count %d, window %d s, percent %d): %s",
 		trig.Kind, chat.Id, trig.Count, trig.Window, trig.Percent, name)
+
+	// Only the call that won the latch and lockdown.Start gets here with Started, so the
+	// notice is posted once per lockdown; a lockdown another trigger or an admin started
+	// is already answered. A failed post changes nothing about the lockdown.
+	if res.Outcome == lockdownStartStarted {
+		raidPostNotice(b, chat, trig, res)
+	}
+}
+
+// lockdownTriggerSentence is the time-less sentence saying what an automatic trigger saw:
+// a join surge names its count and window, a flood its count, window and the percent from
+// new members. Any other kind, a manual lockdown included, has none and gets "". The
+// numbers are passed as strings built with strconv and by name only, so the translator's
+// legacy printf pass never meets the percent sign, and the sentence holds no user text.
+func lockdownTriggerSentence(tr *i18n.Translator, kind string, count, window, percent int) string {
+	switch kind {
+	case models.LockdownTriggerJoinSurge:
+		return lockdownText(tr, "lockdown_trigger_join_surge", i18n.TranslationParams{
+			"count":  strconv.Itoa(count),
+			"window": strconv.Itoa(window),
+		})
+	case models.LockdownTriggerFlood:
+		return lockdownText(tr, "lockdown_trigger_flood", i18n.TranslationParams{
+			"count":   strconv.Itoa(count),
+			"window":  strconv.Itoa(window),
+			"percent": strconv.Itoa(percent),
+		})
+	}
+	return ""
+}
+
+// raidPostNotice tells the locked group, once, that the bot locked it on its own: which
+// trigger fired with its numbers, that approved users are muted too, and the notes
+// /lockdown adds when the bot lacks the delete or the invite right (read from res.BotMember,
+// the rights startLockdownRow saw). It is written in the group's own language and sent
+// through the lockdown pacer under raidPostTimeout. A failed send is logged at warn and
+// nothing else happens: the lockdown stands, and the notice is not retried.
+func raidPostNotice(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, res lockdownStartResult) {
+	tr := staffChatTranslator(chat.Id)
+	count, window := strconv.Itoa(trig.Count), strconv.Itoa(trig.Window)
+
+	var intro string
+	switch trig.Kind {
+	case models.LockdownTriggerJoinSurge:
+		intro = lockdownText(tr, "lockdown_auto_started_join_surge", i18n.TranslationParams{
+			"count":  count,
+			"window": window,
+		})
+	case models.LockdownTriggerFlood:
+		intro = lockdownText(tr, "lockdown_auto_started_flood", i18n.TranslationParams{
+			"count":   count,
+			"window":  window,
+			"percent": strconv.Itoa(trig.Percent),
+		})
+	default:
+		return
+	}
+
+	lines := []string{intro, lockdownText(tr, "lockdown_note_approved_muted")}
+	// A missing delete or invite right never blocks the lock; it only adds a note.
+	if !res.BotMember.CanDeleteMessages {
+		lines = append(lines, lockdownText(tr, "lockdown_note_no_delete"))
+	}
+	if !res.BotMember.CanInviteUsers {
+		lines = append(lines, lockdownText(tr, "lockdown_note_no_invite"))
+	}
+	text := lockdownJoinLines(lines)
+
+	ctx, cancel := context.WithTimeout(context.Background(), raidPostTimeout)
+	defer cancel()
+	err := lockdownPaced(ctx, func(callCtx context.Context) error {
+		call, cancelCall := context.WithTimeout(callCtx, lockdownCallTimeout)
+		defer cancelCall()
+		_, sendErr := b.SendMessageWithContext(call, chat.Id, text, &gotgbot.SendMessageOpts{
+			ParseMode:          formatting.HTML,
+			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+		})
+		return sendErr
+	})
+	if err != nil {
+		log.Warnf("[RaidDetection] the notice of the automatic lockdown in chat %d was not delivered: %v", chat.Id, err)
+	}
 }

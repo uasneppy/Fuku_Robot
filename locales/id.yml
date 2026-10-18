@@ -2924,3 +2924,7 @@ lockdown_auto_usage: "Penggunaan: <code>/autolockdown</code> menampilkan pemicu;
 lockdown_auto_range: "Ambang batas harus berupa bilangan bulat dari {min} sampai {max}."
 lockdown_auto_save_failed: "Saya tidak bisa menyimpannya sekarang, jadi tidak ada yang berubah. Coba lagi sebentar lagi."
 lockdown_auto_read_failed: "Saya tidak bisa membaca pengaturan penguncian otomatis sekarang. Coba lagi sebentar lagi."
+lockdown_auto_started_join_surge: "🔒 Saya mengunci grup ini secara otomatis: {count} orang bergabung dalam {window} detik. Hanya admin yang bisa bicara, dan siapa pun yang bergabung akan dikeluarkan sampai admin menjalankan /unlockdown."
+lockdown_auto_started_flood: "🔒 Saya mengunci grup ini secara otomatis: {count} pesan masuk dalam {window} detik, {percent}% di antaranya dari anggota baru. Hanya admin yang bisa bicara, dan siapa pun yang bergabung akan dikeluarkan sampai admin menjalankan /unlockdown."
+lockdown_trigger_join_surge: "Lonjakan anggota baru: {count} bergabung dalam {window} dtk."
+lockdown_trigger_flood: "Flood: {count} pesan dalam {window} dtk, {percent}% dari anggota baru."
