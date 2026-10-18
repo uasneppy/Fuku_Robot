@@ -534,7 +534,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   older reminders of that destination get `buttons_live` false and `edit_pending` true and lose their buttons through the
   sync step; the original alert copy keeps its buttons until the lift. Planning stops with the lockdown being active
   (`PlanReminderSlots` checks it in its transaction, the poster lists only active lockdowns), and the lift's close step
-  edits every alert and reminder copy to the lifted footer. A reminder shows the reason, the joiners removed so far
+  edits every alert and reminder copy to the lifted footer. A reminder shows the reason (for an automatic lockdown the
+  trigger sentence from `lockdownTriggerSentence` in its place, since it has no reason), the joiners removed so far
   (`lockdownRemovedSoFar`, response bans included), the ones still pending and the alert's link line, with no sample;
   its Ban label is counted when the reminder is posted.
 - At the lift, whether it came from `/unlockdown` or from the alert's button, the worker edits every posted alert copy to its
