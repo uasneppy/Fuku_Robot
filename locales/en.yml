@@ -2448,36 +2448,14 @@ db_blacklist_default_reason: "Blacklisted word: '%s'"
 
 # AntiRaid module strings
 antiraid_help_msg: |
-  Protect your group from spam-join attacks with AntiRaid.
-  *Admin Commands:*
-  /antiraid: Show current state + enable/disable buttons.
-  /antiraid on: Enable raid mode for configured time.
-  /antiraid <duration>: Enable for custom duration (e.g. 3h, 30m).
-  /antiraid off: Disable raid mode immediately.
-  /raidtime <time>: Set raid duration (default: 6h).
-  /raidactiontime <time>: Set temp-ban duration (default: 1h).
-  /autoantiraid <N>: Auto-enable if N+ joins/min.
-  /autoantiraid off: Disable auto-trigger.
-antiraid_active_status: "AntiRaid ACTIVE | Expires: {expires_in} | Raid: {raid_time} | Action: {action_time} | Auto: {auto_threshold}"
-antiraid_inactive_status: "AntiRaid INACTIVE | Raid: {raid_time} | Action: {action_time} | Auto: {auto_threshold}"
-antiraid_enabled: "AntiRaid enabled for {duration}."
-antiraid_disabled: "AntiRaid disabled."
-antiraid_already_active: "AntiRaid is already active."
-antiraid_not_active: "AntiRaid is not active."
-antiraid_invalid_duration: "Invalid duration. Use format like: 30m, 2h, 1d, 1w"
-antiraid_duration_must_be_positive: "Duration must be positive."
-antiraid_raidtime_usage: "Usage: /raidtime <duration> (e.g., 6h)"
-antiraid_raidtime_no_change: "Raid time is already {duration}."
-antiraid_raidtime_set: "Raid time set to {duration}."
-antiraid_raidactiontime_usage: "Usage: /raidactiontime <duration> (e.g., 1h)"
-antiraid_raidactiontime_no_change: "Raid action time is already {duration}."
-antiraid_raidactiontime_set: "Raid action time set to {duration}."
-antiraid_auto_disabled: "Auto-AntiRaid is disabled."
-antiraid_auto_enabled: "Auto-AntiRaid threshold: {threshold} joins/min."
-antiraid_invalid_threshold: "Invalid threshold. Give a positive number or 'off'."
-antiraid_auto_triggered: "Auto-raid triggered! %s users joined/min — new joiners temp-banned."
-antiraid_btn_enable: "Enable AntiRaid"
-antiraid_btn_disable: "Disable AntiRaid"
+  The old raid mode is retired, and nobody is temp-banned any more. I lock a group automatically when a raid starts, and admins can lock it by hand.
+
+  × <code>/autolockdown</code>: See or change the automatic triggers, the join surge and the message flood.
+  × <code>/lockdown</code> and <code>/unlockdown</code>: Lock this group by hand, and lift the lock.
+  × <code>/autoantiraid N|off</code>: Still sets the join-surge threshold (3 to 500 joins in 60 seconds) and turns it on, or turns the join surge off.
+
+  <code>/antiraid</code>, <code>/raidtime</code> and <code>/raidactiontime</code> only point here now and change nothing.
+  A group's old auto threshold became its join-surge threshold.
 
 # Rose feature-parity keys (federations, log channels, extras)
 federations_help_msg: |
@@ -2965,6 +2943,7 @@ lockdown_auto_usage: "Usage: <code>/autolockdown</code> shows the triggers; <cod
 lockdown_auto_range: "The threshold must be a whole number from {min} to {max}."
 lockdown_auto_save_failed: "I couldn't save that right now, so nothing changed. Try again in a moment."
 lockdown_auto_read_failed: "I couldn't read the automatic lockdown settings right now. Try again in a moment."
+lockdown_antiraid_retired: "The old raid mode is retired. Use <code>/lockdown</code> to lock this group now, and <code>/autolockdown</code> to see or change the automatic triggers, for example <code>/autolockdown joins 20</code>."
 lockdown_auto_started_join_surge: "🔒 I locked this group automatically: {count} people joined within {window} seconds. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
 lockdown_auto_started_flood: "🔒 I locked this group automatically: {count} messages arrived within {window} seconds, {percent}% of them from new members. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
 lockdown_trigger_join_surge: "Join surge: {count} joins in {window} s."

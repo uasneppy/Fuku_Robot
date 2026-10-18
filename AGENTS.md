@@ -51,7 +51,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Handlers
 
-- Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard · `-6` fed-ban · `-5` antiraid ·
+- Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard · `-6` fed-ban ·
   `-4` raid flood counter · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
   `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel.
@@ -176,8 +176,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`alita/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `alita/db/cache`, not `alita/utils/cache`.
-- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:staff:*`, `alita:lockdown:*`, `alita:raid:*`)
-  sit outside the `alita:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them.
+- Operational Redis keys (`alita:anonAdmin:*`, `alita:staff:*`, `alita:lockdown:*`, `alita:raid:*`) sit outside the
+  `alita:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `alita:antiraid:*` is retired: nothing reads or
+  writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
 - `alita:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
@@ -208,8 +209,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   time wins, a non-empty link, name or username fills in). One pipelined round trip under 250 ms
   (`lockdownRecentTimeout`) adds, trims to 10 minutes, keeps the newest 500 (`lockdownRecentCap`) and sets a 700 s TTL.
   It is empty without Redis and is never a ban decision. The joins of the 10 minutes before the lock are saved with the
-  lockdown's alert (`chat_lockdown_burst`), and Phase 6 may reuse the tracker. Antiraid's 60-second join list is not
-  used for this.
+  lockdown's alert (`chat_lockdown_burst`), and the burst of a flood lockdown. The raid join counter does not use it.
 - `alita:raid:{<chat>}:joined` is the join counter of automatic raid detection (`raid_counters.go`): a sorted set whose
   member is the user ID and whose score is that account's latest join in unix milliseconds, so the `chat_member` update
   and the service message of one join are one member and a re-join refreshes the account. One Lua script
@@ -374,7 +374,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Subsystem traps
 
 - Approved users skip antiflood, locks, blacklists, and captcha.
-- Antiflood counters are in-process (per replica). Antiraid is Redis-only and does nothing without Redis.
+- Antiflood counters are in-process (per replica). The raid detection counters (`alita:raid:*`) are Redis-only: without
+  Redis the automatic triggers do nothing, and `/lockdown` still works.
 - Fed-ban lookups cache per `(fed, user)` with a negative sentinel; every ban/unban write must invalidate it.
 - A join arrives as both `ChatMemberUpdated` and a service message; dedupe through `claimRecentJoinProcessing`
   (the lockdown guard, which runs first, dedupes by its joiner row instead and never gates a ban on Redis).
@@ -481,9 +482,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownAlreadyActiveText`); every other kind, a manual lockdown included, reads as before.
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
-  Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown (`locked_at` set) is active in
-  the chat (until Phase 6 retires it), so it neither temp-bans a user an admin added nor counts joins toward its auto
-  trigger, and each joiner is handled once, by the lockdown; a lockdown it cannot read does not stop it.
+- The old raid mode is retired (`antiraid.go`, LOCK-15). `/antiraid`, `/raidtime` and `/raidactiontime` are one pointer
+  command (`antiraidRetiredDesc`, `Disableable`, no checks) that replies `lockdown_antiraid_retired` and changes
+  nothing; a press on an old `antiraid|` button is answered once with the same text and changes nothing. `/autoantiraid`
+  (`autoantiraidDesc`) is kept as an alias of the join-surge threshold: with words it runs `autolockdownApply` with
+  `joins` in front, alone it shows the triggers, and it has exactly `/autolockdown`'s checks
+  (`requireAutoLockdownAuthority`, a live `getChatMember`) and anonymous-admin re-entry, so it is stricter than the old
+  command, which any cached admin could use. There is no join handler at group `-5` and no expiry poller: nobody is
+  temp-banned by the raid mode, whatever an old `alita:antiraid:*` key says. The keys are removed by
+  `sweepRetiredAntiRaidKeys` (`SCAN` with `COUNT 100` and `UNLINK`, started once per process from `LoadAntiRaid` in a
+  recover-protected goroutine, bounded to 30 s, a no-op without Redis). During a rolling deploy an old replica can still
+  temp-ban until it stops and can leave new keys, which the next start's sweep clears. The `antiraid_settings` table and
+  `alita/db/antiraid` stay (migrations are append-only, and the legacy backup module reads them); no command reads its
+  timing columns any more.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
   only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched (a staff `/ban` or `/tban` over a lockdown's

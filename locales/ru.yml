@@ -2157,36 +2157,14 @@ approvals_list_reason: " (причина: %s)"
 
 # AntiRaid module strings
 antiraid_help_msg: |
-  Защитите вашу группу от спам-атак с помощью AntiRaid.
-  *Команды администратора:*
-  /antiraid: Показать текущее состояние + кнопки включения/выключения.
-  /antiraid on: Включить режим рейда на настроенное время.
-  /antiraid <duration>: Включить на заданное время (например, 3ч, 30м).
-  /antiraid off: Немедленно отключить режим рейда.
-  /raidtime <time>: Установить длительность рейда (по умолчанию: 6ч).
-  /raidactiontime <time>: Установить длительность временного бана (по умолчанию: 1ч).
-  /autoantiraid <N>: Авто-включение при N+ входов/мин.
-  /autoantiraid off: Отключить авто-триггер.
-antiraid_active_status: "AntiRaid АКТИВЕН | Истекает: {expires_in} | Рейд: {raid_time} | Действие: {action_time} | Авто: {auto_threshold}"
-antiraid_inactive_status: "AntiRaid НЕАКТИВЕН | Рейд: {raid_time} | Действие: {action_time} | Авто: {auto_threshold}"
-antiraid_enabled: "AntiRaid включён на {duration}."
-antiraid_disabled: "AntiRaid отключён."
-antiraid_already_active: "AntiRaid уже активен."
-antiraid_not_active: "AntiRaid не активен."
-antiraid_invalid_duration: "Неверная длительность. Используйте формат: 30м, 2ч, 1д, 1н"
-antiraid_duration_must_be_positive: "Длительность должна быть положительной."
-antiraid_raidtime_usage: "Использование: /raidtime <длительность> (например, 6ч)"
-antiraid_raidtime_no_change: "Время рейда уже {duration}."
-antiraid_raidtime_set: "Время рейда установлено на {duration}."
-antiraid_raidactiontime_usage: "Использование: /raidactiontime <длительность> (например, 1ч)"
-antiraid_raidactiontime_no_change: "Время действия рейда уже {duration}."
-antiraid_raidactiontime_set: "Время действия рейда установлено на {duration}."
-antiraid_auto_disabled: "Auto-AntiRaid отключён."
-antiraid_auto_enabled: "Порог Auto-AntiRaid: {threshold} входов/мин."
-antiraid_invalid_threshold: "Неверный порог. Укажите положительное число или 'off'."
-antiraid_auto_triggered: "Авто-рейд активирован! %s пользователей вошло/мин — новые участники временно забанены."
-antiraid_btn_enable: "Включить AntiRaid"
-antiraid_btn_disable: "Отключить AntiRaid"
+  Старый режим рейда отключён, и больше никого не банят временно. Я автоматически блокирую группу, когда начинается рейд, а админы могут заблокировать её вручную.
+
+  × <code>/autolockdown</code>: Посмотреть или изменить автоматические триггеры: наплыв новых участников и поток сообщений.
+  × <code>/lockdown</code> и <code>/unlockdown</code>: Заблокировать эту группу вручную и снять блокировку.
+  × <code>/autoantiraid N|off</code>: По-прежнему задаёт порог наплыва участников (от 3 до 500 входов за 60 секунд) и включает его, либо выключает наплыв.
+
+  <code>/antiraid</code>, <code>/raidtime</code> и <code>/raidactiontime</code> теперь только отсылают сюда и ничего не меняют.
+  Прежний автоматический порог группы стал её порогом наплыва участников.
 
 # Rose feature-parity keys (federations, log channels, extras)
 federations_help_msg: |
@@ -2674,6 +2652,7 @@ lockdown_auto_usage: "Использование: <code>/autolockdown</code> п�
 lockdown_auto_range: "Порог должен быть целым числом от {min} до {max}."
 lockdown_auto_save_failed: "Сейчас не удалось сохранить, поэтому ничего не изменилось. Повторите чуть позже."
 lockdown_auto_read_failed: "Сейчас не удалось прочитать настройки автоматической блокировки. Повторите чуть позже."
+lockdown_antiraid_retired: "Старый режим рейда отключён. Используйте <code>/lockdown</code>, чтобы заблокировать группу сейчас, и <code>/autolockdown</code>, чтобы посмотреть или изменить автоматические триггеры, например <code>/autolockdown joins 20</code>."
 lockdown_auto_started_join_surge: "🔒 Я автоматически заблокировал эту группу: {count} человек вошли за {window} секунд. Говорить могут только админы, а каждый вошедший удаляется, пока админ не выполнит /unlockdown."
 lockdown_auto_started_flood: "🔒 Я автоматически заблокировал эту группу: за {window} секунд пришло {count} сообщений, {percent}% из них от новых участников. Говорить могут только админы, а каждый вошедший удаляется, пока админ не выполнит /unlockdown."
 lockdown_trigger_join_surge: "Наплыв участников: {count} входов за {window} с."

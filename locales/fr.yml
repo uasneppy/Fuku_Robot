@@ -2336,36 +2336,14 @@ approvals_list_reason: " (raison : %s)"
 
 # AntiRaid module strings
 antiraid_help_msg: |
-  Protégez votre groupe des attaques de spam-join avec AntiRaid.
-  *Commandes Admin :*
-  /antiraid: Affiche l'état actuel + boutons activer/désactiver.
-  /antiraid on: Active le mode raid pour la durée configurée.
-  /antiraid <durée>: Active pour une durée personnalisée (ex. 3h, 30m).
-  /antiraid off: Désactive immédiatement le mode raid.
-  /raidtime <temps>: Définit la durée du raid (défaut : 6h).
-  /raidactiontime <temps>: Définit la durée du ban temporaire (défaut : 1h).
-  /autoantiraid <N>: Activation auto si N+ joins/min.
-  /autoantiraid off: Désactive le déclenchement automatique.
-antiraid_active_status: "AntiRaid ACTIF | Expire : {expires_in} | Raid : {raid_time} | Action : {action_time} | Auto : {auto_threshold}"
-antiraid_inactive_status: "AntiRaid INACTIF | Raid : {raid_time} | Action : {action_time} | Auto : {auto_threshold}"
-antiraid_enabled: "AntiRaid activé pour {duration}."
-antiraid_disabled: "AntiRaid désactivé."
-antiraid_already_active: "AntiRaid est déjà actif."
-antiraid_not_active: "AntiRaid n'est pas actif."
-antiraid_invalid_duration: "Durée invalide. Utilisez un format comme : 30m, 2h, 1d, 1w"
-antiraid_duration_must_be_positive: "La durée doit être positive."
-antiraid_raidtime_usage: "Usage : /raidtime <durée> (ex., 6h)"
-antiraid_raidtime_no_change: "La durée du raid est déjà {duration}."
-antiraid_raidtime_set: "Durée du raid définie à {duration}."
-antiraid_raidactiontime_usage: "Usage : /raidactiontime <durée> (ex., 1h)"
-antiraid_raidactiontime_no_change: "La durée d'action du raid est déjà {duration}."
-antiraid_raidactiontime_set: "Durée d'action du raid définie à {duration}."
-antiraid_auto_disabled: "L'AntiRaid automatique est désactivé."
-antiraid_auto_enabled: "Seuil d'Auto-AntiRaid : {threshold} joins/min."
-antiraid_invalid_threshold: "Seuil invalide. Donnez un nombre positif ou 'off'."
-antiraid_auto_triggered: "Raid auto déclenché ! %s utilisateurs ont rejoint/min — nouveaux joiners bannis temporairement."
-antiraid_btn_enable: "Activer AntiRaid"
-antiraid_btn_disable: "Désactiver AntiRaid"
+  L'ancien mode raid est retiré et plus personne n'est banni temporairement. Je verrouille un groupe automatiquement quand un raid commence, et les admins peuvent le verrouiller à la main.
+
+  × <code>/autolockdown</code> : Voir ou changer les déclencheurs automatiques, l'afflux de membres et le flood de messages.
+  × <code>/lockdown</code> et <code>/unlockdown</code> : Verrouiller ce groupe à la main, et lever le verrou.
+  × <code>/autoantiraid N|off</code> : Règle toujours le seuil d'afflux de membres (3 à 500 arrivées en 60 secondes) et l'active, ou désactive l'afflux.
+
+  <code>/antiraid</code>, <code>/raidtime</code> et <code>/raidactiontime</code> ne servent plus qu'à renvoyer ici et ne changent rien.
+  L'ancien seuil automatique d'un groupe est devenu son seuil d'afflux de membres.
 
 # Rose feature-parity keys (federations, log channels, extras)
 federations_help_msg: |
@@ -2853,6 +2831,7 @@ lockdown_auto_usage: "Usage : <code>/autolockdown</code> affiche les déclencheu
 lockdown_auto_range: "Le seuil doit être un nombre entier de {min} à {max}."
 lockdown_auto_save_failed: "Je n'ai pas pu enregistrer cela pour le moment, donc rien n'a changé. Réessayez dans un instant."
 lockdown_auto_read_failed: "Je n'ai pas pu lire les réglages du verrouillage automatique pour le moment. Réessayez dans un instant."
+lockdown_antiraid_retired: "L'ancien mode raid est retiré. Utilisez <code>/lockdown</code> pour verrouiller ce groupe, et <code>/autolockdown</code> pour voir ou changer les déclencheurs automatiques, par ex. <code>/autolockdown joins 20</code>."
 lockdown_auto_started_join_surge: "🔒 J'ai verrouillé ce groupe automatiquement : {count} personnes l'ont rejoint en {window} secondes. Seuls les admins peuvent parler, et toute personne qui rejoint est retirée jusqu'à ce qu'un admin utilise /unlockdown."
 lockdown_auto_started_flood: "🔒 J'ai verrouillé ce groupe automatiquement : {count} messages sont arrivés en {window} secondes, dont {percent} % de nouveaux membres. Seuls les admins peuvent parler, et toute personne qui rejoint est retirée jusqu'à ce qu'un admin utilise /unlockdown."
 lockdown_trigger_join_surge: "Afflux de membres : {count} arrivées en {window} s."
