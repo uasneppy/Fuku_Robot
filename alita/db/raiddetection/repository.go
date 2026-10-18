@@ -65,3 +65,19 @@ func GetSettings(ctx context.Context, chatID int64) (*models.ChatRaidDetection, 
 			return &row, nil
 		})
 }
+
+// ErrThresholdOutOfRange is returned by the threshold setters for a value outside
+// MinThreshold..MaxThreshold. Nothing is written.
+var ErrThresholdOutOfRange = errors.New("raid detection threshold out of range")
+
+// SetJoinEnabled is scaffolding for the RED commit: it writes nothing yet.
+func SetJoinEnabled(chatID int64, enabled bool) error { return nil }
+
+// SetJoinThreshold is scaffolding for the RED commit: it writes nothing yet.
+func SetJoinThreshold(chatID int64, threshold int) error { return nil }
+
+// SetFloodEnabled is scaffolding for the RED commit: it writes nothing yet.
+func SetFloodEnabled(chatID int64, enabled bool) error { return nil }
+
+// SetFloodThreshold is scaffolding for the RED commit: it writes nothing yet.
+func SetFloodThreshold(chatID int64, threshold int) error { return nil }
