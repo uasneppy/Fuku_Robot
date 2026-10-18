@@ -41,7 +41,7 @@ versions, and legacy unversioned dot-notation payloads are rejected.
 | Bans | `unrestrict` | unrestrictButtonHandler |
 | Blacklists | `rmAllBlacklist` | buttonHandler |
 | Bot Updates | `anon_admin` | verifyAnonymousAdmin |
-| AntiRaid | `antiraid` | callbackHandler |
+| AntiRaid | `antiraid` | antiraidRetiredCallback |
 | Approvals | `rmAllApprovals` | unapproveAllCallback |
 | Captcha | `captcha_refresh` | captchaRefreshCallback |
 | Captcha | `captcha_verify` | captchaVerifyCallback |
@@ -106,10 +106,10 @@ Handles anonymous admin verification callbacks for channel messages.
 
 #### `antiraid`
 
-- **Handler**: `callbackHandler`
+- **Handler**: `antiraidRetiredCallback`
 - **Source**: `antiraid.go`
 
-Handles anti-raid mode toggle callbacks (enable/disable raid protection).
+Retired. The old raid mode is gone, so a press on one of its buttons is answered once with a pointer to `/lockdown` and `/autolockdown` and changes nothing. The raid mode's buttons are not offered any more; this handler only answers old messages still showing them.
 
 ### Approvals
 
