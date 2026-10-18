@@ -11,11 +11,9 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/divkix/Alita_Robot/alita/db"
-	"github.com/divkix/Alita_Robot/alita/db/antiraid"
 	"github.com/divkix/Alita_Robot/alita/db/greetings"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
-	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
 // sendIn runs a message in any chat of the env as from through the real dispatcher.
@@ -235,66 +233,4 @@ func TestLockdownAffectsOnlyItsChat(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAntiRaidStepsAsideDuringLockdown(t *testing.T) {
-	t.Run("raid mode does not ban an admin-added user", func(t *testing.T) {
-		env := newLockdownEnv(t)
-		LoadAntiRaid(env.dispatcher)
-		if enabled, err := antiRaidModule.enableRaid(env.chat.Id, 3600); err != nil || !enabled {
-			t.Fatalf("enableRaid() = (%v, %v), want true, nil", enabled, err)
-		}
-		t.Cleanup(func() { _, _ = antiRaidModule.disableRaid(env.chat.Id) })
-		env.lockAsAdmin("raid")
-
-		human := env.newJoiner("Human")
-		env.serviceJoin(env.admin, nil, human)
-
-		if row := env.joinerRow(human.Id); row.State != models.JoinerStateExempt {
-			t.Errorf("row = %+v, want exempt: a live administrator added the user", row)
-		}
-		env.cycle()
-		if bans := env.bansOf(human.Id); len(bans) != 0 {
-			t.Errorf("banChatMember calls for the admin-added user = %d, want none: antiraid steps aside during a lockdown", len(bans))
-		}
-
-		// After the lift antiraid works as before.
-		env.send(env.admin, "/unlockdown")
-		env.cycle()
-		member := env.newJoiner("Member")
-		env.serviceJoin(member, nil, member)
-		if bans := env.bansOf(member.Id); len(bans) != 1 {
-			t.Errorf("banChatMember calls for a self-join after the lift = %d, want 1: raid mode bans as before", len(bans))
-		}
-	})
-
-	t.Run("joins are not counted toward the auto trigger", func(t *testing.T) {
-		env := newLockdownEnv(t)
-		LoadAntiRaid(env.dispatcher)
-		if err := antiraid.SetAutoAntiRaidThreshold(env.chat.Id, 50); err != nil {
-			t.Fatalf("set the auto threshold: %v", err)
-		}
-		joins := func() int64 {
-			count, err := cache.GetRedisClient().ZCard(cache.Context, joinsKey(env.chat.Id)).Result()
-			if err != nil {
-				t.Fatalf("read the antiraid joins set: %v", err)
-			}
-			return count
-		}
-		env.lockAsAdmin("raid")
-
-		human := env.newJoiner("Human")
-		env.serviceJoin(env.admin, nil, human)
-		if got := joins(); got != 0 {
-			t.Errorf("antiraid joins counted during the lockdown = %d, want 0", got)
-		}
-
-		env.send(env.admin, "/unlockdown")
-		env.cycle()
-		member := env.newJoiner("Member")
-		env.serviceJoin(member, nil, member)
-		if got := joins(); got != 1 {
-			t.Errorf("antiraid joins counted after the lift = %d, want 1: counting works as before", got)
-		}
-	})
 }

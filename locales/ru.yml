@@ -2674,6 +2674,7 @@ lockdown_auto_usage: "Использование: <code>/autolockdown</code> п�
 lockdown_auto_range: "Порог должен быть целым числом от {min} до {max}."
 lockdown_auto_save_failed: "Сейчас не удалось сохранить, поэтому ничего не изменилось. Повторите чуть позже."
 lockdown_auto_read_failed: "Сейчас не удалось прочитать настройки автоматической блокировки. Повторите чуть позже."
+lockdown_antiraid_retired: "Старый режим рейда отключён. Используйте <code>/lockdown</code>, чтобы заблокировать группу сейчас, и <code>/autolockdown</code>, чтобы посмотреть или изменить автоматические триггеры, например <code>/autolockdown joins 20</code>."
 lockdown_auto_started_join_surge: "🔒 Я автоматически заблокировал эту группу: {count} человек вошли за {window} секунд. Говорить могут только админы, а каждый вошедший удаляется, пока админ не выполнит /unlockdown."
 lockdown_auto_started_flood: "🔒 Я автоматически заблокировал эту группу: за {window} секунд пришло {count} сообщений, {percent}% из них от новых участников. Говорить могут только админы, а каждый вошедший удаляется, пока админ не выполнит /unlockdown."
 lockdown_trigger_join_surge: "Наплыв участников: {count} входов за {window} с."

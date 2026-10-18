@@ -2965,6 +2965,7 @@ lockdown_auto_usage: "Usage: <code>/autolockdown</code> shows the triggers; <cod
 lockdown_auto_range: "The threshold must be a whole number from {min} to {max}."
 lockdown_auto_save_failed: "I couldn't save that right now, so nothing changed. Try again in a moment."
 lockdown_auto_read_failed: "I couldn't read the automatic lockdown settings right now. Try again in a moment."
+lockdown_antiraid_retired: "The old raid mode is retired. Use <code>/lockdown</code> to lock this group now, and <code>/autolockdown</code> to see or change the automatic triggers, for example <code>/autolockdown joins 20</code>."
 lockdown_auto_started_join_surge: "🔒 I locked this group automatically: {count} people joined within {window} seconds. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
 lockdown_auto_started_flood: "🔒 I locked this group automatically: {count} messages arrived within {window} seconds, {percent}% of them from new members. Only admins can talk, and anyone who joins is removed until an admin runs /unlockdown."
 lockdown_trigger_join_surge: "Join surge: {count} joins in {window} s."

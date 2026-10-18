@@ -2937,6 +2937,7 @@ lockdown_auto_usage: "Uso: <code>/autolockdown</code> muestra los activadores; <
 lockdown_auto_range: "El umbral debe ser un número entero de {min} a {max}."
 lockdown_auto_save_failed: "No pude guardar eso ahora mismo, así que no cambió nada. Inténtalo de nuevo en un momento."
 lockdown_auto_read_failed: "No pude leer los ajustes del bloqueo automático ahora mismo. Inténtalo de nuevo en un momento."
+lockdown_antiraid_retired: "El antiguo modo raid se ha retirado. Usa <code>/lockdown</code> para bloquear este grupo ahora y <code>/autolockdown</code> para ver o cambiar los activadores automáticos, por ejemplo <code>/autolockdown joins 20</code>."
 lockdown_auto_started_join_surge: "🔒 He bloqueado este grupo automáticamente: {count} personas se unieron en {window} segundos. Solo los admins pueden hablar y quien se una será expulsado hasta que un admin use /unlockdown."
 lockdown_auto_started_flood: "🔒 He bloqueado este grupo automáticamente: llegaron {count} mensajes en {window} segundos, {percent}% de ellos de miembros nuevos. Solo los admins pueden hablar y quien se una será expulsado hasta que un admin use /unlockdown."
 lockdown_trigger_join_surge: "Oleada de ingresos: {count} ingresos en {window} s."

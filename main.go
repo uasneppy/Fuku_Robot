@@ -194,11 +194,6 @@ func main() {
 	})
 
 	shutdownManager.RegisterHandler(func() error {
-		log.Info("[Shutdown] Stopping anti-raid expiry poller...")
-		modules.StopAntiRaidExpiryPoller()
-		return nil
-	})
-	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Stopping captcha lifecycle...")
 		modules.StopCaptchaLifecycle()
 		return nil
