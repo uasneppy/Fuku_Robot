@@ -277,7 +277,7 @@ Plans:
   4. When several triggers fire at once, the group gets exactly one lockdown and one alert. This holds even when different bot replicas handle the joins and messages.
   5. `/antiraid` and its old timing commands now point admins to `/lockdown`. A group's old auto-threshold becomes its join-surge threshold, and the old raid mode no longer temp-bans anyone.
 
-**Plans:** 7/13 plans executed
+**Plans:** 8/13 plans executed
 
 Plans:
 **Wave 1**
@@ -298,7 +298,7 @@ Plans:
 - [x] 06-07-PLAN.md: The group is told it was locked automatically; a raid the bot cannot lock is reported once a day to the Staff Group and the log channel
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 06-08-PLAN.md: /lockdownstatus, /lockdown and reminders name the automatic trigger
+- [x] 06-08-PLAN.md: /lockdownstatus, /lockdown and reminders name the automatic trigger
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 06-09-PLAN.md: A flood alert lists the flooding accounts and "Ban N recent joiners" can ban them (D-17)
@@ -371,7 +371,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
-| 6. Automatic Raid Detection | 7/13 | In Progress|  |
+| 6. Automatic Raid Detection | 8/13 | In Progress|  |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |
