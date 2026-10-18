@@ -2818,6 +2818,7 @@ lockdown_help_msg: |
   × <code>/lockdown [reason]</code>: Lock this group at once, with no confirm step. Only admins can talk, approved users included, and new members are removed until the lift.
   × <code>/unlockdown</code>: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned, except the accounts banned for good with Ban recent joiners.
   × <code>/lockdownstatus</code>: Show whether this group is locked, since when, by whom and why (any admin).
+  × <code>/autolockdown [joins|flood] [N|on|off]</code>: Show or change the automatic triggers. Any admin can look; only the group owner or an admin who can restrict members can change them. A number from 3 to 500 sets the threshold and turns the trigger on.
 
   Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
   A lockdown never ends on its own. It stays until an admin lifts it.
@@ -2826,6 +2827,8 @@ lockdown_help_msg: |
   Join requests are declined while the group is locked; people can ask again after the lift.
 
   When this group is locked, I post an alert to its Staff Group (if it is linked) and to its log channel (if the admin log category is on): the trigger, how many joined just before and since, up to 10 of those accounts, and the invite link most of them used.
+
+  I also lock this group on my own when a raid starts: when 15 people join within 60 seconds (join surge), or when 30 messages, photos, GIFs or stickers arrive within 30 seconds, at least 60% of them from at least 3 members who joined in the last 24 hours (flood). Both are on by default. Admins and approved users never count, so approving trusted newcomers keeps them out of it. I post a short notice when I lock the group, and the alert says which trigger fired. For 10 minutes after a lift I don't lock again on my own. If I see a raid but can't lock (I must be an admin who can restrict members, in a supergroup), I warn the Staff Group and the log channel, at most once a day. These settings are not saved in backups.
 
   🔓 Lift lockdown: lifts the lockdown like <code>/unlockdown</code>. Only the group owner or an admin who can restrict members, checked live; being in the Staff Group is not enough.
 

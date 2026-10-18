@@ -2706,6 +2706,7 @@ lockdown_help_msg: |
   × <code>/lockdown [raison]</code> : Verrouille ce groupe immédiatement, sans étape de confirmation. Seuls les admins peuvent parler, utilisateurs approuvés compris, et les nouveaux membres sont retirés jusqu'à la levée.
   × <code>/unlockdown</code> : Lève le verrouillage. Chaque permission revient exactement comme avant le verrouillage, et les personnes que j'ai retirées sont débannies, sauf les comptes bannis définitivement avec Bannir les nouveaux arrivants.
   × <code>/lockdownstatus</code> : Indique si ce groupe est verrouillé, depuis quand, par qui et pourquoi (n'importe quel admin).
+  × <code>/autolockdown [joins|flood] [N|on|off]</code> : Affiche ou modifie les déclencheurs automatiques. N'importe quel admin peut les consulter ; seul le propriétaire du groupe ou un admin qui peut restreindre des membres peut les modifier. Un nombre de 3 à 500 fixe le seuil et active le déclencheur.
 
   Seul le propriétaire du groupe, ou un admin qui peut restreindre des membres, peut utiliser ces commandes, et je le vérifie en direct. Je dois être admin avec le droit de restreindre des membres, et le groupe doit être un supergroupe.
   Un verrouillage ne se termine jamais tout seul. Il dure jusqu'à ce qu'un admin le lève.
@@ -2714,6 +2715,8 @@ lockdown_help_msg: |
   Les demandes d'adhésion sont refusées tant que le groupe est verrouillé ; les personnes peuvent redemander après la levée.
 
   Quand ce groupe est verrouillé, je publie une alerte dans son groupe Staff (s'il est lié) et dans son canal de journal (si la catégorie de journal admin est activée) : ce qui l'a déclenché, combien de personnes sont arrivées juste avant et depuis, jusqu'à 10 de ces comptes, et le lien d'invitation utilisé par la plupart d'entre elles.
+
+  Je verrouille aussi ce groupe de moi-même quand un raid commence : quand 15 personnes rejoignent en 60 secondes (vague d'arrivées), ou quand 30 messages, photos, GIF ou stickers arrivent en 30 secondes, dont au moins 60 % viennent d'au moins 3 membres arrivés dans les dernières 24 heures (déluge de messages). Les deux sont activés par défaut. Les admins et les utilisateurs approuvés ne comptent jamais, donc approuver les nouveaux de confiance les met à l'écart. Je publie un court avis quand je verrouille le groupe, et l'alerte indique quel déclencheur s'est activé. Pendant 10 minutes après une levée, je ne reverrouille pas de moi-même. Si je vois un raid mais ne peux pas verrouiller (je dois être admin avec le droit de restreindre des membres, dans un supergroupe), je préviens le groupe Staff et le canal de journal, au plus une fois par jour. Ces réglages ne sont pas inclus dans les sauvegardes.
 
   🔓 Lever le verrouillage : lève le verrouillage comme <code>/unlockdown</code>. Réservé au propriétaire du groupe ou à un admin qui peut restreindre des membres, vérifié en direct ; être dans le groupe Staff ne suffit pas.
 

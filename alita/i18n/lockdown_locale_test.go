@@ -155,8 +155,8 @@ func TestLockdownStringsHaveBalancedTags(t *testing.T) {
 				failures = append(failures, fmt.Sprintf("%s: help bullet %q does not start with a <code> command", lang, trimmed))
 			}
 		}
-		if bullets != 3 {
-			failures = append(failures, fmt.Sprintf("%s: lockdown_help_msg has %d command bullets, want 3", lang, bullets))
+		if bullets != 4 {
+			failures = append(failures, fmt.Sprintf("%s: lockdown_help_msg has %d command bullets, want 4", lang, bullets))
 		}
 	}
 	sort.Strings(failures)

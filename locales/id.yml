@@ -2780,6 +2780,7 @@ lockdown_help_msg: |
   × <code>/lockdown [alasan]</code>: Kunci grup ini seketika, tanpa langkah konfirmasi. Hanya admin yang bisa bicara, pengguna yang disetujui pun dibisukan, dan anggota baru dikeluarkan sampai lockdown dicabut.
   × <code>/unlockdown</code>: Cabut lockdown. Setiap izin kembali persis seperti sebelum lockdown, dan orang yang saya keluarkan di-unban, kecuali akun yang diblokir selamanya lewat Blokir anggota baru.
   × <code>/lockdownstatus</code>: Tampilkan apakah grup ini terkunci, sejak kapan, oleh siapa dan mengapa (admin mana pun).
+  × <code>/autolockdown [joins|flood] [N|on|off]</code>: Tampilkan atau ubah pemicu otomatis. Admin mana pun bisa melihatnya; hanya pemilik grup atau admin yang bisa membatasi anggota yang dapat mengubahnya. Angka dari 3 sampai 500 menetapkan ambang batas dan mengaktifkan pemicunya.
 
   Hanya pemilik grup, atau admin yang bisa membatasi anggota, yang dapat memakai perintah ini, dan saya memeriksanya secara langsung. Saya harus menjadi admin yang bisa membatasi anggota, dan grup harus berupa supergrup.
   Lockdown tidak pernah berakhir dengan sendirinya. Ia bertahan sampai seorang admin mencabutnya.
@@ -2788,6 +2789,8 @@ lockdown_help_msg: |
   Permintaan bergabung ditolak selama grup terkunci; orang dapat meminta lagi setelah lockdown dicabut.
 
   Saat grup ini terkunci, saya mengirim peringatan ke Grup Staf-nya (jika terhubung) dan ke kanal lognya (jika kategori log admin aktif): pemicunya, berapa orang yang bergabung sesaat sebelum dan sejak itu, hingga 10 akun di antaranya, serta tautan undangan yang dipakai sebagian besar dari mereka.
+
+  Saya juga mengunci grup ini sendiri saat raid dimulai: ketika 15 orang bergabung dalam 60 detik (lonjakan bergabung), atau ketika 30 pesan, foto, GIF, atau stiker masuk dalam 30 detik, sedikitnya 60% di antaranya dari sedikitnya 3 anggota yang bergabung dalam 24 jam terakhir (banjir pesan). Keduanya aktif secara bawaan. Admin dan pengguna yang disetujui tidak pernah dihitung, jadi menyetujui anggota baru yang tepercaya membuat mereka tidak ikut terhitung. Saya mengirim pemberitahuan singkat saat mengunci grup, dan peringatan menyebutkan pemicu mana yang aktif. Selama 10 menit setelah lockdown dicabut, saya tidak mengunci lagi sendiri. Jika saya melihat raid tetapi tidak bisa mengunci (saya harus menjadi admin yang bisa membatasi anggota, di supergrup), saya memperingatkan Grup Staf dan kanal log, paling banyak sekali sehari. Pengaturan ini tidak disimpan dalam cadangan.
 
   🔓 Cabut lockdown: mencabut lockdown seperti <code>/unlockdown</code>. Hanya pemilik grup atau admin yang bisa membatasi anggota, diperiksa secara langsung; berada di Grup Staf saja tidak cukup.
 

@@ -2790,6 +2790,7 @@ lockdown_help_msg: |
   × <code>/lockdown [motivo]</code>: Bloquea este grupo al instante, sin paso de confirmación. Solo los admins pueden hablar, también los usuarios aprobados, y los miembros nuevos son expulsados hasta que se levante.
   × <code>/unlockdown</code>: Levanta el bloqueo. Cada permiso vuelve exactamente a como estaba antes del bloqueo y las personas que expulsé son desbaneadas, salvo las cuentas baneadas para siempre con Banear a los recién llegados.
   × <code>/lockdownstatus</code>: Muestra si este grupo está bloqueado, desde cuándo, por quién y por qué (cualquier admin).
+  × <code>/autolockdown [joins|flood] [N|on|off]</code>: Muestra o cambia los disparadores automáticos. Cualquier admin puede verlos; solo el creador del grupo o un admin que pueda restringir miembros puede cambiarlos. Un número de 3 a 500 fija el umbral y activa el disparador.
 
   Solo el creador del grupo, o un admin que pueda restringir miembros, puede usar estos comandos, y lo compruebo en el momento. Debo ser admin con permiso para restringir miembros y el grupo debe ser un supergrupo.
   Un bloqueo nunca termina solo. Dura hasta que un admin lo levante.
@@ -2798,6 +2799,8 @@ lockdown_help_msg: |
   Las solicitudes de unión se rechazan mientras el grupo está bloqueado; las personas pueden volver a pedirlo tras el levantamiento.
 
   Cuando este grupo está bloqueado, publico una alerta en su Grupo de Staff (si está vinculado) y en su canal de registro (si la categoría de registro de admin está activada): lo que lo activó, cuántas personas entraron justo antes y desde entonces, hasta 10 de esas cuentas y el enlace de invitación que usaron la mayoría.
+
+  También bloqueo este grupo por mi cuenta cuando empieza una raid: cuando 15 personas entran en 60 segundos (oleada de entradas), o cuando llegan 30 mensajes, fotos, GIF o stickers en 30 segundos, al menos el 60 % de ellos de al menos 3 miembros que entraron en las últimas 24 horas (avalancha de mensajes). Ambos están activados por defecto. Los admins y los usuarios aprobados nunca cuentan, así que aprobar a los recién llegados de confianza los deja fuera. Publico un aviso breve cuando bloqueo el grupo, y la alerta indica qué disparador se activó. Durante 10 minutos tras un levantamiento no vuelvo a bloquear por mi cuenta. Si veo una raid pero no puedo bloquear (debo ser admin con permiso para restringir miembros, en un supergrupo), aviso al Grupo de Staff y al canal de registro, como máximo una vez al día. Estos ajustes no se guardan en las copias de seguridad.
 
   🔓 Levantar bloqueo: levanta el bloqueo como <code>/unlockdown</code>. Solo el creador del grupo o un admin que pueda restringir miembros, comprobado en el momento; estar en el Grupo de Staff no basta.
 
