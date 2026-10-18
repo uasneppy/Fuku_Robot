@@ -81,6 +81,8 @@ Out of scope:
   - Counting runs in supergroups only. `/autolockdown` in a basic group answers with the existing basic-group text.
   - `/autolockdown joins N` or `flood N` sets the threshold and also turns that trigger on.
 
+- **D-22 (refines D-03/D-18, planner's call, reported to the owner 2026-10-18):** The carry-over clamps the old threshold into the stored range in both directions: `LEAST(GREATEST(auto_antiraid_threshold, 3), 500)`. A threshold above 500 becomes 500, because the table's CHECK (3 to 500) would otherwise reject the row and abort startup. The capped group is more sensitive than before, which is accepted as safer than failing to start.
+
 ### Claude's Discretion
 - Handler group placement of the flood counter. It must see messages before antiflood (group 4) ends them, and return `ext.ContinueGroups`.
 - The exact Redis key layout and atomic counting (a Lua script or a pipelined ZADD/ZCOUNT) of both counters.
