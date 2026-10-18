@@ -122,6 +122,10 @@ func (m moduleStruct) lockdownOnJoinMember(b *gotgbot.Bot, ctx *ext.Context) err
 	// Best effort and first: the tracker never decides or delays what the guard does.
 	trackLockdownRecentJoins(chat.Id, lockdownMemberJoins(b, update))
 
+	// Best effort and before the lockdown is read, so the join that tips the threshold is
+	// handled by the lockdown it starts. It shares the one performer lookup it made.
+	raidStatus, raidLooked := raidCountMemberJoin(b, chat, update)
+
 	active, err := lockdownActiveLookup(chat.Id)
 	if err != nil {
 		// Fail open: the joiner is still muted by the locked default permissions.
@@ -141,7 +145,11 @@ func (m moduleStruct) lockdownOnJoinMember(b *gotgbot.Bot, ctx *ext.Context) err
 		BotID:                   b.Id,
 		PerformerAnonymousAdmin: update.From.Id == lockdownGroupAnonymousBot,
 	}
-	if lockdownNeedsPerformerLookup(input) {
+	if raidLooked {
+		// The raid counter already asked Telegram about this performer; a failed lookup
+		// left the status empty, which is never exempt.
+		input.PerformerStatus = raidStatus
+	} else if lockdownNeedsPerformerLookup(input) {
 		// A failed lookup leaves the status empty, which is never exempt.
 		if live, lookupErr := lockdownLiveMember(b, chat.Id, update.From.Id); lookupErr != nil {
 			log.Warnf("[Lockdown] join guard could not check performer %d in chat %d: %v", update.From.Id, chat.Id, lookupErr)
