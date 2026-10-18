@@ -34,7 +34,7 @@ import (
 // text is never logged or stored, only item keys and user IDs.
 
 // raidFloodGroup is the handler group of the flood watcher: after the lockdown join guard
-// (-7), fed-ban (-6) and antiraid (-5), before the staff watchers (-3), aispam (3),
+// (-7) and fed-ban (-6), before the staff watchers (-3), aispam (3),
 // antiflood (4), locks (5, 6) and blacklists (7), so a message those later end was
 // already counted.
 const raidFloodGroup = -4

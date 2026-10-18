@@ -114,7 +114,7 @@ func StopStaffSweeper() {
 		return
 	}
 	cancel()
-	// Wait without holding the mutex (cf. StopAntiRaidExpiryPoller): a sweep that
+	// Wait without holding the mutex (cf. StopLockdownWorker): a sweep that
 	// is mid-call must not wedge shutdown behind a lock.
 	staffSweepWG.Wait()
 	staffSweepMu.Lock()

@@ -45,9 +45,9 @@ This page provides a complete reference of all commands available in Alita Robot
 
 | Command | Description | Permission | Disableable | Aliases |
 |---------|-------------|------------|-------------|---------|
-| `/antiraid` | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Admin | ✅ | — |
-| `/raidtime` | Retired: replies with the same pointer | Admin | ✅ | — |
-| `/raidactiontime` | Retired: replies with the same pointer | Admin | ✅ | — |
+| `/antiraid` | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Everyone | ✅ | — |
+| `/raidtime` | Retired: replies with the same pointer | Everyone | ✅ | — |
+| `/raidactiontime` | Retired: replies with the same pointer | Everyone | ✅ | — |
 | `/autoantiraid` | Alias: set the join surge threshold (3 to 500) or turn it off; owner or admin who can restrict members, checked live | Admin | ❌ | — |
 | `/autolockdown` | Show or change the automatic raid triggers (`joins`, `flood`); changing needs the owner or an admin who can restrict members, checked live | Admin | ❌ | — |
 
@@ -343,13 +343,13 @@ No commands — passive background tracker. See [module page](/commands/users/) 
 | `/addsudo` | Devs | Grant sudo permissions to a user | Owner |
 | `/allowconnect` | Connections | Toggle connection permissions | Admin |
 | `/anonadmin` | Admin | Toggle anonymous admin mode | Admin |
-| `/antiraid` | AntiRaid | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Admin |
+| `/antiraid` | AntiRaid | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Everyone |
 | `/antichannelpin` | Pins | Toggle anti-channel pin mode | Admin |
 | `/approval` | Approvals | Check a user's approval status | Admin |
 | `/approve` | Approvals | Approve a user in the group | Admin |
 | `/approved` | Approvals | List all approved users | Admin |
 | `/autoantiraid` | AntiRaid | Alias: set the join surge threshold or turn it off (owner or admin who can restrict members, checked live) | Admin |
-| `/autolockdown` | AntiRaid | Show or change the automatic raid triggers | Admin |
+| `/autolockdown` | Lockdown | Show or change the automatic raid triggers | Admin |
 | `/autoapprove` | Greetings | Toggle auto-approve join requests | Admin |
 | `/ban` | Bans | Ban a user | Admin |
 | `/blacklist` | Blacklists | Add a word to the blacklist | Admin |
@@ -424,8 +424,8 @@ No commands — passive background tracker. See [module page](/commands/users/) 
 | `/purge` | Purges | Purge messages from replied-to onwards | Admin |
 | `/purgefrom` | Purges | Set purge start point | Admin |
 | `/purgeto` | Purges | Purge to a specific message | Admin |
-| `/raidactiontime` | AntiRaid | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Admin |
-| `/raidtime` | AntiRaid | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Admin |
+| `/raidactiontime` | AntiRaid | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Everyone |
+| `/raidtime` | AntiRaid | Retired: replies with a pointer to `/lockdown` and `/autolockdown` | Everyone |
 | `/reactions` | Reactions | List configured reactions | Everyone |
 | `/reconnect` | Connections | Reconnect to last connected group | Everyone |
 | `/remallbl` | Blacklists | Remove all blacklisted words | Admin |

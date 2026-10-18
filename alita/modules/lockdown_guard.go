@@ -596,7 +596,7 @@ func (m moduleStruct) lockdownOnKicked(b *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 // loadLockdownGuard registers the join guard at the lockdown module's handler group,
-// ahead of fed-ban, antiraid, greetings and captcha. The service message handler also
+// ahead of fed-ban, greetings and captcha. The service message handler also
 // accepts messages sent by bots, because a bot or an anonymous administrator can add
 // users.
 func loadLockdownGuard(dispatcher *ext.Dispatcher) {
