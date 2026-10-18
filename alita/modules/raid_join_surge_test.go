@@ -3,6 +3,8 @@
 package modules
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
 // raidCleanup deletes the chat_raid_detection rows of the given chats now and when the
@@ -130,6 +133,122 @@ func TestRaidJoinSurge(t *testing.T) {
 		}
 		if strings.Contains(text, staffMarker("lockdown_alert_trigger_manual")) {
 			t.Errorf("alert %q names a manual lockdown", text)
+		}
+	})
+}
+
+// raidJoinedCount is how many accounts the join counter holds for the env's chat.
+func (e *lockdownEnv) raidJoinedCount() int64 {
+	e.t.Helper()
+	client := cache.GetRedisClient()
+	if client == nil {
+		e.t.Fatal("no Redis client in the test")
+	}
+	n, err := client.ZCard(context.Background(), raidKey(e.chat.Id, raidPartJoined)).Result()
+	if err != nil {
+		e.t.Fatalf("read the joined set: %v", err)
+	}
+	return n
+}
+
+// seedRaidSettings writes a chat_raid_detection row directly and drops its cached copy,
+// the way a settings write would.
+func seedRaidSettings(t *testing.T, row models.ChatRaidDetection) {
+	t.Helper()
+	if err := db.DB.Create(&row).Error; err != nil {
+		t.Fatalf("seed raid settings: %v", err)
+	}
+	dbcache.DeleteCache(dbcache.CacheKey("raid_detection", row.ChatID))
+}
+
+func TestRaidJoinSurgeSettings(t *testing.T) {
+	t.Run("fourteen do not lock", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		linkLockdownStaffGroup(env)
+		raidCleanup(t, env.chat.Id)
+
+		env.selfJoins(14)
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown exists after 14 joins with no settings row, want none")
+		}
+		if got := len(env.calls("setChatPermissions")); got != 0 {
+			t.Errorf("setChatPermissions calls = %d, want 0", got)
+		}
+		if got := len(env.calls("getChat")); got != 0 {
+			t.Errorf("getChat calls = %d, want 0", got)
+		}
+	})
+
+	t.Run("a stored threshold", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		linkLockdownStaffGroup(env)
+		raidCleanup(t, env.chat.Id)
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: true, JoinThreshold: 3, FloodEnabled: true, FloodThreshold: 30,
+		})
+
+		env.selfJoins(2)
+		if row := env.activeLockdown(); row != nil {
+			t.Fatal("a lockdown exists after 2 joins with a threshold of 3")
+		}
+		env.selfJoins(1)
+
+		row := env.activeLockdown()
+		if row == nil {
+			t.Fatal("no active lockdown after 3 joins with a threshold of 3")
+		}
+		if row.TriggerKind != models.LockdownTriggerJoinSurge || row.TriggerCount != 3 {
+			t.Errorf("trigger = %q with count %d, want join_surge with count 3", row.TriggerKind, row.TriggerCount)
+		}
+	})
+
+	t.Run("join surge off", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		linkLockdownStaffGroup(env)
+		raidCleanup(t, env.chat.Id)
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: false, JoinThreshold: 3, FloodEnabled: true, FloodThreshold: 30,
+		})
+
+		env.selfJoins(5)
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown exists with the join surge off")
+		}
+		if got := len(env.calls("setChatPermissions")); got != 0 {
+			t.Errorf("setChatPermissions calls = %d, want 0", got)
+		}
+		if got := env.raidJoinedCount(); got != 5 {
+			t.Errorf("the joined set holds %d accounts, want the 5 joiners (the flood trigger needs them)", got)
+		}
+	})
+
+	t.Run("settings unreadable", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		linkLockdownStaffGroup(env)
+		raidCleanup(t, env.chat.Id)
+		previous := raidSettingsLookup
+		raidSettingsLookup = func(context.Context, int64) (*models.ChatRaidDetection, error) {
+			return nil, errors.New("settings unreadable")
+		}
+		t.Cleanup(func() { raidSettingsLookup = previous })
+
+		users := env.selfJoins(20)
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown exists although the settings could not be read")
+		}
+		if got := env.raidJoinedCount(); got != 0 {
+			t.Errorf("the joined set holds %d accounts, want none", got)
+		}
+		for _, user := range users {
+			if rows := env.joinerRows(user.Id); len(rows) != 0 {
+				t.Errorf("joiner %d has %d lockdown rows, want none (the group is not locked)", user.Id, len(rows))
+			}
+			if bans := env.bansOf(user.Id); len(bans) != 0 {
+				t.Errorf("joiner %d was banned, want let through", user.Id)
+			}
 		}
 	})
 }
