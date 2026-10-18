@@ -14,12 +14,12 @@ import (
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
-// withMiniredis starts an in-process Redis server (miniredis), installs a
-// *redis.Client pointing at it via cache.SetRedisClientForTest, and stops the
-// server when t finishes. Tests that exercise Redis-dependent paths (trackJoin,
-// checkExpiredRaids) call this instead of t.Skip so coverage goals are met
-// without a live Redis server.
-func withMiniredis(t *testing.T) {
+// withMiniredisServer starts an in-process Redis server (miniredis), installs a
+// *redis.Client pointing at it via cache.SetCacheState, and stops the server when t
+// finishes. It returns the server, so a test can reach what a client cannot, such as
+// fast-forwarding Redis time to expire a key. Tests that exercise Redis-dependent paths
+// call this instead of t.Skip so they run without a live Redis server.
+func withMiniredisServer(t *testing.T) *miniredis.Miniredis {
 	t.Helper()
 
 	mr, err := miniredis.Run()
@@ -39,4 +39,11 @@ func withMiniredis(t *testing.T) {
 	t.Cleanup(func() {
 		cache.SetCacheState(previousMarshal, previousManager, previousClient)
 	})
+	return mr
+}
+
+// withMiniredis is withMiniredisServer for a test that never touches the server itself.
+func withMiniredis(t *testing.T) {
+	t.Helper()
+	withMiniredisServer(t)
 }

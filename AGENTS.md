@@ -232,6 +232,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidFloodScript`) adds the item, trims all three to 30 s, caps the first two at 2000 (`raidFloodCap`), sets
   `PEXPIRE` 2 minutes on each and returns their sizes; a member is new when `:joined` scores them within 24 h
   (`ZSCORE`). It is Redis only, like the join counter.
+- Automatic lockdowns are announced in `raid_trigger.go`, every post through `lockdownPaced` under `raidPostTimeout`
+  (30 s), and a failed post is only logged: it never changes the lockdown or its absence. The call of `raidFire` that
+  got `lockdownStartStarted` posts one public notice in the locked group (`raidPostNotice`, the group's language: the
+  trigger and its numbers, `lockdown_note_approved_muted`, and the no-delete and no-invite notes `/lockdown` adds),
+  and no other outcome does. When the bot cannot lock a group (`lockdownStartNotSupergroup`,
+  `lockdownStartBotCannotRestrict` or a definitively refused lock, `lockdownStartLockFailed`) nothing is started and
+  `raidWarnCannotLock` warns the group's Staff Group (`staff.GetLinkOfGroupFresh`, the Staff Group's language) and its
+  log channel (`actionlog.Destination` under the admin category, the group's language, starting with the usual header),
+  each only when it exists. One `SET NX EX 86400` on `alita:raid:{<chat>}:warn` gates both copies, so a group is
+  warned at most once a day across replicas, and a Redis error or a lost `SetNX` sends nothing. The other outcomes
+  (bot rights or permissions unreadable, a failed state write, a lock whose answer was lost) only log. The group title
+  is escaped and spliced in after translation; the trigger sentence (`lockdownTriggerSentence`) holds only numbers.
 - `chat_raid_detection` (migration 20261018130000) holds one chat's automatic raid detection settings: the join surge
   and flood switches and thresholds (`CHECK` 3..500, defaults 15 and 30). A missing row means the defaults, both triggers
   on (`raiddetection.Defaults`); the Go model carries no `default:` tag on its booleans, because GORM's Create would
