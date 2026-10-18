@@ -7,12 +7,32 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
 // raidFireTimeout bounds one automatic start: the bot-rights check, getChat, the row
 // insert and the lock call.
 const raidFireTimeout = 30 * time.Second
+
+// raidRetryLatch is how long the fire latch lasts after an attempt that failed for a
+// reason that may pass at once (a Telegram or database error), so the next qualifying join
+// tries again soon.
+const raidRetryLatch = 10 * time.Second
+
+// raidShortenLatch cuts the chat's fire latch down to d, best effort: the latch only sheds
+// load, so a Redis error is ignored and the latch simply keeps its full length.
+func raidShortenLatch(chatID int64, d time.Duration) {
+	client := raidRedis()
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	if err := client.PExpire(ctx, raidKey(chatID, raidPartFire), d).Err(); err != nil {
+		log.Debugf("[RaidDetection] could not set the fire latch of chat %d to %s: %v", chatID, d, err)
+	}
+}
 
 // raidTrigger is what fired: the trigger kind (models.LockdownTrigger*) and the numbers
 // behind it. Percent is 0 for a join surge.
@@ -46,6 +66,20 @@ func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 		return
 	}
 	if !won {
+		return
+	}
+
+	// A lockdown that is active, confirmed or not, already answers this raid: stay silent
+	// before any Telegram call, so a trigger that keeps firing costs one database read per
+	// latch period. The latch is kept. Exactly one lockdown is still lockdown.Start's
+	// partial unique index, this read only saves the calls a loser would make.
+	active, err := lockdown.GetActiveFresh(chat.Id)
+	if err != nil {
+		log.Warnf("[RaidDetection] the lockdown of chat %d could not be read, trying again soon: %v", chat.Id, err)
+		raidShortenLatch(chat.Id, raidRetryLatch)
+		return
+	}
+	if active != nil {
 		return
 	}
 

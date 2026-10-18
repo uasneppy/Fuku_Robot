@@ -112,11 +112,15 @@ func TestRaidTriggersSingleLockdown(t *testing.T) {
 		if row == nil || row.TriggerKind != models.LockdownTriggerJoinSurge {
 			t.Fatalf("setup: active lockdown = %+v, want one started by the join surge", row)
 		}
+		// The first counted message loads the chat's admin list, which reads the bot's own
+		// membership and getChat. Send it before the snapshot so only the trigger's calls
+		// are compared.
+		env.sendItems(recent, 1)
 		botLookups := env.botMemberLookups()
 		chatReads := len(env.calls("getChat"))
 
 		env.dropRaidLatch()
-		env.sendItems(recent, 30)
+		env.sendItems(recent, 29)
 
 		if env.raidLatchTTL() <= 0 {
 			t.Fatal("the fire latch was not taken again, so the flood trigger never fired and the test proves nothing")
