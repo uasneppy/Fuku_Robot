@@ -71,6 +71,16 @@ Out of scope:
   - A raid mode still active in Redis at deploy is ignored and its keys cleared.
   - The `antiraid_settings` table stays (migrations are append-only); its timing columns are no longer read.
 
+### Amendments after research (owner, 2026-10-18)
+- **D-17 (refines D-13, Pitfall 10):** A flood lockdown saves the flooding accounts as its alert burst, so the alert's sample lists them and "Ban N recent joiners" can ban them. These are the recently joined accounts whose items counted toward the trigger, with the usual Phase 5 exclusions. Without this, the burst would hold only the 10-minute join tracker, and flooders who joined hours earlier would be missing.
+- **D-18 (refines D-03):** In the migration, a carried-over old threshold below 3 is raised to 3, so no group locks on its first join or two. New input to `/autolockdown` and `/autoantiraid` must be between 3 and 500, and the table has a CHECK for the stored range.
+- **D-19 (refines D-14):** The "raid detected but I can't lock" warning goes to both the Staff Group and the log channel when both exist, like the alert. One daily limit per group covers both.
+- **D-20 (scope):** Backups (export, import, reset) do not carry the new `chat_raid_detection` settings in this phase, and the docs say so. The legacy backup module keeps reading `antiraid_settings` unchanged. The developer `/stats` lines are repointed to the new table.
+- **D-21 (Claude's call on research recommendations):**
+  - The trigger numbers (count, window, percent) are stored as columns on `chat_lockdowns`, not inside `reason`, so each destination's alert can render them in its own language.
+  - Counting runs in supergroups only. `/autolockdown` in a basic group answers with the existing basic-group text.
+  - `/autolockdown joins N` or `flood N` sets the threshold and also turns that trigger on.
+
 ### Claude's Discretion
 - Handler group placement of the flood counter. It must see messages before antiflood (group 4) ends them, and return `ext.ContinueGroups`.
 - The exact Redis key layout and atomic counting (a Lua script or a pipelined ZADD/ZCOUNT) of both counters.
