@@ -5,6 +5,8 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -275,6 +277,93 @@ func TestLockdownStartRow(t *testing.T) {
 		}
 		if row.StartedBy != env.admin.Id {
 			t.Errorf("StartedBy = %d, want the admin %d", row.StartedBy, env.admin.Id)
+		}
+	})
+}
+
+// startAutomaticLockdownRow writes an active, confirmed lockdown row of the env's chat
+// directly, the way a trigger's start leaves it, with the bot as its starter.
+func startAutomaticLockdownRow(t *testing.T, env *lockdownEnv, kind string, count, window, percent int) {
+	t.Helper()
+	row := &models.ChatLockdown{
+		ChatID:            env.chat.Id,
+		TriggerKind:       kind,
+		StartedBy:         staffTestBotID,
+		StartedByName:     "Alita",
+		ChatTitle:         "Lock Chat",
+		PrePermissions:    lockdownTestPrePermissions,
+		LockedPermissions: lockdownLockedPermissions,
+		TriggerCount:      count,
+		TriggerWindow:     window,
+		TriggerPercent:    percent,
+	}
+	if started, err := lockdown.Start(row); err != nil || !started {
+		t.Fatalf("lockdown.Start = %v, %v, want true", started, err)
+	}
+	if ok, err := lockdown.ConfirmLocked(row.ID); err != nil || !ok {
+		t.Fatalf("lockdown.ConfirmLocked = %v, %v, want true", ok, err)
+	}
+}
+
+// alertTextInStaffGroup runs the worker and returns the one alert the Staff Group got.
+func alertTextInStaffGroup(t *testing.T, env *lockdownEnv, staffChat gotgbot.Chat) string {
+	t.Helper()
+	env.cycle()
+	env.cycle()
+	sent := env.fake.sentTo(staffChat.Id)
+	if len(sent) != 1 {
+		t.Fatalf("%d messages reached the Staff Group, want exactly 1", len(sent))
+	}
+	return fmt.Sprint(sent[0].Params["text"])
+}
+
+func TestLockdownAlertTriggerLine(t *testing.T) {
+	t.Run("join surge", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := linkLockdownStaffGroup(env)
+		startAutomaticLockdownRow(t, env, models.LockdownTriggerJoinSurge, 15, 60, 0)
+
+		text := alertTextInStaffGroup(t, env, staffChat)
+
+		if want := staffMarker("lockdown_alert_trigger_join_surge") + " 15 60"; !strings.Contains(text, want) {
+			t.Errorf("alert %q does not contain %q: the join surge, its count and its window", text, want)
+		}
+		if strings.Contains(text, staffMarker("lockdown_alert_trigger_manual")) {
+			t.Errorf("alert %q carries the manual trigger line", text)
+		}
+	})
+
+	t.Run("flood", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := linkLockdownStaffGroup(env)
+		startAutomaticLockdownRow(t, env, models.LockdownTriggerFlood, 41, 30, 87)
+
+		text := alertTextInStaffGroup(t, env, staffChat)
+
+		if want := staffMarker("lockdown_alert_trigger_flood") + " 41 30 87"; !strings.Contains(text, want) {
+			t.Errorf("alert %q does not contain %q: the flood, its count, window and percent", text, want)
+		}
+		if strings.Contains(text, staffMarker("lockdown_alert_trigger_manual")) {
+			t.Errorf("alert %q carries the manual trigger line", text)
+		}
+	})
+
+	t.Run("manual unchanged", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		staffChat := linkLockdownStaffGroup(env)
+		env.send(env.admin, "/lockdown raid")
+
+		text := alertTextInStaffGroup(t, env, staffChat)
+
+		for _, want := range []string{staffMarker("lockdown_alert_trigger_manual"), "Ad&lt;b&gt;min"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("alert %q does not contain %q", text, want)
+			}
+		}
+		for _, other := range []string{"lockdown_alert_trigger_join_surge", "lockdown_alert_trigger_flood"} {
+			if strings.Contains(text, staffMarker(other)) {
+				t.Errorf("alert %q carries the %s line", text, other)
+			}
 		}
 	})
 }
