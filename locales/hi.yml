@@ -2544,6 +2544,8 @@ lockdown_lift_tally_failed: "⚠️ मैं {count} को अनबैन न
 lockdown_lift_tally_more: "…और {count} और।"
 lockdown_alert_title: "🚨 <b>{group} में लॉकडाउन</b>"
 lockdown_alert_trigger_manual: "{name} ने {time} पर /lockdown से शुरू किया।"
+lockdown_alert_trigger_join_surge: "जॉइन की बाढ़: {window} सेकंड में {count} जॉइन। {time} पर अपने आप लॉक किया गया।"
+lockdown_alert_trigger_flood: "फ़्लड: {window} सेकंड में {count} संदेश, {percent}% नए सदस्यों से। {time} पर अपने आप लॉक किया गया।"
 lockdown_alert_btn_lift: "🔓 लॉकडाउन हटाएँ"
 lockdown_alert_lift_ask: "{group} में लॉकडाउन हटाएँ? इसकी अनुमतियाँ पहले जैसी हो जाएँगी, और लॉकडाउन के दौरान हटाए गए लोग अनबैन हो जाएँगे, सिर्फ़ वे खाते छोड़कर जिन्हें \"नए सदस्यों को बैन करें\" से हमेशा के लिए बैन किया गया था; वे बैन ही रहेंगे।"
 lockdown_alert_btn_confirm: "पुष्टि करें"
