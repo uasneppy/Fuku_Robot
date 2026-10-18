@@ -14,9 +14,20 @@ const (
 	LockdownStateLifted = "lifted"
 )
 
-// LockdownTriggerManual is the trigger_kind of a lockdown an admin started with
-// /lockdown. The column has no CHECK, so later phases add kinds without a migration.
-const LockdownTriggerManual = "manual"
+// Kinds of lockdown trigger, as stored in chat_lockdowns.trigger_kind. The column has no
+// CHECK, so later phases add kinds without a migration.
+const (
+	// LockdownTriggerManual is the trigger_kind of a lockdown an admin started with
+	// /lockdown.
+	LockdownTriggerManual = "manual"
+	// LockdownTriggerJoinSurge is the trigger_kind of a lockdown the join-surge detector
+	// started: trigger_count joins within trigger_window seconds.
+	LockdownTriggerJoinSurge = "join_surge"
+	// LockdownTriggerFlood is the trigger_kind of a lockdown the flood detector started:
+	// trigger_count messages within trigger_window seconds, trigger_percent of them from
+	// new members.
+	LockdownTriggerFlood = "flood"
+)
 
 // States of one joiner row of a lockdown, as stored in chat_lockdown_joiners.state.
 const (
@@ -88,6 +99,15 @@ type ChatLockdown struct {
 	LiftStartedAt     *time.Time `gorm:"column:lift_started_at" json:"lift_started_at,omitempty"`
 	LiftedAt          *time.Time `gorm:"column:lifted_at" json:"lifted_at,omitempty"`
 	ManualChange      bool       `gorm:"column:manual_change;not null;default:false" json:"manual_change,omitempty"`
+	// TriggerCount is the number of joins (join_surge) or messages (flood) that fired an
+	// automatic trigger; 0 for a manual lockdown (migration 20261018120000).
+	TriggerCount int `gorm:"column:trigger_count;not null;default:0" json:"trigger_count,omitempty"`
+	// TriggerWindow is the window TriggerCount was counted in, in seconds; 0 for a manual
+	// lockdown.
+	TriggerWindow int `gorm:"column:trigger_window;not null;default:0" json:"trigger_window,omitempty"`
+	// TriggerPercent is, for a flood, the share (0-100) of the counted messages that came
+	// from new members; 0 for every other kind.
+	TriggerPercent int `gorm:"column:trigger_percent;not null;default:0" json:"trigger_percent,omitempty"`
 	// ChatTitle is the locked group's title when the lockdown started, so an alert
 	// names the group without a getChat. Empty for a lockdown from before it was kept.
 	ChatTitle string `gorm:"column:chat_title;not null;default:''" json:"chat_title,omitempty"`
