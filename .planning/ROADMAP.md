@@ -277,7 +277,7 @@ Plans:
   4. When several triggers fire at once, the group gets exactly one lockdown and one alert. This holds even when different bot replicas handle the joins and messages.
   5. `/antiraid` and its old timing commands now point admins to `/lockdown`. A group's old auto-threshold becomes its join-surge threshold, and the old raid mode no longer temp-bans anyone.
 
-**Plans:** 2/13 plans executed
+**Plans:** 4/13 plans executed
 
 Plans:
 **Wave 1**
@@ -287,8 +287,8 @@ Plans:
 - [x] 06-02-PLAN.md: Tracer. 15 joins in 60 s lock a group automatically and the alert names the join surge with its count; settings table with the threshold carry-over (clamped to 3..500, D-22)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 06-03-PLAN.md: Every join path counted once; admin-added, approved, the bot and join requests never count; window, script and no-Redis pinned; the guard suites still pass
-- [ ] 06-04-PLAN.md: The flood trigger at handler group -4: 30 items in 30 s, 60% from members who joined in the last day, at least 3 accounts; exemptions and item kinds
+- [x] 06-03-PLAN.md: Every join path counted once; admin-added, approved, the bot and join requests never count; window, script and no-Redis pinned; the guard suites still pass
+- [x] 06-04-PLAN.md: The flood trigger at handler group -4: 30 items in 30 s, 60% from members who joined in the last day, at least 3 accounts; exemptions and item kinds
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 06-05-PLAN.md: `/autolockdown` shows and changes each trigger (live owner or restricting admin), and the next burst follows it on every replica
@@ -371,7 +371,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
-| 6. Automatic Raid Detection | 2/13 | In Progress|  |
+| 6. Automatic Raid Detection | 4/13 | In Progress|  |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |
