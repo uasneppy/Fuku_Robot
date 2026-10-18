@@ -169,8 +169,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`alita/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `alita/db/cache`, not `alita/utils/cache`.
-- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:staff:*`, `alita:lockdown:*`) sit outside the
-  `alita:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them.
+- Operational Redis keys (`alita:antiraid:*`, `alita:anonAdmin:*`, `alita:staff:*`, `alita:lockdown:*`, `alita:raid:*`)
+  sit outside the `alita:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them.
 - `alita:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
@@ -203,6 +203,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   It is empty without Redis and is never a ban decision. The joins of the 10 minutes before the lock are saved with the
   lockdown's alert (`chat_lockdown_burst`), and Phase 6 may reuse the tracker. Antiraid's 60-second join list is not
   used for this.
+- `alita:raid:{<chat>}:joined` is the join counter of automatic raid detection (`raid_counters.go`): a sorted set whose
+  member is the user ID and whose score is that account's latest join in unix milliseconds, so the `chat_member` update
+  and the service message of one join are one member and a re-join refreshes the account. One Lua script
+  (`raidJoinScript`, the chat ID is a hash tag) adds the joins, trims what is older than 24 h, keeps the newest 5000
+  (`raidJoinedCap`), sets a 25 h TTL and returns how many different accounts joined in the last 60 s. It is best effort
+  and Redis only: without Redis automatic detection is inert on that replica (one info log per process) and `/lockdown`
+  still works. `alita:raid:{<chat>}:fire` is a `SET NX EX 60` latch that only sheds load while a trigger starts a
+  lockdown; exactly one lockdown is still `uk_chat_lockdowns_active` plus `lockdown.Start`. Do not reuse
+  `alita:lockdown:recent:<chat>` for counting: its JSON members count one join twice.
+- `chat_raid_detection` (migration 20261018130000) holds one chat's automatic raid detection settings: the join surge
+  and flood switches and thresholds (`CHECK` 3..500, defaults 15 and 30). A missing row means the defaults, both triggers
+  on (`raiddetection.Defaults`); the Go model carries no `default:` tag on its booleans, because GORM's Create would
+  turn a Go `false` back into the SQL default. It is read through `cache.GetFromCacheOrLoad` under
+  `cache.CacheKey("raid_detection", chat)` (`raiddetection.GetSettings`), every write must `cache.DeleteCache` that key,
+  and it is never part of backup/export/import/reset. The migration carries every non-zero
+  `antiraid_settings.auto_antiraid_threshold` over as the join threshold, clamped by `LEAST(GREATEST(x, 3), 500)`: a
+  value below 3 becomes 3 (D-18) and the old `/autoantiraid` values above 500 become 500 (D-22), so the copy satisfies
+  the `CHECK` and cannot abort startup.
 - `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
@@ -374,6 +392,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `uk_chat_lockdowns_active`, the lock call, the confirmation and the worker wake. Of two simultaneous callers for one
   chat exactly one gets `lockdownStartStarted` and the other `lockdownStartAlreadyActive` with the running row. It judges
   no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent.
+- The join surge trigger is counted by the `chat_member` join guard (`lockdownOnJoinMember`, group `-7`) through
+  `raidCountMemberJoin`, right after the lockdown join tracker write and before the lockdown is read, so the join that
+  tips the threshold is handled by the lockdown it starts. It is best effort and Redis only, and a count never bans,
+  restricts or deletes anything: when `raidJoinCounts` holds (not the bot, not a request, not an approved user, not
+  added by the anonymous admin or by a live creator or administrator) and the chat's different accounts joined within
+  60 s reach its threshold, `raidFire` starts the lockdown through `startLockdownRow` exactly as `/lockdown` does, with
+  `trigger_kind` `join_surge`, the bot as starter, an empty `reason` and the numbers in the trigger columns. The
+  trigger runs synchronously in the handler (no goroutine, no drain); a crash half way leaves an unconfirmed row the
+  worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
+  status it read and whether it asked), so a join still makes at most one performer lookup. Settings come from
+  `raidSettingsLookup`, a test seam; an unreadable read counts nothing.
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
   Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown (`locked_at` set) is active in
@@ -606,7 +635,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `alita/db/lockdown/testmain_test.go` (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
   The Phase 5 models (`ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun`) are in
   `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go` only; the `alita/db` package's own
-  tests never touch them.
+  tests never touch them. `ChatRaidDetection` is in `alita/modules/test_harness_test.go`, and `raidCleanup` deletes
+  its rows and their cached copies.
 - `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
   prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
   `TestBanRunStart` (one running ban run per lockdown, the partial unique index), plus the Phase 5 conditional updates:
