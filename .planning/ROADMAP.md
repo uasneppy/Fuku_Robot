@@ -277,35 +277,39 @@ Plans:
   4. When several triggers fire at once, the group gets exactly one lockdown and one alert. This holds even when different bot replicas handle the joins and messages.
   5. `/antiraid` and its old timing commands now point admins to `/lockdown`. A group's old auto-threshold becomes its join-surge threshold, and the old raid mode no longer temp-bans anyone.
 
-**Plans:** 11 plans
+**Plans:** 13 plans
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md: Tracer. 15 joins in 60 s lock a group automatically through one start path shared with /lockdown; settings table, trigger columns and threshold carry-over in one migration; the alert names the trigger
+- [ ] 06-01-PLAN.md: One start path shared by /lockdown and the triggers (`startLockdownRow`, replies unchanged), the trigger columns on `chat_lockdowns`, and the alert line that names the trigger
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 06-02-PLAN.md: Every join path counted once; admin-added, approved, the bot and join requests never count; window, script and no-Redis pinned
-- [ ] 06-03-PLAN.md: The flood trigger at handler group -4: 30 items in 30 s, 60% from members who joined in the last day, at least 3 accounts; exemptions and item kinds
+- [ ] 06-02-PLAN.md: Tracer. 15 joins in 60 s lock a group automatically and the alert names the join surge with its count; settings table with the threshold carry-over (clamped to 3..500, D-22)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 06-04-PLAN.md: `/autolockdown` shows and changes each trigger (live owner or restricting admin), and the next burst follows it on every replica
-- [ ] 06-05-PLAN.md: One lockdown and one alert however many triggers and replicas fire; 10 quiet minutes after a lift; the fire latch by outcome
+- [ ] 06-03-PLAN.md: Every join path counted once; admin-added, approved, the bot and join requests never count; window, script and no-Redis pinned; the guard suites still pass
+- [ ] 06-04-PLAN.md: The flood trigger at handler group -4: 30 items in 30 s, 60% from members who joined in the last day, at least 3 accounts; exemptions and item kinds
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 06-06-PLAN.md: The group is told it was locked automatically; a raid the bot cannot lock is reported once a day to the Staff Group and the log channel
+- [ ] 06-05-PLAN.md: `/autolockdown` shows and changes each trigger (live owner or restricting admin), and the next burst follows it on every replica
+- [ ] 06-06-PLAN.md: One lockdown and one alert however many triggers and replicas fire; 10 quiet minutes after a lift; the fire latch by outcome
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 06-07-PLAN.md: /lockdownstatus, /lockdown and reminders name the automatic trigger
+- [ ] 06-07-PLAN.md: The group is told it was locked automatically; a raid the bot cannot lock is reported once a day to the Staff Group and the log channel
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 06-08-PLAN.md: A flood alert lists the flooding accounts and "Ban N recent joiners" can ban them (D-17)
+- [ ] 06-08-PLAN.md: /lockdownstatus, /lockdown and reminders name the automatic trigger
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 06-09-PLAN.md: The old raid mode is retired: pointer commands, the `/autoantiraid` alias, no temp-bans, startup key sweep
-- [ ] 06-10-PLAN.md: Developer stats on the new table, the PostgreSQL carry-over proof, and the docs pages
+- [ ] 06-09-PLAN.md: A flood alert lists the flooding accounts and "Ban N recent joiners" can ban them (D-17)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 06-11-PLAN.md: Help text in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
+- [ ] 06-10-PLAN.md: The old raid mode is retired: pointer commands, the `/autoantiraid` alias, no temp-bans, startup key sweep
+- [ ] 06-11-PLAN.md: Developer stats on the new table and the PostgreSQL carry-over proof
+- [ ] 06-12-PLAN.md: The docs pages describe the automatic triggers and the retired raid mode
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 06-13-PLAN.md: Help text in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
 
 ### Phase 7: AI-Assisted Raid Detection
 
@@ -367,7 +371,7 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
-| 6. Automatic Raid Detection | 0/11 | Not started | - |
+| 6. Automatic Raid Detection | 0/13 | Not started | - |
 | 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |
