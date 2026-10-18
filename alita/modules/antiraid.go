@@ -1,7 +1,9 @@
 package modules
 
 import (
+	"context"
 	"regexp"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -84,6 +86,14 @@ func (m moduleStruct) antiraidRetiredCallback(b *gotgbot.Bot, ctx *ext.Context) 
 	}
 	_, _ = query.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: text, ShowAlert: true})
 	return ext.EndGroups
+}
+
+// antiraidSweepOnce makes the startup sweep of the retired keys run once per process.
+var antiraidSweepOnce sync.Once
+
+// sweepRetiredAntiRaidKeys is compile scaffolding for its test: it removes nothing yet.
+func sweepRetiredAntiRaidKeys(ctx context.Context) (int, error) {
+	return 0, nil
 }
 
 // LoadAntiRaid registers the pointer commands, the /autoantiraid alias and the answer

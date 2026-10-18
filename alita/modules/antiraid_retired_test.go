@@ -3,12 +3,15 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/redis/go-redis/v9"
 	"github.com/vmihailenco/msgpack/v5"
 
@@ -78,6 +81,22 @@ func wantAntiRaidSettings(t *testing.T, chatID int64) {
 	}
 }
 
+// quietAntiRaidSweep marks the startup sweep of the retired keys as already run, so a
+// test that loads the module does not start a background sweep against its Redis. The
+// tests of the sweep itself call it directly or reset the Once.
+func quietAntiRaidSweep(t *testing.T) {
+	t.Helper()
+	antiraidSweepOnce.Do(func() {})
+}
+
+// loadAntiRaid loads the AntiRaid module on the env's dispatcher without the background
+// sweep.
+func (e *lockdownEnv) loadAntiRaid() {
+	e.t.Helper()
+	quietAntiRaidSweep(e.t)
+	LoadAntiRaid(e.dispatcher)
+}
+
 // pressAntiRaid presses an old antiraid button (data built the way the old command
 // built it) as from, on message msgID of the env's chat.
 func (e *lockdownEnv) pressAntiRaid(from gotgbot.User, msgID int64, action string) {
@@ -105,7 +124,7 @@ func (e *lockdownEnv) pressAntiRaid(from gotgbot.User, msgID int64, action strin
 func TestAntiRaidRetired(t *testing.T) {
 	t.Run("pointers", func(t *testing.T) {
 		env := newLockdownEnv(t)
-		LoadAntiRaid(env.dispatcher)
+		env.loadAntiRaid()
 		raidCleanup(t, env.chat.Id)
 		seedAntiRaidSettings(t, env.chat.Id)
 
@@ -123,7 +142,7 @@ func TestAntiRaidRetired(t *testing.T) {
 
 	t.Run("alias sets the surge", func(t *testing.T) {
 		env := newLockdownEnv(t)
-		LoadAntiRaid(env.dispatcher)
+		env.loadAntiRaid()
 		raidCleanup(t, env.chat.Id)
 
 		env.send(env.admin, "/autoantiraid 20")
@@ -145,7 +164,7 @@ func TestAntiRaidRetired(t *testing.T) {
 
 	t.Run("alias authority", func(t *testing.T) {
 		env := newLockdownEnv(t)
-		LoadAntiRaid(env.dispatcher)
+		env.loadAntiRaid()
 		raidCleanup(t, env.chat.Id)
 		member := env.newOutsider()
 		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
@@ -166,7 +185,7 @@ func TestAntiRaidRetired(t *testing.T) {
 
 	t.Run("alias anonymous admin", func(t *testing.T) {
 		env, creator := newAnonLockdownEnv(t, false)
-		LoadAntiRaid(env.dispatcher)
+		env.loadAntiRaid()
 		raidCleanup(t, env.chat.Id)
 
 		env.sendAnonymous("/autoantiraid 20")
@@ -180,7 +199,7 @@ func TestAntiRaidRetired(t *testing.T) {
 
 	t.Run("old button", func(t *testing.T) {
 		env := newLockdownEnv(t)
-		LoadAntiRaid(env.dispatcher)
+		env.loadAntiRaid()
 		raidCleanup(t, env.chat.Id)
 		seedAntiRaidSettings(t, env.chat.Id)
 		seedLegacyRaidKeys(t, env.chat.Id)
@@ -212,7 +231,7 @@ func TestAntiRaidRetired(t *testing.T) {
 
 func TestAntiRaidRetiredNoBan(t *testing.T) {
 	env := newLockdownEnv(t)
-	LoadAntiRaid(env.dispatcher)
+	env.loadAntiRaid()
 	raidCleanup(t, env.chat.Id)
 	seedLegacyRaidKeys(t, env.chat.Id)
 
@@ -235,5 +254,110 @@ func TestAntiRaidRetiredNoBan(t *testing.T) {
 	}
 	if row := env.activeLockdown(); row != nil {
 		t.Errorf("a lockdown (kind %q) exists after 4 joins, want none", row.TriggerKind)
+	}
+}
+
+func TestAntiRaidKeySweep(t *testing.T) {
+	retired := []string{
+		"alita:antiraid:state:-1001",
+		"alita:antiraid:joins:-1001",
+		"alita:antiraid:state:-1002",
+	}
+	kept := []string{
+		"alita:lockdown:recent:-1001",
+		"alita:raid:{-1001}:joined",
+	}
+
+	t.Run("removes exactly the retired keys", func(t *testing.T) {
+		mr := withMiniredisServer(t)
+		for _, key := range append(append([]string{}, retired...), kept...) {
+			mr.Set(key, "x")
+		}
+
+		removed, err := sweepRetiredAntiRaidKeys(context.Background())
+		if err != nil || removed != 3 {
+			t.Fatalf("first sweep = %d, %v; want 3, nil", removed, err)
+		}
+		for _, key := range retired {
+			if mr.Exists(key) {
+				t.Errorf("retired key %s survived the sweep", key)
+			}
+		}
+		for _, key := range kept {
+			if !mr.Exists(key) {
+				t.Errorf("key %s was removed, but it is not a retired key", key)
+			}
+		}
+
+		removed, err = sweepRetiredAntiRaidKeys(context.Background())
+		if err != nil || removed != 0 {
+			t.Errorf("second sweep = %d, %v; want 0, nil", removed, err)
+		}
+	})
+
+	t.Run("sweeps more keys than one scan batch", func(t *testing.T) {
+		mr := withMiniredisServer(t)
+		for i := 0; i < 350; i++ {
+			mr.Set(fmt.Sprintf("alita:antiraid:state:%d", -2000-i), "x")
+		}
+		mr.Set("alita:raid:{-2000}:joined", "x")
+
+		removed, err := sweepRetiredAntiRaidKeys(context.Background())
+		if err != nil || removed != 350 {
+			t.Fatalf("sweep = %d, %v; want 350, nil", removed, err)
+		}
+		if got := len(mr.Keys()); got != 1 {
+			t.Errorf("keys left = %d, want only the one that is not retired", got)
+		}
+	})
+
+	t.Run("without Redis it returns at once", func(t *testing.T) {
+		restore := cache.DisableRedisForTest()
+		t.Cleanup(restore)
+
+		removed, err := sweepRetiredAntiRaidKeys(context.Background())
+		if err != nil || removed != 0 {
+			t.Errorf("sweep without Redis = %d, %v; want 0, nil", removed, err)
+		}
+	})
+
+	t.Run("a Redis failure is returned and keeps the keys", func(t *testing.T) {
+		mr := withMiniredisServer(t)
+		mr.Set(retired[0], "x")
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		removed, err := sweepRetiredAntiRaidKeys(ctx)
+		if err == nil {
+			t.Error("sweep with a cancelled context returned no error")
+		}
+		if removed != 0 || !mr.Exists(retired[0]) {
+			t.Errorf("removed = %d, key exists = %v; want nothing removed", removed, mr.Exists(retired[0]))
+		}
+	})
+}
+
+func TestAntiRaidSweepRunsOnceOnLoad(t *testing.T) {
+	mr := withMiniredisServer(t)
+	antiraidSweepOnce = sync.Once{}
+	t.Cleanup(func() { quietAntiRaidSweep(t) })
+
+	mr.Set("alita:antiraid:state:-3001", "x")
+	LoadAntiRaid(ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1}))
+
+	deadline := time.Now().Add(5 * time.Second)
+	for mr.Exists("alita:antiraid:state:-3001") {
+		if time.Now().After(deadline) {
+			t.Fatal("the retired key was still in Redis 5 s after the module loaded")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// A second load in the same process does not sweep again.
+	mr.Set("alita:antiraid:state:-3002", "x")
+	LoadAntiRaid(ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1}))
+	time.Sleep(300 * time.Millisecond)
+	if !mr.Exists("alita:antiraid:state:-3002") {
+		t.Error("a second load swept again, want one sweep per process")
 	}
 }
