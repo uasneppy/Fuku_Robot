@@ -79,15 +79,7 @@ func raidCountMemberJoin(b *gotgbot.Bot, chat *gotgbot.Chat, update *gotgbot.Cha
 		return "", false
 	}
 
-	member := update.NewChatMember.MergeChatMember().User
-	in := lockdownJoinInput{
-		Path:                    models.JoinPathMember,
-		PerformerID:             update.From.Id,
-		MemberID:                member.Id,
-		MemberIsBot:             member.IsBot,
-		BotID:                   b.Id,
-		PerformerAnonymousAdmin: update.From.Id == lockdownGroupAnonymousBot,
-	}
+	in := lockdownMemberJoinInput(b, update)
 	if raidNeedsPerformerLookup(in) {
 		looked = true
 		// A failed lookup leaves the status empty, which counts.
@@ -99,17 +91,82 @@ func raidCountMemberJoin(b *gotgbot.Bot, chat *gotgbot.Chat, update *gotgbot.Cha
 		}
 	}
 
-	if !raidJoinCounts(in, false) {
-		return performerStatus, looked
+	if raidJoinsCountedFor(chat.Id, in) {
+		raidRecordAndFire(b, chat, settings, []int64{in.MemberID})
 	}
-	if !raidJoinCounts(in, approvals.IsUserApproved(chat.Id, member.Id)) {
-		return performerStatus, looked
+	return performerStatus, looked
+}
+
+// raidCountMessageJoins counts the joins a new_chat_members service message reports by
+// the same rule as raidCountMemberJoin, in one counter write, and starts a lockdown when
+// enough different accounts joined within a minute. A user who also arrived as a
+// chat_member update is the same account and counts once.
+//
+// It returns the performer status it read and looked true whenever it made the live
+// lookup of the message's performer, whether it worked (status set) or failed (status
+// empty), so the join guard never asks Telegram a second time about the same message.
+func raidCountMessageJoins(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message) (performerStatus string, looked bool) {
+	if chat == nil || msg == nil || len(msg.NewChatMembers) == 0 || chat.Type != "supergroup" || raidRedis() == nil {
+		return "", false
 	}
 
-	count, err := recordRaidJoins(chat.Id, []int64{member.Id})
+	ctx, cancel := context.WithTimeout(context.Background(), raidSettingsTimeout)
+	settings, err := raidSettingsLookup(ctx, chat.Id)
+	cancel()
+	if err != nil {
+		log.Debugf("[RaidDetection] settings of chat %d could not be read, counting nothing: %v", chat.Id, err)
+		return "", false
+	}
+	if settings == nil || (!settings.JoinEnabled && !settings.FloodEnabled) {
+		return "", false
+	}
+
+	inputs, performerID := lockdownMessageJoinInputs(b, chat, msg)
+	needsLookup := false
+	for _, in := range inputs {
+		needsLookup = needsLookup || raidNeedsPerformerLookup(in)
+	}
+	if needsLookup && performerID > 0 {
+		looked = true
+		// A failed lookup leaves the status empty, which counts.
+		if live, lookupErr := lockdownLiveMember(b, chat.Id, performerID); lookupErr != nil {
+			log.Warnf("[RaidDetection] could not check performer %d in chat %d: %v", performerID, chat.Id, lookupErr)
+		} else {
+			performerStatus = live.Status
+		}
+	}
+
+	counted := make([]int64, 0, len(inputs))
+	for _, in := range inputs {
+		in.PerformerStatus = performerStatus
+		if raidJoinsCountedFor(chat.Id, in) {
+			counted = append(counted, in.MemberID)
+		}
+	}
+	raidRecordAndFire(b, chat, settings, counted)
+	return performerStatus, looked
+}
+
+// raidJoinsCountedFor applies raidJoinCounts to one join. The approved-user read is made
+// only for a join that would count otherwise.
+func raidJoinsCountedFor(chatID int64, in lockdownJoinInput) bool {
+	if !raidJoinCounts(in, false) {
+		return false
+	}
+	return raidJoinCounts(in, approvals.IsUserApproved(chatID, in.MemberID))
+}
+
+// raidRecordAndFire stores the counted accounts in the chat's joined set in one script
+// call and starts the lockdown when the chat's join surge is on and the number of
+// different accounts that joined within the window reaches its threshold.
+func raidRecordAndFire(b *gotgbot.Bot, chat *gotgbot.Chat, settings *models.ChatRaidDetection, userIDs []int64) {
+	if len(userIDs) == 0 {
+		return
+	}
+	count, err := recordRaidJoins(chat.Id, userIDs)
 	if err != nil {
 		log.Debugf("[RaidDetection] join counter write for chat %d failed: %v", chat.Id, err)
-		return performerStatus, looked
+		return
 	}
 	if settings.JoinEnabled && count >= settings.JoinThreshold {
 		raidFire(b, chat, raidTrigger{
@@ -118,5 +175,4 @@ func raidCountMemberJoin(b *gotgbot.Bot, chat *gotgbot.Chat, update *gotgbot.Cha
 			Window: int(raidJoinWindow / time.Second),
 		})
 	}
-	return performerStatus, looked
 }

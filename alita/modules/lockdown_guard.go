@@ -89,6 +89,46 @@ func lockdownNeedsPerformerLookup(in lockdownJoinInput) bool {
 		!in.PerformerAnonymousAdmin
 }
 
+// lockdownMemberJoinInput builds the guard's input for the user of a chat_member join.
+// The lockdown guard and the raid counter both use it, so the rule for who performed a
+// join cannot drift between them. PerformerStatus is left empty for the caller to fill.
+func lockdownMemberJoinInput(b *gotgbot.Bot, update *gotgbot.ChatMemberUpdated) lockdownJoinInput {
+	member := update.NewChatMember.MergeChatMember().User
+	return lockdownJoinInput{
+		Path:                    models.JoinPathMember,
+		PerformerID:             update.From.Id,
+		MemberID:                member.Id,
+		MemberIsBot:             member.IsBot,
+		BotID:                   b.Id,
+		PerformerAnonymousAdmin: update.From.Id == lockdownGroupAnonymousBot,
+	}
+}
+
+// lockdownMessageJoinInputs builds the guard's input for every user a new_chat_members
+// service message names, in the message's order, and returns the performer's ID. The
+// performer is the message's sender, or the anonymous admin identity (sender_chat equal
+// to the group, or the Group Anonymous Bot); the ID is 0 when the message has no sender.
+// PerformerStatus is left empty for the caller to fill.
+func lockdownMessageJoinInputs(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message) (inputs []lockdownJoinInput, performerID int64) {
+	if msg.From != nil {
+		performerID = msg.From.Id
+	}
+	anonymous := (msg.SenderChat != nil && msg.SenderChat.Id == chat.Id) || performerID == lockdownGroupAnonymousBot
+
+	inputs = make([]lockdownJoinInput, len(msg.NewChatMembers))
+	for i, member := range msg.NewChatMembers {
+		inputs[i] = lockdownJoinInput{
+			Path:                    models.JoinPathService,
+			PerformerID:             performerID,
+			MemberID:                member.Id,
+			MemberIsBot:             member.IsBot,
+			BotID:                   b.Id,
+			PerformerAnonymousAdmin: anonymous,
+		}
+	}
+	return inputs, performerID
+}
+
 // lockdownRecordJoin is the call that stores a joiner row. It is a variable only so a
 // test can make the write fail; production code never reassigns it.
 var lockdownRecordJoin = lockdown.RecordJoin
@@ -137,14 +177,7 @@ func (m moduleStruct) lockdownOnJoinMember(b *gotgbot.Bot, ctx *ext.Context) err
 	}
 
 	member := update.NewChatMember.MergeChatMember().User
-	input := lockdownJoinInput{
-		Path:                    models.JoinPathMember,
-		PerformerID:             update.From.Id,
-		MemberID:                member.Id,
-		MemberIsBot:             member.IsBot,
-		BotID:                   b.Id,
-		PerformerAnonymousAdmin: update.From.Id == lockdownGroupAnonymousBot,
-	}
+	input := lockdownMemberJoinInput(b, update)
 	if raidLooked {
 		// The raid counter already asked Telegram about this performer; a failed lookup
 		// left the status empty, which is never exempt.
@@ -201,6 +234,10 @@ func (m moduleStruct) lockdownOnJoinMessage(b *gotgbot.Bot, ctx *ext.Context) er
 	// Best effort and first: the tracker never decides or delays what the guard does.
 	trackLockdownRecentJoins(chat.Id, lockdownMessageJoins(b, msg.NewChatMembers))
 
+	// Best effort and before the lockdown is read, so the join that tips the threshold is
+	// handled by the lockdown it starts. It shares the one performer lookup it made.
+	raidStatus, raidLooked := raidCountMessageJoins(b, chat, msg)
+
 	active, err := lockdownActiveLookup(chat.Id)
 	if err != nil {
 		// Fail open: the joiners are still muted by the locked default permissions.
@@ -211,33 +248,27 @@ func (m moduleStruct) lockdownOnJoinMessage(b *gotgbot.Bot, ctx *ext.Context) er
 		return ext.ContinueGroups
 	}
 
-	var performerID int64
-	if msg.From != nil {
-		performerID = msg.From.Id
-	}
-	anonymous := (msg.SenderChat != nil && msg.SenderChat.Id == chat.Id) || performerID == lockdownGroupAnonymousBot
-
 	members := append([]gotgbot.User(nil), msg.NewChatMembers...)
-	inputs := make([]lockdownJoinInput, len(members))
-	needsLookup := false
-	for i, member := range members {
-		inputs[i] = lockdownJoinInput{
-			Path:                    models.JoinPathService,
-			PerformerID:             performerID,
-			MemberID:                member.Id,
-			MemberIsBot:             member.IsBot,
-			BotID:                   b.Id,
-			PerformerAnonymousAdmin: anonymous,
+	inputs, performerID := lockdownMessageJoinInputs(b, chat, msg)
+	if raidLooked {
+		// The raid counter already asked Telegram about this performer; a failed lookup
+		// left the status empty, which is never exempt.
+		for i := range inputs {
+			inputs[i].PerformerStatus = raidStatus
 		}
-		needsLookup = needsLookup || lockdownNeedsPerformerLookup(inputs[i])
-	}
-	if needsLookup && performerID > 0 {
-		// A failed lookup leaves the status empty, which is never exempt.
-		if live, lookupErr := lockdownLiveMember(b, chat.Id, performerID); lookupErr != nil {
-			log.Warnf("[Lockdown] join guard could not check performer %d in chat %d: %v", performerID, chat.Id, lookupErr)
-		} else {
-			for i := range inputs {
-				inputs[i].PerformerStatus = live.Status
+	} else {
+		needsLookup := false
+		for _, input := range inputs {
+			needsLookup = needsLookup || lockdownNeedsPerformerLookup(input)
+		}
+		if needsLookup && performerID > 0 {
+			// A failed lookup leaves the status empty, which is never exempt.
+			if live, lookupErr := lockdownLiveMember(b, chat.Id, performerID); lookupErr != nil {
+				log.Warnf("[Lockdown] join guard could not check performer %d in chat %d: %v", performerID, chat.Id, lookupErr)
+			} else {
+				for i := range inputs {
+					inputs[i].PerformerStatus = live.Status
+				}
 			}
 		}
 	}
