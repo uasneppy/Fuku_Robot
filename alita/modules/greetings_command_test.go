@@ -702,7 +702,6 @@ func TestNewMemberCaptchaSuccessAndSendFailurePaths(t *testing.T) {
 				t.Fatalf("newMember error = %v, want EndGroups", errNewMember)
 			}
 
-
 			if calls := client.callsFor("restrictChatMember"); len(calls) != tt.wantRestrict {
 				t.Fatalf("restrictChatMember calls = %d, want %d", len(calls), tt.wantRestrict)
 			}

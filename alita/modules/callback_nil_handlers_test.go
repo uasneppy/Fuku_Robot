@@ -13,7 +13,6 @@ func TestCallbackHandlersIgnoreMissingCallbackQuery(t *testing.T) {
 	t.Parallel()
 
 	module := moduleStruct{}
-	antiRaid := &antiRaidStruct{}
 
 	type callbackHandler struct {
 		name string
@@ -46,7 +45,7 @@ func TestCallbackHandlersIgnoreMissingCallbackQuery(t *testing.T) {
 		{name: "unrestrictButtonHandler", want: ext.EndGroups, call: module.unrestrictButtonHandler},
 		{name: "deleteButtonHandler", want: ext.EndGroups, call: module.deleteButtonHandler},
 		{name: "buttonHandler", want: ext.EndGroups, call: module.buttonHandler},
-		{name: "antiRaidCallbackHandler", want: ext.ContinueGroups, call: antiRaid.callbackHandler},
+		{name: "antiraidRetiredCallback", want: ext.ContinueGroups, call: module.antiraidRetiredCallback},
 	}
 
 	contexts := []struct {

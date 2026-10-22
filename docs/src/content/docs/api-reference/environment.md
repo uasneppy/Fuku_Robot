@@ -452,7 +452,7 @@ Maximum memory usage in MB
 
 ### `CLEAR_CACHE_ON_STARTUP`
 
-Whether to clear disposable `alita:cache:*` entries on bot startup. Active anti-raid state and pending confirmations are preserved.
+Whether to clear disposable `alita:cache:*` entries on bot startup. Operational keys (lockdown, staff and raid detection state under `alita:lockdown:*`, `alita:staff:*` and `alita:raid:*`) and pending confirmations are preserved.
 
 | Property | Value |
 |----------|-------|

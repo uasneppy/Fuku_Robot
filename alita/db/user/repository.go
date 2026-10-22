@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -126,6 +127,51 @@ func GetUserIdByUserName(username string) int64 {
 	}
 	log.Debugf("[Database] GetUserIdByUserName: %d", userId)
 	return userId
+}
+
+// FindUsersByUsername is the Staff Group target resolver for an @username. It reads
+// the users table only (never channels, never Telegram), matches case-insensitively
+// by equality (an underscore is literal), and returns up to limit rows, newest
+// last_activity first, so the caller can refuse an ambiguous name and list who
+// shares it. A leading "@" is stripped; an empty name returns (nil, nil) without a
+// query. Unlike GetUserIdByUserName it returns the database error: a failed lookup
+// must never read as "never seen". It is uncached on purpose, so a fresh username
+// change is seen.
+func FindUsersByUsername(username string, limit int) ([]models.User, error) {
+	username = strings.TrimSpace(username)
+	username = strings.TrimSpace(strings.TrimPrefix(username, "@"))
+	if username == "" {
+		return nil, nil
+	}
+	var rows []models.User
+	err := db.DB.Where("LOWER(username) = LOWER(?)", username).
+		Order("last_activity DESC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		log.Errorf("[Database] FindUsersByUsername: %v - %s", err, username)
+		return nil, fmt.Errorf("find users by username %q: %w", username, err)
+	}
+	return rows, nil
+}
+
+// FindUsersByIDs reads the users rows of many IDs in one uncached query and returns them
+// by user ID. An ID with no row is absent from the map, and an empty input returns an
+// empty map without querying. A database error is returned, never reported as "no rows".
+func FindUsersByIDs(ids []int64) (map[int64]models.User, error) {
+	found := make(map[int64]models.User, len(ids))
+	if len(ids) == 0 {
+		return found, nil
+	}
+	var rows []models.User
+	if err := db.DB.Where("user_id IN ?", ids).Find(&rows).Error; err != nil {
+		log.Errorf("[Database] FindUsersByIDs: %v - %d ids", err, len(ids))
+		return nil, fmt.Errorf("find users by %d ids: %w", len(ids), err)
+	}
+	for _, row := range rows {
+		found[row.UserId] = row
+	}
+	return found, nil
 }
 
 func GetUserInfoById(userId int64) (username, name string, found bool) {

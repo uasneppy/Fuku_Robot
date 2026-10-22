@@ -41,6 +41,15 @@ captcha, connections, disabling, filters, greetings, locks, notes, pins,
 reactions, reports, rules, and warns. Import and reset are transactional: if one
 selected module fails, no selected module is changed.
 
+The automatic raid detection settings (`/autolockdown`: the join surge and flood
+triggers and their thresholds) are not part of a backup. Export does not write
+them, import does not restore them, and reset does not clear them. The AntiRaid
+module of a backup still holds the old `antiraid_settings` (the retired raid
+mode's timings and auto threshold). Those values no longer control anything, so
+restoring an old backup does not change a group's raid detection. Check it with
+`/autolockdown` after an import. Lockdown and Staff Group state are not backed up
+either.
+
 ## Available Commands
 
 | Command | Description | Disableable |

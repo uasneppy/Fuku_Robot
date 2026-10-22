@@ -14,7 +14,8 @@ This page documents every registered message watcher with its exact handler grou
 | Group | Module | Handler | Filter | Return on Match | Notes |
 |-------|--------|---------|--------|-----------------|-------|
 | -10 | Captcha | `handlePendingCaptchaMessage` | nil (all messages) | `EndGroups` | Intercepts messages from users with pending captcha; stores and deletes message |
-| -5 | AntiRaid | `antiRaidJoinHandler` | ChatMember (user joined) | `EndGroups` | Intercepts new member joins during raid mode; auto-restricts or bans joiners |
+| -7 | Lockdown | `lockdownOnJoinMember`, `lockdownOnJoinMessage`, `lockdownOnKicked`, `lockdownOnJoinRequest` | ChatMember (joined or kicked), `new_chat_members` service message, join request | `EndGroups` when a confirmed lockdown handled the update, `ContinueGroups` otherwise | The lockdown join guard. Records each join in the 10-minute tracker and counts it for the join surge trigger first, then reads the lockdown fresh; during a lockdown it records the joiner and ends the update so no welcome or captcha follows |
+| -4 | Lockdown | `raidFloodWatcher` | `message.All` | `ContinueGroups` (always) | The raid flood counter. Counts messages and media for the flood trigger, never deletes anything, and lets aispam, antiflood, locks and blacklists still see every message |
 | -1 | BotUpdates | `botJoinedGroup` | MyChatMember (bot joined) | `EndGroups` | Early interceptor for bot group joins; leaves non-supergroups |
 | -1 | Users | `logUsers` | `message.All` | `ContinueGroups` | Logs user activity; never blocks propagation |
 | 0 | All modules | Commands, callbacks | Various | varies | Default group; standard command handlers |
@@ -33,8 +34,9 @@ This page documents every registered message watcher with its exact handler grou
 :::caution[Critical propagation rules]
 Understanding these rules is essential for debugging why a message did or did not trigger a particular watcher.
 
-- **Captcha is first (group -10).** Any message from a user with a pending captcha is stored for moderator review and deleted. The message never reaches antiraid, antiflood, blacklists, or filters.
-- **AntiRaid intercepts joins (group -5).** During raid mode, new member joins are intercepted and auto-restricted before reaching downstream handlers.
+- **Captcha is first (group -10).** Any message from a user with a pending captcha is stored for moderator review and deleted. The message never reaches the raid flood counter, antiflood, blacklists, or filters.
+- **The lockdown guard intercepts joins (group -7).** It counts every supergroup join for the join surge trigger, then, while a lockdown is active, records the joiner and ends the update, so welcome messages and captcha challenges never run for that join. With no lockdown it returns `ContinueGroups` and the join continues as usual. The old raid mode handler at group -5 is gone.
+- **The raid flood counter never blocks (group -4).** It always returns `ContinueGroups` and deletes nothing. When a flood trigger fires it starts a lockdown, and the lockdown's muting stops the flood.
 - **Blacklists and Filters use ContinueGroups.** Both take their configured action (warn, mute, ban for blacklists; send reply for filters) but do not block downstream watchers. A message matching a blacklist word still gets checked by filters.
 :::
 
@@ -49,7 +51,7 @@ Understanding these rules is essential for debugging why a message did or did no
 ### Scenario 2: User sends a flood of messages
 
 1. Captcha (group -10) passes through (no pending captcha).
-2. AntiRaid (group -5) passes through (raid mode not active).
+2. The raid flood counter (group -4) counts the message towards the flood trigger and continues. If enough of a burst comes from newly joined members, it starts a lockdown, but it does not touch this message.
 3. Users (group -1) logs activity, continues.
 4. Commands (group 0) fire normally for earlier messages.
 5. **Antiflood (group 4)** triggers after the flood threshold is reached, returns `EndGroups`.
@@ -58,7 +60,7 @@ Understanding these rules is essential for debugging why a message did or did no
 ### Scenario 3: Message matches both a blacklist word and a filter
 
 1. Captcha (group -10) passes through.
-2. AntiRaid (group -5) passes through (raid mode not active).
+2. The raid flood counter (group -4) counts the message and continues.
 3. Users (group -1) logs activity, continues.
 4. Commands (group 0) — not a command, passes.
 5. Antiflood (group 4) — not flooding, continues.

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -523,5 +524,138 @@ func TestRunChecksOrder(t *testing.T) {
 	}
 	if len(calls) != 2 || calls[0] != "a" || calls[1] != "b" {
 		t.Fatalf("RunChecks calls = %v, want [a b] (short-circuit)", calls)
+	}
+}
+
+// recordingCpBot is cpBotClient that remembers every Telegram method called.
+type recordingCpBot struct {
+	cpBotClient
+	mu    sync.Mutex
+	calls []string
+}
+
+func (r *recordingCpBot) RequestWithContext(ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	r.mu.Lock()
+	r.calls = append(r.calls, method)
+	r.mu.Unlock()
+	return r.cpBotClient.RequestWithContext(ctx, token, method, params, opts)
+}
+
+func (r *recordingCpBot) methods() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.calls...)
+}
+
+// senderCase builds a command context for a message with the given identity
+// fields, the way WrapCommand would hand it to RejectAnonymousSender.
+func senderCase(from *gotgbot.User, senderChat *gotgbot.Chat, autoForward bool) (*CommandContext, *recordingCpBot) {
+	rec := &recordingCpBot{}
+	bot := &gotgbot.Bot{
+		Token:     "999:test",
+		BotClient: rec,
+		User:      gotgbot.User{Id: 999, IsBot: true, FirstName: "Bot"},
+	}
+	msg := &gotgbot.Message{
+		MessageId:          1,
+		Date:               1,
+		Chat:               gotgbot.Chat{Id: -1001, Type: "supergroup", Title: "Test Chat"},
+		From:               from,
+		SenderChat:         senderChat,
+		IsAutomaticForward: autoForward,
+	}
+	ctx := ext.NewContext(bot, &gotgbot.Update{UpdateId: 1, Message: msg}, nil)
+	return &CommandContext{Bot: bot, Ctx: ctx, Chat: &msg.Chat, Msg: msg, User: from}, rec
+}
+
+// wantOnlyReply asserts the check refused and sent exactly one reply and made no
+// other Telegram call (so no admin or member lookup ran for an unprovable identity).
+func wantOnlyReply(t *testing.T, got bool, rec *recordingCpBot) {
+	t.Helper()
+	if got {
+		t.Fatal("RejectAnonymousSender() = true, want false")
+	}
+	if calls := rec.methods(); len(calls) != 1 || calls[0] != "sendMessage" {
+		t.Fatalf("Telegram calls = %v, want exactly [sendMessage]", calls)
+	}
+}
+
+func TestRejectAnonymousSenderBlocksAnonymousAdmin(t *testing.T) {
+	// An anonymous admin posts as the group itself: SenderChat is the chat and
+	// From is the GroupAnonymousBot placeholder.
+	c, rec := senderCase(
+		&gotgbot.User{Id: 1087968824, IsBot: true, FirstName: "Group"},
+		&gotgbot.Chat{Id: -1001, Type: "supergroup", Title: "Test Chat"},
+		false,
+	)
+	wantOnlyReply(t, RejectAnonymousSender()(c), rec)
+}
+
+func TestRejectAnonymousSenderBlocksChannelIdentity(t *testing.T) {
+	cases := map[string]struct {
+		from        *gotgbot.User
+		senderChat  *gotgbot.Chat
+		autoForward bool
+	}{
+		"sent as another channel": {
+			from:       &gotgbot.User{Id: 136817688, IsBot: true, FirstName: "Channel"},
+			senderChat: &gotgbot.Chat{Id: -1009, Type: "channel", Title: "Some Channel"},
+		},
+		"linked channel auto-forward": {
+			from:        &gotgbot.User{Id: 42, FirstName: "Forwarder"},
+			senderChat:  &gotgbot.Chat{Id: -1009, Type: "channel", Title: "Linked"},
+			autoForward: true,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			c, rec := senderCase(tc.from, tc.senderChat, tc.autoForward)
+			wantOnlyReply(t, RejectAnonymousSender()(c), rec)
+		})
+	}
+}
+
+func TestRejectAnonymousSenderBlocksChannelPostWithoutUser(t *testing.T) {
+	c, rec := senderCase(nil, &gotgbot.Chat{Id: -1001, Type: "channel", Title: "Chan"}, false)
+	c.Msg.Chat = gotgbot.Chat{Id: -1001, Type: "channel", Title: "Chan"}
+	c.Ctx = ext.NewContext(c.Bot, &gotgbot.Update{UpdateId: 1, Message: c.Msg}, nil)
+	wantOnlyReply(t, RejectAnonymousSender()(c), rec)
+}
+
+func TestRejectAnonymousSenderBlocksServiceAccount(t *testing.T) {
+	c, rec := senderCase(&gotgbot.User{Id: 777000, FirstName: "Telegram"}, nil, false)
+	wantOnlyReply(t, RejectAnonymousSender()(c), rec)
+}
+
+func TestRejectAnonymousSenderBlocksMissingUser(t *testing.T) {
+	c, rec := senderCase(&gotgbot.User{Id: 42, FirstName: "Real"}, nil, false)
+	c.User = nil
+	wantOnlyReply(t, RejectAnonymousSender()(c), rec)
+}
+
+func TestRejectAnonymousSenderAllowsRealUser(t *testing.T) {
+	c, rec := senderCase(&gotgbot.User{Id: 42, FirstName: "Real"}, nil, false)
+	if !RejectAnonymousSender()(c) {
+		t.Fatal("RejectAnonymousSender() = false for a real user, want true")
+	}
+	if calls := rec.methods(); len(calls) != 0 {
+		t.Fatalf("a real user caused Telegram calls %v, want none", calls)
+	}
+}
+
+func TestIsAnonymousSenderNilInputs(t *testing.T) {
+	if !IsAnonymousSender(nil, &gotgbot.User{Id: 42}) {
+		t.Error("IsAnonymousSender(nil ctx) = false, want true")
+	}
+	c, _ := senderCase(&gotgbot.User{Id: 42}, nil, false)
+	if !IsAnonymousSender(c.Ctx, nil) {
+		t.Error("IsAnonymousSender(nil user) = false, want true")
+	}
+	if IsAnonymousSender(c.Ctx, &gotgbot.User{Id: 42}) {
+		t.Error("IsAnonymousSender(real user) = true, want false")
+	}
+	c.Ctx.EffectiveSender = nil
+	if !IsAnonymousSender(c.Ctx, &gotgbot.User{Id: 42}) {
+		t.Error("IsAnonymousSender(nil sender) = false, want true")
 	}
 }

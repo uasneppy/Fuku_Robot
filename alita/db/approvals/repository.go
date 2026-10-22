@@ -8,6 +8,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/utils/errors"
 )
 
 func AddApprovedUser(chatID, userID, approvedBy int64, reason string) error {
@@ -56,6 +57,25 @@ func GetApprovedUsersContext(ctx context.Context, chatID int64) []*models.Approv
 		return nil
 	}
 	return result
+}
+
+// ListApprovedIDsFresh reads the approved users of one chat straight from the database and
+// returns their IDs as a set. Unlike GetApprovedUsers it never reads or fills the cache,
+// so no cache key needs invalidation, and it returns its error instead of an empty list:
+// a caller that must not act on an unreadable list (a permanent ban) can tell "nobody is
+// approved" from "the approvals could not be read".
+func ListApprovedIDsFresh(chatID int64) (map[int64]bool, error) {
+	var ids []int64
+	err := db.DB.Model(&models.ApprovedUsers{}).Where("chat_id = ?", chatID).Pluck("user_id", &ids).Error
+	if err != nil {
+		log.Errorf("[Database] ListApprovedIDsFresh: %v - chat:%d", err, chatID)
+		return nil, errors.Wrapf(err, "list approved users of chat %d", chatID)
+	}
+	approved := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		approved[id] = true
+	}
+	return approved, nil
 }
 
 func RemoveApprovedUser(chatID, userID int64) error {

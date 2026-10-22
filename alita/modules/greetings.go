@@ -21,6 +21,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
 	"github.com/divkix/Alita_Robot/alita/db/greetings"
 	"github.com/divkix/Alita_Robot/alita/db/lang"
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
@@ -960,13 +961,32 @@ func (m moduleStruct) joinRequestHandler(b *gotgbot.Bot, ctx *ext.Context) error
 		}
 	}
 
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+
+	// While a lockdown holds the group the Accept button approves nothing (D-25): the
+	// request stays pending until the lift, or an admin approves it in Telegram's own
+	// request list. A lockdown that cannot be read counts as active.
+	if response == "accept" {
+		active, lockErr := lockdown.GetActiveFresh(chat.Id)
+		if lockErr != nil {
+			log.Errorf("[Greetings] could not read the lockdown of chat %d, refusing to approve: %v", chat.Id, lockErr)
+		}
+		if lockErr != nil || active != nil {
+			refusal, _ := tr.GetString("greetings_join_request_lockdown")
+			if _, err = query.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: refusal, ShowAlert: true}); err != nil {
+				log.Error(err)
+				return err
+			}
+			return ext.EndGroups
+		}
+	}
+
 	joinUser, err := b.GetChat(joinUserId, nil)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 	var helpText string
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 
 	// A request another admin already handled, the user withdrew, or that
 	// joined some other way is gone; report that instead of the requested action.
