@@ -427,6 +427,8 @@ func TestRedisEnvParsingPure(t *testing.T) {
 // setRequiredConfigEnv sets the variables LoadConfig cannot start without.
 func setRequiredConfigEnv(t *testing.T) {
 	t.Helper()
+	// LoadConfig registers the secrets it reads with logredact; take them out again.
+	forgetRegisteredSecrets(t)
 	t.Setenv("BOT_TOKEN", "test-token")
 	t.Setenv("OWNER_ID", "12345")
 	t.Setenv("MESSAGE_DUMP", "67890")
@@ -528,6 +530,7 @@ func TestGeminiConfig(t *testing.T) {
 	t.Run("the key is registered", func(t *testing.T) {
 		const key = "AIzaSyRegisteredSecretForTest_abcdefghij"
 		const botToken = "registersecretsbottoken"
+		forgetRegisteredSecrets(t)
 		registerSecrets(&Config{GeminiAPIKey: key, BotToken: botToken})
 
 		got := logredact.Scrub("calling model with key=" + key + " and " + botToken)
