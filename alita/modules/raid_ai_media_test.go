@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -21,6 +22,7 @@ import (
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/divkix/Alita_Robot/alita/config"
+	"github.com/divkix/Alita_Robot/alita/utils/gemini"
 )
 
 // raidAITestKey is the Gemini key of the image tests, shaped like a real one.
@@ -472,6 +474,195 @@ func TestRaidAIMedia(t *testing.T) {
 		env.wantNoActions()
 		if got := len(env.calls("unbanChatMember")); got != 0 {
 			t.Errorf("unbanChatMember calls = %d, want 0", got)
+		}
+	})
+
+	t.Run("frame table", func(t *testing.T) {
+		thumb := &gotgbot.PhotoSize{FileId: "thumb", FileUniqueId: "uthumb", Width: 90, Height: 90}
+		cases := []struct {
+			name   string
+			msg    gotgbot.Message
+			wantID string // empty: no candidate
+			kind   string
+		}{
+			{"a regular static sticker sends the sticker file", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk", Type: "regular", Thumbnail: thumb},
+			}, "stk", "sticker"},
+			{"an animated sticker sends its thumbnail", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "tgs", Type: "regular", IsAnimated: true, Thumbnail: thumb},
+			}, "thumb", "sticker"},
+			{"a video sticker sends its thumbnail", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "webm", Type: "regular", IsVideo: true, Thumbnail: thumb},
+			}, "thumb", "sticker"},
+			{"an animation sends its thumbnail, whatever the document says", gotgbot.Message{
+				Animation: &gotgbot.Animation{FileId: "gif", Thumbnail: thumb},
+				Document:  &gotgbot.Document{FileId: "gif", Thumbnail: &gotgbot.PhotoSize{FileId: "doc-thumb"}},
+			}, "thumb", "animation"},
+			{"a video sends its thumbnail", gotgbot.Message{
+				Video: &gotgbot.Video{FileId: "vid", Thumbnail: thumb},
+			}, "thumb", "video"},
+			{"a photo sends the size nearest 1024 px", gotgbot.Message{Photo: photoSizes()}, "p800", "photo"},
+			{"a sticker without a frame sends nothing", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "tgs", Type: "regular", IsAnimated: true},
+			}, "", ""},
+			{"a video sticker without a thumbnail sends nothing", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "webm", Type: "regular", IsVideo: true},
+			}, "", ""},
+			{"a video without a thumbnail sends nothing", gotgbot.Message{
+				Video: &gotgbot.Video{FileId: "vid"},
+			}, "", ""},
+			{"an animation without a thumbnail sends nothing", gotgbot.Message{
+				Animation: &gotgbot.Animation{FileId: "gif"},
+				Document:  &gotgbot.Document{FileId: "gif"},
+			}, "", ""},
+			{"a custom emoji sends nothing", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "emoji", Type: "custom_emoji", Thumbnail: thumb},
+			}, "", ""},
+			{"a mask sends nothing", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "mask", Type: "mask", Thumbnail: thumb},
+			}, "", ""},
+			{"a video note sends nothing", gotgbot.Message{
+				VideoNote: &gotgbot.VideoNote{FileId: "note", Thumbnail: thumb},
+			}, "", ""},
+			{"a document sends nothing", gotgbot.Message{
+				Document: &gotgbot.Document{FileId: "doc", FileName: "x.jpg", MimeType: "image/jpeg", Thumbnail: thumb},
+			}, "", ""},
+			{"a voice note sends nothing", gotgbot.Message{Voice: &gotgbot.Voice{FileId: "voice"}}, "", ""},
+			{"a text sends nothing", gotgbot.Message{Text: "hello"}, "", ""},
+			{"a photo over 5 MiB sends nothing", gotgbot.Message{
+				Photo: []gotgbot.PhotoSize{{FileId: "huge", Width: 1024, Height: 1024, FileSize: gemini.MaxImageBytes + 1}},
+			}, "", ""},
+			{"a sticker over 5 MiB sends nothing", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "huge", Type: "regular", FileSize: gemini.MaxImageBytes + 1},
+			}, "", ""},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				got, ok := raidAIMediaRef(&tc.msg)
+				if tc.wantID == "" {
+					if ok {
+						t.Fatalf("raidAIMediaRef = %+v, want no candidate", got)
+					}
+					return
+				}
+				if !ok || got.FileID != tc.wantID || got.Kind != tc.kind {
+					t.Errorf("raidAIMediaRef = %+v (ok %v), want file %q of kind %q", got, ok, tc.wantID, tc.kind)
+				}
+			})
+		}
+	})
+
+	t.Run("kinds end to end", func(t *testing.T) {
+		thumb := &gotgbot.PhotoSize{FileId: "thumb", FileUniqueId: "uthumb", Width: 90, Height: 90}
+		cases := []struct {
+			name     string
+			msg      gotgbot.Message
+			wantFile string
+			wantMIME string
+		}{
+			{"a static sticker is sent as WebP", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk", Type: "regular"},
+			}, "stk", "image/webp"},
+			{"a GIF is sent as its thumbnail", gotgbot.Message{
+				Animation: &gotgbot.Animation{FileId: "gif", FileUniqueId: "ugif", Thumbnail: thumb},
+				Document:  &gotgbot.Document{FileId: "gif", FileUniqueId: "ugif"},
+			}, "thumb", "image/jpeg"},
+			{"an animated sticker is sent as its thumbnail", gotgbot.Message{
+				Sticker: &gotgbot.Sticker{FileId: "tgs", FileUniqueId: "utgs", Type: "regular", IsAnimated: true, Thumbnail: thumb},
+			}, "thumb", "image/jpeg"},
+			{"a video is sent as its thumbnail", gotgbot.Message{
+				Video: &gotgbot.Video{FileId: "vid", FileUniqueId: "uvid", Thumbnail: thumb},
+			}, "thumb", "image/jpeg"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				env := newRaidAIImageEnv(t)
+				member := env.newMembers(1, 2*time.Hour)[0]
+				env.serve("files/stk", raidAIServed{status: http.StatusOK, body: raidAITestWebP("sticker")})
+
+				env.sendMedia(member, tc.msg)
+				env.settleAI()
+
+				if got := env.client.getFiles(); len(got) != 1 || got[0] != tc.wantFile {
+					t.Fatalf("getFile asked for %v, want exactly %q", got, tc.wantFile)
+				}
+				if got := env.geminiRequests(); got != 1 {
+					t.Fatalf("Gemini requests = %d, want 1", got)
+				}
+				images := inlineImages(t, env.geminiBody(0))
+				if len(images) != 1 || images[0].MimeType != tc.wantMIME {
+					t.Errorf("inline images = %+v, want exactly one %s", images, tc.wantMIME)
+				}
+				if n := aiVerdictSetSize(env.lockdownEnv, "av"); n != 1 {
+					t.Errorf("verdict items = %d, want 1", n)
+				}
+				env.wantNoActions()
+			})
+		}
+	})
+
+	t.Run("refused files", func(t *testing.T) {
+		cases := []struct {
+			name string
+			// setup shapes the getFile answer and the file server for the photo's p800 size.
+			setup func(env *raidAIImageEnv)
+			// wantDownload is whether the file server should be asked at all.
+			wantDownload bool
+		}{
+			{"bytes that are HTML", func(env *raidAIImageEnv) {
+				env.serve("files/p800", raidAIServed{status: http.StatusOK, body: []byte("<html><body>not an image</body></html>")})
+			}, true},
+			{"bytes that are a GIF image", func(env *raidAIImageEnv) {
+				env.serve("files/p800", raidAIServed{status: http.StatusOK, body: []byte("GIF89a\x01\x00\x01\x00")})
+			}, true},
+			{"a body over 5 MiB with no size declared", func(env *raidAIImageEnv) {
+				env.client.rawFile["p800"] = `{"file_id":"p800","file_unique_id":"u","file_path":"files/p800"}`
+				env.serve("files/p800", raidAIServed{
+					status: http.StatusOK,
+					body:   append(raidAITestJPEG("big"), bytes.Repeat([]byte{0x41}, gemini.MaxImageBytes)...),
+				})
+			}, true},
+			{"a file that declares over 5 MiB", func(env *raidAIImageEnv) {
+				env.client.rawFile["p800"] = fmt.Sprintf(
+					`{"file_id":"p800","file_unique_id":"u","file_size":%d,"file_path":"files/p800"}`, gemini.MaxImageBytes+1)
+			}, false},
+			{"an empty file path", func(env *raidAIImageEnv) {
+				env.client.rawFile["p800"] = `{"file_id":"p800","file_unique_id":"u","file_size":100}`
+			}, false},
+			{"an absolute file path", func(env *raidAIImageEnv) {
+				env.client.rawFile["p800"] = `{"file_id":"p800","file_unique_id":"u","file_size":100,"file_path":"/var/lib/telegram-bot-api/p800.jpg"}`
+			}, false},
+			{"a 404 from the file server", func(env *raidAIImageEnv) {
+				env.serve("files/p800", raidAIServed{status: http.StatusNotFound, body: []byte("gone")})
+			}, true},
+			{"an empty download", func(env *raidAIImageEnv) {
+				env.serve("files/p800", raidAIServed{status: http.StatusOK})
+			}, true},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				env := newRaidAIImageEnv(t)
+				member := env.newMembers(1, 2*time.Hour)[0]
+				tc.setup(env)
+				before := GetRaidAIStats()
+
+				env.sendMedia(member, gotgbot.Message{Photo: photoSizes()})
+				env.settleAI()
+
+				if got := env.geminiRequests(); got != 0 {
+					t.Errorf("Gemini requests = %d, want 0 for a refused file", got)
+				}
+				if got := env.fileHits.Load() > 0; got != tc.wantDownload {
+					t.Errorf("file server asked = %v, want %v", got, tc.wantDownload)
+				}
+				if got := GetRaidAIStats(); got.Failed-before.Failed != 1 {
+					t.Errorf("Failed grew by %d, want 1", got.Failed-before.Failed)
+				}
+				if n := aiVerdictSetSize(env.lockdownEnv, "av"); n != 0 {
+					t.Errorf("verdict items = %d, want 0", n)
+				}
+				env.wantNoActions()
+			})
 		}
 	})
 }
