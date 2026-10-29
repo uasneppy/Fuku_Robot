@@ -325,7 +325,8 @@ func raidSend(b *gotgbot.Bot, chatID int64, text string) error {
 
 // lockdownTriggerSentence is the time-less sentence saying what an automatic trigger saw:
 // a join surge names its count and window, a flood its count, window and the percent from
-// new members. Any other kind, a manual lockdown included, has none and gets "". The
+// new members, an AI burst its count of spam verdicts and window. Any other kind, a manual
+// lockdown included, has none and gets "". The
 // numbers are passed as strings built with strconv and by name only, so the translator's
 // legacy printf pass never meets the percent sign, and the sentence holds no user text.
 func lockdownTriggerSentence(tr *i18n.Translator, kind string, count, window, percent int) string {
@@ -341,11 +342,17 @@ func lockdownTriggerSentence(tr *i18n.Translator, kind string, count, window, pe
 			"window":  strconv.Itoa(window),
 			"percent": strconv.Itoa(percent),
 		})
+	case models.LockdownTriggerAIBurst:
+		return lockdownText(tr, "lockdown_trigger_ai_burst", i18n.TranslationParams{
+			"count":  strconv.Itoa(count),
+			"window": strconv.Itoa(window),
+		})
 	}
 	return ""
 }
 
-// raidPostNotice tells the locked group, once, that the bot locked it on its own: which
+// raidPostNotice tells the locked group, once, that the bot locked it on its own (a join
+// surge, a flood or an AI burst; any other kind posts nothing): which
 // trigger fired with its numbers, that approved users are muted too, and the notes
 // /lockdown adds when the bot lacks the delete or the invite right (read from res.BotMember,
 // the rights startLockdownRow saw). It is written in the group's own language and sent
@@ -367,6 +374,11 @@ func raidPostNotice(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, res lo
 			"count":   count,
 			"window":  window,
 			"percent": strconv.Itoa(trig.Percent),
+		})
+	case models.LockdownTriggerAIBurst:
+		intro = lockdownText(tr, "lockdown_auto_started_ai_burst", i18n.TranslationParams{
+			"count":  count,
+			"window": window,
 		})
 	default:
 		return

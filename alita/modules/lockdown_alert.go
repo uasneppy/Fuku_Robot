@@ -469,12 +469,17 @@ func lockdownRenderSampleAccount(tr *i18n.Translator, account lockdown.BurstAcco
 // then, when the burst is not empty, a title, one line per listed account and an "and N
 // more" line for the accounts not listed. The counts line of a flood lockdown says that
 // the listed accounts are the flooding accounts as well as the joins just before the lock;
-// every other kind says only who joined. The account lines hold user text, so they are
+// that of an AI burst names the accounts behind the spam verdicts and does not say they
+// joined, because some of them may be established members; every other kind says only who
+// joined. The account lines hold user text, so they are
 // built outside the translator and spliced in after it, in place of a token.
 func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount, counts lockdown.BurstCounts, kind string) string {
 	countsKey := "lockdown_alert_counts"
-	if kind == models.LockdownTriggerFlood {
+	switch kind {
+	case models.LockdownTriggerFlood:
 		countsKey = "lockdown_alert_counts_flood"
+	case models.LockdownTriggerAIBurst:
+		countsKey = "lockdown_alert_counts_ai"
 	}
 	lines := []string{lockdownText(tr, countsKey, i18n.TranslationParams{
 		"before": strconv.FormatInt(counts.Before, 10),

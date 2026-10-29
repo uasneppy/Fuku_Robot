@@ -524,8 +524,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the bot itself never count. Nothing on the counting path deletes, restricts or bans: the `/aispam` deletion itself is
   unchanged, and the lockdown's muting is what stops the raid. The call is synchronous in the `/aispam` worker
   (`DrainAISpamChecks` waits for it); `raidFire` is bounded by `raidFireTimeout` and its 60 s latch.
-- An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge` or `flood`) is described as such to
-  admins. `/lockdownstatus` opens with `lockdown_status_active_auto` and the trigger sentence
+- An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
+  described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
+  `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`
+  (counts line `lockdown_alert_counts_ai` for an AI alert, which does not say the listed accounts joined, because some
+  may be established members). `TestLockdownTriggerKindsAllSurfaces` renders every kind in
+  `models.LockdownTriggerKinds()` on every one of them, so a new kind added there without the same case everywhere
+  fails it. `/lockdownstatus` opens with `lockdown_status_active_auto` and the trigger sentence
   (`lockdownTriggerSentence`, from the row's trigger columns, never from `reason`) instead of "started by" the bot, and
   `/lockdown` during one answers `lockdown_already_active_auto` plus the same sentence and starts nothing
   (`lockdownAlreadyActiveText`); every other kind, a manual lockdown included, reads as before.
