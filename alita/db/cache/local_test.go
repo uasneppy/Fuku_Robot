@@ -295,6 +295,17 @@ func TestSkipLocalMatchesFreshnessCriticalKeys(t *testing.T) {
 	}
 }
 
+// TestSkipLocalRaidDetectionSettingsKey pins the exact key the raid detection repository
+// reads and invalidates (cache.CacheKey("raid_detection", chat)): an admin's change must
+// reach every replica at once, so the in-process layer must never hold it.
+func TestSkipLocalRaidDetectionSettingsKey(t *testing.T) {
+	for _, chatID := range []int64{1, -1001234567890} {
+		if !skipLocal(CacheKey("raid_detection", chatID)) {
+			t.Errorf("raid detection settings key of chat %d is served from the local layer", chatID)
+		}
+	}
+}
+
 func TestSwappingBackingStoreDropsLocalEntries(t *testing.T) {
 	setupLocalRedis(t, 10)
 	ctx := context.Background()

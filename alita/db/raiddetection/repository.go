@@ -102,7 +102,7 @@ func upsertSettings(row *models.ChatRaidDetection, columns []string) error {
 	if err != nil {
 		return alitaerrors.Wrapf(err, "write raid detection settings of chat %d", row.ChatID)
 	}
-	cache.DeleteCache(cache.CacheKey("raid_detection", row.ChatID))
+	cache.DeleteCache(cache.CacheKey(cacheModule, row.ChatID))
 	return nil
 }
 
