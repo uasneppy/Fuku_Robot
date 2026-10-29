@@ -18,10 +18,11 @@ import (
 	"github.com/divkix/Alita_Robot/alita/utils/helpers"
 )
 
-// The two triggers /autolockdown can change.
+// The three triggers /autolockdown can change.
 const (
 	autoTriggerJoins = "joins"
 	autoTriggerFlood = "flood"
+	autoTriggerAI    = "ai"
 )
 
 var (
@@ -59,7 +60,7 @@ func requireAutoLockdownAuthority() helpers.CheckFunc {
 // autoLockdownChange is one parsed /autolockdown change. A zero Trigger means no change
 // was asked for: the command shows the settings.
 type autoLockdownChange struct {
-	// Trigger is autoTriggerJoins or autoTriggerFlood.
+	// Trigger is autoTriggerJoins, autoTriggerFlood or autoTriggerAI.
 	Trigger string
 	// Enable is the new switch when SetThreshold is false.
 	Enable bool
@@ -70,7 +71,7 @@ type autoLockdownChange struct {
 }
 
 // parseAutoLockdownArgs reads the words after /autolockdown. No words is the status
-// (a zero change). Otherwise exactly two words: joins or flood in any case, then on, off
+// (a zero change). Otherwise exactly two words: joins, flood or ai in any case, then on, off
 // or a whole number, which sets the threshold and turns the trigger on (D-21). Anything
 // else is errAutoLockdownUsage, and a number outside MinThreshold..MaxThreshold is
 // errAutoLockdownRange (D-18).
@@ -87,6 +88,8 @@ func parseAutoLockdownArgs(args []string) (autoLockdownChange, error) {
 		change.Trigger = autoTriggerJoins
 	case autoTriggerFlood:
 		change.Trigger = autoTriggerFlood
+	case autoTriggerAI:
+		change.Trigger = autoTriggerAI
 	default:
 		return autoLockdownChange{}, errAutoLockdownUsage
 	}
@@ -142,6 +145,11 @@ func writeAutoLockdown(chatID int64, change autoLockdownChange) error {
 			return raiddetection.SetFloodThreshold(chatID, change.Threshold)
 		}
 		return raiddetection.SetFloodEnabled(chatID, change.Enable)
+	case autoTriggerAI:
+		if change.SetThreshold {
+			return raiddetection.SetAIThreshold(chatID, change.Threshold)
+		}
+		return raiddetection.SetAIEnabled(chatID, change.Enable)
 	}
 	return fmt.Errorf("autolockdown: unknown trigger %q", change.Trigger)
 }
