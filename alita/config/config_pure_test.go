@@ -4,6 +4,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/divkix/Alita_Robot/alita/utils/gemini"
+	"github.com/divkix/Alita_Robot/alita/utils/logredact"
 )
 
 // t.Parallel() because it mutates os.Args and must run sequentially.
@@ -416,4 +419,99 @@ func TestRedisEnvParsingPure(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setRequiredConfigEnv sets the variables LoadConfig cannot start without.
+func setRequiredConfigEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("BOT_TOKEN", "test-token")
+	t.Setenv("OWNER_ID", "12345")
+	t.Setenv("MESSAGE_DUMP", "67890")
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("REDIS_ADDRESS", "redis:6379")
+	t.Setenv("REDIS_PASSWORD", "")
+	t.Setenv("REDIS_URL", "")
+}
+
+// t.Setenv() is incompatible with parallel execution.
+func TestGeminiConfig(t *testing.T) {
+	t.Run("key and model load", func(t *testing.T) {
+		setRequiredConfigEnv(t)
+		t.Setenv("GEMINI_API_KEY", "AIzaSyTestKeyForConfig_0123456789abcdefg")
+		t.Setenv("GEMINI_MODEL", "gemini-3.5-flash")
+
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.GeminiAPIKey != "AIzaSyTestKeyForConfig_0123456789abcdefg" {
+			t.Errorf("GeminiAPIKey: got %q", cfg.GeminiAPIKey)
+		}
+		if cfg.GeminiModel != "gemini-3.5-flash" {
+			t.Errorf("GeminiModel: got %q, want %q", cfg.GeminiModel, "gemini-3.5-flash")
+		}
+	})
+
+	t.Run("model defaults", func(t *testing.T) {
+		setRequiredConfigEnv(t)
+		t.Setenv("GEMINI_API_KEY", "")
+		t.Setenv("GEMINI_MODEL", "")
+
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatalf("a missing key must not fail LoadConfig: %v", err)
+		}
+		if cfg.GeminiAPIKey != "" {
+			t.Errorf("GeminiAPIKey: got %q, want empty", cfg.GeminiAPIKey)
+		}
+		if cfg.GeminiModel != gemini.DefaultModel {
+			t.Errorf("GeminiModel: got %q, want %q", cfg.GeminiModel, gemini.DefaultModel)
+		}
+	})
+
+	t.Run("bad model falls back", func(t *testing.T) {
+		for name, model := range map[string]string{
+			"path traversal": "../v1/files",
+			"too long":       strings.Repeat("a", 65),
+			"query":          "gemini?key=x",
+		} {
+			t.Run(name, func(t *testing.T) {
+				setRequiredConfigEnv(t)
+				t.Setenv("GEMINI_MODEL", model)
+
+				cfg, err := LoadConfig()
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if cfg.GeminiModel != gemini.DefaultModel {
+					t.Errorf("GeminiModel: got %q, want %q", cfg.GeminiModel, gemini.DefaultModel)
+				}
+			})
+		}
+	})
+
+	t.Run("the key is registered", func(t *testing.T) {
+		const key = "AIzaSyRegisteredSecretForTest_abcdefghij"
+		const botToken = "registersecretsbottoken"
+		registerSecrets(&Config{GeminiAPIKey: key, BotToken: botToken})
+
+		got := logredact.Scrub("calling model with key=" + key + " and " + botToken)
+		if strings.Contains(got, key) {
+			t.Errorf("Gemini key leaked: %q", got)
+		}
+		if strings.Contains(got, botToken) {
+			t.Errorf("bot token no longer registered: %q", got)
+		}
+		if !strings.Contains(got, logredact.Placeholder) {
+			t.Errorf("expected %q in %q", logredact.Placeholder, got)
+		}
+
+		// A value the AIza shape pattern cannot match proves the exact-value
+		// registration on its own.
+		const plain = "plain-gemini-key-registered-by-exact-value"
+		registerSecrets(&Config{GeminiAPIKey: plain})
+		if got := logredact.Scrub("key=" + plain); strings.Contains(got, plain) {
+			t.Errorf("exact-value registration missing: %q", got)
+		}
+	})
 }
