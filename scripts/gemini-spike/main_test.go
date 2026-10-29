@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"image"
 	"image/jpeg"
 	"io"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/divkix/Alita_Robot/alita/utils/gemini"
 )
 
 const testKey = "test-key-9f3a7c1d-not-a-real-key"
@@ -31,6 +34,7 @@ type recordingTransport struct {
 	calls    int
 	keys     []string
 	paths    []string
+	methods  []string
 	requests []string
 }
 
@@ -47,6 +51,7 @@ func (r *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	r.calls++
 	r.keys = append(r.keys, req.Header.Get("x-goog-api-key"))
 	r.paths = append(r.paths, req.URL.Path)
+	r.methods = append(r.methods, req.Method)
 	r.requests = append(r.requests, sent)
 	r.mu.Unlock()
 
@@ -226,5 +231,182 @@ func TestSpikeOptionsReachTheRequest(t *testing.T) {
 		if strings.Contains(sent, unwanted) {
 			t.Errorf("request body has %s although the flags turned it off", unwanted)
 		}
+	}
+}
+
+const keyInvalidBody = `{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT",` +
+	`"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID","domain":"googleapis.com"}]}}`
+
+func TestSpikeProbeVerdicts(t *testing.T) {
+	rejected := &gemini.HTTPError{Status: 400, Code: "INVALID_ARGUMENT", Message: `Invalid JSON payload received. Unknown name "responseFormat" at 'generation_config': Cannot find field.`}
+	keyRefused := &gemini.HTTPError{Status: 400, Code: "INVALID_ARGUMENT", Reason: "API_KEY_INVALID", Message: "API key not valid. Please pass a valid API key."}
+	notFound := &gemini.HTTPError{Status: 404, Code: "NOT_FOUND", Message: "models/nope is not found"}
+	modelSide := &gemini.HTTPError{Status: 400, Code: "INVALID_ARGUMENT", Message: "Thinking level is not supported for this model."}
+
+	cases := []struct {
+		name string
+		err  error
+		v    *gemini.Verdict
+		want []string
+	}{
+		{"field rejected", rejected, nil, []string{"field rejected", "Invalid JSON payload"}},
+		{"shape accepted, key refused", keyRefused, nil, []string{"shape accepted, key refused"}},
+		{"accepted and answered", nil, &gemini.Verdict{SpamProbability: 0.42}, []string{"accepted and answered", "0.42"}},
+		{"other status", notFound, nil, []string{"404", "NOT_FOUND"}},
+		{"model-side 400 is not a rejected field", modelSide, nil, []string{"400", "Thinking level"}},
+		{"blocked", gemini.ErrBlocked, nil, []string{"accepted", "blocked"}},
+		{"unusable answer", gemini.ErrNoVerdict, nil, []string{"accepted", "not a usable verdict"}},
+		{"transport", errors.New("connection reset"), nil, []string{"request error"}},
+	}
+	for _, tc := range cases {
+		got := probeVerdict(tc.err, tc.v)
+		for _, want := range tc.want {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s: probeVerdict = %q; want it to contain %q", tc.name, got, want)
+			}
+		}
+	}
+	if got := probeVerdict(modelSide, nil); strings.Contains(got, "field rejected") || strings.Contains(got, "key refused") {
+		t.Errorf("a model-side 400 was read as %q", got)
+	}
+
+	variants := probeVariants()
+	names := map[string]bool{}
+	mimes := map[string]bool{}
+	schemas := map[string]bool{}
+	resolutions := map[string]bool{}
+	stores := map[bool]bool{}
+	var thinkingOn, thinkingOff, safety bool
+	for _, v := range variants {
+		if names[v.Name] {
+			t.Errorf("two probe variants are named %q", v.Name)
+		}
+		names[v.Name] = true
+		if len(v.Image.Data) == 0 {
+			t.Errorf("variant %q has no image", v.Name)
+		}
+		mimes[v.Image.MIMEType] = true
+		if v.Options.SchemaField != "" {
+			schemas[v.Options.SchemaField] = true
+		}
+		if v.Options.MediaResolution != "" {
+			resolutions[v.Options.MediaResolution] = true
+		}
+		if v.Options.Store != nil {
+			stores[*v.Options.Store] = true
+		}
+		thinkingOn = thinkingOn || (v.Options.ThinkingLevel != "" && v.Options.ThinkingLevel != "off")
+		thinkingOff = thinkingOff || v.Options.ThinkingLevel == "off"
+		safety = safety || v.Options.SafetyThreshold != ""
+	}
+	for _, mime := range []string{"image/jpeg", "image/png", "image/webp"} {
+		if !mimes[mime] {
+			t.Errorf("no probe variant sends %s", mime)
+		}
+	}
+	for _, field := range []string{"responseJsonSchema", "responseSchema", "responseFormat"} {
+		if !schemas[field] {
+			t.Errorf("no probe variant uses the %s schema field", field)
+		}
+	}
+	if len(resolutions) != 3 {
+		t.Errorf("probe variants cover %d media resolutions; want 3", len(resolutions))
+	}
+	if !stores[true] || !stores[false] || !thinkingOn || !thinkingOff || !safety {
+		t.Errorf("probe variants miss an option: store %v thinking on %v off %v safety %v", stores, thinkingOn, thinkingOff, safety)
+	}
+}
+
+func TestSpikeProbeRefusesWithoutAnyKey(t *testing.T) {
+	for _, args := range [][]string{{"-probe"}, {"-fake-key"}, {"-models-get", "-fake-key"}} {
+		tr := &recordingTransport{t: t, forbid: true}
+		var stdout, stderr bytes.Buffer
+		if code := run(args, envOf(), &stdout, &stderr, tr); code == 0 {
+			t.Errorf("run %v without a key exited 0", args)
+		}
+		if tr.count() != 0 {
+			t.Errorf("run %v sent %d requests without a key", args, tr.count())
+		}
+		if !strings.Contains(stderr.String(), "GEMINI_API_KEY") {
+			t.Errorf("run %v: usage does not name GEMINI_API_KEY: %q", args, stderr.String())
+		}
+	}
+
+	tr := &recordingTransport{t: t, status: http.StatusBadRequest, body: keyInvalidBody}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-probe", "-fake-key"}, envOf(), &stdout, &stderr, tr); code != 0 {
+		t.Fatalf("-probe -fake-key exited %d; stderr: %s", code, stderr.String())
+	}
+	variants := probeVariants()
+	if tr.count() != len(variants) {
+		t.Fatalf("%d requests; want one per probe variant (%d)", tr.count(), len(variants))
+	}
+	if got := strings.Count(stdout.String(), "shape accepted, key refused"); got != len(variants) {
+		t.Errorf("stdout reports %d variants as 'shape accepted, key refused'; want %d:\n%s", got, len(variants), stdout.String())
+	}
+	for _, v := range variants {
+		if !strings.Contains(stdout.String(), v.Name) {
+			t.Errorf("stdout does not name the variant %q", v.Name)
+		}
+	}
+	for _, key := range tr.keys {
+		if key == "" || key == testKey {
+			t.Errorf("a probe request used the key %q; want the built-in fake key", key)
+		}
+	}
+
+	// With a real key in the environment the probe uses it, and never prints it.
+	tr = &recordingTransport{t: t, status: http.StatusBadRequest, body: keyInvalidBody}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"-probe"}, envOf("GEMINI_API_KEY", testKey), &stdout, &stderr, tr); code != 0 {
+		t.Fatalf("-probe with a key exited %d; stderr: %s", code, stderr.String())
+	}
+	if tr.keys[0] != testKey {
+		t.Error("the probe did not use the key from GEMINI_API_KEY")
+	}
+	if strings.Contains(stdout.String()+stderr.String(), testKey) {
+		t.Error("the probe printed the API key")
+	}
+}
+
+func TestSpikeModelsGet(t *testing.T) {
+	const body = `{"name":"models/gemini-3.5-flash-lite","displayName":"Gemini 3.5 Flash-Lite","inputTokenLimit":1048576,"outputTokenLimit":65536,` +
+		`"supportedGenerationMethods":["generateContent","countTokens"]}`
+
+	tr := &recordingTransport{t: t, body: body}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-models-get"}, envOf("GEMINI_API_KEY", testKey), &stdout, &stderr, tr); code != 0 {
+		t.Fatalf("-models-get exited %d; stderr: %s", code, stderr.String())
+	}
+	if tr.count() != 1 || tr.methods[0] != http.MethodGet || !strings.HasSuffix(tr.paths[0], "/v1beta/models/gemini-3.5-flash-lite") {
+		t.Errorf("requests = %d %v %v; want one GET of the model", tr.count(), tr.methods, tr.paths)
+	}
+	for _, want := range []string{"models/gemini-3.5-flash-lite", "1048576", "65536", "generateContent", "countTokens"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String()+stderr.String(), testKey) {
+		t.Error("the API key appears in the output")
+	}
+
+	// A model the API does not know is a failure, reported without the key.
+	missing := &recordingTransport{
+		t:      t,
+		status: http.StatusNotFound,
+		body:   `{"error":{"code":404,"message":"models/nope is not found for key ` + testKey + `","status":"NOT_FOUND"}}`,
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code := run([]string{"-models-get", "-model", "nope"}, envOf("GEMINI_API_KEY", testKey), &stdout, &stderr, missing)
+	if code == 0 {
+		t.Error("-models-get on an unknown model exited 0")
+	}
+	if !strings.Contains(stderr.String(), "404") {
+		t.Errorf("stderr does not report the 404: %q", stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), testKey) {
+		t.Error("the API key appears in the output of a failed -models-get")
 	}
 }
