@@ -10,7 +10,7 @@ A lockdown stops a raid in this group: everyone but the admins is muted until an
 - `/lockdown [reason]`: Lock this group at once, with no confirm step. Only admins can talk, approved users included, and new members are removed until the lift.
 - `/unlockdown`: Lift the lockdown. Every permission goes back exactly as it was before the lockdown, and the people I removed are unbanned, except the accounts banned for good with Ban recent joiners.
 - `/lockdownstatus`: Show whether this group is locked, since when, by whom and why (any admin).
-- `/autolockdown [joins|flood] [N|on|off]`: Show or change the automatic triggers. Any admin can look; only the group owner or an admin who can restrict members can change them. A number from 3 to 500 sets the threshold and turns the trigger on.
+- `/autolockdown [joins|flood|ai] [N|on|off]`: Show or change the automatic triggers. Any admin can look; only the group owner or an admin who can restrict members can change them. A number from 3 to 500 sets the threshold and turns the trigger on.
 
 Only the group owner, or an admin who can restrict members, can use these commands, and I check that live. I must be an admin who can restrict members, and the group must be a supergroup.
 A lockdown never ends on its own. It stays until an admin lifts it.
@@ -21,6 +21,8 @@ Join requests are declined while the group is locked; people can ask again after
 When this group is locked, I post an alert to its Staff Group (if it is linked) and to its log channel (if the admin log category is on): the trigger, how many joined just before and since, up to 10 of those accounts, and the invite link most of them used.
 
 I also lock this group on my own when a raid starts: when 15 people join within 60 seconds (join surge), or when 30 messages, photos, GIFs or stickers arrive within 30 seconds, at least 60% of them from at least 3 members who joined in the last 24 hours (flood). Those numbers are the defaults; `/autolockdown` shows this group's own numbers. Both triggers are on by default. Admins, approved users and commands I handle never count, so approving trusted newcomers keeps them out of it. I post a short notice when I lock the group, and the alert says which trigger fired. For 10 minutes after a lift I don't lock again on my own. If I see a raid but can't lock (I must be an admin who can restrict members, in a supergroup), I warn the Staff Group and the log channel, at most once a day. These settings are not saved in backups.
+
+AI trigger: suspicious text from members who joined in the last 24 hours is checked by TypeSafe, their photos, GIFs and stickers by Google Gemini (if set up). 5 spam verdicts from 3 accounts within 120 s lock the group; one verdict never does, and AI never deletes or bans.
 
 🔓 Lift lockdown: lifts the lockdown like `/unlockdown`. Only the group owner or an admin who can restrict members, checked live; being in the Staff Group is not enough.
 
