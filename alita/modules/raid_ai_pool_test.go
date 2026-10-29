@@ -68,6 +68,16 @@ func (g *raidMethodGate) wantEntered(t *testing.T) {
 	}
 }
 
+// raidAIFiresIdle reports whether no lockdown start asked for by an AI verdict is in flight.
+func raidAIFiresIdle() bool {
+	select {
+	case <-raidAIFires.idleChan():
+		return true
+	default:
+		return false
+	}
+}
+
 func TestRaidAIPool(t *testing.T) {
 	t.Run("a lockdown start runs off the worker", func(t *testing.T) {
 		env := newRaidAIEnv(t)
@@ -82,6 +92,10 @@ func TestRaidAIPool(t *testing.T) {
 		if !returnsWithin(10*time.Second, raidAIJobs.wait) {
 			gated.open()
 			t.Fatal("the raid AI jobs were still running while the lockdown start waited for Telegram")
+		}
+		if raidAIFiresIdle() {
+			gated.open()
+			t.Fatal("no lockdown start is in flight although its lock call was held back")
 		}
 		if row := env.activeLockdown(); row != nil && row.LockedAt != nil {
 			t.Fatalf("the lockdown is confirmed (%+v) while its lock call was held back", row)
@@ -109,6 +123,10 @@ func TestRaidAIPool(t *testing.T) {
 		if !returnsWithin(10*time.Second, DrainAISpamChecks) {
 			gated.open()
 			t.Fatal("the /aispam checks were still running while the lockdown start waited for Telegram")
+		}
+		if raidAIFiresIdle() {
+			gated.open()
+			t.Fatal("no lockdown start is in flight although its lock call was held back")
 		}
 
 		gated.open()

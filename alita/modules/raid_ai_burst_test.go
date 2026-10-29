@@ -117,13 +117,14 @@ func (e *lockdownEnv) textsFrom(chat gotgbot.Chat, user gotgbot.User, n int, pre
 }
 
 // settleAI waits until every raid AI job and /aispam check the env's messages queued has
-// finished, together with the public notice or warning an automatic lockdown posts. The
-// raid AI jobs come first: a verdict of one can start the lockdown whose posts are waited
-// for last.
+// finished, together with the lockdown start a verdict asked for and the public notice or
+// warning an automatic lockdown posts. The jobs come first: a verdict of one starts the
+// lockdown (raidAIFires) whose posts are waited for last.
 func (e *lockdownEnv) settleAI() {
 	e.t.Helper()
 	raidAIJobs.wait()
 	DrainAISpamChecks()
+	raidAIFires.wait()
 	raidPosts.wait()
 }
 

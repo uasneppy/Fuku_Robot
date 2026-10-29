@@ -554,8 +554,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   as `/lockdown` and the other triggers start a lockdown. Every delete verdict from any account feeds it (D-19), an
   established member's included, and a keep verdict never does; a basic group, an anonymous or non-positive sender and
   the bot itself never count. Nothing on the counting path deletes, restricts or bans: the `/aispam` deletion itself is
-  unchanged, and the lockdown's muting is what stops the raid. The call is synchronous in the `/aispam` worker
-  (`DrainAISpamChecks` waits for it); `raidFire` is bounded by `raidFireTimeout` and its 60 s latch. During a rolling
+  unchanged, and the lockdown's muting is what stops the raid. The start runs on its own goroutine
+  (`raidAIFireAsync`, counted in `raidAIFires`, a `raidPostTracker`, and starting with
+  `defer error_handling.RecoverFromPanic`), so no `/aispam` or raid AI worker waits on it; `raidFire` keeps its own
+  `raidFireTimeout` and its 60 s latch, which bounds how many starts exist per chat. During a rolling
   deploy an old replica that wins `BeginAlert` for an `ai_burst` row renders the manual wording and no spammer sample;
   that is accepted, like the other rolling-deploy caveats here.
 - The raid AI candidate watcher (`raidAIWatcher`, group `2`, registered in `LoadLockdown`) picks the texts the raid path
@@ -581,8 +583,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   panics, per job too. A full queue or a draining process sheds the job (`raidAIShed`); the in-flight count is a
   `raidPostTracker` (`raidAIJobs`), taken before `raidAIDraining` is read, never a `sync.WaitGroup`. A raid-only text job
   reports a spam verdict (`aispamIsDelete`) to `raidAIRecordVerdict` and nothing else; a slow, failing or paused
-  provider is no verdict. Until the pool gets its own context and drain, the worker that reports the tipping verdict runs
-  `raidFire` itself, which is bounded by `raidFireTimeout` and its 60 s latch.
+  provider is no verdict. The worker that reports the tipping verdict hands the lockdown start to `raidAIFireAsync` and
+  moves on (above).
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`
