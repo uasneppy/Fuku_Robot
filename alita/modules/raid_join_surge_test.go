@@ -15,6 +15,7 @@ import (
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/db/raiddetection"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
@@ -152,9 +153,14 @@ func (e *lockdownEnv) raidJoinedCount() int64 {
 }
 
 // seedRaidSettings writes a chat_raid_detection row directly and drops its cached copy,
-// the way a settings write would.
+// the way a settings write would. A row that leaves AIThreshold at 0 gets the AI defaults
+// (on, at 5): the table's CHECK refuses a threshold below 3 even on SQLite.
 func seedRaidSettings(t *testing.T, row models.ChatRaidDetection) {
 	t.Helper()
+	if row.AIThreshold == 0 {
+		row.AIEnabled = true
+		row.AIThreshold = raiddetection.DefaultAIThreshold
+	}
 	if err := db.DB.Create(&row).Error; err != nil {
 		t.Fatalf("seed raid settings: %v", err)
 	}

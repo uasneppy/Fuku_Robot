@@ -14,9 +14,9 @@ func TestLoadRaidDetectionStats(t *testing.T) {
 	baseConfigured, baseJoinOff, baseFloodOff := LoadRaidDetectionStats()
 
 	rows := []*models.ChatRaidDetection{
-		{ChatID: uniqueRaidChatID(), JoinEnabled: true, JoinThreshold: DefaultJoinThreshold, FloodEnabled: true, FloodThreshold: DefaultFloodThreshold},
-		{ChatID: uniqueRaidChatID(), JoinEnabled: false, JoinThreshold: DefaultJoinThreshold, FloodEnabled: true, FloodThreshold: DefaultFloodThreshold},
-		{ChatID: uniqueRaidChatID(), JoinEnabled: true, JoinThreshold: DefaultJoinThreshold, FloodEnabled: false, FloodThreshold: DefaultFloodThreshold},
+		{ChatID: uniqueRaidChatID(), JoinEnabled: true, JoinThreshold: DefaultJoinThreshold, FloodEnabled: true, FloodThreshold: DefaultFloodThreshold, AIEnabled: true, AIThreshold: DefaultAIThreshold},
+		{ChatID: uniqueRaidChatID(), JoinEnabled: false, JoinThreshold: DefaultJoinThreshold, FloodEnabled: true, FloodThreshold: DefaultFloodThreshold, AIEnabled: true, AIThreshold: DefaultAIThreshold},
+		{ChatID: uniqueRaidChatID(), JoinEnabled: true, JoinThreshold: DefaultJoinThreshold, FloodEnabled: false, FloodThreshold: DefaultFloodThreshold, AIEnabled: true, AIThreshold: DefaultAIThreshold},
 	}
 	t.Cleanup(func() {
 		for _, row := range rows {

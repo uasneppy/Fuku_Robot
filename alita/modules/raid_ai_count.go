@@ -35,10 +35,6 @@ const (
 	raidAIMinAccounts = 3
 	// raidAITTL lets an idle chat's sets expire on their own.
 	raidAITTL = 5 * time.Minute
-	// raidAIDefaultThreshold is the verdict count of the D-05 default, on in every group.
-	// The chat's own stored threshold replaces it once the setting exists (plan 07-04).
-	raidAIDefaultThreshold = 5
-
 	// raidPartAIVerdicts is the sorted set of the window's verdict items: the item key
 	// (m:<message id>, or g:<media group id>) scored by the time it was reported in unix
 	// milliseconds.
@@ -132,7 +128,10 @@ func raidAIItemKey(msg *gotgbot.Message) string {
 
 // raidAIRecordVerdict reports one /aispam delete verdict to the burst counter and starts
 // the lockdown when the rule holds. It does nothing for a basic group, an anonymous or
-// non-positive sender, the bot itself or without Redis. The verdict only adds one item; it
+// non-positive sender, the bot itself or without Redis. It reads the chat's own settings on
+// every verdict (raidSettingsLookup under raidSettingsTimeout, the default of 5 when the
+// chat has no row): an off switch or an unreadable setting counts nothing, and the chat's
+// stored threshold decides the rule (D-05, D-14). The verdict only adds one item; it
 // never deletes, restricts or bans, and only raidAICounts calls raidFire. The call is
 // synchronous in the /aispam worker (drained by DrainAISpamChecks): raidFire is bounded by
 // raidFireTimeout and its latch lets one attempt through per chat per minute.
@@ -145,12 +144,23 @@ func raidAIRecordVerdict(b *gotgbot.Bot, chat gotgbot.Chat, userID int64, itemKe
 		return
 	}
 
+	settingsCtx, cancel := context.WithTimeout(context.Background(), raidSettingsTimeout)
+	settings, err := raidSettingsLookup(settingsCtx, chat.Id)
+	cancel()
+	if err != nil {
+		log.Debugf("[RaidDetection] settings of chat %d could not be read, counting nothing: %v", chat.Id, err)
+		return
+	}
+	if settings == nil || !settings.AIEnabled {
+		return
+	}
+
 	items, accounts, err := recordRaidAIVerdict(client, chat.Id, userID, itemKey)
 	if err != nil {
 		log.Debugf("[RaidDetection] AI verdict counter write for chat %d, user %d failed: %v", chat.Id, userID, err)
 		return
 	}
-	if !raidAICounts(items, accounts, raidAIDefaultThreshold) {
+	if !raidAICounts(items, accounts, settings.AIThreshold) {
 		return
 	}
 	raidFire(b, &chat, raidTrigger{

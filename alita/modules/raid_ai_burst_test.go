@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -251,6 +252,100 @@ func TestRaidAIBurstFires(t *testing.T) {
 		}
 		if env.redis.Exists(raidKey(env.chat.Id, "av")) {
 			t.Error("the verdict set exists for a basic group, want no key")
+		}
+	})
+}
+
+func TestRaidAIBurstSettings(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		accounts := env.newMembers(3, 0)
+
+		env.spamFrom(accounts[0], 2)
+		env.spamFrom(accounts[1], 1)
+		env.spamFrom(accounts[2], 1)
+		env.settleAI()
+		if row := env.activeLockdown(); row != nil {
+			t.Fatalf("a lockdown (kind %q) exists after 4 verdicts with no settings row, want none", row.TriggerKind)
+		}
+
+		env.spamFrom(accounts[1], 1)
+		env.settleAI()
+		row := env.activeLockdown()
+		if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst || row.TriggerCount != 5 {
+			t.Fatalf("active lockdown = %+v after the 5th verdict, want an AI burst lockdown of 5 verdicts (the default)", row)
+		}
+	})
+
+	t.Run("a stored threshold", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: true, JoinThreshold: 15, FloodEnabled: true, FloodThreshold: 30,
+			AIEnabled: true, AIThreshold: 3,
+		})
+		accounts := env.newMembers(3, 0)
+
+		env.spamFrom(accounts[0], 1)
+		env.spamFrom(accounts[1], 1)
+		env.settleAI()
+		if row := env.activeLockdown(); row != nil {
+			t.Fatalf("a lockdown exists after 2 verdicts with a threshold of 3")
+		}
+
+		env.spamFrom(accounts[2], 1)
+		env.settleAI()
+		row := env.activeLockdown()
+		if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst {
+			t.Fatalf("active lockdown = %+v after 3 verdicts from 3 accounts with a threshold of 3, want an AI burst lockdown", row)
+		}
+		if row.TriggerCount != 3 {
+			t.Errorf("TriggerCount = %d, want 3", row.TriggerCount)
+		}
+	})
+
+	t.Run("AI off", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: true, JoinThreshold: 15, FloodEnabled: true, FloodThreshold: 30,
+			AIEnabled: false, AIThreshold: 3,
+		})
+		accounts := env.newMembers(3, 0)
+
+		env.spamFrom(accounts[0], 2)
+		env.spamFrom(accounts[1], 2)
+		env.spamFrom(accounts[2], 2)
+		env.settleAI()
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown (kind %q) exists with the AI trigger off", row.TriggerKind)
+		}
+		if got := aiVerdictSetSize(env, "av"); got != 0 {
+			t.Errorf("verdict items counted = %d, want 0: nothing is counted while the trigger is off", got)
+		}
+		if got := len(env.calls("deleteMessage")); got != 6 {
+			t.Errorf("deleteMessage calls = %d, want the 6 /aispam deletions: the switch only stops the counting", got)
+		}
+	})
+
+	t.Run("settings unreadable", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		previous := raidSettingsLookup
+		raidSettingsLookup = func(context.Context, int64) (*models.ChatRaidDetection, error) {
+			return nil, errors.New("settings unreadable")
+		}
+		t.Cleanup(func() { raidSettingsLookup = previous })
+		accounts := env.newMembers(3, 0)
+
+		env.spamFrom(accounts[0], 2)
+		env.spamFrom(accounts[1], 2)
+		env.spamFrom(accounts[2], 2)
+		env.settleAI()
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown (kind %q) exists although the settings could not be read", row.TriggerKind)
+		}
+		if got := aiVerdictSetSize(env, "av"); got != 0 {
+			t.Errorf("verdict items counted = %d, want 0: an unreadable setting counts nothing", got)
 		}
 	})
 }
