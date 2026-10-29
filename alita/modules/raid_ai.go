@@ -64,18 +64,23 @@ const (
 // so a test can shorten it; production code never reassigns it.
 var raidAIStopWait = 1 * time.Second
 
+// ENABLE_AISPAM is the global AI kill switch: with it off the raid AI path sends nothing to
+// either provider (TypeSafe for texts, Gemini for images), whatever keys are set (WR-02).
+
 // raidAITextConfigured reports whether a provider is set up to judge texts: the same
-// TypeSafe configuration /aispam needs.
+// TypeSafe configuration /aispam needs, which includes the ENABLE_AISPAM kill switch.
 func raidAITextConfigured() bool {
 	return config.AppConfig.EnableAISpam && config.AppConfig.TypeSafeAPIKey != ""
 }
 
-// raidAIImageConfigured reports whether a provider is set up to judge images.
+// raidAIImageConfigured reports whether a provider is set up to judge images: a Gemini key
+// and the ENABLE_AISPAM kill switch on.
 func raidAIImageConfigured() bool {
-	return config.AppConfig.GeminiAPIKey != ""
+	return config.AppConfig.EnableAISpam && config.AppConfig.GeminiAPIKey != ""
 }
 
-// raidAIConfigured reports whether any AI provider of the raid path is set up.
+// raidAIConfigured reports whether any AI provider of the raid path is set up and not
+// switched off by ENABLE_AISPAM.
 func raidAIConfigured() bool {
 	return raidAITextConfigured() || raidAIImageConfigured()
 }
@@ -481,6 +486,10 @@ func raidAIEnqueue(job raidAIJob) bool {
 func raidAIProcessJob(job raidAIJob) {
 	if job.media != nil {
 		raidAIProcessImage(raidAIContext(), job)
+		return
+	}
+	// A job queued before the kill switch or the key went away is dropped, not sent.
+	if !raidAITextConfigured() {
 		return
 	}
 	raidAIProcessText(job)

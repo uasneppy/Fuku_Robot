@@ -46,9 +46,12 @@ Days before marking a chat as inactive
 
 ### `ENABLE_AISPAM`
 
-Global kill switch for the AI spam filter. When `false`, no chat runs AI spam
-checks regardless of its per-chat setting. The filter is inert without
-`TYPESAFE_API_KEY` either way.
+Global kill switch for every AI check. When `false`, no chat runs `/aispam`
+checks regardless of its per-chat setting, and the AI raid trigger sends nothing
+to either provider: no text goes to TypeSafe and no image goes to Google Gemini,
+even when `GEMINI_API_KEY` is set. `/autolockdown` then shows the "AI checks are
+not set up" notice. The text checks are inert without `TYPESAFE_API_KEY` either
+way.
 
 | Property | Value |
 |----------|-------|
@@ -74,7 +77,8 @@ set, suspicious photos, GIFs and stickers posted by members who joined in the
 last 24 hours are sent to Google Gemini to be judged as spam or not. A burst of
 spam verdicts from several accounts can lock the group; the AI never locks a
 group on its own. When it is unset, no image is sent anywhere and the text
-checks (through `TYPESAFE_API_KEY`) are unchanged.
+checks (through `TYPESAFE_API_KEY`) are unchanged. Setting `ENABLE_AISPAM` to
+`false` also stops the image checks.
 
 Use a paid-tier key. On the free tier Google may use the images you send to
 improve its products, so the owner decides before setting a free-tier key. The
@@ -578,7 +582,7 @@ DB_MAX_OPEN_CONNS=# (default: 200)
 DEBUG=# enable debug logging (default: false)
 DISPATCHER_MAX_ROUTINES=# (default: 200)
 DROP_PENDING_UPDATES=# (default: false)
-ENABLE_AISPAM=# global AI spam filter kill switch (default: true)
+ENABLE_AISPAM=# global kill switch for every AI check, text and images (default: true)
 ENABLE_AUTO_CLEANUP=# (default: true)
 ENABLE_BACKGROUND_STATS=# (default: true in prod, false in debug)
 ENABLE_DB_MONITORING=# (default: false)

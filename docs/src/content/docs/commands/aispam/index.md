@@ -103,8 +103,8 @@ separate from the opt-in filter above, and the two work together:
   information. A verdict counts only at 0.85 or higher, and the checks are
   limited to 150 per group and 500 for all groups per hour.
 - **Nothing is sent without the keys.** Without `GEMINI_API_KEY` no image
-  leaves the server. Without `TYPESAFE_API_KEY` (or with `ENABLE_AISPAM` off) no
-  text is sent for the raid checks. Without Redis the trigger does nothing.
+  leaves the server. Without `TYPESAFE_API_KEY` no text is sent for the raid
+  checks. With `ENABLE_AISPAM` off nothing is sent at all, no text and no image. Without Redis the trigger does nothing.
 - **Use a paid-tier Gemini key.** On Google's free tier the images you send may
   be used to improve Google's products, so a paid-tier key is recommended before
   the owner turns the image checks on.
@@ -140,7 +140,7 @@ never left believing their chat is protected when it is not.
 | Variable | Meaning |
 |----------|---------|
 | `TYPESAFE_API_KEY` | TypeSafe API key used for every check. One credential for the whole bot; chats cannot bring their own. Empty disables the feature. |
-| `ENABLE_AISPAM` | Global kill switch. Default `true`; the filter still stays off in chats that never enabled it. |
+| `ENABLE_AISPAM` | Global kill switch for every AI check, `/aispam` and the raid checks, text and images. Default `true`; `/aispam` still stays off in chats that never enabled it. Set to `false`, nothing goes to TypeSafe or Google even with the keys set. |
 | `GEMINI_API_KEY` | Google Gemini key for the raid protection's image checks. Empty means no image is ever sent. A paid-tier key is recommended. |
 
 The key is registered with `logredact`, so it never appears in logs.

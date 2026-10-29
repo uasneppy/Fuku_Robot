@@ -126,7 +126,7 @@ type raidAIImageResult struct {
 // A download or getFile failure is a failure of this job only. It never deletes, restricts,
 // bans or posts.
 func raidAIProcessImage(ctx context.Context, job raidAIJob) {
-	if job.media == nil {
+	if job.media == nil || !raidAIImageConfigured() {
 		return
 	}
 	client := raidAIGeminiClient()

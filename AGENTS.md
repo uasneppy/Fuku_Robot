@@ -185,8 +185,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ai` is checked and saved like the other two (`raiddetection.SetAIThreshold` / `SetAIEnabled`), so it has no
   refusal text of its own. The status lists the AI line after the flood line and adds
   `lockdown_auto_ai_unavailable` ("AI checks are not set up") when `raidAIConfigured()` is false, that is when
-  neither the text checks (`ENABLE_AISPAM` with `TYPESAFE_API_KEY`) nor the image checks (`GEMINI_API_KEY`) are
-  available; a server with one of the two shows no notice. The `/lockdown` help says what the AI trigger sends to
+  neither the text checks (`ENABLE_AISPAM` with `TYPESAFE_API_KEY`) nor the image checks (`ENABLE_AISPAM` with
+  `GEMINI_API_KEY`) are available; a server with one of the two shows no notice. `ENABLE_AISPAM=false` is the global AI
+  kill switch for the whole raid AI path: `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
+  watcher enqueues nothing, and a job already queued is dropped by `raidAIProcessJob` / `raidAIProcessImage` without
+  a `getFile` or any provider call. The `/lockdown` help says what the AI trigger sends to
   TypeSafe and to Google (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
   `TestLockdownHelpFitsOneMessage`.
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
@@ -618,7 +621,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The raid AI image checks (`raid_ai_media.go`, `raid_ai_image.go`) are the Gemini half of RAID-04. The same group `2`
   watcher (`raidAIWatch`) sends a message with no `Text` and a media frame (`raidAIMediaRef`) down the image path: only a
   new member's media is a candidate (the candidate script asked with an empty hash, so nothing is recorded), after
-  `raidAIImageConfigured` (`GEMINI_API_KEY`), Redis, the chat's `ai_enabled` and `aispamCarvedOut`, and the job joins the
+  `raidAIImageConfigured` (`ENABLE_AISPAM` and `GEMINI_API_KEY`), Redis, the chat's `ai_enabled` and `aispamCarvedOut`, and the job joins the
   shared pool. Without the key no `getFile` is made and no image leaves the server. The frame is the photo size whose
   larger side is nearest 1024 px, a regular static sticker's WebP, or Telegram's own thumbnail for a GIF, video, animated
   or video sticker; a missing thumbnail, a custom emoji or mask sticker, a video note, a document, a voice note, a
@@ -892,7 +895,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Version strings are shape-locked (`BotVersion:` with two spaces in `alita/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
-- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (inert without `TYPESAFE_API_KEY`); `GEMINI_API_KEY` empty
+- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text and images; inert without `TYPESAFE_API_KEY`); `GEMINI_API_KEY` empty
   means no raid image check and no image leaves the server, and `GEMINI_MODEL` falls back to `gemini.DefaultModel`
   (with a warning) when empty or not a valid model name; perf monitoring and
   background stats are on only when `DEBUG=false`; `HTTP_PORT` falls back to `PORT` then 8080. Integer env parsing is

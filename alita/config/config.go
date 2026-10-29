@@ -190,13 +190,15 @@ type Config struct {
 
 	MetricsAuthToken string
 
-	// AI spam filter (TypeSafe Jev). EnableAISpam is a global kill switch; the
-	// feature is inert without TypeSafeAPIKey.
+	// AI spam filter (TypeSafe Jev). EnableAISpam is the global AI kill switch: when
+	// false it stops /aispam and every raid AI check, text (TypeSafe) and image
+	// (Gemini) alike. The text feature is inert without TypeSafeAPIKey.
 	EnableAISpam   bool
 	TypeSafeAPIKey string
 
 	// Image checks of the AI raid trigger (Google Gemini). The feature is inert
-	// without GeminiAPIKey: with no key no image leaves the server. The key is
+	// without GeminiAPIKey (with no key no image leaves the server) and while
+	// EnableAISpam is false. The key is
 	// a secret and is registered with logredact.RegisterSecret. GeminiModel is
 	// checked against the Gemini client's model-name rule in setDefaults, so a name that is not a
 	// plain model id never reaches a request URL.
