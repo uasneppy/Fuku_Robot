@@ -4,9 +4,12 @@ package i18n
 
 import (
 	"fmt"
+	"html"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
+	"unicode/utf16"
 )
 
 const lockdownKeyPrefix = "lockdown_"
@@ -179,6 +182,38 @@ func TestLockdownRepliesCarryNoTelegramDetail(t *testing.T) {
 					failures = append(failures, fmt.Sprintf("%s: %s has a {detail} placeholder", lang, key))
 				}
 			}
+		}
+	}
+	sort.Strings(failures)
+	for _, failure := range failures {
+		t.Error(failure)
+	}
+}
+
+// lockdownHelpTelegramLimit is the most characters one Telegram message holds after its
+// tags are parsed away; the module help is sent as a single message (a header and the
+// help text), so a longer help message fails to send in that language.
+const lockdownHelpTelegramLimit = 4096
+
+var lockdownHelpTagPattern = regexp.MustCompile(`<[^>]+>`)
+
+// lockdownHelpLength counts a string the way Telegram does: tags removed, entities
+// decoded, UTF-16 code units.
+func lockdownHelpLength(s string) int {
+	return len(utf16.Encode([]rune(html.UnescapeString(lockdownHelpTagPattern.ReplaceAllString(s, "")))))
+}
+
+// TestLockdownHelpFitsOneMessage checks that, in every locale, the module help header
+// plus lockdown_help_msg stays inside one Telegram message.
+func TestLockdownHelpFitsOneMessage(t *testing.T) {
+	var failures []string
+	for _, lang := range staffLocales {
+		data := loadStaffLocale(t, lang)
+		help, _ := data["lockdown_help_msg"].(string)
+		header, _ := data["helpers_module_help_header"].(string)
+		total := lockdownHelpLength(strings.ReplaceAll(header, "%s", "Lockdown")) + lockdownHelpLength(help)
+		if total > lockdownHelpTelegramLimit {
+			failures = append(failures, fmt.Sprintf("%s: help header and lockdown_help_msg are %d characters, over Telegram's %d", lang, total, lockdownHelpTelegramLimit))
 		}
 	}
 	sort.Strings(failures)
