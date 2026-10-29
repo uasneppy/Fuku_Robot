@@ -12,12 +12,13 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/raiddetection"
 )
 
-// raidSettingsTimeout bounds the settings read on the join hot path.
+// raidSettingsTimeout bounds every settings read of the raid triggers and of /autolockdown.
 const raidSettingsTimeout = 2 * time.Second
 
-// raidSettingsLookup is the join counter's read of a chat's raid detection settings. It
-// is a variable only so a test can make the read fail; production code never reassigns
-// it.
+// raidSettingsLookup is the read of a chat's raid detection settings used by the join
+// counters, the flood watchers and /autolockdown, always under raidSettingsTimeout. It is
+// a variable only so a test can make the read fail or see its deadline; production code
+// never reassigns it.
 var raidSettingsLookup = raiddetection.GetSettings
 
 // raidNeedsPerformerLookup reports whether deciding if a join counts depends on the
@@ -64,18 +65,11 @@ func raidJoinCounts(in lockdownJoinInput, approved bool) bool {
 // lookup, whether the lookup worked (status set) or failed (status empty), so the join
 // guard never asks Telegram a second time about the same join.
 func raidCountMemberJoin(b *gotgbot.Bot, chat *gotgbot.Chat, update *gotgbot.ChatMemberUpdated) (performerStatus string, looked bool) {
-	if chat == nil || update == nil || chat.Type != "supergroup" || raidRedis() == nil {
+	if chat == nil || update == nil {
 		return "", false
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), raidSettingsTimeout)
-	settings, err := raidSettingsLookup(ctx, chat.Id)
-	cancel()
-	if err != nil {
-		log.Debugf("[RaidDetection] settings of chat %d could not be read, counting nothing: %v", chat.Id, err)
-		return "", false
-	}
-	if settings == nil || (!settings.JoinEnabled && !settings.FloodEnabled) {
+	settings, ok := raidJoinSettings(chat)
+	if !ok {
 		return "", false
 	}
 
@@ -106,18 +100,11 @@ func raidCountMemberJoin(b *gotgbot.Bot, chat *gotgbot.Chat, update *gotgbot.Cha
 // lookup of the message's performer, whether it worked (status set) or failed (status
 // empty), so the join guard never asks Telegram a second time about the same message.
 func raidCountMessageJoins(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message) (performerStatus string, looked bool) {
-	if chat == nil || msg == nil || len(msg.NewChatMembers) == 0 || chat.Type != "supergroup" || raidRedis() == nil {
+	if chat == nil || msg == nil || len(msg.NewChatMembers) == 0 {
 		return "", false
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), raidSettingsTimeout)
-	settings, err := raidSettingsLookup(ctx, chat.Id)
-	cancel()
-	if err != nil {
-		log.Debugf("[RaidDetection] settings of chat %d could not be read, counting nothing: %v", chat.Id, err)
-		return "", false
-	}
-	if settings == nil || (!settings.JoinEnabled && !settings.FloodEnabled) {
+	settings, ok := raidJoinSettings(chat)
+	if !ok {
 		return "", false
 	}
 
@@ -145,6 +132,29 @@ func raidCountMessageJoins(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Mess
 	}
 	raidRecordAndFire(b, chat, settings, counted)
 	return performerStatus, looked
+}
+
+// raidJoinSettings is what both join counters check before they count anything. It reports
+// the chat's raid detection settings and true when joins are to be counted: the chat is a
+// supergroup, Redis is available, the settings could be read (one bounded read under
+// raidSettingsTimeout; an unreadable answer counts nothing) and at least one trigger is on.
+// The flood switch counts too, because the join list is also what the flood trigger
+// reads to tell new members.
+func raidJoinSettings(chat *gotgbot.Chat) (*models.ChatRaidDetection, bool) {
+	if chat.Type != "supergroup" || raidRedis() == nil {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), raidSettingsTimeout)
+	settings, err := raidSettingsLookup(ctx, chat.Id)
+	cancel()
+	if err != nil {
+		log.Debugf("[RaidDetection] settings of chat %d could not be read, counting nothing: %v", chat.Id, err)
+		return nil, false
+	}
+	if settings == nil || (!settings.JoinEnabled && !settings.FloodEnabled) {
+		return nil, false
+	}
+	return settings, true
 }
 
 // raidJoinsCountedFor applies raidJoinCounts to one join. The approved-user read is made

@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -425,4 +426,59 @@ func TestAutoLockdownSaveFails(t *testing.T) {
 	env.wantReplyHas(staffMarker("lockdown_auto_save_failed"))
 	env.wantReplyLacks(staffMarker("lockdown_auto_saved"), "database is gone")
 	env.wantAutoRow(true, 25, true, 30)
+}
+
+// TestAutoLockdownReadsAreBounded pins that the settings reads of /autolockdown run under
+// raidSettingsTimeout, the view and the readback after a save alike, and that a failed
+// read gets its reply instead of holding the handler.
+func TestAutoLockdownReadsAreBounded(t *testing.T) {
+	withLookup := func(t *testing.T, deadlines *[]time.Duration) {
+		t.Helper()
+		previous := raidSettingsLookup
+		raidSettingsLookup = func(ctx context.Context, _ int64) (*models.ChatRaidDetection, error) {
+			if deadline, ok := ctx.Deadline(); ok {
+				*deadlines = append(*deadlines, time.Until(deadline))
+			} else {
+				*deadlines = append(*deadlines, -1)
+			}
+			return nil, errors.New("settings unreadable")
+		}
+		t.Cleanup(func() { raidSettingsLookup = previous })
+	}
+	wantBounded := func(t *testing.T, deadlines []time.Duration, reads int) {
+		t.Helper()
+		if len(deadlines) != reads {
+			t.Fatalf("settings reads = %d, want %d", len(deadlines), reads)
+		}
+		for _, left := range deadlines {
+			if left <= 0 || left > raidSettingsTimeout {
+				t.Errorf("a settings read had %v left, want a deadline within (0, %v]", left, raidSettingsTimeout)
+			}
+		}
+	}
+
+	t.Run("the view", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		var deadlines []time.Duration
+		withLookup(t, &deadlines)
+
+		env.send(env.admin, "/autolockdown")
+
+		wantBounded(t, deadlines, 1)
+		env.wantReplyHas(staffMarker("lockdown_auto_read_failed"))
+	})
+
+	t.Run("the readback after a save", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		var deadlines []time.Duration
+		withLookup(t, &deadlines)
+
+		env.send(env.admin, "/autolockdown joins 20")
+
+		wantBounded(t, deadlines, 1)
+		env.wantReplyHas(staffMarker("lockdown_auto_saved"))
+		env.wantAutoRow(true, 20, true, 30)
+	})
 }

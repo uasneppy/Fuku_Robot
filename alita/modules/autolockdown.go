@@ -207,7 +207,7 @@ func autolockdownApply(b *gotgbot.Bot, ctx *ext.Context, args []string) error {
 	}
 
 	if change.Trigger == "" {
-		settings, readErr := raiddetection.GetSettings(context.Background(), chat.Id)
+		settings, readErr := autolockdownReadSettings(chat.Id)
 		if readErr != nil {
 			log.Errorf("[Lockdown] automatic lockdown settings of chat %d: %v", chat.Id, readErr)
 			return reply(lockdownText(tr, "lockdown_auto_read_failed"))
@@ -227,11 +227,20 @@ func autolockdownApply(b *gotgbot.Bot, ctx *ext.Context, args []string) error {
 	}
 
 	saved := lockdownText(tr, "lockdown_auto_saved")
-	settings, readErr := raiddetection.GetSettings(context.Background(), chat.Id)
+	settings, readErr := autolockdownReadSettings(chat.Id)
 	if readErr != nil {
 		// The change is saved; only the readback failed.
 		log.Warnf("[Lockdown] automatic lockdown settings of chat %d after the save: %v", chat.Id, readErr)
 		return reply(saved)
 	}
 	return reply(lockdownJoinLines([]string{saved, autolockdownStatusText(tr, settings)}))
+}
+
+// autolockdownReadSettings reads the chat's raid detection settings under
+// raidSettingsTimeout, so a stuck cache or database ends the command with its "could not
+// read" reply instead of holding the handler.
+func autolockdownReadSettings(chatID int64) (*models.ChatRaidDetection, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), raidSettingsTimeout)
+	defer cancel()
+	return raidSettingsLookup(ctx, chatID)
 }
