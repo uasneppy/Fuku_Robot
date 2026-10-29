@@ -215,6 +215,10 @@ func main() {
 	// from the database, so a worker cut off here loses nothing. It gets the worker's
 	// wait plus a grace period, not the 10 s default.
 	modules.RegisterLockdownWorkerDrain(shutdownManager)
+	// Also after the DB-close handler: an automatic lockdown's public notice and cannot-lock
+	// warning are sent from goroutines that read the database. It waits at most 2 s; a post
+	// is best effort.
+	modules.RegisterRaidPostsDrain(shutdownManager)
 
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")

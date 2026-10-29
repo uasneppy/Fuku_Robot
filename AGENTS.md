@@ -27,8 +27,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   it. The 60 s budget still bounds everything and exits with code 1 wherever it runs out, so deploy manifests must allow
   more than 60 s between SIGTERM and SIGKILL (`stop_grace_period: 75s` in `docker-compose.yml`).
 - `StopStaffActions` is one of those drains, registered through `RegisterStaffActionsDrain` (`staffActionStopWait` plus
-  grace). In webhook mode the drains before it (HTTP stop 10 s, AI spam 10 s, lockdown 6 s) still leave its 31 s inside
-  the 60 s; in polling mode the updater's extra 10 s can let the global budget cut it short. It cancels running staff fan-outs, marks every unfinished group
+  grace). In webhook mode the drains before it (HTTP stop 10 s, AI spam 10 s, raid posts 3 s, lockdown 6 s) still leave its 31 s
+  inside the 60 s; in polling mode the updater's extra 10 s can let the global budget cut it short. It cancels running staff fan-outs, marks every unfinished group
   "interrupted by restart", delivers the final summary and returns within 30 s. A delivery still waiting out a 429
   when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines. A run cancelled by the
   shutdown skips its remaining log posts, so a group applied just before it may have no post. Undo runs join the
@@ -47,6 +47,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Acting goes back to pending in an active lockdown, to banned (a ban) or cancelled (a join request) in a lifting one,
   and unbanning goes back to banned, so a restart resumes every ban, decline and unban and the live check at the lift
   keeps a repeated unban safe.
+- `StopRaidPosts` is a drain registered after DB-close too, through `RegisterRaidPostsDrain` (`raidPostStopWait`, 2 s,
+  plus grace). It waits for the public notice and the cannot-lock warning of an automatic lockdown that are in flight
+  (`raidPosts`, a counter and not a `sync.WaitGroup`, because the drain gives up after its wait while a new post can still
+  start). A post is best effort: the lockdown it announces is already in place and its alert is driven by the database,
+  so a post still running when the 2 s are up is cut off with the process and only that notice is lost.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
@@ -251,7 +256,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   after the alert changes nothing. A flood alert's counts line is `lockdown_alert_counts_flood`
   (`lockdownRenderSample` takes the trigger kind); the join-surge and manual alerts keep `lockdown_alert_counts`.
 - Automatic lockdowns are announced in `raid_trigger.go`, every post through `lockdownPaced` under `raidPostTimeout`
-  (30 s), and a failed post is only logged: it never changes the lockdown or its absence. The call of `raidFire` that
+  (30 s per send), and a failed post is only logged: it never changes the lockdown or its absence. The lock itself is
+  synchronous, but the notice and the cannot-lock warning are sent from a goroutine (`raidPostAsync`: counted in
+  `raidPosts`, starting with `defer error_handling.RecoverFromPanic`), so the join guard records the joiner who tipped the
+  threshold and the message pipeline reaches aispam, antiflood and the rest without waiting on a pacer slot. They are
+  best effort and drained at shutdown by `StopRaidPosts` (below, under shutdown). Tests wait for them with
+  `raidPosts.wait()`; the fake's read helpers (`sentTo`, `sentChats`, `callsFor`) do it themselves. The call of `raidFire` that
   got `lockdownStartStarted` posts one public notice in the locked group (`raidPostNotice`, the group's language: the
   trigger and its numbers, `lockdown_note_approved_muted`, and the no-delete and no-invite notes `/lockdown` adds),
   and no other outcome does. When the bot cannot lock a group (`lockdownStartNotSupergroup`,
@@ -464,8 +474,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   added by the anonymous admin or by a live creator or administrator) and the chat's different accounts joined within
   60 s reach its threshold, `raidFire` starts the lockdown through `startLockdownRow` exactly as `/lockdown` does, with
   `trigger_kind` `join_surge`, the bot as starter, an empty `reason` and the numbers in the trigger columns. The
-  trigger runs synchronously in the handler (no goroutine, no drain); a crash half way leaves an unconfirmed row the
-  worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
+  start runs synchronously in the handler, and only the posts that follow it run on goroutines (see the announcement
+  bullet above); a crash half way leaves an unconfirmed row the worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
   status it read and whether it asked), so a join or a join message still makes at most one performer lookup. Settings come from
   `raidSettingsLookup`, a test seam; an unreadable read counts nothing.
 - The flood trigger is counted by two watchers that share one function, `raidFloodCountUpdate`: the group `-4` watcher

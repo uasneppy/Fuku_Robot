@@ -365,6 +365,10 @@ func newLockdownEnv(t *testing.T) *lockdownEnv {
 
 	env.dispatcher = ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
 	LoadLockdown(env.dispatcher)
+	// An automatic lockdown's notice and warning are sent from goroutines. Registered last,
+	// this runs before the cleanups above, so no post is still running when the pacer and
+	// the clients it uses are put back.
+	t.Cleanup(raidPosts.wait)
 	return env
 }
 

@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -16,6 +17,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/actionlog"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
 )
 
@@ -55,6 +57,96 @@ const (
 	// legacy printf pass.
 	raidTriggerToken = "<<raid-trigger>>"
 )
+
+// raidPostStopWait is the longest StopRaidPosts waits for the posts in flight at shutdown. A
+// post is best effort: the lockdown it announces is already in place and its alert is driven
+// by the database, so a post cut off with the process loses only a notice. A variable so a
+// test can shorten it.
+var raidPostStopWait = 2 * time.Second
+
+// raidPostTracker counts the public notices and cannot-lock warnings in flight
+// (raidPostAsync). It is a counter and not a sync.WaitGroup because the shutdown drain gives
+// up after a bounded wait and posts may still start while a waiter is abandoned; a
+// WaitGroup must not be added to concurrently with a Wait that began at zero, and this
+// counter has no such rule.
+type raidPostTracker struct {
+	mu      sync.Mutex
+	running int
+	idle    chan struct{}
+}
+
+// raidPostsClosed is the idle channel of a tracker with nothing running.
+var raidPostsClosed = func() chan struct{} {
+	c := make(chan struct{})
+	close(c)
+	return c
+}()
+
+// raidPosts is the posts in flight. StopRaidPosts waits on it at shutdown, and the tests
+// wait on it before they read what was sent.
+var raidPosts raidPostTracker
+
+func (t *raidPostTracker) start() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.running == 0 {
+		t.idle = make(chan struct{})
+	}
+	t.running++
+}
+
+func (t *raidPostTracker) finish() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.running--
+	if t.running == 0 {
+		close(t.idle)
+	}
+}
+
+// idleChan is closed when no post is in flight: already closed when none is running now,
+// else closed by the last post to finish.
+func (t *raidPostTracker) idleChan() <-chan struct{} {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.running == 0 {
+		return raidPostsClosed
+	}
+	return t.idle
+}
+
+// wait blocks until no post is in flight.
+func (t *raidPostTracker) wait() { <-t.idleChan() }
+
+// raidPostAsync runs one post (a public notice or a warning) on its own goroutine, so the
+// handler that started the lockdown goes on at once: the join guard records the joiner who
+// tipped the threshold, and the message pipeline reaches aispam, antiflood and the rest,
+// without waiting up to raidPostTimeout per send for a pacer slot. The goroutine is counted
+// in raidPosts and recovers from a panic, so a failing post can neither crash the bot nor
+// be lost to the shutdown unseen.
+func raidPostAsync(name string, post func()) {
+	raidPosts.start()
+	go func() {
+		defer raidPosts.finish()
+		defer error_handling.RecoverFromPanic(name, "Lockdown")
+		post()
+	}()
+}
+
+// StopRaidPosts waits at most raidPostStopWait for the posts in flight and reports whether
+// they all finished. It is a shutdown drain registered after the database close, because a
+// post reads the Staff Group link, the log channel and the language from the database. Posts
+// still running when the wait ends are cut off with the process (best effort, see
+// raidPostStopWait).
+func StopRaidPosts() bool {
+	select {
+	case <-raidPosts.idleChan():
+		return true
+	case <-time.After(raidPostStopWait):
+		log.Warn("[RaidDetection] shutdown drain timed out with posts still in flight")
+		return false
+	}
+}
 
 // raidSetLatch sets the remaining life of the chat's fire latch to d, best effort: the
 // latch only sheds load, so a Redis error is ignored and the latch keeps the length it has.
@@ -109,9 +201,11 @@ type raidTrigger struct {
 }
 
 // raidFire starts the lockdown a trigger asks for, through startLockdownRow exactly as
-// /lockdown does, with the bot as the starter and the trigger's numbers on the row. It
-// runs synchronously in the caller's handler: a crash half way leaves an unconfirmed row
-// the lockdown worker settles on its own.
+// /lockdown does, with the bot as the starter and the trigger's numbers on the row. The
+// start runs synchronously in the caller's handler: a crash half way leaves an unconfirmed
+// row the lockdown worker settles on its own. The public notice and the cannot-lock warning
+// are not part of it: they are sent from a goroutine (raidPostAsync) after the start, so the
+// handler never waits on a send.
 //
 // The latch (SET NX with a 60 second expiry) only sheds load, so a burst of joins past
 // the threshold does not make every join attempt the start; the one active lockdown per
@@ -207,9 +301,9 @@ func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	// the lockdown or its absence.
 	switch res.Outcome {
 	case lockdownStartStarted:
-		raidPostNotice(b, chat, trig, res)
+		raidPostAsync("raidPostNotice", func() { raidPostNotice(b, chat, trig, res) })
 	case lockdownStartNotSupergroup, lockdownStartBotCannotRestrict, lockdownStartLockFailed:
-		raidWarnCannotLock(b, chat, trig, res.Outcome)
+		raidPostAsync("raidWarnCannotLock", func() { raidWarnCannotLock(b, chat, trig, res.Outcome) })
 	}
 }
 

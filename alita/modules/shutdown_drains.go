@@ -35,3 +35,16 @@ func RegisterLockdownWorkerDrain(m *shutdown.Manager) {
 		return nil
 	}, lockdownWorkerStopWait+shutdownDrainGrace)
 }
+
+// RegisterRaidPostsDrain registers StopRaidPosts with an allowance of raidPostStopWait plus
+// shutdownDrainGrace. Register it after the DB-close handler so LIFO runs it first: a post
+// reads the Staff Group link, the log channel and the language from the database. The wait
+// is short on purpose, because a post is best effort and the lockdown it announces is
+// already in place.
+func RegisterRaidPostsDrain(m *shutdown.Manager) {
+	m.RegisterHandlerWithTimeout(func() error {
+		log.Info("[Shutdown] Draining raid detection posts...")
+		StopRaidPosts()
+		return nil
+	}, raidPostStopWait+shutdownDrainGrace)
+}

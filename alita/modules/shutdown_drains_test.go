@@ -136,3 +136,41 @@ func TestShutdownWaitsForLockdownWorker(t *testing.T) {
 		t.Fatal("the database-close probe never ran")
 	}
 }
+
+// TestShutdownWaitsForRaidPosts holds the notice of an automatic lockdown inside a slow
+// send and runs a real shutdown.Manager. The DB-close probe must only see the notice
+// delivered once the post finished, which needs the drain's own allowance, far above the
+// manager's 50 ms default.
+func TestShutdownWaitsForRaidPosts(t *testing.T) {
+	env := newLockdownEnv(t)
+	linkLockdownStaffGroup(env)
+	raidCleanup(t, env.chat.Id)
+	env.fake.setDelay("sendMessage", env.chat.Id, 300*time.Millisecond)
+
+	previous := raidPostStopWait
+	raidPostStopWait = 3 * time.Second
+	t.Cleanup(func() { raidPostStopWait = previous })
+
+	env.selfJoins(15)
+
+	observed := make(chan int, 1)
+	m := shutdown.NewManager()
+	// The probe stands for the DB-close handler and must not call t.Fatal.
+	m.RegisterHandler(func() error {
+		observed <- env.sentCount()
+		return nil
+	})
+	RegisterRaidPostsDrain(m)
+
+	if code := m.RunForTest(10*time.Second, 50*time.Millisecond); code != 0 {
+		t.Fatalf("shutdown exit code = %d, want 0", code)
+	}
+	select {
+	case sent := <-observed:
+		if sent != 1 {
+			t.Errorf("%d messages were sent when the database-close handler ran, want the notice delivered", sent)
+		}
+	default:
+		t.Fatal("the database-close probe never ran")
+	}
+}

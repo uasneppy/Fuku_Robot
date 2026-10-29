@@ -152,6 +152,9 @@ func (c *moduleBotClient) FileURL(token string, path string, _ *gotgbot.RequestO
 }
 
 func (c *moduleBotClient) callsFor(method string) []moduleBotCall {
+	// An automatic lockdown's notice and warning are sent from goroutines; read the
+	// calls only once they are done.
+	raidPosts.wait()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
