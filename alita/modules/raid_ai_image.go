@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -26,6 +27,36 @@ import (
 // raidAIImageBar is the spam probability at or above which an image verdict counts as spam
 // (D-04). A code constant, and the first thing the owner tunes after the live run.
 const raidAIImageBar = 0.85
+
+const (
+	// raidPartAIAlbum starts the key of an album's gate; the media group ID follows.
+	raidPartAIAlbum = "ag"
+	// raidPartAIBudget starts the key of a chat's hourly budget; the hour stamp follows.
+	raidPartAIBudget = "ab"
+	// raidAIGlobalBudgetPrefix is the key prefix of the all-groups hourly budget; the hour stamp follows.
+	raidAIGlobalBudgetPrefix = "alita:raid:aibudget:"
+	// raidAIVerdictCachePrefix is the key prefix of a cached verdict; Telegram's file_unique_id follows.
+	raidAIVerdictCachePrefix = "alita:raid:aiv:"
+
+	// raidAIVerdictCacheTTL is how long one image's verdict is reused.
+	raidAIVerdictCacheTTL = time.Hour
+	// raidAIAlbumGateTTL is how long the first photo of an album keeps the others out.
+	raidAIAlbumGateTTL = 120 * time.Second
+	// raidAIBudgetTTL lets an hour's budget counters expire on their own.
+	raidAIBudgetTTL = 2 * time.Hour
+)
+
+// The hourly Gemini budgets (D-20): code constants, held in variables only so a test can make
+// them small. Production code never reassigns them.
+var (
+	raidAIChatHourlyBudget   int64 = 150
+	raidAIGlobalHourlyBudget int64 = 500
+)
+
+// raidAIHourStamp names the UTC hour of t, the suffix of the budget keys.
+func raidAIHourStamp(t time.Time) string {
+	return t.UTC().Format("2006010215")
+}
 
 var (
 	// raidAIGeminiEndpoint is the Gemini API host. A variable only so a test points it at an
