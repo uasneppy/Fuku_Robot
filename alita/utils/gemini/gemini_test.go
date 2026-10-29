@@ -7,12 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 const testKey = "test-gemini-key-123456"
@@ -476,4 +478,360 @@ func dig(t *testing.T, m map[string]any, path ...string) any {
 		}
 	}
 	return cur
+}
+
+func rateLimitBody(delay string) string {
+	return `{"error":{"code":429,"message":"quota exceeded","status":"RESOURCE_EXHAUSTED",` +
+		`"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"` + delay + `"}]}}`
+}
+
+func classifyOnce(client *Client) (*Verdict, error) {
+	return client.Classify(context.Background(), Image{MIMEType: "image/jpeg", Data: jpegBytes})
+}
+
+func TestGeminiRetryAndErrors(t *testing.T) {
+	t.Run("429 with a short retryDelay is retried once", func(t *testing.T) {
+		var calls int
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			calls++
+			if calls == 1 {
+				writeJSON(w, http.StatusTooManyRequests, rateLimitBody("1s"))
+				return
+			}
+			writeJSON(w, http.StatusOK, answerBody(goodAnswer))
+		})
+		verdict, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		if err != nil {
+			t.Fatalf("Classify: %v", err)
+		}
+		if verdict.SpamProbability != 0.93 {
+			t.Fatalf("verdict = %+v", verdict)
+		}
+		if rec.count() != 2 {
+			t.Fatalf("requests = %d, want 2", rec.count())
+		}
+	})
+
+	t.Run("429 with a long retryDelay is not retried", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusTooManyRequests, rateLimitBody("30s"))
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("err = %v, want *HTTPError", err)
+		}
+		if httpErr.Status != 429 || httpErr.Code != "RESOURCE_EXHAUSTED" || httpErr.RetryDelay != 30*time.Second {
+			t.Fatalf("HTTPError = %+v", httpErr)
+		}
+		if rec.count() != 1 {
+			t.Fatalf("requests = %d, want 1", rec.count())
+		}
+		if !httpErr.Retryable() {
+			t.Fatal("429 must be retryable")
+		}
+	})
+
+	t.Run("a fractional retryDelay is read", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusTooManyRequests, rateLimitBody("15.5s"))
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("err = %v", err)
+		}
+		if httpErr.RetryDelay != 15500*time.Millisecond {
+			t.Fatalf("RetryDelay = %v, want 15.5s", httpErr.RetryDelay)
+		}
+	})
+
+	t.Run("Retry-After header is honoured when the body has no delay", func(t *testing.T) {
+		var calls int
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			calls++
+			if calls == 1 {
+				w.Header().Set("Retry-After", "1")
+				writeJSON(w, http.StatusTooManyRequests, `{"error":{"code":429,"message":"slow down","status":"RESOURCE_EXHAUSTED"}}`)
+				return
+			}
+			writeJSON(w, http.StatusOK, answerBody(goodAnswer))
+		})
+		if _, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite")); err != nil {
+			t.Fatalf("Classify: %v", err)
+		}
+		if rec.count() != 2 {
+			t.Fatalf("requests = %d, want 2", rec.count())
+		}
+	})
+
+	t.Run("a long Retry-After header is not retried", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Retry-After", "60")
+			writeJSON(w, http.StatusServiceUnavailable, `{"error":{"code":503,"message":"overloaded","status":"UNAVAILABLE"}}`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) || httpErr.Status != 503 {
+			t.Fatalf("err = %v", err)
+		}
+		if rec.count() != 1 {
+			t.Fatalf("requests = %d, want 1", rec.count())
+		}
+	})
+
+	t.Run("two 500s make two requests and an HTTPError", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusInternalServerError, `{"error":{"code":500,"message":"boom","status":"INTERNAL"}}`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) || httpErr.Status != 500 {
+			t.Fatalf("err = %v, want *HTTPError with status 500", err)
+		}
+		if rec.count() != 2 {
+			t.Fatalf("requests = %d, want 2 (one retry only)", rec.count())
+		}
+	})
+
+	t.Run("a 400 with API_KEY_INVALID is final and rejects the key", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusBadRequest, `{"error":{"code":400,"message":"API key not valid.","status":"INVALID_ARGUMENT",`+
+				`"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID"}]}}`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("err = %v", err)
+		}
+		if !httpErr.KeyRejected() {
+			t.Fatalf("KeyRejected = false for %+v", httpErr)
+		}
+		if httpErr.Reason != "API_KEY_INVALID" || httpErr.Retryable() {
+			t.Fatalf("HTTPError = %+v", httpErr)
+		}
+		if rec.count() != 1 {
+			t.Fatalf("requests = %d, want 1", rec.count())
+		}
+	})
+
+	t.Run("a 403 PERMISSION_DENIED rejects the key", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusForbidden, `{"error":{"code":403,"message":"denied","status":"PERMISSION_DENIED"}}`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) || !httpErr.KeyRejected() {
+			t.Fatalf("err = %v, want a key-rejected HTTPError", err)
+		}
+	})
+
+	t.Run("a plain 400 does not reject the key", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusBadRequest, `{"error":{"code":400,"message":"bad field","status":"INVALID_ARGUMENT"}}`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("err = %v", err)
+		}
+		if httpErr.KeyRejected() || httpErr.Retryable() {
+			t.Fatalf("a 400 must be final and not a key problem: %+v", httpErr)
+		}
+	})
+
+	t.Run("an answer that is not an error envelope is still an HTTPError", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusBadGateway, `<html>bad gateway</html>`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) || httpErr.Status != 502 {
+			t.Fatalf("err = %v", err)
+		}
+	})
+
+	t.Run("a hung server ends at the caller's deadline", func(t *testing.T) {
+		server, _ := newTestServer(t, func(_ http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		verdict, err := testClient(server, "gemini-3.5-flash-lite").Classify(ctx, Image{MIMEType: "image/jpeg", Data: jpegBytes})
+		if verdict != nil || err == nil {
+			t.Fatalf("verdict = %v err = %v, want an error", verdict, err)
+		}
+		if elapsed := time.Since(start); elapsed > time.Second {
+			t.Fatalf("took %v, want under 1s", elapsed)
+		}
+	})
+
+	t.Run("Retryable is true for 429 and 5xx only", func(t *testing.T) {
+		for status, want := range map[int]bool{429: true, 500: true, 503: true, 400: false, 401: false, 403: false, 404: false} {
+			if got := (&HTTPError{Status: status}).Retryable(); got != want {
+				t.Errorf("Retryable(%d) = %v, want %v", status, got, want)
+			}
+		}
+	})
+}
+
+func TestGeminiErrorsNeverContainKey(t *testing.T) {
+	assertClean := func(t *testing.T, name string, err error, extra ...string) {
+		t.Helper()
+		if err == nil {
+			t.Fatalf("%s: no error", name)
+		}
+		texts := []string{err.Error(), fmt.Sprintf("%v", err), fmt.Sprintf("%+v", err), fmt.Sprintf("%#v", err)}
+		var httpErr *HTTPError
+		if errors.As(err, &httpErr) {
+			texts = append(texts, httpErr.Message, httpErr.Code, httpErr.Reason, fmt.Sprintf("%+v", *httpErr))
+		}
+		for _, text := range texts {
+			if strings.Contains(text, testKey) {
+				t.Errorf("%s: error text contains the key: %q", name, text)
+			}
+			for _, banned := range extra {
+				if strings.Contains(text, banned) {
+					t.Errorf("%s: error text contains %q: %q", name, banned, text)
+				}
+			}
+		}
+	}
+
+	t.Run("a 400 whose message echoes the key", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusBadRequest, `{"error":{"code":400,"message":"API key `+testKey+` not valid. Pass `+testKey+`","status":"INVALID_ARGUMENT",`+
+				`"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID"}]}}`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		assertClean(t, "echoed key", err)
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) || !strings.Contains(httpErr.Message, "[REDACTED]") {
+			t.Fatalf("Message should keep the text with the key replaced, got %+v", httpErr)
+		}
+	})
+
+	t.Run("a 500 whose body is the key repeated", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusInternalServerError, strings.Repeat(testKey, 20))
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		assertClean(t, "key body", err)
+	})
+
+	t.Run("a key echoed in the status and reason", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusBadRequest, `{"error":{"code":400,"message":"x","status":"`+testKey+`",`+
+				`"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"`+testKey+`"}]}}`)
+		})
+		_, err := classifyOnce(testClient(server, "gemini-3.5-flash-lite"))
+		assertClean(t, "key in code and reason", err)
+	})
+
+	t.Run("a closed server", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, answerBody(goodAnswer))
+		})
+		client := testClient(server, "gemini-3.5-flash-lite")
+		serverURL := server.URL
+		server.Close()
+
+		_, err := classifyOnce(client)
+		assertClean(t, "closed server", err, serverURL, "/v1beta")
+	})
+
+	t.Run("a hung server", func(t *testing.T) {
+		server, _ := newTestServer(t, func(_ http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		defer cancel()
+		_, err := testClient(server, "gemini-3.5-flash-lite").Classify(ctx, Image{MIMEType: "image/jpeg", Data: jpegBytes})
+		assertClean(t, "hung server", err, server.URL, "/v1beta")
+	})
+
+	t.Run("an endpoint that cannot be parsed", func(t *testing.T) {
+		client := &Client{Endpoint: "http://bad host\x7f/" + testKey, APIKey: testKey, Model: "gemini-3.5-flash-lite"}
+		_, err := classifyOnce(client)
+		assertClean(t, "unbuildable request", err, "bad host")
+	})
+
+	t.Run("a key echoed in a transport error", func(t *testing.T) {
+		client := &Client{
+			Endpoint: "http://example.invalid",
+			APIKey:   testKey,
+			Model:    "gemini-3.5-flash-lite",
+			HTTP: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return nil, errors.New("dial failed for " + testKey)
+			})},
+		}
+		_, err := classifyOnce(client)
+		assertClean(t, "transport echo", err, "example.invalid")
+	})
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestGeminiGetModel(t *testing.T) {
+	t.Run("reads the model metadata", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, `{"name":"models/gemini-3.5-flash-lite","displayName":"Gemini 3.5 Flash-Lite",`+
+				`"inputTokenLimit":1048576,"outputTokenLimit":65536,`+
+				`"supportedGenerationMethods":["generateContent","countTokens"]}`)
+		})
+		info, err := testClient(server, "gemini-3.5-flash-lite").GetModel(context.Background())
+		if err != nil {
+			t.Fatalf("GetModel: %v", err)
+		}
+		if info.Name != "models/gemini-3.5-flash-lite" || info.DisplayName != "Gemini 3.5 Flash-Lite" ||
+			info.InputTokenLimit != 1048576 || info.OutputTokenLimit != 65536 ||
+			len(info.SupportedGenerationMethods) != 2 || info.SupportedGenerationMethods[0] != "generateContent" {
+			t.Fatalf("info = %+v", info)
+		}
+		reqs := rec.all()
+		if len(reqs) != 1 {
+			t.Fatalf("requests = %d, want 1", len(reqs))
+		}
+		if reqs[0].Method != http.MethodGet || reqs[0].Path != "/v1beta/models/gemini-3.5-flash-lite" {
+			t.Fatalf("request = %s %s", reqs[0].Method, reqs[0].Path)
+		}
+		if reqs[0].RawQuery != "" {
+			t.Fatalf("raw query = %q, want empty", reqs[0].RawQuery)
+		}
+		if got := reqs[0].Header.Get("x-goog-api-key"); got != testKey {
+			t.Fatalf("x-goog-api-key = %q", got)
+		}
+	})
+
+	t.Run("a 404 is an HTTPError", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusNotFound, `{"error":{"code":404,"message":"model not found","status":"NOT_FOUND"}}`)
+		})
+		_, err := testClient(server, "gemini-9").GetModel(context.Background())
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) || httpErr.Status != 404 || httpErr.Code != "NOT_FOUND" {
+			t.Fatalf("err = %v, want a 404 HTTPError", err)
+		}
+	})
+
+	t.Run("checks the key and the model before any request", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, `{}`)
+		})
+		noKey := testClient(server, "gemini-3.5-flash-lite")
+		noKey.APIKey = ""
+		if _, err := noKey.GetModel(context.Background()); !errors.Is(err, ErrNotConfigured) {
+			t.Fatalf("err = %v, want ErrNotConfigured", err)
+		}
+		if _, err := testClient(server, "a/b").GetModel(context.Background()); !errors.Is(err, ErrInvalidModel) {
+			t.Fatalf("err = %v, want ErrInvalidModel", err)
+		}
+		if rec.count() != 0 {
+			t.Fatalf("requests = %d, want 0", rec.count())
+		}
+	})
 }
