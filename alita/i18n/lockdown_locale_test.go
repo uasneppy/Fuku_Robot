@@ -212,6 +212,7 @@ func TestLockdownHelpFitsOneMessage(t *testing.T) {
 		help, _ := data["lockdown_help_msg"].(string)
 		header, _ := data["helpers_module_help_header"].(string)
 		total := lockdownHelpLength(strings.ReplaceAll(header, "%s", "Lockdown")) + lockdownHelpLength(help)
+		t.Logf("%s: help %d of %d UTF-16 units, headroom %d", lang, total, lockdownHelpTelegramLimit, lockdownHelpTelegramLimit-total)
 		if total > lockdownHelpTelegramLimit {
 			failures = append(failures, fmt.Sprintf("%s: help header and lockdown_help_msg are %d characters, over Telegram's %d", lang, total, lockdownHelpTelegramLimit))
 		}

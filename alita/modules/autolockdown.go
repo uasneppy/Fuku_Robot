@@ -157,14 +157,20 @@ func autolockdownTriggerLine(tr *i18n.Translator, enabled bool, threshold int, o
 }
 
 // autolockdownStatusText is the settings a group has: a title, one line per trigger
-// (on or off and its threshold) and the hint on how to change them.
+// (join surge, flood and AI spam, each on or off with its threshold), the notice that AI
+// checks are not set up when the server has neither the TypeSafe nor the Gemini key
+// (raidAIConfigured, D-14), and the hint on how to change them.
 func autolockdownStatusText(tr *i18n.Translator, s *models.ChatRaidDetection) string {
-	return lockdownJoinLines([]string{
+	lines := []string{
 		lockdownText(tr, "lockdown_auto_title"),
 		autolockdownTriggerLine(tr, s.JoinEnabled, s.JoinThreshold, "lockdown_auto_joins_on", "lockdown_auto_joins_off"),
 		autolockdownTriggerLine(tr, s.FloodEnabled, s.FloodThreshold, "lockdown_auto_flood_on", "lockdown_auto_flood_off"),
-		lockdownText(tr, "lockdown_auto_hint"),
-	})
+		autolockdownTriggerLine(tr, s.AIEnabled, s.AIThreshold, "lockdown_auto_ai_on", "lockdown_auto_ai_off"),
+	}
+	if !raidAIConfigured() {
+		lines = append(lines, lockdownText(tr, "lockdown_auto_ai_unavailable"))
+	}
+	return lockdownJoinLines(append(lines, lockdownText(tr, "lockdown_auto_hint")))
 }
 
 // autolockdown shows or changes the automatic lockdown triggers of the group. The
