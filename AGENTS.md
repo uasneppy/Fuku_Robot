@@ -185,7 +185,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ai` is checked and saved like the other two (`raiddetection.SetAIThreshold` / `SetAIEnabled`), so it has no
   refusal text of its own. The status lists the AI line after the flood line and adds
   `lockdown_auto_ai_unavailable` ("AI checks are not set up") when `raidAIConfigured()` is false, that is when
-  neither the TypeSafe nor the Gemini key is configured; a server with one of the two shows no notice.
+  neither the text checks (`ENABLE_AISPAM` with `TYPESAFE_API_KEY`) nor the image checks (`GEMINI_API_KEY`) are
+  available; a server with one of the two shows no notice. The `/lockdown` help says what the AI trigger sends to
+  TypeSafe and to Google (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
+  `TestLockdownHelpFitsOneMessage`.
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
   arguments then pick view or change for the tapper. The command is not `Disableable`. `/autoantiraid` is its alias for
   the join threshold (see the retired raid mode under Subsystem traps) with exactly the same checks and anonymous-admin
@@ -349,7 +352,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   trigger on), each `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of only its own columns plus `updated_at` followed by
   `cache.DeleteCache`, so two admins changing the two triggers never clobber each other, a Go `false` is always written,
   and a threshold outside 3..500 returns `ErrThresholdOutOfRange` before any write. The developer `/stats` counts the
-  rows through `raiddetection.LoadRaidDetectionStats` (chats with a row, and the chats with each trigger off).
+  rows through `raiddetection.LoadRaidDetectionStats` (chats with a row, and the chats with each trigger off: the
+  "Join surge off", "Flood off" and "AI spam off" lines; `AI spam off` is the chats with `ai_enabled` false). `getStats`
+  then appends `raidAIStatsSection`, a heading that says "this replica, since its last restart" and two lines of
+  in-memory numbers only (no text, file ID, chat, user or key): the raid AI pool's counters (`RaidAIStats`: checked,
+  spam, kept, shed, failed, blocked, capped, cached) and `/aispam`'s (checked, deleted, kept, shed, failed). They belong
+  to the process that answers, start at zero on every restart and are not fleet totals.
 - `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
@@ -884,7 +892,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Version strings are shape-locked (`BotVersion:` with two spaces in `alita/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
-- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (inert without `TYPESAFE_API_KEY`); perf monitoring and
+- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (inert without `TYPESAFE_API_KEY`); `GEMINI_API_KEY` empty
+  means no raid image check and no image leaves the server, and `GEMINI_MODEL` falls back to `gemini.DefaultModel`
+  (with a warning) when empty or not a valid model name; perf monitoring and
   background stats are on only when `DEBUG=false`; `HTTP_PORT` falls back to `PORT` then 8080. Integer env parsing is
   lenient, so a typo silently becomes the default.
 
@@ -893,6 +903,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Always pass `-tags testtools`; without it, test files and the helpers in production packages that carry that build tag drop out silently.
 - Postgres tests need both `DATABASE_URL` and `ALITA_TEST_DATABASE=true`; otherwise they run on SQLite.
 - Use real fixtures: `internal/testdb.Run` (SQLite), miniredis, hand-written `gotgbot.BotClient` fakes. No mock libraries.
+- No test calls a real AI provider (TypeSafe or Google): the Gemini client, the raid AI image path and the
+  `scripts/gemini-spike` tool are tested against `httptest` servers or a fake transport, with no `t.Skip`, so they run
+  in `make test`. The live Gemini spike (`go run ./scripts/gemini-spike`, needs `GEMINI_API_KEY`) is a manual owner
+  step, never part of CI.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
