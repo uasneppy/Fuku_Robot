@@ -555,6 +555,9 @@ func LoadLockdown(dispatcher *ext.Dispatcher) {
 	// before the staff watchers (-3), aispam, antiflood, locks and blacklists, so a
 	// message those later end was already counted. It never ends a message's handling.
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, lockdownModule.raidFloodWatcher), raidFloodGroup)
+	// The raid AI candidate watcher sits at group 2, between the commands at 0 (a handled
+	// command ends the update first) and aispam at 3. It never ends an update.
+	dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, lockdownModule.raidAIWatcher), raidAIGroup)
 	// The late flood watcher sits after every other group and counts the slash-prefixed
 	// texts that reach it: a command the bot handles ends the update first (D-07).
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, lockdownModule.raidFloodLateWatcher), raidFloodLateGroup)

@@ -59,7 +59,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
-  `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
+  `-1` users tracker · `0` commands/help/greetings · `2` raid AI candidate watcher (hands a new member's suspicious
+  item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
   after every other group).
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
@@ -251,6 +252,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   for tests, never set below 500 except to prove the cap), sets `PEXPIRE` 5 minutes and returns the two sizes. It is
   Redis only, like the other raid counters: without Redis the trigger is inert on that replica. Message text is never
   stored.
+- `alita:raid:{<chat>}:ar:<user>` is the repeat test of the raid AI candidate watcher (`raid_ai.go`): a list of hashes of
+  a new member's recent texts, each the first 8 bytes of the SHA-256 of the normalised text (lower-cased, whitespace
+  collapsed) as 16 hex characters, only for a text of at least 10 runes (`raidAIRepeatMinRunes`), newest 5
+  (`raidAIRepeatHistory`), 1 h TTL (`raidAIRepeatTTL`). One Lua script (`raidAICandidateScript`) answers whether the
+  sender is new (`:joined` scores them within 24 h) and whether the hash is one of their last few, and records the
+  hash for a new member only, so an established member leaves no key. Raw message text is never stored, here or by
+  the raid path anywhere else. It is Redis only, like the other raid counters.
 - `alita:raid:{<chat>}:flooders` is the flood alert's snapshot (`raid_flood.go`, D-17). When a flood trigger fires,
   `raidFire` calls `raidSnapshotFlooders` after the latch, the active check and the quiet period and before
   `startLockdownRow`: one Lua script (`raidFloodersScript`) replaces the key with the newest accounts of `:fa` (at most
@@ -546,6 +554,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`DrainAISpamChecks` waits for it); `raidFire` is bounded by `raidFireTimeout` and its 60 s latch. During a rolling
   deploy an old replica that wins `BeginAlert` for an `ai_burst` row renders the manual wording and no spammer sample;
   that is accepted, like the other rolling-deploy caveats here.
+- The raid AI candidate watcher (`raidAIWatcher`, group `2`, registered in `LoadLockdown`) picks the texts the raid path
+  asks TypeSafe about, even in a group that never enabled `/aispam` (D-01, D-02). It returns `ext.ContinueGroups` on
+  every path, never waits on AI, and deletes, restricts, bans and posts nothing. It is supergroups only, and a text
+  candidate is a message with `Text` set: a caption belongs to the image path. Checks run cheapest first: the chat
+  type, `raidFloodSenderCounts` (so no `sender_chat`, automatic forward, Telegram service ID or the bot), the item, the
+  provider (`raidAITextConfigured`: `ENABLE_AISPAM` and `TYPESAFE_API_KEY`), Redis, the chat's settings (`ai_enabled`),
+  the candidate script, the rule, then `aispamCarvedOut` (pending captcha, cached admin, approved) because it costs
+  more, then the enqueue. The rule is: the sender is a new member (joined within 24 h) and the text carries a link
+  (`aispamLinkDomains`), is a forward, or repeats one of their last 5 texts of at least 10 runes. Established members'
+  messages, plain texts, admins, approved users, members with a pending captcha and basic groups are never sent to any AI.
+- The raid path's text checks never double the `/aispam` call: `aispamWillJudge` (the TypeSafe configuration,
+  `aispam.IsAISpamEnabled` and a breaker that is not paused, the gates at the top of `checkAISpam`) hands a text to
+  `/aispam` whenever `/aispam` will judge it, and the watcher then sends nothing, so a message makes at most one
+  TypeSafe call; `/aispam`'s own delete verdict is what feeds the burst counter there (D-03, D-19). Where `/aispam` is
+  off, the raid-only check reports a verdict and never deletes. Raid-only checks never record the `/aispam` sender
+  history (it stores raw text), never post the `/aispam` breaker notice (the tripped return of
+  `aispamBreakerRecordFailure` is ignored, because the chat may never have enabled `/aispam`) and share its per-chat
+  breaker silently: a paused chat is not asked and the check counts as shed. Without Redis the watcher does nothing.
+- The raid AI pool (`raid_ai.go`, D-18) is separate from the `/aispam` queue and shared by raid-only text and image
+  checks: 128 queued jobs (`raidAIQueueCapacity`), 4 workers (`raidAIWorkerCount`) started once, each recovering from
+  panics, per job too. A full queue or a draining process sheds the job (`raidAIShed`); the in-flight count is a
+  `raidPostTracker` (`raidAIJobs`), taken before `raidAIDraining` is read, never a `sync.WaitGroup`. A raid-only text job
+  reports a spam verdict (`aispamIsDelete`) to `raidAIRecordVerdict` and nothing else; a slow, failing or paused
+  provider is no verdict. Until the pool gets its own context and drain, the worker that reports the tipping verdict runs
+  `raidFire` itself, which is bounded by `raidFireTimeout` and its 60 s latch.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`
