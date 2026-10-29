@@ -5,11 +5,13 @@ package modules
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/config"
 	"github.com/divkix/Alita_Robot/alita/db"
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -151,6 +153,88 @@ func TestAutoLockdown(t *testing.T) {
 		if row.TriggerKind != models.LockdownTriggerJoinSurge {
 			t.Errorf("TriggerKind = %q, want %q", row.TriggerKind, models.LockdownTriggerJoinSurge)
 		}
+	})
+}
+
+// withAIKeys sets the two AI provider keys of the server for one test: TypeSafe (which
+// also needs ENABLE_AISPAM) and Gemini. An empty string means not configured.
+func withAIKeys(t *testing.T, typeSafe, gemini string) {
+	t.Helper()
+	previousKey, previousEnabled, previousGemini := config.AppConfig.TypeSafeAPIKey, config.AppConfig.EnableAISpam, config.AppConfig.GeminiAPIKey
+	config.AppConfig.TypeSafeAPIKey = typeSafe
+	config.AppConfig.EnableAISpam = true
+	config.AppConfig.GeminiAPIKey = gemini
+	t.Cleanup(func() {
+		config.AppConfig.TypeSafeAPIKey = previousKey
+		config.AppConfig.EnableAISpam = previousEnabled
+		config.AppConfig.GeminiAPIKey = previousGemini
+	})
+}
+
+func TestAutolockdownAI(t *testing.T) {
+	t.Run("the view lists the AI trigger", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "typesafe-test-key", "")
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(
+			staffMarker("lockdown_auto_title"),
+			staffMarker("lockdown_auto_ai_on")+" 5",
+		)
+		env.wantReplyLacks(staffMarker("lockdown_auto_ai_unavailable"))
+		env.wantNoAutoRow()
+	})
+
+	t.Run("the view of a trigger that is off", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "typesafe-test-key", "")
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: true, JoinThreshold: 15, FloodEnabled: true, FloodThreshold: 30,
+			AIEnabled: false, AIThreshold: 9,
+		})
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_ai_off") + " 9")
+		env.wantReplyLacks(staffMarker("lockdown_auto_ai_on"))
+	})
+
+	t.Run("no AI keys at all says so after the AI line", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "", "")
+
+		env.send(env.admin, "/autolockdown")
+
+		reply := env.lastReply()
+		line := strings.Index(reply, staffMarker("lockdown_auto_ai_on"))
+		notice := strings.Index(reply, staffMarker("lockdown_auto_ai_unavailable"))
+		if line < 0 || notice < 0 || notice < line {
+			t.Errorf("reply %q: the AI line is at %d and the not-set-up notice at %d, want the notice after the line", reply, line, notice)
+		}
+	})
+
+	t.Run("one provider is enough for no notice", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "", "gemini-test-key")
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_ai_on") + " 5")
+		env.wantReplyLacks(staffMarker("lockdown_auto_ai_unavailable"))
+	})
+
+	t.Run("the hint names the ai word", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_hint"))
 	})
 }
 
