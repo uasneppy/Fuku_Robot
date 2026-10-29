@@ -55,7 +55,6 @@ var raidAIGeminiBreakers = struct {
 var raidAIGeminiPause struct {
 	mu         sync.Mutex
 	pausedTill time.Time
-	reason     string
 }
 
 // raidAIGeminiPaused reports whether the chat's image checks are paused, by its own breaker
@@ -150,7 +149,6 @@ func raidAIGeminiPauseProvider(now time.Time, err error) {
 	}
 	till := now.Add(span)
 	raidAIGeminiPause.pausedTill = till
-	raidAIGeminiPause.reason = reason
 	raidAIGeminiPause.mu.Unlock()
 
 	log.Warnf("[RaidDetection] AI image checks paused for every chat: %s; they resume at %s",
