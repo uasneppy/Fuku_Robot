@@ -79,6 +79,50 @@ func TestScrubDoesNotCorruptOrdinaryProse(t *testing.T) {
 	}
 }
 
+func TestScrubGoogleAPIKeyShape(t *testing.T) {
+	reset()
+	t.Cleanup(reset)
+
+	// "AIzaSy" plus 33 URL-safe characters: 39 characters in all, the shape of
+	// a Google API key, never registered here.
+	key := "AIzaSy" + "aB3_-dE5fG7hI9jK1lM3nO5pQ7rS9tU1v"
+	if len(key) != 39 {
+		t.Fatalf("test key has %d characters, want 39", len(key))
+	}
+
+	leaks := []struct {
+		name  string
+		input string
+	}{
+		{"url query", "POST https://generativelanguage.googleapis.com/v1beta/models/m:generateContent?key=" + key + " failed"},
+		{"json body", `{"key":"` + key + `","other":1}`},
+		{"end of sentence", "the configured key was " + key},
+	}
+	for _, tc := range leaks {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Scrub(tc.input)
+			if strings.Contains(got, key) || strings.Contains(got, key[:20]) {
+				t.Fatalf("Google API key leaked: %q", got)
+			}
+			if !strings.Contains(got, Placeholder) {
+				t.Fatalf("expected %q in %q", Placeholder, got)
+			}
+		})
+	}
+
+	untouched := []string{
+		"AIza" + strings.Repeat("a", 34), // one character short of a key
+		"AIzaSy-short",
+		"the AIza prefix is mentioned in prose only",
+		"AIza",
+	}
+	for _, in := range untouched {
+		if got := Scrub(in); got != in {
+			t.Fatalf("non-key text was changed: %q -> %q", in, got)
+		}
+	}
+}
+
 func TestScrubRegisteredSecret(t *testing.T) {
 	reset()
 	t.Cleanup(reset)

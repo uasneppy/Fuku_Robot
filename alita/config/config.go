@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/divkix/Alita_Robot/alita/utils/gemini"
 	"github.com/divkix/Alita_Robot/alita/utils/logredact"
 )
 
@@ -193,6 +194,14 @@ type Config struct {
 	// feature is inert without TypeSafeAPIKey.
 	EnableAISpam   bool
 	TypeSafeAPIKey string
+
+	// Image checks of the AI raid trigger (Google Gemini). The feature is inert
+	// without GeminiAPIKey: with no key no image leaves the server. The key is
+	// a secret and is registered with logredact.RegisterSecret. GeminiModel is
+	// checked against the Gemini client's model-name rule in setDefaults, so a name that is not a
+	// plain model id never reaches a request URL.
+	GeminiAPIKey string
+	GeminiModel  string
 }
 
 var AppConfig *Config
@@ -328,6 +337,9 @@ func LoadConfig() (*Config, error) {
 
 		EnableAISpam:   typeConvertor{str: os.Getenv("ENABLE_AISPAM")}.Bool(),
 		TypeSafeAPIKey: os.Getenv("TYPESAFE_API_KEY"),
+
+		GeminiAPIKey: os.Getenv("GEMINI_API_KEY"),
+		GeminiModel:  os.Getenv("GEMINI_MODEL"),
 	}
 
 	cfg.setDefaults()
@@ -446,6 +458,29 @@ func (cfg *Config) setDefaults() {
 	if os.Getenv("ENABLE_AISPAM") == "" {
 		cfg.EnableAISpam = true
 	}
+
+	// The model name ends up in a request path, so one that is not a plain
+	// model id is replaced by the default instead of being used.
+	if cfg.GeminiModel == "" {
+		cfg.GeminiModel = gemini.DefaultModel
+	} else if !gemini.ValidModel(cfg.GeminiModel) {
+		log.Warnf("[Config] GEMINI_MODEL %q is not a valid model name, using %s", cfg.GeminiModel, gemini.DefaultModel)
+		cfg.GeminiModel = gemini.DefaultModel
+	}
+}
+
+// registerSecrets registers every configured secret with logredact so its exact
+// value is scrubbed from all log output.
+func registerSecrets(cfg *Config) {
+	logredact.RegisterSecret(
+		cfg.BotToken,
+		cfg.DatabaseURL,
+		cfg.RedisPassword,
+		cfg.WebhookSecret,
+		cfg.MetricsAuthToken,
+		cfg.TypeSafeAPIKey,
+		cfg.GeminiAPIKey,
+	)
 }
 
 func init() {
@@ -483,14 +518,7 @@ func init() {
 
 	AppConfig = cfg
 
-	logredact.RegisterSecret(
-		cfg.BotToken,
-		cfg.DatabaseURL,
-		cfg.RedisPassword,
-		cfg.WebhookSecret,
-		cfg.MetricsAuthToken,
-		cfg.TypeSafeAPIKey,
-	)
+	registerSecrets(cfg)
 
 	if cfg.Debug {
 		log.SetLevel(log.DebugLevel)

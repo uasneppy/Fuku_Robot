@@ -67,6 +67,39 @@ chats cannot bring their own. Leaving it empty disables the feature and makes
 | **Type** | `string` |
 | **Required** | No |
 
+### `GEMINI_API_KEY`
+
+Google Gemini API key for the image checks of the AI raid trigger. When it is
+set, suspicious photos, GIFs and stickers posted by members who joined in the
+last 24 hours are sent to Google Gemini to be judged as spam or not. A burst of
+spam verdicts from several accounts can lock the group; the AI never locks a
+group on its own. When it is unset, no image is sent anywhere and the text
+checks (through `TYPESAFE_API_KEY`) are unchanged.
+
+Use a paid-tier key. On the free tier Google may use the images you send to
+improve its products, so the owner decides before setting a free-tier key. The
+key is a secret: it is registered with the log redactor at startup, and any
+string shaped like a Google API key is scrubbed from log lines even when it was
+never registered. It is sent only in a request header, never in a URL.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No |
+
+### `GEMINI_MODEL`
+
+Gemini model used for the image checks. Only used when `GEMINI_API_KEY` is set.
+The name must be a plain model id of 1 to 64 letters, digits, dots, underscores
+or hyphens. Any other value is replaced by the default with a warning in the
+log, so a bad name never reaches a request URL.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No |
+| **Default** | `gemini-3.5-flash-lite` |
+
 ## 📂 Bot settings
 
 ### `MESSAGE_DUMP` (Required)
@@ -552,6 +585,8 @@ ENABLE_DB_MONITORING=# (default: false)
 ENABLE_PERFORMANCE_MONITORING=# (default: true in prod, false in debug)
 ENABLE_PPROF=# enable pprof endpoints (default: false)
 ENABLED_LOCALES=# comma-separated language codes (default: en)
+GEMINI_API_KEY=# Google Gemini key for the image checks of the AI raid trigger (off when unset; use a paid-tier key)
+GEMINI_MODEL=# Gemini model for those checks (default: gemini-3.5-flash-lite)
 HTTP_MAX_IDLE_CONNS=# (default: 100)
 HTTP_MAX_IDLE_CONNS_PER_HOST=# (default: 50)
 HTTP_PORT=# unified HTTP server port (PORT fallback, then 8080)
