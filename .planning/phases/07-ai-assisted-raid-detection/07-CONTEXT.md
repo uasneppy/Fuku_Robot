@@ -47,6 +47,13 @@ Out of scope:
 - **D-16:** The Gemini client, the candidate rules and the verdict counter sit behind interfaces or swappable variables, with hand-written fakes in tests (no mock libraries). The AI path is inert without keys and the whole phase passes `make test` with no network.
 - **D-17 (spike deferred, owner's choice):** The Gemini spike gate is not run in this phase. Instead it ships `scripts/gemini-spike/` (a standalone Go tool that reads a folder of labelled sample images, calls the same client code with the owner's key, and prints accuracy, latency, tokens and an estimated cost) and `07-SPIKE.md` (what to measure and which constants to tune: the 0.85 bar, the thumbnail choice, the model). The tool is not part of `make test` and calls nothing without a key.
 
+### Amendments after research (orchestrator's calls, 2026-10-29)
+- **D-18 (refines D-13):** The raid-only text and image jobs run in their **own bounded pool** with their own breakers, budgets, verdict cache and drain, not in `/aispam`'s queue. Sharing it would let a 100-image raid shed real `/aispam` moderation. `/aispam`'s queue and behaviour stay unchanged.
+- **D-19 (reads D-03 literally):** Every `/aispam` delete verdict feeds the burst counter, from any account; a keep verdict does not. The three-account floor and the threshold still guard against a single spammer. The raid path's own checks stay limited to new-member candidates (D-01).
+- **D-20 (spend guard, owner question defaulted to the researcher's recommendation):** Gemini calls are capped by code constants: 150 images per group per hour and 500 per hour across all groups; a capped item is "no verdict". A verdict served from the per-`file_unique_id` cache costs no budget. The constants are easy to change in code; env overrides are deferred.
+- **D-21 (docs, not code):** The docs recommend a paid-tier Gemini key, because member photos leave the server and the free tier may let Google use them. Leaving `GEMINI_API_KEY` unset keeps the text path working and sends no image anywhere. The owner chooses the key when they run the spike.
+- **D-22 (AI-SPEC):** `/gsd-ai-integration-phase` is not run. Its framework selection is moot (plain REST, D-10) and its evaluation strategy is covered by the research's Validation Architecture and the `07-SPIKE.md` kit (D-17).
+
 ### Claude's Discretion
 - The rule for "repeated text" (exact match against the sender's recent texts, reusing `observeAISpamSender`'s history) and the exact link and forward tests.
 - Redis key names (`alita:raid:{<chat>}:ai...`), TTLs, caps and the snapshot key for the spammers.
