@@ -49,7 +49,7 @@ This page provides a complete reference of all commands available in Alita Robot
 | `/raidtime` | Retired: replies with the same pointer | Everyone | ✅ | — |
 | `/raidactiontime` | Retired: replies with the same pointer | Everyone | ✅ | — |
 | `/autoantiraid` | Alias: set the join surge threshold (3 to 500) or turn it off; owner or admin who can restrict members, checked live | Admin | ❌ | — |
-| `/autolockdown` | Show or change the automatic raid triggers (`joins`, `flood`); changing needs the owner or an admin who can restrict members, checked live | Admin | ❌ | — |
+| `/autolockdown` | Show or change the automatic raid triggers (`joins`, `flood`, `ai`); changing needs the owner or an admin who can restrict members, checked live | Admin | ❌ | — |
 
 #### 🤖 Aispam
 
