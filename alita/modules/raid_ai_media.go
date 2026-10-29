@@ -58,10 +58,42 @@ func raidAIMediaRef(msg *gotgbot.Message) (raidAIMedia, bool) {
 	if msg == nil {
 		return raidAIMedia{}, false
 	}
-	if len(msg.Photo) > 0 {
+	switch {
+	case len(msg.Photo) > 0:
 		return raidAIPhotoRef(msg.Photo)
+	case msg.Sticker != nil:
+		return raidAIStickerRef(msg.Sticker)
+	case msg.Animation != nil:
+		// Checked before the document: Telegram sets Document on a GIF too, and a document
+		// is not a candidate on its own.
+		return raidAIThumbnailRef(msg.Animation.Thumbnail, "animation")
+	case msg.Video != nil:
+		return raidAIThumbnailRef(msg.Video.Thumbnail, "video")
 	}
+	// A video note, a document, a voice note, audio, a poll and the rest have no frame
+	// worth sending.
 	return raidAIMedia{}, false
+}
+
+// raidAIStickerRef sends a regular static sticker as its WebP file and an animated (TGS) or
+// video (WEBM) one as its thumbnail. A custom emoji or mask sticker is not a candidate.
+func raidAIStickerRef(sticker *gotgbot.Sticker) (raidAIMedia, bool) {
+	if sticker.Type != "regular" {
+		return raidAIMedia{}, false
+	}
+	if sticker.IsAnimated || sticker.IsVideo {
+		return raidAIThumbnailRef(sticker.Thumbnail, "sticker")
+	}
+	return raidAIFrame(sticker.FileId, sticker.FileUniqueId, sticker.FileSize, "sticker")
+}
+
+// raidAIThumbnailRef sends Telegram's own thumbnail of a GIF, video or animated sticker.
+// Without one there is no frame and nothing is sent.
+func raidAIThumbnailRef(thumbnail *gotgbot.PhotoSize, kind string) (raidAIMedia, bool) {
+	if thumbnail == nil {
+		return raidAIMedia{}, false
+	}
+	return raidAIFrame(thumbnail.FileId, thumbnail.FileUniqueId, thumbnail.FileSize, kind)
 }
 
 // raidAIPhotoRef takes the photo size whose larger side is nearest to raidAIPhotoTarget.
