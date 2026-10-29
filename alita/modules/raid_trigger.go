@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
@@ -297,12 +298,16 @@ func raidPostNotice(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, res lo
 // category is on (in the group's language, starting with the usual log header), each through
 // the lockdown pacer.
 //
-// One SET NX with a 24 hour expiry gates both copies for the group, across replicas, so a
-// sustained raid warns once a day; a Redis error or a lost SetNX sends nothing. The
-// failures that may pass at once (bot rights or permissions unreadable, a database error, a
-// lock whose answer was lost) are not passed in and warn nobody. The group's title is
-// escaped and spliced in after translation. A lookup that fails skips that copy, and a
-// failed send is only logged.
+// The destinations are resolved first, and with none the warning is not even attempted and
+// nothing is recorded, so a Staff Group linked later is still warned. Then one SET NX with a
+// 24 hour expiry gates both copies for the group, across replicas, so a sustained raid warns
+// once a day; a Redis error or a lost SetNX sends nothing. The gate is the record of a
+// warning that reached somebody: when no copy was delivered it is given back with DEL, so
+// the next qualifying trigger tries again, and when at least one copy was delivered it
+// stays, so the two copies count as one warning. The failures that may pass at once (bot
+// rights or permissions unreadable, a database error, a lock whose answer was lost) are not
+// passed in and warn nobody. The group's title is escaped and spliced in after translation.
+// A lookup that fails skips that copy, and a failed send is only logged.
 func raidWarnCannotLock(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, outcome lockdownStartOutcome) {
 	var key string
 	switch outcome {
@@ -320,8 +325,21 @@ func raidWarnCannotLock(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, ou
 	if client == nil {
 		return
 	}
+
+	// Resolve where the warning would go before the gate is touched.
+	link, err := staff.GetLinkOfGroupFresh(chat.Id)
+	if err != nil {
+		log.Warnf("[RaidDetection] the Staff Group link of chat %d could not be read for the warning: %v", chat.Id, err)
+		link = nil
+	}
+	channelID, header, hasChannel := actionlog.Destination(chat, logchannels.CategoryAdmin)
+	if link == nil && !hasChannel {
+		return
+	}
+
+	gateKey := raidKey(chat.Id, raidPartWarn)
 	gateCtx, cancelGate := context.WithTimeout(cache.Context, raidRedisTimeout)
-	won, err := client.SetNX(gateCtx, raidKey(chat.Id, raidPartWarn), "1", raidWarnEvery).Result()
+	won, err := client.SetNX(gateCtx, gateKey, "1", raidWarnEvery).Result()
 	cancelGate()
 	if err != nil {
 		log.Debugf("[RaidDetection] warning gate of chat %d failed: %v", chat.Id, err)
@@ -346,21 +364,37 @@ func raidWarnCannotLock(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, ou
 		)
 	}
 
-	link, err := staff.GetLinkOfGroupFresh(chat.Id)
-	switch {
-	case err != nil:
-		log.Warnf("[RaidDetection] the Staff Group link of chat %d could not be read for the warning: %v", chat.Id, err)
-	case link != nil:
+	delivered := 0
+	if link != nil {
 		if err := raidSend(b, link.StaffChatID, render(staffChatTranslator(link.StaffChatID))); err != nil {
 			log.Warnf("[RaidDetection] the warning for chat %d was not delivered to its Staff Group %d: %v",
 				chat.Id, link.StaffChatID, err)
+		} else {
+			delivered++
 		}
 	}
-
-	if channelID, header, ok := actionlog.Destination(chat, logchannels.CategoryAdmin); ok {
+	if hasChannel {
 		if err := raidSend(b, channelID, header+render(staffChatTranslator(chat.Id))); err != nil {
 			log.Warnf("[RaidDetection] the warning for chat %d was not delivered to its log channel %d: %v",
 				chat.Id, channelID, err)
+		} else {
+			delivered++
 		}
+	}
+
+	if delivered == 0 {
+		raidReleaseWarnGate(client, chat.Id, gateKey)
+	}
+}
+
+// raidReleaseWarnGate gives the once-a-day warning gate back after a warning nobody
+// received, so the next qualifying trigger warns again instead of staying silent for a day.
+// Best effort: a Redis error leaves the gate, which only delays the next warning.
+func raidReleaseWarnGate(client *redis.Client, chatID int64, gateKey string) {
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	if err := client.Del(ctx, gateKey).Err(); err != nil {
+		log.Warnf("[RaidDetection] the warning gate of chat %d could not be given back after a warning nobody received: %v",
+			chatID, err)
 	}
 }

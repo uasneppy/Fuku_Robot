@@ -258,8 +258,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `lockdownStartBotCannotRestrict` or a definitively refused lock, `lockdownStartLockFailed`) nothing is started and
   `raidWarnCannotLock` warns the group's Staff Group (`staff.GetLinkOfGroupFresh`, the Staff Group's language) and its
   log channel (`actionlog.Destination` under the admin category, the group's language, starting with the usual header),
-  each only when it exists. One `SET NX EX 86400` on `alita:raid:{<chat>}:warn` gates both copies, so a group is
-  warned at most once a day across replicas, and a Redis error or a lost `SetNX` sends nothing. The other outcomes
+  each only when it exists. The destinations are resolved before the gate is touched: with neither, nothing is
+  attempted and the gate stays free, so a Staff Group linked later is still warned. One `SET NX EX 86400` on
+  `alita:raid:{<chat>}:warn` then gates both copies, so a group is warned at most once a day across replicas, and a
+  Redis error or a lost `SetNX` sends nothing. The gate records a warning that reached somebody: when no copy was
+  delivered it is given back with `DEL` (`raidReleaseWarnGate`, best effort), and when at least one was delivered it
+  stays. The other outcomes
   (bot rights or permissions unreadable, a failed state write, a lock whose answer was lost) only log. The group title
   is escaped and spliced in after translation; the trigger sentence (`lockdownTriggerSentence`) holds only numbers.
 - `chat_raid_detection` (migration 20261018130000) holds one chat's automatic raid detection settings: the join surge

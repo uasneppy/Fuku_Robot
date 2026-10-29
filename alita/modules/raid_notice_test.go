@@ -364,6 +364,75 @@ func TestRaidCannotLockWarnsOncePerDay(t *testing.T) {
 		if got := len(env.sentChats()); got != 0 {
 			t.Errorf("%d messages were sent, want none: nobody is linked and no log channel is set", got)
 		}
+		if env.redis.Exists(raidKey(env.chat.Id, raidPartWarn)) {
+			t.Error("the once-a-day gate is set although nobody could be warned")
+		}
+	})
+
+	t.Run("a Staff Group linked after a warning with no destination still gets it", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		env.fake.setBotRole(env.chat.Id, staffRoleAdminNoRestrict)
+
+		env.selfJoins(15)
+		if got := len(env.sentChats()); got != 0 {
+			t.Fatalf("%d messages were sent, want none: nobody is linked and no log channel is set", got)
+		}
+
+		staffChat := linkLockdownStaffGroup(env)
+		env.dropRaidLatch()
+		env.selfJoins(1)
+
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 1 {
+			t.Errorf("%d messages reached the newly linked Staff Group, want the warning within the same day", got)
+		}
+	})
+
+	t.Run("a warning nobody received is tried again", func(t *testing.T) {
+		env, staffChat, channel := warnEnv(t)
+		env.fake.setBotRole(env.chat.Id, staffRoleAdminNoRestrict)
+		env.fake.script("sendMessage", staffChat, staffFakeError(400, "Bad Request: have no rights to send a message"))
+		env.fake.script("sendMessage", channel, staffFakeError(400, "Bad Request: have no rights to send a message"))
+
+		env.selfJoins(15)
+
+		env.wantWarnings(staffChat, channel, 0)
+		if env.redis.Exists(raidKey(env.chat.Id, raidPartWarn)) {
+			t.Fatal("the once-a-day gate is still set after both copies failed")
+		}
+
+		env.dropRaidLatch()
+		env.selfJoins(1)
+
+		env.wantWarnings(staffChat, channel, 1)
+		if !env.redis.Exists(raidKey(env.chat.Id, raidPartWarn)) {
+			t.Error("the once-a-day gate is not set after the warning was delivered")
+		}
+	})
+
+	t.Run("one delivered copy keeps the gate", func(t *testing.T) {
+		env, staffChat, channel := warnEnv(t)
+		env.fake.setBotRole(env.chat.Id, staffRoleAdminNoRestrict)
+		env.fake.script("sendMessage", channel, staffFakeError(400, "Bad Request: have no rights to send a message"))
+
+		env.selfJoins(15)
+
+		if got := len(env.fake.sentTo(staffChat)); got != 1 {
+			t.Fatalf("%d messages reached the Staff Group, want 1", got)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 0 {
+			t.Fatalf("%d messages reached the log channel, want 0: its send failed", got)
+		}
+
+		env.dropRaidLatch()
+		env.selfJoins(1)
+
+		if got := len(env.fake.sentTo(staffChat)); got != 1 {
+			t.Errorf("%d messages reached the Staff Group, want still 1: one delivered copy is the day's warning", got)
+		}
+		if got := len(env.fake.sentTo(channel)); got != 0 {
+			t.Errorf("%d messages reached the log channel, want still 0", got)
+		}
 	})
 
 	t.Run("title is escaped", func(t *testing.T) {
