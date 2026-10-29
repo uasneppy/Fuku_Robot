@@ -933,7 +933,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - No test calls a real AI provider (TypeSafe or Google): the Gemini client, the raid AI image path and the
   `scripts/gemini-spike` tool are tested against `httptest` servers or a fake transport, with no `t.Skip`, so they run
   in `make test`. The live Gemini spike (`go run ./scripts/gemini-spike`, needs `GEMINI_API_KEY`) is a manual owner
-  step, never part of CI.
+  step, never part of CI. It refuses an `-endpoint` that is not https (plain http is accepted only for `localhost`,
+  `127.0.0.1` and `::1`), because the key goes there in a header, and it exits 1 when every request failed.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,

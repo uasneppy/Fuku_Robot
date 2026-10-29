@@ -18,6 +18,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -159,11 +160,35 @@ func parseFlags(args []string, stderr io.Writer) (*config, *flag.FlagSet, rawFla
 	return cfg, flags, raw, -1
 }
 
+// validEndpoint returns a message unless the endpoint is an https URL, or an http URL for a
+// loopback host (for a local test server). The real API key travels in a header to this host, so
+// a plain-http or hostless URL is refused before anything is sent.
+func validEndpoint(endpoint string) string {
+	const message = "-endpoint must be an https URL, or an http URL for localhost, 127.0.0.1 or ::1"
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" || u.User != nil {
+		return message
+	}
+	switch u.Scheme {
+	case "https":
+		return ""
+	case "http":
+		switch u.Hostname() {
+		case "localhost", "127.0.0.1", "::1":
+			return ""
+		}
+	}
+	return message
+}
+
 // validate checks the parsed flags and fills cfg.options from the raw ones.
 // It returns a message for the first problem, or "".
 func validate(cfg *config, raw rawFlags) string {
 	if !gemini.ValidModel(cfg.model) {
 		return "-model must be 1 to 64 letters, digits, dots, underscores or hyphens"
+	}
+	if msg := validEndpoint(cfg.endpoint); msg != "" {
+		return msg
 	}
 	if cfg.bar <= 0 || cfg.bar > 1 {
 		return "-bar must be above 0 and at most 1"
@@ -428,8 +453,9 @@ func runLabelled(client *gemini.Client, cfg *config, key string, stdout, stderr 
 			failed++
 		}
 	}
-	if failed == len(results) {
+	if len(results) > 0 && failed == len(results) {
 		_, _ = fmt.Fprintln(stderr, "Every request failed. Run -probe and -models-get first to check the key, the model id and the request shape.")
+		return exitFailure
 	}
 	return exitOK
 }

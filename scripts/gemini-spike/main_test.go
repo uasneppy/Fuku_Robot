@@ -153,8 +153,11 @@ func TestSpikeNoKeyMakesNoRequest(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 		code := run([]string{"-dir", dir, "-concurrency", "1"}, envOf("GEMINI_API_KEY", testKey), &stdout, &stderr, tr)
-		if code != 0 {
-			t.Fatalf("run exited %d; stderr: %s", code, stderr.String())
+		if code != exitFailure {
+			t.Fatalf("run exited %d, want %d when every request failed; stderr: %s", code, exitFailure, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "Every request failed") {
+			t.Errorf("stderr does not say every request failed: %q", stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "failed HTTP 403 PERMISSION_DENIED") {
 			t.Errorf("the CSV row does not carry the status and code:\n%s", stdout.String())
@@ -190,6 +193,12 @@ func TestSpikeRefusesBadFlags(t *testing.T) {
 		{"-dir", dir, "-schema-field", "responseNonsense"},
 		{"-dir", dir, "-bar", "1.5"},
 		{"-dir", dir, "-concurrency", "0"},
+		{"-dir", dir, "-endpoint", "http://generativelanguage.googleapis.com"},
+		{"-dir", dir, "-endpoint", "http://localhost.evil.example"},
+		{"-dir", dir, "-endpoint", "ftp://127.0.0.1"},
+		{"-dir", dir, "-endpoint", "https://"},
+		{"-dir", dir, "-endpoint", "https://user:pass@generativelanguage.googleapis.com"},
+		{"-dir", dir, "-endpoint", "generativelanguage.googleapis.com"},
 		{"-dir", dir, "-no-such-flag"},
 		{},
 	} {
@@ -204,6 +213,28 @@ func TestSpikeRefusesBadFlags(t *testing.T) {
 		}
 		if strings.Contains(stdout.String()+stderr.String(), testKey) {
 			t.Errorf("run %v printed the key", args)
+		}
+	}
+}
+
+func TestSpikeAcceptsHTTPSAndLoopbackEndpoints(t *testing.T) {
+	dir := t.TempDir()
+	writeJPEG(t, filepath.Join(dir, "spam", "a.jpg"))
+
+	for _, endpoint := range []string{
+		"https://generativelanguage.googleapis.com",
+		"http://localhost:8080",
+		"http://127.0.0.1:9",
+		"http://[::1]:9",
+	} {
+		tr := &recordingTransport{t: t, body: cannedVerdict}
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"-dir", dir, "-endpoint", endpoint}, envOf("GEMINI_API_KEY", testKey), &stdout, &stderr, tr)
+		if code != 0 {
+			t.Errorf("-endpoint %s exited %d; stderr: %s", endpoint, code, stderr.String())
+		}
+		if tr.count() != 1 {
+			t.Errorf("-endpoint %s sent %d requests, want 1", endpoint, tr.count())
 		}
 	}
 }
