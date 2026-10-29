@@ -171,8 +171,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `/autolockdown` (`autolockdownApply`) shows or changes the automatic lockdown triggers. Its authority is the same live
   `getChatMember` check, chosen by whether arguments follow (`requireAutoLockdownAuthority`): with none, any live creator
   or administrator may view; with any, only the creator or an administrator with `can_restrict_members` may change, and
-  a refusal, a bad argument, a basic group or a failed save writes nothing. The grammar is exactly `joins|flood` then
+  a refusal, a bad argument, a basic group or a failed save writes nothing. The grammar is exactly `joins|flood|ai` then
   `on`, `off` or a whole number 3..500 (a number sets the threshold and turns the trigger on; `on` and `off` keep it).
+  `ai` is checked and saved like the other two (`raiddetection.SetAIThreshold` / `SetAIEnabled`), so it has no
+  refusal text of its own. The status lists the AI line after the flood line and adds
+  `lockdown_auto_ai_unavailable` ("AI checks are not set up") when `raidAIConfigured()` is false, that is when
+  neither the TypeSafe nor the Gemini key is configured; a server with one of the two shows no notice.
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
   arguments then pick view or change for the tapper. The command is not `Disableable`. `/autoantiraid` is its alias for
   the join threshold (see the retired raid mode under Subsystem traps) with exactly the same checks and anonymous-admin

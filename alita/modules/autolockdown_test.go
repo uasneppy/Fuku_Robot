@@ -5,11 +5,13 @@ package modules
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/config"
 	"github.com/divkix/Alita_Robot/alita/db"
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -39,6 +41,20 @@ func (e *lockdownEnv) wantAutoRow(joinOn bool, joinN int, floodOn bool, floodN i
 	if row.JoinEnabled != joinOn || row.JoinThreshold != joinN || row.FloodEnabled != floodOn || row.FloodThreshold != floodN {
 		e.t.Errorf("row = joins %v/%d, flood %v/%d; want joins %v/%d, flood %v/%d",
 			row.JoinEnabled, row.JoinThreshold, row.FloodEnabled, row.FloodThreshold, joinOn, joinN, floodOn, floodN)
+	}
+}
+
+// wantAutoAIRow fails unless the env's chat has a row whose AI trigger columns are
+// exactly these. It sits beside wantAutoRow, which keeps its signature for the join and
+// flood columns.
+func (e *lockdownEnv) wantAutoAIRow(aiOn bool, aiN int) {
+	e.t.Helper()
+	row, ok := e.autoRow()
+	if !ok {
+		e.t.Fatal("no chat_raid_detection row, want one")
+	}
+	if row.AIEnabled != aiOn || row.AIThreshold != aiN {
+		e.t.Errorf("row = ai %v/%d; want ai %v/%d", row.AIEnabled, row.AIThreshold, aiOn, aiN)
 	}
 }
 
@@ -154,6 +170,290 @@ func TestAutoLockdown(t *testing.T) {
 	})
 }
 
+// withAIKeys sets the two AI provider keys of the server for one test: TypeSafe (which
+// also needs ENABLE_AISPAM) and Gemini. An empty string means not configured.
+func withAIKeys(t *testing.T, typeSafe, gemini string) {
+	t.Helper()
+	previousKey, previousEnabled, previousGemini := config.AppConfig.TypeSafeAPIKey, config.AppConfig.EnableAISpam, config.AppConfig.GeminiAPIKey
+	config.AppConfig.TypeSafeAPIKey = typeSafe
+	config.AppConfig.EnableAISpam = true
+	config.AppConfig.GeminiAPIKey = gemini
+	t.Cleanup(func() {
+		config.AppConfig.TypeSafeAPIKey = previousKey
+		config.AppConfig.EnableAISpam = previousEnabled
+		config.AppConfig.GeminiAPIKey = previousGemini
+	})
+}
+
+func TestAutolockdownAI(t *testing.T) {
+	t.Run("the view lists the AI trigger", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "typesafe-test-key", "")
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(
+			staffMarker("lockdown_auto_title"),
+			staffMarker("lockdown_auto_ai_on")+" 5",
+		)
+		env.wantReplyLacks(staffMarker("lockdown_auto_ai_unavailable"))
+		env.wantNoAutoRow()
+	})
+
+	t.Run("the view of a trigger that is off", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "typesafe-test-key", "")
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: true, JoinThreshold: 15, FloodEnabled: true, FloodThreshold: 30,
+			AIEnabled: false, AIThreshold: 9,
+		})
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_ai_off") + " 9")
+		env.wantReplyLacks(staffMarker("lockdown_auto_ai_on"))
+	})
+
+	t.Run("no AI keys at all says so after the AI line", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "", "")
+
+		env.send(env.admin, "/autolockdown")
+
+		reply := env.lastReply()
+		line := strings.Index(reply, staffMarker("lockdown_auto_ai_on"))
+		notice := strings.Index(reply, staffMarker("lockdown_auto_ai_unavailable"))
+		if line < 0 || notice < 0 || notice < line {
+			t.Errorf("reply %q: the AI line is at %d and the not-set-up notice at %d, want the notice after the line", reply, line, notice)
+		}
+	})
+
+	t.Run("one provider is enough for no notice", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "", "gemini-test-key")
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_ai_on") + " 5")
+		env.wantReplyLacks(staffMarker("lockdown_auto_ai_unavailable"))
+	})
+
+	t.Run("the hint names the ai word", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+
+		env.send(env.admin, "/autolockdown")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_hint"))
+	})
+
+	t.Run("ai 8 saves and keeps the other triggers", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "typesafe-test-key", "")
+
+		env.send(env.admin, "/autolockdown ai 8")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_saved"), staffMarker("lockdown_auto_ai_on")+" 8")
+		env.wantAutoAIRow(true, 8)
+		env.wantAutoRow(true, 15, true, 30)
+	})
+
+	t.Run("ai off keeps the threshold", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		withAIKeys(t, "typesafe-test-key", "")
+
+		env.send(env.admin, "/autolockdown ai 8")
+		env.send(env.admin, "/autolockdown ai off")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_saved"), staffMarker("lockdown_auto_ai_off")+" 8")
+		env.wantAutoAIRow(false, 8)
+
+		env.send(env.admin, "/autolockdown ai on")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_saved"), staffMarker("lockdown_auto_ai_on")+" 8")
+		env.wantAutoAIRow(true, 8)
+		env.wantAutoRow(true, 15, true, 30)
+	})
+
+	t.Run("the other triggers leave the AI trigger alone", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+
+		env.send(env.admin, "/autolockdown ai 8")
+		env.send(env.admin, "/autolockdown joins 20")
+
+		env.wantAutoAIRow(true, 8)
+		env.wantAutoRow(true, 20, true, 30)
+	})
+
+	t.Run("out of range writes nothing", func(t *testing.T) {
+		for _, text := range []string{"/autolockdown ai 2", "/autolockdown ai 501"} {
+			env := newLockdownEnv(t)
+			raidCleanup(t, env.chat.Id)
+
+			env.send(env.admin, text)
+
+			env.wantReplyHas(staffMarker("lockdown_auto_range") + " 3 500")
+			env.wantReplyLacks(staffMarker("lockdown_auto_saved"))
+			env.wantNoAutoRow()
+		}
+	})
+
+	t.Run("bad words write nothing", func(t *testing.T) {
+		for _, text := range []string{"/autolockdown ai maybe", "/autolockdown ai", "/autolockdown ai 8 9"} {
+			env := newLockdownEnv(t)
+			raidCleanup(t, env.chat.Id)
+
+			env.send(env.admin, text)
+
+			env.wantReplyHas(staffMarker("lockdown_auto_usage"))
+			env.wantNoAutoRow()
+		}
+	})
+
+	t.Run("an administrator without can_restrict_members may view but not change", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		helper := env.newOutsider()
+		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{
+			Status:             gotgbot.ChatMemberStatusAdministrator,
+			CanRestrictMembers: false,
+		})
+
+		env.send(helper, "/autolockdown")
+		env.wantReplyHas(staffMarker("lockdown_auto_ai_on") + " 5")
+
+		env.send(helper, "/autolockdown ai 8")
+		env.wantReplyHas(staffMarker("chat_status_restrict_cmd_error"))
+		env.wantNoAutoRow()
+
+		env.send(helper, "/autolockdown ai off")
+		env.wantReplyHas(staffMarker("chat_status_restrict_cmd_error"))
+		env.wantNoAutoRow()
+	})
+
+	t.Run("a plain member is refused", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		member := env.newOutsider()
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+		env.send(member, "/autolockdown ai off")
+
+		env.wantReplyHas(staffMarker("chat_status_user_admin_cmd_error"))
+		env.wantNoAutoRow()
+	})
+
+	t.Run("an anonymous admin proves first", func(t *testing.T) {
+		env, creator := newAnonLockdownEnv(t, false)
+		raidCleanup(t, env.chat.Id)
+
+		env.sendAnonymous("/autolockdown ai 8")
+		env.wantProofPrompt()
+		env.wantNoAutoRow()
+
+		env.tapProof(creator)
+		env.wantReplyHas(staffMarker("lockdown_auto_saved"), staffMarker("lockdown_auto_ai_on")+" 8")
+		env.wantAutoAIRow(true, 8)
+	})
+
+	t.Run("an anonymous admin who taps without the restrict right saves nothing", func(t *testing.T) {
+		env, _ := newAnonLockdownEnv(t, true)
+		raidCleanup(t, env.chat.Id)
+		helper := gotgbot.User{Id: uniqueLinkOwnerID() + 43, FirstName: "Helper"}
+		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{
+			Status:             gotgbot.ChatMemberStatusAdministrator,
+			CanRestrictMembers: false,
+		})
+		env.fake.setCreator(env.chat.Id, helper.Id)
+
+		env.sendAnonymous("/autolockdown ai off")
+		env.wantProofPrompt()
+		env.tapProof(helper)
+
+		env.wantReplyHas(staffMarker("chat_status_restrict_cmd_error"))
+		env.wantNoAutoRow()
+	})
+
+	t.Run("a basic group is refused", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		env.chat.Type = "group"
+
+		env.send(env.admin, "/autolockdown ai 8")
+
+		env.wantReplyHas(staffMarker("lockdown_basic_group"))
+		env.wantReplyLacks(staffMarker("lockdown_auto_saved"))
+		env.wantNoAutoRow()
+	})
+
+	t.Run("a failed save writes nothing", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		raidCleanup(t, env.chat.Id)
+		previous := autolockdownWrite
+		autolockdownWrite = func(int64, autoLockdownChange) error { return errors.New("database is gone") }
+		t.Cleanup(func() { autolockdownWrite = previous })
+
+		env.send(env.admin, "/autolockdown ai 8")
+
+		env.wantReplyHas(staffMarker("lockdown_auto_save_failed"))
+		env.wantReplyLacks(staffMarker("lockdown_auto_saved"), "database is gone")
+		env.wantNoAutoRow()
+	})
+
+	t.Run("the next burst follows the change on any replica", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		env.send(env.admin, "/autolockdown ai 3")
+		env.wantReplyHas(staffMarker("lockdown_auto_saved"))
+		env.wantAutoAIRow(true, 3)
+
+		// Another replica has nothing of this one's in-process cache.
+		dbcache.ResetLocalForTest()
+
+		accounts := env.newMembers(3, 0)
+		for _, account := range accounts {
+			env.spamFrom(account, 1)
+		}
+		env.settleAI()
+
+		row := env.activeLockdown()
+		if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst {
+			t.Fatalf("active lockdown = %+v after 3 verdicts from 3 accounts with the threshold at 3, want an AI burst lockdown", row)
+		}
+		if row.TriggerCount != 3 {
+			t.Errorf("TriggerCount = %d, want 3", row.TriggerCount)
+		}
+	})
+
+	t.Run("the next burst obeys ai off on any replica", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		env.send(env.admin, "/autolockdown ai off")
+		env.wantReplyHas(staffMarker("lockdown_auto_saved"), staffMarker("lockdown_auto_ai_off")+" 5")
+		env.wantAutoAIRow(false, 5)
+
+		dbcache.ResetLocalForTest()
+
+		accounts := env.newMembers(3, 0)
+		for _, account := range accounts {
+			env.spamFrom(account, 2)
+		}
+		env.settleAI()
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown (kind %q) exists after 6 verdicts with the AI trigger off, want none", row.TriggerKind)
+		}
+		if got := aiVerdictSetSize(env, "av"); got != 0 {
+			t.Errorf("verdict items counted = %d, want 0 while the trigger is off", got)
+		}
+	})
+}
+
 func TestAutoLockdownArgs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -184,6 +484,16 @@ func TestAutoLockdownArgs(t *testing.T) {
 		{name: "a lone minus", args: []string{"joins", "-"}, err: errAutoLockdownUsage},
 		{name: "a third word", args: []string{"flood", "20", "extra"}, err: errAutoLockdownUsage},
 		{name: "an unknown trigger", args: []string{"banana", "20"}, err: errAutoLockdownUsage},
+		{name: "ai with a number", args: []string{"ai", "8"},
+			want: autoLockdownChange{Trigger: autoTriggerAI, Enable: true, SetThreshold: true, Threshold: 8}},
+		{name: "ai is case-insensitive", args: []string{"AI", "on"},
+			want: autoLockdownChange{Trigger: autoTriggerAI, Enable: true}},
+		{name: "ai off", args: []string{"ai", "off"}, want: autoLockdownChange{Trigger: autoTriggerAI}},
+		{name: "ai below the range", args: []string{"ai", "2"}, err: errAutoLockdownRange},
+		{name: "ai above the range", args: []string{"ai", "501"}, err: errAutoLockdownRange},
+		{name: "ai with a word", args: []string{"ai", "maybe"}, err: errAutoLockdownUsage},
+		{name: "ai alone", args: []string{"ai"}, err: errAutoLockdownUsage},
+		{name: "ai with a third word", args: []string{"ai", "8", "9"}, err: errAutoLockdownUsage},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
