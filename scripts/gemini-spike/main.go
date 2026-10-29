@@ -104,9 +104,9 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer, tr
 
 	switch {
 	case cfg.probe:
-		return runProbe(client, cfg, stdout, stderr)
+		return runProbe(client, cfg, key, stdout, stderr)
 	case cfg.modelsGet:
-		return runModelsGet(client, stdout, stderr)
+		return runModelsGet(client, key, stdout, stderr)
 	}
 	return runLabelled(client, cfg, key, stdout, stderr)
 }
@@ -461,14 +461,55 @@ func writeOutputs(cfg *config, results []result, stdout, stderr io.Writer) int {
 // fakeAPIKey is the obviously fake key -probe uses with -fake-key.
 const fakeAPIKey = "spike-fake-key-not-a-real-key"
 
-// runProbe is wired in the next step of the plan.
-func runProbe(_ *gemini.Client, _ *config, _, stderr io.Writer) int {
-	_, _ = fmt.Fprintln(stderr, "gemini-spike: -probe is not available yet")
-	return exitUsage
+// runProbe sends one tiny request per probe variant and prints how the API
+// answered each. It exits 1 when the API rejected a field name, because that
+// means a request spelling in alita/utils/gemini needs a fix.
+func runProbe(client *gemini.Client, cfg *config, key string, stdout, stderr io.Writer) int {
+	variants := probeVariants()
+	if key == fakeAPIKey {
+		_, _ = fmt.Fprintln(stderr, "Probing with the built-in fake key: no image of yours is sent, and the API should answer 'key refused' to every accepted shape.")
+	} else {
+		_, _ = fmt.Fprintf(stderr, "Probing with your key: %d tiny 1x1 images go to Google and may be billed.\n", len(variants))
+	}
+
+	rejected := 0
+	_, _ = fmt.Fprintf(stdout, "Probe of model %s\n", cfg.model)
+	for _, v := range variants {
+		probe := *client
+		probe.Options = v.Options
+		verdict, err := probe.Classify(context.Background(), v.Image)
+		line := strings.ReplaceAll(probeVerdict(err, verdict), key, "[REDACTED]")
+		if strings.HasPrefix(line, "field rejected") {
+			rejected++
+		}
+		_, _ = fmt.Fprintf(stdout, "  %-28s %s\n", v.Name, line)
+	}
+	_, _ = fmt.Fprintf(stdout, "%d of %d variants had a field name the API does not know.\n", rejected, len(variants))
+	if rejected > 0 {
+		return exitFailure
+	}
+	return exitOK
 }
 
-// runModelsGet is wired in the next step of the plan.
-func runModelsGet(_ *gemini.Client, _, stderr io.Writer) int {
-	_, _ = fmt.Fprintln(stderr, "gemini-spike: -models-get is not available yet")
-	return exitUsage
+// runModelsGet prints the configured model's metadata.
+func runModelsGet(client *gemini.Client, key string, stdout, stderr io.Writer) int {
+	info, err := client.GetModel(context.Background())
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "gemini-spike: models.get failed: %s\n", strings.ReplaceAll(err.Error(), key, "[REDACTED]"))
+		return exitFailure
+	}
+	generate := "no"
+	for _, method := range info.SupportedGenerationMethods {
+		if method == "generateContent" {
+			generate = "yes"
+		}
+	}
+	p := func(format string, args ...any) { _, _ = fmt.Fprintf(stdout, format, args...) }
+	p("Name:                %s\n", info.Name)
+	p("Display name:        %s\n", info.DisplayName)
+	p("Input token limit:   %d\n", info.InputTokenLimit)
+	p("Output token limit:  %d\n", info.OutputTokenLimit)
+	p("Generation methods:  %s\n", strings.Join(info.SupportedGenerationMethods, ", "))
+	p("Takes generateContent: %s\n", generate)
+	return exitOK
 }

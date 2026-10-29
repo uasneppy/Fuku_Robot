@@ -285,6 +285,9 @@ func TestSpikeProbeVerdicts(t *testing.T) {
 		if len(v.Image.Data) == 0 {
 			t.Errorf("variant %q has no image", v.Name)
 		}
+		if got := http.DetectContentType(v.Image.Data); got != v.Image.MIMEType {
+			t.Errorf("variant %q claims %s but its bytes sniff as %s", v.Name, v.Image.MIMEType, got)
+		}
 		mimes[v.Image.MIMEType] = true
 		if v.Options.SchemaField != "" {
 			schemas[v.Options.SchemaField] = true
