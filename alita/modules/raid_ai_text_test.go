@@ -33,6 +33,7 @@ func resetRaidAIStats() {
 	raidAIKept.Store(0)
 	raidAIShed.Store(0)
 	raidAIFailed.Store(0)
+	raidAIBlocked.Store(0)
 }
 
 // newRaidAIEnv is a flood env (Staff Group, clean raid settings, env.admin the chat's
