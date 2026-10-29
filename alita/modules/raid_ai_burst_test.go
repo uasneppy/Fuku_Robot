@@ -41,10 +41,11 @@ func newAIBurstEnv(t *testing.T) *lockdownEnv {
 	return env
 }
 
-// enableAI turns /aispam on for the env's chat, answering from the TypeSafe fake of
-// newAIBurstEnv, and loads the AI spam module on the env's dispatcher.
-func (e *lockdownEnv) enableAI() {
-	t, env := e.t, e
+// serveTypeSafe configures TypeSafe for the test and answers every request from a fake:
+// a text that holds SPAM is a delete verdict at 0.95, any other text a keep verdict at
+// 0.1. It does not turn /aispam on for any chat, so the raid path alone checks.
+func (e *lockdownEnv) serveTypeSafe() {
+	t := e.t
 	t.Helper()
 	resetAISpamRuntime()
 	withAISpamTestConfig(t, "typesafe-test-key", true, 0)
@@ -71,6 +72,14 @@ func (e *lockdownEnv) enableAI() {
 		}
 		_, _ = w.Write([]byte(aispamDecisionBody(0.1, "none")))
 	})
+}
+
+// enableAI turns /aispam on for the env's chat, answering from the TypeSafe fake of
+// serveTypeSafe, and loads the AI spam module on the env's dispatcher.
+func (e *lockdownEnv) enableAI() {
+	t, env := e.t, e
+	t.Helper()
+	env.serveTypeSafe()
 	if err := aispam.SetAISpamEnabled(env.chat.Id, true); err != nil {
 		t.Fatalf("enable /aispam: %v", err)
 	}
@@ -107,10 +116,13 @@ func (e *lockdownEnv) textsFrom(chat gotgbot.Chat, user gotgbot.User, n int, pre
 	}
 }
 
-// settleAI waits until every /aispam check the env's messages queued has finished,
-// together with the public notice or warning an automatic lockdown posts.
+// settleAI waits until every raid AI job and /aispam check the env's messages queued has
+// finished, together with the public notice or warning an automatic lockdown posts. The
+// raid AI jobs come first: a verdict of one can start the lockdown whose posts are waited
+// for last.
 func (e *lockdownEnv) settleAI() {
 	e.t.Helper()
+	raidAIJobs.wait()
 	DrainAISpamChecks()
 	raidPosts.wait()
 }

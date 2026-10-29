@@ -153,7 +153,9 @@ func (c *moduleBotClient) FileURL(token string, path string, _ *gotgbot.RequestO
 
 func (c *moduleBotClient) callsFor(method string) []moduleBotCall {
 	// An automatic lockdown's notice and warning are sent from goroutines; read the
-	// calls only once they are done.
+	// calls only once they are done. Raid AI jobs run on their own workers and can start
+	// that lockdown, so they are waited for first.
+	raidAIJobs.wait()
 	raidPosts.wait()
 	c.mu.Lock()
 	defer c.mu.Unlock()
