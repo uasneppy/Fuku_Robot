@@ -65,7 +65,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **LOCK-07**: Lifting a lockdown restores the group's permissions exactly as they were before it was locked.
 - [x] **LOCK-08**: Unmuting someone during a lockdown, including by passing the captcha or `/unmute`, doesn't leave them muted after the lockdown lifts.
 - [x] **LOCK-09**: An admin can start a lockdown manually with `/lockdown` and see the current lockdown status (active or not, since when, why).
-- [ ] **LOCK-10**: A group can have at most one active lockdown. Several triggers firing at once create a single lockdown and a single alert.
+- [x] **LOCK-10**: A group can have at most one active lockdown. Several triggers firing at once create a single lockdown and a single alert.
 - [x] **LOCK-11**: Each lockdown posts one alert to the group's Staff Group (if linked) and to its log channel. The alert shows:
   - the trigger and the counts behind it
   - a sample of the accounts that joined during the burst
@@ -74,17 +74,17 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **LOCK-12**: An admin of the locked group can press "Ban N recent joiners" to ban the accounts that joined during the burst. Admins and approved users are excluded, and the result is reported.
 - [x] **LOCK-13**: The alert shows which invite link the burst used, where Telegram reports it. It has a "Revoke link" button that only admins of that group can use.
 - [x] **LOCK-14**: While a group stays locked, the alert is re-posted periodically as a reminder until someone lifts it.
-- [ ] **LOCK-15**: The old `/antiraid` mode is retired. Its commands point to `/lockdown`, the existing auto-threshold setting carries over to join-surge detection, and the temp-ban timings are dropped.
+- [x] **LOCK-15**: The old `/antiraid` mode is retired. Its commands point to `/lockdown`, the existing auto-threshold setting carries over to join-surge detection, and the temp-ban timings are dropped.
 
 ### Raid detection
 
-- [ ] **RAID-01**: A burst of joins within a short window automatically triggers a lockdown.
-- [ ] **RAID-02**: A burst of messages, photos, GIFs or stickers, mostly from recently joined members, automatically triggers a lockdown.
+- [x] **RAID-01**: A burst of joins within a short window automatically triggers a lockdown.
+- [x] **RAID-02**: A burst of messages, photos, GIFs or stickers, mostly from recently joined members, automatically triggers a lockdown.
 - [ ] **RAID-03**: A burst of AI spam verdicts within a short window automatically triggers a lockdown.
 - [ ] **RAID-04**: Borderline text is classified with the existing TypeSafe AI check. Borderline photos, GIFs and stickers are classified with Gemini (`gemini-3.5-flash-lite`, owner-provided key).
 - [ ] **RAID-05**: Rules, not AI, decide when to lock. AI verdicts only feed the counters in RAID-03.
-- [ ] **RAID-06**: Automatic triggers are on by default in every group, with conservative thresholds. An admin can turn each one off or tune its threshold.
-- [ ] **RAID-07**: Admins and approved users never count toward detection.
+- [x] **RAID-06**: Automatic triggers are on by default in every group, with conservative thresholds. An admin can turn each one off or tune its threshold.
+- [x] **RAID-07**: Admins and approved users never count toward detection.
 
 ### Captcha
 
@@ -200,19 +200,19 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | LOCK-07 | Phase 4 | Complete |
 | LOCK-08 | Phase 4 | Complete |
 | LOCK-09 | Phase 4 | Complete |
-| LOCK-10 | Phase 6 | Pending |
+| LOCK-10 | Phase 6 | Complete |
 | LOCK-11 | Phase 5 | Complete |
 | LOCK-12 | Phase 5 | Complete |
 | LOCK-13 | Phase 5 | Complete |
 | LOCK-14 | Phase 5 | Complete |
-| LOCK-15 | Phase 6 | Pending |
-| RAID-01 | Phase 6 | Pending |
-| RAID-02 | Phase 6 | Pending |
+| LOCK-15 | Phase 6 | Complete |
+| RAID-01 | Phase 6 | Complete |
+| RAID-02 | Phase 6 | Complete |
 | RAID-03 | Phase 7 | Pending |
 | RAID-04 | Phase 7 | Pending |
 | RAID-05 | Phase 7 | Pending |
-| RAID-06 | Phase 6 | Pending |
-| RAID-07 | Phase 6 | Pending |
+| RAID-06 | Phase 6 | Complete |
+| RAID-07 | Phase 6 | Complete |
 | CAPT-01 | Phase 8 | Pending |
 | CAPT-02 | Phase 8 | Pending |
 | CAPT-03 | Phase 8 | Pending |

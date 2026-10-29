@@ -18,7 +18,7 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ Admin tooling: admin list cache, approvals (approved users skip antiflood, locks, blacklists and captcha), disabling commands, anonymous-admin handling — existing
 - ✓ Content controls: locks, blacklists, filters, notes, rules, greetings, pins, reactions — existing
 - ✓ Antiflood with per-replica in-process counters — existing
-- ✓ Antiraid "raid mode": temp-bans new joiners for a set time, auto-enables at N joins/min, expires on its own, Redis-only — existing
+- ✓ Antiraid "raid mode": temp-bans new joiners for a set time, auto-enables at N joins/min, expires on its own, Redis-only — existing (retired in Phase 6, replaced by automatic lockdown)
 - ✓ Join captcha (math/text/image via base64Captcha), one attempt per user per chat, pending messages replayed on pass — existing
 - ✓ AI spam detection through the TypeSafe API (`aispam`, inert without `TYPESAFE_API_KEY`) — existing
 - ✓ Federations: `/fban` bans across a federation's chats where the user is known, with federation admins and a federation log chat — existing
@@ -44,14 +44,19 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ The alert's "Lift lockdown" works only for a live admin of the locked group with the restrict right, wherever it is pressed (Staff Group or log channel), through the same lift path as `/unlockdown`; a press on a lifted lockdown says so and changes nothing — Phase 5
 - ✓ "Ban N recent joiners" bans the burst for good, skipping admins, approved users, the bot and joiners an admin let in, reports banned/skipped/failed and posts one `#LOCKDOWN_BAN`; the bans survive the lift — Phase 5
 - ✓ "Revoke link" revokes the raid's invite link (bot-made links only) for a live admin with the invite right; hourly reminders repeat the alert until the lift — Phase 5
+- ✓ A join surge starts a lockdown on its own: 15 different accounts joining within 60 s by default, counted across replicas in Redis; accounts an admin added or approved, approved users, join requests and the bot never count — Phase 6
+- ✓ A message or media flood starts a lockdown on its own: 30 or more items (text, photo, GIF, sticker and other media) within 30 s, at least 60% of them from at least 3 accounts that joined in the last 24 h; admins, approved users, anonymous senders, service accounts and the bot never count, and a flood lockdown's alert lists the flooders — Phase 6
+- ✓ An automatic lockdown is exactly a `/lockdown` (same snapshot, join guard, worker, alert, buttons, reminders and lift), tagged `join_surge` or `flood` with its numbers. Triggers firing together, on any replica, give one lockdown and one alert, and stay quiet for 10 minutes after a lift; a group the bot cannot lock gets one daily warning in its Staff Group and log channel — Phase 6
+- ✓ `/autolockdown` shows both triggers to any live admin and turns each on or off or sets its threshold (3 to 500) for the owner or an admin with restrict rights, checked live; `/autoantiraid` is an alias for the join threshold — Phase 6
+- ✓ The old `/antiraid` raid mode is retired: its commands point to `/lockdown` and `/autolockdown`, nobody is temp-banned any more, its leftover Redis keys are swept at startup, and each group's old auto-threshold carried over to the join-surge setting (clamped to 3..500) — Phase 6
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
 **Raid protection (second)**
-- [ ] A lockdown can be triggered by a join surge, a message or media flood (messages, photos, GIFs, stickers, mostly from new members), or a burst of AI spam verdicts (manual `/lockdown` shipped in Phase 4).
-- [ ] Detection uses fast rule-based rates (joins, floods) to trigger lockdown. AI only assists by classifying borderline text and images.
+- [ ] A lockdown can also be triggered by a burst of AI spam verdicts (manual `/lockdown` shipped in Phase 4; join-surge and flood triggers shipped in Phase 6).
+- [ ] AI only assists the rule-based detection, by classifying borderline text (TypeSafe) and images, GIFs and stickers (Gemini); rules decide when to lock.
 
 **Web captcha (third)**
 - [ ] New members verify through Cloudflare Turnstile on a Telegram Mini App page the bot hosts, with server-side token verification.
@@ -114,15 +119,15 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Every action hits all linked groups | That is the core value; per-group targeting adds complexity without demand | ✓ Shipped — Phase 2 |
 | Only a person who owns both groups can link them; one Staff Group per group; auto-unlink on ownership change | Strongest guarantee that a Staff Group can't gain control of a group it shouldn't | ✓ Shipped — Phase 1 |
 | Lockdown = kick joiners + mute all except admins and approved users; admin-only manual lift | Stops a raid immediately and leaves the "safe again" call to a human | ⚠️ Revised — Phase 4: approved users are muted too (Telegram has no per-user exception to a locked default, spike 1, D-01/D-02); joiners are banned until the lift instead of kicked; the manual lift shipped |
-| Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | — Pending |
+| Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | ✓ Rules shipped — Phase 6 (join surge, flood); AI assist is Phase 7 |
 | Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | — Pending |
 | `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | ✓ Panel shipped — Phase 1; menu fold-in Phase 9 |
 | Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | — Pending |
 | Every staff action needs a Confirm tap showing the resolved target | `@usernames` can be stale or recycled; owner prefers safety over speed | ✓ Shipped — Phase 2 (5-minute card, issuer-only Confirm) |
 | Staff Group members aren't protected from staff actions; only each group's admins and owner, and the bot, are | Owner's call; staff are trusted, not immune | ✓ Shipped — Phase 2 |
 | Undo-everywhere button and a recent-actions list in `/staff` are in v1, backed by an audit record | Mistakes are reversible and accountable | ✓ Shipped — Phase 3 (live UAT passed) |
-| Old `/antiraid` is retired; its auto-threshold carries over to join-surge detection | One raid system, not two | — Pending |
-| Auto-triggers are on by default with conservative thresholds | Protection from day one; admins tune or disable per group | — Pending |
+| Old `/antiraid` is retired; its auto-threshold carries over to join-surge detection | One raid system, not two | ✓ Shipped — Phase 6 (carry-over clamped to 3..500, D-18/D-22) |
+| Auto-triggers are on by default with conservative thresholds | Protection from day one; admins tune or disable per group | ✓ Shipped — Phase 6 (15 joins in 60 s; 30 items in 30 s); live tuning in real groups still to be checked |
 | Images are classified by Gemini `gemini-3.5-flash-lite` (owner's key); text stays on TypeSafe | Owner's choice of provider; TypeSafe is text-only | — Pending |
 | Turnstile captcha is one solve only; math and text modes stay as fallbacks | Owner's call; fallbacks cover Cloudflare or hosting outages | — Pending |
 | `/settings` asks whether to open in the group or in private | GroupHelp-style choice | — Pending |
@@ -150,6 +155,11 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Alert buttons use stateless `lockdown|v1` callbacks (copy row ID, asker and expiry minute in the data) and judge every press by a live `getChatMember` of the locked chat, never Staff Group membership | Works without Redis, from the log channel too, and a forged or old button can reach nothing | ✓ Good — Phase 5 |
 | Every alert, reminder, close, ban-run and ban-result delivery is a database row claimed with a conditional update and resumed by the worker on any replica | A restart, a 429 or a dead replica never loses or doubles a notice (duplicate accepted over lost after a crash) | ✓ Good — Phase 5 (code review WR-01 made the ban result resumable too) |
 | "Ban N recent joiners" bans are permanent, outside the staff audit and not undoable; only bot-made invite links get a Revoke button, one revoke per lockdown | Owner's call (D-10, D-11, D-18); a cut-short link cannot be revoked by the bot | ✓ Good — Phase 5 (live UAT accepted by the owner) |
+| Automatic triggers share one start path with `/lockdown` (`startLockdownRow`); exactly one lockdown and one alert come from `uk_chat_lockdowns_active`, `lockdown.Start` and `lockdown.BeginAlert`, and the Redis fire latch only sheds load | Counters run on every replica and Redis can lose data, so the database decides, never Redis | ✓ Good — Phase 6 (cross-replica proof is a PostgreSQL test run in CI) |
+| Detection counters are Redis-only (Lua scripts keyed by `{chat}`); without Redis the automatic triggers do nothing and `/lockdown` still works | Counting is best effort and must never gate a ban or block a handler; a PostgreSQL join log was declined for its per-join cost | ✓ Good — Phase 6 |
+| The flood counter is two watchers: group `-4` counts everything but slash-prefixed texts, group `12` counts the slash texts no command took | A handled command ends the update, so the dispatcher itself says which commands the bot handles, with no second command list | ✓ Good — Phase 6 (review WR-01, no reflection) |
+| Notices and the "cannot lock" warning are sent from recovered, drained goroutines; the lock itself stays synchronous | A slow pacer slot must not hold the join guard or the message pipeline | ✓ Good — Phase 6 (review WR-03, `StopRaidPosts` drain) |
+| A flood lockdown saves the flooders as its alert burst; the settings table carries no backup/export/import | Flooders who joined hours before the lock must be on the alert and in "Ban N recent joiners"; owner kept the new settings out of backups for now | ✓ Good — Phase 6 (D-17, D-20) |
 
 ## Evolution
 
@@ -169,4 +179,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-18 after Phase 5*
+*Last updated: 2026-10-29 after Phase 6*

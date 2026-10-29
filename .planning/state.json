@@ -31,7 +31,7 @@
     {
       "number": "6",
       "name": "Automatic Raid Detection",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "7",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 6 of 9 · 56% · executing"
+    "label": "Advance to the next step (plan phase 7)",
+    "reason": "Phase 7 of 9 — needs a plan"
   },
-  "updated_at": "2026-10-18T11:34:25.204Z"
+  "updated_at": "2026-10-29T15:40:47.707Z"
 }

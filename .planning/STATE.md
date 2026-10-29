@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 6
-current_phase_name: Automatic Raid Detection
-status: executing
-stopped_at: Phase 5 complete, ready to plan Phase 6
-last_updated: "2026-10-18T11:34:25.184Z"
-last_activity: 2026-10-18
-last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: b0decf928488caebb06da97fe8090a3eda3af150
+current_phase: 7
+current_phase_name: AI-Assisted Raid Detection
+status: planning
+stopped_at: Phase 6 complete, ready to plan Phase 7
+last_updated: "2026-10-29T15:40:47.600Z"
+last_activity: 2026-10-29
+last_activity_desc: Phase 6 complete, transitioned to Phase 7
+state_head: 6654315d203a0f9d3a662cc659163893848197b2
 progress:
   total_phases: 9
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 67
-  completed_plans: 54
-  percent: 56
+  completed_plans: 67
+  percent: 67
 ---
 
 # Project State
@@ -27,17 +27,17 @@ See: .planning/PROJECT.md (updated 2026-10-18)
 
 ## Current Position
 
-Phase: 6 (Automatic Raid Detection) — READY TO EXECUTE
+Phase: 7 — AI-Assisted Raid Detection
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-18 — Phase 5 complete, transitioned to Phase 6
+Status: Ready to plan
+Last activity: 2026-10-29 — Phase 6 complete, transitioned to Phase 7
 
-Progress: [██████░░░░] 56%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 54
+- Total plans completed: 67
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -50,6 +50,7 @@ Progress: [██████░░░░] 56%
 | 03 | 12 | - | - |
 | 04 | 8 | - | - |
 | 5 | 14 | - | - |
+| 6 | 13 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -96,6 +97,8 @@ Recent decisions affecting current work:
 - [Phase 5]: Alerts are planned once by the conditional `lockdown.BeginAlert` and posted, refreshed, reminded and closed by the lockdown worker from `chat_lockdown_alerts` rows. Phase 6's automatic triggers should call the same alert path with their own `trigger_kind` and counts, and may reuse the `alita:lockdown:recent:<chat>` 10-minute join tracker.
 - [Phase 5]: Alert buttons (`lockdown|v1`) are stateless and judge every press by a live `getChatMember` of the locked chat; Lift goes through `liftLockdownRow`, shared with `/unlockdown`.
 - [Phase 5]: "Ban N recent joiners" bans are permanent and resumable (`chat_lockdown_ban_runs`, result delivery since migration 20261011160000); the lift keeps them.
+- [Phase 6]: Automatic triggers call `startLockdownRow`, the start path `/lockdown` uses; one lockdown and one alert come from the PostgreSQL index and conditional writes, never from the Redis latch. Settings live in `chat_raid_detection` (`raiddetection.GetSettings`, listed in `skipLocal`). Phase 7's AI-verdict trigger should add its own counter and setting beside the join and flood ones, and fire through `raidFire`.
+- [Phase 6]: The flood counter is two watchers (group `-4` and group `12`) sharing `raidFloodCountUpdate`; group `12` must stay after every other handler group. The old `/antiraid` mode is a pointer command and `alita:antiraid:*` keys are swept at startup.
 
 ### Pending Todos
 
@@ -116,6 +119,8 @@ None yet.
 - [Phase 5]: Live Telegram UAT (Lift from both copies, real Ban N run, revoke refusal texts, hourly reminders) and `make test-postgres-integrity` in CI were accepted by the owner without being run here. Code review WR-01..WR-03 and IN-01..IN-09 were all fixed (`05-REVIEW-FIX.md`). By decision D-04/D-20 the alert text is not refreshed and a log channel with the admin category off gets no copy.
 - [Quick 261008-j3b]: Shutdown follow-ups not fixed: `DrainAISpamChecks` waits up to 30 s but keeps the 10 s allowance; in polling mode the 60 s budget can still cut the staff drain short; `render.yaml`, `app.json`/Procfile and `railway.toml` keep their platforms' 30 s stop limits.
 - [Quick 261008-j3a]: Follow-up candidate: an anonymous admin's ban-family command also gets a stray `chat_status_restrict_cmd_error` reply before the proof tap (pre-existing).
+- [Phase 6]: The owner accepted the seven live checks without running them ("All good, continue"): a real join surge, a real flood, two replicas racing, `/autolockdown` with anonymous-admin proof, the retired `/antiraid`, and `TestRaidDetectionCarryOver` / `TestRaidDetectionSettings` through `make test-postgres-integrity` in CI. Code review WR-01..WR-03 and IN-01..IN-05 were all fixed (`06-REVIEW-FIX.md`).
+- [Phase 6]: The six non-English translations of the new lockdown and antiraid texts have not had a native-speaker review. `lockdown_help_msg` is near Telegram's 4096-character limit in es (margin 44) and pt (margin 31); `TestLockdownHelpFitsOneMessage` guards it.
 - [Tooling]: `make lint` needs a golangci-lint built with Go 1.26; the sandbox's is built with Go 1.25, so the quick batch was linted only with `go vet` and `gofmt`.
 
 ### Quick Tasks Completed
@@ -139,5 +144,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-10-18T05:45:00.000Z
-Stopped at: Phase 5 complete, ready to plan Phase 6
+Stopped at: Phase 6 complete, ready to plan Phase 7
 Resume file: None

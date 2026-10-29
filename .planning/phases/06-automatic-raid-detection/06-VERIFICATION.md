@@ -1,7 +1,7 @@
 ---
 phase: 06-automatic-raid-detection
 verified: 2026-10-29T16:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - alita/modules/raid_flood.go
@@ -73,7 +73,7 @@ human_verification:
 
 **Phase Goal:** As a group admin, I want to have raids detected and locked down automatically, so that my group is protected when no admin is online.
 **Verified:** 2026-10-29
-**Status:** human_needed
+**Status:** passed (live checks deferred by the owner)
 **Re-verification:** No, initial verification
 
 All five roadmap success criteria hold in the code. Nothing is FAILED. The status is `human_needed` only because live Telegram, two replicas and PostgreSQL are outside this environment.
@@ -171,6 +171,14 @@ None. No TBD, FIXME, XXX, TODO or HACK in the Phase 6 production files. The 8 re
 No gaps. Remaining items are live-system checks (see `human_verification`). Notes for the owner:
 - The French `lockdown_help_msg` is now 4021 characters raw; the last commit trimmed it under the limit. pt is exactly 4096 raw including HTML tags, which Telegram does not count, so it should send; confirm with a real `/lockdown help` in pt.
 - The cross-replica "one lockdown, one alert" guarantee and the clamped carry-over rest on PostgreSQL tests that did not run here.
+
+## Human Verification Outcome
+
+On 2026-10-29 the owner reviewed the seven `human_verification` items above and answered "All good, continue". The status moved from `human_needed` to `passed` on that basis. The seven checks were not run: they need a live Telegram bot, two replicas and PostgreSQL, none of which exist in this environment. They stay open as deferred live checks:
+
+- the real join surge, the real flood, the two-replica race, `/autolockdown` with anonymous-admin proof, and the retired `/antiraid` in a real group;
+- `TestRaidDetectionCarryOver` and `TestRaidDetectionSettings` through `make test-postgres-integrity` in CI;
+- a native-speaker review of the six non-English translations, and a real `/lockdown help` in pt (4096 characters raw).
 
 ---
 
