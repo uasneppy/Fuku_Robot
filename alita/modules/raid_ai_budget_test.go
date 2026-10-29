@@ -1,0 +1,246 @@
+//go:build testtools
+
+package modules
+
+import (
+	"fmt"
+	"net/http"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+)
+
+// photoNamed is a one-size photo whose file ID is tag and whose file_unique_id is "u"+tag, so
+// two photos with different tags are two different images.
+func photoNamed(tag string) []gotgbot.PhotoSize {
+	return []gotgbot.PhotoSize{{FileId: tag, FileUniqueId: "u" + tag, Width: 800, Height: 600}}
+}
+
+// sendMediaIn has user send msg in chat through the env's real dispatcher.
+func (e *raidAIImageEnv) sendMediaIn(chat gotgbot.Chat, user gotgbot.User, msg gotgbot.Message) {
+	e.t.Helper()
+	msg.From = &user
+	e.dispatchMessage(chat, msg)
+}
+
+// withRaidAIBudgets sets the hourly budgets for the test and restores them when it ends.
+func withRaidAIBudgets(t *testing.T, perChat, total int64) {
+	t.Helper()
+	previousChat, previousTotal := raidAIChatHourlyBudget, raidAIGlobalHourlyBudget
+	raidAIChatHourlyBudget, raidAIGlobalHourlyBudget = perChat, total
+	t.Cleanup(func() { raidAIChatHourlyBudget, raidAIGlobalHourlyBudget = previousChat, previousTotal })
+}
+
+// movableClock makes raidNow a clock the test can move forward, starting at the real time.
+func movableClock(t *testing.T) (advance func(time.Duration)) {
+	t.Helper()
+	base := time.Now()
+	var offset atomic.Int64
+	raidSetClock(t, func() time.Time { return base.Add(time.Duration(offset.Load())) })
+	return func(d time.Duration) { offset.Add(int64(d)) }
+}
+
+func TestRaidAIBudget(t *testing.T) {
+	t.Run("per-group cap", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		withRaidAIBudgets(t, 2, 1000)
+		other := env.addChat()
+		members := env.newMembers(3, 2*time.Hour)
+		elsewhere := env.newJoiner("Elsewhere")
+		seedJoinedIn(t, other.Id, elsewhere.Id, time.Hour)
+		before := GetRaidAIStats()
+
+		for i, member := range members {
+			env.sendMedia(member, gotgbot.Message{Photo: photoNamed(fmt.Sprintf("cap%d", i))})
+		}
+		env.settleAI()
+
+		if got := env.geminiRequests(); got != 2 {
+			t.Fatalf("Gemini requests = %d, want 2: the third photo is over the group's budget", got)
+		}
+		if got := GetRaidAIStats().Capped - before.Capped; got != 1 {
+			t.Errorf("Capped grew by %d, want 1", got)
+		}
+
+		env.sendMediaIn(other, elsewhere, gotgbot.Message{Photo: photoNamed("elsewhere")})
+		env.settleAI()
+		if got := env.geminiRequests(); got != 3 {
+			t.Errorf("Gemini requests = %d, want 3: another group has its own budget", got)
+		}
+		env.wantNoActions()
+	})
+
+	t.Run("global cap", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		withRaidAIBudgets(t, 100, 3)
+		chats := []gotgbot.Chat{env.chat, env.addChat(), env.addChat()}
+		before := GetRaidAIStats()
+		for i, chat := range chats {
+			member := env.newJoiner(fmt.Sprintf("Global%d", i))
+			seedJoinedIn(t, chat.Id, member.Id, time.Hour)
+			env.sendMediaIn(chat, member, gotgbot.Message{Photo: photoNamed(fmt.Sprintf("glob%d", i))})
+		}
+		env.settleAI()
+		if got := env.geminiRequests(); got != 3 {
+			t.Fatalf("Gemini requests = %d, want 3 across three groups", got)
+		}
+
+		late := env.newJoiner("Late")
+		seedJoinedIn(t, env.chat.Id, late.Id, time.Hour)
+		env.sendMedia(late, gotgbot.Message{Photo: photoNamed("glob-late")})
+		env.settleAI()
+
+		if got := env.geminiRequests(); got != 3 {
+			t.Errorf("Gemini requests = %d, want still 3: the fleet is out of budget", got)
+		}
+		if got := GetRaidAIStats().Capped - before.Capped; got != 1 {
+			t.Errorf("Capped grew by %d, want 1", got)
+		}
+	})
+
+	t.Run("a new hour resets", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		advance := movableClock(t)
+		withRaidAIBudgets(t, 2, 1000)
+		members := env.newMembers(4, 2*time.Hour)
+
+		for i := 0; i < 3; i++ {
+			env.sendMedia(members[i], gotgbot.Message{Photo: photoNamed(fmt.Sprintf("hour%d", i))})
+		}
+		env.settleAI()
+		if got := env.geminiRequests(); got != 2 {
+			t.Fatalf("Gemini requests = %d, want 2 before the hour turns", got)
+		}
+
+		advance(time.Hour)
+		env.sendMedia(members[3], gotgbot.Message{Photo: photoNamed("hour3")})
+		env.settleAI()
+
+		if got := env.geminiRequests(); got != 3 {
+			t.Errorf("Gemini requests = %d, want 3: the next hour has a fresh budget", got)
+		}
+	})
+
+	t.Run("a cached verdict costs nothing", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		withRaidAIBudgets(t, 1, 1)
+		members := env.newMembers(3, 2*time.Hour)
+		env.serve("files/stk", raidAIServed{status: http.StatusOK, body: raidAITestWebP("sticker")})
+		sticker := gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk-same", Type: "regular"}}
+		before := GetRaidAIStats()
+
+		for _, member := range members {
+			env.sendMedia(member, sticker)
+			env.settleAI()
+		}
+
+		if got := env.geminiRequests(); got != 1 {
+			t.Fatalf("Gemini requests = %d, want 1 for one image posted three times", got)
+		}
+		if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 3 {
+			t.Errorf("verdict items = %d, want 3: each post counts as a verdict from its own message", got)
+		}
+		got := GetRaidAIStats()
+		if got.Cached-before.Cached != 2 || got.Capped != before.Capped {
+			t.Errorf("stats = %+v (before %+v), want 2 more cached and none capped: a cached verdict spends no budget", got, before)
+		}
+		if got.Checked-before.Checked != 1 || got.Spam-before.Spam != 3 {
+			t.Errorf("stats = %+v (before %+v), want 1 checked and 3 spam", got, before)
+		}
+	})
+
+	t.Run("the same image at the same moment is judged once", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		members := env.newMembers(3, 2*time.Hour)
+		env.serve("files/stk", raidAIServed{status: http.StatusOK, body: raidAITestWebP("sticker")})
+		release := make(chan struct{})
+		env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
+			<-release
+			_, _ = w.Write([]byte(raidAIGeminiAnswer(0.9, "")))
+		})
+		sticker := gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk-race", Type: "regular"}}
+
+		for _, member := range members {
+			env.sendMedia(member, sticker)
+		}
+		time.Sleep(200 * time.Millisecond)
+		close(release)
+		env.settleAI()
+
+		if got := env.geminiRequests(); got != 1 {
+			t.Errorf("Gemini requests = %d, want 1: the posts that overlap share the one call", got)
+		}
+		if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 3 {
+			t.Errorf("verdict items = %d, want 3", got)
+		}
+	})
+
+	t.Run("an album is judged once", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		member := env.newMembers(1, 2*time.Hour)[0]
+		before := GetRaidAIStats()
+
+		for i := 0; i < 10; i++ {
+			env.sendMedia(member, gotgbot.Message{Photo: photoNamed(fmt.Sprintf("album%d", i)), MediaGroupId: "alb1"})
+		}
+		env.settleAI()
+
+		if got := env.client.getFiles(); len(got) != 1 {
+			t.Errorf("getFile asked for %v, want exactly one for a ten-photo album", got)
+		}
+		if got := env.geminiRequests(); got != 1 {
+			t.Errorf("Gemini requests = %d, want 1", got)
+		}
+		items, err := env.redis.ZMembers(raidKey(env.chat.Id, "av"))
+		if err != nil || len(items) != 1 || items[0] != "g:alb1" {
+			t.Errorf("verdict items = %v (error %v), want exactly g:alb1", items, err)
+		}
+		if got := GetRaidAIStats().Cached - before.Cached; got != 9 {
+			t.Errorf("Cached grew by %d, want 9 (the other photos of the album)", got)
+		}
+	})
+
+	t.Run("no checks during a fire", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		member := env.newMembers(1, 2*time.Hour)[0]
+		if err := env.redis.Set(raidKey(env.chat.Id, raidPartFire), "1"); err != nil {
+			t.Fatalf("set the fire latch: %v", err)
+		}
+		before := GetRaidAIStats()
+
+		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("fire")})
+		env.settleAI()
+
+		if got := env.client.getFiles(); len(got) != 0 {
+			t.Errorf("getFile asked for %v, want nothing while a lockdown is being started", got)
+		}
+		if got := env.geminiRequests(); got != 0 {
+			t.Errorf("Gemini requests = %d, want 0", got)
+		}
+		if got := GetRaidAIStats().Cached - before.Cached; got != 1 {
+			t.Errorf("Cached grew by %d, want 1 for the skipped check", got)
+		}
+	})
+
+	t.Run("Redis refuses", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		member := env.newMembers(1, 2*time.Hour)[0]
+		// A budget key that is not a number makes INCR fail: Redis answers the candidate
+		// script and everything before the budget, and refuses only the budget.
+		if err := env.redis.Set(raidKey(env.chat.Id, raidPartAIBudget+":"+raidAIHourStamp(raidNow())), "not a number"); err != nil {
+			t.Fatalf("poison the budget key: %v", err)
+		}
+
+		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("refused")})
+		env.settleAI()
+
+		if got := env.geminiRequests(); got != 0 {
+			t.Errorf("Gemini requests = %d, want 0: a budget that cannot be counted sends nothing", got)
+		}
+		if got := env.client.getFiles(); len(got) != 0 {
+			t.Errorf("getFile asked for %v, want nothing", got)
+		}
+	})
+}

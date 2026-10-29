@@ -374,6 +374,11 @@ var (
 	raidAIKept    atomic.Int64
 	raidAIShed    atomic.Int64
 	raidAIFailed  atomic.Int64
+	// raidAICapped counts the image checks an hourly budget refused (D-20).
+	raidAICapped atomic.Int64
+	// raidAICached counts the image checks that cost no provider call: a verdict served from
+	// the cache, a photo dropped by the album gate or a check skipped for the fire latch.
+	raidAICached atomic.Int64
 )
 
 // RaidAIStats is the raid AI path's counters (D-15).
@@ -393,6 +398,12 @@ type RaidAIStats struct {
 	// verdict and is counted apart from Failed, so an owner can see how many images the
 	// filters keep from the check.
 	Blocked int64
+	// Capped is the image checks an hourly Gemini budget refused (150 per group, 500 in all).
+	// A capped check is no verdict and costs nothing.
+	Capped int64
+	// Cached is the image checks that needed no Gemini call: the image's verdict was cached,
+	// the photo belonged to an album already judged, or a lockdown was being started.
+	Cached int64
 }
 
 // GetRaidAIStats reports the raid AI path's counters.
@@ -404,6 +415,8 @@ func GetRaidAIStats() RaidAIStats {
 		Shed:    raidAIShed.Load(),
 		Failed:  raidAIFailed.Load(),
 		Blocked: raidAIBlocked.Load(),
+		Capped:  raidAICapped.Load(),
+		Cached:  raidAICached.Load(),
 	}
 }
 

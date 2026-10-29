@@ -107,6 +107,8 @@ type raidAIImageEnv struct {
 func newRaidAIImageEnv(t *testing.T) *raidAIImageEnv {
 	t.Helper()
 	env := &raidAIImageEnv{lockdownEnv: newRaidAIEnv(t), served: make(map[string]raidAIServed)}
+	// Breaker state is process-wide: a test that makes Gemini fail must not pause the next.
+	resetRaidAIGeminiBreakers(t)
 
 	previousKey, previousModel := config.AppConfig.GeminiAPIKey, config.AppConfig.GeminiModel
 	config.AppConfig.GeminiAPIKey = raidAITestKey
@@ -437,9 +439,10 @@ func TestRaidAIMedia(t *testing.T) {
 		t.Cleanup(func() { raidAIModelWarned.Store(false) })
 		hook := captureLogs(t, log.InfoLevel)
 
-		env.sendMedia(members[0], gotgbot.Message{Photo: photoSizes()})
+		// Two different images: the same one would be served from the verdict cache.
+		env.sendMedia(members[0], gotgbot.Message{Photo: photoNamed("warn-a")})
 		env.settleAI()
-		env.sendMedia(members[1], gotgbot.Message{Photo: photoSizes()})
+		env.sendMedia(members[1], gotgbot.Message{Photo: photoNamed("warn-b")})
 		env.settleAI()
 
 		if got := env.geminiRequests(); got != 2 {
@@ -464,8 +467,9 @@ func TestRaidAIMedia(t *testing.T) {
 		env := newRaidAIImageEnv(t)
 		member := env.newMembers(1, 2*time.Hour)[0]
 
-		env.sendMedia(member, gotgbot.Message{Photo: photoSizes()})
-		env.sendMedia(member, gotgbot.Message{Photo: photoSizes()})
+		// Two different images: the same one would be served from the verdict cache.
+		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("act-a")})
+		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("act-b")})
 		env.settleAI()
 
 		if got := env.geminiRequests(); got != 2 {

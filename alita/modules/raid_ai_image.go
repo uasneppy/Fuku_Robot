@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/divkix/Alita_Robot/alita/config"
+	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/gemini"
 )
 
@@ -27,6 +32,31 @@ import (
 // (D-04). A code constant, and the first thing the owner tunes after the live run.
 const raidAIImageBar = 0.85
 
+const (
+	// raidPartAIAlbum starts the key of an album's gate; the media group ID follows.
+	raidPartAIAlbum = "ag"
+	// raidPartAIBudget starts the key of a chat's hourly budget; the hour stamp follows.
+	raidPartAIBudget = "ab"
+	// raidAIGlobalBudgetPrefix is the key prefix of the all-groups hourly budget; the hour stamp follows.
+	raidAIGlobalBudgetPrefix = "alita:raid:aibudget:"
+	// raidAIVerdictCachePrefix is the key prefix of a cached verdict; Telegram's file_unique_id follows.
+	raidAIVerdictCachePrefix = "alita:raid:aiv:"
+
+	// raidAIVerdictCacheTTL is how long one image's verdict is reused.
+	raidAIVerdictCacheTTL = time.Hour
+	// raidAIAlbumGateTTL is how long the first photo of an album keeps the others out.
+	raidAIAlbumGateTTL = 120 * time.Second
+	// raidAIBudgetTTL lets an hour's budget counters expire on their own.
+	raidAIBudgetTTL = 2 * time.Hour
+)
+
+// The hourly Gemini budgets (D-20): code constants, held in variables only so a test can make
+// them small. Production code never reassigns them.
+var (
+	raidAIChatHourlyBudget   int64 = 150
+	raidAIGlobalHourlyBudget int64 = 500
+)
+
 var (
 	// raidAIGeminiEndpoint is the Gemini API host. A variable only so a test points it at an
 	// httptest server; production code never reassigns it.
@@ -40,7 +70,17 @@ var (
 
 	// raidAIModelWarned makes the deprecated-model warning appear once per process.
 	raidAIModelWarned atomic.Bool
+
+	// raidAIImageFlight lets the jobs that carry one image (one file_unique_id) at the same
+	// moment share a single verdict step, so a flood of the same sticker costs one call even
+	// when the posts overlap and the cache holds nothing yet.
+	raidAIImageFlight singleflight.Group
 )
+
+// raidAIHourStamp names the UTC hour of t, the suffix of the budget keys.
+func raidAIHourStamp(t time.Time) string {
+	return t.UTC().Format("2006010215")
+}
 
 // raidAIGeminiClient builds the Gemini client of one job from the configured key and model.
 // It returns nil without GEMINI_API_KEY.
@@ -68,8 +108,20 @@ func raidAIScrub(text string, secrets ...string) string {
 	return text
 }
 
-// raidAIProcessImage runs one image job: it downloads the frame, asks Gemini and reports the
-// verdict. ctx derives from the pool's context, so the shutdown drain aborts both the
+// raidAIImageResult is what the verdict step of one image gives its jobs: the spam
+// probability, and whether it was served without a Gemini call of this job.
+type raidAIImageResult struct {
+	probability float64
+	cached      bool
+	ok          bool
+}
+
+// raidAIProcessImage runs one image job. Before any Gemini call it passes, in order: the
+// album gate (an album is judged once), the fire-latch skip (a lockdown was just attempted, so
+// more checks are wasted), the verdict cache (one image is judged once an hour), the budgets
+// (150 calls per group and 500 in all per hour, D-20), and only then the download and the
+// call. Every refusal is no verdict and is counted, and a Redis error on any guard sends
+// nothing. ctx derives from the pool's context, so the shutdown drain aborts both the
 // download and the call; a check cut off that way is no verdict and not a provider failure.
 // A download or getFile failure is a failure of this job only. It never deletes, restricts,
 // bans or posts.
@@ -81,12 +133,200 @@ func raidAIProcessImage(ctx context.Context, job raidAIJob) {
 	if client == nil {
 		return
 	}
+	redisClient := raidRedis()
+	if redisClient == nil {
+		raidAIShed.Add(1)
+		return
+	}
 	fields := log.Fields{
 		"chat_id":    job.chat.Id,
 		"user_id":    job.userID,
 		"message_id": job.messageID,
 		"media":      job.media.Kind,
 	}
+
+	if !raidAIAlbumFirst(redisClient, job) || !raidAINoFire(redisClient, job) {
+		return
+	}
+
+	var result raidAIImageResult
+	if uid := job.media.FileUniqueID; uid != "" {
+		leader := false
+		answer, _, _ := raidAIImageFlight.Do(uid, func() (any, error) {
+			leader = true
+			return raidAIImageVerdict(ctx, client, redisClient, job, fields), nil
+		})
+		result, _ = answer.(raidAIImageResult)
+		if !leader {
+			// Another job of this image made the call; this one reuses its answer.
+			result.cached = true
+		}
+	} else {
+		result = raidAIImageVerdict(ctx, client, redisClient, job, fields)
+	}
+	if !result.ok {
+		return
+	}
+	if result.cached {
+		raidAICached.Add(1)
+	}
+
+	spam := result.probability >= raidAIImageBar
+	log.WithFields(fields).WithFields(log.Fields{
+		"decision":    aispamDecisionName(spam),
+		"probability": result.probability,
+		"cached":      result.cached,
+	}).Info("[RaidDetection] AI image verdict")
+
+	if !spam {
+		raidAIKept.Add(1)
+		return
+	}
+	raidAISpam.Add(1)
+	raidAIRecordVerdict(job.bot, job.chat, job.userID, job.itemKey)
+}
+
+// raidAIAlbumFirst lets the first photo of an album through and drops the rest: an album is
+// judged once (its item key is g:<media_group_id>, one item for the burst count). A message
+// outside an album passes. A dropped photo counts as cached; a Redis error is no verdict.
+func raidAIAlbumFirst(client *redis.Client, job raidAIJob) bool {
+	group, isAlbum := strings.CutPrefix(job.itemKey, "g:")
+	if !isAlbum {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	first, err := client.SetNX(ctx, raidKey(job.chat.Id, raidPartAIAlbum+":"+group), "1", raidAIAlbumGateTTL).Result()
+	if err != nil {
+		raidAIShed.Add(1)
+		log.Debugf("[RaidDetection] AI image album gate for chat %d failed, no verdict: %v", job.chat.Id, err)
+		return false
+	}
+	if !first {
+		raidAICached.Add(1)
+	}
+	return first
+}
+
+// raidAINoFire reports false while the chat's fire latch is set: a trigger just attempted a
+// lockdown, so another check is wasted. The skipped check counts as cached; a Redis error is
+// no verdict.
+func raidAINoFire(client *redis.Client, job raidAIJob) bool {
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	latched, err := client.Exists(ctx, raidKey(job.chat.Id, raidPartFire)).Result()
+	if err != nil {
+		raidAIShed.Add(1)
+		log.Debugf("[RaidDetection] AI image fire check for chat %d failed, no verdict: %v", job.chat.Id, err)
+		return false
+	}
+	if latched > 0 {
+		raidAICached.Add(1)
+		return false
+	}
+	return true
+}
+
+// raidAICachedVerdict reads the cached probability of one image. A missing, unreadable or
+// out-of-range value is a miss; a Redis error is returned.
+func raidAICachedVerdict(client *redis.Client, uniqueID string) (probability float64, hit bool, err error) {
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	value, err := client.Get(ctx, raidAIVerdictCachePrefix+uniqueID).Result()
+	if errors.Is(err, redis.Nil) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	probability, parseErr := strconv.ParseFloat(value, 64)
+	if parseErr != nil || probability < 0 || probability > 1 {
+		return 0, false, nil
+	}
+	return probability, true, nil
+}
+
+// raidAIStoreVerdict caches the probability of one image for an hour. Only a verdict is ever
+// cached, never a failure or a block. Best effort: a failed write costs a later repeat call.
+func raidAIStoreVerdict(client *redis.Client, uniqueID string, probability float64) {
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	value := strconv.FormatFloat(probability, 'f', -1, 64)
+	if err := client.Set(ctx, raidAIVerdictCachePrefix+uniqueID, value, raidAIVerdictCacheTTL).Err(); err != nil {
+		log.Debugf("[RaidDetection] AI image verdict cache write failed: %v", err)
+	}
+}
+
+// raidAIBudgetTake adds one to an hourly counter and reports whether it is still within
+// limit. The unit is reserved before the call, so a call that fails still spends it (the
+// conservative side).
+func raidAIBudgetTake(client *redis.Client, key string, limit int64) (bool, error) {
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	pipe := client.TxPipeline()
+	count := pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, raidAIBudgetTTL)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return false, err
+	}
+	return count.Val() <= limit, nil
+}
+
+// raidAIReserveBudget takes one unit of the chat's hourly budget and then one of the fleet's.
+// A refusal counts as capped and a Redis error as shed; both are no verdict. A chat over its
+// own budget never spends the fleet's.
+func raidAIReserveBudget(client *redis.Client, chatID int64) bool {
+	stamp := raidAIHourStamp(raidNow())
+	budgets := []struct {
+		key   string
+		limit int64
+	}{
+		{raidKey(chatID, raidPartAIBudget+":"+stamp), raidAIChatHourlyBudget},
+		{raidAIGlobalBudgetPrefix + stamp, raidAIGlobalHourlyBudget},
+	}
+	for _, budget := range budgets {
+		allowed, err := raidAIBudgetTake(client, budget.key, budget.limit)
+		if err != nil {
+			raidAIShed.Add(1)
+			log.Debugf("[RaidDetection] AI image budget for chat %d could not be counted, no verdict: %v", chatID, err)
+			return false
+		}
+		if !allowed {
+			raidAICapped.Add(1)
+			log.Debugf("[RaidDetection] AI image budget used up for chat %d, no verdict", chatID)
+			return false
+		}
+	}
+	return true
+}
+
+// raidAIImageVerdict is the step after the cheap guards: the verdict cache, the budgets, then
+// the download and the Gemini call. It counts every outcome and returns the probability when
+// there is a verdict.
+func raidAIImageVerdict(
+	ctx context.Context, client *gemini.Client, redisClient *redis.Client, job raidAIJob, fields log.Fields,
+) raidAIImageResult {
+	uid := job.media.FileUniqueID
+	if uid != "" {
+		probability, hit, err := raidAICachedVerdict(redisClient, uid)
+		if err != nil {
+			raidAIShed.Add(1)
+			log.Debugf("[RaidDetection] AI image verdict cache read for chat %d failed, no verdict: %v", job.chat.Id, err)
+			return raidAIImageResult{}
+		}
+		if hit {
+			return raidAIImageResult{probability: probability, cached: true, ok: true}
+		}
+	}
+	// The breakers come before the budget: a paused chat, or a paused provider, spends no unit.
+	if raidAIGeminiPaused(job.chat.Id) {
+		raidAIShed.Add(1)
+		return raidAIImageResult{}
+	}
+	if !raidAIReserveBudget(redisClient, job.chat.Id) {
+		return raidAIImageResult{}
+	}
+
 	token := ""
 	if job.bot != nil {
 		token = job.bot.Token
@@ -96,12 +336,12 @@ func raidAIProcessImage(ctx context.Context, job raidAIJob) {
 	if err != nil {
 		if ctx.Err() != nil {
 			raidAIShed.Add(1)
-			return
+			return raidAIImageResult{}
 		}
 		raidAIFailed.Add(1)
 		log.WithFields(fields).Warnf("[RaidDetection] AI image download failed, no verdict: %s",
 			raidAIScrub(err.Error(), token, client.APIKey))
-		return
+		return raidAIImageResult{}
 	}
 
 	verdict, err := client.Classify(ctx, image)
@@ -111,9 +351,12 @@ func raidAIProcessImage(ctx context.Context, job raidAIJob) {
 			// Cut off by the shutdown drain: no verdict, and not the provider's failure.
 			raidAIShed.Add(1)
 		case errors.Is(err, gemini.ErrBlocked):
+			// The provider answered: a refusal to judge this image is not an outage.
+			raidAIGeminiRecordSuccess(job.chat.Id)
 			raidAIBlocked.Add(1)
 			log.WithFields(fields).Info("[RaidDetection] AI image check blocked by the provider's safety filters, no verdict")
 		default:
+			raidAIGeminiRecordFailure(job.chat.Id, err)
 			raidAIFailed.Add(1)
 			entry := log.WithFields(fields)
 			var httpErr *gemini.HTTPError
@@ -123,23 +366,15 @@ func raidAIProcessImage(ctx context.Context, job raidAIJob) {
 			entry.Warnf("[RaidDetection] AI image check failed, no verdict: %s",
 				raidAIScrub(err.Error(), token, client.APIKey))
 		}
-		return
+		return raidAIImageResult{}
 	}
+	raidAIGeminiRecordSuccess(job.chat.Id)
 	raidAIChecked.Add(1)
 	raidAIWarnModelStage(verdict)
-
-	spam := verdict.SpamProbability >= raidAIImageBar
-	log.WithFields(fields).WithFields(log.Fields{
-		"decision":    aispamDecisionName(spam),
-		"probability": verdict.SpamProbability,
-	}).Info("[RaidDetection] AI image verdict")
-
-	if !spam {
-		raidAIKept.Add(1)
-		return
+	if uid != "" {
+		raidAIStoreVerdict(redisClient, uid, verdict.SpamProbability)
 	}
-	raidAISpam.Add(1)
-	raidAIRecordVerdict(job.bot, job.chat, job.userID, job.itemKey)
+	return raidAIImageResult{probability: verdict.SpamProbability, ok: true}
 }
 
 // raidAIWarnModelStage logs one warning per process when the answer says the configured
