@@ -534,8 +534,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   3-account floor are code constants. It then calls `raidFire` with `trigger_kind` `flood`, the item count, window 30
   and the percent. Without Redis it is inert.
 - AI never decides alone (RAID-05). A `/aispam` delete verdict only adds one item to the AI burst counter, through
-  `raidAIRecordVerdict` at the end of `processAISpam`'s delete branch; only `raidAICounts` (at least the threshold,
-  default 5 (`raidAIDefaultThreshold`), of verdict items from at least 3 accounts in the fixed 120 s window, and a
+  `raidAIRecordVerdict` at the end of `processAISpam`'s delete branch, which first reads the chat's own settings
+  (`raidSettingsLookup` under `raidSettingsTimeout`): an off `ai_enabled` or an unreadable setting counts nothing, so
+  the Redis sets are not written either. Only `raidAICounts` (at least the chat's `ai_threshold`, default 5
+  (`raiddetection.DefaultAIThreshold`), of verdict items from at least 3 accounts in the fixed 120 s window, and a
   threshold below `raiddetection.MinThreshold` never counts) calls `raidFire` with `trigger_kind` `ai_burst`, exactly
   as `/lockdown` and the other triggers start a lockdown. Every delete verdict from any account feeds it (D-19), an
   established member's included, and a keep verdict never does; a basic group, an anonymous or non-positive sender and
