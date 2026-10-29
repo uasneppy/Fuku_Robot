@@ -666,3 +666,148 @@ func TestRaidAIMedia(t *testing.T) {
 		}
 	})
 }
+
+// lockedBuffer is a bytes.Buffer the logger and the test can use at the same time.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+// everythingLogged is all the global logger wrote through out and the hook, as one string.
+func everythingLogged(out *lockedBuffer, hook *logrustest.Hook) string {
+	var all strings.Builder
+	all.WriteString(out.String())
+	for _, entry := range hook.AllEntries() {
+		all.WriteString(entry.Message)
+		all.WriteString(fmt.Sprint(entry.Data))
+	}
+	return all.String()
+}
+
+// TestRaidAISecretsNeverLogged shows no failure of an image check writes the Gemini key or
+// the bot token (which is in the Telegram file URL) anywhere: the global logger runs at
+// debug level with its hooks replaced by an empty set, so the redaction hook does not run
+// and only the code under test keeps the secrets out.
+func TestRaidAISecretsNeverLogged(t *testing.T) {
+	const botToken = "999:test"
+	cases := []struct {
+		name string
+		// setup breaks one half of the check; it returns strings that must not be logged
+		// besides the key and the token, and a function reading what must stay at zero.
+		setup func(t *testing.T, env *raidAIImageEnv) (forbidden []string, untouched func() int64)
+		// gemini is whether a direct Classify call is also made to read the client's error.
+		gemini bool
+		// download is whether a direct raidAIDownload call is also made to read its error.
+		download bool
+	}{
+		{name: "a Gemini 400 that echoes the key", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+			env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":400,"message":"API key not valid: ` + raidAITestKey +
+					`. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID"}]}}`))
+			})
+			return nil, nil
+		}},
+		{name: "a Gemini 500 whose body is the key", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+			env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(raidAITestKey))
+			})
+			return nil, nil
+		}},
+		{name: "a Gemini server closed before the call", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+			dead := httptest.NewServer(http.NotFoundHandler())
+			raidAIGeminiEndpoint = dead.URL
+			dead.Close()
+			return nil, nil
+		}},
+		{name: "a Gemini call that hangs past a shortened timeout", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+			env.answerWith(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() })
+			raidAIGeminiHTTP = &http.Client{Timeout: 200 * time.Millisecond}
+			return nil, nil
+		}},
+		{name: "a file server closed before the download", download: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+			env.files.Close()
+			return nil, nil
+		}},
+		{name: "a file server that redirects to a second server", setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+			var hits atomic.Int64
+			second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				hits.Add(1)
+				_, _ = w.Write(raidAITestJPEG("stolen"))
+			}))
+			t.Cleanup(second.Close)
+			env.serve("files/p800", raidAIServed{location: second.URL + "/stolen"})
+			return []string{strings.TrimPrefix(second.URL, "http://")}, hits.Load
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newRaidAIImageEnv(t)
+			member := env.newMembers(1, 2*time.Hour)[0]
+			forbidden, untouched := tc.setup(t, env)
+			forbidden = append(forbidden, raidAITestKey, botToken, "/file/bot")
+
+			out := &lockedBuffer{}
+			hook := captureLogs(t, log.DebugLevel)
+			log.SetOutput(out)
+			before := GetRaidAIStats()
+
+			var directErr error
+			switch {
+			case tc.gemini:
+				_, directErr = raidAIGeminiClient().Classify(context.Background(),
+					gemini.Image{MIMEType: "image/jpeg", Data: raidAITestJPEG("direct")})
+			case tc.download:
+				_, directErr = raidAIDownload(context.Background(), env.bot, "p800")
+			}
+			if (tc.gemini || tc.download) && directErr == nil {
+				t.Fatal("the direct call succeeded: the case would prove nothing")
+			}
+			if directErr != nil {
+				for _, secret := range forbidden {
+					if strings.Contains(directErr.Error(), secret) {
+						t.Errorf("the returned error %q contains %q", directErr, secret)
+					}
+				}
+			}
+
+			env.sendMedia(member, gotgbot.Message{Photo: photoSizes()})
+			env.settleAI()
+
+			if got := GetRaidAIStats(); got.Failed-before.Failed != 1 {
+				t.Errorf("Failed grew by %d, want 1", got.Failed-before.Failed)
+			}
+			logged := everythingLogged(out, hook)
+			if !strings.Contains(logged, "[RaidDetection]") {
+				t.Fatal("the failure logged nothing: the case would prove nothing")
+			}
+			for _, secret := range forbidden {
+				if strings.Contains(logged, secret) {
+					t.Errorf("the log contains %q", secret)
+				}
+			}
+			if untouched != nil {
+				if got := untouched(); got != 0 {
+					t.Errorf("the redirect target received %d requests, want none", got)
+				}
+			}
+			if n := aiVerdictSetSize(env.lockdownEnv, "av"); n != 0 {
+				t.Errorf("verdict items = %d, want 0 for a failed check", n)
+			}
+		})
+	}
+}
