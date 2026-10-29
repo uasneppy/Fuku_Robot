@@ -182,7 +182,7 @@ func LoadAllStats() string {
 	approvedUsers, approvalChats := approvals.LoadApprovalsStats()
 	warnedUsers, warnChats := warns.LoadWarnsStats()
 	lockedPerms, lockChats := locks.LoadLocksStats()
-	raidCustom, raidJoinOff, raidFloodOff := raiddetection.LoadRaidDetectionStats()
+	raidCustom, raidJoinOff, raidFloodOff, raidAIOff := raiddetection.LoadRaidDetectionStats()
 	logChannelChats := logchannels.LoadLogChannelStats()
 	reactionsNum, reactionChats := reactions.LoadReactionsStats()
 	aiSpamChats := aispam.LoadAISpamStats()
@@ -290,6 +290,7 @@ func LoadAllStats() string {
 		fmt.Sprintf("\n    <b>Custom settings:</b> %s chats", comma(raidCustom)) +
 		fmt.Sprintf("\n    <b>Join surge off:</b> %s chats", comma(raidJoinOff)) +
 		fmt.Sprintf("\n    <b>Flood off:</b> %s chats", comma(raidFloodOff)) +
+		fmt.Sprintf("\n    <b>AI spam off:</b> %s chats", comma(raidAIOff)) +
 		fmt.Sprintf("\n<b>Log Channels:</b> %s chats linked", comma(logChannelChats)) +
 		fmt.Sprintf(
 			"\n<b>Reactions:</b> %s reactions in %s chats",

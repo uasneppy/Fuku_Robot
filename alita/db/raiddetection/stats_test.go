@@ -11,12 +11,13 @@ import (
 
 func TestLoadRaidDetectionStats(t *testing.T) {
 	// Other tests of the package share the database, so count the change, not the total.
-	baseConfigured, baseJoinOff, baseFloodOff := LoadRaidDetectionStats()
+	baseConfigured, baseJoinOff, baseFloodOff, baseAIOff := LoadRaidDetectionStats()
 
 	rows := []*models.ChatRaidDetection{
 		{ChatID: uniqueRaidChatID(), JoinEnabled: true, JoinThreshold: DefaultJoinThreshold, FloodEnabled: true, FloodThreshold: DefaultFloodThreshold, AIEnabled: true, AIThreshold: DefaultAIThreshold},
 		{ChatID: uniqueRaidChatID(), JoinEnabled: false, JoinThreshold: DefaultJoinThreshold, FloodEnabled: true, FloodThreshold: DefaultFloodThreshold, AIEnabled: true, AIThreshold: DefaultAIThreshold},
 		{ChatID: uniqueRaidChatID(), JoinEnabled: true, JoinThreshold: DefaultJoinThreshold, FloodEnabled: false, FloodThreshold: DefaultFloodThreshold, AIEnabled: true, AIThreshold: DefaultAIThreshold},
+		{ChatID: uniqueRaidChatID(), JoinEnabled: true, JoinThreshold: DefaultJoinThreshold, FloodEnabled: true, FloodThreshold: DefaultFloodThreshold, AIEnabled: false, AIThreshold: DefaultAIThreshold},
 	}
 	t.Cleanup(func() {
 		for _, row := range rows {
@@ -29,14 +30,17 @@ func TestLoadRaidDetectionStats(t *testing.T) {
 		}
 	}
 
-	configured, joinOff, floodOff := LoadRaidDetectionStats()
-	if got := configured - baseConfigured; got != 3 {
-		t.Errorf("chats with their own settings grew by %d, want 3", got)
+	configured, joinOff, floodOff, aiOff := LoadRaidDetectionStats()
+	if got := configured - baseConfigured; got != 4 {
+		t.Errorf("chats with their own settings grew by %d, want 4", got)
 	}
 	if got := joinOff - baseJoinOff; got != 1 {
 		t.Errorf("chats with the join surge off grew by %d, want 1", got)
 	}
 	if got := floodOff - baseFloodOff; got != 1 {
 		t.Errorf("chats with the flood off grew by %d, want 1", got)
+	}
+	if got := aiOff - baseAIOff; got != 1 {
+		t.Errorf("chats with the AI trigger off grew by %d, want 1", got)
 	}
 }
