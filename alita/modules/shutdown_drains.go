@@ -48,3 +48,18 @@ func RegisterRaidPostsDrain(m *shutdown.Manager) {
 		return nil
 	}, raidPostStopWait+shutdownDrainGrace)
 }
+
+// RegisterRaidAIDrain registers StopRaidAI with an allowance of raidAIStopWait plus
+// shutdownDrainGrace. Register it after the DB-close handler so LIFO runs it first, and
+// after RegisterRaidPostsDrain, so it runs before the posts drain: a lockdown start an AI
+// verdict asked for reads and writes the database and can post a notice. The AI spam drain
+// is registered after it, so it runs earlier still, because an /aispam verdict is what asks
+// for the start. The wait is short on purpose: the drain cancels the AI calls first, and a
+// start cut off leaves at worst an unconfirmed row the lockdown worker settles.
+func RegisterRaidAIDrain(m *shutdown.Manager) {
+	m.RegisterHandlerWithTimeout(func() error {
+		log.Info("[Shutdown] Draining raid AI checks...")
+		StopRaidAI()
+		return nil
+	}, raidAIStopWait+shutdownDrainGrace)
+}

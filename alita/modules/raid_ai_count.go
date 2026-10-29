@@ -13,6 +13,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/raiddetection"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 )
 
 // The Redis verdict counter of the AI burst trigger of automatic raid detection (RAID-03,
@@ -23,7 +24,9 @@ import (
 //
 // AI never decides alone (RAID-05, D-07): a verdict only adds to the count, and only the
 // rule (raidAICounts) fires. Nothing on the counting path deletes, restricts or bans; the
-// /aispam deletion that produced the verdict is its own, unchanged code. The counter is
+// /aispam deletion that produced the verdict is its own, unchanged code. The lockdown start
+// the rule asks for runs on its own tracked goroutine (raidAIFireAsync), so neither an
+// /aispam worker nor a raid AI worker ever waits on Telegram for it (D-18). The counter is
 // best effort and Redis only: without Redis the trigger does nothing. Message text is never
 // stored, only item keys and user IDs.
 
@@ -126,15 +129,36 @@ func raidAIItemKey(msg *gotgbot.Message) string {
 	return "m:" + strconv.FormatInt(msg.MessageId, 10)
 }
 
+// raidAIFires counts the lockdown starts an AI verdict asked for that are in flight
+// (raidAIFireAsync). It is a raidPostTracker and not a sync.WaitGroup for the reason that
+// type gives: the shutdown drain gives up after a bounded wait while a start can still begin.
+var raidAIFires raidPostTracker
+
+// raidAIFireAsync starts the lockdown an AI verdict asked for on its own goroutine, so the
+// worker that reported the tipping verdict (a raid AI worker or an /aispam worker) moves on
+// at once instead of waiting up to raidFireTimeout for Telegram. The goroutine is counted in
+// raidAIFires, which StopRaidAI waits on, and recovers from a panic, so a failing start can
+// neither crash the bot nor be lost to the shutdown unseen. raidFire keeps its own bounded
+// context and its 60 s latch, which bounds how many starts exist per chat.
+func raidAIFireAsync(b *gotgbot.Bot, chat gotgbot.Chat, trig raidTrigger) {
+	raidAIFires.start()
+	go func() {
+		defer raidAIFires.finish()
+		defer error_handling.RecoverFromPanic("raidAIFire", "Lockdown")
+		raidFire(b, &chat, trig)
+	}()
+}
+
 // raidAIRecordVerdict reports one /aispam delete verdict to the burst counter and starts
 // the lockdown when the rule holds. It does nothing for a basic group, an anonymous or
 // non-positive sender, the bot itself or without Redis. It reads the chat's own settings on
 // every verdict (raidSettingsLookup under raidSettingsTimeout, the default of 5 when the
 // chat has no row): an off switch or an unreadable setting counts nothing, and the chat's
 // stored threshold decides the rule (D-05, D-14). The verdict only adds one item; it
-// never deletes, restricts or bans, and only raidAICounts calls raidFire. The call is
-// synchronous in the /aispam worker (drained by DrainAISpamChecks): raidFire is bounded by
-// raidFireTimeout and its latch lets one attempt through per chat per minute.
+// never deletes, restricts or bans, and only raidAICounts starts raidFire, through
+// raidAIFireAsync: the caller (an /aispam worker or a raid AI worker) does not wait for it,
+// and raidFire is bounded by raidFireTimeout and its latch lets one attempt through per
+// chat per minute.
 func raidAIRecordVerdict(b *gotgbot.Bot, chat gotgbot.Chat, userID int64, itemKey string) {
 	if chat.Type != "supergroup" || userID <= 0 || userID == b.Id {
 		return
@@ -163,7 +187,7 @@ func raidAIRecordVerdict(b *gotgbot.Bot, chat gotgbot.Chat, userID int64, itemKe
 	if !raidAICounts(items, accounts, settings.AIThreshold) {
 		return
 	}
-	raidFire(b, &chat, raidTrigger{
+	raidAIFireAsync(b, chat, raidTrigger{
 		Kind:    models.LockdownTriggerAIBurst,
 		Count:   items,
 		Window:  int(raidAIWindow / time.Second),
