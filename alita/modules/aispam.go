@@ -504,7 +504,7 @@ func aispamBreakerPaused(chatID int64) bool {
 	if !ok {
 		return false
 	}
-	return !breaker.pausedTill.IsZero() && time.Now().Before(breaker.pausedTill)
+	return !breaker.pausedTill.IsZero() && raidNow().Before(breaker.pausedTill)
 }
 
 // aispamBreakerRecordFailure counts one failed check and reports whether this
@@ -512,7 +512,9 @@ func aispamBreakerPaused(chatID int64) bool {
 // chat gets one notice. The stored enabled flag is never touched: a provider
 // outage must not silently disable a chat's protection.
 func aispamBreakerRecordFailure(chatID int64) bool {
-	now := time.Now()
+	// The breaker reads raidNow, the clock the raid breakers use (time.Now in production),
+	// so a test moves a cooldown instead of waiting it out.
+	now := raidNow()
 
 	aispamBreakers.mu.Lock()
 	defer aispamBreakers.mu.Unlock()

@@ -687,9 +687,7 @@ func TestAISpamBreakerResumesAfterCooldown(t *testing.T) {
 	resetAISpamRuntime()
 	withAISpamTestConfig(t, "typesafe-test-key", true, 0)
 
-	previousCooldown := aispamBreakerCooldown
-	aispamBreakerCooldown = 50 * time.Millisecond
-	t.Cleanup(func() { aispamBreakerCooldown = previousCooldown })
+	advance := movableClock(t)
 
 	var fail atomic.Bool
 	fail.Store(true)
@@ -724,7 +722,7 @@ func TestAISpamBreakerResumesAfterCooldown(t *testing.T) {
 		t.Fatal("breaker did not pause the chat")
 	}
 
-	time.Sleep(aispamBreakerCooldown + 20*time.Millisecond)
+	advance(aispamBreakerCooldown + time.Second)
 	fail.Store(false)
 
 	aispamProcessUpdate(t, dispatcher, bot, chat, user, 899, "BUY CHEAP COINS AFTER COOLDOWN")

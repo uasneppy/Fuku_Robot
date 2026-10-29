@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/alicebob/miniredis/v2/server"
 )
 
 // photoNamed is a one-size photo whose file ID is tag and whose file_unique_id is "u"+tag, so
@@ -221,17 +223,34 @@ func TestRaidAIBudget(t *testing.T) {
 		members := env.newMembers(3, 2*time.Hour)
 		env.serve("files/stk", raidAIServed{status: http.StatusOK, body: raidAITestWebP("sticker")})
 		release := make(chan struct{})
+		var releaseOnce sync.Once
+		open := func() { releaseOnce.Do(func() { close(release) }) }
+		// Opened on every exit, so a failed wait cannot leave the Gemini handler blocked.
+		t.Cleanup(open)
 		env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
 			<-release
 			_, _ = w.Write([]byte(raidAIGeminiAnswer(0.9, "")))
 		})
 		sticker := gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk-race", Type: "regular"}}
 
+		// Every job asks Redis whether the fire latch is set (raidAINoFire) right before it
+		// joins the image's flight, so counting those asks tells when all three are about to
+		// overlap, with no sleep. The leader is inside the gated Gemini handler by then.
+		var fireChecks atomic.Int64
+		env.redis.Server().SetPreHook(func(_ *server.Peer, cmd string, args ...string) bool {
+			if cmd == "EXISTS" && len(args) == 1 && strings.HasSuffix(args[0], ":"+raidPartFire) {
+				fireChecks.Add(1)
+			}
+			return false
+		})
+		t.Cleanup(func() { env.redis.Server().SetPreHook(nil) })
+
 		for _, member := range members {
 			env.sendMedia(member, sticker)
 		}
-		time.Sleep(200 * time.Millisecond)
-		close(release)
+		waitUntil(t, 10*time.Second, "the leader to reach Gemini", func() bool { return env.geminiRequests() == 1 })
+		waitUntil(t, 10*time.Second, "all three jobs to reach the flight", func() bool { return fireChecks.Load() == int64(len(members)) })
+		open()
 		env.settleAI()
 
 		if got := env.geminiRequests(); got != 1 {

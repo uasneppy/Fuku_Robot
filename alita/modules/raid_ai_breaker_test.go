@@ -85,9 +85,7 @@ func TestRaidAIBreaker(t *testing.T) {
 
 	t.Run("checks resume after the cooldown", func(t *testing.T) {
 		env := newRaidAIEnv(t)
-		previous := aispamBreakerCooldown
-		aispamBreakerCooldown = 50 * time.Millisecond
-		t.Cleanup(func() { aispamBreakerCooldown = previous })
+		advance := movableClock(t)
 		var requests atomic.Int64
 		var fail atomic.Bool
 		fail.Store(true)
@@ -102,7 +100,7 @@ func TestRaidAIBreaker(t *testing.T) {
 			t.Fatal("the failures did not pause the chat")
 		}
 
-		time.Sleep(aispamBreakerCooldown + 20*time.Millisecond)
+		advance(aispamBreakerCooldown + time.Second)
 		fail.Store(false)
 		env.sendText(members[aispamBreakerFailures], spamLink)
 		env.settleAI()
