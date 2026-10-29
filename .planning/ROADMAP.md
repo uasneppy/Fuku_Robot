@@ -324,7 +324,7 @@ Plans:
   3. AI never decides a lockdown alone. A single verdict doesn't lock a group. If an AI provider is slow, down or not configured, the rule-based triggers keep working and nothing waits on AI.
   4. The Gemini API key never appears in logs, including errors and debug output.
 
-**Plans:** 2/14 plans executed
+**Plans:** 5/14 plans executed
 
 Plans:
 **Wave 1**
@@ -332,9 +332,9 @@ Plans:
 - [x] 07-02-PLAN.md: The stdlib-only Gemini client (`alita/utils/gemini`): verified request, strict verdict, key-free errors, one retry within 2 s, leaf-package test
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 07-03-PLAN.md: `GEMINI_API_KEY` and `GEMINI_MODEL` loaded, validated and registered with `logredact`; Google-key shape scrubbed; env docs with the paid-tier note
-- [ ] 07-04-PLAN.md: `ai_enabled` / `ai_threshold` on `chat_raid_detection` (append-only migration, CHECK 3..500), stale-cache defaults, and the counter follows each group's setting
-- [ ] 07-05-PLAN.md: The owner's Gemini spike kit (`scripts/gemini-spike/` with `-probe` and `-models-get`) and `07-SPIKE.md`
+- [x] 07-03-PLAN.md: `GEMINI_API_KEY` and `GEMINI_MODEL` loaded, validated and registered with `logredact`; Google-key shape scrubbed; env docs with the paid-tier note
+- [x] 07-04-PLAN.md: `ai_enabled` / `ai_threshold` on `chat_raid_detection` (append-only migration, CHECK 3..500), stale-cache defaults, and the counter follows each group's setting
+- [x] 07-05-PLAN.md: The owner's Gemini spike kit (`scripts/gemini-spike/` with `-probe` and `-models-get`) and `07-SPIKE.md`
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 07-06-PLAN.md: The group 2 candidate watcher and the raid AI pool: new members' suspicious text checked once by TypeSafe, one verdict shared with /aispam, silent raid-only breaker, inert without Redis
@@ -407,6 +407,6 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
-| 7. AI-Assisted Raid Detection | 2/14 | In Progress|  |
+| 7. AI-Assisted Raid Detection | 5/14 | In Progress|  |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |
