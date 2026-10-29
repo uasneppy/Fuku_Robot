@@ -726,7 +726,7 @@ Legacy anti-raid configuration per chat. The raid mode it configured is retired:
 
 ### `chat_raid_detection`
 
-Automatic raid detection settings per chat: the join surge and flood triggers (migration `20261018130000`). A chat without a row uses the defaults, both triggers on, join surge at 15 and flood at 30.
+Automatic raid detection settings per chat: the join surge and flood triggers (migration `20261018130000`) and the AI burst trigger (migration `20261029120000`). A chat without a row uses the defaults, all three triggers on, join surge at 15, flood at 30 and AI at 5.
 
 #### Columns
 
@@ -738,6 +738,8 @@ Automatic raid detection settings per chat: the join surge and flood triggers (m
 | `join_threshold` | `INTEGER` | NO | `15` | CHECK (`join_threshold BETWEEN 3 AND 500`) |
 | `flood_enabled` | `BOOLEAN` | NO | `TRUE` | — |
 | `flood_threshold` | `INTEGER` | NO | `30` | CHECK (`flood_threshold BETWEEN 3 AND 500`) |
+| `ai_enabled` | `BOOLEAN` | NO | `TRUE` | — |
+| `ai_threshold` | `INTEGER` | NO | `5` | CHECK (`chk_chat_raid_detection_ai`: `ai_threshold BETWEEN 3 AND 500`) |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | YES | `NOW()` | — |
 | `updated_at` | `TIMESTAMP WITH TIME ZONE` | YES | `NOW()` | — |
 
@@ -748,6 +750,7 @@ None. The chat ID has no foreign key, like the staff, federation and lockdown ta
 #### Notes
 
 - Reads go through `cache.GetFromCacheOrLoad` under the key `raid_detection:{chatId}`, which is never served from the in-process layer (`skipLocal`), and every write invalidates it, so a change applies on every replica at the next join or message.
+- Migration `20261029120000` added `ai_enabled` and `ai_threshold`; rows that already existed took the defaults, so those chats have the AI trigger on at 5. A settings value cached before the migration has no AI fields and is read as on at 5, never as the trigger off.
 - The table is not part of backups, export, import or reset. The `/autolockdown` settings are not restored by `/import`, and `/reset` does not clear them.
 - The migration copied each chat's non-zero `antiraid_settings.auto_antiraid_threshold` into `join_threshold`, raised to 3 if lower and lowered to 500 if higher, so every copied row satisfies the CHECK. Chats whose old threshold was 0 got no row and use the defaults.
 
@@ -759,11 +762,11 @@ Lockdown state is documented with the [Lockdown](/commands/lockdown/) commands. 
 
 | Column | Meaning |
 |--------|---------|
-| `trigger_count` | Joins (`join_surge`) or items (`flood`) that fired the trigger |
-| `trigger_window` | The window those were counted in, in seconds (60 or 30) |
-| `trigger_percent` | For a flood, the share of those items from new members, 0 to 100 |
+| `trigger_count` | Joins (`join_surge`), items (`flood`) or AI spam verdicts (`ai_burst`) that fired the trigger |
+| `trigger_window` | The window those were counted in, in seconds (60, 30 or 120) |
+| `trigger_percent` | For a flood, the share of those items from new members, 0 to 100; 0 for `ai_burst` |
 
-`trigger_kind` is `manual`, `join_surge` or `flood`. The numbers are columns rather than part of `reason`, so each alert renders them in its own language. The migration also added `idx_chat_lockdowns_chat_lift` on `(chat_id, lift_started_at)`, which serves the 10-minute quiet period after a lift. Rows are read fresh and never cached.
+`trigger_kind` is `manual`, `join_surge`, `flood` or `ai_burst`. For `ai_burst`, `trigger_count` is the number of spam verdict items, `trigger_window` is 120 seconds and `trigger_percent` is 0; the column has no CHECK, so the new kind needed no migration. The numbers are columns rather than part of `reason`, so each alert renders them in its own language. The migration also added `idx_chat_lockdowns_chat_lift` on `(chat_id, lift_started_at)`, which serves the 10-minute quiet period after a lift. Rows are read fresh and never cached.
 
 ---
 

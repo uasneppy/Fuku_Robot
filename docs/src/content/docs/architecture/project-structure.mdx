@@ -60,6 +60,11 @@ This document explains the directory structure of Alita Robot, helping developer
     - raid_counters.go Redis join counter and the alita:raid:* keys
     - raid_join.go Join surge trigger
     - raid_flood.go Message flood counter (group -4) and the flood alert snapshot
+    - raid_ai.go Raid AI candidate watcher (group 2) and the shared raid AI pool
+    - raid_ai_count.go AI burst counter (verdict items and accounts) and the AI alert snapshot
+    - raid_ai_media.go Picks the image a new member's photo, GIF, sticker or video is judged by
+    - raid_ai_image.go Gemini image check: album gate, verdict cache, hourly budgets
+    - raid_ai_breaker.go Gemini failure breakers (per chat and provider-wide)
     - raid_trigger.go Fires an automatic lockdown: latch, quiet period, public notice, cannot-lock warning
     - lockdown_start.go Shared start path of /lockdown and the automatic triggers
     - autolockdown.go /autolockdown command for the trigger settings
@@ -105,6 +110,7 @@ This document explains the directory structure of Alita Robot, helping developer
     - error_handling/ Panic recovery and logging
     - errors/ Custom error types with stack traces
     - extraction/ User/text extraction
+    - gemini/ Gemini image-check client (standard library only, so the spike tool can use it without the database connection)
     - helpers/ General helper functions and decorators
       - command_pipeline.go Declarative command pipeline
       - decorators.go Command aliases and disableable registration
@@ -130,6 +136,8 @@ This document explains the directory structure of Alita Robot, helping developer
       - sender.go Unified media sender
     - keyboard/ Keyboard building utilities
     - formatting/ HTML/Markdown formatting utilities
+- scripts/ Helper scripts
+  - gemini-spike/ The owner's Gemini spike tool: sends sample images to Google and prints accuracy, latency and cost. Not part of the bot
 - migrations/ **SQL migration files**
   - 20250805200527_initial_migration.sql
   - ...
