@@ -3,9 +3,9 @@ phase: "7"
 slug: "ai-assisted-raid-detection"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-29"
 ---
 
@@ -42,18 +42,18 @@ Seeded from the research's requirement-to-test map. The planner and executors re
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 07-02-01, 07-02-02 | 07-02 | 1 | RAID-04 | T-07-06, T-07-07, T-07-08 | Gemini request has `x-goog-api-key`, no key in the URL, and a verdict parse that treats every unreadable or blocked answer as no verdict | unit (httptest) | `go test -tags testtools -race -count=1 -run '^(TestGeminiRequestShape|TestGeminiVerdictParse|TestGeminiRetryAndErrors)$' ./alita/utils/gemini` | ❌ W0 | ⬜ pending |
-| 07-06-01, 07-08-01, 07-08-02 | 07-06, 07-08 | 3, 6 | RAID-04 | T-07-22, T-07-30 | Only suspicious items from new members are sent; established members, admins, approved users, anonymous senders and bots never are | integration | `... -run '^(TestRaidAICandidateText|TestRaidAIMedia)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 07-06-02 | 07-06 | 3 | RAID-04 | T-07-22 | `/aispam` on: one TypeSafe call per text and its delete verdict feeds the counter; off: raid-only call, nothing deleted | integration | `... -run '^TestRaidAISpamSharesVerdict$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 07-01-01, 07-01-03, 07-04-02 | 07-01, 07-04 | 1, 2 | RAID-03 | T-07-01, T-07-02 | Counter script counts one verdict per message or album and distinct accounts; N verdicts from at least 3 accounts fires `ai_burst`; one verdict or one account never does | script and end-to-end (miniredis) | `... -run '^(TestRaidAIVerdictScript|TestRaidAIBurstFires|TestRaidAIBurstSettings)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 07-01-01, 07-01-02, 07-01-03, 07-13-01 | 07-01, 07-13 | 1, 10 | RAID-03 | T-07-05 | The alert names the AI trigger and count, the spammers are in the sample and the Ban run; every surface renders `join_surge`, `flood` and `ai_burst` distinctly | integration | `... -run '^(TestRaidAIAlert|TestLockdownTriggerKindsAllSurfaces|TestRaidAIImageBurst)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 07-06-01, 07-06-02, 07-14-01, 07-09-02, 07-13-01, 07-13-02 | 07-06, 07-14, 07-09, 07-13 | 3, 5, 7, 10 | RAID-05 | T-07-21, T-07-34, T-07-43, T-07-44, T-07-46 | The raid AI path never deletes, bans, restricts or posts; provider slow, down, unreadable, unconfigured, breaker open or queue full means no verdict and the update returns promptly while join and flood triggers still fire | integration | `... -run '^(TestRaidAINeverActs|TestRaidAIFailOpen|TestRaidAIBreaker|TestRaidAINoRedis)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 07-04-01, 07-07-01, 07-07-02 | 07-04, 07-07 | 2, 4 | RAID-03 | T-07-14, T-07-25 | `/autolockdown ai [N\|on\|off]`: live authority, anonymous-admin proof, range 3..500, column-targeted writes with `DeleteCache`, stale cached settings normalise to the defaults, "not set up" notice | integration and repo | `... -run '^(TestAutolockdownAI|TestRaidDetectionStaleCacheDefaults)$' ./alita/modules ./alita/db/raiddetection` | ❌ W0 | ⬜ pending |
-| 07-02-02, 07-03-01, 07-03-02, 07-08-03 | 07-02, 07-03, 07-08 | 1, 2, 6 | PLAT-02 | T-07-06, T-07-11, T-07-28, T-07-29 | The Gemini key and the Telegram file URL (bot token) never reach a log or a returned error, including debug output; the client is a leaf package with no `alita/config` or `alita/db` import | unit and integration | `... -run '^(TestScrubGoogleAPIKeyShape|TestGeminiConfig|TestRaidAISecretsNeverLogged|TestGeminiErrorsNeverContainKey|TestGeminiPackageIsLeaf)$' ./alita/utils/logredact ./alita/config ./alita/modules ./alita/utils/gemini` | ❌ W0 | ⬜ pending |
-| 07-14-01, 07-14-02, 07-09-01 | 07-14, 07-09 | 5, 7 | RAID-04 | T-07-21, T-07-24, T-07-33, T-07-47 | Per-chat and global hourly budgets stop provider calls; a cached verdict (same `file_unique_id`) costs no budget; the pool is bounded and drains on shutdown | unit | `... -run '^(TestRaidAIBudget|TestRaidAIPool)$' ./alita/modules` | ❌ W0 | ⬜ pending |
-| 07-04-01 | 07-04 | 2 | RAID-03 | T-07-15 | Migration adds `ai_enabled` and `ai_threshold` with defaults and the 3..500 CHECK; the carry-over and settings guarantees still hold on PostgreSQL | PostgreSQL only (CI) | extend `TestRaidDetectionSettings` and keep `TestRaidDetectionCarryOver` in `make test-postgres-integrity` (never run locally) | ✅ extend | ⬜ pending |
-| 07-10-01, 07-10-02 | 07-10 | 8 | RAID-04 (D-15) | T-07-37 | Developer `/stats` counts the AI-off groups and shows this replica's AI check counters, with no text, file ID or key | integration | `... -run '^(TestRaidAIStats|TestLoadRaidDetectionStats)$' ./alita/modules ./alita/db/raiddetection` | ❌ W0 | ⬜ pending |
-| 07-05-01, 07-05-02 | 07-05 | 2 | RAID-04 (D-17) | T-07-17 | The spike kit sends nothing without the owner's key, its report math is exact, and its tests are network-free | unit | `go test -race -count=1 ./scripts/gemini-spike` | ❌ W0 | ⬜ pending |
+| 07-02-01, 07-02-02 | 07-02 | 1 | RAID-04 | T-07-06, T-07-07, T-07-08 | Gemini request has `x-goog-api-key`, no key in the URL, and a verdict parse that treats every unreadable or blocked answer as no verdict | unit (httptest) | `go test -tags testtools -race -count=1 -run '^(TestGeminiRequestShape|TestGeminiVerdictParse|TestGeminiRetryAndErrors)$' ./alita/utils/gemini` | ✅ | ✅ green |
+| 07-06-01, 07-08-01, 07-08-02 | 07-06, 07-08 | 3, 6 | RAID-04 | T-07-22, T-07-30 | Only suspicious items from new members are sent; established members, admins, approved users, anonymous senders and bots never are | integration | `... -run '^(TestRaidAICandidateText|TestRaidAIMedia)$' ./alita/modules` | ✅ | ✅ green |
+| 07-06-02 | 07-06 | 3 | RAID-04 | T-07-22 | `/aispam` on: one TypeSafe call per text and its delete verdict feeds the counter; off: raid-only call, nothing deleted | integration | `... -run '^TestRaidAISpamSharesVerdict$' ./alita/modules` | ✅ | ✅ green |
+| 07-01-01, 07-01-03, 07-04-02 | 07-01, 07-04 | 1, 2 | RAID-03 | T-07-01, T-07-02 | Counter script counts one verdict per message or album and distinct accounts; N verdicts from at least 3 accounts fires `ai_burst`; one verdict or one account never does | script and end-to-end (miniredis) | `... -run '^(TestRaidAIVerdictScript|TestRaidAIBurstFires|TestRaidAIBurstSettings)$' ./alita/modules` | ✅ | ✅ green |
+| 07-01-01, 07-01-02, 07-01-03, 07-13-01 | 07-01, 07-13 | 1, 10 | RAID-03 | T-07-05 | The alert names the AI trigger and count, the spammers are in the sample and the Ban run; every surface renders `join_surge`, `flood` and `ai_burst` distinctly | integration | `... -run '^(TestRaidAIAlert|TestLockdownTriggerKindsAllSurfaces|TestRaidAIImageBurst)$' ./alita/modules` | ✅ | ✅ green |
+| 07-06-01, 07-06-02, 07-14-01, 07-09-02, 07-13-01, 07-13-02 | 07-06, 07-14, 07-09, 07-13 | 3, 5, 7, 10 | RAID-05 | T-07-21, T-07-34, T-07-43, T-07-44, T-07-46 | The raid AI path never deletes, bans, restricts or posts; provider slow, down, unreadable, unconfigured, breaker open or queue full means no verdict and the update returns promptly while join and flood triggers still fire | integration | `... -run '^(TestRaidAINeverActs|TestRaidAIFailOpen|TestRaidAIBreaker|TestRaidAINoRedis)$' ./alita/modules` | ✅ | ✅ green |
+| 07-04-01, 07-07-01, 07-07-02 | 07-04, 07-07 | 2, 4 | RAID-03 | T-07-14, T-07-25 | `/autolockdown ai [N\|on\|off]`: live authority, anonymous-admin proof, range 3..500, column-targeted writes with `DeleteCache`, stale cached settings normalise to the defaults, "not set up" notice | integration and repo | `... -run '^(TestAutolockdownAI|TestRaidDetectionStaleCacheDefaults)$' ./alita/modules ./alita/db/raiddetection` | ✅ | ✅ green |
+| 07-02-02, 07-03-01, 07-03-02, 07-08-03 | 07-02, 07-03, 07-08 | 1, 2, 6 | PLAT-02 | T-07-06, T-07-11, T-07-28, T-07-29 | The Gemini key and the Telegram file URL (bot token) never reach a log or a returned error, including debug output; the client is a leaf package with no `alita/config` or `alita/db` import | unit and integration | `... -run '^(TestScrubGoogleAPIKeyShape|TestGeminiConfig|TestRaidAISecretsNeverLogged|TestGeminiErrorsNeverContainKey|TestGeminiPackageIsLeaf)$' ./alita/utils/logredact ./alita/config ./alita/modules ./alita/utils/gemini` | ✅ | ✅ green |
+| 07-14-01, 07-14-02, 07-09-01 | 07-14, 07-09 | 5, 7 | RAID-04 | T-07-21, T-07-24, T-07-33, T-07-47 | Per-chat and global hourly budgets stop provider calls; a cached verdict (same `file_unique_id`) costs no budget; the pool is bounded and drains on shutdown | unit | `... -run '^(TestRaidAIBudget|TestRaidAIPool)$' ./alita/modules` | ✅ | ✅ green |
+| 07-04-01 | 07-04 | 2 | RAID-03 | T-07-15 | Migration adds `ai_enabled` and `ai_threshold` with defaults and the 3..500 CHECK; the carry-over and settings guarantees still hold on PostgreSQL | PostgreSQL only (CI) | extend `TestRaidDetectionSettings` and keep `TestRaidDetectionCarryOver` in `make test-postgres-integrity` (never run locally) | ✅ | ✅ green (CI-only) |
+| 07-10-01, 07-10-02 | 07-10 | 8 | RAID-04 (D-15) | T-07-37 | Developer `/stats` counts the AI-off groups and shows this replica's AI check counters, with no text, file ID or key | integration | `... -run '^(TestRaidAIStats|TestLoadRaidDetectionStats)$' ./alita/modules ./alita/db/raiddetection` | ✅ | ✅ green |
+| 07-05-01, 07-05-02 | 07-05 | 2 | RAID-04 (D-17) | T-07-17 | The spike kit sends nothing without the owner's key, its report math is exact, and its tests are network-free | unit | `go test -race -count=1 ./scripts/gemini-spike` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -61,11 +61,11 @@ Seeded from the research's requirement-to-test map. The planner and executors re
 
 ## Wave 0 Requirements
 
-- [ ] `alita/utils/gemini/*_test.go` — client request shape, verdict parse, retry and error tests, and the leaf-import test, with an `httptest` helper
-- [ ] `alita/modules/raid_ai_*_test.go` — candidate, media, counter, fire, alert, fail-open, budget and pool tests, with an `httptest` fake for Gemini, TypeSafe and Telegram file downloads
-- [ ] A `getFile` response on `lockdownFake` or `moduleBotClient` (the backup tests already set `client.responses["getFile"]`)
-- [ ] A new top-level PostgreSQL-only test function, if one is added, is listed in the `-run` pattern of `make test-postgres-integrity` with its package; extending `TestRaidDetectionSettings` avoids this
-- [ ] No harness `AutoMigrate` list change is needed (the `ChatRaidDetection` model is already in every list)
+- [x] `alita/utils/gemini/*_test.go` — client request shape, verdict parse, retry and error tests, and the leaf-import test, with an `httptest` helper
+- [x] `alita/modules/raid_ai_*_test.go` — candidate, media, counter, fire, alert, fail-open, budget and pool tests, with an `httptest` fake for Gemini, TypeSafe and Telegram file downloads
+- [x] A `getFile` response on `lockdownFake` or `moduleBotClient` (the backup tests already set `client.responses["getFile"]`)
+- [x] A new top-level PostgreSQL-only test function, if one is added, is listed in the `-run` pattern of `make test-postgres-integrity` with its package; extending `TestRaidDetectionSettings` avoids this
+- [x] No harness `AutoMigrate` list change is needed (the `ChatRaidDetection` model is already in every list)
 
 ---
 
@@ -82,11 +82,21 @@ Seeded from the research's requirement-to-test map. The planner and executors re
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 90s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-10-29
+
+## Validation Audit 2026-10-29
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 (all named tests exist and pass) |
+| Escalated | 0 |
+
+Quick command plus all map patterns run green with `-race` (modules, gemini, raiddetection, config, logredact, scripts/gemini-spike). Review-fix coverage: WR-01 `TestRaidAIBudget` (per-account cap), WR-02 `TestRaidAIKillSwitch`, WR-03 `TestRaidAITextRequestIsMinimal`, WR-04 `TestRaidAIAlert` (established spammer case), WR-05 harness waits (used by every helper), IN-02 `TestGeminiConfig`, IN-03/IN-04 `TestRaidAIBreaker`/`TestRaidAIBudget`, IN-06 `TestRegisteredSecretsDoNotOutliveTheTest`, IN-08 `TestSpikeRefusesBadFlags`/`TestSpikeAcceptsHTTPSAndLoopbackEndpoints`. CI-only: `TestRaidDetectionSettings` and `TestRaidDetectionCarryOver` PostgreSQL paths (`make test-postgres-integrity`). Manual-only items are those listed above.
