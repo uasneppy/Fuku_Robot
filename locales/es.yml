@@ -2790,25 +2790,27 @@ lockdown_help_msg: |
   × <code>/lockdown [motivo]</code>: Bloquea este grupo al instante, sin paso de confirmación. Solo los admins pueden hablar, también los usuarios aprobados, y los miembros nuevos son expulsados hasta que se levante.
   × <code>/unlockdown</code>: Levanta el bloqueo. Cada permiso vuelve exactamente a como estaba antes del bloqueo y las personas que expulsé son desbaneadas, salvo las cuentas baneadas para siempre con Banear a los recién llegados.
   × <code>/lockdownstatus</code>: Muestra si este grupo está bloqueado, desde cuándo, por quién y por qué (cualquier admin).
-  × <code>/autolockdown [joins|flood] [N|on|off]</code>: Muestra o cambia los disparadores automáticos. Cualquier admin puede verlos; solo el creador del grupo o un admin que pueda restringir miembros puede cambiarlos. Un número de 3 a 500 fija el umbral y activa el disparador.
+  × <code>/autolockdown [joins|flood|ai] [N|on|off]</code>: Muestra o cambia los disparadores automáticos. Cualquier admin puede verlos; solo el creador del grupo o un admin que pueda restringir miembros puede cambiarlos. Un número de 3 a 500 fija el umbral y activa el disparador.
 
-  Solo el creador del grupo, o un admin que pueda restringir miembros, puede usar estos comandos, y lo compruebo en el momento. Debo ser admin con permiso para restringir miembros y el grupo debe ser un supergrupo.
+  Solo el creador del grupo, o un admin que pueda restringir miembros, puede usar estos comandos, y lo compruebo en el momento. Debo ser admin con ese permiso y el grupo debe ser un supergrupo.
   Un bloqueo nunca termina solo. Dura hasta que un admin lo levante.
-  Los baneos que pongo a quienes se unen duran 330 días desde cada unión. Si un bloqueo dura más, esos baneos terminan solos y las personas pueden volver; el resumen del levantamiento indica cuántas.
+  Mis baneos a quienes se unen duran 330 días desde cada unión; luego terminan solos, las personas pueden volver y el resumen del levantamiento las cuenta.
   A los admins anónimos se les pide primero que confirmen quiénes son.
   Las solicitudes de unión se rechazan mientras el grupo está bloqueado; las personas pueden volver a pedirlo tras el levantamiento.
 
   Cuando este grupo está bloqueado, publico una alerta en su Grupo de Staff (si está vinculado) y en su canal de registro (si la categoría de registro de admin está activada): lo que lo activó, cuántas personas entraron justo antes y desde entonces, hasta 10 de esas cuentas y el enlace de invitación que usaron la mayoría.
 
-  También bloqueo este grupo por mi cuenta cuando empieza una raid: cuando 15 personas entran en 60 segundos (oleada de entradas), o cuando llegan 30 mensajes, fotos, GIF o stickers en 30 segundos, al menos el 60 % de ellos de al menos 3 miembros que entraron en las últimas 24 horas (avalancha). Son los valores por defecto; <code>/autolockdown</code> muestra las cifras de este grupo. Ambos están activados. No cuentan nunca los admins, los usuarios aprobados ni los comandos que gestiono, así que aprobar a los recién llegados de confianza los deja fuera. Publico un aviso breve cuando bloqueo el grupo, y la alerta indica qué disparador se activó. Durante 10 minutos tras un levantamiento no vuelvo a bloquear solo. Si veo una raid pero no puedo bloquear (debo ser admin que pueda restringir miembros, en un supergrupo), aviso al Grupo de Staff y al canal de registro, como máximo una vez al día. Estos ajustes no van en las copias de seguridad.
+  También bloqueo este grupo por mi cuenta cuando empieza una raid: cuando 15 personas entran en 60 segundos (oleada de entradas), o cuando llegan 30 mensajes, fotos, GIF o stickers en 30 segundos, al menos el 60 % de ellos de al menos 3 miembros que entraron en las últimas 24 horas (avalancha). Son los valores por defecto, con ambos activados; <code>/autolockdown</code> muestra las cifras de este grupo. Nunca cuentan los admins, los usuarios aprobados ni los comandos que gestiono, así que aprobar a los recién llegados de confianza los deja fuera. Publico un aviso breve cuando bloqueo el grupo, y la alerta indica qué disparador se activó. Durante 10 minutos tras un levantamiento no vuelvo a bloquear solo. Si veo una raid pero no puedo bloquear (debo ser admin con ese permiso, en un supergrupo), aviso al Grupo de Staff y al canal de registro, como máximo una vez al día. Estos ajustes no van en las copias de seguridad.
 
-  🔓 Levantar bloqueo: levanta el bloqueo como <code>/unlockdown</code>. Solo el creador del grupo o un admin que pueda restringir miembros, comprobado en el momento; estar en el Grupo de Staff no basta.
+  Disparador IA: el texto sospechoso de miembros que entraron hace menos de 24 h lo revisa TypeSafe, y sus fotos, GIF y stickers, Google Gemini (si está configurado). 5 veredictos de spam de 3 cuentas en 120 s bloquean el grupo; uno solo nunca lo hace, y la IA nunca borra ni banea.
 
-  🚫 Banear a los recién llegados: banea para siempre las cuentas de la oleada, así que no podrán volver a entrar, y no puedo deshacerlo. Quedan fuera los admins, los usuarios aprobados y las personas que un admin dejó entrar. Una pulsación posterior banea solo las cuentas nuevas. Solo el creador del grupo o un admin que pueda restringir miembros, comprobado en el momento.
+  🔓 Levantar bloqueo: levanta el bloqueo como <code>/unlockdown</code>. Mismos derechos que /unlockdown, comprobados en el momento; estar en el Grupo de Staff no basta.
 
-  ⛔ Revocar enlace: revoca el enlace de invitación que usó la raid, si lo creé yo; los enlaces de otros admins hay que revocarlos en Telegram. Solo el creador del grupo o un admin que pueda invitar usuarios. Solo se ofrece una revocación por bloqueo; si la raid pasa a otro enlace, revócalo en los ajustes del grupo en Telegram.
+  🚫 Banear a los recién llegados: banea para siempre las cuentas de la oleada, así que no podrán volver a entrar, y no puedo deshacerlo. Quedan fuera los admins, los usuarios aprobados y las personas que un admin dejó entrar. Una pulsación posterior banea solo las cuentas nuevas. Mismos derechos que /unlockdown.
 
-  Cada botón pide una confirmación que solo puede dar quien lo pulsó. Pulsa los botones como tú mismo, no como admin anónimo ni como canal. Mientras el grupo siga bloqueado publico un recordatorio cada hora; los recordatorios terminan cuando se levanta el bloqueo.
+  ⛔ Revocar enlace: revoca el enlace de invitación que usó la raid, si lo creé yo; los enlaces de otros admins hay que revocarlos en Telegram. Solo el creador del grupo o un admin que pueda invitar usuarios. Una revocación por bloqueo; otros enlaces míos se revocan en los ajustes del grupo en Telegram.
+
+  Solo quien pulsó un botón puede confirmarlo; púlsalos como tú mismo, no como admin anónimo ni como canal. Mientras el grupo siga bloqueado publico un recordatorio cada hora hasta que se levante.
 lockdown_started: "🔒 Este grupo está en bloqueo. Solo los admins pueden hablar y quien se una será expulsado hasta que un admin use /unlockdown."
 lockdown_note_approved_muted: "Los usuarios aprobados también están silenciados."
 lockdown_started_by: "Bloqueado por {name}."
