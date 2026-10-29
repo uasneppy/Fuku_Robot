@@ -33,6 +33,18 @@ const (
 	LockdownTriggerAIBurst = "ai_burst"
 )
 
+// LockdownTriggerKinds lists every trigger_kind a lockdown row can carry. A new kind is
+// added here beside its constant, and the surface test that renders each kind fails until
+// every place that switches on the kind knows it.
+func LockdownTriggerKinds() []string {
+	return []string{
+		LockdownTriggerManual,
+		LockdownTriggerJoinSurge,
+		LockdownTriggerFlood,
+		LockdownTriggerAIBurst,
+	}
+}
+
 // States of one joiner row of a lockdown, as stored in chat_lockdown_joiners.state.
 const (
 	// JoinerStatePending means the joiner was recorded and is waiting to be banned.
