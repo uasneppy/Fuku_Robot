@@ -65,7 +65,6 @@ func newTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *r
 	t.Helper()
 	rec := &recorder{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Record a copy of the body, then give the handler a fresh reader.
 		rec.add(r)
 		handler(w, r)
 	}))
