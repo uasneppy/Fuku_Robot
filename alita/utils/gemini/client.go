@@ -33,6 +33,12 @@ const (
 
 	maxResponseBytes = 1 << 20
 	apiKeyHeader     = "x-goog-api-key"
+
+	// retryWait is the wait before the one retry when the server names none.
+	retryWait = 500 * time.Millisecond
+	// maxRetryWait drops the retry rather than hold a worker on a long
+	// backoff. A shed check is "not checked", which is the safe side.
+	maxRetryWait = 2 * time.Second
 )
 
 var (
@@ -153,11 +159,80 @@ func (c *Client) Classify(ctx context.Context, img Image) (*Verdict, error) {
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 
-	body, err := c.send(ctx, http.MethodPost, c.modelURL(":generateContent"), payload)
+	body, err := c.exec(ctx, http.MethodPost, c.modelURL(":generateContent"), payload)
 	if err != nil {
 		return nil, err
 	}
 	return parseVerdict(body)
+}
+
+// ModelInfo is the part of models.get the spike tool reports.
+type ModelInfo struct {
+	Name                       string   `json:"name"`
+	DisplayName                string   `json:"displayName"`
+	InputTokenLimit            int      `json:"inputTokenLimit"`
+	OutputTokenLimit           int      `json:"outputTokenLimit"`
+	SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+}
+
+// GetModel reads the configured model's metadata (models.get). The spike tool
+// uses it to check that the model exists and takes images; the bot does not.
+func (c *Client) GetModel(ctx context.Context) (*ModelInfo, error) {
+	if c.APIKey == "" {
+		return nil, ErrNotConfigured
+	}
+	if !ValidModel(c.Model) {
+		return nil, ErrInvalidModel
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, Timeout)
+	defer cancel()
+
+	body, err := c.exec(ctx, http.MethodGet, c.modelURL(""), nil)
+	if err != nil {
+		return nil, err
+	}
+	var info ModelInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		return nil, errors.New("gemini: unreadable model metadata")
+	}
+	return &info, nil
+}
+
+// exec makes the request and, for a 429 or 5xx, one more attempt when the wait
+// is at most maxRetryWait. The wait is the server's retryDelay or Retry-After,
+// else retryWait. Any other failure is final.
+func (c *Client) exec(ctx context.Context, method, target string, payload []byte) ([]byte, error) {
+	body, err := c.send(ctx, method, target, payload)
+	if err == nil {
+		return body, nil
+	}
+
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || !httpErr.Retryable() {
+		return nil, err
+	}
+	wait := httpErr.RetryDelay
+	if wait <= 0 {
+		wait = retryWait
+	}
+	if wait > maxRetryWait || !sleepContext(ctx, wait) {
+		return nil, err
+	}
+	return c.send(ctx, method, target, payload)
+}
+
+// sleepContext waits, reporting false if the context ended first.
+func sleepContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // send makes one request and returns the body of a 2xx answer.
@@ -190,7 +265,7 @@ func (c *Client) send(ctx context.Context, method, target string, payload []byte
 		return nil, c.transportError(err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, fmt.Errorf("gemini: HTTP %d", resp.StatusCode)
+		return nil, newHTTPError(resp.StatusCode, resp.Header, data, c.APIKey)
 	}
 	return data, nil
 }
