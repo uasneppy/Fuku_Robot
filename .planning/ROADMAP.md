@@ -324,7 +324,39 @@ Plans:
   3. AI never decides a lockdown alone. A single verdict doesn't lock a group. If an AI provider is slow, down or not configured, the rule-based triggers keep working and nothing waits on AI.
   4. The Gemini API key never appears in logs, including errors and debug output.
 
-**Plans:** TBD
+**Plans:** 13 plans
+
+Plans:
+**Wave 1**
+- [ ] 07-01-PLAN.md: Tracer. Five /aispam spam verdicts from three accounts lock the group as `ai_burst` through `raidFire`; every trigger-kind surface names the AI trigger; the alert lists the accounts behind the verdicts
+- [ ] 07-02-PLAN.md: The stdlib-only Gemini client (`alita/utils/gemini`): verified request, strict verdict, key-free errors, one retry within 2 s, leaf-package test
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 07-03-PLAN.md: `GEMINI_API_KEY` and `GEMINI_MODEL` loaded, validated and registered with `logredact`; Google-key shape scrubbed; env docs with the paid-tier note
+- [ ] 07-04-PLAN.md: `ai_enabled` / `ai_threshold` on `chat_raid_detection` (append-only migration, CHECK 3..500), stale-cache defaults, and the counter follows each group's setting
+- [ ] 07-05-PLAN.md: The owner's Gemini spike kit (`scripts/gemini-spike/` with `-probe` and `-models-get`) and `07-SPIKE.md`
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 07-06-PLAN.md: The group 2 candidate watcher and the bounded raid AI pool: new members' suspicious text checked once by TypeSafe, shared verdict with /aispam, drain after `RegisterRaidPostsDrain`
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 07-07-PLAN.md: `/autolockdown ai N|on|off` with the same live checks, the AI status line and the "not set up" notice
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 07-08-PLAN.md: New members' photos, GIFs, stickers and videos judged by Gemini; the right frame per kind; token-safe download; secrets never logged
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 07-09-PLAN.md: Hourly Gemini budgets, verdict cache, album gate, fire-latch skip, per-chat breaker and provider-wide pause
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 07-10-PLAN.md: Developer `/stats`: AI-off groups and this replica's AI check counters
+- [ ] 07-11-PLAN.md: Architecture and reference docs for the AI trigger, its keys and what is sent where
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 07-12-PLAN.md: The /lockdown help in all 7 languages, the generated page, the final AGENTS.md pass
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 07-13-PLAN.md: Final integration: an image burst locks end to end, the AI path never acts, join and flood still fire with every provider down; full phase gate
 
 ### Phase 8: Turnstile Web Captcha
 
@@ -372,6 +404,6 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
-| 7. AI-Assisted Raid Detection | 0/TBD | Not started | - |
+| 7. AI-Assisted Raid Detection | 0/13 | Planned | - |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |
