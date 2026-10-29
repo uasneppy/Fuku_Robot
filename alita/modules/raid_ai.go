@@ -18,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/divkix/Alita_Robot/alita/config"
+	"github.com/divkix/Alita_Robot/alita/db/aispam"
 	"github.com/divkix/Alita_Robot/alita/db/lang"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
@@ -71,6 +72,14 @@ func raidAIImageConfigured() bool {
 // raidAIConfigured reports whether any AI provider of the raid path is set up.
 func raidAIConfigured() bool {
 	return raidAITextConfigured() || raidAIImageConfigured()
+}
+
+// aispamWillJudge reports whether /aispam will judge a text of the chat at group 3: the
+// gates at the top of checkAISpam, the TypeSafe configuration, the chat's own /aispam
+// switch and a breaker that is not paused. Where it holds, the raid path leaves the text
+// to /aispam, whose delete verdict feeds the same burst counter (D-03, D-19).
+func aispamWillJudge(chatID int64) bool {
+	return raidAITextConfigured() && aispam.IsAISpamEnabled(chatID) && !aispamBreakerPaused(chatID)
 }
 
 // raidAITextHash is the repeat test's fingerprint of a text: lower-cased, whitespace
@@ -198,6 +207,13 @@ func raidAIWatchText(b *gotgbot.Bot, ctx *ext.Context) {
 		return
 	}
 	if settings == nil || !settings.AIEnabled {
+		return
+	}
+
+	// D-03: where /aispam will judge this text at group 3, the raid path sends nothing and
+	// reuses /aispam's own delete verdict (raidAIRecordVerdict), so a message gets at most
+	// one TypeSafe call.
+	if aispamWillJudge(chat.Id) {
 		return
 	}
 

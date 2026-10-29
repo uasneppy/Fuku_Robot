@@ -564,6 +564,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   more, then the enqueue. The rule is: the sender is a new member (joined within 24 h) and the text carries a link
   (`aispamLinkDomains`), is a forward, or repeats one of their last 5 texts of at least 10 runes. Established members'
   messages, plain texts, admins, approved users, members with a pending captcha and basic groups are never sent to any AI.
+- The raid path's text checks never double the `/aispam` call: `aispamWillJudge` (the TypeSafe configuration,
+  `aispam.IsAISpamEnabled` and a breaker that is not paused, the gates at the top of `checkAISpam`) hands a text to
+  `/aispam` whenever `/aispam` will judge it, and the watcher then sends nothing, so a message makes at most one
+  TypeSafe call; `/aispam`'s own delete verdict is what feeds the burst counter there (D-03, D-19). Where `/aispam` is
+  off, the raid-only check reports a verdict and never deletes. Raid-only checks never record the `/aispam` sender
+  history (it stores raw text), never post the `/aispam` breaker notice (the tripped return of
+  `aispamBreakerRecordFailure` is ignored, because the chat may never have enabled `/aispam`) and share its per-chat
+  breaker silently: a paused chat is not asked and the check counts as shed. Without Redis the watcher does nothing.
 - The raid AI pool (`raid_ai.go`, D-18) is separate from the `/aispam` queue and shared by raid-only text and image
   checks: 128 queued jobs (`raidAIQueueCapacity`), 4 workers (`raidAIWorkerCount`) started once, each recovering from
   panics, per job too. A full queue or a draining process sheds the job (`raidAIShed`); the in-flight count is a
