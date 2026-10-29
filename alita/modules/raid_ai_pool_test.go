@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -134,6 +135,104 @@ func TestRaidAIPool(t *testing.T) {
 		row := env.activeLockdown()
 		if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst || row.LockedAt == nil {
 			t.Fatalf("active lockdown = %+v, want a confirmed AI burst lockdown once the lock went through", row)
+		}
+	})
+
+	t.Run("bounded and shed", func(t *testing.T) {
+		raidAIJobs.wait()
+		resetRaidAIStats()
+		gate := make(chan struct{})
+		var release sync.Once
+		open := func() { release.Do(func() { close(gate) }) }
+		started := make(chan struct{}, raidAIWorkerCount)
+		var processed atomic.Int64
+		previous := raidAIProcess
+		raidAIProcess = func(raidAIJob) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-gate
+			processed.Add(1)
+		}
+		t.Cleanup(func() {
+			open()
+			raidAIJobs.wait()
+			raidAIProcess = previous
+		})
+		job := raidAIJob{chat: gotgbot.Chat{Id: -1001234500777, Type: "supergroup"}, userID: 11, text: "SPAM t.me/x"}
+
+		for i := range raidAIWorkerCount {
+			if !raidAIEnqueue(job) {
+				t.Fatalf("job %d was shed by an idle pool", i+1)
+			}
+		}
+		for i := range raidAIWorkerCount {
+			select {
+			case <-started:
+			case <-time.After(10 * time.Second):
+				open()
+				t.Fatalf("only %d of %d workers took a job", i, raidAIWorkerCount)
+			}
+		}
+		for i := range raidAIQueueCapacity {
+			if !raidAIEnqueue(job) {
+				open()
+				t.Fatalf("queued job %d of %d was shed before the queue was full", i+1, raidAIQueueCapacity)
+			}
+		}
+		shedBefore := GetRaidAIStats().Shed
+		if raidAIEnqueue(job) {
+			open()
+			t.Fatal("a job was accepted although the 4 workers and the 128-job queue were full")
+		}
+		if got := GetRaidAIStats().Shed - shedBefore; got != 1 {
+			t.Errorf("Shed grew by %d, want 1", got)
+		}
+
+		open()
+		if !returnsWithin(10*time.Second, raidAIJobs.wait) {
+			t.Fatal("the pool did not finish its jobs once the gate opened")
+		}
+		if want := int64(raidAIWorkerCount + raidAIQueueCapacity); processed.Load() != want {
+			t.Errorf("%d jobs ran, want all %d that were accepted", processed.Load(), want)
+		}
+	})
+
+	t.Run("a panicking job is recovered", func(t *testing.T) {
+		raidAIJobs.wait()
+		var panics, ran atomic.Int64
+		previous := raidAIProcess
+		raidAIProcess = func(job raidAIJob) {
+			if job.userID == 1 {
+				panics.Add(1)
+				panic("a job that fails")
+			}
+			ran.Add(1)
+		}
+		t.Cleanup(func() {
+			raidAIJobs.wait()
+			raidAIProcess = previous
+		})
+
+		// More panicking jobs than workers: a worker that a panic stopped would leave the
+		// jobs behind them unprocessed.
+		const panicking, healthy = raidAIWorkerCount + 2, 8
+		for range panicking {
+			if !raidAIEnqueue(raidAIJob{userID: 1}) {
+				t.Fatal("a job was shed by an idle pool")
+			}
+		}
+		for range healthy {
+			if !raidAIEnqueue(raidAIJob{userID: 2}) {
+				t.Fatal("a job was shed by an idle pool")
+			}
+		}
+		if !returnsWithin(10*time.Second, raidAIJobs.wait) {
+			t.Fatal("the pool did not finish its jobs after a job panicked")
+		}
+		if panics.Load() != panicking || ran.Load() != healthy {
+			t.Errorf("%d panicking and %d healthy jobs ran, want %d and %d", panics.Load(), ran.Load(), panicking, healthy)
 		}
 	})
 }
