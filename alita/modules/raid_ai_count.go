@@ -45,9 +45,9 @@ const (
 	// raidPartAIAccounts is the sorted set of the accounts behind them: the user ID scored by
 	// the time of that account's latest newly counted verdict.
 	raidPartAIAccounts = "aa"
-	// raidPartAISpammers is the snapshot of the accounts behind the counted verdicts, taken
-	// when the AI trigger fires: a sorted set of user IDs scored by the time of their join
-	// when it is within 24 hours, else by the time of their verdict, in unix milliseconds.
+	// raidPartAISpammers is the snapshot of the recent joiners behind the counted verdicts,
+	// taken when the AI trigger fires: a sorted set of user IDs scored by the time of their
+	// join in unix milliseconds. An account that did not join within 24 hours is not in it.
 	raidPartAISpammers = "aispammers"
 )
 
@@ -195,15 +195,16 @@ func raidAIRecordVerdict(b *gotgbot.Bot, chat gotgbot.Chat, userID int64, itemKe
 	})
 }
 
-// raidAISpammersScript copies the accounts behind the counted verdicts into the snapshot
-// set when the AI trigger fires (D-09, research Pitfall 10). The verdict sets only keep
-// 120 seconds and expire in minutes, and the join tracker only knows the last 10 minutes
-// of joins, so an account that joined hours ago, or an established member whose delete
-// verdict counted (D-19), would be on neither once the alert is decided. It replaces any
-// older snapshot, takes the newest accounts of the accounts set (at most the given
-// maximum) and scores each by its join time when the joined set has it within the recent
-// window, else by its verdict time, then sets the TTL. It returns how many accounts it
-// kept.
+// raidAISpammersScript copies the recent joiners among the accounts behind the counted
+// verdicts into the snapshot set when the AI trigger fires (D-09, research Pitfall 10, WR-04).
+// The verdict sets only keep 120 seconds and expire in minutes, and the join tracker only
+// knows the last 10 minutes of joins, so an account that joined hours ago would be on
+// neither once the alert is decided. It replaces any older snapshot, walks the newest
+// accounts of the accounts set (at most the given maximum) and saves an account, scored by
+// its join time, only when the joined set has it within the recent window. An established
+// member whose delete verdict counted toward the threshold (D-19) is never saved: the alert's
+// "Ban N recent joiners" queues the burst, so the burst must hold recent joiners only. It then
+// sets the TTL and returns how many accounts it kept.
 //
 // KEYS: 1 AI accounts, 2 joined set, 3 spammers snapshot. ARGV: 1 now (ms), 2 recent
 // window (ms), 3 maximum accounts, 4 TTL (ms).
@@ -211,24 +212,21 @@ var raidAISpammersScript = redis.NewScript(`
 redis.call('DEL', KEYS[3])
 local now = tonumber(ARGV[1])
 local cutoff = now - tonumber(ARGV[2])
-local entries = redis.call('ZREVRANGE', KEYS[1], 0, tonumber(ARGV[3]) - 1, 'WITHSCORES')
+local ids = redis.call('ZREVRANGE', KEYS[1], 0, tonumber(ARGV[3]) - 1)
 local kept = 0
-for i = 1, #entries, 2 do
-  local id = entries[i]
-  local score = entries[i + 1]
+for _, id in ipairs(ids) do
   local joinedAt = redis.call('ZSCORE', KEYS[2], id)
   if joinedAt and tonumber(joinedAt) > cutoff then
-    score = joinedAt
+    redis.call('ZADD', KEYS[3], joinedAt, id)
+    kept = kept + 1
   end
-  redis.call('ZADD', KEYS[3], score, id)
-  kept = kept + 1
 end
 if kept > 0 then redis.call('PEXPIRE', KEYS[3], ARGV[4]) end
 return kept
 `)
 
-// raidSnapshotAISpammers saves the accounts behind the chat's AI spam verdicts with a
-// time each, for the alert of the lockdown the AI trigger is about to start. It returns
+// raidSnapshotAISpammers saves the recent joiners among the accounts behind the chat's AI
+// spam verdicts with their join time each, for the alert of the lockdown the AI trigger is about to start. It returns
 // how many accounts it saved. Without Redis it saves nothing and returns (0, nil). One
 // script call under raidRedisTimeout; an error is returned for the caller to log, and the
 // lockdown starts without a snapshot.
@@ -253,9 +251,8 @@ func raidSnapshotAISpammers(chatID int64) (int, error) {
 }
 
 // readRaidAISpammers returns the chat's AI spammer snapshot, oldest time first, each as a
-// lockdownRecentJoin whose At is the account's join time (or, for an account that did not
-// join recently, the time of its verdict) and which carries no name: the snapshot holds
-// IDs only. Without Redis it returns nothing and no error; no snapshot is the same.
+// lockdownRecentJoin whose At is the account's join time and which carries no name: the
+// snapshot holds IDs only. Without Redis it returns nothing and no error; no snapshot is the same.
 func readRaidAISpammers(chatID int64) ([]lockdownRecentJoin, error) {
 	client := raidRedis()
 	if client == nil {

@@ -593,23 +593,72 @@ func TestRaidAIAlert(t *testing.T) {
 		if locked == nil {
 			t.Fatal("the lockdown has no locked_at")
 		}
-		established := accounts[2].user.Id
 		for _, burst := range rows {
 			if burst.Source != models.BurstSourcePre || burst.JoinedAt == nil {
 				t.Errorf("burst row = %+v, want a pre row with a time", burst)
 				continue
 			}
 			ago := locked.Sub(*burst.JoinedAt)
-			if burst.UserID == established {
-				if ago < -2*time.Second || ago > time.Minute {
-					t.Errorf("burst row of the established member is %s before the lock, want within a minute (the verdict time)", ago)
-				}
-				continue
-			}
 			if ago < 2*time.Hour+55*time.Minute || ago > 3*time.Hour+5*time.Minute {
 				t.Errorf("burst row of %d joined %s before the lock, want about 3 hours", burst.UserID, ago)
 			}
 		}
+	})
+
+	t.Run("an established spammer counts but is never listed or banned", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		staffChat := env.staffChatOf()
+		accounts := env.aiSpammersWithEstablished()
+		recent, established := accounts[:2], accounts[2]
+		env.aiRaidFrom(accounts)
+		row := env.activeLockdown()
+		if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst {
+			t.Fatalf("active lockdown = %+v, want one started by the AI burst: the established account's verdicts still count toward the threshold and the 3-account floor", row)
+		}
+
+		saved, err := readRaidAISpammers(env.chat.Id)
+		if err != nil {
+			t.Fatalf("read the snapshot: %v", err)
+		}
+		if len(saved) != len(recent) {
+			t.Fatalf("snapshot = %+v, want the two recent joiners only", saved)
+		}
+		for _, join := range saved {
+			if join.UserID == established.user.Id {
+				t.Errorf("snapshot holds the established member %d", join.UserID)
+			}
+		}
+
+		env.cycle()
+		text := alertText(t, env, staffChat)
+		for _, account := range recent {
+			if want := fmt.Sprintf("<code>%d</code>", account.user.Id); !strings.Contains(text, want) {
+				t.Errorf("alert %q does not list the recent joiner %q", text, want)
+			}
+		}
+		if unwanted := fmt.Sprintf("<code>%d</code>", established.user.Id); strings.Contains(text, unwanted) {
+			t.Errorf("alert %q lists the established member %d", text, established.user.Id)
+		}
+		if rows := env.burstRows(); len(rows) != 2 {
+			t.Fatalf("%d burst rows, want 2: the recent joiners only", len(rows))
+		}
+
+		a := lastAlert(t, env, staffChat)
+		keyboard := staffKeyboardOf(a.alert.Params["reply_markup"])
+		if len(keyboard) < 2 || len(keyboard[1]) != 1 {
+			t.Fatalf("alert keyboard = %+v, want a second row with the Ban button", keyboard)
+		}
+		if label := keyboard[1][0].Text; !strings.Contains(label, staffMarker("lockdown_alert_btn_ban")+" 2") {
+			t.Errorf("Ban button label = %q, want it to carry %q with 2", label, staffMarker("lockdown_alert_btn_ban"))
+		}
+		card := env.askBan(a, env.admin)
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+		env.cycleUntilIdle()
+
+		for i, account := range recent {
+			env.wantBannedForGood(account.user.Id, fmt.Sprintf("recent joiner %d", i+1))
+		}
+		env.wantNotBanned(established.user.Id, "the established member")
 	})
 
 	t.Run("ban the spammers", func(t *testing.T) {
@@ -716,10 +765,17 @@ func TestRaidAIAlert(t *testing.T) {
 	})
 }
 
-// aiSpammers makes the three accounts of an AI burst, each with a users row and markup in
-// its name: the first two joined three hours ago, the third is an established member
-// (no joined score). They are returned in that order.
+// aiSpammers makes the three accounts of an AI burst, each a recent joiner (three hours ago)
+// with a users row and markup in its name.
 func (e *lockdownEnv) aiSpammers() []floodAccount {
+	e.t.Helper()
+	return e.seedFlooders(3, 3*time.Hour, true)
+}
+
+// aiSpammersWithEstablished makes the three accounts of an AI burst, each with a users row and
+// markup in its name: the first two joined three hours ago, the third is an established
+// member (no joined score). They are returned in that order.
+func (e *lockdownEnv) aiSpammersWithEstablished() []floodAccount {
 	e.t.Helper()
 	accounts := e.seedFlooders(2, 3*time.Hour, true)
 

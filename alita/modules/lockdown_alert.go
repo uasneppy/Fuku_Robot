@@ -206,8 +206,9 @@ func lockdownAlertDestinations(ld *models.ChatLockdown) ([]models.ChatLockdownAl
 // For a lockdown the flood trigger started it adds the flooding accounts too (D-17): the
 // recently joined accounts that posted in the flood window, saved at the moment the
 // trigger fired, however long ago they joined (lockdownMergeFlooders). A lockdown the AI
-// burst trigger started adds the accounts behind the counted spam verdicts the same way,
-// established members among them (lockdownMergeAISpammers).
+// burst trigger started adds the recent joiners behind the counted spam verdicts the same
+// way (lockdownMergeAISpammers); an established member whose verdict counted is never saved,
+// so "Ban N recent joiners" cannot offer one (WR-04).
 func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.ChatLockdownBurst {
 	if ld.LockedAt == nil {
 		return nil
@@ -253,9 +254,8 @@ func lockdownMergeFlooders(b *gotgbot.Bot, ld *models.ChatLockdown, joins []lock
 
 // lockdownMergeAISpammers adds the accounts behind an AI burst lockdown's spam verdicts to
 // the tracker's joins, from the snapshot the AI trigger saved when it fired
-// (raidAISpammersLookup). An account that did not join recently, an established member
-// whose delete verdict counted, is in it too, timed by its verdict. See
-// lockdownMergeSnapshot for how they are merged.
+// (raidAISpammersLookup), which holds recent joiners only. See lockdownMergeSnapshot for how
+// they are merged.
 func lockdownMergeAISpammers(b *gotgbot.Bot, ld *models.ChatLockdown, joins []lockdownRecentJoin) []lockdownRecentJoin {
 	return lockdownMergeSnapshot(b, ld, joins, raidAISpammersLookup, "spamming")
 }
@@ -497,7 +497,7 @@ func lockdownRenderSampleAccount(tr *i18n.Translator, account lockdown.BurstAcco
 // more" line for the accounts not listed. The counts line of a flood lockdown says that
 // the listed accounts are the flooding accounts as well as the joins just before the lock;
 // that of an AI burst names the accounts behind the spam verdicts and does not say they
-// joined, because some of them may be established members; every other kind says only who
+// joined, because it is not the join counts line; every other kind says only who
 // joined. The account lines hold user text, so they are
 // built outside the translator and spliced in after it, in place of a token.
 func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount, counts lockdown.BurstCounts, kind string) string {

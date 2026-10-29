@@ -61,7 +61,7 @@ Disposable snapshots use `alita:cache:`. Operational state uses its existing `al
 | `alita:raid:{chatId}:fire` | Short latch that sheds load while a trigger starts a lockdown (60 s, shorter or longer after some outcomes) |
 | `alita:raid:{chatId}:flooders` | Snapshot of the flooding accounts saved for the lockdown alert (15 min TTL) |
 | `alita:raid:{chatId}:av`, `:aa` | AI burst counter: the spam verdict items (one per message or album) and the accounts behind them (120 s window, 5 min TTL, newest 1000 of each kept). Message text is never stored |
-| `alita:raid:{chatId}:aispammers` | Snapshot of the accounts behind the counted AI verdicts saved for the lockdown alert (15 min TTL) |
+| `alita:raid:{chatId}:aispammers` | Snapshot of the recent joiners (joined within 24 h) behind the counted AI verdicts, saved for the lockdown alert (15 min TTL) |
 | `alita:raid:{chatId}:ar:{userId}` | Repeat test of the raid AI candidate watcher: short hashes of a new member's last 5 texts, never the text itself (1 h TTL) |
 | `alita:raid:{chatId}:ag:{mediaGroupId}` | Album gate: only the first photo of an album is judged (120 s) |
 | `alita:raid:{chatId}:abu:{userId}:{hour}`, `alita:raid:{chatId}:ab:{hour}` and `alita:raid:aibudget:{hour}` | Hourly Gemini image budgets, 20 calls per account in a group, 150 per group and 500 in all, counted per UTC hour (2 h TTL) |

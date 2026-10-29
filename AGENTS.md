@@ -308,9 +308,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `alita:raid:{<chat>}:aispammers` is the AI burst alert's snapshot (`raid_ai_count.go`), the twin of `:flooders`. When an
   AI trigger fires, `raidFire` calls `raidSnapshotAISpammers` at the same point (after the latch, the active check and
   the quiet period, before `startLockdownRow`): one Lua script (`raidAISpammersScript`) replaces the key with the newest
-  accounts of `:aa` (at most `raidFloodersMax` = 500), scored by their `:joined` score when it is within 24 h, else by
-  their verdict time (an established member whose `/aispam` delete verdict counted, D-19), with a 15-minute TTL
-  (`raidFloodersTTL`). A failed snapshot is logged at debug and the lockdown still starts. `lockdownBurstSnapshot` reads
+  accounts of `:aa` (at most `raidFloodersMax` = 500) whose `:joined` score is within 24 h, scored by that join time,
+  with a 15-minute TTL (`raidFloodersTTL`). The AI burst snapshot lists recent joiners only (WR-04): an established member
+  whose `/aispam` delete verdict counted (D-19) still counts toward the threshold and the 3-account floor, but is never
+  saved, so the alert's sample and "Ban N recent joiners" can never offer one. A failed snapshot is logged at debug and the lockdown still starts. `lockdownBurstSnapshot` reads
   it for a lockdown whose `trigger_kind` is `ai_burst` only (`raidAISpammersLookup`, a test seam; no Redis or no snapshot
   adds nothing) and `lockdownMergeAISpammers` merges it with the 10-minute tracker's joins through
   `lockdownMergeSnapshot`, the one merge that `lockdownMergeFlooders` shares (by user ID, the tracker's name, username,
@@ -665,8 +666,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`
-  (counts line `lockdown_alert_counts_ai` for an AI alert, which does not say the listed accounts joined, because some
-  may be established members). `TestLockdownTriggerKindsAllSurfaces` renders every kind in
+  (counts line `lockdown_alert_counts_ai` for an AI alert, which does not say the listed accounts joined; the burst holds
+  recent joiners only, see `:aispammers` above). `TestLockdownTriggerKindsAllSurfaces` renders every kind in
   `models.LockdownTriggerKinds()` on every one of them, so a new kind added there without the same case everywhere
   fails it. `/lockdownstatus` opens with `lockdown_status_active_auto` and the trigger sentence
   (`lockdownTriggerSentence`, from the row's trigger columns, never from `reason`) instead of "started by" the bot, and

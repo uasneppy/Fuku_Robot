@@ -217,7 +217,7 @@ type raidTrigger struct {
 // lockdown and for raidLiftQuiet after an admin started lifting one (D-15); a failed read
 // of either shortens the latch to raidRetryLatch. A flood trigger then copies its flooding
 // accounts into a short-lived snapshot for the alert (raidSnapshotFlooders), and an AI
-// burst copies the accounts behind its spam verdicts the same way (raidSnapshotAISpammers).
+// burst copies the recent joiners behind its spam verdicts the same way (raidSnapshotAISpammers).
 // After the start the latch is cut or stretched by outcome (raidOutcomeLatch).
 func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	client := raidRedis()
