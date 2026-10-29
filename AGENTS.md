@@ -272,6 +272,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   sender is new (`:joined` scores them within 24 h) and whether the hash is one of their last few, and records the
   hash for a new member only, so an established member leaves no key. Raw message text is never stored, here or by
   the raid path anywhere else. It is Redis only, like the other raid counters.
+- The image checks' cost guards (`raid_ai_image.go`, D-20) keep four Redis key families, all outside the cache prefix.
+  `alita:raid:{<chat>}:ag:<media_group_id>` is the album gate, `SET NX EX 120` (`raidAIAlbumGateTTL`): the first photo of
+  an album is judged and the others are dropped. `alita:raid:{<chat>}:ab:<yyyymmddhh>` and `alita:raid:aibudget:<yyyymmddhh>`
+  are the hourly budgets, 150 Gemini calls per group (`raidAIChatHourlyBudget`) and 500 in all
+  (`raidAIGlobalHourlyBudget`), counted by `INCR` plus a 2 h expiry (`raidAIBudgetTTL`) in one transaction, the UTC hour
+  from `raidNow`. `alita:raid:aiv:<file_unique_id>` is the verdict cache: the probability as a decimal string, `SET EX
+  3600` (`raidAIVerdictCacheTTL`), written only after a verdict (never for a failure or a block). The budget is reserved
+  before the download, so a failed call still spends its unit; a group over its own budget never spends the fleet's. The
+  two budgets are package variables only so a test can make them small. A Redis error on any of these keys is no verdict:
+  the image is not sent, never an unbounded call. The all-groups key has no `{chat}` hash tag, so it is only ever used in
+  single-key commands, never in a multi-key script.
 - `alita:raid:{<chat>}:flooders` is the flood alert's snapshot (`raid_flood.go`, D-17). When a flood trigger fires,
   `raidFire` calls `raidSnapshotFlooders` after the latch, the active check and the quiet period and before
   `startLockdownRow`: one Lua script (`raidFloodersScript`) replaces the key with the newest accounts of `:fa` (at most
@@ -610,6 +621,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   failure (`getFile`, download, Gemini) in `Failed`, and both are no verdict. A verdict
   whose model stage is LEGACY, DEPRECATED or RETIRED logs one warning per process naming the model id and the stage.
   Nothing on this path deletes, restricts, bans or posts, and every call derives from `raidAIContext()`.
+- Before any Gemini call an image job passes, cheapest and most decisive first (`raidAIProcessImage`): the album gate, the
+  fire-latch skip (`EXISTS alita:raid:{<chat>}:fire`: a lockdown was just attempted, so more checks are wasted), the verdict
+  cache by `file_unique_id`, then the hourly budgets, then the download and the call. Each refusal is no verdict and is
+  counted: `RaidAIStats.Capped` for a budget refusal, `RaidAIStats.Cached` for a verdict served from the cache, a photo
+  dropped by the album gate or a check skipped for the latch (a Redis error counts as `Shed`). A cached verdict costs no
+  budget and no provider call; it is judged against the same bar and counted as spam or kept like a fresh one, but it is
+  not `Checked`, which counts only provider answers that carried a verdict. Jobs that carry one image at the same moment
+  share one verdict step (`raidAIImageFlight`, a singleflight keyed by `file_unique_id`), so overlapping posts of one
+  sticker make one call, the followers count as cached and they share its failure too. The join and flood triggers are
+  not touched by any of this.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`
