@@ -154,7 +154,9 @@ func raidAICheckCandidate(client *redis.Client, chatID, userID int64, hash strin
 }
 
 // raidAIJob is one check for the pool. It carries copies, never the update, so a worker
-// holds nothing of the dispatcher. The text is sent to TypeSafe and is never logged.
+// holds nothing of the dispatcher. The text is sent to TypeSafe and is never logged. An
+// image job has a media reference and no text: the frame is fetched by the worker and is
+// the only thing that goes to Gemini.
 type raidAIJob struct {
 	bot         *gotgbot.Bot
 	chat        gotgbot.Chat
@@ -167,6 +169,7 @@ type raidAIJob struct {
 	isReply     bool
 	title       string
 	language    string
+	media       *raidAIMedia
 }
 
 // raidAIWatcher is the group 2 candidate watcher. It returns ext.ContinueGroups on every
@@ -175,15 +178,15 @@ type raidAIJob struct {
 // suspicious text of a new member goes to the pool.
 func (m moduleStruct) raidAIWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 	defer error_handling.RecoverFromPanic("raidAIWatcher", "Lockdown")
-	raidAIWatchText(b, ctx)
+	raidAIWatch(b, ctx)
 	return ext.ContinueGroups
 }
 
-// raidAIWatchText applies the candidate rules of D-01 and D-02 to one message, cheapest
-// first (the way raidFloodCountUpdate orders its checks): the chat type, the sender's
-// shape, the item, the configuration, Redis, the chat's settings, the candidate script and
-// its rule, and last the carve-outs that cost a lookup.
-func raidAIWatchText(b *gotgbot.Bot, ctx *ext.Context) {
+// raidAIWatch applies the candidate rules of D-01 and D-02 to one message, cheapest first
+// (the way raidFloodCountUpdate orders its checks): the chat type, the sender's shape, and
+// the item, which sends a text to the text rules and a photo, GIF, sticker or video to the
+// image rules. A caption is never judged here: it belongs to /aispam.
+func raidAIWatch(b *gotgbot.Bot, ctx *ext.Context) {
 	chat := ctx.EffectiveChat
 	if chat == nil || chat.Type != "supergroup" {
 		return
@@ -192,11 +195,23 @@ func raidAIWatchText(b *gotgbot.Bot, ctx *ext.Context) {
 	if !ok {
 		return
 	}
-	// A caption belongs to the image path, not to this one.
 	msg := ctx.EffectiveMessage
-	if msg == nil || msg.Text == "" {
+	if msg == nil {
 		return
 	}
+	if msg.Text != "" {
+		raidAIWatchText(b, ctx, chat, userID, msg)
+		return
+	}
+	if media, ok := raidAIMediaRef(msg); ok {
+		raidAIWatchImage(b, ctx, chat, userID, msg, media)
+	}
+}
+
+// raidAIWatchText applies the text rules to one text of a supergroup member: the
+// configuration, Redis, the chat's settings, the candidate script and its rule, and last
+// the carve-outs that cost a lookup.
+func raidAIWatchText(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, userID int64, msg *gotgbot.Message) {
 	if !raidAITextConfigured() {
 		return
 	}
@@ -251,6 +266,57 @@ func raidAIWatchText(b *gotgbot.Bot, ctx *ext.Context) {
 		isReply:     msg.ReplyToMessage != nil,
 		title:       chat.Title,
 		language:    lang.GetLanguage(ctx),
+	})
+}
+
+// raidAIWatchImage applies the image rule to one photo, GIF, sticker or video of a
+// supergroup member: only a new member's media is a candidate (D-01), and the frame that
+// would be sent is already chosen (media). The order is the text path's: the provider is
+// configured (without GEMINI_API_KEY nothing is fetched and nothing leaves, D-11, D-21),
+// Redis, the chat's settings, the candidate script with an empty hash (so only "is the
+// sender new" is asked and nothing is recorded), the carve-outs, then the enqueue. The
+// media job carries no caption, name or text, so none can reach the provider (D-12).
+func raidAIWatchImage(
+	b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, userID int64, msg *gotgbot.Message, media raidAIMedia,
+) {
+	if !raidAIImageConfigured() {
+		return
+	}
+	client := raidRedis()
+	if client == nil {
+		return
+	}
+
+	settingsCtx, cancel := context.WithTimeout(context.Background(), raidSettingsTimeout)
+	settings, err := raidSettingsLookup(settingsCtx, chat.Id)
+	cancel()
+	if err != nil {
+		log.Debugf("[RaidDetection] settings of chat %d could not be read, checking nothing: %v", chat.Id, err)
+		return
+	}
+	if settings == nil || !settings.AIEnabled {
+		return
+	}
+
+	isNew, _, err := raidAICheckCandidate(client, chat.Id, userID, "")
+	if err != nil {
+		log.Debugf("[RaidDetection] AI candidate script for chat %d failed: %v", chat.Id, err)
+		return
+	}
+	if !isNew {
+		return
+	}
+	if aispamCarvedOut(b, ctx, chat.Id, userID) {
+		return
+	}
+
+	raidAIEnqueue(raidAIJob{
+		bot:       b,
+		chat:      *chat,
+		userID:    userID,
+		messageID: msg.MessageId,
+		itemKey:   raidAIItemKey(msg),
+		media:     &media,
 	})
 }
 
@@ -323,6 +389,10 @@ type RaidAIStats struct {
 	Shed int64
 	// Failed is the checks that got no verdict from the provider.
 	Failed int64
+	// Blocked is the image checks Google's safety filters refused to judge. A block is no
+	// verdict and is counted apart from Failed, so an owner can see how many images the
+	// filters keep from the check.
+	Blocked int64
 }
 
 // GetRaidAIStats reports the raid AI path's counters.
@@ -333,6 +403,7 @@ func GetRaidAIStats() RaidAIStats {
 		Kept:    raidAIKept.Load(),
 		Shed:    raidAIShed.Load(),
 		Failed:  raidAIFailed.Load(),
+		Blocked: raidAIBlocked.Load(),
 	}
 }
 
@@ -392,8 +463,13 @@ func raidAIEnqueue(job raidAIJob) bool {
 	}
 }
 
-// raidAIProcessJob runs one queued check.
+// raidAIProcessJob runs one queued check: an image job goes to the Gemini check, any other
+// to TypeSafe.
 func raidAIProcessJob(job raidAIJob) {
+	if job.media != nil {
+		raidAIProcessImage(raidAIContext(), job)
+		return
+	}
 	raidAIProcessText(job)
 }
 

@@ -596,6 +596,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   moves on (above). Every provider call derives from `raidAIContext()`, which `StopRaidAI` cancels at shutdown (see
   Startup and shutdown). Tests that call `StopRaidAI` must restore the pool afterwards (`restoreRaidAIPool`), because a
   drain sets the draining flag and cancels the context for good.
+- The raid AI image checks (`raid_ai_media.go`, `raid_ai_image.go`) are the Gemini half of RAID-04. The same group `2`
+  watcher (`raidAIWatch`) sends a message with no `Text` and a media frame (`raidAIMediaRef`) down the image path: only a
+  new member's media is a candidate (the candidate script asked with an empty hash, so nothing is recorded), after
+  `raidAIImageConfigured` (`GEMINI_API_KEY`), Redis, the chat's `ai_enabled` and `aispamCarvedOut`, and the job joins the
+  shared pool. Without the key no `getFile` is made and no image leaves the server. The frame is the photo size whose
+  larger side is nearest 1024 px, a regular static sticker's WebP, or Telegram's own thumbnail for a GIF, video, animated
+  or video sticker; a missing thumbnail, a custom emoji or mask sticker, a video note, a document, a voice note, a
+  declared size over `gemini.MaxImageBytes` (5 MiB), a body over it, or bytes that `http.DetectContentType` does not call
+  JPEG, PNG or WebP give nothing. Only the image bytes and the code-owned instruction go to Google, never the caption,
+  names, chat or user data. A verdict of at least `raidAIImageBar` (0.85, a code constant) counts as one spam item for
+  the AI burst counter, anything below it is kept; a safety block counts in `RaidAIStats.Blocked` and every other
+  failure (`getFile`, download, Gemini) in `Failed`, and both are no verdict. A verdict
+  whose model stage is LEGACY, DEPRECATED or RETIRED logs one warning per process naming the model id and the stage.
+  Nothing on this path deletes, restricts, bans or posts, and every call derives from `raidAIContext()`.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`
@@ -819,6 +833,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Every fire-and-forget goroutine starts with `defer error_handling.RecoverFromPanic(...)`. Async user/chat writers
   join the WaitGroup drained by `DrainUsersAsyncWrites`.
 - Register every new secret with `logredact.RegisterSecret` (≥6 chars), or it is logged verbatim.
+- A file the bot downloads itself never puts its URL in an error or a log: the Telegram file URL holds the bot token and
+  `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
+  follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
+  (`raidAIDownload` is the pattern).
+- `alita/utils/gemini` imports the standard library only, so `scripts/gemini-spike` can use it without the pre-main
+  database connection of `alita/config` and `alita/db`. The Gemini key travels only in the `x-goog-api-key` header,
+  never in a URL, and no error that package returns contains it.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
