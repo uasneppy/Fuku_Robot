@@ -1,9 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
+
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/divkix/Alita_Robot/alita/utils/gemini"
 	"github.com/divkix/Alita_Robot/alita/utils/logredact"
@@ -487,6 +490,38 @@ func TestGeminiConfig(t *testing.T) {
 					t.Errorf("GeminiModel: got %q, want %q", cfg.GeminiModel, gemini.DefaultModel)
 				}
 			})
+		}
+	})
+
+	t.Run("a rejected model is not logged", func(t *testing.T) {
+		const pasted = "AIzaSyPastedIntoTheWrongVariable 0123456789"
+		hook := logrustest.NewGlobal()
+		defer hook.Reset()
+		setRequiredConfigEnv(t)
+		t.Setenv("GEMINI_MODEL", pasted)
+
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.GeminiModel != gemini.DefaultModel {
+			t.Fatalf("GeminiModel: got %q, want the default", cfg.GeminiModel)
+		}
+		warned := false
+		for _, entry := range hook.AllEntries() {
+			line := entry.Message
+			for _, value := range entry.Data {
+				line += " " + fmt.Sprint(value)
+			}
+			if strings.Contains(line, pasted) || strings.Contains(line, "AIzaSy") {
+				t.Errorf("a log line carries the rejected GEMINI_MODEL value: %q", line)
+			}
+			if strings.Contains(entry.Message, "GEMINI_MODEL") {
+				warned = true
+			}
+		}
+		if !warned {
+			t.Error("no warning names GEMINI_MODEL: the case would prove nothing")
 		}
 	})
 

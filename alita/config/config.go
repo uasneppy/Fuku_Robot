@@ -7,6 +7,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
@@ -466,7 +467,10 @@ func (cfg *Config) setDefaults() {
 	if cfg.GeminiModel == "" {
 		cfg.GeminiModel = gemini.DefaultModel
 	} else if !gemini.ValidModel(cfg.GeminiModel) {
-		log.Warnf("[Config] GEMINI_MODEL %q is not a valid model name, using %s", cfg.GeminiModel, gemini.DefaultModel)
+		// The rejected value is never logged: setDefaults runs before registerSecrets, and a
+		// variable pasted into the wrong place could be a key.
+		log.Warnf("[Config] GEMINI_MODEL (%d characters) is not a valid model name, using %s",
+			utf8.RuneCountInString(cfg.GeminiModel), gemini.DefaultModel)
 		cfg.GeminiModel = gemini.DefaultModel
 	}
 }
