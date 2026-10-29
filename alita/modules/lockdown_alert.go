@@ -535,7 +535,8 @@ func lockdownRenderLinkLine(tr *i18n.Translator, links []lockdown.InviteLinkCoun
 
 // lockdownAlertTriggerLine is the alert's line saying how the lockdown was triggered. A
 // join surge names its count and window, a flood its count, window and the percent from
-// new members; any other kind, a manual lockdown included, names who started it with
+// new members, an AI burst its count of spam verdicts and window; any other kind, a manual
+// lockdown included, names who started it with
 // /lockdown. The numbers come from the row's trigger columns, never from the reason, so
 // each destination reads them in its own language. They are passed as strings built with
 // strconv and by name only, so the translator's legacy printf pass never meets the
@@ -556,6 +557,12 @@ func lockdownAlertTriggerLine(tr *i18n.Translator, ld *models.ChatLockdown, lock
 			"window":  window,
 			"percent": strconv.Itoa(ld.TriggerPercent),
 			"time":    lockdownTime(lockedAt),
+		})
+	case models.LockdownTriggerAIBurst:
+		return lockdownText(tr, "lockdown_alert_trigger_ai_burst", i18n.TranslationParams{
+			"count":  count,
+			"window": window,
+			"time":   lockdownTime(lockedAt),
 		})
 	}
 	return lockdownSplice(

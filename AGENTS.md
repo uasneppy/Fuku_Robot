@@ -242,6 +242,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidFloodScript`) adds the item, trims all three to 30 s, caps the first two at 2000 (`raidFloodCap`), sets
   `PEXPIRE` 2 minutes on each and returns their sizes; a member is new when `:joined` scores them within 24 h
   (`ZSCORE`). It is Redis only, like the join counter.
+- `alita:raid:{<chat>}:av` and `:aa` are the AI spam verdict counter of automatic raid detection (`raid_ai_count.go`):
+  two sorted sets scored in unix ms, the verdict items (`m:<message id>`, or `g:<media group id>` so an album is one
+  item) and the accounts behind them (user ID, scored by that account's latest newly counted verdict). One Lua script
+  (`raidAIVerdictScript`) adds the item with `ZADD NX`, so a second report of one message or album is a no-op, and
+  writes the account only when its item was newly added, so a duplicate can never refresh an account whose items aged
+  out. It trims both sets to the fixed 120 s window (`raidAIWindow`), caps each at 1000 (`raidAICap`, a variable only
+  for tests, never set below 500 except to prove the cap), sets `PEXPIRE` 5 minutes and returns the two sizes. It is
+  Redis only, like the other raid counters: without Redis the trigger is inert on that replica. Message text is never
+  stored.
 - `alita:raid:{<chat>}:flooders` is the flood alert's snapshot (`raid_flood.go`, D-17). When a flood trigger fires,
   `raidFire` calls `raidSnapshotFlooders` after the latch, the active check and the quiet period and before
   `startLockdownRow`: one Lua script (`raidFloodersScript`) replaces the key with the newest accounts of `:fa` (at most
@@ -329,7 +338,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   button path also posts the public `lockdown_lifted` notice in the locked group, through `lockdownPaced`. The
   `chat_lockdowns` columns `trigger_count`, `trigger_window` (seconds) and `trigger_percent` (migration 20261018120000,
   with `idx_chat_lockdowns_chat_lift` on `(chat_id, lift_started_at)`) record the numbers behind an automatic trigger:
-  `trigger_kind` is `manual`, `join_surge` or `flood`, and all three numbers are 0 for a manual lockdown. The numbers are
+  `trigger_kind` is `manual`, `join_surge`, `flood` or `ai_burst`, and all three numbers are 0 for a manual lockdown
+  (for `ai_burst`, `trigger_count` is the spam verdict items, `trigger_window` 120 and `trigger_percent` 0; the 8
+  characters fit the 16 of the column, which has no `CHECK`, so the kind needed no migration). The numbers are
   columns and never part of `reason`, so each destination renders them in its own language
   (`lockdownAlertTriggerLine`).
 - `chat_lockdown_alerts` and the `chat_lockdowns` columns `chat_title` and `alert_started_at` (migration
@@ -504,6 +515,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   60% of them from members who joined in the last 24 h, from at least 3 such accounts; the windows, the 60% and the
   3-account floor are code constants. It then calls `raidFire` with `trigger_kind` `flood`, the item count, window 30
   and the percent. Without Redis it is inert.
+- AI never decides alone (RAID-05). A `/aispam` delete verdict only adds one item to the AI burst counter, through
+  `raidAIRecordVerdict` at the end of `processAISpam`'s delete branch; only `raidAICounts` (at least the threshold,
+  default 5 (`raidAIDefaultThreshold`), of verdict items from at least 3 accounts in the fixed 120 s window, and a
+  threshold below `raiddetection.MinThreshold` never counts) calls `raidFire` with `trigger_kind` `ai_burst`, exactly
+  as `/lockdown` and the other triggers start a lockdown. Every delete verdict from any account feeds it (D-19), an
+  established member's included, and a keep verdict never does; a basic group, an anonymous or non-positive sender and
+  the bot itself never count. Nothing on the counting path deletes, restricts or bans: the `/aispam` deletion itself is
+  unchanged, and the lockdown's muting is what stops the raid. The call is synchronous in the `/aispam` worker
+  (`DrainAISpamChecks` waits for it); `raidFire` is bounded by `raidFireTimeout` and its 60 s latch.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge` or `flood`) is described as such to
   admins. `/lockdownstatus` opens with `lockdown_status_active_auto` and the trigger sentence
   (`lockdownTriggerSentence`, from the row's trigger columns, never from `reason`) instead of "started by" the bot, and

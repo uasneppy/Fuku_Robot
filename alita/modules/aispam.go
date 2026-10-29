@@ -111,6 +111,8 @@ var aispamDesc = helpers.CommandDescriptor{
 // that costs a database or network read is resolved by the worker instead.
 type aispamTask struct {
 	bot         *gotgbot.Bot
+	chat        gotgbot.Chat
+	itemKey     string
 	chatID      int64
 	messageID   int64
 	userID      int64
@@ -174,6 +176,8 @@ func (m moduleStruct) checkAISpam(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	aispamEnqueue(aispamTask{
 		bot:         b,
+		chat:        *chat,
+		itemKey:     raidAIItemKey(msg),
 		chatID:      chat.Id,
 		messageID:   msg.MessageId,
 		userID:      user.Id,
@@ -281,14 +285,8 @@ func processAISpam(task aispamTask) {
 	aispamBreakerRecordSuccess(task.chatID)
 	aispamChecked.Add(1)
 
-	// The message's own language picks the bar, not the chat's setting: Jev is
-	// English-first, and an English chat still receives posts written in other
-	// languages. An answer the module cannot read takes the higher bar.
-	threshold := aispamThresholdNonEnglish
-	if verdict.Language == aispamLanguageEnglish {
-		threshold = aispamThresholdEnglish
-	}
-	deleting := verdict.DeleteProbability >= threshold
+	threshold := aispamBar(verdict)
+	deleting := aispamIsDelete(verdict)
 
 	log.WithFields(log.Fields{
 		"chat_id":            task.chatID,
@@ -321,6 +319,27 @@ func processAISpam(task aispamTask) {
 	}
 
 	aispamMirrorDeletion(task, verdict)
+
+	// D-03, D-19: every delete verdict, from any account, is also one item of the AI burst
+	// counter; a keep verdict never is. This only counts: the deletion above is the only
+	// action a verdict takes, and the rule alone may start a lockdown.
+	raidAIRecordVerdict(task.bot, task.chat, task.userID, task.itemKey)
+}
+
+// aispamBar is the delete probability a verdict must reach. The message's own language
+// picks the bar, not the chat's setting: Jev is English-first, and an English chat still
+// receives posts written in other languages. An answer the module cannot read takes the
+// higher bar.
+func aispamBar(verdict *aispamVerdict) float64 {
+	if verdict.Language == aispamLanguageEnglish {
+		return aispamThresholdEnglish
+	}
+	return aispamThresholdNonEnglish
+}
+
+// aispamIsDelete reports whether the verdict is a delete verdict at its bar.
+func aispamIsDelete(verdict *aispamVerdict) bool {
+	return verdict.DeleteProbability >= aispamBar(verdict)
 }
 
 func aispamDecisionName(deleting bool) string {

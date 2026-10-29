@@ -19,9 +19,6 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 )
 
-// aiBurstKind is the trigger_kind of a lockdown the AI spam verdict counter started.
-const aiBurstKind = "ai_burst"
-
 // aiSpamRequests counts the requests the TypeSafe fake of the AI burst tests received.
 var aiSpamRequests atomic.Int64
 
@@ -111,7 +108,7 @@ func (e *lockdownEnv) aiBurstLockdown() *models.ChatLockdown {
 	e.spamFrom(accounts[2], 1)
 	e.settleAI()
 	row := e.activeLockdown()
-	if row == nil || row.TriggerKind != aiBurstKind || row.LockedAt == nil {
+	if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst || row.LockedAt == nil {
 		e.t.Fatalf("setup: active lockdown = %+v, want a confirmed AI burst lockdown", row)
 	}
 	return row
