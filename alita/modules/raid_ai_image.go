@@ -16,6 +16,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/config"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/gemini"
+	"github.com/divkix/Alita_Robot/alita/utils/logredact"
 )
 
 // The raid-only Gemini check of one image (RAID-04, PLAT-02). A worker of the raid AI pool
@@ -109,7 +110,7 @@ func raidAIGeminiClient() *gemini.Client {
 func raidAIScrub(text string, secrets ...string) string {
 	for _, secret := range secrets {
 		if secret != "" {
-			text = strings.ReplaceAll(text, secret, "[REDACTED]")
+			text = strings.ReplaceAll(text, secret, logredact.Placeholder)
 		}
 	}
 	return text

@@ -159,7 +159,7 @@ func firstAnswerText(c *responseContent) (string, bool) {
 // safeToken bounds an enum-like string taken from the answer before it is put
 // into an error or a verdict.
 func safeToken(s string) string {
-	return truncateRunes(s, 40)
+	return truncateRunes(s, maxTokenRunes)
 }
 
 func truncateRunes(s string, max int) string {
