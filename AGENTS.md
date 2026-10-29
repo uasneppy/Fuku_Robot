@@ -299,16 +299,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (bot rights or permissions unreadable, a failed state write, a lock whose answer was lost) only log. The group title
   is escaped and spliced in after translation; the trigger sentence (`lockdownTriggerSentence`) holds only numbers.
 - `chat_raid_detection` (migration 20261018130000) holds one chat's automatic raid detection settings: the join surge
-  and flood switches and thresholds (`CHECK` 3..500, defaults 15 and 30). A missing row means the defaults, both triggers
-  on (`raiddetection.Defaults`); the Go model carries no `default:` tag on its booleans, because GORM's Create would
+  and flood switches and thresholds (`CHECK` 3..500, defaults 15 and 30). Migration 20261029120000 adds the AI burst
+  trigger's `ai_enabled` (default true) and `ai_threshold` (default 5, `CHECK` 3..500 as `chk_chat_raid_detection_ai`);
+  existing rows take those defaults. A missing row means the defaults, all three triggers
+  on (`raiddetection.Defaults`, with `DefaultAIThreshold`); the Go model carries no `default:` tag on its booleans, because GORM's Create would
   turn a Go `false` back into the SQL default. It is read through `cache.GetFromCacheOrLoad` under
   `cache.CacheKey("raid_detection", chat)` (`raiddetection.GetSettings`), every write must `cache.DeleteCache` that key,
   and it is never part of backup/export/import/reset. The migration carries every non-zero
   `antiraid_settings.auto_antiraid_threshold` over as the join threshold, clamped by `LEAST(GREATEST(x, 3), 500)`: a
   value below 3 becomes 3 (D-18) and the old `/autoantiraid` values above 500 become 500 (D-22), so the copy satisfies
   the `CHECK` and cannot abort startup. The key `raid_detection:*` is listed in `skipLocal` (D-12), so another replica
-  never serves it from the in-process layer after a change. Writes are four column-targeted upserts, one per trigger
-  and kind (`SetJoinEnabled`, `SetJoinThreshold`, `SetFloodEnabled`, `SetFloodThreshold`; a threshold also turns its
+  never serves it from the in-process layer after a change. A value the previous build cached has no AI fields and decodes
+  with `ai_threshold` 0 (stored rows are never below 3), so `GetSettings` reads it as the AI defaults (on, at 5), never as
+  the trigger off. Writes are six column-targeted upserts, one per trigger
+  and kind (`SetJoinEnabled`, `SetJoinThreshold`, `SetFloodEnabled`, `SetFloodThreshold`, `SetAIEnabled`,
+  `SetAIThreshold`; a threshold also turns its
   trigger on), each `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of only its own columns plus `updated_at` followed by
   `cache.DeleteCache`, so two admins changing the two triggers never clobber each other, a Go `false` is always written,
   and a threshold outside 3..500 returns `ErrThresholdOutOfRange` before any write. The developer `/stats` counts the
@@ -795,7 +800,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go` only; the `alita/db` package's own
   tests never touch them. The Phase 6 model `ChatRaidDetection` is in `alita/modules/test_harness_test.go`,
   `alita/db/raiddetection/testmain_test.go` and `alita/db/devs/testmain_test.go` (the developer `/stats` reads it), and
-  `raidCleanup` in the modules tests deletes its rows and their cached copies.
+  `raidCleanup` in the modules tests deletes its rows and their cached copies. A fixture that creates
+  `ChatRaidDetection` rows directly must set `AIThreshold` (3..500): the `CHECK` applies on SQLite too, because GORM
+  builds it from the model tag (`seedRaidSettings` fills the AI defaults when it is left at 0).
 - `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
   prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
   `TestBanRunStart` (one running ban run per lockdown, the partial unique index), plus the Phase 5 conditional updates:
@@ -804,8 +811,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`FinishBanRun`'s `NOT EXISTS` guard and its single finish), `TestAlertSync` and
   `TestAlertSyncKeepsAMarkSetDuringTheEdit` (`RecordAlertSynced`'s parameterised `CASE`), `TestAlertClose`
   (`ClaimAlertClose`'s `CASE` over the old row) and `TestBanRunReport` (one report claim wins, steps settled
-  separately). The Phase 6 guarantees are `TestRaidDetectionSettings` (`./alita/db/raiddetection`: the `CHECK` 3..500
-  and the column-targeted upserts that never clobber each other) and `TestRaidDetectionCarryOver`
+  separately). The Phase 6 guarantees are `TestRaidDetectionSettings` (`./alita/db/raiddetection`: the `CHECK` 3..500, the AI
+  column's `chk_chat_raid_detection_ai` included, and the column-targeted upserts that never clobber each other) and `TestRaidDetectionCarryOver`
   (`./alita/db/migrations`: the clamped carry-over of `antiraid_settings.auto_antiraid_threshold`, which executes
   migration 20261018130000 against the schema the migration-chain step already built, so it must run after that step).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the

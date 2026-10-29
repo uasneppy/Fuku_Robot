@@ -3,8 +3,8 @@ package models
 import "time"
 
 // ChatRaidDetection is one chat's settings for automatic raid detection: whether the join
-// surge and the message flood triggers are on and how many it takes to fire each. A chat
-// without a row uses the defaults (see alita/db/raiddetection).
+// surge, the message flood and the AI burst triggers are on and how many it takes to fire
+// each. A chat without a row uses the defaults (see alita/db/raiddetection).
 //
 // The booleans carry no gorm default tag on purpose. With one, GORM's Create drops a Go
 // false and the SQL default (true) takes its place, so an admin who switched a trigger
@@ -17,6 +17,8 @@ type ChatRaidDetection struct {
 	JoinThreshold  int       `gorm:"column:join_threshold;not null;check:chk_chat_raid_detection_join,join_threshold BETWEEN 3 AND 500" json:"join_threshold"`
 	FloodEnabled   bool      `gorm:"column:flood_enabled;not null" json:"flood_enabled"`
 	FloodThreshold int       `gorm:"column:flood_threshold;not null;check:chk_chat_raid_detection_flood,flood_threshold BETWEEN 3 AND 500" json:"flood_threshold"`
+	AIEnabled      bool      `gorm:"column:ai_enabled;not null" json:"ai_enabled"`
+	AIThreshold    int       `gorm:"column:ai_threshold;not null;check:chk_chat_raid_detection_ai,ai_threshold BETWEEN 3 AND 500" json:"ai_threshold"`
 	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
 	UpdatedAt      time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
