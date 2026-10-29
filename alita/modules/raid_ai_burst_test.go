@@ -268,6 +268,78 @@ func TestRaidAIBurstFires(t *testing.T) {
 	})
 }
 
+// TestRaidAISpamSharesVerdict shows a text gets one TypeSafe call whichever path judges it:
+// where /aispam judges, the raid path sends nothing and reuses /aispam's verdict (D-03,
+// D-19); elsewhere the raid path checks and never deletes.
+func TestRaidAISpamSharesVerdict(t *testing.T) {
+	t.Run("/aispam on, one call per text", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		member := env.newMembers(1, 2*time.Hour)[0]
+
+		env.sendText(member, spamLink)
+		env.settleAI()
+
+		if got := env.aiRequests(); got != 1 {
+			t.Errorf("TypeSafe requests = %d, want exactly 1: /aispam judges, the raid path sends nothing", got)
+		}
+		if got := len(env.calls("deleteMessage")); got != 1 {
+			t.Errorf("deleteMessage calls = %d, want the 1 /aispam deletion", got)
+		}
+		if got := aiVerdictSetSize(env, "av"); got != 1 {
+			t.Errorf("verdict items = %d, want the message counted once", got)
+		}
+	})
+
+	t.Run("/aispam off, the raid path checks and deletes nothing", func(t *testing.T) {
+		env := newRaidAIEnv(t)
+		LoadAISpam(env.dispatcher)
+		member := env.newMembers(1, 2*time.Hour)[0]
+
+		env.sendText(member, spamLink)
+		env.settleAI()
+
+		if got := env.aiRequests(); got != 1 {
+			t.Errorf("TypeSafe requests = %d, want exactly 1 from the raid path", got)
+		}
+		if got := len(env.calls("deleteMessage")); got != 0 {
+			t.Errorf("deleteMessage calls = %d, want 0: the raid path never deletes", got)
+		}
+		if got := aiVerdictSetSize(env, "av"); got != 1 {
+			t.Errorf("verdict items = %d, want the message counted once", got)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		env  func(t *testing.T) *lockdownEnv
+	}{
+		{"/aispam on", newAIBurstEnv},
+		{"/aispam off", func(t *testing.T) *lockdownEnv {
+			env := newRaidAIEnv(t)
+			LoadAISpam(env.dispatcher)
+			return env
+		}},
+	} {
+		t.Run("a keep verdict counts on neither path: "+tc.name, func(t *testing.T) {
+			env := tc.env(t)
+			member := env.newMembers(1, 2*time.Hour)[0]
+
+			env.sendText(member, "see https://example.org/page")
+			env.settleAI()
+
+			if got := env.aiRequests(); got != 1 {
+				t.Fatalf("TypeSafe requests = %d, want 1: the case would prove nothing", got)
+			}
+			if got := aiVerdictSetSize(env, "av"); got != 0 {
+				t.Errorf("verdict items = %d, want 0 for a keep verdict", got)
+			}
+			if got := len(env.calls("deleteMessage")); got != 0 {
+				t.Errorf("deleteMessage calls = %d, want 0", got)
+			}
+		})
+	}
+}
+
 func TestRaidAIBurstSettings(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		env := newAIBurstEnv(t)

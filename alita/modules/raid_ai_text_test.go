@@ -16,6 +16,8 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/redis/go-redis/v9"
+	log "github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/approvals"
@@ -363,4 +365,52 @@ func TestRaidAICandidateText(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestRaidAINoRedis(t *testing.T) {
+	env := newRaidAIEnv(t)
+	member := env.newMembers(1, time.Hour)[0]
+	t.Cleanup(cache.DisableRedisForTest())
+
+	raidNoRedisLogged.Store(false)
+	t.Cleanup(func() { raidNoRedisLogged.Store(false) })
+	previousHooks := log.StandardLogger().ReplaceHooks(make(log.LevelHooks))
+	hook := logrustest.NewGlobal()
+	previousLevel := log.GetLevel()
+	log.SetLevel(log.InfoLevel)
+	t.Cleanup(func() {
+		log.SetLevel(previousLevel)
+		log.StandardLogger().ReplaceHooks(previousHooks)
+	})
+
+	env.sendText(member, spamLink)
+	env.sendText(member, spamLink)
+	env.watchDirect(env.chat, gotgbot.Message{From: &member, Text: spamLink})
+	env.settleAI()
+
+	if got := env.aiRequests(); got != 0 {
+		t.Errorf("TypeSafe requests = %d, want 0 without Redis", got)
+	}
+	if row := env.activeLockdown(); row != nil {
+		t.Errorf("a lockdown (kind %q) exists without Redis, want none", row.TriggerKind)
+	}
+	notices := 0
+	for _, entry := range hook.AllEntries() {
+		if entry.Level == log.InfoLevel && strings.Contains(entry.Message, "automatic raid detection is off") {
+			notices++
+		}
+	}
+	if notices > 1 {
+		t.Errorf("the no-Redis notice was logged %d times, want at most once", notices)
+	}
+
+	// /lockdown does not need Redis.
+	env.send(env.admin, "/lockdown raid")
+	row := env.activeLockdown()
+	if row == nil || row.LockedAt == nil {
+		t.Fatalf("lockdown row = %+v, want a confirmed manual lockdown without Redis", row)
+	}
+	if row.TriggerKind != models.LockdownTriggerManual {
+		t.Errorf("TriggerKind = %q, want %q", row.TriggerKind, models.LockdownTriggerManual)
+	}
 }
