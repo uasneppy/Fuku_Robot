@@ -1,7 +1,8 @@
 ---
 phase: "8"
 slug: "turnstile-web-captcha"
-status: draft
+status: approved
+reviewed_at: "2026-10-29"
 shadcn_initialized: false
 preset: none
 created: "2026-10-29"
@@ -180,7 +181,7 @@ All icons: `viewBox="0 0 24 24"`, rendered at 48 x 48, `fill="none"`, `stroke="c
 
 ## State Machine and Per-State Contract
 
-Eight visible states. Every state is: icon + one headline + one body line + at most one button. State content is
+Nine visible states. Every state is: icon + one headline + one body line + at most one button. State content is
 rendered into one live region; switching state replaces the text with `textContent` (never `innerHTML`).
 
 | State id | Icon | Headline key | Body key | Button (key) | Entered when | Leaves when |
@@ -322,7 +323,7 @@ Server-contract dependencies the UI relies on (planner must carry these into the
 | Pressed feedback | `button:active { opacity: .85 }` (not colour only) |
 | Zoom and text size | rem units, no `user-scalable=no`, no `maximum-scale` |
 | Direction | left-to-right only (RTL is out of scope) |
-| No-JS | `<noscript>` block with the English `captcha_web_unsupported` text in Caption style; the page cannot work without script |
+| No-JS | `<noscript>` block with hard-coded English text (the only page text not read from the string table, since no script runs) in Caption style; the page cannot work without script |
 
 Button style (the only one): width 100%, min-height 48px, padding 0 24px, radius 12px, border 0, background
 `--c-accent`, label colour `--c-on-accent`, Button typography, one line, `cursor: pointer`, `touch-action: manipulation`,
