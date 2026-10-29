@@ -324,7 +324,7 @@ Plans:
   3. AI never decides a lockdown alone. A single verdict doesn't lock a group. If an AI provider is slow, down or not configured, the rule-based triggers keep working and nothing waits on AI.
   4. The Gemini API key never appears in logs, including errors and debug output.
 
-**Plans:** 8/14 plans executed
+**Plans:** 9/14 plans executed
 
 Plans:
 **Wave 1**
@@ -346,7 +346,7 @@ Plans:
 - [x] 07-14-PLAN.md: AI-triggered lockdown starts off the workers, the pool context, and the `StopRaidAI` drain registered after `RegisterRaidPostsDrain`
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 07-08-PLAN.md: New members' photos, GIFs, stickers and videos judged by Gemini; the right frame per kind; token-safe download; secrets never logged
+- [x] 07-08-PLAN.md: New members' photos, GIFs, stickers and videos judged by Gemini; the right frame per kind; token-safe download; secrets never logged
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 07-09-PLAN.md: Hourly Gemini budgets, verdict cache, album gate, fire-latch skip, per-chat breaker and provider-wide pause
@@ -407,6 +407,6 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
-| 7. AI-Assisted Raid Detection | 8/14 | In Progress|  |
+| 7. AI-Assisted Raid Detection | 9/14 | In Progress|  |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |
