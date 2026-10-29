@@ -5,6 +5,8 @@ package modules
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -234,5 +236,107 @@ func TestRaidAIPool(t *testing.T) {
 		if panics.Load() != panicking || ran.Load() != healthy {
 			t.Errorf("%d panicking and %d healthy jobs ran, want %d and %d", panics.Load(), ran.Load(), panicking, healthy)
 		}
+	})
+
+	t.Run("the drain cancels and returns", func(t *testing.T) {
+		restoreRaidAIPool(t)
+		env := newRaidAIEnv(t)
+		member := env.newMembers(1, time.Hour)[0]
+
+		started := make(chan struct{}, 1)
+		cancelled := make(chan struct{})
+		withAISpamJevServer(t, func(w http.ResponseWriter, r *http.Request) {
+			aiSpamRequests.Add(1)
+			// The server notices a closed connection only after the body was read.
+			_, _ = io.Copy(io.Discard, r.Body)
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			select {
+			case <-r.Context().Done():
+				close(cancelled)
+			case <-time.After(20 * time.Second):
+			}
+		})
+
+		env.sendText(member, spamLink)
+		select {
+		case <-started:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the provider never received the check")
+		}
+
+		var stopped bool
+		began := time.Now()
+		if !returnsWithin(raidAIStopWait+200*time.Millisecond, func() { stopped = StopRaidAI() }) {
+			t.Fatalf("StopRaidAI did not return within %s of a hung provider", raidAIStopWait+200*time.Millisecond)
+		}
+		if !stopped {
+			t.Error("StopRaidAI reported the checks unfinished although it cancelled the only one in flight")
+		}
+		t.Logf("StopRaidAI returned after %s", time.Since(began))
+		select {
+		case <-cancelled:
+		case <-time.After(5 * time.Second):
+			t.Error("the provider's request was never cancelled")
+		}
+		if got := aiVerdictSetSize(env, "av"); got != 0 {
+			t.Errorf("verdict items = %d, want 0: a check cut off is no verdict", got)
+		}
+
+		shedBefore := GetRaidAIStats().Shed
+		if raidAIEnqueue(raidAIJob{userID: 3}) {
+			t.Error("a job was accepted after the drain began")
+		}
+		if got := GetRaidAIStats().Shed - shedBefore; got != 1 {
+			t.Errorf("Shed grew by %d after the drain, want 1", got)
+		}
+	})
+
+	t.Run("the drain waits for a lockdown start", func(t *testing.T) {
+		restoreRaidAIPool(t)
+		env := newRaidAIEnv(t)
+		gated := gateMethod(env, "setChatPermissions")
+		accounts := env.newMembers(3, 2*time.Hour)
+		env.spamFrom(accounts[0], 2)
+		env.spamFrom(accounts[1], 2)
+		env.spamFrom(accounts[2], 1)
+		gated.wantEntered(t)
+		if !returnsWithin(10*time.Second, raidAIJobs.wait) {
+			gated.open()
+			t.Fatal("the raid AI jobs did not finish")
+		}
+
+		previous := raidAIStopWait
+		raidAIStopWait = 50 * time.Millisecond
+		t.Cleanup(func() { raidAIStopWait = previous })
+		if StopRaidAI() {
+			gated.open()
+			t.Fatal("StopRaidAI reported done while a lockdown start was held back")
+		}
+
+		raidAIStopWait = 10 * time.Second
+		gated.open()
+		if !StopRaidAI() {
+			t.Fatal("StopRaidAI did not report done once the lock call went through")
+		}
+		row := env.activeLockdown()
+		if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst || row.LockedAt == nil {
+			t.Fatalf("active lockdown = %+v, want the AI burst lockdown the drain waited for", row)
+		}
+	})
+}
+
+// restoreRaidAIPool puts the pool back to a working state when the test ends: a drain sets
+// the draining flag and cancels the pool's context for good, which would shed or abort every
+// later test's checks.
+func restoreRaidAIPool(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		raidAIDraining.Store(false)
+		raidAIPoolContext.mu.Lock()
+		defer raidAIPoolContext.mu.Unlock()
+		raidAIPoolContext.ctx, raidAIPoolContext.cancel = context.WithCancel(context.Background())
 	})
 }

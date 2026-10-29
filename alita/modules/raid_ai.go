@@ -58,6 +58,12 @@ const (
 	raidAIWorkerCount = 4
 )
 
+// raidAIStopWait is the longest StopRaidAI waits for the checks and the lockdown starts in
+// flight at shutdown, after it cancelled them. A check cut off is no verdict and a start
+// left behind is settled by the lockdown worker, so the wait is short on purpose. A variable
+// so a test can shorten it; production code never reassigns it.
+var raidAIStopWait = 1 * time.Second
+
 // raidAITextConfigured reports whether a provider is set up to judge texts: the same
 // TypeSafe configuration /aispam needs.
 func raidAITextConfigured() bool {
@@ -268,6 +274,34 @@ var (
 	raidAIProcess = raidAIProcessJob
 )
 
+// raidAIPoolContext holds the context every call of the pool derives from. Cancelling it
+// aborts every HTTP call in flight at once, which is what the shutdown drain does first.
+var raidAIPoolContext struct {
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// raidAIContext returns the pool's context, creating it on first use. A raid AI job derives
+// its provider call from it, so StopRaidAI can cancel every check in flight at once.
+func raidAIContext() context.Context {
+	raidAIPoolContext.mu.Lock()
+	defer raidAIPoolContext.mu.Unlock()
+	if raidAIPoolContext.ctx == nil {
+		raidAIPoolContext.ctx, raidAIPoolContext.cancel = context.WithCancel(context.Background())
+	}
+	return raidAIPoolContext.ctx
+}
+
+// raidAICancel cancels the pool's context, creating it first when no job ever ran, so a
+// later job finds it already cancelled.
+func raidAICancel() {
+	raidAIContext()
+	raidAIPoolContext.mu.Lock()
+	defer raidAIPoolContext.mu.Unlock()
+	raidAIPoolContext.cancel()
+}
+
 var (
 	raidAIChecked atomic.Int64
 	raidAISpam    atomic.Int64
@@ -306,6 +340,7 @@ func raidAIEnsureWorkers() {
 	raidAIWorkersOnce.Do(func() {
 		// A fixed pool: a provider brownout sheds checks instead of growing goroutines.
 		raidAIQueue = make(chan raidAIJob, raidAIQueueCapacity)
+		raidAIContext()
 		for range raidAIWorkerCount {
 			go raidAIWorker()
 		}
@@ -319,6 +354,11 @@ func raidAIWorker() {
 		func() {
 			defer raidAIJobs.finish()
 			defer error_handling.RecoverFromPanic("raidAIProcess", "Lockdown")
+			// A queued job the shutdown drain cancelled is dropped as no verdict.
+			if raidAIContext().Err() != nil {
+				raidAIShed.Add(1)
+				return
+			}
 			raidAIProcess(job)
 		}()
 	}
@@ -384,8 +424,16 @@ func raidAIProcessText(job raidAIJob) {
 		title:       job.title,
 		language:    job.language,
 	}
-	verdict, err := aispamJevDecide(context.Background(), config.AppConfig.TypeSafeAPIKey, task.state(nil, 1))
+	// The call derives from the pool's context, so the shutdown drain aborts it.
+	poolCtx := raidAIContext()
+	verdict, err := aispamJevDecide(poolCtx, config.AppConfig.TypeSafeAPIKey, task.state(nil, 1))
 	if err != nil {
+		if poolCtx.Err() != nil {
+			// Cut off by the shutdown drain: no verdict, and not the provider's failure, so
+			// the chat's breaker is left alone.
+			raidAIShed.Add(1)
+			return
+		}
 		raidAIFailed.Add(1)
 		log.WithFields(log.Fields{
 			"chat_id":    job.chat.Id,
@@ -415,4 +463,28 @@ func raidAIProcessText(job raidAIJob) {
 	}
 	raidAISpam.Add(1)
 	raidAIRecordVerdict(job.bot, job.chat, job.userID, job.itemKey)
+}
+
+// StopRaidAI is the shutdown drain of the raid AI pool. It sets raidAIDraining, so a late
+// update is shed, cancels the pool's context first (every AI call in flight aborts at once,
+// and a check cut off is no verdict, the safe side), then waits at most raidAIStopWait for
+// the jobs and for the lockdown starts a verdict asked for (raidAIFires), and reports
+// whether both went idle. Queued jobs are dropped as no verdict. A start still running when
+// the wait ends is cut off with the process and leaves at worst an unconfirmed row that the
+// lockdown worker settles. It is registered after the database close, because a start reads
+// and writes the database.
+func StopRaidAI() bool {
+	raidAIDraining.Store(true)
+	raidAICancel()
+
+	timeout := time.After(raidAIStopWait)
+	for _, tracker := range []*raidPostTracker{&raidAIJobs, &raidAIFires} {
+		select {
+		case <-tracker.idleChan():
+		case <-timeout:
+			log.Warn("[RaidDetection] shutdown drain timed out with AI checks or lockdown starts still in flight")
+			return false
+		}
+	}
+	return true
 }

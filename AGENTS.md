@@ -27,8 +27,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   it. The 60 s budget still bounds everything and exits with code 1 wherever it runs out, so deploy manifests must allow
   more than 60 s between SIGTERM and SIGKILL (`stop_grace_period: 75s` in `docker-compose.yml`).
 - `StopStaffActions` is one of those drains, registered through `RegisterStaffActionsDrain` (`staffActionStopWait` plus
-  grace). In webhook mode the drains before it (HTTP stop 10 s, AI spam 10 s, raid posts 3 s, lockdown 6 s) still leave its 31 s
-  inside the 60 s; in polling mode the updater's extra 10 s can let the global budget cut it short. It cancels running staff fan-outs, marks every unfinished group
+  grace). In webhook mode the drains before it (HTTP stop 10 s, AI spam 10 s, raid AI 2 s, raid posts 3 s, lockdown 6 s)
+  leave its 31 s inside the 60 s only while they are not all at their limit: when every one of them runs to its limit the
+  staff drain can be cut up to 2 s short (idle drains return at once, so this is the worst case, not the usual one); in polling mode the updater's extra 10 s can let the global budget cut it short. It cancels running staff fan-outs, marks every unfinished group
   "interrupted by restart", delivers the final summary and returns within 30 s. A delivery still waiting out a 429
   when the 30 s are up is cut off with the process. A hard crash can still leave ⏳ lines. A run cancelled by the
   shutdown skips its remaining log posts, so a group applied just before it may have no post. Undo runs join the
@@ -52,6 +53,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidPosts`, a counter and not a `sync.WaitGroup`, because the drain gives up after its wait while a new post can still
   start). A post is best effort: the lockdown it announces is already in place and its alert is driven by the database,
   so a post still running when the 2 s are up is cut off with the process and only that notice is lost.
+- `StopRaidAI` is a drain registered after DB-close as well, through `RegisterRaidAIDrain` (`raidAIStopWait`, 1 s, plus
+  grace), in `main.go` right after `RegisterRaidPostsDrain`. Shutdown is LIFO, so it runs after `DrainAISpamChecks`
+  (whose verdicts can start lockdowns) and before `StopRaidPosts` (a start can post a notice) and the database close. It
+  sets `raidAIDraining`, cancels the raid AI pool's context first (`raidAIContext`: every provider call of a raid-only
+  check derives from it, so all of them abort at once, and a check cut off is no verdict, never a breaker failure), then
+  waits at most 1 s for `raidAIJobs` and `raidAIFires` to go idle, logging one warning when the wait runs out. Queued
+  jobs are dropped as no verdict. A lockdown start still running after the wait is cut off with the process and leaves at
+  worst an unconfirmed row that the lockdown worker settles.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 
 ## Handlers
@@ -584,7 +593,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `raidPostTracker` (`raidAIJobs`), taken before `raidAIDraining` is read, never a `sync.WaitGroup`. A raid-only text job
   reports a spam verdict (`aispamIsDelete`) to `raidAIRecordVerdict` and nothing else; a slow, failing or paused
   provider is no verdict. The worker that reports the tipping verdict hands the lockdown start to `raidAIFireAsync` and
-  moves on (above).
+  moves on (above). Every provider call derives from `raidAIContext()`, which `StopRaidAI` cancels at shutdown (see
+  Startup and shutdown). Tests that call `StopRaidAI` must restore the pool afterwards (`restoreRaidAIPool`), because a
+  drain sets the draining flag and cancels the context for good.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`

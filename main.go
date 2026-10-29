@@ -219,6 +219,11 @@ func main() {
 	// warning are sent from goroutines that read the database. It waits at most 2 s; a post
 	// is best effort.
 	modules.RegisterRaidPostsDrain(shutdownManager)
+	// Also after the DB-close handler, and after the raid posts drain, so LIFO runs it after
+	// the AI spam drain below (whose verdicts can start lockdowns) and before the raid posts
+	// drain (a start posts a notice) and the database close. It cancels the in-flight AI
+	// checks first and waits at most 1 s for them and for the lockdown starts they began.
+	modules.RegisterRaidAIDrain(shutdownManager)
 
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")
