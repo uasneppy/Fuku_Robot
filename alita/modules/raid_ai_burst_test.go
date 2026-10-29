@@ -4,7 +4,9 @@ package modules
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"strings"
@@ -13,12 +15,16 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/aispam"
+	"github.com/divkix/Alita_Robot/alita/db/approvals"
 	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
+	"github.com/divkix/Alita_Robot/alita/utils/cache"
 )
 
 // aiSpamRequests counts the requests the TypeSafe fake of the AI burst tests received.
@@ -359,6 +365,353 @@ func TestRaidAIAlert(t *testing.T) {
 		} {
 			if len(texts) == 1 && !strings.Contains(texts[0], want) {
 				t.Errorf("Staff Group warning %q does not contain %q", texts[0], want)
+			}
+		}
+	})
+
+	t.Run("spammers listed", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		staffChat := env.staffChatOf()
+		accounts := env.aiSpammers()
+		env.aiRaidFrom(accounts)
+		row := env.activeLockdown()
+		if row == nil || row.TriggerKind != models.LockdownTriggerAIBurst {
+			t.Fatalf("active lockdown = %+v, want one started by the AI burst", row)
+		}
+
+		env.cycle()
+
+		text := alertText(t, env, staffChat)
+		for i, account := range accounts {
+			for _, want := range []string{
+				html.EscapeString(account.user.FirstName),
+				"@" + account.username,
+				fmt.Sprintf("<code>%d</code>", account.user.Id),
+			} {
+				if !strings.Contains(text, want) {
+					t.Errorf("alert %q does not contain %q (account %d)", text, want, i+1)
+				}
+			}
+		}
+		for _, unescaped := range []string{"<b>1</b>", "<b>2</b>", "<b>3</b>"} {
+			if strings.Contains(text, unescaped) {
+				t.Errorf("alert %q holds an unescaped name tag %q", text, unescaped)
+			}
+		}
+		if want := staffMarker("lockdown_alert_counts_ai") + " 3 0"; !strings.Contains(text, want) {
+			t.Errorf("alert %q does not contain the AI counts %q", text, want)
+		}
+		if strings.Contains(text, staffMarker("lockdown_alert_counts")+" ") {
+			t.Errorf("alert %q uses the join counts line, want the AI one", text)
+		}
+
+		rows := env.burstRows()
+		if len(rows) != 3 {
+			t.Fatalf("%d burst rows, want 3", len(rows))
+		}
+		locked := env.freshRow(row.ID).LockedAt
+		if locked == nil {
+			t.Fatal("the lockdown has no locked_at")
+		}
+		established := accounts[2].user.Id
+		for _, burst := range rows {
+			if burst.Source != models.BurstSourcePre || burst.JoinedAt == nil {
+				t.Errorf("burst row = %+v, want a pre row with a time", burst)
+				continue
+			}
+			ago := locked.Sub(*burst.JoinedAt)
+			if burst.UserID == established {
+				if ago < -2*time.Second || ago > time.Minute {
+					t.Errorf("burst row of the established member is %s before the lock, want within a minute (the verdict time)", ago)
+				}
+				continue
+			}
+			if ago < 2*time.Hour+55*time.Minute || ago > 3*time.Hour+5*time.Minute {
+				t.Errorf("burst row of %d joined %s before the lock, want about 3 hours", burst.UserID, ago)
+			}
+		}
+	})
+
+	t.Run("ban the spammers", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		staffChat := env.staffChatOf()
+		accounts := env.aiSpammers()
+		env.aiRaidFrom(accounts)
+		env.cycle()
+
+		a := lastAlert(t, env, staffChat)
+		keyboard := staffKeyboardOf(a.alert.Params["reply_markup"])
+		if len(keyboard) < 2 || len(keyboard[1]) != 1 {
+			t.Fatalf("alert keyboard = %+v, want a second row with the Ban button", keyboard)
+		}
+		if label := keyboard[1][0].Text; !strings.Contains(label, staffMarker("lockdown_alert_btn_ban")+" 3") {
+			t.Errorf("Ban button label = %q, want it to carry %q with 3", label, staffMarker("lockdown_alert_btn_ban"))
+		}
+
+		card := env.askBan(a, env.admin)
+		if text := fmt.Sprint(card.msg.Params["text"]); !strings.Contains(text, staffMarker("lockdown_ban_ask")+" 3 ") {
+			t.Errorf("card text = %q, want %q with 3", text, staffMarker("lockdown_ban_ask"))
+		}
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+		env.cycleUntilIdle()
+
+		for i, account := range accounts {
+			env.wantBannedForGood(account.user.Id, fmt.Sprintf("spammer %d", i+1))
+			if row := env.burstRowOf(account.user.Id); row.State != models.BurstStateBanned {
+				t.Errorf("burst row of spammer %d = %s, want %s", i+1, row.State, models.BurstStateBanned)
+			}
+		}
+		env.wantNotBanned(staffTestBotID, "the bot itself")
+	})
+
+	t.Run("an approved spammer is left out", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		staffChat := env.staffChatOf()
+		accounts := env.aiSpammers()
+		env.aiRaidFrom(accounts)
+		approved := accounts[1].user
+		if err := approvals.AddApprovedUser(env.chat.Id, approved.Id, env.admin.Id, ""); err != nil {
+			t.Fatalf("approve %d: %v", approved.Id, err)
+		}
+		env.cycle()
+
+		a := lastAlert(t, env, staffChat)
+		keyboard := staffKeyboardOf(a.alert.Params["reply_markup"])
+		if len(keyboard) < 2 || len(keyboard[1]) != 1 {
+			t.Fatalf("alert keyboard = %+v, want a second row with the Ban button", keyboard)
+		}
+		if label := keyboard[1][0].Text; !strings.Contains(label, staffMarker("lockdown_alert_btn_ban")+" 2") {
+			t.Errorf("Ban button label = %q, want it to carry %q with 2", label, staffMarker("lockdown_alert_btn_ban"))
+		}
+		card := env.askBan(a, env.admin)
+		if text := fmt.Sprint(card.msg.Params["text"]); !strings.Contains(text, staffMarker("lockdown_ban_ask")+" 2 ") {
+			t.Errorf("card text = %q, want %q with 2", text, staffMarker("lockdown_ban_ask"))
+		}
+		pressLockdownButton(env, env.admin, staffChat, card.msg.MessageID, card.confirm)
+		env.cycleUntilIdle()
+
+		env.wantNotBanned(approved.Id, "the approved spammer")
+		env.wantBannedForGood(accounts[0].user.Id, "spammer 1")
+		env.wantBannedForGood(accounts[2].user.Id, "spammer 3")
+	})
+
+	t.Run("snapshot unreadable", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		staffChat := env.staffChatOf()
+		first, second := env.newJoiner("Joiner1"), env.newJoiner("Joiner2")
+		env.join(first, first, "")
+		env.join(second, second, "")
+		accounts := env.aiSpammers()
+		env.aiRaidFrom(accounts)
+		if row := env.activeLockdown(); row == nil || row.TriggerKind != models.LockdownTriggerAIBurst {
+			t.Fatalf("active lockdown = %+v, want one started by the AI burst", row)
+		}
+
+		var reads atomic.Int32
+		previous := raidAISpammersLookup
+		raidAISpammersLookup = func(int64) ([]lockdownRecentJoin, error) {
+			reads.Add(1)
+			return nil, errors.New("the snapshot could not be read")
+		}
+		t.Cleanup(func() { raidAISpammersLookup = previous })
+		env.cycle()
+
+		if reads.Load() == 0 {
+			t.Fatal("the spammer snapshot was never read: the case would prove nothing")
+		}
+		text := alertText(t, env, staffChat)
+		if want := staffMarker("lockdown_alert_counts_ai") + " 2 0"; !strings.Contains(text, want) {
+			t.Errorf("alert %q does not contain the counts %q: the tracker's two joins only", text, want)
+		}
+		for _, joiner := range []gotgbot.User{first, second} {
+			if want := fmt.Sprintf("<code>%d</code>", joiner.Id); !strings.Contains(text, want) {
+				t.Errorf("alert %q does not list the tracker's joiner %q", text, want)
+			}
+		}
+		for _, account := range accounts {
+			if unwanted := fmt.Sprintf("<code>%d</code>", account.user.Id); strings.Contains(text, unwanted) {
+				t.Errorf("alert %q lists spammer %d although the snapshot was unreadable", text, account.user.Id)
+			}
+		}
+	})
+}
+
+// aiSpammers makes the three accounts of an AI burst, each with a users row and markup in
+// its name: the first two joined three hours ago, the third is an established member
+// (no joined score). They are returned in that order.
+func (e *lockdownEnv) aiSpammers() []floodAccount {
+	e.t.Helper()
+	accounts := e.seedFlooders(2, 3*time.Hour, true)
+
+	established := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Old<b>3</b>", Username: "oldtimer3"}
+	row := models.User{UserId: established.Id, UserName: established.Username, Name: established.FirstName, LastActivity: time.Now()}
+	if err := db.DB.Create(&row).Error; err != nil {
+		e.t.Fatalf("seed the users row of %d: %v", established.Id, err)
+	}
+	e.t.Cleanup(func() { db.DB.Where("user_id = ?", established.Id).Delete(&models.User{}) })
+	return append(accounts, floodAccount{user: established, username: established.Username})
+}
+
+// aiRaidFrom has the three accounts send 2, 2 and 1 spam texts and waits for the verdicts,
+// which is the burst that locks the chat.
+func (e *lockdownEnv) aiRaidFrom(accounts []floodAccount) {
+	e.t.Helper()
+	e.spamFrom(accounts[0].user, 2)
+	e.spamFrom(accounts[1].user, 2)
+	e.spamFrom(accounts[2].user, 1)
+	e.settleAI()
+}
+
+func TestRaidAIVerdictScript(t *testing.T) {
+	const chatID int64 = -1001234500001
+	setup := func(t *testing.T) (*miniredis.Miniredis, *redis.Client, *time.Time) {
+		t.Helper()
+		server := withMiniredisServer(t)
+		now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+		raidSetClock(t, func() time.Time { return now })
+		return server, cache.GetRedisClient(), &now
+	}
+	record := func(t *testing.T, client *redis.Client, userID int64, itemKey string) (int, int) {
+		t.Helper()
+		items, accounts, err := recordRaidAIVerdict(client, chatID, userID, itemKey)
+		if err != nil {
+			t.Fatalf("recordRaidAIVerdict(%d, %s) error = %v", userID, itemKey, err)
+		}
+		return items, accounts
+	}
+	members := func(t *testing.T, server *miniredis.Miniredis, part string) []string {
+		t.Helper()
+		got, err := server.ZMembers(raidKey(chatID, part))
+		if err != nil {
+			return nil
+		}
+		return got
+	}
+
+	t.Run("the same item twice is one item and one account", func(t *testing.T) {
+		_, client, _ := setup(t)
+		if items, accounts := record(t, client, 11, "m:1"); items != 1 || accounts != 1 {
+			t.Fatalf("first report = %d items, %d accounts, want 1, 1", items, accounts)
+		}
+		if items, accounts := record(t, client, 11, "m:1"); items != 1 || accounts != 1 {
+			t.Errorf("second report of the same message = %d items, %d accounts, want 1, 1", items, accounts)
+		}
+	})
+
+	t.Run("two items of one account are two items and one account", func(t *testing.T) {
+		_, client, _ := setup(t)
+		record(t, client, 11, "m:1")
+		if items, accounts := record(t, client, 11, "m:2"); items != 2 || accounts != 1 {
+			t.Errorf("two messages of one account = %d items, %d accounts, want 2, 1", items, accounts)
+		}
+	})
+
+	t.Run("an album is one item", func(t *testing.T) {
+		_, client, _ := setup(t)
+		var items, accounts int
+		for id := int64(1); id <= 3; id++ {
+			msg := gotgbot.Message{MessageId: id, MediaGroupId: "album-9"}
+			if key := raidAIItemKey(&msg); key != "g:album-9" {
+				t.Fatalf("raidAIItemKey(album part %d) = %q, want g:album-9", id, key)
+			}
+			items, accounts = record(t, client, 11, raidAIItemKey(&msg))
+		}
+		if items != 1 || accounts != 1 {
+			t.Errorf("three photos of one album = %d items, %d accounts, want 1, 1", items, accounts)
+		}
+		if key := raidAIItemKey(&gotgbot.Message{MessageId: 42}); key != "m:42" {
+			t.Errorf("raidAIItemKey(plain message) = %q, want m:42", key)
+		}
+	})
+
+	t.Run("items older than the window are trimmed with their accounts", func(t *testing.T) {
+		server, client, now := setup(t)
+		record(t, client, 11, "m:1")
+		*now = now.Add(raidAIWindow + time.Second)
+
+		items, accounts := record(t, client, 12, "m:2")
+
+		if items != 1 || accounts != 1 {
+			t.Errorf("after the window = %d items, %d accounts, want only the new 1, 1", items, accounts)
+		}
+		if got := members(t, server, raidPartAIVerdicts); len(got) != 1 || got[0] != "m:2" {
+			t.Errorf("verdict items = %v, want [m:2]", got)
+		}
+		if got := members(t, server, raidPartAIAccounts); len(got) != 1 || got[0] != "12" {
+			t.Errorf("accounts = %v, want [12]", got)
+		}
+	})
+
+	t.Run("a repeated report does not move its account", func(t *testing.T) {
+		server, client, now := setup(t)
+		first := *now
+		record(t, client, 11, "m:1")
+		*now = now.Add(time.Minute)
+
+		record(t, client, 11, "m:1")
+
+		score, err := server.ZScore(raidKey(chatID, raidPartAIAccounts), "11")
+		if err != nil {
+			t.Fatalf("read the account's score: %v", err)
+		}
+		if int64(score) != first.UnixMilli() {
+			t.Errorf("account score = %d, want the first report's %d: a duplicate must not refresh it", int64(score), first.UnixMilli())
+		}
+
+		// A duplicate of an item that has aged out cannot bring its account back.
+		*now = first.Add(raidAIWindow + time.Second)
+		if items, accounts := record(t, client, 11, "m:1"); items != 0 || accounts != 0 {
+			t.Errorf("duplicate of an aged-out item = %d items, %d accounts, want 0, 0", items, accounts)
+		}
+	})
+
+	t.Run("the cap keeps the newest", func(t *testing.T) {
+		server, client, now := setup(t)
+		previous := raidAICap
+		raidAICap = 3
+		t.Cleanup(func() { raidAICap = previous })
+
+		for id := int64(1); id <= 5; id++ {
+			record(t, client, 100+id, fmt.Sprintf("m:%d", id))
+			*now = now.Add(time.Second)
+		}
+
+		if got := members(t, server, raidPartAIVerdicts); len(got) != 3 || got[0] != "m:3" || got[2] != "m:5" {
+			t.Errorf("verdict items = %v, want the newest 3 (m:3 to m:5)", got)
+		}
+		if got := members(t, server, raidPartAIAccounts); len(got) != 3 || got[0] != "103" || got[2] != "105" {
+			t.Errorf("accounts = %v, want the newest 3 (103 to 105)", got)
+		}
+	})
+
+	t.Run("both sets expire on their own", func(t *testing.T) {
+		server, client, _ := setup(t)
+		record(t, client, 11, "m:1")
+
+		for _, part := range []string{raidPartAIVerdicts, raidPartAIAccounts} {
+			ttl := server.TTL(raidKey(chatID, part))
+			if ttl < 4*time.Minute+30*time.Second || ttl > 5*time.Minute {
+				t.Errorf("TTL of %s = %s, want about 5 minutes", part, ttl)
+			}
+		}
+	})
+
+	t.Run("the rule", func(t *testing.T) {
+		for _, tc := range []struct {
+			items, accounts, threshold int
+			want                       bool
+		}{
+			{5, 3, 5, true},
+			{4, 3, 5, false},
+			{5, 2, 5, false},
+			{500, 3, 500, true},
+			{2, 3, 2, false},
+			{1, 9, 1, false},
+			{0, 0, 0, false},
+		} {
+			if got := raidAICounts(tc.items, tc.accounts, tc.threshold); got != tc.want {
+				t.Errorf("raidAICounts(%d items, %d accounts, threshold %d) = %v, want %v",
+					tc.items, tc.accounts, tc.threshold, got, tc.want)
 			}
 		}
 	})
