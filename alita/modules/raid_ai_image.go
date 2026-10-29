@@ -77,9 +77,10 @@ var (
 	// raidAIModelWarned makes the deprecated-model warning appear once per process.
 	raidAIModelWarned atomic.Bool
 
-	// raidAIImageFlight lets the jobs that carry one image (one file_unique_id) at the same
-	// moment share a single verdict step, so a flood of the same sticker costs one call even
-	// when the posts overlap and the cache holds nothing yet.
+	// raidAIImageFlight lets the jobs that carry one image (one file_unique_id) in one chat at
+	// the same moment share a single verdict step, so a flood of the same sticker costs one
+	// call even when the posts overlap and the cache holds nothing yet. Keyed by chat and
+	// file, so another chat never inherits a refusal that belongs to this one.
 	raidAIImageFlight singleflight.Group
 )
 
@@ -120,6 +121,10 @@ type raidAIImageResult struct {
 	probability float64
 	cached      bool
 	ok          bool
+	// refused is set when the step stopped before any Gemini call for a reason that belongs
+	// to this moment (a paused breaker, a budget refusal, a Redis error), so the rest of the
+	// image's album may still be judged.
+	refused bool
 }
 
 // raidAIProcessImage runs one image job. Before any Gemini call it passes, in order: the
@@ -151,14 +156,21 @@ func raidAIProcessImage(ctx context.Context, job raidAIJob) {
 		"media":      job.media.Kind,
 	}
 
-	if !raidAIAlbumFirst(redisClient, job) || !raidAINoFire(redisClient, job) {
+	if !raidAIAlbumFirst(redisClient, job) {
+		return
+	}
+	if !raidAINoFire(redisClient, job) {
+		raidAIAlbumRelease(redisClient, job)
 		return
 	}
 
 	var result raidAIImageResult
 	if uid := job.media.FileUniqueID; uid != "" {
 		leader := false
-		answer, _, _ := raidAIImageFlight.Do(uid, func() (any, error) {
+		// The flight is per chat: a follower in another chat must not inherit a leader's
+		// refusal (a capped or paused chat) when its own chat has budget.
+		flightKey := strconv.FormatInt(job.chat.Id, 10) + ":" + uid
+		answer, _, _ := raidAIImageFlight.Do(flightKey, func() (any, error) {
 			leader = true
 			return raidAIImageVerdict(ctx, client, redisClient, job, fields), nil
 		})
@@ -171,6 +183,9 @@ func raidAIProcessImage(ctx context.Context, job raidAIJob) {
 		result = raidAIImageVerdict(ctx, client, redisClient, job, fields)
 	}
 	if !result.ok {
+		if result.refused {
+			raidAIAlbumRelease(redisClient, job)
+		}
 		return
 	}
 	if result.cached {
@@ -212,6 +227,22 @@ func raidAIAlbumFirst(client *redis.Client, job raidAIJob) bool {
 		raidAICached.Add(1)
 	}
 	return first
+}
+
+// raidAIAlbumRelease gives the album's gate back after the photo that took it was refused for a
+// transient reason before any Gemini call, so the next photo of the album can be judged instead
+// of the whole album being dropped for the gate's 120 seconds. A photo outside an album has no
+// gate. Best effort: a failed delete leaves the gate to expire.
+func raidAIAlbumRelease(client *redis.Client, job raidAIJob) {
+	group, isAlbum := strings.CutPrefix(job.itemKey, "g:")
+	if !isAlbum {
+		return
+	}
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	if err := client.Del(ctx, raidKey(job.chat.Id, raidPartAIAlbum+":"+group)).Err(); err != nil {
+		log.Debugf("[RaidDetection] AI image album gate for chat %d could not be released: %v", job.chat.Id, err)
+	}
 }
 
 // raidAINoFire reports false while the chat's fire latch is set: a trigger just attempted a
@@ -320,7 +351,7 @@ func raidAIImageVerdict(
 		if err != nil {
 			raidAIShed.Add(1)
 			log.Debugf("[RaidDetection] AI image verdict cache read for chat %d failed, no verdict: %v", job.chat.Id, err)
-			return raidAIImageResult{}
+			return raidAIImageResult{refused: true}
 		}
 		if hit {
 			return raidAIImageResult{probability: probability, cached: true, ok: true}
@@ -329,10 +360,10 @@ func raidAIImageVerdict(
 	// The breakers come before the budget: a paused chat, or a paused provider, spends no unit.
 	if raidAIGeminiPaused(job.chat.Id) {
 		raidAIShed.Add(1)
-		return raidAIImageResult{}
+		return raidAIImageResult{refused: true}
 	}
 	if !raidAIReserveBudget(redisClient, job.chat.Id, job.userID) {
-		return raidAIImageResult{}
+		return raidAIImageResult{refused: true}
 	}
 
 	token := ""

@@ -280,7 +280,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the raid path anywhere else. It is Redis only, like the other raid counters.
 - The image checks' cost guards (`raid_ai_image.go`, D-20) keep five Redis key families, all outside the cache prefix.
   `alita:raid:{<chat>}:ag:<media_group_id>` is the album gate, `SET NX EX 120` (`raidAIAlbumGateTTL`): the first photo of
-  an album is judged and the others are dropped. `alita:raid:{<chat>}:ab:<yyyymmddhh>` and `alita:raid:aibudget:<yyyymmddhh>`
+  an album is judged and the others are dropped, except that a first photo refused for a reason of that moment before any
+  Gemini call (a paused breaker, a budget refusal, a Redis error, the fire latch) gives the gate back with `DEL`
+  (`raidAIAlbumRelease`), so the next photo of the album can still be judged; a photo that reached Gemini keeps it.
+  `alita:raid:{<chat>}:ab:<yyyymmddhh>` and `alita:raid:aibudget:<yyyymmddhh>`
   are the hourly budgets, 150 Gemini calls per group (`raidAIChatHourlyBudget`) and 500 in all
   (`raidAIGlobalHourlyBudget`), counted by `INCR` plus a 2 h expiry (`raidAIBudgetTTL`) in one transaction, the UTC hour
   from `raidNow`. In front of both sits the per-account budget `alita:raid:{<chat>}:abu:<user>:<yyyymmddhh>`, 20 calls
@@ -651,8 +654,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   dropped by the album gate or a check skipped for the latch (a Redis error counts as `Shed`). A cached verdict costs no
   budget and no provider call; it is judged against the same bar and counted as spam or kept like a fresh one, but it is
   not `Checked`, which counts only provider answers that carried a verdict. Jobs that carry one image at the same moment
-  share one verdict step (`raidAIImageFlight`, a singleflight keyed by `file_unique_id`), so overlapping posts of one
-  sticker make one call, the followers count as cached and they share its failure too. The join and flood triggers are
+  share one verdict step (`raidAIImageFlight`, a singleflight keyed by chat ID and `file_unique_id`), so overlapping
+  posts of one sticker in one chat make one call, the followers count as cached and they share its failure too. Another
+  chat never joins that flight, so it cannot inherit a refusal that belongs to the leader's chat; the verdict cache still
+  serves it afterwards. The join and flood triggers are
   not touched by any of this.
 - The image checks have their own Gemini breakers (`raid_ai_breaker.go`), checked after the verdict cache and before the
   budget, so a paused check spends no unit. Five Gemini failures in one chat pause that chat's image checks for 5 minutes

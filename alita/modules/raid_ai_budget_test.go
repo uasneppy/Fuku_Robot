@@ -3,8 +3,10 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -262,6 +264,89 @@ func TestRaidAIBudget(t *testing.T) {
 		}
 		if got := GetRaidAIStats().Cached - before.Cached; got != 9 {
 			t.Errorf("Cached grew by %d, want 9 (the other photos of the album)", got)
+		}
+	})
+
+	t.Run("an album photo refused for a moment does not drop the rest of the album", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		advance := movableClock(t)
+		withRaidAIGeminiCooldown(t, time.Minute)
+		member := env.newMembers(1, 2*time.Hour)[0]
+		for range raidAIGeminiFailures {
+			raidAIGeminiRecordFailure(env.chat.Id, errors.New("provider down"))
+		}
+		if !raidAIGeminiPaused(env.chat.Id) {
+			t.Fatal("the chat is not paused: the case would prove nothing")
+		}
+
+		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("alb-first"), MediaGroupId: "alb-retry"})
+		env.settleAI()
+		if got := env.geminiRequests(); got != 0 {
+			t.Fatalf("Gemini requests = %d while paused, want 0", got)
+		}
+
+		advance(2 * time.Minute)
+		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("alb-second"), MediaGroupId: "alb-retry"})
+		env.settleAI()
+
+		if got := env.geminiRequests(); got != 1 {
+			t.Errorf("Gemini requests = %d, want 1: the album was not judged because its first photo met a pause", got)
+		}
+	})
+
+	t.Run("an album is not judged twice once a photo reached Gemini", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		member := env.newMembers(1, 2*time.Hour)[0]
+		env.answerWith(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadRequest) })
+
+		for i := 0; i < 3; i++ {
+			env.sendMedia(member, gotgbot.Message{Photo: photoNamed(fmt.Sprintf("alb-fail%d", i)), MediaGroupId: "alb-fail"})
+			env.settleAI()
+		}
+
+		if got := env.geminiRequests(); got != 1 {
+			t.Errorf("Gemini requests = %d, want 1: the failing album costs its first photo's call only", got)
+		}
+	})
+
+	t.Run("a refusal in one chat is not inherited by another chat", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		other := env.addChat()
+		first := env.newMembers(1, 2*time.Hour)[0]
+		second := env.newJoiner("Elsewhere")
+		seedJoinedIn(t, other.Id, second.Id, time.Hour)
+		env.serve("files/stk", raidAIServed{status: http.StatusOK, body: raidAITestWebP("sticker")})
+		sticker := gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk-cross", Type: "regular"}}
+
+		release := make(chan struct{})
+		var releaseOnce sync.Once
+		open := func() { releaseOnce.Do(func() { close(release) }) }
+		// Opened on every exit, so a failed wait cannot leave the Gemini handler blocked.
+		t.Cleanup(open)
+		var calls atomic.Int64
+		env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
+			if calls.Add(1) == 1 {
+				<-release
+				// Not retried by the client, so the leader's one call fails for good.
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write([]byte(raidAIGeminiAnswer(0.9, "")))
+		})
+		before := GetRaidAIStats()
+
+		env.sendMedia(first, sticker)
+		waitUntil(t, 10*time.Second, "the first chat's call to reach Gemini", func() bool { return calls.Load() == 1 })
+		env.sendMediaIn(other, second, sticker)
+		waitUntil(t, 10*time.Second, "the other chat's own call to reach Gemini", func() bool { return calls.Load() == 2 })
+		open()
+		env.settleAI()
+
+		if got := GetRaidAIStats().Checked - before.Checked; got != 1 {
+			t.Errorf("Checked grew by %d, want 1: the other chat gets its own verdict, not the failed leader's", got)
+		}
+		if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
+			t.Errorf("verdict items of the first chat = %d, want 0 (its call failed)", got)
 		}
 	})
 
