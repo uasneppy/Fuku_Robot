@@ -356,7 +356,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the `CHECK` and cannot abort startup. The key `raid_detection:*` is listed in `skipLocal` (D-12), so another replica
   never serves it from the in-process layer after a change. A value the previous build cached has no AI fields and decodes
   with `ai_threshold` 0 (stored rows are never below 3), so `GetSettings` reads it as the AI defaults (on, at 5), never as
-  the trigger off. Writes are six column-targeted upserts, one per trigger
+  the trigger off. Rolling-deploy caveat (accepted, like the others here): the settings cache is shared in Redis, so an
+  old-build replica that reloads a chat's row after an admin ran `/autolockdown ai off` caches an entry without the AI
+  fields, and the new replicas read it as AI on until that entry expires (`cache.DefaultCacheTTL`, 30 minutes) or the
+  next write; a single-replica deploy is unaffected, and `/autolockdown ai off` run again after the deploy settles it.
+  Writes are six column-targeted upserts, one per trigger
   and kind (`SetJoinEnabled`, `SetJoinThreshold`, `SetFloodEnabled`, `SetFloodThreshold`, `SetAIEnabled`,
   `SetAIThreshold`; a threshold also turns its
   trigger on), each `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of only its own columns plus `updated_at` followed by
