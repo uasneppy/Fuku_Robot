@@ -49,14 +49,13 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ An automatic lockdown is exactly a `/lockdown` (same snapshot, join guard, worker, alert, buttons, reminders and lift), tagged `join_surge` or `flood` with its numbers. Triggers firing together, on any replica, give one lockdown and one alert, and stay quiet for 10 minutes after a lift; a group the bot cannot lock gets one daily warning in its Staff Group and log channel — Phase 6
 - ✓ `/autolockdown` shows both triggers to any live admin and turns each on or off or sets its threshold (3 to 500) for the owner or an admin with restrict rights, checked live; `/autoantiraid` is an alias for the join threshold — Phase 6
 - ✓ The old `/antiraid` raid mode is retired: its commands point to `/lockdown` and `/autolockdown`, nobody is temp-banned any more, its leftover Redis keys are swept at startup, and each group's old auto-threshold carried over to the join-surge setting (clamped to 3..500) — Phase 6
+- ✓ A burst of AI spam verdicts starts a lockdown on its own: 5 spam verdicts from at least 3 different accounts within 120 s by default, counted across replicas in Redis. `/aispam` delete verdicts feed it, and so do suspicious texts, photos, GIFs and stickers from members who joined in the last 24 h, checked off the update path (text by TypeSafe, images by Google Gemini when `GEMINI_API_KEY` is set). Ordinary messages and established members' messages are never sent to any AI — Phase 7
+- ✓ AI never decides alone and never blocks: one verdict, one account or a duplicate delivery never locks; a slow, failing, rate-limited, unreadable or unconfigured provider means no verdict; the join-surge and flood triggers keep working with every provider down; `ENABLE_AISPAM=false` stops it all; hourly spend caps (20 per account, 150 per group, 500 in all) bound the Gemini cost — Phase 7
+- ✓ `/autolockdown ai [N|on|off]` turns the AI trigger on or off and sets its threshold (3 to 500) with the same live authority and anonymous-admin proof as the other two triggers; the alert names "AI spam" and its count and lists the recent joiners behind it; the Gemini key and the Telegram file URL never reach a log or an error; a stdlib-only client and a spike tool for the owner's own accuracy, latency and cost run ship with it — Phase 7
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
-
-**Raid protection (second)**
-- [ ] A lockdown can also be triggered by a burst of AI spam verdicts (manual `/lockdown` shipped in Phase 4; join-surge and flood triggers shipped in Phase 6).
-- [ ] AI only assists the rule-based detection, by classifying borderline text (TypeSafe) and images, GIFs and stickers (Gemini); rules decide when to lock.
 
 **Web captcha (third)**
 - [ ] New members verify through Cloudflare Turnstile on a Telegram Mini App page the bot hosts, with server-side token verification.
@@ -119,7 +118,7 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Every action hits all linked groups | That is the core value; per-group targeting adds complexity without demand | ✓ Shipped — Phase 2 |
 | Only a person who owns both groups can link them; one Staff Group per group; auto-unlink on ownership change | Strongest guarantee that a Staff Group can't gain control of a group it shouldn't | ✓ Shipped — Phase 1 |
 | Lockdown = kick joiners + mute all except admins and approved users; admin-only manual lift | Stops a raid immediately and leaves the "safe again" call to a human | ⚠️ Revised — Phase 4: approved users are muted too (Telegram has no per-user exception to a locked default, spike 1, D-01/D-02); joiners are banned until the lift instead of kicked; the manual lift shipped |
-| Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | ✓ Rules shipped — Phase 6 (join surge, flood); AI assist is Phase 7 |
+| Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | ✓ Shipped — Phases 6 and 7 (join surge, flood, AI burst; AI only adds to a count) |
 | Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | — Pending |
 | `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | ✓ Panel shipped — Phase 1; menu fold-in Phase 9 |
 | Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | — Pending |
@@ -128,7 +127,7 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Undo-everywhere button and a recent-actions list in `/staff` are in v1, backed by an audit record | Mistakes are reversible and accountable | ✓ Shipped — Phase 3 (live UAT passed) |
 | Old `/antiraid` is retired; its auto-threshold carries over to join-surge detection | One raid system, not two | ✓ Shipped — Phase 6 (carry-over clamped to 3..500, D-18/D-22) |
 | Auto-triggers are on by default with conservative thresholds | Protection from day one; admins tune or disable per group | ✓ Shipped — Phase 6 (15 joins in 60 s; 30 items in 30 s); live tuning in real groups still to be checked |
-| Images are classified by Gemini `gemini-3.5-flash-lite` (owner's key); text stays on TypeSafe | Owner's choice of provider; TypeSafe is text-only | — Pending |
+| Images are classified by Gemini `gemini-3.5-flash-lite` (owner's key); text stays on TypeSafe | Owner's choice of provider; TypeSafe is text-only | ✓ Shipped — Phase 7 (REST client, no new dependency); accuracy, latency and cost not yet measured, the owner runs the spike kit with a paid-tier key |
 | Turnstile captcha is one solve only; math and text modes stay as fallbacks | Owner's call; fallbacks cover Cloudflare or hosting outages | — Pending |
 | `/settings` asks whether to open in the group or in private | GroupHelp-style choice | — Pending |
 | Multiple replicas: pacing, counters, challenges and lockdown state are shared, not per process | That's how the bot is deployed | ✓ Pacing and the per-target lock are shared through Redis — Phase 2; counters, challenges and lockdown state come later |
@@ -160,6 +159,10 @@ My trusted staff can protect every one of my communities from one place. We act 
 | The flood counter is two watchers: group `-4` counts everything but slash-prefixed texts, group `12` counts the slash texts no command took | A handled command ends the update, so the dispatcher itself says which commands the bot handles, with no second command list | ✓ Good — Phase 6 (review WR-01, no reflection) |
 | Notices and the "cannot lock" warning are sent from recovered, drained goroutines; the lock itself stays synchronous | A slow pacer slot must not hold the join guard or the message pipeline | ✓ Good — Phase 6 (review WR-03, `StopRaidPosts` drain) |
 | A flood lockdown saves the flooders as its alert burst; the settings table carries no backup/export/import | Flooders who joined hours before the lock must be on the alert and in "Ban N recent joiners"; owner kept the new settings out of backups for now | ✓ Good — Phase 6 (D-17, D-20) |
+| The Gemini spike gate is deferred; the phase ships a spike kit (`scripts/gemini-spike/`, `07-SPIKE.md`) instead and `/gsd-ai-integration-phase` is not run | The spike needs the owner's key; the client is plain REST behind constants (0.85 bar, model id, thumbnails) the owner tunes from real results | ✓ Good — Phase 7 (owner's choice, "plan now, spike later") |
+| The raid AI path has its own bounded pool, breakers, budgets and verdict cache, apart from `/aispam`'s queue | A 100-image raid must not shed real `/aispam` moderation, and an image flood must not burn the owner's Gemini quota | ✓ Good — Phase 7 (D-18, D-20; review WR-01 added the per-account cap) |
+| The AI burst lists recent joiners only; established members' `/aispam` verdicts still count toward the threshold | "Ban N recent joiners" must never offer an established member | ✓ Good — Phase 7 (review WR-04) |
+| `ENABLE_AISPAM=false` is the one global switch for all AI checks, text and images; no key means no outbound call | The owner must be able to stop every AI call with one setting | ✓ Good — Phase 7 (review WR-02) |
 
 ## Evolution
 
@@ -179,4 +182,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-29 after Phase 6*
+*Last updated: 2026-10-29 after Phase 7*

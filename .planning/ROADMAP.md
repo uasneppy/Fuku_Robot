@@ -28,7 +28,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Manual Lockdown** - `/lockdown` removes joiners and mutes non-admins in one group; `/unlockdown` restores its permissions exactly (completed 2026-10-08)
 - [x] **Phase 5: Lockdown Alerts and Response** - Each lockdown alerts the Staff Group and log channel with Lift, "Ban N recent joiners" and "Revoke link" buttons (completed 2026-10-18)
 - [x] **Phase 6: Automatic Raid Detection** - Join surges and new-member floods lock a group automatically; the old `/antiraid` is retired (completed 2026-10-29)
-- [ ] **Phase 7: AI-Assisted Raid Detection** - TypeSafe (text) and Gemini (images) spam verdicts feed a burst trigger, while rules still decide
+- [x] **Phase 7: AI-Assisted Raid Detection** - TypeSafe (text) and Gemini (images) spam verdicts feed a burst trigger, while rules still decide (completed 2026-10-29)
 - [ ] **Phase 8: Turnstile Web Captcha** - New members verify through Cloudflare Turnstile in a bot-hosted Telegram Mini App
 - [ ] **Phase 9: Settings Menu** - `/settings` opens an inline-button menu with Staff Group, Lockdown, Captcha and Antiflood pages
 
@@ -324,7 +324,7 @@ Plans:
   3. AI never decides a lockdown alone. A single verdict doesn't lock a group. If an AI provider is slow, down or not configured, the rule-based triggers keep working and nothing waits on AI.
   4. The Gemini API key never appears in logs, including errors and debug output.
 
-**Plans:** 14/14 plans executed
+**Plans:** 14/14 plans complete
 
 Plans:
 **Wave 1**
@@ -407,6 +407,6 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
-| 7. AI-Assisted Raid Detection | 14/14 | In Progress|  |
+| 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
 | 8. Turnstile Web Captcha | 0/TBD | Not started | - |
 | 9. Settings Menu | 0/TBD | Not started | - |

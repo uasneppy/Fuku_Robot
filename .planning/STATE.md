@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 7
-current_phase_name: AI-Assisted Raid Detection
-status: executing
-stopped_at: Phase 6 complete, ready to plan Phase 7
-last_updated: "2026-10-29T17:33:20.737Z"
+current_phase: 8
+current_phase_name: Turnstile Web Captcha
+status: planning
+stopped_at: Phase 7 complete, ready to plan Phase 8
+last_updated: "2026-10-29T22:26:11.302Z"
 last_activity: 2026-10-29
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: 340ce8ebe2210e9da2d6517bc45980bb1616da28
+last_activity_desc: Phase 7 complete, transitioned to Phase 8
+state_head: 149a1c51b0223812c899a52f8edcd51262a7d5f6
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 81
-  completed_plans: 67
-  percent: 67
+  completed_plans: 81
+  percent: 78
 ---
 
 # Project State
@@ -27,17 +27,17 @@ See: .planning/PROJECT.md (updated 2026-10-18)
 
 ## Current Position
 
-Phase: 7 (AI-Assisted Raid Detection) — READY TO EXECUTE
+Phase: 8 — Turnstile Web Captcha
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-29 — Phase 6 complete, transitioned to Phase 7
+Status: Ready to plan
+Last activity: 2026-10-29 — Phase 7 complete, transitioned to Phase 8
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 67
+- Total plans completed: 81
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -51,6 +51,7 @@ Progress: [███████░░░] 67%
 | 04 | 8 | - | - |
 | 5 | 14 | - | - |
 | 6 | 13 | - | - |
+| 7 | 14 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -99,6 +100,8 @@ Recent decisions affecting current work:
 - [Phase 5]: "Ban N recent joiners" bans are permanent and resumable (`chat_lockdown_ban_runs`, result delivery since migration 20261011160000); the lift keeps them.
 - [Phase 6]: Automatic triggers call `startLockdownRow`, the start path `/lockdown` uses; one lockdown and one alert come from the PostgreSQL index and conditional writes, never from the Redis latch. Settings live in `chat_raid_detection` (`raiddetection.GetSettings`, listed in `skipLocal`). Phase 7's AI-verdict trigger should add its own counter and setting beside the join and flood ones, and fire through `raidFire`.
 - [Phase 6]: The flood counter is two watchers (group `-4` and group `12`) sharing `raidFloodCountUpdate`; group `12` must stay after every other handler group. The old `/antiraid` mode is a pointer command and `alita:antiraid:*` keys are swept at startup.
+- [Phase 7]: AI verdicts only add to a Redis count (`raidAIRecordVerdict`, items `:av`, accounts `:aa`); the rule (threshold from at least 3 accounts in 120 s) fires `raidFire` with `ai_burst`, off the worker on its own goroutine. Settings are the `ai_enabled`/`ai_threshold` columns of `chat_raid_detection`. The candidate watcher is handler group 2; the raid AI pool, its budgets, breakers and the `StopRaidAI` drain are separate from `/aispam`. Phase 8 must register the Turnstile secret with `logredact.RegisterSecret` (the Turnstile half of PLAT-02) and keep new handler groups below 12.
+- [Phase 7]: The Gemini client (`alita/utils/gemini`) is stdlib-only so tools can import it without the pre-main database connection; the key travels only in the `x-goog-api-key` header. The spike tool (`scripts/gemini-spike/`) is the owner's way to measure accuracy, latency and cost.
 
 ### Pending Todos
 
@@ -106,7 +109,8 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 7]: Spike gate. Evaluate Gemini on spam images, GIFs and stickers, then run `/gsd-ai-integration-phase`.
+- [Phase 7]: The owner accepted the seven live checks without running them ("All good, continue"): the Gemini spike with a paid-tier key (the 0.85 image bar, the GIF/video thumbnail choice, the model id, latency, cost, safety-block rate), a real AI burst, two replicas, `make test-postgres-integrity` for the new `ai_threshold` CHECK, a native-speaker read of the translations (the es, pt and id help paragraphs were shortened; pt has 26 units of headroom against Telegram's 4096), a live log grep for the Gemini key and bot token, and `make lint` on Go 1.26. Code review WR-01..WR-05 and IN-01..IN-09 were all fixed (`07-REVIEW-FIX.md`).
+- [Phase 7]: Accepted limit: a follower of a shared image verdict inherits the leader's refusal only within one chat; overlap across replicas is covered only once a verdict is cached. A rolling deploy can make an `ai off` setting read as on for up to 30 minutes (documented in AGENTS.md).
 - [Phase 8]: Spike gate. Test Direct Link Mini App launch from a group, and Turnstile rendering in Telegram WebViews. The owner must provide a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
 - [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
 - [Phase 1]: 10 of 11 live-Telegram UAT checks were deferred without being run (`phases/01-staff-group-links/01-UAT.md` Deferred Follow-Ups). CI had not run on PR #1 at phase close; the PostgreSQL trigger test passed locally against PostgreSQL 16.
@@ -145,5 +149,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-10-18T05:45:00.000Z
-Stopped at: Phase 6 complete, ready to plan Phase 7
+Stopped at: Phase 7 complete, ready to plan Phase 8
 Resume file: None

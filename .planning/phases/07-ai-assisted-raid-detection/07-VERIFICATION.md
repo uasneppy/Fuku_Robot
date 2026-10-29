@@ -1,7 +1,7 @@
 ---
 phase: 07-ai-assisted-raid-detection
 verified: 2026-10-29T22:30:00Z
-status: human_needed
+status: passed
 score: 4/4 must-haves verified
 covered_files:
   - .planning/phases/07-ai-assisted-raid-detection/07-01-PLAN.md
@@ -90,7 +90,7 @@ human_verification:
 
 **Phase Goal:** As a group admin, I want to have AI flag borderline spam text and images, so that subtler raids still trigger a lockdown.
 **Verified:** 2026-10-29
-**Status:** human_needed
+**Status:** passed (live checks deferred by the owner)
 **Re-verification:** No, initial verification
 
 All four ROADMAP success criteria hold in the code and in tests I ran myself. Nothing is FAILED. The status is `human_needed` only because the live checks (a real Gemini call with the owner's key, a real AI burst, two replicas, PostgreSQL CI, a native-speaker read of the translations, `make lint`) cannot run in this environment.
@@ -211,6 +211,17 @@ No gaps. Notes for the owner:
 - In a group that has switched `/aispam` on, `/aispam` already sends every message to TypeSafe; that is existing opt-in behaviour (D-03) and is unchanged. The new raid path sends nothing extra to any AI in such a group, and elsewhere it sends only a new member's suspicious item.
 - The image bar of 0.85, the thumbnail choice for GIFs and video stickers, and the model were never measured against Google (the spike was deferred by the owner, D-17). The kit and `07-SPIKE.md` are the way to do it.
 - Rolling-deploy caveat (documented in AGENTS.md): an old-build replica can re-cache a settings row without the AI fields, so `/autolockdown ai off` may read as on on new replicas for up to 30 minutes in a mixed fleet.
+
+## Human Verification Outcome
+
+On 2026-10-29 the owner reviewed the seven `human_verification` items above and answered "All good, continue". The status moved from `human_needed` to `passed` on that basis. The seven checks were not run: they need the owner's Gemini key, a live Telegram bot and groups, two replicas, PostgreSQL and a Go 1.26 linter, none of which exist in this environment. They stay open as deferred live checks:
+
+- the Gemini spike with a paid-tier key (`07-SPIKE.md`): the 0.85 image bar, the thumbnail choice for GIFs and video stickers, the model id, latency, cost and the safety-block rate;
+- a real AI burst in a Telegram supergroup, and two replicas sharing one burst;
+- `make test-postgres-integrity` in CI, which runs `TestRaidDetectionSettings` with the new AI `CHECK` and the migration chain;
+- a native-speaker read of the six non-English translations (the es, pt and id help paragraphs were shortened to fit Telegram's limit);
+- a live grep of the debug log for the Gemini key and the bot token;
+- `make lint` on a Go 1.26 toolchain.
 
 ---
 

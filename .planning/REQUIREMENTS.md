@@ -80,9 +80,9 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 - [x] **RAID-01**: A burst of joins within a short window automatically triggers a lockdown.
 - [x] **RAID-02**: A burst of messages, photos, GIFs or stickers, mostly from recently joined members, automatically triggers a lockdown.
-- [ ] **RAID-03**: A burst of AI spam verdicts within a short window automatically triggers a lockdown.
-- [ ] **RAID-04**: Borderline text is classified with the existing TypeSafe AI check. Borderline photos, GIFs and stickers are classified with Gemini (`gemini-3.5-flash-lite`, owner-provided key).
-- [ ] **RAID-05**: Rules, not AI, decide when to lock. AI verdicts only feed the counters in RAID-03.
+- [x] **RAID-03**: A burst of AI spam verdicts within a short window automatically triggers a lockdown.
+- [x] **RAID-04**: Borderline text is classified with the existing TypeSafe AI check. Borderline photos, GIFs and stickers are classified with Gemini (`gemini-3.5-flash-lite`, owner-provided key).
+- [x] **RAID-05**: Rules, not AI, decide when to lock. AI verdicts only feed the counters in RAID-03.
 - [x] **RAID-06**: Automatic triggers are on by default in every group, with conservative thresholds. An admin can turn each one off or tune its threshold.
 - [x] **RAID-07**: Admins and approved users never count toward detection.
 
@@ -111,7 +111,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 ### Platform
 
 - [x] **PLAT-01**: Everything works with several bot replicas running at once. Fan-out pacing, detection counters, captcha challenges and lockdown state are shared, not per process.
-- [ ] **PLAT-02**: New secrets (Turnstile secret key, Gemini API key) never appear in logs.
+- [x] **PLAT-02**: New secrets (Turnstile secret key, Gemini API key) never appear in logs.
 - [x] **PLAT-03**: Every new message and button label exists in all 7 languages.
 - [ ] **PLAT-04**: The deployment steps for the captcha page are documented: public HTTPS hostname, BotFather Mini App registration, Turnstile keys.
 
@@ -208,9 +208,9 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | LOCK-15 | Phase 6 | Complete |
 | RAID-01 | Phase 6 | Complete |
 | RAID-02 | Phase 6 | Complete |
-| RAID-03 | Phase 7 | Pending |
-| RAID-04 | Phase 7 | Pending |
-| RAID-05 | Phase 7 | Pending |
+| RAID-03 | Phase 7 | Complete |
+| RAID-04 | Phase 7 | Complete |
+| RAID-05 | Phase 7 | Complete |
 | RAID-06 | Phase 6 | Complete |
 | RAID-07 | Phase 6 | Complete |
 | CAPT-01 | Phase 8 | Pending |
@@ -230,7 +230,7 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | MENU-07 | Phase 9 | Pending |
 | MENU-08 | Phase 9 | Pending |
 | PLAT-01 | Phase 2 | Complete |
-| PLAT-02 | Phase 7 | Pending |
+| PLAT-02 | Phase 7 | Complete |
 | PLAT-03 | Phase 1 | Complete |
 | PLAT-04 | Phase 8 | Pending |
 

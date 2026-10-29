@@ -36,7 +36,7 @@
     {
       "number": "7",
       "name": "AI-Assisted Raid Detection",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "8",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 7 of 9 · 67% · executing"
+    "label": "Advance to the next step (plan phase 8)",
+    "reason": "Phase 8 of 9 — needs a plan"
   },
-  "updated_at": "2026-10-29T17:33:20.753Z"
+  "updated_at": "2026-10-29T22:26:11.330Z"
 }
