@@ -318,6 +318,11 @@ func raidAIImageVerdict(
 			return raidAIImageResult{probability: probability, cached: true, ok: true}
 		}
 	}
+	// The breakers come before the budget: a paused chat, or a paused provider, spends no unit.
+	if raidAIGeminiPaused(job.chat.Id) {
+		raidAIShed.Add(1)
+		return raidAIImageResult{}
+	}
 	if !raidAIReserveBudget(redisClient, job.chat.Id) {
 		return raidAIImageResult{}
 	}
@@ -346,9 +351,12 @@ func raidAIImageVerdict(
 			// Cut off by the shutdown drain: no verdict, and not the provider's failure.
 			raidAIShed.Add(1)
 		case errors.Is(err, gemini.ErrBlocked):
+			// The provider answered: a refusal to judge this image is not an outage.
+			raidAIGeminiRecordSuccess(job.chat.Id)
 			raidAIBlocked.Add(1)
 			log.WithFields(fields).Info("[RaidDetection] AI image check blocked by the provider's safety filters, no verdict")
 		default:
+			raidAIGeminiRecordFailure(job.chat.Id, err)
 			raidAIFailed.Add(1)
 			entry := log.WithFields(fields)
 			var httpErr *gemini.HTTPError
@@ -360,6 +368,7 @@ func raidAIImageVerdict(
 		}
 		return raidAIImageResult{}
 	}
+	raidAIGeminiRecordSuccess(job.chat.Id)
 	raidAIChecked.Add(1)
 	raidAIWarnModelStage(verdict)
 	if uid != "" {

@@ -631,6 +631,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   share one verdict step (`raidAIImageFlight`, a singleflight keyed by `file_unique_id`), so overlapping posts of one
   sticker make one call, the followers count as cached and they share its failure too. The join and flood triggers are
   not touched by any of this.
+- The image checks have their own Gemini breakers (`raid_ai_breaker.go`), checked after the verdict cache and before the
+  budget, so a paused check spends no unit. Five Gemini failures in one chat pause that chat's image checks for 5 minutes
+  (`raidAIGeminiFailures`, `raidAIGeminiCooldown`); a success clears the count. A provider-wide pause stops every chat's
+  image checks: a rejected key (`gemini.HTTPError.KeyRejected()`) pauses all chats for 5 minutes (`raidAIGeminiKeyPause`),
+  and a 429 whose `RetryDelay` is over 2 s pauses all chats for that delay, at most 5 minutes (the Gemini client itself
+  retries a shorter wait once and drops a longer one). Each pause logs one warning naming its reason (status and status
+  word only) and its end, and none posts anything: a paused check is `Shed`. Only Gemini answers count; a `getFile` or
+  download failure never does, and a safety block counts as an answer, not a failure. The breaker clock is `raidNow`. The
+  raid-only TypeSafe text checks keep sharing `/aispam`'s per-chat breaker silently and never touch these.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`

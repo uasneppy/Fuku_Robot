@@ -107,6 +107,8 @@ type raidAIImageEnv struct {
 func newRaidAIImageEnv(t *testing.T) *raidAIImageEnv {
 	t.Helper()
 	env := &raidAIImageEnv{lockdownEnv: newRaidAIEnv(t), served: make(map[string]raidAIServed)}
+	// Breaker state is process-wide: a test that makes Gemini fail must not pause the next.
+	resetRaidAIGeminiBreakers(t)
 
 	previousKey, previousModel := config.AppConfig.GeminiAPIKey, config.AppConfig.GeminiModel
 	config.AppConfig.GeminiAPIKey = raidAITestKey
