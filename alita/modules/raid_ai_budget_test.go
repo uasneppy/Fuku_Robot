@@ -33,6 +33,14 @@ func withRaidAIBudgets(t *testing.T, perChat, total int64) {
 	t.Cleanup(func() { raidAIChatHourlyBudget, raidAIGlobalHourlyBudget = previousChat, previousTotal })
 }
 
+// withRaidAIUserBudget sets the hourly per-account budget for the test and restores it when it ends.
+func withRaidAIUserBudget(t *testing.T, perAccount int64) {
+	t.Helper()
+	previous := raidAIUserHourlyBudget
+	raidAIUserHourlyBudget = perAccount
+	t.Cleanup(func() { raidAIUserHourlyBudget = previous })
+}
+
 // movableClock makes raidNow a clock the test can move forward, starting at the real time.
 func movableClock(t *testing.T) (advance func(time.Duration)) {
 	t.Helper()
@@ -97,6 +105,61 @@ func TestRaidAIBudget(t *testing.T) {
 		}
 		if got := GetRaidAIStats().Capped - before.Capped; got != 1 {
 			t.Errorf("Capped grew by %d, want 1", got)
+		}
+	})
+
+	t.Run("one account cannot exhaust the group or the fleet budget", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		const perAccount, distinctPhotos = 4, 12
+		withRaidAIUserBudget(t, perAccount)
+		withRaidAIBudgets(t, 10, 10)
+		spammer, bystander := env.newMembers(2, 2*time.Hour)[0], env.newJoiner("Bystander")
+		seedJoinedIn(t, env.chat.Id, bystander.Id, time.Hour)
+		before := GetRaidAIStats()
+
+		for i := 0; i < distinctPhotos; i++ {
+			env.sendMedia(spammer, gotgbot.Message{Photo: photoNamed(fmt.Sprintf("flood%d", i))})
+			env.settleAI()
+		}
+
+		if got := env.geminiRequests(); got != perAccount {
+			t.Fatalf("Gemini requests = %d, want %d: one account's cap", got, perAccount)
+		}
+		if got := GetRaidAIStats().Capped - before.Capped; got != distinctPhotos-perAccount {
+			t.Errorf("Capped grew by %d, want %d", got, distinctPhotos-perAccount)
+		}
+		stamp := raidAIHourStamp(raidNow())
+		for _, shared := range []string{raidKey(env.chat.Id, raidPartAIBudget+":"+stamp), raidAIGlobalBudgetPrefix + stamp} {
+			if got, err := env.redis.Get(shared); err != nil || got != fmt.Sprint(perAccount) {
+				t.Errorf("shared budget %q = %q (error %v), want %d: an account over its cap spends no shared unit", shared, got, err, perAccount)
+			}
+		}
+
+		env.sendMedia(bystander, gotgbot.Message{Photo: photoNamed("bystander")})
+		env.settleAI()
+		if got := env.geminiRequests(); got != perAccount+1 {
+			t.Errorf("Gemini requests = %d, want %d: another member's photo is still judged", got, perAccount+1)
+		}
+	})
+
+	t.Run("a cached verdict spends none of the account's budget", func(t *testing.T) {
+		env := newRaidAIImageEnv(t)
+		withRaidAIUserBudget(t, 1)
+		member := env.newMembers(1, 2*time.Hour)[0]
+		env.serve("files/stk", raidAIServed{status: http.StatusOK, body: raidAITestWebP("sticker")})
+		sticker := gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk-user", Type: "regular"}}
+		before := GetRaidAIStats()
+
+		for i := 0; i < 4; i++ {
+			env.sendMedia(member, sticker)
+			env.settleAI()
+		}
+
+		if got := env.geminiRequests(); got != 1 {
+			t.Errorf("Gemini requests = %d, want 1 for one image posted four times", got)
+		}
+		if got := GetRaidAIStats().Capped - before.Capped; got != 0 {
+			t.Errorf("Capped grew by %d, want 0: the cache answers before any budget", got)
 		}
 	})
 

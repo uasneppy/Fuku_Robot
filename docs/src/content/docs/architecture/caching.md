@@ -64,7 +64,7 @@ Disposable snapshots use `alita:cache:`. Operational state uses its existing `al
 | `alita:raid:{chatId}:aispammers` | Snapshot of the accounts behind the counted AI verdicts saved for the lockdown alert (15 min TTL) |
 | `alita:raid:{chatId}:ar:{userId}` | Repeat test of the raid AI candidate watcher: short hashes of a new member's last 5 texts, never the text itself (1 h TTL) |
 | `alita:raid:{chatId}:ag:{mediaGroupId}` | Album gate: only the first photo of an album is judged (120 s) |
-| `alita:raid:{chatId}:ab:{hour}` and `alita:raid:aibudget:{hour}` | Hourly Gemini image budgets, 150 calls per group and 500 in all, counted per UTC hour (2 h TTL) |
+| `alita:raid:{chatId}:abu:{userId}:{hour}`, `alita:raid:{chatId}:ab:{hour}` and `alita:raid:aibudget:{hour}` | Hourly Gemini image budgets, 20 calls per account in a group, 150 per group and 500 in all, counted per UTC hour (2 h TTL) |
 | `alita:raid:aiv:{fileUniqueId}` | Cached Gemini verdict for one image, so the same file is not sent twice (1 h TTL) |
 | `alita:raid:{chatId}:warn` | Once-a-day gate for the "raid detected but I can't lock this group" warning (24 h) |
 | `alita:cache:locks_map:{chatId}` | Lock status (1 hour TTL, from optimized queries) |

@@ -101,7 +101,7 @@ separate from the opt-in filter above, and the two work together:
   Gemini. Only the image itself (for a GIF or video, Telegram's preview picture)
   and a fixed instruction are sent: no caption, name, username, user ID or chat
   information. A verdict counts only at 0.85 or higher, and the checks are
-  limited to 150 per group and 500 for all groups per hour.
+  limited to 20 per member, 150 per group and 500 for all groups per hour.
 - **Nothing is sent without the keys.** Without `GEMINI_API_KEY` no image
   leaves the server. Without `TYPESAFE_API_KEY` no text is sent for the raid
   checks. With `ENABLE_AISPAM` off nothing is sent at all, no text and no image. Without Redis the trigger does nothing.

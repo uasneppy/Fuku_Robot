@@ -278,12 +278,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   sender is new (`:joined` scores them within 24 h) and whether the hash is one of their last few, and records the
   hash for a new member only, so an established member leaves no key. Raw message text is never stored, here or by
   the raid path anywhere else. It is Redis only, like the other raid counters.
-- The image checks' cost guards (`raid_ai_image.go`, D-20) keep four Redis key families, all outside the cache prefix.
+- The image checks' cost guards (`raid_ai_image.go`, D-20) keep five Redis key families, all outside the cache prefix.
   `alita:raid:{<chat>}:ag:<media_group_id>` is the album gate, `SET NX EX 120` (`raidAIAlbumGateTTL`): the first photo of
   an album is judged and the others are dropped. `alita:raid:{<chat>}:ab:<yyyymmddhh>` and `alita:raid:aibudget:<yyyymmddhh>`
   are the hourly budgets, 150 Gemini calls per group (`raidAIChatHourlyBudget`) and 500 in all
   (`raidAIGlobalHourlyBudget`), counted by `INCR` plus a 2 h expiry (`raidAIBudgetTTL`) in one transaction, the UTC hour
-  from `raidNow`. `alita:raid:aiv:<file_unique_id>` is the verdict cache: the probability as a decimal string, `SET EX
+  from `raidNow`. In front of both sits the per-account budget `alita:raid:{<chat>}:abu:<user>:<yyyymmddhh>`, 20 calls
+  per account per group per hour (`raidAIUserHourlyBudget`), counted the same way and reserved first: an account that
+  is over it is `Capped` and spends neither shared unit, so one fresh account posting distinct photos can neither empty
+  its group's 150 nor the fleet's 500 (WR-01). A cached verdict is answered before any budget and spends none. `alita:raid:aiv:<file_unique_id>` is the verdict cache: the probability as a decimal string, `SET EX
   3600` (`raidAIVerdictCacheTTL`), written only after a verdict (never for a failure or a block). The budget is reserved
   before the download, so a failed call still spends its unit; a group over its own budget never spends the fleet's. The
   two budgets are package variables only so a test can make them small. A Redis error on any of these keys is no verdict:

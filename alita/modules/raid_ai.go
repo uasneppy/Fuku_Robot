@@ -403,8 +403,8 @@ type RaidAIStats struct {
 	// verdict and is counted apart from Failed, so an owner can see how many images the
 	// filters keep from the check.
 	Blocked int64
-	// Capped is the image checks an hourly Gemini budget refused (150 per group, 500 in all).
-	// A capped check is no verdict and costs nothing.
+	// Capped is the image checks an hourly Gemini budget refused (20 per account in a group,
+	// 150 per group, 500 in all). A capped check is no verdict and costs nothing.
 	Capped int64
 	// Cached is the image checks that needed no Gemini call: the image's verdict was cached,
 	// the photo belonged to an album already judged, or a lockdown was being started.

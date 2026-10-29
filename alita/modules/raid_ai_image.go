@@ -37,6 +37,9 @@ const (
 	raidPartAIAlbum = "ag"
 	// raidPartAIBudget starts the key of a chat's hourly budget; the hour stamp follows.
 	raidPartAIBudget = "ab"
+	// raidPartAIUserBudget starts the key of one account's hourly budget in one chat; the user
+	// ID and the hour stamp follow (alita:raid:{<chat>}:abu:<user>:<hour>).
+	raidPartAIUserBudget = "abu"
 	// raidAIGlobalBudgetPrefix is the key prefix of the all-groups hourly budget; the hour stamp follows.
 	raidAIGlobalBudgetPrefix = "alita:raid:aibudget:"
 	// raidAIVerdictCachePrefix is the key prefix of a cached verdict; Telegram's file_unique_id follows.
@@ -51,8 +54,11 @@ const (
 )
 
 // The hourly Gemini budgets (D-20): code constants, held in variables only so a test can make
-// them small. Production code never reassigns them.
+// them small. Production code never reassigns them. The per-account budget sits in front of
+// the two shared ones (WR-01): one account posting distinct photos spends its own 20 units
+// and then nothing else, so it can neither empty its group's 150 nor the fleet's 500.
 var (
+	raidAIUserHourlyBudget   int64 = 20
 	raidAIChatHourlyBudget   int64 = 150
 	raidAIGlobalHourlyBudget int64 = 500
 )
@@ -119,7 +125,7 @@ type raidAIImageResult struct {
 // raidAIProcessImage runs one image job. Before any Gemini call it passes, in order: the
 // album gate (an album is judged once), the fire-latch skip (a lockdown was just attempted, so
 // more checks are wasted), the verdict cache (one image is judged once an hour), the budgets
-// (150 calls per group and 500 in all per hour, D-20), and only then the download and the
+// (20 calls per account, 150 per group and 500 in all per hour, D-20), and only then the download and the
 // call. Every refusal is no verdict and is counted, and a Redis error on any guard sends
 // nothing. ctx derives from the pool's context, so the shutdown drain aborts both the
 // download and the call; a check cut off that way is no verdict and not a provider failure.
@@ -272,15 +278,17 @@ func raidAIBudgetTake(client *redis.Client, key string, limit int64) (bool, erro
 	return count.Val() <= limit, nil
 }
 
-// raidAIReserveBudget takes one unit of the chat's hourly budget and then one of the fleet's.
-// A refusal counts as capped and a Redis error as shed; both are no verdict. A chat over its
-// own budget never spends the fleet's.
-func raidAIReserveBudget(client *redis.Client, chatID int64) bool {
+// raidAIReserveBudget takes one unit of the account's hourly budget in this chat, then one of
+// the chat's, then one of the fleet's, each with the same atomic INCR+EXPIRE. A refusal counts
+// as capped and a Redis error as shed; both are no verdict. An account over its own budget
+// spends neither shared unit, and a chat over its own never spends the fleet's.
+func raidAIReserveBudget(client *redis.Client, chatID, userID int64) bool {
 	stamp := raidAIHourStamp(raidNow())
 	budgets := []struct {
 		key   string
 		limit int64
 	}{
+		{raidKey(chatID, raidPartAIUserBudget+":"+strconv.FormatInt(userID, 10)+":"+stamp), raidAIUserHourlyBudget},
 		{raidKey(chatID, raidPartAIBudget+":"+stamp), raidAIChatHourlyBudget},
 		{raidAIGlobalBudgetPrefix + stamp, raidAIGlobalHourlyBudget},
 	}
@@ -323,7 +331,7 @@ func raidAIImageVerdict(
 		raidAIShed.Add(1)
 		return raidAIImageResult{}
 	}
-	if !raidAIReserveBudget(redisClient, job.chat.Id) {
+	if !raidAIReserveBudget(redisClient, job.chat.Id, job.userID) {
 		return raidAIImageResult{}
 	}
 
