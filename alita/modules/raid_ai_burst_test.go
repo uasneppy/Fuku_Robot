@@ -10,11 +10,13 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/aispam"
+	"github.com/divkix/Alita_Robot/alita/db/lockdown"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
 )
@@ -28,6 +30,15 @@ var aiSpamRequests atomic.Int64
 func newAIBurstEnv(t *testing.T) *lockdownEnv {
 	t.Helper()
 	env, _ := floodBurstEnv(t)
+	env.enableAI()
+	return env
+}
+
+// enableAI turns /aispam on for the env's chat, answering from the TypeSafe fake of
+// newAIBurstEnv, and loads the AI spam module on the env's dispatcher.
+func (e *lockdownEnv) enableAI() {
+	t, env := e.t, e
+	t.Helper()
 	resetAISpamRuntime()
 	withAISpamTestConfig(t, "typesafe-test-key", true, 0)
 	aiSpamRequests.Store(0)
@@ -58,7 +69,6 @@ func newAIBurstEnv(t *testing.T) *lockdownEnv {
 	}
 	t.Cleanup(func() { db.DB.Where("chat_id = ?", env.chat.Id).Delete(&models.AISpamSettings{}) })
 	LoadAISpam(env.dispatcher)
-	return env
 }
 
 // staffChatOf is the Staff Group the env's chat is linked to.
@@ -255,4 +265,183 @@ func TestRaidAIAlert(t *testing.T) {
 			t.Errorf("alert %q names a manual lockdown", text)
 		}
 	})
+
+	t.Run("status and already active", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		env.aiBurstLockdown()
+		locksBefore := len(env.calls("setChatPermissions"))
+
+		env.askStatus(env.admin)
+
+		env.wantReplyHas(
+			staffMarker("lockdown_status_active_auto"),
+			staffMarker("lockdown_trigger_ai_burst")+" 5 120",
+		)
+		env.wantReplyLacks(staffMarker("lockdown_status_active"), staffMarker("lockdown_reason_line"))
+
+		env.send(env.admin, "/lockdown")
+
+		env.wantReplyHas(
+			staffMarker("lockdown_already_active_auto"),
+			staffMarker("lockdown_trigger_ai_burst")+" 5 120",
+		)
+		if got := len(env.calls("setChatPermissions")); got != locksBefore {
+			t.Errorf("setChatPermissions calls = %d after /lockdown, want still %d", got, locksBefore)
+		}
+	})
+
+	t.Run("reminder", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		staffChat := env.staffChatOf()
+		row := env.aiBurstLockdown()
+
+		env.cycle()
+		if got := len(env.fake.sentTo(staffChat.Id)); got != 1 {
+			t.Fatalf("%d messages reached the Staff Group after the alert cycle, want 1", got)
+		}
+		ageAlert(t, row.ID, 61*time.Minute)
+		env.cycle()
+
+		sent := env.fake.sentTo(staffChat.Id)
+		if len(sent) != 2 {
+			t.Fatalf("%d messages reached the Staff Group, want the alert and one reminder", len(sent))
+		}
+		text := fmt.Sprint(sent[1].Params["text"])
+		for _, want := range []string{
+			staffMarker("lockdown_reminder_title"),
+			staffMarker("lockdown_trigger_ai_burst") + " 5 120",
+		} {
+			if !strings.Contains(text, want) {
+				t.Errorf("reminder %q does not contain %q", text, want)
+			}
+		}
+		if strings.Contains(text, staffMarker("lockdown_reason_line")) {
+			t.Errorf("reminder %q has a reason line", text)
+		}
+	})
+
+	t.Run("notice", func(t *testing.T) {
+		env := newAIBurstEnv(t)
+		env.aiBurstLockdown()
+
+		text := env.wantOneNoticeIn()
+
+		if want := staffMarker("lockdown_auto_started_ai_burst") + " 5 120"; !strings.Contains(text, want) {
+			t.Errorf("notice %q does not contain %q", text, want)
+		}
+		if !strings.Contains(text, staffMarker("lockdown_note_approved_muted")) {
+			t.Errorf("notice %q does not say approved users are muted too", text)
+		}
+	})
+
+	t.Run("cannot lock", func(t *testing.T) {
+		env, staffChat, channel := warnEnv(t)
+		env.enableAI()
+		env.fake.setBotRole(env.chat.Id, staffRoleAdminNoRestrict)
+		accounts := env.newMembers(3, 0)
+
+		env.spamFrom(accounts[0], 2)
+		env.spamFrom(accounts[1], 2)
+		env.spamFrom(accounts[2], 1)
+		env.settleAI()
+
+		if row := env.activeLockdown(); row != nil {
+			t.Fatalf("a lockdown exists although the bot cannot restrict members: %+v", row)
+		}
+		if got := len(env.calls("setChatPermissions")); got != 0 {
+			t.Errorf("setChatPermissions calls = %d, want 0", got)
+		}
+		env.wantWarnings(staffChat, channel, 1)
+		texts := env.textsTo(staffChat)
+		for _, want := range []string{
+			staffMarker("lockdown_auto_cant_lock_rights"),
+			staffMarker("lockdown_trigger_ai_burst") + " 5 120",
+		} {
+			if len(texts) == 1 && !strings.Contains(texts[0], want) {
+				t.Errorf("Staff Group warning %q does not contain %q", texts[0], want)
+			}
+		}
+	})
+}
+
+// TestLockdownTriggerKindsAllSurfaces renders every trigger kind on every surface that
+// switches on it. A kind added to models.LockdownTriggerKinds without a case here fails
+// the table, and an automatic kind that any surface renders as the manual wording, or as
+// nothing, fails its own case.
+func TestLockdownTriggerKindsAllSurfaces(t *testing.T) {
+	type surfaces struct {
+		// automatic is whether the bot started the lockdown on its own.
+		automatic bool
+		// counts is the locale key of the alert's counts line.
+		counts string
+	}
+	cases := map[string]surfaces{
+		models.LockdownTriggerManual:    {automatic: false, counts: "lockdown_alert_counts"},
+		models.LockdownTriggerJoinSurge: {automatic: true, counts: "lockdown_alert_counts"},
+		models.LockdownTriggerFlood:     {automatic: true, counts: "lockdown_alert_counts_flood"},
+		models.LockdownTriggerAIBurst:   {automatic: true, counts: "lockdown_alert_counts_ai"},
+	}
+	for _, kind := range models.LockdownTriggerKinds() {
+		if _, ok := cases[kind]; !ok {
+			t.Errorf("trigger kind %q has no case in the surface table", kind)
+		}
+	}
+
+	env := newLockdownEnv(t)
+	tr := staffChatTranslator(env.chat.Id)
+	for kind, want := range cases {
+		t.Run(kind, func(t *testing.T) {
+			ld := &models.ChatLockdown{
+				ChatID: env.chat.Id, TriggerKind: kind, TriggerCount: 7, TriggerWindow: 120, TriggerPercent: 40,
+				StartedBy: env.admin.Id, StartedByName: "Starter",
+			}
+
+			sentence := lockdownTriggerSentence(tr, kind, 7, 120, 40)
+			line := lockdownAlertTriggerLine(tr, ld, time.Now())
+			if want.automatic {
+				if !strings.Contains(sentence, staffMarker("lockdown_trigger_"+kind)) {
+					t.Errorf("trigger sentence %q does not carry %q", sentence, staffMarker("lockdown_trigger_"+kind))
+				}
+				if !strings.Contains(line, staffMarker("lockdown_alert_trigger_"+kind)) {
+					t.Errorf("alert line %q does not carry %q", line, staffMarker("lockdown_alert_trigger_"+kind))
+				}
+				if strings.Contains(line, staffMarker("lockdown_alert_trigger_manual")) {
+					t.Errorf("alert line %q is the manual wording", line)
+				}
+			} else {
+				if sentence != "" {
+					t.Errorf("trigger sentence = %q, want none for a manual lockdown", sentence)
+				}
+				if !strings.Contains(line, staffMarker("lockdown_alert_trigger_manual")) {
+					t.Errorf("alert line %q is not the manual wording", line)
+				}
+			}
+
+			if got := lockdownStartedAutomatically(ld); got != want.automatic {
+				t.Errorf("lockdownStartedAutomatically = %v, want %v", got, want.automatic)
+			}
+
+			sample := lockdownRenderSample(tr, nil, lockdown.BurstCounts{}, kind)
+			if !strings.Contains(sample, staffMarker(want.counts)+" ") {
+				t.Errorf("sample %q does not use the counts line %q", sample, want.counts)
+			}
+
+			before := len(env.fake.sentTo(env.chat.Id))
+			raidPostNotice(env.bot, &env.chat, raidTrigger{Kind: kind, Count: 7, Window: 120, Percent: 40}, lockdownStartResult{})
+			sent := env.fake.sentTo(env.chat.Id)
+			if !want.automatic {
+				if len(sent) != before {
+					t.Errorf("a manual kind posted %d public notices, want none", len(sent)-before)
+				}
+				return
+			}
+			if len(sent) != before+1 {
+				t.Fatalf("%d public notices, want exactly 1", len(sent)-before)
+			}
+			notice := fmt.Sprint(sent[len(sent)-1].Params["text"])
+			if !strings.Contains(notice, staffMarker("lockdown_auto_started_"+kind)) {
+				t.Errorf("notice %q does not carry %q", notice, staffMarker("lockdown_auto_started_"+kind))
+			}
+		})
+	}
 }
