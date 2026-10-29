@@ -662,6 +662,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   retries a shorter wait once and drops a longer one). Each pause logs one warning naming its reason (status and status
   word only) and its end, and none posts anything: a paused check is `Shed`. Only Gemini answers count; a `getFile` or
   download failure never does, and a safety block counts as an answer, not a failure. The breaker clock is `raidNow`. The
+  breaker map holds at most 10000 chats (`raidAIGeminiBreakerMaxChats`); when it is full the idle breakers (no failures,
+  not paused) are evicted, and if every tracked chat is failing or paused a new chat stays untracked, so it cannot be
+  paused, with one warning per process. The
   raid-only TypeSafe text checks keep sharing `/aispam`'s per-chat breaker silently and never touch these.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,

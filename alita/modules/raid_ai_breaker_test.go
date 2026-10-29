@@ -13,6 +13,8 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
+
+	"github.com/divkix/Alita_Robot/alita/utils/gemini"
 )
 
 // brokenTypeSafe answers every request with a 500 and a backoff longer than the client waits,
@@ -388,6 +390,7 @@ func resetRaidAIGeminiBreakers(t *testing.T) {
 		raidAIGeminiPause.mu.Lock()
 		raidAIGeminiPause.pausedTill = time.Time{}
 		raidAIGeminiPause.mu.Unlock()
+		raidAIGeminiCapWarned.Store(false)
 	}
 	reset()
 	t.Cleanup(reset)
@@ -429,4 +432,56 @@ func wantNoNotice(env *raidAIImageEnv, chats ...gotgbot.Chat) {
 			env.t.Errorf("sendMessage calls to %d = %d, want 0: a paused image check posts no notice", chat.Id, got)
 		}
 	}
+}
+
+// fillRaidAIGeminiBreakers makes the breaker map hold raidAIGeminiBreakerMaxChats chats, each
+// built by build, with IDs from 1.
+func fillRaidAIGeminiBreakers(t *testing.T, build func(id int64) *raidAIGeminiBreaker) {
+	t.Helper()
+	raidAIGeminiBreakers.mu.Lock()
+	defer raidAIGeminiBreakers.mu.Unlock()
+	for id := int64(1); id <= raidAIGeminiBreakerMaxChats; id++ {
+		raidAIGeminiBreakers.m[id] = build(id)
+	}
+}
+
+func TestRaidAIGeminiBreakerCap(t *testing.T) {
+	failure := &gemini.HTTPError{Status: 500}
+	const newChat = int64(-1009999)
+
+	t.Run("a full map of idle breakers makes room", func(t *testing.T) {
+		resetRaidAIGeminiBreakers(t)
+		fillRaidAIGeminiBreakers(t, func(int64) *raidAIGeminiBreaker { return &raidAIGeminiBreaker{} })
+
+		for range raidAIGeminiFailures {
+			raidAIGeminiRecordFailure(newChat, failure)
+		}
+
+		if !raidAIGeminiPaused(newChat) {
+			t.Error("a chat failing now is not tracked, so it was never paused: idle breakers should have been evicted")
+		}
+	})
+
+	t.Run("a full map of failing chats warns once", func(t *testing.T) {
+		resetRaidAIGeminiBreakers(t)
+		hook := captureLogs(t, log.WarnLevel)
+		fillRaidAIGeminiBreakers(t, func(int64) *raidAIGeminiBreaker { return &raidAIGeminiBreaker{failures: 2} })
+
+		for range 3 * raidAIGeminiFailures {
+			raidAIGeminiRecordFailure(newChat, failure)
+		}
+
+		if raidAIGeminiPaused(newChat) {
+			t.Error("an untracked chat was paused")
+		}
+		warnings := 0
+		for _, entry := range hook.AllEntries() {
+			if entry.Level == log.WarnLevel && strings.Contains(entry.Message, "breaker map is full") {
+				warnings++
+			}
+		}
+		if warnings != 1 {
+			t.Errorf("%d warnings that the breaker map is full, want exactly 1", warnings)
+		}
+	})
 }

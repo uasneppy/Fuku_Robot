@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -43,6 +44,20 @@ var (
 type raidAIGeminiBreaker struct {
 	failures   int
 	pausedTill time.Time
+}
+
+// raidAIGeminiCapWarned makes the "breaker map is full" warning appear once per process.
+var raidAIGeminiCapWarned atomic.Bool
+
+// raidAIGeminiPruneLocked drops the breakers that are neither paused nor counting failures,
+// the ones a success or an expired pause left idle, so a full map makes room for a chat that
+// is failing now. The caller holds raidAIGeminiBreakers.mu.
+func raidAIGeminiPruneLocked(now time.Time) {
+	for chatID, breaker := range raidAIGeminiBreakers.m {
+		if breaker.failures == 0 && (breaker.pausedTill.IsZero() || !now.Before(breaker.pausedTill)) {
+			delete(raidAIGeminiBreakers.m, chatID)
+		}
+	}
 }
 
 // raidAIGeminiBreakers holds the per-chat breakers.
@@ -91,7 +106,16 @@ func raidAIGeminiRecordFailure(chatID int64, err error) {
 	breaker, ok := raidAIGeminiBreakers.m[chatID]
 	if !ok {
 		if len(raidAIGeminiBreakers.m) >= raidAIGeminiBreakerMaxChats {
+			raidAIGeminiPruneLocked(now)
+		}
+		if len(raidAIGeminiBreakers.m) >= raidAIGeminiBreakerMaxChats {
 			raidAIGeminiBreakers.mu.Unlock()
+			// Every tracked chat is failing or paused: this one stays untracked, so it can
+			// never be paused. Said once per process, not per failure.
+			if raidAIGeminiCapWarned.CompareAndSwap(false, true) {
+				log.Warnf("[RaidDetection] the Gemini breaker map is full (%d chats failing or paused); "+
+					"further chats are not tracked and cannot be paused", raidAIGeminiBreakerMaxChats)
+			}
 			return
 		}
 		breaker = &raidAIGeminiBreaker{}
