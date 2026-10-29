@@ -59,6 +59,7 @@ func linkLockdownGroupTo(env *lockdownEnv, staffChat gotgbot.Chat) {
 // sentChats returns the chat IDs every sendMessage of the fake went to, in order.
 func (e *lockdownEnv) sentChats() []int64 {
 	raidAIJobs.wait()
+	raidAIFires.wait()
 	raidPosts.wait()
 	e.fake.fmu.Lock()
 	defer e.fake.fmu.Unlock()

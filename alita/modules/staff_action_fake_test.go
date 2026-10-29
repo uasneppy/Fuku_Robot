@@ -191,8 +191,9 @@ func (f *staffActionFake) popScripted(method string, chatID int64) error {
 func (f *staffActionFake) sentTo(chatID int64) []staffSentMessage {
 	// An automatic lockdown's notice and warning are sent from goroutines; read what
 	// they sent only once they are done. Raid AI jobs can start that lockdown, so they
-	// are waited for first.
+	// are waited for first, then the lockdown starts their verdicts asked for, then the posts.
 	raidAIJobs.wait()
+	raidAIFires.wait()
 	raidPosts.wait()
 	f.fmu.Lock()
 	defer f.fmu.Unlock()

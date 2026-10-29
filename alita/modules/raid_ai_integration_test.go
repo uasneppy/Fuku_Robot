@@ -65,6 +65,7 @@ func (e *raidAIImageEnv) serveGeminiByFileName() *atomic.Int64 {
 // raid posts and AI jobs in flight are done.
 func (e *lockdownEnv) callsSince(n int) []moduleBotCall {
 	raidAIJobs.wait()
+	raidAIFires.wait()
 	raidPosts.wait()
 	e.fake.mu.Lock()
 	defer e.fake.mu.Unlock()
