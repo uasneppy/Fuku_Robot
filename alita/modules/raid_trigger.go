@@ -216,8 +216,9 @@ type raidTrigger struct {
 // After the latch it stays silent, with no Telegram call, while the chat has an active
 // lockdown and for raidLiftQuiet after an admin started lifting one (D-15); a failed read
 // of either shortens the latch to raidRetryLatch. A flood trigger then copies its flooding
-// accounts into a short-lived snapshot for the alert (raidSnapshotFlooders). After the
-// start the latch is cut or stretched by outcome (raidOutcomeLatch).
+// accounts into a short-lived snapshot for the alert (raidSnapshotFlooders), and an AI
+// burst copies the accounts behind its spam verdicts the same way (raidSnapshotAISpammers).
+// After the start the latch is cut or stretched by outcome (raidOutcomeLatch).
 func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	client := raidRedis()
 	if client == nil {
@@ -268,11 +269,20 @@ func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	// only 30 seconds, so they are copied now, before the lockdown row exists, for the alert
 	// the worker decides later (D-17). It is best effort: without the snapshot the alert
 	// still lists the tracker's joins.
-	if trig.Kind == models.LockdownTriggerFlood {
+	// An AI burst is described the same way, by the accounts behind its spam verdicts (the
+	// verdict sets keep 120 seconds and expire in minutes).
+	switch trig.Kind {
+	case models.LockdownTriggerFlood:
 		if saved, snapErr := raidSnapshotFlooders(chat.Id); snapErr != nil {
 			log.Debugf("[RaidDetection] the flooding accounts of chat %d could not be saved: %v", chat.Id, snapErr)
 		} else {
 			log.Debugf("[RaidDetection] %d flooding accounts of chat %d saved for the alert", saved, chat.Id)
+		}
+	case models.LockdownTriggerAIBurst:
+		if saved, snapErr := raidSnapshotAISpammers(chat.Id); snapErr != nil {
+			log.Debugf("[RaidDetection] the spamming accounts of chat %d could not be saved: %v", chat.Id, snapErr)
+		} else {
+			log.Debugf("[RaidDetection] %d spamming accounts of chat %d saved for the alert", saved, chat.Id)
 		}
 	}
 

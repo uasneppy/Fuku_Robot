@@ -264,6 +264,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   sample and in "Ban N recent joiners" (through the unchanged Phase 5 ban run and its exclusions), and a Redis flush
   after the alert changes nothing. A flood alert's counts line is `lockdown_alert_counts_flood`
   (`lockdownRenderSample` takes the trigger kind); the join-surge and manual alerts keep `lockdown_alert_counts`.
+- `alita:raid:{<chat>}:aispammers` is the AI burst alert's snapshot (`raid_ai_count.go`), the twin of `:flooders`. When an
+  AI trigger fires, `raidFire` calls `raidSnapshotAISpammers` at the same point (after the latch, the active check and
+  the quiet period, before `startLockdownRow`): one Lua script (`raidAISpammersScript`) replaces the key with the newest
+  accounts of `:aa` (at most `raidFloodersMax` = 500), scored by their `:joined` score when it is within 24 h, else by
+  their verdict time (an established member whose `/aispam` delete verdict counted, D-19), with a 15-minute TTL
+  (`raidFloodersTTL`). A failed snapshot is logged at debug and the lockdown still starts. `lockdownBurstSnapshot` reads
+  it for a lockdown whose `trigger_kind` is `ai_burst` only (`raidAISpammersLookup`, a test seam; no Redis or no snapshot
+  adds nothing) and `lockdownMergeAISpammers` merges it with the 10-minute tracker's joins through
+  `lockdownMergeSnapshot`, the one merge that `lockdownMergeFlooders` shares (by user ID, the tracker's name, username,
+  link and bot flag win, the earliest time wins, the rest are named with one `user.FindUsersByIDs` query, the bot is
+  skipped). They are saved as `pre` burst rows by `lockdown.BeginAlert`'s winner, so the alert's sample and "Ban N recent
+  joiners" include them with the unchanged Phase 5 exclusions. An AI alert's counts line is `lockdown_alert_counts_ai`,
+  which does not say the listed accounts joined.
 - Automatic lockdowns are announced in `raid_trigger.go`, every post through `lockdownPaced` under `raidPostTimeout`
   (30 s per send), and a failed post is only logged: it never changes the lockdown or its absence. The lock itself is
   synchronous, but the notice and the cannot-lock warning are sent from a goroutine (`raidPostAsync`: counted in
@@ -523,7 +536,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   established member's included, and a keep verdict never does; a basic group, an anonymous or non-positive sender and
   the bot itself never count. Nothing on the counting path deletes, restricts or bans: the `/aispam` deletion itself is
   unchanged, and the lockdown's muting is what stops the raid. The call is synchronous in the `/aispam` worker
-  (`DrainAISpamChecks` waits for it); `raidFire` is bounded by `raidFireTimeout` and its 60 s latch.
+  (`DrainAISpamChecks` waits for it); `raidFire` is bounded by `raidFireTimeout` and its 60 s latch. During a rolling
+  deploy an old replica that wins `BeginAlert` for an `ai_burst` row renders the manual wording and no spammer sample;
+  that is accepted, like the other rolling-deploy caveats here.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
   described as such to admins. Every site that switches on the kind knows all three: `lockdownTriggerSentence`,
   `raidPostNotice` (an unknown kind posts no public notice), `lockdownAlertTriggerLine` and `lockdownRenderSample`
