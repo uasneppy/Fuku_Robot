@@ -50,8 +50,9 @@ func (e *lockdownEnv) dispatchMessage(chat gotgbot.Chat, msg gotgbot.Message) {
 }
 
 // floodMessage builds the message of one item kind: text, photo, gif (an animation, which
-// Telegram also sends as a document), sticker, command, or album:<id> (one photo of an
-// album).
+// Telegram also sends as a document), sticker, command (a command the test dispatcher
+// handles), slash (a slash-prefixed text no handler takes), otherbot (a command addressed
+// to another bot), or album:<id> (one photo of an album).
 func floodMessage(t *testing.T, from gotgbot.User, kind string) gotgbot.Message {
 	t.Helper()
 	msg := gotgbot.Message{From: &from}
@@ -67,8 +68,19 @@ func floodMessage(t *testing.T, from gotgbot.User, kind string) gotgbot.Message 
 	case kind == "sticker":
 		msg.Sticker = &gotgbot.Sticker{FileId: floodTestFile, FileUniqueId: floodTestFile}
 	case kind == "command":
-		msg.Text = "/cmd now"
-		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 4}}
+		msg.Text = "/lockdownstatus now"
+		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 14}}
+	case kind == "addressed":
+		msg.Text = "/lockdownstatus@AlitaTestBot now"
+		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 26}}
+	case kind == "slash":
+		msg.Text = "/x spam"
+		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 2}}
+	case kind == "otherbot":
+		msg.Text = "/start@otherbot"
+		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 15}}
+	case kind == "slashes":
+		msg.Text = "/////"
 	case strings.HasPrefix(kind, "album:"):
 		msg.MediaGroupId = strings.TrimPrefix(kind, "album:")
 		msg.Photo = photo
@@ -222,6 +234,7 @@ func TestRaidFloodItemKey(t *testing.T) {
 	photo := []gotgbot.PhotoSize{{FileId: floodTestFile, FileUniqueId: floodTestFile, Width: 1, Height: 1}}
 	file := gotgbot.Document{FileId: floodTestFile, FileUniqueId: floodTestFile}
 
+	// counted are the items the group -4 watcher counts: everything but a slash-prefixed text.
 	counted := []struct {
 		name string
 		msg  gotgbot.Message
@@ -235,6 +248,7 @@ func TestRaidFloodItemKey(t *testing.T) {
 		{"a lone slash", gotgbot.Message{MessageId: 7, Text: "/ nothing"}, "m:7"},
 		{"photo", gotgbot.Message{MessageId: 7, Photo: photo}, "m:7"},
 		{"photo with a caption", gotgbot.Message{MessageId: 7, Photo: photo, Caption: "look"}, "m:7"},
+		{"photo with a command as its caption", gotgbot.Message{MessageId: 7, Photo: photo, Caption: "/ban now"}, "m:7"},
 		{"animation that is also a document", gotgbot.Message{
 			MessageId: 7, Animation: &gotgbot.Animation{FileId: floodTestFile}, Document: &file,
 		}, "m:7"},
@@ -249,9 +263,30 @@ func TestRaidFloodItemKey(t *testing.T) {
 	}
 	for _, tc := range counted {
 		t.Run("counts "+tc.name, func(t *testing.T) {
-			got, ok := raidFloodItemKey(&tc.msg)
-			if !ok || got != tc.want {
-				t.Errorf("raidFloodItemKey = %q, %v, want %q, true", got, ok, tc.want)
+			got, slash, ok := raidFloodItemKey(&tc.msg)
+			if !ok || slash || got != tc.want {
+				t.Errorf("raidFloodItemKey = %q, slash %v, %v, want %q, not slash, true", got, slash, ok, tc.want)
+			}
+		})
+	}
+
+	// slashed are the items only the late watcher counts: a text that looks like a command.
+	// Whether one is a command the bot handles is the dispatcher's to say.
+	slashed := []struct {
+		name string
+		msg  gotgbot.Message
+	}{
+		{"command", command("/cmd", 4)},
+		{"command with a bot name and arguments", command("/cmd@alita_bot args", 14)},
+		{"command addressed to another bot", command("/start@otherbot", 15)},
+		{"command with no entity", gotgbot.Message{MessageId: 7, Text: "/cmd args"}},
+		{"only slashes", gotgbot.Message{MessageId: 7, Text: "/////"}},
+	}
+	for _, tc := range slashed {
+		t.Run("leaves "+tc.name+" to the late watcher", func(t *testing.T) {
+			got, slash, ok := raidFloodItemKey(&tc.msg)
+			if !ok || !slash || got != "m:7" {
+				t.Errorf("raidFloodItemKey = %q, slash %v, %v, want \"m:7\", slash, true", got, slash, ok)
 			}
 		})
 	}
@@ -260,9 +295,6 @@ func TestRaidFloodItemKey(t *testing.T) {
 		name string
 		msg  gotgbot.Message
 	}{
-		{"command", command("/cmd", 4)},
-		{"command with a bot name and arguments", command("/cmd@alita_bot args", 14)},
-		{"command with no entity", gotgbot.Message{MessageId: 7, Text: "/cmd args"}},
 		{"new members", gotgbot.Message{MessageId: 7, NewChatMembers: []gotgbot.User{{Id: 5}}}},
 		{"left member", gotgbot.Message{MessageId: 7, LeftChatMember: &gotgbot.User{Id: 5}}},
 		{"pinned message", gotgbot.Message{MessageId: 7, PinnedMessage: gotgbot.Message{MessageId: 3}}},
@@ -272,13 +304,13 @@ func TestRaidFloodItemKey(t *testing.T) {
 	}
 	for _, tc := range ignored {
 		t.Run("ignores "+tc.name, func(t *testing.T) {
-			if got, ok := raidFloodItemKey(&tc.msg); ok {
+			if got, _, ok := raidFloodItemKey(&tc.msg); ok {
 				t.Errorf("raidFloodItemKey = %q, true, want it ignored", got)
 			}
 		})
 	}
 
-	if _, ok := raidFloodItemKey(nil); ok {
+	if _, _, ok := raidFloodItemKey(nil); ok {
 		t.Error("raidFloodItemKey(nil) counted")
 	}
 }
@@ -364,7 +396,8 @@ func TestRaidFloodExemptions(t *testing.T) {
 			name: "sender_chat on an ordinary user",
 			send: withSenderChat(func(*lockdownEnv) gotgbot.Chat { return channel }, false),
 		},
-		{name: "commands", send: asUser("command")},
+		{name: "commands the bot handles", send: asUser("command")},
+		{name: "commands addressed to this bot", send: asUser("addressed")},
 		{
 			name: "edited message",
 			send: func(env *lockdownEnv, user gotgbot.User) {
@@ -592,4 +625,142 @@ func TestRaidFloodScript(t *testing.T) {
 	if items, newItems, _ := floodSizes(t, chatID); items != 3 || newItems != 3 {
 		t.Errorf("with a cap of 3 the sets hold %d items and %d new items, want 3 and 3", items, newItems)
 	}
+}
+
+// sendKind sends n items of one kind, one per call in turn from the given users.
+func (e *lockdownEnv) sendKind(users []gotgbot.User, n int, kind string) {
+	e.t.Helper()
+	for i := 0; i < n; i++ {
+		e.sendItem(users[i%len(users)], kind)
+	}
+}
+
+// TestRaidFloodSlashTexts pins D-07 for slash-prefixed texts: a command the bot handles
+// never counts, and any other slash-prefixed text counts like an ordinary message, so a
+// raider cannot flood with "/word" and stay uncounted.
+func TestRaidFloodSlashTexts(t *testing.T) {
+	t.Run("a flood of unhandled commands locks", func(t *testing.T) {
+		env := newFloodEnv(t)
+		recent := env.newMembers(4, 2*time.Hour)
+
+		env.sendKind(recent, 29, "slash")
+		if row := env.activeLockdown(); row != nil {
+			t.Fatalf("a lockdown (kind %q) exists after 29 items, want none", row.TriggerKind)
+		}
+		if items, newItems, accounts := floodSizes(t, env.chat.Id); items != 29 || newItems != 29 || accounts != 4 {
+			t.Fatalf("after 29 unhandled commands the sets hold %d items, %d new, %d accounts, want 29, 29, 4", items, newItems, accounts)
+		}
+
+		env.sendItem(recent[0], "slash")
+
+		row := env.activeLockdown()
+		if row == nil {
+			t.Fatal("no lockdown after 30 unhandled commands from recent joiners")
+		}
+		if row.TriggerKind != models.LockdownTriggerFlood || row.TriggerCount != 30 || row.TriggerPercent != 100 {
+			t.Errorf("trigger = %q, %d items, %d%%, want flood, 30, 100%%", row.TriggerKind, row.TriggerCount, row.TriggerPercent)
+		}
+		if got := len(env.calls("setChatPermissions")); got != 1 {
+			t.Errorf("setChatPermissions calls = %d, want exactly 1", got)
+		}
+		if got := len(env.calls("deleteMessage")); got != 0 {
+			t.Errorf("deleteMessage calls = %d, want 0: the flood trigger deletes nothing", got)
+		}
+	})
+
+	t.Run("a flood of commands the bot handles does not lock", func(t *testing.T) {
+		env := newFloodEnv(t)
+		recent := env.newMembers(4, 2*time.Hour)
+
+		env.sendKind(recent, 40, "command")
+
+		if items, newItems, accounts := floodSizes(t, env.chat.Id); items+newItems+accounts != 0 {
+			t.Errorf("handled commands left %d items, %d new, %d accounts, want nothing counted", items, newItems, accounts)
+		}
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown (kind %q) exists after 40 handled commands, want none", row.TriggerKind)
+		}
+		if got := len(env.calls("setChatPermissions")); got != 0 {
+			t.Errorf("setChatPermissions calls = %d, want 0", got)
+		}
+	})
+
+	t.Run("a command addressed to this bot is handled and does not count", func(t *testing.T) {
+		env := newFloodEnv(t)
+		recent := env.newMembers(4, 2*time.Hour)
+
+		env.sendKind(recent, 40, "addressed")
+
+		if items, newItems, accounts := floodSizes(t, env.chat.Id); items+newItems+accounts != 0 {
+			t.Errorf("addressed commands left %d items, %d new, %d accounts, want nothing counted", items, newItems, accounts)
+		}
+	})
+
+	t.Run("a command addressed to another bot counts", func(t *testing.T) {
+		env := newFloodEnv(t)
+		recent := env.newMembers(4, 2*time.Hour)
+
+		env.sendKind(recent, 29, "otherbot")
+		if items, _, _ := floodSizes(t, env.chat.Id); items != 29 {
+			t.Fatalf("29 commands for another bot left %d items, want 29", items)
+		}
+		env.sendItem(recent[2], "otherbot")
+
+		if row := env.activeLockdown(); row == nil || row.TriggerKind != models.LockdownTriggerFlood {
+			t.Errorf("active lockdown = %+v, want a flood lockdown after 30 commands for another bot", row)
+		}
+	})
+
+	t.Run("a text of only slashes counts", func(t *testing.T) {
+		env := newFloodEnv(t)
+		recent := env.newMembers(4, 2*time.Hour)
+
+		env.sendKind(recent, 30, "slashes")
+
+		if row := env.activeLockdown(); row == nil || row.TriggerKind != models.LockdownTriggerFlood {
+			t.Errorf("active lockdown = %+v, want a flood lockdown after 30 texts of slashes", row)
+		}
+	})
+
+	t.Run("plain texts at -4 and slash texts late add up to one total", func(t *testing.T) {
+		env := newFloodEnv(t)
+		recent := env.newMembers(4, 2*time.Hour)
+
+		env.sendKind(recent, 15, "text")
+		env.sendKind(recent, 14, "slash")
+		if items, newItems, accounts := floodSizes(t, env.chat.Id); items != 29 || newItems != 29 || accounts != 4 {
+			t.Fatalf("15 plain and 14 slash items left %d items, %d new, %d accounts, want 29, 29, 4", items, newItems, accounts)
+		}
+		if row := env.activeLockdown(); row != nil {
+			t.Fatalf("a lockdown (kind %q) exists after 29 mixed items, want none", row.TriggerKind)
+		}
+
+		env.sendItem(recent[1], "slash")
+
+		row := env.activeLockdown()
+		if row == nil {
+			t.Fatal("no lockdown after 30 mixed items: the two watchers do not share one total")
+		}
+		if row.TriggerCount != 30 || row.TriggerPercent != 100 {
+			t.Errorf("trigger = %d items, %d%%, want 30, 100%%", row.TriggerCount, row.TriggerPercent)
+		}
+	})
+
+	t.Run("a slash text from an exempt sender never counts late", func(t *testing.T) {
+		env := newFloodEnv(t)
+		seedRecentJoin(env, env.admin.Id, time.Hour)
+		floodPrime(env)
+
+		for i := 0; i < 6; i++ {
+			env.sendItem(env.admin, "slash")
+		}
+
+		if items, newItems, accounts := floodSizes(t, env.chat.Id); items != 24 || newItems != 24 || accounts != 3 {
+			t.Errorf("six slash items from an admin left %d items, %d new, %d accounts, want 24, 24, 3", items, newItems, accounts)
+		}
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown (kind %q) exists after six exempt slash items, want none", row.TriggerKind)
+		}
+	})
+
 }

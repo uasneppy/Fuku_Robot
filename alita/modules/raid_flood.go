@@ -28,6 +28,14 @@ import (
 // them from such new members, from at least 3 such accounts, starts a lockdown through
 // raidFire.
 //
+// A command the bot handles does not count (D-07), and the way to know that is the
+// dispatcher's own order: a handled command returns ext.EndGroups, which ends every later
+// group. So the group -4 watcher skips every slash-prefixed text, and a second watcher in
+// the last group (raidFloodLateGroup) counts the slash-prefixed texts that reach it, the
+// ones no command handled: "/word" with no handler, "/////", "/start@otherbot". Both run
+// the same function (raidFloodCountUpdate), so the item classification, the exemptions,
+// the script and the trigger are one code path.
+//
 // It is best effort and Redis only. It never ends a message's handling (every path
 // returns ext.ContinueGroups, so aispam, antiflood, locks and the rest still see the
 // message) and it deletes nothing: the lockdown's muting stops the flood (D-08). Message
@@ -36,8 +44,14 @@ import (
 // raidFloodGroup is the handler group of the flood watcher: after the lockdown join guard
 // (-7) and fed-ban (-6), before the staff watchers (-3), aispam (3),
 // antiflood (4), locks (5, 6) and blacklists (7), so a message those later end was
-// already counted.
+// already counted. It counts everything but slash-prefixed texts.
 const raidFloodGroup = -4
+
+// raidFloodLateGroup is the handler group of the late flood watcher, after every other
+// handler group (the log channel's is 11). Only an update that no earlier handler ended
+// reaches it, so a slash-prefixed text counted here is one no command handled. It counts
+// slash-prefixed texts only.
+const raidFloodLateGroup = 12
 
 const (
 	// raidFloodWindow is the window the flood counts in (fixed, D-05).
@@ -105,44 +119,50 @@ return {redis.call('ZCARD', KEYS[1]), redis.call('ZCARD', KEYS[2]), redis.call('
 `)
 
 // raidFloodItemKey classifies a message for the flood counter. It reports the item's
-// key and true when the message is user content, and false for everything that never
-// counts: service messages and commands. User content is text that is not a command,
-// and a photo, GIF (an animation is checked before the document Telegram also sets on
-// it), sticker, video, video note, voice, audio, document, poll, contact, location,
-// venue, dice or story, forwards and replies included. An album counts once: its parts
-// share the key g:<media_group_id>, every other item is m:<message_id>.
-func raidFloodItemKey(msg *gotgbot.Message) (string, bool) {
+// key, whether the item is a slash-prefixed text, and true when the message is user
+// content; it reports false for everything that never counts: service messages and
+// messages with nothing to count. User content is text, and a photo, GIF (an animation is
+// checked before the document Telegram also sets on it), sticker, video, video note,
+// voice, audio, document, poll, contact, location, venue, dice or story, forwards and
+// replies included. An album counts once: its parts share the key g:<media_group_id>,
+// every other item is m:<message_id>.
+//
+// A slash-prefixed text (raidFloodIsSlashText) is a command only when some handler takes
+// it, and the dispatcher tells that by ending the update, so the group -4 watcher leaves
+// these to the late watcher (raidFloodCountUpdate).
+func raidFloodItemKey(msg *gotgbot.Message) (key string, slash bool, ok bool) {
 	if msg == nil {
-		return "", false
+		return "", false, false
 	}
 	if msg.NewChatMembers != nil || msg.LeftChatMember != nil || msg.PinnedMessage != nil ||
 		msg.NewChatTitle != "" || msg.NewChatPhoto != nil || msg.DeleteChatPhoto ||
 		msg.GroupChatCreated || msg.SupergroupChatCreated ||
 		msg.MigrateToChatId != 0 || msg.MigrateFromChatId != 0 {
-		return "", false
+		return "", false, false
 	}
 
 	media := msg.Animation != nil || msg.Sticker != nil || msg.Photo != nil || msg.Video != nil ||
 		msg.VideoNote != nil || msg.Voice != nil || msg.Audio != nil || msg.Document != nil ||
 		msg.Poll != nil || msg.Contact != nil || msg.Location != nil || msg.Venue != nil ||
 		msg.Dice != nil || msg.Story != nil
-	text := msg.Text != "" && !raidFloodIsCommand(msg)
+	text := msg.Text != ""
 	if !media && !text {
-		return "", false
+		return "", false, false
 	}
+	slash = !media && raidFloodIsSlashText(msg)
 
 	if msg.MediaGroupId != "" {
-		return "g:" + msg.MediaGroupId, true
+		return "g:" + msg.MediaGroupId, slash, true
 	}
-	return "m:" + strconv.FormatInt(msg.MessageId, 10), true
+	return "m:" + strconv.FormatInt(msg.MessageId, 10), slash, true
 }
 
-// raidFloodIsCommand reports whether the text message is a bot command the way the
-// dispatcher sees one: its first entity is a bot_command at offset 0, or it begins with
-// "/" and a non-space character. gotgbot's command handler accepts the second form too (a
-// text with no entity at offset 0), so a message it would run as a command is never
-// counted as user content.
-func raidFloodIsCommand(msg *gotgbot.Message) bool {
+// raidFloodIsSlashText reports whether the text message looks like a bot command the way
+// the dispatcher sees one: its first entity is a bot_command at offset 0, or it begins
+// with "/" and a non-space character. gotgbot's command handler accepts the second form
+// too (a text with no entity at offset 0). Looking like a command is not being one the
+// bot handles: that is only known once the dispatcher has run the handlers.
+func raidFloodIsSlashText(msg *gotgbot.Message) bool {
 	for _, entity := range msg.Entities {
 		if entity.Offset == 0 && entity.Type == "bot_command" {
 			return true
@@ -222,16 +242,32 @@ func recordRaidFloodItem(client *redis.Client, chatID, userID int64, itemKey str
 	return int(sizes[0]), int(sizes[1]), int(sizes[2]), nil
 }
 
-// raidFloodWatcher counts one message toward its chat's flood and starts a lockdown when
-// the rule holds. Checks run cheapest first, because this sees every group message:
-// the chat type, the sender's shape and the item (all pure Go), then Redis, then the
-// chat's settings (a flood switched off returns here), then approved users, then the
-// cached admin list (D-07 accepts the cached list; the live fallback it makes is bounded
-// and assumes an admin when saturated, which only lowers the counts). It returns
-// ext.ContinueGroups on every path.
+// raidFloodWatcher is the group -4 flood watcher. It counts every item but a
+// slash-prefixed text; those wait for raidFloodLateWatcher.
 func (m moduleStruct) raidFloodWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 	defer error_handling.RecoverFromPanic("raidFloodWatcher", "Lockdown")
+	return raidFloodCountUpdate(b, ctx, false)
+}
 
+// raidFloodLateWatcher is the group 12 flood watcher. An update that reaches it was ended
+// by no earlier handler, so a slash-prefixed text it sees is one no command took, and it
+// counts like any other text (D-07 exempts only the commands the bot handles). It counts
+// slash-prefixed texts only; everything else was counted at -4.
+func (m moduleStruct) raidFloodLateWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
+	defer error_handling.RecoverFromPanic("raidFloodLateWatcher", "Lockdown")
+	return raidFloodCountUpdate(b, ctx, true)
+}
+
+// raidFloodCountUpdate counts one message toward its chat's flood and starts a lockdown
+// when the rule holds. late selects which half of the items this call is for: false for
+// everything but slash-prefixed texts (the group -4 watcher), true for the slash-prefixed
+// texts only (the group 12 watcher). Checks run cheapest first, because this sees every
+// group message: the chat type, the sender's shape and the item (all pure Go), then Redis,
+// then the chat's settings (a flood switched off returns here), then approved users, then
+// the cached admin list (D-07 accepts the cached list; the live fallback it makes is
+// bounded and assumes an admin when saturated, which only lowers the counts). It returns
+// ext.ContinueGroups on every path.
+func raidFloodCountUpdate(b *gotgbot.Bot, ctx *ext.Context, late bool) error {
 	chat := ctx.EffectiveChat
 	if chat == nil || chat.Type != "supergroup" {
 		return ext.ContinueGroups
@@ -240,8 +276,8 @@ func (m moduleStruct) raidFloodWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 	if !ok {
 		return ext.ContinueGroups
 	}
-	itemKey, ok := raidFloodItemKey(ctx.EffectiveMessage)
-	if !ok {
+	itemKey, slash, ok := raidFloodItemKey(ctx.EffectiveMessage)
+	if !ok || slash != late {
 		return ext.ContinueGroups
 	}
 	client := raidRedis()

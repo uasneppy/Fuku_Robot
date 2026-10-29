@@ -52,10 +52,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Handlers
 
 - Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
-  before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts, never ends an update; there is no
+  before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
   `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
-  `8` reports+reactions · `9` filters · `10` pins · `11` log-channel.
+  `8` reports+reactions · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
+  after every other group).
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
   `ext.EndGroups`. A group-0 watcher returning `nil` silently kills every later group-0 handler.
 - Modules register in `init()` via `RegisterLegacyModule(name, priority, load)`. Use a unique name; duplicates are
@@ -463,14 +464,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
   status it read and whether it asked), so a join or a join message still makes at most one performer lookup. Settings come from
   `raidSettingsLookup`, a test seam; an unreadable read counts nothing.
-- The flood trigger is counted by the group `-4` watcher (`raidFloodWatcher`, registered in `LoadLockdown`), which returns
-  `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still see every message, and deletes
-  nothing: the lockdown's muting stops the flood. What counts (`raidFloodItemKey`) is any user content in a supergroup:
-  text that is not a command (a `bot_command` entity at offset 0, or a text starting with `/` and a non-space
-  character, which gotgbot's command handler also runs), photo, GIF (animation, checked before the
-  document Telegram also sets), sticker, video, video note, voice, audio, document, poll, contact, location, venue, dice
-  and story, forwards and replies included; an album counts once. Commands, service messages, edited messages, channel
-  posts and bot senders never count (gotgbot drops the last three before the watcher). Who never counts: a sender with
+- The flood trigger is counted by two watchers that share one function, `raidFloodCountUpdate`: the group `-4` watcher
+  (`raidFloodWatcher`, registered in `LoadLockdown`) and the group `12` watcher (`raidFloodLateWatcher`,
+  `raidFloodLateGroup`). Both return `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still
+  see every message, and delete nothing: the lockdown's muting stops the flood. What counts (`raidFloodItemKey`) is any
+  user content in a supergroup: text, photo, GIF (animation, checked before the document Telegram also sets), sticker,
+  video, video note, voice, audio, document, poll, contact, location, venue, dice and story, forwards and replies
+  included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
+  which: a handled command returns `ext.EndGroups`, which ends every later group. So the `-4` watcher counts every item
+  except a slash-prefixed text (`raidFloodIsSlashText`: a `bot_command` entity at offset 0, or a text starting with `/`
+  and a non-space character, which gotgbot's command handler also runs), and the group `12` watcher counts only the
+  slash-prefixed texts that reach it, the ones no command took: `/word` with no handler, `/////`, and a command addressed
+  to another bot (`/start@otherbot`). Never keep a second list of command names for this. Group `12` must stay after every
+  other group, so every new handler group needs a number below it. A slash text that a handler ends is not counted, and
+  neither is one that an earlier handler ends (an aispam, antiflood, lock or blacklist deletion at groups `3` to `7`); a
+  command that returns `nil` or an error instead of `ext.EndGroups` is counted late, which only raises the counts, so
+  new commands should still end with `ext.EndGroups`. Service messages, edited messages, channel posts and bot senders
+  never count (gotgbot drops the last three before the watcher). Who never counts: a sender with
   `sender_chat` set (an anonymous administrator, a channel, a linked channel's automatic forward: gotgbot's `IsBot` is
   false for all of them), a Telegram service ID (`staffServiceUserIDs`), the bot, an approved user
   (`IsApprovedForUpdate`) and an administrator by the cached list (`antifloodModule.userIsFloodExempt`; its bounded live
