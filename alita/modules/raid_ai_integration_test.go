@@ -12,12 +12,14 @@ import (
 	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/config"
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/approvals"
 	"github.com/divkix/Alita_Robot/alita/db/models"
@@ -266,5 +268,296 @@ func TestRaidAINeverActs(t *testing.T) {
 				env.wantNoActions()
 			})
 		}
+	}
+}
+
+// failOpenBound is how long one update may take with the AI providers down (the research's
+// fail-open bound).
+const failOpenBound = 500 * time.Millisecond
+
+// failOpenMode is one way the AI providers can fail, TypeSafe and Gemini both.
+type failOpenMode struct {
+	name string
+	// holds is true when the mode leaves raid AI jobs unfinished until released.
+	holds bool
+	// silent is true when no provider request may be made once the mode is applied.
+	silent bool
+	// apply puts env's providers in the mode and returns what releases anything it holds.
+	apply func(env *raidAIImageEnv, typesafe *atomic.Int64) (release func())
+}
+
+// failOpenProviders installs handlers for the TypeSafe and the Gemini fakes of env, the
+// TypeSafe one counted in typesafe (Gemini's requests are env.geminiRequests).
+func failOpenProviders(env *raidAIImageEnv, typesafe *atomic.Int64, ts, gemini http.HandlerFunc) {
+	withAISpamJevServer(env.t, func(w http.ResponseWriter, r *http.Request) {
+		typesafe.Add(1)
+		_, _ = io.Copy(io.Discard, r.Body)
+		ts(w, r)
+	})
+	env.answerWith(gemini)
+}
+
+// failOpenAnswer is a handler that always answers with status and body.
+func failOpenAnswer(status int, header, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if header != "" {
+			w.Header().Set("Retry-After", header)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}
+}
+
+// failOpenSpamAnswers is a pair of handlers that judge everything spam.
+func failOpenSpamAnswers() (ts, gemini http.HandlerFunc) {
+	ts = func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(aispamDecisionBody(0.95, "scam"))) }
+	gemini = func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(raidAIGeminiAnswer(0.95, ""))) }
+	return ts, gemini
+}
+
+var failOpenModes = []failOpenMode{
+	{
+		name: "hung", holds: true,
+		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
+			gate := make(chan struct{})
+			var once sync.Once
+			release := func() { once.Do(func() { close(gate) }) }
+			hang := func(w http.ResponseWriter, r *http.Request) {
+				select {
+				case <-gate:
+				case <-r.Context().Done():
+				}
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			failOpenProviders(env, typesafe, hang, hang)
+			env.t.Cleanup(release)
+			return release
+		},
+	},
+	{
+		name: "500",
+		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
+			failOpenProviders(env, typesafe,
+				failOpenAnswer(http.StatusInternalServerError, "", "boom"),
+				failOpenAnswer(http.StatusInternalServerError, "", "boom"))
+			return func() {}
+		},
+	},
+	{
+		name: "429 with a retry delay of 30 s",
+		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
+			const limited = `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED",` +
+				`"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"30s"}]}}`
+			failOpenProviders(env, typesafe,
+				failOpenAnswer(http.StatusTooManyRequests, "30", "slow down"),
+				failOpenAnswer(http.StatusTooManyRequests, "30", limited))
+			return func() {}
+		},
+	},
+	{
+		name: "unreadable JSON",
+		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
+			failOpenProviders(env, typesafe,
+				failOpenAnswer(http.StatusOK, "", "{not json"),
+				failOpenAnswer(http.StatusOK, "", "{not json"))
+			return func() {}
+		},
+	},
+	{
+		name: "keys missing", silent: true,
+		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
+			ts, gemini := failOpenSpamAnswers()
+			failOpenProviders(env, typesafe, ts, gemini)
+			withAISpamTestConfig(env.t, "", true, 0)
+			previous := config.AppConfig.GeminiAPIKey
+			config.AppConfig.GeminiAPIKey = ""
+			env.t.Cleanup(func() { config.AppConfig.GeminiAPIKey = previous })
+			return func() {}
+		},
+	},
+	{
+		name: "breakers open", silent: true,
+		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
+			failOpenProviders(env, typesafe,
+				failOpenAnswer(http.StatusInternalServerError, "", "boom"),
+				failOpenAnswer(http.StatusInternalServerError, "", "boom"))
+			// Enough real failures, text and image, to open both of the chat's breakers.
+			members := env.newMembers(3, 2*time.Hour)
+			for i := 0; i < 8; i++ {
+				env.sendText(members[i%len(members)], fmt.Sprintf("SPAM deal t.me/scam trip %d", i))
+				env.sendMedia(members[i%len(members)], gotgbot.Message{Photo: aiPhoto(fmt.Sprintf("trip-%d", i))})
+			}
+			env.settleAI()
+			return func() {}
+		},
+	},
+	{
+		name: "queue full", holds: true, silent: true,
+		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
+			ts, gemini := failOpenSpamAnswers()
+			failOpenProviders(env, typesafe, ts, gemini)
+
+			raidAIJobs.wait()
+			gate := make(chan struct{})
+			var once sync.Once
+			started := make(chan struct{}, raidAIWorkerCount)
+			previous := raidAIProcess
+			raidAIProcess = func(raidAIJob) {
+				select {
+				case started <- struct{}{}:
+				default:
+				}
+				<-gate
+			}
+			release := func() {
+				once.Do(func() {
+					close(gate)
+					raidAIJobs.wait()
+					raidAIProcess = previous
+				})
+			}
+			env.t.Cleanup(release)
+
+			job := raidAIJob{chat: gotgbot.Chat{Id: -1001234500888, Type: "supergroup"}, userID: 11, text: "SPAM t.me/x"}
+			for i := 0; i < raidAIWorkerCount; i++ {
+				if !raidAIEnqueue(job) {
+					env.t.Fatalf("job %d was shed by an idle pool", i+1)
+				}
+			}
+			for i := 0; i < raidAIWorkerCount; i++ {
+				select {
+				case <-started:
+				case <-time.After(10 * time.Second):
+					env.t.Fatalf("only %d of %d workers took a job", i, raidAIWorkerCount)
+				}
+			}
+			for i := 0; i < raidAIQueueCapacity; i++ {
+				if !raidAIEnqueue(job) {
+					env.t.Fatalf("queued job %d of %d was shed before the queue was full", i+1, raidAIQueueCapacity)
+				}
+			}
+			if raidAIEnqueue(job) {
+				env.t.Fatal("a job was accepted although the workers and the queue were full")
+			}
+			return release
+		},
+	},
+}
+
+// dispatchWithin runs one message update in chat through the env's real dispatcher and
+// reports whether ProcessUpdate returned within failOpenBound.
+func (e *lockdownEnv) dispatchWithin(chat gotgbot.Chat, msg gotgbot.Message) bool {
+	e.t.Helper()
+	id := e.updateID()
+	msg.MessageId, msg.Date, msg.Chat = id, 1, chat
+	var processErr error
+	within := returnsWithin(failOpenBound, func() {
+		processErr = e.dispatcher.ProcessUpdate(e.bot, &gotgbot.Update{UpdateId: id, Message: &msg}, nil)
+	})
+	if within && processErr != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, processErr)
+	}
+	return within
+}
+
+// probeFailOpen has each member send a link text and a photo and fails the test when any
+// update takes longer than failOpenBound.
+func (e *raidAIImageEnv) probeFailOpen(members []gotgbot.User, tag string) {
+	e.t.Helper()
+	for i, member := range members {
+		member := member
+		text := gotgbot.Message{From: &member, Text: fmt.Sprintf("SPAM deal t.me/scam %s %d", tag, i)}
+		if !e.dispatchWithin(e.chat, text) {
+			e.t.Fatalf("the link text of member %d did not return within %s", i, failOpenBound)
+		}
+		photo := gotgbot.Message{From: &member, Photo: aiPhoto(fmt.Sprintf("%s-%d", tag, i))}
+		if !e.dispatchWithin(e.chat, photo) {
+			e.t.Fatalf("the photo of member %d did not return within %s", i, failOpenBound)
+		}
+	}
+}
+
+func TestRaidAIFailOpen(t *testing.T) {
+	for _, mode := range failOpenModes {
+		t.Run(mode.name, func(t *testing.T) {
+			t.Run("join surge locks", func(t *testing.T) {
+				env := newRaidAIImageEnv(t)
+				var typesafe atomic.Int64
+				release := mode.apply(env, &typesafe)
+				tsBefore, geminiBefore := typesafe.Load(), env.geminiRequests()
+				members := env.newMembers(3, 2*time.Hour)
+
+				env.probeFailOpen(members, "probe")
+
+				if mode.silent {
+					if got := typesafe.Load() - tsBefore; got != 0 {
+						t.Errorf("%d TypeSafe requests, want none in this mode", got)
+					}
+					if got := env.geminiRequests() - geminiBefore; got != 0 {
+						t.Errorf("%d Gemini requests, want none in this mode", got)
+					}
+				}
+				if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
+					t.Errorf("verdict items = %d, want 0: a failure is no verdict", got)
+				}
+				if !mode.holds {
+					env.settleAI()
+					if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
+						t.Errorf("verdict items after the checks ended = %d, want 0", got)
+					}
+				}
+				if row := env.activeLockdown(); row != nil {
+					t.Fatalf("a lockdown (kind %q) exists although no verdict counted", row.TriggerKind)
+				}
+
+				// The join surge still locks the raided group, with the providers still down.
+				env.selfJoins(15)
+				row := env.activeLockdown()
+				if row == nil || row.TriggerKind != models.LockdownTriggerJoinSurge || row.LockedAt == nil {
+					t.Fatalf("active lockdown = %+v, want a confirmed join surge lockdown", row)
+				}
+
+				release()
+				env.settleAI()
+				if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
+					t.Errorf("verdict items after the release = %d, want 0", got)
+				}
+				if row := env.activeLockdown(); row == nil || row.TriggerKind != models.LockdownTriggerJoinSurge {
+					t.Errorf("active lockdown = %+v after the release, want still the join surge's", row)
+				}
+				if !mode.silent && int(typesafe.Load())+env.geminiRequests() == int(tsBefore)+geminiBefore {
+					t.Error("no provider was asked: the case would prove nothing")
+				}
+			})
+
+			t.Run("flood locks", func(t *testing.T) {
+				env := newRaidAIImageEnv(t)
+				var typesafe atomic.Int64
+				release := mode.apply(env, &typesafe)
+				recent := env.newMembers(4, 2*time.Hour)
+
+				kinds := []string{"text", "photo", "gif", "sticker"}
+				for i := 0; i < 30; i++ {
+					msg := floodMessage(t, recent[i%len(recent)], kinds[i%len(kinds)])
+					if !env.dispatchWithin(env.chat, msg) {
+						t.Fatalf("flood item %d (%s) did not return within %s", i+1, kinds[i%len(kinds)], failOpenBound)
+					}
+				}
+
+				row := env.activeLockdown()
+				if row == nil || row.TriggerKind != models.LockdownTriggerFlood || row.LockedAt == nil {
+					t.Fatalf("active lockdown = %+v, want a confirmed flood lockdown", row)
+				}
+				if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
+					t.Errorf("verdict items = %d, want 0: a failure is no verdict", got)
+				}
+
+				release()
+				env.settleAI()
+				if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
+					t.Errorf("verdict items after the release = %d, want 0", got)
+				}
+			})
+		})
 	}
 }
