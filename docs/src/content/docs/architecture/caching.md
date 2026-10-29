@@ -27,7 +27,6 @@ Cache Time-To-Live (TTL) values are defined in `alita/db/cache/ttl.go`:
 | `CacheTTLWarnSettings` | 30 minutes | Warning configuration |
 | `CacheTTLAntiflood` | 30 minutes | Flood protection settings |
 | `CacheTTLDisabledCmds` | 30 minutes | Disabled commands list |
-| `CacheTTLAntiRaid` | 30 minutes | Legacy anti-raid settings (the retired raid mode; read only by the backup module) |
 | `CacheTTLApprovals` | 30 minutes | Approved users list |
 | `CacheTTLCaptchaSettings` | 30 minutes | Captcha verification settings |
 
