@@ -92,8 +92,11 @@ separate from the opt-in filter above, and the two work together:
 - **Raid protection also checks new members' posts, with or without `/aispam`.**
   For members who joined the group in the last 24 hours, a text with a link, a
   forwarded text, or a text they just repeated is checked with TypeSafe. The check
-  sends the same kind of data as the list above, without the sender's recent
-  messages. When `/aispam` is on and will judge the text itself, the raid check
+  sends much less than the list above: the chat's title and language, the
+  sender's days since the bot first saw them and a messages-last-hour number
+  (always 1 here), and the text with the domains it links to and whether it is a
+  forward. It never sends the chat's description or rules, the sender's warn
+  count, whether the message is a reply, or any earlier message. When `/aispam` is on and will judge the text itself, the raid check
   sends nothing, so a message is never judged twice. These checks only report a
   verdict: they delete nothing.
 - **Images go to Google Gemini.** When the bot owner has set `GEMINI_API_KEY`,

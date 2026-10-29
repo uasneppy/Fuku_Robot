@@ -604,6 +604,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   more, then the enqueue. The rule is: the sender is a new member (joined within 24 h) and the text carries a link
   (`aispamLinkDomains`), is a forward, or repeats one of their last 5 texts of at least 10 runes. Established members'
   messages, plain texts, admins, approved users, members with a pending captcha and basic groups are never sent to any AI.
+- A raid-only text check sends TypeSafe less than `/aispam` does (`raidAIState`, built by `raidAIStateOf`, WR-03), because the
+  chat never switched `/aispam` on: the chat's title and language, the sender's first-seen days and a
+  `messages_last_hour` of 1 (the raid path keeps no sender history), and the message's text, `has_link`, link domains
+  and `is_forward`. It never carries the chat description (no live `getChat`), the chat rules, the sender's warn
+  count, the reply flag or `recent_from_sender`; `raidAIState` has no field for them, and `/aispam`'s own `aispamState`
+  request is unchanged (`aispamJevDecide` takes either). `TestRaidAITextRequestIsMinimal` reads the request body the
+  TypeSafe server receives. The `/lockdown` help never claimed more than "suspicious text ... is checked by TypeSafe",
+  so it is unchanged.
 - The raid path's text checks never double the `/aispam` call: `aispamWillJudge` (the TypeSafe configuration,
   `aispam.IsAISpamEnabled` and a breaker that is not paused, the gates at the top of `checkAISpam`) hands a text to
   `/aispam` whenever `/aispam` will judge it, and the watcher then sends nothing, so a message makes at most one

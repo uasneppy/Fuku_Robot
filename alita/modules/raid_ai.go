@@ -171,7 +171,6 @@ type raidAIJob struct {
 	text        string
 	linkDomains []string
 	isForward   bool
-	isReply     bool
 	title       string
 	language    string
 	media       *raidAIMedia
@@ -268,7 +267,6 @@ func raidAIWatchText(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, userI
 		text:        msg.Text,
 		linkDomains: domains,
 		isForward:   msg.ForwardOrigin != nil,
-		isReply:     msg.ReplyToMessage != nil,
 		title:       chat.Title,
 		language:    lang.GetLanguage(ctx),
 	})
@@ -495,6 +493,56 @@ func raidAIProcessJob(job raidAIJob) {
 	raidAIProcessText(job)
 }
 
+// raidAIState is what the raid-only text check sends to TypeSafe (WR-03), a subset of
+// /aispam's aispamState: the chat's title and language, the sender's first-seen days and
+// messages-last-hour (always 1 here: the raid path keeps no sender history), and the
+// message's text with its link domains and forward flag. It never carries the chat's
+// description or rules, the sender's warn count, a reply flag or any recent message,
+// because the chat never switched /aispam on. It has no field for them on purpose.
+type raidAIState struct {
+	Chat    raidAIChatState    `json:"chat"`
+	Sender  raidAISenderState  `json:"sender"`
+	Message raidAIMessageState `json:"message"`
+}
+
+type raidAIChatState struct {
+	Title    string `json:"title"`
+	Language string `json:"language"`
+}
+
+type raidAISenderState struct {
+	FirstSeenDaysAgo int `json:"first_seen_days_ago"`
+	MessagesLastHour int `json:"messages_last_hour"`
+}
+
+type raidAIMessageState struct {
+	Text        string   `json:"text,omitempty"`
+	HasLink     bool     `json:"has_link"`
+	LinkDomains []string `json:"link_domains,omitempty"`
+	IsForward   bool     `json:"is_forward"`
+}
+
+// raidAIStateOf builds the TypeSafe state of one raid-only text job. The same truncation
+// limits as /aispam apply to the title and the text.
+func raidAIStateOf(job raidAIJob) raidAIState {
+	return raidAIState{
+		Chat: raidAIChatState{
+			Title:    aispamTruncate(job.title, aispamMaxTitleLen),
+			Language: job.language,
+		},
+		Sender: raidAISenderState{
+			FirstSeenDaysAgo: aispamFirstSeenDaysAgo(job.userID),
+			MessagesLastHour: 1,
+		},
+		Message: raidAIMessageState{
+			Text:        aispamTruncate(job.text, aispamMaxMessageLen),
+			HasLink:     len(job.linkDomains) > 0,
+			LinkDomains: job.linkDomains,
+			IsForward:   job.isForward,
+		},
+	}
+}
+
 // raidAIProcessText asks TypeSafe about one new member's text and reports a spam verdict to
 // the AI burst counter. It never deletes, restricts, bans or posts. It shares /aispam's
 // per-chat breaker silently: a paused chat is not asked, a failure counts toward the
@@ -507,24 +555,9 @@ func raidAIProcessText(job raidAIJob) {
 		return
 	}
 
-	task := aispamTask{
-		bot:         job.bot,
-		chat:        job.chat,
-		itemKey:     job.itemKey,
-		chatID:      job.chat.Id,
-		messageID:   job.messageID,
-		userID:      job.userID,
-		text:        job.text,
-		hasLink:     len(job.linkDomains) > 0,
-		linkDomains: job.linkDomains,
-		isForward:   job.isForward,
-		isReply:     job.isReply,
-		title:       job.title,
-		language:    job.language,
-	}
 	// The call derives from the pool's context, so the shutdown drain aborts it.
 	poolCtx := raidAIContext()
-	verdict, err := aispamJevDecide(poolCtx, config.AppConfig.TypeSafeAPIKey, task.state(nil, 1))
+	verdict, err := aispamJevDecide(poolCtx, config.AppConfig.TypeSafeAPIKey, raidAIStateOf(job))
 	if err != nil {
 		if poolCtx.Err() != nil {
 			// Cut off by the shutdown drain: no verdict, and not the provider's failure, so

@@ -78,7 +78,9 @@ type aispamMessageState struct {
 }
 
 type aispamJevRequest struct {
-	State     aispamState                  `json:"state"`
+	// State is an aispamState for /aispam and a raidAIState for the raid-only text check,
+	// which sends less (WR-03).
+	State     any                          `json:"state"`
 	Model     string                       `json:"model"`
 	Questions map[string]aispamJevQuestion `json:"questions"`
 }
@@ -172,7 +174,7 @@ func (e *aispamHTTPError) retryable() bool {
 // aispamJevDecide asks the model to judge one message. Any failure -- timeout,
 // 429, 5xx, transport error, unparseable answer -- returns an error and no
 // verdict, and the caller fails open.
-func aispamJevDecide(ctx context.Context, apiKey string, state aispamState) (*aispamVerdict, error) {
+func aispamJevDecide(ctx context.Context, apiKey string, state any) (*aispamVerdict, error) {
 	ctx, cancel := context.WithTimeout(ctx, aispamJevTimeout)
 	defer cancel()
 
@@ -200,7 +202,7 @@ func aispamJevDecide(ctx context.Context, apiKey string, state aispamState) (*ai
 	return aispamJevPost(ctx, apiKey, state)
 }
 
-func aispamJevPost(ctx context.Context, apiKey string, state aispamState) (*aispamVerdict, error) {
+func aispamJevPost(ctx context.Context, apiKey string, state any) (*aispamVerdict, error) {
 	payload, err := json.Marshal(aispamJevRequest{
 		State:     state,
 		Model:     aispamJevModel,
