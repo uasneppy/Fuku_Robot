@@ -102,13 +102,17 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 // lockdownStartedAutomatically reports whether the bot locked the group on its own: the
-// lockdown's trigger is a join surge or a flood. Any other kind, a manual lockdown
-// included, reads as it always did.
+// lockdown's trigger is a join surge, a flood or an AI burst. Any other kind, a manual
+// lockdown included, reads as it always did.
 func lockdownStartedAutomatically(ld *models.ChatLockdown) bool {
 	if ld == nil {
 		return false
 	}
-	return ld.TriggerKind == models.LockdownTriggerJoinSurge || ld.TriggerKind == models.LockdownTriggerFlood
+	switch ld.TriggerKind {
+	case models.LockdownTriggerJoinSurge, models.LockdownTriggerFlood, models.LockdownTriggerAIBurst:
+		return true
+	}
+	return false
 }
 
 // lockdownRemovedSoFar is how many joiners a lockdown removed: the joiners under its

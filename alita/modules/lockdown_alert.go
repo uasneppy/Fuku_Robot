@@ -205,7 +205,9 @@ func lockdownAlertDestinations(ld *models.ChatLockdown) ([]models.ChatLockdownAl
 //
 // For a lockdown the flood trigger started it adds the flooding accounts too (D-17): the
 // recently joined accounts that posted in the flood window, saved at the moment the
-// trigger fired, however long ago they joined (lockdownMergeFlooders).
+// trigger fired, however long ago they joined (lockdownMergeFlooders). A lockdown the AI
+// burst trigger started adds the accounts behind the counted spam verdicts the same way,
+// established members among them (lockdownMergeAISpammers).
 func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.ChatLockdownBurst {
 	if ld.LockedAt == nil {
 		return nil
@@ -216,8 +218,11 @@ func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.Cha
 		log.Warnf("[Lockdown] the recent joins of chat %d could not be read for the alert of lockdown %d: %v", ld.ChatID, ld.ID, err)
 		joins = nil
 	}
-	if ld.TriggerKind == models.LockdownTriggerFlood {
+	switch ld.TriggerKind {
+	case models.LockdownTriggerFlood:
 		joins = lockdownMergeFlooders(b, ld, joins)
+	case models.LockdownTriggerAIBurst:
+		joins = lockdownMergeAISpammers(b, ld, joins)
 	}
 	rows := make([]models.ChatLockdownBurst, 0, len(joins))
 	for _, join := range joins {
@@ -240,18 +245,40 @@ func lockdownBurstSnapshot(b *gotgbot.Bot, ld *models.ChatLockdown) []models.Cha
 }
 
 // lockdownMergeFlooders adds the flooding accounts of a flood lockdown to the tracker's
-// joins. The flooders come from the snapshot the trigger saved when it fired
-// (raidFloodersLookup; no Redis or no snapshot adds nothing, a failed read is logged at warn
-// and adds nothing, because the alert must still post). They are merged by user ID: an
+// joins, from the snapshot the flood trigger saved when it fired (raidFloodersLookup).
+// See lockdownMergeSnapshot for how they are merged.
+func lockdownMergeFlooders(b *gotgbot.Bot, ld *models.ChatLockdown, joins []lockdownRecentJoin) []lockdownRecentJoin {
+	return lockdownMergeSnapshot(b, ld, joins, raidFloodersLookup, "flooding")
+}
+
+// lockdownMergeAISpammers adds the accounts behind an AI burst lockdown's spam verdicts to
+// the tracker's joins, from the snapshot the AI trigger saved when it fired
+// (raidAISpammersLookup). An account that did not join recently, an established member
+// whose delete verdict counted, is in it too, timed by its verdict. See
+// lockdownMergeSnapshot for how they are merged.
+func lockdownMergeAISpammers(b *gotgbot.Bot, ld *models.ChatLockdown, joins []lockdownRecentJoin) []lockdownRecentJoin {
+	return lockdownMergeSnapshot(b, ld, joins, raidAISpammersLookup, "spamming")
+}
+
+// lockdownMergeSnapshot adds the accounts of a trigger's snapshot to the tracker's joins.
+// The accounts come from lookup, the snapshot the trigger saved when it fired (no Redis or
+// no snapshot adds nothing, a failed read is logged at warn and adds nothing, because the
+// alert must still post); what names them in the warn logs. They are merged by user ID: an
 // account the tracker also saw keeps the tracker's name, username, link and bot flag, and
-// the earlier of the two join times wins. A flooder the tracker never saw is named from the
+// the earlier of the two times wins. An account the tracker never saw is named from the
 // users table with one query (a failed read leaves the names empty, and the account is still
 // saved), with the name and username capped as the tracker caps them. The bot itself is
-// skipped. The result is ordered by join time, then user ID.
-func lockdownMergeFlooders(b *gotgbot.Bot, ld *models.ChatLockdown, joins []lockdownRecentJoin) []lockdownRecentJoin {
-	flooders, err := raidFloodersLookup(ld.ChatID)
+// skipped. The result is ordered by time, then user ID.
+func lockdownMergeSnapshot(
+	b *gotgbot.Bot,
+	ld *models.ChatLockdown,
+	joins []lockdownRecentJoin,
+	lookup func(int64) ([]lockdownRecentJoin, error),
+	what string,
+) []lockdownRecentJoin {
+	flooders, err := lookup(ld.ChatID)
 	if err != nil {
-		log.Warnf("[Lockdown] the flooding accounts of chat %d could not be read for the alert of lockdown %d: %v", ld.ChatID, ld.ID, err)
+		log.Warnf("[Lockdown] the %s accounts of chat %d could not be read for the alert of lockdown %d: %v", what, ld.ChatID, ld.ID, err)
 		return joins
 	}
 	if len(flooders) == 0 {
@@ -282,7 +309,7 @@ func lockdownMergeFlooders(b *gotgbot.Bot, ld *models.ChatLockdown, joins []lock
 	if len(unnamed) > 0 {
 		names, err := user.FindUsersByIDs(unnamed)
 		if err != nil {
-			log.Warnf("[Lockdown] the names of the flooding accounts of chat %d could not be read for the alert of lockdown %d: %v", ld.ChatID, ld.ID, err)
+			log.Warnf("[Lockdown] the names of the %s accounts of chat %d could not be read for the alert of lockdown %d: %v", what, ld.ChatID, ld.ID, err)
 		}
 		for _, id := range unnamed {
 			row, found := names[id]
@@ -469,12 +496,17 @@ func lockdownRenderSampleAccount(tr *i18n.Translator, account lockdown.BurstAcco
 // then, when the burst is not empty, a title, one line per listed account and an "and N
 // more" line for the accounts not listed. The counts line of a flood lockdown says that
 // the listed accounts are the flooding accounts as well as the joins just before the lock;
-// every other kind says only who joined. The account lines hold user text, so they are
+// that of an AI burst names the accounts behind the spam verdicts and does not say they
+// joined, because some of them may be established members; every other kind says only who
+// joined. The account lines hold user text, so they are
 // built outside the translator and spliced in after it, in place of a token.
 func lockdownRenderSample(tr *i18n.Translator, accounts []lockdown.BurstAccount, counts lockdown.BurstCounts, kind string) string {
 	countsKey := "lockdown_alert_counts"
-	if kind == models.LockdownTriggerFlood {
+	switch kind {
+	case models.LockdownTriggerFlood:
 		countsKey = "lockdown_alert_counts_flood"
+	case models.LockdownTriggerAIBurst:
+		countsKey = "lockdown_alert_counts_ai"
 	}
 	lines := []string{lockdownText(tr, countsKey, i18n.TranslationParams{
 		"before": strconv.FormatInt(counts.Before, 10),
@@ -535,7 +567,8 @@ func lockdownRenderLinkLine(tr *i18n.Translator, links []lockdown.InviteLinkCoun
 
 // lockdownAlertTriggerLine is the alert's line saying how the lockdown was triggered. A
 // join surge names its count and window, a flood its count, window and the percent from
-// new members; any other kind, a manual lockdown included, names who started it with
+// new members, an AI burst its count of spam verdicts and window; any other kind, a manual
+// lockdown included, names who started it with
 // /lockdown. The numbers come from the row's trigger columns, never from the reason, so
 // each destination reads them in its own language. They are passed as strings built with
 // strconv and by name only, so the translator's legacy printf pass never meets the
@@ -556,6 +589,12 @@ func lockdownAlertTriggerLine(tr *i18n.Translator, ld *models.ChatLockdown, lock
 			"window":  window,
 			"percent": strconv.Itoa(ld.TriggerPercent),
 			"time":    lockdownTime(lockedAt),
+		})
+	case models.LockdownTriggerAIBurst:
+		return lockdownText(tr, "lockdown_alert_trigger_ai_burst", i18n.TranslationParams{
+			"count":  count,
+			"window": window,
+			"time":   lockdownTime(lockedAt),
 		})
 	}
 	return lockdownSplice(

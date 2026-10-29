@@ -27,7 +27,23 @@ const (
 	// trigger_count messages within trigger_window seconds, trigger_percent of them from
 	// new members.
 	LockdownTriggerFlood = "flood"
+	// LockdownTriggerAIBurst is the trigger_kind of a lockdown the AI spam verdict counter
+	// started: trigger_count spam verdicts within trigger_window seconds, trigger_percent 0.
+	// It is 8 characters and the column holds 16 with no CHECK, so it needs no migration.
+	LockdownTriggerAIBurst = "ai_burst"
 )
+
+// LockdownTriggerKinds lists every trigger_kind a lockdown row can carry. A new kind is
+// added here beside its constant, and the surface test that renders each kind fails until
+// every place that switches on the kind knows it.
+func LockdownTriggerKinds() []string {
+	return []string{
+		LockdownTriggerManual,
+		LockdownTriggerJoinSurge,
+		LockdownTriggerFlood,
+		LockdownTriggerAIBurst,
+	}
+}
 
 // States of one joiner row of a lockdown, as stored in chat_lockdown_joiners.state.
 const (

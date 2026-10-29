@@ -216,8 +216,9 @@ type raidTrigger struct {
 // After the latch it stays silent, with no Telegram call, while the chat has an active
 // lockdown and for raidLiftQuiet after an admin started lifting one (D-15); a failed read
 // of either shortens the latch to raidRetryLatch. A flood trigger then copies its flooding
-// accounts into a short-lived snapshot for the alert (raidSnapshotFlooders). After the
-// start the latch is cut or stretched by outcome (raidOutcomeLatch).
+// accounts into a short-lived snapshot for the alert (raidSnapshotFlooders), and an AI
+// burst copies the accounts behind its spam verdicts the same way (raidSnapshotAISpammers).
+// After the start the latch is cut or stretched by outcome (raidOutcomeLatch).
 func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	client := raidRedis()
 	if client == nil {
@@ -268,11 +269,20 @@ func raidFire(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger) {
 	// only 30 seconds, so they are copied now, before the lockdown row exists, for the alert
 	// the worker decides later (D-17). It is best effort: without the snapshot the alert
 	// still lists the tracker's joins.
-	if trig.Kind == models.LockdownTriggerFlood {
+	// An AI burst is described the same way, by the accounts behind its spam verdicts (the
+	// verdict sets keep 120 seconds and expire in minutes).
+	switch trig.Kind {
+	case models.LockdownTriggerFlood:
 		if saved, snapErr := raidSnapshotFlooders(chat.Id); snapErr != nil {
 			log.Debugf("[RaidDetection] the flooding accounts of chat %d could not be saved: %v", chat.Id, snapErr)
 		} else {
 			log.Debugf("[RaidDetection] %d flooding accounts of chat %d saved for the alert", saved, chat.Id)
+		}
+	case models.LockdownTriggerAIBurst:
+		if saved, snapErr := raidSnapshotAISpammers(chat.Id); snapErr != nil {
+			log.Debugf("[RaidDetection] the spamming accounts of chat %d could not be saved: %v", chat.Id, snapErr)
+		} else {
+			log.Debugf("[RaidDetection] %d spamming accounts of chat %d saved for the alert", saved, chat.Id)
 		}
 	}
 
@@ -325,7 +335,8 @@ func raidSend(b *gotgbot.Bot, chatID int64, text string) error {
 
 // lockdownTriggerSentence is the time-less sentence saying what an automatic trigger saw:
 // a join surge names its count and window, a flood its count, window and the percent from
-// new members. Any other kind, a manual lockdown included, has none and gets "". The
+// new members, an AI burst its count of spam verdicts and window. Any other kind, a manual
+// lockdown included, has none and gets "". The
 // numbers are passed as strings built with strconv and by name only, so the translator's
 // legacy printf pass never meets the percent sign, and the sentence holds no user text.
 func lockdownTriggerSentence(tr *i18n.Translator, kind string, count, window, percent int) string {
@@ -341,11 +352,17 @@ func lockdownTriggerSentence(tr *i18n.Translator, kind string, count, window, pe
 			"window":  strconv.Itoa(window),
 			"percent": strconv.Itoa(percent),
 		})
+	case models.LockdownTriggerAIBurst:
+		return lockdownText(tr, "lockdown_trigger_ai_burst", i18n.TranslationParams{
+			"count":  strconv.Itoa(count),
+			"window": strconv.Itoa(window),
+		})
 	}
 	return ""
 }
 
-// raidPostNotice tells the locked group, once, that the bot locked it on its own: which
+// raidPostNotice tells the locked group, once, that the bot locked it on its own (a join
+// surge, a flood or an AI burst; any other kind posts nothing): which
 // trigger fired with its numbers, that approved users are muted too, and the notes
 // /lockdown adds when the bot lacks the delete or the invite right (read from res.BotMember,
 // the rights startLockdownRow saw). It is written in the group's own language and sent
@@ -367,6 +384,11 @@ func raidPostNotice(b *gotgbot.Bot, chat *gotgbot.Chat, trig raidTrigger, res lo
 			"count":   count,
 			"window":  window,
 			"percent": strconv.Itoa(trig.Percent),
+		})
+	case models.LockdownTriggerAIBurst:
+		intro = lockdownText(tr, "lockdown_auto_started_ai_burst", i18n.TranslationParams{
+			"count":  count,
+			"window": window,
 		})
 	default:
 		return
