@@ -375,7 +375,7 @@ Plans:
   4. A member who fails the Turnstile check, or doesn't pass within the group's time limit, is kicked and can rejoin to try again. This works no matter which bot replica handles the join or the check.
   5. The owner can deploy the captcha page by following the documented steps: a public HTTPS hostname, BotFather Mini App registration, and Turnstile keys. The Turnstile secret never appears in logs.
 
-**Plans:** 2/11 plans executed
+**Plans:** 5/11 plans executed
 **UI hint**: yes
 
 Plans:
@@ -384,9 +384,9 @@ Plans:
 - [x] 08-02-PLAN.md: The four web captcha settings (plus trusted proxies) load all-or-nothing, the Turnstile secret is registered with `logredact`, env docs
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 08-03-PLAN.md: Strict `initData` validation pinned by the published known-answer vector; the `captchaweb` leaf-package test
-- [ ] 08-04-PLAN.md: Append-only migration widening `chk_captcha_mode` (legacy inline check dropped too), `SetCaptchaMode` accepts turnstile, PostgreSQL guarantee in CI
-- [ ] 08-05-PLAN.md: The embedded Mini App page: per-response nonce CSP, 9 states, `cData` binding, one POST per token, `node --test` for its script
+- [x] 08-03-PLAN.md: Strict `initData` validation pinned by the published known-answer vector; the `captchaweb` leaf-package test
+- [x] 08-04-PLAN.md: Append-only migration widening `chk_captcha_mode` (legacy inline check dropped too), `SetCaptchaMode` accepts turnstile, PostgreSQL guarantee in CI
+- [x] 08-05-PLAN.md: The embedded Mini App page: per-response nonce CSP, 9 states, `cData` binding, one POST per token, `node --test` for its script
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 08-06-PLAN.md: A failed check kicks once, Cloudflare and setup faults retry with the token re-armed, timeouts and checks decide once on any replica, nothing secret is logged
@@ -432,5 +432,5 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
 | 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
-| 8. Turnstile Web Captcha | 2/11 | In Progress|  |
+| 8. Turnstile Web Captcha | 5/11 | In Progress|  |
 | 9. Settings Menu | 0/TBD | Not started | - |
