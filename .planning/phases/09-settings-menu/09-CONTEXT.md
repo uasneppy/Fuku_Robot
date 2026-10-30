@@ -16,7 +16,7 @@ There is no spike gate. The roadmap marks this phase "UI hint: yes", so a UI des
 Out of scope:
 - Menus for other modules (welcome, rules, warns, filters, notes and so on). Pages are registered in one table so they can be added later.
 - Starting a lockdown from the menu (`/lockdown` stays a command; the Lockdown page shows state, Lift and the trigger settings only).
-- Antiflood actions that need a duration (`tban`, `tmute`): they stay command-only.
+- Antiflood actions other than mute, ban and kick (`warn`, `tban`, `tmute`), which no command sets today (D-20).
 - Any new setting. The menu exposes existing settings through the same code the commands use.
 - Running live Telegram checks. They are deferred to a checklist (`09-SPIKE.md`) like Phases 7 and 8.
 
@@ -51,6 +51,13 @@ Out of scope:
 - **D-17:** Each setting the menu can change has one apply function that both the command handler and the menu call. It holds validation, the setting-specific refusals (for example Turnstile's three), the repository write and the `cache.DeleteCache` of the affected keys, and returns a typed result the command renders as its reply and the menu renders as a page or alert. The existing command handlers are refactored to call it; their observable replies do not change.
 - **D-18:** Pages read through the same cached getters the commands read, so the command's answer and the menu's value are always the same. Keys that a replica could serve stale from the in-process layer are already in `skipLocal` where freshness matters; the plan checks each setting the menu edits.
 - **D-19:** Tests prove parity per setting: change by command and read the menu's value; change by menu and read what the command shows; compare the stored rows; and a drift test that fails when a command and the menu disagree about validation (for example a threshold of 2, a time limit of 11, an unknown mode). Authority parity is tested too: a press that the command would refuse is refused by the menu.
+
+### Amendments after the UI contract (orchestrator's calls, 2026-10-30)
+- **D-20 (refines D-15, A-1):** `/setfloodmode` accepts only `ban`, `kick` and `mute`; nothing in the code writes `warn`, `tban` or `tmute`, and no antiflood command takes a duration. The Antiflood page therefore offers mute, ban and kick. A stored `warn`, `tban` or `tmute` (an old or imported row) is shown read-only with a note and is never claimed to be settable by a command. The limit control is Off, then 3 to 100, because that is what `/setflood` accepts.
+- **D-21 (privacy, A-2):** Phase 1's rule is that nothing about a link is shown to the linked group's members. A menu opened in the group is a message every member can read, so there the Staff Group page shows only a masked line (linked or not, and the bot's health, never the Staff Group's name or ID). The private menu and a menu opened inside a Staff Group show the full information. This keeps D-12's information for the admin who asked for it in private.
+- **D-22 (Link picker, A-3):** an owner can have several Staff Groups and D-08 allows no free text, so Link opens a stateless picker with one button per Staff Group the presser owns, each verified live at the press, then calls the same function as `/linkstaff`. A presser who owns no Staff Group gets the command's own refusal.
+- **D-23 (reused strings, A-4):** where a command already has the refusal or state text, the menu reuses that existing key, in all 7 languages, instead of duplicating it as a `settings_*` key, so "the menu refuses with the command's words" holds. New `settings_*` keys cover only what is new (page titles, labels, menu-specific alerts).
+- **D-24 (value button, A-5):** a stepper's value button redraws the page, which also re-runs the live admin check. A double tap is harmless because a stepper button sends the absolute target value.
 
 ### Claude's Discretion
 - The exact `settings|v1` field names and abbreviations, and how a stepper encodes its direction and size (for example a step of 1, 5 or 10 for thresholds).
