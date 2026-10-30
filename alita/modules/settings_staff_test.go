@@ -18,6 +18,8 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/staff"
+	"github.com/divkix/Alita_Robot/alita/i18n"
+	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 )
 
 // settingsStaffTestPrivateMsg is the ID of the message a private Staff Group page sits on.
@@ -881,4 +883,144 @@ func TestSettingsStaffUnlink(t *testing.T) {
 			t.Fatal("an unanswered owner check removed the link")
 		}
 	})
+}
+
+func TestSettingsAuthorityParityStaff(t *testing.T) {
+	// A refusal posted in the issuing group deletes itself after a delay; keep the timers out
+	// of the test.
+	previousDelay := staffSelfDeleteAfter
+	staffSelfDeleteAfter = time.Hour
+	t.Cleanup(func() { staffSelfDeleteAfter = previousDelay })
+
+	t.Run("an administrator who owns no Staff Group", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		env.send(env.admin, "/linkstaff")
+		if reply := env.lastReply(); !strings.Contains(reply, staffMarker("staff_link_no_staff_group")) {
+			t.Fatalf("/linkstaff replied %q, want staff_link_no_staff_group", reply)
+		}
+
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, staffMarker("staff_link_no_staff_group"))
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Errorf("a refused press linked the group: %+v", link)
+		}
+	})
+
+	t.Run("an administrator who is not the creator of the Staff Group", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		other := gotgbot.User{Id: env.admin.Id + 7, FirstName: "Other"}
+		env.fake.setMember(env.chat.Id, other.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true})
+
+		env.send(other, "/unlinkstaff")
+		if reply := env.lastReply(); !strings.Contains(reply, staffMarker("staff_unlink_refuse_not_owner")) {
+			t.Fatalf("/unlinkstaff replied %q, want staff_unlink_refuse_not_owner", reply)
+		}
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("/unlinkstaff by a stranger removed the link")
+		}
+
+		msgID := env.openMenu(other)
+		env.press(other, msgID, env.groupFields(other, "a", "ua"))
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, staffMarker("staff_unlink_refuse_not_owner"))
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("the menu's Unlink by a stranger removed the link")
+		}
+	})
+
+	t.Run("a plain member", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		member := gotgbot.User{Id: env.admin.Id + 9, FirstName: "Member"}
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		memberStaff := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Member Staff"}
+		staffCleanup(t, memberStaff.Id, env.chat.Id)
+		if _, err := staff.CreateStaffGroup(memberStaff.Id, member.Id, memberStaff.Title); err != nil {
+			t.Fatalf("create the member's Staff Group: %v", err)
+		}
+		env.fake.setCreator(memberStaff.Id, member.Id)
+
+		env.send(member, "/linkstaff")
+		if got := settingsStaffTestMessagesWith(env, memberStaff.Id, "staff_link_refuse_not_target_owner"); got != 1 {
+			t.Fatalf("/linkstaff by a member posted %d refusals to the Staff Group, want 1", got)
+		}
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Fatalf("/linkstaff by a member linked the group: %+v", link)
+		}
+
+		msgID := int64(5151)
+		env.pressPrivate(member, msgID, env.privateFields(env.chat.Id, "a", "lk"))
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("the member's private press answered %q alert %v, want the settings_not_admin alert", answer, alert)
+		}
+		if got := len(env.edits(member.Id, msgID)); got != 0 {
+			t.Errorf("a refused private press edited the message %d times", got)
+		}
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Fatalf("a refused press linked the group: %+v", link)
+		}
+	})
+}
+
+func TestSettingsStaffCallbackBytes(t *testing.T) {
+	withRealLocales(t)
+	tr := i18n.MustNewTranslator("en")
+
+	const staffID = int64(-1001111111111)
+	staffGroup := models.StaffGroup{ID: 4294967295, ChatID: staffID, OwnerUserID: 55, Title: "Fuku Staff"}
+	link := models.StaffGroupLink{ID: 4294967295, GroupChatID: -1001234567890, StaffChatID: staffID, OwnerUserID: 55, GroupTitle: "Fuku Test Group"}
+	row := staffLinkRow{Link: link, Health: models.StaffHealthOK, HealthKnown: true, OwnerState: chat_status.OwnerMatch}
+	pickable := make([]models.StaffGroup, 10)
+	for i := range pickable {
+		pickable[i] = models.StaffGroup{ID: 4294967295, ChatID: staffID - int64(i), OwnerUserID: 55, Title: "Fuku Staff"}
+	}
+	panelRows := make([]staffLinkRow, 20)
+	for i := range panelRows {
+		panelRows[i] = row
+	}
+
+	for _, variant := range []struct {
+		name string
+		view settingsView
+	}{
+		{"private", settingsView{Tr: tr, Private: true, OwnerKey: "c", OwnerValue: "-1001234567890", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}},
+		{"group", settingsView{Tr: tr, OwnerKey: "u", OwnerValue: "9999999999", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}},
+	} {
+		t.Run(variant.name, func(t *testing.T) {
+			v := variant.view
+			screens := map[string]settingsScreen{
+				"linked":     renderSettingsStaffLinked(v, settingsStaffViewFor(v, false, &staffGroup, &row), ""),
+				"not linked": renderSettingsStaffNotLinked(v, ""),
+				"panel":      renderSettingsStaffPanel(v, staffGroup, panelRows, 1, time.Now(), ""),
+				"picker":     renderSettingsStaffPicker(v, pickable, ""),
+				"card":       renderSettingsStaffUnlinkCard(v, link),
+			}
+			for name, screen := range screens {
+				if screen.Omitted != 0 {
+					t.Errorf("%s omitted %d buttons for overflow, want none", name, screen.Omitted)
+				}
+				buttons := settingsAllButtons(screen.Keyboard.InlineKeyboard)
+				if len(buttons) == 0 {
+					t.Errorf("%s has no buttons", name)
+				}
+				for _, button := range buttons {
+					if n := len(button.CallbackData); n < 1 || n > 64 {
+						t.Errorf("%s button %q has %d bytes of callback data, want 1..64", name, button.Text, n)
+					}
+				}
+			}
+			if variant.name == "private" {
+				for _, button := range settingsAllButtons(screens["picker"].Keyboard.InlineKeyboard) {
+					if fields := settingsButtonFields(t, button); fields["a"] == "lk" && len(button.CallbackData) != 46 {
+						t.Errorf("the private pick button is %d bytes, want 46", len(button.CallbackData))
+					}
+				}
+			}
+			if got := len(settingsAllButtons(screens["picker"].Keyboard.InlineKeyboard)); got != settingsStaffPickMax+2 {
+				t.Errorf("the picker has %d buttons, want %d picks and Back and Close", got, settingsStaffPickMax)
+			}
+		})
+	}
 }
