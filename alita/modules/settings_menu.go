@@ -320,6 +320,12 @@ func settingsVerifyPress(b *gotgbot.Bot, ctx *ext.Context, query *gotgbot.Callba
 		return refuse("settings_check_failed")
 	}
 	group := full.ToChat()
+	// Callback data is not authenticated by Telegram, so c can name any chat the presser
+	// administers. Only a group or supergroup is configured here, as the deep link does.
+	if group.Type != "group" && group.Type != "supergroup" {
+		p.cannotOpen()
+		return nil
+	}
 	p.group = &group
 	return p
 }

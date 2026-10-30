@@ -223,7 +223,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_pages.go`. A private press makes two Telegram calls, `getChatMember` of the presser in `c` and `getChat` of
   `c`; an error of either that `chat_status.IsBotMissingError` recognises ("bot was kicked", "bot is not a member",
   "chat not found") is the cannot-open edit with its alert (`settingsPress.cannotOpen`, D-11), and every other error is
-  the `settings_check_failed` alert with no edit. A group menu's pipeline is unchanged.
+  the `settings_check_failed` alert with no edit. A `c` whose `getChat` answer is not a `group` or `supergroup` (callback data
+  is not authenticated, so it can name a channel or a private chat the presser administers) is the same cannot-open edit
+  with its alert and no write, as the deep link refuses it. A group menu's pipeline is unchanged.
 - The Staff Group page (`settings_staff.go`, page `s`) declares four actions: `lk` Link (with an optional `s`), `ua` Unlink
   ask, `uy` Unlink Yes (with `e`) and `pg` (with `v`, the page of the read-only panel, parsed by `settingsParseNumber`
   and clamped; a value that is not a number is an invalid request). `s` is the staff_groups row ID, never a chat ID:

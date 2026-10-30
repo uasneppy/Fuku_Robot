@@ -321,6 +321,44 @@ func TestSettingsPrivateMenu(t *testing.T) {
 		}
 	})
 
+	// Callback data is not authenticated by Telegram, so c can name a channel or a private
+	// chat the presser administers. The press is the cannot-open edit and writes nothing
+	// (WR-05), exactly like the deep link.
+	for _, chatType := range []string{"channel", "private"} {
+		t.Run("a chat of type "+chatType+" is never configured", func(t *testing.T) {
+			env := newSettingsEnv(t)
+			msgID := settingsPrivateOpen(t, env)
+			env.pressPrivate(env.admin, msgID, captchaPage(env))
+			_, keyboard := env.lastEdit(env.admin.Id, msgID)
+			stepper := settingsCaptchaRow(t, keyboard, settingsCaptchaTime)
+			if len(stepper) != 3 {
+				t.Fatalf("private Captcha page keyboard = %+v, want a three button time stepper row", keyboard)
+			}
+			env.fake.setChatType(env.chat.Id, chatType)
+			answers := env.answerCount()
+			edits := len(env.edits(env.admin.Id, msgID))
+
+			env.pressRaw(settingsPrivateChat(env.admin), env.admin, msgID, stepper[2].CallbackData)
+
+			if got := env.answerCount() - answers; got != 1 {
+				t.Fatalf("the press answered the callback %d times, want once", got)
+			}
+			if text, alert := env.lastAnswer(); !alert || !strings.Contains(text, staffMarker("settings_cannot_open_alert")) {
+				t.Errorf("answer = %q (alert %v), want the settings_cannot_open_alert alert", text, alert)
+			}
+			if got := len(env.edits(env.admin.Id, msgID)) - edits; got != 1 {
+				t.Fatalf("the menu was edited %d times by the press, want once", got)
+			}
+			text, kb := env.lastEdit(env.admin.Id, msgID)
+			if !strings.Contains(text, staffMarker("settings_cannot_open")) || len(kb) != 0 {
+				t.Errorf("edit = %q with keyboard %+v, want settings_cannot_open and no keyboard", text, kb)
+			}
+			if stored, ok := settingsStoredTimeout(t, env.chat.Id); ok {
+				t.Errorf("a press on a %s wrote captcha settings (timeout %d)", chatType, stored)
+			}
+		})
+	}
+
 	t.Run("any other lookup error is a plain alert and edits nothing", func(t *testing.T) {
 		for name, script := range map[string]func(env *settingsEnv){
 			"getChatMember": func(env *settingsEnv) {
