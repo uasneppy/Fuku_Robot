@@ -512,6 +512,39 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 	})
 }
 
+// TestVerifyRoutePassWhoseUnmuteFailedIsRemembered pins WR-02: the claim of a pass is
+// irreversible and its unmute is retried durably, so the first answer is retry (the member is
+// not unmuted yet) and a repeat replays passed with no side effect and no Cloudflare call.
+func TestVerifyRoutePassWhoseUnmuteFailedIsRemembered(t *testing.T) {
+	const member = int64(42)
+	o := newOutcomeHandler(t)
+	o.Backend.PassResult = PassUnmuteFailed
+	token, _ := o.issue(member)
+
+	if status, answer := o.post(member, token); status != 200 || answer.Result != ResultRetry {
+		t.Fatalf("first post = %d %+v, want 200 retry", status, answer)
+	}
+	if o.Redis.Exists(o.key(token)) {
+		t.Fatal("the challenge was given back after a claimed pass")
+	}
+	calls, requests := o.Backend.Calls(), o.Requests.Load()
+	for i := 0; i < 2; i++ {
+		if status, answer := o.post(member, token); status != 200 || answer.Result != ResultPassed || answer.Action != "" {
+			t.Fatalf("repeat %d = %d %+v, want 200 passed", i+1, status, answer)
+		}
+	}
+	if got := o.Backend.Calls(); strings.Join(got, ",") != strings.Join(calls, ",") {
+		t.Fatalf("a repeat reached the backend: %v, want %v", got, calls)
+	}
+	if got := o.Requests.Load(); got != requests {
+		t.Fatalf("a repeat made %d Cloudflare requests, want none", got-requests)
+	}
+	// Another member still gets not_for_you from the same marker.
+	if status, answer := o.post(43, token); status != 200 || answer.Result != ResultNotForYou {
+		t.Fatalf("other member = %d %+v, want 200 not_for_you", status, answer)
+	}
+}
+
 // TestVerifyRouteActionNotApplied pins WR-07: when the group's failure action could not be
 // applied the member was only unmuted, so the page gets the neutral invalid answer with no
 // action (never "you were removed"), the replay marker stores the same, and the fault is

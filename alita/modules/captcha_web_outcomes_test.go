@@ -386,8 +386,17 @@ func TestCaptchaWebUnmuteFailureSchedulesRetry(t *testing.T) {
 		t.Fatalf("kicks = %d, want none after a claimed pass", got)
 	}
 
-	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultInvalid {
-		t.Fatalf("second verify = %d %+v, want 200 invalid", status, answer)
+	// The pass is decided, so a second tap (Try again on the page) is told so, with no side
+	// effect, instead of ending on a dead "invalid" screen (WR-02).
+	calls := callCount(env.client)
+	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("second verify = %d %+v, want 200 passed (the remembered decision)", status, answer)
+	}
+	if got := callCount(env.client); got != calls {
+		t.Fatalf("the replay made %d Telegram calls, want none", got-calls)
+	}
+	if got := env.cfRequests.Load(); got != 1 {
+		t.Fatalf("Cloudflare requests = %d, want 1", got)
 	}
 }
 

@@ -633,9 +633,13 @@ func (c *challengeRun) pass() {
 		c.lostClaim()
 	default:
 		// Claimed, but the unmute failed: the Backend left a durable retry, so the challenge
-		// is not given back.
+		// is not given back. The pass is decided, so it is remembered: a second tap replays
+		// passed instead of ending on a dead invalid screen (WR-02). This first reply stays
+		// retry, because the member is not unmuted yet and "you can chat now" would not be
+		// true until the retry worker has run.
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] outcome=retry reason=unmute")
 		countError()
+		c.decided(ResultPassed, "")
 		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultRetry})
 	}
 }

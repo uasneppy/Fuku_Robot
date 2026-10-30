@@ -615,8 +615,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   answers `expired`. For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
   `settleCaptchaAttempt` (the timeout path reports a database error as "not claimed") and returns an error when the
   attempt is still pending, so a blip re-arms the challenge instead of burning it (WR-01). A claim whose unmute failed answers `retry`,
-  not `passed`: the claim already wrote the `captcha_muted_users` row due now, the 5-minute worker retries it, the
-  challenge message is deleted and the token is not re-armed. A replica that crashes between the consume and a re-arm
+  not `passed` (the member is not unmuted yet): the claim already wrote the `captcha_muted_users` row due now, the
+  5-minute worker retries it, the challenge message is deleted and the token is not re-armed, but the pass is written
+  to the done marker as `passed`, so a second tap (the page's Try again) replays `passed` with no side effect instead of
+  ending on a dead `invalid` screen (WR-02). A replica that crashes between the consume and a re-arm
   loses that member's challenge until the group's time limit ends the attempt (accepted).
   The verify route (`Handler.Verify`, `POST /captcha/verify`) refuses cheapest first: the handler's own write deadline is
   extended to 20 s (the HTTP server's `WriteTimeout` is 10 s, shorter than a siteverify call plus a pass), then a method
