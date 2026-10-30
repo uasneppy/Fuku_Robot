@@ -37,14 +37,14 @@ func TestSpikeLabels(t *testing.T) {
 // 1 false negative, plus one blocked and one failed image.
 func spikeFixture() []result {
 	return []result{
-		{File: "spam/1.jpg", Label: "spam", Probability: 0.95, Category: "scam", Finish: "ok", Duration: 1200 * time.Millisecond, PromptTokens: 300, OutputTokens: 20, ThoughtTokens: 5},
-		{File: "spam/2.jpg", Label: "spam", Probability: 0.90, Category: "promotion", Finish: "ok", Duration: 900 * time.Millisecond, PromptTokens: 300, OutputTokens: 20},
-		{File: "spam/3.jpg", Label: "spam", Probability: 0.60, Category: "other_spam", Finish: "ok", Duration: 1000 * time.Millisecond, PromptTokens: 300, OutputTokens: 20},
-		{File: "ham/4.jpg", Label: "ham", Probability: 0.85, Category: "promotion", Finish: "ok", Duration: 800 * time.Millisecond, PromptTokens: 300, OutputTokens: 20},
-		{File: "ham/5.jpg", Label: "ham", Probability: 0.10, Category: "not_spam", Finish: "ok", Duration: 700 * time.Millisecond, PromptTokens: 300, OutputTokens: 20},
-		{File: "ham/6.jpg", Label: "ham", Probability: 0.20, Category: "not_spam", Finish: "ok", Duration: 600 * time.Millisecond, PromptTokens: 300, OutputTokens: 20},
+		{File: "spam/1.jpg", Label: "spam", Probability: 0.95, Finish: "ok", Duration: 1200 * time.Millisecond, InputTokens: 300, OutputTokens: 25},
+		{File: "spam/2.jpg", Label: "spam", Probability: 0.90, Finish: "ok", Duration: 900 * time.Millisecond, InputTokens: 300, OutputTokens: 20},
+		{File: "spam/3.jpg", Label: "spam", Probability: 0.60, Finish: "ok", Duration: 1000 * time.Millisecond, InputTokens: 300, OutputTokens: 20},
+		{File: "ham/4.jpg", Label: "ham", Probability: 0.85, Finish: "ok", Duration: 800 * time.Millisecond, InputTokens: 300, OutputTokens: 20},
+		{File: "ham/5.jpg", Label: "ham", Probability: 0.10, Finish: "ok", Duration: 700 * time.Millisecond, InputTokens: 300, OutputTokens: 20},
+		{File: "ham/6.jpg", Label: "ham", Probability: 0.20, Finish: "ok", Duration: 600 * time.Millisecond, InputTokens: 300, OutputTokens: 20},
 		{File: "spam/7.jpg", Label: "spam", Finish: "blocked", Duration: 400 * time.Millisecond, Blocked: true},
-		{File: "ham/8.jpg", Label: "ham", Finish: "failed HTTP 429 RESOURCE_EXHAUSTED", Duration: 300 * time.Millisecond, Failed: true},
+		{File: "ham/8.jpg", Label: "ham", Finish: "failed HTTP 429 rate_limit_error", Duration: 300 * time.Millisecond, Failed: true},
 	}
 }
 
@@ -119,7 +119,7 @@ func TestSpikeSummary(t *testing.T) {
 
 	// A comma in a file name must be quoted, and a blocked image has no probability.
 	var buf bytes.Buffer
-	odd := append([]result{{File: "spam/a,b.jpg", Label: "spam", Probability: 0.91, Category: "scam", Finish: "ok", Duration: 1234 * time.Millisecond, PromptTokens: 11, OutputTokens: 22, ThoughtTokens: 33}}, results[6])
+	odd := append([]result{{File: "spam/a,b.jpg", Label: "spam", Probability: 0.91, Finish: "ok", Duration: 1234 * time.Millisecond, InputTokens: 11, OutputTokens: 22}}, results[6])
 	if err := writeCSV(&buf, odd); err != nil {
 		t.Fatal(err)
 	}
@@ -130,23 +130,23 @@ func TestSpikeSummary(t *testing.T) {
 	if len(records) != 3 {
 		t.Fatalf("CSV has %d records; want a header and two rows", len(records))
 	}
-	if got := strings.Join(records[0], "|"); got != "file|label|probability|category|finish|ms|prompt_tokens|output_tokens|thought_tokens" {
+	if got := strings.Join(records[0], "|"); got != "file|label|probability|finish|ms|input_tokens|output_tokens" {
 		t.Errorf("CSV header = %q", got)
 	}
-	if got := strings.Join(records[1], "|"); got != "spam/a,b.jpg|spam|0.9100|scam|ok|1234|11|22|33" {
+	if got := strings.Join(records[1], "|"); got != "spam/a,b.jpg|spam|0.9100|ok|1234|11|22" {
 		t.Errorf("CSV row 1 = %q", got)
 	}
-	if got := strings.Join(records[2], "|"); got != "spam/7.jpg|spam|||blocked|400|0|0|0" {
+	if got := strings.Join(records[2], "|"); got != "spam/7.jpg|spam||blocked|400|0|0" {
 		t.Errorf("CSV row 2 (blocked, no probability) = %q", got)
 	}
 }
 
 func TestSpikeCost(t *testing.T) {
-	got := estimateCost(1_000_000, 100_000, 20_000, 0.30, 2.50)
-	if !near(got, 0.60) {
-		t.Errorf("estimateCost = %.6f; want 0.60 (0.30 for input, 0.30 for 120,000 output tokens)", got)
+	got := estimateCost(1_000_000, 200_000, 0.10, 0.50)
+	if !near(got, 0.20) {
+		t.Errorf("estimateCost = %.6f; want 0.20 (0.10 for input, 0.10 for 200,000 output tokens)", got)
 	}
-	if got := estimateCost(0, 0, 0, 0.30, 2.50); got != 0 {
+	if got := estimateCost(0, 0, 0.10, 0.50); got != 0 {
 		t.Errorf("estimateCost of nothing = %v; want 0", got)
 	}
 	if got := costPer1000(0.60, 200); !near(got, 3.0) {
@@ -157,11 +157,11 @@ func TestSpikeCost(t *testing.T) {
 	}
 
 	// The totals add the verdicts' tokens and count every image once.
-	tot := totalsOf(spikeFixture(), 0.30, 2.50)
-	if tot.Images != 8 || tot.Prompt != 1800 || tot.Candidates != 120 || tot.Thoughts != 5 {
-		t.Errorf("totals = %+v; want 8 images, 1800 prompt, 120 candidate, 5 thought tokens", tot)
+	tot := totalsOf(spikeFixture(), 0.10, 0.50)
+	if tot.Images != 8 || tot.Input != 1800 || tot.Output != 125 || tot.TokenlessImages != 2 {
+		t.Errorf("totals = %+v; want 8 images, 1800 input, 125 output tokens, 2 tokenless", tot)
 	}
-	if !near(tot.Cost, estimateCost(1800, 120, 5, 0.30, 2.50)) {
+	if !near(tot.Cost, estimateCost(1800, 125, 0.10, 0.50)) {
 		t.Errorf("total cost = %v", tot.Cost)
 	}
 	if tot.Max != 1200*time.Millisecond {
