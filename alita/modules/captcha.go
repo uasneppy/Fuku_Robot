@@ -696,33 +696,81 @@ func (moduleStruct) captchaTimeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 	}
 
 	timeout64, err := strconv.ParseInt(args[0], 10, 64)
-	if err != nil || timeout64 < 1 || timeout64 > 10 {
+	if err != nil {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("captcha_timeout_invalid")
 		_, err = msg.Reply(bot, text, nil)
 		return err
 	}
-	timeout := int(timeout64)
 
-	err = captcha.SetCaptchaTimeout(chat.Id, timeout)
-	if err != nil {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		var text string
-		if errors.Is(err, captcha.ErrInvalidTimeout) {
-			text, _ = tr.GetString("captcha_timeout_range_error")
-		} else {
-			text, _ = tr.GetString("captcha_timeout_failed")
-		}
+	result := applyCaptchaTimeout(tracing.UpdateContext(ctx), chat.Id, timeout64)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case captchaInvalid:
+		text, _ := tr.GetString(result.Key)
+		_, err = msg.Reply(bot, text, nil)
+		return err
+	case captchaSaveFailed:
+		text, _ := tr.GetString(result.Key)
 		if _, replyErr := msg.Reply(bot, text, formatting.Shtml()); replyErr != nil {
 			log.Warnf("[Captcha] Failed to send timeout error message in chat %d: %v", chat.Id, replyErr)
 		}
-		return err
+		return result.Err
 	}
 
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	text, _ := tr.GetString("captcha_timeout_set_success", i18n.TranslationParams{"d": timeout})
+	text, _ := tr.GetString("captcha_timeout_set_success", i18n.TranslationParams{"d": int(timeout64)})
 	_, err = msg.Reply(bot, text, formatting.Shtml())
 	return err
+}
+
+// captchaApplyOutcome says how an apply function ended. The zero value is success.
+type captchaApplyOutcome int
+
+const (
+	// captchaApplied means the change was validated and stored.
+	captchaApplied captchaApplyOutcome = iota
+	// captchaInvalid means the value was refused before anything was written.
+	captchaInvalid
+	// captchaSaveFailed means the repository refused or failed the write.
+	captchaSaveFailed
+)
+
+// captchaApplyResult is what an apply function reports to its callers: the command turns it
+// into a reply, the settings menu into a redraw or a notice.
+type captchaApplyResult struct {
+	Outcome captchaApplyOutcome
+	// Key is the exact locale key the command replies with for a refusal or a failure. It
+	// is empty on success.
+	Key string
+	// Settings is the stored row read back after a successful write (nil on failure, and
+	// when the read-back itself failed although the write succeeded).
+	Settings *models.CaptchaSettings
+	// Err is the repository error of a failed write.
+	Err error
+}
+
+// applyCaptchaTimeout is the one path that changes a group's captcha time limit, called by
+// /captchatime and by the settings menu. It validates the range, writes through
+// captcha.SetCaptchaTimeout (which invalidates the settings cache) and reads the stored row
+// back.
+func applyCaptchaTimeout(ctx context.Context, chatID int64, minutes int64) captchaApplyResult {
+	if minutes < 1 || minutes > 10 {
+		return captchaApplyResult{Outcome: captchaInvalid, Key: "captcha_timeout_invalid"}
+	}
+	if err := captcha.SetCaptchaTimeout(chatID, int(minutes)); err != nil {
+		if errors.Is(err, captcha.ErrInvalidTimeout) {
+			return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_timeout_range_error", Err: err}
+		}
+		return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_timeout_failed", Err: err}
+	}
+	result := captchaApplyResult{Outcome: captchaApplied}
+	settings, err := captcha.GetCaptchaSettingsContext(ctx, chatID)
+	if err != nil {
+		log.Warnf("[Captcha] read back settings of chat %d after a timeout change: %v", chatID, err)
+		return result
+	}
+	result.Settings = settings
+	return result
 }
 
 func (moduleStruct) captchaActionCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
