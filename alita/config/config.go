@@ -15,7 +15,7 @@ import (
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/divkix/Alita_Robot/alita/utils/gemini"
+	"github.com/divkix/Alita_Robot/alita/utils/claude"
 	"github.com/divkix/Alita_Robot/alita/utils/logredact"
 )
 
@@ -196,18 +196,18 @@ type Config struct {
 
 	// AI spam filter (TypeSafe Jev). EnableAISpam is the global AI kill switch: when
 	// false it stops /aispam and every raid AI check, text (TypeSafe) and image
-	// (Gemini) alike. The text feature is inert without TypeSafeAPIKey.
+	// (Anthropic Claude) alike. The text feature is inert without TypeSafeAPIKey.
 	EnableAISpam   bool
 	TypeSafeAPIKey string
 
-	// Image checks of the AI raid trigger (Google Gemini). The feature is inert
-	// without GeminiAPIKey (with no key no image leaves the server) and while
-	// EnableAISpam is false. The key is
-	// a secret and is registered with logredact.RegisterSecret. GeminiModel is
-	// checked against the Gemini client's model-name rule in setDefaults, so a name that is not a
-	// plain model id never reaches a request URL.
-	GeminiAPIKey string
-	GeminiModel  string
+	// Image checks of the AI raid trigger, through the Anthropic API. The feature
+	// is inert without AnthropicAPIKey (with no key no image leaves the server)
+	// and while EnableAISpam is false. The key is a secret and is registered with
+	// logredact.RegisterSecret. AnthropicModel is checked against the claude
+	// package's model-name rule in setDefaults, so a pasted secret or odd value
+	// is replaced by the default and never used.
+	AnthropicAPIKey string
+	AnthropicModel  string
 
 	// Web captcha (Cloudflare Turnstile in a Telegram Mini App). It is on only when
 	// all four of CAPTCHA_WEB_BASE_URL, TELEGRAM_MINI_APP_SHORT_NAME,
@@ -457,8 +457,8 @@ func LoadConfig() (*Config, error) {
 		EnableAISpam:   typeConvertor{str: os.Getenv("ENABLE_AISPAM")}.Bool(),
 		TypeSafeAPIKey: os.Getenv("TYPESAFE_API_KEY"),
 
-		GeminiAPIKey: os.Getenv("GEMINI_API_KEY"),
-		GeminiModel:  os.Getenv("GEMINI_MODEL"),
+		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicModel:  os.Getenv("ANTHROPIC_MODEL"),
 
 		CaptchaWebBaseURL:        strings.TrimSpace(os.Getenv("CAPTCHA_WEB_BASE_URL")),
 		TelegramMiniAppShortName: strings.TrimSpace(os.Getenv("TELEGRAM_MINI_APP_SHORT_NAME")),
@@ -584,16 +584,16 @@ func (cfg *Config) setDefaults() {
 		cfg.EnableAISpam = true
 	}
 
-	// The model name ends up in a request path, so one that is not a plain
+	// The model name ends up in a request body, so one that is not a plain
 	// model id is replaced by the default instead of being used.
-	if cfg.GeminiModel == "" {
-		cfg.GeminiModel = gemini.DefaultModel
-	} else if !gemini.ValidModel(cfg.GeminiModel) {
+	if cfg.AnthropicModel == "" {
+		cfg.AnthropicModel = claude.DefaultModel
+	} else if !claude.ValidModel(cfg.AnthropicModel) {
 		// The rejected value is never logged: setDefaults runs before registerSecrets, and a
 		// variable pasted into the wrong place could be a key.
-		log.Warnf("[Config] GEMINI_MODEL (%d characters) is not a valid model name, using %s",
-			utf8.RuneCountInString(cfg.GeminiModel), gemini.DefaultModel)
-		cfg.GeminiModel = gemini.DefaultModel
+		log.Warnf("[Config] ANTHROPIC_MODEL (%d characters) is not a valid model name, using %s",
+			utf8.RuneCountInString(cfg.AnthropicModel), claude.DefaultModel)
+		cfg.AnthropicModel = claude.DefaultModel
 	}
 }
 
@@ -607,7 +607,7 @@ func registerSecrets(cfg *Config) {
 		cfg.WebhookSecret,
 		cfg.MetricsAuthToken,
 		cfg.TypeSafeAPIKey,
-		cfg.GeminiAPIKey,
+		cfg.AnthropicAPIKey,
 		cfg.TurnstileSecretKey,
 	)
 }

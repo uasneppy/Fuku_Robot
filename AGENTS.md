@@ -294,7 +294,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   refusal text of its own. The status lists the AI line after the flood line and adds
   `lockdown_auto_ai_unavailable` ("AI checks are not set up") when `raidAIConfigured()` is false, that is when
   neither the text checks (`ENABLE_AISPAM` with `TYPESAFE_API_KEY`) nor the image checks (`ENABLE_AISPAM` with
-  `GEMINI_API_KEY`) are available; a server with one of the two shows no notice. `ENABLE_AISPAM=false` is the global AI
+  `ANTHROPIC_API_KEY`) are available; a server with one of the two shows no notice. `ENABLE_AISPAM=false` is the global AI
   kill switch for the whole raid AI path: `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
   watcher enqueues nothing, and a job already queued is dropped by `raidAIProcessJob` / `raidAIProcessImage` without
   a `getFile` or any provider call. The `/lockdown` help says what the AI trigger sends to
@@ -407,10 +407,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The image checks' cost guards (`raid_ai_image.go`, D-20) keep five Redis key families, all outside the cache prefix.
   `alita:raid:{<chat>}:ag:<media_group_id>` is the album gate, `SET NX EX 120` (`raidAIAlbumGateTTL`): the first photo of
   an album is judged and the others are dropped, except that a first photo refused for a reason of that moment before any
-  Gemini call (a paused breaker, a budget refusal, a Redis error, the fire latch) gives the gate back with `DEL`
-  (`raidAIAlbumRelease`), so the next photo of the album can still be judged; a photo that reached Gemini keeps it.
+  provider call (a paused breaker, a budget refusal, a Redis error, the fire latch) gives the gate back with `DEL`
+  (`raidAIAlbumRelease`), so the next photo of the album can still be judged; a photo that reached the provider keeps it.
   `alita:raid:{<chat>}:ab:<yyyymmddhh>` and `alita:raid:aibudget:<yyyymmddhh>`
-  are the hourly budgets, 150 Gemini calls per group (`raidAIChatHourlyBudget`) and 500 in all
+  are the hourly budgets, 150 provider calls per group (`raidAIChatHourlyBudget`) and 500 in all
   (`raidAIGlobalHourlyBudget`), counted by `INCR` plus a 2 h expiry (`raidAIBudgetTTL`) in one transaction, the UTC hour
   from `raidNow`. In front of both sits the per-account budget `alita:raid:{<chat>}:abu:<user>:<yyyymmddhh>`, 20 calls
   per account per group per hour (`raidAIUserHourlyBudget`), counted the same way and reserved first: an account that
@@ -939,21 +939,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   moves on (above). Every provider call derives from `raidAIContext()`, which `StopRaidAI` cancels at shutdown (see
   Startup and shutdown). Tests that call `StopRaidAI` must restore the pool afterwards (`restoreRaidAIPool`), because a
   drain sets the draining flag and cancels the context for good.
-- The raid AI image checks (`raid_ai_media.go`, `raid_ai_image.go`) are the Gemini half of RAID-04. The same group `2`
+- The raid AI image checks (`raid_ai_media.go`, `raid_ai_image.go`) are the Claude half of RAID-04. The same group `2`
   watcher (`raidAIWatch`) sends a message with no `Text` and a media frame (`raidAIMediaRef`) down the image path: only a
   new member's media is a candidate (the candidate script asked with an empty hash, so nothing is recorded), after
-  `raidAIImageConfigured` (`ENABLE_AISPAM` and `GEMINI_API_KEY`), Redis, the chat's `ai_enabled` and `aispamCarvedOut`, and the job joins the
+  `raidAIImageConfigured` (`ENABLE_AISPAM` and `ANTHROPIC_API_KEY`), Redis, the chat's `ai_enabled` and `aispamCarvedOut`, and the job joins the
   shared pool. Without the key no `getFile` is made and no image leaves the server. The frame is the photo size whose
   larger side is nearest 1024 px, a regular static sticker's WebP, or Telegram's own thumbnail for a GIF, video, animated
   or video sticker; a missing thumbnail, a custom emoji or mask sticker, a video note, a document, a voice note, a
-  declared size over `gemini.MaxImageBytes` (5 MiB), a body over it, or bytes that `http.DetectContentType` does not call
-  JPEG, PNG or WebP give nothing. Only the image bytes and the code-owned instruction go to Google, never the caption,
+  declared size over `claude.MaxImageBytes` (5 MiB), a body over it, or bytes that `http.DetectContentType` does not call
+  JPEG, PNG or WebP give nothing. Only the image bytes and the code-owned instruction go to Anthropic, never the caption,
   names, chat or user data. A verdict of at least `raidAIImageBar` (0.85, a code constant) counts as one spam item for
-  the AI burst counter, anything below it is kept; a safety block counts in `RaidAIStats.Blocked` and every other
-  failure (`getFile`, download, Gemini) in `Failed`, and both are no verdict. A verdict
-  whose model stage is LEGACY, DEPRECATED or RETIRED logs one warning per process naming the model id and the stage.
+  the AI burst counter, anything below it is kept; a refusal stop counts in `RaidAIStats.Blocked` and every other
+  failure (`getFile`, download, provider) in `Failed`, and both are no verdict. A retired or unknown model answers 404
+  `not_found_error`, a failure logged at Warn with its status and error type (there is no model-stage warning: a Messages
+  answer carries no lifecycle stage). The request carries the image block, one fixed text block, the code-owned system
+  instruction and one forced strict tool (`claude.ToolName`, a single `spam_probability` number); thinking is disabled
+  and no `temperature`, `top_p` or `top_k` is sent, because the default model answers 400 to them.
   Nothing on this path deletes, restricts, bans or posts, and every call derives from `raidAIContext()`.
-- Before any Gemini call an image job passes, cheapest and most decisive first (`raidAIProcessImage`): the album gate, the
+- Before any provider call an image job passes, cheapest and most decisive first (`raidAIProcessImage`): the album gate, the
   fire-latch skip (`EXISTS alita:raid:{<chat>}:fire`: a lockdown was just attempted, so more checks are wasted), the verdict
   cache by `file_unique_id`, then the hourly budgets, then the download and the call. Each refusal is no verdict and is
   counted: `RaidAIStats.Capped` for a budget refusal, `RaidAIStats.Cached` for a verdict served from the cache, a photo
@@ -965,15 +968,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   chat never joins that flight, so it cannot inherit a refusal that belongs to the leader's chat; the verdict cache still
   serves it afterwards. The join and flood triggers are
   not touched by any of this.
-- The image checks have their own Gemini breakers (`raid_ai_breaker.go`), checked after the verdict cache and before the
-  budget, so a paused check spends no unit. Five Gemini failures in one chat pause that chat's image checks for 5 minutes
-  (`raidAIGeminiFailures`, `raidAIGeminiCooldown`); a success clears the count. A provider-wide pause stops every chat's
-  image checks: a rejected key (`gemini.HTTPError.KeyRejected()`) pauses all chats for 5 minutes (`raidAIGeminiKeyPause`),
-  and a 429 whose `RetryDelay` is over 2 s pauses all chats for that delay, at most 5 minutes (the Gemini client itself
-  retries a shorter wait once and drops a longer one). Each pause logs one warning naming its reason (status and status
-  word only) and its end, and none posts anything: a paused check is `Shed`. Only Gemini answers count; a `getFile` or
-  download failure never does, and a safety block counts as an answer, not a failure. The breaker clock is `raidNow`. The
-  breaker map holds at most 10000 chats (`raidAIGeminiBreakerMaxChats`); when it is full the idle breakers (no failures,
+- The image checks have their own provider breakers (`raid_ai_breaker.go`), checked after the verdict cache and before the
+  budget, so a paused check spends no unit. Five provider failures in one chat pause that chat's image checks for 5 minutes
+  (`raidAIImageFailures`, `raidAIImageCooldown`); a success clears the count. A provider-wide pause stops every chat's
+  image checks: a rejected key or account (`claude.HTTPError.KeyRejected()`: 401, 402 or 403) pauses all chats for 5
+  minutes (`raidAIImageKeyPause`), and a 429 whose `retry-after` (`RetryDelay`) is over 2 s pauses all chats for that
+  delay, at most 5 minutes (the Claude client itself retries a shorter wait once and drops a longer one; a 5xx, 529,
+  network error or unusable answer counts toward the chat's five). Each pause logs one warning naming its reason (status
+  and error type only) and its end, and none posts anything: a paused check is `Shed`. Only provider answers count; a
+  `getFile` or download failure never does, and a refusal stop counts as an answer, not a failure. The breaker clock is
+  `raidNow`. The breaker map holds at most 10000 chats (`raidAIImageBreakerMaxChats`); when it is full the idle breakers (no failures,
   not paused) are evicted, and if every tracked chat is failing or paused a new chat stays untracked, so it cannot be
   paused, with one warning per process. The
   raid-only TypeSafe text checks keep sharing `/aispam`'s per-chat breaker silently and never touch these.
@@ -1244,6 +1248,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `alita/utils/gemini` imports the standard library only, so `scripts/gemini-spike` can use it without the pre-main
   database connection of `alita/config` and `alita/db`. The Gemini key travels only in the `x-goog-api-key` header,
   never in a URL, and no error that package returns contains it.
+- `alita/utils/claude` imports the standard library only, so a spike tool can use it without the pre-main database
+  connection of `alita/config` and `alita/db`. The Anthropic key travels only in the `x-api-key` header, never in a URL,
+  and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is ever sent,
+  because the default model rejects them with a 400.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
@@ -1258,9 +1266,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Version strings are shape-locked (`BotVersion:` with two spaces in `alita/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
-- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text and images; inert without `TYPESAFE_API_KEY`); `GEMINI_API_KEY` empty
-  means no raid image check and no image leaves the server, and `GEMINI_MODEL` falls back to `gemini.DefaultModel`
-  (with a warning) when empty or not a valid model name; perf monitoring and
+- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text and images; inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
+  means no raid image check and no image leaves the server, and `ANTHROPIC_MODEL` falls back to `claude.DefaultModel`
+  (with a warning) when empty or not a valid model name; because the bot reads the standard `ANTHROPIC_API_KEY` name, a
+  key exported for another tool on the same host turns the image checks on; perf monitoring and
   background stats are on only when `DEBUG=false`; `HTTP_PORT` falls back to `PORT` then 8080. Integer env parsing is
   lenient, so a typo silently becomes the default.
 

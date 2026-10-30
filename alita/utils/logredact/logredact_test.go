@@ -79,30 +79,31 @@ func TestScrubDoesNotCorruptOrdinaryProse(t *testing.T) {
 	}
 }
 
-func TestScrubGoogleAPIKeyShape(t *testing.T) {
+func TestScrubAnthropicAPIKeyShape(t *testing.T) {
 	reset()
 	t.Cleanup(reset)
 
-	// "AIzaSy" plus 33 URL-safe characters: 39 characters in all, the shape of
-	// a Google API key, never registered here.
-	key := "AIzaSy" + "aB3_-dE5fG7hI9jK1lM3nO5pQ7rS9tU1v"
-	if len(key) != 39 {
-		t.Fatalf("test key has %d characters, want 39", len(key))
+	// "sk-ant-api03-" plus 95 URL-safe characters plus "AA": the shape of an
+	// Anthropic API key, never registered here and obviously fake.
+	key := "sk-ant-api03-" + strings.Repeat("FAKEKEY_-9", 9) + "FAKEK" + "AA"
+	if len(key) != 13+95+2 {
+		t.Fatalf("test key has %d characters, want %d", len(key), 13+95+2)
 	}
 
 	leaks := []struct {
 		name  string
 		input string
 	}{
-		{"url query", "POST https://generativelanguage.googleapis.com/v1beta/models/m:generateContent?key=" + key + " failed"},
+		{"header line", "request sent with x-api-key: " + key},
 		{"json body", `{"key":"` + key + `","other":1}`},
+		{"wrapped error", "claude: request failed: " + key + ": connection reset"},
 		{"end of sentence", "the configured key was " + key},
 	}
 	for _, tc := range leaks {
 		t.Run(tc.name, func(t *testing.T) {
 			got := Scrub(tc.input)
-			if strings.Contains(got, key) || strings.Contains(got, key[:20]) {
-				t.Fatalf("Google API key leaked: %q", got)
+			if strings.Contains(got, key) || strings.Contains(got, key[:30]) || strings.Contains(got, key[len(key)-10:]) {
+				t.Fatalf("Anthropic API key leaked: %q", got)
 			}
 			if !strings.Contains(got, Placeholder) {
 				t.Fatalf("expected %q in %q", Placeholder, got)
@@ -111,10 +112,9 @@ func TestScrubGoogleAPIKeyShape(t *testing.T) {
 	}
 
 	untouched := []string{
-		"AIza" + strings.Repeat("a", 34), // one character short of a key
-		"AIzaSy-short",
-		"the AIza prefix is mentioned in prose only",
-		"AIza",
+		"sk-ant-short",
+		"sk-ant-",
+		"the sk-ant- prefix in prose",
 	}
 	for _, in := range untouched {
 		if got := Scrub(in); got != in {

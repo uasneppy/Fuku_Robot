@@ -59,14 +59,14 @@ func TestRaidAIStats(t *testing.T) {
 			_, _ = w.Write([]byte(aispamDecisionBody(0.1, "none")))
 		}
 	})
-	// Gemini: the first call is a spam verdict, the second a safety block.
-	var geminiCalls atomic.Int64
+	// Claude: the first call is a spam verdict, the second a refusal.
+	var claudeCalls atomic.Int64
 	env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
-		if geminiCalls.Add(1) == 1 {
-			_, _ = w.Write([]byte(raidAIGeminiAnswer(0.9, "")))
+		if claudeCalls.Add(1) == 1 {
+			_, _ = w.Write([]byte(raidAIClaudeAnswer(0.9)))
 			return
 		}
-		_, _ = w.Write([]byte(`{"promptFeedback":{"blockReason":"IMAGE_SAFETY"}}`))
+		_, _ = w.Write([]byte(raidAIClaudeRefusal()))
 	})
 
 	members := env.newMembers(7, 2*time.Hour)
@@ -88,8 +88,8 @@ func TestRaidAIStats(t *testing.T) {
 	send(members[4], gotgbot.Message{Photo: photoNamed("st-spam")})
 	send(members[5], gotgbot.Message{Photo: photoNamed("st-blocked")})
 	send(members[6], gotgbot.Message{Photo: photoNamed("st-capped")})
-	if got := env.geminiRequests(); got != 2 {
-		t.Fatalf("Gemini requests = %d, want 2: the repeat is cached and the third image is over the budget", got)
+	if got := env.claudeRequests(); got != 2 {
+		t.Fatalf("Claude requests = %d, want 2: the repeat is cached and the third image is over the budget", got)
 	}
 	env.wantNoActions()
 

@@ -12,7 +12,7 @@
 //   - Pattern-based redaction (Scrub) rewrites credential-bearing structures
 //     that are recognizable by shape even when the exact value is unknown:
 //     Telegram bot tokens, connection-string passwords (scheme://user:pass@host),
-//     HTTP Authorization bearer tokens, and Google API keys (the Gemini key).
+//     HTTP Authorization bearer tokens, and Anthropic API keys (sk-ant-...).
 //   - Exact-value redaction removes known secrets registered at startup from
 //     the running configuration via RegisterSecret.
 //
@@ -67,12 +67,13 @@ var structuralPatterns = []struct {
 		re:   regexp.MustCompile(`(?i)(authorization:\s*(?:bearer|basic)\s+)[A-Za-z0-9+/._\-=]{8,}`),
 		repl: `${1}` + Placeholder,
 	},
-	// Google API key, the shape of the Gemini key: "AIza" followed by 35
-	// URL-safe characters. A backstop for a key that was never registered or
-	// was mangled on its way into a log line; the registered exact value is
-	// the primary control.
+	// Anthropic API key: "sk-ant-" followed by at least 20 URL-safe characters
+	// (api, admin and OAuth key prefixes alike). Open-ended like the bot-token
+	// pattern, so a tail is never left behind. A backstop for a key that was
+	// never registered or was mangled on its way into a log line; the
+	// registered exact value is the primary control.
 	{
-		re:   regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
+		re:   regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{20,}`),
 		repl: Placeholder,
 	},
 }
