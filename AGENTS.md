@@ -115,6 +115,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cache), is not `Disableable`, and re-enters for anonymous admins through `RegisterAnonymousAdminHandler("settings", ...)`:
   the tapper becomes the opener. The `settings|` callback is registered with `callbackquery.Prefix("settings|")` and no
   `SetAllowChannel`, because a menu is never a channel message.
+- The settings menu's private entry is `RegisterDeepLinkHandler("settings_", settingsStartDeepLink)`, the Open in private
+  button's `/start settings_<chat id>`; `help.go`'s `start` is not edited and the router picks the longest prefix. The
+  payload is parsed strictly (`parseStaffChatIDArg`: an optional minus, digits, at most 20 characters, a negative
+  result; anything else is `settings_start_invalid` with no Telegram call) and never authorizes anything: a live
+  `getChatMember` of the user in that group must show the creator or an administrator (`settings_start_not_admin`
+  otherwise, `settings_check_failed` for a lookup error), then one `getChat` of the group, and only a group or supergroup
+  is opened. A bot that is missing from the group, a group that is gone (`chat_status.IsBotMissingError`) or any other
+  chat type is `settings_cannot_open`. Every refusal is a plain reply with no keyboard. The Main page is sent to the
+  private chat in the user's language, its buttons carrying `c` (the group's chat ID) and no opener field. A `/start`
+  with extra words (`settings_ -100`) has an unexpected argument count, so `start` ignores it and the handler never runs.
 
 ## Callbacks
 
@@ -208,7 +218,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_cannot_open_alert`). Every button's data is at most 64 bytes for a 14-character chat ID and a 10-digit user
   ID; an encode that overflows is counted in `settingsScreen.Omitted` and logged, and a worst-case test fails on any.
   A new page is one `registerSettingsPage` call from its own file's `init` plus its strings, and never edits
-  `settings_pages.go`.
+  `settings_pages.go`. A private press makes two Telegram calls, `getChatMember` of the presser in `c` and `getChat` of
+  `c`; an error of either that `chat_status.IsBotMissingError` recognises ("bot was kicked", "bot is not a member",
+  "chat not found") is the cannot-open edit with its alert (`settingsPress.cannotOpen`, D-11), and every other error is
+  the `settings_check_failed` alert with no edit. A group menu's pipeline is unchanged.
 
 ## Permissions
 

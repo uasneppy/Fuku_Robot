@@ -1,7 +1,10 @@
 package modules
 
 import (
+	"context"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -90,6 +93,74 @@ func (m moduleStruct) settings(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
+// settingsStartDeepLink opens the Main page in the user's private chat for the group named
+// by a /start settings_<chat id> payload. The payload is attacker-controlled text and
+// authorizes nothing: it must parse strictly (parseStaffChatIDArg: an optional minus,
+// digits, at most 20 characters, a negative result), and a live getChatMember of the user
+// in that group must show a creator or an administrator before any menu is sent. Every
+// refusal is a plain reply with no keyboard.
+func settingsStartDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) error {
+	if ctx == nil || ctx.EffectiveChat == nil || ctx.EffectiveMessage == nil || user == nil {
+		return ext.EndGroups
+	}
+	tr := ctxTr(ctx)
+	refuse := func(key string) error {
+		replyHTML(b, ctx.EffectiveMessage, settingsText(tr, key))
+		return ext.EndGroups
+	}
+
+	rest, _ := strings.CutPrefix(arg, settingsStartPrefix)
+	chatID, ok := parseStaffChatIDArg(rest)
+	if !ok {
+		return refuse("settings_start_invalid")
+	}
+
+	member, err := lockdownLiveMember(b, chatID, user.Id)
+	if err != nil {
+		if chat_status.IsBotMissingError(err) {
+			return refuse("settings_cannot_open")
+		}
+		log.Warnf("[Settings] live check of user %d in chat %d failed: %v", user.Id, chatID, err)
+		return refuse("settings_check_failed")
+	}
+	if member.Status != gotgbot.ChatMemberStatusCreator && member.Status != gotgbot.ChatMemberStatusAdministrator {
+		return refuse("settings_start_not_admin")
+	}
+
+	lookupCtx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	full, err := b.GetChatWithContext(lookupCtx, chatID, nil)
+	if err != nil || full == nil {
+		if err != nil && chat_status.IsBotMissingError(err) {
+			return refuse("settings_cannot_open")
+		}
+		log.Warnf("[Settings] getChat of chat %d for the private entry failed: %v", chatID, err)
+		return refuse("settings_check_failed")
+	}
+	group := full.ToChat()
+	if group.Type != "group" && group.Type != "supergroup" {
+		return refuse("settings_cannot_open")
+	}
+
+	view := settingsView{
+		Tr:         tr,
+		Private:    true,
+		OwnerKey:   "c",
+		OwnerValue: strconv.FormatInt(chatID, 10),
+		GroupID:    chatID,
+		GroupTitle: group.Title,
+		OpenerName: staffFullName(user),
+		Now:        time.Now(),
+	}
+	screen := renderSettingsMain(view, settingsMainEntries(b, tr, &group), "")
+	opts := formatting.Shtml()
+	opts.ReplyMarkup = screen.Keyboard
+	if _, err := b.SendMessage(ctx.EffectiveChat.Id, screen.Text, opts); err != nil {
+		log.Errorf("[Settings] private Main page for chat %d to user %d: %v", group.Id, user.Id, err)
+	}
+	return ext.EndGroups
+}
+
 // LoadSettings registers /settings and the settings| callback. The help text, the alt names
 // and the module switch arrive with the docs, so /help never lists a module without text.
 func LoadSettings(dispatcher *ext.Dispatcher) {
@@ -100,6 +171,9 @@ func LoadSettings(dispatcher *ext.Dispatcher) {
 
 func init() {
 	RegisterLegacyModule("Settings", 239, LoadSettings)
+	// The Open in private button of the choice message lands here through /start, which
+	// is left untouched (D-29): the router picks the longest registered prefix.
+	RegisterDeepLinkHandler(settingsStartPrefix, settingsStartDeepLink)
 	// An anonymous admin proves who they are first; the proof re-enters here as the person
 	// who tapped, and the same live check runs for them.
 	RegisterAnonymousAdminHandler("settings", anonPipelineHandler(settingsDesc, settingsModule.settings))
