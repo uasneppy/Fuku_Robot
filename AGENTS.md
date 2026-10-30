@@ -110,6 +110,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
+- The Settings module (priority 239, `settings.go`) adds no handler group. `/settings` goes through `helpers.WrapCommand`
+  with `requireLockdownGroup()` and `requireLockdownAuthority(false)` (a live creator or administrator, never the admin
+  cache), is not `Disableable`, and re-enters for anonymous admins through `RegisterAnonymousAdminHandler("settings", ...)`:
+  the tapper becomes the opener. The `settings|` callback is registered with `callbackquery.Prefix("settings|")` and no
+  `SetAllowChannel`, because a menu is never a channel message.
 
 ## Callbacks
 
@@ -179,6 +184,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   name the cause are mapped, so a bare 403 or "chat not found" gets the generic line; Telegram's own text goes to the log
   only) and records nothing, except that a refusal met after another admin's revoke was recorded (the lockdown is read
   again) shows `lockdown_revoke_already` instead.
+- The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
+  group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
+  `l` lockdown, `c` captcha, `f` antiflood), `t` control, `v` the absolute target value; `e` (confirm expiry) and `s`
+  (Staff Group row ID) arrive with the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
+  message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
+  Close, `tg` toggle, `st` set, `no` cancel a card back to page `p`; a page declares its own codes through
+  `registerSettingsPage`, which panics at init on a duplicate page key or action code. Exactly one of `c` and `u` is
+  present: `c` is accepted only on a message in a private chat and `u` only on one in a non-private chat, and each action
+  takes an allow-listed field set (an unknown key is refused), all checked before any I/O. Steppers and toggles send the
+  absolute target value (`v`), never a delta, so a double tap is harmless. Every press runs one pipeline, each step
+  refusing before the next (`settingsVerifyPress`): (1) decode and structure, refused with the alert
+  `common_callback_invalid_request` (a missing message is `common_callback_message_unavailable`); (2) a Telegram service
+  identity (`staffServiceUserIDs`) gets `lockdown_alert_post_as_yourself` before any lookup; (3) in a group menu
+  `query.From.Id` must equal `u`, else `settings_not_your_menu`, with no lookup; (4) one live `getChatMember` of the presser
+  in the group being configured (the message's chat for a group menu, `c` for a private one, after one `getChat` of `c`),
+  creator or administrator, else `settings_not_admin`, and a failed lookup `settings_check_failed`; then (5) the right of
+  the control. The callback is answered exactly once, only through `settingsPress.answer` (which calls
+  `answerStaffCallback`; no settings file calls `query.Answer`), and the menu message is edited in place; Telegram's
+  "message is not modified" is success, and a failed or rate-limited edit is logged once, never retried and never undoes
+  a write. Close deletes the message and, when the delete fails, edits it to `settings_closed` with no keyboard. A page
+  that cannot read its data is the cannot-open edit (`settings_cannot_open`, no keyboard, with the alert
+  `settings_cannot_open_alert`). Every button's data is at most 64 bytes for a 14-character chat ID and a 10-digit user
+  ID; an encode that overflows is counted in `settingsScreen.Omitted` and logged, and a worst-case test fails on any.
+  A new page is one `registerSettingsPage` call from its own file's `init` plus its strings, and never edits
+  `settings_pages.go`.
 
 ## Permissions
 
@@ -224,6 +254,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `can_restrict_members` by a live `chat_status.FetchBotMember` (never the admin cache; an unknown answer refuses,
   `captcha_web_refuse_no_rights`). Math and text are unchanged and need none of these checks. The refusal texts name no
   setting, variable, secret or URL.
+- Each settings menu control declares one `settingsRight`, and the menu refuses what the matching command refuses.
+  `settingsRightAdmin` needs only the live admin check every press already makes (`/captchamode`, `/captchatime`,
+  `/captchaaction`). `settingsRightAdminBotAdmin` also needs `chat_status.IsBotAdmin` and refuses with the notice
+  `chat_status_bot_not_admin` (`/captcha`). `settingsRightAdminFloodBot` also needs `chat_status.IsUserAdmin(b, chat, b.Id)`
+  and refuses with the notice `connections_is_user_connected_bot_not_admin` (`/setflood`, `/setfloodmode`, `/delflood`).
+  `settingsRightRestrict` needs the creator or an administrator with `can_restrict_members` from the same member record
+  (`staffIssuerSkipReason`) and refuses with the alert `settings_no_restrict` (lockdown lift and triggers). The user check
+  is live, so it is stricter than the commands' cached one; the bot check uses the commands' own predicate, never a live
+  `FetchBotMember`. A notice refusal answers empty and redraws the page with the warning line; an alert refusal edits
+  nothing. A control the presser lacks the right for is still drawn and its press refused.
 
 ## Data
 
@@ -1080,6 +1120,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
   than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not
   an end date: `until_date` is computed once at Confirm and that one value goes to every group.
+- One setting, one code path (the settings menu): every setting the menu changes has one apply function beside its
+  command (`applyCaptchaTimeout` in `captcha.go` first), which holds the validation, the refusals, the repository write
+  and its `cache.DeleteCache`, and returns a typed result (`captchaApplyResult`: outcome, the locale key the command
+  replies with, the stored row read back, the repository error). The command maps the result to its unchanged reply and
+  the menu to a notice or a redraw, so a new setting adds one apply function and never a second write path. Pages read
+  through the getter their command reads, and a read error is the cannot-open edit, so a getter that hides read errors is
+  never used by a page (`settingsCaptchaRead` is the seam). The menu keeps no state: no Redis key, no migration, no model,
+  no shutdown drain, so a press works on any replica with Redis down. Accepted skew: the `captcha_settings` and
+  `antiflood` keys are not in `skipLocal`, so another replica can show an old value for up to `CACHE_LOCAL_TTL`, exactly
+  as the commands can; the replica that took the press is consistent. A group menu's text is readable by every member of
+  the group, and a menu or choice message stays until used or closed (no auto-close timer). The "Only {name} can use this
+  menu." line carries an escaped name, not a mention, so it pings nobody.
 
 ## Go rules
 
@@ -1165,6 +1217,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
+- The settings menu tests share one toolkit, `alita/modules/settings_env_test.go` (`newSettingsEnv`, `newSettingsEnvWith`
+  with `RealLocale`, `openMenu`, `press`, `pressRaw`, `pressPrivate`, `pressNoMessage`, `sendIn`, `sendPrivate`, `edits`,
+  `lastEdit`, `answerCount`, `settingsButtonByMarker`, `settingsButtonFields`): page tests call it by name and do not edit
+  it. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
+  has no locale manager of its own. `alita/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
+  `settings_` keys of the locale files, so a plan that adds a key adds its row.
 
 ## Commits
 
