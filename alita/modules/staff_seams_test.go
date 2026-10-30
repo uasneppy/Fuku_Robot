@@ -3,14 +3,19 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"html"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
+
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/db/staff"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 )
@@ -142,9 +147,7 @@ func TestStaffPanelTextLimit(t *testing.T) {
 		rows := panelRows(8, func(i int) string { return "Group" + string(rune('A'+i)) })
 		const limit = 600
 
-		small := view(rows)
-		small.limit = limit
-		text, shown := staffPanelTextFor(tr, small)
+		text, shown := staffPanelTextFor(tr, func() staffPanelView { v := view(rows); v.limit = limit; return v }())
 
 		if got := panelUTF16Len(text); got > limit {
 			t.Fatalf("text is %d UTF-16 units, want at most %d:\n%s", got, limit, text)
@@ -178,6 +181,248 @@ func TestStaffPanelTextLimit(t *testing.T) {
 			if text != base || len(shown) != len(baseShown) {
 				t.Errorf("limit %d changed a text that fits in %d units: %q", limit, need, text)
 			}
+		}
+	})
+}
+
+// staffSeamsOwner is the issuer of the seam tests' link env.
+func staffSeamsOwner(e *linkEnv) *gotgbot.User {
+	return &gotgbot.User{Id: e.ownerID, FirstName: "Owner"}
+}
+
+func TestListVerifiedOwnStaffGroups(t *testing.T) {
+	t.Run("no Staff Group", func(t *testing.T) {
+		env := newLinkEnv(t)
+		stranger := &gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Nobody"}
+
+		matched, unknown, err := listVerifiedOwnStaffGroups(env.bot, stranger)
+
+		if err != nil || unknown != 0 || len(matched) != 0 {
+			t.Fatalf("got (%+v, %d, %v), want an empty list, 0 unknown and no error", matched, unknown, err)
+		}
+	})
+
+	t.Run("two live-created Staff Groups come back in order", func(t *testing.T) {
+		env := newLinkEnv(t)
+		second := uniqueModuleChatID()
+		env.client.setCreator(second, env.ownerID)
+		staffCleanup(t, second)
+		if _, err := staff.CreateStaffGroup(second, env.ownerID, "Second HQ"); err != nil {
+			t.Fatalf("create second Staff Group: %v", err)
+		}
+
+		matched, unknown, err := listVerifiedOwnStaffGroups(env.bot, staffSeamsOwner(env))
+
+		if err != nil || unknown != 0 {
+			t.Fatalf("got unknown %d, err %v, want 0 and nil", unknown, err)
+		}
+		if len(matched) != 2 || matched[0].ChatID != env.staffID || matched[1].ChatID != second {
+			t.Fatalf("matched = %+v, want [%d %d] in the repository's order", matched, env.staffID, second)
+		}
+	})
+
+	t.Run("a Staff Group created by someone else is left out", func(t *testing.T) {
+		env := newLinkEnv(t)
+		second := uniqueModuleChatID()
+		env.client.setCreator(second, env.ownerID+1)
+		staffCleanup(t, second)
+		if _, err := staff.CreateStaffGroup(second, env.ownerID, "Handed over"); err != nil {
+			t.Fatalf("create second Staff Group: %v", err)
+		}
+
+		matched, unknown, err := listVerifiedOwnStaffGroups(env.bot, staffSeamsOwner(env))
+
+		if err != nil || unknown != 0 {
+			t.Fatalf("got unknown %d, err %v, want 0 and nil", unknown, err)
+		}
+		if len(matched) != 1 || matched[0].ChatID != env.staffID {
+			t.Fatalf("matched = %+v, want only %d: the recorded owner is never an authority", matched, env.staffID)
+		}
+	})
+
+	t.Run("a failed owner check is counted and the group left out", func(t *testing.T) {
+		env := newLinkEnv(t)
+		second := uniqueModuleChatID()
+		env.client.setCreator(second, env.ownerID)
+		env.client.setFailure("getChatAdministrators", second, errors.New("telegram is down"))
+		staffCleanup(t, second)
+		if _, err := staff.CreateStaffGroup(second, env.ownerID, "Unreachable"); err != nil {
+			t.Fatalf("create second Staff Group: %v", err)
+		}
+
+		matched, unknown, err := listVerifiedOwnStaffGroups(env.bot, staffSeamsOwner(env))
+
+		if err != nil {
+			t.Fatalf("err = %v, want nil", err)
+		}
+		if unknown != 1 {
+			t.Fatalf("unknown = %d, want 1", unknown)
+		}
+		if len(matched) != 1 || matched[0].ChatID != env.staffID {
+			t.Fatalf("matched = %+v, want only %d", matched, env.staffID)
+		}
+	})
+}
+
+func TestLinkToStaffGroup(t *testing.T) {
+	staffGroupOf := func(t *testing.T, e *linkEnv) *models.StaffGroup {
+		t.Helper()
+		group, err := staff.GetStaffGroupFresh(e.staffID)
+		if err != nil || group == nil {
+			t.Fatalf("Staff Group %d = (%+v, %v), want a row", e.staffID, group, err)
+		}
+		return group
+	}
+	wantNoLink := func(t *testing.T, e *linkEnv) {
+		t.Helper()
+		link, err := staff.GetLinkOfGroupFresh(e.groupID)
+		if err != nil || link != nil {
+			t.Fatalf("link of group = (%+v, %v), want none", link, err)
+		}
+	}
+	wantNoMessage := func(t *testing.T, e *linkEnv) {
+		t.Helper()
+		if sent := e.client.callsFor("sendMessage"); len(sent) != 0 {
+			t.Fatalf("%d messages were sent, want none: linkToStaffGroup never speaks", len(sent))
+		}
+	}
+
+	t.Run("a supergroup the issuer created is linked", func(t *testing.T) {
+		env := newLinkEnv(t)
+		env.client.botRole[env.groupID] = staffRoleAdminNoRestrict
+		chat := env.groupChat("Linked <Group>")
+
+		out := linkToStaffGroup(env.bot, staffSeamsOwner(env), &chat, staffGroupOf(t, env))
+
+		if out.Refusal != staffRefusalNone || out.Link == nil || out.StaffGroup == nil {
+			t.Fatalf("outcome = %+v, want a link and no refusal", out)
+		}
+		if out.StaffGroup.ChatID != env.staffID {
+			t.Errorf("outcome Staff Group = %d, want %d", out.StaffGroup.ChatID, env.staffID)
+		}
+		link := env.wantLink(t, models.StaffHealthBotCannotRestrict)
+		if link.GroupTitle != "Linked <Group>" {
+			t.Errorf("stored title = %q, want the target's title", link.GroupTitle)
+		}
+		wantNoMessage(t, env)
+	})
+
+	t.Run("a basic group is refused", func(t *testing.T) {
+		env := newLinkEnv(t)
+		chat := gotgbot.Chat{Id: env.groupID, Type: "group", Title: "Basic"}
+
+		out := linkToStaffGroup(env.bot, staffSeamsOwner(env), &chat, staffGroupOf(t, env))
+
+		if out.Refusal != staffRefusalNotSupergroup || out.Link != nil {
+			t.Fatalf("outcome = %+v, want staffRefusalNotSupergroup and no link", out)
+		}
+		wantNoLink(t, env)
+		wantNoMessage(t, env)
+	})
+
+	t.Run("a Staff Group as target is refused", func(t *testing.T) {
+		env := newLinkEnv(t)
+		other := uniqueModuleChatID()
+		env.client.setCreator(other, env.ownerID)
+		staffCleanup(t, other)
+		if _, err := staff.CreateStaffGroup(other, env.ownerID, "Other HQ"); err != nil {
+			t.Fatalf("create second Staff Group: %v", err)
+		}
+		chat := gotgbot.Chat{Id: other, Type: "supergroup", Title: "Other HQ"}
+
+		out := linkToStaffGroup(env.bot, staffSeamsOwner(env), &chat, staffGroupOf(t, env))
+
+		if out.Refusal != staffRefusalTargetIsStaff || out.Link != nil {
+			t.Fatalf("outcome = %+v, want staffRefusalTargetIsStaff and no link", out)
+		}
+		if link, err := staff.GetLinkOfGroupFresh(other); err != nil || link != nil {
+			t.Fatalf("link of the target Staff Group = (%+v, %v), want none", link, err)
+		}
+		wantNoMessage(t, env)
+	})
+
+	t.Run("a target created by someone else is refused", func(t *testing.T) {
+		env := newLinkEnv(t)
+		env.client.setCreator(env.groupID, env.ownerID+1)
+		chat := env.groupChat("Not mine")
+
+		out := linkToStaffGroup(env.bot, staffSeamsOwner(env), &chat, staffGroupOf(t, env))
+
+		if out.Refusal != staffRefusalNotTargetOwner || out.Link != nil {
+			t.Fatalf("outcome = %+v, want staffRefusalNotTargetOwner and no link", out)
+		}
+		wantNoLink(t, env)
+		wantNoMessage(t, env)
+	})
+
+	t.Run("a target that is already linked is refused", func(t *testing.T) {
+		env := newLinkEnv(t)
+		chat := env.groupChat("Twice")
+		group := staffGroupOf(t, env)
+		if first := linkToStaffGroup(env.bot, staffSeamsOwner(env), &chat, group); first.Refusal != staffRefusalNone {
+			t.Fatalf("first link refused with %v", first.Refusal)
+		}
+
+		out := linkToStaffGroup(env.bot, staffSeamsOwner(env), &chat, group)
+
+		if out.Refusal != staffRefusalAlreadyLinked || out.Link != nil {
+			t.Fatalf("outcome = %+v, want staffRefusalAlreadyLinked and no link", out)
+		}
+		env.wantLink(t, models.StaffHealthOK)
+		wantNoMessage(t, env)
+	})
+}
+
+func TestAnnounceStaffLink(t *testing.T) {
+	newOutcome := func(e *linkEnv, health string) staffLinkOutcome {
+		return staffLinkOutcome{
+			StaffGroup: &models.StaffGroup{ChatID: e.staffID, OwnerUserID: e.ownerID},
+			Link: &models.StaffGroupLink{
+				GroupChatID: e.groupID,
+				StaffChatID: e.staffID,
+				OwnerUserID: e.ownerID,
+				GroupTitle:  "Fish & <b>Chips</b>",
+				Health:      health,
+			},
+		}
+	}
+
+	t.Run("a healthy link is announced to the Staff Group only", func(t *testing.T) {
+		env := newLinkEnv(t)
+
+		announceStaffLink(env.bot, newOutcome(env, models.StaffHealthOK))
+
+		if all := env.client.callsFor("sendMessage"); len(all) != 1 {
+			t.Fatalf("%d messages sent, want exactly one", len(all))
+		}
+		notices := textsToChat(env.client, env.staffID)
+		if len(notices) != 1 || !strings.Contains(notices[0], staffMarker("staff_link_done")) {
+			t.Fatalf("Staff Group notices = %q, want one staff_link_done", notices)
+		}
+		if !strings.Contains(notices[0], "Fish &amp; &lt;b&gt;Chips&lt;/b&gt;") ||
+			!strings.Contains(notices[0], strconv.FormatInt(env.groupID, 10)) {
+			t.Errorf("notice %q must carry the escaped title and the group ID", notices[0])
+		}
+		if strings.Contains(notices[0], "staff-link-warn") {
+			t.Errorf("notice %q carries a warning for a healthy link", notices[0])
+		}
+		if sent := callsToChat(env.client, "sendMessage", env.groupID); len(sent) != 0 {
+			t.Fatalf("%d messages sent to the linked group, want none", len(sent))
+		}
+	})
+
+	t.Run("a bot without rights adds its warning line", func(t *testing.T) {
+		env := newLinkEnv(t)
+
+		announceStaffLink(env.bot, newOutcome(env, models.StaffHealthBotNotAdmin))
+
+		notices := textsToChat(env.client, env.staffID)
+		if len(notices) != 1 || !strings.Contains(notices[0], staffMarker("staff_link_done")) ||
+			!strings.Contains(notices[0], staffMarker("staff_link_warn_bot_not_admin")) {
+			t.Fatalf("Staff Group notices = %q, want one staff_link_done with the not-admin warning", notices)
+		}
+		if sent := callsToChat(env.client, "sendMessage", env.groupID); len(sent) != 0 {
+			t.Fatalf("%d messages sent to the linked group, want none", len(sent))
 		}
 	})
 }
