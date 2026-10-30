@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -46,6 +48,17 @@ type CaptchaWebConfig struct {
 	Redis *redis.Client
 	// Siteverify is the Cloudflare client; nil builds one with Secret.
 	Siteverify *captchaweb.Client
+	// TrustedProxies is CAPTCHA_WEB_TRUSTED_PROXIES: the comma-separated IPs and CIDRs whose
+	// X-Forwarded-For is believed. Empty means the client address is RemoteAddr. A bad entry
+	// fails the configuration.
+	TrustedProxies string
+	// PageStrings are the page's string tables by language (the i18n StringTable of
+	// captchaweb.PageLanguages and PageKeys). With it set the runtime builds the page and
+	// CaptchaWebRoutes returns the three routes; without it there is no page to serve.
+	PageStrings map[string]map[string]string
+	// StartNotReady builds the verify route closed (503 retry) until MarkCaptchaWebReady, for
+	// polling mode, where the HTTP server starts before the modules are loaded (D-30).
+	StartNotReady bool
 }
 
 // captchaWebRuntime is a configured web captcha: the challenge store, the verify handler
@@ -55,6 +68,8 @@ type captchaWebRuntime struct {
 	cfg     CaptchaWebConfig
 	store   *captchaweb.Store
 	handler *captchaweb.Handler
+	// page is the Mini App page handler, nil when the config carried no PageStrings.
+	page *captchaweb.Page
 }
 
 // captchaWebCurrent is the installed runtime, or nil while the web captcha is off.
@@ -96,19 +111,68 @@ func newCaptchaWebRuntime(bot *gotgbot.Bot, cfg CaptchaWebConfig) (*captchaWebRu
 	if cfg.Siteverify == nil {
 		cfg.Siteverify = &captchaweb.Client{Secret: cfg.Secret}
 	}
+	trusted, err := captchaweb.ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		return nil, fmt.Errorf("web captcha trusted proxies: %w", err)
+	}
 	rt := &captchaWebRuntime{bot: bot, cfg: cfg, store: captchaweb.NewStore(cfg.Redis)}
+	if cfg.PageStrings != nil {
+		rt.page, err = captchaweb.NewPage(captchaweb.PageOptions{SiteKey: cfg.SiteKey, Strings: cfg.PageStrings})
+		if err != nil {
+			return nil, fmt.Errorf("web captcha page: %w", err)
+		}
+	}
 	handler, err := captchaweb.NewHandler(captchaweb.Options{
-		BotToken:      bot.Token,
-		PublicBaseURL: cfg.BaseURL,
-		Store:         rt.store,
-		Siteverify:    cfg.Siteverify,
-		Backend:       captchaWebBackend{rt: rt},
+		BotToken:       bot.Token,
+		PublicBaseURL:  cfg.BaseURL,
+		Store:          rt.store,
+		Siteverify:     cfg.Siteverify,
+		Backend:        captchaWebBackend{rt: rt},
+		TrustedProxies: trusted,
+		StartNotReady:  cfg.StartNotReady,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("web captcha handler: %w", err)
 	}
 	rt.handler = handler
 	return rt, nil
+}
+
+// CaptchaWebRoutes returns the three web captcha routes (the page, the verify route and the
+// health check) keyed by their method patterns, for the HTTP server to mount before Start. It
+// is nil while no runtime with a page is installed, so with the settings unset none of the
+// three routes exists (D-10).
+func CaptchaWebRoutes() map[string]http.Handler {
+	rt := captchaWebCurrent.Load()
+	if rt == nil || rt.page == nil {
+		return nil
+	}
+	return rt.handler.Routes(rt.page)
+}
+
+// MarkCaptchaWebReady opens the verify route and the health check once the modules are loaded
+// (D-30). It does nothing while no runtime is installed.
+func MarkCaptchaWebReady() {
+	if rt := captchaWebCurrent.Load(); rt != nil {
+		rt.handler.SetReady(true)
+	}
+}
+
+// CaptchaWebStartupWarnings returns the startup warnings of an enabled web captcha (D-31):
+// the captcha routes share the HTTP port with /metrics, /db_metrics, /health, pprof and the
+// webhook, and an empty trusted proxy list collapses the per-address limit. It takes no
+// secret, so it cannot leak one.
+func CaptchaWebStartupWarnings(metricsTokenSet bool, trustedProxies string) []string {
+	var warnings []string
+	if !metricsTokenSet {
+		warnings = append(warnings, "[CaptchaWeb] METRICS_AUTH_TOKEN is not set: the captcha routes share the HTTP port "+
+			"with /metrics, /db_metrics, /health, pprof and the webhook. Forward only /captcha and /captcha/* through the public proxy.")
+	}
+	if strings.TrimSpace(trustedProxies) == "" {
+		warnings = append(warnings, "[CaptchaWeb] CAPTCHA_WEB_TRUSTED_PROXIES is empty: X-Forwarded-For is ignored "+
+			"and requests from a private or loopback address get no per-address limit. Set it to your reverse proxy's address.")
+	}
+	return warnings
 }
 
 // captchaWebAvailable reports whether a join in a Turnstile group can get a web challenge:
