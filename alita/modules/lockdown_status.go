@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -57,6 +58,35 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 		return reply(lockdownLiftingStatusText(tr, row, tally))
 	}
 
+	parts := lockdownStatusHead(tr, row, 0)
+	parts = append(parts, lockdownText(tr, "lockdown_status_removed",
+		i18n.TranslationParams{"count": lockdownRemovedSoFar(row.ID, tally)}))
+	if count := tally[models.JoinerStateBanFailed]; count > 0 {
+		parts = append(parts, lockdownText(tr, "lockdown_status_ban_failed", i18n.TranslationParams{"count": count}))
+	}
+	if count := tally[models.JoinerStateDeclined]; count > 0 {
+		parts = append(parts, lockdownText(tr, "lockdown_status_declined", i18n.TranslationParams{"count": count}))
+	}
+	// Until Telegram confirmed the lock the permissions may not have changed yet, so
+	// comparing them would only raise a false warning.
+	if row.LockedAt != nil {
+		if line := lockdownPermissionsLine(b, tr, chat.Id, row); line != "" {
+			parts = append(parts, line)
+		}
+	}
+	return reply(lockdownJoinLines(parts))
+}
+
+// lockdownStatusHead is the head of the status of an active lockdown, a line at a time
+// (D-13, D-29): since when (UTC, from the lock, else from the row's creation), then for a
+// manual lockdown who started it and the reason, for an automatic one the trigger
+// sentence rendered from the row's trigger columns (it has no reason), and
+// lockdown_status_unconfirmed while Telegram has not confirmed the lock. The starter's
+// name and the reason are escaped and spliced in after the translation. A positive
+// reasonMaxRunes cuts a longer reason to that many runes plus "…" before it is escaped,
+// for a menu page with a tight text budget; 0 leaves the reason whole, as /lockdownstatus
+// shows it.
+func lockdownStatusHead(tr *i18n.Translator, row *models.ChatLockdown, reasonMaxRunes int) []string {
 	since := row.CreatedAt
 	if row.LockedAt != nil {
 		since = *row.LockedAt
@@ -76,29 +106,20 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 			"name":  lockdownNameToken,
 		})
 		parts = []string{lockdownSplice(active, lockdownNameToken, lockdownMention(row.StartedBy, row.StartedByName))}
-		if line := lockdownReasonLine(tr, row.Reason); line != "" {
+		reason := row.Reason
+		if reasonMaxRunes > 0 && utf8.RuneCountInString(reason) > reasonMaxRunes {
+			// The mark is spliced in with the reason, so it stays next to it in every
+			// language whatever the line's word order.
+			reason = lockdownCapRunes(reason, reasonMaxRunes) + "…"
+		}
+		if line := lockdownReasonLine(tr, reason); line != "" {
 			parts = append(parts, line)
 		}
 	}
 	if row.LockedAt == nil {
 		parts = append(parts, lockdownText(tr, "lockdown_status_unconfirmed"))
 	}
-	parts = append(parts, lockdownText(tr, "lockdown_status_removed",
-		i18n.TranslationParams{"count": lockdownRemovedSoFar(row.ID, tally)}))
-	if count := tally[models.JoinerStateBanFailed]; count > 0 {
-		parts = append(parts, lockdownText(tr, "lockdown_status_ban_failed", i18n.TranslationParams{"count": count}))
-	}
-	if count := tally[models.JoinerStateDeclined]; count > 0 {
-		parts = append(parts, lockdownText(tr, "lockdown_status_declined", i18n.TranslationParams{"count": count}))
-	}
-	// Until Telegram confirmed the lock the permissions may not have changed yet, so
-	// comparing them would only raise a false warning.
-	if row.LockedAt != nil {
-		if line := lockdownPermissionsLine(b, tr, chat.Id, row); line != "" {
-			parts = append(parts, line)
-		}
-	}
-	return reply(lockdownJoinLines(parts))
+	return parts
 }
 
 // lockdownStartedAutomatically reports whether the bot locked the group on its own: the

@@ -104,6 +104,12 @@ func requireLockdownGroup() helpers.CheckFunc {
 // production code never reassigns it.
 var lockdownBeginLift = lockdown.BeginLift
 
+// lockdownCurrentLookup reads a chat's current lockdown (active, else one still being
+// lifted) fresh from the database. It is a variable only so a test can make the read
+// fail; production code never reassigns it. applyLockdownLift and the settings
+// Lockdown page read through it.
+var lockdownCurrentLookup = lockdown.GetCurrentFresh
+
 // lockdownLiveMember asks Telegram, live and uncached, for one member of a group.
 func lockdownLiveMember(b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedChatMember, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), lockdownLiveCheckTimeout)
@@ -406,40 +412,106 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	reply := func(text string) error {
-		replyLockdown(b, msg, text)
-		return ext.EndGroups
-	}
+	res := applyLockdownLift(context.Background(), b, chat.Id, actor)
+	replyLockdown(b, msg, lockdownLiftApplyText(tr, res, actor.Id))
+	return ext.EndGroups
+}
 
-	// The chat's active lockdown, else one still being lifted. Neither makes a
-	// Telegram call.
-	row, err := lockdown.GetCurrentFresh(chat.Id)
+// lockdownLiftApplyOutcome is how one applyLockdownLift call ended.
+type lockdownLiftApplyOutcome int
+
+const (
+	// liftApplyDone means the permissions were restored and this caller recorded the lift.
+	liftApplyDone lockdownLiftApplyOutcome = iota
+	// liftApplyStateFailed means the chat's lockdown could not be read; nothing was done.
+	liftApplyStateFailed
+	// liftApplyNotActive means the chat has no lockdown to lift; no Telegram call was made.
+	liftApplyNotActive
+	// liftApplyInProgress means a lift was already recorded and its joiners are still
+	// being unbanned; Row names the lifter and nothing was repeated.
+	liftApplyInProgress
+	// liftApplyRestoreFailed means Telegram did not confirm the restore; the lockdown
+	// stays active.
+	liftApplyRestoreFailed
+	// liftApplyRecordFailed means the lift could not be recorded; the lockdown stays
+	// active.
+	liftApplyRecordFailed
+	// liftApplyLost means the permissions were restored but another caller recorded the
+	// lift first.
+	liftApplyLost
+)
+
+// lockdownLiftApply is what applyLockdownLift reports.
+type lockdownLiftApply struct {
+	Outcome lockdownLiftApplyOutcome
+	// Row is the lockdown that was read; nil for liftApplyStateFailed and liftApplyNotActive.
+	Row *models.ChatLockdown
+	// Lift is liftLockdownRow's result; meaningful once a lift was tried.
+	Lift lockdownLiftResult
+	// ActorName is the name recorded as the lifter, capped to lockdownNameMaxRunes.
+	ActorName string
+}
+
+// applyLockdownLift lifts the lockdown of a chat for the actor and is the one lift entry
+// shared by /unlockdown and the settings menu. It reads the chat's current lockdown
+// fresh (active, else one still being lifted; neither makes a Telegram call) and lifts
+// only through liftLockdownRow, which restores the stored permissions before the one
+// conditional record. The caller has already judged the actor's authority and posts
+// whatever the outcome needs said.
+func applyLockdownLift(ctx context.Context, b *gotgbot.Bot, chatID int64, actor *gotgbot.User) lockdownLiftApply {
+	row, err := lockdownCurrentLookup(chatID)
 	if err != nil {
-		return reply(lockdownText(tr, "lockdown_state_failed"))
+		return lockdownLiftApply{Outcome: liftApplyStateFailed}
 	}
 	if row == nil {
-		return reply(lockdownText(tr, "lockdown_not_active"))
+		return lockdownLiftApply{Outcome: liftApplyNotActive}
 	}
 	if row.State == models.LockdownStateLifting {
-		var lifterID int64
-		if row.LiftedBy != nil {
-			lifterID = *row.LiftedBy
-		}
-		text := lockdownText(tr, "lockdown_lift_in_progress", i18n.TranslationParams{"name": lockdownNameToken})
-		return reply(lockdownSplice(text, lockdownNameToken, lockdownMention(lifterID, row.LiftedByName)))
+		return lockdownLiftApply{Outcome: liftApplyInProgress, Row: row}
 	}
 
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
-	res := liftLockdownRow(context.Background(), b, row, actor.Id, name)
+	res := liftLockdownRow(ctx, b, row, actor.Id, name)
+	out := lockdownLiftApply{Outcome: liftApplyDone, Row: row, Lift: res, ActorName: name}
 	switch res.Outcome {
 	case lockdownLiftRestoreFailed:
-		return reply(lockdownText(tr, "lockdown_restore_failed"))
+		out.Outcome = liftApplyRestoreFailed
 	case lockdownLiftRecordFailed:
-		return reply(lockdownText(tr, "lockdown_lift_record_failed"))
+		out.Outcome = liftApplyRecordFailed
 	case lockdownLiftLost:
-		return reply(lockdownText(tr, "lockdown_already_lifted"))
+		out.Outcome = liftApplyLost
 	}
-	return reply(lockdownLiftedText(tr, actor.Id, name, res))
+	return out
+}
+
+// lockdownLiftApplyText is the reply for one applyLockdownLift result, exactly as
+// /unlockdown sends it. The lifter's name and a lift in progress's lifter are escaped
+// and spliced in after the translation.
+func lockdownLiftApplyText(tr *i18n.Translator, r lockdownLiftApply, actorID int64) string {
+	switch r.Outcome {
+	case liftApplyStateFailed:
+		return lockdownText(tr, "lockdown_state_failed")
+	case liftApplyNotActive:
+		return lockdownText(tr, "lockdown_not_active")
+	case liftApplyInProgress:
+		var lifterID int64
+		var lifterName string
+		if r.Row != nil {
+			if r.Row.LiftedBy != nil {
+				lifterID = *r.Row.LiftedBy
+			}
+			lifterName = r.Row.LiftedByName
+		}
+		text := lockdownText(tr, "lockdown_lift_in_progress", i18n.TranslationParams{"name": lockdownNameToken})
+		return lockdownSplice(text, lockdownNameToken, lockdownMention(lifterID, lifterName))
+	case liftApplyRestoreFailed:
+		return lockdownText(tr, "lockdown_restore_failed")
+	case liftApplyRecordFailed:
+		return lockdownText(tr, "lockdown_lift_record_failed")
+	case liftApplyLost:
+		return lockdownText(tr, "lockdown_already_lifted")
+	}
+	return lockdownLiftedText(tr, actorID, r.ActorName, r.Lift)
 }
 
 // lockdownLiftOutcome is how one lift attempt ended.
