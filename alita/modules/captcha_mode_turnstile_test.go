@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"gopkg.in/yaml.v3"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
@@ -222,4 +224,50 @@ func TestCaptchaModeTurnstileRefusals(t *testing.T) {
 		}
 		assertCaptchaSettings(t, env.chat.Id, db.CaptchaSettings{CaptchaMode: "math", Timeout: 2, FailureAction: "kick", MaxAttempts: 3})
 	})
+}
+
+// TestCaptchaModeListsTurnstileInEveryLanguage holds the four texts that list the captcha
+// modes to the truth in all 7 languages, and checks the two replies that carry them.
+func TestCaptchaModeListsTurnstileInEveryLanguage(t *testing.T) {
+	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+		raw, err := os.ReadFile("../../locales/" + code + ".yml")
+		if err != nil {
+			t.Fatalf("read %s.yml: %v", code, err)
+		}
+		var data map[string]any
+		if err := yaml.Unmarshal(raw, &data); err != nil {
+			t.Fatalf("parse %s.yml: %v", code, err)
+		}
+		for _, key := range []string{"captcha_mode_specify", "captcha_mode_invalid", "captcha_invalid_mode_error"} {
+			text, _ := data[key].(string)
+			for _, mode := range []string{"math", "text", "turnstile"} {
+				if !strings.Contains(text, mode) {
+					t.Errorf("%s: %s = %q does not name %q", code, key, text, mode)
+				}
+			}
+		}
+		help, _ := data["captcha_help_msg"].(string)
+		if !strings.Contains(help, "turnstile") {
+			t.Errorf("%s: captcha_help_msg does not name turnstile", code)
+		}
+	}
+
+	withStaffLocale(t)
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Captcha Chat"}
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	for _, tc := range []struct{ text, key string }{
+		{"/captchamode", "captcha_mode_specify"},
+		{"/captchamode bogus", "captcha_mode_invalid"},
+	} {
+		before := len(client.callsFor("sendMessage"))
+		if err := runCaptchaModeAs(bot, chat, admin, tc.text); err != nil {
+			t.Fatalf("%s error = %v", tc.text, err)
+		}
+		sends := client.callsFor("sendMessage")
+		if len(sends) != before+1 || !strings.Contains(fmt.Sprint(sends[len(sends)-1].Params["text"]), staffMarker(tc.key)) {
+			t.Fatalf("%s did not reply with %s", tc.text, tc.key)
+		}
+	}
 }
