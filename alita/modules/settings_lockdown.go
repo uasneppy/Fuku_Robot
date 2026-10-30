@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -22,6 +23,11 @@ const (
 	settingsTriggerAI    = "a"
 	// settingsLockdownReasonRunes is how much of a manual lockdown's reason the page shows.
 	settingsLockdownReasonRunes = 200
+
+	// settingsActLiftAsk is the first tap of Lift and settingsActLiftYes the second (e is the
+	// card's expiry minute).
+	settingsActLiftAsk = "ls"
+	settingsActLiftYes = "ly"
 )
 
 func init() {
@@ -32,6 +38,10 @@ func init() {
 		TitleKey:  "settings_page_lockdown",
 		MainState: settingsLockdownMainState,
 		Open:      settingsLockdownOpen,
+		Actions: map[string]settingsPageAction{
+			settingsActLiftAsk: {Right: settingsRightRestrict, Run: settingsLockdownLiftAsk},
+			settingsActLiftYes: {Fields: []string{"e"}, Right: settingsRightRestrict, Run: settingsLockdownLiftYes},
+		},
 		Controls: map[string]settingsControl{
 			settingsTriggerJoins: {Right: settingsRightRestrict, Set: settingsLockdownSetTrigger(autoTriggerJoins)},
 			settingsTriggerFlood: {Right: settingsRightRestrict, Set: settingsLockdownSetTrigger(autoTriggerFlood)},
@@ -181,8 +191,14 @@ func renderSettingsLockdown(v settingsView, s settingsLockdownSnapshot, notice s
 		body = append(body, settingsText(v.Tr, "lockdown_auto_ai_unavailable"))
 	}
 
-	// The Lift row of an active lockdown goes first among the content rows; plan 09-12 adds
-	// it here, above the trigger rows.
+	// The Lift row of an active lockdown goes first among the content rows, above the trigger
+	// rows. A lockdown that is being lifted, or none, offers no Lift.
+	if s.Row != nil && s.Row.State == models.LockdownStateActive {
+		if button, ok := k.button(settingsText(v.Tr, "lockdown_alert_btn_lift"),
+			map[string]string{"a": settingsActLiftAsk}); ok {
+			k.row(button)
+		}
+	}
 	for _, t := range triggers {
 		label := settingsText(v.Tr, t.buttonKey, i18n.TranslationParams{"state": settingsStateWord(v.Tr, t.enabled)})
 		k.row(settingsToggleButton(k, settingsPageLockdown, t.control, label, t.enabled)...)
@@ -268,4 +284,65 @@ func settingsLockdownAtBound(p *settingsPress, trigger string, target int) bool 
 		p.answer(settingsText(p.tr, "settings_max_value", i18n.TranslationParams{"max": raiddetection.MaxThreshold}), false)
 	}
 	return true
+}
+
+// renderSettingsLockdownLiftCard draws the Lift card: the alert's own confirm prompt naming
+// the locked group (its stored title, escaped and spliced in after translation), Yes and No,
+// and the navigation row.
+func renderSettingsLockdownLiftCard(v settingsView, row *models.ChatLockdown) settingsScreen {
+	prompt := lockdownGroupText(v.Tr, "lockdown_alert_lift_ask", row)
+	k := newSettingsKeyboard(v)
+	settingsCardRows(k, map[string]string{"a": settingsActLiftYes}, settingsPageLockdown)
+	return k.screen(settingsCompose(v, "settings_page_lockdown", []string{prompt}, "", false))
+}
+
+// settingsLockdownLiftAsk handles ls, the first tap of Lift. The press's right
+// (settingsRightRestrict, a live member record) was judged before this runs. The lockdown is
+// read fresh: none, one being lifted or an unreadable state redraws the page with the
+// command's own words, and only an active one gets the card.
+func settingsLockdownLiftAsk(p *settingsPress) *settingsScreen {
+	row, err := lockdownCurrentLookup(p.group.Id)
+	switch {
+	case err != nil:
+		log.Warnf("[Settings] lockdown state of chat %d could not be read for a Lift press: %v", p.group.Id, err)
+		return settingsLockdownLiftRefusal(p, lockdownLiftApply{Outcome: liftApplyStateFailed})
+	case row == nil:
+		return settingsLockdownLiftRefusal(p, lockdownLiftApply{Outcome: liftApplyNotActive})
+	case row.State != models.LockdownStateActive:
+		return settingsLockdownLiftRefusal(p, lockdownLiftApply{Outcome: liftApplyInProgress, Row: row})
+	}
+	screen := renderSettingsLockdownLiftCard(p.view(), row)
+	return &screen
+}
+
+// settingsLockdownLiftRefusal redraws the page with the text of a lift result that is not a
+// lift, as a warning.
+func settingsLockdownLiftRefusal(p *settingsPress, result lockdownLiftApply) *settingsScreen {
+	return settingsLockdownRedraw(p, nil, settingsNoticeWarn(lockdownLiftApplyText(p.tr, result, p.query.From.Id)))
+}
+
+// settingsLockdownLiftYes handles ly, the second tap. A Yes whose expiry minute has passed
+// redraws the page with settings_card_expired and lifts nothing. Otherwise the press is
+// answered first (the lift can outlast the callback, D-31) and the lift goes only through
+// applyLockdownLift, the path /unlockdown uses, which reads the lockdown fresh and records
+// the lift through the conditional BeginLift, so of two Yes presses one wins. A recorded lift
+// is announced in the group like the alert's Lift (lockdownAnnounceLift); every outcome
+// redraws the page with the command's words as a notice.
+func settingsLockdownLiftYes(p *settingsPress) *settingsScreen {
+	expired, ok := settingsCardExpired(p.fields)
+	if !ok {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	if expired {
+		return settingsLockdownRedraw(p, nil, settingsNoticeWarn(settingsText(p.tr, "settings_card_expired")))
+	}
+	p.answer("", false)
+
+	result := applyLockdownLift(context.Background(), p.b, p.group.Id, &p.query.From)
+	if result.Outcome != liftApplyDone {
+		return settingsLockdownLiftRefusal(p, result)
+	}
+	lockdownAnnounceLift(p.b, result.Row, p.query.From.Id, result.ActorName, result.Lift)
+	return settingsLockdownRedraw(p, nil, settingsNoticeOK(lockdownLiftApplyText(p.tr, result, p.query.From.Id)))
 }
