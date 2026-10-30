@@ -415,15 +415,15 @@ Plans:
   4. The Lockdown page shows the current state, a working Lift button, and an on/off switch and threshold for each automatic trigger. The Captcha page sets the mode and time limit, and the Antiflood page configures antiflood.
   5. A setting changed in the menu is identical to the same setting changed by command, and both always show the same current value.
 
-**Plans:** 14 plans
+**Plans:** 4/14 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
-- [ ] 09-01-PLAN.md: Tracer. `/settings` in a group, the choice message, Open here, the Main page, the full press pipeline and rights, the Captcha time stepper through `applyCaptchaTimeout` shared with `/captchatime`, Back and Close
-- [ ] 09-02-PLAN.md: Staff seams: the panel row split into head and status, a length limit on the panel text, the link flow split into `listVerifiedOwnStaffGroups`, `linkToStaffGroup` and `announceStaffLink`
-- [ ] 09-03-PLAN.md: Antiflood first-write characterization and `applyFloodLimit/Mode/Delete` with a database read-back, shared by the commands
-- [ ] 09-04-PLAN.md: `applyAutoLockdown`, `applyLockdownLift`, `lockdownAnnounceLift` and `lockdownStatusHead`, shared by the lockdown commands and the alert
+- [x] 09-01-PLAN.md: Tracer. `/settings` in a group, the choice message, Open here, the Main page, the full press pipeline and rights, the Captcha time stepper through `applyCaptchaTimeout` shared with `/captchatime`, Back and Close
+- [x] 09-02-PLAN.md: Staff seams: the panel row split into head and status, a length limit on the panel text, the link flow split into `listVerifiedOwnStaffGroups`, `linkToStaffGroup` and `announceStaffLink`
+- [x] 09-03-PLAN.md: Antiflood first-write characterization and `applyFloodLimit/Mode/Delete` with a database read-back, shared by the commands
+- [x] 09-04-PLAN.md: `applyAutoLockdown`, `applyLockdownLift`, `lockdownAnnounceLift` and `lockdownStatusHead`, shared by the lockdown commands and the alert
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 09-05-PLAN.md: Every page and card string in all 7 languages, with ceiling, label-length and privacy-placeholder tests
@@ -458,4 +458,4 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
 | 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
 | 8. Turnstile Web Captcha | 11/11 | Complete    | 2026-10-30 |
-| 9. Settings Menu | 0/TBD | Not started | - |
+| 9. Settings Menu | 4/14 | In Progress|  |
