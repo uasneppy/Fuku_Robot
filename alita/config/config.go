@@ -2,15 +2,20 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/divkix/Alita_Robot/alita/utils/gemini"
 	"github.com/divkix/Alita_Robot/alita/utils/logredact"
 )
 
@@ -189,13 +194,136 @@ type Config struct {
 
 	MetricsAuthToken string
 
-	// AI spam filter (TypeSafe Jev). EnableAISpam is a global kill switch; the
-	// feature is inert without TypeSafeAPIKey.
+	// AI spam filter (TypeSafe Jev). EnableAISpam is the global AI kill switch: when
+	// false it stops /aispam and every raid AI check, text (TypeSafe) and image
+	// (Gemini) alike. The text feature is inert without TypeSafeAPIKey.
 	EnableAISpam   bool
 	TypeSafeAPIKey string
+
+	// Image checks of the AI raid trigger (Google Gemini). The feature is inert
+	// without GeminiAPIKey (with no key no image leaves the server) and while
+	// EnableAISpam is false. The key is
+	// a secret and is registered with logredact.RegisterSecret. GeminiModel is
+	// checked against the Gemini client's model-name rule in setDefaults, so a name that is not a
+	// plain model id never reaches a request URL.
+	GeminiAPIKey string
+	GeminiModel  string
+
+	// Web captcha (Cloudflare Turnstile in a Telegram Mini App). It is on only when
+	// all four of CAPTCHA_WEB_BASE_URL, TELEGRAM_MINI_APP_SHORT_NAME,
+	// TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY are set; a partial set stops
+	// startup. TurnstileSecretKey is registered with logredact and is sent only to
+	// Cloudflare. CaptchaWebTrustedProxies is a comma-separated list of IPs or CIDRs
+	// of the reverse proxies whose X-Forwarded-For the verify route may read.
+	CaptchaWebBaseURL        string
+	TelegramMiniAppShortName string
+	TurnstileSiteKey         string
+	TurnstileSecretKey       string
+	CaptchaWebTrustedProxies string
 }
 
 var AppConfig *Config
+
+// captchaWebShortNameRe is a loose superset of BotFather's Mini App short names.
+var captchaWebShortNameRe = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
+
+// captchaWebMinSecretLen is the log redactor's floor: a shorter secret could not be scrubbed.
+const captchaWebMinSecretLen = 6
+
+// CaptchaWebConfigured reports whether all four required web captcha settings are set.
+func (c *Config) CaptchaWebConfigured() bool {
+	return c.CaptchaWebBaseURL != "" &&
+		c.TelegramMiniAppShortName != "" &&
+		c.TurnstileSiteKey != "" &&
+		c.TurnstileSecretKey != ""
+}
+
+// validateCaptchaWeb checks the web captcha settings all-or-nothing. Every error
+// names the variable and the rule only, never a value.
+func validateCaptchaWeb(cfg *Config) error {
+	required := []struct {
+		name  string
+		value string
+	}{
+		{"CAPTCHA_WEB_BASE_URL", cfg.CaptchaWebBaseURL},
+		{"TELEGRAM_MINI_APP_SHORT_NAME", cfg.TelegramMiniAppShortName},
+		{"TURNSTILE_SITE_KEY", cfg.TurnstileSiteKey},
+		{"TURNSTILE_SECRET_KEY", cfg.TurnstileSecretKey},
+	}
+	var missing []string
+	for _, r := range required {
+		if r.value == "" {
+			missing = append(missing, r.name)
+		}
+	}
+
+	switch {
+	case len(missing) == len(required):
+		if cfg.CaptchaWebTrustedProxies != "" {
+			return fmt.Errorf("CAPTCHA_WEB_TRUSTED_PROXIES is set but the web captcha is not configured; set CAPTCHA_WEB_BASE_URL, TELEGRAM_MINI_APP_SHORT_NAME, TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY, or remove it")
+		}
+		return nil
+	case len(missing) > 0:
+		return fmt.Errorf("web captcha settings are incomplete: missing %s", strings.Join(missing, ", "))
+	}
+
+	if !validCaptchaWebBaseURL(cfg.CaptchaWebBaseURL) {
+		return fmt.Errorf("CAPTCHA_WEB_BASE_URL must be an https URL with a host, no user info, query or fragment, and a path that is empty or /")
+	}
+	if !captchaWebShortNameRe.MatchString(cfg.TelegramMiniAppShortName) {
+		return fmt.Errorf("TELEGRAM_MINI_APP_SHORT_NAME must be 1 to 64 letters, digits or underscores")
+	}
+	if len(cfg.TurnstileSecretKey) < captchaWebMinSecretLen {
+		return fmt.Errorf("TURNSTILE_SECRET_KEY must be at least %d characters so it can be scrubbed from logs", captchaWebMinSecretLen)
+	}
+	if !validCaptchaWebProxies(cfg.CaptchaWebTrustedProxies) {
+		return fmt.Errorf("CAPTCHA_WEB_TRUSTED_PROXIES must be a comma-separated list of IP addresses or CIDR prefixes")
+	}
+	return nil
+}
+
+// validCaptchaWebBaseURL reports whether raw is an https URL with a host and
+// nothing but an empty or "/" path. It never returns the parse error, which
+// would echo the URL.
+func validCaptchaWebBaseURL(raw string) bool {
+	if strings.ContainsAny(raw, "?#") {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "https" &&
+		u.Hostname() != "" &&
+		u.User == nil &&
+		u.RawQuery == "" &&
+		u.Fragment == "" &&
+		(u.Path == "" || u.Path == "/")
+}
+
+// validCaptchaWebProxies reports whether every comma-separated entry of list is
+// an IP address or a CIDR prefix. Empty entries (an empty list, a trailing or a
+// doubled comma) are skipped, which is the rule of captchaweb.ParseTrustedProxies
+// that parses the same setting at runtime; the package is a leaf and cannot be
+// shared, so the two tests hold the same table of inputs.
+func validCaptchaWebProxies(list string) bool {
+	for _, entry := range strings.Split(list, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.Contains(entry, "/") {
+			if _, err := netip.ParsePrefix(entry); err != nil {
+				return false
+			}
+			continue
+		}
+		if _, err := netip.ParseAddr(entry); err != nil {
+			return false
+		}
+	}
+	return true
+}
 
 func ValidateConfig(cfg *Config) error {
 	if cfg.BotToken == "" {
@@ -255,7 +383,7 @@ func ValidateConfig(cfg *Config) error {
 		return fmt.Errorf("REDIS_DB must be an integer 0-15")
 	}
 
-	return nil
+	return validateCaptchaWeb(cfg)
 }
 
 func LoadConfig() (*Config, error) {
@@ -328,6 +456,15 @@ func LoadConfig() (*Config, error) {
 
 		EnableAISpam:   typeConvertor{str: os.Getenv("ENABLE_AISPAM")}.Bool(),
 		TypeSafeAPIKey: os.Getenv("TYPESAFE_API_KEY"),
+
+		GeminiAPIKey: os.Getenv("GEMINI_API_KEY"),
+		GeminiModel:  os.Getenv("GEMINI_MODEL"),
+
+		CaptchaWebBaseURL:        strings.TrimSpace(os.Getenv("CAPTCHA_WEB_BASE_URL")),
+		TelegramMiniAppShortName: strings.TrimSpace(os.Getenv("TELEGRAM_MINI_APP_SHORT_NAME")),
+		TurnstileSiteKey:         strings.TrimSpace(os.Getenv("TURNSTILE_SITE_KEY")),
+		TurnstileSecretKey:       strings.TrimSpace(os.Getenv("TURNSTILE_SECRET_KEY")),
+		CaptchaWebTrustedProxies: strings.TrimSpace(os.Getenv("CAPTCHA_WEB_TRUSTED_PROXIES")),
 	}
 
 	cfg.setDefaults()
@@ -446,6 +583,33 @@ func (cfg *Config) setDefaults() {
 	if os.Getenv("ENABLE_AISPAM") == "" {
 		cfg.EnableAISpam = true
 	}
+
+	// The model name ends up in a request path, so one that is not a plain
+	// model id is replaced by the default instead of being used.
+	if cfg.GeminiModel == "" {
+		cfg.GeminiModel = gemini.DefaultModel
+	} else if !gemini.ValidModel(cfg.GeminiModel) {
+		// The rejected value is never logged: setDefaults runs before registerSecrets, and a
+		// variable pasted into the wrong place could be a key.
+		log.Warnf("[Config] GEMINI_MODEL (%d characters) is not a valid model name, using %s",
+			utf8.RuneCountInString(cfg.GeminiModel), gemini.DefaultModel)
+		cfg.GeminiModel = gemini.DefaultModel
+	}
+}
+
+// registerSecrets registers every configured secret with logredact so its exact
+// value is scrubbed from all log output.
+func registerSecrets(cfg *Config) {
+	logredact.RegisterSecret(
+		cfg.BotToken,
+		cfg.DatabaseURL,
+		cfg.RedisPassword,
+		cfg.WebhookSecret,
+		cfg.MetricsAuthToken,
+		cfg.TypeSafeAPIKey,
+		cfg.GeminiAPIKey,
+		cfg.TurnstileSecretKey,
+	)
 }
 
 func init() {
@@ -483,14 +647,7 @@ func init() {
 
 	AppConfig = cfg
 
-	logredact.RegisterSecret(
-		cfg.BotToken,
-		cfg.DatabaseURL,
-		cfg.RedisPassword,
-		cfg.WebhookSecret,
-		cfg.MetricsAuthToken,
-		cfg.TypeSafeAPIKey,
-	)
+	registerSecrets(cfg)
 
 	if cfg.Debug {
 		log.SetLevel(log.DebugLevel)

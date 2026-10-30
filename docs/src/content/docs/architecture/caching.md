@@ -27,7 +27,6 @@ Cache Time-To-Live (TTL) values are defined in `alita/db/cache/ttl.go`:
 | `CacheTTLWarnSettings` | 30 minutes | Warning configuration |
 | `CacheTTLAntiflood` | 30 minutes | Flood protection settings |
 | `CacheTTLDisabledCmds` | 30 minutes | Disabled commands list |
-| `CacheTTLAntiRaid` | 30 minutes | Anti-raid settings |
 | `CacheTTLApprovals` | 30 minutes | Approved users list |
 | `CacheTTLCaptchaSettings` | 30 minutes | Captcha verification settings |
 
@@ -56,8 +55,18 @@ Disposable snapshots use `alita:cache:`. Operational state uses its existing `al
 | `alita:cache:adminCache:{chatId}` | Cached admin list for a chat (30min TTL) |
 | `alita:cache:captcha_settings:{chatId}` | Captcha settings (30 min TTL) |
 | `alita:cache:approvals:{chatId}` | Approved users list (30 min TTL) |
-| `alita:antiraid:state:{chatId}` | Live anti-raid state (TTL covers the requested raid expiry plus one polling interval) |
-| `alita:antiraid:joins:{chatId}` | Anti-raid join tracking (60s counting window) |
+| `alita:cache:raid_detection:{chatId}` | Automatic raid detection settings (30 min TTL, never served from the local layer) |
+| `alita:raid:{chatId}:joined` | Join surge counter: a sorted set of the last 24 hours of joins, scored by join time (25 h TTL, newest 5000 kept); the chat ID is a hash tag |
+| `alita:raid:{chatId}:fi`, `:fn`, `:fa` | Flood counter: the window's items, the items from new members, and those members (30 s window, 2 min TTL) |
+| `alita:raid:{chatId}:fire` | Short latch that sheds load while a trigger starts a lockdown (60 s, shorter or longer after some outcomes) |
+| `alita:raid:{chatId}:flooders` | Snapshot of the flooding accounts saved for the lockdown alert (15 min TTL) |
+| `alita:raid:{chatId}:av`, `:aa` | AI burst counter: the spam verdict items (one per message or album) and the accounts behind them (120 s window, 5 min TTL, newest 1000 of each kept). Message text is never stored |
+| `alita:raid:{chatId}:aispammers` | Snapshot of the recent joiners (joined within 24 h) behind the counted AI verdicts, saved for the lockdown alert (15 min TTL) |
+| `alita:raid:{chatId}:ar:{userId}` | Repeat test of the raid AI candidate watcher: short hashes of a new member's last 5 texts, never the text itself (1 h TTL) |
+| `alita:raid:{chatId}:ag:{mediaGroupId}` | Album gate: only the first photo of an album is judged (120 s) |
+| `alita:raid:{chatId}:abu:{userId}:{hour}`, `alita:raid:{chatId}:ab:{hour}` and `alita:raid:aibudget:{hour}` | Hourly Gemini image budgets, 20 calls per account in a group, 150 per group and 500 in all, counted per UTC hour (2 h TTL) |
+| `alita:raid:aiv:{fileUniqueId}` | Cached Gemini verdict for one image, so the same file is not sent twice (1 h TTL) |
+| `alita:raid:{chatId}:warn` | Once-a-day gate for the "raid detected but I can't lock this group" warning (24 h) |
 | `alita:cache:locks_map:{chatId}` | Lock status (1 hour TTL, from optimized queries) |
 | `alita:cache:user:{userId}` | User basic info (1 hour TTL, from optimized queries) |
 | `alita:cache:chat:{chatId}` | Chat basic info (30 min TTL, from optimized queries) |
@@ -117,7 +126,7 @@ return cache.GetFromCacheOrLoad(ctx, cache.CacheKey("settings", chatID), time.Mi
 `GetFromCacheOrLoad` checks a short-TTL, size-bounded in-process LRU before Redis. A hit decodes stored msgpack bytes, so every caller gets its own copy and may mutate it safely. Entries are added after a Redis hit and after a successful load, and only if no `DeleteCache` for the key ran since the read started.
 
 - **TTL:** `CACHE_LOCAL_TTL` seconds (default `10`, `0` disables the layer). `CACHE_LOCAL_MAX_ENTRIES` (default `50000`) bounds its size. `DISABLE_CACHE=true` also disables it.
-- **Scope:** only `GetFromCacheOrLoad` keys. The admin cache, operational keys (`alita:antiraid:*`, `alita:anonAdmin:*`, ...) and keys listed in `skipLocal` (`alita/db/cache/local.go`), such as the captcha pending flag, always go to Redis.
+- **Scope:** only `GetFromCacheOrLoad` keys. The admin cache, operational keys (`alita:raid:*`, `alita:lockdown:*`, `alita:staff:*`, `alita:anonAdmin:*`, ...) and keys listed in `skipLocal` (`alita/db/cache/local.go`), such as the captcha pending flag and the raid detection settings, always go to Redis.
 - **Multiple replicas:** `DeleteCache` evicts the local copy on the replica that performs the write, so that replica sees the change immediately. Other replicas can serve the old value for up to `CACHE_LOCAL_TTL` seconds. There is no cross-replica invalidation.
 - **Metrics:** `alita_cache_local_hits_total` and `alita_cache_local_misses_total`.
 
@@ -145,7 +154,7 @@ Use `InvalidateAdminCache(chatID)` from `alita/utils/cache` for event handling, 
 
 `CLEAR_CACHE_ON_STARTUP` defaults to `false`. Normal restarts preserve cached data to avoid a burst of database queries.
 
-When explicitly enabled, `ClearAllCaches` uses Redis `SCAN` and `UNLINK` to remove only `alita:cache:*` entries. Anti-raid state, join tracking, pending confirmations, and unrelated application keys remain intact. Use this option when cached data needs to be rebuilt after a format change.
+When explicitly enabled, `ClearAllCaches` uses Redis `SCAN` and `UNLINK` to remove only `alita:cache:*` entries. Operational keys (raid detection counters under `alita:raid:*`, lockdown and staff state), pending confirmations, and unrelated application keys remain intact. Use this option when cached data needs to be rebuilt after a format change.
 
 Old cache keys from versions predating the `alita:cache:` namespace expire through their existing TTLs. Deployments should finish replacing the old version before relying on invalidation across instances, because older instances still use the old cache keys.
 

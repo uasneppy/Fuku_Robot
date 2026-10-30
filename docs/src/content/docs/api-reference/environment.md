@@ -46,9 +46,12 @@ Days before marking a chat as inactive
 
 ### `ENABLE_AISPAM`
 
-Global kill switch for the AI spam filter. When `false`, no chat runs AI spam
-checks regardless of its per-chat setting. The filter is inert without
-`TYPESAFE_API_KEY` either way.
+Global kill switch for every AI check. When `false`, no chat runs `/aispam`
+checks regardless of its per-chat setting, and the AI raid trigger sends nothing
+to either provider: no text goes to TypeSafe and no image goes to Google Gemini,
+even when `GEMINI_API_KEY` is set. `/autolockdown` then shows the "AI checks are
+not set up" notice. The text checks are inert without `TYPESAFE_API_KEY` either
+way.
 
 | Property | Value |
 |----------|-------|
@@ -65,6 +68,107 @@ chats cannot bring their own. Leaving it empty disables the feature and makes
 | Property | Value |
 |----------|-------|
 | **Type** | `string` |
+| **Required** | No |
+
+### `GEMINI_API_KEY`
+
+Google Gemini API key for the image checks of the AI raid trigger. When it is
+set, suspicious photos, GIFs and stickers posted by members who joined in the
+last 24 hours are sent to Google Gemini to be judged as spam or not. A burst of
+spam verdicts from several accounts can lock the group; the AI never locks a
+group on its own. When it is unset, no image is sent anywhere and the text
+checks (through `TYPESAFE_API_KEY`) are unchanged. Setting `ENABLE_AISPAM` to
+`false` also stops the image checks.
+
+Use a paid-tier key. On the free tier Google may use the images you send to
+improve its products, so the owner decides before setting a free-tier key. The
+key is a secret: it is registered with the log redactor at startup, and any
+string shaped like a Google API key is scrubbed from log lines even when it was
+never registered. It is sent only in a request header, never in a URL.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No |
+
+### `GEMINI_MODEL`
+
+Gemini model used for the image checks. Only used when `GEMINI_API_KEY` is set.
+The name must be a plain model id of 1 to 64 letters, digits, dots, underscores
+or hyphens. Any other value is replaced by the default with a warning in the
+log, so a bad name never reaches a request URL.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No |
+| **Default** | `gemini-3.5-flash-lite` |
+
+## 📂 Web captcha configuration
+
+The web captcha verifies new members with Cloudflare Turnstile inside a Telegram
+Mini App. It is on only when all four of `CAPTCHA_WEB_BASE_URL`,
+`TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`
+are set. With none of them set the bot starts as before and the web captcha is
+off. With some but not all of them set, the bot refuses to start and the error
+names every missing variable; it never prints a value. No variable has a
+default.
+
+### `CAPTCHA_WEB_BASE_URL`
+
+Public address of the bot's HTTP port, as reachable from the internet behind
+your reverse proxy. It must be an `https` URL with a host, no user info, no
+query, no fragment, and a path that is empty or `/`. The captcha page is served
+at `<base>/captcha`, and the Turnstile answer is checked against this host.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` (https URL) |
+| **Required** | No (all four together) |
+
+### `TELEGRAM_MINI_APP_SHORT_NAME`
+
+Short name of the Mini App you created with BotFather `/newapp`. It must be 1 to
+64 letters, digits or underscores.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No (all four together) |
+
+### `TURNSTILE_SITE_KEY`
+
+Site key of your Cloudflare Turnstile widget. It is public, because the browser
+needs it to show the widget, so it is not scrubbed from logs.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No (all four together) |
+
+### `TURNSTILE_SECRET_KEY`
+
+Secret key of your Cloudflare Turnstile widget. The bot sends it only to
+Cloudflare's `siteverify` endpoint, from the server. It must be at least 6
+characters so the log redactor can scrub it. It is registered with the log
+redactor at startup, and its exact value is scrubbed from every log line.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No (all four together) |
+
+### `CAPTCHA_WEB_TRUSTED_PROXIES`
+
+Comma-separated list of IP addresses or CIDR prefixes (for example
+`10.0.0.0/8, 192.168.1.10, ::1`) of the reverse proxies whose `X-Forwarded-For`
+header the verification route may trust. When it is empty the header is ignored.
+Setting it without the four variables above stops startup, because a proxy list
+alone is a misconfiguration.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` (comma-separated IPs or CIDRs) |
 | **Required** | No |
 
 ## 📂 Bot settings
@@ -452,7 +556,7 @@ Maximum memory usage in MB
 
 ### `CLEAR_CACHE_ON_STARTUP`
 
-Whether to clear disposable `alita:cache:*` entries on bot startup. Active anti-raid state and pending confirmations are preserved.
+Whether to clear disposable `alita:cache:*` entries on bot startup. Operational keys (lockdown, staff and raid detection state under `alita:lockdown:*`, `alita:staff:*` and `alita:raid:*`) and pending confirmations are preserved.
 
 | Property | Value |
 |----------|-------|
@@ -537,6 +641,8 @@ ACTIVITY_CHECK_INTERVAL=# hours between activity checks (default: 1)
 API_SERVER=# custom API server URL (default: https://api.telegram.org)
 AUTO_MIGRATE=# enable automatic database migrations (default: false)
 AUTO_MIGRATE_SILENT_FAIL=# continue even if migrations fail (default: false)
+CAPTCHA_WEB_BASE_URL=# public https address of the bot's HTTP port for the web captcha (all four web captcha variables together or none)
+CAPTCHA_WEB_TRUSTED_PROXIES=# comma-separated IPs or CIDRs of the reverse proxies whose X-Forwarded-For is trusted (empty: header ignored)
 CLEAR_CACHE_ON_STARTUP=false # clear disposable cached data on startup
 DB_CONN_MAX_IDLE_TIME_MIN=# max idle time in min (default: 60)
 DB_CONN_MAX_LIFETIME_MIN=# max lifetime in min (default: 240)
@@ -545,13 +651,15 @@ DB_MAX_OPEN_CONNS=# (default: 200)
 DEBUG=# enable debug logging (default: false)
 DISPATCHER_MAX_ROUTINES=# (default: 200)
 DROP_PENDING_UPDATES=# (default: false)
-ENABLE_AISPAM=# global AI spam filter kill switch (default: true)
+ENABLE_AISPAM=# global kill switch for every AI check, text and images (default: true)
 ENABLE_AUTO_CLEANUP=# (default: true)
 ENABLE_BACKGROUND_STATS=# (default: true in prod, false in debug)
 ENABLE_DB_MONITORING=# (default: false)
 ENABLE_PERFORMANCE_MONITORING=# (default: true in prod, false in debug)
 ENABLE_PPROF=# enable pprof endpoints (default: false)
 ENABLED_LOCALES=# comma-separated language codes (default: en)
+GEMINI_API_KEY=# Google Gemini key for the image checks of the AI raid trigger (off when unset; use a paid-tier key)
+GEMINI_MODEL=# Gemini model for those checks (default: gemini-3.5-flash-lite)
 HTTP_MAX_IDLE_CONNS=# (default: 100)
 HTTP_MAX_IDLE_CONNS_PER_HOST=# (default: 50)
 HTTP_PORT=# unified HTTP server port (PORT fallback, then 8080)
@@ -569,6 +677,9 @@ REDIS_URL=# Redis URL (fallback for REDIS_ADDRESS + REDIS_PASSWORD)
 RESOURCE_GC_THRESHOLD_MB=# GC threshold in MB (default: 400)
 RESOURCE_MAX_GOROUTINES=# max goroutines (default: 1000)
 RESOURCE_MAX_MEMORY_MB=# max memory in MB (default: 500)
+TELEGRAM_MINI_APP_SHORT_NAME=# short name of the web captcha Mini App from BotFather /newapp (all four web captcha variables together or none)
+TURNSTILE_SECRET_KEY=# Cloudflare Turnstile secret key (scrubbed from logs; all four web captcha variables together or none)
+TURNSTILE_SITE_KEY=# Cloudflare Turnstile site key (public; all four web captcha variables together or none)
 TYPESAFE_API_KEY=# TypeSafe API key for the AI spam filter
 USE_WEBHOOKS=# enable webhook mode (default: false)
 WEBHOOK_DOMAIN=# required if USE_WEBHOOKS=true

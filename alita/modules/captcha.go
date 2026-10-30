@@ -27,9 +27,11 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
 	"github.com/divkix/Alita_Robot/alita/db/chats"
 	"github.com/divkix/Alita_Robot/alita/db/lang"
+	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/user"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 	"github.com/divkix/Alita_Robot/alita/utils/extraction"
@@ -499,41 +501,10 @@ func (moduleStruct) captchaCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 	switch strings.ToLower(args[0]) {
 	case "on", "enable", "yes":
-		err := captcha.SetCaptchaEnabled(chat.Id, true)
-		if err != nil {
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			text, _ := tr.GetString("captcha_enable_failed")
-			if _, replyErr := msg.Reply(bot, text, nil); replyErr != nil {
-				log.Warnf("[Captcha] Failed to send enable error message in chat %d: %v", chat.Id, replyErr)
-			}
-			return err
-		}
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("captcha_enabled_success")
-		_, err = msg.Reply(bot, text, formatting.Shtml())
-		return err
+		return captchaEnabledReply(bot, ctx, true)
 
 	case "off", "disable", "no":
-		err := captcha.SetCaptchaEnabled(chat.Id, false)
-		if err != nil {
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			text, _ := tr.GetString("captcha_disable_failed")
-			if _, replyErr := msg.Reply(bot, text, nil); replyErr != nil {
-				log.Warnf("[Captcha] Failed to send disable error message in chat %d: %v", chat.Id, replyErr)
-			}
-			return err
-		}
-		if err = disableCaptchaForChat(bot, chat.Id); err != nil {
-			log.Errorf("[Captcha] Failed to clean up chat %d after disabling captcha: %v", chat.Id, err)
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			text, _ := tr.GetString("captcha_disable_failed")
-			_, _ = msg.Reply(bot, text, nil)
-			return err
-		}
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("captcha_disabled_success")
-		_, err = msg.Reply(bot, text, formatting.Shtml())
-		return err
+		return captchaEnabledReply(bot, ctx, false)
 
 	default:
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -541,6 +512,70 @@ func (moduleStruct) captchaCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
 		_, err := msg.Reply(bot, text, formatting.Shtml())
 		return err
 	}
+}
+
+// captchaEnabledReply runs applyCaptchaEnabled for /captcha on|off and sends the reply the
+// command has always sent for each outcome.
+func captchaEnabledReply(bot *gotgbot.Bot, ctx *ext.Context, on bool) error {
+	msg := ctx.EffectiveMessage
+	chat := ctx.EffectiveChat
+	result := applyCaptchaEnabled(bot, chat.Id, on)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case captchaSaveFailed:
+		text, _ := tr.GetString(result.Key)
+		if _, replyErr := msg.Reply(bot, text, nil); replyErr != nil {
+			log.Warnf("[Captcha] Failed to send captcha switch error message in chat %d: %v", chat.Id, replyErr)
+		}
+		return result.Err
+	case captchaCleanupFailed:
+		text, _ := tr.GetString(result.Key)
+		_, _ = msg.Reply(bot, text, nil)
+		return result.Err
+	}
+
+	key := "captcha_disabled_success"
+	if on {
+		key = "captcha_enabled_success"
+	}
+	text, _ := tr.GetString(key)
+	_, err := msg.Reply(bot, text, formatting.Shtml())
+	return err
+}
+
+// applyCaptchaEnabled is the one path that switches a group's captcha on or off, called by
+// /captcha and by the settings menu. Turning it off also runs disableCaptchaForChat, which
+// releases the pending attempts, deletes their challenges and restores the muted members. A
+// failed write is captchaSaveFailed with nothing changed; a failed cleanup is
+// captchaCleanupFailed with the switch already saved, as /captcha off has always reported it.
+func applyCaptchaEnabled(b *gotgbot.Bot, chatID int64, on bool) captchaApplyResult {
+	if err := captcha.SetCaptchaEnabled(chatID, on); err != nil {
+		key := "captcha_enable_failed"
+		if !on {
+			key = "captcha_disable_failed"
+		}
+		return captchaApplyResult{Outcome: captchaSaveFailed, Key: key, Err: err}
+	}
+	if !on {
+		if err := disableCaptchaForChat(b, chatID); err != nil {
+			log.Errorf("[Captcha] Failed to clean up chat %d after disabling captcha: %v", chatID, err)
+			return captchaApplyResult{Outcome: captchaCleanupFailed, Key: "captcha_disable_failed", Err: err}
+		}
+	}
+	return captchaReadBack(chatID, "a switch change")
+}
+
+// captchaReadBack reads the stored row after a successful write. A failed read-back is only
+// logged: the write itself succeeded.
+func captchaReadBack(chatID int64, what string) captchaApplyResult {
+	result := captchaApplyResult{Outcome: captchaApplied}
+	settings, err := captcha.GetCaptchaSettingsContext(context.Background(), chatID)
+	if err != nil {
+		log.Warnf("[Captcha] read back settings of chat %d after %s: %v", chatID, what, err)
+		return result
+	}
+	result.Settings = settings
+	return result
 }
 
 func disableCaptchaForChat(bot *gotgbot.Bot, chatID int64) error {
@@ -598,38 +633,103 @@ func (moduleStruct) captchaModeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 	}
 
 	mode := strings.ToLower(args[0])
-	if mode != "math" && mode != "text" {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("captcha_mode_invalid")
+	result := applyCaptchaMode(bot, chat.Id, mode)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case captchaInvalid, captchaRefused:
+		text, _ := tr.GetString(result.Key)
 		_, err := msg.Reply(bot, text, formatting.Shtml())
 		return err
-	}
-
-	err := captcha.SetCaptchaMode(chat.Id, mode)
-	if err != nil {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		var text string
-		if errors.Is(err, captcha.ErrInvalidCaptchaMode) {
-			text, _ = tr.GetString("captcha_invalid_mode_error")
-		} else {
-			text, _ = tr.GetString("captcha_mode_failed")
-		}
+	case captchaSaveFailed:
+		text, _ := tr.GetString(result.Key)
 		if _, replyErr := msg.Reply(bot, text, formatting.Shtml()); replyErr != nil {
 			log.Warnf("[Captcha] Failed to send mode error message in chat %d: %v", chat.Id, replyErr)
 		}
-		return err
+		return result.Err
 	}
 
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	modeDesc, _ := tr.GetString("captcha_mode_math_desc")
-	if mode == "text" {
+	switch mode {
+	case "text":
 		modeDesc, _ = tr.GetString("captcha_mode_text_desc")
+	case "turnstile":
+		modeDesc, _ = tr.GetString("captcha_mode_turnstile_desc")
 	}
 
 	textTemplate, _ := tr.GetString("captcha_mode_set_formatted")
 	text := fmt.Sprintf(textTemplate, mode, modeDesc)
-	_, err = msg.Reply(bot, text, formatting.Shtml())
+	_, err := msg.Reply(bot, text, formatting.Shtml())
 	return err
+}
+
+// applyCaptchaMode is the one path that changes a group's captcha mode, called by
+// /captchamode and by the settings menu. The mode is lower-cased and must be math, text or
+// turnstile. Turnstile is stored only when captchaWebModeRefusal finds nothing against it
+// (D-05, D-09 of Phase 8): a group switched to a mode that could only fall back would be a
+// setting that lies. Nothing is written on a refusal.
+func applyCaptchaMode(b *gotgbot.Bot, chatID int64, mode string) captchaApplyResult {
+	mode = strings.ToLower(mode)
+	if mode != "math" && mode != "text" && mode != "turnstile" {
+		return captchaApplyResult{Outcome: captchaInvalid, Key: "captcha_mode_invalid"}
+	}
+	if mode == "turnstile" {
+		if refusal := captchaWebModeRefusal(b, &gotgbot.Chat{Id: chatID}); refusal != "" {
+			return captchaApplyResult{Outcome: captchaRefused, Key: refusal}
+		}
+	}
+	if err := captcha.SetCaptchaMode(chatID, mode); err != nil {
+		if errors.Is(err, captcha.ErrInvalidCaptchaMode) {
+			return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_invalid_mode_error", Err: err}
+		}
+		return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_mode_failed", Err: err}
+	}
+	return captchaReadBack(chatID, "a mode change")
+}
+
+// captchaWebInstalled is the first Turnstile condition: a web captcha runtime is installed,
+// the bot has a username and the runtime has a Redis client. It does no I/O, so the settings
+// page can mark Turnstile unavailable without waiting, and captchaWebModeRefusal starts with
+// it so the page and the command never disagree.
+func captchaWebInstalled(bot *gotgbot.Bot) bool {
+	return captchaWebRuntimeInstalled(captchaWebCurrent.Load(), bot)
+}
+
+// captchaWebRuntimeInstalled is captchaWebInstalled for a runtime the caller already loaded,
+// so a caller that goes on to use the runtime judges and uses the same one.
+func captchaWebRuntimeInstalled(rt *captchaWebRuntime, bot *gotgbot.Bot) bool {
+	return rt != nil && bot != nil && bot.Username != "" && rt.cfg.Redis != nil
+}
+
+// captchaWebModeRefusal decides whether /captchamode turnstile may be stored in chat and
+// returns the locale key of the reason when it may not, or "" when it may. The order is the
+// contract: no installed runtime (the web captcha's settings are not all set, or the bot
+// has no username), then a fresh Redis PING within captchaweb.RedisTimeout (not the memo
+// of captchaWebAvailable: the admin deserves a live answer), then the bot's own rights by a
+// live getChatMember, never the admin cache. The math and text captcha need the same right
+// to mute and unmute, and an unknown answer refuses.
+func captchaWebModeRefusal(bot *gotgbot.Bot, chat *gotgbot.Chat) string {
+	rt := captchaWebCurrent.Load()
+	if !captchaWebRuntimeInstalled(rt, bot) {
+		return "captcha_web_refuse_not_configured"
+	}
+
+	pingCtx, cancel := context.WithTimeout(context.Background(), captchaweb.RedisTimeout)
+	defer cancel()
+	if err := rt.cfg.Redis.Ping(pingCtx).Err(); err != nil {
+		return "captcha_web_refuse_no_redis"
+	}
+
+	member, result, err := chat_status.FetchBotMember(bot, chat.Id)
+	if result == chat_status.BotMemberUnknown {
+		log.Warnf("[Captcha] bot rights check in chat %d failed: %v", chat.Id, err)
+		return "captcha_web_refuse_no_rights"
+	}
+	if result == chat_status.BotMemberMissing ||
+		(member.Status != gotgbot.ChatMemberStatusCreator &&
+			(member.Status != gotgbot.ChatMemberStatusAdministrator || !member.CanRestrictMembers)) {
+		return "captcha_web_refuse_no_rights"
+	}
+	return ""
 }
 
 func (moduleStruct) captchaTimeCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
@@ -648,33 +748,86 @@ func (moduleStruct) captchaTimeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 	}
 
 	timeout64, err := strconv.ParseInt(args[0], 10, 64)
-	if err != nil || timeout64 < 1 || timeout64 > 10 {
+	if err != nil {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("captcha_timeout_invalid")
 		_, err = msg.Reply(bot, text, nil)
 		return err
 	}
-	timeout := int(timeout64)
 
-	err = captcha.SetCaptchaTimeout(chat.Id, timeout)
-	if err != nil {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		var text string
-		if errors.Is(err, captcha.ErrInvalidTimeout) {
-			text, _ = tr.GetString("captcha_timeout_range_error")
-		} else {
-			text, _ = tr.GetString("captcha_timeout_failed")
-		}
+	result := applyCaptchaTimeout(tracing.UpdateContext(ctx), chat.Id, timeout64)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case captchaInvalid:
+		text, _ := tr.GetString(result.Key)
+		_, err = msg.Reply(bot, text, nil)
+		return err
+	case captchaSaveFailed:
+		text, _ := tr.GetString(result.Key)
 		if _, replyErr := msg.Reply(bot, text, formatting.Shtml()); replyErr != nil {
 			log.Warnf("[Captcha] Failed to send timeout error message in chat %d: %v", chat.Id, replyErr)
 		}
-		return err
+		return result.Err
 	}
 
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	text, _ := tr.GetString("captcha_timeout_set_success", i18n.TranslationParams{"d": timeout})
+	text, _ := tr.GetString("captcha_timeout_set_success", i18n.TranslationParams{"d": int(timeout64)})
 	_, err = msg.Reply(bot, text, formatting.Shtml())
 	return err
+}
+
+// captchaApplyOutcome says how an apply function ended. The zero value is success.
+type captchaApplyOutcome int
+
+const (
+	// captchaApplied means the change was validated and stored.
+	captchaApplied captchaApplyOutcome = iota
+	// captchaInvalid means the value was refused before anything was written.
+	captchaInvalid
+	// captchaSaveFailed means the repository refused or failed the write.
+	captchaSaveFailed
+	// captchaRefused means a setting-specific refusal stopped the change before any write;
+	// Key says which.
+	captchaRefused
+	// captchaCleanupFailed means the switch was saved but the follow-up cleanup failed.
+	captchaCleanupFailed
+)
+
+// captchaApplyResult is what an apply function reports to its callers: the command turns it
+// into a reply, the settings menu into a redraw or a notice.
+type captchaApplyResult struct {
+	Outcome captchaApplyOutcome
+	// Key is the exact locale key the command replies with for a refusal or a failure. It
+	// is empty on success.
+	Key string
+	// Settings is the stored row read back after a successful write (nil on failure, and
+	// when the read-back itself failed although the write succeeded).
+	Settings *models.CaptchaSettings
+	// Err is the repository error of a failed write.
+	Err error
+}
+
+// applyCaptchaTimeout is the one path that changes a group's captcha time limit, called by
+// /captchatime and by the settings menu. It validates the range, writes through
+// captcha.SetCaptchaTimeout (which invalidates the settings cache) and reads the stored row
+// back.
+func applyCaptchaTimeout(ctx context.Context, chatID int64, minutes int64) captchaApplyResult {
+	if minutes < 1 || minutes > 10 {
+		return captchaApplyResult{Outcome: captchaInvalid, Key: "captcha_timeout_invalid"}
+	}
+	if err := captcha.SetCaptchaTimeout(chatID, int(minutes)); err != nil {
+		if errors.Is(err, captcha.ErrInvalidTimeout) {
+			return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_timeout_range_error", Err: err}
+		}
+		return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_timeout_failed", Err: err}
+	}
+	result := captchaApplyResult{Outcome: captchaApplied}
+	settings, err := captcha.GetCaptchaSettingsContext(ctx, chatID)
+	if err != nil {
+		log.Warnf("[Captcha] read back settings of chat %d after a timeout change: %v", chatID, err)
+		return result
+	}
+	result.Settings = settings
+	return result
 }
 
 func (moduleStruct) captchaActionCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
@@ -693,32 +846,41 @@ func (moduleStruct) captchaActionCommand(bot *gotgbot.Bot, ctx *ext.Context) err
 	}
 
 	action := strings.ToLower(args[0])
-	if action != "kick" && action != "ban" && action != "mute" {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("captcha_action_invalid")
+	result := applyCaptchaAction(chat.Id, action)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case captchaInvalid:
+		text, _ := tr.GetString(result.Key)
 		_, err := msg.Reply(bot, text, formatting.Shtml())
 		return err
-	}
-
-	err := captcha.SetCaptchaFailureAction(chat.Id, action)
-	if err != nil {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		var text string
-		if errors.Is(err, captcha.ErrInvalidFailureAction) {
-			text, _ = tr.GetString("captcha_invalid_action_error")
-		} else {
-			text, _ = tr.GetString("captcha_action_failed")
-		}
+	case captchaSaveFailed:
+		text, _ := tr.GetString(result.Key)
 		if _, replyErr := msg.Reply(bot, text, formatting.Shtml()); replyErr != nil {
 			log.Warnf("[Captcha] Failed to send action error message in chat %d: %v", chat.Id, replyErr)
 		}
-		return err
+		return result.Err
 	}
 
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	text, _ := tr.GetString("captcha_action_set_success", i18n.TranslationParams{"s": action})
-	_, err = msg.Reply(bot, text, formatting.Shtml())
+	_, err := msg.Reply(bot, text, formatting.Shtml())
 	return err
+}
+
+// applyCaptchaAction is the one path that changes what happens to a member who fails the
+// captcha, called by /captchaaction and by the settings menu. The action is lower-cased and
+// must be kick, ban or mute; anything else is refused before a write.
+func applyCaptchaAction(chatID int64, action string) captchaApplyResult {
+	action = strings.ToLower(action)
+	if action != "kick" && action != "ban" && action != "mute" {
+		return captchaApplyResult{Outcome: captchaInvalid, Key: "captcha_action_invalid"}
+	}
+	if err := captcha.SetCaptchaFailureAction(chatID, action); err != nil {
+		if errors.Is(err, captcha.ErrInvalidFailureAction) {
+			return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_invalid_action_error", Err: err}
+		}
+		return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_action_failed", Err: err}
+	}
+	return captchaReadBack(chatID, "a failure action change")
 }
 
 func (moduleStruct) captchaMaxAttemptsCommand(bot *gotgbot.Bot, ctx *ext.Context) error {
@@ -1023,13 +1185,33 @@ func SendCaptcha(bot *gotgbot.Bot, ctx *ext.Context, userID int64, userName stri
 		return errCaptchaDisabled
 	}
 
+	// mode is the captcha this join actually gets. A Turnstile group whose web captcha is
+	// not available gets the group's math captcha, so nobody is left muted with no way in
+	// (D-09).
+	mode := settings.CaptchaMode
+	var webRuntime *captchaWebRuntime
+	if mode == "turnstile" {
+		if rt, ok := captchaWebAvailable(bot); ok {
+			webRuntime = rt
+		} else {
+			mode = "math"
+			logCaptchaWebFallback(chat.Id)
+		}
+	}
+
 	var question string
 	var answer string
 	var options []string
 	var imageBytes []byte
 	isImage := false
 
-	if settings.CaptchaMode == "math" {
+	if mode == "turnstile" {
+		answer, err = captchaweb.NewReservedAnswer()
+		if err != nil {
+			log.Errorf("[Captcha][SendCaptcha] Failed to create the Turnstile answer: %v", err)
+			return fmt.Errorf("generate captcha: %w", err)
+		}
+	} else if mode == "math" {
 		var err error
 		answer, imageBytes, options, err = generateMathImageCaptcha()
 		if err != nil || imageBytes == nil {
@@ -1112,45 +1294,40 @@ func SendCaptcha(bot *gotgbot.Bot, ctx *ext.Context, userID int64, userName stri
 	}
 	muted = true
 
-	includeRefresh := isImage && imageBytes != nil
-	refreshBtnText := ""
-	if includeRefresh {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		refreshBtnText, _ = tr.GetString("captcha_refresh_button")
-	}
-	keyboard := buildCaptchaKeyboard(preAttempt.ID, userID, preAttempt.RefreshCount, options, includeRefresh, refreshBtnText)
-	verifyCount := len(keyboard.InlineKeyboard)
-	if includeRefresh && verifyCount > 0 {
-		verifyCount--
-	}
-	if verifyCount == 0 {
-		log.Errorf("[Captcha] No verify buttons could be encoded for attempt %d", preAttempt.ID)
-		return errors.Join(errors.New("captcha keyboard empty: no encodable options"), rollbackCaptchaAttempt(bot, preAttempt))
-	}
-
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	var keyboard gotgbot.InlineKeyboardMarkup
 	var msgText string
-	if isImage {
-		if settings.CaptchaMode == "math" {
-			text, _ := tr.GetString("captcha_welcome_math_image", i18n.TranslationParams{
-				"first":  formatting.MentionHtml(userID, userName),
-				"number": settings.Timeout,
-			})
-			msgText = text
-		} else {
-			text, _ := tr.GetString("captcha_welcome_text_image", i18n.TranslationParams{
-				"first":  formatting.MentionHtml(userID, userName),
-				"number": settings.Timeout,
-			})
-			msgText = text
+	if mode == "turnstile" {
+		token, issueErr := webRuntime.issueChallenge(preAttempt)
+		if issueErr != nil {
+			log.Errorf("[Captcha][SendCaptcha] Failed to issue the web challenge for attempt %d: %v", preAttempt.ID, issueErr)
+			return errors.Join(issueErr, rollbackCaptchaAttempt(bot, preAttempt))
 		}
-	} else {
-		text, _ := tr.GetString("captcha_welcome_math_text", i18n.TranslationParams{
-			"first":    formatting.MentionHtml(userID, userName),
-			"question": question,
-			"number":   settings.Timeout,
+		text, _ := tr.GetString("captcha_web_welcome", i18n.TranslationParams{
+			"first":  formatting.MentionHtml(userID, userName),
+			"number": settings.Timeout,
 		})
 		msgText = text
+		buttonText, _ := tr.GetString("captcha_web_button")
+		keyboard = gotgbot.InlineKeyboardMarkup{InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{
+			{Text: buttonText, Url: captchaweb.MiniAppLink(bot.Username, webRuntime.cfg.ShortName, token)},
+		}}}
+	} else {
+		includeRefresh := isImage && imageBytes != nil
+		refreshBtnText := ""
+		if includeRefresh {
+			refreshBtnText, _ = tr.GetString("captcha_refresh_button")
+		}
+		keyboard = buildCaptchaKeyboard(preAttempt.ID, userID, preAttempt.RefreshCount, options, includeRefresh, refreshBtnText)
+		verifyCount := len(keyboard.InlineKeyboard)
+		if includeRefresh && verifyCount > 0 {
+			verifyCount--
+		}
+		if verifyCount == 0 {
+			log.Errorf("[Captcha] No verify buttons could be encoded for attempt %d", preAttempt.ID)
+			return errors.Join(errors.New("captcha keyboard empty: no encodable options"), rollbackCaptchaAttempt(bot, preAttempt))
+		}
+		msgText = captchaChallengeText(tr, mode, isImage, userID, userName, question, settings.Timeout)
 	}
 
 	var sent *gotgbot.Message
@@ -1184,12 +1361,37 @@ func SendCaptcha(bot *gotgbot.Bot, ctx *ext.Context, userID int64, userName stri
 	}
 
 	preAttempt.MessageID = sent.MessageId
+	if mode == "turnstile" {
+		captchaweb.CountIssued()
+	}
 	if preAttempt.PreviousMessageID > 0 && preAttempt.PreviousMessageID != sent.MessageId {
 		_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, preAttempt.PreviousMessageID)
 	}
 	scheduleCaptchaTimeout(bot, preAttempt)
 
 	return nil
+}
+
+// captchaChallengeText is the welcome text of a math or text captcha: the image keys when
+// the challenge is a picture, the question text otherwise.
+func captchaChallengeText(tr *i18n.Translator, mode string, isImage bool, userID int64, userName, question string, timeout int) string {
+	if !isImage {
+		text, _ := tr.GetString("captcha_welcome_math_text", i18n.TranslationParams{
+			"first":    formatting.MentionHtml(userID, userName),
+			"question": question,
+			"number":   timeout,
+		})
+		return text
+	}
+	key := "captcha_welcome_text_image"
+	if mode == "math" {
+		key = "captcha_welcome_math_image"
+	}
+	text, _ := tr.GetString(key, i18n.TranslationParams{
+		"first":  formatting.MentionHtml(userID, userName),
+		"number": timeout,
+	})
+	return text
 }
 
 func rollbackCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) error {
@@ -1229,23 +1431,50 @@ func scheduleCaptchaTimeout(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) {
 }
 
 func expireCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (bool, error) {
+	claimed, _, err := expireCaptchaAttemptApplied(bot, attempt)
+	return claimed, err
+}
+
+// expireCaptchaAttemptApplied is expireCaptchaAttempt that also reports whether the group's
+// failure action took effect. A released attempt (an approved member, or a group that turned
+// the captcha off) is claimed without any action applied.
+func expireCaptchaAttemptApplied(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (claimed, applied bool, err error) {
+	settled, err := settleCaptchaAttempt(bot, attempt)
+	if settled.Claimed && !settled.Released && captchaweb.IsReservedAnswer(attempt.Answer) {
+		captchaweb.CountExpired()
+	}
+	return settled.Claimed, settled.Applied, err
+}
+
+// captchaSettled is what settleCaptchaAttempt did with an attempt.
+type captchaSettled struct {
+	// Claimed is true when this call won the conditional delete of the attempt row.
+	Claimed bool
+	// Applied is true when the group's failure action then took effect.
+	Applied bool
+	// Released is true when the attempt was released without any action, because the member is
+	// approved or the group turned the captcha off.
+	Released bool
+}
+
+// settleCaptchaAttempt is the one decision about what happens to an attempt that is over, shared
+// by the timer, the cleanup tick, the web captcha's late check and its failed solve, so the
+// paths cannot drift: an approved member, and a group that turned the captcha off, are released
+// and unmuted instead of punished (AGENTS.md: approved users skip captcha); everyone else gets
+// the group's failure action through handleCaptchaTimeout. The conditional delete of the row
+// decides who acts.
+func settleCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (captchaSettled, error) {
 	if chat_status.IsApproved(bot, attempt.ChatID, attempt.UserID) {
-		if attempt.MessageID > 0 {
-			_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
-		}
-		return releaseIncompleteCaptchaAttempt(bot, attempt)
+		return releaseSparedCaptchaAttempt(bot, attempt)
 	}
 	settings, err := captcha.GetCaptchaSettings(attempt.ChatID)
 	if err != nil {
-		return false, fmt.Errorf("load captcha settings for chat %d: %w", attempt.ChatID, err)
+		return captchaSettled{}, fmt.Errorf("load captcha settings for chat %d: %w", attempt.ChatID, err)
 	}
 	if !settings.Enabled {
-		if attempt.MessageID > 0 {
-			_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
-		}
-		return releaseIncompleteCaptchaAttempt(bot, attempt)
+		return releaseSparedCaptchaAttempt(bot, attempt)
 	}
-	claimed, _ := handleCaptchaTimeout(
+	claimed, applied := handleCaptchaTimeout(
 		bot,
 		attempt.ChatID,
 		attempt.UserID,
@@ -1253,7 +1482,17 @@ func expireCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (bool, 
 		attempt.MessageID,
 		settings.FailureAction,
 	)
-	return claimed, nil
+	return captchaSettled{Claimed: claimed, Applied: applied}, nil
+}
+
+// releaseSparedCaptchaAttempt deletes the challenge message and releases the attempt of a
+// member the captcha no longer applies to.
+func releaseSparedCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (captchaSettled, error) {
+	if attempt.MessageID > 0 {
+		_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
+	}
+	claimed, err := releaseIncompleteCaptchaAttempt(bot, attempt)
+	return captchaSettled{Claimed: claimed, Released: true}, err
 }
 
 func handleCaptchaTimeout(bot *gotgbot.Bot, chatID, userID int64, attemptID uint, fallbackMessageID int64, action string) (bool, bool) {
@@ -1393,7 +1632,11 @@ func unmuteCaptchaUser(bot *gotgbot.Bot, chatID, userID int64) error {
 	if err != nil {
 		return err
 	}
-	_, err = bot.RestrictChatMember(chatID, userID, resolveUnmutePermissions(chat), nil)
+	perms, err := resolveUnmutePermissions(chat)
+	if err != nil {
+		return err
+	}
+	_, err = bot.RestrictChatMember(chatID, userID, perms, nil)
 	return err
 }
 
@@ -1404,6 +1647,101 @@ func restoreCaptchaPermissions(bot *gotgbot.Bot, chatID, userID int64) error {
 		return errors.Join(err, scheduleErr)
 	}
 	return captcha.DeleteMutedUser(userID, chatID)
+}
+
+// captchaPassInput is everything a captcha pass needs and nothing about how it was
+// triggered, so the button callback and the web verify run the same pass.
+type captchaPassInput struct {
+	Bot *gotgbot.Bot
+	// Chat carries the ID, type, title and username the greeting's placeholders need.
+	Chat *gotgbot.Chat
+	// Attempt is the freshly read row; its Answer, MessageID and RefreshCount are what the
+	// claim matches on.
+	Attempt   *db.CaptchaAttempts
+	UserID    int64
+	FirstName string
+	// Ctx is the update's context for the callback; the web pass builds one that only holds
+	// the chat, as the timeout path does.
+	Ctx *ext.Context
+}
+
+// claimCaptchaPass reads the held messages, claims the attempt and unmutes the member. The
+// messages are read first because the claim deletes them. It returns claimed false when
+// the attempt is gone or taken by something else (err is then only a database error), and
+// claimed true with a non-nil err when the unmute failed, in which case restoreCaptchaPermissions
+// has already scheduled the durable retry.
+func claimCaptchaPass(in captchaPassInput) (stored []*models.StoredMessages, claimed bool, err error) {
+	storedMessages, storedErr := captcha.GetStoredMessagesForAttempt(in.Attempt.ID)
+	if storedErr != nil {
+		log.Warnf("[Captcha] Failed to read stored messages for attempt %d: %v", in.Attempt.ID, storedErr)
+		storedMessages = nil
+	}
+
+	claimed, claimErr := captcha.CompleteCaptchaAttemptAtomic(
+		in.Attempt.ID,
+		in.UserID,
+		in.Chat.Id,
+		in.Attempt.Answer,
+		in.Attempt.MessageID,
+		in.Attempt.RefreshCount,
+	)
+	if claimErr != nil || !claimed {
+		return nil, false, claimErr
+	}
+
+	return storedMessages, true, restoreCaptchaPermissions(in.Bot, in.Chat.Id, in.UserID)
+}
+
+// finishCaptchaPass posts the held-message summary, deletes the challenge, posts the success
+// note and runs the greeting. It runs after a claim whose unmute succeeded.
+func finishCaptchaPass(in captchaPassInput, stored []*models.StoredMessages) {
+	bot, chat := in.Bot, in.Chat
+
+	if len(stored) > 0 {
+		tr := i18n.MustNewTranslator(lang.GetLanguage(in.Ctx))
+		var messageTypes []string
+		for _, msg := range stored {
+			msgTypeStr := messageTypeToString(tr, msg.MessageType)
+			if !slices.Contains(messageTypes, msgTypeStr) {
+				messageTypes = append(messageTypes, msgTypeStr)
+			}
+		}
+		summaryText, _ := tr.GetString("captcha_stored_messages_summary",
+			i18n.TranslationParams{
+				"user":  formatting.MentionHtml(in.UserID, in.FirstName),
+				"count": len(stored),
+				"types": strings.Join(messageTypes, ", "),
+			})
+
+		summaryMsg, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, summaryText, &gotgbot.SendMessageOpts{
+			ParseMode: formatting.HTML,
+		})
+
+		if summaryMsg != nil {
+			time.AfterFunc(30*time.Second, func() {
+				defer error_handling.RecoverFromPanic("captchaSummaryMsgDelete", "captcha")
+				_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, summaryMsg.MessageId)
+			})
+		}
+	}
+
+	_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, in.Attempt.MessageID)
+
+	tr := i18n.MustNewTranslator(lang.GetLanguage(in.Ctx))
+	msgTemplate, _ := tr.GetString("greetings_captcha_verified_success")
+	successMsg := fmt.Sprintf(msgTemplate, formatting.MentionHtml(in.UserID, in.FirstName))
+	sent, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, successMsg, &gotgbot.SendMessageOpts{ParseMode: formatting.HTML})
+
+	if sent != nil {
+		time.AfterFunc(5*time.Second, func() {
+			defer error_handling.RecoverFromPanic("captchaSuccessMsgDelete", "captcha")
+			_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, sent.MessageId)
+		})
+	}
+
+	if err := SendWelcomeMessage(bot, in.Ctx, in.UserID, in.FirstName); err != nil {
+		log.Errorf("Failed to send welcome message after captcha verification: %v", err)
+	}
 }
 
 func (moduleStruct) captchaVerifyCallback(bot *gotgbot.Bot, ctx *ext.Context) error {
@@ -1476,6 +1814,14 @@ func (moduleStruct) captchaVerifyCallback(bot *gotgbot.Bot, ctx *ext.Context) er
 		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
 		return err
 	}
+	// D-25: a Turnstile attempt is passed only by the web check. A hand-built callback can
+	// carry any bytes, so it is refused before any answer comparison or count.
+	if captchaweb.IsReservedAnswer(attempt.Answer) {
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		text, _ := tr.GetString("captcha_attempt_not_valid")
+		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
+		return err
+	}
 	if attempt.RefreshCount != expectedRefreshCount {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("captcha_attempt_not_valid")
@@ -1493,81 +1839,33 @@ func (moduleStruct) captchaVerifyCallback(bot *gotgbot.Bot, ctx *ext.Context) er
 	}
 
 	if selectedAnswer == attempt.Answer {
-		storedMessages, storedErr := captcha.GetStoredMessagesForAttempt(attempt.ID)
-		if storedErr != nil {
-			log.Warnf("[Captcha] Failed to read stored messages for attempt %d: %v", attempt.ID, storedErr)
+		in := captchaPassInput{
+			Bot:       bot,
+			Chat:      chat,
+			Attempt:   attempt,
+			UserID:    targetUserID,
+			FirstName: user.FirstName,
+			Ctx:       ctx,
 		}
-
-		claimed, claimErr := captcha.CompleteCaptchaAttemptAtomic(
-			attempt.ID,
-			targetUserID,
-			chat.Id,
-			selectedAnswer,
-			attempt.MessageID,
-			expectedRefreshCount,
-		)
-		if claimErr != nil || !claimed {
+		storedMessages, claimed, claimErr := claimCaptchaPass(in)
+		if !claimed {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			text, _ := tr.GetString("captcha_expired_or_not_found")
 			_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
 			return err
 		}
-
-		if err = restoreCaptchaPermissions(bot, chat.Id, targetUserID); err != nil {
-			log.Errorf("Failed to unmute user %d on verify: %v", targetUserID, err)
+		if claimErr != nil {
+			log.Errorf("Failed to unmute user %d on verify: %v", targetUserID, claimErr)
 			_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, attempt.MessageID)
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			text, _ := tr.GetString("captcha_failed_verify")
 			_, _ = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
-			return err
+			return claimErr
 		}
 
-		if storedErr == nil && len(storedMessages) > 0 {
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			var messageTypes []string
-			for _, msg := range storedMessages {
-				msgTypeStr := messageTypeToString(tr, msg.MessageType)
-				if !slices.Contains(messageTypes, msgTypeStr) {
-					messageTypes = append(messageTypes, msgTypeStr)
-				}
-			}
-			summaryText, _ := tr.GetString("captcha_stored_messages_summary",
-				i18n.TranslationParams{
-					"user":  formatting.MentionHtml(targetUserID, user.FirstName),
-					"count": len(storedMessages),
-					"types": strings.Join(messageTypes, ", "),
-				})
-
-			summaryMsg, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, summaryText, &gotgbot.SendMessageOpts{
-				ParseMode: formatting.HTML,
-			})
-
-			if summaryMsg != nil {
-				time.AfterFunc(30*time.Second, func() {
-					defer error_handling.RecoverFromPanic("captchaSummaryMsgDelete", "captcha")
-					_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, summaryMsg.MessageId)
-				})
-			}
-		}
-
-		_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, attempt.MessageID)
+		finishCaptchaPass(in, storedMessages)
 
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		msgTemplate, _ := tr.GetString("greetings_captcha_verified_success")
-		successMsg := fmt.Sprintf(msgTemplate, formatting.MentionHtml(targetUserID, user.FirstName))
-		sent, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, successMsg, &gotgbot.SendMessageOpts{ParseMode: formatting.HTML})
-
-		if sent != nil {
-			time.AfterFunc(5*time.Second, func() {
-				defer error_handling.RecoverFromPanic("captchaSuccessMsgDelete", "captcha")
-				_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, sent.MessageId)
-			})
-		}
-
-		if err = SendWelcomeMessage(bot, ctx, targetUserID, user.FirstName); err != nil {
-			log.Errorf("Failed to send welcome message after captcha verification: %v", err)
-		}
-
 		text, _ := tr.GetString("captcha_verified_success_msg")
 		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
 		return err
@@ -1704,6 +2002,14 @@ func (moduleStruct) captchaRefreshCallback(bot *gotgbot.Bot, ctx *ext.Context) e
 		return err
 	}
 	if attempt.ID != uint(attemptID64) {
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		text, _ := tr.GetString("captcha_attempt_not_valid")
+		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
+		return err
+	}
+	// D-25: a Turnstile attempt is passed only by the web check; a refresh would replace its
+	// challenge with an image the sender can solve.
+	if captchaweb.IsReservedAnswer(attempt.Answer) {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("captcha_attempt_not_valid")
 		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})

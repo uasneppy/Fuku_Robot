@@ -9,6 +9,8 @@ services:
     image: ghcr.io/divkix/alita_robot:latest
     container_name: alita-robot
     restart: always
+    # Graceful shutdown may use up to 60 s (staff runs get 30 s to finish their summaries); Docker's default 10 s would SIGKILL it first.
+    stop_grace_period: 75s
     environment:
       DATABASE_URL: postgresql://alita:alita@postgres:5432/alita
       REDIS_ADDRESS: redis:6379

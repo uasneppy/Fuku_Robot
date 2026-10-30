@@ -25,6 +25,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/modules"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 	alitaerrors "github.com/divkix/Alita_Robot/alita/utils/errors"
 	"github.com/divkix/Alita_Robot/alita/utils/formatting"
@@ -194,15 +195,36 @@ func main() {
 	})
 
 	shutdownManager.RegisterHandler(func() error {
-		log.Info("[Shutdown] Stopping anti-raid expiry poller...")
-		modules.StopAntiRaidExpiryPoller()
-		return nil
-	})
-	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Stopping captcha lifecycle...")
 		modules.StopCaptchaLifecycle()
 		return nil
 	})
+	// Registered after the DB-close handler, so LIFO stops the sweeper before the
+	// database closes.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping staff sweeper...")
+		modules.StopStaffSweeper()
+		return nil
+	})
+	// Also registered after the DB-close handler, so LIFO cancels the staff fan-outs
+	// and lets them deliver their final summaries before the database closes: their
+	// workers still write links through recheckLink while they wind down. It gets the
+	// staff wait plus a grace period, not the 10 s default.
+	modules.RegisterStaffActionsDrain(shutdownManager)
+	// Also registered after the DB-close handler, so LIFO stops the lockdown worker
+	// before the database closes. It waits at most 5 s: every lockdown row resumes
+	// from the database, so a worker cut off here loses nothing. It gets the worker's
+	// wait plus a grace period, not the 10 s default.
+	modules.RegisterLockdownWorkerDrain(shutdownManager)
+	// Also after the DB-close handler: an automatic lockdown's public notice and cannot-lock
+	// warning are sent from goroutines that read the database. It waits at most 2 s; a post
+	// is best effort.
+	modules.RegisterRaidPostsDrain(shutdownManager)
+	// Also after the DB-close handler, and after the raid posts drain, so LIFO runs it after
+	// the AI spam drain below (whose verdicts can start lockdowns) and before the raid posts
+	// drain (a start posts a notice) and the database close. It cancels the in-flight AI
+	// checks first and waits at most 1 s for them and for the lockdown starts they began.
+	modules.RegisterRaidAIDrain(shutdownManager)
 
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")
@@ -215,6 +237,10 @@ func main() {
 	httpServer.SetMetricsAuthToken(config.AppConfig.MetricsAuthToken)
 	httpServer.RegisterMetrics()
 	httpServer.RegisterDBMetrics()
+
+	if config.AppConfig.CaptchaWebConfigured() {
+		registerCaptchaWeb(b, httpServer, localeManager)
+	}
 
 	if config.AppConfig.EnablePPROF {
 		httpServer.RegisterPPROF()
@@ -410,11 +436,52 @@ func dispatcherErrorHandler(_ *gotgbot.Bot, ctx *ext.Context, err error) ext.Dis
 	return ext.DispatcherActionNoop
 }
 
+// registerCaptchaWeb configures the Turnstile web captcha runtime and mounts its three routes
+// on the bot's HTTP server, before Start. The verify route stays closed (503 retry) until
+// modules.MarkCaptchaWebReady runs at the end of postInit, which covers polling mode, where
+// the HTTP server starts before the modules load (D-30). It adds no shutdown handler: the
+// HTTP server stops first, and a web pass's finish joins the captcha lifecycle drain.
+func registerCaptchaWeb(b *gotgbot.Bot, httpServer *httpserver.Server, localeManager *i18n.LocaleManager) {
+	pageStrings, err := localeManager.StringTable(captchaweb.PageLanguages, captchaweb.PageKeys)
+	if err != nil {
+		log.Fatalf("[CaptchaWeb] Failed to build the page strings: %v", err)
+	}
+	cfg := config.AppConfig
+	redisClient := cache.GetRedisClient()
+	if redisClient == nil {
+		// The challenges live in Redis (D-16). Without it no runtime is installed, so no
+		// route is mounted and a Turnstile group gets the math captcha at join (D-09).
+		log.Warn("[CaptchaWeb] The web captcha settings are set but Redis is not available: the web captcha stays off and Turnstile groups use the math captcha")
+		return
+	}
+	err = modules.ConfigureCaptchaWeb(b, modules.CaptchaWebConfig{
+		BaseURL:        cfg.CaptchaWebBaseURL,
+		ShortName:      cfg.TelegramMiniAppShortName,
+		SiteKey:        cfg.TurnstileSiteKey,
+		Secret:         cfg.TurnstileSecretKey,
+		Redis:          redisClient,
+		TrustedProxies: cfg.CaptchaWebTrustedProxies,
+		PageStrings:    pageStrings,
+		StartNotReady:  true,
+	})
+	if err != nil {
+		log.Fatalf("[CaptchaWeb] Failed to configure the web captcha: %v", err)
+	}
+	for pattern, handler := range modules.CaptchaWebRoutes() {
+		httpServer.Handle(pattern, handler)
+	}
+	for _, warning := range modules.CaptchaWebStartupWarnings(cfg.MetricsAuthToken != "", cfg.CaptchaWebTrustedProxies) {
+		log.Warn(warning)
+	}
+}
+
 func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 	alita.LoadModules(d)
 	if err := modules.StartCaptchaLifecycle(b); err != nil {
 		log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 	}
+	modules.StartStaffSweeper(b)
+	modules.StartLockdownWorker(b)
 	log.Infof("[Modules] Loaded modules: %s", alita.ListModules())
 
 	config.AppConfig.WorkingMode = mode
@@ -453,6 +520,9 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 	} else {
 		log.Infof("[Bot] %s has been started in %s mode...", username, mode)
 	}
+
+	// Everything the captcha routes depend on is loaded: open the verify route (D-30).
+	modules.MarkCaptchaWebReady()
 }
 
 func closeDBConnections() error {

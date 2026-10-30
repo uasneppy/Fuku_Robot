@@ -171,9 +171,11 @@ func TestLoadAllStats(t *testing.T) {
 		"Approvals",
 		"Warns",
 		"Locks",
-		"AntiRaid",
-		"Configured",
-		"Auto AntiRaid",
+		"Raid detection",
+		"Custom settings",
+		"Join surge off",
+		"Flood off",
+		"AI spam off",
 		"Log Channels",
 		"Reactions",
 		"AI Spam",
@@ -263,12 +265,12 @@ func TestLoadAllStats_IncludesModuleCounts(t *testing.T) {
 
 	tables := []any{
 		&models.CaptchaSettings{}, &models.CaptchaAttempts{}, &models.CaptchaMutedUsers{},
-		&models.ApprovedUsers{}, &models.Warns{}, &models.LockSettings{}, &models.AntiRaidSettings{},
+		&models.ApprovedUsers{}, &models.Warns{}, &models.LockSettings{}, &models.ChatRaidDetection{},
 		&models.LogChannel{}, &models.Reactions{}, &models.AISpamSettings{},
 	}
 	t.Cleanup(func() {
 		for _, model := range tables {
-			if err := db.DB.Where("chat_id IN ?", []int64{chatID, otherChat}).Delete(model).Error; err != nil {
+			if err := db.DB.Where("chat_id IN ?", []int64{chatID, otherChat, otherChat + 1}).Delete(model).Error; err != nil {
 				t.Errorf("cleanup %T error: %v", model, err)
 			}
 		}
@@ -292,8 +294,9 @@ func TestLoadAllStats_IncludesModuleCounts(t *testing.T) {
 		&models.LockSettings{ChatId: chatID, LockType: "url", Locked: true},
 		&models.LockSettings{ChatId: chatID, LockType: "forward", Locked: true},
 		&models.LockSettings{ChatId: otherChat, LockType: "url", Locked: false},
-		&models.AntiRaidSettings{ChatID: chatID, AutoAntiRaidThreshold: 5},
-		&models.AntiRaidSettings{ChatID: otherChat},
+		&models.ChatRaidDetection{ChatID: chatID, JoinEnabled: true, JoinThreshold: 15, FloodEnabled: true, FloodThreshold: 30, AIEnabled: false, AIThreshold: 5},
+		&models.ChatRaidDetection{ChatID: otherChat, JoinEnabled: false, JoinThreshold: 15, FloodEnabled: true, FloodThreshold: 30, AIEnabled: true, AIThreshold: 5},
+		&models.ChatRaidDetection{ChatID: otherChat + 1, JoinEnabled: true, JoinThreshold: 15, FloodEnabled: false, FloodThreshold: 30, AIEnabled: true, AIThreshold: 5},
 		&models.LogChannel{ChatID: chatID, LogChannelID: otherChat},
 		&models.Reactions{ChatID: chatID, Keyword: "hello", Emoji: "👋"},
 		&models.Reactions{ChatID: chatID, Keyword: "bye", Emoji: "🚀"},
@@ -313,7 +316,7 @@ func TestLoadAllStats_IncludesModuleCounts(t *testing.T) {
 		"<b>Approvals:</b> 2 users approved in 1 chats",
 		"<b>Warns:</b> 2 users warned in 1 chats",
 		"<b>Locks:</b> 2 locks set in 1 chats",
-		"<b>AntiRaid:</b>\n    <b>Configured:</b> 2 chats\n    <b>Auto AntiRaid:</b> 1 chats",
+		"<b>Raid detection:</b>\n    <b>Custom settings:</b> 3 chats\n    <b>Join surge off:</b> 1 chats\n    <b>Flood off:</b> 1 chats\n    <b>AI spam off:</b> 1 chats",
 		"<b>Log Channels:</b> 1 chats linked",
 		"<b>Reactions:</b> 2 reactions in 1 chats",
 		"<b>AI Spam:</b> enabled in 1 chats",

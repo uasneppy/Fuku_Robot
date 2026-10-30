@@ -23,6 +23,7 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
 )
 
 func TestWebhookLimitsProcessingAndRejectsOverflow(t *testing.T) {
@@ -811,4 +812,77 @@ func TestWebhookAcceptsRecentRichBlockTypes(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("rich-message update was accepted but not dispatched")
 	}
+}
+
+// TestCaptchaWebRoutesRegistration registers the three captcha routes the way main does, with
+// the captchaweb route patterns (no method: the handlers check their own) through Handle, and
+// drives them through the real mux.
+func TestCaptchaWebRoutesRegistration(t *testing.T) {
+	s := New(0, time.Now())
+	s.RegisterHealth()
+	tag := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Handler", name)
+			w.WriteHeader(http.StatusOK)
+		})
+	}
+	s.Handle(captchaweb.RoutePage, tag("page"))
+	s.Handle(captchaweb.RouteVerify, tag("verify"))
+	s.Handle(captchaweb.RouteHealth, tag("health"))
+
+	do := func(method, target string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		s.mux.ServeHTTP(rr, httptest.NewRequest(method, target, nil))
+		return rr
+	}
+
+	t.Run("page answers GET and HEAD", func(t *testing.T) {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			rr := do(method, "/captcha")
+			if rr.Code != http.StatusOK || rr.Header().Get("X-Handler") != "page" {
+				t.Fatalf("%s /captcha = %d via %q, want 200 via page", method, rr.Code, rr.Header().Get("X-Handler"))
+			}
+		}
+	})
+	t.Run("verify answers POST", func(t *testing.T) {
+		rr := do(http.MethodPost, "/captcha/verify")
+		if rr.Code != http.StatusOK || rr.Header().Get("X-Handler") != "verify" {
+			t.Fatalf("POST /captcha/verify = %d via %q, want 200 via verify", rr.Code, rr.Header().Get("X-Handler"))
+		}
+	})
+	t.Run("the mux leaves the method to the handler", func(t *testing.T) {
+		// A method pattern would make the mux answer these itself with a bare 405; the handler
+		// must be reached so that its own 405 (with its headers) is what the client sees.
+		for _, method := range []string{http.MethodGet, http.MethodOptions} {
+			rr := do(method, "/captcha/verify")
+			if rr.Header().Get("X-Handler") != "verify" {
+				t.Fatalf("%s /captcha/verify reached %q, want the verify handler", method, rr.Header().Get("X-Handler"))
+			}
+		}
+	})
+	t.Run("health answers GET", func(t *testing.T) {
+		rr := do(http.MethodGet, "/captcha/health")
+		if rr.Code != http.StatusOK || rr.Header().Get("X-Handler") != "health" {
+			t.Fatalf("GET /captcha/health = %d via %q, want 200 via health", rr.Code, rr.Header().Get("X-Handler"))
+		}
+	})
+	t.Run("trailing slash is not the page", func(t *testing.T) {
+		if rr := do(http.MethodGet, "/captcha/"); rr.Code != http.StatusNotFound {
+			t.Fatalf("GET /captcha/ = %d, want 404", rr.Code)
+		}
+	})
+	t.Run("the bot's own health route still answers", func(t *testing.T) {
+		rr := do(http.MethodGet, "/health")
+		if got := rr.Header().Get("Content-Type"); got != "application/json" {
+			t.Fatalf("GET /health Content-Type = %q, want application/json (route missing?)", got)
+		}
+	})
+	t.Run("Start lists the routes among its endpoints", func(t *testing.T) {
+		listed := strings.Join(s.endpointList(), " ")
+		for _, pattern := range []string{captchaweb.RoutePage, captchaweb.RouteVerify, captchaweb.RouteHealth} {
+			if !strings.Contains(listed, pattern) {
+				t.Fatalf("endpoints %q lack %q", listed, pattern)
+			}
+		}
+	})
 }

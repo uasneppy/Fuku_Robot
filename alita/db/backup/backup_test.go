@@ -10,7 +10,6 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/admin"
 	"github.com/divkix/Alita_Robot/alita/db/antiflood"
-	"github.com/divkix/Alita_Robot/alita/db/antiraid"
 	"github.com/divkix/Alita_Robot/alita/db/blacklists"
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
 	"github.com/divkix/Alita_Robot/alita/db/chats"
@@ -553,11 +552,14 @@ func TestClearModuleData_IndividualModules(t *testing.T) {
 	require.NoError(t, ClearModuleData(chatID, BackupModuleAntiflood))
 	assert.Equal(t, 0, antiflood.GetFlood(chatID).Limit)
 
-	require.NoError(t, antiraid.SetRaidTime(chatID, 60))
-	require.NoError(t, antiraid.SetRaidActionTime(chatID, 30))
-	require.NoError(t, antiraid.SetAutoAntiRaidThreshold(chatID, 5))
+	// The raid mode is retired and no repository writes this table any more, so the row a
+	// reset has to replace is written directly.
+	require.NoError(t, db.DB.Create(&models.AntiRaidSettings{
+		ChatID: chatID, RaidTime: 60, RaidActionTime: 30, AutoAntiRaidThreshold: 5,
+	}).Error)
 	require.NoError(t, ClearModuleData(chatID, BackupModuleAntiraid))
-	cleared := antiraid.GetAntiRaidSettings(chatID)
+	var cleared models.AntiRaidSettings
+	require.NoError(t, db.DB.Where("chat_id = ?", chatID).First(&cleared).Error)
 	assert.Equal(t, 21600, cleared.RaidTime)
 	assert.Equal(t, 3600, cleared.RaidActionTime)
 	assert.Equal(t, 0, cleared.AutoAntiRaidThreshold)

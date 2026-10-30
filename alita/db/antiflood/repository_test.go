@@ -268,6 +268,88 @@ func TestSetFloodMode(t *testing.T) {
 	})
 }
 
+// TestSetFloodModeOnFreshChatStoredLimit pins what the first write on a chat with no antiflood
+// row stores (D-27, research Pitfall 2). FirstOrCreate inserts a new row from the model, and the
+// model's flood_limit default of 5 applies because the insert leaves the limit at its Go zero
+// value, so an admin who only picks an action on an unconfigured chat also turns antiflood on at
+// 5 messages. The repository is not changed here: the commands and the settings page both show
+// the row read back after the write (applyFloodMode), never an assumed limit.
+//
+// The same test pins the opposite edge: a Mute write on another fresh chat is a no-op, because the
+// cached default already says mute, so the setter returns early and writes no row. That is why a
+// Mute press on an unconfigured chat changes nothing.
+func TestSetFloodModeOnFreshChatStoredLimit(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano()
+	muteChatID := chatID + 1
+	t.Cleanup(func() {
+		if err := db.DB.Where("chat_id IN ?", []int64{chatID, muteChatID}).Delete(&models.AntifloodSettings{}).Error; err != nil {
+			t.Fatalf("cleanup failed: %v", err)
+		}
+	})
+
+	ctx := context.Background()
+	if err := SetFloodModeContext(ctx, chatID, "ban"); err != nil {
+		t.Fatalf("SetFloodModeContext(ban) failed: %v", err)
+	}
+	stored, err := GetAntifloodSettingsContext(ctx, chatID)
+	if err != nil {
+		t.Fatalf("uncached read failed: %v", err)
+	}
+	if stored.Action != "ban" {
+		t.Fatalf("stored action = %q, want ban", stored.Action)
+	}
+	if stored.Limit != 5 {
+		t.Fatalf("stored flood_limit after a first mode write = %d, want the model default 5", stored.Limit)
+	}
+
+	if err := SetFloodModeContext(ctx, muteChatID, "mute"); err != nil {
+		t.Fatalf("SetFloodModeContext(mute) failed: %v", err)
+	}
+	var count int64
+	if err := db.DB.Model(&models.AntifloodSettings{}).Where("chat_id = ?", muteChatID).Count(&count).Error; err != nil {
+		t.Fatalf("count query failed: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("a Mute write on a fresh chat created %d row(s), want none", count)
+	}
+}
+
+// TestSetFloodMsgDelOnFreshChatStoredLimit pins the same first-write side effect for the delete
+// switch (D-27): turning "delete flood messages" on for a chat with no row inserts the row with
+// the model's flood_limit default of 5, so it also turns antiflood on at 5 messages. The
+// repository is not changed; applyFloodDelete reports the stored row so the page and the
+// command show the real limit.
+func TestSetFloodMsgDelOnFreshChatStoredLimit(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano()
+	t.Cleanup(func() {
+		if err := db.DB.Where("chat_id = ?", chatID).Delete(&models.AntifloodSettings{}).Error; err != nil {
+			t.Fatalf("cleanup failed: %v", err)
+		}
+	})
+
+	ctx := context.Background()
+	if err := SetFloodMsgDelContext(ctx, chatID, true); err != nil {
+		t.Fatalf("SetFloodMsgDelContext(true) failed: %v", err)
+	}
+	stored, err := GetAntifloodSettingsContext(ctx, chatID)
+	if err != nil {
+		t.Fatalf("uncached read failed: %v", err)
+	}
+	if !stored.DeleteAntifloodMessage {
+		t.Fatalf("stored delete_antiflood_message = false, want true")
+	}
+	if stored.Limit != 5 {
+		t.Fatalf("stored flood_limit after a first delete write = %d, want the model default 5", stored.Limit)
+	}
+	if stored.Action != "mute" {
+		t.Fatalf("stored action = %q, want the default mute", stored.Action)
+	}
+}
+
 func TestLoadAntifloodStats(t *testing.T) {
 	skipIfNoDb(t)
 

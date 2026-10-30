@@ -263,7 +263,8 @@ Alita Robot creates the following tables:
 | `devs` | Developer settings |
 | `channels` | Linked channels |
 | `approved_users` | Approved users immune to anti-spam |
-| `antiraid_settings` | Anti-raid configuration |
+| `antiraid_settings` | Legacy anti-raid configuration (the retired raid mode; read only by the backup module) |
+| `chat_raid_detection` | Automatic raid detection settings (join surge, flood and AI spam triggers) |
 | `captcha_settings` | Captcha configuration |
 | `captcha_attempts` | Active captcha attempts |
 | `captcha_muted_users` | Users muted due to captcha failure |

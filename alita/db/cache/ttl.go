@@ -20,7 +20,6 @@ const (
 	CacheTTLDisabledCmds    = DefaultCacheTTL
 	CacheTTLCaptchaSettings = DefaultCacheTTL
 	CacheTTLApprovals       = DefaultCacheTTL
-	CacheTTLAntiRaid        = DefaultCacheTTL
 	CacheTTLChannels        = DefaultCacheTTL
 	CacheTTLReactions       = DefaultCacheTTL
 	CacheTTLFederation      = DefaultCacheTTL

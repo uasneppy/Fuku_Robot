@@ -359,6 +359,25 @@ func (moduleStruct) listTeam(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
+// raidAIStatsSection is the part of the developer /stats text that comes from this
+// replica's memory: the raid AI pool's counters (text and image checks) and /aispam's
+// (D-15). The counters belong to this process and start at zero on every restart, and the
+// heading says so, so nobody reads them as fleet totals. It prints numbers only: no message
+// text, file ID, chat, user or key.
+func raidAIStatsSection() string {
+	raid := GetRaidAIStats()
+	checked, deleted, kept, shed, failed := GetAISpamStats()
+	return "\n<b>AI checks (this replica, since its last restart):</b>" +
+		fmt.Sprintf(
+			"\n    <b>Raid path:</b> checked %d, spam %d, kept %d, shed %d, failed %d, blocked %d, capped %d, cached %d",
+			raid.Checked, raid.Spam, raid.Kept, raid.Shed, raid.Failed, raid.Blocked, raid.Capped, raid.Cached,
+		) +
+		fmt.Sprintf(
+			"\n    <b>/aispam:</b> checked %d, deleted %d, kept %d, shed %d, failed %d",
+			checked, deleted, kept, shed, failed,
+		)
+}
+
 func (moduleStruct) getStats(b *gotgbot.Bot, ctx *ext.Context) error {
 	user := chat_status.RequireUser(b, ctx)
 	if user == nil {
@@ -385,7 +404,7 @@ func (moduleStruct) getStats(b *gotgbot.Bot, ctx *ext.Context) error {
 		return err
 	}
 
-	stats := devs.LoadAllStats()
+	stats := devs.LoadAllStats() + raidAIStatsSection() + captchaWebStatsSection()
 	_, _, err = edits.EditText(b, &gotgbot.EditMessageTextOpts{Text: stats, ParseMode: formatting.HTML})
 	if err != nil {
 		log.Error(err)

@@ -413,6 +413,77 @@ func TestVerifyAnonymousAdminRestoresCachedMessageAndDeletesButton(t *testing.T)
 	if ctx.EffectiveMessage.SenderChat != nil {
 		t.Fatal("SenderChat was not cleared before command replay")
 	}
+	if ctx.Message == nil || ctx.Message.MessageId != cached.MessageId || ctx.Message.Text != cached.Text {
+		t.Fatalf("ctx.Message = %#v, want the cached command message", ctx.Message)
+	}
+	if ctx.EffectiveChat == nil || ctx.EffectiveChat.Id != chat.Id {
+		t.Fatalf("EffectiveChat = %#v, want the command's chat %d", ctx.EffectiveChat, chat.Id)
+	}
+	if !chat_status.RequireGroup(bot, ctx, nil) {
+		t.Fatal("RequireGroup(nil chat) = false, want the re-entered command to find its chat")
+	}
+}
+
+func TestVerifyAnonymousAdminRefusesChatMismatch(t *testing.T) {
+	m := cache.GetMarshal()
+	if m == nil {
+		t.Skip("requires initialized cache marshaler")
+	}
+
+	tests := []struct {
+		name string
+		// cachedInOther puts the cached command in another chat than c.
+		cachedInOther bool
+		// buttonInOther puts the proof button in another chat than c.
+		buttonInOther bool
+	}{
+		{name: "cached command from another chat", cachedInOther: true},
+		{name: "proof button in another chat", buttonInOther: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newModuleBotClient()
+			bot := newModuleTestBot(client)
+			chatA := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Chat A"}
+			chatB := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Chat B"}
+			admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+
+			cachedChat, buttonChat := chatA, chatA
+			if tt.cachedInOther {
+				cachedChat = chatB
+			}
+			if tt.buttonInOther {
+				buttonChat = chatB
+			}
+			cached := &gotgbot.Message{MessageId: 505, Date: 1, Chat: cachedChat, Text: "/unknown"}
+			key := fmt.Sprintf("alita:anonAdmin:%d:%d", chatA.Id, cached.MessageId)
+			if err := m.Set(cache.Context, key, cached); err != nil {
+				t.Fatalf("cache set: %v", err)
+			}
+			t.Cleanup(func() { _ = m.Delete(cache.Context, key) })
+			data := encodeCallbackData("anon_admin", map[string]string{
+				"c": fmt.Sprint(chatA.Id),
+				"m": fmt.Sprint(cached.MessageId),
+			})
+			ctx := newModuleCallbackContext(bot, buttonChat, admin, data)
+
+			if err := verifyAnonymousAdmin(bot, ctx); err != ext.EndGroups {
+				t.Fatalf("verifyAnonymousAdmin() error = %v, want EndGroups", err)
+			}
+			if calls := client.callsFor("answerCallbackQuery"); len(calls) != 1 {
+				t.Fatalf("answerCallbackQuery calls = %d, want the invalid-request answer", len(calls))
+			}
+			if calls := client.callsFor("deleteMessage"); len(calls) != 0 {
+				t.Fatalf("deleteMessage calls = %d, want none for a mismatched tap", len(calls))
+			}
+			if ctx.CallbackQuery == nil {
+				t.Fatal("the context was rebuilt for a mismatched tap")
+			}
+			if ctx.EffectiveMessage != nil && ctx.EffectiveMessage.MessageId == cached.MessageId {
+				t.Fatal("EffectiveMessage is the cached command for a mismatched tap")
+			}
+		})
+	}
 }
 
 func TestBotUpdatesLoadersRegisterExpectedHandlers(t *testing.T) {

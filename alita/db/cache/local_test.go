@@ -282,12 +282,27 @@ func TestExcludedKeysNeverServedLocally(t *testing.T) {
 	}
 }
 
-func TestSkipLocalMatchesOnlyCaptchaPendingKeys(t *testing.T) {
-	if !skipLocal(CacheKey("captcha_pending", int64(-1001))) {
-		t.Fatal("captcha_pending key not excluded")
+func TestSkipLocalMatchesFreshnessCriticalKeys(t *testing.T) {
+	for _, prefix := range []string{"captcha_pending", "staff_group", "staff_link_of", "raid_detection"} {
+		if !skipLocal(CacheKey(prefix, int64(-1001))) {
+			t.Errorf("%s key not excluded from the local layer", prefix)
+		}
 	}
-	if skipLocal(CacheKey("captcha_settings", int64(-1001))) {
-		t.Fatal("captcha_settings key excluded, want it cached locally")
+	for _, prefix := range []string{"captcha_settings", "staff_groupx", "staff_link_ofx", "raid_detectionx"} {
+		if skipLocal(CacheKey(prefix, int64(-1001))) {
+			t.Errorf("%s key excluded, want it cached locally", prefix)
+		}
+	}
+}
+
+// TestSkipLocalRaidDetectionSettingsKey pins the exact key the raid detection repository
+// reads and invalidates (cache.CacheKey("raid_detection", chat)): an admin's change must
+// reach every replica at once, so the in-process layer must never hold it.
+func TestSkipLocalRaidDetectionSettingsKey(t *testing.T) {
+	for _, chatID := range []int64{1, -1001234567890} {
+		if !skipLocal(CacheKey("raid_detection", chatID)) {
+			t.Errorf("raid detection settings key of chat %d is served from the local layer", chatID)
+		}
 	}
 }
 

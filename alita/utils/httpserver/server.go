@@ -50,6 +50,8 @@ type Server struct {
 	dispatchStopped  bool
 	dispatchContext  context.Context
 	dispatchCancel   context.CancelFunc
+	// extraEndpoints are the patterns mounted through Handle, listed by Start.
+	extraEndpoints []string
 }
 
 type webhookUpdate struct {
@@ -201,6 +203,17 @@ func (s *Server) RegisterPPROF() {
 
 	s.pprofEnabled = true
 	log.Info("[HTTPServer] Registered /debug/pprof/* endpoints")
+}
+
+// Handle mounts h on the server's mux under pattern, a Go 1.22 pattern such as "/captcha"
+// (the captcha routes carry no method, so their handlers answer a wrong method with their own
+// headers), and records the pattern so Start lists it among its endpoints. It must be
+// called before Start. The port, the timeouts and the TLS terminating proxy are the server's
+// own: a route mounted here shares them with /health, /metrics, pprof and the webhook.
+func (s *Server) Handle(pattern string, h http.Handler) {
+	s.mux.Handle(pattern, h)
+	s.extraEndpoints = append(s.extraEndpoints, pattern)
+	log.Infof("[HTTPServer] Registered %s", pattern)
 }
 
 func (s *Server) RegisterWebhook(bot *gotgbot.Bot, dispatcher *ext.Dispatcher, secret, domain string) error {
@@ -375,6 +388,19 @@ func (s *Server) validateWebhook(r *http.Request) bool {
 	return true
 }
 
+// endpointList is the list of endpoints Start logs: the built-in ones, then every pattern
+// mounted through Handle.
+func (s *Server) endpointList() []string {
+	endpoints := []string{"/health", "/metrics"}
+	if s.pprofEnabled {
+		endpoints = append(endpoints, "/debug/pprof/*")
+	}
+	if s.webhookEnabled {
+		endpoints = append(endpoints, "/webhook")
+	}
+	return append(endpoints, s.extraEndpoints...)
+}
+
 func (s *Server) Start() error {
 	s.server = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.port),
@@ -384,13 +410,7 @@ func (s *Server) Start() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	endpoints := []string{"/health", "/metrics"}
-	if s.pprofEnabled {
-		endpoints = append(endpoints, "/debug/pprof/*")
-	}
-	if s.webhookEnabled {
-		endpoints = append(endpoints, "/webhook")
-	}
+	endpoints := s.endpointList()
 	log.Infof("[HTTPServer] Starting unified HTTP server on port %d with endpoints: %v", s.port, endpoints)
 
 	errChan := make(chan error, 1)

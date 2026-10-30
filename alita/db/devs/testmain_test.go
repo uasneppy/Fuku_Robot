@@ -74,6 +74,7 @@ func TestMain(m *testing.M) {
 			&models.WarnSettings{},
 			&models.LockSettings{},
 			&models.AntiRaidSettings{},
+			&models.ChatRaidDetection{},
 			&models.LogChannel{},
 			&models.Reactions{},
 			&models.AISpamSettings{},
