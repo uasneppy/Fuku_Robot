@@ -4,8 +4,10 @@ package modules
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -13,6 +15,8 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/divkix/Alita_Robot/alita/db"
+	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
 )
 
@@ -188,6 +192,192 @@ func TestCaptchaWebStartupWarnings(t *testing.T) {
 		warnings := CaptchaWebStartupWarnings(true, "")
 		if len(warnings) != 1 || !strings.Contains(warnings[0], "CAPTCHA_WEB_TRUSTED_PROXIES") {
 			t.Fatalf("got %q, want only the proxy warning", warnings)
+		}
+	})
+}
+
+// statsDeltaWant checks that every counter moved by exactly the wanted amount since before.
+func statsDeltaWant(t *testing.T, before, want captchaweb.Stats) {
+	t.Helper()
+	after := captchaweb.StatsSnapshot()
+	got := captchaweb.Stats{
+		Issued:  after.Issued - before.Issued,
+		Passed:  after.Passed - before.Passed,
+		Failed:  after.Failed - before.Failed,
+		Expired: after.Expired - before.Expired,
+		Invalid: after.Invalid - before.Invalid,
+		Retry:   after.Retry - before.Retry,
+		Limited: after.Limited - before.Limited,
+		Errors:  after.Errors - before.Errors,
+	}
+	if got != want {
+		t.Fatalf("counter deltas = %+v, want %+v", got, want)
+	}
+}
+
+// expireAttemptNow makes the attempt's time run out without running any timer.
+func expireAttemptNow(t *testing.T, attemptID uint) {
+	t.Helper()
+	if err := db.DB.Model(&db.CaptchaAttempts{}).Where("id = ?", attemptID).
+		Updates(map[string]any{
+			"created_at": time.Now().Add(-2 * time.Minute),
+			"expires_at": time.Now().Add(-time.Minute),
+		}).Error; err != nil {
+		t.Fatalf("expire the attempt: %v", err)
+	}
+}
+
+func TestCaptchaWebStatsSection(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	other := gotgbot.User{Id: 43, FirstName: "Other"}
+	upstream500 := captchaweb.SiteverifyAnswerForTest(http.StatusInternalServerError, `{"error":"upstream"}`)
+
+	t.Run("a join and a pass", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		before := captchaweb.StatsSnapshot()
+		token := env.join(member)
+		statsDeltaWant(t, before, captchaweb.Stats{Issued: 1})
+
+		mid := captchaweb.StatsSnapshot()
+		if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+			t.Fatalf("verify = %d %+v, want passed", status, answer)
+		}
+		statsDeltaWant(t, mid, captchaweb.Stats{Passed: 1})
+
+		// The remembered answer of a repeated tap is the same event: it is not counted again.
+		mid = captchaweb.StatsSnapshot()
+		if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+			t.Fatalf("second verify = %d %+v, want the remembered pass", status, answer)
+		}
+		statsDeltaWant(t, mid, captchaweb.Stats{})
+	})
+
+	t.Run("a failed solve", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		token := env.join(member)
+		env.setSiteverify(captchaweb.SiteverifyAnswerForTest(http.StatusOK, `{"success":false,"error-codes":["invalid-input-response"]}`))
+		before := captchaweb.StatsSnapshot()
+		if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultFailed {
+			t.Fatalf("verify = %d %+v, want failed", status, answer)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{Failed: 1})
+	})
+
+	t.Run("a Cloudflare 500 is a retry and no error", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		token := env.join(member)
+		env.setSiteverify(upstream500)
+		before := captchaweb.StatsSnapshot()
+		if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
+			t.Fatalf("verify = %d %+v, want retry", status, answer)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{Retry: 1})
+	})
+
+	t.Run("a wrong user is invalid", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		token := env.join(member)
+		before := captchaweb.StatsSnapshot()
+		if status, answer := env.verify(other, token); status != http.StatusOK || answer.Result != captchaweb.ResultNotForYou {
+			t.Fatalf("verify = %d %+v, want not_for_you", status, answer)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{Invalid: 1})
+	})
+
+	t.Run("a hostname mismatch is an error and a retry", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		token := env.join(member)
+		env.setSiteverify(captchaweb.SiteverifyPassForTest("not-our-host.example.net"))
+		before := captchaweb.StatsSnapshot()
+		if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
+			t.Fatalf("verify = %d %+v, want retry", status, answer)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{Errors: 1, Retry: 1})
+	})
+
+	t.Run("a spent budget is limited and no retry", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		token := env.join(member)
+		env.setSiteverify(upstream500)
+		// The per-token budget is 8 a minute: eight retries, then the ninth is refused.
+		for i := 0; i < 8; i++ {
+			if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
+				t.Fatalf("verify %d = %d %+v, want retry", i+1, status, answer)
+			}
+		}
+		before := captchaweb.StatsSnapshot()
+		if status, answer := env.verify(member, token); status != http.StatusTooManyRequests || answer.Result != captchaweb.ResultRetry {
+			t.Fatalf("ninth verify = %d %+v, want 429 retry", status, answer)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{Limited: 1})
+	})
+
+	t.Run("an expired Turnstile attempt counts once, a math attempt not at all", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		token := env.join(member)
+		attempt := env.attempt(member.Id)
+		expireAttemptNow(t, attempt.ID)
+
+		// The member's late check expires it through the backend: one Expired, and the
+		// expired answer itself is not counted again.
+		before := captchaweb.StatsSnapshot()
+		if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultExpired {
+			t.Fatalf("verify = %d %+v, want expired", status, answer)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{Expired: 1})
+
+		// A timer on a second Turnstile attempt: the same function, one more Expired.
+		token2 := env.join(other)
+		_ = token2
+		second := env.attempt(other.Id)
+		expireAttemptNow(t, second.ID)
+		before = captchaweb.StatsSnapshot()
+		if _, err := expireCaptchaAttempt(env.bot, second); err != nil {
+			t.Fatalf("expireCaptchaAttempt() error = %v", err)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{Expired: 1})
+
+		// A math attempt expiring is not a web captcha event.
+		if err := db.DB.Model(&db.CaptchaSettings{}).Where("chat_id = ?", env.chat.Id).
+			Update("captcha_mode", "math").Error; err != nil {
+			t.Fatalf("set math mode: %v", err)
+		}
+		dbcache.DeleteCache(dbcache.CacheKey("captcha_settings", env.chat.Id))
+		third := gotgbot.User{Id: 44, FirstName: "Third"}
+		joinWithoutToken(t, env, third)
+		mathAttempt := env.attempt(third.Id)
+		if mathAttempt == nil || captchaweb.IsReservedAnswer(mathAttempt.Answer) {
+			t.Fatalf("attempt = %+v, want a math attempt", mathAttempt)
+		}
+		expireAttemptNow(t, mathAttempt.ID)
+		before = captchaweb.StatsSnapshot()
+		if _, err := expireCaptchaAttempt(env.bot, mathAttempt); err != nil {
+			t.Fatalf("expireCaptchaAttempt(math) error = %v", err)
+		}
+		statsDeltaWant(t, before, captchaweb.Stats{})
+	})
+
+	t.Run("the section prints eight numbers and nothing else", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		token := env.join(member)
+		if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+			t.Fatalf("verify = %d %+v, want passed", status, answer)
+		}
+
+		section := captchaWebStatsSection()
+		if !strings.Contains(section, "Web captcha (this replica, since its last restart)") {
+			t.Fatalf("section %q lacks its heading", section)
+		}
+		for _, word := range []string{"issued", "passed", "failed", "expired", "invalid", "retry", "limited", "errors"} {
+			if !regexp.MustCompile(word + ` \d+`).MatchString(section) {
+				t.Fatalf("section %q lacks %q followed by a number", section, word)
+			}
+		}
+		lower := strings.ToLower(section)
+		for _, banned := range []string{token, "init", "cloudflare", "turnstile", "token", fmt.Sprint(env.chat.Id), env.secret} {
+			if banned != "" && strings.Contains(lower, strings.ToLower(banned)) {
+				t.Fatalf("section %q contains %q", section, banned)
+			}
 		}
 	})
 }
