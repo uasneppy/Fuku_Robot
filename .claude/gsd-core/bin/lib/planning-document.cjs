@@ -34,16 +34,21 @@ exports.PLANNING_ARTIFACTS = void 0;
 exports.parsePlanningDoc = parsePlanningDoc;
 exports.findField = findField;
 exports.readNode = readNode;
+exports.readFrontmatterField = readFrontmatterField;
+exports.readFrontmatterFieldFromSource = readFrontmatterFieldFromSource;
+exports.readFrontmatterFieldsFromSource = readFrontmatterFieldsFromSource;
 exports.setFieldValue = setFieldValue;
 exports.hasUnreadableNodes = hasUnreadableNodes;
 exports.serialize = serialize;
+exports.replaceProse = replaceProse;
 const markdown_sectionizer_cjs_1 = require("./markdown-sectionizer.cjs");
 const markdown_table_cjs_1 = require("./markdown-table.cjs");
 const artifacts_cjs_1 = require("./artifacts.cjs");
 // `frontmatter.cts` uses `export =` (CJS-style single export object), so it
 // is imported as a default import (esModuleInterop), not a named import.
 const frontmatter_cjs_1 = __importDefault(require("./frontmatter.cjs"));
-const { frontmatterRegion } = frontmatter_cjs_1.default;
+const frontmatter_fence_cjs_1 = require("./frontmatter-fence.cjs");
+const { extractFrontmatter, FRONTMATTER_UNPARSEABLE } = frontmatter_cjs_1.default;
 /**
  * Canonical `.planning/` root artifact basenames this seam recognises,
  * derived from the SAME registry `isCanonicalPlanningFile` consults
@@ -79,46 +84,28 @@ function splitLinesInfo(source) {
     return out;
 }
 /**
- * Locate the frontmatter block, if any, by COMPOSING `frontmatter.cts`'s
- * `frontmatterRegion` — the fence-detection grammar (byte-0 rule, BOM strip,
- * `\n---` search, CR handling) lives there, once, and this seam never
- * re-derives it (ADR-4910 Decision 1).
+ * Locate the frontmatter block, if any, from `locateFrontmatterFence` — the
+ * one owner of the fence grammar (byte-0 rule, BOM tolerance, whole-line
+ * closing fence, an adjacent empty block), which every frontmatter reader and
+ * writer also reads; this seam never re-derives it (ADR-4910 Decision 1).
  *
- * `frontmatterRegion` reports the YAML body's own bounds (`region`,
- * `terminated`, and the possibly BOM-stripped `content`), not this seam's
- * `Span` shape (an absolute byte range into the UNSTRIPPED `source`,
- * inclusive of both fences). This adapter translates one into the other by
- * reading ONLY the two boundary characters `frontmatterRegion` already
- * anchored (whether the YAML end / closing fence sit on a CRLF line) — it
- * does not re-scan for the fences themselves.
+ * The span is an absolute range into `source`, from the opening fence (after
+ * any BOM) through the closing fence line's text, plus that line's CR when it
+ * ends in CRLF. Found while implementing #5105: the previous adapter re-derived
+ * the closing fence's end from the YAML region's length and was one character
+ * long on an adjacent empty block (`---\n---\n`), which has no line of its own
+ * before the closer.
  */
 function findFrontmatterSpan(source) {
-    const found = frontmatterRegion(source);
-    if (!found)
+    const fence = (0, frontmatter_fence_cjs_1.locateFrontmatterFence)(source);
+    if (!fence)
         return null;
-    // `found.content` may be `source` with a single leading BOM stripped;
-    // every offset below is relative to `found.content`, so translate back to
-    // `source` coordinates by the same delta.
-    const bomDelta = source.length - found.content.length;
-    const content = found.content;
-    if (!found.terminated) {
-        return { span: { start: bomDelta, end: bomDelta + content.length }, terminated: false };
+    const start = fence.bom.length;
+    if (!fence.closed) {
+        return { span: { start, end: source.length }, terminated: false };
     }
-    // `frontmatterRegion` already did fence DETECTION — `found` being non-null
-    // and `terminated` IS that result. It reports only the YAML body's bounds
-    // (`region`), not an absolute span, so recover the closing fence's end
-    // from `region`'s length. The one thing still read directly here is the
-    // opening fence's fixed-width line ending (`\n` vs `\r\n`), needed to
-    // translate `region`'s length into a `content` offset — not a re-scan for
-    // the fence itself.
-    const headerEnd = content.startsWith('---\r\n') ? 5 : 4;
-    const yamlEnd = headerEnd + found.region.length;
-    const closingLineStart = content[yamlEnd] === '\r' ? yamlEnd + 1 : yamlEnd;
-    const fenceLineStart = closingLineStart + 1;
-    let fenceEnd = fenceLineStart + 3;
-    if (content[fenceEnd] === '\r')
-        fenceEnd += 1;
-    return { span: { start: bomDelta, end: bomDelta + fenceEnd }, terminated: true };
+    const end = fence.closingFenceEnd + (source[fence.closingFenceEnd] === '\r' ? 1 : 0);
+    return { span: { start, end }, terminated: true };
 }
 /** Build the set of 0-based line indices that fall inside a fenced code
  * block (opening/closing delimiter lines included), so `**Label:**`/table/
@@ -311,7 +298,10 @@ function parsePlanningDoc(source, artifact) {
         frontmatterEnd = fm.span.end;
     }
     if (source.length === 0) {
-        return { ok: true, value: { source, artifact, nodes: [], staged: new Map() } };
+        return {
+            ok: true,
+            value: { source, artifact, nodes: [], staged: new Map() },
+        };
     }
     const lines = splitLinesInfo(source);
     // Sections: one per heading, in document order — every heading is its own
@@ -333,7 +323,10 @@ function parsePlanningDoc(source, artifact) {
     }
     nodes.push(...scanBodyNodes(source, lines, frontmatterEnd));
     nodes.sort((a, b) => a.span.start - b.span.start);
-    return { ok: true, value: { source, artifact, nodes, staged: new Map() } };
+    return {
+        ok: true,
+        value: { source, artifact, nodes, staged: new Map() },
+    };
 }
 /** Find the id of the (first, document-order) `boldField` node whose label
  * exactly matches `label`, or `null` when none does. */
@@ -360,10 +353,205 @@ function readNode(doc, id) {
     return { ok: true, value: doc.source.slice(node.span.start, node.span.end) };
 }
 /**
+ * Parse a frontmatter block's own span TEXT (fences included) via
+ * `frontmatter.cts`'s `extractFrontmatter`, exactly ONCE, returning either the
+ * parsed object or a `{ ok: false }` marker for the `FRONTMATTER_UNPARSEABLE`
+ * case. Split out of the single-key lookup below (#5026 follow-up) so a
+ * caller reading MULTIPLE keys off the SAME region
+ * (`readFrontmatterFieldsFromSource`) detects the span and parses its YAML
+ * once, not once per key — this function is the one and only place that
+ * detect-then-parse step happens; every reader (single-key or bulk) composes
+ * it rather than re-deriving it.
+ */
+function parseFrontmatterRegion(regionText) {
+    // A CRLF block's span ends on its closing fence line's CR (`findFrontmatterSpan`). That CR is
+    // half a line ending, not part of the fence: a `---` line ended by a lone CR does not close a
+    // block, so the text is parsed without it.
+    const fm = extractFrontmatter(regionText.endsWith('\r') ? regionText.slice(0, -1) : regionText);
+    if (fm[FRONTMATTER_UNPARSEABLE] === true) {
+        return { ok: false };
+    }
+    return { ok: true, value: fm };
+}
+/**
+ * Shared core of `readFrontmatterField` / `readFrontmatterFieldFromSource` /
+ * `readFrontmatterFieldsFromSource`: given an ALREADY-PARSED frontmatter
+ * result (`parseFrontmatterRegion`'s output) and the `Span` to report on
+ * failure, shape one `key`'s lookup as a `NodeRead`. Every reader composes
+ * this SAME shaping step — neither may duplicate it (the exact
+ * `DEFECT.GENERATIVE-FIX` class this epic exists to close).
+ *
+ * A region that failed to parse as YAML (`extractFrontmatter` reports this by
+ * returning `{}` carrying the `FRONTMATTER_UNPARSEABLE` Symbol, per that
+ * module's own documented contract) → `{ ok: false, reason:
+ * 'unparseable-frontmatter', span }`. A parseable region whose key is simply
+ * absent → `{ ok: false, reason: 'field-not-found', span }` —
+ * `extractFrontmatter` itself has no notion of "field not found" (a missing
+ * key just reads `undefined` off its returned object), so this reason string
+ * is this seam's own, not a passthrough of an upstream contract.
+ */
+function shapeFrontmatterField(parsed, span, key) {
+    if (!parsed.ok) {
+        return { ok: false, reason: 'unparseable-frontmatter', span };
+    }
+    const value = parsed.value[key];
+    if (value === undefined) {
+        return { ok: false, reason: 'field-not-found', span };
+    }
+    return { ok: true, value };
+}
+/** Single-key lookup: parse `regionText` once (`parseFrontmatterRegion`) and
+ * shape `key`'s result (`shapeFrontmatterField`). Used by `readFrontmatterField`
+ * and `readFrontmatterFieldFromSource`, which each already have the region's
+ * own text and span in hand; a caller reading several keys off one region
+ * should use `readFrontmatterFieldsFromSource` instead, to avoid re-parsing
+ * once per key. */
+function lookupFrontmatterField(regionText, span, key) {
+    return shapeFrontmatterField(parseFrontmatterRegion(regionText), span, key);
+}
+/**
+ * Read one top-level frontmatter key off an already-parsed `PlanningDoc`,
+ * composing `frontmatter.cts`'s `extractFrontmatter` rather than
+ * reimplementing YAML parsing (ADR-4910 Decision 1's precedent — the same
+ * composition `frontmatterRegion` already uses).
+ *
+ * No `FrontmatterNode` in `doc.nodes` (there is at most one per document) →
+ * `{ ok: false, reason: 'no-frontmatter', span: {0,0} }`, mirroring
+ * `findField`'s own not-found span convention (`readNode`'s unknown-id case).
+ *
+ * A `FrontmatterNode` is only ever pushed onto `doc.nodes` when its fence was
+ * terminated (`parsePlanningDoc` fails the whole document, before any node
+ * exists, on an unterminated fence) — so the "opened but never closed" case
+ * `extractFrontmatter` also handles is never reachable from an already-parsed
+ * `PlanningDoc` through this function. See `lookupFrontmatterField` for the
+ * unparseable-frontmatter / field-not-found / present result shapes.
+ */
+function readFrontmatterField(doc, key) {
+    const node = doc.nodes.find((n) => n.kind === 'frontmatter');
+    if (!node) {
+        return { ok: false, reason: 'no-frontmatter', span: { start: 0, end: 0 } };
+    }
+    const raw = doc.source.slice(node.span.start, node.span.end);
+    return lookupFrontmatterField(raw, node.span, key);
+}
+/**
+ * Read one top-level frontmatter key directly off raw `source` text, with no
+ * `PlanningDoc`/artifact-kind gate involved (#5026). `parsePlanningDoc`'s
+ * artifact-kind gate exists to distinguish "this document records nothing"
+ * from "wrong kind entirely" for a caller that might hand it any
+ * `.planning/`-root file, including a non-markdown one (config.json,
+ * state.json, …) — a risk that does not exist for a caller (`plan-document.
+ * cts`) that is ONLY ever invoked on real `*-PLAN.md` content, never on
+ * anything else, and is never given a canonical root-artifact basename to
+ * gate on in the first place (`*-PLAN.md` lives nested under
+ * `.planning/phase/*\/plans/`, never at the `.planning/` root
+ * `PLANNING_ARTIFACTS` enumerates — confirmed by execution:
+ * `isCanonicalPlanningFile('01-PLAN.md')` is `false`). This entry point
+ * routes around that gate rather than through it, for exactly that caller
+ * shape: content in hand, no filename to check, no need for any other
+ * `PlanningDoc` capability (sections/tables/checklists) this seam offers.
+ *
+ * Locates the frontmatter span via `findFrontmatterSpan` — the SAME
+ * `locateFrontmatterFence`-reading helper `parsePlanningDoc` itself uses to
+ * build a `FrontmatterNode` — so this is not a second detection mechanism,
+ * only a bypass of the node-parsing pipeline neither this caller nor its
+ * content needs.
+ *
+ * No frontmatter fence at byte 0 at all → `{ ok: false, reason:
+ * 'no-frontmatter', span: {0,0} }`, the same shape `readFrontmatterField`
+ * returns for its own not-found case. An OPENED-but-never-closed fence is
+ * reachable here (unlike `readFrontmatterField`, which can only ever see an
+ * already-terminated frontmatter node): `extractFrontmatter` treats that
+ * region as if it had none (`{}`, no `FRONTMATTER_UNPARSEABLE` marker), so
+ * every key on it comes back `field-not-found` — matching exactly what a
+ * direct `extractFrontmatter(source)[key] === undefined` check already
+ * produces for that same input today. See `lookupFrontmatterField` for the
+ * unparseable-frontmatter / field-not-found / present result shapes.
+ */
+function readFrontmatterFieldFromSource(source, key) {
+    const found = findFrontmatterSpan(source);
+    if (!found) {
+        return { ok: false, reason: 'no-frontmatter', span: { start: 0, end: 0 } };
+    }
+    const raw = source.slice(found.span.start, found.span.end);
+    return lookupFrontmatterField(raw, found.span, key);
+}
+/**
+ * Read MULTIPLE top-level frontmatter keys off raw `source` text in ONE pass
+ * — the bulk sibling of `readFrontmatterFieldFromSource`, for a caller (added
+ * for `plan-document.cts`'s `parsePlanDocument`, #5026 follow-up) that needs
+ * several keys off the SAME document. Calling `readFrontmatterFieldFromSource`
+ * once per key each independently re-detects the frontmatter span AND
+ * re-parses the full frontmatter YAML from scratch (`findFrontmatterSpan` +
+ * `parseFrontmatterRegion`, both non-trivial scans) — this function detects
+ * the span and parses the YAML exactly ONCE, then shapes every requested key
+ * off that SAME parsed result.
+ *
+ * This is a second ENTRY POINT into the one shared detect-span +
+ * parse-YAML + shape-a-key pipeline (`findFrontmatterSpan` /
+ * `parseFrontmatterRegion` / `shapeFrontmatterField`), never a second parser:
+ * per-key result shapes are byte-identical to calling
+ * `readFrontmatterFieldFromSource` once per key (same `no-frontmatter` /
+ * `unparseable-frontmatter` / `field-not-found` / present shapes, same span).
+ */
+function readFrontmatterFieldsFromSource(source, keys) {
+    const found = findFrontmatterSpan(source);
+    const out = {};
+    if (!found) {
+        const span = { start: 0, end: 0 };
+        for (const key of keys)
+            out[key] = { ok: false, reason: 'no-frontmatter', span };
+        return out;
+    }
+    const raw = source.slice(found.span.start, found.span.end);
+    const parsed = parseFrontmatterRegion(raw);
+    for (const key of keys)
+        out[key] = shapeFrontmatterField(parsed, found.span, key);
+    return out;
+}
+/**
  * Stage a new value for a `boldField` node, returning a NEW `PlanningDoc`
  * (immutable — `doc` itself is never mutated). Refuses an id this doc did
- * not mint, and refuses any node kind other than `boldField` — only the
+ * not mint, and refuses any node kind other than `boldField` — only
  * `valueSpan` is ever writable this phase (ADR-4910 §1).
+ *
+ * #5007 / ADR-4910 Phase 6: a prior amendment here added a `{ allowSeparator:
+ * true }` escape hatch that spliced the caller's value across the FULL
+ * rest-of-line span (`valueSpan.start`..`trailingSpan.end`) to let a value
+ * legitimately containing the grammar's ` — ` trailing-separator token
+ * (`TRAILING_SEPARATOR_RE`) be written without triggering the round-trip
+ * refusal below. That option was REMOVED (still #5007, same phase) after a
+ * failing-first reproduction proved it only avoided the refusal AT WRITE
+ * TIME: the written bytes are correct, but `parseBoldFieldLine` splits on
+ * ` — ` unconditionally and without any escaping/metadata to distinguish
+ * "atomic value containing the token" from "value plus hand-annotation" —
+ * the same input shape either way. So the NEXT fresh `parsePlanningDoc` of
+ * that exact text (not the in-memory `doc` the option's own tests checked)
+ * silently re-truncates the value and demotes the rest to `trailingSpan`,
+ * with `findField`/`readNode` reporting a confident, wrong `ok: true`
+ * result and no error — reproduced live: staging `"Phase — COMPLETE"` this
+ * way, serializing, and re-parsing the output through a fresh
+ * `parsePlanningDoc` read back `"Phase"` via `readNode`, silently losing
+ * ` — COMPLETE`. This is exactly the #4917 finding-2 corruption this
+ * module's round-trip check exists to prevent, just moved one parse cycle
+ * downstream of where the check could still catch it. There is no escaping
+ * convention anywhere in this grammar (`BOLD_FIELD_RE`/`TRAILING_SEPARATOR_
+ * RE` are unconditional, unversioned regexes with no metadata channel), and
+ * `TRAILING_SEPARATOR_RE`'s split is relied on by every other reader of this
+ * seam (`findField`/`readNode`, used today for ROADMAP.md's `Plans`/
+ * `Depends on` fields) — narrowing or version-gating it here would be a
+ * grammar change with its own blast radius, not a local bug fix. Widening
+ * `setFieldValue`'s PUBLIC, shared contract to include a write path that is
+ * only safe for a caller who never reads the field back through this same
+ * module is an attractive nuisance: nothing stops a future `findField`/
+ * `readNode` caller from reaching for it and hitting this exact corruption.
+ * The one real caller (`stateReplaceField`, src/state-document.cts) never
+ * reads STATE.md fields back through `parsePlanningDoc`/`findField` (it uses
+ * `stateExtractField`'s own non-splitting regex instead), so it does its own
+ * local full-rest-of-line splice directly against `content`, using this
+ * module only to LOCATE the field's spans — keeping the dangerous affordance
+ * out of this shared seam's public surface entirely, rather than fixing it
+ * with a narrower version of the same false-safety option.
  */
 function setFieldValue(doc, id, value) {
     const node = doc.nodes.find((n) => n.id === id);
@@ -411,7 +599,10 @@ function setFieldValue(doc, id, value) {
     }
     const staged = new Map(doc.staged);
     staged.set(id, value);
-    return { ok: true, value: { source: doc.source, artifact: doc.artifact, nodes: doc.nodes, staged } };
+    return {
+        ok: true,
+        value: { source: doc.source, artifact: doc.artifact, nodes: doc.nodes, staged },
+    };
 }
 /** True when any node in `doc` failed to parse. */
 function hasUnreadableNodes(doc) {
@@ -454,6 +645,48 @@ function serialize(doc) {
     }
     out += doc.source.slice(cursor);
     return { ok: true, value: out };
+}
+/**
+ * Replace every occurrence of the single-line literal `from` with `to` in the
+ * document's prose — the seam's answer to a verbatim cross-reference rewrite
+ * (ADR-5057 §6, Phase 13, #5217: the migration's "Phase 1:" -> "Phase 1-01:"
+ * substitution in PROJECT.md / STATE.md).
+ *
+ * Fenced code blocks are never rewritten (rows 9/14: fenced content is not a
+ * node), every other byte — each line's own terminator included — is copied
+ * from `doc.source`, and a substitution that changes nothing returns a doc
+ * whose `source` is byte-identical. The result is re-parsed so its node spans
+ * describe the new text. Refuses (Result failure, nothing written) when `from`
+ * is empty or spans a line break, or when `doc` already carries staged
+ * field edits (their spans address the pre-substitution text).
+ */
+function replaceProse(doc, from, to) {
+    if (typeof from !== 'string' || from.length === 0) {
+        return { ok: false, reason: 'replaceProse: `from` must be a non-empty string' };
+    }
+    if (typeof to !== 'string' || /[\r\n]/.test(from) || /[\r\n]/.test(to)) {
+        return { ok: false, reason: 'replaceProse: `from` and `to` must be single-line strings' };
+    }
+    if (doc.staged.size > 0) {
+        return { ok: false, reason: 'replaceProse: refused while field edits are staged' };
+    }
+    const lines = splitLinesInfo(doc.source);
+    const fenced = fencedLineIndices(lines);
+    let out = '';
+    let cursor = 0;
+    let changed = false;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (fenced.has(i) || !line.text.includes(from))
+            continue;
+        out += doc.source.slice(cursor, line.start) + line.text.split(from).join(to);
+        cursor = line.end;
+        changed = true;
+    }
+    if (!changed)
+        return { ok: true, value: doc };
+    out += doc.source.slice(cursor);
+    return parsePlanningDoc(out, doc.artifact);
 }
 // Consumers: require('../gsd-core/bin/lib/planning-document.cjs')
 // Named CJS exports are the canonical surface (ADR-457 .cts → .cjs build-at-publish).

@@ -32,7 +32,7 @@ function _getNestedConfigValue(config, dotKey) {
     return { found: true, value: current };
 }
 const _warnedRawConfigPaths = new Set();
-function _readRawConfigKey(filePath, dotKey) {
+function _readRawConfigKey(filePath, dotKey, quiet = false) {
     try {
         const raw = node_fs_1.default.readFileSync(filePath, 'utf8');
         let parsed;
@@ -40,7 +40,7 @@ function _readRawConfigKey(filePath, dotKey) {
             parsed = JSON.parse(raw);
         }
         catch {
-            if (!_warnedRawConfigPaths.has(filePath)) {
+            if (!quiet && !_warnedRawConfigPaths.has(filePath)) {
                 _warnedRawConfigPaths.add(filePath);
                 try {
                     process.stderr.write(`gsd-tools: warning: failed to parse ${filePath} as JSON — skipping for activation resolution\n`);
@@ -67,9 +67,14 @@ function _readRawConfigKey(filePath, dotKey) {
  *   3. Root config.json at planningRoot(cwd)/config.json (only if path differs).
  *   4. registry.configSchema[dotKey].default — schema default.
  *   5. Absent → { found: false, value: undefined }.
+ *
+ * `quiet: true` (default false) suppresses the one-time stderr warning for a config.json that is
+ * not valid JSON: a gate reads its switch quietly (a malformed config is simply "key absent"), it
+ * never writes to stderr (#5139).
  */
 function resolveConfigKey(dotKey, opts) {
     const { config, cwd, registry } = opts;
+    const quiet = opts.quiet === true;
     // Level 1: loadConfig result
     const fromConfig = _getNestedConfigValue(config, dotKey);
     if (fromConfig.found)
@@ -78,11 +83,11 @@ function resolveConfigKey(dotKey, opts) {
     if (cwd) {
         const wsConfigPath = node_path_1.default.join(planningDir(cwd), 'config.json');
         const rootConfigPath = node_path_1.default.join(planningRoot(cwd), 'config.json');
-        const fromWs = _readRawConfigKey(wsConfigPath, dotKey);
+        const fromWs = _readRawConfigKey(wsConfigPath, dotKey, quiet);
         if (fromWs.found)
             return { found: true, value: fromWs.value };
         if (wsConfigPath !== rootConfigPath) {
-            const fromRoot = _readRawConfigKey(rootConfigPath, dotKey);
+            const fromRoot = _readRawConfigKey(rootConfigPath, dotKey, quiet);
             if (fromRoot.found)
                 return { found: true, value: fromRoot.value };
         }

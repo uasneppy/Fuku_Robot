@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.15.0
+// gsd-hook-version: 1.19.0
 // Context Monitor - PostToolUse/AfterTool hook (Gemini uses AfterTool)
 // Reads context metrics from the statusline bridge file and injects
 // warnings when context usage is high. This makes the AGENT aware of
@@ -14,6 +14,8 @@
 // Thresholds:
 //   WARNING  (remaining <= 35%): Agent should wrap up current task
 //   CRITICAL (remaining <= 25%): Agent should stop immediately and save state
+// "remaining" is of the auto-compact threshold — the statusline puts the
+// bridge on that scale (#4985), so both fire before Claude Code compacts.
 // Both fire-points are overridable per project via .planning/config.json
 // (hooks.context_warning_threshold / hooks.context_critical_threshold, #4285);
 // the values above are the defaults used when the keys are absent or unusable.
@@ -199,6 +201,29 @@ function writeSentinel(target, payload) {
       }
     } finally { fs.closeSync(fd); }
   } catch (e) { /* best effort — see above */ }
+}
+
+// The calendar day the CRITICAL auto-record writes into STATE.md (#4905): the
+// operator's LOCAL day through the clock seam, which honors GSD_NOW_MS under
+// GSD_TEST_MODE, like every other date GSD stamps into planning files. The
+// clock is compiled into gsd-core/bin/lib/, so it is reached through the
+// self-healing build seam (#3582). If the library is missing and cannot
+// self-build, the host's local day stands in — still never the UTC day.
+function localDayStamp() {
+  try {
+    const { ensureRuntimeBuild } = require('../gsd-core/bin/ensure-runtime-build.cjs');
+    ensureRuntimeBuild();
+    return require('../gsd-core/bin/lib/clock.cjs').realClock.localToday();
+  } catch {
+    const now = new Date();
+    return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+  }
+}
+
+// The Stopped At breadcrumb for /gsd-resume-work (#1974). usedPct is coerced to
+// a safe number in case the bridge file is malformed.
+function criticalStoppedAt(usedPct) {
+  return `context exhaustion at ${Number(usedPct) || 0}% (${localDayStamp()})`;
 }
 
 let input = '';
@@ -464,9 +489,7 @@ const handleStdinEnd = () => {
         // Using __dirname makes this work on Claude Code, OpenCode, Gemini,
         // Kilo, etc. without hardcoding ~/.claude/.
         const gsdTools = path.join(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
-        // Coerce usedPct to a safe number in case bridge file is malformed
-        const safeUsedPct = Number(usedPct) || 0;
-        const stoppedAt = `context exhaustion at ${safeUsedPct}% (${new Date().toISOString().split('T')[0]})`;
+        const stoppedAt = criticalStoppedAt(usedPct);
         spawn(
           process.execPath,
           [gsdTools, 'state', 'record-session', '--stopped-at', stoppedAt],
@@ -479,23 +502,30 @@ const handleStdinEnd = () => {
     }
 
     // Build advisory warning message (never use imperative commands that
-    // override user preferences — see #884)
+    // override user preferences — see #884). The percentages are of the
+    // auto-compact threshold (#4985); the token counts, when the bridge has
+    // them, are the ones /context shows (#2451).
+    const kTokens = n => `${Math.round(n / 1000)}k`;
+    const tokenDetail = Number.isFinite(metrics.used_tokens) && Number.isFinite(metrics.threshold_tokens)
+      ? ` (${kTokens(metrics.used_tokens)} of ${kTokens(metrics.threshold_tokens)} usable tokens)`
+      : '';
+    const usage = `Usage at ${usedPct}%${tokenDetail}. Remaining: ${remaining}%. `;
     let message;
     if (isCritical) {
       message = isGsdActive
-        ? `CONTEXT CRITICAL: Usage at ${usedPct}%. Remaining: ${remaining}%. ` +
+        ? `CONTEXT CRITICAL: ${usage}` +
           'Context is nearly exhausted. Do NOT start new complex work or write handoff files — ' +
           'GSD state is already tracked in STATE.md. Inform the user so they can run ' +
           '/gsd-pause-work at the next natural stopping point.'
-        : `CONTEXT CRITICAL: Usage at ${usedPct}%. Remaining: ${remaining}%. ` +
+        : `CONTEXT CRITICAL: ${usage}` +
           'Context is nearly exhausted. Inform the user that context is low and ask how they ' +
           'want to proceed. Do NOT autonomously save state or write handoff files unless the user asks.';
     } else {
       message = isGsdActive
-        ? `CONTEXT WARNING: Usage at ${usedPct}%. Remaining: ${remaining}%. ` +
+        ? `CONTEXT WARNING: ${usage}` +
           'Context is getting limited. Avoid starting new complex work. If not between ' +
           'defined plan steps, inform the user so they can prepare to pause.'
-        : `CONTEXT WARNING: Usage at ${usedPct}%. Remaining: ${remaining}%. ` +
+        : `CONTEXT WARNING: ${usage}` +
           'Be aware that context is getting limited. Avoid unnecessary exploration or ' +
           'starting new complex work.';
     }
@@ -560,8 +590,10 @@ if (require.main === module) {
   main();
 }
 
-// Exported for the #4285 property test only. The two constants ride along so a
-// test asserts the fallback pair against the SOURCE of truth rather than
-// re-hardcoding 35/25 — a test carrying its own copy of the defaults would stay
-// green if the constants were edited.
-module.exports = { resolveThresholds, WARNING_THRESHOLD, CRITICAL_THRESHOLD };
+// Exported for tests only. resolveThresholds and the two constants serve the
+// #4285 property test; the constants ride along so a test asserts the fallback
+// pair against the SOURCE of truth rather than re-hardcoding 35/25 — a test
+// carrying its own copy of the defaults would stay green if the constants were
+// edited. criticalStoppedAt lets the #4905 test pin the breadcrumb's day
+// without waiting on the detached record-session writer (#3726).
+module.exports = { resolveThresholds, WARNING_THRESHOLD, CRITICAL_THRESHOLD, criticalStoppedAt };

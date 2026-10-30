@@ -45,16 +45,18 @@ const { loadConfig: loadConfigForScope } = configLoaderForScope;
 const scanPhasePlans = require("./plan-scan.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const coreUtils = require("./core-utils.cjs");
-const { countMatchedSummaries, findUnsummarizedPlans } = coreUtils;
+const { findUnsummarizedPlans } = coreUtils;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const frontmatter = require("./frontmatter.cjs");
-const { extractFrontmatter, parseMustHavesBlock } = frontmatter;
+const { extractFrontmatter, frontmatterRegion, parseMustHavesBlock } = frontmatter;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const verificationMod = require("./verification.cjs");
-const { isPhaseComplete } = verificationMod;
+const { isPhaseComplete, failOnVerificationStatusError, firstStatusError } = verificationMod;
 // #4906 Phase 2 (#4917/ADR-4910): the PlanningDoc parse -> mutate -> serialize
 // seam, mirroring phase.cts's already-migrated `writePlansField` site.
 const planning_document_cjs_1 = require("./planning-document.cjs");
+// #5060: the Phase Status Module owns the ladder; roadmap.cts is a consumer.
+const phase_status_cjs_1 = require("./phase-status.cjs");
 // ─── coerceTruthToString ──────────────────────────────────────────────────────
 /**
  * Coerce an arbitrary YAML scalar/object into a string for cross-cutting
@@ -212,7 +214,8 @@ function searchPhaseInContent(content, escapedPhase, phaseNum, convention) {
  * Returns the phase section string if found, null if ROADMAP.md is missing,
  * or throws if ROADMAP.md read fails.
  *
- * Used by check-command-router (computeUiPlanGate) so ui-plan-gate uses the SAME
+ * Used by the shared gate phase context (lookupRoadmapPhase in gate-phase-context.cts, which
+ * computeUiPlanGate in gate-ui-plan.cts calls) so ui-plan-gate uses the SAME
  * phase resolution as `roadmap.get-phase` — not a milestone-only subset.
  */
 function getRoadmapPhaseWithFallback(cwd, phaseNum) {
@@ -310,6 +313,14 @@ function cmdRoadmapGetPhase(cwd, phaseNum, raw) {
         error('Failed to read ROADMAP.md: ' + e.message);
     }
 }
+/**
+ * #4757: the phase records whose `roadmap_complete` was READ from a ROADMAP
+ * checkbox. Table rows and headings with no checklist entry also report
+ * `roadmap_complete: false`, but there is no checkbox behind it, so they must
+ * not be compared against disk status by `checkbox_conflict`. A WeakSet keeps
+ * this out of the emitted `phases[]` shape.
+ */
+const PHASES_WITH_CHECKBOX = new WeakSet();
 // #612 composes the convention-qualified sentinel reading with upstream's
 // canonical legacy sentinel owner. A reserved bracket milestone OR a reserved
 // phase token excludes the occurrence.
@@ -373,6 +384,7 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
     // The caller needs the exact occurrence identities from the same scan that
     // built `phases`; returning them together also keeps fallback rescans atomic.
     const detailKeys = new Set();
+    let statusError;
     while ((match = phasePattern.exec(content)) !== null) {
         const bracketId = G ? match[1] : undefined;
         const phaseNum = match[1 + G];
@@ -402,7 +414,7 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
         const depends_on = dependsMatch ? dependsMatch[1].trim() : null;
         // Check completion on disk
         const normalized = normalizePhaseName(phaseNum);
-        let diskStatus = 'no_directory';
+        let diskStatus = phase_status_cjs_1.DISK_STATUS.NO_DIRECTORY;
         let planCount = 0;
         let summaryCount = 0;
         let hasContext = false;
@@ -446,33 +458,32 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
             hasResearch = counts.hasResearch;
             contextReadError = counts.contextReadError;
             contextScope = counts.scope;
-            // ADR-3180 §7.4 (issue #3186, disk-strict, #3168 fix): route "is this
-            // phase complete" through the canonical owner (`isPhaseComplete`),
-            // which calls readVerificationStatus UNCONDITIONALLY — plan count is
-            // NOT a precondition, so a zero-plan phase with a passing
-            // `*-VERIFICATION.md` reports complete here too, not just via
-            // `phase.complete`.
-            // #612: `convention` (a parameter of this function, same thread as
-            // matchPhaseDirs above) rides into completion so a bracket phase dir
-            // resolves and scopes its verification report like its legacy twin.
-            const completionResult = isPhaseComplete(node_path_1.default.join(phasesDir, dirMatch), { convention });
-            if (completionResult.value.complete)
-                diskStatus = 'complete';
-            else if (summaryCount > 0)
-                diskStatus = 'partial';
-            else if (planCount > 0)
-                diskStatus = 'planned';
-            else if (hasResearch)
-                diskStatus = 'researched';
-            else if (hasContext)
-                diskStatus = 'discussed';
-            else
-                diskStatus = 'empty';
+            // #5060: route the disk-status ladder through the Phase Status Module's
+            // single owner (`phaseStatus`/`toDiskStatus`) rather than a local
+            // if/else re-derivation. `convention` still threads through so a
+            // bracket phase's verification report resolves and scopes like its
+            // legacy twin (#612).
+            const ps = (0, phase_status_cjs_1.phaseStatus)(node_path_1.default.join(phasesDir, dirMatch), { convention });
+            statusError = firstStatusError(statusError, ps.value.statusError);
+            diskStatus = (0, phase_status_cjs_1.toDiskStatus)(ps.value.status, { hasResearch, hasContext });
         }
-        // Check ROADMAP checkbox status. #3537: padding-tolerant fragment — the
-        // heading discovered above may use a different padding than the
-        // summary-bullet checkbox below it (mixed padding inside one ROADMAP is
-        // legal and seen in real projects).
+        // Check ROADMAP checkbox status. #4965: line-anchored, label-first — the
+        // old fragment allowed `\s*.*` between the checkbox and the label, which
+        // let "Phase N" match ANYWHERE in any checklist line's free-form
+        // description (not just this phase's own line), and `content.match`
+        // returns only the first hit in the document — so an earlier, unrelated
+        // line whose prose merely mentioned "Phase N" shadowed that phase's own
+        // checkbox state (both a false negative and a false positive were
+        // reported against real ROADMAPs). The label must now be the first thing
+        // after the checkbox, tolerating only an optional `**` bold marker and
+        // horizontal whitespace — matching `cmdRoadmapAnalyze`'s own
+        // `checklistPattern` (the missing-detail-section scan a bit further down
+        // in this file), which already hard-requires `\*\*` immediately after the
+        // checkbox for the same reason. A decoration the old `.*` used to tolerate
+        // by accident — a blockquoted bullet, an emoji/badge before the label —
+        // now resolves to `roadmap_complete: false` instead of matching; this is
+        // the deliberate, precedent-consistent narrowing (see 10-diagnosis.md's
+        // "Negative space" note), not a new gap.
         //
         // ADR-3180 §7.4 (disk-strict, #2957, maintainer decision 2026-08-08):
         // `roadmapComplete` is reported below as metadata ONLY — it carries NO
@@ -483,10 +494,10 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
         // checkbox — no passing `*-VERIFICATION.md`, plans outstanding — now
         // reports incomplete; this is the deliberate Tier-2 break (ADR-3180 §7.4
         // Decision 3).
-        const checkboxPattern = new RegExp(`-\\s*\\[(x| )\\]\\s*.*${phaseHeadingPrefixSrcFor(PHASE_HEADING_BASELINE.LABEL_ONLY, convention)}${phaseMarkdownRegexSource(phaseNum)}${OPTIONAL_PHASE_TAG_SOURCE}[:\\s]`, 'i');
+        const checkboxPattern = new RegExp(`^[ \\t]*-[ \\t]*\\[(x| )\\][ \\t]*(?:\\*\\*)?${phaseHeadingPrefixSrcFor(PHASE_HEADING_BASELINE.LABEL_ONLY, convention)}${phaseMarkdownRegexSource(phaseNum)}${OPTIONAL_PHASE_TAG_SOURCE}[:\\s]`, 'im');
         const checkboxMatch = content.match(checkboxPattern);
         const roadmapComplete = checkboxMatch ? checkboxMatch[1] === 'x' : false;
-        phases.push({
+        const headingPhase = {
             number: phaseNum,
             name: phaseName,
             goal,
@@ -500,7 +511,10 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
             roadmap_complete: roadmapComplete,
             context_read_error: contextReadError,
             context_scope: contextScope,
-        });
+        };
+        if (checkboxMatch)
+            PHASES_WITH_CHECKBOX.add(headingPhase);
+        phases.push(headingPhase);
     }
     // #3577: markdown-table row declarations join the enumeration — same
     // enrichment contract as headings (disk counts when the directory exists),
@@ -514,7 +528,7 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
         detailKeys.add(occurrenceKey(tr.id));
         if (seen.has(stripPadA(tr.id)))
             continue;
-        const dirMatchA = matchPhaseDirs(phaseDirNames, normalizePhaseName(tr.id)).matches[0];
+        const dirMatchA = matchPhaseDirs(phaseDirNames, normalizePhaseName(tr.id), convention).matches[0];
         let tPlanCount = 0;
         let tSummaryCount = 0;
         let tHasContext = false;
@@ -523,8 +537,9 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
         // #4014 (epic #3473 B4): additive sibling, same default rule as the
         // heading-declared branch above.
         let tContextScope = SCOPE.COMPLETE;
+        let tDiskStatus = phase_status_cjs_1.DISK_STATUS.NO_DIRECTORY;
         if (dirMatchA) {
-            const counts = countPhasePlansAndSummaries(node_path_1.default.join(phasesDir, dirMatchA));
+            const counts = countPhasePlansAndSummaries(node_path_1.default.join(phasesDir, dirMatchA), convention);
             tPlanCount = counts.planCount;
             tSummaryCount = counts.summaryCount;
             tHasContext = node_fs_1.default.existsSync(node_path_1.default.join(phasesDir, dirMatchA, 'CONTEXT.md'));
@@ -535,6 +550,11 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
             // an unreadable phase directory is still surfaced via the sibling call.
             tContextReadError = counts.contextReadError;
             tContextScope = counts.scope;
+            // #5060: route through the Phase Status Module's owner rather than the
+            // fixed 'ok' sentinel this row used to emit.
+            const tps = (0, phase_status_cjs_1.phaseStatus)(node_path_1.default.join(phasesDir, dirMatchA), { convention });
+            statusError = firstStatusError(statusError, tps.value.statusError);
+            tDiskStatus = (0, phase_status_cjs_1.toDiskStatus)(tps.value.status, { hasResearch: tHasResearch, hasContext: tHasContext });
         }
         phases.push({
             number: tr.id,
@@ -546,13 +566,13 @@ function collectAnalyzePhases(content, phasesDir, phaseDirNames, convention) {
             summary_count: tSummaryCount,
             has_context: tHasContext,
             has_research: tHasResearch,
-            disk_status: dirMatchA ? 'ok' : 'no_directory',
+            disk_status: tDiskStatus,
             roadmap_complete: false,
             context_read_error: tContextReadError,
             context_scope: tContextScope,
         });
     }
-    return { phases, detailKeys };
+    return { phases, detailKeys, statusError };
 }
 function cmdRoadmapAnalyze(cwd, raw) {
     const roadmapPath = planningPaths(cwd).roadmap;
@@ -588,6 +608,8 @@ function cmdRoadmapAnalyze(cwd, raw) {
     let collected = collectAnalyzePhases(content, phasesDir, _phaseDirNames, convention);
     let phases = collected.phases;
     let detailKeys = collected.detailKeys;
+    // #5118: carried from every phaseStatus read this command makes.
+    let statusError = collected.statusError;
     // `effectiveContent` is what the downstream checklist scan (missing_details)
     // iterates. Defaults to the scoped window; switched to the fallback document
     // when the recovery path below fires, so a phase found via fallback is not
@@ -614,6 +636,7 @@ function cmdRoadmapAnalyze(cwd, raw) {
             collected = fallbackCollection;
             phases = collected.phases;
             detailKeys = collected.detailKeys;
+            statusError = firstStatusError(statusError, collected.statusError);
             effectiveContent = fallbackContent;
         }
     }
@@ -626,12 +649,12 @@ function cmdRoadmapAnalyze(cwd, raw) {
         version: m.version,
     }));
     // Find current and next phase
-    const currentPhase = phases.find(p => p.disk_status === 'planned' || p.disk_status === 'partial') || null;
-    const nextPhase = phases.find(p => p.disk_status === 'empty' || p.disk_status === 'no_directory' || p.disk_status === 'discussed' || p.disk_status === 'researched') || null;
+    const currentPhase = phases.find(p => p.disk_status === phase_status_cjs_1.DISK_STATUS.PLANNED || p.disk_status === phase_status_cjs_1.DISK_STATUS.PARTIAL || p.disk_status === phase_status_cjs_1.DISK_STATUS.EXECUTED) || null;
+    const nextPhase = phases.find(p => p.disk_status === phase_status_cjs_1.DISK_STATUS.EMPTY || p.disk_status === phase_status_cjs_1.DISK_STATUS.NO_DIRECTORY || p.disk_status === phase_status_cjs_1.DISK_STATUS.DISCUSSED || p.disk_status === phase_status_cjs_1.DISK_STATUS.RESEARCHED) || null;
     // Aggregated stats
     const totalPlans = phases.reduce((sum, p) => sum + p.plan_count, 0);
     const totalSummaries = phases.reduce((sum, p) => sum + p.summary_count, 0);
-    const completedPhases = phases.filter(p => p.disk_status === 'complete').length;
+    const completedPhases = phases.filter(p => p.disk_status === phase_status_cjs_1.DISK_STATUS.COMPLETE).length;
     // Detect phases in summary list without detail sections (malformed ROADMAP).
     // The char class must allow `-` (not just `.`) so dash-separated milestone-prefixed
     // IDs (e.g. `1-01`) match the detail-heading scanner above; otherwise they truncate
@@ -718,21 +741,12 @@ function cmdRoadmapAnalyze(cwd, raw) {
                 hasResearch = counts.hasResearch;
                 contextReadError = counts.contextReadError;
                 contextScope = counts.scope;
-                const completionResult = isPhaseComplete(node_path_1.default.join(phasesDir, dirMatch), { convention });
-                if (completionResult.value.complete)
-                    diskStatus = 'complete';
-                else if (summaryCount > 0)
-                    diskStatus = 'partial';
-                else if (planCount > 0)
-                    diskStatus = 'planned';
-                else if (hasResearch)
-                    diskStatus = 'researched';
-                else if (hasContext)
-                    diskStatus = 'discussed';
-                else
-                    diskStatus = 'empty';
+                // #5060: same owner call as the heading branch above.
+                const ps = (0, phase_status_cjs_1.phaseStatus)(node_path_1.default.join(phasesDir, dirMatch), { convention });
+                statusError = firstStatusError(statusError, ps.value.statusError);
+                diskStatus = (0, phase_status_cjs_1.toDiskStatus)(ps.value.status, { hasResearch, hasContext });
             }
-            phases.push({
+            const synthesized = {
                 number: occ.token,
                 name: `Phase ${occ.token}`,
                 goal: null,
@@ -746,7 +760,9 @@ function cmdRoadmapAnalyze(cwd, raw) {
                 roadmap_complete: occ.checked,
                 context_read_error: contextReadError,
                 context_scope: contextScope,
-            });
+            };
+            PHASES_WITH_CHECKBOX.add(synthesized);
+            phases.push(synthesized);
         }
     }
     // The EMITTED value stays the bare token, unchanged: `phases[].number` is a
@@ -790,6 +806,29 @@ function cmdRoadmapAnalyze(cwd, raw) {
     const progressPercent = progressScope === SCOPE.COMPLETE
         ? (0, phase_lifecycle_cjs_1.clampPercent)(scopedTotalSummaries, scopedTotalPlans)
         : null;
+    // #4757: `current_phase` / `next_phase` / `completed_phases` are disk-
+    // authoritative (ADR-3180 §7.4, #2957 — a ticked ROADMAP checkbox carries no
+    // machine authority), so a phase whose checkbox disagrees with its disk
+    // status can be handed back as the phase to work on while the operator has
+    // already ticked it (a backfilled phase with a SUMMARY and no PLAN reads
+    // `empty`; an all-summarized phase with no VERIFICATION reads `executed`), or
+    // withheld from `completed_phases` while ticked-complete. The selectors stay
+    // disk-authoritative; the disagreement is SURFACED here rather than silently
+    // resolved either way. Computed after the heading/table/checklist phase
+    // enumeration is final so synthesized phases are covered too. Only phases
+    // that HAVE a checkbox can conflict: a progress-table row or a heading with
+    // no checklist entry reports `roadmap_complete: false` because there is no
+    // checkbox to read, not because one is unticked.
+    const checkboxConflict = phases
+        .filter(p => PHASES_WITH_CHECKBOX.has(p)
+        && p.roadmap_complete !== (p.disk_status === phase_status_cjs_1.DISK_STATUS.COMPLETE))
+        .map(p => ({
+        number: p.number,
+        roadmap_complete: p.roadmap_complete,
+        disk_status: p.disk_status,
+        plan_count: p.plan_count,
+        summary_count: p.summary_count,
+    }));
     const result = {
         milestones,
         phases,
@@ -817,6 +856,9 @@ function cmdRoadmapAnalyze(cwd, raw) {
         progress_scope: progressScope,
         current_phase: currentPhase ? currentPhase.number : null,
         next_phase: nextPhase ? nextPhase.number : null,
+        // #4757: phases whose ROADMAP checkbox disagrees with `disk_status`
+        // (`roadmap_complete` vs `disk_status === "complete"`); always an array.
+        checkbox_conflict: checkboxConflict,
         missing_phase_details: missingDetails.length > 0 ? missingDetails : null,
         // #3184/#3165: distinguishes a genuinely empty milestone (`scope:
         // "complete"`, `phase_count: 0`) from a window that could not be fully
@@ -824,6 +866,10 @@ function cmdRoadmapAnalyze(cwd, raw) {
         // were previously output-identical.
         scope,
     };
+    // #5118: a read-only aggregate over a refused report prints nothing and
+    // fails with the error's own reason.
+    if (statusError)
+        failOnVerificationStatusError(statusError);
     output(result, raw, undefined);
 }
 // ─── cmdRoadmapMilestoneScope ────────────────────────────────────────────────
@@ -867,11 +913,11 @@ function cmdRoadmapMilestoneScope(cwd, raw) {
         phaseIdConvention = undefined;
     }
     if (phaseIdConvention === undefined || phaseIdConvention === null) {
-        // Bounded per local/no-unbounded-quantifier (#2128): frontmatter is a
-        // short header block — 4KB is orders of magnitude beyond any real one.
-        const fmMatch = rawContent.match(/^---\r?\n([\s\S]{0,4000}?)\r?\n---/);
-        if (fmMatch) {
-            const kvMatch = fmMatch[1].match(/^phase_id_convention:\s*(.*)$/m);
+        // The block is the one the one fence owner finds (`frontmatterRegion`), the same one
+        // `roadmap validate` reads, so the two cannot disagree on where it ends (#3641 NEW-1).
+        const found = frontmatterRegion(rawContent);
+        if (found?.terminated) {
+            const kvMatch = found.region.match(/^phase_id_convention:\s*(.*)$/m);
             if (kvMatch) {
                 const val = kvMatch[1].trim();
                 if (val !== 'null' && val !== '') {
@@ -928,11 +974,20 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
     if (!phaseInfo) {
         error(`Phase ${phaseNum} not found`);
     }
-    const planCount = phaseInfo.plans.length;
-    // Count only summaries that pair with a real plan (#1988): stray non-plan
-    // summaries (30-FIX-CR02-SUMMARY.md, 30-GAPCLOSURE-SUMMARY.md, …) must not
-    // inflate summary_count and silently flip the phase to Complete.
-    const summaryCount = countMatchedSummaries(phaseInfo.plans, phaseInfo.summaries);
+    const phaseDir = node_path_1.default.join(cwd, phaseInfo.directory);
+    // #5060: ONE count source for this verb — `scanPhasePlans` (the ADR-3180
+    // §7.5 count owner) — rather than `phaseInfo.plans.length` /
+    // `countMatchedSummaries(phaseInfo.plans, phaseInfo.summaries)`. The two
+    // diverge when a plan's frontmatter declares `status: superseded`:
+    // scanPhasePlans excludes it (and its summary) from both counts (#2349),
+    // the phaseInfo-based counts do not. Using scanPhasePlans everywhere in
+    // this verb — the `planCount === 0` decline, the `Plans Complete` cell,
+    // the `Plans:` line, the checkbox gate, and the JSON output — keeps every
+    // one of those in agreement with the Status-cell ladder below, which
+    // already read scanPhasePlans's counts.
+    const coverageScan = scanPhasePlans(phaseDir);
+    const planCount = coverageScan.planCount;
+    const summaryCount = coverageScan.summaryCount;
     if (planCount === 0) {
         declineNoOp(raw, 'updated', 'No plans found', 'roadmap update-plan-progress skipped — no plans found for this phase. ROADMAP.md was left unchanged.', { plan_count: 0, summary_count: 0 });
         return;
@@ -949,12 +1004,15 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
     // agrees with `roadmap analyze` / `init manager` / `phase complete` for
     // the same phase (ADR-3180 §7.4's headline: one predicate for the read
     // path and the write path).
-    const phaseDir = node_path_1.default.join(cwd, phaseInfo.directory);
     // ADR-3180 §7.4 read/write-path symmetry with the threaded site at ~583:
     // thread convention here too, so this write path's completion reading
     // agrees with the read path's under the bracket convention.
     const convention = resolvePhaseIdConvention(cwd);
     const completionResult = isPhaseComplete(phaseDir, { convention });
+    // #5118: no write before the error — a report whose `status` is outside the
+    // closed set fails this writer before ROADMAP.md is touched.
+    if (completionResult.value.statusError)
+        failOnVerificationStatusError(completionResult.value.statusError);
     const verificationResult = completionResult.value.verification;
     // #2648 precedent, applied at this write site (ADR-3180 §7.4 / #3186):
     // `isPhaseComplete` deliberately carries NO plan-count precondition — the
@@ -970,14 +1028,29 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
     // (phase.cts:~1995, #2648: "a coverage gate that passes when it cannot
     // read the plans is no gate at all"), composed explicitly here rather than
     // folded into the predicate: complete AND all plans executed.
-    const coverageScan = scanPhasePlans(phaseDir);
+    // #5060: `coverageScan` (declared above, before the `planCount === 0`
+    // decline) is now this verb's ONE count source — the `Plans Complete`
+    // cell, the `Plans:` line, the checkbox gate, the JSON output, and the
+    // Status-cell ladder below all read `planCount`/`summaryCount` from it, so
+    // a phase with a `status: superseded` plan (#2349) reports the same
+    // counts everywhere instead of diverging between the ladder and the rest
+    // of this verb's output.
     const unsummarizedPlans = findUnsummarizedPlans(coverageScan.planFiles, coverageScan.summaryFiles);
     const isComplete = completionResult.value.complete && unsummarizedPlans.length === 0;
     // #3057 B3: routing above is unchanged (an indeterminate staleness check
     // still routes as if nothing were stale) — this only makes the fact visible
     // to whatever reads this command's JSON output.
-    const verificationStaleCheckIndeterminate = verificationResult.staleCheckIndeterminate === true;
-    const status = isComplete ? 'Complete' : summaryCount > 0 ? 'In Progress' : 'Planned';
+    const verificationStaleCheckIndeterminate = 'staleCheckIndeterminate' in verificationResult && verificationResult.staleCheckIndeterminate === true;
+    // #5060: route the Status-cell token through the Phase Status Module's
+    // owner ladder rather than a local if/else, over the same `planCount`/
+    // `summaryCount` (from `coverageScan`) every other output in this verb
+    // uses.
+    const status = (0, phase_status_cjs_1.toRoadmapStatusCell)((0, phase_status_cjs_1.phaseStatusFromFacts)({
+        planCount,
+        summaryCount,
+        complete: isComplete,
+        verificationStatus: verificationResult.status,
+    }));
     const today = clock_cjs_1.realClock.localToday();
     if (!node_fs_1.default.existsSync(roadmapPath)) {
         declineNoOp(raw, 'updated', 'ROADMAP.md not found', 'roadmap update-plan-progress skipped — ROADMAP.md not found.', { plan_count: planCount, summary_count: summaryCount });
@@ -1002,6 +1075,7 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
     // refusal below declines with the analyzer's own `missing_phase_details`
     // vocabulary and leaves ROADMAP.md byte-identical.
     let missingPhaseDetails = false;
+    const warnings = [];
     withPlanningLock(cwd, () => {
         // #3957 (B9.4): captured BEFORE any transform runs, so the write/report
         // decision below reflects whether the transforms actually changed
@@ -1037,13 +1111,26 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
         // Heading target: the exact grammar `planSectionPattern` /
         // `insertRowsPatternA|B` anchor on (an ATX phase heading for this phase).
         const headingTargetFound = new RegExp(phaseHeadingAnchor, 'i').test(gateActiveRegion);
+        // #5545: the phase-checklist bullet grammar, defined ONCE for the writer
+        // (an unchecked bullet to tick) and the gate probe (`anyState`).
+        // Line-anchored, with only an optional `**` before the label and horizontal
+        // whitespace, so a bullet that merely MENTIONS "Phase N" is not the phase's
+        // bullet and no `\s` can run past the line end (which used to land the
+        // `(completed …)` annotation on the NEXT line). A decorated bullet (emoji,
+        // blockquote, link) is deliberately NOT the phase's bullet either — the
+        // same narrowing #4965 made for `roadmap analyze`'s checklist reader.
+        // The lookahead only PEEKS (its `\s` may see a newline but consumes none):
+        // the label must be followed by `:`, whitespace or the end of the line, so
+        // `Phase 2.1` / `Phase 20` are not `Phase 2`. Capture group 1 is the opening
+        // `- [`, group 2 the rest of the line after the box.
+        const phaseChecklistBullet = (anyState) => new RegExp(`^([ \\t]*-[ \\t]*\\[)${anyState ? '[ x]' : ' '}(\\][ \\t]*(?:\\*\\*)?[ \\t]*Phase[ \\t]+${phasePattern}${OPTIONAL_PHASE_TAG_SOURCE}(?=[:\\s]|$)[^\\n]*)`, 'im');
         // Checklist target: when the phase is complete, its own checklist bullet
         // (`- [ ] **Phase N: …**`) IS a writable phase row — the completion
         // checkbox stamp below updates it. Same grammar as that writer, widened
         // one notch to `[ x]` so an ALREADY-checked bullet still counts as a
         // found target: an idempotent re-run then takes the honest
         // "no changes were needed" decline instead of this refusal.
-        const checklistTargetFound = isComplete && new RegExp(`-\\s*\\[[ x]\\]\\s*.*Phase\\s+${phasePattern}${OPTIONAL_PHASE_TAG_SOURCE}[:\\s]`, 'i').test(gateActiveRegion);
+        const checklistTargetFound = isComplete && phaseChecklistBullet(true).test(gateActiveRegion);
         // Table-row target: set by the row-scoped cell updates below.
         let tableRowFound = false;
         // Progress table row: update Plans Complete/Status/Completed columns BY
@@ -1068,7 +1155,29 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
                 text = plansResult.value;
                 tableRowFound = true;
             }
-            const statusResult = (0, markdown_table_cjs_1.updateTableCell)(text, rowMatch, 'Status', ` ${status.padEnd(11)}`);
+            // #4925: the verb owns the Status cell's leading status TOKEN only — the
+            // same split #2853/#3584 made for the `Plans:` line below. It used to
+            // overwrite the whole cell with ` ${status.padEnd(11)}` (no trailing
+            // space), discarding any operator prose kept after the token. Three arms:
+            //   1. empty or a dash placeholder → write the token, padded exactly as
+            //      phase complete writes ` Complete    ` (phase.cts).
+            //   2. a leading status token → rewrite the token only and keep the prose
+            //      after it; an unchanged token leaves the cell byte-identical.
+            //   3. freeform prose with no leading token → operator-owned, untouched.
+            // #5060: routed through the Phase Status Module's `matchRoadmapStatusCell`
+            // owner rather than a local statusTokenRe. `ROADMAP_STATUS_TOKEN.DEFERRED`
+            // is now a recognized token (the old regex never matched "deferred" at
+            // all, so a Deferred cell fell through to arm 3 unchanged) — the DEFERRED
+            // guard below preserves that same "leave it alone" outcome explicitly.
+            const statusResult = (0, markdown_table_cjs_1.updateTableCell)(text, rowMatch, 'Status', (current) => {
+                if (current === '' || /^[-–—]$/.test(current))
+                    return ` ${status.padEnd(11)} `;
+                const m = (0, phase_status_cjs_1.matchRoadmapStatusCell)(current);
+                if (!m || m.token === phase_status_cjs_1.ROADMAP_STATUS_TOKEN.DEFERRED || m.text === status)
+                    return current;
+                const rest = current.slice(m.text.length);
+                return rest === '' ? ` ${status.padEnd(11)} ` : ` ${(0, markdown_table_cjs_1.escapeCell)(status + rest)} `;
+            });
             if (statusResult.ok) {
                 text = statusResult.value;
                 tableRowFound = true;
@@ -1085,7 +1194,9 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
                 if (isComplete) {
                     return dateShape.test(current.trim()) ? current : ` ${today} `;
                 }
-                return '  ';
+                // #4925: only a stale ISO completion date — this verb's own stamp — is
+                // cleared; a `-` placeholder or operator text stays byte-identical.
+                return dateShape.test(current) ? '  ' : current;
             });
             if (completedResult.ok) {
                 text = completedResult.value;
@@ -1093,6 +1204,16 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
             }
             return text;
         });
+        // #4947: a word-prefixed Phase cell (`Phase 68`) is deliberately not a
+        // writable table target (#4247 — the read side ignores it too), but when the
+        // phase's heading section is still written the command reports
+        // `updated: true` and the unwritten Status cell looked like a silent bug.
+        // The row stays byte-identical; the output now says so.
+        const wordPrefixedCellRe = new RegExp(`^Phase\\s+${phasePattern}\\.?(?:\\s|$)`, 'i');
+        const progressTable = tableRowFound ? null : (0, markdown_table_cjs_1.findTableWithColumns)(gateActiveRegion, ['Phase', 'Status']);
+        if (progressTable && progressTable.rows.some((row) => wordPrefixedCellRe.test((row['Phase'] ?? '').trim()))) {
+            warnings.push(`Progress table row for phase ${formatDiagnosticToken(String(phaseNum))} was not updated: its Phase cell is word-prefixed ("Phase N"), and only a bare phase number (N or N.) is recognized. Edit that row by hand or rewrite the cell as the bare number.`);
+        }
         // Update plan count in phase detail section.
         // Three recognised forms (all tolerated; canonical template uses the first):
         //   `**Plans**: N plans`  — bold word + outer colon (gsd-core/templates/roadmap.md)
@@ -1150,6 +1271,13 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
         // wording, so it correctly falls through to arm 3 untouched. Kept as a
         // caller-side classifier (NOT seam grammar) reused below against the
         // `boldField` node's own parsed `value`.
+        // #4947: a value that is exactly `TBD` is the planner's own "no plans yet"
+        // marker, not an operator annotation — once plans exist it contradicts the
+        // checklist this verb inserts right under it. `TBD — note` keeps its note
+        // (row 5): on the bold path the note is the node's trailing span, which the
+        // caller checks is empty; on the plain path the note is part of the value,
+        // so the whole-value comparison already excludes it.
+        const isBareTbd = (value) => value.trim() === 'TBD';
         const isTemplatePlaceholder = (value) => {
             const trimmed = value.trim();
             return /^\[\s*Number of plans\b[\s\S]*\]$/i.test(trimmed);
@@ -1174,6 +1302,35 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
         const bareCountPrefixLength = (value) => {
             const m = value.match(/^\d+\s+plans?/i);
             return m ? m[0].length : -1;
+        };
+        // #4947: the pending-plan clause a human or planner glues after the count
+        // (`; 2 gap-closure plans pending (48-18, 48-19)`) is DERIVED from the same
+        // plan/summary facts this verb already computes, so a completed plan left
+        // listed as pending contradicts the count the verb just wrote. The verb
+        // owns that one clause: ids that now have a SUMMARY.md are removed, the
+        // number is recounted, and an emptied clause is dropped. Everything else in
+        // the tail (`in 11 waves`, free prose) stays the operator's — a wave total
+        // does not change when a plan completes. A clause whose ids are not all
+        // plan ids (`(see backlog)`) is not provably derived, so it is left alone.
+        const summarizedPlanIds = new Set(phaseInfo.summaries
+            .map((summaryFile) => summaryFile.replace('-SUMMARY.md', '').replace('SUMMARY.md', ''))
+            .filter((id) => id !== ''));
+        const pendingClauseRe = /;[ \t]*(\d+)[ \t]+((?:[\w-]+[ \t]+)*?)plans?[ \t]+pending[ \t]*\(([^()\r\n]*)\)/i;
+        const planIdShape = /^\d+(?:\.\d+)?-\d+(?:\.\d+)?$/;
+        const reconcilePendingClause = (tail) => {
+            const m = pendingClauseRe.exec(tail);
+            if (!m)
+                return tail;
+            const ids = m[3].split(',').map((id) => id.trim());
+            if (ids.length === 0 || !ids.every((id) => planIdShape.test(id)))
+                return tail;
+            const stillPending = ids.filter((id) => !summarizedPlanIds.has(id));
+            if (stillPending.length === ids.length)
+                return tail;
+            const replacement = stillPending.length === 0
+                ? ''
+                : `; ${stillPending.length} ${m[2]}plan${stillPending.length === 1 ? '' : 's'} pending (${stillPending.join(', ')})`;
+            return tail.slice(0, m.index) + replacement + tail.slice(m.index + m[0].length);
         };
         roadmapContent = replaceInCurrentMilestone(roadmapContent, planSectionPattern, (sectionText) => {
             const parsed = (0, planning_document_cjs_1.parsePlanningDoc)(sectionText, 'ROADMAP.md');
@@ -1205,12 +1362,12 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
                 const plainFractionLen = fractionCountPrefixLength(plainValue);
                 const plainBareLen = bareCountPrefixLength(plainValue);
                 const plainCountPrefixLen = plainFractionLen >= 0 ? plainFractionLen : plainBareLen;
-                if (plainCountPrefixLen < 0 && !isTemplatePlaceholder(plainValue)) {
+                if (plainCountPrefixLen < 0 && !isTemplatePlaceholder(plainValue) && !isBareTbd(plainValue)) {
                     // Arm 3: freeform prose, TBD, a bracketed human annotation, or an
                     // empty value — leave the section exactly as it was.
                     return sectionText;
                 }
-                const plainSuffix = plainCountPrefixLen >= 0 ? plainValue.slice(plainCountPrefixLen) : '';
+                const plainSuffix = plainCountPrefixLen >= 0 ? reconcilePendingClause(plainValue.slice(plainCountPrefixLen)) : '';
                 const newPlainLine = `${indent}Plans:${spacing}${planCountText}${plainSuffix}`;
                 const start = plainMatch.index ?? sectionText.indexOf(whole);
                 return sectionText.slice(0, start) + newPlainLine + sectionText.slice(start + whole.length);
@@ -1223,7 +1380,11 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
             const fractionPrefixLen = fractionCountPrefixLength(currentValue);
             const barePrefixLen = bareCountPrefixLength(currentValue);
             const countPrefixLen = fractionPrefixLen >= 0 ? fractionPrefixLen : barePrefixLen;
-            if (countPrefixLen < 0 && !isTemplatePlaceholder(currentValue)) {
+            const fieldNode = parsed.value.nodes.find((n) => n.id === fieldId);
+            const trailingText = fieldNode && fieldNode.kind === 'boldField'
+                ? parsed.value.source.slice(fieldNode.trailingSpan.start, fieldNode.trailingSpan.end)
+                : '';
+            if (countPrefixLen < 0 && !isTemplatePlaceholder(currentValue) && !(isBareTbd(currentValue) && trailingText.trim() === '')) {
                 // Arm 3: freeform prose, TBD, a bracketed human annotation, or an
                 // empty value — leave the section exactly as it was.
                 return sectionText;
@@ -1234,7 +1395,7 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
             // `setFieldValue`'s valueSpan/trailingSpan split additionally preserves
             // any EM-DASH-separated trailing annotation (#2853) automatically — no
             // separate "preserve trailing" branch needed for that shape.
-            const suffix = countPrefixLen >= 0 ? currentValue.slice(countPrefixLen) : '';
+            const suffix = countPrefixLen >= 0 ? reconcilePendingClause(currentValue.slice(countPrefixLen)) : '';
             const newValueToWrite = planCountText + suffix;
             const staged = (0, planning_document_cjs_1.setFieldValue)(parsed.value, fieldId, newValueToWrite);
             if (!staged.ok) {
@@ -1251,24 +1412,25 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
         });
         // If complete: check checkbox
         if (isComplete) {
-            const checkboxPattern = new RegExp(`(-\\s*\\[)[ ](\\]\\s*.*Phase\\s+${phasePattern}${OPTIONAL_PHASE_TAG_SOURCE}[:\\s][^\\n]*)`, 'i');
-            roadmapContent = replaceInCurrentMilestone(roadmapContent, checkboxPattern, `$1x$2 (completed ${today})`);
+            roadmapContent = replaceInCurrentMilestone(roadmapContent, phaseChecklistBullet(false), `$1x$2 (completed ${today})`);
         }
         // Mark completed plan checkboxes (e.g. "- [ ] 50-01-PLAN.md", "- [ ] 50-01:", or "- [ ] **50-01**")
         // #4741: tick only plans the phase's own COUNT still counts. `plans` is the
         // superseded-filtered set (#2349 via scanPhasePlans) while `summaries` is
         // the raw *-SUMMARY.md listing — a superseded plan can carry a SUMMARY
         // (e.g. `status: halted`), and ticking it read as "executed" right under a
-        // count line that excludes it. The prefix match mirrors the checkbox regex
-        // below (rows match by planId prefix, which the PLAN-01.md naming shape
-        // relies on), so non-superseded plans tick exactly as before.
+        // count line that excludes it. #5542: a summary belongs to a live plan only
+        // by the SAME pairing rule the counts use (`summaryCandidates` via
+        // `countMatchedSummaries`), never by id prefix — a leftover `47-1` summary
+        // must not survive because a live `47-10` plan starts with `47-1`. Rows
+        // match the id up to a boundary (`planRowPattern`), so `47-1` never ticks
+        // `47-10-PLAN.md`.
         const tickableSummaries = phaseInfo.summaries
             .map((summaryFile) => ({ summaryFile, planId: summaryFile.replace('-SUMMARY.md', '').replace('SUMMARY.md', '') }))
-            .filter(({ planId }) => planId !== '' && phaseInfo.plans.some((planFile) => planFile.startsWith(planId)));
+            .filter(({ summaryFile, planId }) => planId !== ''
+            && coreUtils.summaryPairsWithAnyPlan(phaseInfo.plans, summaryFile));
         for (const { planId } of tickableSummaries) {
-            const planEscaped = (0, pattern_cjs_1.escapeRegex)(planId);
-            const planCheckboxPattern = new RegExp(`(-\\s*\\[) (\\]\\s*(?:\\*\\*)?${planEscaped}(?:\\*\\*)?)`, 'i');
-            roadmapContent = roadmapContent.replace(planCheckboxPattern, '$1x$2');
+            roadmapContent = roadmapContent.replace(coreUtils.planRowPattern(planId), '$1x$2');
         }
         // Compute the active (post-</details>) region offset ONCE.  Both the
         // missing-plan DETECTION and the row INSERTION must use the same active
@@ -1292,23 +1454,19 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
         //
         // #4786: a plan row may be written WITH the `-PLAN.md` suffix (canonical
         // template form) or WITHOUT it (hand-written form: `- [x] 659-01 — desc`).
-        // The tick loop above keys on the bare planId stem with a PREFIX match
-        // (pre-existing, out of scope here), while detection required the full
-        // `-PLAN.md` filename — so every suffix-less row was counted missing and
-        // the insertion fired BESIDE the recognized list — 32 checkbox lines for
-        // 16 plans, exit 0. The stem arm below accepts the bare id only up to a
-        // boundary (whitespace / `:` / dashes / `-PLAN.md` / `.md` / `**` / `)`),
-        // so `5-011` never satisfies `5-01`. Deliberately NOT in the boundary set:
-        // `.` — a dotted sub-id (`5-01.5`) is a real distinct plan, and counting
-        // its row as 5-01's presence would suppress a genuine insertion.
+        // The tick loop above keys on the bare planId stem, while detection required
+        // the full `-PLAN.md` filename — so every suffix-less row was counted
+        // missing and the insertion fired BESIDE the recognized list — 32 checkbox
+        // lines for 16 plans, exit 0. The stem arm below accepts the bare id only
+        // up to the SAME boundary the tick loop uses (`planRowPattern`, #5542), so
+        // `5-011` never satisfies `5-01` and a dotted sub-id (`5-01.5`) is a real
+        // distinct plan whose row does not count as 5-01's presence.
         const missingPlans = phaseInfo.plans.filter((planFile) => {
             const planEscaped = (0, pattern_cjs_1.escapeRegex)(planFile);
             if (new RegExp(`-\\s*\\[[x ]\\]\\s*(?:\\*\\*)?${planEscaped}`, 'i').test(activeRegion))
                 return false;
             const stem = planFile.replace(/-PLAN\.md$/i, '');
-            const stemEscaped = (0, pattern_cjs_1.escapeRegex)(stem);
-            const stemPresent = new RegExp(`-\\s*\\[[x ]\\]\\s*(?:\\*\\*)?${stemEscaped}(?=$|\\s|:|—|–|-PLAN\\.md|\\.md|\\*\\*|\\))`, 'i').test(activeRegion);
-            return !stemPresent;
+            return !coreUtils.planRowPattern(stem, { anyState: true }).test(activeRegion);
         });
         if (missingPlans.length > 0) {
             // Insert missing plan checklist rows (#1163).  We prefer to anchor to the
@@ -1354,9 +1512,7 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
                 // (#4741: same superseded-filtered tick list as the loop above — a
                 // pre-existing superseded row must stay unchecked on this path too).
                 for (const { planId } of tickableSummaries) {
-                    const planEscaped = (0, pattern_cjs_1.escapeRegex)(planId);
-                    const planCheckboxPattern = new RegExp(`(-\\s*\\[) (\\]\\s*(?:\\*\\*)?${planEscaped}(?:\\*\\*)?)`, 'i');
-                    roadmapContent = roadmapContent.replace(planCheckboxPattern, '$1x$2');
+                    roadmapContent = roadmapContent.replace(coreUtils.planRowPattern(planId), '$1x$2');
                 }
             }
         }
@@ -1393,7 +1549,7 @@ function cmdRoadmapUpdatePlanProgress(cwd, phaseNum, raw) {
         verification_stale_check_indeterminate: verificationStaleCheckIndeterminate,
     };
     if (updated) {
-        output({ updated: true, ...computed }, raw, `${summaryCount}/${planCount} ${status}`);
+        output(warnings.length > 0 ? { updated: true, ...computed, warnings } : { updated: true, ...computed }, raw, `${summaryCount}/${planCount} ${status}`);
     }
     else if (missingPhaseDetails) {
         // #4247: honest refusal — the reason names the real condition (the

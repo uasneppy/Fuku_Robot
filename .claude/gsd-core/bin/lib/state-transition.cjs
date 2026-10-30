@@ -30,6 +30,7 @@ exports.applyPreserveWhenUnchanged = applyPreserveWhenUnchanged;
 exports.applyStatePreservation = applyStatePreservation;
 exports.transitionCore = transitionCore;
 exports.sliceCurrentPositionSection = sliceCurrentPositionSection;
+exports.isStatePastPhase = isStatePastPhase;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const frontmatter = require("./frontmatter.cjs");
 const state_document_cjs_1 = require("./state-document.cjs");
@@ -37,6 +38,9 @@ const state_document_cjs_2 = require("./state-document.cjs");
 const markdown_sectionizer_cjs_1 = require("./markdown-sectionizer.cjs");
 const phase_lifecycle_cjs_1 = require("./phase-lifecycle.cjs");
 const pattern_cjs_1 = require("./pattern.cjs");
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- phase-id.cjs is an export= CommonJS module
+const phaseIdMod = require("./phase-id.cjs");
+const { comparePhaseNum } = phaseIdMod;
 // #4129: the completion-ratio kernel for the resync-arm ratchet's percent
 // (planning-scope's SCOPE — state-document's own dependency, no cycle here:
 // state-document never imports this module).
@@ -417,7 +421,41 @@ function createStateWriteIntent(transaction, init = {}) {
         err.code = 'STATE_WRITE_INTENT_TRANSACTION_REQUIRED';
         throw err;
     }
-    const assertions = Object.freeze((init.assertions ?? []).map((a) => Object.freeze({ field: a.field, requirement: a.requirement })));
+    // C2 (ADR-4629 §8.2): an unknown `requirement` is a construction error. §8.2
+    // judges only `'required'` assertions, so a mistyped value (`'Required'`)
+    // would otherwise be silently skipped: a fail-open verifier.
+    for (const a of init.assertions ?? []) {
+        if (a.requirement !== 'required' && a.requirement !== 'best-effort') {
+            const err = new Error(`createStateWriteIntent: assertion ${JSON.stringify(a.field)} has unknown requirement ` +
+                `${JSON.stringify(a.requirement)}; expected 'required' or 'best-effort' (ADR-4629 §8.1).`);
+            err.code = 'STATE_WRITE_INTENT_REQUIREMENT_INVALID';
+            throw err;
+        }
+    }
+    if (init.scope !== undefined && init.scope !== 'narrow' && init.scope !== 'broad') {
+        const err = new Error(`createStateWriteIntent: unknown scope ${JSON.stringify(init.scope)}; expected 'narrow' or 'broad' ` +
+            '(ADR-4629 §8.1).');
+        err.code = 'STATE_WRITE_INTENT_SCOPE_INVALID';
+        throw err;
+    }
+    // C2 (ADR-4629 §8.2): an unknown `target` is a construction error, never a
+    // silent fall-back to field semantics (a JS caller passing `'sections'`).
+    for (const a of init.assertions ?? []) {
+        if (a.target !== undefined && a.target !== 'field' && a.target !== 'section') {
+            const err = new Error(`createStateWriteIntent: assertion ${JSON.stringify(a.field)} has unknown target ` +
+                `${JSON.stringify(a.target)}; expected 'field' or 'section' (ADR-4629 §8.2).`);
+            err.code = 'STATE_WRITE_INTENT_TARGET_INVALID';
+            throw err;
+        }
+    }
+    // C2 (ADR-4629 §8.2): `target` / `value` are copied only when the caller set
+    // them, so a C1-shaped assertion stays exactly `{ field, requirement }`.
+    const assertions = Object.freeze((init.assertions ?? []).map((a) => Object.freeze({
+        field: a.field,
+        requirement: a.requirement,
+        ...(a.target !== undefined ? { target: a.target } : {}),
+        ...(a.value !== undefined ? { value: a.value } : {}),
+    })));
     return Object.freeze({
         ...transaction,
         assertions,
@@ -609,17 +647,23 @@ function mergeResyncProgressRatchet(curatedRecord, derivedRecord) {
             merged[key] = value;
         }
     }
-    if ((0, state_document_cjs_2.toFiniteNumber)(derivedRecord.percent) !== null) {
-        const recomputed = (0, state_document_cjs_2.computeProgressPercent)((0, state_document_cjs_2.toFiniteNumber)(merged.completed_plans), (0, state_document_cjs_2.toFiniteNumber)(merged.total_plans), (0, state_document_cjs_2.toFiniteNumber)(merged.completed_phases), (0, state_document_cjs_2.toFiniteNumber)(merged.total_phases), planningScopeMod.SCOPE.COMPLETE);
-        // Same verbatim rule for percent: assign only when the recomputed value
-        // numerically differs, so a string-spelled derived percent ("67") is not
-        // churned into a number-spelled 67 (phantom-divergence noise, not a
-        // change).
-        if (recomputed !== null && recomputed !== (0, state_document_cjs_2.toFiniteNumber)(merged.percent)) {
-            merged.percent = recomputed;
-        }
-    }
+    recomputeMergedProgressPercent(merged, derivedRecord);
     return merged;
+}
+/**
+ * Make `merged.percent` the progress computation over the counters `merged` actually carries (#5619,
+ * #4129). Only when the derived side measured a percent: a derivation that withheld one (an incomplete
+ * scope, #1761/#3217) stays withheld, never invented. Same verbatim rule as the counters: assign only
+ * when the recomputed value numerically differs, so a string-spelled derived percent ("67") is not
+ * churned into a number-spelled 67 (phantom-divergence noise, not a change).
+ */
+function recomputeMergedProgressPercent(merged, derivedRecord) {
+    if ((0, state_document_cjs_2.toFiniteNumber)(derivedRecord.percent) === null)
+        return;
+    const recomputed = (0, state_document_cjs_2.computeProgressPercent)((0, state_document_cjs_2.toFiniteNumber)(merged.completed_plans), (0, state_document_cjs_2.toFiniteNumber)(merged.total_plans), (0, state_document_cjs_2.toFiniteNumber)(merged.completed_phases), (0, state_document_cjs_2.toFiniteNumber)(merged.total_phases), planningScopeMod.SCOPE.COMPLETE);
+    if (recomputed !== null && recomputed !== (0, state_document_cjs_2.toFiniteNumber)(merged.percent)) {
+        merged.percent = recomputed;
+    }
 }
 /**
  * Executor for `preservation: 'preserve-always'` (ADR-3408 §8.1). Only
@@ -685,18 +729,23 @@ function applyPreserveAlways(field, cls, ctx) {
             // completed after the plan count grew) — ratcheting UP only, never
             // deriving downward (preserves the #3242 curated-progress protection
             // for cases unrelated to plan-count growth, e.g. a deleted SUMMARY).
-            // percent also takes the derived value — the resync recomputed it from
-            // disk counts, and a stale curated percent would be incoherent against
-            // the ratcheted-up completed counts (e.g. 54/54 at 93%).
+            // percent is recomputed over the counters actually written (#5619): the
+            // disk-derived percent is only coherent with the DERIVED counters, and a
+            // stale curated percent would be incoherent against the ratcheted-up
+            // completed counts (e.g. 54/54 at 93%).
             const ratchetUpKeys = new Set(['completed_plans', 'completed_phases']);
             for (const [key, value] of Object.entries(curatedRecord)) {
                 if (key === 'total_plans' || key === 'total_phases' || key === 'percent')
                     continue;
                 if (ratchetUpKeys.has(key)) {
-                    const derivedNum = typeof derivedRecord[key] === 'number' ? derivedRecord[key] : -Infinity;
-                    const curatedNum = typeof value === 'number' ? value : -Infinity;
+                    // Frontmatter scalars arrive as STRINGS ("2", not 2): coerce through
+                    // `toFiniteNumber`, never a `typeof === 'number'` test (#5619 — that
+                    // test made both sides -Infinity and the ratchet unreachable).
+                    const derivedNum = (0, state_document_cjs_2.toFiniteNumber)(derivedRecord[key]) ?? -Infinity;
+                    const curatedNum = (0, state_document_cjs_2.toFiniteNumber)(value) ?? -Infinity;
                     // Take the derived value only when it ratchets up (strictly
-                    // greater — #2969's `>` not `>=`); else keep curated.
+                    // greater — #2969's `>` not `>=`); else keep curated, with its
+                    // spelling, on a tie too.
                     if (derivedNum > curatedNum)
                         continue;
                     merged[key] = value;
@@ -706,6 +755,7 @@ function applyPreserveAlways(field, cls, ctx) {
                 }
             }
         }
+        recomputeMergedProgressPercent(merged, derivedRecord);
         next = merged;
     }
     else {
@@ -842,7 +892,36 @@ exports.STATE_MD_SECTIONS = {
  * Phases 2–7 add cases for the remaining 9 intent kinds. A missing case is
  * a compile-time error (the function would not return on that path).
  */
+/**
+ * The transitions that rewrite single-line body fields (`Status:`, `Current focus:`, `Plan:` …) with
+ * plain line-anchored patterns. Those patterns match a fenced EXAMPLE of a field as readily as the
+ * live line (#5460), so these run over the document body with fenced blocks hidden.
+ * `milestone*`, `prune` and `rebuild` restructure sections or re-derive the document and are not
+ * field-by-field writers.
+ */
+const FENCE_MASKED_TRANSITIONS = new Set([
+    'beginPhase', 'advancePlan', 'completePhase', 'plannedPhase', 'patch', 'update', 'sync',
+]);
 function transitionCore(content, intent, deps) {
+    if (!FENCE_MASKED_TRANSITIONS.has(intent.kind))
+        return transitionCoreUnmasked(content, intent, deps);
+    // Only the body is masked: a fence opener inside a frontmatter block scalar must not swallow the
+    // closing `---` (the frontmatter is not where the live fields are written).
+    const body = stripFrontmatter(content);
+    if (!content.endsWith(body))
+        return transitionCoreUnmasked(content, intent, deps);
+    const prefix = content.slice(0, content.length - body.length);
+    const fenceMask = (0, markdown_sectionizer_cjs_1.maskFences)(body);
+    const result = transitionCoreUnmasked(prefix + fenceMask.masked, intent, deps);
+    const restored = fenceMask.restore(result.content);
+    // Cannot happen short of a writer bug (a transition dropped or duplicated a placeholder line); a
+    // refusal is the one outcome that cannot report a rewrite that did not land.
+    if (restored === null) {
+        throw new Error(`${intent.kind}: fenced code blocks could not be restored after the edit; refusing to write STATE.md`);
+    }
+    return { ...result, content: restored };
+}
+function transitionCoreUnmasked(content, intent, deps) {
     switch (intent.kind) {
         case 'beginPhase':
             return beginPhaseCore(content, intent, deps);
@@ -888,6 +967,8 @@ function transitionCore(content, intent, deps) {
  */
 function beginPhaseCore(content, intent, deps) {
     const updated = [];
+    // #4945: a re-entry whose earlier plans already have summaries starts at the first plan still to run.
+    const startPlan = intent.startPlan && intent.startPlan > 0 ? Math.floor(intent.startPlan) : 1;
     // #1255: body-field replacements operate on body only (frontmatter stripped),
     // not on the full content. The YAML `status:` key matches `^Status:\s*`
     // before the body pipe-table row if full content is passed.
@@ -943,7 +1024,7 @@ function beginPhaseCore(content, intent, deps) {
         if (intent.phaseName) {
             tryField('Current Phase Name', intent.phaseName);
         }
-        tryField('Current Plan', '1');
+        tryField('Current Plan', String(startPlan));
         if (intent.planCount) {
             tryField('Total Plans in Phase', String(intent.planCount));
         }
@@ -962,14 +1043,21 @@ function beginPhaseCore(content, intent, deps) {
         // end-of-line (inert here since `.` never crosses line terminators
         // without `/s`, which is not set).
         const focusPattern = /^([ \t]*\*\*Current focus:\*\*[ \t]*)(.*)$/im;
-        if (focusPattern.test(body)) {
-            body = body.replace(focusPattern, (_match, prefix) => `${prefix}${focusLabel}`);
+        const focusMatch = focusPattern.exec(body);
+        if (focusMatch) {
+            // #4945: a value an author wrapped onto further lines is replaced whole, so its tail is not
+            // left behind under the new value. The lines that count are the ones `state validate` already
+            // reports as a field's continuation (stops at a blank line, a heading, a list item, a table
+            // row, a fence or a sibling field). An empty first line has no value to continue.
+            const valueEnd = focusMatch.index + focusMatch[0].length;
+            const end = focusMatch[2].trim() === '' ? valueEnd : (0, state_document_cjs_2.fieldContinuationEnd)(body, valueEnd);
+            body = body.slice(0, focusMatch.index) + focusMatch[1] + focusLabel + body.slice(end);
             updated.push('Current focus');
         }
         // ## Current Position section mutation (#1104, #1365).
         // `locateCurrentPosition` (fence-aware, tokenizeHeadings-based) locates
         // the section; mirrors state.cts:2261-2324 byte-for-behaviour.
-        body = mutateCurrentPositionFirstTime(body, intent, today, updated);
+        body = mutateCurrentPositionFirstTime(body, { ...intent, startPlan }, today, updated);
     }
     else {
         // Resume path: only update Last activity timestamp in Current Position
@@ -1061,7 +1149,9 @@ function mutateCurrentPositionFirstTime(body, intent, today, updated) {
     const span = locateCurrentPosition(body);
     if (span === null)
         return body;
-    let sectionBody = body.slice(span.start, span.end);
+    // #5460: the section's fenced examples are hidden while the live lines are rewritten.
+    const fenceMask = (0, markdown_sectionizer_cjs_1.maskFences)(body.slice(span.start, span.end));
+    let sectionBody = fenceMask.masked;
     // Phase line — inline first, then pipe-table fallback (#1257).
     const phaseLabel = `${intent.phaseNumber}${intent.phaseName ? ` (${intent.phaseName})` : ''} — EXECUTING`;
     if (/^Phase:/m.test(sectionBody)) {
@@ -1073,7 +1163,7 @@ function mutateCurrentPositionFirstTime(body, intent, today, updated) {
             sectionBody = replaced;
     }
     // Plan line.
-    const planValue = `1 of ${intent.planCount || '?'}`;
+    const planValue = `${intent.startPlan} of ${intent.planCount || '?'}`;
     if (/^Plan:/m.test(sectionBody)) {
         sectionBody = sectionBody.replace(/^Plan:.*$/m, `Plan: ${planValue}`);
     }
@@ -1103,8 +1193,11 @@ function mutateCurrentPositionFirstTime(body, intent, today, updated) {
         if (replaced !== null)
             sectionBody = replaced;
     }
+    const restored = fenceMask.restore(sectionBody);
+    if (restored === null)
+        return body;
     updated.push('Current Position');
-    return body.slice(0, span.start) + sectionBody + body.slice(span.end);
+    return body.slice(0, span.start) + restored + body.slice(span.end);
 }
 /**
  * Resume ## Current Position mutation: only update Last activity line
@@ -1115,7 +1208,8 @@ function mutateCurrentPositionResume(body, intent, today, updated) {
     const span = locateCurrentPosition(body);
     if (span === null)
         return body;
-    let sectionBody = body.slice(span.start, span.end);
+    const fenceMask = (0, markdown_sectionizer_cjs_1.maskFences)(body.slice(span.start, span.end));
+    let sectionBody = fenceMask.masked;
     const resumeActivity = `Last activity: ${today} — Phase ${intent.phaseNumber} execution resumed (wave continue)`;
     if (/^Last activity:/im.test(sectionBody)) {
         sectionBody = sectionBody.replace(/^Last activity:.*$/im, resumeActivity);
@@ -1130,7 +1224,10 @@ function mutateCurrentPositionResume(body, intent, today, updated) {
             updated.push('Last activity (resume)');
         }
     }
-    return body.slice(0, span.start) + sectionBody + body.slice(span.end);
+    const restored = fenceMask.restore(sectionBody);
+    if (restored === null)
+        return body;
+    return body.slice(0, span.start) + restored + body.slice(span.end);
 }
 const PLAN_SHAPE_N = /^(\d+)(?:\s.*)?$/;
 const PLAN_SHAPE_N_OF_M = /^(\d+)\s+of\s+(\d+)(?:\s.*)?$/;
@@ -1187,7 +1284,8 @@ function mutateCurrentPositionForAdvance(content, fields, statusDefaults, lastAc
     const span = locateCurrentPosition(content);
     if (span === null)
         return content;
-    let sectionBody = content.slice(span.start, span.end);
+    const fenceMask = (0, markdown_sectionizer_cjs_1.maskFences)(content.slice(span.start, span.end));
+    let sectionBody = fenceMask.masked;
     let mutated = false;
     // #3395: Phase is always replaced when a caller passes it — system-derived,
     // not executor-authored (same rule as Plan below). plannedPhaseCore uses
@@ -1300,7 +1398,10 @@ function mutateCurrentPositionForAdvance(content, fields, statusDefaults, lastAc
     }
     if (!mutated)
         return content;
-    return content.slice(0, span.start) + sectionBody + content.slice(span.end);
+    const restored = fenceMask.restore(sectionBody);
+    if (restored === null)
+        return content;
+    return content.slice(0, span.start) + restored + content.slice(span.end);
 }
 // ----------------------------------------------------------------------------
 // advancePlan — intent implementation (Phase 2)
@@ -1575,9 +1676,53 @@ function advancePlanCore(content, deps) {
         data: { advanced: true, previous_plan: currentPlan, current_plan: newPlan, total_plans: totalPlans },
     };
 }
-// ----------------------------------------------------------------------------
-// completePhase — intent implementation (Phase 3)
-// ----------------------------------------------------------------------------
+/**
+ * #4824: Status / Current Plan / Stopped-at wording for the phase a
+ * completion hands off to. The historical `Ready to plan` is only true for a
+ * phase with no plans; a phase that already has PLANs routes to execution,
+ * and one whose plans all have SUMMARYs awaits verification — never back to
+ * `/gsd-plan-phase`. Which phase is selected stays #4078's rule.
+ */
+function nextPhaseWording(disk) {
+    switch (disk?.status) {
+        case 'PLANNED':
+            return { status: 'Ready to execute', currentPlan: 'Not started', stoppedAt: 'ready to execute' };
+        case 'IN_PROGRESS':
+            return { status: 'Ready to execute', currentPlan: String(disk.summaryCount + 1), stoppedAt: 'ready to execute' };
+        case 'EXECUTED':
+        case 'NEEDS_REVIEW':
+            return {
+                status: 'Phase complete — ready for verification',
+                currentPlan: String(disk.planCount),
+                stoppedAt: 'ready to verify',
+            };
+        default:
+            return { status: 'Ready to plan', currentPlan: 'Not started', stoppedAt: 'ready to plan' };
+    }
+}
+/**
+ * #5165: is STATE.md already positioned PAST phase `phaseNum`? True when its
+ * current phase (frontmatter `current_phase`, else the body `Current Phase` /
+ * `Phase` field's leading phase token) compares greater than `phaseNum`.
+ * Re-completing a phase STATE has already moved past must not rewind the
+ * position; the caller combines this with "the phase is already complete in
+ * ROADMAP.md" so a first-time out-of-order completion (#2028) still
+ * transitions. An unparseable or absent current phase is "not past".
+ */
+function isStatePastPhase(content, phaseNum, sourcePath) {
+    const fm = extractFrontmatter(content, sourcePath);
+    const fromFm = fm['current_phase'];
+    let raw = typeof fromFm === 'string' || typeof fromFm === 'number' ? String(fromFm) : null;
+    if (raw === null || raw.trim() === '') {
+        const body = stripFrontmatter(content);
+        raw = (0, state_document_cjs_1.stateExtractField)(body, 'Current Phase') || (0, state_document_cjs_1.stateExtractField)(body, 'Phase') || null;
+    }
+    // `Phase 4` / `phase 4 of 9` name phase 4 as surely as `4 of 9` does.
+    const m = raw === null ? null : /^\s*(?:phase\s+)?(\d+(?:\.\d+)*)/i.exec(raw);
+    if (!m)
+        return false;
+    return comparePhaseNum(m[1], String(phaseNum)) > 0;
+}
 /**
  * Apply a `completePhase` transition to STATE.md content.
  *
@@ -1585,7 +1730,9 @@ function advancePlanCore(content, deps) {
  * (phase.cts) onto the substrate. Owns the field-classification-governed body
  * mutations: Current Phase (preserving the `of total` shape and phase name),
  * Current Phase Name, Status (`All phases complete` on the last phase, else
- * `Ready to plan` per ADR-2207), Current Plan (`Not started`), Last Activity + Description,
+ * `Ready to plan` per ADR-2207 — or, #4824, the next phase's disk-derived
+ * wording when it is already planned or executed), Current Plan (`Not started`
+ * unless the next phase is in flight), Last Activity + Description,
  * and the Completed/Total Phases + Progress percent block (re-derived from the
  * roadmap via the injected `roadmapProvider`).
  *
@@ -1602,6 +1749,13 @@ function advancePlanCore(content, deps) {
 function completePhaseCore(content, intent, deps) {
     const updated = [];
     const today = deps.clock.localToday();
+    const nextWording = nextPhaseWording(intent.isLastPhase ? null : intent.nextPhaseDisk ?? null);
+    // #5165: the milestone the caller resolved (ROADMAP-bound identity first) wins;
+    // else the milestone STATE asserts. It scopes the roadmap-derived counters
+    // below to that milestone's Progress-table rows, the same milestone
+    // `phase complete` scopes its frontmatter progress to.
+    const currentMilestone = (0, phase_lifecycle_cjs_1.milestoneVersionOf)(intent.milestone)
+        ?? (0, phase_lifecycle_cjs_1.milestoneVersionOf)(extractFrontmatter(content, deps.sourcePath)['milestone']);
     // Consult the field-classification table for the frontmatter keys this
     // transition touches (same guard beginPhaseCore applies). A missing row is a
     // substrate defect — fail loudly rather than silently re-encoding policy.
@@ -1665,7 +1819,7 @@ function completePhaseCore(content, intent, deps) {
     // Status — `All phases complete` on the final phase (ADR-2207), otherwise
     // `Ready to plan`. Milestone termination (`<version> milestone complete`) is
     // owned solely by the milestone-close verb (milestoneCompleteCore).
-    const statusValue = intent.isLastPhase ? 'All phases complete' : 'Ready to plan';
+    const statusValue = intent.isLastPhase ? 'All phases complete' : nextWording.status;
     const statusAfter = (0, state_document_cjs_1.stateReplaceFieldWithFallback)(body, 'Status', null, statusValue);
     if (statusAfter !== body) {
         body = statusAfter;
@@ -1682,10 +1836,10 @@ function completePhaseCore(content, intent, deps) {
     let planAfter;
     const positionScope = (0, state_document_cjs_1.stateCurrentPositionSlice)(body);
     if (positionScope !== null) {
-        planAfter = (0, markdown_sectionizer_cjs_1.withSection)(body, (h) => (h.level === 2 || h.level === 3) && h.text.trim().toLowerCase() === 'current position', (sectionBody) => (0, state_document_cjs_1.stateReplaceFieldWithFallback)(sectionBody, 'Current Plan', 'Plan', 'Not started'), { levelBounded: true });
+        planAfter = (0, markdown_sectionizer_cjs_1.withSection)(body, (h) => (h.level === 2 || h.level === 3) && h.text.trim().toLowerCase() === 'current position', (sectionBody) => (0, state_document_cjs_1.stateReplaceFieldWithFallback)(sectionBody, 'Current Plan', 'Plan', nextWording.currentPlan), { levelBounded: true });
     }
     else {
-        planAfter = (0, state_document_cjs_1.stateReplaceFieldWithFallback)(body, 'Current Plan', 'Plan', 'Not started');
+        planAfter = (0, state_document_cjs_1.stateReplaceFieldWithFallback)(body, 'Current Plan', 'Plan', nextWording.currentPlan);
     }
     if (planAfter !== body) {
         body = planAfter;
@@ -1729,7 +1883,7 @@ function completePhaseCore(content, intent, deps) {
     // milestone termination wording stays owned by milestoneCompleteCore.
     const stoppedAtLine = intent.isLastPhase
         ? `Phase ${intent.phaseNum} complete — all phases complete`
-        : `Phase ${intent.phaseNum} complete${intent.nextPhaseNum ? `, ready to plan Phase ${intent.nextPhaseNum}` : ''}`;
+        : `Phase ${intent.phaseNum} complete${intent.nextPhaseNum ? `, ${nextWording.stoppedAt} Phase ${intent.nextPhaseNum}` : ''}`;
     const stoppedAfter = (0, state_document_cjs_1.stateReplaceFieldInSession)(body, 'Stopped At', 'Stopped at', stoppedAtLine);
     if (stoppedAfter !== body) {
         body = stoppedAfter;
@@ -1740,15 +1894,27 @@ function completePhaseCore(content, intent, deps) {
     // Only runs when a Completed Phases field exists (the existing guard).
     const completedRaw = (0, state_document_cjs_1.stateExtractField)(body, 'Completed Phases');
     if (completedRaw !== null) {
-        let newCompleted = parseInt(completedRaw, 10);
+        const recordedCompleted = parseInt(completedRaw, 10);
+        let newCompleted = recordedCompleted;
         let derivedTotalPhases = null;
         const roadmapContent = deps.roadmapProvider ? deps.roadmapProvider() : null;
         if (roadmapContent) {
-            const derived = (0, phase_lifecycle_cjs_1.deriveProgressFromRoadmap)(roadmapContent);
-            if (derived.completedPhases !== null)
-                newCompleted = derived.completedPhases;
-            if (derived.totalPhases !== null)
-                derivedTotalPhases = derived.totalPhases;
+            const derived = (0, phase_lifecycle_cjs_1.deriveProgressFromRoadmap)(roadmapContent, currentMilestone);
+            // #4901: completed counters only ratchet up, like the frontmatter twin
+            // (applyAuthoritativeProgressSubkeys, completedOnlyRaise). A derivation
+            // that lands BELOW the recorded counter read a narrower scope than the
+            // counter spans (e.g. the first `## Progress` section of a multi-milestone
+            // roadmap), so its total is just as suspect: keep the recorded counter and
+            // fall back to the recorded Total Phases for the percent below.
+            const derivedLowered = derived.completedPhases !== null
+                && Number.isFinite(recordedCompleted)
+                && derived.completedPhases < recordedCompleted;
+            if (!derivedLowered) {
+                if (derived.completedPhases !== null)
+                    newCompleted = derived.completedPhases;
+                if (derived.totalPhases !== null)
+                    derivedTotalPhases = derived.totalPhases;
+            }
         }
         // #3057 B9: only mark 'Completed Phases' updated when the text actually
         // changed. `stateReplaceField` returns the full (re-)substituted content
@@ -1854,8 +2020,16 @@ function plannedPhaseCore(content, intent, deps) {
     // Phase is system-derived, always replaced (Knuth invariant does not apply);
     // Status / Last activity stay template-aware.
     const beforePos = body;
+    // #5369: with no --name the label reuses the curated frontmatter name (when it is a real one), so the
+    // body line and the frontmatter agree on it (the #3834 reassert keeps that name in frontmatter). A
+    // status fragment a pre-fix write left there is never copied back into the name slot.
+    const curatedName = existingFm['current_phase_name'];
+    const labelName = intent.phaseName
+        ?? (typeof curatedName === 'string' && curatedName.trim() !== '' && !phaseIdMod.isPlannedPhaseStatusPhrase(curatedName)
+            ? curatedName.trim()
+            : null);
     body = mutateCurrentPositionForAdvance(body, {
-        phase: `${intent.phaseNumber}${intent.phaseName ? ` (${intent.phaseName})` : ''} — READY TO EXECUTE`,
+        phase: `${intent.phaseNumber}${labelName ? ` (${labelName})` : ''} — READY TO EXECUTE`,
         status: 'Ready to execute',
         lastActivity: `${today} — Phase ${intent.phaseNumber} planning complete`,
     }, statusDefaults, lastActivityDefaults);

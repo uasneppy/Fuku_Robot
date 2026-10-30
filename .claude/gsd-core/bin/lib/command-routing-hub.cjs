@@ -15,6 +15,7 @@
  *           | { ok: false, kind: 'InvalidArgs',     arg: string, reason: string }
  *           | { ok: false, kind: 'HandlerRefusal',  reason: string }
  *           | { ok: false, kind: 'HandlerFailure',  message: string, cause?: Error }
+ *           | { ok: false, kind: 'VerificationStatusInvalid', message: string, reason: string, file: string }
  *
  * Invariants:
  *   - Hub always routes through CJS handlers. There is no SDK path (#175).
@@ -44,6 +45,31 @@ const { createNoOpLogger } = observabilityLogger;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cliExitModule = require("./cli-exit.cjs");
 const { ExitError } = cliExitModule;
+let _verification = null;
+/**
+ * #5118: the verification-status owner, required lazily (the hub is loaded by
+ * every command router; the owner's I/O graph is needed only when a handler
+ * actually throws). Its exported error code is the one matched below.
+ */
+function verificationOwner() {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    if (!_verification)
+        _verification = require('./verification.cjs');
+    return _verification;
+}
+/**
+ * #5118: a handler that threw verification.cts's VerificationStatusError (a
+ * report `status` outside the closed enum). Matched by the owner's exported
+ * code constant, never a restated literal.
+ */
+function asVerificationStatusError(err) {
+    if (!(err instanceof Error))
+        return null;
+    const code = err.code;
+    if (typeof code !== 'string' || code !== verificationOwner().VERIFICATION_STATUS_ERROR_CODE)
+        return null;
+    return err;
+}
 // ─── Error kind constants ─────────────────────────────────────────────────────
 /**
  * Closed error-kind enum. Export as a frozen object so callers can switch on
@@ -63,6 +89,13 @@ const ERROR_KINDS = Object.freeze({
     HandlerRefusal: 'HandlerRefusal',
     /** A handler threw an unexpected exception. */
     HandlerFailure: 'HandlerFailure',
+    /**
+     * #5118: a handler read a verification report whose `status` is outside the
+     * closed enum. The kind is PascalCase like every other (key === value); the
+     * Result carries the error's own ERROR_REASON in `reason`, so the CLI adapter
+     * fails with `error(message, reason)` and restates nothing.
+     */
+    VerificationStatusInvalid: 'VerificationStatusInvalid',
 });
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 /**
@@ -117,6 +150,9 @@ function makeHandlerFailure(message, cause) {
     }
     return Object.freeze(obj);
 }
+function makeVerificationStatusInvalid(message, reason, file) {
+    return Object.freeze({ ok: false, kind: ERROR_KINDS.VerificationStatusInvalid, message, reason, file });
+}
 // ─── Handler-return shape validator (Finding 1) ───────────────────────────────
 /**
  * Required payload fields per ok:false kind.
@@ -140,6 +176,10 @@ const _VARIANT_SCHEMA = {
     HandlerFailure: {
         required: ['message'],
         allowed: new Set(['ok', 'kind', 'message', 'cause']),
+    },
+    [ERROR_KINDS.VerificationStatusInvalid]: {
+        required: ['message', 'reason', 'file'],
+        allowed: new Set(['ok', 'kind', 'message', 'reason', 'file']),
     },
 };
 /**
@@ -262,7 +302,14 @@ function createHub({ cjsRegistry, manifest, logger } = {}) {
             if (err instanceof ExitError) {
                 throw err;
             }
-            if (err instanceof Error) {
+            // #5118: an out-of-set verification report status is a pure Result
+            // carrying the error's own reason — never a reason-less HandlerFailure,
+            // never a rethrow.
+            const statusError = asVerificationStatusError(err);
+            if (statusError) {
+                result = makeVerificationStatusInvalid(statusError.message, statusError.reason, statusError.file);
+            }
+            else if (err instanceof Error) {
                 result = makeHandlerFailure(err.message, err);
             }
             else {

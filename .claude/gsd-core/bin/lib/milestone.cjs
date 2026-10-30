@@ -40,6 +40,7 @@ const { publishStateContract } = stateContract;
 const phaseIdMod = require("./phase-id.cjs");
 const { normalizePhaseName, matchPhaseDirs, isSentinelPhaseId, isSentinelPhaseDir, buildPhaseHeadingScanRegex, PHASE_HEADING_BASELINE } = phaseIdMod;
 const pattern_cjs_1 = require("./pattern.cjs");
+const milestone_release_map_cjs_1 = require("./milestone-release-map.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const roadmapParserMod = require("./roadmap-parser.cjs");
 const { getMilestonePhaseFilter, extractCurrentMilestone, getMilestoneInfo, sliceMilestoneWindow, } = roadmapParserMod;
@@ -63,7 +64,7 @@ const { extractFrontmatter } = frontmatterMod;
 // divergence signal). Routed through the single write-seam composition
 // (`syncAndPreserveStateMd`) instead, under `withStateLock` — see
 // `cmdMilestoneComplete`'s own STATE.md-update block for the full rationale.
-const { syncAndPreserveStateMd, withStateLock, readModifyWriteStateMd } = stateMod;
+const { syncAndPreserveStateMd, withStateLock, readModifyWriteStateMd, assertVerificationReportsReadable } = stateMod;
 // #2288 security: a milestone version label becomes a filesystem directory
 // component (`milestones/<label>-phases/`) into which phase directories are
 // MOVED. Any label used as a path segment must be a safe version token —
@@ -524,6 +525,41 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
     const phasesDir = planningPaths(cwd).phases;
     const today = clock_cjs_1.realClock.localToday();
     const milestoneName = options.name || version;
+    // #5706 (epic #3628): validate the caller-supplied release map BEFORE any
+    // read-for-decision or write below, so a bad map leaves the tree untouched
+    // (no archive directory, no MILESTONES.md or STATE.md change). An archived
+    // map is a recorded value: a differing map for an already-archived version is
+    // refused rather than silently overwritten; an identical one is left as is.
+    let releaseMap = null;
+    let releaseMapFile = null;
+    let releaseMapNeedsWrite = false;
+    if (typeof options.releaseMap === 'string') {
+        const loaded = (0, milestone_release_map_cjs_1.loadReleaseMapFile)(node_path_1.default.resolve(cwd, options.releaseMap));
+        if (!loaded.ok) {
+            error(`milestone complete: invalid --release-map — nothing has been changed.\n${loaded.errors.map((e) => `  - ${e}`).join('\n')}`);
+        }
+        else {
+            releaseMap = loaded.map;
+            releaseMapFile = (0, milestone_release_map_cjs_1.releaseMapArchivePath)(archiveDir, version);
+            const serialized = (0, milestone_release_map_cjs_1.serializeReleaseMapArchive)(version, releaseMap);
+            let existingText = null;
+            try {
+                existingText = node_fs_1.default.readFileSync(releaseMapFile, 'utf-8');
+            }
+            catch (e) {
+                if (e.code !== 'ENOENT') {
+                    error(`milestone complete: ${node_path_1.default.basename(releaseMapFile)} already exists and cannot be read — nothing has been changed.`);
+                }
+            }
+            if (existingText !== null && existingText !== serialized) {
+                error(`milestone complete: ${node_path_1.default.basename(releaseMapFile)} already exists with a different release map; the archived map is a recorded value and is not overwritten — nothing has been changed.`);
+            }
+            releaseMapNeedsWrite = existingText === null;
+        }
+    }
+    const releaseMapReport = releaseMap && releaseMapFile
+        ? { path: node_path_1.default.relative(cwd, releaseMapFile).split(node_path_1.default.sep).join('/'), entries: releaseMap.length }
+        : null;
     // ADR-3408 §8.5 / #3469: "liberal but visible" — when the write-seam
     // composition's preservation stage restores a curated frontmatter value
     // over a disagreeing freshly-derived one, that divergence is surfaced
@@ -860,6 +896,7 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
                 phases_archive_skipped: phasesArchiveSkippedForScope,
                 phases_archive_skip_reason: phasesArchiveSkipReason,
                 quick: quickDirsToArchive,
+                ...(releaseMapReport ? { release_map: { target: releaseMapReport.path, entries: releaseMapReport.entries } } : {}),
             },
             would_update: {
                 milestones_md: node_path_1.default.relative(cwd, milestonesPath).split(node_path_1.default.sep).join('/'),
@@ -869,6 +906,15 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
         output(dryRunResult, raw);
         return;
     }
+    // #5118 (no write before the error): the STATE.md update further down
+    // rebuilds the frontmatter from every phase's report and throws on a
+    // `status` outside the closed set — AFTER the archive directory, the
+    // archived ROADMAP/REQUIREMENTS copies, MILESTONES.md and the moved audit
+    // and quick-task files. Validate first, so the refusal leaves the tree
+    // untouched.
+    if (node_fs_1.default.existsSync(statePath)) {
+        assertVerificationReportsReadable((0, shell_command_projection_cjs_1.platformReadSync)(statePath) || '', cwd);
+    }
     // Ensure archive directory exists. Deliberately placed AFTER the dry-run
     // early return and every refusal/guard above (missingExplicitVersion, the
     // scope refusal, the unstarted-phase guard) — #3184 review finding: this
@@ -876,6 +922,10 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
     // archive directory behind. Reaching this point means the run is
     // committed to mutating.
     (0, shell_command_projection_cjs_1.platformEnsureDir)(archiveDir);
+    // #5706: archive the validated release map by recorded value.
+    if (releaseMap && releaseMapFile && releaseMapNeedsWrite) {
+        (0, shell_command_projection_cjs_1.platformWriteSync)(releaseMapFile, (0, milestone_release_map_cjs_1.serializeReleaseMapArchive)(version, releaseMap));
+    }
     // Archive ROADMAP.md
     if (node_fs_1.default.existsSync(roadmapPath)) {
         const roadmapContent = node_fs_1.default.readFileSync(roadmapPath, 'utf-8');
@@ -900,7 +950,7 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
     }
     // Create/append MILESTONES.md entry
     const accomplishmentsList = accomplishments.map((a) => `- ${a}`).join('\n');
-    const milestoneEntry = `## ${version} ${milestoneName} (Shipped: ${today})\n\n**Phases completed:** ${phaseCount} phases, ${totalPlans} plans, ${totalTasks} tasks\n\n**Key accomplishments:**\n${accomplishmentsList || '- (none recorded)'}\n\n---\n\n`;
+    const milestoneEntry = `## ${version} ${milestoneName} (Shipped: ${today})\n\n**Phases completed:** ${phaseCount} phases, ${totalPlans} plans, ${totalTasks} tasks\n\n**Key accomplishments:**\n${accomplishmentsList || '- (none recorded)'}\n\n${releaseMap ? `${(0, milestone_release_map_cjs_1.renderReleaseMapMarkdown)(releaseMap)}\n` : ''}---\n\n`;
     // #3685: mirror requirementsUpdated's diff-tracking contract — the result
     // below used to report `milestones_updated: true` hardcoded, never
     // consulting whether the MILESTONES.md write actually changed anything.
@@ -1157,6 +1207,7 @@ function cmdMilestoneComplete(cwd, version, options, raw) {
         milestones_updated: milestonesUpdated,
         state_updated: stateUpdated,
         preservation_warnings: preservationWarnings,
+        ...(releaseMapReport ? { release_map: releaseMapReport } : {}),
     };
     output(result, raw);
     // #3227 (design doc §40 row 26 / "Not-corruption" rule): a refreshed
@@ -1701,6 +1752,15 @@ function cmdQuickArchive(cwd, version, options, raw) {
             archive_dir: toPosixRel(node_path_1.default.join(planningBase, 'milestones', `${version}-quick`)),
         }, raw);
         return;
+    }
+    // #5118 (no write before the error): the STATE.md reset below goes through
+    // `readModifyWriteStateMd`, whose frontmatter rebuild reads every phase's
+    // report and throws on a `status` outside the closed set — AFTER the quick
+    // task directories have been MOVED. Validate first, so the refusal leaves the
+    // tree untouched. Gated on there being anything to archive: a run that would
+    // move nothing never reaches that rebuild.
+    if (node_fs_1.default.existsSync(statePath) && listQuickTaskDirsForArchive(cwd).length > 0) {
+        assertVerificationReportsReadable(node_fs_1.default.readFileSync(statePath, 'utf-8'), cwd);
     }
     const quickArchiveResult = archiveQuickTaskDirectories(cwd, version);
     const warnings = [];

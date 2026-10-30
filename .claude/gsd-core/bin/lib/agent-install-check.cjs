@@ -328,8 +328,33 @@ function checkCodexModelPosture(runtime, projectRoot) {
 // derives its sandbox_mode from actually lives, in every install shape
 // (repo-dev tree or npm-global package, where the package still ships its
 // own agents/ alongside bin/ and gsd-core/).
-function _canonicalAgentSourceDir() {
-    return node_path_1.default.join(__dirname, '..', '..', '..', 'agents');
+//
+// #5496: "install-relative" has three shapes. This module compiles to
+// `<root>/gsd-core/bin/lib/`, so `<root>` is three parents up. In the repository
+// and the npm package the canonical sources are `<root>/agents`. In an INSTALLED
+// config dir `<root>/agents` holds the CONVERTED runtime copies (no `tools:`
+// declaration — every role then derived `read-only`, 26 false violations on a
+// clean Codex install) and the canonical sources are `<root>/gsd-core/agents`.
+// Prefer the nested directory when it actually holds agent sources; fall back to
+// `<root>/agents`. `root` is a parameter so each layout is testable.
+//
+// #5636: "holds agent sources" is a recognized agent file, `gsd-<name>.md` (every file in the shipped
+// roster) that is not a `.compact.md` variant. Any markdown would let a stray README in the nested
+// directory hide the real sources, so the posture check found no role's canonical file and skipped all.
+const CANONICAL_AGENT_SOURCE_FILE = /^gsd-.+\.md$/;
+function isCanonicalAgentSourceFile(entry) {
+    return CANONICAL_AGENT_SOURCE_FILE.test(entry) && !entry.endsWith('.compact.md');
+}
+function canonicalAgentSourceDir(root = node_path_1.default.join(__dirname, '..', '..', '..')) {
+    const nested = node_path_1.default.join(root, 'gsd-core', 'agents');
+    try {
+        if (node_fs_1.default.readdirSync(nested).some(isCanonicalAgentSourceFile))
+            return nested;
+    }
+    catch {
+        // Absent or unreadable: not this layout.
+    }
+    return node_path_1.default.join(root, 'agents');
 }
 /**
  * Validate installed Codex `.toml` agents' `sandbox_mode` against what each
@@ -384,7 +409,7 @@ function checkCodexSandboxPosture(runtime, projectRoot) {
             reason: POSTURE_REASON.AGENTS_DIR_MISSING,
         };
     }
-    const canonicalAgentsDir = _canonicalAgentSourceDir();
+    const canonicalAgentsDir = canonicalAgentSourceDir();
     // Same symlink guard as checkCodexModelPosture, same reason (never follow
     // an agents-dir symlink into an arbitrary file's content).
     const tomlFiles = node_fs_1.default
@@ -483,7 +508,10 @@ function agentFileExists(agentsDir, name, runtime) {
     // kimi requires BOTH the persona yaml and the prompt md (same as checkAgentsInstalled).
     const kimiYaml = node_path_1.default.join(agentsDir, 'subagents', `${name}.yaml`);
     const kimiPrompt = node_path_1.default.join(agentsDir, 'subagents', `${name}.md`);
-    return runtime === 'kimi' && node_fs_1.default.existsSync(kimiYaml) && node_fs_1.default.existsSync(kimiPrompt);
+    // #5169: descriptor-declared (`hostBehaviors.requiresSubagentPair`); a label
+    // that is not a registered runtime declares nothing, so it never requires the pair.
+    return (0, runtime_name_policy_cjs_1.hostBehaviorsFor)(runtime).requiresSubagentPair === true
+        && node_fs_1.default.existsSync(kimiYaml) && node_fs_1.default.existsSync(kimiPrompt);
 }
 /**
  * Resolve a per-plan `agent_hint` specialist name to a dispatchable subagent
@@ -530,6 +558,7 @@ module.exports = {
     checkAgentsInstalled,
     checkCodexModelPosture,
     checkCodexSandboxPosture,
+    canonicalAgentSourceDir,
     POSTURE_REASON,
     resolveAgentHint,
 };

@@ -27,11 +27,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sha256File = sha256File;
 exports.findPristineByHash = findPristineByHash;
+exports.isCleanRelativePosixPath = isCleanRelativePosixPath;
+exports.gitExec = gitExec;
 exports.findPristineInGit = findPristineInGit;
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 const node_crypto_1 = __importDefault(require("node:crypto"));
 const node_child_process_1 = require("node:child_process");
+const read_only_git_env_cjs_1 = require("./read-only-git-env.cjs");
 /**
  * SHA-256 hex digest of a file's raw bytes. Byte-for-byte the same digest
  * install.js fileHash() records into manifests and backup-meta.json.
@@ -125,6 +128,14 @@ const GIT_MAX_COMMITS_PER_FILE = 100;
 const GIT_SUBPROCESS_TIMEOUT_MS = 10_000;
 /** git log --format=%H output cap; 100 full shas are ~4 KB, this is headroom. */
 const GIT_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+/**
+ * #5105 review finding 1/4: shared containment guard AND the shared
+ * non-trimming `git` subprocess runner, exported so `uat.cts`'s
+ * `readBaselineAtHead` (byte-exact `git show HEAD:<path>` read) can route
+ * through the same bounded, `windowsHide`d, stderr-discarding call this
+ * module already uses, rather than maintaining a second private
+ * `execFileSync` wrapper that can drift from this one's timeout/maxBuffer.
+ */
 function isCleanRelativePosixPath(relPath) {
     if (!relPath || relPath.startsWith('/') || relPath.includes('\\') || relPath.includes('\0')) {
         return false;
@@ -134,13 +145,20 @@ function isCleanRelativePosixPath(relPath) {
 }
 function gitExec(gitDir, args) {
     return (0, node_child_process_1.execFileSync)('git', args, {
+        // windowsHide (#685): a console-window flash per git call would spam the
+        // user on Windows for what is a background, read-only history walk. Kept
+        // high in the options so the completeness guard's 400-char scan finds it.
+        windowsHide: true,
         cwd: gitDir,
         encoding: 'utf8',
+        // #5048: every call here is a history/objects walk that never opens the
+        // index, so the variable is inert today — set anyway so a future `status` /
+        // `diff` caller inherits it. The block is owned by
+        // src/read-only-git-env.cts and shared with every other read-only seam.
+        // Parity: tests/git-optional-locks-parity.test.cjs.
+        env: (0, read_only_git_env_cjs_1.readOnlyGitEnv)(),
         timeout: GIT_SUBPROCESS_TIMEOUT_MS,
         maxBuffer: GIT_MAX_BUFFER_BYTES,
-        // windowsHide (#685): a console-window flash per git call would spam the
-        // user on Windows for what is a background, read-only history walk.
-        windowsHide: true,
         // stderr is discarded: "file absent in commit" is an expected walk outcome,
         // not operator-visible diagnostics.
         stdio: ['ignore', 'pipe', 'ignore'],

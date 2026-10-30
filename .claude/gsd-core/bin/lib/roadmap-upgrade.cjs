@@ -12,7 +12,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
-const node_child_process_1 = require("node:child_process");
 const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const planningWorkspace = require("./planning-workspace.cjs");
@@ -34,6 +33,9 @@ const coreUtilsMod = require("./core-utils.cjs");
 const markdownSectionizerMod = require("./markdown-sectionizer.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const planScanMod = require("./plan-scan.cjs");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const stateMod = require("./state.cjs");
+const planning_document_cjs_1 = require("./planning-document.cjs");
 const { planningDir } = planningWorkspace;
 const { listAllPhaseDirs } = phaseLocatorMod;
 const { SCOPE } = planningScopeMod;
@@ -41,7 +43,22 @@ const { SCOPE } = planningScopeMod;
 // (src/frontmatter.cts) rather than a bespoke YAML touch — `spliceFrontmatter`
 // already solves "change exactly one key, preserve every other key's raw text
 // byte-for-byte", which is exactly the contract a `depends_on` rewrite needs.
-const { extractFrontmatter, spliceFrontmatter } = frontmatterMod;
+const { extractFrontmatter, spliceFrontmatter, isFrontmatterWriteRefusal } = frontmatterMod;
+/**
+ * The migration's fail-closed error for a phase artifact whose frontmatter the shared
+ * writer refuses to rewrite: it names the artifact's full path and, for a write refusal,
+ * the refusal code (also set as `code` on the error) — so the user can find the file and
+ * see why (found while implementing #5105).
+ */
+function frontmatterRewriteError(what, filePath, sourceToken, targetToken, err) {
+    const code = isFrontmatterWriteRefusal(err) ? err.code : undefined;
+    const rewriteErr = new Error(`Cannot rewrite ${what} in ${JSON.stringify(filePath)} for phase token change `
+        + `${JSON.stringify(sourceToken)} -> ${JSON.stringify(targetToken)}`
+        + `${code ? ` [${code}]` : ''}: ${err.message}`);
+    if (code)
+        rewriteErr.code = code;
+    return rewriteErr;
+}
 const { milestoneSections, isPhaseHeadingText } = roadmapParserMod;
 const { normalizeDependencyToken } = phaseMod;
 // #4144 round 5 Blocker 3: the single owner of the canonical short-alias
@@ -51,7 +68,11 @@ const { extractCanonicalPlanId } = coreUtilsMod;
 // #4144 round 5 Blocker 4: the readers' own fence-scanning engine
 // (tokenizeHeadings is built on this same seam) — reused here instead of a
 // third independent fence parser.
-const { scanFencedBlocks } = markdownSectionizerMod;
+const { scanFencedBlocks, updateBullet, updateHeading } = markdownSectionizerMod;
+// ADR-5057 §6 (Phase 13, #5217): every mutation of a planning artifact goes
+// through its seam — headings/bullets through the sectionizer, PROJECT.md
+// prose through PlanningDoc, STATE.md through its own write seam.
+const { readModifyWriteStateMd } = stateMod;
 // #4144 round 5 follow-up (lint-plan-count-drift): the plan-scan owner's own
 // root-plan-file predicate (src/plan-scan.cts) — reused in
 // computeDependsOnRewrites instead of a private `/-PLAN\.md$/i` filename
@@ -113,7 +134,7 @@ const PROJECT_CODE_RE = new RegExp(`^${BRACKET_PROJECT_CODE_SRC}$`);
 // `.` never matches `\r` (it is its own LineTerminator, ECMA-262), so a CRLF
 // roadmap's `\r` sat just past the `(.*)` group's end — present in the LINE
 // but absent from `headingTail`, which the heading rebuild below is built
-// from. Since `applyRoadmapEdits` replaces a touched line's FULL text with
+// from. Since the roadmap rewrite (`rewriteRoadmapLines`) replaces a touched line's FULL text with
 // the rebuilt one, every converted heading silently lost its `\r` while
 // every untouched line (and every checklist bullet, whose rewrite instead
 // slices the line's own remainder rather than reassembling captured groups)
@@ -698,8 +719,7 @@ function computeDependsOnRewrites(oldDirPath, sourceToken, targetToken, fileRena
             // must never be silently dropped — refuse before any write, the same
             // contract every other unrepresentable case in this file already
             // follows (e.g. computeArtifactRenames' collision refusal above).
-            throw new Error(`Cannot rewrite depends_on in ${JSON.stringify(entry.name)} for phase token change `
-                + `${JSON.stringify(sourceToken)} -> ${JSON.stringify(targetToken)}: ${err.message}`);
+            throw frontmatterRewriteError('depends_on', filePath, sourceToken, targetToken, err);
         }
         rewrites.push({
             oldName: entry.name,
@@ -800,8 +820,7 @@ function computePhaseFrontmatterRewrites(oldDirPath, dirName, sourceToken, targe
         catch (err) {
             // Same refuse-before-any-write contract every other unrepresentable
             // frontmatter rewrite in this file already follows.
-            throw new Error(`Cannot rewrite phase frontmatter in ${JSON.stringify(entry.name)} for phase token change `
-                + `${JSON.stringify(sourceToken)} -> ${JSON.stringify(targetToken)}: ${err.message}`);
+            throw frontmatterRewriteError('phase frontmatter', filePath, sourceToken, targetToken, err);
         }
         const finalName = renameByOldName.get(entry.name) ?? entry.name;
         if (existing) {
@@ -1817,39 +1836,70 @@ function computeMigrationPlan(cwd, options = {}) {
         crossRefEdits,
     };
 }
+// ─── Seam-routed planning writes (ADR-5057 §6, Phase 13, #5217) ───────────────
 /**
- * Apply roadmap line edits via character-offset splicing against the
- * ORIGINAL content string — never a full split/rejoin (#3413). `lineIndex`
- * boundaries are found by scanning for the next bare `\n`, exactly matching
- * how computeMigrationPlan() itself indexes lines (`roadmapContent.split('\n')`)
- * — both sides must agree on line indexing for `lineText === edit.from` to
- * match, and this keeps a `\r` that precedes a `\n` as part of the LINE text
- * rather than a separately-normalized terminator. Only a line whose text
- * exactly equals an edit's `from` is replaced; every other character —
- * including every line's own terminator, touched or not — is copied
- * byte-for-byte from the original, so a mixed-EOL ROADMAP.md never has its
- * untouched lines silently flattened to one dominant style.
+ * Apply the plan's ROADMAP.md line edits through the sectionizer seam: a
+ * heading edit through `updateHeading`, a checklist edit through
+ * `updateBullet`. Both match on the plan's own `lineIndex` AND exact line text
+ * (`split('\n')` indexing, a trailing `\r` is part of the line), so two
+ * headings with identical text in different milestones stay distinct, a stale
+ * edit is left untouched, and every untouched byte is copied verbatim.
+ *
+ * An edit whose target line is still its `from` text after both seams ran was
+ * refused by the seam (a line the sectionizer does not read as a heading or
+ * bullet — fenced, or not CommonMark-shaped). That is thrown, never skipped:
+ * a silently-skipped edit leaves ROADMAP.md half-migrated, and the mixed-state
+ * guard then refuses every retry. `applyMigration` rolls back on the throw.
  */
-function applyRoadmapEdits(content, edits) {
-    const editByLine = new Map();
-    for (const edit of edits)
-        editByLine.set(edit.lineIndex, edit);
-    let result = '';
-    let pos = 0;
-    let lineIndex = 0;
-    for (;;) {
-        const nlIdx = content.indexOf('\n', pos);
-        const lineEnd = nlIdx === -1 ? content.length : nlIdx;
-        const lineText = content.slice(pos, lineEnd);
-        const edit = editByLine.get(lineIndex);
-        result += edit && lineText === edit.from ? edit.to : lineText;
-        if (nlIdx === -1)
-            break;
-        result += '\n';
-        pos = nlIdx + 1;
-        lineIndex++;
+function rewriteRoadmapLines(content, plannedEdits) {
+    // The planner reads raw lines, so it also plans edits for phase-shaped lines
+    // inside a fenced example block. Fenced content is never a heading or a
+    // bullet (the sectionizer's own view), so those edits are dropped here —
+    // not thrown: a fenced example must neither be rewritten nor block the
+    // migration.
+    const fencedLines = new Set();
+    const physicalLines = content.split('\n');
+    for (const block of scanFencedBlocks(physicalLines)) {
+        const last = block.closeLineIdx === -1 ? physicalLines.length - 1 : block.closeLineIdx;
+        for (let i = block.openLineIdx; i <= last; i++)
+            fencedLines.add(i);
+    }
+    const edits = plannedEdits.filter((edit) => !fencedLines.has(edit.lineIndex));
+    let result = content;
+    for (const edit of edits) {
+        const atTarget = (rawLine, lineIndex) => lineIndex === edit.lineIndex && rawLine === edit.from;
+        const swap = () => edit.to;
+        result = updateHeading(result, (_heading, rawLine, lineIndex) => atTarget(rawLine, lineIndex), swap);
+        result = updateBullet(result, (_text, rawLine, lineIndex) => atTarget(rawLine, lineIndex), swap);
+    }
+    const lines = result.split('\n');
+    for (const edit of edits) {
+        if (edit.from !== edit.to && lines[edit.lineIndex] === edit.from) {
+            throw new Error(`ROADMAP.md line ${edit.lineIndex + 1} (${JSON.stringify(edit.from)}) is not a heading or checklist `
+                + 'line the planning seam can rewrite');
+        }
     }
     return result;
+}
+/**
+ * Apply the cross-reference substitutions to one planning artifact's content
+ * through `PlanningDoc` (`replaceProse`), in plan order. A document the seam
+ * cannot read (an unterminated frontmatter fence) is refused — thrown, so the
+ * migration rolls back — rather than rewritten blind.
+ */
+function substituteCrossRefs(content, fileName, edits) {
+    const parsed = (0, planning_document_cjs_1.parsePlanningDoc)(content, fileName);
+    if (!parsed.ok) {
+        throw new Error(`${fileName} cannot be read as a planning document: ${parsed.reason}`);
+    }
+    let doc = parsed.value;
+    for (const edit of edits) {
+        const next = (0, planning_document_cjs_1.replaceProse)(doc, edit.from, edit.to);
+        if (!next.ok)
+            throw new Error(`${fileName} cross-reference rewrite refused: ${next.reason}`);
+        doc = next.value;
+    }
+    return doc.source;
 }
 // ─── applyMigration ───────────────────────────────────────────────────────────
 /**
@@ -1872,7 +1922,45 @@ function applyMigration(cwd, plan, options = {}) {
     // ── Real run: verify clean working tree ───────────────────────────────────
     let gitStatus;
     try {
-        gitStatus = (0, node_child_process_1.execSync)('git status --porcelain', { cwd, encoding: 'utf8', windowsHide: true, timeout: 10_000 });
+        // #5048: this is a read-only spawn, but git still refreshes the index under
+        // it and takes the optional `.git/index.lock` to write the refreshed copy
+        // back — which can lose a race against a real `git add` / `git commit` in
+        // the same repo. Routing through the shared execGit seam (CONTEXT.md, OS
+        // Shell Projection) is what gets GIT_OPTIONAL_LOCKS=0 here; a bare execSync
+        // bypassed the seam and therefore the opt-out, so this call site was the one
+        // read-only `git status` the seam change did not reach. shell-free, so no
+        // argv quoting or PATH-resolution policy is introduced.
+        const statusTimeoutMs = 10_000;
+        const result = (0, shell_command_projection_cjs_1.execGit)(['status', '--porcelain'], { cwd, timeout: statusTimeoutMs });
+        // #5048: execSync carried the cause on the thrown error. execGit reports a
+        // timeout, a spawn/buffer failure or a signal through `timedOut`/`error`/
+        // `signal` with an exit code of `status ?? 1` and often an empty stderr.
+        // Order matters: a maxBuffer overflow returns signal SIGTERM *and*
+        // error.code ENOBUFS — check `error` before `signal` so the real cause is
+        // not reported as "killed by SIGTERM". Only a genuine non-zero exit falls
+        // through. (ENOENT is rewritten by `_spawnResult` to exit 127 + stderr.)
+        if (result.timedOut) {
+            throw new Error(`git status timed out after ${statusTimeoutMs} ms`);
+        }
+        if (result.error) {
+            // The cause is not always a failed spawn: ENOBUFS and EPERM reach this
+            // branch with the process already started (a maxBuffer overflow returns
+            // signal SIGTERM *and* error.code ENOBUFS). So the message stays neutral
+            // about starting and names the code instead of inferring a cause from it.
+            const code = result.error.code;
+            const why = code === 'ENOBUFS' ? 'output exceeded the buffer' : code;
+            const detail = why && !result.error.message.includes(why)
+                ? `${result.error.message} (${why})`
+                : result.error.message;
+            throw new Error(detail);
+        }
+        if (result.signal) {
+            throw new Error(`git status was killed by ${result.signal}`);
+        }
+        if (result.exitCode !== 0) {
+            throw new Error(result.stderr || `git exited ${result.exitCode}`);
+        }
+        gitStatus = result.stdout;
     }
     catch (err) {
         throw new Error(`git status failed: ${err.message}`);
@@ -1944,6 +2032,18 @@ function applyMigration(cwd, plan, options = {}) {
                     const currentPath = node_path_1.default.join(newPath, rewrite.finalName);
                     if (node_fs_1.default.existsSync(currentPath)) {
                         const originalPath = node_path_1.default.join(oldPath, rewrite.oldName);
+                        // `rewrite.to` is the frontmatter seam's own output
+                        // (`spliceFrontmatter`, computed in computeDependsOnRewrites); it is
+                        // only persisted over the exact content it was computed from, so a
+                        // plan file edited since the plan was made is refused, never
+                        // clobbered with a stale whole-file image. The check runs BEFORE
+                        // the backup is recorded: the backup holds `rewrite.from`, which is
+                        // only the file's real content once this check has passed — recording
+                        // it first would make the rollback restore stale content over the
+                        // edited file.
+                        if (node_fs_1.default.readFileSync(currentPath, 'utf8') !== rewrite.from) {
+                            throw new Error(`${JSON.stringify(node_path_1.default.join('phases', phaseEntry.newDir, rewrite.finalName))} changed since the migration plan was computed`);
+                        }
                         if (!fileBackups.has(originalPath)) {
                             fileBackups.set(originalPath, { existed: true, content: rewrite.from });
                         }
@@ -1956,36 +2056,36 @@ function applyMigration(cwd, plan, options = {}) {
         // 2. Rewrite ROADMAP.md phase headings
         if (plan.roadmapEdits.length > 0) {
             const roadmapContent = node_fs_1.default.readFileSync(roadmapPath, 'utf8');
-            const newRoadmapContent = applyRoadmapEdits(roadmapContent, plan.roadmapEdits);
+            const newRoadmapContent = rewriteRoadmapLines(roadmapContent, plan.roadmapEdits);
             snapshotFile(roadmapPath);
             node_fs_1.default.writeFileSync(roadmapPath, newRoadmapContent, 'utf8');
             editedFiles.push('ROADMAP.md');
         }
         // 3. Rewrite cross-refs in STATE.md and PROJECT.md
-        const crossRefsByFile = new Map();
-        for (const edit of plan.crossRefEdits) {
-            if (!crossRefsByFile.has(edit.file)) {
-                crossRefsByFile.set(edit.file, []);
+        // Two targets, two writes, one per seam (ADR-5057 §6): PROJECT.md's
+        // content is rewritten by PlanningDoc, STATE.md goes through its own
+        // read-modify-write seam (ADR-3408: lock, frontmatter sync and
+        // preservation; body-only edit).
+        const crossRefsFor = (fileName) => plan.crossRefEdits.filter((edit) => edit.file === fileName);
+        const projectEdits = crossRefsFor('PROJECT.md');
+        const projectPath = node_path_1.default.join(pDir, 'PROJECT.md');
+        if (projectEdits.length > 0 && node_fs_1.default.existsSync(projectPath)) {
+            const original = node_fs_1.default.readFileSync(projectPath, 'utf8');
+            const rewritten = substituteCrossRefs(original, 'PROJECT.md', projectEdits);
+            if (rewritten !== original) {
+                snapshotFile(projectPath);
+                node_fs_1.default.writeFileSync(projectPath, rewritten, 'utf8');
+                editedFiles.push('PROJECT.md');
             }
-            crossRefsByFile.get(edit.file).push(edit);
         }
-        for (const [fileName, edits] of crossRefsByFile) {
-            const filePath = node_path_1.default.join(pDir, fileName);
-            if (!node_fs_1.default.existsSync(filePath))
-                continue;
-            let content = node_fs_1.default.readFileSync(filePath, 'utf8');
-            let changed = false;
-            for (const edit of edits) {
-                if (content.includes(edit.from)) {
-                    // Replace all occurrences
-                    content = content.split(edit.from).join(edit.to);
-                    changed = true;
-                }
-            }
-            if (changed) {
-                snapshotFile(filePath);
-                node_fs_1.default.writeFileSync(filePath, content, 'utf8');
-                editedFiles.push(fileName);
+        const stateEdits = crossRefsFor('STATE.md');
+        const stateMdPath = node_path_1.default.join(pDir, 'STATE.md');
+        if (stateEdits.length > 0 && node_fs_1.default.existsSync(stateMdPath)) {
+            const original = node_fs_1.default.readFileSync(stateMdPath, 'utf8');
+            if (substituteCrossRefs(original, 'STATE.md', stateEdits) !== original) {
+                snapshotFile(stateMdPath);
+                readModifyWriteStateMd(stateMdPath, (current) => substituteCrossRefs(current, 'STATE.md', stateEdits), cwd, { resync: false });
+                editedFiles.push('STATE.md');
             }
         }
         // 4. Update config.json to the convention named by this plan — but only
@@ -2051,10 +2151,9 @@ module.exports = {
     computeMigrationPlan,
     applyMigration,
     computeDependsOnRewrites,
-    // #4698 review round 28: exported for the property test that drives the REAL
-    // roadmap transform (the same function applyMigration writes through) rather
-    // than a hand-rolled line-replacer stand-in, per ADR-1508's precedent of
-    // exporting an internal solely to satisfy RULESET.TESTS.property-based-testing.
-    // Not a new production seam: applyMigration remains its only caller in `src/`.
-    applyRoadmapEdits,
+    // #4698 review round 28 precedent (ADR-1508): exported solely so the property
+    // test drives the REAL roadmap transform `applyMigration` writes through —
+    // which is now a composition of sectionizer seams (`updateHeading`,
+    // `updateBullet`), not a line-indexer of its own. Not a new production seam.
+    rewriteRoadmapLines,
 };

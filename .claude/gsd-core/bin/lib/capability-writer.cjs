@@ -50,6 +50,7 @@ const { planningDir } = planningWorkspaceMod;
 const nodefs = require("fs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const nodepath = require("path");
+const runtime_slash_cjs_1 = require("./runtime-slash.cjs");
 // ─── Implementation ───────────────────────────────────────────────────────────
 /**
  * Write-side capability state mutator.
@@ -305,7 +306,7 @@ function setCapabilityState(cwd, runtimeConfigDir, desired, opts) {
         if (entry.enabled === true) {
             const afterCap = after.capabilities.find((c) => c.id === entry.id);
             if (afterCap && afterCap.enabled !== true) {
-                errors.push(`cannot enable "${entry.id}": not in the active surface/profile (widen the profile or use /gsd:surface enable)`);
+                errors.push(`cannot enable "${entry.id}": not in the active surface/profile (widen the profile or use ${(0, runtime_slash_cjs_1.runtimeCommand)(cwd, 'surface enable')})`);
             }
         }
         // Fix B: desired enabled=false — assert it is actually disabled after write.

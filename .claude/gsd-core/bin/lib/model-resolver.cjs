@@ -55,24 +55,24 @@ const { planningDir } = planningWorkspaceMod;
 // <install>/gsd-core/bin/lib). Precedence for the gate: project config.runtime →
 // GSD_RUNTIME env (manual/CI override + test seam) → install marker → 'claude'.
 //
-// `claude` is currently the ONLY runtime with nativeModelAliases:true; a
-// registry-parity test guards this set so a future alias-capable runtime fails
-// loudly here instead of silently omitting.
-const RUNTIMES_WITH_NATIVE_ALIASES = new Set(['claude']);
+// Whether a runtime resolves tier aliases natively is a runtime-descriptor fact
+// (`hostBehaviors.nativeModelAliases`, #5169) — `claude` is currently the ONLY
+// runtime that declares it — not a hand-kept set in this module. A label that is
+// not a registered runtime (a future runtime named by env/config) has none.
+function hasNativeModelAliases(runtime) {
+    return (0, runtime_name_policy_cjs_1.hostBehaviorsFor)(runtime).nativeModelAliases === true;
+}
 // #3897 rung 2: the marker reader + its cache and test seams were promoted to
 // the canonical owner, `runtime-slash.cts` (imported above) — this module now
 // consumes that single implementation instead of holding its own copy. N5:
 // behaviour and the seam contract are unchanged by the move; the re-exports
 // below (`export =` at the bottom of this file) preserve every existing
 // caller's `require('./model-resolver.cjs')` surface byte-for-behaviour.
-// The runtime whose install is actually resolving, canonicalized so an alias or
-// case variant (e.g. "claude-code"/"Claude") cannot defeat the native-alias
-// check below (#2297 review). Precedence mirrors resolveRuntime()
-// (runtime-slash.cts): GSD_RUNTIME env → project config.runtime → per-install
-// .gsd-runtime marker → 'claude'.
-function resolveActiveRuntime(config) {
-    return (0, runtime_name_policy_cjs_1.resolveRuntimeNameFromCandidates)(process.env['GSD_RUNTIME'], config['runtime'], (0, runtime_slash_cjs_1.readInstallRuntimeMarker)()) || 'claude';
-}
+// The runtime whose install is actually resolving — one chain, owned by
+// runtime-slash.cts's `resolveActiveRuntime` (#5169): GSD_RUNTIME env → project
+// config.runtime → per-install .gsd-runtime marker → 'claude', canonicalized so
+// an alias or case variant (e.g. "claude-code"/"Claude") cannot defeat the
+// native-alias check below (#2297 review).
 // Did the PROJECT's own config (root `.planning/config.json` or the active
 // workstream/project override) explicitly set resolve_model_ids to "omit"?
 // Project config takes precedence over the shared ~/.gsd/defaults.json (#2297
@@ -129,7 +129,7 @@ function _resolveRuntimeTier(config, tier) {
         // the per-install marker), and reading it raw made
         // `model_profile_overrides.<runtime>.<tier>` silently inert for every
         // install that did not also write the key by hand.
-        runtime: resolveActiveRuntime(config),
+        runtime: (0, runtime_slash_cjs_1.resolveActiveRuntime)(config),
         tier,
         overrides: config['model_profile_overrides'],
     });
@@ -502,7 +502,7 @@ function resolveModelInternal(cwd, agentType) {
         ? modelOverrides[agentType]
         : undefined;
     if (override) {
-        const mapped = mapClaudeOverrideForRuntime(override, resolveActiveRuntime(config), agentType);
+        const mapped = mapClaudeOverrideForRuntime(override, (0, runtime_slash_cjs_1.resolveActiveRuntime)(config), agentType);
         if (mapped !== null)
             return mapped;
         // Unmappable Claude ID — fall through to tier resolution (matches model_policy).
@@ -528,7 +528,7 @@ function resolveModelInternal(cwd, agentType) {
     // Never undefined, so the "no runtime declared anywhere" case still resolves
     // 'claude' and step 3's deliberate claude skip (#1156/#2297/#4192) is
     // unchanged for every existing install.
-    const activeRuntime = resolveActiveRuntime(config);
+    const activeRuntime = (0, runtime_slash_cjs_1.resolveActiveRuntime)(config);
     if (tier && tier !== 'inherit') {
         const onClaude = activeRuntime === 'claude';
         const effectiveRuntime = activeRuntime;
@@ -582,7 +582,7 @@ function resolveModelInternal(cwd, agentType) {
     // map, but only outranks the omit gate when that key canonicalizes to a
     // recognised non-Claude runtime.
     const omitApplies = config['resolve_model_ids'] === 'omit'
-        && (projectExplicitlySetsOmit(cwd) || !RUNTIMES_WITH_NATIVE_ALIASES.has(activeRuntime));
+        && (projectExplicitlySetsOmit(cwd) || !hasNativeModelAliases(activeRuntime));
     // CANONICALIZED, not the raw field. Comparing the raw value against the literal
     // 'claude' made every spelling that is not exactly that string count as a
     // non-Claude opt-in and outrank the omit gate: `runtime:"Claude"`,
@@ -764,13 +764,13 @@ function resolveModelForTier(cwd, agentType, attempt) {
         ? modelOverrides[agentType]
         : undefined;
     if (override) {
-        const mapped = mapClaudeOverrideForRuntime(override, resolveActiveRuntime(config), agentType);
+        const mapped = mapClaudeOverrideForRuntime(override, (0, runtime_slash_cjs_1.resolveActiveRuntime)(config), agentType);
         if (mapped !== null)
             return mapped;
         // Unmappable Claude ID — fall through to dynamic_routing / model_policy resolution.
     }
     // #4505: same active-runtime rule as resolveModelInternal step 3.
-    if (config['model_policy'] && resolveActiveRuntime(config) !== 'claude') {
+    if (config['model_policy'] && (0, runtime_slash_cjs_1.resolveActiveRuntime)(config) !== 'claude') {
         return resolveModelInternal(cwd, agentType);
     }
     const alias = dynamicRoutingModel(config, agentType, attemptN);

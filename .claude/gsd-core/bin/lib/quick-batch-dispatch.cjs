@@ -26,6 +26,7 @@
  *
  * ADR-457 build-at-publish: compiled by tsc to gsd-core/bin/lib/quick-batch-dispatch.cjs.
  */
+const runtime_slash_cjs_1 = require("./runtime-slash.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const planDocumentMod = require("./plan-document.cjs");
 const { parsePlanDocument } = planDocumentMod;
@@ -42,7 +43,7 @@ function parseQuickBatchArgs(args) {
         return { ok: false, reason: 'quick-batch args must be an array' };
     }
     if (args.includes('--discuss')) {
-        return { ok: false, reason: 'quick-batch does not support --discuss in v1 — use /gsd:quick --discuss per item instead' };
+        return { ok: false, reason: `quick-batch does not support --discuss in v1 — use ${(0, runtime_slash_cjs_1.runtimeCommand)(null, 'quick --discuss')} per item instead` };
     }
     if (args.includes('--full')) {
         return { ok: false, reason: 'quick-batch does not support --full in v1' };
@@ -141,20 +142,23 @@ function computeSpawnPlan(input) {
     return { spawn, pending };
 }
 /**
+ * #5118: one routing entry per writer-set status, keyed by the owner's type —
+ * no status literal is compared (local/no-verification-status-literal's
+ * type-aware arm), and `Record<VerifierStatus, …>` makes the table total.
+ */
+const VERIFICATION_OUTCOME_ROUTES = Object.freeze({
+    passed: { action: 'complete' },
+    human_needed: { action: 'human_needed' },
+    gaps_found: { action: 'fail', failureReason: 'verification reported gaps_found (no automatic gap-fix retry in v1)' },
+});
+/**
  * Route a verifier's status to an item action. `human_needed` is terminal
  * for the item — the caller must NOT call `completeQuickItem` (row 30, no
  * STATE row appended). `gaps_found` fails the item WITHOUT rollback and
  * WITHOUT an automatic gap-fix retry (row 31,34). `passed` completes it.
  */
 function routeVerificationOutcome(status) {
-    switch (status) {
-        case 'passed':
-            return { action: 'complete' };
-        case 'human_needed':
-            return { action: 'human_needed' };
-        case 'gaps_found':
-            return { action: 'fail', failureReason: 'verification reported gaps_found (no automatic gap-fix retry in v1)' };
-    }
+    return VERIFICATION_OUTCOME_ROUTES[status];
 }
 /**
  * Route a merge attempt's outcome to an item action. Both `merge_failed`

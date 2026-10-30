@@ -496,7 +496,7 @@ function _resolveNamedConverter(converterName, kindLabel) {
  * @param converterName name of converter function in Runtime Artifact Conversion exports
  * @param configDir     runtime config dir (for .gsd-source marker resolution)
  */
-function convertedAgentsKind(destSubpath, prefix, converterName, configDir, sourceContext, scope) {
+function convertedAgentsKind(destSubpath, prefix, converterName, configDir, sourceContext, scope, excludeSuffixes) {
     return {
         kind: 'agents',
         destSubpath,
@@ -569,7 +569,7 @@ function convertedAgentsKind(destSubpath, prefix, converterName, configDir, sour
             // ADR-1235 §1: when agentCtx is provided (by createRuntimeArtifactInstallPlan
             // for descriptor-driven runtimes), thread it through so stageAgentsForRuntimeWithConverter
             // can apply the full pre-converter + post-converter sequence in the correct order.
-            return stageAgentsForRuntimeWithConverter(sourceRootFor(sourceContext, 'agents'), resolved, converter, (0, install_scope_cjs_1.isGlobalScope)(scope), agentCtx?.runtime ? agentCtx : undefined);
+            return stageAgentsForRuntimeWithConverter(sourceRootFor(sourceContext, 'agents'), resolved, converter, (0, install_scope_cjs_1.isGlobalScope)(scope), agentCtx?.runtime ? agentCtx : undefined, excludeSuffixes);
         },
     };
 }
@@ -713,7 +713,7 @@ function dispatchKindEntry(entry, runtime, configDir, scope, capabilityRegistry,
         case 'agents':
             result = converter == null
                 ? agentsKind(destSubpath, prefix, configDir, sourceContext)
-                : convertedAgentsKind(destSubpath, prefix, converter, configDir, sourceContext, scope);
+                : convertedAgentsKind(destSubpath, prefix, converter, configDir, sourceContext, scope, entry.excludeSuffixes);
             break;
         case 'skills':
             if (converter == null) {
@@ -957,4 +957,64 @@ function resolveTriggerSurface(runtime, scopes, opts) {
     }
     return surfaces;
 }
-module.exports = { resolveRuntimeArtifactLayout, resolveRuntimeArtifactLayoutFromRegistry, findInstallSourceRoot, resolveTriggerSurface, isNamespacedByDir, composeCommandFilename };
+// ---------------------------------------------------------------------------
+// The advertised "next step" command (#5215, ADR-5057 §5 Phase 12).
+//
+// What the installer tells a user to run is a projection of what the runtime
+// registered: the `new-project` trigger the Trigger Surface resolves for the
+// install scope. It is never a per-runtime literal, so a runtime that registers
+// no such trigger (pi's native extension registers only `/gsd`; windsurf's
+// global layout registers nothing) cannot be told to run one (#4567).
+// ---------------------------------------------------------------------------
+/** The cross-agent default for an id GSD cannot know (ADR-5057 §5 Phase 10 amendment). */
+const DEFAULT_NEW_PROJECT_COMMAND = '/gsd-new-project';
+/**
+ * How a host invokes a registered trigger. Presentation only — whether the
+ * trigger exists is decided by the registered surface, not by this table. A
+ * runtime absent here is invoked as `/<trigger>`.
+ */
+// Agent Skills hosts that start a skill with `/skill:<name>` (kimi; pi, #5547 —
+// pi never accepts a bare `/<name>` for a skill).
+const slashSkillInvocation = (trigger) => `/skill:${trigger}`;
+const TRIGGER_INVOCATION = {
+    codex: (trigger) => `$${trigger}`,
+    cursor: (trigger) => `${trigger} (mention the skill name)`,
+    kimi: slashSkillInvocation,
+    pi: slashSkillInvocation,
+};
+/**
+ * The command a native-extension runtime registers instead of per-workflow
+ * triggers: the extension file's stem as a slash command (pi's `gsd.js`
+ * registers `/gsd`; pinned by tests/advertised-command-parity.test.cjs against
+ * the extension itself). `null` for a runtime with no native plugin.
+ */
+function nativePluginCommand(runtime) {
+    const descriptor = getTriggerRegistry().runtimes[runtime]?.runtime;
+    const file = descriptor?.hostBehaviors?.nativePlugin?.file;
+    if (typeof file !== 'string' || file.length === 0)
+        return null;
+    const stem = file.replace(/\.[^.]+$/, '');
+    return stem.length > 0 ? `/${stem}` : null;
+}
+/**
+ * The command the installer advertises for starting a project, generated from
+ * the registered trigger surface of `runtime` in `scope`. `unregistered` means
+ * the runtime registers no `new-project` trigger there (`nativeCommand` names
+ * what a native-extension runtime registers instead). An empty or unregistered
+ * id keeps the documented cross-agent default: it names a runtime GSD cannot
+ * know, so no surface exists to project from. Membership is decided up front,
+ * so an error inside the surface resolution is a bug and propagates.
+ */
+function resolveAdvertisedNewProject(runtime, scope) {
+    const known = Boolean(runtime) && Object.prototype.hasOwnProperty.call(getTriggerRegistry().runtimes, runtime);
+    if (!known)
+        return { kind: 'command', command: DEFAULT_NEW_PROJECT_COMMAND };
+    const registered = resolveTriggerSurface(runtime, [scope], { stems: ['new-project'] })[0];
+    if (!registered)
+        return { kind: 'unregistered', nativeCommand: nativePluginCommand(runtime) };
+    const render = Object.prototype.hasOwnProperty.call(TRIGGER_INVOCATION, runtime)
+        ? TRIGGER_INVOCATION[runtime]
+        : (trigger) => `/${trigger}`;
+    return { kind: 'command', command: render(registered.trigger) };
+}
+module.exports = { resolveRuntimeArtifactLayout, resolveRuntimeArtifactLayoutFromRegistry, findInstallSourceRoot, resolveTriggerSurface, resolveAdvertisedNewProject, isNamespacedByDir, composeCommandFilename };

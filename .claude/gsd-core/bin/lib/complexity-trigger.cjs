@@ -3,7 +3,9 @@
  * Complexity-triggered refactor extension point — analyzer, evaluator, and
  * baseline persistence (issue #1953).
  *
- * LEAF MODULE — imports ONLY: node:fs, node:path. No other src/ imports.
+ * LEAF MODULE — imports ONLY: node:fs, node:path, and the zero-import leaf
+ * frontmatter-fence.cjs (the one frontmatter fence owner, read by parseProposal). No other
+ * src/ imports.
  *
  * Pipeline: analyzeSource (decision-point complexity per function, via
  * stripLiterals to blank comments/string/regex content while preserving
@@ -49,6 +51,7 @@ exports.readBaseline = readBaseline;
 exports.writeBaseline = writeBaseline;
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
+const frontmatter_fence_cjs_1 = require("./frontmatter-fence.cjs");
 // ─── Constants ─────────────────────────────────────────────────────────────
 exports.BASELINE_FILE_NAME = 'complexity-baseline.json'; // under .planning/
 exports.PROPOSAL_SUFFIX = '-REFACTOR.md'; // ${PHASE_DIR}/${PADDED}-REFACTOR.md
@@ -1018,13 +1021,11 @@ function renderProposal(p) {
  */
 function parseProposal(text) {
     try {
-        if (!text.startsWith('---\n') && !text.startsWith('---\r\n'))
+        // The block is the one the one fence owner finds (`locateFrontmatterFence`).
+        const fence = (0, frontmatter_fence_cjs_1.locateFrontmatterFence)(text);
+        if (!fence?.closed)
             return null;
-        const headerEnd = text.startsWith('---\r\n') ? 5 : 4;
-        const closeIdx = text.indexOf('\n---', headerEnd);
-        if (closeIdx === -1)
-            return null;
-        const yamlBody = text.slice(headerEnd, closeIdx);
+        const yamlBody = text.slice(fence.openEnd, fence.bodyEnd);
         const fm = {};
         for (const rawLine of yamlBody.split(/\r?\n/)) {
             const line = rawLine.replace(/\r$/, '');

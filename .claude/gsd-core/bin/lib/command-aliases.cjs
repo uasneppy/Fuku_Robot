@@ -893,6 +893,13 @@ exports.NON_FAMILY_COMMAND_ALIASES = [
         "mutation": false
     },
     {
+        "canonical": "uat.complete-session",
+        "aliases": [
+            "uat complete-session"
+        ],
+        "mutation": true
+    },
+    {
         "canonical": "uat.render-checkpoint",
         "aliases": [
             "uat render-checkpoint"

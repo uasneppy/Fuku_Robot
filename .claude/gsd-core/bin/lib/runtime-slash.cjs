@@ -34,7 +34,9 @@ exports._setInstallRuntimeMarkerForTests = _setInstallRuntimeMarkerForTests;
 exports._resetInstallRuntimeMarkerCacheForTests = _resetInstallRuntimeMarkerCacheForTests;
 exports.resolveExplicitRuntime = resolveExplicitRuntime;
 exports.resolveRuntime = resolveRuntime;
+exports.resolveActiveRuntime = resolveActiveRuntime;
 exports.formatGsdSlashFor = formatGsdSlashFor;
+exports.runtimeCommand = runtimeCommand;
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 const runtime_name_policy_cjs_1 = require("./runtime-name-policy.cjs");
@@ -148,30 +150,35 @@ function resolveExplicitRuntime(projectDir, env = process.env) {
     const envRuntime = (0, runtime_name_policy_cjs_1.resolveRuntimeNameFromCandidates)(env['GSD_RUNTIME']);
     if (envRuntime)
         return envRuntime;
-    if (projectDir) {
-        try {
-            // Read config.json directly (not via loadConfig). loadConfig has a side
-            // effect of normalizing and re-writing legacy keys back to disk, which
-            // would mutate the project file just to read the runtime name. We only
-            // need the literal `runtime:` value, so a plain JSON read is sufficient
-            // and side-effect-free.
-            const configPath = node_path_1.default.join(projectDir, '.planning', 'config.json');
-            if (node_fs_1.default.existsSync(configPath)) {
-                const raw = node_fs_1.default.readFileSync(configPath, 'utf-8');
-                const parsed = JSON.parse(raw);
-                if (parsed && typeof parsed === 'object' && 'runtime' in parsed) {
-                    const configRuntime = (0, runtime_name_policy_cjs_1.resolveRuntimeNameFromCandidates)(parsed['runtime']);
-                    if (configRuntime)
-                        return configRuntime;
-                }
-            }
-        }
-        catch {
-            // Fall through to default — a missing/broken config must not crash
-            // runtime output formatting.
-        }
-    }
+    const config = readProjectConfig(projectDir);
+    const configRuntime = (0, runtime_name_policy_cjs_1.resolveRuntimeNameFromCandidates)(config ? config['runtime'] : undefined);
+    if (configRuntime)
+        return configRuntime;
     return null;
+}
+/**
+ * Read `<projectDir>/.planning/config.json` as a plain object, or `null` when
+ * there is no project, no file, or it is unreadable or not an object.
+ *
+ * Read directly (not via loadConfig). loadConfig has a side effect of
+ * normalizing and re-writing legacy keys back to disk, which would mutate the
+ * project file just to read the runtime name. A plain JSON read is sufficient
+ * and side-effect-free. A missing or broken config must not crash runtime
+ * output formatting, so every failure degrades to `null`.
+ */
+function readProjectConfig(projectDir) {
+    if (!projectDir)
+        return null;
+    try {
+        const configPath = node_path_1.default.join(projectDir, '.planning', 'config.json');
+        if (!node_fs_1.default.existsSync(configPath))
+            return null;
+        const parsed = JSON.parse(node_fs_1.default.readFileSync(configPath, 'utf-8'));
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    }
+    catch {
+        return null;
+    }
 }
 /**
  * Resolve the effective runtime for a project directory.
@@ -195,13 +202,24 @@ function resolveExplicitRuntime(projectDir, env = process.env) {
  * @returns the resolved runtime name
  */
 function resolveRuntime(projectDir) {
-    const explicit = resolveExplicitRuntime(projectDir);
-    if (explicit)
-        return explicit;
-    const markerRuntime = (0, runtime_name_policy_cjs_1.resolveRuntimeNameFromCandidates)(readInstallRuntimeMarker());
-    if (markerRuntime)
-        return markerRuntime;
-    return 'claude';
+    // The same chain `resolveActiveRuntime` owns, fed by a project directory:
+    // one implementation, so the two entry points cannot drift (#5169).
+    return resolveActiveRuntime(readProjectConfig(projectDir));
+}
+/**
+ * Resolve the effective runtime from an ALREADY-LOADED config object — the one
+ * chain every consumer of "which runtime is this install" shares (#5169,
+ * ADR-5057 §5, #4690):
+ *
+ *   env.GSD_RUNTIME  >  config.runtime  >  install marker  >  'claude'
+ *
+ * Canonicalized, so an alias or case variant (`claude-code`, `Claude`) cannot
+ * defeat a downstream comparison. `resolveRuntime` above is the same chain for
+ * callers that hold a project directory rather than a parsed config; the marker
+ * is read through `readInstallRuntimeMarker` in both.
+ */
+function resolveActiveRuntime(config, env = process.env) {
+    return (0, runtime_name_policy_cjs_1.resolveRuntimeNameFromCandidates)(env['GSD_RUNTIME'], config ? config['runtime'] : undefined, readInstallRuntimeMarker()) || 'claude';
 }
 /**
  * Convenience: format using the runtime resolved from a project directory.
@@ -209,4 +227,16 @@ function resolveRuntime(projectDir) {
  */
 function formatGsdSlashFor(projectDir, commandName) {
     return formatGsdSlash(commandName, resolveRuntime(projectDir));
+}
+/**
+ * #4859: the command as the project's runtime registers it, typed as a string —
+ * for runtime code that builds user-facing guidance. String literals in compiled
+ * runtime code are printed verbatim (the install-time conversion only rewrites
+ * markdown artifact bodies), so a hard-coded `/gsd:<cmd>` names a command no
+ * install route registers. Route every such reference through here:
+ * `runtimeCommand(cwd, 'plan-phase 3 --research')` → `/gsd-plan-phase 3 --research`
+ * (`$gsd-plan-phase …` on Codex). `commandName` is the bare name plus any argument tail.
+ */
+function runtimeCommand(projectDir, commandName) {
+    return String(formatGsdSlashFor(projectDir, commandName));
 }

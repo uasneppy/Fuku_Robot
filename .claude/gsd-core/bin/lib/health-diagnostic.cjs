@@ -95,6 +95,10 @@ const RULES = [
  */
 const CONSISTENCY_RULES = [
     ...roadmapDiskConsistencyMod.RULES.filter((r) => ['W006', 'W007'].includes(r.code)),
+    // #5118: W030 (a verification report status outside the closed set) is
+    // REUSED too — the snapshot carries the error, and a diagnostics surface
+    // reports it as a finding instead of failing on the defect it diagnoses.
+    ...phaseStructureMod.RULES.filter((r) => r.code === 'W030'),
     ...consistencyMod.RULES,
 ];
 // ─── Repair-handler runtime dependencies ───────────────────────────────────
@@ -112,7 +116,10 @@ const roadmapParserMod = require("./roadmap-parser.cjs");
 const { getMilestoneInfo } = roadmapParserMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const stateMod = require("./state.cjs");
-const { writeStateMd } = stateMod;
+const { writeStateMd, assertVerificationReportsReadable } = stateMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const verificationMod = require("./verification.cjs");
+const { repairLegacyVerificationStatus } = verificationMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const frontmatter = require("./frontmatter.cjs");
 const { extractFrontmatter } = frontmatter;
@@ -149,7 +156,7 @@ function evaluateRules(snapshot) {
     return evaluateRuleTable(RULES, snapshot);
 }
 /**
- * Evaluate `CONSISTENCY_RULES` (W006/W007 + C001-C004) against `snapshot` —
+ * Evaluate `CONSISTENCY_RULES` (W006/W007/W030 + C001-C004) against `snapshot` —
  * `validate.consistency`'s evaluator entry point, mirroring `evaluateRules`
  * exactly but over the smaller, command-specific rule subset.
  */
@@ -248,9 +255,27 @@ function computeMissingMilestoneVersions(milestonesArchiveDir, milestonesPath) {
  * shape, collapsed to one seam here since every case now shares one
  * caller).
  */
-function runRepairAction(cwd, action, paths) {
+function runRepairAction(cwd, action, paths, args = {}) {
     const { rootBase, configPath, statePath, milestonesPath, milestonesArchiveDir } = paths;
     switch (action) {
+        case REMEDY_ACTION.REPAIR_VERIFICATION_STATUS: {
+            // #5291: the report path comes from the finding's own remedy args, not
+            // from user input; `repairLegacyVerificationStatus` re-verifies that it is
+            // a report contained in its phase directory before it writes a byte.
+            const file = typeof args['file'] === 'string' ? args['file'] : '';
+            if (file === '')
+                return { success: false, error: 'no report path on the finding' };
+            const repaired = repairLegacyVerificationStatus(file);
+            if (!repaired.ok)
+                return { success: false, error: repaired.reason };
+            return {
+                success: true,
+                path: node_path_1.default.relative(cwd, file).split(node_path_1.default.sep).join('/'),
+                detail: repaired.legacyStatusKept
+                    ? `status ${repaired.from} -> ${repaired.to}; the report's existing legacy_status was left as it was`
+                    : `status ${repaired.from} -> ${repaired.to}; original kept as legacy_status`,
+            };
+        }
         case REMEDY_ACTION.CREATE_CONFIG:
         case REMEDY_ACTION.RESET_CONFIG: {
             (0, shell_command_projection_cjs_1.platformWriteSync)(configPath, JSON.stringify(defaultConfigPayload(), null, 2));
@@ -258,12 +283,6 @@ function runRepairAction(cwd, action, paths) {
         }
         case REMEDY_ACTION.REGENERATE_STATE: {
             const extraDetails = [];
-            if (node_fs_1.default.existsSync(statePath)) {
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                const backupPath = `${statePath}.bak-${timestamp}`;
-                node_fs_1.default.copyFileSync(statePath, backupPath);
-                extraDetails.push({ action: 'backupState', success: true, path: backupPath });
-            }
             const milestone = getMilestoneInfo(cwd).value;
             const projectRef = node_path_1.default
                 .relative(cwd, node_path_1.default.join(rootBase, 'PROJECT.md'))
@@ -286,6 +305,17 @@ function runRepairAction(cwd, action, paths) {
             // STATE.md that had no parseable frontmatter — which is the usual
             // reason this repair fires.
             const priorState = node_fs_1.default.existsSync(statePath) ? ((0, shell_command_projection_cjs_1.platformReadSync)(statePath) ?? '') : '';
+            // #5118: the write below rebuilds the STATE frontmatter from every
+            // phase's report and throws on a `status` outside the closed set.
+            // `applyRepairs` validates ONCE, before the run's first write
+            // (`assertVerificationReportsReadable`), so this handler is only reached
+            // over readable reports and no earlier repair has written.
+            if (node_fs_1.default.existsSync(statePath)) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                const backupPath = `${statePath}.bak-${timestamp}`;
+                node_fs_1.default.copyFileSync(statePath, backupPath);
+                extraDetails.push({ action: 'backupState', success: true, path: backupPath });
+            }
             writeStateMd(statePath, stateContent, rebuildStateTransaction({
                 snapshot: extractFrontmatter(priorState, statePath),
             }), cwd);
@@ -381,9 +411,56 @@ function applyRepairs(cwd, diagnostics, repair, backfill) {
     const refused = [];
     const details = [];
     const paths = repairPaths(cwd);
+    // #5291: a legacy-status repair is the CURE for the refusal the pre-check
+    // below enforces, so it runs first (a report edit is its only write and it
+    // validates its own target); the pre-check then sees the repaired reports.
+    const statusRepairs = new Set();
+    if (repair) {
+        for (const diagnostic of diagnostics) {
+            const { remedy, code } = diagnostic;
+            if (remedy.action !== REMEDY_ACTION.REPAIR_VERIFICATION_STATUS || remedy.risk === REMEDY_RISK.DESTRUCTIVE)
+                continue;
+            statusRepairs.add(diagnostic);
+            try {
+                const outcome = runRepairAction(cwd, remedy.action, paths, remedy.args);
+                details.push({
+                    code,
+                    action: remedy.action,
+                    success: outcome.success,
+                    ...(outcome.path ? { path: outcome.path } : {}),
+                    ...(outcome.detail ? { detail: outcome.detail } : {}),
+                    ...(outcome.error ? { error: outcome.error } : {}),
+                });
+                if (outcome.success)
+                    applied.push(code);
+            }
+            catch (err) {
+                details.push({ code, action: remedy.action, success: false, error: err instanceof Error ? err.message : String(err) });
+            }
+        }
+    }
+    // #5118 (no write before the error): a requested REGENERATE_STATE rewrites
+    // STATE.md from every phase's report and throws on one whose `status` is
+    // outside the closed set — but other repairs in the SAME run (config,
+    // MILESTONES.md) may be ordered before it and would already have written.
+    // Validate once, before the run's first write; on a refusal no repair in the
+    // run is applied (each is reported failed — the dispatcher's exit-0 shape;
+    // the defect itself is W030) and the tree is untouched.
+    const regenerateRequested = repair && diagnostics.some((d) => d.remedy.action === REMEDY_ACTION.REGENERATE_STATE && d.remedy.risk !== REMEDY_RISK.DESTRUCTIVE);
+    let abortMessage = null;
+    if (regenerateRequested) {
+        try {
+            assertVerificationReportsReadable('', cwd);
+        }
+        catch (err) {
+            abortMessage = err instanceof Error ? err.message : String(err);
+        }
+    }
     for (const diagnostic of diagnostics) {
         const { remedy, code } = diagnostic;
         if (remedy.action === REMEDY_ACTION.ADVISE)
+            continue;
+        if (statusRepairs.has(diagnostic))
             continue;
         const requested = remedy.action === REMEDY_ACTION.BACKFILL_MILESTONES ? repair || backfill : repair;
         if (!requested)
@@ -395,6 +472,17 @@ function applyRepairs(cwd, diagnostics, repair, backfill) {
                 action: remedy.action,
                 success: false,
                 error: `refused: '${remedy.action}' is a destructive remedy and is not auto-applied by --repair`,
+            });
+            continue;
+        }
+        if (abortMessage !== null) {
+            details.push({
+                code,
+                action: remedy.action,
+                success: false,
+                error: remedy.action === REMEDY_ACTION.REGENERATE_STATE
+                    ? abortMessage
+                    : `not applied: the run stopped before its first write — ${abortMessage}`,
             });
             continue;
         }

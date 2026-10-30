@@ -28,9 +28,18 @@
  *   - capability-registry.cjs (byLoopPoint, consumed at call time)
  *   - capability-state.cjs (resolveCapabilityRuntimeState — for capabilities list)
  */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+const node_fs_1 = __importDefault(require("node:fs"));
+const node_path_1 = __importDefault(require("node:path"));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ioMod = require("./io.cjs");
 const { output: coreOutput, error: coreError } = ioMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const verificationMod = require("./verification.cjs");
+const { resolvePhaseArtifactFile } = verificationMod;
+const security_cjs_1 = require("./security.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const configLoaderModule = require("./config-loader.cjs");
 const { loadConfig } = configLoaderModule;
@@ -528,6 +537,56 @@ function resolveActiveHooksForPoint(cwd, point, options = {}) {
     const combinedWarnings = [...(state.warnings || []), ...loadFailWarnings];
     return { point: resolved.point, activeHooks: resolved.activeHooks, warnings: combinedWarnings };
 }
+/**
+ * #5105 R2: a `produces` entry `p` "exists" in `phaseDir` when it resolves via
+ * the SAME phase-artifact selection core `resolveVerificationFile`/
+ * `resolveUatFile` delegate to (`resolvePhaseArtifactFile`, `verification.cts`)
+ * — no second derivation of "which file counts as this phase's artifact"
+ * (#3473 F2's generative-divergence class). That core is pure and takes an
+ * already-read directory listing of REGULAR-file names only, so a directory
+ * of the same name, or a suffixed near-miss (`p.bak`, `p.tmp`), never counts,
+ * and `phaseDirName` scoping rejects a stray cross-phase file (`02-SECURITY.md`
+ * inside a `01-foo` phase dir) exactly as the aggregate scans do.
+ */
+function producesEntryPresent(fileNames, phaseDirName, p) {
+    return resolvePhaseArtifactFile([...fileNames], p, { phaseDirName, allowBare: true }) !== null;
+}
+/**
+ * #5105 R2: partition `activeHooks` by whether every one of a `kind:"step"`
+ * hook's declared `produces` artifacts already exists (as a regular file)
+ * directly in `phaseDir`. A hook with `produces: []` (e.g. mempalace-capture),
+ * and every gate/contribution, passes through unchanged in `activeHooks`.
+ *
+ * Throws when `phaseDir` cannot be read (fail closed — the caller converts
+ * this to a `coreError` exit, never a silent pass-everything-through).
+ */
+function partitionHooksByFingerprint(activeHooks, phaseDir) {
+    const entries = node_fs_1.default.readdirSync(phaseDir, { withFileTypes: true });
+    const fileNames = entries.filter((e) => e.isFile()).map((e) => e.name);
+    const phaseDirName = node_path_1.default.basename(phaseDir);
+    const kept = [];
+    const skipped = [];
+    for (const hook of activeHooks) {
+        if (hook.kind !== 'step' || !hook.produces || hook.produces.length === 0) {
+            kept.push(hook);
+            continue;
+        }
+        const everyProduced = hook.produces.every((p) => producesEntryPresent(fileNames, phaseDirName, p));
+        if (everyProduced) {
+            skipped.push({
+                capId: hook.capId,
+                kind: 'step',
+                ref: hook.ref,
+                reason: 'produces-present',
+                artifacts: [...hook.produces],
+            });
+        }
+        else {
+            kept.push(hook);
+        }
+    }
+    return { activeHooks: kept, skippedHooks: skipped };
+}
 function cmdLoopRenderHooks(cwd, point, raw, options = {}) {
     if (!point) {
         coreError('loop render-hooks requires a <point> argument. Valid points: ' + CANONICAL_POINTS.join(', '));
@@ -548,6 +607,38 @@ function cmdLoopRenderHooks(cwd, point, raw, options = {}) {
         coreError(msg);
         return;
     }
+    // #5105 R2: --after-fingerprint <phaseDir> — gate out verify:post steps
+    // whose declared artifact(s) already exist in phaseDir (execute-phase
+    // already dispatched them before its own fingerprint; a re-dispatch here
+    // would write a post-fingerprint covered path for no reason, #4981/#4887).
+    const afterFingerprintDir = typeof options['afterFingerprint'] === 'string' ? options['afterFingerprint'] : undefined;
+    let skippedHooks;
+    if (afterFingerprintDir !== undefined) {
+        // #5105 S10: resolve relative to the handler's own cwd (never the
+        // process cwd) and fail closed if it escapes the project root — the same
+        // `requireSafePath` seam `uat.cts`'s `cmdUatCompleteSession` uses for its
+        // own path argument.
+        let safePhaseDir;
+        try {
+            safePhaseDir = (0, security_cjs_1.requireSafePath)(afterFingerprintDir, cwd, '--after-fingerprint directory', security_cjs_1.PathAcceptance.AbsoluteInsideRoot);
+        }
+        catch (err) {
+            const msg = (err instanceof Error) ? err.message : String(err);
+            coreError(`--after-fingerprint directory is unsafe: ${msg}`);
+            return;
+        }
+        let partition;
+        try {
+            partition = partitionHooksByFingerprint(result.activeHooks, safePhaseDir);
+        }
+        catch (err) {
+            const msg = (err instanceof Error) ? err.message : String(err);
+            coreError(`--after-fingerprint phase directory not found or unreadable: ${afterFingerprintDir} (${msg})`);
+            return;
+        }
+        result = { point: result.point, activeHooks: partition.activeHooks, warnings: result.warnings };
+        skippedHooks = partition.skippedHooks;
+    }
     if (activeCapId !== undefined) {
         const isActive = result.activeHooks.some((h) => h.capId === activeCapId);
         process.stdout.write(isActive ? 'true\n' : 'false\n');
@@ -562,6 +653,9 @@ function cmdLoopRenderHooks(cwd, point, raw, options = {}) {
     if (result.warnings.length > 0) {
         envelope.warnings = result.warnings;
     }
+    if (skippedHooks !== undefined) {
+        envelope.skippedHooks = skippedHooks;
+    }
     coreOutput(envelope, raw);
 }
 module.exports = {
@@ -569,6 +663,7 @@ module.exports = {
     renderLoopHooks,
     cmdLoopRenderHooks,
     resolveActiveHooksForPoint,
+    partitionHooksByFingerprint,
     // Exported for tests
     _getNestedConfigValue,
     _resolveActivationValue,

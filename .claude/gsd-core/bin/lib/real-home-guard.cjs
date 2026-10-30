@@ -105,6 +105,14 @@ const SANDBOX_MARKER = 'GSD_TEST_HOME_SANDBOX';
  * `statSync` follows symlinks and reports the inode itself, so a case-variant
  * HOME, a symlinked HOME, and a bind-mounted HOME all compare equal.
  *
+ * `identify` calls `fs.statSync(p, { bigint: true })`, not the plain numeric
+ * form. Node documents that the default numeric `dev`/`ino` lose precision past
+ * `Number.MAX_SAFE_INTEGER` (2^53), and NTFS/ReFS file IDs routinely exceed
+ * that — so on Windows two DISTINCT directories can round to the same numeric
+ * `ino` and compare equal here, which is a fail-OPEN in a module whose whole
+ * job is refusing writes into the real home. `{ bigint: true }` reports the
+ * true 64-bit values with no precision loss.
+ *
  * Fails CLOSED, and "closed" here means returning FALSE. The sole caller is the
  * passwd-less marker branch, which READS a true as permission to proceed:
  *
@@ -130,7 +138,7 @@ function sameDirectory(a, b) {
 }
 function identify(p) {
     try {
-        const st = node_fs_1.default.statSync(p);
+        const st = node_fs_1.default.statSync(p, { bigint: true });
         return { kind: 'ok', dev: st.dev, ino: st.ino };
     }
     catch (err) {

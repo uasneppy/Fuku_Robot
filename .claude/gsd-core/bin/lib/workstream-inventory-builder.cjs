@@ -17,11 +17,16 @@ exports.isCompletedInventory = isCompletedInventory;
 exports.buildWorkstreamInventory = buildWorkstreamInventory;
 const node_path_1 = __importDefault(require("node:path"));
 const phase_lifecycle_cjs_1 = require("./phase-lifecycle.cjs");
+// #5060: `phase-status.cjs` is a load-time leaf (no top-level requires) — its
+// `phaseStatusFromFacts`/`toWireStatus` are pure functions of facts, so
+// importing them here does not violate this module's "No I/O. No async."
+// contract.
+const phase_status_cjs_1 = require("./phase-status.cjs");
 // Internal helpers
 function toPosixPath(p) {
     return p.split('\\').join('/');
 }
-// #2562/#2645's FAILING_VERIFICATION_STATUSES set (the verdicts that used to
+// #2562/#2645's former failing-verdict set (the verdicts that used to
 // disqualify a phase from `complete` when combined with a local
 // summary-count-meets-plan-count check) was removed by ADR-3180 §7.4
 // (#3186): `complete` is now the single canonical owner's verdict
@@ -133,11 +138,14 @@ function buildWorkstreamInventory(inputs) {
         // read `pending` instead of `complete`. `complete` defaults to `false`
         // when absent so a caller that has not been updated to pass it never
         // silently reads as complete.
-        const status = (counts?.complete ?? false)
-            ? 'complete'
-            : planCount > 0
-                ? 'in_progress'
-                : 'pending';
+        // #5060: routed through the Phase Status Module's owner ladder rather
+        // than a local re-derivation of the same complete/planCount branches.
+        const status = (0, phase_status_cjs_1.toWireStatus)((0, phase_status_cjs_1.phaseStatusFromFacts)({
+            planCount,
+            summaryCount,
+            complete: counts?.complete ?? false,
+            verificationStatus: counts?.verificationStatus ?? null,
+        }));
         // #2562: only current-milestone phases feed the rollup when scoping is on,
         // and only one directory per phase key (see rollupDirs above).
         const countsTowardMilestone = (!scoped || counts?.inMilestone !== false) && rollupDirs.has(dir);

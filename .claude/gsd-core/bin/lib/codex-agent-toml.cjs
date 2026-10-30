@@ -2,7 +2,8 @@
 /**
  * Codex Agent TOML — typed IR for `~/.codex/agents/<agent>.toml` (#3243, ADR-2313).
  *
- * A genuine leaf: node builtins only. This is a **document model**, not a policy —
+ * A genuine leaf: node builtins, plus the zero-import `frontmatter-fence.cjs`. This is a
+ * **document model**, not a policy —
  * it knows how to parse/render/strip two known keys (`model`,
  * `model_reasoning_effort`) from a Codex agent `.toml`. It does NOT know which
  * `model` values are illegal for Codex (that predicate — Anthropic-flavored
@@ -23,7 +24,9 @@
  * stdout-JSON caller (`agent-install-check.cts`'s `checkCodexSandboxPosture`).
  * This module was already the single fs/path-free-parsing home both callers
  * shared; `fs`/`path` are imported below ONLY for `validateCodexSandboxHolds`'s
- * roster check — still node builtins only, no third-party or bin/lib dependency.
+ * roster check — still node builtins only, no third-party dependency, and no bin/lib
+ * dependency beyond the zero-import, side-effect-free `frontmatter-fence.cjs` (the one
+ * frontmatter fence owner, read by `extractToolsValue`).
  *
  * ── The reconciliation (40-design.md) ──────────────────────────────────────
  *
@@ -62,6 +65,7 @@ exports.deriveCodexSandboxMode = deriveCodexSandboxMode;
 exports.validateCodexSandboxHolds = validateCodexSandboxHolds;
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
+const frontmatter_fence_cjs_1 = require("./frontmatter-fence.cjs");
 /** Frozen reason enum for a failed {@link parseCodexAgentToml}. */
 exports.PARSE_REASON = Object.freeze({
     UNTERMINATED_BLOCK: 'unterminated_block',
@@ -589,13 +593,12 @@ function isSandboxHeld(...candidates) {
 function extractToolsValue(agentContent) {
     if (typeof agentContent !== 'string')
         return undefined;
-    if (!agentContent.startsWith('---'))
+    // The block is the one the one fence owner finds, so a `---` inside a value (a
+    // description mentioning `a---b`) cannot cut the tools list off.
+    const fence = (0, frontmatter_fence_cjs_1.locateFrontmatterFence)(agentContent);
+    if (!fence?.closed)
         return '';
-    const endIndex = agentContent.indexOf('---', 3);
-    if (endIndex === -1)
-        return '';
-    const frontmatter = agentContent.substring(3, endIndex);
-    const lines = frontmatter.split(/\r?\n/);
+    const lines = agentContent.slice(fence.openEnd, fence.bodyEnd).split(/\r?\n/);
     const toolsLineIndex = lines.findIndex((line) => /^tools:/.test(line));
     if (toolsLineIndex === -1)
         return '';
