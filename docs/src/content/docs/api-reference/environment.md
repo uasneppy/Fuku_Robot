@@ -104,6 +104,73 @@ log, so a bad name never reaches a request URL.
 | **Required** | No |
 | **Default** | `gemini-3.5-flash-lite` |
 
+## 📂 Web captcha configuration
+
+The web captcha verifies new members with Cloudflare Turnstile inside a Telegram
+Mini App. It is on only when all four of `CAPTCHA_WEB_BASE_URL`,
+`TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`
+are set. With none of them set the bot starts as before and the web captcha is
+off. With some but not all of them set, the bot refuses to start and the error
+names every missing variable; it never prints a value. No variable has a
+default.
+
+### `CAPTCHA_WEB_BASE_URL`
+
+Public address of the bot's HTTP port, as reachable from the internet behind
+your reverse proxy. It must be an `https` URL with a host, no user info, no
+query, no fragment, and a path that is empty or `/`. The captcha page is served
+at `<base>/captcha`, and the Turnstile answer is checked against this host.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` (https URL) |
+| **Required** | No (all four together) |
+
+### `TELEGRAM_MINI_APP_SHORT_NAME`
+
+Short name of the Mini App you created with BotFather `/newapp`. It must be 1 to
+64 letters, digits or underscores.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No (all four together) |
+
+### `TURNSTILE_SITE_KEY`
+
+Site key of your Cloudflare Turnstile widget. It is public, because the browser
+needs it to show the widget, so it is not scrubbed from logs.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No (all four together) |
+
+### `TURNSTILE_SECRET_KEY`
+
+Secret key of your Cloudflare Turnstile widget. The bot sends it only to
+Cloudflare's `siteverify` endpoint, from the server. It must be at least 6
+characters so the log redactor can scrub it. It is registered with the log
+redactor at startup, and its exact value is scrubbed from every log line.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No (all four together) |
+
+### `CAPTCHA_WEB_TRUSTED_PROXIES`
+
+Comma-separated list of IP addresses or CIDR prefixes (for example
+`10.0.0.0/8, 192.168.1.10, ::1`) of the reverse proxies whose `X-Forwarded-For`
+header the verification route may trust. When it is empty the header is ignored.
+Setting it without the four variables above stops startup, because a proxy list
+alone is a misconfiguration.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` (comma-separated IPs or CIDRs) |
+| **Required** | No |
+
 ## 📂 Bot settings
 
 ### `MESSAGE_DUMP` (Required)
@@ -574,6 +641,8 @@ ACTIVITY_CHECK_INTERVAL=# hours between activity checks (default: 1)
 API_SERVER=# custom API server URL (default: https://api.telegram.org)
 AUTO_MIGRATE=# enable automatic database migrations (default: false)
 AUTO_MIGRATE_SILENT_FAIL=# continue even if migrations fail (default: false)
+CAPTCHA_WEB_BASE_URL=# public https address of the bot's HTTP port for the web captcha (all four web captcha variables together or none)
+CAPTCHA_WEB_TRUSTED_PROXIES=# comma-separated IPs or CIDRs of the reverse proxies whose X-Forwarded-For is trusted (empty: header ignored)
 CLEAR_CACHE_ON_STARTUP=false # clear disposable cached data on startup
 DB_CONN_MAX_IDLE_TIME_MIN=# max idle time in min (default: 60)
 DB_CONN_MAX_LIFETIME_MIN=# max lifetime in min (default: 240)
@@ -608,6 +677,9 @@ REDIS_URL=# Redis URL (fallback for REDIS_ADDRESS + REDIS_PASSWORD)
 RESOURCE_GC_THRESHOLD_MB=# GC threshold in MB (default: 400)
 RESOURCE_MAX_GOROUTINES=# max goroutines (default: 1000)
 RESOURCE_MAX_MEMORY_MB=# max memory in MB (default: 500)
+TELEGRAM_MINI_APP_SHORT_NAME=# short name of the web captcha Mini App from BotFather /newapp (all four web captcha variables together or none)
+TURNSTILE_SECRET_KEY=# Cloudflare Turnstile secret key (scrubbed from logs; all four web captcha variables together or none)
+TURNSTILE_SITE_KEY=# Cloudflare Turnstile site key (public; all four web captcha variables together or none)
 TYPESAFE_API_KEY=# TypeSafe API key for the AI spam filter
 USE_WEBHOOKS=# enable webhook mode (default: false)
 WEBHOOK_DOMAIN=# required if USE_WEBHOOKS=true
