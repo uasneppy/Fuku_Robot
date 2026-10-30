@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -30,6 +32,17 @@ const (
 	// botRightsTimeout bounds the live check of the bot's own Restrict right that runs
 	// before any Cloudflare call.
 	botRightsTimeout = 3 * time.Second
+	// verifyMaxInFlight is how many verify requests are served at once on one replica; the
+	// next one is answered 503 retry without touching Redis or the backend.
+	verifyMaxInFlight = 64
+)
+
+// The route patterns (Go 1.22 method patterns), mounted by the HTTP server. A wrong method
+// on the verify path gets 405 from the mux, HEAD on the page works, and /captcha/ is a 404.
+const (
+	RoutePage   = "GET /captcha"
+	RouteVerify = "POST /captcha/verify"
+	RouteHealth = "GET /captcha/health"
 )
 
 // Result is the decided answer of the verify route.
@@ -118,6 +131,9 @@ type Options struct {
 	TrustedProxies []netip.Prefix
 	// Limiter counts the abuse windows; nil builds one on the Store's Redis client.
 	Limiter *Limiter
+	// StartNotReady builds the handler not ready: verify answers 503 retry and the health
+	// route reports unavailable until SetReady(true) (D-30). The zero value is ready at once.
+	StartNotReady bool
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 }
@@ -132,6 +148,8 @@ type Handler struct {
 	limiter    *Limiter
 	trusted    []netip.Prefix
 	now        func() time.Time
+	ready      atomic.Bool
+	inflight   chan struct{}
 }
 
 // ErrBadOptions means NewHandler refused its options.
@@ -155,7 +173,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	if limiter == nil {
 		limiter = NewLimiter(opts.Store.client)
 	}
-	return &Handler{
+	h := &Handler{
 		botToken:   opts.BotToken,
 		hostname:   strings.ToLower(base.Hostname()),
 		store:      opts.Store,
@@ -164,7 +182,44 @@ func NewHandler(opts Options) (*Handler, error) {
 		limiter:    limiter,
 		trusted:    opts.TrustedProxies,
 		now:        now,
-	}, nil
+		inflight:   make(chan struct{}, verifyMaxInFlight),
+	}
+	h.ready.Store(!opts.StartNotReady)
+	return h, nil
+}
+
+// SetReady marks the handler ready (true) or not ready (false). While it is not ready, verify
+// answers 503 retry before reading anything and the health route reports unavailable.
+func (h *Handler) SetReady(ready bool) {
+	h.ready.Store(ready)
+}
+
+// Routes returns the three route patterns with their handlers, page being the Mini App page
+// handler, for the HTTP server to mount.
+func (h *Handler) Routes(page http.Handler) map[string]http.Handler {
+	return map[string]http.Handler{
+		RoutePage:   page,
+		RouteVerify: http.HandlerFunc(h.Verify),
+		RouteHealth: http.HandlerFunc(h.Health),
+	}
+}
+
+// Health answers 200 {"status":"ok"} when the handler is ready and Redis answers a PING
+// within RedisTimeout, and 503 {"status":"unavailable"} otherwise. The body never names an ID,
+// a setting or a secret (D-10).
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	status, body := http.StatusOK, `{"status":"ok"}`
+	if !h.ready.Load() || h.store.Ping(r.Context()) != nil {
+		status, body = http.StatusServiceUnavailable, `{"status":"unavailable"}`
+	}
+	hdr := w.Header()
+	hdr.Set("Content-Type", "application/json")
+	hdr.Set("Cache-Control", "no-store")
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	if _, err := io.WriteString(w, body+"\n"); err != nil {
+		log.Debugf("[CaptchaWeb][Health] write failed: %v", err)
+	}
 }
 
 type verifyRequest struct {
@@ -222,6 +277,11 @@ func (h *Handler) withinLimit(w http.ResponseWriter, r *http.Request, key string
 
 func decodeVerifyRequest(w http.ResponseWriter, r *http.Request) (verifyRequest, int, bool) {
 	var req verifyRequest
+	// Only JSON is accepted: a form post or a text/plain post from another site is refused
+	// before a byte of it is read (no CORS preflight can make it pass).
+	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
+		return req, http.StatusUnsupportedMediaType, false
+	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
@@ -253,14 +313,29 @@ func decodeVerifyRequest(w http.ResponseWriter, r *http.Request) (verifyRequest,
 // network or configuration fault, a bot that cannot restrict, or a Backend error before
 // anything was claimed (D-21).
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
+	// The server's write timeout is shorter than a siteverify call plus a pass. The error is
+	// ignored: a recorder or a wrapped writer may not support deadlines.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(verifyWriteDeadline))
+
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		writeAnswer(w, http.StatusMethodNotAllowed, Answer{Result: ResultInvalid})
 		return
 	}
-	// The server's write timeout is shorter than a siteverify call plus a pass. The error is
-	// ignored: a recorder or a wrapped writer may not support deadlines.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(verifyWriteDeadline))
+	// Until the modules are loaded (polling mode starts serving before they are) nothing is
+	// decided and nothing is read: the page retries (D-30).
+	if !h.ready.Load() {
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return
+	}
+	// A burst beyond the in-flight cap is refused at once, before any Redis or backend work.
+	select {
+	case h.inflight <- struct{}{}:
+		defer func() { <-h.inflight }()
+	default:
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return
+	}
 
 	// The per-address window comes before the body is read. Behind a shared proxy address with
 	// no trusted list there is no per-address bucket, and the per-user windows still apply.

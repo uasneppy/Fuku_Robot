@@ -141,6 +141,13 @@ func (s *Store) Issue(ctx context.Context, token string, rec Record) error {
 	return err
 }
 
+// Ping reports whether Redis answers a PING within RedisTimeout.
+func (s *Store) Ping(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, RedisTimeout)
+	defer cancel()
+	return s.client.Ping(ctx).Err()
+}
+
 // ConsumeResult is the outcome of ConsumeIfUser.
 type ConsumeResult int
 

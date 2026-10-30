@@ -561,6 +561,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   not `passed`: the claim already wrote the `captcha_muted_users` row due now, the 5-minute worker retries it, the
   challenge message is deleted and the token is not re-armed. A replica that crashes between the consume and a re-arm
   loses that member's challenge until the group's time limit ends the attempt (accepted).
+  The verify route (`Handler.Verify`, `POST /captcha/verify`) refuses cheapest first: the handler's own write deadline is
+  extended to 20 s (the HTTP server's `WriteTimeout` is 10 s, shorter than a siteverify call plus a pass), then a method
+  other than POST gets 405 with `Allow: POST`, then a handler that is not ready answers 503 retry, then more than 64
+  requests in flight on the replica (`verifyMaxInFlight`) get 503 retry before any Redis or backend call, then the
+  address window, then the body: `Content-Type` must be `application/json` (415), at most 16 KiB (413), no unknown field
+  and no second JSON value (400). Every answer, the 405 and 429 ones included, carries `Cache-Control: no-store`,
+  `X-Content-Type-Options: nosniff` and a JSON body, and the route sets no CORS header and answers no preflight, so another
+  site can neither read it nor post a form to it. Work after the challenge is claimed never uses the request context (see
+  above). A handler built with `Options.StartNotReady` answers 503 retry, reading nothing and touching neither Redis nor
+  the backend, until `SetReady(true)` (polling mode starts the HTTP server before the modules load, D-30).
+  `GET /captcha/health` (`Handler.Health`) answers `200 {"status":"ok"}` only when the handler is ready and Redis answers a
+  `PING` within 250 ms, else `503 {"status":"unavailable"}`, and never names an ID, a setting or a secret. The patterns are
+  `RoutePage`, `RouteVerify` and `RouteHealth`, returned by `Handler.Routes`.
 - The Turnstile verify route's client address is `captchaweb.ClientIP`: `RemoteAddr`, unless `RemoteAddr` is inside
   `CAPTCHA_WEB_TRUSTED_PROXIES` (`captchaweb.ParseTrustedProxies`, comma-separated IPs and CIDRs), in which case
   `X-Forwarded-For` (all header lines as one list) is walked from the right to the first address outside the list. `X-Real-IP`
