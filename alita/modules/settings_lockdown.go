@@ -325,9 +325,15 @@ func settingsLockdownLiftRefusal(p *settingsPress, result lockdownLiftApply) *se
 // redraws the page with settings_card_expired and lifts nothing. Otherwise the press is
 // answered first (the lift can outlast the callback, D-31) and the lift goes only through
 // applyLockdownLift, the path /unlockdown uses, which reads the lockdown fresh and records
-// the lift through the conditional BeginLift, so of two Yes presses one wins. A recorded lift
-// is announced in the group like the alert's Lift (lockdownAnnounceLift); every outcome
-// redraws the page with the command's words as a notice.
+// the lift through the conditional BeginLift, so of two Yes presses one wins. Every outcome
+// redraws the page with the command's words as a notice. A recorded lift redraws the page
+// before anything is announced: the announcement waits for a pacer slot (up to a minute) and
+// the card with its live Yes must not stay on screen meanwhile (WR-04). It is then announced
+// as the alert's Lift is (lockdownAnnounceLift: the public lockdown_lifted notice in the
+// locked group, then a wake of the worker) from a private menu, which is the only place the
+// group has not already been told. A menu opened in the group redraws in that same chat with
+// the same words as its notice, so a second public message would say it twice; it only wakes
+// the worker (D-26 as amended).
 func settingsLockdownLiftYes(p *settingsPress) *settingsScreen {
 	expired, ok := settingsCardExpired(p.fields)
 	if !ok {
@@ -343,6 +349,11 @@ func settingsLockdownLiftYes(p *settingsPress) *settingsScreen {
 	if result.Outcome != liftApplyDone {
 		return settingsLockdownLiftRefusal(p, result)
 	}
-	lockdownAnnounceLift(p.b, result.Row, p.query.From.Id, result.ActorName, result.Lift)
-	return settingsLockdownRedraw(p, nil, settingsNoticeOK(lockdownLiftApplyText(p.tr, result, p.query.From.Id)))
+	p.edit(*settingsLockdownRedraw(p, nil, settingsNoticeOK(lockdownLiftApplyText(p.tr, result, p.query.From.Id))))
+	if p.private {
+		lockdownAnnounceLift(p.b, result.Row, p.query.From.Id, result.ActorName, result.Lift)
+	} else {
+		wakeLockdownWorker()
+	}
+	return nil
 }

@@ -117,6 +117,7 @@ func TestSettingsLockdownLift(t *testing.T) {
 		answersAtRestore = n
 	})
 	answersBefore := env.answerCount()
+	lockdownApplyDrainWake()
 	env.pressRaw(env.chat, env.admin, msgID, yes.CallbackData)
 
 	if got := env.answerCount() - answersBefore; got != 1 {
@@ -140,8 +141,13 @@ func TestSettingsLockdownLift(t *testing.T) {
 	if lifted.LiftedBy == nil || *lifted.LiftedBy != env.admin.Id {
 		t.Errorf("LiftedBy = %v, want the presser %d", lifted.LiftedBy, env.admin.Id)
 	}
-	if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 1 {
-		t.Errorf("%d public lift notices reached the group, want exactly 1", len(got))
+	// A menu opened in the group redraws in the group with the lift as its notice (checked
+	// below), so a second public message would say it twice (WR-04). The worker is still woken.
+	if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 0 {
+		t.Errorf("%d public lift notices reached the group beside the redrawn menu, want none", len(got))
+	}
+	if !lockdownApplyDrainWake() {
+		t.Error("the lockdown worker was not woken after a lift from a group menu")
 	}
 	finalText, finalKeyboard := env.lastEdit(env.chat.Id, msgID)
 	if !strings.Contains(finalText, staffMarker("lockdown_lifted")) {
@@ -286,8 +292,8 @@ func TestSettingsLockdownLiftTwice(t *testing.T) {
 			if got := settingsLiftTestRestores(env) - restoresBefore; got != 1 {
 				t.Errorf("two Yes presses made %d restore calls, want 1", got)
 			}
-			if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 1 {
-				t.Errorf("%d public lift notices, want exactly 1", len(got))
+			if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 0 {
+				t.Errorf("%d public lift notices beside the menu's own notice, want none", len(got))
 			}
 			lifted := env.freshRow(row.ID)
 			if lifted.LiftedBy == nil || *lifted.LiftedBy != env.admin.Id {
@@ -477,8 +483,13 @@ func TestSettingsLockdownLiftPrivate(t *testing.T) {
 	if lifted.LiftedBy == nil || *lifted.LiftedBy != env.admin.Id {
 		t.Errorf("LiftedBy = %v, want %d", lifted.LiftedBy, env.admin.Id)
 	}
+	// The group has not been told anywhere else, so the private menu posts the one notice
+	// (D-26), after the page was redrawn (WR-04).
 	if got := env.repliesWith(staffMarker("lockdown_lifted")); len(got) != 1 {
 		t.Errorf("%d public lift notices reached the group, want exactly 1", len(got))
+	}
+	if !lockdownApplyDrainWake() {
+		t.Error("the lockdown worker was not woken after a lift from a private menu")
 	}
 	if sent := env.fake.sentTo(env.admin.Id); len(sent) != 1 {
 		t.Errorf("the bot sent %d messages to the private chat, want only the menu itself", len(sent))
@@ -633,5 +644,48 @@ func TestSettingsLockdownLiftCardFitsEveryLocale(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// settingsLiftTestCallIndex returns the position in the bot's call log of the first call of
+// method to chatID whose text carries the marker, or -1.
+func settingsLiftTestCallIndex(env *settingsEnv, method string, chatID int64, marker string) int {
+	env.fake.moduleBotClient.mu.Lock()
+	defer env.fake.moduleBotClient.mu.Unlock()
+	for i, call := range env.fake.moduleBotClient.calls {
+		if call.Method != method || staffParamInt(call.Params, "chat_id") != chatID {
+			continue
+		}
+		if text, _ := call.Params["text"].(string); strings.Contains(text, marker) {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestSettingsLockdownLiftRedrawsBeforeAnnouncing pins WR-04: the announcement waits for a
+// pacer slot, so the menu is redrawn (and its live Yes is gone) before the public notice is
+// sent.
+func TestSettingsLockdownLiftRedrawsBeforeAnnouncing(t *testing.T) {
+	env := newSettingsEnv(t)
+	env.lockAsAdmin("raid")
+	env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+	privateMsgID := settingsPrivateOnlySent(t, env, env.admin).MessageID
+	private := settingsPrivateChat(env.admin)
+	env.pressPrivate(env.admin, privateMsgID, env.privateFields(env.chat.Id, "a", "op", "p", settingsPageLockdown))
+	_, keyboard := env.lastEdit(env.admin.Id, privateMsgID)
+	env.pressRaw(private, env.admin, privateMsgID, settingsLiftTestButton(t, keyboard, "lockdown_alert_btn_lift").CallbackData)
+	_, card := env.lastEdit(env.admin.Id, privateMsgID)
+	yes := settingsLiftTestButton(t, card, "settings_btn_yes")
+
+	env.pressRaw(private, env.admin, privateMsgID, yes.CallbackData)
+
+	redraw := settingsLiftTestCallIndex(env, "editMessageText", env.admin.Id, staffMarker("lockdown_lifted"))
+	announce := settingsLiftTestCallIndex(env, "sendMessage", env.chat.Id, staffMarker("lockdown_lifted"))
+	if redraw < 0 || announce < 0 {
+		t.Fatalf("redraw call at %d, announcement at %d: both must exist", redraw, announce)
+	}
+	if redraw > announce {
+		t.Errorf("the menu was redrawn at call %d, after the announcement at call %d: the Yes card stayed on screen while the notice waited", redraw, announce)
 	}
 }

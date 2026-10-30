@@ -254,9 +254,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   an active one draws the card `lockdown_alert_lift_ask` (`renderSettingsLockdownLiftCard`, the stored group title
   escaped and spliced in after translation). Yes goes through `settingsCardExpired` (an expired minute redraws with
   `settings_card_expired` and lifts nothing), answers the press empty first, then lifts only through
-  `applyLockdownLift`; the menu never calls `setChatPermissions`, `BeginLift` or `FinishLift` itself. A recorded lift is
-  announced through `lockdownAnnounceLift` and every outcome redraws the page with the command's words as a notice
-  (`lockdownLiftApplyText`). The page never starts a lockdown.
+  `applyLockdownLift`; the menu never calls `setChatPermissions`, `BeginLift` or `FinishLift` itself. Every outcome redraws the page with the command's words as a notice
+  (`lockdownLiftApplyText`), and a recorded lift redraws it before anything is announced (the announcement waits for a
+  pacer slot, up to a minute, and the card with its live Yes must not stay on screen meanwhile). A lift from a private
+  menu is then announced through `lockdownAnnounceLift`; a lift from a menu opened in the group only wakes the worker,
+  because the redrawn menu already says it in that same chat and a second public message would say it twice. The page
+  never starts a lockdown.
 
 ## Permissions
 
@@ -596,8 +599,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `BeginLift` is reached only through `lockdownBeginLift` in `liftLockdownRow`, the one lift path shared by `/unlockdown`
   (`applyLockdownLift`), the alert's Lift Confirm and the settings menu's Lift Yes (`applyLockdownLift`) (restore the
   stored permissions, then one conditional record, then `FinishLift`). The alert's Lift and the settings menu's Lift
-  also post the public `lockdown_lifted` notice in the locked group, through `lockdownAnnounceLift` (`lockdownPaced`),
-  and wake the worker, so a lift by button is never silent, also from a private menu. The
+  from a private menu also post the public `lockdown_lifted` notice in the locked group, through `lockdownAnnounceLift`
+  (`lockdownPaced`), and wake the worker, so a lift by button is never silent, also from a private menu; a Lift from a
+  menu opened in the group only wakes the worker, its redrawn menu being the notice in that same chat. The
   `chat_lockdowns` columns `trigger_count`, `trigger_window` (seconds) and `trigger_percent` (migration 20261018120000,
   with `idx_chat_lockdowns_chat_lift` on `(chat_id, lift_started_at)`) record the numbers behind an automatic trigger:
   `trigger_kind` is `manual`, `join_surge`, `flood` or `ai_burst`, and all three numbers are 0 for a manual lockdown
