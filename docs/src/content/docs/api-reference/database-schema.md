@@ -209,7 +209,7 @@ Stores captcha configuration per chat.
 | `id` | `SERIAL` | NO | auto-increment | PRIMARY KEY |
 | `chat_id` | `BIGINT` | NO | — | UNIQUE |
 | `enabled` | `BOOLEAN` | NO | `FALSE` | — |
-| `captcha_mode` | `VARCHAR(10)` | NO | `'math'` | CHECK (`captcha_mode IN ('math','text')`) |
+| `captcha_mode` | `VARCHAR(10)` | NO | `'math'` | CHECK (`captcha_mode IN ('math','text','turnstile')`) |
 | `timeout` | `INTEGER` | NO | `2` | CHECK (`timeout BETWEEN 1 AND 10`) |
 | `failure_action` | `VARCHAR(10)` | NO | `'kick'` | CHECK (`failure_action IN ('kick','ban','mute')`) |
 | `max_attempts` | `INTEGER` | NO | `3` | CHECK (`max_attempts BETWEEN 1 AND 10`) |
