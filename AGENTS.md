@@ -222,6 +222,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `c`; an error of either that `chat_status.IsBotMissingError` recognises ("bot was kicked", "bot is not a member",
   "chat not found") is the cannot-open edit with its alert (`settingsPress.cannotOpen`, D-11), and every other error is
   the `settings_check_failed` alert with no edit. A group menu's pipeline is unchanged.
+- The Staff Group page (`settings_staff.go`, page `s`) declares four actions: `lk` Link (with an optional `s`), `ua` Unlink
+  ask, `uy` Unlink Yes (with `e`) and `pg` (with `v`, the page of the read-only panel, parsed by `settingsParseNumber`
+  and clamped; a value that is not a number is an invalid request). `s` is the staff_groups row ID, never a chat ID:
+  a pick lists the presser's own Staff Groups again (`staff.ListStaffGroupsByOwner`), takes the row whose ID equals `s`
+  (never a position, so a list that was reordered since it was drawn cannot link another group), and only then makes
+  `resolveNamedStaffGroup`'s live creator check. An `s` that is not a positive number of at most 10 digits is an invalid
+  request; one that names no row of the presser is refused with `staff_link_refuse_not_staff_owner` and links nothing.
+  The Unlink card is the shared two-tap card of `settings_card.go`: `settingsCardRows` adds `[Yes | No]` and the
+  navigation row, Yes carries `e` (unix minutes, `settingsCardLifetime` 5 minutes ahead, a variable only for tests), expiry
+  is lazy (`settingsCardExpired`: a Yes whose minute is past redraws the page with `settings_card_expired` and runs
+  nothing, an `e` that is not digits only, positive and 63-bit is an invalid request), there is no timer and no Redis
+  key, and Yes goes through the whole press pipeline and then the action's own live checks (`runUnlinkGroup` checks the
+  creator of both groups again). Plan 09-12's Lift card uses the same helper.
 
 ## Permissions
 
@@ -1145,6 +1158,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   as the commands can; the replica that took the press is consistent. A group menu's text is readable by every member of
   the group, and a menu or choice message stays until used or closed (no auto-close timer). The "Only {name} can use this
   menu." line carries an escaped name, not a mention, so it pings nobody.
+- A menu opened in the group never shows the Staff Group's title or chat ID (D-21): not in any text, button label, notice,
+  alert or callback data, in any of the 7 languages, on any page, picker, card or refusal. A private menu and a menu inside
+  a Staff Group may. `settingsStaffViewFor` is the one place that decides: it copies the title and chat ID into
+  `settingsStaffView` only for a private menu or a Staff Group's own page and clears the row's link either way, so a
+  group-menu renderer never receives them; the picker's labels in a group menu are positions
+  (`settings_btn_staff_pick_n`) and its buttons carry the row ID. Filtering text after the fact is never the fix.
+  `staff_link_done` and `staff_notice_unlinked_by` go to the Staff Group only, as the commands post them, and nothing about
+  a link is posted into the linked group. Link and Unlink run `listVerifiedOwnStaffGroups`, `linkToStaffGroup`,
+  `announceStaffLink`, `checkUnlinkAuthority` and `runUnlinkGroup`, so the menu and `/linkstaff` and `/unlinkstaff` cannot
+  diverge, and a refusal is the command's own text through `staffLinkRefusalText` or `staffUnlinkRefusalText` as a notice.
+  The page reads the database first (a failed read is the cannot-open alert and edit), then answers the press empty, then
+  makes its live health checks (`buildStaffPanelRows`, at most 2N+1 Telegram calls, `staffPanelBuildTimeout`), and a link
+  the owner check removed draws as "Not linked" with no notice. Inside a Staff Group the page is the `/staff` panel
+  read-only (`renderSettingsStaffPanel`, 8 groups a page, inside 3800 UTF-16 units with the settings header and the
+  `settings_staff_readonly` line) with no Link, Unlink, Add group or Recent actions. `TestSettingsStaffPrivacy` renders
+  every reachable screen in all 7 languages and runs a group menu end to end.
 
 ## Go rules
 
