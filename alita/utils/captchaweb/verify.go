@@ -89,6 +89,22 @@ const (
 	PassUnmuteFailed
 )
 
+// ActionResult is what Backend.Fail and Backend.Expire report about the group's failure action.
+type ActionResult int
+
+const (
+	// ActionLost means this call changed nothing: the attempt was already decided by someone
+	// else (a timer, another replica, a pass), or its row is gone. The decider applied the
+	// action, so the answer still names it. It is the zero value.
+	ActionLost ActionResult = iota
+	// ActionApplied means this call claimed the attempt and the group's action took effect.
+	ActionApplied
+	// ActionNotApplied means this call claimed the attempt but the group's action could not be
+	// applied (Telegram refused it): the member was unmuted and is still in the group, so the
+	// answer must not say they were removed.
+	ActionNotApplied
+)
+
 // Backend is the bot side of the web captcha: the attempt row, the claim, the unmute and the
 // greeting. alita/modules implements it, so this package never imports a package of the
 // module.
@@ -106,14 +122,14 @@ type Backend interface {
 	// button pass does. It is called only after the signed user and Cloudflare confirmed.
 	Pass(ctx context.Context, rec Record, user InitData) (PassResult, error)
 	// Fail applies the group's failure action to a member whose solve provably failed, once,
-	// through the same function the timer uses. claimed is true when this call won the
-	// conditional delete of the attempt row (and so applied, or tried to apply, the action);
-	// false means the attempt was already decided by someone else.
-	Fail(ctx context.Context, rec Record) (claimed bool, err error)
+	// through the same function the timer uses. The result says whether this call won the
+	// conditional delete of the attempt row and whether the action took effect. An unclaimed
+	// Fail with the attempt still pending is an error, because nothing was decided.
+	Fail(ctx context.Context, rec Record) (ActionResult, error)
 	// Expire applies the group's failure action to an attempt whose time is up and that
-	// nobody has decided yet. It does nothing when the row is gone or still live, because the
-	// timer owns a live row.
-	Expire(ctx context.Context, rec Record) error
+	// nobody has decided yet. It does nothing (ActionLost) when the row is gone or still live,
+	// because the timer owns a live row.
+	Expire(ctx context.Context, rec Record) (ActionResult, error)
 }
 
 // Options builds a Handler.
@@ -499,14 +515,30 @@ func (c *challengeRun) retry(status int) {
 func (c *challengeRun) expire() {
 	ctx, cancel := c.work()
 	defer cancel()
-	if err := c.h.backend.Expire(ctx, c.rec); err != nil {
+	res, err := c.h.backend.Expire(ctx, c.rec)
+	if err != nil {
 		// Nothing changed; the timer and the cleanup tick still own the row.
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] expire failed")
 		countError()
 	}
-	log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=expired")
-	c.decided(ResultExpired, c.action)
-	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultExpired, Action: c.action})
+	c.answerAction(ResultExpired, res)
+}
+
+// answerAction answers a decided failed or expired outcome from what the Backend did. When the
+// group's action could not be applied the member was unmuted and is still in the group, so the
+// page gets the neutral invalid answer ("nothing was changed") instead of a removal notice, and
+// the replay marker stores the same answer (WR-07).
+func (c *challengeRun) answerAction(result Result, res ActionResult) {
+	if res == ActionNotApplied {
+		log.WithFields(c.fields).Warnf("[CaptchaWeb][Verify] outcome=%s applied=false", result)
+		countError()
+		c.decided(ResultInvalid, "")
+		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultInvalid})
+		return
+	}
+	log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=%s", result)
+	c.decided(result, c.action)
+	writeAnswer(c.w, http.StatusOK, Answer{Result: result, Action: c.action})
 }
 
 func (c *challengeRun) decide() {
@@ -585,7 +617,7 @@ func (c *challengeRun) pass() {
 
 func (c *challengeRun) fail(reason Reason) {
 	ctx, cancel := c.work()
-	claimed, err := c.h.backend.Fail(ctx, c.rec)
+	res, err := c.h.backend.Fail(ctx, c.rec)
 	cancel()
 	if err != nil {
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] fail failed")
@@ -593,12 +625,11 @@ func (c *challengeRun) fail(reason Reason) {
 		c.retry(http.StatusServiceUnavailable)
 		return
 	}
-	if !claimed {
+	if res == ActionLost {
 		// Lost the conditional delete to a timer or another replica.
 		c.expire()
 		return
 	}
-	log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=failed reason=%s", reason)
-	c.decided(ResultFailed, c.action)
-	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultFailed, Action: c.action})
+	log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] failed solve reason=%s", reason)
+	c.answerAction(ResultFailed, res)
 }

@@ -33,8 +33,9 @@ type outcomeBackend struct {
 	AttemptErr     error
 	PassResult     PassResult
 	PassErr        error
-	FailClaimed    bool
+	FailResult     ActionResult
 	FailErr        error
+	ExpireResult   ActionResult
 	ExpireErr      error
 
 	calls []string
@@ -42,10 +43,11 @@ type outcomeBackend struct {
 
 func newOutcomeBackend() *outcomeBackend {
 	return &outcomeBackend{
-		CanRestrict: true,
-		Status:      AttemptStatus{Live: true, Action: "kick"},
-		PassResult:  PassOK,
-		FailClaimed: true,
+		CanRestrict:  true,
+		Status:       AttemptStatus{Live: true, Action: "kick"},
+		PassResult:   PassOK,
+		FailResult:   ActionApplied,
+		ExpireResult: ActionApplied,
 	}
 }
 
@@ -83,18 +85,18 @@ func (b *outcomeBackend) Pass(context.Context, Record, InitData) (PassResult, er
 	return b.PassResult, b.PassErr
 }
 
-func (b *outcomeBackend) Fail(context.Context, Record) (bool, error) {
+func (b *outcomeBackend) Fail(context.Context, Record) (ActionResult, error) {
 	b.record("fail")
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.FailClaimed, b.FailErr
+	return b.FailResult, b.FailErr
 }
 
-func (b *outcomeBackend) Expire(context.Context, Record) error {
+func (b *outcomeBackend) Expire(context.Context, Record) (ActionResult, error) {
 	b.record("expire")
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.ExpireErr
+	return b.ExpireResult, b.ExpireErr
 }
 
 const (
@@ -258,7 +260,7 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 			name: "a failed solve that lost the claim expires and does not re-arm",
 			setup: func(o *outcomeHandler) {
 				o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("timeout-or-duplicate")))
-				o.Backend.FailClaimed = false
+				o.Backend.FailResult = ActionLost
 			},
 			wantStatus: 200,
 			wantResult: ResultExpired,
@@ -269,7 +271,7 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 			name: "a failed solve whose claim errored re-arms",
 			setup: func(o *outcomeHandler) {
 				o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("invalid-input-response")))
-				o.Backend.FailClaimed = false
+				o.Backend.FailResult = ActionLost
 				o.Backend.FailErr = errors.New("database down")
 			},
 			wantStatus:  503,
@@ -451,6 +453,77 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 	})
 }
 
+// TestVerifyRouteActionNotApplied pins WR-07: when the group's failure action could not be
+// applied the member was only unmuted, so the page gets the neutral invalid answer with no
+// action (never "you were removed"), the replay marker stores the same, and the fault is
+// logged at warn level with applied=false.
+func TestVerifyRouteActionNotApplied(t *testing.T) {
+	const member = int64(42)
+
+	cases := []struct {
+		name      string
+		setup     func(o *outcomeHandler)
+		wantCalls []string
+	}{
+		{
+			name: "a failed solve",
+			setup: func(o *outcomeHandler) {
+				o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("invalid-input-response")))
+				o.Backend.FailResult = ActionNotApplied
+			},
+			wantCalls: []string{"bot_can_restrict", "attempt", "fail"},
+		},
+		{
+			name: "an expired attempt",
+			setup: func(o *outcomeHandler) {
+				o.Backend.Status = AttemptStatus{Live: false, Action: "ban"}
+				o.Backend.ExpireResult = ActionNotApplied
+			},
+			wantCalls: []string{"bot_can_restrict", "attempt", "expire"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hook := captureLogs(t)
+			o := newOutcomeHandler(t)
+			tc.setup(o)
+			token, _ := o.issue(member)
+
+			status, answer := o.post(member, token)
+			if status != 200 || answer.Result != ResultInvalid || answer.Action != "" {
+				t.Fatalf("answer = %d %+v, want 200 invalid with no action", status, answer)
+			}
+			if got := o.Backend.Calls(); strings.Join(got, ",") != strings.Join(tc.wantCalls, ",") {
+				t.Fatalf("backend calls = %v, want %v", got, tc.wantCalls)
+			}
+			if o.Redis.Exists(o.key(token)) {
+				t.Fatal("the challenge was given back after a decided outcome")
+			}
+
+			// The remembered answer is the same neutral one, replayed with no side effect.
+			status, answer = o.post(member, token)
+			if status != 200 || answer.Result != ResultInvalid || answer.Action != "" {
+				t.Fatalf("replay = %d %+v, want 200 invalid with no action", status, answer)
+			}
+			if got := o.Backend.Calls(); strings.Join(got, ",") != strings.Join(tc.wantCalls, ",") {
+				t.Fatalf("the replay reached the backend: %v", got)
+			}
+
+			hook.mu.Lock()
+			defer hook.mu.Unlock()
+			var warned bool
+			for _, entry := range hook.entries {
+				if strings.Contains(entry.text, "applied=false") && entry.level == log.WarnLevel {
+					warned = true
+				}
+			}
+			if !warned {
+				t.Fatal("no warn entry with applied=false")
+			}
+		})
+	}
+}
+
 // capturedLog is one log entry as the test saw it: the message and every field value, flattened.
 type capturedLog struct {
 	level log.Level
@@ -619,7 +692,7 @@ func TestCaptchaWebNeverLogsInputs(t *testing.T) {
 		}), ResultRetry},
 		{"fail lost, expire error", plain(func(o *outcomeHandler) {
 			o.setSiteverify(echoingCloudflare(200, cloudflareCodes("timeout-or-duplicate")))
-			o.Backend.FailClaimed = false
+			o.Backend.FailResult = ActionLost
 			o.Backend.ExpireErr = errors.New("telegram says " + echoMarker)
 		}), ResultExpired},
 		{"not for you", func(o *outcomeHandler) (int, Answer, []string) {

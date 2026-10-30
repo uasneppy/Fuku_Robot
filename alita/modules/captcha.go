@@ -1317,23 +1317,33 @@ func scheduleCaptchaTimeout(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) {
 }
 
 func expireCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (bool, error) {
+	claimed, _, err := expireCaptchaAttemptApplied(bot, attempt)
+	return claimed, err
+}
+
+// expireCaptchaAttemptApplied is expireCaptchaAttempt that also reports whether the group's
+// failure action took effect. A released attempt (an approved member, or a group that turned
+// the captcha off) is claimed without any action applied.
+func expireCaptchaAttemptApplied(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (claimed, applied bool, err error) {
 	if chat_status.IsApproved(bot, attempt.ChatID, attempt.UserID) {
 		if attempt.MessageID > 0 {
 			_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
 		}
-		return releaseIncompleteCaptchaAttempt(bot, attempt)
+		claimed, err = releaseIncompleteCaptchaAttempt(bot, attempt)
+		return claimed, false, err
 	}
 	settings, err := captcha.GetCaptchaSettings(attempt.ChatID)
 	if err != nil {
-		return false, fmt.Errorf("load captcha settings for chat %d: %w", attempt.ChatID, err)
+		return false, false, fmt.Errorf("load captcha settings for chat %d: %w", attempt.ChatID, err)
 	}
 	if !settings.Enabled {
 		if attempt.MessageID > 0 {
 			_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
 		}
-		return releaseIncompleteCaptchaAttempt(bot, attempt)
+		claimed, err = releaseIncompleteCaptchaAttempt(bot, attempt)
+		return claimed, false, err
 	}
-	claimed, _ := handleCaptchaTimeout(
+	claimed, applied = handleCaptchaTimeout(
 		bot,
 		attempt.ChatID,
 		attempt.UserID,
@@ -1344,7 +1354,7 @@ func expireCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (bool, 
 	if claimed && captchaweb.IsReservedAnswer(attempt.Answer) {
 		captchaweb.CountExpired()
 	}
-	return claimed, nil
+	return claimed, applied, nil
 }
 
 func handleCaptchaTimeout(bot *gotgbot.Bot, chatID, userID int64, attemptID uint, fallbackMessageID int64, action string) (bool, bool) {

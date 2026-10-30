@@ -630,3 +630,38 @@ func TestCaptchaWebCloudflareErrorIsNotAFailure(t *testing.T) {
 		})
 	}
 }
+
+// TestCaptchaWebFailedActionNotAppliedIsNeutral pins WR-07: a failed solve whose failure action
+// Telegram refused leaves the member unmuted and in the group, so the page is never told they
+// were removed, and the remembered answer is the same neutral one.
+func TestCaptchaWebFailedActionNotAppliedIsNeutral(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	env := newCaptchaWebEnv(t)
+	if err := captcha.SetCaptchaFailureAction(env.chat.Id, "ban"); err != nil {
+		t.Fatalf("SetCaptchaFailureAction() error = %v", err)
+	}
+	token := env.join(member)
+	env.setSiteverify(captchaweb.SiteverifyAnswerForTest(http.StatusOK, `{"success":false,"error-codes":["invalid-input-response"]}`))
+	env.client.mu.Lock()
+	env.client.errors["banChatMember"] = errors.New("Bad Request: not enough rights to restrict")
+	env.client.mu.Unlock()
+
+	status, answer := env.verify(member, token)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid || answer.Action != "" {
+		t.Fatalf("verify = %d %+v, want 200 invalid with no action", status, answer)
+	}
+	if env.attempt(member.Id) != nil {
+		t.Fatal("the attempt row survived a claimed failed solve")
+	}
+	if got := unmutesOf(t, env.client, member.Id); got == 0 {
+		t.Fatal("the member was not unmuted after the action failed")
+	}
+	if failures := sentTextContaining(env.client, staffMarker("captcha_timeout_failure_banned")); failures != 0 {
+		t.Fatalf("removal notices = %d, want none for an action that did not apply", failures)
+	}
+
+	status, answer = env.verify(member, token)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid || answer.Action != "" {
+		t.Fatalf("replay = %d %+v, want the same neutral answer", status, answer)
+	}
+}

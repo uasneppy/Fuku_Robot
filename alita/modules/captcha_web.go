@@ -367,20 +367,31 @@ func pendingTurnstileAttempt(rec captchaweb.Record) (*db.CaptchaAttempts, error)
 // who applies the group's action, the challenge message is deleted and the failure notice is
 // posted (D-08). It reads the row and the settings first so that a database error is reported
 // as an error, with nothing changed, instead of looking like a lost claim.
-func (b captchaWebBackend) Fail(_ context.Context, rec captchaweb.Record) (bool, error) {
+func (b captchaWebBackend) Fail(_ context.Context, rec captchaweb.Record) (captchaweb.ActionResult, error) {
 	attempt, err := pendingTurnstileAttempt(rec)
 	if err != nil {
-		return false, err
+		return captchaweb.ActionLost, err
 	}
 	if attempt == nil {
-		return false, nil
+		return captchaweb.ActionLost, nil
 	}
 	settings, err := captcha.GetCaptchaSettings(rec.ChatID)
 	if err != nil {
-		return false, err
+		return captchaweb.ActionLost, err
 	}
-	claimed, _ := handleCaptchaTimeout(b.rt.bot, rec.ChatID, rec.UserID, rec.AttemptID, 0, settings.FailureAction)
-	return claimed, nil
+	claimed, applied := handleCaptchaTimeout(b.rt.bot, rec.ChatID, rec.UserID, rec.AttemptID, 0, settings.FailureAction)
+	return actionResultOf(claimed, applied), nil
+}
+
+// actionResultOf maps the (claimed, applied) pair of the timeout path to the Backend result.
+func actionResultOf(claimed, applied bool) captchaweb.ActionResult {
+	switch {
+	case !claimed:
+		return captchaweb.ActionLost
+	case applied:
+		return captchaweb.ActionApplied
+	}
+	return captchaweb.ActionNotApplied
 }
 
 // Expire implements captchaweb.Backend. It applies the group's action to an attempt whose
@@ -388,14 +399,20 @@ func (b captchaWebBackend) Fail(_ context.Context, rec captchaweb.Record) (bool,
 // so whichever of the three arrives first decides and the others find the row gone. A row
 // that is gone, belongs to another member or chat, or is still live is left alone: the timer
 // owns a live row.
-func (b captchaWebBackend) Expire(_ context.Context, rec captchaweb.Record) error {
+func (b captchaWebBackend) Expire(_ context.Context, rec captchaweb.Record) (captchaweb.ActionResult, error) {
 	attempt, err := pendingTurnstileAttempt(rec)
 	if err != nil {
-		return err
+		return captchaweb.ActionLost, err
 	}
 	if attempt == nil || time.Now().Before(attempt.ExpiresAt) {
-		return nil
+		return captchaweb.ActionLost, nil
 	}
-	_, err = expireCaptchaAttempt(b.rt.bot, attempt)
-	return err
+	claimed, applied, err := expireCaptchaAttemptApplied(b.rt.bot, attempt)
+	if claimed && err != nil {
+		// The attempt is decided; only a follow-up step (an unmute retry) failed. The contract
+		// reserves an error for a call that changed nothing.
+		log.Warnf("[Captcha][Web] Expire of attempt %d was claimed but a follow-up failed: %v", rec.AttemptID, err)
+		err = nil
+	}
+	return actionResultOf(claimed, applied), err
 }

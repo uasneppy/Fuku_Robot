@@ -423,8 +423,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   another member who hammers a target's public token spends only their own budgets and the target still passes (D-26).
   The address window is counted before the body is read, the other two right after `initData` is verified.
 - `alita:captcha:done:<token>` is the Turnstile verify route's decided-answer marker (`challenge.go`, `Store.MarkDone` and
-  `Store.Done`): a string `<user>:<result>[:<action>]` (result `passed`, `failed` or `expired`, action `kick`, `ban` or
-  `mute` and empty for passed), 10 minutes (`DoneTTL`), written with `SET NX` after every decided answer and before the
+  `Store.Done`): a string `<user>:<result>[:<action>]` (result `passed`, `failed`, `expired` or `invalid`, the neutral answer of
+  a failure action that could not be applied; action `kick`, `ban` or `mute` and empty for passed and invalid), 10 minutes (`DoneTTL`), written with `SET NX` after every decided answer and before the
   response is written, so a response lost on the way can be asked for again. When the challenge key is gone, a verify from
   the same verified user with a marker gets the same answer with no backend call and no Cloudflare request, another
   verified user gets `not_for_you`, and no marker means `invalid`. A retry answer writes none (its token is re-armed
@@ -595,7 +595,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `Store.Rearm` with its remaining lifetime; a wrong user, an unknown token, a failed solve, an expiry and a pass never
   re-arm. The bot's own Restrict right is checked live (`BotCanRestrict`, 3 s, never the admin cache) before any
   Cloudflare call, and a bot without it, or an unknown answer, is a retry. A `Backend` method returns an error only when
-  it changed nothing, which is what makes the re-arm after one safe.
+  it changed nothing, which is what makes the re-arm after one safe. `Fail` and `Expire` return a
+  `captchaweb.ActionResult`: `ActionLost` (someone else decided), `ActionApplied` or `ActionNotApplied` (this call won the
+  claim but the action did not take effect: Telegram refused the kick or ban, so the member was unmuted and is still in
+  the group). A not-applied outcome is answered with the neutral `invalid` and no action, never `failed` or `expired`
+  with a removal text, the replay marker stores the same `invalid`, and the handler logs `outcome=<result> applied=false`
+  at Warn and counts an error (WR-07).
   Exactly once on any replica: a pass, a failed solve and a timeout are decided only by the conditional delete of the
   attempt row (`CompleteCaptchaAttemptAtomic` or `ReleaseCaptchaAttemptAtomic`), never by a Redis flag, so a challenge
   issued on one replica passes on another and a timer, a cleanup tick and a check on three replicas cannot all act. A

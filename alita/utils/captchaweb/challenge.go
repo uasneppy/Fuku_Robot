@@ -152,21 +152,23 @@ func (s *Store) Issue(ctx context.Context, token string, rec Record) error {
 type Decision struct {
 	// UserID is the verified member the answer was given to.
 	UserID int64
-	// Result is passed, failed or expired.
+	// Result is passed, failed or expired, or invalid for an outcome whose failure action
+	// could not be applied (the member was spared, so the page must not say they were removed).
 	Result Result
 	// Action is the group's failure action (kick, ban or mute); empty for passed.
 	Action string
 }
 
 // MarkDone remembers a decided answer under token for DoneTTL. The first decision wins: a
-// token is decided once, so a second write is a no-op. Only passed, failed and expired are
-// decisions; a retry is never stored.
+// token is decided once, so a second write is a no-op. Only passed, failed, expired and invalid
+// (the neutral answer of an action that could not be applied) are decisions; a retry is never
+// stored.
 func (s *Store) MarkDone(ctx context.Context, token string, d Decision) error {
 	if !ValidToken(token) || d.UserID <= 0 || strings.Contains(d.Action, ":") {
 		return ErrInvalidChallenge
 	}
 	switch d.Result {
-	case ResultPassed, ResultFailed, ResultExpired:
+	case ResultPassed, ResultFailed, ResultExpired, ResultInvalid:
 	default:
 		return ErrInvalidChallenge
 	}
@@ -207,7 +209,7 @@ func (s *Store) Done(ctx context.Context, token string) (Decision, bool, error) 
 		d.Action = parts[2]
 	}
 	switch d.Result {
-	case ResultPassed, ResultFailed, ResultExpired:
+	case ResultPassed, ResultFailed, ResultExpired, ResultInvalid:
 		return d, true, nil
 	}
 	return Decision{}, false, nil
