@@ -48,12 +48,25 @@ func settingsOpenCaptchaPage(t *testing.T, env *settingsEnv) int64 {
 	t.Helper()
 	msgID := env.openMenu(env.admin)
 	_, keyboard := env.lastEdit(env.chat.Id, msgID)
-	button, ok := settingsButtonByMarker(keyboard, "settings_page_captcha")
+	button, ok := settingsPageButton(t, keyboard, settingsPageCaptcha)
 	if !ok {
 		t.Fatal("the Main page has no Captcha button")
 	}
 	env.pressRaw(env.chat, env.admin, msgID, button.CallbackData)
 	return msgID
+}
+
+// settingsPageButton finds the Main page button that opens the page with the given key, by
+// its callback data, so it works with the marker locale and with the real one.
+func settingsPageButton(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, pageKey string) (gotgbot.InlineKeyboardButton, bool) {
+	t.Helper()
+	for _, button := range settingsAllButtons(keyboard) {
+		fields := settingsButtonFields(t, button)
+		if fields["a"] == "op" && fields["p"] == pageKey {
+			return button, true
+		}
+	}
+	return gotgbot.InlineKeyboardButton{}, false
 }
 
 // settingsStepper returns the three buttons of the captcha time stepper on the current

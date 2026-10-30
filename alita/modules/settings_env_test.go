@@ -4,6 +4,7 @@ package modules
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db"
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/i18n"
 )
 
 // settingsEnv is the shared toolkit of the settings menu tests: a lockdown environment
@@ -63,10 +65,31 @@ func newSettingsEnvWith(t *testing.T, opts settingsEnvOptions) *settingsEnv {
 	return env
 }
 
-// newRealLocaleLockdownEnv is newLockdownEnv without the marker locale.
+// withRealLocales installs the real locale files of the languages a settings test reads
+// as the translator's data, for the test's lifetime.
+func withRealLocales(t *testing.T) {
+	t.Helper()
+	files := make(map[string]string)
+	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+		raw, err := os.ReadFile("../../locales/" + code + ".yml")
+		if err != nil {
+			t.Fatalf("read %s.yml: %v", code, err)
+		}
+		files[code] = string(raw)
+	}
+	restore, err := i18n.OverrideManagerLanguagesForTest(files)
+	if err != nil {
+		t.Fatalf("install real locales: %v", err)
+	}
+	t.Cleanup(restore)
+}
+
+// newRealLocaleLockdownEnv is newLockdownEnv with the real locale files instead of the
+// marker locale.
 func newRealLocaleLockdownEnv(t *testing.T) *lockdownEnv {
 	t.Helper()
 	redisServer := withMiniredisServer(t)
+	withRealLocales(t)
 	withFastLockdownPacer(t)
 
 	fake := newLockdownFake()
