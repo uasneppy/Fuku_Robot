@@ -431,6 +431,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   instead), and a marker write error is logged by outcome name and never changes the answer. Parallel verifies of one
   token act once because only the Lua consume of `alita:captcha:ch:<token>` succeeds for one of them. It is Redis only and
   outside the cache prefix.
+- The developer `/stats` also gets the web captcha's counters: `getStats` appends `captchaWebStatsSection` after
+  `raidAIStatsSection` (issued, passed, failed, expired, invalid, retry, limited, errors). They are in-memory numbers of the
+  replica that answers (`captchaweb.StatsSnapshot`), start at zero on every restart and are never fleet totals, and the
+  section holds no token, initData, ID or Cloudflare text. Each event is counted once: `writeAnswer` counts a decided
+  answer by its result (`invalid` and `not_for_you` as invalid; an `expired` answer is not counted, because the expiry is
+  counted where the attempt was claimed), `writeLimited` counts a 429 or an in-flight 503 as limited and not as retry, a
+  remembered answer replayed from `alita:captcha:done:<token>` counts nothing, `captchaweb.CountIssued` runs in
+  `SendCaptcha` once a Turnstile challenge message was sent and its ID stored, and `captchaweb.CountExpired` runs in
+  `expireCaptchaAttempt` when `handleCaptchaTimeout` claimed an attempt whose answer is reserved (the timer, the cleanup
+  tick and a late check all go through it). Errors are configuration faults (`Verdict.ConfigError`), backend and Redis
+  errors and a failed unmute; a Cloudflare 5xx or a network fault is a retry only.
 - `captcha_settings.captcha_mode` is `math`, `text` or `turnstile` under `chk_captcha_mode` (migration 20261030120000).
   That migration drops `chk_captcha_mode` and the legacy inline column check of 20250807103246 (PostgreSQL named it
   `captcha_settings_captcha_mode_check`, and no later migration removed it, so every database the chain built had two

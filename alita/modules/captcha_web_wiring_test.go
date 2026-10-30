@@ -357,6 +357,15 @@ func TestCaptchaWebStatsSection(t *testing.T) {
 		statsDeltaWant(t, before, captchaweb.Stats{})
 	})
 
+	t.Run("the owner's stats text carries the section after the AI checks", func(t *testing.T) {
+		text := ownerStatsText(t)
+		ai := strings.Index(text, "AI checks (this replica")
+		web := strings.Index(text, "Web captcha (this replica, since its last restart)")
+		if ai < 0 || web < 0 || web < ai {
+			t.Fatalf("stats text has the AI section at %d and the web captcha section at %d, want both with the web one last:\n%s", ai, web, text)
+		}
+	})
+
 	t.Run("the section prints eight numbers and nothing else", func(t *testing.T) {
 		env := newCaptchaWebEnv(t)
 		token := env.join(member)

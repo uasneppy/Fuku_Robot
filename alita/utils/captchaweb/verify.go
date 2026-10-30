@@ -228,9 +228,23 @@ type verifyRequest struct {
 	Challenge      string `json:"challenge"`
 }
 
-// writeAnswer is the one place a response is written: it sets the three headers every
-// answer carries and the JSON body, and nothing else.
+// writeAnswer writes a decided answer and counts it once by its result (D-17).
 func writeAnswer(w http.ResponseWriter, status int, answer Answer) {
+	countAnswer(answer.Result)
+	writeBody(w, status, answer)
+}
+
+// writeLimited writes the retry answer of a request refused by a spent budget or by the
+// in-flight cap. It counts Limited and not Retry, so a refusal is one event.
+func writeLimited(w http.ResponseWriter, status int) {
+	countLimited()
+	writeBody(w, status, Answer{Result: ResultRetry})
+}
+
+// writeBody is the one place a response is written: it sets the three headers every
+// answer carries and the JSON body, and nothing else. It counts nothing, so a remembered
+// answer that is replayed is not counted a second time.
+func writeBody(w http.ResponseWriter, status int, answer Answer) {
 	h := w.Header()
 	h.Set("Content-Type", "application/json")
 	h.Set("Cache-Control", "no-store")
@@ -260,6 +274,7 @@ func (h *Handler) withinLimit(w http.ResponseWriter, r *http.Request, key string
 	allowed, retryAfter, err := h.limiter.Allow(r.Context(), key, limit, verifyWindow)
 	if err != nil {
 		log.Warn("[CaptchaWeb][Verify] rate window failed")
+		countError()
 		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
 		return false
 	}
@@ -271,7 +286,7 @@ func (h *Handler) withinLimit(w http.ResponseWriter, r *http.Request, key string
 		seconds = 1
 	}
 	w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
-	writeAnswer(w, http.StatusTooManyRequests, Answer{Result: ResultRetry})
+	writeLimited(w, http.StatusTooManyRequests)
 	return false
 }
 
@@ -333,7 +348,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	case h.inflight <- struct{}{}:
 		defer func() { <-h.inflight }()
 	default:
-		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		writeLimited(w, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -375,6 +390,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	consumed, rec, left, err := h.store.ConsumeIfUser(r.Context(), req.Challenge, user.UserID)
 	if err != nil {
 		log.WithField("user_id", user.UserID).Warn("[CaptchaWeb][Verify] challenge store failed")
+		countError()
 		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
 		return
 	}
@@ -410,6 +426,7 @@ func (h *Handler) answerUnknown(w http.ResponseWriter, r *http.Request, token st
 	decision, found, err := h.store.Done(r.Context(), token)
 	if err != nil {
 		log.WithField("user_id", userID).Warn("[CaptchaWeb][Verify] done marker lookup failed")
+		countError()
 		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
 		return
 	}
@@ -419,7 +436,8 @@ func (h *Handler) answerUnknown(w http.ResponseWriter, r *http.Request, token st
 	case decision.UserID != userID:
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultNotForYou})
 	default:
-		writeAnswer(w, http.StatusOK, Answer{Result: decision.Result, Action: decision.Action})
+		// The remembered answer of an event already counted: replayed, not counted again.
+		writeBody(w, http.StatusOK, Answer{Result: decision.Result, Action: decision.Action})
 	}
 }
 
@@ -484,6 +502,7 @@ func (c *challengeRun) expire() {
 	if err := c.h.backend.Expire(ctx, c.rec); err != nil {
 		// Nothing changed; the timer and the cleanup tick still own the row.
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] expire failed")
+		countError()
 	}
 	log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=expired")
 	c.decided(ResultExpired, c.action)
@@ -494,6 +513,9 @@ func (c *challengeRun) decide() {
 	rightsCtx, cancelRights := context.WithTimeout(c.r.Context(), botRightsTimeout)
 	canRestrict, err := c.h.backend.BotCanRestrict(rightsCtx, c.rec.ChatID)
 	cancelRights()
+	if err != nil {
+		countError()
+	}
 	if err != nil || !canRestrict {
 		// The failure action could not be applied, so no Cloudflare call is made and the
 		// member keeps their attempt and their challenge.
@@ -505,6 +527,7 @@ func (c *challengeRun) decide() {
 	attempt, err := c.h.backend.Attempt(c.r.Context(), c.rec)
 	if err != nil {
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] attempt lookup failed")
+		countError()
 		c.retry(http.StatusServiceUnavailable)
 		return
 	}
@@ -527,6 +550,7 @@ func (c *challengeRun) decide() {
 	default:
 		if verdict.ConfigError() {
 			log.Errorf("[CaptchaWeb] siteverify configuration fault: %s", verdict.Reason)
+			countError()
 		}
 		log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=retry reason=%s", verdict.Reason)
 		c.retry(http.StatusOK)
@@ -539,6 +563,7 @@ func (c *challengeRun) pass() {
 	passed, err := c.h.backend.Pass(ctx, c.rec, c.user)
 	if err != nil {
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] pass failed")
+		countError()
 		c.retry(http.StatusServiceUnavailable)
 		return
 	}
@@ -553,6 +578,7 @@ func (c *challengeRun) pass() {
 		// Claimed, but the unmute failed: the Backend left a durable retry, so the challenge
 		// is not given back.
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] outcome=retry reason=unmute")
+		countError()
 		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultRetry})
 	}
 }
@@ -563,6 +589,7 @@ func (c *challengeRun) fail(reason Reason) {
 	cancel()
 	if err != nil {
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] fail failed")
+		countError()
 		c.retry(http.StatusServiceUnavailable)
 		return
 	}

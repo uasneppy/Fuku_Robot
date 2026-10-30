@@ -1247,6 +1247,9 @@ func SendCaptcha(bot *gotgbot.Bot, ctx *ext.Context, userID int64, userName stri
 	}
 
 	preAttempt.MessageID = sent.MessageId
+	if mode == "turnstile" {
+		captchaweb.CountIssued()
+	}
 	if preAttempt.PreviousMessageID > 0 && preAttempt.PreviousMessageID != sent.MessageId {
 		_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, preAttempt.PreviousMessageID)
 	}
@@ -1338,6 +1341,9 @@ func expireCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (bool, 
 		attempt.MessageID,
 		settings.FailureAction,
 	)
+	if claimed && captchaweb.IsReservedAnswer(attempt.Answer) {
+		captchaweb.CountExpired()
+	}
 	return claimed, nil
 }
 

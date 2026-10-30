@@ -404,7 +404,7 @@ func (moduleStruct) getStats(b *gotgbot.Bot, ctx *ext.Context) error {
 		return err
 	}
 
-	stats := devs.LoadAllStats() + raidAIStatsSection()
+	stats := devs.LoadAllStats() + raidAIStatsSection() + captchaWebStatsSection()
 	_, _, err = edits.EditText(b, &gotgbot.EditMessageTextOpts{Text: stats, ParseMode: formatting.HTML})
 	if err != nil {
 		log.Error(err)

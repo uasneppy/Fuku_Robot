@@ -158,6 +158,19 @@ func MarkCaptchaWebReady() {
 	}
 }
 
+// captchaWebStatsSection is the part of the developer /stats text that comes from this
+// replica's web captcha counters (D-17). They belong to the process that answers, start at
+// zero on every restart, and the heading says so, so nobody reads them as fleet totals. It
+// prints numbers only: no token, initData, ID or Cloudflare text.
+func captchaWebStatsSection() string {
+	s := captchaweb.StatsSnapshot()
+	return "\n<b>Web captcha (this replica, since its last restart):</b>" +
+		fmt.Sprintf(
+			"\n    issued %d, passed %d, failed %d, expired %d, invalid %d, retry %d, limited %d, errors %d",
+			s.Issued, s.Passed, s.Failed, s.Expired, s.Invalid, s.Retry, s.Limited, s.Errors,
+		)
+}
+
 // CaptchaWebStartupWarnings returns the startup warnings of an enabled web captcha (D-31):
 // the captcha routes share the HTTP port with /metrics, /db_metrics, /health, pprof and the
 // webhook, and an empty trusted proxy list collapses the per-address limit. It takes no
