@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<title>Verification</title>
+<script nonce="{{.Nonce}}" src="https://telegram.org/js/telegram-web-app.js"></script>
+<style nonce="{{.Nonce}}">
+:root {
+  --c-bg: var(--tg-theme-bg-color, #ffffff);
+  --c-surface: var(--tg-theme-secondary-bg-color, #f1f1f4);
+  --c-text: var(--tg-theme-text-color, #000000);
+  --c-hint: var(--tg-theme-hint-color, #5f6368);
+  --c-accent: var(--tg-theme-button-color, #1c6fc2);
+  --c-on-accent: var(--tg-theme-button-text-color, #ffffff);
+  --c-danger: var(--tg-theme-destructive-text-color, #c62828);
+  --c-success: #1e7e34;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --c-bg: var(--tg-theme-bg-color, #212121);
+    --c-surface: var(--tg-theme-secondary-bg-color, #181818);
+    --c-text: var(--tg-theme-text-color, #ffffff);
+    --c-hint: var(--tg-theme-hint-color, #aaaaaa);
+    --c-accent: var(--tg-theme-button-color, #8ab4f8);
+    --c-on-accent: var(--tg-theme-button-text-color, #0b1a2e);
+    --c-danger: var(--tg-theme-destructive-text-color, #ff8a80);
+    --c-success: #5fd07a;
+  }
+}
+:root[data-theme="dark"] {
+  --c-bg: var(--tg-theme-bg-color, #212121);
+  --c-surface: var(--tg-theme-secondary-bg-color, #181818);
+  --c-text: var(--tg-theme-text-color, #ffffff);
+  --c-hint: var(--tg-theme-hint-color, #aaaaaa);
+  --c-accent: var(--tg-theme-button-color, #8ab4f8);
+  --c-on-accent: var(--tg-theme-button-text-color, #0b1a2e);
+  --c-danger: var(--tg-theme-destructive-text-color, #ff8a80);
+  --c-success: #5fd07a;
+}
+[hidden] {
+  display: none !important;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  min-height: 100vh;
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-align: center;
+  color-scheme: light dark;
+}
+main {
+  box-sizing: border-box;
+  max-width: 360px;
+  margin-inline: auto;
+  min-height: 100vh;
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: max(24px, env(safe-area-inset-top, 0px), calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)));
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+  padding-left: max(0px, env(safe-area-inset-left, 0px), calc(var(--tg-safe-area-inset-left, 0px) + var(--tg-content-safe-area-inset-left, 0px)));
+  padding-right: max(0px, env(safe-area-inset-right, 0px), calc(var(--tg-safe-area-inset-right, 0px) + var(--tg-content-safe-area-inset-right, 0px)));
+}
+.panel {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--c-surface);
+  border-radius: 12px;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  color: var(--c-hint);
+}
+.icon svg {
+  display: none;
+  width: 48px;
+  height: 48px;
+}
+.icon[data-icon="spinner"] svg[data-icon="spinner"],
+.icon[data-icon="shield"] svg[data-icon="shield"],
+.icon[data-icon="check"] svg[data-icon="check"],
+.icon[data-icon="cross"] svg[data-icon="cross"],
+.icon[data-icon="clock"] svg[data-icon="clock"],
+.icon[data-icon="retry"] svg[data-icon="retry"],
+.icon[data-icon="slash"] svg[data-icon="slash"],
+.icon[data-icon="info"] svg[data-icon="info"] {
+  display: block;
+}
+.icon[data-icon="spinner"],
+.icon[data-icon="shield"] {
+  color: var(--c-accent);
+}
+.icon[data-icon="check"] {
+  color: var(--c-success);
+}
+.icon[data-icon="cross"] {
+  color: var(--c-danger);
+}
+#status {
+  width: 100%;
+}
+h1 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+#status-body {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#widget {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 65px;
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#widget[data-size="compact"] {
+  min-height: 140px;
+}
+#action {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 24px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#action:focus-visible {
+  outline: 2px solid var(--c-text);
+  outline-offset: 2px;
+}
+#action:active {
+  opacity: .85;
+}
+.caption {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--c-hint);
+  overflow-wrap: anywhere;
+}
+@media (max-height: 420px) {
+  .icon {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .icon[data-icon="spinner"] svg[data-icon="spinner"] {
+    animation: captcha-spin 1s linear infinite;
+  }
+  #status.swap {
+    animation: captcha-fade 150ms ease-out;
+  }
+  @keyframes captcha-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes captcha-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+</style>
+</head>
+<body>
+<main id="captcha-root" data-sitekey="{{.SiteKey}}" data-action="{{.Action}}" data-cdata-prefix="{{.CDataPrefix}}">
+  <div class="panel">
+    <div class="icon" id="icon" data-icon="spinner">
+      <svg data-icon="spinner" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" opacity=".25"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>
+      <svg data-icon="shield" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <svg data-icon="check" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>
+      <svg data-icon="cross" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+      <svg data-icon="clock" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <svg data-icon="retry" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></svg>
+      <svg data-icon="slash" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/></svg>
+      <svg data-icon="info" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+    </div>
+    <section id="status" role="status" aria-live="polite" aria-atomic="true">
+      <h1 id="headline">Getting ready</h1>
+      <p id="status-body">Setting up the check. This takes a moment.</p>
+    </section>
+    <div id="widget" role="group" aria-label="Security check" hidden></div>
+    <button id="action" type="button" hidden></button>
+    <noscript>
+      <p class="caption">This check needs JavaScript. Turn it on, then open the link in Telegram again.</p>
+    </noscript>
+  </div>
+</main>
+<script nonce="{{.Nonce}}" type="application/json" id="i18n">{{.I18N}}</script>
+<script nonce="{{.Nonce}}" id="captcha-main">
+(function () {
+  'use strict';
+
+  var LANGS = ['en', 'es', 'fr', 'hi', 'id', 'pt', 'ru'];
+  var CHALLENGE_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  var START_PARAM_RE = /(?:^|[?&#])tgWebAppStartParam=([^&#]*)/;
+  var TELEGRAM_WAIT_MS = 8000;
+  var TELEGRAM_POLL_MS = 250;
+  var TURNSTILE_WAIT_MS = 10000;
+  var VERIFY_TIMEOUT_MS = 12000;
+  var CLOSE_DELAY_MS = 2000;
+  var COMPACT_BELOW_PX = 300;
+  var MIN_CONTRAST = 4.5;
+
+  var TOKENS = ['bg', 'surface', 'text', 'hint', 'accent', 'on-accent'];
+  var PAIRS = [['text', 'bg'], ['text', 'surface'], ['hint', 'surface'], ['on-accent', 'accent']];
+  var FALLBACKS = {
+    light: { bg: '#ffffff', surface: '#f1f1f4', text: '#000000', hint: '#5f6368', accent: '#1c6fc2', 'on-accent': '#ffffff' },
+    dark: { bg: '#212121', surface: '#181818', text: '#ffffff', hint: '#aaaaaa', accent: '#8ab4f8', 'on-accent': '#0b1a2e' }
+  };
+
+  var STATE_UI = {
+    loading: { icon: 'spinner', button: '' },
+    ready: { icon: 'shield', button: '' },
+    verifying: { icon: 'spinner', button: '' },
+    passed: { icon: 'check', button: '' },
+    failed: { icon: 'cross', button: 'close' },
+    expired: { icon: 'clock', button: 'close' },
+    retry: { icon: 'retry', button: 'retry' },
+    invalid: { icon: 'slash', button: 'close' },
+    unsupported: { icon: 'info', button: '' }
+  };
+  var TERMINAL = { passed: true, failed: true, expired: true, invalid: true, unsupported: true };
+  var FOCUS_STATES = { retry: true, failed: true, expired: true, invalid: true };
+
+  var turnstileLoaded = false;
+  var onTurnstileLoaded = null;
+  var booted = false;
+
+  function normalizeLang(code) {
+    if (typeof code !== 'string') { return 'en'; }
+    var base = code.toLowerCase().split('-')[0].split('_')[0];
+    if (base === 'in') { base = 'id'; }
+    return LANGS.indexOf(base) >= 0 ? base : 'en';
+  }
+
+  // Display only: the language never decides anything the server trusts.
+  function resolveLanguage(telegramCode, navigatorCode) {
+    if (typeof telegramCode === 'string' && telegramCode !== '') { return normalizeLang(telegramCode); }
+    if (typeof navigatorCode === 'string' && navigatorCode !== '') { return normalizeLang(navigatorCode); }
+    return 'en';
+  }
+
+  function turnstileLanguage(code) {
+    return typeof code === 'string' && LANGS.indexOf(code) >= 0 ? code : 'auto';
+  }
+
+  function readChallenge(unsafe, search) {
+    var value = unsafe && typeof unsafe.start_param === 'string' ? unsafe.start_param : '';
+    if (value === '' && typeof search === 'string') {
+      var m = START_PARAM_RE.exec(search);
+      if (m) {
+        try { value = decodeURIComponent(m[1]); } catch (e) { value = ''; }
+      }
+    }
+    return CHALLENGE_RE.test(value) ? value : null;
+  }
+
+  // The widget's cData: lowercase hex SHA-256 of the prefix and the challenge. The server
+  // recomputes it and requires Cloudflare to echo it back.
+  function cdataFor(prefix, challenge) {
+    var subtle = window.crypto && window.crypto.subtle;
+    if (!subtle || typeof subtle.digest !== 'function') {
+      return Promise.reject(new Error('no subtle crypto'));
+    }
+    var text = String(prefix) + String(challenge);
+    var bytes = new Uint8Array(text.length);
+    for (var i = 0; i < text.length; i++) {
+      var code = text.charCodeAt(i);
+      if (code > 127) { return Promise.reject(new Error('not ascii')); }
+      bytes[i] = code;
+    }
+    return subtle.digest('SHA-256', bytes).then(function (buf) {
+      var view = new Uint8Array(buf);
+      var hex = '';
+      for (var j = 0; j < view.length; j++) {
+        hex += (view[j] < 16 ? '0' : '') + view[j].toString(16);
+      }
+      return hex;
+    });
+  }
+
+  function widgetSizeFor(width) {
+    return width < COMPACT_BELOW_PX ? 'compact' : 'flexible';
+  }
+
+  function actionOf(value) {
+    return value === 'ban' || value === 'mute' ? value : 'kick';
+  }
+
+  function plainState(name) {
+    return { state: name, titleKey: 'captcha_web_' + name + '_title', bodyKey: 'captcha_web_' + name + '_body' };
+  }
+
+  // The server's JSON is the only thing that picks a state. response is null for a
+  // network error or timeout, else { status: number, body: object or null }.
+  function stateForAnswer(response) {
+    var status = response && typeof response.status === 'number' ? response.status : 0;
+    var body = response && response.body && typeof response.body === 'object' ? response.body : null;
+    var result = body && typeof body.result === 'string' ? body.result : '';
+    if (status === 200) {
+      if (result === 'passed') { return plainState('passed'); }
+      if (result === 'failed' || result === 'expired') {
+        return {
+          state: result,
+          titleKey: 'captcha_web_' + result + '_title',
+          bodyKey: 'captcha_web_' + result + '_body_' + actionOf(body.action)
+        };
+      }
+    }
+    if ((result === 'invalid' || result === 'not_for_you') && status >= 200 && status < 500 && status !== 429) {
+      return plainState('invalid');
+    }
+    return plainState('retry');
+  }
+
+  function parseColor(value) {
+    if (typeof value !== 'string') { return null; }
+    var s = value.trim().toLowerCase();
+    var m = /^#([0-9a-f]{3})$/.exec(s);
+    if (m) {
+      return [
+        parseInt(m[1].charAt(0) + m[1].charAt(0), 16),
+        parseInt(m[1].charAt(1) + m[1].charAt(1), 16),
+        parseInt(m[1].charAt(2) + m[1].charAt(2), 16)
+      ];
+    }
+    m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})(?:[0-9a-f]{2})?$/.exec(s);
+    if (m) { return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]; }
+    m = /^rgba?\(\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*(?:[,\/]\s*[\d.]+%?\s*)?\)$/.exec(s);
+    if (m) {
+      var rgb = [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
+      return rgb[0] > 255 || rgb[1] > 255 || rgb[2] > 255 ? null : rgb;
+    }
+    return null;
+  }
+
+  function luminance(rgb) {
+    var c = [];
+    for (var i = 0; i < 3; i++) {
+      var v = rgb[i] / 255;
+      c.push(v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    }
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+
+  // WCAG 2.x contrast ratio of two colours (strings or [r, g, b]); null when one is unreadable.
+  function contrastRatio(a, b) {
+    var ca = typeof a === 'string' ? parseColor(a) : a;
+    var cb = typeof b === 'string' ? parseColor(b) : b;
+    if (!ca || !cb) { return null; }
+    var la = luminance(ca);
+    var lb = luminance(cb);
+    var hi = Math.max(la, lb);
+    var lo = Math.min(la, lb);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  // Returns the colours to override: every colour of a pair under 4.5:1 goes back to the
+  // fallback of the active scheme, and a pair is judged again after a replacement.
+  function guardTheme(values, scheme) {
+    var fallback = FALLBACKS[scheme === 'dark' ? 'dark' : 'light'];
+    var current = {};
+    var overrides = {};
+    var k;
+    for (k in values) {
+      if (Object.prototype.hasOwnProperty.call(values, k)) { current[k] = values[k]; }
+    }
+    for (var round = 0; round < 3; round++) {
+      var changed = false;
+      for (var p = 0; p < PAIRS.length; p++) {
+        var ratio = contrastRatio(current[PAIRS[p][0]], current[PAIRS[p][1]]);
+        if (ratio !== null && ratio >= MIN_CONTRAST) { continue; }
+        for (var q = 0; q < 2; q++) {
+          var name = PAIRS[p][q];
+          if (current[name] !== fallback[name]) {
+            current[name] = fallback[name];
+            overrides[name] = fallback[name];
+            changed = true;
+          }
+        }
+      }
+      if (!changed) { break; }
+    }
+    return overrides;
+  }
+
+  // One request per widget token: a second call while the latch is held does nothing.
+  function createSubmitLatch(fn) {
+    var busy = false;
+    function latch(token) {
+      if (busy) { return false; }
+      busy = true;
+      fn(token);
+      return true;
+    }
+    latch.release = function () { busy = false; };
+    latch.isBusy = function () { return busy; };
+    return latch;
+  }
+
+  function setHidden(el, hidden) {
+    if (el) { el.hidden = hidden; }
+  }
+
+  function restartFade(el) {
+    if (!el || !el.classList) { return; }
+    el.classList.remove('swap');
+    void el.offsetWidth;
+    el.classList.add('swap');
+  }
+
+  function hasTelegram() {
+    return !!(window.Telegram && window.Telegram.WebApp);
+  }
+
+  function navigatorLang() {
+    return window.navigator && typeof window.navigator.language === 'string' ? window.navigator.language : '';
+  }
+
+  function locationText() {
+    var loc = window.location || {};
+    return (loc.search || '') + '&' + (loc.hash ? String(loc.hash).slice(1) : '');
+  }
+
+  function documentWidth() {
+    var d = window.document && window.document.documentElement;
+    return (d && d.clientWidth) || window.innerWidth || 320;
+  }
+
+  function onTurnstileReady() {
+    turnstileLoaded = true;
+    if (onTurnstileLoaded) { onTurnstileLoaded(); }
+  }
+
+  function boot() {
+    if (booted) { return; }
+    booted = true;
+
+    var doc = window.document;
+    var root = doc.documentElement;
+    var els = {
+      main: doc.getElementById('captcha-root'),
+      i18n: doc.getElementById('i18n'),
+      icon: doc.getElementById('icon'),
+      status: doc.getElementById('status'),
+      headline: doc.getElementById('headline'),
+      body: doc.getElementById('status-body'),
+      widget: doc.getElementById('widget'),
+      action: doc.getElementById('action')
+    };
+    var siteKey = els.main.getAttribute('data-sitekey') || '';
+    var turnstileAction = els.main.getAttribute('data-action') || '';
+    var cdataPrefix = els.main.getAttribute('data-cdata-prefix') || '';
+
+    var tables = {};
+    try { tables = JSON.parse(els.i18n.textContent) || {}; } catch (e) { tables = {}; }
+
+    var lang = resolveLanguage(null, navigatorLang());
+    var state = 'loading';
+    var buttonMode = '';
+    var wa = null;
+    var initData = '';
+    var challenge = null;
+    var cdata = null;
+    var scheme = 'light';
+    var widgetId = null;
+    var widgetRendered = false;
+    var readySent = false;
+
+    function t(key) {
+      var own = tables[lang];
+      var v = own ? own[key] : undefined;
+      if (typeof v !== 'string' || v === '') { v = tables.en ? tables.en[key] : undefined; }
+      return typeof v === 'string' ? v : '';
+    }
+
+    function haptic(kind) {
+      try {
+        var h = wa && wa.HapticFeedback;
+        if (h && typeof h.notificationOccurred === 'function') { h.notificationOccurred(kind); }
+      } catch (e) { /* optional */ }
+    }
+
+    function closeApp() {
+      try {
+        if (wa && typeof wa.close === 'function') { wa.close(); }
+      } catch (e) { /* nothing to close */ }
+    }
+
+    function applyLanguage() {
+      root.setAttribute('lang', lang);
+      doc.title = t('captcha_web_page_title');
+      els.widget.setAttribute('aria-label', t('captcha_web_widget_label'));
+    }
+
+    function show(name, bodyKey) {
+      if (TERMINAL[state]) { return; }
+      state = name;
+      var ui = STATE_UI[name];
+      els.icon.setAttribute('data-icon', ui.icon);
+      els.headline.textContent = t('captcha_web_' + name + '_title');
+      els.body.textContent = t(bodyKey || ('captcha_web_' + name + '_body'));
+      setHidden(els.widget, name !== 'ready' || !widgetRendered);
+      if (ui.button) {
+        els.action.textContent = t(ui.button === 'retry' ? 'captcha_web_retry_button' : 'captcha_web_close_button');
+        buttonMode = ui.button;
+        setHidden(els.action, false);
+      } else {
+        buttonMode = '';
+        setHidden(els.action, true);
+      }
+      restartFade(els.status);
+      if (FOCUS_STATES[name] && els.action.focus) { els.action.focus(); }
+      if (name === 'passed') {
+        haptic('success');
+        setTimeout(closeApp, CLOSE_DELAY_MS);
+      } else if (name === 'failed' || name === 'expired') {
+        haptic('error');
+      }
+    }
+
+    function applyTheme() {
+      if (wa && (wa.colorScheme === 'dark' || wa.colorScheme === 'light')) {
+        scheme = wa.colorScheme;
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        scheme = 'dark';
+      } else {
+        scheme = 'light';
+      }
+      root.setAttribute('data-theme', scheme);
+      try {
+        var i;
+        for (i = 0; i < TOKENS.length; i++) { root.style.removeProperty('--c-' + TOKENS[i]); }
+        var computed = window.getComputedStyle(root);
+        var values = {};
+        for (i = 0; i < TOKENS.length; i++) {
+          values[TOKENS[i]] = computed.getPropertyValue('--c-' + TOKENS[i]).trim();
+        }
+        var overrides = guardTheme(values, scheme);
+        for (var name in overrides) {
+          if (Object.prototype.hasOwnProperty.call(overrides, name)) {
+            root.style.setProperty('--c-' + name, overrides[name]);
+          }
+        }
+      } catch (e) { /* no CSSOM: the CSS fallbacks stay */ }
+    }
+
+    function prepareApp() {
+      try {
+        if (typeof wa.isVersionAtLeast === 'function' && wa.isVersionAtLeast('7.7') &&
+            typeof wa.disableVerticalSwipes === 'function') {
+          wa.disableVerticalSwipes();
+        }
+        if (typeof wa.setHeaderColor === 'function') { wa.setHeaderColor('bg_color'); }
+        if (typeof wa.setBackgroundColor === 'function') { wa.setBackgroundColor('bg_color'); }
+        if (typeof wa.onEvent === 'function') { wa.onEvent('themeChanged', applyTheme); }
+      } catch (e) { /* optional chrome */ }
+    }
+
+    function tellReady() {
+      if (readySent || !wa) { return; }
+      readySent = true;
+      try {
+        if (typeof wa.ready === 'function') { wa.ready(); }
+      } catch (e) { /* ignore */ }
+    }
+
+    function answer(response) {
+      var next = stateForAnswer(response);
+      show(next.state, next.bodyKey);
+    }
+
+    var latch = createSubmitLatch(function (token) {
+      show('verifying');
+      var done = false;
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = null;
+      function settle(response) {
+        if (done) { return; }
+        done = true;
+        clearTimeout(timer);
+        answer(response);
+      }
+      timer = setTimeout(function () {
+        if (controller) {
+          try { controller.abort(); } catch (e) { /* already settled */ }
+        }
+        settle(null);
+      }, VERIFY_TIMEOUT_MS);
+      var request = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ init_data: initData, turnstile_token: token, challenge: challenge }),
+        credentials: 'omit',
+        cache: 'no-store'
+      };
+      if (controller) { request.signal = controller.signal; }
+      try {
+        fetch('/captcha/verify', request).then(function (res) {
+          return res.json().then(
+            function (parsed) { return { status: res.status, body: parsed }; },
+            function () { return { status: res.status, body: null }; }
+          );
+        }).then(settle, function () { settle(null); });
+      } catch (e) {
+        settle(null);
+      }
+    });
+
+    function onToken(token) {
+      if (state !== 'ready' || typeof token !== 'string' || token === '') { return; }
+      latch(token);
+    }
+
+    function onWidgetProblem() {
+      if (state === 'ready') { show('retry'); }
+    }
+
+    function renderWidget() {
+      try {
+        setHidden(els.widget, false);
+        var width = els.widget.clientWidth || (documentWidth() - 32);
+        var size = widgetSizeFor(width);
+        els.widget.setAttribute('data-size', size);
+        widgetId = window.turnstile.render(els.widget, {
+          sitekey: siteKey,
+          action: turnstileAction,
+          cData: cdata,
+          theme: scheme,
+          size: size,
+          language: turnstileLanguage(lang),
+          appearance: 'always',
+          retry: 'never',
+          'refresh-expired': 'never',
+          'refresh-timeout': 'never',
+          callback: onToken,
+          'error-callback': onWidgetProblem,
+          'timeout-callback': onWidgetProblem,
+          'expired-callback': onWidgetProblem
+        });
+      } catch (e) {
+        widgetId = null;
+      }
+      if (widgetId === null || widgetId === undefined) {
+        setHidden(els.widget, true);
+        show('retry');
+        return;
+      }
+      widgetRendered = true;
+      show('ready');
+    }
+
+    function maybeRender() {
+      if (widgetRendered || state !== 'loading') { return; }
+      if (!turnstileLoaded || cdata === null) { return; }
+      renderWidget();
+    }
+
+    function retryNow() {
+      if (state !== 'retry') { return; }
+      if (widgetRendered && window.turnstile && typeof window.turnstile.reset === 'function') {
+        try {
+          window.turnstile.reset(widgetId);
+        } catch (e) {
+          window.location.reload();
+          return;
+        }
+        latch.release();
+        show('ready');
+        return;
+      }
+      window.location.reload();
+    }
+
+    els.action.addEventListener('click', function () {
+      if (buttonMode === 'close') {
+        closeApp();
+      } else if (buttonMode === 'retry') {
+        retryNow();
+      }
+    });
+
+    function onTelegram() {
+      wa = window.Telegram.WebApp;
+      initData = typeof wa.initData === 'string' ? wa.initData : '';
+      if (initData === '') {
+        applyTheme();
+        show('unsupported');
+        return;
+      }
+      var unsafe = wa.initDataUnsafe || {};
+      lang = resolveLanguage(unsafe.user && unsafe.user.language_code, navigatorLang());
+      applyLanguage();
+      applyTheme();
+      prepareApp();
+      show('loading');
+      tellReady();
+
+      challenge = readChallenge(unsafe, locationText());
+      if (challenge === null) {
+        show('invalid');
+        return;
+      }
+      cdataFor(cdataPrefix, challenge).then(function (value) {
+        cdata = value;
+        maybeRender();
+      }, function () {
+        show('unsupported');
+      });
+    }
+
+    applyLanguage();
+    show('loading');
+    onTurnstileLoaded = maybeRender;
+
+    var polls = 0;
+    function poll() {
+      if (hasTelegram()) {
+        onTelegram();
+        return;
+      }
+      polls += 1;
+      if (polls * TELEGRAM_POLL_MS >= TELEGRAM_WAIT_MS) {
+        show('unsupported');
+        return;
+      }
+      setTimeout(poll, TELEGRAM_POLL_MS);
+    }
+    poll();
+
+    setTimeout(function () {
+      if (state === 'loading' && !widgetRendered && !turnstileLoaded) { show('retry'); }
+    }, TURNSTILE_WAIT_MS);
+  }
+
+  window.captchaTurnstileReady = onTurnstileReady;
+  window.CaptchaPage = {
+    resolveLanguage: resolveLanguage,
+    readChallenge: readChallenge,
+    cdataFor: cdataFor,
+    turnstileLanguage: turnstileLanguage,
+    stateForAnswer: stateForAnswer,
+    parseColor: parseColor,
+    contrastRatio: contrastRatio,
+    widgetSizeFor: widgetSizeFor,
+    createSubmitLatch: createSubmitLatch,
+    guardTheme: guardTheme,
+    boot: boot
+  };
+
+  if (window.document.readyState === 'loading') {
+    window.document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+<script nonce="{{.Nonce}}" src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=captchaTurnstileReady" async defer></script>
+</body>
+</html>
