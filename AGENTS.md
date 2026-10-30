@@ -398,6 +398,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   in whole seconds. The user and token windows are keyed by the verified `initData` user, never by the token alone, so
   another member who hammers a target's public token spends only their own budgets and the target still passes (D-26).
   The address window is counted before the body is read, the other two right after `initData` is verified.
+- `alita:captcha:done:<token>` is the Turnstile verify route's decided-answer marker (`challenge.go`, `Store.MarkDone` and
+  `Store.Done`): a string `<user>:<result>[:<action>]` (result `passed`, `failed` or `expired`, action `kick`, `ban` or
+  `mute` and empty for passed), 10 minutes (`DoneTTL`), written with `SET NX` after every decided answer and before the
+  response is written, so a response lost on the way can be asked for again. When the challenge key is gone, a verify from
+  the same verified user with a marker gets the same answer with no backend call and no Cloudflare request, another
+  verified user gets `not_for_you`, and no marker means `invalid`. A retry answer writes none (its token is re-armed
+  instead), and a marker write error is logged by outcome name and never changes the answer. Parallel verifies of one
+  token act once because only the Lua consume of `alita:captcha:ch:<token>` succeeds for one of them. It is Redis only and
+  outside the cache prefix.
 - `captcha_settings.captcha_mode` is `math`, `text` or `turnstile` under `chk_captcha_mode` (migration 20261030120000).
   That migration drops `chk_captcha_mode` and the legacy inline column check of 20250807103246 (PostgreSQL named it
   `captcha_settings_captcha_mode_check`, and no later migration removed it, so every database the chain built had two

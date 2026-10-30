@@ -43,6 +43,12 @@ const (
 	// KeyPrefix starts the key of a challenge. It sits outside alita:cache:, so
 	// CLEAR_CACHE_ON_STARTUP keeps it.
 	KeyPrefix = "alita:captcha:ch:"
+
+	// DoneKeyPrefix starts the key of a decided answer, beside the challenge key and outside
+	// the cache prefix for the same reason.
+	DoneKeyPrefix = "alita:captcha:done:"
+	// DoneTTL is how long a decided answer is remembered.
+	DoneTTL = 10 * time.Minute
 )
 
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -139,6 +145,72 @@ func (s *Store) Issue(ctx context.Context, token string, rec Record) error {
 		return nil
 	})
 	return err
+}
+
+// Decision is a decided answer of a challenge, kept so a repeat of the same request (a lost
+// response, a double tap) gets the same answer without acting twice (D-03).
+type Decision struct {
+	// UserID is the verified member the answer was given to.
+	UserID int64
+	// Result is passed, failed or expired.
+	Result Result
+	// Action is the group's failure action (kick, ban or mute); empty for passed.
+	Action string
+}
+
+// MarkDone remembers a decided answer under token for DoneTTL. The first decision wins: a
+// token is decided once, so a second write is a no-op. Only passed, failed and expired are
+// decisions; a retry is never stored.
+func (s *Store) MarkDone(ctx context.Context, token string, d Decision) error {
+	if !ValidToken(token) || d.UserID <= 0 || strings.Contains(d.Action, ":") {
+		return ErrInvalidChallenge
+	}
+	switch d.Result {
+	case ResultPassed, ResultFailed, ResultExpired:
+	default:
+		return ErrInvalidChallenge
+	}
+	value := strconv.FormatInt(d.UserID, 10) + ":" + string(d.Result)
+	if d.Action != "" {
+		value += ":" + d.Action
+	}
+	ctx, cancel := context.WithTimeout(ctx, RedisTimeout)
+	defer cancel()
+	return s.client.SetNX(ctx, DoneKeyPrefix+token, value, DoneTTL).Err()
+}
+
+// Done returns the decision remembered for token and whether there is one. A value that does
+// not parse is treated as no decision.
+func (s *Store) Done(ctx context.Context, token string) (Decision, bool, error) {
+	if !ValidToken(token) {
+		return Decision{}, false, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, RedisTimeout)
+	defer cancel()
+	value, err := s.client.Get(ctx, DoneKeyPrefix+token).Result()
+	if errors.Is(err, redis.Nil) {
+		return Decision{}, false, nil
+	}
+	if err != nil {
+		return Decision{}, false, err
+	}
+	parts := strings.SplitN(value, ":", 3)
+	if len(parts) < 2 {
+		return Decision{}, false, nil
+	}
+	userID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || userID <= 0 {
+		return Decision{}, false, nil
+	}
+	d := Decision{UserID: userID, Result: Result(parts[1])}
+	if len(parts) == 3 {
+		d.Action = parts[2]
+	}
+	switch d.Result {
+	case ResultPassed, ResultFailed, ResultExpired:
+		return d, true, nil
+	}
+	return Decision{}, false, nil
 }
 
 // Ping reports whether Redis answers a PING within RedisTimeout.

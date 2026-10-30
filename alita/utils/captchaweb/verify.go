@@ -380,7 +380,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	}
 	switch consumed {
 	case ConsumeUnknown:
-		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
+		h.answerUnknown(w, r, req.Challenge, user.UserID)
 		return
 	case ConsumeWrongUser:
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultNotForYou})
@@ -400,6 +400,27 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		fields:     log.Fields{"chat_id": rec.ChatID, "user_id": rec.UserID, "attempt_id": rec.AttemptID},
 	}
 	run.decide()
+}
+
+// answerUnknown answers a token the store no longer holds. When the token was decided in the
+// last 10 minutes the same verified member gets the same answer again, with no side effect
+// (their response was lost, or they tapped twice), and any other member gets not_for_you; with
+// no remembered decision the token is invalid (D-03).
+func (h *Handler) answerUnknown(w http.ResponseWriter, r *http.Request, token string, userID int64) {
+	decision, found, err := h.store.Done(r.Context(), token)
+	if err != nil {
+		log.WithField("user_id", userID).Warn("[CaptchaWeb][Verify] done marker lookup failed")
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return
+	}
+	switch {
+	case !found:
+		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
+	case decision.UserID != userID:
+		writeAnswer(w, http.StatusOK, Answer{Result: ResultNotForYou})
+	default:
+		writeAnswer(w, http.StatusOK, Answer{Result: decision.Result, Action: decision.Action})
+	}
 }
 
 // challengeRun is one consumed challenge being decided. Each step either answers or hands on,
@@ -437,6 +458,18 @@ func (c *challengeRun) rearm() {
 	}
 }
 
+// decided remembers the answer before it is written, so a response that is lost on the way
+// can be asked for again (D-03). A write failure is logged by outcome and changes nothing: the
+// answer is already decided.
+func (c *challengeRun) decided(result Result, action string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.r.Context()), 2*RedisTimeout)
+	defer cancel()
+	d := Decision{UserID: c.user.UserID, Result: result, Action: action}
+	if err := c.h.store.MarkDone(ctx, c.token, d); err != nil {
+		log.WithFields(c.fields).Warnf("[CaptchaWeb][Verify] done marker failed outcome=%s", result)
+	}
+}
+
 // retry gives the challenge back and answers retry with status.
 func (c *challengeRun) retry(status int) {
 	c.rearm()
@@ -453,6 +486,7 @@ func (c *challengeRun) expire() {
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] expire failed")
 	}
 	log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=expired")
+	c.decided(ResultExpired, c.action)
 	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultExpired, Action: c.action})
 }
 
@@ -511,6 +545,7 @@ func (c *challengeRun) pass() {
 	switch passed {
 	case PassOK:
 		log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=passed")
+		c.decided(ResultPassed, "")
 		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultPassed})
 	case PassLost:
 		c.expire()
@@ -537,5 +572,6 @@ func (c *challengeRun) fail(reason Reason) {
 		return
 	}
 	log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=failed reason=%s", reason)
+	c.decided(ResultFailed, c.action)
 	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultFailed, Action: c.action})
 }
