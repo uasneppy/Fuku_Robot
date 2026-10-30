@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf16"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -423,6 +424,461 @@ func TestSettingsStaffReadOnly(t *testing.T) {
 		settingsStaffTestWantContains(t, text, staffMarker("settings_cannot_open"))
 		if len(keyboard) != 0 {
 			t.Errorf("the cannot-open edit carries a keyboard: %+v", keyboard)
+		}
+	})
+}
+
+// settingsStaffTestOwnedStaffGroup makes a Staff Group titled title that the env's
+// administrator created (the recorded owner and, live, the creator) and returns its chat.
+func settingsStaffTestOwnedStaffGroup(env *settingsEnv, title string) gotgbot.Chat {
+	env.t.Helper()
+	chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: title}
+	staffCleanup(env.t, chat.Id, env.chat.Id)
+	if _, err := staff.CreateStaffGroup(chat.Id, env.admin.Id, title); err != nil {
+		env.t.Fatalf("create Staff Group %q: %v", title, err)
+	}
+	env.fake.setCreator(chat.Id, env.admin.Id)
+	return chat
+}
+
+// settingsStaffTestMessagesWith counts the messages sent to chatID that carry the marker of
+// the locale key.
+func settingsStaffTestMessagesWith(env *settingsEnv, chatID int64, key string) int {
+	n := 0
+	for _, sent := range env.fake.sentTo(chatID) {
+		if strings.Contains(fmt.Sprint(sent.Params["text"]), staffMarker(key)) {
+			n++
+		}
+	}
+	return n
+}
+
+// settingsStaffTestStaffRowIDs lists the staff_groups row IDs of the env's administrator, in
+// the order the repository lists them.
+func settingsStaffTestStaffRowIDs(t *testing.T, env *settingsEnv) []uint {
+	t.Helper()
+	groups, err := staff.ListStaffGroupsByOwner(env.admin.Id)
+	if err != nil {
+		t.Fatalf("list Staff Groups: %v", err)
+	}
+	ids := make([]uint, 0, len(groups))
+	for _, group := range groups {
+		ids = append(ids, group.ID)
+	}
+	return ids
+}
+
+// settingsStaffTestLinkOf reads the link of the env's chat, failing the test on a read error.
+func settingsStaffTestLinkOf(t *testing.T, env *settingsEnv) *models.StaffGroupLink {
+	t.Helper()
+	link, err := staff.GetLinkOfGroupFresh(env.chat.Id)
+	if err != nil {
+		t.Fatalf("read the link: %v", err)
+	}
+	return link
+}
+
+func TestSettingsCardExpiry(t *testing.T) {
+	now := time.Now()
+	want := strconv.FormatInt(now.Add(settingsCardLifetime).Unix()/60, 10)
+	if got := settingsCardExpiry(now); got != want {
+		t.Fatalf("settingsCardExpiry = %q, want the unix minute %q", got, want)
+	}
+
+	if expired, ok := settingsCardExpired(map[string]string{"e": settingsCardExpiry(time.Now())}); !ok || expired {
+		t.Errorf("a card made now: expired = %v, ok = %v, want (false, true)", expired, ok)
+	}
+	past := strconv.FormatInt(time.Now().Unix()/60-1, 10)
+	if expired, ok := settingsCardExpired(map[string]string{"e": past}); !ok || !expired {
+		t.Errorf("a card from a minute ago: expired = %v, ok = %v, want (true, true)", expired, ok)
+	}
+	for _, bad := range []string{"", "0", "-5", "1a", "+5", " 5", "9223372036854775808"} {
+		if _, ok := settingsCardExpired(map[string]string{"e": bad}); ok {
+			t.Errorf("e = %q was accepted", bad)
+		}
+	}
+	if _, ok := settingsCardExpired(map[string]string{}); ok {
+		t.Error("a missing e was accepted")
+	}
+}
+
+func TestSettingsStaffLink(t *testing.T) {
+	t.Run("an opener who owns no Staff Group gets the command's text", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_link_no_staff_group"),
+			staffMarker("settings_staff_not_linked"))
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Errorf("a link exists: %+v", link)
+		}
+	})
+
+	t.Run("exactly one verified Staff Group links at once", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestOwnedStaffGroup(env, "Staff HQ")
+		msgID := env.openMenu(env.admin)
+		inGroup := len(env.fake.sentTo(env.chat.Id))
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+
+		link := settingsStaffTestLinkOf(t, env)
+		if link == nil || link.StaffChatID != staffChat.Id || link.OwnerUserID != env.admin.Id {
+			t.Fatalf("link = %+v, want one to Staff Group %d by the opener", link, staffChat.Id)
+		}
+		if got := settingsStaffTestMessagesWith(env, staffChat.Id, "staff_link_done"); got != 1 {
+			t.Errorf("the Staff Group got %d link notices, want exactly 1", got)
+		}
+		if got := len(env.fake.sentTo(env.chat.Id)); got != inGroup {
+			t.Errorf("%d messages reached the linked group, want none", got-inGroup)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeOKIcon+staffMarker("settings_notice_linked"),
+			staffMarker("settings_staff_linked_hidden"))
+		settingsStaffTestWantAbsent(t, text, "Staff HQ", strconv.FormatInt(staffChat.Id, 10))
+	})
+
+	t.Run("a candidate whose owner check fails links nothing", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestOwnedStaffGroup(env, "Staff HQ")
+		env.fake.setFailure("getChatAdministrators", staffChat.Id, errors.New("boom"))
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_check_failed"))
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Errorf("a link exists: %+v", link)
+		}
+		if got := settingsStaffTestMessagesWith(env, staffChat.Id, "staff_link_done"); got != 0 {
+			t.Errorf("the Staff Group got %d link notices, want none", got)
+		}
+	})
+
+	t.Run("a basic group is refused with its escaped title", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestOwnedStaffGroup(env, "Staff HQ")
+		msgID := env.openMenu(env.admin)
+		basic := gotgbot.Chat{Id: env.chat.Id, Type: "group", Title: "Basic <b>Chat</b>"}
+		data := encodeCallbackData(settingsCallbackNamespace, env.groupFields(env.admin, "a", "lk"))
+		env.pressRaw(basic, env.admin, msgID, data)
+
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_link_refuse_not_supergroup"),
+			"Basic &lt;b&gt;Chat&lt;/b&gt;")
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Errorf("a link exists: %+v", link)
+		}
+	})
+}
+
+func TestSettingsStaffPick(t *testing.T) {
+	newPicker := func(t *testing.T) (*settingsEnv, []gotgbot.Chat, []uint) {
+		t.Helper()
+		env := newSettingsEnv(t)
+		chats := []gotgbot.Chat{
+			settingsStaffTestOwnedStaffGroup(env, "Alpha Staff"),
+			settingsStaffTestOwnedStaffGroup(env, "Bravo Staff"),
+			settingsStaffTestOwnedStaffGroup(env, "Charlie Staff"),
+		}
+		return env, chats, settingsStaffTestStaffRowIDs(t, env)
+	}
+
+	t.Run("a group menu offers positional buttons that carry row IDs", func(t *testing.T) {
+		env, chats, ids := newPicker(t)
+		if len(ids) != 3 {
+			t.Fatalf("%d Staff Groups, want 3", len(ids))
+		}
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, staffMarker("settings_staff_pick"), staffMarker("settings_staff_pick_private_hint"))
+		if got := settingsStaffTestShape(t, keyboard); got != "lk;lk;lk;bk,cl" {
+			t.Fatalf("keyboard = %q, want three pick buttons and the navigation row", got)
+		}
+		for i := range chats {
+			button := keyboard[i][0]
+			if !strings.Contains(button.Text, staffMarker("settings_btn_staff_pick_n")) || !strings.HasSuffix(button.Text, " "+strconv.Itoa(i+1)) {
+				t.Errorf("button %d label = %q, want the positional label for %d", i, button.Text, i+1)
+			}
+			settingsStaffTestWantFields(t, button, env.groupFields(env.admin, "a", "lk", "s", strconv.FormatUint(uint64(ids[i]), 10)))
+			settingsStaffTestWantAbsent(t, text+button.Text+button.CallbackData, chats[i].Title, strconv.FormatInt(chats[i].Id, 10))
+		}
+	})
+
+	t.Run("a private menu labels the buttons with the titles", func(t *testing.T) {
+		env, chats, _ := newPicker(t)
+		env.pressPrivate(env.admin, settingsStaffTestPrivateMsg, env.privateFields(env.chat.Id, "a", "lk"))
+
+		text, keyboard := settingsStaffTestPrivatePage(env)
+		settingsStaffTestWantContains(t, text, staffMarker("settings_staff_pick"))
+		settingsStaffTestWantAbsent(t, text, staffMarker("settings_staff_pick_private_hint"))
+		for i, chat := range chats {
+			if want := "👥 " + chat.Title; keyboard[i][0].Text != want {
+				t.Errorf("button %d label = %q, want %q", i, keyboard[i][0].Text, want)
+			}
+		}
+	})
+
+	t.Run("the pick links the row whose ID was pressed, not a position", func(t *testing.T) {
+		env, chats, ids := newPicker(t)
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		second := keyboard[1][0]
+
+		// Re-create the first Staff Group: its row now sorts last, so position 2 is another group.
+		if err := db.DB.Where("chat_id = ?", chats[0].Id).Delete(&models.StaffGroup{}).Error; err != nil {
+			t.Fatalf("delete the first Staff Group: %v", err)
+		}
+		if _, err := staff.CreateStaffGroup(chats[0].Id, env.admin.Id, chats[0].Title); err != nil {
+			t.Fatalf("re-create the first Staff Group: %v", err)
+		}
+		if now := settingsStaffTestStaffRowIDs(t, env); now[1] == ids[1] {
+			t.Fatalf("the rows did not move: %v", now)
+		}
+
+		env.pressRaw(env.chat, env.admin, msgID, second.CallbackData)
+		link := settingsStaffTestLinkOf(t, env)
+		if link == nil || link.StaffChatID != chats[1].Id {
+			t.Fatalf("link = %+v, want a link to the second Staff Group %d", link, chats[1].Id)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeOKIcon+staffMarker("settings_notice_linked"))
+	})
+
+	t.Run("a forged s links nothing", func(t *testing.T) {
+		env, chats, ids := newPicker(t)
+		msgID := env.openMenu(env.admin)
+
+		stranger := gotgbot.User{Id: env.admin.Id + 1, FirstName: "Stranger"}
+		otherChat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Other Staff"}
+		staffCleanup(t, otherChat.Id)
+		if _, err := staff.CreateStaffGroup(otherChat.Id, stranger.Id, otherChat.Title); err != nil {
+			t.Fatalf("create the stranger's Staff Group: %v", err)
+		}
+		env.fake.setCreator(otherChat.Id, stranger.Id)
+		var otherRow models.StaffGroup
+		if err := db.DB.Where("chat_id = ?", otherChat.Id).First(&otherRow).Error; err != nil {
+			t.Fatalf("read the stranger's row: %v", err)
+		}
+
+		for name, s := range map[string]string{
+			"another owner's row":     strconv.FormatUint(uint64(otherRow.ID), 10),
+			"a row that is not there": strconv.FormatUint(uint64(ids[2])+1_000_000, 10),
+		} {
+			env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk", "s", s))
+			text, _ := env.lastEdit(env.chat.Id, msgID)
+			settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_link_refuse_not_staff_owner"))
+			if link := settingsStaffTestLinkOf(t, env); link != nil {
+				t.Fatalf("%s linked the group: %+v", name, link)
+			}
+		}
+
+		// Not a number, or zero: an invalid request, not an edit.
+		for _, s := range []string{"abc", "0"} {
+			edits := len(env.edits(env.chat.Id, msgID))
+			env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk", "s", s))
+			if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+				t.Errorf("s = %q edited the menu", s)
+			}
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("s = %q answered %q alert %v, want the invalid request alert", s, answer, alert)
+			}
+			if link := settingsStaffTestLinkOf(t, env); link != nil {
+				t.Fatalf("s = %q linked the group: %+v", s, link)
+			}
+		}
+
+		// A Staff Group the presser no longer creates, live, is refused with the same text.
+		env.fake.setCreator(chats[1].Id, stranger.Id)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk", "s", strconv.FormatUint(uint64(ids[1]), 10)))
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_link_refuse_not_staff_owner"))
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Fatalf("a Staff Group that is no longer the presser's was linked: %+v", link)
+		}
+	})
+}
+
+func TestSettingsStaffUnlink(t *testing.T) {
+	// ask presses Unlink on the Staff page of a linked group and returns the menu message and
+	// the card's keyboard.
+	ask := func(t *testing.T, env *settingsEnv, from gotgbot.User) (int64, [][]gotgbot.InlineKeyboardButton) {
+		t.Helper()
+		msgID := env.openMenu(from)
+		env.press(from, msgID, env.groupFields(from, "a", "op", "p", "s"))
+		env.press(from, msgID, env.groupFields(from, "a", "ua"))
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		return msgID, keyboard
+	}
+
+	t.Run("the owner gets a card and No returns to the page", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		msgID, keyboard := ask(t, env, env.admin)
+
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, staffMarker("staff_unlink_confirm_prompt"), "Lock Chat")
+		if got := settingsStaffTestShape(t, keyboard); got != "uy,no;bk,cl" {
+			t.Fatalf("card keyboard = %q, want Yes and No and the navigation row", got)
+		}
+		yes, no := keyboard[0][0], keyboard[0][1]
+		if !containsMarker(yes.Text, "settings_btn_yes") || !containsMarker(no.Text, "settings_btn_no") {
+			t.Errorf("labels = %q and %q", yes.Text, no.Text)
+		}
+		fields := settingsButtonFields(t, yes)
+		minute := time.Now().Unix() / 60
+		if e, err := strconv.ParseInt(fields["e"], 10, 64); err != nil || e < minute+4 || e > minute+6 {
+			t.Errorf("Yes carries e = %q, want about five minutes ahead of minute %d", fields["e"], minute)
+		}
+		settingsStaffTestWantFields(t, no, env.groupFields(env.admin, "a", "no", "p", "s"))
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("the ask removed the link")
+		}
+
+		env.pressRaw(env.chat, env.admin, msgID, no.CallbackData)
+		text, _ = env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, staffMarker("settings_staff_linked_hidden"))
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("No removed the link")
+		}
+	})
+
+	t.Run("Yes unlinks, tells the Staff Group only and redraws as not linked", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestLinked(env)
+		msgID, keyboard := ask(t, env, env.admin)
+		inGroup := len(env.fake.sentTo(env.chat.Id))
+
+		env.pressRaw(env.chat, env.admin, msgID, keyboard[0][0].CallbackData)
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Fatalf("the link survived Yes: %+v", link)
+		}
+		if got := settingsStaffTestMessagesWith(env, staffChat.Id, "staff_notice_unlinked_by"); got != 1 {
+			t.Errorf("the Staff Group got %d unlink notices, want 1", got)
+		}
+		if got := len(env.fake.sentTo(env.chat.Id)); got != inGroup {
+			t.Errorf("%d messages reached the unlinked group, want none", got-inGroup)
+		}
+		text, kb := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeOKIcon+staffMarker("settings_notice_unlinked"),
+			staffMarker("settings_staff_not_linked"))
+		if got := settingsStaffTestShape(t, kb); got != "lk;bk,cl" {
+			t.Errorf("keyboard = %q, want Link and the navigation row", got)
+		}
+	})
+
+	t.Run("two Yes presses unlink once and post one notice", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestLinked(env)
+		msgID, keyboard := ask(t, env, env.admin)
+
+		env.pressRaw(env.chat, env.admin, msgID, keyboard[0][0].CallbackData)
+		env.pressRaw(env.chat, env.admin, msgID, keyboard[0][0].CallbackData)
+		if got := settingsStaffTestMessagesWith(env, staffChat.Id, "staff_notice_unlinked_by"); got != 1 {
+			t.Errorf("the Staff Group got %d unlink notices, want exactly 1", got)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_unlink_not_linked"))
+	})
+
+	t.Run("a Yes after its expiry keeps the link", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		previous := settingsCardLifetime
+		settingsCardLifetime = -2 * time.Minute
+		t.Cleanup(func() { settingsCardLifetime = previous })
+		msgID, keyboard := ask(t, env, env.admin)
+
+		env.pressRaw(env.chat, env.admin, msgID, keyboard[0][0].CallbackData)
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("settings_card_expired"),
+			staffMarker("settings_staff_linked_hidden"))
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("an expired Yes removed the link")
+		}
+	})
+
+	t.Run("a Yes with a forged expiry is an invalid request", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		msgID, _ := ask(t, env, env.admin)
+		edits := len(env.edits(env.chat.Id, msgID))
+
+		for _, e := range []string{"", "abc", "0", "-3"} {
+			fields := env.groupFields(env.admin, "a", "uy")
+			if e != "" {
+				fields["e"] = e
+			}
+			env.press(env.admin, msgID, fields)
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("e = %q answered %q alert %v, want the invalid request alert", e, answer, alert)
+			}
+		}
+		if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+			t.Errorf("a forged Yes edited the menu %d times", got-edits)
+		}
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("a forged Yes removed the link")
+		}
+	})
+
+	t.Run("an admin who created neither group is refused at the ask", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		other := gotgbot.User{Id: env.admin.Id + 7, FirstName: "Other"}
+		env.fake.setMember(env.chat.Id, other.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true})
+
+		msgID := env.openMenu(other)
+		env.press(other, msgID, env.groupFields(other, "a", "op", "p", "s"))
+		env.press(other, msgID, env.groupFields(other, "a", "ua"))
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_unlink_refuse_not_owner"))
+		for _, button := range settingsAllButtons(keyboard) {
+			if settingsButtonFields(t, button)["a"] == "uy" {
+				t.Errorf("a refused ask drew a Yes button")
+			}
+		}
+		if strings.Contains(text, staffMarker("staff_unlink_confirm_prompt")) {
+			t.Errorf("a refused ask drew the card: %q", text)
+		}
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("a refused ask removed the link")
+		}
+	})
+
+	t.Run("ownership that moves between the ask and Yes is refused", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestLinked(env)
+		msgID, keyboard := ask(t, env, env.admin)
+
+		// The Staff Group's creator changes after the card was drawn. The refusal is the
+		// command's own text and Yes itself unlinks nothing and posts no unlink notice; the
+		// page redraw's owner recheck then removes the link of a maker who no longer owns the
+		// Staff Group, as /staff does, and says so to the Staff Group alone.
+		env.fake.setCreator(staffChat.Id, env.admin.Id+1)
+		env.pressRaw(env.chat, env.admin, msgID, keyboard[0][0].CallbackData)
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_unlink_refuse_not_owner"))
+		if got := settingsStaffTestMessagesWith(env, staffChat.Id, "staff_notice_unlinked_by"); got != 0 {
+			t.Errorf("a refused Yes posted %d unlink notices, want none", got)
+		}
+	})
+
+	t.Run("an owner check that cannot be answered at Yes keeps the link", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestLinked(env)
+		msgID, keyboard := ask(t, env, env.admin)
+
+		env.fake.setFailure("getChatAdministrators", staffChat.Id, errors.New("boom"))
+		env.pressRaw(env.chat, env.admin, msgID, keyboard[0][0].CallbackData)
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_check_failed"))
+		if link := settingsStaffTestLinkOf(t, env); link == nil {
+			t.Fatal("an unanswered owner check removed the link")
 		}
 	})
 }
