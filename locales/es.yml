@@ -2841,7 +2841,7 @@ lockdown_help_msg: |
 
   También bloqueo este grupo por mi cuenta cuando empieza una raid: cuando 15 personas entran en 60 segundos (oleada de entradas), o cuando llegan 30 mensajes, fotos, GIF o stickers en 30 segundos, al menos el 60 % de ellos de al menos 3 miembros que entraron en las últimas 24 horas (avalancha). Son los valores por defecto, con ambos activados; <code>/autolockdown</code> muestra las cifras de este grupo. Nunca cuentan los admins, los usuarios aprobados ni los comandos que gestiono, así que aprobar a los recién llegados de confianza los deja fuera. Publico un aviso breve cuando bloqueo el grupo, y la alerta indica qué disparador se activó. Durante 10 minutos tras un levantamiento no vuelvo a bloquear solo. Si veo una raid pero no puedo bloquear (debo ser admin con ese permiso, en un supergrupo), aviso al Grupo de Staff y al canal de registro, como máximo una vez al día. Estos ajustes no van en las copias de seguridad.
 
-  Disparador IA: el texto sospechoso de miembros que entraron hace menos de 24 h lo revisa TypeSafe, y sus fotos, GIF y stickers, Google Gemini (si está configurado). 5 veredictos de spam de 3 cuentas en 120 s bloquean el grupo; uno solo nunca lo hace, y la IA nunca borra ni banea.
+  Disparador IA: el texto sospechoso de miembros que entraron hace menos de 24 h lo revisa TypeSafe, y sus fotos, GIF y stickers, Anthropic Claude (si está configurado). 5 veredictos de spam de 3 cuentas en 120 s bloquean el grupo; uno solo nunca lo hace, y la IA nunca borra ni banea.
 
   🔓 Levantar bloqueo: levanta el bloqueo como <code>/unlockdown</code>. Mismos derechos que /unlockdown, comprobados en el momento; estar en el Grupo de Staff no basta.
 

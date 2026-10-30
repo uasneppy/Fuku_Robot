@@ -2831,7 +2831,7 @@ lockdown_help_msg: |
 
   Saya juga mengunci grup ini sendiri saat raid dimulai: ketika 15 orang bergabung dalam 60 detik (lonjakan bergabung), atau ketika 30 pesan, foto, GIF, atau stiker masuk dalam 30 detik, sedikitnya 60% di antaranya dari sedikitnya 3 anggota yang bergabung dalam 24 jam terakhir (banjir pesan). Itu nilai bawaan, keduanya aktif; <code>/autolockdown</code> menampilkan angka grup ini. Admin, pengguna yang disetujui, dan perintah yang saya tangani tidak pernah dihitung, jadi menyetujui anggota baru yang tepercaya mengecualikan mereka. Saya mengirim pemberitahuan singkat saat mengunci grup, dan peringatan menyebutkan pemicu mana yang aktif. Selama 10 menit setelah lockdown dicabut, saya tidak mengunci lagi sendiri. Jika saya melihat raid tetapi tidak bisa mengunci (saya harus menjadi admin dengan hak itu, di supergrup), saya memperingatkan Grup Staf dan kanal log, paling banyak sekali sehari. Pengaturan ini tidak disimpan dalam cadangan.
 
-  Pemicu AI: teks mencurigakan dari anggota yang bergabung kurang dari 24 jam lalu diperiksa TypeSafe, dan foto, GIF, serta stikernya oleh Google Gemini (jika sudah disiapkan). 5 vonis spam dari 3 akun dalam 120 detik mengunci grup; satu vonis tidak pernah, dan AI tidak pernah menghapus atau memblokir.
+  Pemicu AI: teks mencurigakan dari anggota yang bergabung kurang dari 24 jam lalu diperiksa TypeSafe, dan foto, GIF, serta stikernya oleh Anthropic Claude (jika sudah disiapkan). 5 vonis spam dari 3 akun dalam 120 detik mengunci grup; satu vonis tidak pernah, dan AI tidak pernah menghapus atau memblokir.
 
   🔓 Cabut lockdown: mencabut lockdown seperti <code>/unlockdown</code>. Hak yang sama dengan /unlockdown, diperiksa secara langsung; berada di Grup Staf saja tidak cukup.
 

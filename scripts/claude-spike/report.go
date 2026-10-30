@@ -52,44 +52,39 @@ func labelOf(p string) (string, bool) {
 // result is the outcome for one image. A blocked or failed image has no
 // probability and stays out of the confusion matrix.
 type result struct {
-	File, Label   string
-	Probability   float64
-	Category      string
-	Finish        string
-	Duration      time.Duration
-	PromptTokens  int
-	OutputTokens  int
-	ThoughtTokens int
-	Blocked       bool
-	Failed        bool
+	File, Label  string
+	Probability  float64
+	Finish       string
+	Duration     time.Duration
+	InputTokens  int
+	OutputTokens int
+	Blocked      bool
+	Failed       bool
 }
 
 // csvHeader is the column list of the per-image output.
-var csvHeader = []string{"file", "label", "probability", "category", "finish", "ms", "prompt_tokens", "output_tokens", "thought_tokens"}
+var csvHeader = []string{"file", "label", "probability", "finish", "ms", "input_tokens", "output_tokens"}
 
 // writeCSV writes the header and one row per result. A blocked or failed
-// image has an empty probability and category.
+// image has an empty probability.
 func writeCSV(w io.Writer, results []result) error {
 	cw := csv.NewWriter(w)
 	if err := cw.Write(csvHeader); err != nil {
 		return err
 	}
 	for _, r := range results {
-		probability, category := "", ""
+		probability := ""
 		if !r.Blocked && !r.Failed {
 			probability = strconv.FormatFloat(r.Probability, 'f', 4, 64)
-			category = r.Category
 		}
 		row := []string{
 			r.File,
 			r.Label,
 			probability,
-			category,
 			r.Finish,
 			strconv.FormatInt(r.Duration.Milliseconds(), 10),
-			strconv.Itoa(r.PromptTokens),
+			strconv.Itoa(r.InputTokens),
 			strconv.Itoa(r.OutputTokens),
-			strconv.Itoa(r.ThoughtTokens),
 		}
 		if err := cw.Write(row); err != nil {
 			return err
@@ -186,11 +181,11 @@ func percentile(d []time.Duration, p float64) time.Duration {
 	return sorted[rank-1]
 }
 
-// estimateCost is the price of a run in dollars: prompt tokens at the input
-// price plus candidate and thought tokens at the output price, both given in
-// dollars per million tokens.
-func estimateCost(prompt, candidates, thoughts int, priceIn, priceOut float64) float64 {
-	return (float64(prompt)*priceIn + float64(candidates+thoughts)*priceOut) / 1e6
+// estimateCost is the price of a run in dollars: input tokens at the input
+// price plus output tokens at the output price, both given in dollars per
+// million tokens.
+func estimateCost(input, output int, priceIn, priceOut float64) float64 {
+	return (float64(input)*priceIn + float64(output)*priceOut) / 1e6
 }
 
 // costPer1000 scales a run's cost to a thousand images, or 0 for no images.
@@ -203,12 +198,12 @@ func costPer1000(cost float64, images int) float64 {
 
 // totals are the latency, token and cost figures of a run.
 type totals struct {
-	Images                       int
-	P50, P95, Max                time.Duration
-	Prompt, Candidates, Thoughts int
-	PriceIn, PriceOut            float64
-	Cost, CostPer1000            float64
-	TokenlessImages              int
+	Images            int
+	P50, P95, Max     time.Duration
+	Input, Output     int
+	PriceIn, PriceOut float64
+	Cost, CostPer1000 float64
+	TokenlessImages   int
 }
 
 // totalsOf adds up a run. Every image is one request and counts once; only an
@@ -219,9 +214,8 @@ func totalsOf(results []result, priceIn, priceOut float64) totals {
 	durations := make([]time.Duration, 0, len(results))
 	for _, r := range results {
 		durations = append(durations, r.Duration)
-		t.Prompt += r.PromptTokens
-		t.Candidates += r.OutputTokens
-		t.Thoughts += r.ThoughtTokens
+		t.Input += r.InputTokens
+		t.Output += r.OutputTokens
 		if r.Blocked || r.Failed {
 			t.TokenlessImages++
 		}
@@ -229,13 +223,15 @@ func totalsOf(results []result, priceIn, priceOut float64) totals {
 	t.P50 = percentile(durations, 50)
 	t.P95 = percentile(durations, 95)
 	t.Max = percentile(durations, 100)
-	t.Cost = estimateCost(t.Prompt, t.Candidates, t.Thoughts, priceIn, priceOut)
+	t.Cost = estimateCost(t.Input, t.Output, priceIn, priceOut)
 	t.CostPer1000 = costPer1000(t.Cost, t.Images)
 	return t
 }
 
-// pricingNote tells the owner where the default prices must be checked.
-const pricingNote = "verify at ai.google.dev/gemini-api/docs/pricing"
+// pricingNote tells the owner that the default prices are list prices that
+// must be checked: they are for prompts up to 100K tokens at the time of
+// writing, and thinking is billed as output.
+const pricingNote = "list prices for prompts up to 100K tokens at the time of writing, thinking is billed as output; verify on Anthropic's pricing page"
 
 // writeSummary prints the confusion matrix at the chosen bar, the sweep of
 // bars, and the latency, token and cost figures.
@@ -257,7 +253,7 @@ func writeSummary(w io.Writer, s summary, rows []summary, t totals) {
 	}
 
 	p("\nLatency (all %d requests): p50 %s, p95 %s, max %s\n", t.Images, t.P50.Round(time.Millisecond), t.P95.Round(time.Millisecond), t.Max.Round(time.Millisecond))
-	p("Tokens: prompt %d, candidates %d, thoughts %d (blocked or failed images add none: %d)\n", t.Prompt, t.Candidates, t.Thoughts, t.TokenlessImages)
+	p("Tokens: input %d, output %d (blocked or failed images add none: %d)\n", t.Input, t.Output, t.TokenlessImages)
 	p("Estimated cost: $%.4f for %d images, $%.4f per 1000 images\n", t.Cost, t.Images, t.CostPer1000)
-	p("  at $%.2f per million input tokens and $%.2f per million output tokens (candidates plus thoughts); %s\n", t.PriceIn, t.PriceOut, pricingNote)
+	p("  at $%.2f per million input tokens and $%.2f per million output tokens; %s\n", t.PriceIn, t.PriceOut, pricingNote)
 }

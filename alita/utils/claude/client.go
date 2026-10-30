@@ -81,6 +81,8 @@ type Client struct {
 	// HTTP is the transport. Nil uses a client with Timeout that follows no
 	// redirects.
 	HTTP *http.Client
+	// Options is for the spike tool; leave it zero in production.
+	Options Options
 }
 
 // defaultHTTP follows no redirect: an answer is never read from another host.
@@ -128,7 +130,7 @@ func (c *Client) Classify(ctx context.Context, img Image) (*Verdict, error) {
 		return nil, ErrUnsupportedImage
 	}
 
-	payload, err := json.Marshal(buildRequest(c.Model, img))
+	payload, err := json.Marshal(buildRequest(c.Model, c.Options, img))
 	if err != nil {
 		return nil, errors.New("claude: encode request")
 	}
@@ -141,6 +143,39 @@ func (c *Client) Classify(ctx context.Context, img Image) (*Verdict, error) {
 		return nil, err
 	}
 	return parseVerdict(body)
+}
+
+// ModelInfo is the metadata the models endpoint reports for a model. The spike
+// tool prints it so the owner can check the model id and its limits.
+type ModelInfo struct {
+	ID             string `json:"id"`
+	DisplayName    string `json:"display_name"`
+	MaxInputTokens int    `json:"max_input_tokens"`
+	MaxTokens      int    `json:"max_tokens"`
+}
+
+// GetModel reads the configured model's metadata (GET /v1/models/{id}). The
+// spike tool uses it to check the model id before a run.
+func (c *Client) GetModel(ctx context.Context) (*ModelInfo, error) {
+	if c.APIKey == "" {
+		return nil, ErrNotConfigured
+	}
+	if !ValidModel(c.Model) {
+		return nil, ErrInvalidModel
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, Timeout)
+	defer cancel()
+
+	body, err := c.exec(ctx, http.MethodGet, c.baseURL()+"/v1/models/"+url.PathEscape(c.Model), nil)
+	if err != nil {
+		return nil, err
+	}
+	var info ModelInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		return nil, errors.New("claude: unreadable model metadata")
+	}
+	return &info, nil
 }
 
 // exec makes the request and, for a 429 or 5xx, one more attempt when the wait

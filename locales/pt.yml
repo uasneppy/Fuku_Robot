@@ -2803,7 +2803,7 @@ lockdown_help_msg: |
 
   Também bloqueio este grupo sozinho quando começa um raid: quando 15 pessoas entram em 60 segundos (surto de entradas), ou quando chegam 30 mensagens, fotos, GIFs ou stickers em 30 segundos, pelo menos 60% deles de pelo menos 3 membros que entraram nas últimas 24 horas (inundação). São os valores predefinidos; <code>/autolockdown</code> mostra os números deste grupo. Nunca contam administradores, utilizadores aprovados nem comandos que eu trato, por isso aprovar recém-chegados de confiança os exclui. Publico um aviso curto quando bloqueio o grupo, e o alerta indica o acionador. Durante 10 minutos após um levantamento, não volto a bloquear sozinho. Se vir um raid mas não puder bloquear (preciso de ser administrador com essa permissão, num supergrupo), aviso o Grupo de Staff e o canal de registo, no máximo uma vez por dia. Estas definições não ficam nas cópias de segurança.
 
-  Acionador IA: o texto suspeito de membros que entraram há menos de 24 h é verificado pelo TypeSafe, e as suas fotos, GIFs e stickers pelo Google Gemini (se configurado). 5 vereditos de spam de 3 contas em 120 s bloqueiam o grupo; um só nunca o faz, e a IA nunca apaga nem bane.
+  Acionador IA: o texto suspeito de membros que entraram há menos de 24 h é verificado pelo TypeSafe, e as suas fotos, GIFs e stickers pelo Anthropic Claude (se configurado). 5 vereditos de spam de 3 contas em 120 s bloqueiam o grupo; um só nunca o faz, e a IA nunca apaga nem bane.
 
   🔓 Levantar bloqueio: levanta o bloqueio como <code>/unlockdown</code>. Mesmos direitos que /unlockdown, verificados em tempo real; estar no Grupo de Staff não chega.
 

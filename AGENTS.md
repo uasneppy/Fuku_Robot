@@ -298,7 +298,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   kill switch for the whole raid AI path: `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
   watcher enqueues nothing, and a job already queued is dropped by `raidAIProcessJob` / `raidAIProcessImage` without
   a `getFile` or any provider call. The `/lockdown` help says what the AI trigger sends to
-  TypeSafe and to Google (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
+  TypeSafe and to Anthropic Claude (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
   `TestLockdownHelpFitsOneMessage`.
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
   arguments then pick view or change for the tapper. The command is not `Disableable`. `/autoantiraid` is its alias for
@@ -1245,13 +1245,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
   follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
   (`raidAIDownload` is the pattern).
-- `alita/utils/gemini` imports the standard library only, so `scripts/gemini-spike` can use it without the pre-main
-  database connection of `alita/config` and `alita/db`. The Gemini key travels only in the `x-goog-api-key` header,
-  never in a URL, and no error that package returns contains it.
-- `alita/utils/claude` imports the standard library only, so a spike tool can use it without the pre-main database
-  connection of `alita/config` and `alita/db`. The Anthropic key travels only in the `x-api-key` header, never in a URL,
-  and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is ever sent,
-  because the default model rejects them with a 400.
+- `alita/utils/claude` imports the standard library only, so `scripts/claude-spike` can use it without the pre-main
+  database connection of `alita/config` and `alita/db`. The Anthropic key travels only in the `x-api-key` header, never
+  in a URL, and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is
+  ever sent, because the default model rejects them with a 400. `claude.Options` and `GetModel` exist for the spike tool
+  only; its zero value is the production request, and the bot never sets it.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
@@ -1278,9 +1276,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Always pass `-tags testtools`; without it, test files and the helpers in production packages that carry that build tag drop out silently.
 - Postgres tests need both `DATABASE_URL` and `ALITA_TEST_DATABASE=true`; otherwise they run on SQLite.
 - Use real fixtures: `internal/testdb.Run` (SQLite), miniredis, hand-written `gotgbot.BotClient` fakes. No mock libraries.
-- No test calls a real AI provider (TypeSafe or Google): the Gemini client, the raid AI image path and the
-  `scripts/gemini-spike` tool are tested against `httptest` servers or a fake transport, with no `t.Skip`, so they run
-  in `make test`. The live Gemini spike (`go run ./scripts/gemini-spike`, needs `GEMINI_API_KEY`) is a manual owner
+- No test calls a real AI provider (TypeSafe or Anthropic): the Claude client, the raid AI image path and the
+  `scripts/claude-spike` tool are tested against `httptest` servers or a fake transport, with no `t.Skip`, so they run
+  in `make test`. The live Claude spike (`go run ./scripts/claude-spike`, needs `ANTHROPIC_API_KEY`) is a manual owner
   step, never part of CI. It refuses an `-endpoint` that is not https (plain http is accepted only for `localhost`,
   `127.0.0.1` and `::1`), because the key goes there in a header, and it exits 1 when every request failed.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,

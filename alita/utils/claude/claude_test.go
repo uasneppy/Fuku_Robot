@@ -801,3 +801,191 @@ func TestClaudeErrorsNeverContainKey(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// requestBodyWith classifies one image with options and returns the decoded
+// request body the server saw.
+func requestBodyWith(t *testing.T, opts Options) map[string]any {
+	t.Helper()
+	server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, toolAnswer(goodAnswer))
+	})
+	client := testClient(server, testModel)
+	client.Options = opts
+	if _, err := classifyOnce(client); err != nil {
+		t.Fatalf("Classify with %+v: %v", opts, err)
+	}
+	reqs := rec.all()
+	if len(reqs) != 1 {
+		t.Fatalf("requests = %d, want 1", len(reqs))
+	}
+	var body map[string]any
+	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
+		t.Fatalf("request body is not JSON: %v", err)
+	}
+	return body
+}
+
+// changedKeys lists the top-level keys whose value differs between two bodies,
+// including a key present in only one of them.
+func changedKeys(a, b map[string]any) []string {
+	seen := map[string]bool{}
+	var out []string
+	for key := range a {
+		seen[key] = true
+		if fmt.Sprint(a[key]) != fmt.Sprint(b[key]) {
+			out = append(out, key)
+		}
+	}
+	for key := range b {
+		if !seen[key] {
+			out = append(out, key)
+		}
+	}
+	return out
+}
+
+func TestClaudeSpikeOptionsChangeOnlyTheirOwnField(t *testing.T) {
+	production := requestBodyWith(t, Options{})
+
+	cases := []struct {
+		name   string
+		opts   Options
+		field  string
+		verify func(t *testing.T, body map[string]any)
+	}{
+		{"auto tool choice", Options{ToolChoice: "auto"}, "tool_choice", func(t *testing.T, body map[string]any) {
+			choice := body["tool_choice"].(map[string]any)
+			if choice["type"] != "auto" || len(choice) != 1 {
+				t.Errorf("tool_choice = %v, want only type auto", choice)
+			}
+			if len(body["tools"].([]any)) != 1 {
+				t.Error("the auto request must still carry the tool")
+			}
+		}},
+		{"adaptive thinking", Options{Thinking: "adaptive"}, "thinking", func(t *testing.T, body map[string]any) {
+			if body["thinking"].(map[string]any)["type"] != "adaptive" {
+				t.Errorf("thinking = %v", body["thinking"])
+			}
+		}},
+		{"thinking omitted", Options{Thinking: "omit"}, "thinking", func(t *testing.T, body map[string]any) {
+			if _, ok := body["thinking"]; ok {
+				t.Errorf("thinking = %v, want no field", body["thinking"])
+			}
+		}},
+		{"effort", Options{Effort: "low"}, "output_config", func(t *testing.T, body map[string]any) {
+			if body["output_config"].(map[string]any)["effort"] != "low" {
+				t.Errorf("output_config = %v", body["output_config"])
+			}
+		}},
+		{"max tokens", Options{MaxTokens: 1024}, "max_tokens", func(t *testing.T, body map[string]any) {
+			if body["max_tokens"].(float64) != 1024 {
+				t.Errorf("max_tokens = %v", body["max_tokens"])
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := requestBodyWith(t, tc.opts)
+			changed := changedKeys(production, body)
+			if len(changed) != 1 || changed[0] != tc.field {
+				t.Errorf("changed keys = %v, want only %s", changed, tc.field)
+			}
+			tc.verify(t, body)
+			for _, banned := range []string{"temperature", "top_p", "top_k"} {
+				if _, ok := body[banned]; ok {
+					t.Errorf("%s must not be sent", banned)
+				}
+			}
+		})
+	}
+
+	t.Run("zero options are the production request", func(t *testing.T) {
+		if got := production["tool_choice"].(map[string]any); got["type"] != "tool" || got["name"] != ToolName || got["disable_parallel_tool_use"] != true {
+			t.Errorf("tool_choice = %v", got)
+		}
+		if production["thinking"].(map[string]any)["type"] != "disabled" {
+			t.Errorf("thinking = %v", production["thinking"])
+		}
+		if _, ok := production["output_config"]; ok {
+			t.Error("output_config must not be sent by default")
+		}
+		if production["max_tokens"].(float64) != 256 {
+			t.Errorf("max_tokens = %v", production["max_tokens"])
+		}
+	})
+}
+
+func TestClaudeGetModel(t *testing.T) {
+	t.Run("reads the metadata", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, `{"id":"`+testModel+`","type":"model","display_name":"Test Vision Lite","max_input_tokens":200000,"max_tokens":64000}`)
+		})
+		info, err := testClient(server, testModel).GetModel(context.Background())
+		if err != nil {
+			t.Fatalf("GetModel: %v", err)
+		}
+		if info.ID != testModel || info.DisplayName != "Test Vision Lite" || info.MaxInputTokens != 200000 || info.MaxTokens != 64000 {
+			t.Errorf("info = %+v", info)
+		}
+		reqs := rec.all()
+		if len(reqs) != 1 {
+			t.Fatalf("requests = %d, want 1", len(reqs))
+		}
+		req := reqs[0]
+		if req.Method != http.MethodGet || req.Path != "/v1/models/"+testModel {
+			t.Errorf("request = %s %s", req.Method, req.Path)
+		}
+		if len(req.Body) != 0 {
+			t.Errorf("body = %q, want none", req.Body)
+		}
+		if got := req.Header.Get("Content-Type"); got != "" {
+			t.Errorf("Content-Type = %q, want none on a GET", got)
+		}
+		if req.Header.Get("x-api-key") != testKey || req.Header.Get("anthropic-version") != APIVersion {
+			t.Error("the key and version headers are missing")
+		}
+		if req.RawQuery != "" {
+			t.Errorf("raw query = %q", req.RawQuery)
+		}
+	})
+
+	t.Run("a 404 is an HTTPError", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusNotFound, errorBody("not_found_error", "model: nope", "req_1"))
+		})
+		_, err := testClient(server, testModel).GetModel(context.Background())
+		var httpErr *HTTPError
+		if !errors.As(err, &httpErr) || httpErr.Status != http.StatusNotFound || httpErr.Type != "not_found_error" {
+			t.Fatalf("err = %v, want a 404 not_found_error HTTPError", err)
+		}
+	})
+
+	t.Run("unreadable metadata is a fixed error", func(t *testing.T) {
+		server, _ := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, `not json `+testKey)
+		})
+		_, err := testClient(server, testModel).GetModel(context.Background())
+		if err == nil || strings.Contains(err.Error(), testKey) {
+			t.Fatalf("err = %v, want a keyless error", err)
+		}
+	})
+
+	t.Run("no key or a bad model makes no request", func(t *testing.T) {
+		server, rec := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, `{}`)
+		})
+		noKey := testClient(server, testModel)
+		noKey.APIKey = ""
+		if _, err := noKey.GetModel(context.Background()); !errors.Is(err, ErrNotConfigured) {
+			t.Errorf("no key: err = %v", err)
+		}
+		for _, model := range []string{"", ".", "..", "a/b", "a b"} {
+			if _, err := testClient(server, model).GetModel(context.Background()); !errors.Is(err, ErrInvalidModel) {
+				t.Errorf("model %q: err = %v", model, err)
+			}
+		}
+		if rec.count() != 0 {
+			t.Errorf("%d requests were sent, want none", rec.count())
+		}
+	})
+}
