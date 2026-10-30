@@ -95,10 +95,10 @@ func newCaptchaWebEnv(t *testing.T) *captchaWebEnv {
 	}
 	env.rt = rt
 	captchaWebCurrent.Store(rt)
-	captchaWebProbeAt.Store(0)
+	captchaWebProbe.Store(nil)
 	t.Cleanup(func() {
 		captchaWebCurrent.Store(nil)
-		captchaWebProbeAt.Store(0)
+		captchaWebProbe.Store(nil)
 	})
 	return env
 }
@@ -693,7 +693,7 @@ func TestSendCaptchaTurnstileFallsBackToMath(t *testing.T) {
 			t.Fatalf("newCaptchaWebRuntime() error = %v", err)
 		}
 		captchaWebCurrent.Store(rt)
-		captchaWebProbeAt.Store(0)
+		captchaWebProbe.Store(nil)
 
 		joinWithoutToken(t, env, member)
 		assertMathFallback(t, env, member.Id)
@@ -742,9 +742,7 @@ func TestSendCaptchaTurnstileRollsBackOnFailure(t *testing.T) {
 	t.Run("issue fails", func(t *testing.T) {
 		env := newCaptchaWebEnv(t)
 		// The probe is memoised as up, then Redis goes away before the join.
-		captchaWebProbeRT.Store(env.rt)
-		captchaWebProbeOK.Store(true)
-		captchaWebProbeAt.Store(time.Now().UnixNano())
+		captchaWebProbe.Store(&captchaWebProbeResult{rt: env.rt, at: time.Now().UnixNano(), ok: true})
 		env.mr.Close()
 
 		ctx := newModuleMessageContext(env.bot, env.chat, gotgbot.User{Id: 777000, FirstName: "Telegram"}, "join")

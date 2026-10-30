@@ -75,12 +75,18 @@ type captchaWebRuntime struct {
 // captchaWebCurrent is the installed runtime, or nil while the web captcha is off.
 var captchaWebCurrent atomic.Pointer[captchaWebRuntime]
 
-// The availability memo: the runtime the last probe was for, when it ran (unix nano) and
-// whether Redis answered. They are package variables so a test can reset or set them.
+// captchaWebProbeResult is one memoised Redis probe: the runtime it was for, when it ran (unix
+// nano) and whether Redis answered. It is replaced as a unit, so a reader never sees the
+// runtime of one probe with the time or the answer of another.
+type captchaWebProbeResult struct {
+	rt *captchaWebRuntime
+	at int64
+	ok bool
+}
+
+// The availability memo is a package variable so a test can reset or set it.
 var (
-	captchaWebProbeRT atomic.Pointer[captchaWebRuntime]
-	captchaWebProbeAt atomic.Int64
-	captchaWebProbeOK atomic.Bool
+	captchaWebProbe atomic.Pointer[captchaWebProbeResult]
 
 	captchaWebFallbackLoggedAt atomic.Int64
 )
@@ -198,16 +204,14 @@ func captchaWebAvailable(bot *gotgbot.Bot) (*captchaWebRuntime, bool) {
 		return nil, false
 	}
 	now := time.Now()
-	if captchaWebProbeRT.Load() == rt && now.UnixNano()-captchaWebProbeAt.Load() < int64(captchaWebProbeTTL) {
-		return rt, captchaWebProbeOK.Load()
+	if memo := captchaWebProbe.Load(); memo != nil && memo.rt == rt && now.UnixNano()-memo.at < int64(captchaWebProbeTTL) {
+		return rt, memo.ok
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), captchaweb.RedisTimeout)
 	defer cancel()
 	ok := rt.cfg.Redis.Ping(ctx).Err() == nil
-	captchaWebProbeRT.Store(rt)
-	captchaWebProbeOK.Store(ok)
-	captchaWebProbeAt.Store(now.UnixNano())
+	captchaWebProbe.Store(&captchaWebProbeResult{rt: rt, at: now.UnixNano(), ok: ok})
 	return rt, ok
 }
 

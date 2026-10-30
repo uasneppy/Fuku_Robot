@@ -10,10 +10,14 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
@@ -101,7 +105,7 @@ func TestCaptchaWebWiring(t *testing.T) {
 		}
 		// Point the env at the runtime production would have installed.
 		env.rt = captchaWebCurrent.Load()
-		captchaWebProbeAt.Store(0)
+		captchaWebProbe.Store(nil)
 
 		var patterns []string
 		for pattern := range CaptchaWebRoutes() {
@@ -389,4 +393,68 @@ func TestCaptchaWebStatsSection(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestCaptchaWebAvailabilityMemoIsOneUnit pins IN-04: the memo of the last Redis probe holds the
+// runtime, the time and the answer together. With the runtime swapped back and forth under
+// concurrent callers, a caller must never be told the answer of the other runtime's probe.
+func TestCaptchaWebAvailabilityMemoIsOneUnit(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	dead := miniredis.RunT(t)
+	deadClient := redis.NewClient(&redis.Options{Addr: dead.Addr(), MaxRetries: -1})
+	t.Cleanup(func() { _ = deadClient.Close() })
+	dead.Close()
+	downRT, err := newCaptchaWebRuntime(env.bot, CaptchaWebConfig{
+		BaseURL:   "https://" + captchaWebTestHost,
+		ShortName: "verify",
+		SiteKey:   "test-site-key",
+		Secret:    env.secret,
+		Redis:     deadClient,
+	})
+	if err != nil {
+		t.Fatalf("newCaptchaWebRuntime() error = %v", err)
+	}
+	upRT := env.rt
+
+	var (
+		wg   sync.WaitGroup
+		stop atomic.Bool
+		bad  atomic.Int64
+	)
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for !stop.Load() {
+				// A caller that read this runtime must get this runtime's own answer. The
+				// installed runtime is swapped by the other goroutine, so the answer is
+				// checked against the runtime the call returned.
+				got, ok := captchaWebAvailable(env.bot)
+				if got == nil {
+					continue
+				}
+				if want := got == upRT; ok != want {
+					bad.Add(1)
+				}
+			}
+		}()
+	}
+	swapper := make(chan struct{})
+	go func() {
+		defer close(swapper)
+		for i := 0; i < 200; i++ {
+			if i%2 == 0 {
+				captchaWebCurrent.Store(upRT)
+			} else {
+				captchaWebCurrent.Store(downRT)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	<-swapper
+	stop.Store(true)
+	wg.Wait()
+	if n := bad.Load(); n != 0 {
+		t.Fatalf("%d callers were given the answer of another runtime's probe", n)
+	}
 }

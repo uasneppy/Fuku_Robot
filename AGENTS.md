@@ -603,7 +603,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   can never pass or convert a Turnstile attempt. Rolling-deploy caveat (accepted, like the others here): a replica on
   older code has no such guard until it is replaced. A Turnstile group whose web captcha is unavailable (no runtime
   installed, no bot username, or no Redis `PING` answered within 250 ms in the last 5 s, memoised in
-  `captchaWebProbeAt`/`captchaWebProbeOK` so a raid of joins costs one probe per 5 s) gives the joining member the
+  `captchaWebProbe`, one `atomic.Pointer` to the probe's runtime, time and answer, replaced as a unit, so a raid of joins
+  costs one probe per 5 s) gives the joining member the
   math captcha with no extra message (D-09, `captchaWebAvailable`); `cache.IsRedisAvailable` is not used for this,
   because it only says a client object exists. An issue or send failure rolls the attempt back and unmutes (the existing
   `rollbackCaptchaAttempt`), with no fallback to math from inside a failed join. A re-join replaces the attempt, so the
