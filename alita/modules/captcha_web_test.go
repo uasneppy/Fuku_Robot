@@ -385,15 +385,18 @@ func TestCaptchaWebTracerJoinVerifyUnmute(t *testing.T) {
 		token := env.join(member)
 		env.setSiteverify(captchaweb.SiteverifyAnswerForTest(http.StatusOK, `{"success":false,"error-codes":["invalid-input-response"]}`))
 
+		// Plan 08-06 (D-28): a token Cloudflare says is invalid is one failed solve. The
+		// member is failed with the group's action (kick) and is never unmuted by it.
 		status, answer := env.verify(member, token)
-		if status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
-			t.Fatalf("verify = %d %q, want 200 retry", status, answer.Result)
+		if status != http.StatusOK || answer.Result != captchaweb.ResultFailed || answer.Action != "kick" {
+			t.Fatalf("verify = %d %+v, want 200 failed with action kick", status, answer)
 		}
-		if env.attempt(member.Id) == nil {
-			t.Fatal("attempt row was removed by a rejected Turnstile token")
+		if env.attempt(member.Id) != nil {
+			t.Fatal("attempt row survived a failed Turnstile solve")
 		}
-		if restricts := env.client.callsFor("restrictChatMember"); len(restricts) != 1 {
-			t.Fatalf("restrictChatMember calls = %d, want only the join mute", len(restricts))
+		restricts := env.client.callsFor("restrictChatMember")
+		if len(restricts) != 1 || permissionsOf(t, restricts[0]).CanSendMessages {
+			t.Fatalf("restrictChatMember calls = %d, want only the join mute and no unmute", len(restricts))
 		}
 	})
 
