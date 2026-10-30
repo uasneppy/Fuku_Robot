@@ -204,7 +204,9 @@ func autolockdownApply(b *gotgbot.Bot, ctx *ext.Context, args []string) error {
 		return ext.EndGroups
 	}
 
-	// A basic group cannot be locked, so there is nothing to tune.
+	// A basic group cannot be locked, so there is nothing to tune. applyAutoLockdown
+	// refuses it too; the check stays here so the parse errors and the status of a
+	// basic group keep the one reply they always had.
 	if chat.Type != "supergroup" {
 		return reply(lockdownText(tr, "lockdown_basic_group"))
 	}
@@ -229,25 +231,87 @@ func autolockdownApply(b *gotgbot.Bot, ctx *ext.Context, args []string) error {
 		return reply(autolockdownStatusText(tr, settings))
 	}
 
-	if writeErr := autolockdownWrite(chat.Id, change); writeErr != nil {
-		if errors.Is(writeErr, raiddetection.ErrThresholdOutOfRange) {
-			return reply(lockdownText(tr, "lockdown_auto_range", i18n.TranslationParams{
-				"min": raiddetection.MinThreshold,
-				"max": raiddetection.MaxThreshold,
-			}))
-		}
-		log.Errorf("[Lockdown] saving automatic lockdown change for chat %d: %v", chat.Id, writeErr)
-		return reply(lockdownText(tr, "lockdown_auto_save_failed"))
+	result := applyAutoLockdown(chat, change)
+	if refusal := autolockdownApplyText(tr, result); refusal != "" {
+		return reply(refusal)
 	}
 
 	saved := lockdownText(tr, "lockdown_auto_saved")
-	settings, readErr := autolockdownReadSettings(chat.Id)
-	if readErr != nil {
+	if result.ReadErr != nil {
 		// The change is saved; only the readback failed.
-		log.Warnf("[Lockdown] automatic lockdown settings of chat %d after the save: %v", chat.Id, readErr)
 		return reply(saved)
 	}
-	return reply(lockdownJoinLines([]string{saved, autolockdownStatusText(tr, settings)}))
+	return reply(lockdownJoinLines([]string{saved, autolockdownStatusText(tr, result.Settings)}))
+}
+
+// autoLockdownApplyOutcome is how one trigger change ended.
+type autoLockdownApplyOutcome int
+
+const (
+	// autoApplySaved means the change was written. Settings holds the row read back, or
+	// ReadErr says why it could not be read.
+	autoApplySaved autoLockdownApplyOutcome = iota
+	// autoApplyBasicGroup means the chat is not a supergroup, so nothing was written.
+	autoApplyBasicGroup
+	// autoApplyRange means a threshold outside raiddetection.MinThreshold..MaxThreshold,
+	// so nothing was written.
+	autoApplyRange
+	// autoApplySaveFailed means the write failed; Err holds the cause and nothing is
+	// known to have changed.
+	autoApplySaveFailed
+)
+
+// autoLockdownApplyResult is what applyAutoLockdown reports.
+type autoLockdownApplyResult struct {
+	Outcome autoLockdownApplyOutcome
+	// Settings is the chat's settings read back after a save, nil when ReadErr is set
+	// or the outcome is not autoApplySaved.
+	Settings *models.ChatRaidDetection
+	// Err is the write error of autoApplySaveFailed.
+	Err error
+	// ReadErr is the error of the readback after a successful save.
+	ReadErr error
+}
+
+// applyAutoLockdown is the one write path of the automatic lockdown triggers, shared by
+// /autolockdown, /autoantiraid and the settings menu. It refuses a chat that is not a
+// supergroup (D-21), writes through the autolockdownWrite seam (a threshold also turns
+// its trigger on) and reads the settings back under raidSettingsTimeout. The caller has
+// already judged the actor's authority.
+func applyAutoLockdown(chat *gotgbot.Chat, change autoLockdownChange) autoLockdownApplyResult {
+	if chat == nil || chat.Type != "supergroup" {
+		return autoLockdownApplyResult{Outcome: autoApplyBasicGroup}
+	}
+	if writeErr := autolockdownWrite(chat.Id, change); writeErr != nil {
+		if errors.Is(writeErr, raiddetection.ErrThresholdOutOfRange) {
+			return autoLockdownApplyResult{Outcome: autoApplyRange}
+		}
+		log.Errorf("[Lockdown] saving automatic lockdown change for chat %d: %v", chat.Id, writeErr)
+		return autoLockdownApplyResult{Outcome: autoApplySaveFailed, Err: writeErr}
+	}
+	settings, readErr := autolockdownReadSettings(chat.Id)
+	if readErr != nil {
+		log.Warnf("[Lockdown] automatic lockdown settings of chat %d after the save: %v", chat.Id, readErr)
+		return autoLockdownApplyResult{Outcome: autoApplySaved, ReadErr: readErr}
+	}
+	return autoLockdownApplyResult{Outcome: autoApplySaved, Settings: settings}
+}
+
+// autolockdownApplyText is the reply for a refused or failed change, exactly as
+// /autolockdown has always sent it, and "" for a saved one.
+func autolockdownApplyText(tr *i18n.Translator, r autoLockdownApplyResult) string {
+	switch r.Outcome {
+	case autoApplyBasicGroup:
+		return lockdownText(tr, "lockdown_basic_group")
+	case autoApplyRange:
+		return lockdownText(tr, "lockdown_auto_range", i18n.TranslationParams{
+			"min": raiddetection.MinThreshold,
+			"max": raiddetection.MaxThreshold,
+		})
+	case autoApplySaveFailed:
+		return lockdownText(tr, "lockdown_auto_save_failed")
+	}
+	return ""
 }
 
 // autolockdownReadSettings reads the chat's raid detection settings under
