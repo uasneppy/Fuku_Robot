@@ -542,6 +542,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   re-arm. The bot's own Restrict right is checked live (`BotCanRestrict`, 3 s, never the admin cache) before any
   Cloudflare call, and a bot without it, or an unknown answer, is a retry. A `Backend` method returns an error only when
   it changed nothing, which is what makes the re-arm after one safe.
+  Exactly once on any replica: a pass, a failed solve and a timeout are decided only by the conditional delete of the
+  attempt row (`CompleteCaptchaAttemptAtomic` or `ReleaseCaptchaAttemptAtomic`), never by a Redis flag, so a challenge
+  issued on one replica passes on another and a timer, a cleanup tick and a check on three replicas cannot all act. A
+  check that arrives after `expires_at`, or that lost the claim (a pass or a failed solve whose delete matched nothing),
+  runs `expireCaptchaAttempt` at once through `captchaWebBackend.Expire` (idempotent through its own claim; a live row is
+  left to the timer) and answers `expired` with the action; it never unmutes. A claim whose unmute failed answers `retry`,
+  not `passed`: the claim already wrote the `captcha_muted_users` row due now, the 5-minute worker retries it, the
+  challenge message is deleted and the token is not re-armed. A replica that crashes between the consume and a re-arm
+  loses that member's challenge until the group's time limit ends the attempt (accepted).
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
