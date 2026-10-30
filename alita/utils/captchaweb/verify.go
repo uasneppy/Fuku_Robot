@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,6 +113,11 @@ type Options struct {
 	Store         *Store
 	Siteverify    *Client
 	Backend       Backend
+	// TrustedProxies are the proxies whose X-Forwarded-For is believed
+	// (CAPTCHA_WEB_TRUSTED_PROXIES). With none, the client address is RemoteAddr.
+	TrustedProxies []netip.Prefix
+	// Limiter counts the abuse windows; nil builds one on the Store's Redis client.
+	Limiter *Limiter
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 }
@@ -122,6 +129,8 @@ type Handler struct {
 	store      *Store
 	siteverify *Client
 	backend    Backend
+	limiter    *Limiter
+	trusted    []netip.Prefix
 	now        func() time.Time
 }
 
@@ -142,12 +151,18 @@ func NewHandler(opts Options) (*Handler, error) {
 	if now == nil {
 		now = time.Now
 	}
+	limiter := opts.Limiter
+	if limiter == nil {
+		limiter = NewLimiter(opts.Store.client)
+	}
 	return &Handler{
 		botToken:   opts.BotToken,
 		hostname:   strings.ToLower(base.Hostname()),
 		store:      opts.Store,
 		siteverify: opts.Siteverify,
 		backend:    opts.Backend,
+		limiter:    limiter,
+		trusted:    opts.TrustedProxies,
 		now:        now,
 	}, nil
 }
@@ -169,6 +184,40 @@ func writeAnswer(w http.ResponseWriter, status int, answer Answer) {
 	if err := json.NewEncoder(w).Encode(answer); err != nil {
 		log.Debugf("[CaptchaWeb][Verify] write failed: %v", err)
 	}
+}
+
+// limitKeyForAddr is the per-address window key. An IPv6 client is counted by its /64, the
+// smallest block one subscriber holds, because a single host can otherwise mint 2^64 buckets.
+func limitKeyForAddr(addr netip.Addr) string {
+	if addr.Is6() {
+		if prefix, err := addr.Prefix(64); err == nil {
+			return limitIPKeyPrefix + prefix.Addr().String()
+		}
+	}
+	return limitIPKeyPrefix + addr.String()
+}
+
+// withinLimit counts one request in the window under key and reports whether the request may
+// go on. When it may not, the answer is already written: 429 retry with Retry-After in whole
+// seconds when the budget is spent, 503 retry when the window could not be counted (a Redis
+// error never lets a request through).
+func (h *Handler) withinLimit(w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
+	allowed, retryAfter, err := h.limiter.Allow(r.Context(), key, limit, verifyWindow)
+	if err != nil {
+		log.Warn("[CaptchaWeb][Verify] rate window failed")
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return false
+	}
+	if allowed {
+		return true
+	}
+	seconds := int64((retryAfter + time.Second - 1) / time.Second)
+	if seconds < 1 {
+		seconds = 1
+	}
+	w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
+	writeAnswer(w, http.StatusTooManyRequests, Answer{Result: ResultRetry})
+	return false
 }
 
 func decodeVerifyRequest(w http.ResponseWriter, r *http.Request) (verifyRequest, int, bool) {
@@ -213,6 +262,14 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	// ignored: a recorder or a wrapped writer may not support deadlines.
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(verifyWriteDeadline))
 
+	// The per-address window comes before the body is read. Behind a shared proxy address with
+	// no trusted list there is no per-address bucket, and the per-user windows still apply.
+	if addr, bucket := ClientIP(r, h.trusted); bucket {
+		if !h.withinLimit(w, r, limitKeyForAddr(addr), verifyIPLimit) {
+			return
+		}
+	}
+
 	req, status, ok := decodeVerifyRequest(w, r)
 	if !ok {
 		writeAnswer(w, status, Answer{Result: ResultInvalid})
@@ -224,9 +281,18 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
 		return
 	}
+	// From here on the user is the signed one, so the budgets below are spent by the member
+	// who sent the request and by nobody else (D-26).
+	userID := strconv.FormatInt(user.UserID, 10)
+	if !h.withinLimit(w, r, limitUserKeyPrefix+userID, verifyUserLimit) {
+		return
+	}
 	// A signed start_param is authoritative: the challenge the page posts must be it.
 	if user.StartParam != "" && user.StartParam != req.Challenge {
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
+		return
+	}
+	if !h.withinLimit(w, r, limitTokenUserKeyPrefix+req.Challenge+":"+userID, verifyTokenUserLimit) {
 		return
 	}
 
