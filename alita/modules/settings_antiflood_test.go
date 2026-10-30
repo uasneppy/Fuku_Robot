@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/i18n"
 )
 
 // settingsAntifloodRow reads the antiflood row of chatID straight from the database, past
@@ -411,5 +413,351 @@ func TestSettingsAntifloodReadFailure(t *testing.T) {
 	}
 	if len(kb) != 0 {
 		t.Errorf("the cannot-open edit kept the keyboard %+v", kb)
+	}
+}
+
+// settingsAntifloodWantRow fails unless the stored row of chatID holds exactly the given
+// values, read straight from the database.
+func settingsAntifloodWantRow(t *testing.T, chatID int64, limit int, action string, deleteOn bool) {
+	t.Helper()
+	row, ok := settingsAntifloodRow(t, chatID)
+	if !ok {
+		t.Fatalf("chat %d has no antiflood row, want limit %d action %s delete %v", chatID, limit, action, deleteOn)
+	}
+	if row.Limit != limit || row.Action != action || row.DeleteAntifloodMessage != deleteOn {
+		t.Errorf("stored row = limit %d action %s delete %v, want limit %d action %s delete %v",
+			row.Limit, row.Action, row.DeleteAntifloodMessage, limit, action, deleteOn)
+	}
+}
+
+// settingsAntifloodSentHas reports whether the bot sent chatID a message carrying text.
+func settingsAntifloodSentHas(env *settingsEnv, chatID int64, text string) bool {
+	for _, sent := range env.fake.sentTo(chatID) {
+		if strings.Contains(fmt.Sprint(sent.Params["text"]), text) {
+			return true
+		}
+	}
+	return false
+}
+
+// settingsAntifloodPress hand-builds a press of the Antiflood page on message msgID of chat,
+// as the env's administrator in a group menu.
+func settingsAntifloodPress(t *testing.T, env *settingsEnv, chat gotgbot.Chat, msgID int64, kv ...string) {
+	t.Helper()
+	fields := env.groupFields(env.admin, kv...)
+	data := encodeCallbackData(settingsCallbackNamespace, fields)
+	if data == "" {
+		t.Fatalf("hand-built press %v did not encode", fields)
+	}
+	env.pressRaw(chat, env.admin, msgID, data)
+}
+
+func TestSettingsParityAntiflood(t *testing.T) {
+	env := newSettingsEnv(t)
+	msgID := settingsAntifloodOpen(t, env)
+	admin := env.admin
+	chatID := env.chat.Id
+	redraw := func() (string, [][]gotgbot.InlineKeyboardButton) {
+		env.press(admin, msgID, env.groupFields(admin, "a", "op", "p", "f"))
+		return env.lastEdit(chatID, msgID)
+	}
+
+	// (1) /setflood writes, the page shows it.
+	env.send(admin, "/setflood 9")
+	text, _ := redraw()
+	if want := staffMarker("settings_antiflood_limit") + " 9"; !strings.Contains(text, want) {
+		t.Errorf("after /setflood 9 the page shows %q, want %q", text, want)
+	}
+	if row, ok := settingsAntifloodRow(t, chatID); !ok || row.Limit != 9 {
+		t.Errorf("stored limit = %d (row %v) after /setflood 9, want 9", row.Limit, ok)
+	}
+
+	// (2) the page writes, /flood shows it.
+	settingsAntifloodPress(t, env, env.chat, msgID, "a", "st", "p", "f", "t", "l", "v", "12")
+	env.send(admin, "/flood")
+	env.wantReplyHas(staffMarker("antiflood_flood_show_settings"), "12")
+	if row, ok := settingsAntifloodRow(t, chatID); !ok || row.Limit != 12 {
+		t.Errorf("stored limit = %d (row %v) after the menu step to 12, want 12", row.Limit, ok)
+	}
+
+	// (3) /setfloodmode kick writes, the page marks Kick.
+	env.send(admin, "/setfloodmode kick")
+	_, keyboard := redraw()
+	kick, ok := settingsAntifloodControlButton(t, keyboard, "m", "kick")
+	if !ok || !strings.HasPrefix(kick.Text, "✅ ") {
+		t.Errorf("after /setfloodmode kick the Kick button is %q, want it selected", kick.Text)
+	}
+	settingsAntifloodWantRow(t, chatID, 12, "kick", false)
+
+	// (4) the page's Ban writes, /flood shows banned.
+	settingsAntifloodPress(t, env, env.chat, msgID, "a", "st", "p", "f", "t", "m", "v", "ban")
+	env.send(admin, "/flood")
+	env.wantReplyHas(staffMarker("antiflood_flood_show_settings"), "12", "banned")
+	settingsAntifloodWantRow(t, chatID, 12, "ban", false)
+
+	// (5) /delflood on writes, the page's switch is on.
+	env.send(admin, "/delflood on")
+	_, keyboard = redraw()
+	toggle, ok := settingsAntifloodControlButton(t, keyboard, "d", "0")
+	if !ok || !strings.Contains(toggle.Text, "✅ "+staffMarker("common_status_on")) {
+		t.Errorf("after /delflood on the switch is %q (found %v), want it on and offering to turn off", toggle.Text, ok)
+	}
+	settingsAntifloodWantRow(t, chatID, 12, "ban", true)
+
+	// (6) the page's toggle turns it off, /delflood without an argument says so.
+	settingsAntifloodPress(t, env, env.chat, msgID, "a", "tg", "p", "f", "t", "d", "v", "0")
+	env.send(admin, "/delflood")
+	env.wantReplyHas(staffMarker("antiflood_flood_deleter_already_disabled"))
+	settingsAntifloodWantRow(t, chatID, 12, "ban", false)
+}
+
+func TestSettingsDriftAntiflood(t *testing.T) {
+	setup := func(t *testing.T) (*settingsEnv, gotgbot.Chat) {
+		t.Helper()
+		env := newSettingsEnv(t)
+		return env, env.addChat()
+	}
+	const menuMsgID = 4242
+
+	t.Run("limit", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			command string
+			menu    string
+			want    int
+			refused bool
+		}{
+			{"1 is refused", "/setflood 1", "1", 7, true},
+			{"2 is refused", "/setflood 2", "2", 7, true},
+			{"101 is refused", "/setflood 101", "101", 7, true},
+			{"3 is stored", "/setflood 3", "3", 3, false},
+			{"100 is stored", "/setflood 100", "100", 100, false},
+			{"off turns it off", "/setflood off", "0", 0, false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				env, menuChat := setup(t)
+				env.send(env.admin, "/setflood 7")
+				env.sendIn(menuChat, env.admin, "/setflood 7")
+
+				env.send(env.admin, tc.command)
+				if tc.refused {
+					env.wantReplyHas(staffMarker("antiflood_errors_set_in_limit"))
+				}
+				settingsAntifloodPress(t, env, menuChat, menuMsgID, "a", "st", "p", "f", "t", "l", "v", tc.menu)
+
+				settingsAntifloodWantRow(t, env.chat.Id, tc.want, "mute", false)
+				settingsAntifloodWantRow(t, menuChat.Id, tc.want, "mute", false)
+				if tc.refused {
+					text, _ := env.lastEdit(menuChat.Id, menuMsgID)
+					if !strings.Contains(text, staffMarker("antiflood_errors_set_in_limit")) {
+						t.Errorf("the menu redrew %q, want a notice with the command's own antiflood_errors_set_in_limit", text)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("action", func(t *testing.T) {
+		t.Run("warn is refused by both", func(t *testing.T) {
+			env, menuChat := setup(t)
+			env.send(env.admin, "/setfloodmode warn")
+			env.wantReplyHas(staffMarker("antiflood_setfloodmode_unknown_type"))
+			settingsAntifloodPress(t, env, menuChat, menuMsgID, "a", "st", "p", "f", "t", "m", "v", "warn")
+
+			if _, ok := settingsAntifloodRow(t, env.chat.Id); ok {
+				t.Error("/setfloodmode warn wrote a row")
+			}
+			if _, ok := settingsAntifloodRow(t, menuChat.Id); ok {
+				t.Error("the menu's warn wrote a row")
+			}
+			text, _ := env.lastEdit(menuChat.Id, menuMsgID)
+			if !strings.Contains(text, staffMarker("antiflood_setfloodmode_unknown_type")) {
+				t.Errorf("the menu redrew %q, want a notice with the command's own antiflood_setfloodmode_unknown_type", text)
+			}
+		})
+
+		t.Run("ban is stored by both", func(t *testing.T) {
+			env, menuChat := setup(t)
+			env.send(env.admin, "/setfloodmode ban")
+			settingsAntifloodPress(t, env, menuChat, menuMsgID, "a", "st", "p", "f", "t", "m", "v", "ban")
+
+			commandRow, ok := settingsAntifloodRow(t, env.chat.Id)
+			if !ok {
+				t.Fatal("/setfloodmode ban stored no row")
+			}
+			settingsAntifloodWantRow(t, menuChat.Id, commandRow.Limit, "ban", commandRow.DeleteAntifloodMessage)
+			if commandRow.Action != "ban" {
+				t.Errorf("command stored action %q, want ban", commandRow.Action)
+			}
+		})
+	})
+
+	t.Run("malformed values change nothing", func(t *testing.T) {
+		for _, tc := range []struct{ control, value string }{
+			{"l", "abc"}, {"l", "1000"}, {"l", "-1"}, {"l", "٣"},
+			{"m", "BAN"}, {"m", "ban1"}, {"m", "abcdefghijk"},
+			{"d", "2"}, {"d", "on"},
+		} {
+			t.Run(tc.control+"="+tc.value, func(t *testing.T) {
+				env, menuChat := setup(t)
+				settingsAntifloodPress(t, env, menuChat, menuMsgID, "a", "st", "p", "f", "t", tc.control, "v", tc.value)
+				answer, alert := env.lastAnswer()
+				if !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+					t.Errorf("answer = %q (alert %v), want the invalid request alert", answer, alert)
+				}
+				if _, ok := settingsAntifloodRow(t, menuChat.Id); ok {
+					t.Error("a malformed press wrote a row")
+				}
+			})
+		}
+	})
+}
+
+func TestSettingsAuthorityParityAntiflood(t *testing.T) {
+	const menuMsgID = 5151
+
+	t.Run("a bot that is not an admin is refused like the commands", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		chat := env.addChat()
+		env.fake.setBotRole(chat.Id, staffRoleMember)
+		refusal := staffMarker("connections_is_user_connected_bot_not_admin")
+
+		env.sendIn(chat, env.admin, "/setflood 5")
+		if !settingsAntifloodSentHas(env, chat.Id, refusal) {
+			t.Fatal("/setflood 5 was not refused for a bot that is not an admin")
+		}
+
+		// Viewing needs only the live admin.
+		settingsAntifloodPress(t, env, chat, menuMsgID, "a", "op", "p", "f")
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("settings_page_antiflood")) || strings.Contains(text, staffMarker("settings_cannot_open")) {
+			t.Fatalf("opening the page drew %q, want the Antiflood page", text)
+		}
+
+		for _, press := range [][]string{
+			{"a", "st", "p", "f", "t", "l", "v", "6"},
+			{"a", "st", "p", "f", "t", "m", "v", "ban"},
+			{"a", "tg", "p", "f", "t", "d", "v", "1"},
+		} {
+			answers := env.answerCount()
+			settingsAntifloodPress(t, env, chat, menuMsgID, press...)
+			text, _ = env.lastEdit(chat.Id, menuMsgID)
+			if !strings.Contains(text, refusal) {
+				t.Errorf("press %v drew %q, want the notice %s", press, text, refusal)
+			}
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("press %v answered %d times, want once", press, got)
+			}
+			if _, ok := settingsAntifloodRow(t, chat.Id); ok {
+				t.Fatalf("press %v wrote a row although the bot is not an admin", press)
+			}
+		}
+	})
+
+	t.Run("a bot that is an admin lets both succeed", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		chat := env.addChat()
+		env.sendIn(chat, env.admin, "/setflood 5")
+		if !settingsAntifloodSentHas(env, chat.Id, staffMarker("antiflood_setflood_success")) {
+			t.Fatal("/setflood 5 was not accepted for a bot that is an admin")
+		}
+		settingsAntifloodPress(t, env, chat, menuMsgID, "a", "st", "p", "f", "t", "l", "v", "6")
+		settingsAntifloodWantRow(t, chat.Id, 6, "mute", false)
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if strings.Contains(text, staffMarker("connections_is_user_connected_bot_not_admin")) {
+			t.Errorf("the menu refused %q although the bot is an admin", text)
+		}
+	})
+
+	t.Run("a plain member's private press is refused", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 31, FirstName: "Plain"}
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+		env.pressPrivate(member, 777, env.privateFields(env.chat.Id, "a", "st", "p", "f", "t", "l", "v", "5"))
+
+		answer, alert := env.lastAnswer()
+		if !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+		}
+		if _, ok := settingsAntifloodRow(t, env.chat.Id); ok {
+			t.Error("a plain member's press wrote a row")
+		}
+	})
+}
+
+// settingsAntifloodCheckBytes fails unless every callback button of the screen fits.
+func settingsAntifloodCheckBytes(t *testing.T, name string, screen settingsScreen) {
+	t.Helper()
+	if screen.Omitted != 0 {
+		t.Errorf("%s omitted %d buttons for overflow, want none", name, screen.Omitted)
+	}
+	buttons := settingsAllButtons(screen.Keyboard.InlineKeyboard)
+	if len(buttons) == 0 {
+		t.Errorf("%s has no buttons", name)
+	}
+	for _, button := range buttons {
+		if n := len(button.CallbackData); n < 1 || n > 64 {
+			t.Errorf("%s button %q has %d bytes of callback data, want 1..64", name, button.Text, n)
+		}
+	}
+}
+
+func TestSettingsAntifloodCallbackBytes(t *testing.T) {
+	tr := i18n.MustNewTranslator("en")
+	for _, variant := range []struct {
+		name string
+		view settingsView
+	}{
+		{"private", settingsView{Tr: tr, Private: true, OwnerKey: "c", OwnerValue: "-1001234567890", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}},
+		{"group", settingsView{Tr: tr, OwnerKey: "u", OwnerValue: "9999999999", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}},
+	} {
+		t.Run(variant.name, func(t *testing.T) {
+			for _, limit := range []int{0, 3, 50, 100} {
+				for _, action := range []string{"mute", "ban", "kick", "warn", "tban", "tmute"} {
+					for _, deleteOn := range []bool{false, true} {
+						name := fmt.Sprintf("limit %d action %s delete %v", limit, action, deleteOn)
+						screen := renderSettingsAntiflood(variant.view,
+							&models.AntifloodSettings{Limit: limit, Action: action, DeleteAntifloodMessage: deleteOn}, "")
+						settingsAntifloodCheckBytes(t, name, screen)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSettingsAntifloodPageFitsEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			view := settingsView{
+				Tr: tr, OwnerKey: "u", OwnerValue: "9999999999", GroupID: -1001234567890,
+				GroupTitle: strings.Repeat("&", 64), OpenerName: "N",
+			}
+			notice := settingsNoticeWarn(fmt.Sprintf(settingsText(tr, "antiflood_setfloodmode_unknown_type"), strings.Repeat("a", settingsFloodModeMaxLen)))
+			for _, s := range []*models.AntifloodSettings{
+				{Limit: 100, Action: "tmute", DeleteAntifloodMessage: true},
+				{Limit: 0, Action: "tban"},
+				{Limit: 5, Action: "mute"},
+			} {
+				screen := renderSettingsAntiflood(view, s, notice)
+				if units := len(utf16.Encode([]rune(screen.Text))); units > 3800 {
+					t.Errorf("%s page for %+v is %d UTF-16 units, want at most 3800", code, s, units)
+				}
+				for _, placeholder := range []string{"{n}", "{action}", "{state}", "{page}", "%!"} {
+					if strings.Contains(screen.Text, placeholder) {
+						t.Errorf("%s page %q keeps the unfilled %s", code, screen.Text, placeholder)
+					}
+				}
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					if strings.TrimSpace(button.Text) == "" {
+						t.Errorf("%s page for %+v has a button with an empty label", code, s)
+					}
+				}
+				settingsAntifloodCheckBytes(t, code, screen)
+			}
+		})
 	}
 }
