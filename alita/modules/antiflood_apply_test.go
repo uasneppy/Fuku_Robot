@@ -238,6 +238,8 @@ func TestApplyFloodDelete(t *testing.T) {
 // the same input.
 func TestAntifloodCommandsUseApply(t *testing.T) {
 	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	// Every en.yml string becomes a marker of its own key, so the reply proves which key was used.
+	withStaffLocale(t)
 	tr := i18n.MustNewTranslator("en")
 	text := func(key string, args ...any) string {
 		temp, err := tr.GetString(key)
