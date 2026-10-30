@@ -165,3 +165,45 @@ func TestParseTrustedProxies(t *testing.T) {
 		t.Fatalf("ParseTrustedProxies() accepted a bad entry")
 	}
 }
+
+// trustedProxyInputs is the one table of CAPTCHA_WEB_TRUSTED_PROXIES inputs that the config
+// package and captchaweb.ParseTrustedProxies must both answer the same way. The packages
+// cannot share code (captchaweb is a leaf), so each test file holds a copy: keep the two
+// identical.
+var trustedProxyInputs = []struct {
+	input     string
+	wantValid bool
+	wantCount int
+}{
+	{"", true, 0},
+	{"   ", true, 0},
+	{"10.0.0.1", true, 1},
+	{"10.0.0.1,,10.0.0.2", true, 2},
+	{"10.0.0.1,", true, 1},
+	{",10.0.0.1", true, 1},
+	{",", true, 0},
+	{" , ", true, 0},
+	{"10.0.0.0/8, 192.168.1.10, ::1", true, 3},
+	{"1.2.3.4/8", true, 1},
+	{"fe80::1%eth0", true, 1},
+	{"10.0.0.0/8, nope", false, 0},
+	{"10.0.0.1/33", false, 0},
+	{"10.0.0.1 10.0.0.2", false, 0},
+	{"10.0.0.1;10.0.0.2", false, 0},
+	{"10.0.0.1,,nope", false, 0},
+}
+
+// TestParseTrustedProxiesTable pins IN-03: ParseTrustedProxies answers the shared table the way
+// the config validation does, empty entries skipped.
+func TestParseTrustedProxiesTable(t *testing.T) {
+	for _, tc := range trustedProxyInputs {
+		got, err := ParseTrustedProxies(tc.input)
+		if (err == nil) != tc.wantValid {
+			t.Errorf("ParseTrustedProxies(%q) error = %v, want valid = %v", tc.input, err, tc.wantValid)
+			continue
+		}
+		if tc.wantValid && len(got) != tc.wantCount {
+			t.Errorf("ParseTrustedProxies(%q) = %d prefixes, want %d", tc.input, len(got), tc.wantCount)
+		}
+	}
+}

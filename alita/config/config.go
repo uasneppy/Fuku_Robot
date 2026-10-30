@@ -302,15 +302,15 @@ func validCaptchaWebBaseURL(raw string) bool {
 }
 
 // validCaptchaWebProxies reports whether every comma-separated entry of list is
-// an IP address or a CIDR prefix. An empty list is valid.
+// an IP address or a CIDR prefix. Empty entries (an empty list, a trailing or a
+// doubled comma) are skipped, which is the rule of captchaweb.ParseTrustedProxies
+// that parses the same setting at runtime; the package is a leaf and cannot be
+// shared, so the two tests hold the same table of inputs.
 func validCaptchaWebProxies(list string) bool {
-	if strings.TrimSpace(list) == "" {
-		return true
-	}
 	for _, entry := range strings.Split(list, ",") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
-			return false
+			continue
 		}
 		if strings.Contains(entry, "/") {
 			if _, err := netip.ParsePrefix(entry); err != nil {

@@ -276,3 +276,40 @@ func TestCaptchaWebConfig(t *testing.T) {
 		}
 	})
 }
+
+// trustedProxyInputs is the one table of CAPTCHA_WEB_TRUSTED_PROXIES inputs that the config
+// package and captchaweb.ParseTrustedProxies must both answer the same way. The packages
+// cannot share code (captchaweb is a leaf), so each test file holds a copy: keep the two
+// identical.
+var trustedProxyInputs = []struct {
+	input     string
+	wantValid bool
+	wantCount int
+}{
+	{"", true, 0},
+	{"   ", true, 0},
+	{"10.0.0.1", true, 1},
+	{"10.0.0.1,,10.0.0.2", true, 2},
+	{"10.0.0.1,", true, 1},
+	{",10.0.0.1", true, 1},
+	{",", true, 0},
+	{" , ", true, 0},
+	{"10.0.0.0/8, 192.168.1.10, ::1", true, 3},
+	{"1.2.3.4/8", true, 1},
+	{"fe80::1%eth0", true, 1},
+	{"10.0.0.0/8, nope", false, 0},
+	{"10.0.0.1/33", false, 0},
+	{"10.0.0.1 10.0.0.2", false, 0},
+	{"10.0.0.1;10.0.0.2", false, 0},
+	{"10.0.0.1,,nope", false, 0},
+}
+
+// TestValidCaptchaWebProxiesTable pins IN-03: the config accepts exactly the inputs that
+// captchaweb.ParseTrustedProxies accepts, empty entries skipped.
+func TestValidCaptchaWebProxiesTable(t *testing.T) {
+	for _, tc := range trustedProxyInputs {
+		if got := validCaptchaWebProxies(tc.input); got != tc.wantValid {
+			t.Errorf("validCaptchaWebProxies(%q) = %v, want %v", tc.input, got, tc.wantValid)
+		}
+	}
+}

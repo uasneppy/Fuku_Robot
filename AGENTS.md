@@ -665,7 +665,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `PING` within 250 ms, else `503 {"status":"unavailable"}`, and never names an ID, a setting or a secret. The patterns are
   `RoutePage`, `RouteVerify` and `RouteHealth`, returned by `Handler.Routes`.
 - The Turnstile verify route's client address is `captchaweb.ClientIP`: `RemoteAddr`, unless `RemoteAddr` is inside
-  `CAPTCHA_WEB_TRUSTED_PROXIES` (`captchaweb.ParseTrustedProxies`, comma-separated IPs and CIDRs), in which case
+  `CAPTCHA_WEB_TRUSTED_PROXIES` (`captchaweb.ParseTrustedProxies`, comma-separated IPs and CIDRs; empty entries such as a trailing comma are skipped
+  by it and by the startup check `validCaptchaWebProxies` alike, and both tests hold one table of inputs, because
+  `captchaweb` is a leaf and cannot share the code), in which case
   `X-Forwarded-For` (all header lines as one list) is walked from the right to the first address outside the list. `X-Real-IP`
   and `CF-Connecting-IP` are never read, because anyone can send them. A chain that is empty, all trusted or unparsable
   falls back to `RemoteAddr`. With a loopback, private or link-local peer and no trusted list, a trusted proxy's own
