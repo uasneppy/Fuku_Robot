@@ -177,7 +177,9 @@ func TestSettingsStartDeepLink(t *testing.T) {
 				script: func(env *settingsEnv) {
 					env.fake.script("getChatMember", env.chat.Id, staffFakeError(403, "Forbidden: bot is not a member of the supergroup chat"))
 				},
-				want: "settings_cannot_open",
+				// The same words as a plain member: the answer is no oracle for whether the bot
+				// is in a chat the user named (IN-03).
+				want: "settings_start_not_admin",
 			},
 			{
 				name: "the group is gone at getChat",

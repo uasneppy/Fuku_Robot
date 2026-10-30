@@ -121,8 +121,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   result; anything else is `settings_start_invalid` with no Telegram call) and never authorizes anything: a live
   `getChatMember` of the user in that group must show the creator or an administrator (`settings_start_not_admin`
   otherwise, `settings_check_failed` for a lookup error), then one `getChat` of the group, and only a group or supergroup
-  is opened. A bot that is missing from the group, a group that is gone (`chat_status.IsBotMissingError`) or any other
-  chat type is `settings_cannot_open`. Every refusal is a plain reply with no keyboard. The Main page is sent to the
+  is opened. A bot that is missing from the group or a group that is gone at the `getChatMember` step
+  (`chat_status.IsBotMissingError`) is answered `settings_start_not_admin`, the words a plain member gets, because the
+  payload is attacker-controlled text and a different answer would tell anyone whether the bot is in chat X; once the
+  admin check has passed, a group that is gone at `getChat` or any other chat type is `settings_cannot_open`. Every refusal is a plain reply with no keyboard. The Main page is sent to the
   private chat in the user's language, its buttons carrying `c` (the group's chat ID) and no opener field. A `/start`
   with extra words (`settings_ -100`) has an unexpected argument count, so `start` ignores it and the handler never runs.
 

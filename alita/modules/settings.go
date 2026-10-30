@@ -118,7 +118,9 @@ func settingsStartDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User,
 	member, err := lockdownLiveMember(b, chatID, user.Id)
 	if err != nil {
 		if chat_status.IsBotMissingError(err) {
-			return refuse("settings_cannot_open")
+			// The same words as a plain member gets: any user can send any chat ID, so a
+			// different answer would tell them whether the bot is in that chat.
+			return refuse("settings_start_not_admin")
 		}
 		log.Warnf("[Settings] live check of user %d in chat %d failed: %v", user.Id, chatID, err)
 		return refuse("settings_check_failed")
