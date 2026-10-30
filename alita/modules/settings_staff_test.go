@@ -212,9 +212,11 @@ func TestSettingsStaffPageVariants(t *testing.T) {
 		}
 	})
 
-	t.Run("the private menu shows the Staff Group", func(t *testing.T) {
+	t.Run("the private menu shows the Staff Group to the creator of the group", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		staffChat := settingsStaffTestLinked(env)
+		// The live member record of the press says creator (D-32).
+		env.fake.setMember(env.chat.Id, env.admin.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusCreator})
 		settingsStaffTestOpenPrivate(env)
 
 		text, keyboard := settingsStaffTestPrivatePage(env)
@@ -225,6 +227,22 @@ func TestSettingsStaffPageVariants(t *testing.T) {
 			t.Fatalf("keyboard = %q, want Refresh, Unlink and the navigation row", got)
 		}
 		settingsStaffTestWantFields(t, keyboard[1][0], env.privateFields(env.chat.Id, "a", "ua"))
+	})
+
+	// D-32 (WR-02): any other live admin of the linked group, who need not be staff, gets the
+	// masked line of a group menu in private too.
+	t.Run("the private menu masks the Staff Group from an admin who is not the creator", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestLinked(env)
+		settingsStaffTestOpenPrivate(env)
+
+		text, keyboard := settingsStaffTestPrivatePage(env)
+		settingsStaffTestWantContains(t, text, staffMarker("settings_staff_linked_hidden"), healthy)
+		settingsStaffTestWantAbsent(t, text, staffMarker("settings_staff_linked_to"), "Staff HQ",
+			strconv.FormatInt(staffChat.Id, 10), strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"))
+		if got := settingsStaffTestShape(t, keyboard); got != "op;ua;bk,cl" {
+			t.Fatalf("keyboard = %q, want Refresh, Unlink and the navigation row", got)
+		}
 	})
 
 	t.Run("a bot that cannot restrict shows the cross and the reason", func(t *testing.T) {

@@ -50,6 +50,10 @@ type settingsView struct {
 	// OpenerName is the opener's full name, escaped by the renderer.
 	OpenerName string
 	Now        time.Time
+	// Creator is true for a private menu whose presser is, by the live member record of the
+	// press, the creator of the group being configured. Only that person sees the Staff
+	// Group's title and chat ID on the Staff Group page (D-32); a group menu is never Creator.
+	Creator bool
 }
 
 // settingsScreen is one drawn message: its HTML text and keyboard. Omitted counts buttons

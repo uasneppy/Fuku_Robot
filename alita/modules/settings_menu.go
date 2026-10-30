@@ -172,7 +172,15 @@ func (p *settingsPress) view() settingsView {
 		GroupTitle: p.group.Title,
 		OpenerName: staffFullName(&p.query.From),
 		Now:        time.Now(),
+		Creator:    p.isGroupCreator(),
 	}
+}
+
+// isGroupCreator reports whether this is a private menu whose presser is, by the live member
+// record every press already fetched, the creator of the group being configured. It makes no
+// call of its own.
+func (p *settingsPress) isGroupCreator() bool {
+	return p.private && p.member.Status == gotgbot.ChatMemberStatusCreator
 }
 
 // settingsMainScreen draws the Main page for a press.

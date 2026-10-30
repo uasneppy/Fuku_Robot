@@ -67,10 +67,14 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					Tr: tr, OwnerKey: "u", OwnerValue: "9999999999",
 					GroupID: link.GroupChatID, GroupTitle: "Test Group", OpenerName: "Opener",
 				}
+				// The creator of the group, by the press's live member record (D-32).
 				privateView := settingsView{
-					Tr: tr, Private: true, OwnerKey: "c", OwnerValue: strconv.FormatInt(link.GroupChatID, 10),
+					Tr: tr, Private: true, Creator: true, OwnerKey: "c", OwnerValue: strconv.FormatInt(link.GroupChatID, 10),
 					GroupID: link.GroupChatID, GroupTitle: "Test Group", OpenerName: "Opener",
 				}
+				// Any other admin of the group: a private menu, but not the creator.
+				privateAdminView := privateView
+				privateAdminView.Creator = false
 
 				notices := []string{
 					"",
@@ -91,6 +95,10 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				// Every screen a group menu can reach on the Staff Group page.
 				screens := map[string]settingsScreen{
 					"unlink card": renderSettingsStaffUnlinkCard(groupView, link),
+					// A private menu of an admin who is not the creator is masked like a group menu.
+					"private admin linked":           renderSettingsStaffLinked(privateAdminView, settingsStaffViewFor(privateAdminView, false, &staffGroup, &row), ""),
+					"private admin linked, no group": renderSettingsStaffLinked(privateAdminView, settingsStaffViewFor(privateAdminView, false, nil, &row), ""),
+					"private admin not linked":       renderSettingsStaffNotLinked(privateAdminView, ""),
 					"main": renderSettingsMain(groupView, []settingsMainEntry{
 						{Key: "s", Icon: "👥", Title: settingsText(tr, "settings_page_staff"),
 							State: settingsText(tr, "settings_state_linked"), Known: true},
@@ -107,25 +115,26 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					name := fmt.Sprintf("notice %d", i)
 					screens["linked, "+name] = renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), notice)
 					screens["not linked, "+name] = renderSettingsStaffNotLinked(groupView, notice)
+					screens["private admin linked, "+name] = renderSettingsStaffLinked(privateAdminView, settingsStaffViewFor(privateAdminView, false, &staffGroup, &row), notice)
 					screens["picker, "+name] = renderSettingsStaffPicker(groupView, pickable, notice)
 				}
 
 				for name, screen := range screens {
 					all := settingsStaffPrivacyScreenText(screen)
 					if strings.TrimSpace(screen.Text) == "" {
-						t.Errorf("%s: the group menu screen has no text", name)
+						t.Errorf("%s: the screen has no text", name)
 					}
 					for _, leak := range []string{
 						settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
 						"ZZ Staff", settingsStaffPrivacyDigits,
 					} {
 						if strings.Contains(all, leak) {
-							t.Errorf("%s: a group menu screen leaks %q: %q", name, leak, all)
+							t.Errorf("%s: a screen that must not name the Staff Group leaks %q: %q", name, leak, all)
 						}
 					}
 				}
 
-				// A private menu may name the Staff Group.
+				// A private menu of the group's creator may name the Staff Group.
 				linked := settingsStaffPrivacyScreenText(
 					renderSettingsStaffLinked(privateView, settingsStaffViewFor(privateView, false, &staffGroup, &row), ""))
 				for _, want := range []string{html.EscapeString(settingsStaffPrivacyTitle), strconv.FormatInt(settingsStaffPrivacyChatID, 10)} {
@@ -138,6 +147,64 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					t.Errorf("private picker does not contain the label %q: %q", want, picker)
 				}
 			})
+		}
+	})
+
+	// D-32 (WR-02): a private menu is shown to every live admin of the group, who need not be
+	// staff. Only the group's creator sees the Staff Group's title and chat ID; every other
+	// admin gets the masked line, on every screen the Staff Group page can draw.
+	t.Run("a private run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		staffChat := settingsStaffTestOwnedStaffGroup(env, settingsStaffPrivacyTitle)
+		linkLockdownGroupTo(env.lockdownEnv, staffChat)
+
+		moderator := gotgbot.User{Id: env.admin.Id + 41, FirstName: "Moderator"}
+		env.fake.setMember(env.chat.Id, moderator.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true,
+		})
+		const menuMsgID = 4747
+		private := func(kv ...string) {
+			env.pressPrivate(moderator, menuMsgID, env.privateFields(env.chat.Id, kv...))
+		}
+		private("a", "op", "p", "s")
+		private("a", "ua")
+		private("a", "op", "p", "s")
+		private("a", "lk")
+
+		var seen []string
+		for _, edit := range env.edits(moderator.Id, menuMsgID) {
+			seen = append(seen, fmt.Sprint(edit.Params["text"]))
+			for _, button := range settingsAllButtons(staffKeyboardOf(edit.Params["reply_markup"])) {
+				seen = append(seen, button.Text, button.CallbackData)
+			}
+		}
+		for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+			seen = append(seen, fmt.Sprint(answer.Params["text"]))
+		}
+		everything := strings.Join(seen, "\n")
+		if len(env.edits(moderator.Id, menuMsgID)) < 3 {
+			t.Fatalf("the run edited the menu only %d times", len(env.edits(moderator.Id, menuMsgID)))
+		}
+		for _, leak := range []string{
+			"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+			strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"),
+		} {
+			if strings.Contains(everything, leak) {
+				t.Errorf("a private menu of an admin who is not the creator received %q: %q", leak, everything)
+			}
+		}
+		if !strings.Contains(everything, staffMarker("settings_staff_linked_hidden")) {
+			t.Errorf("the page lacks the masked line: %q", everything)
+		}
+
+		// The creator of the same group sees the full line.
+		env.fake.setMember(env.chat.Id, env.admin.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusCreator})
+		env.pressPrivate(env.admin, menuMsgID+1, env.privateFields(env.chat.Id, "a", "op", "p", "s"))
+		text, _ := env.lastEdit(env.admin.Id, menuMsgID+1)
+		for _, want := range []string{staffMarker("settings_staff_linked_to"), strconv.FormatInt(staffChat.Id, 10)} {
+			if !strings.Contains(text, want) {
+				t.Errorf("the creator's private page %q lacks %q", text, want)
+			}
 		}
 	})
 

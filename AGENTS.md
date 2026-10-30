@@ -1206,11 +1206,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the group, and a menu or choice message stays until used or closed (no auto-close timer). The "Only {name} can use this
   menu." line carries an escaped name, not a mention, so it pings nobody.
 - A menu opened in the group never shows the Staff Group's title or chat ID (D-21): not in any text, button label, notice,
-  alert or callback data, in any of the 7 languages, on any page, picker, card or refusal. A private menu and a menu inside
-  a Staff Group may. `settingsStaffViewFor` is the one place that decides: it copies the title and chat ID into
-  `settingsStaffView` only for a private menu or a Staff Group's own page and clears the row's link either way, so a
-  group-menu renderer never receives them; the picker's labels in a group menu are positions
-  (`settings_btn_staff_pick_n`) and its buttons carry the row ID. Filtering text after the fact is never the fix.
+  alert or callback data, in any of the 7 languages, on any page, picker, card or refusal. Nor does a private menu, except
+  to the live creator of the group being configured (D-32): a private menu is shown to every live admin of the group, who
+  need not be staff, so only the person who can link the group (the press's own live `getChatMember` record has status
+  creator, `settingsView.Creator`, no extra Telegram call) sees `settings_staff_linked_to`; any other admin gets the same
+  masked line (`settings_staff_linked_hidden`) as a group menu, and the page does not even read the Staff Group row for
+  them. A Staff Group's own page (the read-only panel inside a Staff Group) may show its linked groups to the people of
+  that Staff Group. `settingsStaffViewFor` is the one place that decides: it copies the title and chat ID into
+  `settingsStaffView` only for the creator's private menu or a Staff Group's own page and clears the row's link either
+  way, so every other renderer never receives them; the picker's labels in a group menu are positions
+  (`settings_btn_staff_pick_n`) and its buttons carry the row ID (a private picker lists only the presser's own Staff
+  Groups, by title). Filtering text after the fact is never the fix.
   `staff_link_done` and `staff_notice_unlinked_by` go to the Staff Group only, as the commands post them, and nothing about
   a link is posted into the linked group. Link and Unlink run `listVerifiedOwnStaffGroups`, `linkToStaffGroup`,
   `announceStaffLink`, `checkUnlinkAuthority` and `runUnlinkGroup`, so the menu and `/linkstaff` and `/unlinkstaff` cannot
@@ -1222,7 +1228,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the owner check removed draws as "Not linked" with no notice. Inside a Staff Group the page is the `/staff` panel
   read-only (`renderSettingsStaffPanel`, 8 groups a page, inside 3800 UTF-16 units with the settings header and the
   `settings_staff_readonly` line) with no Link, Unlink, Add group or Recent actions. `TestSettingsStaffPrivacy` renders
-  every reachable screen in all 7 languages and runs a group menu end to end.
+  every reachable screen in all 7 languages, runs a group menu end to end and runs a private menu of an admin who is not
+  the creator end to end.
 
 ## Go rules
 
@@ -1321,7 +1328,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`TestSettingsAuthorityParity*`: the menu refuses what the command refuses, with the right the control declares),
   and every page has a worst-case callback test (`TestSettings*CallbackBytes`, 64 bytes) and a length test in all 7
   languages (`TestSettings*PageFitsEveryLocale`); a new setting in the menu adds all of them. `TestSettingsStaffPrivacy`
-  guards D-21 (a group menu never names the Staff Group), `TestSettingsHelpFitsOneMessage` holds `settings_help_msg`
+  guards D-21 and D-32 (a group menu, and a private menu of an admin who is not the creator, never name the Staff Group), `TestSettingsHelpFitsOneMessage` holds `settings_help_msg`
   to one Telegram message in every language, and `TestLoadSettingsRegistersHelp` guards the `/help` entry. No settings
   guarantee rests on PostgreSQL (no migration, no partial index, no `CHECK`), so nothing of the menu joins
   `make test-postgres-integrity`.

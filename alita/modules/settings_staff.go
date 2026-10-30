@@ -81,9 +81,11 @@ func settingsStaffMainState(_ *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.
 }
 
 // settingsStaffView is what the renderers of a linked group's page may know. The Staff
-// Group's title and chat ID are set only when Full, and Full is set only for a menu nobody
-// but the Staff Group's own people can read (a private menu, or a menu inside the Staff
-// Group), so a renderer of a group menu never receives them.
+// Group's title and chat ID are set only when Full, and Full is set only for the people the
+// link is not hidden from: the live creator of the group in a private menu (the person who
+// can link it, D-32) and the people of a Staff Group on its own page. Any other admin of the
+// linked group, who need not be staff, and every reader of a group menu get the masked line,
+// so a renderer of those menus never receives the title or the ID.
 type settingsStaffView struct {
 	Full        bool
 	StaffTitle  string
@@ -93,11 +95,12 @@ type settingsStaffView struct {
 	Linked bool
 }
 
-// settingsStaffViewFor builds the view of the linked page for a menu (D-21 enforcement
-// point). It copies the Staff Group's title and chat ID only when v is a private menu or
-// isStaffGroup holds; for a group menu they stay empty and no renderer can print them.
+// settingsStaffViewFor builds the view of the linked page for a menu (the D-21 and D-32
+// enforcement point). It copies the Staff Group's title and chat ID only when v is a private
+// menu of the group's live creator (v.Creator) or isStaffGroup holds; otherwise they stay
+// empty and no renderer can print them.
 func settingsStaffViewFor(v settingsView, isStaffGroup bool, staffGroup *models.StaffGroup, row *staffLinkRow) settingsStaffView {
-	sv := settingsStaffView{Full: v.Private || isStaffGroup}
+	sv := settingsStaffView{Full: (v.Private && v.Creator) || isStaffGroup}
 	if row != nil {
 		sv.Linked = true
 		sv.Row = staffLinkRow{
@@ -228,8 +231,9 @@ type settingsStaffData struct {
 	// staffGroup is set when this group is itself a Staff Group, with its linked groups.
 	staffGroup *models.StaffGroup
 	links      []models.StaffGroupLink
-	// link is this group's own link, and linkStaff the Staff Group it names (read for a
-	// private menu only, which is the one linked page that shows it).
+	// link is this group's own link, and linkStaff the Staff Group it names (read for the
+	// private menu of the group's live creator only, which is the one linked page that shows
+	// it).
 	link      *models.StaffGroupLink
 	linkStaff *models.StaffGroup
 }
@@ -249,7 +253,7 @@ func settingsStaffRead(p *settingsPress) (settingsStaffData, error) {
 	if data.link, err = staff.GetLinkOfGroupFresh(p.group.Id); err != nil {
 		return data, err
 	}
-	if data.link != nil && p.private {
+	if data.link != nil && p.isGroupCreator() {
 		data.linkStaff, err = staff.GetStaffGroupFresh(data.link.StaffChatID)
 	}
 	return data, err
