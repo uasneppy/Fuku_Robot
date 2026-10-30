@@ -510,7 +510,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   not authenticated by Telegram, so both `captcha_verify` and `captcha_refresh` refuse an attempt whose answer starts with
   `ts1:` with `captcha_attempt_not_valid` and change nothing (no count, no image, no row change): a hand-built callback
   can never pass or convert a Turnstile attempt. Rolling-deploy caveat (accepted, like the others here): a replica on
-  older code has no such guard until it is replaced.
+  older code has no such guard until it is replaced. A Turnstile group whose web captcha is unavailable (no runtime
+  installed, no bot username, or no Redis `PING` answered within 250 ms in the last 5 s, memoised in
+  `captchaWebProbeAt`/`captchaWebProbeOK` so a raid of joins costs one probe per 5 s) gives the joining member the
+  math captcha with no extra message (D-09, `captchaWebAvailable`); `cache.IsRedisAvailable` is not used for this,
+  because it only says a client object exists. An issue or send failure rolls the attempt back and unmutes (the existing
+  `rollbackCaptchaAttempt`), with no fallback to math from inside a failed join. A re-join replaces the attempt, so the
+  old token answers `expired` and never touches the new attempt: the backend matches the challenge record's attempt ID,
+  never the member's current attempt.
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
