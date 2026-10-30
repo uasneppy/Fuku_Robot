@@ -2890,6 +2890,7 @@ lockdown_trigger_ai_burst: "Spam détecté par l'IA : {count} verdicts de spam e
 lockdown_auto_cant_lock_rights: "⚠️ J'ai détecté un raid dans {group} ({trigger}), mais je ne peux pas le verrouiller : je dois être admin avec le droit de restreindre des membres."
 lockdown_auto_cant_lock_basic: "⚠️ J'ai détecté un raid dans {group} ({trigger}), mais je ne peux pas le verrouiller car ce n'est pas un supergroupe."
 lockdown_auto_cant_lock_refused: "⚠️ J'ai détecté un raid dans {group} ({trigger}), mais Telegram a refusé le verrouillage. Vérifie que je suis toujours admin avec le droit de restreindre des membres."
+settings_antiflood_now_on: "L'antiflood était désactivé et est maintenant actif à {n} messages. Mettez la limite sur Off pour le désactiver de nouveau."
 settings_header_main: "⚙️ <b>Paramètres</b>"
 settings_header: "⚙️ <b>Paramètres</b> · {page}"
 settings_page_captcha: "Captcha"

@@ -337,6 +337,96 @@ func TestSettingsAntifloodFreshChat(t *testing.T) {
 	}
 }
 
+// TestSettingsAntifloodFirstWriteNotice pins D-34: the first action or delete tap on a chat
+// with no row stores the default limit, which turns antiflood on, and the menu says so. The
+// repository and the commands are unchanged (the commands' replies are not asserted here).
+func TestSettingsAntifloodFirstWriteNotice(t *testing.T) {
+	noticeMarker := staffMarker("settings_antiflood_now_on")
+
+	t.Run("a Ban press on a fresh chat says antiflood is now on", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		msgID := settingsAntifloodOpen(t, env)
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		ban, ok := settingsAntifloodControlButton(t, keyboard, "m", "ban")
+		if !ok {
+			t.Fatal("no Ban button on the Antiflood page")
+		}
+
+		env.pressRaw(env.chat, env.admin, msgID, ban.CallbackData)
+
+		row, ok := settingsAntifloodRow(t, env.chat.Id)
+		if !ok || row.Limit != 5 || row.Action != "ban" {
+			t.Fatalf("stored row = %+v (row %v), want the action ban at the default limit 5", row, ok)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		if want := settingsNoticeWarnIcon + noticeMarker + " 5"; !strings.Contains(text, want) {
+			t.Errorf("the redraw %q lacks the notice %q", text, want)
+		}
+	})
+
+	t.Run("the delete switch on a fresh chat says it too", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		msgID := settingsAntifloodOpen(t, env)
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		toggle, ok := settingsAntifloodControlButton(t, keyboard, "d", "1")
+		if !ok {
+			t.Fatal("no delete switch on the Antiflood page")
+		}
+
+		env.pressRaw(env.chat, env.admin, msgID, toggle.CallbackData)
+
+		row, ok := settingsAntifloodRow(t, env.chat.Id)
+		if !ok || row.Limit != 5 || !row.DeleteAntifloodMessage {
+			t.Fatalf("stored row = %+v (row %v), want delete on at the default limit 5", row, ok)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		if !strings.Contains(text, noticeMarker+" 5") {
+			t.Errorf("the redraw %q lacks the notice", text)
+		}
+	})
+
+	t.Run("a chat that already has a limit gets no notice", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsAntifloodSeed(t, env.chat.Id, 7, "mute")
+		msgID := settingsAntifloodOpen(t, env)
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		ban, ok := settingsAntifloodControlButton(t, keyboard, "m", "ban")
+		if !ok {
+			t.Fatal("no Ban button on the Antiflood page")
+		}
+		env.pressRaw(env.chat, env.admin, msgID, ban.CallbackData)
+		if text, _ := env.lastEdit(env.chat.Id, msgID); strings.Contains(text, noticeMarker) {
+			t.Errorf("an action change on a chat with limit 7 drew the notice: %q", text)
+		}
+
+		_, keyboard = env.lastEdit(env.chat.Id, msgID)
+		toggle, ok := settingsAntifloodControlButton(t, keyboard, "d", "1")
+		if !ok {
+			t.Fatal("no delete switch on the Antiflood page")
+		}
+		env.pressRaw(env.chat, env.admin, msgID, toggle.CallbackData)
+		if text, _ := env.lastEdit(env.chat.Id, msgID); strings.Contains(text, noticeMarker) {
+			t.Errorf("a delete change on a chat with limit 7 drew the notice: %q", text)
+		}
+	})
+
+	t.Run("a chat whose antiflood was turned off gets no notice either way it is read", func(t *testing.T) {
+		// An explicit limit press names the limit itself: no notice.
+		env := newSettingsEnv(t)
+		msgID := settingsAntifloodOpen(t, env)
+		stepper := settingsAntifloodStepper(t, env, msgID)
+		env.pressRaw(env.chat, env.admin, msgID, stepper[3].CallbackData)
+
+		row, ok := settingsAntifloodRow(t, env.chat.Id)
+		if !ok || row.Limit != 3 {
+			t.Fatalf("stored row = %+v (row %v), want limit 3", row, ok)
+		}
+		if text, _ := env.lastEdit(env.chat.Id, msgID); strings.Contains(text, noticeMarker) {
+			t.Errorf("a limit press drew the notice: %q", text)
+		}
+	})
+}
+
 func TestSettingsAntifloodStoredLegacyAction(t *testing.T) {
 	for _, tc := range []struct{ action, marker string }{
 		{"warn", "settings_opt_warn"},
@@ -736,27 +826,32 @@ func TestSettingsAntifloodPageFitsEveryLocale(t *testing.T) {
 				Tr: tr, OwnerKey: "u", OwnerValue: "9999999999", GroupID: -1001234567890,
 				GroupTitle: strings.Repeat("&", 64), OpenerName: "N",
 			}
-			notice := settingsNoticeWarn(fmt.Sprintf(settingsText(tr, "antiflood_setfloodmode_unknown_type"), strings.Repeat("a", settingsFloodModeMaxLen)))
+			notices := []string{
+				settingsNoticeWarn(fmt.Sprintf(settingsText(tr, "antiflood_setfloodmode_unknown_type"), strings.Repeat("a", settingsFloodModeMaxLen))),
+				settingsNoticeWarn(settingsText(tr, "settings_antiflood_now_on", i18n.TranslationParams{"n": 100})),
+			}
 			for _, s := range []*models.AntifloodSettings{
 				{Limit: 100, Action: "tmute", DeleteAntifloodMessage: true},
 				{Limit: 0, Action: "tban"},
 				{Limit: 5, Action: "mute"},
 			} {
-				screen := renderSettingsAntiflood(view, s, notice)
-				if units := len(utf16.Encode([]rune(screen.Text))); units > 3800 {
-					t.Errorf("%s page for %+v is %d UTF-16 units, want at most 3800", code, s, units)
-				}
-				for _, placeholder := range []string{"{n}", "{action}", "{state}", "{page}", "%!"} {
-					if strings.Contains(screen.Text, placeholder) {
-						t.Errorf("%s page %q keeps the unfilled %s", code, screen.Text, placeholder)
+				for _, notice := range notices {
+					screen := renderSettingsAntiflood(view, s, notice)
+					if units := len(utf16.Encode([]rune(screen.Text))); units > 3800 {
+						t.Errorf("%s page for %+v is %d UTF-16 units, want at most 3800", code, s, units)
 					}
-				}
-				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
-					if strings.TrimSpace(button.Text) == "" {
-						t.Errorf("%s page for %+v has a button with an empty label", code, s)
+					for _, placeholder := range []string{"{n}", "{action}", "{state}", "{page}", "%!"} {
+						if strings.Contains(screen.Text, placeholder) {
+							t.Errorf("%s page %q keeps the unfilled %s", code, screen.Text, placeholder)
+						}
 					}
+					for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+						if strings.TrimSpace(button.Text) == "" {
+							t.Errorf("%s page for %+v has a button with an empty label", code, s)
+						}
+					}
+					settingsAntifloodCheckBytes(t, code, screen)
 				}
-				settingsAntifloodCheckBytes(t, code, screen)
 			}
 		})
 	}

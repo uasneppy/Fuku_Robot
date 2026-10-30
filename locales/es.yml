@@ -2974,6 +2974,7 @@ lockdown_trigger_ai_burst: "Spam de IA: {count} veredictos de spam en {window} s
 lockdown_auto_cant_lock_rights: "⚠️ Detecté una incursión en {group} ({trigger}), pero no puedo bloquearlo: necesito ser admin con permiso para restringir miembros."
 lockdown_auto_cant_lock_basic: "⚠️ Detecté una incursión en {group} ({trigger}), pero no puedo bloquearlo porque no es un supergrupo."
 lockdown_auto_cant_lock_refused: "⚠️ Detecté una incursión en {group} ({trigger}), pero Telegram rechazó el bloqueo. Comprueba que sigo siendo admin con permiso para restringir miembros."
+settings_antiflood_now_on: "El antiflood estaba desactivado y ahora está activo con {n} mensajes. Pon el límite en Apagado para desactivarlo de nuevo."
 settings_header_main: "⚙️ <b>Ajustes</b>"
 settings_header: "⚙️ <b>Ajustes</b> · {page}"
 settings_page_captcha: "Captcha"

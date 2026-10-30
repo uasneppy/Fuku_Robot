@@ -2651,6 +2651,7 @@ lockdown_trigger_ai_burst: "AI स्पैम: {window} सेकंड मे�
 lockdown_auto_cant_lock_rights: "⚠️ मैंने {group} में रेड का पता लगाया ({trigger}), लेकिन मैं इसे लॉक नहीं कर सकता: मुझे सदस्यों को प्रतिबंधित कर सकने वाला एडमिन होना चाहिए।"
 lockdown_auto_cant_lock_basic: "⚠️ मैंने {group} में रेड का पता लगाया ({trigger}), लेकिन मैं इसे लॉक नहीं कर सकता क्योंकि यह सुपरग्रुप नहीं है।"
 lockdown_auto_cant_lock_refused: "⚠️ मैंने {group} में रेड का पता लगाया ({trigger}), लेकिन Telegram ने लॉक अस्वीकार कर दिया। जांचें कि मैं अब भी सदस्यों को प्रतिबंधित कर सकने वाला एडमिन हूं।"
+settings_antiflood_now_on: "एंटीफ्लड बंद था और अब {n} संदेशों की सीमा पर चालू है। इसे फिर बंद करने के लिए सीमा को बंद पर सेट करें।"
 settings_header_main: "⚙️ <b>सेटिंग्स</b>"
 settings_header: "⚙️ <b>सेटिंग्स</b> · {page}"
 settings_page_captcha: "कैप्चा"

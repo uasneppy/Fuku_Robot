@@ -2936,6 +2936,7 @@ lockdown_trigger_ai_burst: "Spam de IA: {count} veredictos de spam em {window} s
 lockdown_auto_cant_lock_rights: "⚠️ Detetei um raide em {group} ({trigger}), mas não consigo bloqueá-lo: preciso de ser administrador com permissão para restringir membros."
 lockdown_auto_cant_lock_basic: "⚠️ Detetei um raide em {group} ({trigger}), mas não consigo bloqueá-lo porque não é um supergrupo."
 lockdown_auto_cant_lock_refused: "⚠️ Detetei um raide em {group} ({trigger}), mas o Telegram recusou o bloqueio. Verifica se ainda sou administrador com permissão para restringir membros."
+settings_antiflood_now_on: "O antiflood estava desligado e agora está ligado em {n} mensagens. Defina o limite como Off para desligá-lo de novo."
 settings_header_main: "⚙️ <b>Configurações</b>"
 settings_header: "⚙️ <b>Configurações</b> · {page}"
 settings_page_captcha: "Captcha"

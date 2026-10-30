@@ -673,7 +673,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   antiflood on at 5 messages. `TestSetFloodModeOnFreshChatStoredLimit` and `TestSetFloodMsgDelOnFreshChatStoredLimit`
   (`alita/db/antiflood`) pin it, and a Mute press on an unconfigured chat writes no row at all (the cached default is
   already mute). The menu's action and delete presses call the same `applyFlood*` functions, so it keeps this on
-  purpose and draws the stored row from their database read-back, never a guess. A repository fix (insert with limit 0
+  purpose and draws the stored row from their database read-back, never a guess. Because a tap in a menu is easier to
+  hit by accident than a typed command, the menu's action and delete presses also show the notice
+  `settings_antiflood_now_on` (menu only, with the stored limit) when the limit read before the write was 0 and the
+  read-back is not (`settingsFloodTurnedOn`, D-34); a limit press never shows it, and the commands' replies are unchanged. A repository fix (insert with limit 0
   on the first write) would change `/setfloodmode` and `/delflood` too, so it is a separate follow-up and must update
   those two tests and this bullet.
 - Antiflood counters are in-process (per replica). The raid detection counters (`alita:raid:*`) are Redis-only: without

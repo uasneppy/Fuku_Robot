@@ -2711,6 +2711,7 @@ lockdown_trigger_ai_burst: "ИИ-спам: {count} вердиктов о спа�
 lockdown_auto_cant_lock_rights: "⚠️ Я обнаружил рейд в {group} ({trigger}), но не могу заблокировать группу: мне нужны права администратора на ограничение участников."
 lockdown_auto_cant_lock_basic: "⚠️ Я обнаружил рейд в {group} ({trigger}), но не могу заблокировать группу, потому что это не супергруппа."
 lockdown_auto_cant_lock_refused: "⚠️ Я обнаружил рейд в {group} ({trigger}), но Telegram отклонил блокировку. Проверьте, что я по-прежнему администратор с правом ограничивать участников."
+settings_antiflood_now_on: "Антифлуд был выключен и теперь включён на {n} сообщений. Поставьте лимит «Выкл», чтобы выключить его снова."
 settings_header_main: "⚙️ <b>Настройки</b>"
 settings_header: "⚙️ <b>Настройки</b> · {page}"
 settings_page_captcha: "Капча"

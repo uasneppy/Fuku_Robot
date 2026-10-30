@@ -105,6 +105,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_antiflood_action":        {36, 50},
 	"settings_antiflood_delete":        {40, 56},
 	"settings_antiflood_action_note":   {110, 154},
+	"settings_antiflood_now_on":        {100, 140},
 	"settings_btn_antiflood_delete":    {36, 48},
 	"settings_card_expired":            {80, 112},
 	"settings_staff_no_group":          {120, 170},

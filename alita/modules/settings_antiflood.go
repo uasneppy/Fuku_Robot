@@ -227,14 +227,31 @@ func settingsFloodNotice(p *settingsPress, result floodApplyResult, word string)
 	return ""
 }
 
+// settingsFloodTurnedOn reports whether a write left antiflood on where it was off.
+// On a chat with no row the repository's first insert stores the model default limit (D-27),
+// so a tap meant for the action or the switch turns antiflood on at that default. The
+// commands behave the same and the repository is unchanged; the menu says so instead of
+// letting a browsing tap pass in silence (D-34). Only the action and the delete switch ask
+// (sideEffect of settingsFloodRedraw): a limit press names the limit itself.
+func settingsFloodTurnedOn(result floodApplyResult, before *models.AntifloodSettings) bool {
+	return result.Outcome == floodApplied && before != nil && before.Limit == 0 &&
+		result.Stored != nil && result.Stored.Limit > 0
+}
+
 // settingsFloodRedraw draws the page after an apply function ran. It shows the row the
 // function read back from the database; when there is none it falls back to the row read
 // before a refused write, and otherwise reads the page again. An unreadable page is the
 // cannot-open edit.
 func settingsFloodRedraw(
 	ctx context.Context, p *settingsPress, result floodApplyResult, before *models.AntifloodSettings, word string,
+	sideEffect bool,
 ) *settingsScreen {
 	notice := settingsFloodNotice(p, result, word)
+	if notice == "" && sideEffect && settingsFloodTurnedOn(result, before) {
+		notice = settingsNoticeWarn(settingsText(p.tr, "settings_antiflood_now_on", i18n.TranslationParams{
+			"n": result.Stored.Limit,
+		}))
+	}
 	current := result.Stored
 	wrote := result.Outcome == floodApplied || result.Outcome == floodDisabled
 	if current == nil && !wrote {
@@ -292,7 +309,7 @@ func settingsFloodSetLimit(p *settingsPress, value string) *settingsScreen {
 			return nil
 		}
 	}
-	return settingsFloodRedraw(ctx, p, applyFloodLimit(ctx, p.group.Id, limit), before, "")
+	return settingsFloodRedraw(ctx, p, applyFloodLimit(ctx, p.group.Id, limit), before, "", false)
 }
 
 // settingsFloodModeWord reports whether v is 1 to settingsFloodModeMaxLen lower-case ASCII
@@ -324,7 +341,7 @@ func settingsFloodSetMode(p *settingsPress, value string) *settingsScreen {
 	if !ok {
 		return nil
 	}
-	return settingsFloodRedraw(ctx, p, applyFloodMode(ctx, p.group.Id, value), before, value)
+	return settingsFloodRedraw(ctx, p, applyFloodMode(ctx, p.group.Id, value), before, value, true)
 }
 
 // settingsFloodSetDelete applies the delete switch through applyFloodDelete, the function
@@ -341,5 +358,5 @@ func settingsFloodSetDelete(p *settingsPress, value string) *settingsScreen {
 	if !ok {
 		return nil
 	}
-	return settingsFloodRedraw(ctx, p, applyFloodDelete(ctx, p.group.Id, value == "1"), before, "")
+	return settingsFloodRedraw(ctx, p, applyFloodDelete(ctx, p.group.Id, value == "1"), before, "", true)
 }
