@@ -298,7 +298,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   kill switch for the whole raid AI path: `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
   watcher enqueues nothing, and a job already queued is dropped by `raidAIProcessJob` / `raidAIProcessImage` without
   a `getFile` or any provider call. The `/lockdown` help says what the AI trigger sends to
-  TypeSafe and to Google (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
+  TypeSafe and to Anthropic Claude (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
   `TestLockdownHelpFitsOneMessage`.
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
   arguments then pick view or change for the tapper. The command is not `Disableable`. `/autoantiraid` is its alias for
