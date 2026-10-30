@@ -430,7 +430,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   window refuses with 503 retry and never lets the request through; a spent budget answers 429 retry with `Retry-After`
   in whole seconds. The user and token windows are keyed by the verified `initData` user, never by the token alone, so
   another member who hammers a target's public token spends only their own budgets and the target still passes (D-26).
-  The address window is counted before the body is read, the other two right after `initData` is verified.
+  The address window is counted before the body is read, the other two right after `initData` is verified, all before the
+  in-flight slot is taken.
 - `alita:captcha:streak` is the Turnstile key mismatch breaker (`captchaweb/breaker.go`, `Store.RecordFailedSolve` and
   `Store.ClearFailedSolves`, WR-04): one fleet-wide counter of failed solves (`OutcomeFailed`, any reason) since the last
   confirmed pass, incremented by one Lua script that also renews a 10 minute expiry (`StreakTTL`), so a streak that goes
@@ -644,10 +645,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   loses that member's challenge until the group's time limit ends the attempt (accepted).
   The verify route (`Handler.Verify`, `POST /captcha/verify`) refuses cheapest first: the handler's own write deadline is
   extended to 20 s (the HTTP server's `WriteTimeout` is 10 s, shorter than a siteverify call plus a pass), then a method
-  other than POST gets 405 with `Allow: POST`, then a handler that is not ready answers 503 retry, then more than 64
-  requests in flight on the replica (`verifyMaxInFlight`) get 503 retry before any Redis or backend call, then the
+  other than POST gets 405 with `Allow: POST`, then a handler that is not ready answers 503 retry, then the
   address window, then the body: `Content-Type` must be `application/json` (415), at most 16 KiB (413), no unknown field
-  and no second JSON value (400). Every answer, the 405 and 429 ones included, carries `Cache-Control: no-store`,
+  and no second JSON value (400), then the signed `initData` and the two per-user windows, and only then the in-flight
+  slot: more than 64 requests holding a slot on the replica (`verifyMaxInFlight`) get 503 retry before the challenge is
+  claimed or the backend is called. The slot is taken that late on purpose (WR-06): a client that sends headers and drips
+  a body, or posts unsigned data, holds no slot, and it still spends its address window, which is counted whether or not
+  a slot is free. Every answer, the 405 and 429 ones included, carries `Cache-Control: no-store`,
   `X-Content-Type-Options: nosniff` and a JSON body, and the route sets no CORS header and answers no preflight, so another
   site can neither read it nor post a form to it. Work after the challenge is claimed never uses the request context (see
   above). A handler built with `Options.StartNotReady` answers 503 retry, reading nothing and touching neither Redis nor

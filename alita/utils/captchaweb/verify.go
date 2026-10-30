@@ -32,8 +32,9 @@ const (
 	// botRightsTimeout bounds the live check of the bot's own Restrict right that runs
 	// before any Cloudflare call.
 	botRightsTimeout = 3 * time.Second
-	// verifyMaxInFlight is how many verify requests are served at once on one replica; the
-	// next one is answered 503 retry without touching Redis or the backend.
+	// verifyMaxInFlight is how many verify requests hold a slot at once on one replica; a slot
+	// is taken after the body is read and the initData is verified, and the next request
+	// is answered 503 retry without claiming the challenge or touching the backend.
 	verifyMaxInFlight = 64
 )
 
@@ -361,15 +362,6 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
 		return
 	}
-	// A burst beyond the in-flight cap is refused at once, before any Redis or backend work.
-	select {
-	case h.inflight <- struct{}{}:
-		defer func() { <-h.inflight }()
-	default:
-		writeLimited(w, http.StatusServiceUnavailable)
-		return
-	}
-
 	// The per-address window comes before the body is read. Behind a shared proxy address with
 	// no trusted list there is no per-address bucket, and the per-user windows still apply.
 	if addr, bucket := ClientIP(r, h.trusted); bucket {
@@ -401,6 +393,20 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.withinLimit(w, r, limitTokenUserKeyPrefix+req.Challenge+":"+userID, verifyTokenUserLimit) {
+		return
+	}
+
+	// The in-flight slot is taken only here, for the expensive part (the claim, Cloudflare,
+	// Telegram). Taking it before the body is read let a client that sends headers and drips
+	// a body hold slots without ever being counted: the windows above are spent first, so
+	// abuse is counted whether or not a slot is free, and an unauthenticated body or one
+	// that is not signed holds nothing (WR-06). A burst beyond the cap is refused before any
+	// Redis claim or backend work.
+	select {
+	case h.inflight <- struct{}{}:
+		defer func() { <-h.inflight }()
+	default:
+		writeLimited(w, http.StatusServiceUnavailable)
 		return
 	}
 

@@ -398,15 +398,29 @@ func TestVerifyRouteLimitsAndHeaders(t *testing.T) {
 			}
 		}
 
-		commands := o.Redis.CommandCount()
-		rec := o.serve("203.0.113.99:4000", "application/json", "{}", nil)
+		// The slot is taken after the body is read and the initData verified (WR-06): a body that
+		// does not parse and initData that is not signed are answered while every slot is held.
+		if rec := o.serve("203.0.113.98:4000", "application/json", "{}", nil); rec.Code != http.StatusBadRequest {
+			close(blocker.release)
+			t.Fatalf("an empty body with every slot held = %d %q, want 400 (no slot needed)", rec.Code, rec.Body.String())
+		}
+		forged := o.body("hash=0&auth_date=1", TurnstileTokenForTest("tok"), "tok")
+		if rec := o.serve("203.0.113.97:4000", "application/json", forged, nil); rec.Code != http.StatusOK || answerOf(t, rec).Result != ResultInvalid {
+			close(blocker.release)
+			t.Fatalf("forged initData with every slot held = %d %q, want 200 invalid (no slot needed)", rec.Code, rec.Body.String())
+		}
+
+		// A verified request beyond the cap is refused before the challenge is claimed.
+		extra, _ := o.issue(3000)
+		extraBody := o.body(o.initData(3000, extra), TurnstileTokenForTest(extra), extra)
+		rec := o.serve("203.0.113.99:4000", "application/json", extraBody, nil)
 		if rec.Code != http.StatusServiceUnavailable || answerOf(t, rec).Result != ResultRetry {
 			close(blocker.release)
 			t.Fatalf("request %d: %d %q, want 503 retry", held+1, rec.Code, rec.Body.String())
 		}
-		if got := o.Redis.CommandCount(); got != commands {
+		if got := o.Redis.HGet(o.key(extra), "u"); got != "3000" || o.Redis.HGet(o.key(extra), "k") != "" {
 			close(blocker.release)
-			t.Fatalf("the refused request made %d Redis commands, want none", got-commands)
+			t.Fatalf("the refused request touched its challenge: owner %q", got)
 		}
 		if calls := o.Backend.Calls(); len(calls) != 0 {
 			close(blocker.release)
