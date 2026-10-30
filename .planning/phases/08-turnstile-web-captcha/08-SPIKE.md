@@ -80,6 +80,8 @@ Steps: pass check 4 once with your real keys, then read the bot log.
 
 Pass looks like: no `siteverify configuration fault` line and the member passed. The server only passes when Cloudflare's answer echoes your host (the host of `CAPTCHA_WEB_BASE_URL`), the action `captcha_join` and the challenge's own data.
 
+Also confirm the key pair belongs to one widget: in the Cloudflare dashboard open the Turnstile widget, and check that `TURNSTILE_SITE_KEY` is that widget's site key and `TURNSTILE_SECRET_KEY` is that same widget's secret key (the dashboard shows both on one page), and that neither is a Cloudflare dummy test key. A pair from two widgets does not log a configuration fault: Cloudflare calls every token "invalid" and the member's solve counts as a failure. The breaker catches this after 5 failed solves in a row (the log then shows `suspected key mismatch` once a minute, and failed solves are held as Try again), but the first 5 members would already have been handled as failures, so check the pair before real members join. The Redis key `alita:captcha:streak` holds the current count of failed solves in a row; it should be absent or at most 1 after your tests.
+
 If not: a `hostname mismatch` fault means the BotFather URL host, `CAPTCHA_WEB_BASE_URL`'s host and the Turnstile hostname list are not the same public host. An `invalid-input-secret` or `missing-input-secret` fault means the secret does not belong to the site key. An action mismatch means a stale cached page: reload and retry. Members are not punished for these faults; they get Try again.
 
 Change: the three hostnames and the two keys. Never use Cloudflare's dummy test keys here: their answers carry the action `test` and the cdata `test-data`, so the checks always reject them.

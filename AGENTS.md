@@ -422,6 +422,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   in whole seconds. The user and token windows are keyed by the verified `initData` user, never by the token alone, so
   another member who hammers a target's public token spends only their own budgets and the target still passes (D-26).
   The address window is counted before the body is read, the other two right after `initData` is verified.
+- `alita:captcha:streak` is the Turnstile key mismatch breaker (`captchaweb/breaker.go`, `Store.RecordFailedSolve` and
+  `Store.ClearFailedSolves`, WR-04): one fleet-wide counter of failed solves (`OutcomeFailed`, any reason) since the last
+  confirmed pass, incremented by one Lua script that also renews a 10 minute expiry (`StreakTTL`), so a streak that goes
+  on stays tripped and a quiet one ends. Cloudflare answers `invalid-input-response` for a token minted by a widget that
+  is not the configured secret's (a site key and a secret copied from two widgets, or Cloudflare's dummy test keys), and
+  D-28 reads that as the member's fault, so without a guard a bad key pair kicks every joiner. The first
+  `StreakLimit` (5) failed solves in a row are enforced; from the sixth on, `suspectKeyMismatch` holds the failed verdict
+  back as a `retry` (the member stays muted, the attempt and the challenge stay intact, no marker is written, nobody is
+  kicked or banned) and the attempt's own timeout still applies the group's `/captchaaction` to anyone who really does
+  not solve. The hold is logged at Error as `[CaptchaWeb] suspected key mismatch ...` by reason name only, at most once a
+  minute per replica, and counted as an error. Every verdict that confirms a pass runs `ClearFailedSolves` (`DEL`). It is
+  Redis only and outside the cache prefix; a Redis error fails open (the failure is enforced as D-28 says, nobody is
+  blocked, a pass still goes through). A single bad token is a streak of one and never trips it.
 - `alita:captcha:done:<token>` is the Turnstile verify route's decided-answer marker (`challenge.go`, `Store.MarkDone` and
   `Store.Done`): a string `<user>:<result>[:<action>]` (result `passed`, `failed`, `expired` or `invalid`, the neutral answer of
   a failure action that could not be applied; action `kick`, `ban` or `mute` and empty for passed and invalid), 10 minutes (`DoneTTL`), written with `SET NX` after every decided answer and before the

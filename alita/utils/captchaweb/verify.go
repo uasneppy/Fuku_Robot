@@ -166,6 +166,8 @@ type Handler struct {
 	now        func() time.Time
 	ready      atomic.Bool
 	inflight   chan struct{}
+	// mismatchLoggedAt is when the key mismatch suspicion was last logged (unix nano).
+	mismatchLoggedAt atomic.Int64
 }
 
 // ErrBadOptions means NewHandler refused its options.
@@ -601,8 +603,13 @@ func (c *challengeRun) decide() {
 	})
 	switch verdict.Outcome {
 	case OutcomePass:
+		c.clearStreak()
 		c.pass()
 	case OutcomeFailed:
+		if c.suspectKeyMismatch(verdict.Reason) {
+			c.retry(http.StatusOK)
+			return
+		}
 		c.fail(verdict.Reason)
 	default:
 		if verdict.ConfigError() {
@@ -612,6 +619,55 @@ func (c *challengeRun) decide() {
 		log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=retry reason=%s", verdict.Reason)
 		c.retry(http.StatusOK)
 	}
+}
+
+// clearStreak ends the failed-solve streak: a confirmed pass shows the site key and the secret
+// belong to one widget. A Redis error changes nothing but a debug line.
+func (c *challengeRun) clearStreak() {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.r.Context()), 2*RedisTimeout)
+	defer cancel()
+	if err := c.h.store.ClearFailedSolves(ctx); err != nil {
+		log.WithFields(c.fields).Debug("[CaptchaWeb][Verify] failed-solve streak not cleared")
+	}
+}
+
+// suspectKeyMismatch counts a failed solve in the streak and reports whether the failure must
+// be held back as a retry (WR-04). Cloudflare answers invalid-input-response for a token whose
+// widget does not belong to the configured secret (a site key and a secret copied from two
+// widgets, or Cloudflare's dummy test keys), and D-28 reads that as the member's fault. After
+// StreakLimit failed solves with no confirmed pass in between, every further one is far more
+// likely the owner's configuration than a run of bots, so the member stays muted with their
+// attempt intact and the attempt's own timeout still applies the group's failure action to
+// anyone who really is not solving. A Redis error fails open: the failure is enforced as D-28
+// says and nobody is blocked.
+func (c *challengeRun) suspectKeyMismatch(reason Reason) bool {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.r.Context()), 2*RedisTimeout)
+	defer cancel()
+	streak, err := c.h.store.RecordFailedSolve(ctx)
+	if err != nil {
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] failed-solve streak unavailable")
+		return false
+	}
+	if streak <= StreakLimit {
+		return false
+	}
+	countError()
+	c.h.logKeyMismatch(reason)
+	log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=retry reason=streak")
+	return true
+}
+
+// logKeyMismatch logs the suspected key mismatch at Error level, at most once a minute, by
+// reason name only.
+func (h *Handler) logKeyMismatch(reason Reason) {
+	now := h.now().UnixNano()
+	last := h.mismatchLoggedAt.Load()
+	if last != 0 && now-last < int64(time.Minute) || !h.mismatchLoggedAt.CompareAndSwap(last, now) {
+		return
+	}
+	log.Errorf("[CaptchaWeb] suspected key mismatch: %d failed solves in a row and no pass, so failed solves are held as retry "+
+		"(reason=%s). Check that TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY belong to one widget and are not Cloudflare test keys",
+		StreakLimit, reason)
 }
 
 func (c *challengeRun) pass() {

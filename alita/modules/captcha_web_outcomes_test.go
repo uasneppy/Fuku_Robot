@@ -859,3 +859,60 @@ func TestCaptchaWebFailedSolveDatabaseBlipIsRetry(t *testing.T) {
 		t.Fatalf("kicks = %d, want exactly one", got)
 	}
 }
+
+// TestCaptchaWebKeyMismatchCannotMassKick pins WR-04 end to end: with a site key and secret
+// that do not belong together Cloudflare calls every solve invalid. The first
+// captchaweb.StreakLimit are enforced as D-28 says; after that the members stay muted with their
+// attempts intact, and once the owner fixes the keys a member passes normally.
+func TestCaptchaWebKeyMismatchCannotMassKick(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	env.setSiteverify(captchaweb.SiteverifyAnswerForTest(http.StatusOK, `{"success":false,"error-codes":["invalid-input-response"]}`))
+
+	total := captchaweb.StreakLimit + 3
+	members := make([]gotgbot.User, total)
+	tokens := make([]string, total)
+	for i := range members {
+		members[i] = gotgbot.User{Id: int64(100 + i), FirstName: "Member"}
+		tokens[i] = env.join(members[i])
+	}
+	for i, member := range members {
+		status, answer := env.verify(member, tokens[i])
+		if i < captchaweb.StreakLimit {
+			if status != http.StatusOK || answer.Result != captchaweb.ResultFailed {
+				t.Fatalf("member %d = %d %+v, want 200 failed", i, status, answer)
+			}
+			if got := kicksOf(env.client, member.Id); got != 1 {
+				t.Fatalf("member %d kicks = %d, want 1", i, got)
+			}
+			continue
+		}
+		if status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
+			t.Fatalf("member %d = %d %+v, want 200 retry once the breaker tripped", i, status, answer)
+		}
+		if got := kicksOf(env.client, member.Id); got != 0 {
+			t.Fatalf("member %d kicks = %d, want none", i, got)
+		}
+		if env.attempt(member.Id) == nil {
+			t.Fatalf("member %d lost their attempt", i)
+		}
+		if !env.mr.Exists(env.challengeKey(tokens[i])) {
+			t.Fatalf("member %d: the challenge was not given back", i)
+		}
+		if got := unmutesOf(t, env.client, member.Id); got != 0 {
+			t.Fatalf("member %d was unmuted %d times, want still muted", i, got)
+		}
+	}
+
+	// The owner fixes the keys.
+	env.setSiteverify(captchaweb.SiteverifyPassForTest(captchaWebTestHost))
+	last := captchaweb.StreakLimit
+	if status, answer := env.verify(members[last], tokens[last]); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("pass after the fix = %d %+v, want 200 passed", status, answer)
+	}
+	if got := unmutesOf(t, env.client, members[last].Id); got != 1 {
+		t.Fatalf("unmutes after the fix = %d, want 1", got)
+	}
+	if env.mr.Exists(captchaweb.StreakKey) {
+		t.Fatal("the pass did not end the streak")
+	}
+}
