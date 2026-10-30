@@ -313,9 +313,18 @@ func (m moduleStruct) lockdownLiftConfirm(
 
 	editStaffCallbackMessage(b, query, lockdownGroupText(tr, "lockdown_alert_lift_done", ld,
 		lockdownNameToken, lockdownMention(query.From.Id, name)))
-	lockdownPostLiftNotice(b, ld, lockdownLiftedText(staffChatTranslator(ld.ChatID), query.From.Id, name, res))
-	wakeLockdownWorker()
+	lockdownAnnounceLift(b, ld, query.From.Id, name, res)
 	return ext.EndGroups
+}
+
+// lockdownAnnounceLift announces a lift that was recorded: the public lockdown_lifted
+// notice in the locked group's own language, posted through lockdownPostLiftNotice (so
+// under the lockdown pacer, a failure only logged), then a wake of the lockdown worker so
+// the joiners left to unban are handled at once. The alert's Lift Confirm and the settings
+// menu's Lift both announce through it, so a lift by button is never silent (D-26).
+func lockdownAnnounceLift(b *gotgbot.Bot, ld *models.ChatLockdown, actorID int64, actorName string, res lockdownLiftResult) {
+	lockdownPostLiftNotice(b, ld, lockdownLiftedText(staffChatTranslator(ld.ChatID), actorID, actorName, res))
+	wakeLockdownWorker()
 }
 
 // lockdownBanText translates a Ban card key with the account count and the locked
