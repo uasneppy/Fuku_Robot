@@ -554,3 +554,246 @@ func TestVerifyRouteOutlivesServerWriteTimeout(t *testing.T) {
 		t.Fatalf("answer = %d %q, want 200 passed", resp.StatusCode, answer.Result)
 	}
 }
+
+func TestChallengeStoreConsumeOnce(t *testing.T) {
+	const member = int64(42)
+
+	t.Run("50 goroutines consume one token once", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		token, _ := o.issue(member)
+
+		const workers = 50
+		var (
+			wg      sync.WaitGroup
+			start   = make(chan struct{})
+			mu      sync.Mutex
+			results = map[ConsumeResult]int{}
+			errs    []error
+		)
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				got, _, _, err := o.Store.ConsumeIfUser(context.Background(), token, member)
+				mu.Lock()
+				defer mu.Unlock()
+				results[got]++
+				if err != nil {
+					errs = append(errs, err)
+				}
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		if len(errs) != 0 {
+			t.Fatalf("ConsumeIfUser errors: %v", errs)
+		}
+		if results[ConsumeOK] != 1 || results[ConsumeUnknown] != workers-1 {
+			t.Fatalf("results = %v, want exactly one ConsumeOK and %d ConsumeUnknown", results, workers-1)
+		}
+	})
+
+	t.Run("parallel verifies of one token act once", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		token, _ := o.issue(member)
+		body := o.body(o.initData(member, token), TurnstileTokenForTest(token), token)
+
+		const parallel = verifyTokenUserLimit
+		var (
+			wg      sync.WaitGroup
+			start   = make(chan struct{})
+			results = make([]*httptest.ResponseRecorder, parallel)
+		)
+		for i := 0; i < parallel; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				results[i] = o.serve("203.0.113.9:4000", "application/json", body, nil)
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		attempts := 0
+		for _, call := range o.Backend.Calls() {
+			if call == "attempt" {
+				attempts++
+			}
+		}
+		if attempts != 1 {
+			t.Fatalf("backend.Attempt called %d times, want 1 (calls: %v)", attempts, o.Backend.Calls())
+		}
+		if got := o.Requests.Load(); got != 1 {
+			t.Fatalf("Cloudflare was asked %d times, want 1", got)
+		}
+		passes := 0
+		for i, rec := range results {
+			if rec.Code != http.StatusOK {
+				t.Fatalf("request %d: status = %d, want 200", i, rec.Code)
+			}
+			switch got := answerOf(t, rec).Result; got {
+			case ResultPassed:
+				passes++
+			case ResultInvalid:
+			default:
+				t.Fatalf("request %d: result = %q, want passed or invalid", i, got)
+			}
+		}
+		if passes == 0 {
+			t.Fatalf("no request was answered passed")
+		}
+		passCalls := 0
+		for _, call := range o.Backend.Calls() {
+			if call == "pass" {
+				passCalls++
+			}
+		}
+		if passCalls != 1 {
+			t.Fatalf("backend.Pass called %d times, want 1", passCalls)
+		}
+	})
+}
+
+func TestVerifyRouteReplaysDecision(t *testing.T) {
+	const (
+		member = int64(42)
+		other  = int64(77)
+	)
+	counts := func(o *outcomeHandler) (calls int, cloudflare int64) {
+		return len(o.Backend.Calls()), o.Requests.Load()
+	}
+
+	t.Run("a passed answer is replayed to the same member only", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		token, _ := o.issue(member)
+		if rec := o.postFrom("203.0.113.9:4000", member, token); answerOf(t, rec).Result != ResultPassed {
+			t.Fatalf("first verify: %q, want passed", rec.Body.String())
+		}
+		calls, cloudflare := counts(o)
+		if cloudflare != 1 {
+			t.Fatalf("Cloudflare requests = %d, want 1", cloudflare)
+		}
+
+		rec := o.postFrom("203.0.113.9:4000", member, token)
+		if rec.Code != http.StatusOK || answerOf(t, rec).Result != ResultPassed {
+			t.Fatalf("repeat: %d %q, want 200 passed", rec.Code, rec.Body.String())
+		}
+		rec = o.postFrom("203.0.113.10:4000", other, token)
+		if rec.Code != http.StatusOK || answerOf(t, rec).Result != ResultNotForYou {
+			t.Fatalf("another member: %d %q, want 200 not_for_you", rec.Code, rec.Body.String())
+		}
+		if gotCalls, gotCloudflare := counts(o); gotCalls != calls || gotCloudflare != cloudflare {
+			t.Fatalf("a repeat acted again: backend calls %d -> %d, Cloudflare %d -> %d", calls, gotCalls, cloudflare, gotCloudflare)
+		}
+
+		if ttl := o.Redis.TTL(DoneKeyPrefix + token); ttl <= 9*time.Minute || ttl > 10*time.Minute {
+			t.Fatalf("done marker TTL = %v, want about 10 minutes", ttl)
+		}
+		o.Redis.FastForward(10*time.Minute + time.Second)
+		rec = o.postFrom("203.0.113.9:4000", member, token)
+		if rec.Code != http.StatusOK || answerOf(t, rec).Result != ResultInvalid {
+			t.Fatalf("after the marker expired: %d %q, want 200 invalid", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("a failed answer keeps its action", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		o.Backend.Status = AttemptStatus{Live: true, Action: "ban"}
+		o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("invalid-input-response")))
+		token, _ := o.issue(member)
+		first := answerOf(t, o.postFrom("203.0.113.9:4000", member, token))
+		if first.Result != ResultFailed || first.Action != "ban" {
+			t.Fatalf("first verify: %+v, want failed with ban", first)
+		}
+		calls, cloudflare := counts(o)
+
+		repeat := answerOf(t, o.postFrom("203.0.113.9:4000", member, token))
+		if repeat != first {
+			t.Fatalf("repeat: %+v, want %+v", repeat, first)
+		}
+		if gotCalls, gotCloudflare := counts(o); gotCalls != calls || gotCloudflare != cloudflare {
+			t.Fatalf("a repeat acted again: backend calls %d -> %d, Cloudflare %d -> %d", calls, gotCalls, cloudflare, gotCloudflare)
+		}
+	})
+
+	t.Run("an expired answer keeps its action", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		o.Backend.Status = AttemptStatus{Live: false, Action: "mute"}
+		token, _ := o.issue(member)
+		first := answerOf(t, o.postFrom("203.0.113.9:4000", member, token))
+		if first.Result != ResultExpired || first.Action != "mute" {
+			t.Fatalf("first verify: %+v, want expired with mute", first)
+		}
+		calls, _ := counts(o)
+
+		repeat := answerOf(t, o.postFrom("203.0.113.9:4000", member, token))
+		if repeat != first {
+			t.Fatalf("repeat: %+v, want %+v", repeat, first)
+		}
+		if gotCalls, _ := counts(o); gotCalls != calls {
+			t.Fatalf("a repeat acted again: backend calls %d -> %d", calls, gotCalls)
+		}
+	})
+
+	t.Run("a retry leaves no marker and the token is re-armed", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("internal-error")))
+		token, _ := o.issue(member)
+		if rec := o.postFrom("203.0.113.9:4000", member, token); answerOf(t, rec).Result != ResultRetry {
+			t.Fatalf("first verify: %q, want retry", rec.Body.String())
+		}
+		if o.Redis.Exists(DoneKeyPrefix + token) {
+			t.Fatalf("a retry wrote a done marker")
+		}
+		if !o.Redis.Exists(o.key(token)) {
+			t.Fatalf("a retry did not re-arm the challenge")
+		}
+		o.setSiteverify(SiteverifyPassForTest(outcomeHost))
+		if rec := o.postFrom("203.0.113.9:4000", member, token); answerOf(t, rec).Result != ResultPassed {
+			t.Fatalf("second verify: %q, want passed", rec.Body.String())
+		}
+	})
+
+	t.Run("an unknown token with no marker stays invalid", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		token, _ := NewToken()
+		rec := o.postFrom("203.0.113.9:4000", member, token)
+		if rec.Code != http.StatusOK || answerOf(t, rec).Result != ResultInvalid {
+			t.Fatalf("unknown token: %d %q, want 200 invalid", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("the store round-trips a decision", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		ctx := context.Background()
+		if err := o.Store.MarkDone(ctx, "tok1", Decision{UserID: member, Result: ResultFailed, Action: "kick"}); err != nil {
+			t.Fatalf("MarkDone() error = %v", err)
+		}
+		got, found, err := o.Store.Done(ctx, "tok1")
+		want := Decision{UserID: member, Result: ResultFailed, Action: "kick"}
+		if err != nil || !found || got != want {
+			t.Fatalf("Done() = (%+v, %v, %v), want (%+v, true, nil)", got, found, err, want)
+		}
+		if err := o.Store.MarkDone(ctx, "tok2", Decision{UserID: member, Result: ResultPassed}); err != nil {
+			t.Fatalf("MarkDone() error = %v", err)
+		}
+		got, found, err = o.Store.Done(ctx, "tok2")
+		if err != nil || !found || got != (Decision{UserID: member, Result: ResultPassed}) {
+			t.Fatalf("Done() = (%+v, %v, %v), want a passed decision with no action", got, found, err)
+		}
+		if _, found, err := o.Store.Done(ctx, "missing"); err != nil || found {
+			t.Fatalf("Done(missing) = (%v, %v), want not found", found, err)
+		}
+		// A decision that is not a decided answer is never stored or read back.
+		if err := o.Store.MarkDone(ctx, "tok3", Decision{UserID: member, Result: ResultRetry}); err == nil {
+			t.Fatalf("MarkDone() accepted a retry")
+		}
+		o.Redis.Set(DoneKeyPrefix+"tok4", "garbage")
+		if _, found, err := o.Store.Done(ctx, "tok4"); err != nil || found {
+			t.Fatalf("Done(garbage) = (%v, %v), want not found", found, err)
+		}
+	})
+}
