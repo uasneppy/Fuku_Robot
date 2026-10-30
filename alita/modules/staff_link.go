@@ -171,35 +171,48 @@ func resolveLinkStaffGroup(b *gotgbot.Bot, issuer *gotgbot.User, staffArg string
 // explicit ID, never an ordering guess. A candidate that could not be verified
 // also fails closed, because it might be a second match.
 func resolveOwnStaffGroup(b *gotgbot.Bot, issuer *gotgbot.User) (*models.StaffGroup, staffRefusal) {
-	candidates, err := staff.ListStaffGroupsByOwner(issuer.Id)
+	matched, unknown, err := listVerifiedOwnStaffGroups(b, issuer)
 	if err != nil {
 		return nil, staffRefusalCheckFailedInPlace
 	}
-	if len(candidates) == 0 {
-		return nil, staffRefusalNoStaffGroup
-	}
-	var matched []*models.StaffGroup
-	unknown := 0
-	for i := range candidates {
-		result, _, ownerErr := chat_status.CheckOwner(b, candidates[i].ChatID, issuer.Id)
-		switch result {
-		case chat_status.OwnerMatch:
-			matched = append(matched, &candidates[i])
-		case chat_status.OwnerUnknown:
-			log.Warnf("[Staff] link: owner check for Staff Group %d failed: %v", candidates[i].ChatID, ownerErr)
-			unknown++
-		}
-	}
+	// No candidate and no match are one refusal, so the text is the same.
 	switch {
 	case len(matched) > 1:
 		return nil, staffRefusalNeedStaffID
 	case unknown > 0:
 		return nil, staffRefusalCheckFailedInPlace
 	case len(matched) == 1:
-		return matched[0], staffRefusalNone
+		return &matched[0], staffRefusalNone
 	default:
 		return nil, staffRefusalNoStaffGroup
 	}
+}
+
+// listVerifiedOwnStaffGroups returns the Staff Groups the issuer is, right now,
+// the creator of, in the repository's order, plus how many candidates could not be
+// verified. The recorded owner_user_id only names the candidates: each one is
+// checked live with chat_status.CheckOwner and is listed only on OwnerMatch, so a
+// recorded owner who is no longer the creator is never an authority. An unknown
+// answer (a failed Telegram call) is counted and logged and the group is left
+// out, so a caller that needs certainty fails closed on unknown > 0. The list is
+// shared by /linkstaff, the group picker and the settings menu (plan 09-11); it
+// sends nothing anywhere.
+func listVerifiedOwnStaffGroups(b *gotgbot.Bot, issuer *gotgbot.User) (matched []models.StaffGroup, unknown int, err error) {
+	candidates, err := staff.ListStaffGroupsByOwner(issuer.Id)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range candidates {
+		result, _, ownerErr := chat_status.CheckOwner(b, candidates[i].ChatID, issuer.Id)
+		switch result {
+		case chat_status.OwnerMatch:
+			matched = append(matched, candidates[i])
+		case chat_status.OwnerUnknown:
+			log.Warnf("[Staff] link: owner check for Staff Group %d failed: %v", candidates[i].ChatID, ownerErr)
+			unknown++
+		}
+	}
+	return matched, unknown, nil
 }
 
 // resolveNamedStaffGroup verifies the Staff Group named by staffArg. Anything that
@@ -284,6 +297,22 @@ func runLinkGroup(
 	if refusal != staffRefusalNone {
 		return staffLinkOutcome{Refusal: refusal}
 	}
+	return linkToStaffGroup(b, issuer, target, staffGroup)
+}
+
+// linkToStaffGroup links target to a Staff Group the caller has already verified
+// the issuer to be the live creator of. It runs the target's live checks
+// (checkLinkTarget), reads the bot's live health in the target and stores the
+// link (storeLink). It sends no message anywhere, to the Staff Group or to the
+// target: the caller decides who is told, and nothing about a link is ever posted
+// into the linked group. It is shared by runLinkGroup (the command and the group
+// picker) and the settings menu (plan 09-11).
+func linkToStaffGroup(
+	b *gotgbot.Bot,
+	issuer *gotgbot.User,
+	target *gotgbot.Chat,
+	staffGroup *models.StaffGroup,
+) staffLinkOutcome {
 	out := staffLinkOutcome{StaffGroup: staffGroup}
 	if out.Refusal = checkLinkTarget(b, issuer, target); out.Refusal != staffRefusalNone {
 		return out
@@ -393,6 +422,17 @@ func (moduleStruct) deliverLinkOutcome(
 		log.Errorf("[Staff] link outcome without a link for group %d", target.Id)
 		return ext.EndGroups
 	}
+	announceStaffLink(b, out)
+	return ext.EndGroups
+}
+
+// announceStaffLink posts the "group linked" notice of a created link, with one
+// warning line when the bot lacks rights in the new group, to the Staff Group in
+// its language. The linked group's title is escaped and spliced in after
+// translation. Nothing is ever sent to the linked group, and a failed post is only
+// logged by sendStaffNotice. The outcome must carry both the Staff Group and the
+// link. It is shared by the commands and the settings menu (plan 09-11).
+func announceStaffLink(b *gotgbot.Bot, out staffLinkOutcome) {
 	tr := staffChatTranslator(out.StaffGroup.ChatID)
 	text, _ := tr.GetString("staff_link_done", i18n.TranslationParams{
 		"group": staffGroupTitleToken,
@@ -403,7 +443,6 @@ func (moduleStruct) deliverLinkOutcome(
 		text += "\n" + warning
 	}
 	_ = sendStaffNotice(b, out.StaffGroup.ChatID, text)
-	return ext.EndGroups
 }
 
 // linkStaff handles /linkstaff [Staff Group chat ID] in the group being linked.
