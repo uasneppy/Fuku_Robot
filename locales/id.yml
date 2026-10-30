@@ -937,6 +937,32 @@ captcha_web_welcome: |
 
   ⏱ Anda punya <b>%d menit</b> untuk menyelesaikannya.
 captcha_web_button: Verifikasi dengan Turnstile
+captcha_web_page_title: Verifikasi
+captcha_web_loading_title: Bersiap-siap
+captcha_web_loading_body: Pemeriksaan sedang disiapkan. Ini hanya sebentar.
+captcha_web_ready_title: Buktikan Anda manusia
+captcha_web_ready_body: Selesaikan pemeriksaan di bawah untuk bergabung ke grup.
+captcha_web_widget_label: Pemeriksaan keamanan
+captcha_web_verifying_title: Memeriksa jawaban Anda
+captcha_web_verifying_body: Mohon tunggu. Jangan tutup halaman ini.
+captcha_web_passed_title: Anda terverifikasi
+captcha_web_passed_body: Selamat datang di grup. Halaman ini tertutup sendiri.
+captcha_web_failed_title: Verifikasi gagal
+captcha_web_failed_body_kick: Anda dikeluarkan dari grup. Anda bisa bergabung kembali untuk mencoba lagi.
+captcha_web_failed_body_ban: Anda diblokir dari grup. Hubungi admin jika ini keliru.
+captcha_web_failed_body_mute: Anda tetap dibisukan di grup. Hubungi admin jika ini keliru.
+captcha_web_expired_title: Waktu habis
+captcha_web_expired_body_kick: Anda tidak selesai tepat waktu. Anda dikeluarkan dari grup dan bisa bergabung kembali untuk mencoba lagi.
+captcha_web_expired_body_ban: Anda tidak selesai tepat waktu. Anda diblokir dari grup. Hubungi admin jika ini keliru.
+captcha_web_expired_body_mute: Anda tidak selesai tepat waktu. Anda tetap dibisukan di grup. Hubungi admin jika ini keliru.
+captcha_web_retry_title: Terjadi kesalahan
+captcha_web_retry_body: Ini masalah koneksi, bukan pemeriksaan yang gagal. Coba lagi sebelum batas waktu habis.
+captcha_web_retry_button: Coba lagi
+captcha_web_invalid_title: Tautan ini tidak valid
+captcha_web_invalid_body: Tautan ini milik anggota lain atau sudah dipakai. Tidak ada yang diubah.
+captcha_web_unsupported_title: Buka di Telegram
+captcha_web_unsupported_body: Gunakan tombol di obrolan grup. Jika sudah, matikan pemblokir konten lalu coba lagi.
+captcha_web_close_button: Tutup
 captcha_failed_verify: Gagal memverifikasi. Silakan hubungi admin.
 captcha_wait_refresh: Silakan tunggu beberapa detik sebelum meminta gambar baru.
 captcha_failed_generate: Gagal membuat gambar baru, coba lagi.

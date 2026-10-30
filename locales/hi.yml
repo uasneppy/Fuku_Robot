@@ -801,6 +801,32 @@ captcha_web_welcome: |
 
   ⏱ पूरा करने के लिए आपके पास <b>%d मिनट</b> हैं।
 captcha_web_button: Turnstile से सत्यापित करें
+captcha_web_page_title: सत्यापन
+captcha_web_loading_title: तैयारी हो रही है
+captcha_web_loading_body: जाँच तैयार की जा रही है। इसमें थोड़ा समय लगेगा।
+captcha_web_ready_title: साबित करें कि आप इंसान हैं
+captcha_web_ready_body: समूह में शामिल होने के लिए नीचे दी गई जाँच पूरी करें।
+captcha_web_widget_label: सुरक्षा जाँच
+captcha_web_verifying_title: आपका उत्तर जाँचा जा रहा है
+captcha_web_verifying_body: कृपया प्रतीक्षा करें। यह पेज बंद न करें।
+captcha_web_passed_title: आप सत्यापित हो गए
+captcha_web_passed_body: समूह में आपका स्वागत है। यह पेज अपने आप बंद हो जाएगा।
+captcha_web_failed_title: सत्यापन विफल रहा
+captcha_web_failed_body_kick: आपको समूह से हटा दिया गया। दोबारा कोशिश करने के लिए आप फिर से जुड़ सकते हैं।
+captcha_web_failed_body_ban: आपको समूह से प्रतिबंधित कर दिया गया। गलती लगे तो किसी एडमिन से संपर्क करें।
+captcha_web_failed_body_mute: आप समूह में म्यूट रहेंगे। गलती लगे तो किसी एडमिन से संपर्क करें।
+captcha_web_expired_title: समय समाप्त हो गया
+captcha_web_expired_body_kick: आप समय पर पूरा नहीं कर पाए। आपको समूह से हटा दिया गया और आप फिर से जुड़कर कोशिश कर सकते हैं।
+captcha_web_expired_body_ban: आप समय पर पूरा नहीं कर पाए। आपको समूह से प्रतिबंधित कर दिया गया। गलती लगे तो किसी एडमिन से संपर्क करें।
+captcha_web_expired_body_mute: आप समय पर पूरा नहीं कर पाए। आप समूह में म्यूट रहेंगे। गलती लगे तो किसी एडमिन से संपर्क करें।
+captcha_web_retry_title: कुछ गड़बड़ हो गई
+captcha_web_retry_body: यह कनेक्शन की समस्या थी, जाँच की विफलता नहीं। समय सीमा खत्म होने से पहले फिर कोशिश करें।
+captcha_web_retry_button: फिर कोशिश करें
+captcha_web_invalid_title: यह लिंक मान्य नहीं है
+captcha_web_invalid_body: यह किसी अन्य सदस्य का है या पहले ही इस्तेमाल हो चुका है। कुछ नहीं बदला गया।
+captcha_web_unsupported_title: इसे Telegram में खोलें
+captcha_web_unsupported_body: समूह चैट के बटन का उपयोग करें। ऐसा किया हो तो कंटेंट ब्लॉकर बंद करके फिर कोशिश करें।
+captcha_web_close_button: बंद करें
 captcha_failed_verify: सत्यापित करने में विफल। कृपया किसी एडमिन से संपर्क करें।
 captcha_wait_refresh: कृपया नई छवि का अनुरोध करने से पहले कुछ सेकंड प्रतीक्षा करें।
 captcha_failed_generate: नई छवि बनाने में विफल, पुनः प्रयास करें।
