@@ -2730,3 +2730,12 @@ settings_state_staff_n: "{count} जुड़े"
 settings_trigger_ai: "AI स्पैम: {state} · 120 सेकंड में {threshold} स्पैम फ़ैसले"
 settings_trigger_flood: "फ्लड: {state} · 30 सेकंड में {threshold} संदेश"
 settings_trigger_joins: "जॉइन की बाढ़: {state} · 60 सेकंड में {threshold} जॉइन"
+settings_help_msg: |
+  इस ग्रुप को एक बटन मेन्यू से मैनेज करें।
+
+  <b>एडमिन कमांड</b>:
+  × /settings: सेटिंग्स मेन्यू खोलें, यहाँ ग्रुप में या प्राइवेट में।
+
+  मेन्यू में स्टाफ ग्रुप लिंक, लॉकडाउन (स्थिति, हटाना और ऑटोमैटिक ट्रिगर), कैप्चा और एंटीफ्लड शामिल हैं। इसमें किया गया हर बदलाव संबंधित कमांड जैसा ही है: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode और /delflood।
+
+  ग्रुप में खोला गया मेन्यू केवल उसी एडमिन को जवाब देता है जिसने उसे खोला। हर प्रेस जाँचता है कि आप अब भी ग्रुप के एडमिन हैं, और हर बदलाव के लिए वही अधिकार चाहिए जो उसकी कमांड के लिए चाहिए।
