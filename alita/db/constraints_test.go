@@ -132,7 +132,7 @@ func TestCaptchaSettingsConstraint_ValidModes(t *testing.T) {
 		_ = DB.Where("chat_id = ?", chatID).Delete(&CaptchaSettings{}).Error
 	})
 
-	validModes := []string{"math", "text"}
+	validModes := []string{"math", "text", "turnstile"}
 	for _, mode := range validModes {
 		settings := &CaptchaSettings{
 			ChatID:      chatID + int64(hashCode(mode)),

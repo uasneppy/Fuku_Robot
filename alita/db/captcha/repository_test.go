@@ -231,6 +231,62 @@ func TestCaptchaSettingsCacheInvalidation(t *testing.T) {
 
 }
 
+// TestSetCaptchaModeAcceptsTurnstile proves a group's Turnstile choice is stored and read
+// back at once (the cached settings are invalidated by the write), that an unknown mode is
+// refused before any write and leaves the stored mode alone, and that math and text still work.
+func TestSetCaptchaModeAcceptsTurnstile(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano()
+	t.Cleanup(func() {
+		_ = db.DB.Where("chat_id = ?", chatID).Delete(&dbmodels.CaptchaSettings{}).Error
+		if m := cache.GetMarshal(); m != nil {
+			_ = m.Delete(cache.Context, dbcache.CacheKey("captcha_settings", chatID))
+		}
+	})
+
+	// Prime the cache with the default so a missing invalidation would serve it back.
+	settings, err := GetCaptchaSettings(chatID)
+	if err != nil {
+		t.Fatalf("GetCaptchaSettings() error = %v", err)
+	}
+	if settings.CaptchaMode != "math" {
+		t.Fatalf("expected default CaptchaMode='math', got %q", settings.CaptchaMode)
+	}
+
+	readMode := func(step string) string {
+		t.Helper()
+		got, err := GetCaptchaSettings(chatID)
+		if err != nil {
+			t.Fatalf("GetCaptchaSettings() %s error = %v", step, err)
+		}
+		return got.CaptchaMode
+	}
+
+	if err := SetCaptchaMode(chatID, "turnstile"); err != nil {
+		t.Fatalf("SetCaptchaMode(turnstile) error = %v", err)
+	}
+	if got := readMode("after turnstile"); got != "turnstile" {
+		t.Fatalf("expected CaptchaMode='turnstile', got %q", got)
+	}
+
+	if err := SetCaptchaMode(chatID, "bogus"); !errors.Is(err, ErrInvalidCaptchaMode) {
+		t.Fatalf("SetCaptchaMode(bogus) error = %v, want ErrInvalidCaptchaMode", err)
+	}
+	if got := readMode("after bogus"); got != "turnstile" {
+		t.Fatalf("a refused mode changed the stored mode to %q, want turnstile", got)
+	}
+
+	for _, mode := range []string{"math", "text"} {
+		if err := SetCaptchaMode(chatID, mode); err != nil {
+			t.Fatalf("SetCaptchaMode(%s) error = %v", mode, err)
+		}
+		if got := readMode("after " + mode); got != mode {
+			t.Fatalf("expected CaptchaMode=%q, got %q", mode, got)
+		}
+	}
+}
+
 func TestCaptchaAttempt_Lifecycle(t *testing.T) {
 	skipIfNoDb(t)
 
