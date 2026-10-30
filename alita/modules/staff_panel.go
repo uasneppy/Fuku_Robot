@@ -153,13 +153,28 @@ func staffRowReason(tr *i18n.Translator, row staffLinkRow) string {
 	return ""
 }
 
-// renderStaffRow renders one linked group: the escaped title and ID, its status
-// line, a reason line when it is broken, and one lockdown line when the group is
-// locked. The title is written straight into the text, never through the
-// translator. The lockdown line shows only when it began (UTC), never why or who
-// started it (D-17), and it is independent of the reason line, so a locked group the
-// bot left shows both (D-22).
-func renderStaffRow(tr *i18n.Translator, row staffLinkRow) string {
+// renderStaffRowHead renders the first line of a linked group's row: its escaped
+// title and its chat ID in code. The title is written straight into the text,
+// never through the translator. It is the only part of a row that names the
+// linked group, which is why the settings menu prints renderStaffRowStatus alone
+// under its own header (D-29).
+func renderStaffRowHead(row staffLinkRow) string {
+	var sb strings.Builder
+	sb.WriteString(staffDisplayTitle(row.Link.GroupTitle))
+	sb.WriteString(" <code>")
+	sb.WriteString(strconv.FormatInt(row.Link.GroupChatID, 10))
+	sb.WriteString("</code>")
+	return sb.String()
+}
+
+// renderStaffRowStatus renders the health of a linked group's row without ever
+// naming the group: its status line, a reason line when it is broken, and one
+// lockdown line when the group is locked. It holds only icons, locale text and a
+// UTC time, never the group's title or chat ID, so a group's own menu can print
+// it under its own header (D-21, D-29). The lockdown line shows only when it began
+// (UTC), never why or who started it (D-17), and it is independent of the reason
+// line, so a locked group the bot left shows both (D-22).
+func renderStaffRowStatus(tr *i18n.Translator, row staffLinkRow) string {
 	bot, restrict, owner := staffRowStatuses(row)
 	status, _ := tr.GetString("staff_panel_row_status", i18n.TranslationParams{
 		"bot":      staffStatusIcon(bot),
@@ -167,10 +182,6 @@ func renderStaffRow(tr *i18n.Translator, row staffLinkRow) string {
 		"owner":    staffStatusIcon(owner),
 	})
 	var sb strings.Builder
-	sb.WriteString(staffDisplayTitle(row.Link.GroupTitle))
-	sb.WriteString(" <code>")
-	sb.WriteString(strconv.FormatInt(row.Link.GroupChatID, 10))
-	sb.WriteString("</code>\n")
 	sb.WriteString(status)
 	if reason := staffRowReason(tr, row); reason != "" {
 		sb.WriteString("\n")
@@ -186,6 +197,12 @@ func renderStaffRow(tr *i18n.Translator, row staffLinkRow) string {
 	return sb.String()
 }
 
+// renderStaffRow renders one linked group: the head (escaped title and ID), a
+// newline and the status piece (status line, reason line and lockdown line).
+func renderStaffRow(tr *i18n.Translator, row staffLinkRow) string {
+	return renderStaffRowHead(row) + "\n" + renderStaffRowStatus(tr, row)
+}
+
 // staffPanelView is everything composeStaffPanelText needs to lay out one page.
 type staffPanelView struct {
 	staffGroup models.StaffGroup
@@ -198,6 +215,11 @@ type staffPanelView struct {
 	page, pages int
 	updatedAt   time.Time
 	helpAsHint  bool
+	// limit is the length cap of the text in UTF-16 code units. Zero means
+	// staffPanelMaxUTF16, so /staff, Refresh and paging are unchanged; the
+	// settings page sets a smaller one to fit its header and footer inside the
+	// same 3800 units.
+	limit int
 }
 
 // composeStaffPanelText lays out the panel text of one page: the help (or its
@@ -264,12 +286,17 @@ func composeStaffPanelText(tr *i18n.Translator, v staffPanelView) string {
 	return sb.String()
 }
 
-// staffPanelTextFor returns the text of a page that fits the length cap, measured
-// in UTF-16 code units on the HTML source. The help is swapped for its short hint
-// when the page is too long with it, and rows are then dropped from the end of the
-// page, with a note, until it fits. It also returns the rows that stayed in.
+// staffPanelTextFor returns the text of a page that fits the length cap (the
+// view's limit, or staffPanelMaxUTF16 when it is zero), measured in UTF-16 code
+// units on the HTML source. The help is swapped for its short hint when the page
+// is too long with it, and rows are then dropped from the end of the page, with a
+// note, until it fits. It also returns the rows that stayed in.
 func staffPanelTextFor(tr *i18n.Translator, v staffPanelView) (string, []staffLinkRow) {
-	fits := func(text string) bool { return len(utf16.Encode([]rune(text))) <= staffPanelMaxUTF16 }
+	limit := v.limit
+	if limit <= 0 {
+		limit = staffPanelMaxUTF16
+	}
+	fits := func(text string) bool { return len(utf16.Encode([]rune(text))) <= limit }
 
 	pageRows := v.shown
 	text := composeStaffPanelText(tr, v)
