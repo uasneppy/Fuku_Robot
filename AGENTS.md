@@ -385,6 +385,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   answers nothing, another member's verify changes nothing (`not_for_you`), and only the target's deletes it. It is Redis
   only and sits outside the `alita:cache:` prefix beside the existing `alita:captcha:refresh:cooldown:*`, so
   `CLEAR_CACHE_ON_STARTUP` keeps it; a Redis flush loses the open challenges and those members time out as usual.
+- `captcha_settings.captcha_mode` is `math`, `text` or `turnstile` under `chk_captcha_mode` (migration 20261030120000).
+  That migration drops `chk_captcha_mode` and the legacy inline column check of 20250807103246 (PostgreSQL named it
+  `captcha_settings_captcha_mode_check`, and no later migration removed it, so every database the chain built had two
+  checks) before re-adding `chk_captcha_mode` `NOT VALID`, because both appliers swallow `duplicate_object` on an
+  `ADD CONSTRAINT`: an add without the drops would change nothing and say nothing. `captcha.SetCaptchaMode` accepts
+  the three values and invalidates `captcha_settings` after the write. A `turnstile` stored on a bot whose web captcha
+  is unavailable (or imported from another bot) is handled at join by the math fallback, never by refusing the row.
 - `staff_actions` and `staff_action_groups` are the staff audit record (migration 20261005120000). They are read only
   through fresh queries, never cached (so no `DeleteCache` applies to them), and never part of
   backup/export/import/reset. A record is created at Confirm and a failed create aborts the card; each group's prior
@@ -992,6 +999,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   column's `chk_chat_raid_detection_ai` included, and the column-targeted upserts that never clobber each other) and `TestRaidDetectionCarryOver`
   (`./alita/db/migrations`: the clamped carry-over of `antiraid_settings.auto_antiraid_threshold`, which executes
   migration 20261018130000 against the schema the migration-chain step already built, so it must run after that step).
+  The Phase 8 guarantee is `TestCaptchaModeTurnstileConstraint` (`./alita/db/migrations`: the widened check accepts
+  `turnstile`, `math` and `text` and refuses the rest with `check_violation`, exactly one `captcha_mode` check is left
+  on `captcha_settings`, and the migration's statements run twice without error; `TestCaptchaModeMigrationStatements`
+  is its database-free half and runs in `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.

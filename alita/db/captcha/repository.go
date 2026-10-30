@@ -70,8 +70,11 @@ func SetCaptchaEnabled(chatID int64, enabled bool) error {
 	return nil
 }
 
+// SetCaptchaMode stores a group's captcha mode: math, text or turnstile (the Turnstile web
+// captcha). Any other value returns ErrInvalidCaptchaMode before a write, and a stored value
+// is checked again by chk_captcha_mode.
 func SetCaptchaMode(chatID int64, mode string) error {
-	if mode != "math" && mode != "text" {
+	if mode != "math" && mode != "text" && mode != "turnstile" {
 		return ErrInvalidCaptchaMode
 	}
 
