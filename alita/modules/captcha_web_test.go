@@ -56,6 +56,9 @@ func newCaptchaWebEnv(t *testing.T) *captchaWebEnv {
 	client := newModuleBotClient()
 	bot := newModuleTestBot(client)
 	chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Captcha Chat"}
+	// The web pass reads the chat from Telegram, so the fake must echo this chat's ID.
+	client.responses["getChat"] = json.RawMessage(
+		fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Captcha Chat"}`, chat.Id))
 	if err := captcha.SetCaptchaEnabled(chat.Id, true); err != nil {
 		t.Fatalf("SetCaptchaEnabled() error = %v", err)
 	}

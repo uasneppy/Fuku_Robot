@@ -27,9 +27,11 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
 	"github.com/divkix/Alita_Robot/alita/db/chats"
 	"github.com/divkix/Alita_Robot/alita/db/lang"
+	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/db/user"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
 	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
 	"github.com/divkix/Alita_Robot/alita/utils/extraction"
@@ -1023,13 +1025,33 @@ func SendCaptcha(bot *gotgbot.Bot, ctx *ext.Context, userID int64, userName stri
 		return errCaptchaDisabled
 	}
 
+	// mode is the captcha this join actually gets. A Turnstile group whose web captcha is
+	// not available gets the group's math captcha, so nobody is left muted with no way in
+	// (D-09).
+	mode := settings.CaptchaMode
+	var webRuntime *captchaWebRuntime
+	if mode == "turnstile" {
+		if rt, ok := captchaWebAvailable(bot); ok {
+			webRuntime = rt
+		} else {
+			mode = "math"
+			logCaptchaWebFallback(chat.Id)
+		}
+	}
+
 	var question string
 	var answer string
 	var options []string
 	var imageBytes []byte
 	isImage := false
 
-	if settings.CaptchaMode == "math" {
+	if mode == "turnstile" {
+		answer, err = captchaweb.NewReservedAnswer()
+		if err != nil {
+			log.Errorf("[Captcha][SendCaptcha] Failed to create the Turnstile answer: %v", err)
+			return fmt.Errorf("generate captcha: %w", err)
+		}
+	} else if mode == "math" {
 		var err error
 		answer, imageBytes, options, err = generateMathImageCaptcha()
 		if err != nil || imageBytes == nil {
@@ -1112,45 +1134,40 @@ func SendCaptcha(bot *gotgbot.Bot, ctx *ext.Context, userID int64, userName stri
 	}
 	muted = true
 
-	includeRefresh := isImage && imageBytes != nil
-	refreshBtnText := ""
-	if includeRefresh {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		refreshBtnText, _ = tr.GetString("captcha_refresh_button")
-	}
-	keyboard := buildCaptchaKeyboard(preAttempt.ID, userID, preAttempt.RefreshCount, options, includeRefresh, refreshBtnText)
-	verifyCount := len(keyboard.InlineKeyboard)
-	if includeRefresh && verifyCount > 0 {
-		verifyCount--
-	}
-	if verifyCount == 0 {
-		log.Errorf("[Captcha] No verify buttons could be encoded for attempt %d", preAttempt.ID)
-		return errors.Join(errors.New("captcha keyboard empty: no encodable options"), rollbackCaptchaAttempt(bot, preAttempt))
-	}
-
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	var keyboard gotgbot.InlineKeyboardMarkup
 	var msgText string
-	if isImage {
-		if settings.CaptchaMode == "math" {
-			text, _ := tr.GetString("captcha_welcome_math_image", i18n.TranslationParams{
-				"first":  formatting.MentionHtml(userID, userName),
-				"number": settings.Timeout,
-			})
-			msgText = text
-		} else {
-			text, _ := tr.GetString("captcha_welcome_text_image", i18n.TranslationParams{
-				"first":  formatting.MentionHtml(userID, userName),
-				"number": settings.Timeout,
-			})
-			msgText = text
+	if mode == "turnstile" {
+		token, issueErr := webRuntime.issueChallenge(preAttempt)
+		if issueErr != nil {
+			log.Errorf("[Captcha][SendCaptcha] Failed to issue the web challenge for attempt %d: %v", preAttempt.ID, issueErr)
+			return errors.Join(issueErr, rollbackCaptchaAttempt(bot, preAttempt))
 		}
-	} else {
-		text, _ := tr.GetString("captcha_welcome_math_text", i18n.TranslationParams{
-			"first":    formatting.MentionHtml(userID, userName),
-			"question": question,
-			"number":   settings.Timeout,
+		text, _ := tr.GetString("captcha_web_welcome", i18n.TranslationParams{
+			"first":  formatting.MentionHtml(userID, userName),
+			"number": settings.Timeout,
 		})
 		msgText = text
+		buttonText, _ := tr.GetString("captcha_web_button")
+		keyboard = gotgbot.InlineKeyboardMarkup{InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{
+			{Text: buttonText, Url: captchaweb.MiniAppLink(bot.Username, webRuntime.cfg.ShortName, token)},
+		}}}
+	} else {
+		includeRefresh := isImage && imageBytes != nil
+		refreshBtnText := ""
+		if includeRefresh {
+			refreshBtnText, _ = tr.GetString("captcha_refresh_button")
+		}
+		keyboard = buildCaptchaKeyboard(preAttempt.ID, userID, preAttempt.RefreshCount, options, includeRefresh, refreshBtnText)
+		verifyCount := len(keyboard.InlineKeyboard)
+		if includeRefresh && verifyCount > 0 {
+			verifyCount--
+		}
+		if verifyCount == 0 {
+			log.Errorf("[Captcha] No verify buttons could be encoded for attempt %d", preAttempt.ID)
+			return errors.Join(errors.New("captcha keyboard empty: no encodable options"), rollbackCaptchaAttempt(bot, preAttempt))
+		}
+		msgText = captchaChallengeText(tr, mode, isImage, userID, userName, question, settings.Timeout)
 	}
 
 	var sent *gotgbot.Message
@@ -1190,6 +1207,28 @@ func SendCaptcha(bot *gotgbot.Bot, ctx *ext.Context, userID int64, userName stri
 	scheduleCaptchaTimeout(bot, preAttempt)
 
 	return nil
+}
+
+// captchaChallengeText is the welcome text of a math or text captcha: the image keys when
+// the challenge is a picture, the question text otherwise.
+func captchaChallengeText(tr *i18n.Translator, mode string, isImage bool, userID int64, userName, question string, timeout int) string {
+	if !isImage {
+		text, _ := tr.GetString("captcha_welcome_math_text", i18n.TranslationParams{
+			"first":    formatting.MentionHtml(userID, userName),
+			"question": question,
+			"number":   timeout,
+		})
+		return text
+	}
+	key := "captcha_welcome_text_image"
+	if mode == "math" {
+		key = "captcha_welcome_math_image"
+	}
+	text, _ := tr.GetString(key, i18n.TranslationParams{
+		"first":  formatting.MentionHtml(userID, userName),
+		"number": timeout,
+	})
+	return text
 }
 
 func rollbackCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) error {
@@ -1410,6 +1449,101 @@ func restoreCaptchaPermissions(bot *gotgbot.Bot, chatID, userID int64) error {
 	return captcha.DeleteMutedUser(userID, chatID)
 }
 
+// captchaPassInput is everything a captcha pass needs and nothing about how it was
+// triggered, so the button callback and the web verify run the same pass.
+type captchaPassInput struct {
+	Bot *gotgbot.Bot
+	// Chat carries the ID, type, title and username the greeting's placeholders need.
+	Chat *gotgbot.Chat
+	// Attempt is the freshly read row; its Answer, MessageID and RefreshCount are what the
+	// claim matches on.
+	Attempt   *db.CaptchaAttempts
+	UserID    int64
+	FirstName string
+	// Ctx is the update's context for the callback; the web pass builds one that only holds
+	// the chat, as the timeout path does.
+	Ctx *ext.Context
+}
+
+// claimCaptchaPass reads the held messages, claims the attempt and unmutes the member. The
+// messages are read first because the claim deletes them. It returns claimed false when
+// the attempt is gone or taken by something else (err is then only a database error), and
+// claimed true with a non-nil err when the unmute failed, in which case restoreCaptchaPermissions
+// has already scheduled the durable retry.
+func claimCaptchaPass(in captchaPassInput) (stored []*models.StoredMessages, claimed bool, err error) {
+	storedMessages, storedErr := captcha.GetStoredMessagesForAttempt(in.Attempt.ID)
+	if storedErr != nil {
+		log.Warnf("[Captcha] Failed to read stored messages for attempt %d: %v", in.Attempt.ID, storedErr)
+		storedMessages = nil
+	}
+
+	claimed, claimErr := captcha.CompleteCaptchaAttemptAtomic(
+		in.Attempt.ID,
+		in.UserID,
+		in.Chat.Id,
+		in.Attempt.Answer,
+		in.Attempt.MessageID,
+		in.Attempt.RefreshCount,
+	)
+	if claimErr != nil || !claimed {
+		return nil, false, claimErr
+	}
+
+	return storedMessages, true, restoreCaptchaPermissions(in.Bot, in.Chat.Id, in.UserID)
+}
+
+// finishCaptchaPass posts the held-message summary, deletes the challenge, posts the success
+// note and runs the greeting. It runs after a claim whose unmute succeeded.
+func finishCaptchaPass(in captchaPassInput, stored []*models.StoredMessages) {
+	bot, chat := in.Bot, in.Chat
+
+	if len(stored) > 0 {
+		tr := i18n.MustNewTranslator(lang.GetLanguage(in.Ctx))
+		var messageTypes []string
+		for _, msg := range stored {
+			msgTypeStr := messageTypeToString(tr, msg.MessageType)
+			if !slices.Contains(messageTypes, msgTypeStr) {
+				messageTypes = append(messageTypes, msgTypeStr)
+			}
+		}
+		summaryText, _ := tr.GetString("captcha_stored_messages_summary",
+			i18n.TranslationParams{
+				"user":  formatting.MentionHtml(in.UserID, in.FirstName),
+				"count": len(stored),
+				"types": strings.Join(messageTypes, ", "),
+			})
+
+		summaryMsg, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, summaryText, &gotgbot.SendMessageOpts{
+			ParseMode: formatting.HTML,
+		})
+
+		if summaryMsg != nil {
+			time.AfterFunc(30*time.Second, func() {
+				defer error_handling.RecoverFromPanic("captchaSummaryMsgDelete", "captcha")
+				_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, summaryMsg.MessageId)
+			})
+		}
+	}
+
+	_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, in.Attempt.MessageID)
+
+	tr := i18n.MustNewTranslator(lang.GetLanguage(in.Ctx))
+	msgTemplate, _ := tr.GetString("greetings_captcha_verified_success")
+	successMsg := fmt.Sprintf(msgTemplate, formatting.MentionHtml(in.UserID, in.FirstName))
+	sent, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, successMsg, &gotgbot.SendMessageOpts{ParseMode: formatting.HTML})
+
+	if sent != nil {
+		time.AfterFunc(5*time.Second, func() {
+			defer error_handling.RecoverFromPanic("captchaSuccessMsgDelete", "captcha")
+			_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, sent.MessageId)
+		})
+	}
+
+	if err := SendWelcomeMessage(bot, in.Ctx, in.UserID, in.FirstName); err != nil {
+		log.Errorf("Failed to send welcome message after captcha verification: %v", err)
+	}
+}
+
 func (moduleStruct) captchaVerifyCallback(bot *gotgbot.Bot, ctx *ext.Context) error {
 	query, ok := callbackQueryFromContext(ctx)
 	if !ok {
@@ -1497,81 +1631,33 @@ func (moduleStruct) captchaVerifyCallback(bot *gotgbot.Bot, ctx *ext.Context) er
 	}
 
 	if selectedAnswer == attempt.Answer {
-		storedMessages, storedErr := captcha.GetStoredMessagesForAttempt(attempt.ID)
-		if storedErr != nil {
-			log.Warnf("[Captcha] Failed to read stored messages for attempt %d: %v", attempt.ID, storedErr)
+		in := captchaPassInput{
+			Bot:       bot,
+			Chat:      chat,
+			Attempt:   attempt,
+			UserID:    targetUserID,
+			FirstName: user.FirstName,
+			Ctx:       ctx,
 		}
-
-		claimed, claimErr := captcha.CompleteCaptchaAttemptAtomic(
-			attempt.ID,
-			targetUserID,
-			chat.Id,
-			selectedAnswer,
-			attempt.MessageID,
-			expectedRefreshCount,
-		)
-		if claimErr != nil || !claimed {
+		storedMessages, claimed, claimErr := claimCaptchaPass(in)
+		if !claimed {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			text, _ := tr.GetString("captcha_expired_or_not_found")
 			_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
 			return err
 		}
-
-		if err = restoreCaptchaPermissions(bot, chat.Id, targetUserID); err != nil {
-			log.Errorf("Failed to unmute user %d on verify: %v", targetUserID, err)
+		if claimErr != nil {
+			log.Errorf("Failed to unmute user %d on verify: %v", targetUserID, claimErr)
 			_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, attempt.MessageID)
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			text, _ := tr.GetString("captcha_failed_verify")
 			_, _ = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
-			return err
+			return claimErr
 		}
 
-		if storedErr == nil && len(storedMessages) > 0 {
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			var messageTypes []string
-			for _, msg := range storedMessages {
-				msgTypeStr := messageTypeToString(tr, msg.MessageType)
-				if !slices.Contains(messageTypes, msgTypeStr) {
-					messageTypes = append(messageTypes, msgTypeStr)
-				}
-			}
-			summaryText, _ := tr.GetString("captcha_stored_messages_summary",
-				i18n.TranslationParams{
-					"user":  formatting.MentionHtml(targetUserID, user.FirstName),
-					"count": len(storedMessages),
-					"types": strings.Join(messageTypes, ", "),
-				})
-
-			summaryMsg, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, summaryText, &gotgbot.SendMessageOpts{
-				ParseMode: formatting.HTML,
-			})
-
-			if summaryMsg != nil {
-				time.AfterFunc(30*time.Second, func() {
-					defer error_handling.RecoverFromPanic("captchaSummaryMsgDelete", "captcha")
-					_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, summaryMsg.MessageId)
-				})
-			}
-		}
-
-		_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, attempt.MessageID)
+		finishCaptchaPass(in, storedMessages)
 
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		msgTemplate, _ := tr.GetString("greetings_captcha_verified_success")
-		successMsg := fmt.Sprintf(msgTemplate, formatting.MentionHtml(targetUserID, user.FirstName))
-		sent, _ := helpers.SendMessageWithErrorHandling(bot, chat.Id, successMsg, &gotgbot.SendMessageOpts{ParseMode: formatting.HTML})
-
-		if sent != nil {
-			time.AfterFunc(5*time.Second, func() {
-				defer error_handling.RecoverFromPanic("captchaSuccessMsgDelete", "captcha")
-				_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, sent.MessageId)
-			})
-		}
-
-		if err = SendWelcomeMessage(bot, ctx, targetUserID, user.FirstName); err != nil {
-			log.Errorf("Failed to send welcome message after captcha verification: %v", err)
-		}
-
 		text, _ := tr.GetString("captcha_verified_success_msg")
 		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
 		return err

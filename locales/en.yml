@@ -1002,6 +1002,13 @@ captcha_welcome_math_text: |
   <b>%s = ?</b>
 
   ⏱ You have <b>%d minutes</b> to answer.
+captcha_web_welcome: |
+  👋 Welcome %s!
+
+  Tap the button below to verify you are human.
+
+  ⏱ You have <b>%d minutes</b> to finish.
+captcha_web_button: Verify with Turnstile
 captcha_failed_verify: Failed to verify. Please contact an admin.
 captcha_wait_refresh: Please wait a few seconds before requesting a new image.
 captcha_failed_generate: Failed to generate new image, try again.

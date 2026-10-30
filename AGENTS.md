@@ -376,6 +376,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
   once as rate limited and the joiner row goes back without counting an attempt.
+- `alita:captcha:ch:<token>` is the Turnstile captcha's challenge handle (`alita/utils/captchaweb`, `challenge.go`): a hash
+  of decimal strings `u` (user ID), `a` (attempt ID), `c` (chat ID) and `x` (the attempt's expiry in unix ms), living the
+  attempt's time left plus 5 minutes (`ChallengeGrace`). The token is 16 random bytes in base64url (22 characters) and is
+  public, because it is the `startapp` value of the group's URL button: the barrier is the signed `initData` `user.id`,
+  never the token's secrecy. `SendCaptcha` writes it for a Turnstile attempt (`Store.Issue`, one round trip under 250 ms)
+  and the verify handler consumes it with a user-compared Lua script (`Store.ConsumeIfUser`): an unknown or used key
+  answers nothing, another member's verify changes nothing (`not_for_you`), and only the target's deletes it. It is Redis
+  only and sits outside the `alita:cache:` prefix beside the existing `alita:captcha:refresh:cooldown:*`, so
+  `CLEAR_CACHE_ON_STARTUP` keeps it; a Redis flush loses the open challenges and those members time out as usual.
 - `staff_actions` and `staff_action_groups` are the staff audit record (migration 20261005120000). They are read only
   through fresh queries, never cached (so no `DeleteCache` applies to them), and never part of
   backup/export/import/reset. A record is created at Confirm and a failed create aborts the card; each group's prior
@@ -486,6 +495,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `alita:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
   must `DeleteCache` it after commit.
+- Turnstile captcha: a Turnstile attempt is an ordinary `captcha_attempts` row whose answer is the reserved `ts1:` plus
+  32 hex characters (`captchaweb.NewReservedAnswer`); there is no second table or kind column, so the one attempt per
+  `(user, chat)`, the timer, the cleanup tick and restart recovery cover it unchanged. The pass path is
+  `claimCaptchaPass` (held messages read, `CompleteCaptchaAttemptAtomic`, unmute) then `finishCaptchaPass` (summary,
+  challenge deleted, success note, greeting), shared by the `captcha_verify` callback and the web verify so the two
+  cannot drift. The web finish runs through `startCaptchaLifecycleTask` (drained by `StopCaptchaLifecycle`, so there is
+  no new shutdown drain) or inline when the lifecycle is not running, and the work after the claim runs on
+  `context.WithoutCancel` with its own 20 s deadline, so a client that disconnects never abandons an unmute. The page
+  decides nothing: a pass needs signed `initData` whose `user.id` is the challenge's user and a `siteverify` success
+  that echoes the expected hostname, `captcha_join` and the `cdata` (`hex(sha256("cd1:" + token))`). The package
+  `alita/utils/captchaweb` imports the standard library, go-redis and logrus only; its `Backend` implementation is
+  `alita/modules/captcha_web.go` (`captchaWebBackend`), and `ConfigureCaptchaWeb` installs the runtime.
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with

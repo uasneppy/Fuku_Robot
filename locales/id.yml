@@ -930,6 +930,13 @@ captcha_welcome_math_text: |
   <b>%s = ?</b>
 
   ⏱ Anda punya <b>%d menit</b> untuk menjawab.
+captcha_web_welcome: |
+  👋 Selamat datang %s!
+
+  Ketuk tombol di bawah untuk memverifikasi bahwa Anda manusia.
+
+  ⏱ Anda punya <b>%d menit</b> untuk menyelesaikannya.
+captcha_web_button: Verifikasi dengan Turnstile
 captcha_failed_verify: Gagal memverifikasi. Silakan hubungi admin.
 captcha_wait_refresh: Silakan tunggu beberapa detik sebelum meminta gambar baru.
 captcha_failed_generate: Gagal membuat gambar baru, coba lagi.
