@@ -21,9 +21,10 @@ Template sections that assume CSS, fonts, pixels or colour are replaced by their
 (message layout, text styling, status icons, keyboard layout). Nothing here adds a setting: every control
 calls the apply function its command uses (D-17).
 
-Items that conflict with the code or with an earlier phase are NOT applied silently; they are listed in
-"Amendments proposed" at the end. Where an amendment changes a screen, the screen below follows CONTEXT as
-written and says "see A-n".
+09-CONTEXT.md D-20..D-24 (the orchestrator's decisions after the first draft of this contract) are applied
+throughout; the section "Decisions applied" at the end maps each one to the screens that implement it.
+D-21 matters most: a menu opened in the group is readable by every member, so the Staff Group page has two
+variants and a group menu never shows the Staff Group's title or ID, anywhere.
 
 ---
 
@@ -170,10 +171,10 @@ redraw reads through the same cached getters the commands use.
 | Kind | Shown as | Rule |
 |------|----------|------|
 | New short refusals made for the menu (`settings_not_your_menu`, `settings_not_admin`, `settings_no_restrict`, `settings_check_failed`, bounds) | alert (`show_alert=true`), plain text, at most 200 characters | the page is not edited |
-| Reused command texts (Staff link/unlink refusals, Turnstile refusals, lockdown lift results, `chat_status_bot_not_admin`) | notice line on the redrawn page, `⚠️ ` plus the text (HTML) | some contain `<code>`, a group title or exceed 200 characters in other languages (Phase 8 allowed 224), so they can never be an alert. The callback is answered empty |
+| Reused command texts (Staff link/unlink refusals, Turnstile refusals, lockdown lift results, `chat_status_bot_not_admin`) | notice line on the redrawn page, `⚠️ ` plus the text (HTML) | some contain `<code>`, a group title or exceed 200 characters in other languages (Phase 8 allowed 224), so they can never be an alert. The callback is answered empty. In a group menu every reused Staff text is checked against the privacy table under "Existing keys reused" first (D-21): none of those allowed names the Staff Group, and the `{group}` they carry is always THIS group |
 | Expired confirm | notice line `settings_card_expired`, page redrawn without the card | nothing was changed |
 | Success of link, unlink, lift | notice line with `✅ ` | other successes (toggle, stepper, choice) show only the new value, no notice |
-| Menu cannot render | alert `settings_cannot_open_alert` plus the message edited to `settings_cannot_open`, no keyboard (D-11) | "group no longer exists", "bot was removed", a failed fresh read of the page's own data |
+| Menu cannot render | alert `settings_cannot_open_alert` plus the message edited to `settings_cannot_open`, no keyboard (D-11) | "group no longer exists", "bot was removed", a failed fresh read of the page's own data. This is the one generic read-failure behaviour for the Captcha and Antiflood pages (their getters return a value or an error) and for the Main and Staff Group pages' database reads (D-11). Only the Lockdown page has its own softer read-failure body (`settings_lockdown_unreadable` plus Refresh), because its state can be re-read at once |
 
 ### Entry: `/settings` in a group (MENU-01, D-01)
 
@@ -223,7 +224,7 @@ text as a notice.
 | Stepper | Range | Buttons | Notes |
 |---------|-------|---------|-------|
 | Join surge / Flood / AI spam threshold | 3..500 (`raiddetection.MinThreshold/MaxThreshold`) | `−10`, `−1`, value, `+1`, `+10` | a threshold write also turns the trigger on (command rule, D-13); the toggle label then shows On |
-| Antiflood limit | Off, 3..100 (`/setflood`: `3..100`, `off`/`0` disables) | `−10`, `−1`, value ("Off" or the number), `+1`, `+10` | Off sits below 3. From 3, `−1` and `−10` give Off. From Off, `+1` gives 3 and `+10` gives 12. The lowest and highest stops are described below |
+| Antiflood limit | Off, 3..100 (`/setflood`: `3..100`, `off`/`0` disables; D-20) | `−10`, `−1`, value (`settings_state_off_plain` "Off", or the number), `+1`, `+10` | Off sits below 3. From 3, `−1` and `−10` give Off. From Off, `+1` gives 3 and `+10` gives 12. The lowest and highest stops are described below |
 | Captcha time limit | 1..10 minutes | `−1`, value (`2 min`), `+1` | 3 buttons |
 
 At a bound the unusable step buttons are labelled `·` (a middle dot) and keep valid callback data. Pressing one answers a
@@ -259,15 +260,24 @@ longer reach it.") with the same two rows.
 | Open the menu, view any page | creator or administrator of the group | `settings_not_admin` / `settings_check_failed` (alert) |
 | Lift lockdown (ask and Yes) | creator, or administrator with `can_restrict_members` (`lockdownButtonAuthority` rule) | `settings_no_restrict` (alert); not an admin: `settings_not_admin` |
 | Lockdown trigger switch and threshold | same as Lift (`requireAutoLockdownAuthority`, change branch) | same as Lift |
-| Staff Group Link | live creator of this group and of the chosen Staff Group (`runLinkGroup`'s checks) | the command's refusal text through `staffLinkRefusalText`, as a notice |
-| Staff Group Unlink (ask and Yes) | live creator of this group and of its Staff Group (`/unlinkstaff`'s checks) | `staff_unlink_refuse_*` / `staff_unlink_not_linked`, as a notice |
-| Captcha on/off | admin AND the bot an admin (`captchaAdminGate(..., true)`) | `chat_status_bot_not_admin`, as a notice |
-| Captcha mode, time limit, failure action | admin (`captchaAdminGate(..., false)`) | alerts above |
-| Captcha mode Turnstile | the three ordered refusals of `captchaWebModeRefusal` (not set up, no Redis `PING`, bot lacks Restrict) | `captcha_web_refuse_*`, as a notice; nothing is written |
-| Antiflood limit, action, delete switch | admin (what `/setflood`, `/setfloodmode`, `/delflood` check) | alerts above |
+| Staff Group Link | live creator of this group and of the chosen Staff Group (`runLinkGroup`'s checks) | the command's refusal text through `staffLinkRefusalText`, as a notice; not an admin: `settings_not_admin` (alert); lookup failed: `settings_check_failed` (alert) |
+| Staff Group Unlink (ask and Yes) | live creator of this group and of its Staff Group (`/unlinkstaff`'s checks) | `staff_unlink_refuse_*` / `staff_unlink_not_linked`, as a notice; not an admin: `settings_not_admin`; lookup failed: `settings_check_failed` |
+| Captcha on/off | admin AND the bot an admin (`captchaAdminGate(..., true)`, which is what `/captcha` checks) | not an admin: `settings_not_admin` (alert); lookup failed: `settings_check_failed` (alert); bot not an admin: `chat_status_bot_not_admin` as a notice |
+| Captcha mode, time limit, failure action | admin only (`captchaAdminGate(..., false)`) | not an admin: `settings_not_admin` (alert); lookup failed: `settings_check_failed` (alert) |
+| Captcha mode Turnstile | the above, then the three ordered refusals of `captchaWebModeRefusal` (not set up, no Redis `PING`, bot lacks Restrict) | `captcha_web_refuse_not_configured` / `_no_redis` / `_no_rights`, as a notice; nothing is written |
+| Antiflood limit, action, delete switch | admin only (what `/setflood`, `/setfloodmode`, `/delflood` check through `IsUserConnected(..., true, true)`) | not an admin: `settings_not_admin` (alert); lookup failed: `settings_check_failed` (alert) |
 
 A control the presser lacks the right for is still drawn (hiding it would make the page differ by person and hide why);
-the press is refused.
+the press is refused. For a Lift or lockdown trigger press the refusals are `settings_no_restrict` (admin without
+`can_restrict_members`), `settings_not_admin` and `settings_check_failed`, all alerts.
+
+Planner flag (parity, D-05/D-19): this contract assumes, from reading `captcha.go` and `antiflood.go`, that `/captcha`
+needs a plain admin plus the bot being an admin, that `/captchamode`, `/captchatime` and `/captchaaction` need a plain
+admin only, and that `/setflood`, `/setfloodmode` and `/delflood` need a plain admin only. The planner must confirm each of
+these in code (including every `RequireBotAdmin` and `IsUserConnected` call) before writing the apply functions, and the
+authority-parity test must prove that a press the command would refuse is refused and a press the command would allow is
+allowed, so the menu never does more or less than the command. If a command checks more (for example a bot right), the menu
+checks the same and uses the command's refusal text as a notice.
 
 ---
 
@@ -294,13 +304,23 @@ Only Alex can use this menu.                     <- group menu only
 
 Button label = page icon + page name + ` · ` + state. States: Staff Group: `Linked`, `Not linked`, or `{count} linked`
 when this group is itself a Staff Group; Lockdown: `Not active`, `Active`, `Lifting`; Captcha: `On` / `Off`
-(`common_status_on/off`); Antiflood: `Limit {n}` or `Off`. A read that fails leaves the state out and appends ` · ❔`.
+(`common_status_on/off`); Antiflood: `Limit {n}` or `Off` (`settings_state_off_plain`). A read that fails leaves the state out and appends ` · ❔`.
+In a menu opened in the group the Staff Group state is only `Linked` / `Not linked` (D-21 allows "linked or not"; no name).
 The loader makes four reads (staff link fresh, lockdown fresh, captcha cached, antiflood cached) and no Telegram call.
 The "Only {name} can use this menu." line is shown in a group menu, with the opener's name escaped after translation.
 
-### Staff Group - in a linked group (D-12, MENU-05)
+### Staff Group - the two variants (D-12, D-21, MENU-05)
 
-Linked:
+The page is chosen by who can read the message:
+
+| Menu | Group being configured | Variant |
+|------|-----------------------|---------|
+| private | linked or not linked | (a) full: the Staff Group's title and ID are shown |
+| private | itself a Staff Group | (a) read-only panel (next section) |
+| opened in the group | itself a Staff Group | (a) read-only panel (the readers are the Staff Group's own members, as for `/staff`) |
+| opened in the group | linked or not linked | (b) masked: never the Staff Group's title or ID, in any line, button, picker, card or notice |
+
+#### (a) Private menu, group linked
 
 ```
 ⚙️ Settings · Staff Group
@@ -313,16 +333,44 @@ Bot is admin: ✅ | Can restrict members: ✅ | Owner matches: ✅
 
 Updated 14:05:09 UTC
 
-[ 🔄 Refresh | ➖ Unlink ]
+[ 🔄 Refresh ]
+[ ➖ Unlink Staff Group ]
 [ ⬅️ Back | ✖️ Close ]
 ```
 
-A broken row adds the `staff_panel_reason_*` line under the status row, exactly like `renderStaffRow`; the lockdown
-line appears only while a lockdown is confirmed (`staff_panel_row_lockdown`). Health comes from one
-`buildStaffPanelRows` call for this one link (at most 3 live Telegram calls). See A-2 for the Staff Group name and ID in
-a menu opened in the group.
+#### (b) Menu opened in the group, group linked
 
-Not linked:
+```
+⚙️ Settings · Staff Group
+Fuku Test Group  -1001234567890
+
+Linked to a Staff Group.
+Bot is admin: ✅ | Can restrict members: ✅ | Owner matches: ✅
+🔒 In lockdown since 30 Oct 14:02
+✅ yes | ❌ no | ❔ could not be checked
+
+Updated 14:05:09 UTC
+
+[ 🔄 Refresh ]
+[ ➖ Unlink Staff Group ]
+[ ⬅️ Back | ✖️ Close ]
+```
+
+The only difference is line 1 of the body: `settings_staff_linked_to` (name and ID) in (a), `settings_staff_linked_hidden` in (b).
+The health row, the lockdown row and the legend are the same in both (they say nothing about the Staff Group). A broken row
+adds the `staff_panel_reason_*` line under the status row, exactly like `renderStaffRow`; the lockdown line appears only while a
+lockdown is confirmed (`staff_panel_row_lockdown`). Health comes from one `buildStaffPanelRows` call for this one link (at
+most 3 live Telegram calls).
+
+Live build failures (both variants). The callback is answered empty first, so the page is always edited afterwards:
+- the 45 s `staffPanelBuildTimeout` runs out, or one health or owner lookup gets no answer: the row is kept and drawn with
+  `❔` icons and the `staff_panel_reason_owner_unknown` line, exactly as `buildStaffPanelRows` already produces for a check
+  that got no answer; the Refresh button is there to retry. Unlink stays on the page (its press does its own live checks);
+- the owner check finds the link was removed (the owner changed): the page is drawn as "Not linked", with no notice (the
+  removal already posted its own Staff Group notice);
+- the link read from the database fails: the generic D-11 cannot-open edit.
+
+#### Not linked (both variants, no Staff Group is named)
 
 ```
 ⚙️ Settings · Staff Group
@@ -337,8 +385,11 @@ Only the creator of this group who also created a Staff Group can link it.
 
 Link press: `resolveOwnStaffGroup` decides. Exactly one verified Staff Group: link at once through `runLinkGroup`'s code
 (including its post to the Staff Group, nothing posted into the linked group) and redraw with notice
-`✅ This group is now linked to your Staff Group.` None: notice with `staff_link_no_staff_group`. More than one: the
-picker (A-3):
+`✅ This group is now linked to your Staff Group.` (no name, in both variants) None: notice with
+`staff_link_no_staff_group`. More than one: the picker (D-22). The command's "need a Staff Group ID" refusal
+(`staff_link_need_staff_id`) is never shown, because the picker replaces it.
+
+Picker, private menu (titles allowed):
 
 ```
 ⚙️ Settings · Staff Group
@@ -351,11 +402,32 @@ Which Staff Group should this group join?
 [ ⬅️ Back | ✖️ Close ]
 ```
 
-One button per Staff Group the user owns (`ListStaffGroupsByOwner`, at most 8 shown, label `👥 ` plus the title cut at 20 runes,
-callback `a=lk&s=<staff chat id>`). A pick is verified live again by `resolveNamedStaffGroup`; a refusal is a notice.
+Picker, menu opened in the group (no titles, no IDs; D-21):
 
-Unlink press: `[ ➖ Unlink ]` opens the Unlink card; Yes runs `/unlinkstaff`'s code, redraws as "Not linked" with notice
-`✅ This group is no longer linked to a Staff Group.`
+```
+⚙️ Settings · Staff Group
+Fuku Test Group  -1001234567890
+
+Which Staff Group should this group join?
+Not sure which is which? Open this menu in private to see their names.
+
+[ 👥 Staff Group 1 ]
+[ 👥 Staff Group 2 ]
+[ ⬅️ Back | ✖️ Close ]
+```
+
+One button per Staff Group the presser owns (`ListStaffGroupsByOwner`, at most 8 shown). Private label: `👥 ` plus the title cut
+at 20 runes (`staffButtonTitle`). Group label: `settings_btn_staff_pick_n` with the 1-based position, never a title.
+Callback `a=lk&s=<Staff Group row ID>`. `s` is the `staff_groups` row ID (a small internal number), not the Staff Group's
+chat ID, because Telegram delivers a message's callback data to every member's client, so a chat ID in `s` of a group menu
+would leak it to anyone who can read raw data (see "Decisions applied", D-21). At the press the handler re-lists
+`ListStaffGroupsByOwner(presser)`, picks the row whose ID equals `s` (position is never used to choose, so a reordered list
+cannot link the wrong group), then verifies it live with the `resolveNamedStaffGroup` checks. An `s` that matches no row of the
+presser, or a failed live check, is a notice with the command's own refusal (`staff_link_refuse_not_staff_owner` or
+`staff_check_failed`).
+
+Unlink press: `[ ➖ Unlink Staff Group ]` opens the Unlink card (its text names only THIS group); Yes runs `/unlinkstaff`'s
+code and redraws as "Not linked" with notice `✅ This group is no longer linked to a Staff Group.`
 
 ### Staff Group - opened inside a Staff Group (read-only, D-12)
 
@@ -390,6 +462,10 @@ This is a Staff Group. Link or unlink a group from that group's own settings men
 ```
 
 No linked groups: `staff_panel_no_links` replaces the header, no legend. Prev/Next carry `a=pg&v=<page>`; the page is clamped.
+This page shows the full information in a private menu and in a menu opened inside the Staff Group (D-21): its readers are the
+Staff Group's own members, the same people `/staff` already shows it to. If the 45 s build times out or a row's check gets no
+answer, those rows are drawn with `❔` and their reason line, as `/staff` does; a database failure listing the links is the
+generic D-11 cannot-open edit.
 
 ### Lockdown (D-13, MENU-06)
 
@@ -497,12 +573,14 @@ Delete flood messages: ❌ Off
 [ ⬅️ Back | ✖️ Close ]
 ```
 
-- Limit Off: the first body line is `Antiflood is off. Set a limit to turn it on.`; the stepper's middle button reads `Off`; the action and delete lines
+- Limit Off: the first body line is `Antiflood is off. Set a limit to turn it on.`; the stepper's middle button reads `Off`
+  (`settings_state_off_plain`, a plain word with no icon, also used for "Antiflood · Off" on Main); the action and delete lines
   stay (they are stored).
+- A read failure of this page (or of Captcha) is the generic D-11 cannot-open edit, not a page-specific body.
 - Presses: stepper `a=st&t=l&v=0|3..100`; action `a=st&t=m&v=mute|ban|kick`; delete `a=tg&t=d&v=0|1`. They call the apply code of
   `/setflood`, `/setfloodmode`, `/delflood`.
 - A stored action other than mute, ban or kick (the database allows `warn`, `tban`, `tmute`; no command writes them,
-  see A-1) is shown on the Action line (`Warn`, `Timed ban`, `Timed mute`) with the line
+  D-20) is shown on the Action line (`Warn`, `Timed ban`, `Timed mute`) with the line
   `This action cannot be set from the menu. Pick one of the buttons below to replace it.` and NO button in the choice
   row is marked selected.
 
@@ -523,7 +601,7 @@ negative chat ID is not expanded. Prefix `settings|v1|` is 12 bytes.
 | `t` | control | Lockdown: `j` join surge, `f` flood, `a` AI. Captcha: `e` enabled, `m` mode, `t` time, `f` failure action. Antiflood: `l` limit, `m` action, `d` delete | 3 |
 | `v` | target value | `0`/`1`, a number up to 3 digits, or `math` `text` `turnstile` `kick` `ban` `mute` | 3 to 11 |
 | `e` | confirm expiry, unix minutes | 8 digits until the year 2160 | 10 |
-| `s` | Staff Group chat ID (Link pick) | up to 14 characters with the sign | 16 |
+| `s` | Staff Group row ID (`staff_groups.id`, Link pick). Never the Staff Group's chat ID: callback data of a group menu reaches every member's client (D-21) | up to 10 digits | 12 |
 
 Action codes: `oh` open here (choice message), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back,
 `cl` Close, `tg` toggle, `st` set a value, `ls` Lift ask, `ly` Lift Yes, `ua` Unlink ask, `uy` Unlink Yes, `lk` Link (with
@@ -546,7 +624,7 @@ Worst case per button, with `c` = `-1001234567890` (14 characters) and `u` = `12
 | Unlink Yes | `settings\|v1\|a=uy&c=-1001234567890&e=29800000` | 44 | 40 |
 | Cancel a card | `settings\|v1\|a=no&c=-1001234567890&p=l` | 37 | 33 |
 | Link | `settings\|v1\|a=lk&c=-1001234567890` | 33 | 29 |
-| Link pick | `settings\|v1\|a=lk&c=-1001234567890&s=-1001111111111` | 50 | 46 |
+| Link pick (`s` = row ID, 10 digits) | `settings\|v1\|a=lk&c=-1001234567890&s=4294967295` | 46 | 42 |
 | Staff panel Prev/Next (page up to 3 digits) | `settings\|v1\|a=pg&c=-1001234567890&v=999` | 39 | 35 |
 
 Largest button: 53 bytes (private Turnstile choice). Headroom of 11 bytes. If Telegram ever issues 16-digit user IDs
@@ -571,7 +649,7 @@ translation, never truncate in code). Alert keys must also fit Telegram's 200-ch
 
 | Element | Copy |
 |---------|------|
-| Primary CTA | Choice message: `settings_btn_open_here` "💬 Open here" and `settings_btn_open_private` "📩 Open in private". In the menu: the page's own control. For linking: `settings_btn_link` "➕ Link to a Staff Group" |
+| Primary CTA | Choice message: `settings_btn_open_here` "💬 Open here" and `settings_btn_open_private` "📩 Open in private". In the menu: the page's own control. For linking: `settings_btn_link` "➕ Link to a Staff Group"; for unlinking: `settings_btn_unlink` "➖ Unlink Staff Group" |
 | Empty state heading | Not applicable (no collection). Nearest equivalents: `settings_staff_not_linked` "This group is not linked to a Staff Group." and `settings_lockdown_none` "🔓 This group is not in lockdown. Start one with /lockdown." |
 | Empty state body | `settings_staff_link_hint` "Only the creator of this group who also created a Staff Group can link it." (next step: the Link button). Staff Group with no links: reused `staff_panel_no_links` |
 | Error state | Page read failed: `settings_cannot_open` "I can't open this menu right now: the group isn't available to me. Send /settings in the group to try again." Lockdown read failed: `settings_lockdown_unreadable` plus Refresh. Rights lookup failed: `settings_check_failed` |
@@ -604,17 +682,21 @@ key renders an empty button or message, so `make check-translations` and the loc
 | `settings_state_lock_active` | Active | 14 | 20 |
 | `settings_state_lock_lifting` | Lifting | 14 | 20 |
 | `settings_state_limit` | Limit {n} | 14 | 20 |
+| `settings_state_off_plain` | Off | 10 | 14 |
 | `settings_btn_back` | ⬅️ Back | 12 | 16 |
 | `settings_btn_close` | ✖️ Close | 12 | 16 |
 | `settings_btn_yes` | ✅ Yes | 12 | 16 |
 | `settings_btn_no` | ❌ No | 12 | 16 |
-| `settings_staff_linked_to` | `Linked to: <b>{staff}</b> <code>{id}</code>` | 60 | 84 |
+| `settings_staff_linked_to` | `Linked to: <b>{staff}</b> <code>{id}</code>` (private menu only; excluding the title, which is spliced in) | 60 | 84 |
+| `settings_staff_linked_hidden` | Linked to a Staff Group. (the group-menu line: no title, no ID; D-21) | 40 | 56 |
+| `settings_btn_staff_pick_n` | 👥 Staff Group {n} (group-menu picker label by position; D-21) | 24 | 32 |
+| `settings_staff_pick_private_hint` | Not sure which is which? Open this menu in private to see their names. (group-menu picker only) | 80 | 112 |
 | `settings_staff_not_linked` | This group is not linked to a Staff Group. | 60 | 84 |
 | `settings_staff_link_hint` | Only the creator of this group who also created a Staff Group can link it. | 100 | 140 |
 | `settings_staff_readonly` | This is a Staff Group. Link or unlink a group from that group's own settings menu. | 110 | 154 |
 | `settings_staff_pick` | Which Staff Group should this group join? | 60 | 84 |
 | `settings_btn_link` | ➕ Link to a Staff Group | 28 | 38 |
-| `settings_btn_unlink` | ➖ Unlink | 16 | 22 |
+| `settings_btn_unlink` | ➖ Unlink Staff Group | 28 | 38 |
 | `settings_notice_linked` | This group is now linked to your Staff Group. | 70 | 98 |
 | `settings_notice_unlinked` | This group is no longer linked to a Staff Group. | 70 | 98 |
 | `settings_lockdown_none` | 🔓 This group is not in lockdown. Start one with /lockdown. | 80 | 112 |
@@ -669,15 +751,26 @@ choice-row buttons (`✅ ` plus option) at most 13 EN / 15 other; every [alert] 
 (the ceilings above leave room); every rendered page at most 3800 UTF-16 units in all 7 locales with the worst-case
 group title, name and reason.
 
+Privacy test requirement (D-21). With a Staff Group whose title and chat ID are distinctive marker strings (and a title
+full of `&`, `<` and multibyte characters), render in a menu opened in the group, in all 7 locales: the Main page, the Staff
+Group page linked and not linked, the Link picker with one and with several owned Staff Groups, the Unlink card, and every
+notice and alert reachable from them (link success, each `staff_link_refuse_*`, `staff_unlink_refuse_*`, `staff_check_failed`,
+`staff_link_no_staff_group`, an expired card, a bad `s`). Assert that neither the marker title nor the marker chat ID appears
+in any message text, button label, notice or alert text. Assert that no callback data of a group menu contains the Staff
+Group's chat ID (the `s` field is the row ID). The same render in a private menu and in a menu opened inside the Staff Group
+may contain them (variant (a)). Locale parity also asserts that the reused Staff texts keep the placeholders listed in the
+privacy table in all 7 languages.
+
 Placeholders: `{state}` is the icon plus `common_status_on` / `common_status_off` ("✅ On" / "❌ Off"); `{mode}` and `{action}`
 are the option words above; `{desc}` is `captcha_mode_*_desc`; `{threshold}`, `{n}`, `{min}`, `{max}`, `{count}` are numbers;
-`{group}`, `{staff}`, `{name}`, `{reason}` are escaped user text spliced in after translation.
+`{group}`, `{staff}`, `{name}`, `{reason}` are escaped user text spliced in after translation. `{staff}` and its `{id}` exist
+only in `settings_staff_linked_to`, which is rendered in a private menu and nowhere else. `settings_state_off_plain` is a plain
+word without an icon (stepper middle button, Main-page label); toggle `{state}` values keep using `common_status_on/off`
+with their icon.
 
-Added only if amendment A-2 is accepted:
-
-| Key | English | Max EN | Max other |
-|-----|---------|--------|-----------|
-| `settings_staff_linked_hidden` | Linked to a Staff Group. | 40 | 56 |
+Keys every locale and privacy test must cover (unconditional): `settings_staff_linked_hidden`, `settings_btn_staff_pick_n`,
+`settings_staff_pick_private_hint` and `settings_state_off_plain`, together with all other keys in the table above (the locale
+parity test, the empty-value check and the ceiling checks run over the whole `settings_` set).
 
 ### Help text (`settings_help_msg`)
 
@@ -703,7 +796,34 @@ Its length is held under one message in every locale by a test like `TestLockdow
 ### Existing keys reused unchanged (the "same words as the command" rule, D-05)
 
 These already exist in all 7 locales and are not re-translated. Reusing them is how the menu shows the command's own
-refusal and state wording; CONTEXT D-10's "new `settings_*` keys" is read as "new keys for new menu text", see A-4.
+refusal and state wording (D-23); new `settings_*` keys cover only new menu text.
+
+#### Privacy check of every reused Staff text (D-21)
+
+A menu opened in the group is readable by every member, so each reused Staff key was read in `locales/en.yml` for whether it
+can name a Staff Group by title or ID. Result for the English text (the other six languages carry the same placeholders,
+which a test checks):
+
+| Key | Can it name the Staff Group by title or ID? | Placeholders | In a group menu |
+|-----|---------------------------------------------|--------------|-----------------|
+| `staff_link_no_staff_group` | no | none | used as is |
+| `staff_link_need_staff_id` | no, but it tells the user to type an ID, which the menu never needs | none | never shown (the picker replaces it) |
+| `staff_link_invalid_id` | no; its example ID is a fixed sample, not a real one | none | never shown (`s` is a row ID checked by lookup, a bad one is `staff_link_refuse_not_staff_owner`) |
+| `staff_link_refuse_not_staff_owner` | no | none | used as is |
+| `staff_link_refuse_not_supergroup`, `_target_is_staff`, `_not_target_owner`, `_already_linked`, `staff_link_check_failed_group` | no; `{group}` is THIS group's escaped title (already in the header). `_already_linked` says "a Staff Group" without a name | `{group}` | used as is |
+| `staff_link_warn_bot_*` | no | none | used as is |
+| `staff_link_done` | yes (posts this group's title and ID, posted into the Staff Group) | `{group}`, `{id}` | never rendered in a menu; it is delivered to the Staff Group exactly as the command does. The menu shows `settings_notice_linked` instead |
+| `staff_unlink_not_linked` | no | none | used as is |
+| `staff_unlink_refuse_not_owner` | no | none | used as is |
+| `staff_unlink_refuse_not_group_owner`, `staff_unlink_check_failed_group`, `staff_unlink_confirm_prompt` | no; `{group}` is THIS group | `{group}` | used as is |
+| `staff_check_failed` | no | none | used as is |
+| `staff_panel_row_status`, `staff_panel_row_lockdown`, `staff_panel_reason_*`, `staff_panel_legend`, `staff_panel_updated` | no | numbers, icons, time | used as is |
+| `staff_panel_chat_id`, `staff_panel_links_header`, `staff_panel_no_links`, `staff_panel_page`, `staff_panel_truncated` | `staff_panel_chat_id` names the Staff Group's own ID | `{chat_id}`, `{count}`, page numbers | rendered only on the read-only Staff Group panel (variant (a)), never in a menu of a linked or unlinked group |
+| `staff_notice_*`, `staff_panel_unlink_button`, `staff_panel_add_group_button`, `staff_panel_recent_button` | `staff_notice_*` can name groups and users | various | never used by the menu |
+
+Masked fallback: no reused key needed one, because every reachable text names only THIS group. The fallback rule for a future
+reused key that can name the Staff Group is: in a group menu use the generic `settings_notice_linked` / `settings_notice_unlinked`
+/ `staff_check_failed`, and send the full text to the private chat or the Staff Group instead, as `staff_link_done` already is.
 
 | Use | Keys |
 |-----|------|
@@ -718,7 +838,7 @@ refusal and state wording; CONTEXT D-10's "new `settings_*` keys" is read as "ne
 
 ## UI Considerations
 
-Applicable state considerations resolved: 14 covered, 2 backstop, 2 unresolved.
+Applicable state considerations resolved: 16 covered, 2 backstop, 2 unresolved.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -728,14 +848,16 @@ Applicable state considerations resolved: 14 covered, 2 backstop, 2 unresolved.
 | partial | a health or owner check with no answer; a stored antiflood action the menu cannot set; AI checks not configured | ✅ covered | `❔` icon with the panel's own reason line; read-only action line with note and no selected button; `lockdown_auto_ai_unavailable` line |
 | long-text | group title, staff title, names, lockdown reason; hi/ru/pt/es labels | ✅ covered | cut at 64 runes (title, name) and 200 runes (reason) before escaping; per-key ceilings; labels never truncated in code; 3800-unit cap test in 7 locales |
 | overflow | many linked groups in a Staff Group; Link picker with many owned Staff Groups | ✅ covered | 8 per page with Prev/Next (panel rule); picker shows at most 8 and its Back/Close |
-| zero-one-many | one vs several owned Staff Groups on Link | ✅ covered | exactly one links at once; several open the picker (A-3); none gives `staff_link_no_staff_group` |
+| zero-one-many | one vs several owned Staff Groups on Link | ✅ covered | exactly one links at once; several open the picker (D-22); none gives `staff_link_no_staff_group` |
 | permissions | non-admin, demoted opener, admin without restrict, not owner, bot not admin | ✅ covered | "Authority per control" table; refusals as alerts or notices; nothing written |
 | double-submit | repeated tap on a stepper or toggle; Yes pressed twice | ✅ covered | absolute target values make steppers and toggles idempotent; the lift's conditional update (`BeginLift`) and the unlink's conditional delete make Yes safe; a second Yes sees the already-done state and shows its notice |
 | stale | menu left open; confirm older than 5 minutes; value changed by command meanwhile | ✅ covered | lazy 5-minute expiry; every press re-reads the live right; the redraw shows the current stored value |
 | bounds | stepper at 3, 500, 100, Off, 1, 10 | ✅ covered | `·` labels and bound toasts; steps clamp to the bound |
 | unavailable | basic group lockdown; Turnstile not configured, no Redis, bot lacks right | ✅ covered | basic-group note with no controls; `🚫 Turnstile` plus the three ordered refusals; fallback note when stored mode is turnstile |
 | cross-replica | a change on replica A, redraw on replica B | ✅ covered | stateless callbacks; the redraw after a write uses the apply result; the plan checks each read key against `skipLocal` (D-18) |
-| group-menu privacy | the menu is readable by every member of the group | ✅ covered, see A-2 | the lines it reveals are listed in A-2 |
+| group-menu privacy | the menu is readable by every member of the group | ✅ covered | rule D-21 applied: the masked Staff Group page (variant (b)), positional picker labels, row-ID `s` field, no Staff Group title or ID in any text, label, notice or alert; reused texts classified in the privacy table. Test requirement below |
+| loading / timeout | Staff Group page build runs out of time or a health check gets no answer | ✅ covered | rows drawn with `❔` and the owner-unknown reason line, Refresh retries; a removed link draws "Not linked"; a database failure is the generic D-11 cannot-open edit |
+| read failure | Captcha and Antiflood getters fail | ✅ covered | generic D-11 cannot-open edit and alert; no page-specific body |
 | real client behaviour | URL button into `/start` for a user who never started the bot; Close on a message older than 48 h in private; callback `show_alert` rendering on iOS, Android, Desktop; button truncation in hi and ru | 🧪 backstop | deferred to the real-device checklist `09-SPIKE.md` (CONTEXT: live checks deferred) |
 | edit rate limits | very fast stepper tapping gives a 429 on `editMessageText` | 🧪 backstop | not retried, value already saved, next press redraws; observe in the spike |
 | menu auto-close | a group menu or choice message that nobody closes | ⚠ unresolved | deferred idea in CONTEXT; the message stays until used or closed. Planner treats it as an accepted limit |
@@ -754,53 +876,31 @@ No UI library, icon set, font or CSS framework is used. The registry vetting gat
 
 ---
 
-## Amendments proposed
+## Decisions applied
 
-CONTEXT is treated as locked. The following came out of reading the code and earlier phases. None is applied in this
-contract unless stated; each says what changes if accepted.
+09-CONTEXT.md D-20..D-24 are settled; each maps to the screens that implement it.
 
-**A-1. Antiflood actions (D-15).** CONTEXT lists "mute, ban, kick, warn" as selectable and `tban`/`tmute` as command-only
-because they need a duration. In the code, `/setfloodmode` accepts only `ban`, `kick`, `mute` (`antiflood.go`, `setFloodMode`),
-nothing writes `warn`, `tban` or `tmute` to `antiflood_settings`, and no command takes a duration for antiflood. Making `warn`
-selectable would change `/setfloodmode`'s accepted words (D-17 forbids changing observable replies). This contract therefore
-offers mute, ban and kick, and shows a stored `warn`, `tban` or `tmute` as the current value without a selected button.
-It never says a command can set them. The limit range is also the command's: Off, then 3..100 (not "any number").
-If accepted: D-15 reads "mute, ban, kick; other stored values are shown read-only".
+| Decision | What it fixes | Where it is implemented in this contract |
+|----------|---------------|------------------------------------------|
+| D-20 (antiflood actions) | The page offers mute, ban and kick only (what `/setfloodmode` accepts). A stored `warn`, `tban` or `tmute` is shown read-only with a note and no selected button, and is never said to be settable by a command. The limit is Off, then 3..100 | Antiflood page (action row, read-only note, limit Off line); stepper table (range, Off position); keys `settings_opt_warn/tban/tmute`, `settings_antiflood_action_note`, `settings_state_off_plain` |
+| D-21 (privacy) | A menu opened in the group never shows the Staff Group's title or ID. Private menu and a menu opened inside a Staff Group show full information | Staff Group page variants (a) and (b) and their selection table; masked line `settings_staff_linked_hidden`; Main-page state `Linked` / `Not linked` only; group-menu picker labelled by position (`settings_btn_staff_pick_n`) with `settings_staff_pick_private_hint`; callback field `s` is the Staff Group row ID, never the chat ID, because a message's callback data is delivered to every member's client; privacy table of reused Staff keys; privacy test requirement |
+| D-22 (Link picker) | A stateless picker, one button per owned Staff Group, each verified live at the press, then the `/linkstaff` function | Staff Group page, Link press and both pickers; action `lk` with field `s`; key `settings_staff_pick`; refusals as notices through `staffLinkRefusalText` |
+| D-23 (reused strings) | The menu reuses the existing key wherever a command already has the refusal or state text; new `settings_*` keys only for new text | "Existing keys reused unchanged" with its privacy table; authority table's refusal column |
+| D-24 (value button) | A stepper's value button redraws the page (action `op`), which re-runs the live admin check; steppers send absolute targets so a double tap is harmless | Interaction Contract "Steppers"; callback action codes; Lockdown, Captcha and Antiflood mock-ups |
 
-**A-2. The Staff Group page in a menu opened in the group (D-12) reveals the link to every member.** A group menu is an
-ordinary group message. Showing "Linked to: <Staff Group title and ID>" and the bot's health there tells all members that
-the group is linked and to what, while Phase 1 (D-06) says nothing about a link is ever shown to the linked group's
-members, and `/linkstaff` deletes its own command message for the same reason. The Main-page state label (`Linked`) and the
-unlink/link notices have the same effect. As written, this contract follows D-12 literally for the private menu and the
-group menu alike. Proposed: in a menu opened in the group, replace the "Linked to" line with `settings_staff_linked_hidden`
-("Linked to a Staff Group."), omit the Staff Group's ID and title, and keep the health, owner and lockdown rows (they reveal
-nothing about the Staff Group); the full line stays in the private menu. Decision needed before planning.
-
-**A-3. A Link picker is needed (D-12 gap).** `/linkstaff` takes an optional Staff Group chat ID because an owner can have
-several Staff Groups (`resolveOwnStaffGroup` refuses "need a Staff Group ID" when more than one matches). D-08 allows no
-free-text input, so the menu needs a stateless picker: one button per Staff Group the user owns, data `a=lk&s=<staff chat id>`,
-re-verified live by `resolveNamedStaffGroup`. No new setting and no new state. Adds action `lk` with field `s` and the key
-`settings_staff_pick`. Included in this contract; flagged because it is more than D-12 states.
-
-**A-4. Reused keys (D-10).** D-10 says all strings are new `settings_*` keys. Reusing the existing `staff_*`, `lockdown_*`,
-`captcha_*` and `chat_status_*` texts is what makes "where a command refuses, the menu refuses with the same words"
-(Specifics, D-05) true without duplicating 7-language translations that could drift. This contract reuses them (table above)
-and adds `settings_*` keys only for new menu text. If the owner wants every string new, the reused rows become copies and the
-drift risk is accepted.
-
-**A-5. The value button is a refresh.** CONTEXT leaves the stepper's value button open. It is `a=op` (redraw this page), so
-it needs no special no-op path and every press still runs the live check of MENU-03. Not a conflict; stated for the planner.
+Implementation note for D-21 and D-22 together: the Link press re-lists the presser's own Staff Groups, matches the row whose
+ID equals `s`, and verifies it live. It never chooses by position and never trusts `s` as authority.
 
 ---
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS (no colour exists; status icons substitute, see Status Icons)
-- [ ] Dimension 4 Typography: PASS (HTML tags substitute, see Text Styling)
-- [ ] Dimension 5 Spacing: PASS (message layout substitutes, see Message Layout)
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
+- [ ] Dimension 1 Copywriting: PASS (re-check after the revision: new keys for the masked page and picker)
+- [ ] Dimension 2 Visuals: PASS (re-check after the revision: Staff Group page variants)
+- [x] Dimension 3 Color: PASS (no colour exists; status icons substitute, see Status Icons)
+- [x] Dimension 4 Typography: PASS (HTML tags substitute, see Text Styling)
+- [x] Dimension 5 Spacing: PASS (message layout substitutes, see Message Layout)
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
 
 **Approval:** pending
