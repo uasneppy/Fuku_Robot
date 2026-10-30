@@ -161,9 +161,11 @@ func settingsStartDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User,
 	return ext.EndGroups
 }
 
-// LoadSettings registers /settings and the settings| callback. The help text, the alt names
-// and the module switch arrive with the docs, so /help never lists a module without text.
+// LoadSettings registers /settings and the settings| callback, and lists the module in
+// /help (its text is settings_help_msg, its alt name comes from locales/config.yml).
 func LoadSettings(dispatcher *ext.Dispatcher) {
+	SetModuleEnabled(settingsModule.moduleName, true)
+
 	helpers.WrapCommand(dispatcher, settingsDesc, pipelineHandler(settingsModule.settings))
 	// No SetAllowChannel: a menu is never a channel message.
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("settings|"), settingsModule.settingsCallback))

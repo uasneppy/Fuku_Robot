@@ -3053,3 +3053,12 @@ settings_state_staff_n: "{count} vinculados"
 settings_trigger_ai: "Spam por IA: {state} · {threshold} veredictos de spam en 120 segundos"
 settings_trigger_flood: "Flood: {state} · {threshold} mensajes en 30 segundos"
 settings_trigger_joins: "Oleada de ingresos: {state} · {threshold} ingresos en 60 segundos"
+settings_help_msg: |
+  Gestiona este grupo desde un único menú de botones.
+
+  <b>Comandos de admin</b>:
+  × /settings: Abre el menú de ajustes, aquí en el grupo o en privado.
+
+  El menú cubre el vínculo con el Grupo de Staff, el bloqueo (estado, levantamiento y disparadores automáticos), el captcha y el antiflood. Cada cambio hecho en él equivale al comando correspondiente: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode y /delflood.
+
+  Un menú abierto en el grupo solo responde al admin que lo abrió. Cada pulsación comprueba que sigues siendo admin del grupo, y cada cambio exige el mismo permiso que su comando.

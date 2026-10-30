@@ -3043,3 +3043,12 @@ settings_state_staff_n: "{count} tertaut"
 settings_trigger_ai: "Spam AI: {state} · {threshold} vonis spam dalam 120 detik"
 settings_trigger_flood: "Flood: {state} · {threshold} pesan dalam 30 detik"
 settings_trigger_joins: "Lonjakan anggota: {state} · {threshold} anggota baru dalam 60 detik"
+settings_help_msg: |
+  Kelola grup ini dari satu menu tombol.
+
+  <b>Perintah admin</b>:
+  × /settings: Buka menu pengaturan, di grup ini atau secara pribadi.
+
+  Menu ini mencakup tautan Grup Staf, lockdown (status, pencabutan, dan pemicu otomatis), captcha, dan antiflood. Setiap perubahan di dalamnya sama dengan perintah yang sesuai: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, dan /delflood.
+
+  Menu yang dibuka di grup hanya menjawab admin yang membukanya. Setiap penekanan memeriksa bahwa Anda masih admin grup, dan setiap perubahan butuh hak yang sama dengan perintahnya.

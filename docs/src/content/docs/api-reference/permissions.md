@@ -416,6 +416,21 @@ CheckDisabledCmd checks if a command is disabled in the chat and handles deletio
 - `msg`
 - `cmd`
 
+## Settings menu
+
+`/settings` opens a button menu in the group or in private. Every press re-checks live, with `getChatMember`, that the
+presser is the creator or an administrator of the group being configured; the cached admin list is never used. A menu
+opened in the group answers only to the admin who opened it. Each control then needs the same right as the command it
+mirrors, and a control the presser lacks the right for is still drawn and its press refused.
+
+| Control | Right needed | Mirrors |
+|---------|--------------|---------|
+| Captcha on/off | Admin, and the bot an admin | `/captcha` |
+| Captcha mode, time limit and failure action | Admin | `/captchamode`, `/captchatime`, `/captchaaction` |
+| Antiflood limit, action and delete switch | Admin, and the bot an admin | `/setflood`, `/setfloodmode`, `/delflood` |
+| Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
+| Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
+
 ## Special Telegram IDs
 
 | ID | Description |
