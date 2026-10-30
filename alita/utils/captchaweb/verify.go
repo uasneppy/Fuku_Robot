@@ -18,12 +18,16 @@ const (
 	maxInitDataBytes       = 4096
 	maxTurnstileTokenBytes = 2048
 
-	// passWorkTimeout bounds the work after a pass is confirmed. It runs detached from the
-	// request, so a client that disconnects never abandons an unmute.
+	// passWorkTimeout bounds the work after a Cloudflare answer is in: a pass, a failed solve
+	// or an expiry. It runs detached from the request, so a client that disconnects never
+	// abandons an unmute or a kick.
 	passWorkTimeout = 20 * time.Second
 	// verifyWriteDeadline replaces the server's 10 s write timeout, which is shorter than a
 	// siteverify call plus the Telegram calls of a pass.
 	verifyWriteDeadline = 20 * time.Second
+	// botRightsTimeout bounds the live check of the bot's own Restrict right that runs
+	// before any Cloudflare call.
+	botRightsTimeout = 3 * time.Second
 )
 
 // Result is the decided answer of the verify route.
@@ -73,12 +77,28 @@ const (
 // Backend is the bot side of the web captcha: the attempt row, the claim, the unmute and the
 // greeting. alita/modules implements it, so this package never imports a package of the
 // module.
+//
+// Contract for every method that returns an error: it returns an error only when it changed
+// nothing (no claim, no Telegram write), so the handler may give the challenge back and the
+// member may try again. A method that changed something reports it through its result.
 type Backend interface {
+	// BotCanRestrict reports, from a live read bounded by ctx, whether the bot is the creator
+	// or an administrator with the Restrict right in chatID. An unknown answer is an error.
+	BotCanRestrict(ctx context.Context, chatID int64) (bool, error)
 	// Attempt reports, from a fresh read, whether the record's attempt can still be passed.
 	Attempt(ctx context.Context, rec Record) (AttemptStatus, error)
 	// Pass claims the attempt, unmutes the member and finishes the pass exactly as the
 	// button pass does. It is called only after the signed user and Cloudflare confirmed.
 	Pass(ctx context.Context, rec Record, user InitData) (PassResult, error)
+	// Fail applies the group's failure action to a member whose solve provably failed, once,
+	// through the same function the timer uses. claimed is true when this call won the
+	// conditional delete of the attempt row (and so applied, or tried to apply, the action);
+	// false means the attempt was already decided by someone else.
+	Fail(ctx context.Context, rec Record) (claimed bool, err error)
+	// Expire applies the group's failure action to an attempt whose time is up and that
+	// nobody has decided yet. It does nothing when the row is gone or still live, because the
+	// timer owns a live row.
+	Expire(ctx context.Context, rec Record) error
 }
 
 // Options builds a Handler.
@@ -177,6 +197,12 @@ func decodeVerifyRequest(w http.ResponseWriter, r *http.Request) (verifyRequest,
 // the challenge, and shows the answer: a pass needs Telegram's signed initData whose user is
 // the challenge's user, and Cloudflare's confirmation for the expected hostname, action and
 // cData. Nothing the body says is trusted on its own.
+//
+// Every outcome is decided exactly once, by the Backend's conditional delete of the attempt
+// row: a pass, a failed solve and a timeout race on it, on any replica (D-16). The challenge
+// is given back (Store.Rearm) only where the member can still try again: a Cloudflare,
+// network or configuration fault, a bot that cannot restrict, or a Backend error before
+// anything was claimed (D-21).
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -204,7 +230,8 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	consumed, rec, _, err := h.store.ConsumeIfUser(r.Context(), req.Challenge, user.UserID)
+	consumedAt := time.Now()
+	consumed, rec, left, err := h.store.ConsumeIfUser(r.Context(), req.Challenge, user.UserID)
 	if err != nil {
 		log.WithField("user_id", user.UserID).Warn("[CaptchaWeb][Verify] challenge store failed")
 		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
@@ -218,50 +245,156 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultNotForYou})
 		return
 	}
-	fields := log.Fields{"chat_id": rec.ChatID, "user_id": rec.UserID, "attempt_id": rec.AttemptID}
 
-	attempt, err := h.backend.Attempt(r.Context(), rec)
-	if err != nil {
-		log.WithFields(fields).Warn("[CaptchaWeb][Verify] attempt lookup failed")
-		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
-		return
+	run := &challengeRun{
+		h:          h,
+		r:          r,
+		w:          w,
+		user:       user,
+		token:      req.Challenge,
+		turnstile:  req.TurnstileToken,
+		rec:        rec,
+		left:       left,
+		consumedAt: consumedAt,
+		fields:     log.Fields{"chat_id": rec.ChatID, "user_id": rec.UserID, "attempt_id": rec.AttemptID},
 	}
-	if !attempt.Live {
-		log.WithFields(fields).Info("[CaptchaWeb][Verify] outcome=expired")
-		writeAnswer(w, http.StatusOK, Answer{Result: ResultExpired, Action: attempt.Action})
-		return
-	}
+	run.decide()
+}
 
-	verdict := h.siteverify.Verify(r.Context(), req.TurnstileToken, Expect{
-		Hostname: h.hostname,
-		Action:   TurnstileAction,
-		CData:    CData(req.Challenge),
-	})
-	if verdict.Outcome != OutcomePass {
-		// Plan 08-06 classifies a failed solve and re-arms the challenge; until then every
-		// other answer is a retry that changes nothing.
-		log.WithFields(fields).Infof("[CaptchaWeb][Verify] outcome=retry reason=%s", verdict.Reason)
-		writeAnswer(w, http.StatusOK, Answer{Result: ResultRetry})
-		return
-	}
+// challengeRun is one consumed challenge being decided. Each step either answers or hands on,
+// and the challenge is given back (retry) only where the member can still try again.
+type challengeRun struct {
+	h          *Handler
+	r          *http.Request
+	w          http.ResponseWriter
+	user       InitData
+	token      string
+	turnstile  string
+	rec        Record
+	left       time.Duration
+	consumedAt time.Time
+	fields     log.Fields
+	// action is the group's failure action, set once the attempt was read.
+	action string
+}
 
-	workCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), passWorkTimeout)
+// work is the context of the work that must not be abandoned when the page disconnects: the
+// request's values, no cancellation, its own deadline.
+func (c *challengeRun) work() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(c.r.Context()), passWorkTimeout)
+}
+
+// rearm puts the challenge back with the lifetime it had left when it was consumed minus the
+// time since, so a retry never stretches the challenge (D-21). A failure only costs the
+// member their second try: the attempt's own timeout still applies.
+func (c *challengeRun) rearm() {
+	remaining := c.left - time.Since(c.consumedAt)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.r.Context()), 2*RedisTimeout)
 	defer cancel()
-	passed, err := h.backend.Pass(workCtx, rec, user)
+	if _, err := c.h.store.Rearm(ctx, c.token, c.rec, remaining); err != nil {
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] re-arm failed")
+	}
+}
+
+// retry gives the challenge back and answers retry with status.
+func (c *challengeRun) retry(status int) {
+	c.rearm()
+	writeAnswer(c.w, status, Answer{Result: ResultRetry})
+}
+
+// expire applies the action to an attempt whose time is up or whose claim was lost, then
+// answers expired with the action. It never re-arms.
+func (c *challengeRun) expire() {
+	ctx, cancel := c.work()
+	defer cancel()
+	if err := c.h.backend.Expire(ctx, c.rec); err != nil {
+		// Nothing changed; the timer and the cleanup tick still own the row.
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] expire failed")
+	}
+	log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=expired")
+	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultExpired, Action: c.action})
+}
+
+func (c *challengeRun) decide() {
+	rightsCtx, cancelRights := context.WithTimeout(c.r.Context(), botRightsTimeout)
+	canRestrict, err := c.h.backend.BotCanRestrict(rightsCtx, c.rec.ChatID)
+	cancelRights()
+	if err != nil || !canRestrict {
+		// The failure action could not be applied, so no Cloudflare call is made and the
+		// member keeps their attempt and their challenge.
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] outcome=retry reason=bot_rights")
+		c.retry(http.StatusOK)
+		return
+	}
+
+	attempt, err := c.h.backend.Attempt(c.r.Context(), c.rec)
 	if err != nil {
-		log.WithFields(fields).Warn("[CaptchaWeb][Verify] pass failed")
-		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] attempt lookup failed")
+		c.retry(http.StatusServiceUnavailable)
+		return
+	}
+	c.action = attempt.Action
+	if !attempt.Live {
+		c.expire()
+		return
+	}
+
+	verdict := c.h.siteverify.Verify(c.r.Context(), c.turnstile, Expect{
+		Hostname: c.h.hostname,
+		Action:   TurnstileAction,
+		CData:    CData(c.token),
+	})
+	switch verdict.Outcome {
+	case OutcomePass:
+		c.pass()
+	case OutcomeFailed:
+		c.fail(verdict.Reason)
+	default:
+		if verdict.ConfigError() {
+			log.Errorf("[CaptchaWeb] siteverify configuration fault: %s", verdict.Reason)
+		}
+		log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=retry reason=%s", verdict.Reason)
+		c.retry(http.StatusOK)
+	}
+}
+
+func (c *challengeRun) pass() {
+	ctx, cancel := c.work()
+	defer cancel()
+	passed, err := c.h.backend.Pass(ctx, c.rec, c.user)
+	if err != nil {
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] pass failed")
+		c.retry(http.StatusServiceUnavailable)
 		return
 	}
 	switch passed {
 	case PassOK:
-		log.WithFields(fields).Info("[CaptchaWeb][Verify] outcome=passed")
-		writeAnswer(w, http.StatusOK, Answer{Result: ResultPassed})
+		log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=passed")
+		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultPassed})
 	case PassLost:
-		log.WithFields(fields).Info("[CaptchaWeb][Verify] outcome=expired")
-		writeAnswer(w, http.StatusOK, Answer{Result: ResultExpired, Action: attempt.Action})
+		c.expire()
 	default:
-		log.WithFields(fields).Warn("[CaptchaWeb][Verify] outcome=retry reason=unmute")
-		writeAnswer(w, http.StatusOK, Answer{Result: ResultRetry})
+		// Claimed, but the unmute failed: the Backend left a durable retry, so the challenge
+		// is not given back.
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] outcome=retry reason=unmute")
+		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultRetry})
 	}
+}
+
+func (c *challengeRun) fail(reason Reason) {
+	ctx, cancel := c.work()
+	claimed, err := c.h.backend.Fail(ctx, c.rec)
+	cancel()
+	if err != nil {
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] fail failed")
+		c.retry(http.StatusServiceUnavailable)
+		return
+	}
+	if !claimed {
+		// Lost the conditional delete to a timer or another replica.
+		c.expire()
+		return
+	}
+	log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=failed reason=%s", reason)
+	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultFailed, Action: c.action})
 }

@@ -247,3 +247,78 @@ func (b captchaWebBackend) Pass(ctx context.Context, rec captchaweb.Record, user
 	}
 	return captchaweb.PassOK, nil
 }
+
+// BotCanRestrict implements captchaweb.Backend. It reads the bot's own membership live, with
+// the caller's context, never the admin cache: the failure action (a kick, a ban or a mute)
+// needs the Restrict right, and a check that cannot be answered is not a yes.
+func (b captchaWebBackend) BotCanRestrict(ctx context.Context, chatID int64) (bool, error) {
+	member, err := b.rt.bot.GetChatMemberWithContext(ctx, chatID, b.rt.bot.Id, nil)
+	if err != nil {
+		return false, fmt.Errorf("read the bot's membership: %w", err)
+	}
+	if member == nil {
+		return false, errors.New("getChatMember returned no member")
+	}
+	merged := member.MergeChatMember()
+	switch merged.Status {
+	case gotgbot.ChatMemberStatusCreator:
+		return true, nil
+	case gotgbot.ChatMemberStatusAdministrator:
+		return merged.CanRestrictMembers, nil
+	}
+	return false, nil
+}
+
+// pendingTurnstileAttempt reads the record's attempt fresh and returns it, expired or not,
+// only while it is still the same Turnstile attempt the challenge was issued for.
+func pendingTurnstileAttempt(rec captchaweb.Record) (*db.CaptchaAttempts, error) {
+	attempt, err := captcha.GetCaptchaAttemptByID(rec.AttemptID)
+	if err != nil {
+		return nil, err
+	}
+	if attempt == nil ||
+		attempt.UserID != rec.UserID ||
+		attempt.ChatID != rec.ChatID ||
+		!captchaweb.IsReservedAnswer(attempt.Answer) {
+		return nil, nil
+	}
+	return attempt, nil
+}
+
+// Fail implements captchaweb.Backend. A provably failed solve is the same event as a timeout,
+// so it runs handleCaptchaTimeout unchanged: the conditional delete of the attempt row decides
+// who applies the group's action, the challenge message is deleted and the failure notice is
+// posted (D-08). It reads the row and the settings first so that a database error is reported
+// as an error, with nothing changed, instead of looking like a lost claim.
+func (b captchaWebBackend) Fail(_ context.Context, rec captchaweb.Record) (bool, error) {
+	attempt, err := pendingTurnstileAttempt(rec)
+	if err != nil {
+		return false, err
+	}
+	if attempt == nil {
+		return false, nil
+	}
+	settings, err := captcha.GetCaptchaSettings(rec.ChatID)
+	if err != nil {
+		return false, err
+	}
+	claimed, _ := handleCaptchaTimeout(b.rt.bot, rec.ChatID, rec.UserID, rec.AttemptID, 0, settings.FailureAction)
+	return claimed, nil
+}
+
+// Expire implements captchaweb.Backend. It applies the group's action to an attempt whose
+// time is up through expireCaptchaAttempt, the function the timer and the cleanup tick use,
+// so whichever of the three arrives first decides and the others find the row gone. A row
+// that is gone, belongs to another member or chat, or is still live is left alone: the timer
+// owns a live row.
+func (b captchaWebBackend) Expire(_ context.Context, rec captchaweb.Record) error {
+	attempt, err := pendingTurnstileAttempt(rec)
+	if err != nil {
+		return err
+	}
+	if attempt == nil || time.Now().Before(attempt.ExpiresAt) {
+		return nil
+	}
+	_, err = expireCaptchaAttempt(b.rt.bot, attempt)
+	return err
+}
