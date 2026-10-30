@@ -48,6 +48,65 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_closed":            {24, 34},
 	"settings_start_not_admin":   {90, 126},
 	"settings_start_invalid":     {110, 154},
+
+	// Page and card strings (plan 09-05). settings_lockdown_reason is not here on
+	// purpose: the reason line reuses lockdown_reason_line (D-29).
+	"settings_page_staff":              {14, 18},
+	"settings_page_lockdown":           {14, 18},
+	"settings_page_antiflood":          {14, 18},
+	"settings_state_linked":            {14, 20},
+	"settings_state_not_linked":        {14, 20},
+	"settings_state_staff_n":           {14, 20},
+	"settings_state_lock_none":         {14, 20},
+	"settings_state_lock_active":       {14, 20},
+	"settings_state_lock_lifting":      {14, 20},
+	"settings_state_limit":             {14, 20},
+	"settings_state_off_plain":         {10, 14},
+	"settings_btn_yes":                 {12, 16},
+	"settings_btn_no":                  {12, 16},
+	"settings_staff_linked_to":         {60, 84},
+	"settings_staff_linked_hidden":     {40, 56},
+	"settings_btn_staff_pick_n":        {24, 32},
+	"settings_staff_pick_private_hint": {80, 112},
+	"settings_staff_not_linked":        {60, 84},
+	"settings_staff_link_hint":         {100, 140},
+	"settings_staff_readonly":          {110, 154},
+	"settings_staff_pick":              {60, 84},
+	"settings_btn_link":                {28, 38},
+	"settings_btn_unlink":              {28, 38},
+	"settings_notice_linked":           {70, 98},
+	"settings_notice_unlinked":         {70, 98},
+	"settings_lockdown_none":           {80, 112},
+	"settings_lockdown_triggers":       {80, 112},
+	"settings_trigger_joins":           {70, 98},
+	"settings_trigger_flood":           {70, 98},
+	"settings_trigger_ai":              {76, 106},
+	"settings_btn_trigger_joins":       {24, 32},
+	"settings_btn_trigger_flood":       {24, 32},
+	"settings_btn_trigger_ai":          {24, 32},
+	"settings_lockdown_basic":          {100, 140},
+	"settings_lockdown_unreadable":     {100, 140},
+	"settings_captcha_status":          {24, 34},
+	"settings_captcha_mode":            {40, 56},
+	"settings_captcha_action":          {40, 56},
+	"settings_captcha_fallback_note":   {110, 154},
+	"settings_btn_captcha_toggle":      {24, 32},
+	"settings_opt_math":                {10, 12},
+	"settings_opt_text":                {10, 12},
+	"settings_opt_turnstile":           {10, 12},
+	"settings_opt_kick":                {10, 12},
+	"settings_opt_ban":                 {10, 12},
+	"settings_opt_mute":                {10, 12},
+	"settings_opt_warn":                {10, 12},
+	"settings_opt_tban":                {14, 18},
+	"settings_opt_tmute":               {14, 18},
+	"settings_antiflood_limit":         {36, 50},
+	"settings_antiflood_off":           {70, 98},
+	"settings_antiflood_action":        {36, 50},
+	"settings_antiflood_delete":        {40, 56},
+	"settings_antiflood_action_note":   {110, 154},
+	"settings_btn_antiflood_delete":    {36, 48},
+	"settings_card_expired":            {80, 112},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -171,6 +230,133 @@ func TestSettingsLocaleKeys(t *testing.T) {
 			sort.Strings(failures)
 			for _, failure := range failures {
 				t.Error(failure)
+			}
+		})
+	}
+}
+
+// settingsLocaleString reads one string value of a locale and fails the test when it is
+// missing or not a string.
+func settingsLocaleString(t *testing.T, lang string, data map[string]any, key string) string {
+	t.Helper()
+	text, ok := data[key].(string)
+	if !ok {
+		t.Fatalf("%s: %s is missing or not a string", lang, key)
+	}
+	return text
+}
+
+// TestSettingsLabelLengths holds the composite buttons to the UI-SPEC sizing checks: a
+// main-page button (icon, page name, separator and its longest state) is at most 34
+// characters in English and 44 in the other languages, and a choice-row button (a check
+// mark and the option) at most 13 and 15.
+func TestSettingsLabelLengths(t *testing.T) {
+	type mainPage struct {
+		icon   string
+		page   string
+		states []string
+	}
+	pages := []mainPage{
+		{"👥", "settings_page_staff", []string{"settings_state_linked", "settings_state_not_linked", "settings_state_staff_n"}},
+		{"🔒", "settings_page_lockdown", []string{"settings_state_lock_none", "settings_state_lock_active", "settings_state_lock_lifting"}},
+		{"🧩", "settings_page_captcha", []string{"common_status_on", "common_status_off"}},
+		{"🌊", "settings_page_antiflood", []string{"settings_state_limit", "settings_state_off_plain"}},
+	}
+	options := []string{
+		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
+		"settings_opt_kick", "settings_opt_ban", "settings_opt_mute",
+	}
+
+	for _, lang := range staffLocales {
+		t.Run(lang, func(t *testing.T) {
+			data := loadStaffLocale(t, lang)
+			mainMax, choiceMax := 44, 15
+			if lang == "en" {
+				mainMax, choiceMax = 34, 13
+			}
+
+			for _, page := range pages {
+				name := settingsLocaleString(t, lang, data, page.page)
+				for _, stateKey := range page.states {
+					state := settingsLocaleString(t, lang, data, stateKey)
+					state = strings.ReplaceAll(state, "{count}", "100")
+					state = strings.ReplaceAll(state, "{n}", "100")
+					if strings.HasPrefix(stateKey, "common_status_") {
+						icon := "❌ "
+						if stateKey == "common_status_on" {
+							icon = "✅ "
+						}
+						state = icon + state
+					}
+					label := page.icon + " " + name + " · " + state
+					if runes := utf8.RuneCountInString(label); runes > mainMax {
+						t.Errorf("%s: main-page label %q has %d characters, ceiling %d", lang, label, runes, mainMax)
+					}
+				}
+			}
+
+			for _, key := range options {
+				label := "✅ " + settingsLocaleString(t, lang, data, key)
+				if runes := utf8.RuneCountInString(label); runes > choiceMax {
+					t.Errorf("%s: choice button %q (%s) has %d characters, ceiling %d", lang, label, key, runes, choiceMax)
+				}
+			}
+		})
+	}
+}
+
+// TestSettingsReusedKeyPlaceholders is the privacy check of D-21: a menu opened in a group
+// is readable by every member, so the Staff texts the menu reuses must never carry a
+// placeholder that could name the Staff Group. They carry none, or {group} (this group).
+// Only settings_staff_linked_to may hold {staff} or {id}, and it is rendered in a private
+// menu only.
+func TestSettingsReusedKeyPlaceholders(t *testing.T) {
+	noPlaceholder := []string{
+		"staff_link_no_staff_group",
+		"staff_link_refuse_not_staff_owner",
+		"staff_check_failed",
+		"staff_unlink_not_linked",
+		"staff_unlink_refuse_not_owner",
+	}
+	groupOnly := []string{
+		"staff_link_refuse_not_supergroup",
+		"staff_link_refuse_target_is_staff",
+		"staff_link_refuse_not_target_owner",
+		"staff_link_refuse_already_linked",
+		"staff_link_check_failed_group",
+		"staff_unlink_refuse_not_group_owner",
+		"staff_unlink_check_failed_group",
+		"staff_unlink_confirm_prompt",
+		"lockdown_alert_lift_ask",
+	}
+
+	for _, lang := range staffLocales {
+		t.Run(lang, func(t *testing.T) {
+			data := loadStaffLocale(t, lang)
+
+			for _, key := range noPlaceholder {
+				text := settingsLocaleString(t, lang, data, key)
+				if got := staffPlaceholders(text); len(got) != 0 {
+					t.Errorf("%s: %s has placeholders %v, want none", lang, key, got)
+				}
+			}
+			for _, key := range groupOnly {
+				text := settingsLocaleString(t, lang, data, key)
+				if got := staffPlaceholders(text); !slices.Equal(got, []string{"group"}) {
+					t.Errorf("%s: %s has placeholders %v, want only [group]", lang, key, got)
+				}
+			}
+
+			for key, value := range data {
+				if !strings.HasPrefix(key, settingsKeyPrefix) || key == "settings_staff_linked_to" {
+					continue
+				}
+				text, _ := value.(string)
+				for _, name := range staffPlaceholders(text) {
+					if name == "staff" || name == "id" {
+						t.Errorf("%s: %s holds {%s}, only settings_staff_linked_to may", lang, key, name)
+					}
+				}
 			}
 		})
 	}
