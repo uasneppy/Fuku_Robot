@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	log "github.com/sirupsen/logrus"
 )
 
 // outcomeBackend is a hand-written Backend that records its calls and answers with scripted
@@ -446,4 +449,260 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 			t.Fatalf("the existing challenge was overwritten: owner %q", got)
 		}
 	})
+}
+
+// capturedLog is one log entry as the test saw it: the message and every field value, flattened.
+type capturedLog struct {
+	level log.Level
+	text  string
+}
+
+// captureHook records every entry of the standard logger at every level.
+type captureHook struct {
+	mu      sync.Mutex
+	entries []capturedLog
+}
+
+func (h *captureHook) Levels() []log.Level { return log.AllLevels }
+
+func (h *captureHook) Fire(e *log.Entry) error {
+	var b strings.Builder
+	b.WriteString(e.Message)
+	for k, v := range e.Data {
+		b.WriteString(" ")
+		b.WriteString(k)
+		b.WriteString("=")
+		b.WriteString(fmt.Sprint(v))
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.entries = append(h.entries, capturedLog{level: e.Level, text: b.String()})
+	return nil
+}
+
+// captureLogs sends the standard logger to a hook at Debug level, with the module's
+// redaction hook not installed (it is not part of this package's tests, which is the point:
+// the package itself must never hand a secret to the logger), and restores it afterwards.
+func captureLogs(t *testing.T) *captureHook {
+	t.Helper()
+	hook := &captureHook{}
+	oldLevel, oldOut := log.GetLevel(), log.StandardLogger().Out
+	oldHooks := log.StandardLogger().ReplaceHooks(make(log.LevelHooks))
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(io.Discard)
+	log.AddHook(hook)
+	t.Cleanup(func() {
+		log.StandardLogger().ReplaceHooks(oldHooks)
+		log.SetLevel(oldLevel)
+		log.SetOutput(oldOut)
+	})
+	return hook
+}
+
+// echoMarker is text only a Cloudflare body carries; it must never reach a log.
+const echoMarker = "cloudflare-body-marker-5f3a"
+
+// echoingCloudflare answers with status and the fields build returns, and echoes the secret,
+// the Turnstile token and echoMarker in the body, as a hostile or careless upstream might.
+func echoingCloudflare(status int, build func(response string) map[string]any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Secret   string `json:"secret"`
+			Response string `json:"response"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		body := build(req.Response)
+		body["echo"] = req.Secret + "|" + req.Response + "|" + echoMarker
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(body)
+	}
+}
+
+// cloudflarePass confirms the token for the expected hostname, action and cdata.
+func cloudflarePass(response string) map[string]any {
+	return map[string]any{
+		"success":  true,
+		"hostname": outcomeHost,
+		"action":   TurnstileAction,
+		"cdata":    strings.TrimPrefix(response, testTurnstilePrefix),
+	}
+}
+
+func cloudflareCodes(codes ...string) func(string) map[string]any {
+	return func(string) map[string]any {
+		return map[string]any{"success": false, "error-codes": codes}
+	}
+}
+
+// TestCaptchaWebNeverLogsInputs drives every answer of the verify route with a Cloudflare
+// double that echoes the secret and the token in every body, and proves that no log entry, at
+// any level, contains the secret, the Turnstile token, the challenge token, the raw initData,
+// the member's name or Cloudflare's text (PLAT-02, D-17).
+func TestCaptchaWebNeverLogsInputs(t *testing.T) {
+	hook := captureLogs(t)
+	const member = int64(42)
+
+	type scenario struct {
+		name string
+		run  func(o *outcomeHandler) (status int, answer Answer, forbidden []string)
+		want Result
+	}
+	// plain posts what a real page posts and remembers every input it used.
+	plain := func(setup func(o *outcomeHandler)) func(o *outcomeHandler) (int, Answer, []string) {
+		return func(o *outcomeHandler) (int, Answer, []string) {
+			if setup != nil {
+				setup(o)
+			}
+			token, _ := o.issue(member)
+			initData := o.initData(member, token)
+			status, answer := o.postBody(o.body(initData, TurnstileTokenForTest(token), token))
+			return status, answer, []string{token, TurnstileTokenForTest(token), CData(token), initData}
+		}
+	}
+	cf := func(status int, build func(string) map[string]any) func(o *outcomeHandler) {
+		return func(o *outcomeHandler) { o.setSiteverify(echoingCloudflare(status, build)) }
+	}
+
+	scenarios := []scenario{
+		{"passed", plain(cf(200, cloudflarePass)), ResultPassed},
+		{"failed solve", plain(cf(200, cloudflareCodes("invalid-input-response"))), ResultFailed},
+		{"failed solve by cdata", plain(cf(200, func(r string) map[string]any {
+			m := cloudflarePass(r)
+			m["cdata"] = "minted-for-another-challenge"
+			return m
+		})), ResultFailed},
+		{"expired", plain(func(o *outcomeHandler) { o.Backend.Status = AttemptStatus{Live: false, Action: "ban"} }), ResultExpired},
+		{"retry: secret rejected", plain(cf(200, cloudflareCodes("invalid-input-secret"))), ResultRetry},
+		{"retry: hostname", plain(cf(200, func(r string) map[string]any {
+			m := cloudflarePass(r)
+			m["hostname"] = "other.example.net"
+			return m
+		})), ResultRetry},
+		{"retry: action", plain(cf(200, func(r string) map[string]any {
+			m := cloudflarePass(r)
+			m["action"] = "login"
+			return m
+		})), ResultRetry},
+		{"retry: internal-error", plain(cf(200, cloudflareCodes("internal-error"))), ResultRetry},
+		{"retry: 500", plain(cf(500, cloudflareCodes("internal-error"))), ResultRetry},
+		{"retry: 500 with text", plain(func(o *outcomeHandler) {
+			o.setSiteverify(func(w http.ResponseWriter, r *http.Request) {
+				var req struct {
+					Secret   string `json:"secret"`
+					Response string `json:"response"`
+				}
+				_ = json.NewDecoder(r.Body).Decode(&req)
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte("boom " + req.Secret + " " + req.Response + " " + echoMarker))
+			})
+		}), ResultRetry},
+		{"retry: unknown code", plain(cf(200, cloudflareCodes("something-new"))), ResultRetry},
+		{"retry: re-arm fails", plain(func(o *outcomeHandler) {
+			o.setSiteverify(func(w http.ResponseWriter, r *http.Request) {
+				o.Redis.Close()
+				echoingCloudflare(200, cloudflareCodes("internal-error"))(w, r)
+			})
+		}), ResultRetry},
+		{"preflight refusal", plain(func(o *outcomeHandler) {
+			o.Backend.CanRestrict = false
+			o.setSiteverify(echoingCloudflare(200, cloudflarePass))
+		}), ResultRetry},
+		{"preflight error", plain(func(o *outcomeHandler) { o.Backend.CanRestrictErr = errors.New("secret in an error " + echoMarker) }), ResultRetry},
+		{"backend error", plain(func(o *outcomeHandler) { o.Backend.AttemptErr = errors.New("database says " + echoMarker) }), ResultRetry},
+		{"pass error", plain(func(o *outcomeHandler) { o.Backend.PassErr = errors.New("telegram says " + echoMarker) }), ResultRetry},
+		{"pass lost", plain(func(o *outcomeHandler) { o.Backend.PassResult = PassLost }), ResultExpired},
+		{"pass unmute failed", plain(func(o *outcomeHandler) { o.Backend.PassResult = PassUnmuteFailed }), ResultRetry},
+		{"fail error", plain(func(o *outcomeHandler) {
+			o.setSiteverify(echoingCloudflare(200, cloudflareCodes("timeout-or-duplicate")))
+			o.Backend.FailErr = errors.New("database says " + echoMarker)
+		}), ResultRetry},
+		{"fail lost, expire error", plain(func(o *outcomeHandler) {
+			o.setSiteverify(echoingCloudflare(200, cloudflareCodes("timeout-or-duplicate")))
+			o.Backend.FailClaimed = false
+			o.Backend.ExpireErr = errors.New("telegram says " + echoMarker)
+		}), ResultExpired},
+		{"not for you", func(o *outcomeHandler) (int, Answer, []string) {
+			token, _ := o.issue(member)
+			initData := o.initData(43, token)
+			status, answer := o.postBody(o.body(initData, TurnstileTokenForTest(token), token))
+			return status, answer, []string{token, TurnstileTokenForTest(token), initData}
+		}, ResultNotForYou},
+		{"unknown token", func(o *outcomeHandler) (int, Answer, []string) {
+			token, err := NewToken()
+			if err != nil {
+				panic(err)
+			}
+			initData := o.initData(member, token)
+			status, answer := o.postBody(o.body(initData, TurnstileTokenForTest(token), token))
+			return status, answer, []string{token, TurnstileTokenForTest(token), initData}
+		}, ResultInvalid},
+		{"stale initData", func(o *outcomeHandler) (int, Answer, []string) {
+			token, _ := o.issue(member)
+			initData := InitDataForTest(outcomeBotToken, member, "Ünïcode Name", "en", token, time.Now().Add(-6*time.Minute))
+			status, answer := o.postBody(o.body(initData, TurnstileTokenForTest(token), token))
+			return status, answer, []string{token, TurnstileTokenForTest(token), initData}
+		}, ResultInvalid},
+		{"initData signed for another bot", func(o *outcomeHandler) (int, Answer, []string) {
+			token, _ := o.issue(member)
+			initData := InitDataForTest("111:another-bots-token", member, "Ünïcode Name", "en", token, time.Now())
+			status, answer := o.postBody(o.body(initData, TurnstileTokenForTest(token), token))
+			return status, answer, []string{token, TurnstileTokenForTest(token), initData}
+		}, ResultInvalid},
+		{"start_param of another challenge", func(o *outcomeHandler) (int, Answer, []string) {
+			token, _ := o.issue(member)
+			initData := InitDataForTest(outcomeBotToken, member, "Ünïcode Name", "en", "some-other-challenge", time.Now())
+			status, answer := o.postBody(o.body(initData, TurnstileTokenForTest(token), token))
+			return status, answer, []string{token, TurnstileTokenForTest(token), initData}
+		}, ResultInvalid},
+		{"malformed JSON that quotes the inputs", func(o *outcomeHandler) (int, Answer, []string) {
+			token, _ := o.issue(member)
+			initData := o.initData(member, token)
+			body := `{"init_data":` + strconv.Quote(initData) + `,"turnstile_token":"` + TurnstileTokenForTest(token) +
+				`","challenge":"` + token + `","extra":true}`
+			status, answer := o.postBody(body)
+			return status, answer, []string{token, TurnstileTokenForTest(token), initData}
+		}, ResultInvalid},
+	}
+
+	var forbidden []string
+	for _, sc := range scenarios {
+		o := newOutcomeHandler(t)
+		status, answer, used := sc.run(o)
+		if answer.Result != sc.want {
+			t.Fatalf("%s: answer = %d %+v, want result %q", sc.name, status, answer, sc.want)
+		}
+		forbidden = append(forbidden, used...)
+	}
+	forbidden = append(forbidden,
+		"turnstile-test-secret-value", // the secret the fake client holds
+		"Ünïcode Name",
+		"%C3%9Cn%C3%AFcode",
+		echoMarker,
+		outcomeBotToken,
+	)
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+	if len(hook.entries) == 0 {
+		t.Fatal("no log entry was captured, so the test proves nothing")
+	}
+	var configFaults int
+	for _, entry := range hook.entries {
+		for _, secret := range forbidden {
+			if secret != "" && strings.Contains(entry.text, secret) {
+				t.Errorf("a log entry contains %q: %s", secret, entry.text)
+			}
+		}
+		if strings.Contains(entry.text, "siteverify configuration fault") {
+			configFaults++
+			if entry.level != log.ErrorLevel {
+				t.Errorf("configuration fault logged at %s, want error: %s", entry.level, entry.text)
+			}
+		}
+	}
+	// secret, hostname and action
+	if configFaults != 3 {
+		t.Fatalf("configuration fault entries = %d, want 3 (secret, hostname, action)", configFaults)
+	}
 }
