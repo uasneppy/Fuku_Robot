@@ -201,6 +201,6 @@ The member's browser loads two scripts, `telegram.org/js/telegram-web-app.js` an
 
 **`GET /captcha/health` answers 503.** The bot is still starting, or Redis is down. Check Redis first.
 
-**New members got a math captcha instead of Turnstile.** The web captcha was unavailable when they joined: check `/captcha/health`, the four settings and Redis.
+**New members got a math captcha instead of Turnstile.** The web captcha was unavailable when they joined: check `/captcha/health`, the four settings and Redis. If the bot runs with the cache disabled (`DISABLE_CACHE=true`, so it has no Redis connection), the bot logs one warning at startup and does not mount the captcha routes at all: `/captcha/health` then answers 404, Turnstile groups get the math captcha and `/captchamode turnstile` is refused.
 
 **Everything is slow or members see a time-out.** The page gives the whole check 12 seconds. Look at the latency between the bot and Cloudflare's `siteverify`, and at the proxy's timeouts for `POST /captcha/verify`.
