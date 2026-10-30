@@ -600,11 +600,22 @@ func (moduleStruct) captchaModeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 	}
 
 	mode := strings.ToLower(args[0])
-	if mode != "math" && mode != "text" {
+	if mode != "math" && mode != "text" && mode != "turnstile" {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("captcha_mode_invalid")
 		_, err := msg.Reply(bot, text, formatting.Shtml())
 		return err
+	}
+
+	// Turnstile is stored only when the bot can run it (D-05, D-09): a group switched to a
+	// mode that could only fall back would be a setting that lies.
+	if mode == "turnstile" {
+		if refusal := captchaWebModeRefusal(bot, chat); refusal != "" {
+			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+			text, _ := tr.GetString(refusal)
+			_, err := msg.Reply(bot, text, formatting.Shtml())
+			return err
+		}
 	}
 
 	err := captcha.SetCaptchaMode(chat.Id, mode)
@@ -624,14 +635,49 @@ func (moduleStruct) captchaModeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	modeDesc, _ := tr.GetString("captcha_mode_math_desc")
-	if mode == "text" {
+	switch mode {
+	case "text":
 		modeDesc, _ = tr.GetString("captcha_mode_text_desc")
+	case "turnstile":
+		modeDesc, _ = tr.GetString("captcha_mode_turnstile_desc")
 	}
 
 	textTemplate, _ := tr.GetString("captcha_mode_set_formatted")
 	text := fmt.Sprintf(textTemplate, mode, modeDesc)
 	_, err = msg.Reply(bot, text, formatting.Shtml())
 	return err
+}
+
+// captchaWebModeRefusal decides whether /captchamode turnstile may be stored in chat and
+// returns the locale key of the reason when it may not, or "" when it may. The order is the
+// contract: no installed runtime (the web captcha's settings are not all set, or the bot
+// has no username), then a fresh Redis PING within captchaweb.RedisTimeout (not the memo
+// of captchaWebAvailable: the admin deserves a live answer), then the bot's own rights by a
+// live getChatMember, never the admin cache. The math and text captcha need the same right
+// to mute and unmute, and an unknown answer refuses.
+func captchaWebModeRefusal(bot *gotgbot.Bot, chat *gotgbot.Chat) string {
+	rt := captchaWebCurrent.Load()
+	if rt == nil || bot == nil || bot.Username == "" || rt.cfg.Redis == nil {
+		return "captcha_web_refuse_not_configured"
+	}
+
+	pingCtx, cancel := context.WithTimeout(context.Background(), captchaweb.RedisTimeout)
+	defer cancel()
+	if err := rt.cfg.Redis.Ping(pingCtx).Err(); err != nil {
+		return "captcha_web_refuse_no_redis"
+	}
+
+	member, result, err := chat_status.FetchBotMember(bot, chat.Id)
+	if result == chat_status.BotMemberUnknown {
+		log.Warnf("[Captcha] bot rights check in chat %d failed: %v", chat.Id, err)
+		return "captcha_web_refuse_no_rights"
+	}
+	if result == chat_status.BotMemberMissing ||
+		(member.Status != gotgbot.ChatMemberStatusCreator &&
+			(member.Status != gotgbot.ChatMemberStatusAdministrator || !member.CanRestrictMembers)) {
+		return "captcha_web_refuse_no_rights"
+	}
+	return ""
 }
 
 func (moduleStruct) captchaTimeCommand(bot *gotgbot.Bot, ctx *ext.Context) error {

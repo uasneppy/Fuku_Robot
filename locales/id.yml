@@ -963,6 +963,9 @@ captcha_web_invalid_body: Tautan ini milik anggota lain atau sudah dipakai. Tida
 captcha_web_unsupported_title: Buka di Telegram
 captcha_web_unsupported_body: Gunakan tombol di obrolan grup. Jika sudah, matikan pemblokir konten lalu coba lagi.
 captcha_web_close_button: Tutup
+captcha_web_refuse_not_configured: "Captcha Turnstile belum disiapkan di bot ini. Minta pemilik bot menyelesaikan pengaturan captcha web. Mode math dan text tetap berfungsi."
+captcha_web_refuse_no_redis: "Captcha Turnstile tidak tersedia saat ini karena penyimpanan bersama bot tidak merespons. Coba lagi nanti, atau gunakan captcha math atau text."
+captcha_web_refuse_no_rights: "Saya harus menjadi admin dengan hak Batasi anggota untuk menjalankan captcha Turnstile. Berikan hak itu kepada saya lalu coba lagi."
 captcha_failed_verify: Gagal memverifikasi. Silakan hubungi admin.
 captcha_wait_refresh: Silakan tunggu beberapa detik sebelum meminta gambar baru.
 captcha_failed_generate: Gagal membuat gambar baru, coba lagi.
@@ -1687,6 +1690,7 @@ button_unmute: "Buka Bisu"
 # Captcha module strings
 captcha_mode_math_desc: "masalah matematika"
 captcha_mode_text_desc: "pengenalan teks dari gambar"
+captcha_mode_turnstile_desc: "pemeriksaan web Cloudflare Turnstile"
 captcha_mode_set_formatted: "✅ Mode captcha diatur ke <b>%s</b> (%s)"
 captcha_welcome_text_detailed: "👋 Selamat datang %s!\n\nSilakan pilih teks yang ditampilkan di gambar untuk memverifikasi Anda manusia:\n\n⏱ Anda punya <b>%d menit</b> untuk menjawab."
 captcha_welcome_math_detailed: "👋 Selamat datang %s!\n\nSilakan selesaikan masalah yang ditampilkan di gambar dan pilih jawaban yang benar:\n\n⏱ Anda punya <b>%d menit</b> untuk menjawab."

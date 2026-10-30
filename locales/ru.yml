@@ -751,6 +751,9 @@ captcha_web_invalid_body: Она принадлежит другому учас�
 captcha_web_unsupported_title: Откройте в Telegram
 captcha_web_unsupported_body: Нажмите кнопку в чате группы. Если вы так и сделали, отключите блокировщики контента и повторите.
 captcha_web_close_button: Закрыть
+captcha_web_refuse_not_configured: "Капча Turnstile ещё не настроена у этого бота. Попросите владельца бота завершить настройку веб-капчи. Режимы math и text работают по-прежнему."
+captcha_web_refuse_no_redis: "Капча Turnstile сейчас недоступна: общее хранилище бота не отвечает. Повторите позже или используйте капчу math или text."
+captcha_web_refuse_no_rights: "Чтобы запустить капчу Turnstile, мне нужны права администратора с правом ограничивать участников. Дайте мне это право и повторите."
 captcha_failed_verify: Не удалось подтвердить. Пожалуйста, свяжитесь с администратором.
 captcha_wait_refresh: Пожалуйста, подождите несколько секунд перед запросом нового изображения.
 captcha_failed_generate: Не удалось сгенерировать новое изображение, попробуйте снова.
@@ -1434,6 +1437,7 @@ reports_invalid_action: "Неверное действие."
 # Captcha module strings
 captcha_mode_math_desc: "математические задачи"
 captcha_mode_text_desc: "распознавание текста с изображений"
+captcha_mode_turnstile_desc: "веб-проверка Cloudflare Turnstile"
 captcha_mode_set_formatted: "✅ Режим капчи установлен на <b>%s</b> (%s)"
 captcha_welcome_text_detailed: "👋 Добро пожаловать, %s!\n\nПожалуйста, выберите текст, показанный на изображении, чтобы подтвердить, что вы человек:\n\n⏱ У вас есть <b>%d минут</b>, чтобы ответить."
 captcha_welcome_math_detailed: "👋 Добро пожаловать, %s!\n\nПожалуйста, решите задачу, показанную на изображении, и выберите правильный ответ:\n\n⏱ У вас есть <b>%d минут</b>, чтобы ответить."

@@ -934,6 +934,9 @@ captcha_web_invalid_body: Ele pertence a outro membro ou já foi usado. Nada foi
 captcha_web_unsupported_title: Abra no Telegram
 captcha_web_unsupported_body: Use o botão no chat do grupo. Se já usou, desative bloqueadores de conteúdo e tente de novo.
 captcha_web_close_button: Fechar
+captcha_web_refuse_not_configured: "O captcha Turnstile ainda não está configurado neste bot. Peça ao dono do bot para concluir a configuração do captcha web. Os modos math e text continuam funcionando."
+captcha_web_refuse_no_redis: "O captcha Turnstile está indisponível agora porque o armazenamento compartilhado do bot não responde. Tente novamente mais tarde ou use o captcha math ou text."
+captcha_web_refuse_no_rights: "Preciso ser administrador com o direito de restringir membros para executar o captcha Turnstile. Dê-me esse direito e tente de novo."
 captcha_failed_verify: Falha na verificação. Por favor contate um admin.
 captcha_wait_refresh: Por favor espere alguns segundos antes de solicitar uma nova imagem.
 captcha_failed_generate: Falha ao gerar nova imagem, tente novamente.
@@ -1658,6 +1661,7 @@ reports_invalid_action: "Ação inválida."
 # Captcha module strings
 captcha_mode_math_desc: "problemas matemáticos"
 captcha_mode_text_desc: "reconhecimento de texto de imagens"
+captcha_mode_turnstile_desc: "verificação web Cloudflare Turnstile"
 captcha_mode_set_formatted: "✅ Modo de captcha definido para <b>%s</b> (%s)"
 captcha_welcome_text_detailed: "👋 Bem-vindo %s!\n\nPor favor selecione o texto mostrado na imagem para verificar que você é humano:\n\n⏱ Você tem <b>%d minutos</b> para responder."
 captcha_welcome_math_detailed: "👋 Bem-vindo %s!\n\nPor favor resolva o problema mostrado na imagem e selecione a resposta correta:\n\n⏱ Você tem <b>%d minutos</b> para responder."
