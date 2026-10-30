@@ -5,6 +5,7 @@ package modules
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -605,5 +606,267 @@ func TestCaptchaPassSharedByCallbackAndWeb(t *testing.T) {
 		if muted != 0 {
 			t.Fatalf("%s: captcha_muted_users rows = %d, want none after a pass", name, muted)
 		}
+	}
+}
+
+// assertMathFallback checks that the join got the group's math captcha and no Mini App
+// button, and that no web challenge was stored.
+func assertMathFallback(t *testing.T, env *captchaWebEnv, userID int64) {
+	t.Helper()
+	attempt := env.attempt(userID)
+	if attempt == nil {
+		t.Fatal("no captcha attempt after the join")
+	}
+	if captchaweb.IsReservedAnswer(attempt.Answer) {
+		t.Fatalf("attempt answer %q is a Turnstile answer, want the math captcha's", attempt.Answer)
+	}
+	if token := env.lastToken(); token != "" {
+		t.Fatalf("a Mini App button was sent (token %q), want the math captcha", token)
+	}
+	var markup gotgbot.InlineKeyboardMarkup
+	var found bool
+	for _, method := range []string{"sendPhoto", "sendMessage"} {
+		for _, call := range env.client.callsFor(method) {
+			if m, ok := call.Params["reply_markup"].(gotgbot.InlineKeyboardMarkup); ok {
+				markup, found = m, true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no captcha challenge was sent")
+	}
+	var verifyButtons int
+	for _, row := range markup.InlineKeyboard {
+		for _, button := range row {
+			if strings.HasPrefix(button.CallbackData, "captcha_verify") {
+				verifyButtons++
+			}
+		}
+	}
+	if verifyButtons == 0 {
+		t.Fatal("the fallback challenge has no captcha_verify buttons")
+	}
+	for _, key := range env.mr.Keys() {
+		if strings.HasPrefix(key, "alita:captcha:ch:") {
+			t.Fatalf("a web challenge key %q was stored for a math captcha", key)
+		}
+	}
+}
+
+// joinWithoutToken runs SendCaptcha and does not look for a Mini App button.
+func joinWithoutToken(t *testing.T, env *captchaWebEnv, user gotgbot.User) {
+	t.Helper()
+	ctx := newModuleMessageContext(env.bot, env.chat, gotgbot.User{Id: 777000, FirstName: "Telegram"}, "join")
+	if err := SendCaptcha(env.bot, ctx, user.Id, user.FirstName); err != nil {
+		t.Fatalf("SendCaptcha(%d) error = %v", user.Id, err)
+	}
+}
+
+func TestSendCaptchaTurnstileFallsBackToMath(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+
+	t.Run("not configured", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		captchaWebCurrent.Store(nil)
+		joinWithoutToken(t, env, member)
+		assertMathFallback(t, env, member.Id)
+	})
+
+	t.Run("Redis does not answer", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		dead := miniredis.RunT(t)
+		deadClient := redis.NewClient(&redis.Options{Addr: dead.Addr(), MaxRetries: -1})
+		t.Cleanup(func() { _ = deadClient.Close() })
+		dead.Close()
+		rt, err := newCaptchaWebRuntime(env.bot, CaptchaWebConfig{
+			BaseURL:   "https://" + captchaWebTestHost,
+			ShortName: "verify",
+			SiteKey:   "test-site-key",
+			Secret:    env.secret,
+			Redis:     deadClient,
+		})
+		if err != nil {
+			t.Fatalf("newCaptchaWebRuntime() error = %v", err)
+		}
+		captchaWebCurrent.Store(rt)
+		captchaWebProbeAt.Store(0)
+
+		joinWithoutToken(t, env, member)
+		assertMathFallback(t, env, member.Id)
+	})
+
+	t.Run("no bot username", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		env.bot.Username = ""
+		joinWithoutToken(t, env, member)
+		assertMathFallback(t, env, member.Id)
+	})
+}
+
+func TestSendCaptchaTurnstileRollsBackOnFailure(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+
+	assertRolledBack := func(t *testing.T, env *captchaWebEnv) {
+		t.Helper()
+		var rows int64
+		if err := db.DB.Model(&db.CaptchaAttempts{}).
+			Where("user_id = ? AND chat_id = ?", member.Id, env.chat.Id).Count(&rows).Error; err != nil {
+			t.Fatalf("count attempts: %v", err)
+		}
+		if rows != 0 {
+			t.Fatalf("attempt rows = %d, want the attempt rolled back", rows)
+		}
+		restricts := env.client.callsFor("restrictChatMember")
+		if len(restricts) != 2 || permissionsOf(t, restricts[0]).CanSendMessages || !permissionsOf(t, restricts[1]).CanSendMessages {
+			t.Fatalf("restrictChatMember calls = %d, want the mute then an unmute", len(restricts))
+		}
+	}
+
+	t.Run("send fails", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		env.client.mu.Lock()
+		env.client.errors["sendMessage"] = errors.New("telegram is down")
+		env.client.mu.Unlock()
+
+		ctx := newModuleMessageContext(env.bot, env.chat, gotgbot.User{Id: 777000, FirstName: "Telegram"}, "join")
+		if err := SendCaptcha(env.bot, ctx, member.Id, member.FirstName); err == nil {
+			t.Fatal("SendCaptcha() error = nil, want the send failure")
+		}
+		assertRolledBack(t, env)
+	})
+
+	t.Run("issue fails", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		// The probe is memoised as up, then Redis goes away before the join.
+		captchaWebProbeRT.Store(env.rt)
+		captchaWebProbeOK.Store(true)
+		captchaWebProbeAt.Store(time.Now().UnixNano())
+		env.mr.Close()
+
+		ctx := newModuleMessageContext(env.bot, env.chat, gotgbot.User{Id: 777000, FirstName: "Telegram"}, "join")
+		if err := SendCaptcha(env.bot, ctx, member.Id, member.FirstName); err == nil {
+			t.Fatal("SendCaptcha() error = nil, want the issue failure")
+		}
+		assertRolledBack(t, env)
+		if sends := env.client.callsFor("sendMessage"); len(sends) != 0 {
+			t.Fatalf("sendMessage calls = %d, want no challenge message without a token", len(sends))
+		}
+	})
+}
+
+func TestCaptchaWebRejoinInvalidatesOldChallenge(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+
+	tokenA := env.join(member)
+	first := env.attempt(member.Id)
+
+	// The fake answers every send with the same message id; the re-join needs a new one so
+	// that the first challenge message is seen to be replaced.
+	env.client.mu.Lock()
+	env.client.responses["sendMessage"] = json.RawMessage(
+		fmt.Sprintf(`{"message_id":9002,"date":1,"chat":{"id":%d,"type":"supergroup","title":"Captcha Chat"}}`, env.chat.Id))
+	env.client.mu.Unlock()
+	tokenB := env.join(member)
+	second := env.attempt(member.Id)
+
+	if tokenA == tokenB {
+		t.Fatal("the re-join reused the first token")
+	}
+	if second == nil || first == nil || second.ID == first.ID {
+		t.Fatalf("attempts before %+v after %+v, want a new attempt", first, second)
+	}
+	if deletes := callsWithMessageID(env.client, "deleteMessage", 9001); len(deletes) == 0 {
+		t.Fatal("the first challenge message was not deleted by the re-join")
+	}
+
+	status, answer := env.verify(member, tokenA)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultExpired || answer.Action != "kick" {
+		t.Fatalf("verify(old token) = %d %+v, want 200 expired with action kick", status, answer)
+	}
+	if got := env.cfRequests.Load(); got != 0 {
+		t.Fatalf("Cloudflare requests = %d, want none for an old token", got)
+	}
+	current := env.attempt(member.Id)
+	if current == nil || current.ID != second.ID {
+		t.Fatalf("the old token changed the new attempt: %+v", current)
+	}
+	if restricts := env.client.callsFor("restrictChatMember"); len(restricts) != 2 {
+		t.Fatalf("restrictChatMember calls = %d, want only the two join mutes", len(restricts))
+	}
+
+	if status, answer := env.verify(member, tokenB); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("verify(new token) = %d %q, want 200 passed", status, answer.Result)
+	}
+}
+
+// attemptRow is the attempt row of userID in the env's chat, expired or not, or nil.
+func (e *captchaWebEnv) attemptRow(userID int64) *db.CaptchaAttempts {
+	e.t.Helper()
+	attempt, err := captcha.GetCaptchaAttemptIncludingExpired(userID, e.chat.Id)
+	if err != nil {
+		e.t.Fatalf("GetCaptchaAttemptIncludingExpired(%d) error = %v", userID, err)
+	}
+	return attempt
+}
+
+func TestRunOrphanedCaptchaRecoveryResumesTurnstileAttempt(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	now := time.Now()
+
+	if err := db.DB.Where("1 = 1").Delete(&models.StoredMessages{}).Error; err != nil {
+		t.Fatalf("stored message cleanup error = %v", err)
+	}
+	if err := db.DB.Where("1 = 1").Delete(&db.CaptchaAttempts{}).Error; err != nil {
+		t.Fatalf("captcha attempt cleanup error = %v", err)
+	}
+
+	liveAnswer, err := captchaweb.NewReservedAnswer()
+	if err != nil {
+		t.Fatalf("NewReservedAnswer() error = %v", err)
+	}
+	expiredAnswer, err := captchaweb.NewReservedAnswer()
+	if err != nil {
+		t.Fatalf("NewReservedAnswer() error = %v", err)
+	}
+	attempts := []db.CaptchaAttempts{
+		{UserID: 7001, ChatID: env.chat.Id, Answer: liveAnswer, MessageID: 8101,
+			CreatedAt: now, ExpiresAt: now.Add(time.Hour)},
+		{UserID: 7002, ChatID: env.chat.Id, Answer: expiredAnswer, MessageID: 8102,
+			CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(-time.Hour)},
+	}
+	for i := range attempts {
+		if err := db.DB.Create(&attempts[i]).Error; err != nil {
+			t.Fatalf("attempt %d setup error = %v", i, err)
+		}
+	}
+
+	if err := runOrphanedCaptchaRecovery(env.bot); err != nil {
+		t.Fatalf("runOrphanedCaptchaRecovery() error = %v", err)
+	}
+
+	if live := env.attemptRow(7001); live == nil {
+		t.Fatal("the live Turnstile attempt was removed by recovery")
+	}
+	if gone := env.attemptRow(7002); gone != nil {
+		t.Fatal("the expired Turnstile attempt survived recovery")
+	}
+	// A kick is one unbanChatMember that also removes a current member (only_if_banned
+	// false), so the member can rejoin; nobody is banned.
+	if calls := env.client.callsFor("banChatMember"); len(calls) != 0 {
+		t.Fatalf("banChatMember calls = %v, want none for the kick action", calls)
+	}
+	calls := env.client.callsFor("unbanChatMember")
+	if len(calls) != 1 || fmt.Sprint(calls[0].Params["user_id"]) != "7002" {
+		t.Fatalf("unbanChatMember calls = %v, want the kick of the expired member only", calls)
+	}
+	if onlyIfBanned, _ := calls[0].Params["only_if_banned"].(bool); onlyIfBanned {
+		t.Fatal("the kick was sent with only_if_banned, so it would not remove a current member")
+	}
+	if deletes := callsWithMessageID(env.client, "deleteMessage", 8102); len(deletes) == 0 {
+		t.Fatal("the expired challenge message was not deleted")
+	}
+	if deletes := callsWithMessageID(env.client, "deleteMessage", 8101); len(deletes) != 0 {
+		t.Fatal("the live challenge message was deleted")
 	}
 }
