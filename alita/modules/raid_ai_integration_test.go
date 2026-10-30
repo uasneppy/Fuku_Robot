@@ -34,16 +34,16 @@ func aiPhoto(id string) []gotgbot.PhotoSize {
 	}
 }
 
-// serveGeminiByFileName replaces the env's Gemini server with one that judges an image spam
+// serveClaudeByFileName replaces the env's Claude server with one that judges an image spam
 // (0.92) when the downloaded bytes name a file that starts with "spam", and keep it (0.1)
 // otherwise. It returns the counter of requests it received.
-func (e *raidAIImageEnv) serveGeminiByFileName() *atomic.Int64 {
+func (e *raidAIImageEnv) serveClaudeByFileName() *atomic.Int64 {
 	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		body, _ := io.ReadAll(r.Body)
 		probability := 0.1
-		for _, image := range inlineImages(e.t, body) {
+		for _, image := range requestImages(e.t, body) {
 			raw, err := base64.StdEncoding.DecodeString(image.Data)
 			if err != nil {
 				e.t.Errorf("decode the inline image: %v", err)
@@ -52,12 +52,12 @@ func (e *raidAIImageEnv) serveGeminiByFileName() *atomic.Int64 {
 				probability = 0.92
 			}
 		}
-		_, _ = w.Write([]byte(raidAIGeminiAnswer(probability, "")))
+		_, _ = w.Write([]byte(raidAIClaudeAnswer(probability)))
 	}))
 	e.t.Cleanup(server.Close)
-	previous := raidAIGeminiEndpoint
-	raidAIGeminiEndpoint = server.URL
-	e.t.Cleanup(func() { raidAIGeminiEndpoint = previous })
+	previous := raidAIClaudeEndpoint
+	raidAIClaudeEndpoint = server.URL
+	e.t.Cleanup(func() { raidAIClaudeEndpoint = previous })
 	return &requests
 }
 
@@ -117,8 +117,8 @@ func TestRaidAIImageBurst(t *testing.T) {
 	if row.StartedBy != staffTestBotID {
 		t.Errorf("StartedBy = %d, want the bot %d", row.StartedBy, staffTestBotID)
 	}
-	if got := env.geminiRequests(); got != 5 {
-		t.Errorf("Gemini requests = %d, want one per photo (5)", got)
+	if got := env.claudeRequests(); got != 5 {
+		t.Errorf("Claude requests = %d, want one per photo (5)", got)
 	}
 	if got := len(env.calls("setChatPermissions")); got != 1 {
 		t.Errorf("setChatPermissions calls = %d, want exactly 1", got)
@@ -199,7 +199,7 @@ func TestRaidAINeverActs(t *testing.T) {
 		for _, sc := range scenarios {
 			t.Run(path+"/"+sc.name, func(t *testing.T) {
 				env := newRaidAIImageEnv(t)
-				geminiRequests := env.serveGeminiByFileName()
+				claudeRequests := env.serveClaudeByFileName()
 				users := env.newMembers(len(sc.accounts), 2*time.Hour)
 				baseline := env.callCount()
 
@@ -236,7 +236,7 @@ func TestRaidAINeverActs(t *testing.T) {
 				}
 				env.settleAI()
 
-				if checks := env.aiRequests() + int(geminiRequests.Load()); checks != seq {
+				if checks := env.aiRequests() + int(claudeRequests.Load()); checks != seq {
 					t.Fatalf("%d provider checks for %d messages: the case would prove nothing", checks, seq)
 				}
 				if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != wantSpam {
@@ -276,7 +276,7 @@ func TestRaidAINeverActs(t *testing.T) {
 // fail-open bound).
 const failOpenBound = 500 * time.Millisecond
 
-// failOpenMode is one way the AI providers can fail, TypeSafe and Gemini both.
+// failOpenMode is one way the AI providers can fail, TypeSafe and the image provider both.
 type failOpenMode struct {
 	name string
 	// holds is true when the mode leaves raid AI jobs unfinished until released.
@@ -287,15 +287,15 @@ type failOpenMode struct {
 	apply func(env *raidAIImageEnv, typesafe *atomic.Int64) (release func())
 }
 
-// failOpenProviders installs handlers for the TypeSafe and the Gemini fakes of env, the
-// TypeSafe one counted in typesafe (Gemini's requests are env.geminiRequests).
-func failOpenProviders(env *raidAIImageEnv, typesafe *atomic.Int64, ts, gemini http.HandlerFunc) {
+// failOpenProviders installs handlers for the TypeSafe and the image provider fakes of env, the
+// TypeSafe one counted in typesafe (the image provider's requests are env.claudeRequests).
+func failOpenProviders(env *raidAIImageEnv, typesafe *atomic.Int64, ts, image http.HandlerFunc) {
 	withAISpamJevServer(env.t, func(w http.ResponseWriter, r *http.Request) {
 		typesafe.Add(1)
 		_, _ = io.Copy(io.Discard, r.Body)
 		ts(w, r)
 	})
-	env.answerWith(gemini)
+	env.answerWith(image)
 }
 
 // failOpenAnswer is a handler that always answers with status and body.
@@ -310,10 +310,10 @@ func failOpenAnswer(status int, header, body string) http.HandlerFunc {
 }
 
 // failOpenSpamAnswers is a pair of handlers that judge everything spam.
-func failOpenSpamAnswers() (ts, gemini http.HandlerFunc) {
+func failOpenSpamAnswers() (ts, image http.HandlerFunc) {
 	ts = func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(aispamDecisionBody(0.95, "scam"))) }
-	gemini = func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(raidAIGeminiAnswer(0.95, ""))) }
-	return ts, gemini
+	image = func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(raidAIClaudeAnswer(0.95))) }
+	return ts, image
 }
 
 var failOpenModes = []failOpenMode{
@@ -347,8 +347,7 @@ var failOpenModes = []failOpenMode{
 	{
 		name: "429 with a retry delay of 30 s",
 		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
-			const limited = `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED",` +
-				`"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"30s"}]}}`
+			limited := raidAIClaudeError("rate_limit_error", "quota")
 			failOpenProviders(env, typesafe,
 				failOpenAnswer(http.StatusTooManyRequests, "30", "slow down"),
 				failOpenAnswer(http.StatusTooManyRequests, "30", limited))
@@ -367,12 +366,12 @@ var failOpenModes = []failOpenMode{
 	{
 		name: "keys missing", silent: true,
 		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
-			ts, gemini := failOpenSpamAnswers()
-			failOpenProviders(env, typesafe, ts, gemini)
+			ts, image := failOpenSpamAnswers()
+			failOpenProviders(env, typesafe, ts, image)
 			withAISpamTestConfig(env.t, "", true, 0)
-			previous := config.AppConfig.GeminiAPIKey
-			config.AppConfig.GeminiAPIKey = ""
-			env.t.Cleanup(func() { config.AppConfig.GeminiAPIKey = previous })
+			previous := config.AppConfig.AnthropicAPIKey
+			config.AppConfig.AnthropicAPIKey = ""
+			env.t.Cleanup(func() { config.AppConfig.AnthropicAPIKey = previous })
 			return func() {}
 		},
 	},
@@ -395,8 +394,8 @@ var failOpenModes = []failOpenMode{
 	{
 		name: "queue full", holds: true, silent: true,
 		apply: func(env *raidAIImageEnv, typesafe *atomic.Int64) func() {
-			ts, gemini := failOpenSpamAnswers()
-			failOpenProviders(env, typesafe, ts, gemini)
+			ts, image := failOpenSpamAnswers()
+			failOpenProviders(env, typesafe, ts, image)
 
 			raidAIJobs.wait()
 			gate := make(chan struct{})
@@ -485,7 +484,7 @@ func TestRaidAIFailOpen(t *testing.T) {
 				env := newRaidAIImageEnv(t)
 				var typesafe atomic.Int64
 				release := mode.apply(env, &typesafe)
-				tsBefore, geminiBefore := typesafe.Load(), env.geminiRequests()
+				tsBefore, imageBefore := typesafe.Load(), env.claudeRequests()
 				members := env.newMembers(3, 2*time.Hour)
 
 				env.probeFailOpen(members, "probe")
@@ -494,8 +493,8 @@ func TestRaidAIFailOpen(t *testing.T) {
 					if got := typesafe.Load() - tsBefore; got != 0 {
 						t.Errorf("%d TypeSafe requests, want none in this mode", got)
 					}
-					if got := env.geminiRequests() - geminiBefore; got != 0 {
-						t.Errorf("%d Gemini requests, want none in this mode", got)
+					if got := env.claudeRequests() - imageBefore; got != 0 {
+						t.Errorf("%d Claude requests, want none in this mode", got)
 					}
 				}
 				if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
@@ -526,7 +525,7 @@ func TestRaidAIFailOpen(t *testing.T) {
 				if row := env.activeLockdown(); row == nil || row.TriggerKind != models.LockdownTriggerJoinSurge {
 					t.Errorf("active lockdown = %+v after the release, want still the join surge's", row)
 				}
-				if !mode.silent && int(typesafe.Load())+env.geminiRequests() == int(tsBefore)+geminiBefore {
+				if !mode.silent && int(typesafe.Load())+env.claudeRequests() == int(tsBefore)+imageBefore {
 					t.Error("no provider was asked: the case would prove nothing")
 				}
 			})

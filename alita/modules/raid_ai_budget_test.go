@@ -69,8 +69,8 @@ func TestRaidAIBudget(t *testing.T) {
 		}
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 2 {
-			t.Fatalf("Gemini requests = %d, want 2: the third photo is over the group's budget", got)
+		if got := env.claudeRequests(); got != 2 {
+			t.Fatalf("Claude requests = %d, want 2: the third photo is over the group's budget", got)
 		}
 		if got := GetRaidAIStats().Capped - before.Capped; got != 1 {
 			t.Errorf("Capped grew by %d, want 1", got)
@@ -78,8 +78,8 @@ func TestRaidAIBudget(t *testing.T) {
 
 		env.sendMediaIn(other, elsewhere, gotgbot.Message{Photo: photoNamed("elsewhere")})
 		env.settleAI()
-		if got := env.geminiRequests(); got != 3 {
-			t.Errorf("Gemini requests = %d, want 3: another group has its own budget", got)
+		if got := env.claudeRequests(); got != 3 {
+			t.Errorf("Claude requests = %d, want 3: another group has its own budget", got)
 		}
 		env.wantNoActions()
 	})
@@ -95,8 +95,8 @@ func TestRaidAIBudget(t *testing.T) {
 			env.sendMediaIn(chat, member, gotgbot.Message{Photo: photoNamed(fmt.Sprintf("glob%d", i))})
 		}
 		env.settleAI()
-		if got := env.geminiRequests(); got != 3 {
-			t.Fatalf("Gemini requests = %d, want 3 across three groups", got)
+		if got := env.claudeRequests(); got != 3 {
+			t.Fatalf("Claude requests = %d, want 3 across three groups", got)
 		}
 
 		late := env.newJoiner("Late")
@@ -104,8 +104,8 @@ func TestRaidAIBudget(t *testing.T) {
 		env.sendMedia(late, gotgbot.Message{Photo: photoNamed("glob-late")})
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 3 {
-			t.Errorf("Gemini requests = %d, want still 3: the fleet is out of budget", got)
+		if got := env.claudeRequests(); got != 3 {
+			t.Errorf("Claude requests = %d, want still 3: the fleet is out of budget", got)
 		}
 		if got := GetRaidAIStats().Capped - before.Capped; got != 1 {
 			t.Errorf("Capped grew by %d, want 1", got)
@@ -126,8 +126,8 @@ func TestRaidAIBudget(t *testing.T) {
 			env.settleAI()
 		}
 
-		if got := env.geminiRequests(); got != perAccount {
-			t.Fatalf("Gemini requests = %d, want %d: one account's cap", got, perAccount)
+		if got := env.claudeRequests(); got != perAccount {
+			t.Fatalf("Claude requests = %d, want %d: one account's cap", got, perAccount)
 		}
 		if got := GetRaidAIStats().Capped - before.Capped; got != distinctPhotos-perAccount {
 			t.Errorf("Capped grew by %d, want %d", got, distinctPhotos-perAccount)
@@ -141,8 +141,8 @@ func TestRaidAIBudget(t *testing.T) {
 
 		env.sendMedia(bystander, gotgbot.Message{Photo: photoNamed("bystander")})
 		env.settleAI()
-		if got := env.geminiRequests(); got != perAccount+1 {
-			t.Errorf("Gemini requests = %d, want %d: another member's photo is still judged", got, perAccount+1)
+		if got := env.claudeRequests(); got != perAccount+1 {
+			t.Errorf("Claude requests = %d, want %d: another member's photo is still judged", got, perAccount+1)
 		}
 	})
 
@@ -159,8 +159,8 @@ func TestRaidAIBudget(t *testing.T) {
 			env.settleAI()
 		}
 
-		if got := env.geminiRequests(); got != 1 {
-			t.Errorf("Gemini requests = %d, want 1 for one image posted four times", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Errorf("Claude requests = %d, want 1 for one image posted four times", got)
 		}
 		if got := GetRaidAIStats().Capped - before.Capped; got != 0 {
 			t.Errorf("Capped grew by %d, want 0: the cache answers before any budget", got)
@@ -177,16 +177,16 @@ func TestRaidAIBudget(t *testing.T) {
 			env.sendMedia(members[i], gotgbot.Message{Photo: photoNamed(fmt.Sprintf("hour%d", i))})
 		}
 		env.settleAI()
-		if got := env.geminiRequests(); got != 2 {
-			t.Fatalf("Gemini requests = %d, want 2 before the hour turns", got)
+		if got := env.claudeRequests(); got != 2 {
+			t.Fatalf("Claude requests = %d, want 2 before the hour turns", got)
 		}
 
 		advance(time.Hour)
 		env.sendMedia(members[3], gotgbot.Message{Photo: photoNamed("hour3")})
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 3 {
-			t.Errorf("Gemini requests = %d, want 3: the next hour has a fresh budget", got)
+		if got := env.claudeRequests(); got != 3 {
+			t.Errorf("Claude requests = %d, want 3: the next hour has a fresh budget", got)
 		}
 	})
 
@@ -203,8 +203,8 @@ func TestRaidAIBudget(t *testing.T) {
 			env.settleAI()
 		}
 
-		if got := env.geminiRequests(); got != 1 {
-			t.Fatalf("Gemini requests = %d, want 1 for one image posted three times", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Fatalf("Claude requests = %d, want 1 for one image posted three times", got)
 		}
 		if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 3 {
 			t.Errorf("verdict items = %d, want 3: each post counts as a verdict from its own message", got)
@@ -225,17 +225,17 @@ func TestRaidAIBudget(t *testing.T) {
 		release := make(chan struct{})
 		var releaseOnce sync.Once
 		open := func() { releaseOnce.Do(func() { close(release) }) }
-		// Opened on every exit, so a failed wait cannot leave the Gemini handler blocked.
+		// Opened on every exit, so a failed wait cannot leave the Claude handler blocked.
 		t.Cleanup(open)
 		env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
 			<-release
-			_, _ = w.Write([]byte(raidAIGeminiAnswer(0.9, "")))
+			_, _ = w.Write([]byte(raidAIClaudeAnswer(0.9)))
 		})
 		sticker := gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "stk", FileUniqueId: "ustk-race", Type: "regular"}}
 
 		// Every job asks Redis whether the fire latch is set (raidAINoFire) right before it
 		// joins the image's flight, so counting those asks tells when all three are about to
-		// overlap, with no sleep. The leader is inside the gated Gemini handler by then.
+		// overlap, with no sleep. The leader is inside the gated Claude handler by then.
 		var fireChecks atomic.Int64
 		env.redis.Server().SetPreHook(func(_ *server.Peer, cmd string, args ...string) bool {
 			if cmd == "EXISTS" && len(args) == 1 && strings.HasSuffix(args[0], ":"+raidPartFire) {
@@ -248,13 +248,13 @@ func TestRaidAIBudget(t *testing.T) {
 		for _, member := range members {
 			env.sendMedia(member, sticker)
 		}
-		waitUntil(t, 10*time.Second, "the leader to reach Gemini", func() bool { return env.geminiRequests() == 1 })
+		waitUntil(t, 10*time.Second, "the leader to reach Claude", func() bool { return env.claudeRequests() == 1 })
 		waitUntil(t, 10*time.Second, "all three jobs to reach the flight", func() bool { return fireChecks.Load() == int64(len(members)) })
 		open()
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 1 {
-			t.Errorf("Gemini requests = %d, want 1: the posts that overlap share the one call", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Errorf("Claude requests = %d, want 1: the posts that overlap share the one call", got)
 		}
 		if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 3 {
 			t.Errorf("verdict items = %d, want 3", got)
@@ -274,8 +274,8 @@ func TestRaidAIBudget(t *testing.T) {
 		if got := env.client.getFiles(); len(got) != 1 {
 			t.Errorf("getFile asked for %v, want exactly one for a ten-photo album", got)
 		}
-		if got := env.geminiRequests(); got != 1 {
-			t.Errorf("Gemini requests = %d, want 1", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Errorf("Claude requests = %d, want 1", got)
 		}
 		items, err := env.redis.ZMembers(raidKey(env.chat.Id, "av"))
 		if err != nil || len(items) != 1 || items[0] != "g:alb1" {
@@ -289,31 +289,31 @@ func TestRaidAIBudget(t *testing.T) {
 	t.Run("an album photo refused for a moment does not drop the rest of the album", func(t *testing.T) {
 		env := newRaidAIImageEnv(t)
 		advance := movableClock(t)
-		withRaidAIGeminiCooldown(t, time.Minute)
+		withRaidAIImageCooldown(t, time.Minute)
 		member := env.newMembers(1, 2*time.Hour)[0]
-		for range raidAIGeminiFailures {
-			raidAIGeminiRecordFailure(env.chat.Id, errors.New("provider down"))
+		for range raidAIImageFailures {
+			raidAIImageRecordFailure(env.chat.Id, errors.New("provider down"))
 		}
-		if !raidAIGeminiPaused(env.chat.Id) {
+		if !raidAIImagePaused(env.chat.Id) {
 			t.Fatal("the chat is not paused: the case would prove nothing")
 		}
 
 		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("alb-first"), MediaGroupId: "alb-retry"})
 		env.settleAI()
-		if got := env.geminiRequests(); got != 0 {
-			t.Fatalf("Gemini requests = %d while paused, want 0", got)
+		if got := env.claudeRequests(); got != 0 {
+			t.Fatalf("Claude requests = %d while paused, want 0", got)
 		}
 
 		advance(2 * time.Minute)
 		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("alb-second"), MediaGroupId: "alb-retry"})
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 1 {
-			t.Errorf("Gemini requests = %d, want 1: the album was not judged because its first photo met a pause", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Errorf("Claude requests = %d, want 1: the album was not judged because its first photo met a pause", got)
 		}
 	})
 
-	t.Run("an album is not judged twice once a photo reached Gemini", func(t *testing.T) {
+	t.Run("an album is not judged twice once a photo reached the provider", func(t *testing.T) {
 		env := newRaidAIImageEnv(t)
 		member := env.newMembers(1, 2*time.Hour)[0]
 		env.answerWith(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadRequest) })
@@ -323,8 +323,8 @@ func TestRaidAIBudget(t *testing.T) {
 			env.settleAI()
 		}
 
-		if got := env.geminiRequests(); got != 1 {
-			t.Errorf("Gemini requests = %d, want 1: the failing album costs its first photo's call only", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Errorf("Claude requests = %d, want 1: the failing album costs its first photo's call only", got)
 		}
 	})
 
@@ -340,7 +340,7 @@ func TestRaidAIBudget(t *testing.T) {
 		release := make(chan struct{})
 		var releaseOnce sync.Once
 		open := func() { releaseOnce.Do(func() { close(release) }) }
-		// Opened on every exit, so a failed wait cannot leave the Gemini handler blocked.
+		// Opened on every exit, so a failed wait cannot leave the Claude handler blocked.
 		t.Cleanup(open)
 		var calls atomic.Int64
 		env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
@@ -350,14 +350,14 @@ func TestRaidAIBudget(t *testing.T) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			_, _ = w.Write([]byte(raidAIGeminiAnswer(0.9, "")))
+			_, _ = w.Write([]byte(raidAIClaudeAnswer(0.9)))
 		})
 		before := GetRaidAIStats()
 
 		env.sendMedia(first, sticker)
-		waitUntil(t, 10*time.Second, "the first chat's call to reach Gemini", func() bool { return calls.Load() == 1 })
+		waitUntil(t, 10*time.Second, "the first chat's call to reach Claude", func() bool { return calls.Load() == 1 })
 		env.sendMediaIn(other, second, sticker)
-		waitUntil(t, 10*time.Second, "the other chat's own call to reach Gemini", func() bool { return calls.Load() == 2 })
+		waitUntil(t, 10*time.Second, "the other chat's own call to reach Claude", func() bool { return calls.Load() == 2 })
 		open()
 		env.settleAI()
 
@@ -383,8 +383,8 @@ func TestRaidAIBudget(t *testing.T) {
 		if got := env.client.getFiles(); len(got) != 0 {
 			t.Errorf("getFile asked for %v, want nothing while a lockdown is being started", got)
 		}
-		if got := env.geminiRequests(); got != 0 {
-			t.Errorf("Gemini requests = %d, want 0", got)
+		if got := env.claudeRequests(); got != 0 {
+			t.Errorf("Claude requests = %d, want 0", got)
 		}
 		if got := GetRaidAIStats().Cached - before.Cached; got != 1 {
 			t.Errorf("Cached grew by %d, want 1 for the skipped check", got)
@@ -403,8 +403,8 @@ func TestRaidAIBudget(t *testing.T) {
 		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("refused")})
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 0 {
-			t.Errorf("Gemini requests = %d, want 0: a budget that cannot be counted sends nothing", got)
+		if got := env.claudeRequests(); got != 0 {
+			t.Errorf("Claude requests = %d, want 0: a budget that cannot be counted sends nothing", got)
 		}
 		if got := env.client.getFiles(); len(got) != 0 {
 			t.Errorf("getFile asked for %v, want nothing", got)
