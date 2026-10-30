@@ -415,7 +415,7 @@ Plans:
   4. The Lockdown page shows the current state, a working Lift button, and an on/off switch and threshold for each automatic trigger. The Captcha page sets the mode and time limit, and the Antiflood page configures antiflood.
   5. A setting changed in the menu is identical to the same setting changed by command, and both always show the same current value.
 
-**Plans:** 7/14 plans executed
+**Plans:** 11/14 plans executed
 **UI hint**: yes
 
 Plans:
@@ -431,10 +431,10 @@ Plans:
 - [x] 09-07-PLAN.md: Open in private: `/start settings_<id>` with a live admin check, and the cannot-open edit for a dead private menu
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 09-08-PLAN.md: Captcha page: on/off, mode and failure action, with parity, drift and authority parity
-- [ ] 09-09-PLAN.md: Antiflood page: Off then 3..100, mute/ban/kick, the delete switch, with the bot-admin rule
-- [ ] 09-10-PLAN.md: Lockdown page: the state and the three automatic triggers' switches and thresholds
-- [ ] 09-11-PLAN.md: Staff Group page: health, Link with the picker, Unlink with a second tap, the read-only panel, and the group-menu privacy test
+- [x] 09-08-PLAN.md: Captcha page: on/off, mode and failure action, with parity, drift and authority parity
+- [x] 09-09-PLAN.md: Antiflood page: Off then 3..100, mute/ban/kick, the delete switch, with the bot-admin rule
+- [x] 09-10-PLAN.md: Lockdown page: the state and the three automatic triggers' switches and thresholds
+- [x] 09-11-PLAN.md: Staff Group page: health, Link with the picker, Unlink with a second tap, the read-only panel, and the group-menu privacy test
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 09-12-PLAN.md: Lift from the Lockdown page with a second tap, the public notice, and parity with `/unlockdown`
@@ -458,4 +458,4 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
 | 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
 | 8. Turnstile Web Captcha | 11/11 | Complete    | 2026-10-30 |
-| 9. Settings Menu | 7/14 | In Progress|  |
+| 9. Settings Menu | 11/14 | In Progress|  |
