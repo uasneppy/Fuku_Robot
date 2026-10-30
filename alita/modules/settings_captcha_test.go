@@ -16,6 +16,7 @@ import (
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
 	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/divkix/Alita_Robot/alita/i18n"
 )
 
 // settingsCaptchaStored reads the captcha_settings row of chatID straight from the
@@ -466,4 +467,320 @@ func TestSettingsCaptchaTurnstile(t *testing.T) {
 			t.Errorf("selected modes after the press = %v, want turnstile", got)
 		}
 	})
+}
+
+// settingsCaptchaSettingsLines are the three lines of /captcha's settings reply for the
+// given values, in the real English locale.
+func settingsCaptchaSettingsLines(t *testing.T, status, mode, action string) []string {
+	t.Helper()
+	tr := i18n.MustNewTranslator("en")
+	var lines []string
+	for _, line := range []struct{ key, value string }{
+		{"captcha_settings_status", status},
+		{"captcha_settings_mode", mode},
+		{"captcha_settings_failure_action", action},
+	} {
+		text, err := tr.GetString(line.key, i18n.TranslationParams{"s": line.value})
+		if err != nil || text == "" {
+			t.Fatalf("real %s text: %q, %v", line.key, text, err)
+		}
+		lines = append(lines, text)
+	}
+	return lines
+}
+
+func TestSettingsParityCaptcha(t *testing.T) {
+	settingsCaptchaNoWeb(t)
+	env := newSettingsEnvWith(t, settingsEnvOptions{RealLocale: true})
+	msgID := settingsOpenCaptchaPage(t, env)
+
+	// pageShows redraws the page from the stored row and returns its keyboard.
+	pageShows := func(t *testing.T) [][]gotgbot.InlineKeyboardButton {
+		t.Helper()
+		settingsCaptchaRefresh(t, env, msgID)
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		return keyboard
+	}
+	// pressMenu presses the button of control t that sets value v on the current page.
+	pressMenu := func(t *testing.T, control, value string) {
+		t.Helper()
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		env.pressRaw(env.chat, env.admin, msgID, settingsCaptchaButton(t, keyboard, control, value).CallbackData)
+	}
+	// stored is the row both sides must agree with, read past every cache.
+	stored := func(t *testing.T) models.CaptchaSettings {
+		t.Helper()
+		dbcache.ResetLocalForTest()
+		row, ok := settingsCaptchaStored(t, env.chat.Id)
+		if !ok {
+			t.Fatal("no captcha_settings row")
+		}
+		return row
+	}
+
+	// (1) the command writes, the page shows it.
+	env.send(env.admin, "/captcha on")
+	env.send(env.admin, "/captchamode text")
+	env.send(env.admin, "/captchaaction ban")
+	keyboard := pageShows(t)
+	if v := settingsButtonFields(t, settingsCaptchaButton(t, keyboard, "e", ""))["v"]; v != "0" {
+		t.Errorf("after /captcha on the toggle targets %q, want 0 (it is On)", v)
+	}
+	if got := settingsCaptchaSelected(t, settingsCaptchaRow(t, keyboard, "m")); fmt.Sprint(got) != "[text]" {
+		t.Errorf("after /captchamode text the page selects %v", got)
+	}
+	if got := settingsCaptchaSelected(t, settingsCaptchaRow(t, keyboard, "f")); fmt.Sprint(got) != "[ban]" {
+		t.Errorf("after /captchaaction ban the page selects %v", got)
+	}
+	if row := stored(t); !row.Enabled || row.CaptchaMode != "text" || row.FailureAction != "ban" {
+		t.Errorf("stored row = %+v after the three commands", row)
+	}
+
+	// (2) the menu writes, /captcha shows it.
+	pressMenu(t, "e", "0")
+	pressMenu(t, "m", "math")
+	pressMenu(t, "f", "mute")
+	env.send(env.admin, "/captcha")
+	env.wantReplyHas(settingsCaptchaSettingsLines(t, "disabled", "math", "mute")...)
+	if row := stored(t); row.Enabled || row.CaptchaMode != "math" || row.FailureAction != "mute" {
+		t.Errorf("stored row = %+v after the three menu presses", row)
+	}
+
+	// (3) the menu sets the other values, and the same row shows on both sides.
+	pressMenu(t, "e", "1")
+	pressMenu(t, "m", "text")
+	pressMenu(t, "f", "ban")
+	env.send(env.admin, "/captcha")
+	env.wantReplyHas(settingsCaptchaSettingsLines(t, "enabled", "text", "ban")...)
+	row := stored(t)
+	if !row.Enabled || row.CaptchaMode != "text" || row.FailureAction != "ban" {
+		t.Errorf("stored row = %+v after the menu set enabled, text and ban", row)
+	}
+	keyboard = pageShows(t)
+	if got := settingsCaptchaSelected(t, settingsCaptchaRow(t, keyboard, "m")); fmt.Sprint(got) != "[text]" {
+		t.Errorf("the page selects %v for the stored text", got)
+	}
+	if got := settingsCaptchaSelected(t, settingsCaptchaRow(t, keyboard, "f")); fmt.Sprint(got) != "[ban]" {
+		t.Errorf("the page selects %v for the stored ban", got)
+	}
+}
+
+func TestSettingsDriftCaptcha(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		command string
+		control string
+		value   string
+		// refusal is the locale key both sides refuse with; empty when both store the value.
+		refusal string
+	}{
+		{"mode image", "/captchamode image", "m", "image", "captcha_mode_invalid"},
+		{"mode math", "/captchamode math", "m", "math", ""},
+		{"mode turnstile without a web captcha", "/captchamode turnstile", "m", "turnstile", "captcha_web_refuse_not_configured"},
+		{"action warn", "/captchaaction warn", "f", "warn", "captcha_action_invalid"},
+		{"action kick", "/captchaaction kick", "f", "kick", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			settingsCaptchaNoWeb(t)
+			env := newSettingsEnv(t)
+			commandChat := env.chat
+			menuChat := env.addChat()
+
+			env.send(env.admin, tc.command)
+			if tc.refusal != "" {
+				env.wantReplyHas(staffMarker(tc.refusal))
+			}
+
+			fields := map[string]string{"a": "st", "u": fmt.Sprint(env.admin.Id), "p": "c", "t": tc.control, "v": tc.value}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("hand-built press %v did not encode", fields)
+			}
+			const menuMsgID = 4343
+			env.pressRaw(menuChat, env.admin, menuMsgID, data)
+
+			commandRow, commandHas := settingsCaptchaStored(t, commandChat.Id)
+			menuRow, menuHas := settingsCaptchaStored(t, menuChat.Id)
+			if commandHas != menuHas || commandRow.CaptchaMode != menuRow.CaptchaMode || commandRow.FailureAction != menuRow.FailureAction {
+				t.Fatalf("command stored (%+v, row %v), menu stored (%+v, row %v): they disagree", commandRow, commandHas, menuRow, menuHas)
+			}
+			if tc.refusal == "" {
+				if !menuHas {
+					t.Fatalf("both sides refused %s, want %s stored", tc.command, tc.value)
+				}
+				got := map[string]string{"m": menuRow.CaptchaMode, "f": menuRow.FailureAction}[tc.control]
+				if got != tc.value {
+					t.Errorf("stored %q, want %q", got, tc.value)
+				}
+				return
+			}
+			if menuHas && (menuRow.CaptchaMode == tc.value || menuRow.FailureAction == tc.value) {
+				t.Errorf("the refused value %q was stored: %+v", tc.value, menuRow)
+			}
+			text, _ := env.lastEdit(menuChat.Id, menuMsgID)
+			if !strings.Contains(text, staffMarker(tc.refusal)) {
+				t.Errorf("the menu redrew %q, want a notice with the command's own %s", text, tc.refusal)
+			}
+		})
+	}
+
+	t.Run("a value of no word shape is an invalid request", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		for _, bad := range []string{"Math", "m4th", "turn-stile", "mathmathmathmathmath"} {
+			fields := map[string]string{"a": "st", "u": fmt.Sprint(env.admin.Id), "p": "c", "t": "m", "v": bad}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("hand-built press %v did not encode", fields)
+			}
+			env.pressRaw(env.chat, env.admin, 4344, data)
+			answer, alert := env.lastAnswer()
+			if !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("value %q answered %q (alert %v), want the invalid request alert", bad, answer, alert)
+			}
+		}
+		if row, ok := settingsCaptchaStored(t, env.chat.Id); ok && row.CaptchaMode != "math" {
+			t.Errorf("a malformed value changed the mode to %q", row.CaptchaMode)
+		}
+	})
+}
+
+func TestSettingsAuthorityParityCaptcha(t *testing.T) {
+	settingsCaptchaNoWeb(t)
+	env := newSettingsEnv(t)
+	// The bot is a plain member of the group from the start, so its role is never cached
+	// as an administrator.
+	env.fake.setBotRole(env.chat.Id, staffRoleMember)
+	plain := gotgbot.User{Id: env.admin.Id + 31, FirstName: "Plain"}
+	env.fake.setMember(env.chat.Id, plain.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+	// A plain member is refused by both, and nothing is stored.
+	env.send(plain, "/captchamode text")
+	env.wantReplyHas(staffMarker("chat_status_user_admin_cmd_error"))
+	env.pressPrivate(plain, 7001, env.privateFields(env.chat.Id, "a", "st", "p", "c", "t", "m", "v", "text"))
+	if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+		t.Errorf("a plain member's private press answered %q (alert %v), want the alert settings_not_admin", answer, alert)
+	}
+	if row, ok := settingsCaptchaStored(t, env.chat.Id); ok && row.CaptchaMode != "math" {
+		t.Errorf("a plain member changed the mode to %q", row.CaptchaMode)
+	}
+
+	// /captcha on needs the bot as an administrator; the menu refuses the same way.
+	env.send(env.admin, "/captcha on")
+	env.wantReplyHas(staffMarker("chat_status_bot_not_admin"))
+	msgID := settingsOpenCaptchaPage(t, env)
+	_, keyboard := env.lastEdit(env.chat.Id, msgID)
+	env.pressRaw(env.chat, env.admin, msgID, settingsCaptchaButton(t, keyboard, "e", "").CallbackData)
+	text, _ := env.lastEdit(env.chat.Id, msgID)
+	if !strings.Contains(text, staffMarker("chat_status_bot_not_admin")) {
+		t.Errorf("the refused toggle redrew %q, want the notice chat_status_bot_not_admin", text)
+	}
+	if row, ok := settingsCaptchaStored(t, env.chat.Id); ok && row.Enabled {
+		t.Errorf("a refused /captcha on or toggle stored Enabled: %+v", row)
+	}
+
+	// The mode needs only the admin: both succeed whatever the bot's role is.
+	env.send(env.admin, "/captchamode text")
+	if row, ok := settingsCaptchaStored(t, env.chat.Id); !ok || row.CaptchaMode != "text" {
+		t.Fatalf("/captchamode text stored %+v (row %v), want text", row, ok)
+	}
+	settingsCaptchaRefresh(t, env, msgID)
+	_, keyboard = env.lastEdit(env.chat.Id, msgID)
+	env.pressRaw(env.chat, env.admin, msgID, settingsCaptchaButton(t, keyboard, "m", "math").CallbackData)
+	if row, ok := settingsCaptchaStored(t, env.chat.Id); !ok || row.CaptchaMode != "math" {
+		t.Errorf("the menu's Math stored %+v (row %v) with the bot a plain member, want math", row, ok)
+	}
+	_, keyboard = env.lastEdit(env.chat.Id, msgID)
+	env.pressRaw(env.chat, env.admin, msgID, settingsCaptchaButton(t, keyboard, "m", "text").CallbackData)
+	if row, ok := settingsCaptchaStored(t, env.chat.Id); !ok || row.CaptchaMode != "text" {
+		t.Errorf("the menu's Text stored %+v (row %v) with the bot a plain member, want text", row, ok)
+	}
+}
+
+func TestSettingsCaptchaCallbackBytes(t *testing.T) {
+	tr := i18n.MustNewTranslator("en")
+	for _, variant := range []struct {
+		name  string
+		view  settingsView
+		wantT int // exact size of the Turnstile choice, 0 for no check
+	}{
+		{"private", settingsView{Tr: tr, Private: true, OwnerKey: "c", OwnerValue: "-1001234567890", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}, 53},
+		{"group", settingsView{Tr: tr, OwnerKey: "u", OwnerValue: "9999999999", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}, 0},
+	} {
+		t.Run(variant.name, func(t *testing.T) {
+			sawTurnstile := false
+			for _, web := range []settingsCaptchaWeb{{}, {Installed: true}, {Installed: true, Available: true}} {
+				for _, enabled := range []bool{false, true} {
+					for _, mode := range []string{"math", "text", "turnstile"} {
+						for _, action := range []string{"kick", "ban", "mute"} {
+							s := &models.CaptchaSettings{Enabled: enabled, CaptchaMode: mode, FailureAction: action, Timeout: 5}
+							screen := renderSettingsCaptcha(variant.view, s, web, "")
+							name := fmt.Sprintf("web %+v enabled %v %s %s", web, enabled, mode, action)
+							if screen.Omitted != 0 {
+								t.Errorf("%s omitted %d buttons", name, screen.Omitted)
+							}
+							buttons := settingsAllButtons(screen.Keyboard.InlineKeyboard)
+							if len(buttons) != 12 {
+								t.Errorf("%s has %d buttons, want toggle, 3 modes, 3 time, 3 actions, Back and Close", name, len(buttons))
+							}
+							for _, button := range buttons {
+								if n := len(button.CallbackData); n < 1 || n > 64 {
+									t.Errorf("%s button %q has %d bytes of callback data, want 1..64", name, button.Text, n)
+								}
+								fields := settingsButtonFields(t, button)
+								if fields["t"] == "m" && fields["v"] == "turnstile" && variant.wantT != 0 {
+									sawTurnstile = true
+									if n := len(button.CallbackData); n != variant.wantT {
+										t.Errorf("%s Turnstile choice has %d bytes, want exactly %d", name, n, variant.wantT)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			if variant.wantT != 0 && !sawTurnstile {
+				t.Error("no Turnstile choice was checked")
+			}
+		})
+	}
+}
+
+func TestSettingsCaptchaPageFitsEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	// 64 runes of characters that grow when escaped or take two UTF-16 units.
+	title := strings.Repeat("&<ж😀", 16)
+	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			for _, view := range []settingsView{
+				{Tr: tr, OwnerKey: "u", OwnerValue: "9999999999", GroupID: -1001234567890, GroupTitle: title, OpenerName: "N"},
+				{Tr: tr, Private: true, OwnerKey: "c", OwnerValue: "-1001234567890", GroupID: -1001234567890, GroupTitle: title, OpenerName: "N"},
+			} {
+				// The longest refusal is the worst notice line.
+				notice := ""
+				for _, key := range []string{"captcha_web_refuse_not_configured", "captcha_web_refuse_no_redis", "captcha_web_refuse_no_rights", "chat_status_bot_not_admin"} {
+					if line := settingsNoticeWarn(settingsText(tr, key)); len(line) > len(notice) {
+						notice = line
+					}
+				}
+				if notice == "" {
+					t.Fatalf("%s: no refusal text", code)
+				}
+				s := &models.CaptchaSettings{Enabled: true, CaptchaMode: "turnstile", FailureAction: "mute", Timeout: 10}
+				screen := renderSettingsCaptcha(view, s, settingsCaptchaWeb{}, notice)
+
+				if got := panelUTF16Len(screen.Text); got > 3800 {
+					t.Errorf("%s: the page is %d UTF-16 units, want at most 3800", code, got)
+				}
+				if note := settingsText(tr, "settings_captcha_fallback_note"); note == "" || !strings.Contains(screen.Text, note) {
+					t.Errorf("%s: the page does not carry the fallback note", code)
+				}
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					if strings.TrimSpace(button.Text) == "" {
+						t.Errorf("%s: a button has an empty label (data %q)", code, button.CallbackData)
+					}
+				}
+			}
+		})
+	}
 }

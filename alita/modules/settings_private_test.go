@@ -243,11 +243,12 @@ func TestSettingsPrivateRoundTrip(t *testing.T) {
 	if !strings.Contains(text, staffMarker("settings_page_captcha")) {
 		t.Fatalf("pressing Captcha in private drew %q, want the Captcha page", text)
 	}
-	if len(keyboard) != 2 || len(keyboard[0]) != 3 {
-		t.Fatalf("private Captcha page keyboard = %+v, want the stepper row and the navigation row", keyboard)
+	stepper := settingsCaptchaRow(t, keyboard, settingsCaptchaTime)
+	if len(stepper) != 3 {
+		t.Fatalf("private Captcha page keyboard = %+v, want a three button time stepper row", keyboard)
 	}
 
-	env.pressRaw(private, env.admin, main.MessageID, keyboard[0][2].CallbackData)
+	env.pressRaw(private, env.admin, main.MessageID, stepper[2].CallbackData)
 	if got := settingsShownTimeout(t, env.chat.Id); got != 3 {
 		t.Errorf("the group's captcha time = %d after a private step, want 3", got)
 	}
@@ -373,11 +374,12 @@ func TestSettingsPrivateMenu(t *testing.T) {
 		msgID := settingsPrivateOpen(t, env)
 		env.pressPrivate(env.admin, msgID, captchaPage(env))
 		_, keyboard := env.lastEdit(env.admin.Id, msgID)
-		if len(keyboard) != 2 || len(keyboard[0]) != 3 {
-			t.Fatalf("private Captcha page keyboard = %+v, want the stepper row and the navigation row", keyboard)
+		stepper := settingsCaptchaRow(t, keyboard, settingsCaptchaTime)
+		if len(stepper) != 3 {
+			t.Fatalf("private Captcha page keyboard = %+v, want a three button time stepper row", keyboard)
 		}
 
-		env.pressRaw(settingsPrivateChat(env.admin), env.admin, msgID, keyboard[0][2].CallbackData)
+		env.pressRaw(settingsPrivateChat(env.admin), env.admin, msgID, stepper[2].CallbackData)
 
 		if stored, ok := settingsStoredTimeout(t, env.chat.Id); !ok || stored != 3 {
 			t.Errorf("stored timeout of the group = %d (row %v), want 3", stored, ok)
