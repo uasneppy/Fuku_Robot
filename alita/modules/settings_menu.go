@@ -291,6 +291,12 @@ func settingsVerifyPress(b *gotgbot.Bot, ctx *ext.Context, query *gotgbot.Callba
 	member, err := lockdownLiveMember(b, groupID, query.From.Id)
 	if err != nil {
 		log.Warnf("[Settings] live check of user %d in chat %d failed: %v", query.From.Id, groupID, err)
+		if p.private && chat_status.IsBotMissingError(err) {
+			// The bot left the group, or the group is gone: this private menu can never
+			// work again, so it closes itself instead of failing on every press (D-11).
+			p.cannotOpen()
+			return nil
+		}
 		return refuse("settings_check_failed")
 	}
 	if member.Status != gotgbot.ChatMemberStatusCreator && member.Status != gotgbot.ChatMemberStatusAdministrator {
@@ -307,6 +313,10 @@ func settingsVerifyPress(b *gotgbot.Bot, ctx *ext.Context, query *gotgbot.Callba
 	full, err := b.GetChatWithContext(lookupCtx, groupID, nil)
 	if err != nil || full == nil {
 		log.Warnf("[Settings] getChat of chat %d for a private menu failed: %v", groupID, err)
+		if err != nil && chat_status.IsBotMissingError(err) {
+			p.cannotOpen()
+			return nil
+		}
 		return refuse("settings_check_failed")
 	}
 	group := full.ToChat()
