@@ -174,13 +174,15 @@ captcha_help_msg: |
     × Math: Решение простых математических задач
   
     × Text: Распознавание текста, показанного на изображении
+
+    × Turnstile: Проверка Cloudflare на веб-странице
   
   
     *Команды администратора:*
   
     × /captcha `<on/off>`: Включить или отключить проверку капчи
   
-    × /captchamode `<math/text>`: Установить тип капчи (математические задачи или распознавание текста)
+    × /captchamode `<math/text/turnstile>`: Установить тип капчи (математические задачи или распознавание текста)
   
     × /captchatime `<1-10>`: Установить время ожидания в минутах (по умолчанию: 2)
   
@@ -689,8 +691,8 @@ users_help_msg:
 captcha_enable_failed: Не удалось включить капчу. Пожалуйста, попробуйте снова.
 captcha_disable_failed: Не удалось отключить капчу. Пожалуйста, попробуйте снова.
 captcha_usage: Используйте <code>/captcha on</code> или <code>/captcha off</code>
-captcha_mode_specify: "Укажите режим: <code>math</code> или <code>text</code>"
-captcha_mode_invalid: Неверный режим. Используйте <code>math</code> или <code>text</code>
+captcha_mode_specify: "Укажите режим: <code>math</code>, <code>text</code> или <code>turnstile</code>"
+captcha_mode_invalid: Неверный режим. Используйте <code>math</code>, <code>text</code> или <code>turnstile</code>
 captcha_mode_failed: Не удалось установить режим капчи. Пожалуйста, попробуйте снова.
 captcha_timeout_specify: Укажите время ожидания в минутах (1-10)
 captcha_timeout_invalid: Неверное время ожидания. Пожалуйста, используйте число от 1 до 10.
@@ -1281,7 +1283,7 @@ db_warn_no_reason: "Без причины"
 db_not_initialized: "база данных не инициализирована"
 
 # Captcha validation strings
-captcha_invalid_mode_error: "неверный режим капчи: должен быть 'math' или 'text'"
+captcha_invalid_mode_error: "неверный режим капчи: должен быть 'math', 'text' или 'turnstile'"
 captcha_timeout_range_error: "время ожидания должно быть между 1 и 10 минутами"
 captcha_invalid_action_error: "неверное действие при неудаче: должно быть 'kick', 'ban' или 'mute'"
 captcha_attempts_range_error: "максимальное количество попыток должно быть между 1 и 10"

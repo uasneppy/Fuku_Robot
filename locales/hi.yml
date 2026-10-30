@@ -247,12 +247,14 @@ captcha_help_msg: "CAPTCHA सत्यापन के साथ अपने �
 
   × Text: एक छवि में दिखाए गए टेक्स्ट की पहचान करें
 
+  × Turnstile: वेब पेज पर Cloudflare की जाँच
+
 
   *एडमिन कमांड:*
 
   × /captcha `<on/off>`: कैप्चा सत्यापन सक्षम या अक्षम करें
 
-  × /captchamode `<math/text>`: कैप्चा प्रकार सेट करें (गणित की समस्याएं या टेक्स्ट पहचान)
+  × /captchamode `<math/text/turnstile>`: कैप्चा प्रकार सेट करें (गणित की समस्याएं या टेक्स्ट पहचान)
 
   × /captchatime `<1-10>`: टाइमआउट मिनटों में सेट करें (डिफ़ॉल्ट: 2)
 
@@ -765,8 +767,8 @@ blacklists_extended_docs: |
 captcha_enable_failed: कैप्चा सक्षम करने में विफल। कृपया पुनः प्रयास करें।
 captcha_disable_failed: कैप्चा अक्षम करने में विफल। कृपया पुनः प्रयास करें।
 captcha_usage: कृपया <code>/captcha on</code> या <code>/captcha off</code> का उपयोग करें
-captcha_mode_specify: "कृपया एक मोड निर्दिष्ट करें: <code>math</code> या <code>text</code>"
-captcha_mode_invalid: अमान्य मोड। <code>math</code> या <code>text</code> का उपयोग करें
+captcha_mode_specify: "कृपया एक मोड निर्दिष्ट करें: <code>math</code>, <code>text</code> या <code>turnstile</code>"
+captcha_mode_invalid: अमान्य मोड। <code>math</code>, <code>text</code> या <code>turnstile</code> का उपयोग करें
 captcha_mode_failed: कैप्चा मोड सेट करने में विफल। कृपया पुनः प्रयास करें।
 captcha_timeout_specify: कृपया मिनटों में टाइमआउट निर्दिष्ट करें (1-10)
 captcha_timeout_invalid: अमान्य टाइमआउट। कृपया 1 और 10 के बीच एक संख्या का उपयोग करें।
@@ -886,7 +888,7 @@ captcha_settings_failure_action: "विफलता कार्रवाई: <
 captcha_settings_max_attempts: "अधिकतम प्रयास: <code>%d</code>"
 captcha_status_enabled: "सक्षम"
 captcha_status_disabled: "अक्षम"
-captcha_invalid_mode_error: "अमान्य कैप्चा मोड: 'math' या 'text' होना चाहिए"
+captcha_invalid_mode_error: "अमान्य कैप्चा मोड: 'math', 'text' या 'turnstile' होना चाहिए"
 captcha_timeout_range_error: "टाइमआउट 1 और 10 मिनट के बीच होना चाहिए"
 captcha_invalid_action_error: "अमान्य विफलता कार्रवाई: 'kick', 'ban', या 'mute' होनी चाहिए"
 captcha_attempts_range_error: "अधिकतम प्रयास 1 और 10 के बीच होने चाहिए"

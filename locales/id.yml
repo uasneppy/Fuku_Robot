@@ -248,12 +248,14 @@ captcha_help_msg: |
 
   × Teks: Identifikasi teks yang ditampilkan dalam gambar
 
+  × Turnstile: Pemeriksaan Cloudflare di halaman web
+
 
   *Perintah Admin:*
 
   × /captcha `<on/off>`: Aktifkan atau nonaktifkan verifikasi captcha
 
-  × /captchamode `<math/text>`: Atur tipe captcha (masalah matematika atau pengenalan teks)
+  × /captchamode `<math/text/turnstile>`: Atur tipe captcha (masalah matematika atau pengenalan teks)
 
   × /captchatime `<1-10>`: Atur batas waktu dalam menit (default: 2)
 
@@ -901,8 +903,8 @@ users_help_msg:
 captcha_enable_failed: Gagal mengaktifkan captcha. Silakan coba lagi.
 captcha_disable_failed: Gagal menonaktifkan captcha. Silakan coba lagi.
 captcha_usage: Silakan gunakan <code>/captcha on</code> atau <code>/captcha off</code>
-captcha_mode_specify: "Silakan tentukan mode: <code>math</code> atau <code>text</code>"
-captcha_mode_invalid: Mode tidak valid. Gunakan <code>math</code> atau <code>text</code>
+captcha_mode_specify: "Silakan tentukan mode: <code>math</code>, <code>text</code> atau <code>turnstile</code>"
+captcha_mode_invalid: Mode tidak valid. Gunakan <code>math</code>, <code>text</code> atau <code>turnstile</code>
 captcha_mode_failed: Gagal mengatur mode captcha. Silakan coba lagi.
 captcha_timeout_specify: Silakan tentukan batas waktu dalam menit (1-10)
 captcha_timeout_invalid: Batas waktu tidak valid. Silakan gunakan angka antara 1 dan 10.
@@ -1519,7 +1521,7 @@ db_warn_no_reason: "Tidak Ada Alasan"
 db_not_initialized: "database tidak diinisialisasi"
 
 # Captcha validation strings
-captcha_invalid_mode_error: "mode captcha tidak valid: harus 'math' atau 'text'"
+captcha_invalid_mode_error: "mode captcha tidak valid: harus 'math', 'text' atau 'turnstile'"
 captcha_timeout_range_error: "batas waktu harus antara 1 dan 10 menit"
 captcha_invalid_action_error: "tindakan kegagalan tidak valid: harus 'kick', 'ban', atau 'mute'"
 captcha_attempts_range_error: "maksimal percobaan harus antara 1 dan 10"

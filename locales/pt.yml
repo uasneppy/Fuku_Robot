@@ -238,12 +238,14 @@ captcha_help_msg:
 
   × Texto: Identifique texto mostrado em uma imagem
 
+  × Turnstile: Uma verificação da Cloudflare em uma página web
+
 
   *Comandos de Admin:*
 
   × /captcha `<on/off>`: Ativa ou desativa a verificação de captcha
 
-  × /captchamode `<math/text>`: Define o tipo de captcha (problemas matemáticos ou reconhecimento de texto)
+  × /captchamode `<math/text/turnstile>`: Define o tipo de captcha (problemas matemáticos ou reconhecimento de texto)
 
   × /captchatime `<1-10>`: Define o tempo limite em minutos (padrão: 2)
 
@@ -872,8 +874,8 @@ users_help_msg:
 captcha_enable_failed: Falha ao ativar captcha. Tente novamente.
 captcha_disable_failed: Falha ao desativar captcha. Tente novamente.
 captcha_usage: Por favor use <code>/captcha on</code> ou <code>/captcha off</code>
-captcha_mode_specify: "Por favor especifique um modo: <code>math</code> ou <code>text</code>"
-captcha_mode_invalid: Modo inválido. Use <code>math</code> ou <code>text</code>
+captcha_mode_specify: "Por favor especifique um modo: <code>math</code>, <code>text</code> ou <code>turnstile</code>"
+captcha_mode_invalid: Modo inválido. Use <code>math</code>, <code>text</code> ou <code>turnstile</code>
 captcha_mode_failed: Falha ao definir modo de captcha. Tente novamente.
 captcha_timeout_specify: Por favor especifique o tempo limite em minutos (1-10)
 captcha_timeout_invalid: Tempo limite inválido. Por favor use um número entre 1 e 10.
@@ -1488,7 +1490,7 @@ db_warn_no_reason: "Sem Motivo"
 db_not_initialized: "banco de dados não inicializado"
 
 # Captcha validation strings
-captcha_invalid_mode_error: "modo de captcha inválido: deve ser 'math' ou 'text'"
+captcha_invalid_mode_error: "modo de captcha inválido: deve ser 'math', 'text' ou 'turnstile'"
 captcha_timeout_range_error: "tempo limite deve ser entre 1 e 10 minutos"
 captcha_invalid_action_error: "ação de falha inválida: deve ser 'kick', 'ban', ou 'mute'"
 captcha_attempts_range_error: "tentativas máximas devem ser entre 1 e 10"

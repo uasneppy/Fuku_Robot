@@ -462,12 +462,14 @@ captcha_help_msg: |
 
   × Text : Identifier du texte affiché dans une image
 
+  × Turnstile : Une vérification Cloudflare sur une page web
+
 
   *Commandes Admin :*
 
   × /captcha `<on/off>` : Activer ou désactiver la vérification captcha
 
-  × /captchamode `<math/text>` : Définir le type de captcha (problèmes mathématiques ou reconnaissance de texte)
+  × /captchamode `<math/text/turnstile>` : Définir le type de captcha (problèmes mathématiques ou reconnaissance de texte)
 
   × /captchatime `<1-10>` : Définir le délai en minutes (défaut : 2)
 
@@ -483,8 +485,8 @@ captcha_help_msg: |
 captcha_enable_failed: Échec de l'activation du captcha. Veuillez réessayer.
 captcha_disable_failed: Échec de la désactivation du captcha. Veuillez réessayer.
 captcha_usage: Veuillez utiliser <code>/captcha on</code> ou <code>/captcha off</code>
-captcha_mode_specify: "Veuillez spécifier un mode : <code>math</code> ou <code>text</code>"
-captcha_mode_invalid: Mode invalide. Utilisez <code>math</code> ou <code>text</code>
+captcha_mode_specify: "Veuillez spécifier un mode : <code>math</code>, <code>text</code> ou <code>turnstile</code>"
+captcha_mode_invalid: Mode invalide. Utilisez <code>math</code>, <code>text</code> ou <code>turnstile</code>
 captcha_mode_failed: Échec de la définition du mode captcha. Veuillez réessayer.
 captcha_timeout_specify: Veuillez spécifier un délai en minutes (1-10)
 captcha_timeout_invalid: Délai invalide. Veuillez utiliser un nombre entre 1 et 10.
@@ -596,7 +598,7 @@ captcha_math_time_remaining: |
   Veuillez résoudre le problème affiché dans l'image et sélectionner la bonne réponse :
 
   ⏱ Vous avez <b>%d minutes</b> pour répondre.
-captcha_invalid_mode_error: "mode captcha invalide : doit être 'math' ou 'text'"
+captcha_invalid_mode_error: "mode captcha invalide : doit être 'math', 'text' ou 'turnstile'"
 captcha_timeout_range_error: "le délai doit être entre 1 et 10 minutes"
 captcha_invalid_action_error: "action d'échec invalide : doit être 'kick', 'ban' ou 'mute'"
 captcha_attempts_range_error: "le nombre max de tentatives doit être entre 1 et 10"

@@ -300,12 +300,14 @@ captcha_help_msg:
 
   × Text: Identify text shown in an image
 
+  × Turnstile: A Cloudflare check on a web page
+
 
   *Admin Commands:*
 
   × /captcha `<on/off>`: Enable or disable captcha verification
 
-  × /captchamode `<math/text>`: Set captcha type (math problems or text recognition)
+  × /captchamode `<math/text/turnstile>`: Set captcha type (math problems or text recognition)
 
   × /captchatime `<1-10>`: Set timeout in minutes (default: 2)
 
@@ -973,8 +975,8 @@ users_help_msg:
 captcha_enable_failed: Failed to enable captcha. Please try again.
 captcha_disable_failed: Failed to disable captcha. Please try again.
 captcha_usage: Please use <code>/captcha on</code> or <code>/captcha off</code>
-captcha_mode_specify: "Please specify a mode: <code>math</code> or <code>text</code>"
-captcha_mode_invalid: Invalid mode. Use <code>math</code> or <code>text</code>
+captcha_mode_specify: "Please specify a mode: <code>math</code>, <code>text</code> or <code>turnstile</code>"
+captcha_mode_invalid: Invalid mode. Use <code>math</code>, <code>text</code> or <code>turnstile</code>
 captcha_mode_failed: Failed to set captcha mode. Please try again.
 captcha_timeout_specify: Please specify timeout in minutes (1-10)
 captcha_timeout_invalid: Invalid timeout. Please use a number between 1 and 10.
@@ -1594,7 +1596,7 @@ db_warn_no_reason: "No Reason"
 db_not_initialized: "database not initialized"
 
 # Captcha validation strings
-captcha_invalid_mode_error: "invalid captcha mode: must be 'math' or 'text'"
+captcha_invalid_mode_error: "invalid captcha mode: must be 'math', 'text' or 'turnstile'"
 captcha_timeout_range_error: "timeout must be between 1 and 10 minutes"
 captcha_invalid_action_error: "invalid failure action: must be 'kick', 'ban', or 'mute'"
 captcha_attempts_range_error: "max attempts must be between 1 and 10"

@@ -13,10 +13,11 @@ Force new members to prove they're human by solving a simple challenge before th
 *Captcha Types:*
 × Math: Solve simple arithmetic problems
 × Text: Identify text shown in an image
+× Turnstile: A Cloudflare check on a web page
 
 *Admin Commands:*
 × /captcha `<on/off>`: Enable or disable captcha verification
-× /captchamode `<math/text>`: Set captcha type (math problems or text recognition)
+× /captchamode `<math/text/turnstile>`: Set captcha type (math problems, text recognition or a Turnstile web check)
 × /captchatime `<1-10>`: Set timeout in minutes (default: 2)
 × /captchaaction `<kick/ban/mute>`: Set action for failed verification (default: kick)
 × /captchamaxattempts `<1-10>`: Set maximum verification attempts (default: 3)
@@ -34,6 +35,7 @@ If they fail or timeout, the configured action is taken.
 **Captcha Types:**
 - **Math**: Solve simple arithmetic problems (addition, subtraction, multiplication)
 - **Text**: Identify text shown in a distorted image
+- **Turnstile**: Complete a Cloudflare Turnstile check on a web page that opens inside Telegram. It needs the bot owner's web captcha setup; see [Self-hosting the web captcha](/self-hosting/captcha-web/). `/captchamode turnstile` is refused, with the reason, until that setup works and the bot is an administrator with the Restrict members right.
 
 **Pending Messages Feature:**
 When a user is completing the captcha, any messages they try to send are stored and deleted. Admins can:

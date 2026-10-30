@@ -251,12 +251,14 @@ captcha_help_msg:
 
   × Texto: Identificar texto mostrado en una imagen
 
+  × Turnstile: Una verificación de Cloudflare en una página web
+
 
   *Comandos de Administrador:*
 
   × /captcha `<on/off>`: Habilitar o deshabilitar verificación captcha
 
-  × /captchamode `<math/text>`: Establecer tipo de captcha (problemas matemáticos o reconocimiento de texto)
+  × /captchamode `<math/text/turnstile>`: Establecer tipo de captcha (problemas matemáticos o reconocimiento de texto)
 
   × /captchatime `<1-10>`: Establecer tiempo de espera en minutos (predeterminado: 2)
 
@@ -907,8 +909,8 @@ users_help_msg:
 captcha_enable_failed: Error al habilitar captcha. Por favor intenta de nuevo.
 captcha_disable_failed: Error al deshabilitar captcha. Por favor intenta de nuevo.
 captcha_usage: Por favor usa <code>/captcha on</code> o <code>/captcha off</code>
-captcha_mode_specify: "Por favor especifica un modo: <code>math</code> o <code>text</code>"
-captcha_mode_invalid: Modo inválido. Usa <code>math</code> o <code>text</code>
+captcha_mode_specify: "Por favor especifica un modo: <code>math</code>, <code>text</code> o <code>turnstile</code>"
+captcha_mode_invalid: Modo inválido. Usa <code>math</code>, <code>text</code> o <code>turnstile</code>
 captcha_mode_failed: Error al establecer modo de captcha. Por favor intenta de nuevo.
 captcha_timeout_specify: Por favor especifica el tiempo de espera en minutos (1-10)
 captcha_timeout_invalid: Tiempo de espera inválido. Por favor usa un número entre 1 y 10.
@@ -1527,7 +1529,7 @@ db_warn_no_reason: "Sin Razón"
 db_not_initialized: "base de datos no inicializada"
 
 # Captcha validation strings
-captcha_invalid_mode_error: "modo de captcha inválido: debe ser 'math' o 'text'"
+captcha_invalid_mode_error: "modo de captcha inválido: debe ser 'math', 'text' o 'turnstile'"
 captcha_timeout_range_error: "el tiempo de espera debe estar entre 1 y 10 minutos"
 captcha_invalid_action_error: "acción de falla inválida: debe ser 'kick', 'ban', o 'mute'"
 captcha_attempts_range_error: "los intentos máximos deben estar entre 1 y 10"
