@@ -238,12 +238,14 @@ captcha_help_msg:
 
   × Texto: Identifique texto mostrado em uma imagem
 
+  × Turnstile: Uma verificação da Cloudflare em uma página web
+
 
   *Comandos de Admin:*
 
   × /captcha `<on/off>`: Ativa ou desativa a verificação de captcha
 
-  × /captchamode `<math/text>`: Define o tipo de captcha (problemas matemáticos ou reconhecimento de texto)
+  × /captchamode `<math/text/turnstile>`: Define o tipo de captcha (problemas matemáticos ou reconhecimento de texto)
 
   × /captchatime `<1-10>`: Define o tempo limite em minutos (padrão: 2)
 
@@ -872,8 +874,8 @@ users_help_msg:
 captcha_enable_failed: Falha ao ativar captcha. Tente novamente.
 captcha_disable_failed: Falha ao desativar captcha. Tente novamente.
 captcha_usage: Por favor use <code>/captcha on</code> ou <code>/captcha off</code>
-captcha_mode_specify: "Por favor especifique um modo: <code>math</code> ou <code>text</code>"
-captcha_mode_invalid: Modo inválido. Use <code>math</code> ou <code>text</code>
+captcha_mode_specify: "Por favor especifique um modo: <code>math</code>, <code>text</code> ou <code>turnstile</code>"
+captcha_mode_invalid: Modo inválido. Use <code>math</code>, <code>text</code> ou <code>turnstile</code>
 captcha_mode_failed: Falha ao definir modo de captcha. Tente novamente.
 captcha_timeout_specify: Por favor especifique o tempo limite em minutos (1-10)
 captcha_timeout_invalid: Tempo limite inválido. Por favor use um número entre 1 e 10.
@@ -934,6 +936,9 @@ captcha_web_invalid_body: Ele pertence a outro membro ou já foi usado. Nada foi
 captcha_web_unsupported_title: Abra no Telegram
 captcha_web_unsupported_body: Use o botão no chat do grupo. Se já usou, desative bloqueadores de conteúdo e tente de novo.
 captcha_web_close_button: Fechar
+captcha_web_refuse_not_configured: "O captcha Turnstile ainda não está configurado neste bot. Peça ao dono do bot para concluir a configuração do captcha web. Os modos math e text continuam funcionando."
+captcha_web_refuse_no_redis: "O captcha Turnstile está indisponível agora porque o armazenamento compartilhado do bot não responde. Tente novamente mais tarde ou use o captcha math ou text."
+captcha_web_refuse_no_rights: "Preciso ser administrador com o direito de restringir membros para executar o captcha Turnstile. Dê-me esse direito e tente de novo."
 captcha_failed_verify: Falha na verificação. Por favor contate um admin.
 captcha_wait_refresh: Por favor espere alguns segundos antes de solicitar uma nova imagem.
 captcha_failed_generate: Falha ao gerar nova imagem, tente novamente.
@@ -1485,7 +1490,7 @@ db_warn_no_reason: "Sem Motivo"
 db_not_initialized: "banco de dados não inicializado"
 
 # Captcha validation strings
-captcha_invalid_mode_error: "modo de captcha inválido: deve ser 'math' ou 'text'"
+captcha_invalid_mode_error: "modo de captcha inválido: deve ser 'math', 'text' ou 'turnstile'"
 captcha_timeout_range_error: "tempo limite deve ser entre 1 e 10 minutos"
 captcha_invalid_action_error: "ação de falha inválida: deve ser 'kick', 'ban', ou 'mute'"
 captcha_attempts_range_error: "tentativas máximas devem ser entre 1 e 10"
@@ -1658,6 +1663,7 @@ reports_invalid_action: "Ação inválida."
 # Captcha module strings
 captcha_mode_math_desc: "problemas matemáticos"
 captcha_mode_text_desc: "reconhecimento de texto de imagens"
+captcha_mode_turnstile_desc: "verificação web Cloudflare Turnstile"
 captcha_mode_set_formatted: "✅ Modo de captcha definido para <b>%s</b> (%s)"
 captcha_welcome_text_detailed: "👋 Bem-vindo %s!\n\nPor favor selecione o texto mostrado na imagem para verificar que você é humano:\n\n⏱ Você tem <b>%d minutos</b> para responder."
 captcha_welcome_math_detailed: "👋 Bem-vindo %s!\n\nPor favor resolva o problema mostrado na imagem e selecione a resposta correta:\n\n⏱ Você tem <b>%d minutos</b> para responder."

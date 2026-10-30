@@ -197,6 +197,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the join threshold (see the retired raid mode under Subsystem traps) with exactly the same checks and anonymous-admin
   re-entry, so neither is ever decided by the cached admin list.
 
+- `/captchamode turnstile` keeps `captchaAdminGate` (a per-group admin check, first and unchanged) and then refuses,
+  writing nothing, in this order (`captchaWebModeRefusal`): no web captcha runtime (the four settings are not all set,
+  or the bot has no username, `captcha_web_refuse_not_configured`), no Redis `PING` within 250 ms (a fresh probe, not the
+  5 s memo of `captchaWebAvailable`, `captcha_web_refuse_no_redis`), or the bot not the creator or an administrator with
+  `can_restrict_members` by a live `chat_status.FetchBotMember` (never the admin cache; an unknown answer refuses,
+  `captcha_web_refuse_no_rights`). Math and text are unchanged and need none of these checks. The refusal texts name no
+  setting, variable, secret or URL.
+
 ## Data
 
 - Repositories live in `alita/db/<domain>/`. Read via `cache.GetFromCacheOrLoad` with `cache.CacheKey` keys.

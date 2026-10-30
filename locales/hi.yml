@@ -247,12 +247,14 @@ captcha_help_msg: "CAPTCHA सत्यापन के साथ अपने �
 
   × Text: एक छवि में दिखाए गए टेक्स्ट की पहचान करें
 
+  × Turnstile: वेब पेज पर Cloudflare की जाँच
+
 
   *एडमिन कमांड:*
 
   × /captcha `<on/off>`: कैप्चा सत्यापन सक्षम या अक्षम करें
 
-  × /captchamode `<math/text>`: कैप्चा प्रकार सेट करें (गणित की समस्याएं या टेक्स्ट पहचान)
+  × /captchamode `<math/text/turnstile>`: कैप्चा प्रकार सेट करें (गणित की समस्याएं या टेक्स्ट पहचान)
 
   × /captchatime `<1-10>`: टाइमआउट मिनटों में सेट करें (डिफ़ॉल्ट: 2)
 
@@ -765,8 +767,8 @@ blacklists_extended_docs: |
 captcha_enable_failed: कैप्चा सक्षम करने में विफल। कृपया पुनः प्रयास करें।
 captcha_disable_failed: कैप्चा अक्षम करने में विफल। कृपया पुनः प्रयास करें।
 captcha_usage: कृपया <code>/captcha on</code> या <code>/captcha off</code> का उपयोग करें
-captcha_mode_specify: "कृपया एक मोड निर्दिष्ट करें: <code>math</code> या <code>text</code>"
-captcha_mode_invalid: अमान्य मोड। <code>math</code> या <code>text</code> का उपयोग करें
+captcha_mode_specify: "कृपया एक मोड निर्दिष्ट करें: <code>math</code>, <code>text</code> या <code>turnstile</code>"
+captcha_mode_invalid: अमान्य मोड। <code>math</code>, <code>text</code> या <code>turnstile</code> का उपयोग करें
 captcha_mode_failed: कैप्चा मोड सेट करने में विफल। कृपया पुनः प्रयास करें।
 captcha_timeout_specify: कृपया मिनटों में टाइमआउट निर्दिष्ट करें (1-10)
 captcha_timeout_invalid: अमान्य टाइमआउट। कृपया 1 और 10 के बीच एक संख्या का उपयोग करें।
@@ -827,6 +829,9 @@ captcha_web_invalid_body: यह किसी अन्य सदस्य क�
 captcha_web_unsupported_title: इसे Telegram में खोलें
 captcha_web_unsupported_body: समूह चैट के बटन का उपयोग करें। ऐसा किया हो तो कंटेंट ब्लॉकर बंद करके फिर कोशिश करें।
 captcha_web_close_button: बंद करें
+captcha_web_refuse_not_configured: "इस बॉट पर Turnstile कैप्चा अभी सेट नहीं है। बॉट के मालिक से वेब कैप्चा सेटअप पूरा करने को कहें। math और text कैप्चा अब भी काम करते हैं।"
+captcha_web_refuse_no_redis: "बॉट का साझा स्टोरेज बंद होने के कारण Turnstile कैप्चा अभी उपलब्ध नहीं है। बाद में फिर कोशिश करें, या math या text कैप्चा इस्तेमाल करें।"
+captcha_web_refuse_no_rights: "Turnstile कैप्चा चलाने के लिए मुझे सदस्यों को प्रतिबंधित करने का अधिकार वाला एडमिन होना होगा। मुझे वह अधिकार दें और फिर कोशिश करें।"
 captcha_failed_verify: सत्यापित करने में विफल। कृपया किसी एडमिन से संपर्क करें।
 captcha_wait_refresh: कृपया नई छवि का अनुरोध करने से पहले कुछ सेकंड प्रतीक्षा करें।
 captcha_failed_generate: नई छवि बनाने में विफल, पुनः प्रयास करें।
@@ -883,7 +888,7 @@ captcha_settings_failure_action: "विफलता कार्रवाई: <
 captcha_settings_max_attempts: "अधिकतम प्रयास: <code>%d</code>"
 captcha_status_enabled: "सक्षम"
 captcha_status_disabled: "अक्षम"
-captcha_invalid_mode_error: "अमान्य कैप्चा मोड: 'math' या 'text' होना चाहिए"
+captcha_invalid_mode_error: "अमान्य कैप्चा मोड: 'math', 'text' या 'turnstile' होना चाहिए"
 captcha_timeout_range_error: "टाइमआउट 1 और 10 मिनट के बीच होना चाहिए"
 captcha_invalid_action_error: "अमान्य विफलता कार्रवाई: 'kick', 'ban', या 'mute' होनी चाहिए"
 captcha_attempts_range_error: "अधिकतम प्रयास 1 और 10 के बीच होने चाहिए"
@@ -897,6 +902,7 @@ captcha_internal_error: "कैप्चा सेटिंग्स अपड�
 captcha_no_active_attempt: "कोई सक्रिय कैप्चा प्रयास नहीं मिला"
 captcha_mode_math_desc: "गणितीय समस्याएं"
 captcha_mode_text_desc: "छवियों से टेक्स्ट पहचान"
+captcha_mode_turnstile_desc: "Cloudflare Turnstile वेब जाँच"
 captcha_mode_set_formatted: "✅ कैप्चा मोड <b>%s</b> (%s) पर सेट किया गया"
 captcha_welcome_text_detailed: "👋 स्वागत है %s!\n\nकृपया छवि में दिखाए गए टेक्स्ट का चयन करें यह साबित करने के लिए कि आप मानव हैं:\n\n⏱ आपके पास जवाब देने के लिए <b>%d मिनट</b> हैं।"
 captcha_welcome_math_detailed: "👋 स्वागत है %s!\n\nकृपया छवि में दिखाई गई समस्या को हल करें और सही उत्तर चुनें:\n\n⏱ आपके पास जवाब देने के लिए <b>%d मिनट</b> हैं।"

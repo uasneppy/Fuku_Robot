@@ -300,12 +300,14 @@ captcha_help_msg:
 
   × Text: Identify text shown in an image
 
+  × Turnstile: A Cloudflare check on a web page
+
 
   *Admin Commands:*
 
   × /captcha `<on/off>`: Enable or disable captcha verification
 
-  × /captchamode `<math/text>`: Set captcha type (math problems or text recognition)
+  × /captchamode `<math/text/turnstile>`: Set captcha type (math problems or text recognition)
 
   × /captchatime `<1-10>`: Set timeout in minutes (default: 2)
 
@@ -973,8 +975,8 @@ users_help_msg:
 captcha_enable_failed: Failed to enable captcha. Please try again.
 captcha_disable_failed: Failed to disable captcha. Please try again.
 captcha_usage: Please use <code>/captcha on</code> or <code>/captcha off</code>
-captcha_mode_specify: "Please specify a mode: <code>math</code> or <code>text</code>"
-captcha_mode_invalid: Invalid mode. Use <code>math</code> or <code>text</code>
+captcha_mode_specify: "Please specify a mode: <code>math</code>, <code>text</code> or <code>turnstile</code>"
+captcha_mode_invalid: Invalid mode. Use <code>math</code>, <code>text</code> or <code>turnstile</code>
 captcha_mode_failed: Failed to set captcha mode. Please try again.
 captcha_timeout_specify: Please specify timeout in minutes (1-10)
 captcha_timeout_invalid: Invalid timeout. Please use a number between 1 and 10.
@@ -1035,6 +1037,9 @@ captcha_web_invalid_body: It belongs to another member or was already used. Noth
 captcha_web_unsupported_title: Open this in Telegram
 captcha_web_unsupported_body: Use the button in the group chat. If you did, turn off content blockers and try again.
 captcha_web_close_button: Close
+captcha_web_refuse_not_configured: "Turnstile captcha is not set up on this bot yet. Ask the bot owner to finish the web captcha setup. Math and text captcha still work."
+captcha_web_refuse_no_redis: "Turnstile captcha is unavailable right now because the bot's shared storage is down. Try again later, or use math or text captcha."
+captcha_web_refuse_no_rights: "I need to be an admin with the Restrict members right to run the Turnstile captcha. Give me that right and try again."
 captcha_failed_verify: Failed to verify. Please contact an admin.
 captcha_wait_refresh: Please wait a few seconds before requesting a new image.
 captcha_failed_generate: Failed to generate new image, try again.
@@ -1591,7 +1596,7 @@ db_warn_no_reason: "No Reason"
 db_not_initialized: "database not initialized"
 
 # Captcha validation strings
-captcha_invalid_mode_error: "invalid captcha mode: must be 'math' or 'text'"
+captcha_invalid_mode_error: "invalid captcha mode: must be 'math', 'text' or 'turnstile'"
 captcha_timeout_range_error: "timeout must be between 1 and 10 minutes"
 captcha_invalid_action_error: "invalid failure action: must be 'kick', 'ban', or 'mute'"
 captcha_attempts_range_error: "max attempts must be between 1 and 10"
@@ -1764,6 +1769,7 @@ reports_invalid_action: "Invalid action."
 # Captcha module strings
 captcha_mode_math_desc: "mathematical problems"
 captcha_mode_text_desc: "text recognition from images"
+captcha_mode_turnstile_desc: "Cloudflare Turnstile web check"
 captcha_mode_set_formatted: "✅ Captcha mode set to <b>%s</b> (%s)"
 captcha_welcome_text_detailed: "👋 Welcome %s!\n\nPlease select the text shown in the image to verify you're human:\n\n⏱ You have <b>%d minutes</b> to answer."
 captcha_welcome_math_detailed: "👋 Welcome %s!\n\nPlease solve the problem shown in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer."
