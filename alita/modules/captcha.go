@@ -1614,6 +1614,14 @@ func (moduleStruct) captchaVerifyCallback(bot *gotgbot.Bot, ctx *ext.Context) er
 		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
 		return err
 	}
+	// D-25: a Turnstile attempt is passed only by the web check. A hand-built callback can
+	// carry any bytes, so it is refused before any answer comparison or count.
+	if captchaweb.IsReservedAnswer(attempt.Answer) {
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		text, _ := tr.GetString("captcha_attempt_not_valid")
+		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
+		return err
+	}
 	if attempt.RefreshCount != expectedRefreshCount {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("captcha_attempt_not_valid")
@@ -1794,6 +1802,14 @@ func (moduleStruct) captchaRefreshCallback(bot *gotgbot.Bot, ctx *ext.Context) e
 		return err
 	}
 	if attempt.ID != uint(attemptID64) {
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		text, _ := tr.GetString("captcha_attempt_not_valid")
+		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})
+		return err
+	}
+	// D-25: a Turnstile attempt is passed only by the web check; a refresh would replace its
+	// challenge with an image the sender can solve.
+	if captchaweb.IsReservedAnswer(attempt.Answer) {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("captcha_attempt_not_valid")
 		_, err = query.Answer(bot, &gotgbot.AnswerCallbackQueryOpts{Text: text})

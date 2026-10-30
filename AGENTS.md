@@ -506,7 +506,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   decides nothing: a pass needs signed `initData` whose `user.id` is the challenge's user and a `siteverify` success
   that echoes the expected hostname, `captcha_join` and the `cdata` (`hex(sha256("cd1:" + token))`). The package
   `alita/utils/captchaweb` imports the standard library, go-redis and logrus only; its `Backend` implementation is
-  `alita/modules/captcha_web.go` (`captchaWebBackend`), and `ConfigureCaptchaWeb` installs the runtime.
+  `alita/modules/captcha_web.go` (`captchaWebBackend`), and `ConfigureCaptchaWeb` installs the runtime. Callback data is
+  not authenticated by Telegram, so both `captcha_verify` and `captcha_refresh` refuse an attempt whose answer starts with
+  `ts1:` with `captcha_attempt_not_valid` and change nothing (no count, no image, no row change): a hand-built callback
+  can never pass or convert a Turnstile attempt. Rolling-deploy caveat (accepted, like the others here): a replica on
+  older code has no such guard until it is replaced.
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
