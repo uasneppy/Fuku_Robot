@@ -47,7 +47,10 @@ func init() {
 		MainState: settingsStaffMainState,
 		Open:      settingsStaffOpen,
 		Actions: map[string]settingsPageAction{
-			settingsStaffActPage: {Fields: []string{"v"}, Right: settingsRightAdmin, Run: settingsStaffPage},
+			settingsStaffActLink:      {Fields: []string{"s"}, Right: settingsRightAdmin, Run: settingsStaffLinkRun},
+			settingsStaffActUnlinkAsk: {Right: settingsRightAdmin, Run: settingsStaffUnlinkAsk},
+			settingsStaffActUnlinkYes: {Fields: []string{"e"}, Right: settingsRightAdmin, Run: settingsStaffUnlinkYes},
+			settingsStaffActPage:      {Fields: []string{"v"}, Right: settingsRightAdmin, Run: settingsStaffPage},
 		},
 	})
 }
@@ -319,4 +322,184 @@ func settingsStaffPage(p *settingsPress) *settingsScreen {
 		return nil
 	}
 	return &screen
+}
+
+// settingsStaffPickMax is how many Staff Groups the picker lists.
+const settingsStaffPickMax = 8
+
+// settingsStaffLinkRun handles lk. Without s it is the /linkstaff flow without an argument:
+// the presser's Staff Groups verified live (listVerifiedOwnStaffGroups), none or an unknown
+// answer is a notice, exactly one links at once, and several make the picker. With s it is a
+// pick (settingsStaffPick). Every press is answered empty first, because the live checks can
+// outlast the callback.
+func settingsStaffLinkRun(p *settingsPress) *settingsScreen {
+	if raw, picked := p.fields["s"]; picked {
+		return settingsStaffPick(p, raw)
+	}
+	p.answer("", false)
+
+	matched, unknown, err := listVerifiedOwnStaffGroups(p.b, &p.query.From)
+	switch {
+	case err != nil, len(matched) == 0 && unknown > 0:
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalCheckFailedInPlace, p.group.Title)))
+	case len(matched) == 0:
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalNoStaffGroup, p.group.Title)))
+	case len(matched) == 1 && unknown == 0:
+		return settingsStaffLinkTo(p, &matched[0])
+	}
+	screen := renderSettingsStaffPicker(p.view(), matched, "")
+	return &screen
+}
+
+// settingsStaffPick handles lk with s, the staff_groups row ID of the Staff Group picked.
+// The ID is never trusted: the presser's own Staff Groups are listed again, the row whose ID
+// equals s is taken (a position is never used), and resolveNamedStaffGroup verifies the
+// presser is its live creator before the link is made. An s that is not a positive number is
+// an invalid request; an s that names no row of the presser is refused with the command's own
+// "you can only link a Staff Group you created" text and links nothing.
+func settingsStaffPick(p *settingsPress, raw string) *settingsScreen {
+	id, ok := settingsParseNumber(raw, 10)
+	if !ok || id <= 0 {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	p.answer("", false)
+
+	owned, err := staff.ListStaffGroupsByOwner(p.query.From.Id)
+	if err != nil {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalCheckFailedInPlace, p.group.Title)))
+	}
+	var picked *models.StaffGroup
+	for i := range owned {
+		if owned[i].ID == uint(id) {
+			picked = &owned[i]
+			break
+		}
+	}
+	if picked == nil {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalNotStaffOwner, p.group.Title)))
+	}
+	staffGroup, refusal := resolveNamedStaffGroup(p.b, &p.query.From, strconv.FormatInt(picked.ChatID, 10))
+	if refusal != staffRefusalNone {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, refusal, p.group.Title)))
+	}
+	return settingsStaffLinkTo(p, staffGroup)
+}
+
+// settingsStaffLinkTo links this group to a Staff Group the presser was just verified to
+// create, through linkToStaffGroup (the target checks, the bot's health, the insert) and
+// announceStaffLink (the notice to the Staff Group only), the code /linkstaff runs. A refusal
+// is the command's own text; a success redraws the page as linked.
+func settingsStaffLinkTo(p *settingsPress, staffGroup *models.StaffGroup) *settingsScreen {
+	out := linkToStaffGroup(p.b, &p.query.From, p.group, staffGroup)
+	if out.Refusal != staffRefusalNone {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, out.Refusal, p.group.Title)))
+	}
+	if out.Link == nil || out.StaffGroup == nil {
+		log.Errorf("[Settings] link outcome without a link for group %d", p.group.Id)
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalCheckFailedInPlace, p.group.Title)))
+	}
+	announceStaffLink(p.b, out)
+	return settingsStaffRedraw(p, settingsNoticeOK(settingsText(p.tr, "settings_notice_linked")))
+}
+
+// renderSettingsStaffPicker draws the list of the presser's Staff Groups, at most
+// settingsStaffPickMax, one button each, carrying a=lk and s, the staff_groups row ID. A
+// private menu labels a button with the title; a group menu is readable by every member, so
+// its labels are positions and it never reads a title (D-21).
+func renderSettingsStaffPicker(v settingsView, groups []models.StaffGroup, notice string) settingsScreen {
+	type choice struct {
+		id    uint
+		title string
+	}
+	choices := make([]choice, 0, min(len(groups), settingsStaffPickMax))
+	for i := 0; i < len(groups) && i < settingsStaffPickMax; i++ {
+		c := choice{id: groups[i].ID}
+		if v.Private {
+			c.title = groups[i].Title
+		}
+		choices = append(choices, c)
+	}
+
+	body := []string{settingsText(v.Tr, "settings_staff_pick")}
+	if !v.Private {
+		body = append(body, settingsText(v.Tr, "settings_staff_pick_private_hint"))
+	}
+	k := newSettingsKeyboard(v)
+	for i, c := range choices {
+		label := "👥 " + staffButtonTitle(c.title)
+		if !v.Private {
+			label = settingsText(v.Tr, "settings_btn_staff_pick_n", i18n.TranslationParams{"n": i + 1})
+		}
+		fields := map[string]string{"a": settingsStaffActLink, "s": strconv.FormatUint(uint64(c.id), 10)}
+		if button, ok := k.button(label, fields); ok {
+			k.row(button)
+		}
+	}
+	k.navRow(false)
+	return k.screen(settingsCompose(v, "settings_page_staff", body, notice, false))
+}
+
+// renderSettingsStaffUnlinkCard draws the Unlink card: the confirm prompt naming only this
+// group (its stored title, escaped and spliced in after translation), Yes and No, and the
+// navigation row.
+func renderSettingsStaffUnlinkCard(v settingsView, link models.StaffGroupLink) settingsScreen {
+	prompt := settingsText(v.Tr, "staff_unlink_confirm_prompt", i18n.TranslationParams{"group": staffGroupTitleToken})
+	prompt = lockdownSplice(prompt, staffGroupTitleToken, staffDisplayTitle(link.GroupTitle))
+
+	k := newSettingsKeyboard(v)
+	settingsCardRows(k, map[string]string{"a": settingsStaffActUnlinkYes}, settingsPageStaff)
+	return k.screen(settingsCompose(v, "settings_page_staff", []string{prompt}, "", false))
+}
+
+// settingsStaffUnlinkAsk handles ua, the first tap of Unlink. The presser must be, live, the
+// creator of the Staff Group and of this group (checkUnlinkAuthority, the check /unlinkstaff
+// makes); a refusal is the command's own text on the redrawn page and no card is drawn.
+func settingsStaffUnlinkAsk(p *settingsPress) *settingsScreen {
+	p.answer("", false)
+	link, err := staff.GetLinkOfGroupFresh(p.group.Id)
+	if err != nil {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, staffUnlinkCheckFailedInPlace, "")))
+	}
+	if link == nil {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, staffUnlinkNotLinked, "")))
+	}
+	if refusal, _ := checkUnlinkAuthority(p.b, &p.query.From, *link); refusal != staffUnlinkOK {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, refusal, link.GroupTitle)))
+	}
+	screen := renderSettingsStaffUnlinkCard(p.view(), *link)
+	return &screen
+}
+
+// settingsStaffUnlinkYes handles uy, the second tap. A Yes whose expiry minute has passed
+// redraws the page with settings_card_expired and unlinks nothing. Otherwise runUnlinkGroup
+// runs, which checks the live creator of both groups again and deletes the link with a
+// conditional delete, so of two Yes presses one wins and posts the one notice to the Staff
+// Group.
+func settingsStaffUnlinkYes(p *settingsPress) *settingsScreen {
+	expired, ok := settingsCardExpired(p.fields)
+	if !ok {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	if expired {
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsText(p.tr, "settings_card_expired")))
+	}
+	p.answer("", false)
+
+	link, err := staff.GetLinkOfGroupFresh(p.group.Id)
+	if err != nil {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, staffUnlinkCheckFailedInPlace, "")))
+	}
+	if link == nil {
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, staffUnlinkNotLinked, "")))
+	}
+	switch refusal, _ := runUnlinkGroup(p.b, &p.query.From, *link); refusal {
+	case staffUnlinkOK:
+		return settingsStaffRedraw(p, settingsNoticeOK(settingsText(p.tr, "settings_notice_unlinked")))
+	case staffUnlinkGone:
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, staffUnlinkNotLinked, "")))
+	default:
+		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, refusal, link.GroupTitle)))
+	}
 }
