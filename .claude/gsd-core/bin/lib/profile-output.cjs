@@ -29,6 +29,7 @@ const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs")
 const runtime_homes_cjs_1 = require("./runtime-homes.cjs");
 const runtime_slash_cjs_1 = require("./runtime-slash.cjs");
 const runtime_name_policy_cjs_1 = require("./runtime-name-policy.cjs");
+const frontmatter_fence_cjs_1 = require("./frontmatter-fence.cjs");
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DIMENSION_KEYS = [
     'communication_style', 'decision_speed', 'explanation_depth',
@@ -203,6 +204,7 @@ function buildClaudeMdWorkflowEnforcement(runtime) {
         'Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.',
         '',
         'Use these entry points:',
+        `- \`${String((0, runtime_slash_cjs_1.formatGsdSlash)('fast', runtime))}\` for a trivial task inline, with no subagents and no PLAN.md`,
         `- \`${String((0, runtime_slash_cjs_1.formatGsdSlash)('quick', runtime))}\` for small fixes, doc updates, and ad-hoc tasks`,
         `- \`${String((0, runtime_slash_cjs_1.formatGsdSlash)('debug', runtime))}\` for investigation and bug fixing`,
         `- \`${String((0, runtime_slash_cjs_1.formatGsdSlash)('execute-phase', runtime))}\` for planned phase work`,
@@ -477,10 +479,11 @@ function generateSkillsSection(cwd) {
  */
 function extractSkillFrontmatter(content) {
     const result = { name: '', description: '' };
-    const fmMatch = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
-    if (!fmMatch)
+    // The block is the one the one fence owner (`locateFrontmatterFence`) finds.
+    const fence = (0, frontmatter_fence_cjs_1.locateFrontmatterFence)(content);
+    if (!fence?.closed)
         return result;
-    const fmBlock = fmMatch[1];
+    const fmBlock = content.slice(fence.openEnd, fence.bodyEnd);
     const lines = fmBlock.split('\n');
     let currentKey = '';
     for (const line of lines) {

@@ -85,6 +85,14 @@
  *     [--no-archive-phases]          Skip moving phase dirs to milestones/vX.Y-phases/ (archived by default)
  *     [--archive-quick]              Move .planning/quick/* dirs to milestones/vX.Y-quick/ + reset the
  *                                    Quick Tasks Completed table (#2142; opt-in, default OFF)
+ *     [--release-map <file>]         Archive a per-repository release map (JSON array of
+ *                                    {repo, release, reference, environment, status, tag}) as
+ *                                    milestones/vX.Y-RELEASE-MAP.json and record it in MILESTONES.md
+ *                                    (#5706; validated before any write, absent = unchanged)
+ *
+ *   milestone release-tags --map <file.json> [--dry-run]
+ *                                      Preflight, then create annotated tags per sub-repo from a JSON array of
+ *                                      {repo, tag, ref?, message?, skip?}; never pushes, never overwrites (#5705)
  *
  *   milestone archive-quick <version>  Move .planning/quick/* dirs to milestones/vX.Y-quick/ + reset the
  *                                      Quick Tasks Completed table, WITHOUT the milestone complete close-out
@@ -223,6 +231,8 @@
  * Loop Extension Point Queries (ADR-857 phase 3c):
  *   loop render-hooks <point>            Resolve + render active Capability hooks at a loop point
  *                                        [--config-dir <path>] [--runtime <r>] [--active-cap <capId>]
+ *                                        [--after-fingerprint <phaseDir>] (#5105: skip verify:post
+ *                                        steps whose declared artifact already exists in phaseDir)
  *                                        Returns JSON envelope { point, activeHooks, rendered }
  *                                        Valid points: discuss:pre/post, plan:pre/post,
  *                                        execute:pre/wave:pre/wave:post/post, verify:pre/post, ship:pre/post
@@ -244,6 +254,14 @@
  *   from-gsd2 [--path <dir>] [--force] [--dry-run]
  *             Import a GSD-2 (.gsd/) project back to GSD v1 (.planning/) format
  */
+
+// #5183: Node's on-disk compile cache, so later runs reuse V8's compiled code
+// for unchanged modules. Only as the entry (a test require() is unaffected),
+// skipped under V8 coverage, optional (Bun stubs it), and never fatal.
+// NODE_DISABLE_COMPILE_CACHE (any value) turns it off.
+if (require.main === module && !process.env.NODE_V8_COVERAGE) {
+  try { require('node:module').enableCompileCache?.(); } catch { /* optimization only */ }
+}
 
 const fs = require('fs');
 const path = require('path');
@@ -276,7 +294,7 @@ try {
 
 const { ExitError, runMain, resolveContractVersion } = require('./lib/cli-exit.cjs');
 const io = require('./lib/io.cjs');
-const { error, ERROR_REASON, setJsonErrorMode, output, formatDiagnosticToken } = io;
+const { error, ERROR_REASON, setJsonErrorMode, output, formatDiagnosticToken, captureStdoutSyncWrites, resolveAtFileOutput } = io;
 const projectRoot = require('./lib/project-root.cjs');
 // Resolve findProjectRoot lazily at call time rather than binding it at module
 // load. It is sourced from project-root.cjs; a call-time lookup is robust
@@ -302,6 +320,7 @@ try {
 } catch { /* advisory — never block */ }
 
 const { resolveActiveWorkstream, applyResolvedWorkstreamEnv, peekActiveWorkstream } = require('./lib/active-workstream-store.cjs');
+const { planningDir, planningRoot } = require('./lib/planning-workspace.cjs');
 const state = require('./lib/state.cjs');
 const phase = require('./lib/phase.cjs');
 const roadmap = require('./lib/roadmap.cjs');
@@ -315,6 +334,7 @@ const config = require('./lib/config.cjs');
 const estimateCli = require('./lib/estimate-cli.cjs');
 const template = require('./lib/template.cjs');
 const milestone = require('./lib/milestone.cjs');
+const milestoneReleaseTags = require('./lib/milestone-release-tags.cjs');
 const commands = require('./lib/commands.cjs');
 const runtimeIdentity = require('./lib/runtime-identity.cjs');
 const init = require('./lib/init.cjs');
@@ -491,6 +511,7 @@ function dispatchCapabilityCommand({ command, args, cwd, raw, error, registry, r
     _result = fn({ args, cwd, raw, error });
   } catch (e) {
     if (e instanceof ExitError) throw e; // intentional structured error from the router (honors --json-errors) — propagate untouched
+    if (isVerificationStatusError(e)) throw e; // #5118: translated once, centrally, by main()
     error(
       'capability command "' + command + '" router "' + entry.router + '" in module "' + entry.module + '" threw: ' + (e && e.message ? e.message : String(e)),
       ERROR_REASON.SDK_FAIL_FAST,
@@ -606,6 +627,7 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
     _result = fn({ args, cwd, raw, error });
   } catch (e) {
     if (e instanceof ExitError) throw e;
+    if (isVerificationStatusError(e)) throw e; // #5118: translated once, centrally, by main()
     error(
       'capability command "' + command + '" router "' + entry.router + '" in module "' + entry.module + '" threw: ' + (e && e.message ? e.message : String(e)),
       ERROR_REASON.SDK_FAIL_FAST,
@@ -835,7 +857,31 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
       error,
       output: output,
     });
-    if (!handled) config.cmdConfigNewProject(cwd, args[1], raw);
+    if (handled) return;
+    // #5268: this verb's flag surface is closed, as `todo complete`'s is
+    // (#4096). `--dry-run` is parsed and plumbed, and any OTHER flag fails loudly
+    // instead of being silently ignored: an accepted-but-ignored `--dry-run`
+    // wrote the config it was meant to preview. (`--raw` is spliced by the
+    // dispatcher before routing; it stays in the set as a guard against that
+    // splice ever moving.) The choices JSON is the one positional argument,
+    // wherever the flag sits, and a second one is refused for the same reason.
+    // A flag is a dash followed by a letter: `-1` is a (negative-number) JSON
+    // argument, refused below as choices that are not an object, not a flag.
+    const CONFIG_NEW_PROJECT_KNOWN_FLAGS = new Set(['--dry-run', '--raw']);
+    const positionals = [];
+    for (const a of args.slice(1)) {
+      if (typeof a === 'string' && /^--?[A-Za-z]/.test(a)) {
+        if (!CONFIG_NEW_PROJECT_KNOWN_FLAGS.has(a)) {
+          error(`Unknown flag for config-new-project: ${a}`, ERROR_REASON.USAGE);
+        }
+        continue;
+      }
+      positionals.push(a);
+    }
+    if (positionals.length > 1) {
+      error(`Unexpected argument for config-new-project: ${positionals[1]}. Usage: config-new-project [choices-json] [--dry-run]`, ERROR_REASON.USAGE);
+    }
+    config.cmdConfigNewProject(cwd, positionals[0], raw, { dryRun: args.includes('--dry-run') });
   }
 
   function routeConfigPath({ cwd, raw, workstreamContext }) {
@@ -1433,8 +1479,12 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
     // Silent no-op when the section is absent or the table is already canonical
     // — the quick/fast workflows call this before their first append, so the
     // migration runs exactly once, on the first quick run, unprompted otherwise.
-    const statePath = path.join(cwd, '.planning', 'STATE.md');
+    const planningPath = planningDir(cwd);
+    const statePath = path.join(planningPath, 'STATE.md');
     if (!fs.existsSync(statePath)) {
+      if (planningPath !== planningRoot(cwd)) {
+        throw new ExitError(1, `quick-tasks-migrate: STATE.md not found at ${statePath}`);
+      }
       output({ ok: true, migrated: false, reason: `STATE.md not found at ${statePath}` }, raw);
       return;
     }
@@ -1507,12 +1557,15 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
             || (qtaQuickId && qtaSlug ? `[${qtaQuickId}-${qtaSlug}](./quick/${qtaQuickId}-${qtaSlug}/)` : undefined);
           const qtaStatus = qtaParsed['status'] || undefined;
 
-          const statePath = path.join(cwd, '.planning', 'STATE.md');
+          const statePath = path.join(planningDir(cwd), 'STATE.md');
           if (!fs.existsSync(statePath)) {
             error(`quick-tasks-append: STATE.md not found at ${statePath}`, ERROR_REASON.USAGE);
           }
 
-          const date = new Date().toISOString().slice(0, 10);
+          // #4905: an operator-facing date, so the local calendar day (#2136)
+          // through the clock seam, which honors the GSD_NOW_MS pin (#474).
+          const { realClock } = require('./lib/clock.cjs');
+          const date = realClock.localToday();
           const { execGit } = require('./lib/shell-command-projection.cjs');
           const hashResult = execGit(['rev-parse', '--short', 'HEAD'], { cwd });
           const commit = hashResult.exitCode === 0 && hashResult.stdout ? hashResult.stdout : '—';
@@ -1578,7 +1631,16 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
     const fsx = require('node:fs');
     const os = require('node:os');
     const { REVIEWER_LANES, mergeReviewerLanes } = require('./lib/review-lane-descriptor.cjs');
-    const { resolveLanePlan, resolveLaneEffort, resolveLaneBudget } = require('./lib/review-lane-invocation.cjs');
+    const { resolveLanePlan: resolveLanePlanBase, resolveLaneEffort, resolveLaneBudget, applyPromptOverride } = require('./lib/review-lane-invocation.cjs');
+    // OpenCode 2.x argv differs from 1.x (no --variant; effort rides on the model as `#variant`;
+    // ADR-5331 D5/D8). The generation is probed lazily, only when the opencode lane is resolved.
+    const resolveLanePlan = (laneInput) => {
+      if (!laneInput || !laneInput.lane || laneInput.lane.slug !== 'opencode') return resolveLanePlanBase(laneInput);
+      const ocv = require('./lib/opencode-version.cjs');
+      const adapted = ocv.adaptLaneInputForGeneration(laneInput, ocv.detectOpencodeGeneration().generation);
+      for (const w of adapted.warnings) process.stderr.write('gsd: ' + w + '\n');
+      return ocv.adaptLanePlanForGeneration(resolveLanePlanBase(adapted.input), ocv.detectOpencodeGeneration().generation);
+    };
     const modelCatalog = require('./lib/model-catalog.cjs');
     const runner = require('./lib/review-lane-runner.cjs');
     const cfgLoader = require('./lib/config-loader.cjs');
@@ -1603,8 +1665,9 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
     // `plan`/`invoke` are the only subs that need the expensive plan-building path
     // below; `sections`/`flags` return earlier still. Anything else errors here, before
     // any of that work starts.
-    if (!['plan', 'invoke', 'sections', 'flags', 'dispatch-step', 'explicit-from-argv'].includes(sub)) {
-      error("Usage: review-lane <plan|invoke|sections|flags|dispatch-step|explicit-from-argv> [--selected a,b] [--run-dir D] [--repo-root R]");
+    const REVIEW_LANE_USAGE = 'Usage: review-lane <plan|invoke|sections|flags|availability|dispatch-step|explicit-from-argv> [--selected a,b] [--run-dir D] [--repo-root R]';
+    if (!['plan', 'invoke', 'sections', 'flags', 'availability', 'dispatch-step', 'explicit-from-argv'].includes(sub)) {
+      error(REVIEW_LANE_USAGE);
       return;
     }
     const runDir = flag('--run-dir') || '.';
@@ -1680,8 +1743,34 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
             method: opts.method,
             headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
             body: opts.body,
+            // Never follow a redirect: the egress check compares the CONFIGURED host, so a
+            // followed redirect would send the review prompt to a host the user never named (#5433).
+            redirect: 'manual',
             signal: AbortSignal.timeout(opts.timeoutMs),
           });
+          // probe:true marks a reachability probe (returns status only, body ''): the status line is the answer, so do not
+          // let a stalled body turn a replying server into `missing`.
+          if (opts.probe) {
+            res.body?.cancel().catch(() => {});
+            return { ok: res.ok, status: res.status, body: '' };
+          }
+          if (res.status >= 300 && res.status < 400) {
+            res.body?.cancel().catch(() => {});
+            const location = res.headers.get('location');
+            let target = 'without a Location header';
+            if (location) {
+              target = 'to an unparseable Location';
+              try { target = `to ${new URL(location, url).host}`; } catch { /* keep the unparseable wording */ }
+            }
+            // Host and path only: a configured URL may carry credentials that must not reach a review file.
+            const asked = (() => { try { const u = new URL(url); return `${u.host}${u.pathname}`; } catch { return 'the configured URL'; } })();
+            return {
+              ok: false,
+              status: res.status,
+              body: '',
+              error: `${asked} answered HTTP ${res.status}, redirecting ${target}. The lane does not follow redirects; configure the final URL as the lane's host.`,
+            };
+          }
           return { ok: res.ok, status: res.status, body: await res.text() };
         } catch (e) {
           return { ok: false, status: 0, body: '', error: e && e.message ? e.message : String(e) };
@@ -1708,6 +1797,23 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
 
     const selected = (flag('--selected') || '')
       .split(',').map((s) => s.trim()).filter(Boolean);
+    // #5266: `<slug>:available|missing` per openai-http lane. Host + default come from the lane
+    // descriptor (resolveLanePlan), probing is runner.probeLane — review.md keeps no host table.
+    // Prerequisite binaries (jq) are reported separately by the workflow, not folded in here.
+    // First-party lanes only: ADR-2782 D5 requires egress/consent before a third-party lane's host is
+    // contacted; detection has no such check, so installed third-party lanes are never probed here.
+    if (sub === 'availability') {
+      const { rows, warnings } = await runner.probeHttpLanes(
+        REVIEWER_LANES,
+        selected,
+        (lane) => resolveLanePlan({ lane, configGet, runDir, repoRoot }),
+        buildLaneRunnerDeps(),
+      );
+      for (const w of warnings) process.stderr.write(`review-lane availability: ${w}\n`);
+      process.stdout.write(rows.join('\n') + (rows.length ? '\n' : ''));
+      return;
+    }
+
     // ADR-2782 D8 (#2927): the lane map is first-party ∪ INSTALLED overlay
     // `reviewer` bodies, first-party winning on slug collision. Before this merge
     // the map was built from the frozen REVIEWER_LANES array alone, so an installed,
@@ -1921,7 +2027,7 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
       const dispatchResult = await dispatchReviewerLanes(
         {
           trait,
-          selection: { explicitFlags, detected: rosterSlugs },
+          selection: { explicitFlags, detected: rosterSlugs, lanes: mergedLanes },
           repoRoot,
           paths,
           depth,
@@ -1972,7 +2078,7 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
     }
 
     if (sub !== 'invoke') {
-      error("Usage: review-lane <plan|invoke|sections|flags|dispatch-step|explicit-from-argv> [--selected a,b] [--run-dir D] [--repo-root R]");
+      error(REVIEW_LANE_USAGE);
       return;
     }
 
@@ -2073,14 +2179,11 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
     }
 
     // `--prompt-file` lets the caller substitute a budget-trimmed prompt. Applied to whichever
-    // channel this lane actually reads from, so one flag serves both transports.
+    // channel this lane actually reads from (stdin, argv, an argv-embedded file reference, or the
+    // http promptPath), so one flag serves every lane (#5049).
     const promptOverride = flag('--prompt-file');
     if (promptOverride) {
-      if (entry.plan.transport === 'spawn') {
-        if (entry.plan.stdin) entry.plan.stdin = promptOverride;
-      } else {
-        entry.plan.promptPath = promptOverride;
-      }
+      entry.plan = applyPromptOverride(entry.plan, promptOverride, repoRoot);
     }
 
     // ADR-2782 D5 rule 4: re-resolve the consented destination at INVOCATION. `undefined` (no
@@ -2113,6 +2216,13 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
           // resolved command; --cwd (already parsed into `cwd`) locates package.json.
           const testCommandNormalizer = require('./lib/normalize-test-command.cjs');
           testCommandNormalizer.cmdNormalizeTestCommand(cwd, args[1]);
+  }
+
+  function routeResolvePackageManager({ args, cwd }) {
+    // #5346: the gates' no-configured-command fallback asks here for the
+    // project's package manager (packageManager field, then lockfile, else npm).
+    // args[1] is the script name; --cwd (already parsed into `cwd`) locates package.json.
+    require('./lib/normalize-test-command.cjs').cmdResolvePackageManager(cwd, args[1]);
   }
 
   function routeDispatchShouldFlatten({ args, cwd, raw, error }) {
@@ -2660,8 +2770,14 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
               'gsd-executor', readGsdEffectiveModelOverrides(cwd), null);
             model = resolveDispatchModelPin('gsd-executor', pinned);
           }
+          let orchestratorExec = runtimeEntry?.runtime?.orchestratorExec;
+          if (orchestratorExec && orchestratorExec.cwdFlag === '--dir' && runtimeId === 'opencode') {
+            // OpenCode 2.x `run` has no --dir: bind the worktree through the process cwd (ADR-5331 D5).
+            const ocv = require('./lib/opencode-version.cjs');
+            orchestratorExec = ocv.adaptOrchestratorExecForGeneration(orchestratorExec, ocv.detectOpencodeGeneration().generation);
+          }
           const resolution = hostIntegration.resolveOrchestratorExec(
-            runtimeEntry?.runtime?.orchestratorExec,
+            orchestratorExec,
             cwdTarget,
             promptArg,
             model,
@@ -2766,6 +2882,63 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
     };
     try {
       nodeFs.mkdirSync(sentinelDir, { recursive: true });
+      // Never write through a project-supplied .gsd symlink. Resolve the
+      // directory as well so an ancestor redirect cannot escape this project.
+      if (nodeFs.lstatSync(sentinelDir).isSymbolicLink() ||
+          nodePath.relative(nodeFs.realpathSync(cwd), nodeFs.realpathSync(sentinelDir)) !== '.gsd') {
+        throw new Error('sentinel directory is a symlink or resolves outside the project');
+      }
+      // User projects do not inherit gsd-core's root .gitignore. Ignore this
+      // tool-owned directory locally before writing the first sentinel. An
+      // ordinary ignore-file IO failure must not prevent recording isolation.
+      const ignorePath = nodePath.join(sentinelDir, '.gitignore');
+      try {
+        nodeFs.writeFileSync(ignorePath, '*\n', { flag: 'wx' });
+      } catch (ignoreError) {
+        if (ignoreError.code === 'EEXIST') {
+          // Keep a pre-existing ignore file. A bare '*' already ignores the
+          // whole directory, including this file and the sentinel temp file.
+          // Read through an fd opened without following links where supported;
+          // replace by rename rather than append through the path, so a link
+          // swapped in after the check cannot redirect a write elsewhere.
+          let fd;
+          let ignoreTmpPath;
+          try {
+            if (nodeFs.lstatSync(ignorePath).isSymbolicLink()) {
+              throw new Error('sentinel ignore file is a symlink');
+            }
+            fd = nodeFs.openSync(ignorePath, nodeFs.constants.O_RDONLY | (nodeFs.constants.O_NOFOLLOW || 0));
+            if (!nodeFs.fstatSync(fd).isFile()) throw new Error('sentinel ignore file is not a regular file');
+            const current = nodeFs.readFileSync(fd, 'utf8');
+            nodeFs.closeSync(fd);
+            fd = undefined;
+            if (!current.includes('# gsd-core dispatch sentinel') && !/^\*\r?$/m.test(current)) {
+              const additionalRules = `${current.endsWith('\n') ? '' : '\n'}# gsd-core dispatch sentinel\n` +
+                '/dispatch-isolation-sentinel.json\n' +
+                '/dispatch-isolation-sentinel.json.tmp-*\n' +
+                '/.gitignore\n';
+              ignoreTmpPath = `${ignorePath}.tmp-${process.pid}-${require('crypto').randomBytes(6).toString('hex')}`;
+              nodeFs.writeFileSync(ignoreTmpPath, current + additionalRules, { flag: 'wx' });
+              if (nodeFs.lstatSync(ignorePath).isSymbolicLink()) {
+                throw new Error('sentinel ignore file is a symlink');
+              }
+              nodeFs.renameSync(ignoreTmpPath, ignorePath);
+              ignoreTmpPath = null;
+            }
+          } catch (existingIgnoreError) {
+            if (existingIgnoreError.code === 'ELOOP' || existingIgnoreError.message === 'sentinel ignore file is a symlink') {
+              throw new Error('sentinel ignore file is a symlink');
+            }
+            // Ignore seeding is best-effort; the sentinel is still useful if
+            // this path cannot be read or updated.
+          } finally {
+            if (fd !== undefined) nodeFs.closeSync(fd);
+            if (ignoreTmpPath) {
+              try { nodeFs.unlinkSync(ignoreTmpPath); } catch (_) { /* best-effort cleanup */ }
+            }
+          }
+        }
+      }
       // Atomic write: unique temp file + rename, so a concurrent reader (a
       // guard hook firing mid-write) never observes a partially-written
       // sentinel. Unique per-process+time so concurrent orchestrator-worktree
@@ -2935,7 +3108,12 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
           const jsonIdx = args.indexOf('--json');
           const agentSkillsJsonMode = jsonIdx !== -1;
           if (agentSkillsJsonMode) args.splice(jsonIdx, 1);
-          init.cmdAgentSkills(cwd, args[1], raw, agentSkillsJsonMode);
+          // #5122: the agent's own self-load asks for configured skills only,
+          // never the persona fallback served to orchestrator-side injection.
+          const skillsOnlyIdx = args.indexOf('--skills-only');
+          const agentSkillsOnly = skillsOnlyIdx !== -1;
+          if (agentSkillsOnly) args.splice(skillsOnlyIdx, 1);
+          init.cmdAgentSkills(cwd, args[1], raw, agentSkillsJsonMode, agentSkillsOnly);
   }
 
   function routeSkillManifest({ args, cwd, raw, error }) {
@@ -3048,7 +3226,18 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
             // --dry-run) the command refuses before touching anything. Distinct
             // from --force, which bypasses the narrow scope guards only.
             const confirm = args.includes('--confirm');
-            milestone.cmdMilestoneComplete(cwd, args[2], { name: milestoneName, archivePhases, force, dryRun, archiveQuick, confirm }, raw);
+            // #5706 (epic #3628): optional caller-supplied release map file.
+            // A flag with no usable value fails loud rather than being dropped.
+            let releaseMap = null;
+            const releaseMapIdx = args.indexOf('--release-map');
+            if (releaseMapIdx !== -1) {
+              const releaseMapValue = args[releaseMapIdx + 1];
+              if (typeof releaseMapValue !== 'string' || releaseMapValue.startsWith('--') || releaseMapValue.trim() === '') {
+                error('--release-map requires a file path (a JSON array of release-map entries)');
+              }
+              releaseMap = releaseMapValue;
+            }
+            milestone.cmdMilestoneComplete(cwd, args[2], { name: milestoneName, archivePhases, force, dryRun, archiveQuick, confirm, releaseMap }, raw);
           } else if (subcommand === 'archive-quick') {
             // #2142 escalation: narrow archival-only entry point (does NOT
             // touch ROADMAP/REQUIREMENTS/MILESTONES.md, runs no completion
@@ -3056,8 +3245,11 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
             // unlike `milestone complete --archive-quick`.
             const dryRun = args.includes('--dry-run');
             milestone.cmdQuickArchive(cwd, args[2], { dryRun }, raw);
+          } else if (subcommand === 'release-tags') {
+            // #5705 (epic #3628 Phase 1): repository-scoped annotated release tags.
+            milestoneReleaseTags.cmdMilestoneReleaseTags(cwd, args, raw);
           } else {
-            error('Unknown milestone subcommand. Available: complete, archive-quick', ERROR_REASON.SDK_UNKNOWN_COMMAND);
+            error('Unknown milestone subcommand. Available: complete, archive-quick, release-tags', ERROR_REASON.SDK_UNKNOWN_COMMAND);
           }
   }
 
@@ -3076,8 +3268,13 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
             const coverage = require('./lib/coverage.cjs');
             const options = parseNamedArgsOrExit(args, { valueFlags: ['summary', 'file'], positionals: 2 }, error);
             coverage.cmdClassify(cwd, options, raw);
+          } else if (subcommand === 'complete-session') {
+            const uat = require('./lib/uat.cjs');
+            const uatPath = args[2];
+            const options = parseNamedArgsOrExit(args, { valueFlags: ['message'], positionals: 3 }, error);
+            return uat.cmdUatCompleteSession(cwd, uatPath, { message: options.message }, raw);
           } else {
-            error('Unknown uat subcommand. Available: render-checkpoint, classify-coverage', ERROR_REASON.SDK_UNKNOWN_COMMAND);
+            error('Unknown uat subcommand. Available: render-checkpoint, classify-coverage, complete-session', ERROR_REASON.SDK_UNKNOWN_COMMAND);
           }
   }
 
@@ -3175,10 +3372,27 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
               }
               loopRuntime = value;
             }
+            // --after-fingerprint <phaseDir> (#5105 R2): gate out verify:post
+            // steps whose declared artifact already exists in phaseDir.
+            let loopAfterFingerprint = undefined;
+            const afterFpEqArg = args.find(arg => arg.startsWith('--after-fingerprint='));
+            const afterFpIdx = args.indexOf('--after-fingerprint');
+            if (afterFpEqArg) {
+              const value = afterFpEqArg.slice('--after-fingerprint='.length).trim();
+              if (!value) error('Missing value for --after-fingerprint', ERROR_REASON ? ERROR_REASON.USAGE : undefined);
+              loopAfterFingerprint = value;
+            } else if (afterFpIdx !== -1) {
+              const value = args[afterFpIdx + 1];
+              if (!value || value.startsWith('--')) {
+                error('Missing value for --after-fingerprint', ERROR_REASON ? ERROR_REASON.USAGE : undefined);
+              }
+              loopAfterFingerprint = value;
+            }
             loopResolver.cmdLoopRenderHooks(cwd, args[2], raw, {
               configDir: loopConfigDir ? path.resolve(loopConfigDir) : undefined,
               activeCap: loopActiveCap,
               runtime: loopRuntime,
+              afterFingerprint: loopAfterFingerprint,
             });
           } else {
             error(
@@ -3720,13 +3934,14 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
       || relPath.startsWith('agents/')
       || relPath.startsWith('commands/');
     if (isFrontmatterSurface) {
-      const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+      // The block is the one the one fence owner finds (found while implementing #5105).
+      const found = frontmatter.frontmatterRegion(content);
       const missingFields = [];
-      if (!block) {
+      if (!found || !found.terminated) {
         missingFields.push('name', 'description');
       } else {
-        if (!/^name:\s*\S/m.test(block[1])) missingFields.push('name');
-        if (!/^description:\s*\S/m.test(block[1])) missingFields.push('description');
+        if (!/^name:\s*\S/m.test(found.region)) missingFields.push('name');
+        if (!/^description:\s*\S/m.test(found.region)) missingFields.push('description');
       }
       if (missingFields.length > 0) {
         warnings.push({
@@ -4510,7 +4725,19 @@ function dispatchOverlayCapabilityCommand({ command, args, cwd, raw, error, load
             }
 
             const roadmapStatus = matchedRow.Status;
-            const result = comparePhaseStatus({ stateStatus, roadmapStatus });
+            // #5060: normalize the raw Status cell through the Phase Status
+            // Module's `matchRoadmapStatusCell` owner before comparing ranks —
+            // this recognizes a cell with trailing operator prose after its
+            // leading token (e.g. "Complete — shipped") the same way the
+            // ROADMAP writers/readers already do, rather than requiring the
+            // WHOLE cell to equal a bare token. The raw `roadmapStatus` in the
+            // output stays untouched — only the comparison input changes.
+            const { matchRoadmapStatusCell } = require('./lib/phase-status.cjs');
+            const matched = matchRoadmapStatusCell(roadmapStatus);
+            const result = comparePhaseStatus({
+              stateStatus,
+              roadmapStatus: matched ? matched.token.toLowerCase() : roadmapStatus,
+            });
             output({
               verdict: result.verdict,
               phase,
@@ -4680,6 +4907,7 @@ const HOST_COMMAND_ROUTERS = {
     // #3676 (Phase 4, epic #3344): quick-batch coordination verbs.
     'quick-batch': routeQuickBatchCommand,
     'normalize-test-command': routeNormalizeTestCommand,
+    'resolve-package-manager': routeResolvePackageManager,
     'dispatch-should-flatten': routeDispatchShouldFlatten,
     'dispatch-isolation': routeDispatchIsolation,
     'dispatch-capacity': routeDispatchCapacity,
@@ -4985,7 +5213,7 @@ function runWithTimeout(argv) {
 // drifting apart when a query command was added to only one or two.
 const TOP_LEVEL_USAGE = 'Usage: gsd-tools <command> [args] [--raw] [--pick <field>] [--cwd <path>] [--project-dir <path>] [--ws <name>] [--json-errors] [--exit-contract=<v>]\n' +
   'Commands: agent, agent-skills, assumption-delta, audit-open, audit-uat, check, check-commit, commit, commit-docs-guard, commit-to-subrepo, pr-subrepo, ' +
-  'config-ensure-section, config-get, config-new-project, config-path, config-set, migrate-config, normalize-test-command, ' +
+  'config-ensure-section, config-get, config-new-project, config-path, config-set, migrate-config, normalize-test-command, resolve-package-manager, ' +
   'context-predicates, current-timestamp, detect-custom-files, docs-init, drift-guard, effort, extract-messages, find-phase, ' +
   'from-gsd2, frontmatter, gap-analysis, generate-claude-md, generate-claude-profile, ' +
   'generate-dev-preferences, generate-slug, graphify, history-digest, init, intel, ' +
@@ -5090,6 +5318,28 @@ function resolveMainWorktreeCwd(cwd, deps = {}) {
     );
   }
   return worktreeRoot;
+}
+
+// ─── #5118: an out-of-set verification status thrown past a command ─────────
+// ADR-5057 Phase 4 closed the verification-status vocabulary: a
+// *-VERIFICATION.md whose frontmatter `status` is outside `passed |
+// gaps_found | human_needed` is a hard error (verification.cjs's
+// VerificationStatusError). A command that reads one report directly
+// (`verification status`, `phase uat-passed`, `phase complete`) lets it throw;
+// aggregates carry it in their own results and fail themselves. Either way
+// the CLI fails through the owner's `failOnVerificationStatusError` — the
+// error's own message and its own `.reason`; nothing here restates either.
+function isVerificationStatusError(err) {
+  return err instanceof verification.VerificationStatusError;
+}
+
+async function captureTranslatingVerificationStatus(run) {
+  try {
+    return await captureStdoutSyncWrites(run);
+  } catch (err) {
+    if (isVerificationStatusError(err)) verification.failOnVerificationStatusError(err);
+    throw err;
+  }
 }
 
 async function main() {
@@ -5357,7 +5607,7 @@ async function main() {
   // themselves JSON text, so resolving late would make every large result a
   // false "output was not JSON" (negative space N8).
   if (pickField) {
-    const captured = await captureStdoutSyncWrites(async () => {
+    const captured = await captureTranslatingVerificationStatus(async () => {
       await runCommand(command, args, cwd, raw, defaultValue, originalCommand, workstreamContext, preWorktreeRemapCwd);
     });
     const resolved = resolveAtFileOutput(captured);
@@ -5389,58 +5639,15 @@ async function main() {
   // already resolves this, but the normal path wrote @file: to stdout, forcing
   // every workflow to have a bash-specific `if [[ "$INIT" == @file:* ]]` check
   // that breaks on PowerShell and other non-bash shells.
-  const captured = await captureStdoutSyncWrites(async () => {
+  const captured = await captureTranslatingVerificationStatus(async () => {
     await runCommand(command, args, cwd, raw, defaultValue, originalCommand, workstreamContext, preWorktreeRemapCwd);
   });
   fs.writeSync(1, resolveAtFileOutput(captured));
 }
 
-function captureStdoutSyncWrites(run) {
-  const originalWriteSync = fs.writeSync;
-  let captured = '';
-
-  fs.writeSync = function patchedWriteSync(fd, data, ...rest) {
-    if (fd === 1) {
-      if (Buffer.isBuffer(data)) {
-        captured += data.toString('utf-8');
-        return data.length;
-      }
-      const text = String(data);
-      captured += text;
-      let encoding = 'utf-8';
-      if (typeof rest[1] === 'string') encoding = rest[1];
-      return Buffer.byteLength(text, encoding);
-    }
-    return originalWriteSync.call(fs, fd, data, ...rest);
-  };
-
-  const restore = () => {
-    fs.writeSync = originalWriteSync;
-  };
-
-  return Promise.resolve()
-    .then(() => run())
-    .then(() => {
-      restore();
-      return captured;
-    }, (err) => {
-      restore();
-      // The wrapped command may have written to stdout BEFORE it threw — e.g. a --raw
-      // command that emits a JSON result/error envelope and THEN throws ExitError to set a
-      // non-zero exit code (capability set/disable on an unknown id). Without this flush that
-      // captured output is silently discarded (the success-path flush at the call site never
-      // runs on a throw). Emit it now; the error still propagates so the exit code is preserved.
-      if (captured) {
-        try { originalWriteSync.call(fs, 1, resolveAtFileOutput(captured)); } catch { /* best-effort flush */ }
-      }
-      throw err;
-    });
-}
-
-function resolveAtFileOutput(captured) {
-  if (!captured.startsWith('@file:')) return captured;
-  return fs.readFileSync(captured.slice(6), 'utf-8');
-}
+// captureStdoutSyncWrites and resolveAtFileOutput moved to src/io.cts
+// (gsd-core/bin/lib/io.cjs) — the ONE shared pair (#5105 S9, review finding
+// 7), also used by uat.cts's cmdUatCompleteSession.
 
 // A plain object root/intermediate value — everything else (null, an array,
 // a number, a string, a boolean) is treated as non-object for NAMED-key

@@ -43,6 +43,8 @@ const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 const node_child_process_1 = require("node:child_process");
 const markdown_sectionizer_cjs_1 = require("./markdown-sectionizer.cjs");
+const read_only_git_env_cjs_1 = require("./read-only-git-env.cjs");
+const runtime_slash_cjs_1 = require("./runtime-slash.cjs");
 // #3696: the calendar-validity predicate moved to the STATE.md document module
 // so `state validate` can assert the same `last_activity` invariant this reader
 // already enforces (ADR-227). Two copies would let the two surfaces disagree
@@ -52,13 +54,16 @@ const ioMod = require("./io.cjs");
 const { output } = ioMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const planningWorkspace = require("./planning-workspace.cjs");
-const { planningPaths } = planningWorkspace;
+const { planningPaths, resolvePhaseIdConvention } = planningWorkspace;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const frontmatter = require("./frontmatter.cjs");
-const { extractFrontmatter } = frontmatter;
+const { extractFrontmatter, frontmatterBlock } = frontmatter;
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- phase-lifecycle.cjs is an export= CommonJS module
 const phaseLifecycle = require("./phase-lifecycle.cjs");
 const { deriveProgressFromRoadmap } = phaseLifecycle;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const roadmapParser = require("./roadmap-parser.cjs");
+const { extractCurrentMilestone, scanMilestonePhaseIds } = roadmapParser;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const stateDocument = require("./state-document.cjs");
 const { stateFieldValue } = stateDocument;
@@ -71,6 +76,10 @@ const { readStateHeadFreshness } = stateMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const unusableInput = require("./unusable-input.cjs");
 const { warnUnusableInput, UNUSABLE_REASON } = unusableInput;
+// #5118: the verification-status owner's frontmatter-only report check.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const verificationMod = require("./verification.cjs");
+const { findVerificationStatusError } = verificationMod;
 // ─── Constants ────────────────────────────────────────────────────────────────
 /**
  * Staleness threshold for idle-stranded detection. A clean tree whose last
@@ -214,6 +223,18 @@ function readGitSignals(cwd) {
                 windowsHide: true,
                 stdio: ['pipe', 'pipe', 'pipe'],
                 timeout: 10_000,
+                // #5048: readGitSignals runs `git status`, which by default refreshes
+                // the index and takes an *optional* `.git/index.lock` to write the
+                // refreshed copy back. That lock is the one a real `git add` / `git
+                // commit` needs, so a routine "which phase am I in" probe can fail
+                // someone else's commit with `Unable to create '.git/index.lock': File
+                // exists`. GIT_OPTIONAL_LOCKS=0 turns off exactly that optional write.
+                // The `rev-parse` / `log` calls sharing this helper never open the
+                // index, so the variable is inert for them. The block itself is owned by
+                // src/read-only-git-env.cts and shared with every other read-only seam;
+                // parity across every read-only surface is asserted in
+                // tests/git-optional-locks-parity.test.cjs.
+                env: (0, read_only_git_env_cjs_1.readOnlyGitEnv)(),
             });
         }
         catch {
@@ -285,11 +306,20 @@ function detectVerifyFailed(cwd, currentPhaseRaw) {
     catch {
         return false;
     }
+    // #5118: this phase's VERIFICATION report `status` is judged by its owner
+    // (src/verification.cts, the same frontmatter-only, containment-checked
+    // locator every reader shares) — an out-of-set value is the owner's hard
+    // error here as at every other reader, never a silent "not failed". The
+    // body `STATUS:` marker scan below is this probe's own signal.
+    const statusError = findVerificationStatusError([latestDir]);
+    if (statusError)
+        throw statusError;
     const candidates = files.filter((f) => /summary|verif(?:y|ication)|uat/i.test(f));
     for (const name of candidates) {
         let content = '';
+        const filePath = node_path_1.default.join(latestDir, name);
         try {
-            content = node_fs_1.default.readFileSync(node_path_1.default.join(latestDir, name), 'utf-8');
+            content = node_fs_1.default.readFileSync(filePath, 'utf-8');
         }
         catch {
             continue;
@@ -311,7 +341,10 @@ function readStateFile(statePath) {
         return null;
     }
     const fm = extractFrontmatter(content, statePath);
-    const body = content.replace(/^---[\s\S]*?---\s*/, '');
+    // The body starts after the block `extractFrontmatter` just read (the one fence owner), so a
+    // `---` inside a value, a BOM, or an adjacent empty block cannot cut it somewhere else.
+    const block = frontmatterBlock(content);
+    const body = block ? block.rest.replace(/^\s+/, '') : content;
     return { fm, body };
 }
 /** Collect the full signal set from disk for `cwd`. Exported for unit tests. */
@@ -336,6 +369,7 @@ function detectSignals(cwd, now = Date.now) {
         stale_activity: false,
         roadmap_total_phases: null,
         roadmap_completed_phases: null,
+        milestone_phases: [],
         // No STATE.md (or unreadable) → no stamp to compare. Unknown, not fresh.
         state_commits_behind: null,
         state_commit_stale: null,
@@ -409,12 +443,18 @@ function detectSignals(cwd, now = Date.now) {
     // Progress table — isComplete falls back to the legacy comparison in that case.
     let roadmapTotalPhases = null;
     let roadmapCompletedPhases = null;
+    let milestonePhases = [];
     if (hasRoadmap) {
         try {
             const roadmapContent = node_fs_1.default.readFileSync(paths.roadmap, 'utf8');
             const derived = deriveProgressFromRoadmap(roadmapContent);
             roadmapTotalPhases = derived.totalPhases;
             roadmapCompletedPhases = derived.completedPhases;
+            // #5228: the ordered phase list of the current milestone, from the same
+            // scan the milestone-scoped commands use.
+            milestonePhases = [
+                ...scanMilestonePhaseIds(extractCurrentMilestone(roadmapContent, cwd), resolvePhaseIdConvention(cwd)),
+            ].sort(comparePhaseNum);
         }
         catch {
             /* ROADMAP.md unreadable — leave null; isComplete falls back to legacy. */
@@ -441,6 +481,7 @@ function detectSignals(cwd, now = Date.now) {
         stale_activity: staleActivity,
         roadmap_total_phases: roadmapTotalPhases,
         roadmap_completed_phases: roadmapCompletedPhases,
+        milestone_phases: milestonePhases,
         state_commits_behind: freshness.commits_behind,
         state_commit_stale: freshness.commit_stale,
     };
@@ -472,10 +513,21 @@ function isComplete(s) {
         // Legacy path: STATE.md comparison. It only fires when ROADMAP.md is
         // absent or has no Progress table, and uses canonical phase-id ordering
         // so dotted phase ids are never coerced to JavaScript numbers.
-        if (s.total_phases === null || s.current_phase === null)
+        if (s.current_phase === null)
             return false;
-        if (comparePhaseNum(s.current_phase, s.total_phases) < 0)
-            return false;
+        if (s.milestone_phases.length > 0) {
+            // #5228: compare against the milestone's LAST phase. The phase count is
+            // not a phase number once numbering continues from an earlier milestone.
+            const last = s.milestone_phases[s.milestone_phases.length - 1];
+            if (comparePhaseNum(s.current_phase, last) < 0)
+                return false;
+        }
+        else {
+            if (s.total_phases === null)
+                return false;
+            if (comparePhaseNum(s.current_phase, s.total_phases) < 0)
+                return false;
+        }
     }
     // Status regex: require milestone-level completion language. The pre-fix
     // regex matched any "shipped" / "done" substring (per-phase language).
@@ -542,52 +594,54 @@ function rec(id, label, command) {
     return action(id, label, command, true);
 }
 /** Per-situation ordered action list; recommended action first. */
-function actionsFor(situation, s) {
+function actionsFor(situation, s, runtime = 'claude') {
+    // #4859: commands are printed verbatim, so name them the way this runtime registers them.
+    const cmd = (name) => (0, runtime_slash_cjs_1.formatGsdSlash)(name, runtime);
     const phaseN = s.current_phase ?? '';
     const execLabel = phaseN === '' ? 'Continue executing' : `Continue executing phase ${phaseN}`;
     switch (situation) {
         case 'no-project':
             return [
-                rec('new-project', 'Start a new project', '/gsd:new-project'),
-                action('map-codebase', 'Map an existing codebase', '/gsd:map-codebase'),
-                action('quick', 'Quick task', '/gsd:quick'),
-                action('help', 'Show help', '/gsd:help'),
+                rec('new-project', 'Start a new project', cmd('new-project')),
+                action('map-codebase', 'Map an existing codebase', cmd('map-codebase')),
+                action('quick', 'Quick task', cmd('quick')),
+                action('help', 'Show help', cmd('help')),
             ];
         case 'paused':
             return [
-                rec('resume-work', 'Resume work', '/gsd:resume-work'),
-                action('progress', 'Show progress', '/gsd:progress'),
-                action('quick', 'Quick task', '/gsd:quick'),
-                action('help', 'Show help', '/gsd:help'),
+                rec('resume-work', 'Resume work', cmd('resume-work')),
+                action('progress', 'Show progress', cmd('progress')),
+                action('quick', 'Quick task', cmd('quick')),
+                action('help', 'Show help', cmd('help')),
             ];
         case 'blocked':
             return [
-                rec('debug', 'Debug the blocker', '/gsd:debug'),
-                action('verify-work', 'Verify current work', '/gsd:verify-work'),
-                action('capture', 'Capture a note', '/gsd:capture'),
-                action('progress', 'Show progress', '/gsd:progress'),
+                rec('debug', 'Debug the blocker', cmd('debug')),
+                action('verify-work', 'Verify current work', cmd('verify-work')),
+                action('capture', 'Capture a note', cmd('capture')),
+                action('progress', 'Show progress', cmd('progress')),
             ];
         case 'verify-failed':
             return [
-                rec('verify-work', 'Re-verify work', '/gsd:verify-work'),
-                action('debug', 'Debug the failure', '/gsd:debug'),
-                action('code-review', 'Review recent work', '/gsd:code-review'),
-                action('progress', 'Show progress', '/gsd:progress'),
+                rec('verify-work', 'Re-verify work', cmd('verify-work')),
+                action('debug', 'Debug the failure', cmd('debug')),
+                action('code-review', 'Review recent work', cmd('code-review')),
+                action('progress', 'Show progress', cmd('progress')),
             ];
         case 'needs-first-phase':
             return [
-                rec('discuss-phase', 'Discuss the first phase', '/gsd:discuss-phase'),
-                action('plan-phase', 'Plan phase 1', '/gsd:plan-phase'),
-                action('quick', 'Quick task', '/gsd:quick'),
-                action('progress', 'Show progress', '/gsd:progress'),
+                rec('discuss-phase', 'Discuss the first phase', cmd('discuss-phase')),
+                action('plan-phase', 'Plan phase 1', cmd('plan-phase')),
+                action('quick', 'Quick task', cmd('quick')),
+                action('progress', 'Show progress', cmd('progress')),
             ];
         case 'planning':
             // Forward motion → delegate to the single gated engine (see 'executing').
             return [
-                rec('progress-next', `Advance to the next step (plan phase ${phaseN || 1})`, '/gsd:progress --next'),
-                action('plan-phase', `Plan phase ${phaseN || 1}`, '/gsd:plan-phase'),
-                action('discuss-phase', 'Discuss before planning', '/gsd:discuss-phase'),
-                action('progress', 'Show progress', '/gsd:progress'),
+                rec('progress-next', `Advance to the next step (plan phase ${phaseN || 1})`, cmd('progress --next')),
+                action('plan-phase', `Plan phase ${phaseN || 1}`, cmd('plan-phase')),
+                action('discuss-phase', 'Discuss before planning', cmd('discuss-phase')),
+                action('progress', 'Show progress', cmd('progress')),
             ];
         case 'executing':
             // In-project forward motion delegates to the single gated engine
@@ -596,44 +650,66 @@ function actionsFor(situation, s) {
             // /gsd:execute-phase here — that divergence is why the old flat /gsd-next
             // was removed (#3054). Direct execute stays as an explicit secondary choice.
             return [
-                rec('progress-next', 'Advance to the next step', '/gsd:progress --next'),
-                action('execute-phase', execLabel, '/gsd:execute-phase'),
-                action('quick', 'Quick task', '/gsd:quick'),
-                action('code-review', 'Review recent work', '/gsd:code-review'),
+                rec('progress-next', 'Advance to the next step', cmd('progress --next')),
+                action('execute-phase', execLabel, cmd('execute-phase')),
+                action('quick', 'Quick task', cmd('quick')),
+                action('code-review', 'Review recent work', cmd('code-review')),
             ];
         case 'verify-pending':
             // Forward motion → delegate to the single gated engine (see 'executing').
             return [
-                rec('progress-next', 'Advance to the next step (verify)', '/gsd:progress --next'),
-                action('verify-work', 'Verify work', '/gsd:verify-work'),
-                action('code-review', 'Review recent work', '/gsd:code-review'),
-                action('ship', 'Ship completed work', '/gsd:ship'),
+                rec('progress-next', 'Advance to the next step (verify)', cmd('progress --next')),
+                action('verify-work', 'Verify work', cmd('verify-work')),
+                action('code-review', 'Review recent work', cmd('code-review')),
+                action('ship', 'Ship completed work', cmd('ship')),
             ];
         case 'idle-stranded':
             return [
-                rec('ship', 'Ship committed work', '/gsd:ship'),
-                action('complete-milestone', 'Complete the milestone', '/gsd:complete-milestone'),
-                action('progress', 'Show progress', '/gsd:progress'),
-                action('capture', 'Capture a note', '/gsd:capture'),
+                rec('ship', 'Ship committed work', cmd('ship')),
+                action('complete-milestone', 'Complete the milestone', cmd('complete-milestone')),
+                action('progress', 'Show progress', cmd('progress')),
+                action('capture', 'Capture a note', cmd('capture')),
             ];
         case 'complete':
             return [
-                rec('new-milestone', 'Start a new milestone', '/gsd:new-milestone'),
-                action('extract-learnings', 'Extract learnings', '/gsd:extract-learnings'),
-                action('quick', 'Quick task', '/gsd:quick'),
-                action('progress', 'Show progress', '/gsd:progress'),
+                rec('new-milestone', 'Start a new milestone', cmd('new-milestone')),
+                action('extract-learnings', 'Extract learnings', cmd('extract-learnings')),
+                action('quick', 'Quick task', cmd('quick')),
+                action('progress', 'Show progress', cmd('progress')),
             ];
         case 'unknown':
         default:
             return [
-                rec('progress', 'Show progress', '/gsd:progress'),
-                action('progress-next', 'Advance to the next step', '/gsd:progress --next'),
-                action('quick', 'Quick task', '/gsd:quick'),
-                action('help', 'Show help', '/gsd:help'),
+                rec('progress', 'Show progress', cmd('progress')),
+                action('progress-next', 'Advance to the next step', cmd('progress --next')),
+                action('quick', 'Quick task', cmd('quick')),
+                action('help', 'Show help', cmd('help')),
             ];
     }
 }
 // ─── Summary line ─────────────────────────────────────────────────────────────
+function phaseSummary(s) {
+    const phase = s.current_phase;
+    // Preserve the milestone ordinal introduced by #5228 when it is known.
+    const at = phase === null ? -1 : s.milestone_phases.findIndex((id) => comparePhaseNum(id, phase) === 0);
+    if (at >= 0)
+        return `Phase ${at + 1} of ${s.milestone_phases.length}`;
+    const total = s.total_phases;
+    const legacy = `Phase ${phase ?? '?'} of ${total ?? '?'}`;
+    const roadmapTotal = s.roadmap_total_phases;
+    // Keep the recorded pair when roadmap counts are unavailable, or when the
+    // pair can describe a single milestone without changing its existing text.
+    if (phase === null || total === null || roadmapTotal === null || roadmapTotal <= 0
+        || (total === roadmapTotal && comparePhaseNum(phase, total) <= 0)) {
+        return legacy;
+    }
+    // When the recorded pair cannot safely describe this roadmap, label its
+    // counts separately rather than printing a mixed-scope ratio.
+    const roadmapDone = s.roadmap_completed_phases;
+    return roadmapDone === null
+        ? `Phase ${phase} (${roadmapTotal} roadmap phases)`
+        : `Phase ${phase} (${roadmapDone} of ${roadmapTotal} roadmap phases complete)`;
+}
 function buildSummary(situation, s) {
     switch (situation) {
         case 'no-project':
@@ -647,7 +723,7 @@ function buildSummary(situation, s) {
         case 'needs-first-phase':
             return 'Project initialized — plan your first phase';
         case 'planning':
-            return `Phase ${s.current_phase ?? '?'} of ${s.total_phases ?? '?'} — needs a plan`;
+            return `${phaseSummary(s)} — needs a plan`;
         case 'executing':
             return progressLine('executing', s);
         case 'verify-pending':
@@ -664,7 +740,7 @@ function buildSummary(situation, s) {
 function progressLine(tail, s) {
     const parts = [];
     if (s.current_phase !== null && s.total_phases !== null) {
-        parts.push(`Phase ${s.current_phase} of ${s.total_phases}`);
+        parts.push(phaseSummary(s));
     }
     else if (s.current_phase !== null) {
         parts.push(`Phase ${s.current_phase}`);
@@ -683,7 +759,7 @@ function progressLine(tail, s) {
 function classifyProject(cwd, now = Date.now) {
     const signals = detectSignals(cwd, now);
     const situation = classify(signals);
-    const actions = actionsFor(situation, signals);
+    const actions = actionsFor(situation, signals, (0, runtime_slash_cjs_1.resolveRuntime)(cwd));
     const recommended = actions.find((a) => a.recommended)?.id ?? 'progress';
     const summary = buildSummary(situation, signals);
     return { situation, recommended, summary, signals, actions };
@@ -702,6 +778,6 @@ function runSmartEntry(cwd, args, raw) {
         return;
     }
     // Human mode: a compact one-liner plus the recommended action.
-    const human = `${result.summary}\nRecommended: ${result.recommended} → ${result.actions.find((a) => a.id === result.recommended)?.command ?? '/gsd:progress'}`;
+    const human = `${result.summary}\nRecommended: ${result.recommended} → ${result.actions.find((a) => a.id === result.recommended)?.command ?? (0, runtime_slash_cjs_1.runtimeCommand)(cwd, 'progress')}`;
     output(null, true, human);
 }

@@ -67,7 +67,7 @@ Before executing, discover project context:
 - Load `rules/*.md` as needed during **implementation**.
 - Follow skill rules relevant to the task you are about to commit.
 
-**agent_skills:** self-load per @/home/user/Fuku_Robot/.claude/gsd-core/references/agent-skills-bootstrap.md
+**agent_skills:** self-load per @/home/user/Fuku_Robot/.claude/gsd-core/references/agent-skills-bootstrap.md (agent type: `gsd-executor`)
 
 **CLAUDE.md enforcement:** If `./CLAUDE.md` exists, treat its directives as hard constraints during execution. Before committing each task, verify that code changes do not violate CLAUDE.md rules (forbidden patterns, required conventions, mandated tools). If a task action would contradict a CLAUDE.md directive, apply the CLAUDE.md rule — it takes precedence over plan instructions. Document any CLAUDE.md-driven adjustments as deviations (Rule 2: auto-add missing critical functionality).
 </project_context>
@@ -410,8 +410,8 @@ The reference is the single source; do not improvise a variant.
 ## Plan-Level TDD Gate Enforcement (type: tdd plans, #4269: stated ONCE)
 
 When the plan frontmatter has `type: tdd`, the mandatory RED/GREEN/REFACTOR gate sequence,
-its fail-fast rules (including the #3770 INVALID_RED / intentional-RED-evidence requirement
-enforced via `gsd_run check tdd-red-evidence`), and the `## TDD Gate Compliance` SUMMARY.md contract are
+its format-based RED evidence rules (#3770 INVALID_RED: `gsd_run check tdd-red-evidence`
+plus semantic inspection), and the `## TDD Gate Compliance` SUMMARY.md contract are
 specified in the canonical `gsd-core/references/tdd.md` "Gate Enforcement Rules" section
 (embedded when TDD applies). The reference is the single source; do not improvise a variant.
 </tdd_execution>
@@ -504,7 +504,11 @@ if [ "$IS_PROTECTED" != "false" ]; then
   echo "Re-home onto a phase/agent branch (#2924, #3819); override: git.allow_default_branch_commits:true in .planning/config.json." >&2
   exit 1
 fi
-if [ -f .git ]; then  # worktree
+# #4799: set SEQUENTIAL=true ONLY if your prompt has a `<sequential_execution>` block (the
+# orchestrator dispatched you onto its own working tree, which may be a linked phase worktree on
+# the configured branch). Otherwise leave it false: the allow-list below applies (fails closed).
+SEQUENTIAL=false
+if [ -f .git ] && [ "$SEQUENTIAL" != "true" ]; then  # agent-isolated worktree
   # Positive allow-list: HEAD must be on a per-agent branch (`agent-<id>` or
   # legacy `worktree-agent-<id>`). This catches feature/* and any other
   # arbitrary branch that the deny-list would silently allow (#2924, #1995).
@@ -572,7 +576,7 @@ git commit -m "{type}({phase}-{plan}): {concise task description}
 
 **6. Post-commit deletion check:** After recording the hash, verify the commit did not accidentally delete tracked files:
 ```bash
-DELETIONS=$(git diff --diff-filter=D --name-only HEAD~1 HEAD 2>/dev/null || true)
+DELETIONS=$(git show --first-parent --diff-filter=D --name-only --pretty=format: HEAD 2>/dev/null || true)
 if [ -n "$DELETIONS" ]; then
   echo "WARNING: Commit includes file deletions: $DELETIONS"
 fi
@@ -621,7 +625,7 @@ back, those deletions appear on the main branch, destroying prior-wave work (#20
   touching `refs/stash`:
 
   - **Move WIP off the working tree:** commit it to a throwaway branch you own
-    (e.g. `git checkout -b scratch-/<task>-wip && git add -A && git commit -m "wip"`),
+    (e.g. `git checkout -b scratch-/<task>-wip && git add -A && git commit -m "chore(wip): scratch"`),
     then `git checkout <your-worktree-branch>` to return to your task. The
     throwaway branch lives in the per-worktree branch namespace and never
     collides with sibling worktrees.
@@ -754,7 +758,7 @@ After writing SUMMARY.md, verify claims before proceeding.
 
 **2. Check commits exist:**
 ```bash
-git log --oneline --all | grep -q "{hash}" && echo "FOUND: {hash}" || echo "MISSING: {hash}"
+git merge-base --is-ancestor "{hash}" HEAD 2>/dev/null && echo "FOUND: {hash}" || echo "MISSING: {hash}"
 ```
 
 **3. Append result to SUMMARY.md:** `## Self-Check: PASSED` or `## Self-Check: FAILED` with missing items listed.

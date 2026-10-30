@@ -234,7 +234,7 @@ function handleMessage(request, ctx = {}) {
                 // subscribe/listChanged — nothing ever sends those notifications
                 // (design row 2 / Hyrum's Law: advertising an unimplemented
                 // notification is a lie a host would act on).
-                capabilities: { tools: {}, resources: {}, prompts: {} },
+                capabilities: ctx.prompts === false ? { tools: {}, resources: {} } : { tools: {}, resources: {}, prompts: {} },
                 serverInfo: { name: exports.SERVER_NAME, version: resolveServerVersion() },
             };
             break;
@@ -276,6 +276,8 @@ function handleMessage(request, ctx = {}) {
             break;
         }
         case 'prompts/list':
+            if (ctx.prompts === false)
+                return isNotification ? null : errorResponse(id, METHOD_NOT_FOUND, 'Method not found: prompts/list.');
             result = {
                 prompts: [...getCatalog().prompts.values()]
                     .map(wirePrompt)
@@ -283,6 +285,8 @@ function handleMessage(request, ctx = {}) {
             };
             break;
         case 'prompts/get': {
+            if (ctx.prompts === false)
+                return isNotification ? null : errorResponse(id, METHOD_NOT_FOUND, 'Method not found: prompts/get.');
             const params = (request.params && typeof request.params === 'object' ? request.params : {});
             const name = asString(params.name);
             if (!name)

@@ -35,6 +35,8 @@ const node_fs_1 = __importDefault(require("node:fs"));
 const node_os_1 = __importDefault(require("node:os"));
 const node_path_1 = __importDefault(require("node:path"));
 const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs");
+const runtime_name_policy_cjs_1 = require("./runtime-name-policy.cjs");
+const args_terminator_cjs_1 = require("./args-terminator.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const installProfiles = require("./install-profiles.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -321,6 +323,14 @@ function applySurface(runtimeConfigDir, layout, manifest, clusterMap, registry, 
     if (node_path_1.default.resolve(runtimeConfigDir) !== node_path_1.default.resolve(layout.configDir)) {
         throw new TypeError('applySurface runtimeConfigDir must match layout.configDir');
     }
+    // #5637: re-staged commands and skills keep the typed-text terminator nonce the install wrote,
+    // when it wrote one; this process is not an installer, so nothing armed it.
+    // A directory with no nonce (an install from before this change) is re-staged canonical, and a
+    // nonce armed earlier in this process for another directory is not carried over.
+    if ((0, args_terminator_cjs_1.readInstalledNonce)(layout.configDir) !== null)
+        (0, args_terminator_cjs_1.armArgsNonce)(layout.configDir, true);
+    else
+        (0, args_terminator_cjs_1.disarmArgsNonce)();
     // #3712: the dest selection below prefers `kind.home` over layout.configDir and
     // then hands it to the destructive _syncGsdDir, so surface apply is a third
     // escape route into the developer's real home alongside install/uninstall.
@@ -351,7 +361,7 @@ function applySurface(runtimeConfigDir, layout, manifest, clusterMap, registry, 
     // then projects the defaulted value to the boolean `_computePathPrefix`'s
     // existing `isGlobal: boolean` API requires.
     const _isGlobal = (0, install_scope_cjs_1.isGlobalScope)(layout.scope ?? 'global');
-    const _isOpencode = layout.runtime === 'opencode';
+    const _isOpencode = (0, runtime_name_policy_cjs_1.hostBehaviorsFor)(layout.runtime).opencodePathPrefix === true;
     const _isWindowsHost = (opts?.platform ?? process.platform) === 'win32';
     // #4377: style is an install-time fact, not a process environment setting.
     // A later gsd-tools surface apply runs in another process, so it must reuse

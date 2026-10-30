@@ -50,6 +50,9 @@ function migrateToWorkstreams(cwd, workstreamName) {
     catch {
         throw new Error('Invalid workstream name for migration');
     }
+    if ((0, workstream_name_policy_cjs_1.isReservedWorkstreamName)(workstreamName)) {
+        throw new Error((0, workstream_name_policy_cjs_1.reservedWorkstreamNameMessage)(workstreamName));
+    }
     const baseDir = planningRoot(cwd);
     const wsDir = node_path_1.default.join(baseDir, 'workstreams', workstreamName);
     if (node_fs_1.default.existsSync(node_path_1.default.join(baseDir, 'workstreams'))) {
@@ -100,6 +103,9 @@ function cmdWorkstreamCreate(cwd, name, options, raw) {
     const slug = (0, workstream_name_policy_cjs_1.toWorkstreamSlug)(name);
     if (!slug) {
         error('Invalid workstream name — must contain at least one alphanumeric character');
+    }
+    if ((0, workstream_name_policy_cjs_1.isReservedWorkstreamName)(slug)) {
+        error((0, workstream_name_policy_cjs_1.reservedWorkstreamNameMessage)(slug));
     }
     const baseDir = planningRoot(cwd);
     if (!node_fs_1.default.existsSync(baseDir)) {
@@ -331,8 +337,11 @@ function cmdWorkstreamSet(cwd, name, raw) {
         output({ active: null, cleared: true, previous: previous || null }, raw, undefined);
         return;
     }
-    if (!(0, workstream_name_policy_cjs_1.isValidActiveWorkstreamName)(name)) {
-        output({ active: null, error: 'invalid_name', message: 'Workstream name must be alphanumeric, hyphens, underscores, or dots' }, raw, undefined);
+    if (!(0, workstream_name_policy_cjs_1.isValidActiveWorkstreamName)(name) || (0, workstream_name_policy_cjs_1.isReservedWorkstreamName)(name)) {
+        const message = (0, workstream_name_policy_cjs_1.isReservedWorkstreamName)(name)
+            ? (0, workstream_name_policy_cjs_1.reservedWorkstreamNameMessage)(name)
+            : 'Workstream name must be alphanumeric, hyphens, underscores, or dots';
+        output({ active: null, error: 'invalid_name', message }, raw, undefined);
         return;
     }
     const wsDir = node_path_1.default.join(planningRoot(cwd), 'workstreams', name);

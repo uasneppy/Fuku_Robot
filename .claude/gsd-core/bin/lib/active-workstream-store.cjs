@@ -395,6 +395,14 @@ function parseCliWorkstream(args) {
         args: args.slice(),
     };
 }
+function workstreamDirectoryExists(cwd, name) {
+    try {
+        return node_fs_1.default.readdirSync(node_path_1.default.join(planningRoot(cwd), 'workstreams')).includes(name);
+    }
+    catch {
+        return false;
+    }
+}
 function resolveActiveWorkstream(cwd, args, env = process.env, deps = {}) {
     const parsed = parseCliWorkstream(args);
     const getStored = deps.getStored || ((dir) => getActiveWorkstream(dir, deps));
@@ -414,6 +422,13 @@ function resolveActiveWorkstream(cwd, args, env = process.env, deps = {}) {
     }
     if (ws && !validateWorkstreamName(ws)) {
         throw new Error('Invalid workstream name: must be alphanumeric, hyphens, underscores, or dots');
+    }
+    // #4772: a reserved name (`none`) is rejected from every source (--ws, env,
+    // pointer) unless a directory of that name already exists (grandfathered).
+    // Grandfathering compares the directory listing exactly, so a case-insensitive
+    // filesystem (macOS, Windows) cannot let `NONE` through on the strength of `none`.
+    if (ws && (0, workstream_name_policy_cjs_1.isReservedWorkstreamName)(ws) && !workstreamDirectoryExists(cwd, ws)) {
+        throw new Error((0, workstream_name_policy_cjs_1.reservedWorkstreamNameMessage)(ws, source));
     }
     return {
         ws,

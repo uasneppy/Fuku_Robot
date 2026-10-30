@@ -73,6 +73,12 @@ exports.buildStateContract = buildStateContract;
 exports.publishStateContract = publishStateContract;
 const node_path_1 = __importDefault(require("node:path"));
 const node_fs_1 = __importDefault(require("node:fs"));
+// #5060: `phase-status.cjs` is a LOAD-TIME LEAF — no top-level requires of
+// its own (verification.cjs/plan-scan.cjs are required lazily, only inside
+// `phaseStatus()`) — so importing it here at top level does not reopen the
+// documented `state.cjs -> state-contract.cjs -> smart-entry.cjs -> state.cjs`
+// require cycle the file header warns about.
+const phase_status_cjs_1 = require("./phase-status.cjs");
 // ─── Public wire vocabulary ────────────────────────────────────────────────
 exports.STATE_CONTRACT_VERSION = '1.0.0';
 exports.STATE_CONTRACT_FLAVOR = 'core';
@@ -80,12 +86,14 @@ exports.STATE_CONTRACT_FLAVOR = 'core';
 exports.CONTRACT_KEY_ORDER = Object.freeze(['contract', 'flavor', 'milestone', 'phases', 'next', 'updated_at']);
 /** Key order of each emitted phase object — an observable, pinned by test. */
 exports.PHASE_KEY_ORDER = Object.freeze(['number', 'name', 'status']);
-/** Frozen three-value phase status vocabulary. Conservative in what we send (Postel's Law). */
-exports.PHASE_STATUS = Object.freeze({
-    COMPLETE: 'complete',
-    IN_PROGRESS: 'in_progress',
-    PENDING: 'pending',
-});
+/**
+ * Frozen three-value phase status vocabulary. Conservative in what we send
+ * (Postel's Law). #5060: identity-pinned to the Phase Status Module's own
+ * `WIRE_STATUS` — this is not a copy, it IS that frozen object, so
+ * `state-contract`'s `PHASE_STATUS` and `phase-status.cjs`'s `WIRE_STATUS`
+ * can never independently drift.
+ */
+exports.PHASE_STATUS = phase_status_cjs_1.WIRE_STATUS;
 /** Frozen `publishStateContract` result reasons. */
 exports.PUBLISH_REASON = Object.freeze({
     PUBLISHED: 'published',
@@ -121,6 +129,7 @@ function owners() {
         locateProgressTable: phaseLifecycleMod.locateProgressTable,
         isSentinelPhaseId: phaseIdMod.isSentinelPhaseId,
         parsePhaseFromProse: phaseIdMod.parsePhaseFromProse,
+        resolvePhaseIdConvention: planningWorkspaceMod.resolvePhaseIdConvention,
         getMilestoneInfo: roadmapParserMod.getMilestoneInfo,
         collectSection: markdownSectionizerMod.collectSection,
         stateFieldValue: stateDocumentMod.stateFieldValue,
@@ -146,36 +155,42 @@ function buildMilestone(cwd) {
 }
 // ─── phases: Progress-table (primary) enumerator ───────────────────────────
 const PHASE_CELL_RE = /^(\d+(?:\.\d+)*)\s*[.:)–—-]?\s*(.*)$/;
-function statusFromProgressCell(raw) {
-    const normalized = (raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-    if (normalized === 'complete')
-        return exports.PHASE_STATUS.COMPLETE;
-    if (normalized === 'in progress')
-        return exports.PHASE_STATUS.IN_PROGRESS;
-    // Everything else — 'not started', 'deferred' (design row 12, lossy by
-    // design), '', and any unrecognized word — folds to pending. An
-    // unrecognized status must never reach the wire as a 4th value.
-    return exports.PHASE_STATUS.PENDING;
+// #5626: under `milestone-prefixed` the phase id is the whole `M-NN` (`3-01`), so the number capture takes
+// one optional `-NN` segment. Chosen by the convention value alone: every other convention keeps the
+// dotted-only capture above, and the `\d+-\d+` shape stays an ordinary leading integer there.
+const MILESTONE_PREFIXED = 'milestone-prefixed';
+const PHASE_CELL_MILESTONE_RE = /^(\d+(?:-\d+)?(?:\.\d+)*)\s*[.:)–—-]?\s*(.*)$/;
+/** The project's `phase_id_convention` (null when unset or unreadable), through its one owner. */
+function phaseIdConventionOf(cwd) {
+    try {
+        return owners().resolvePhaseIdConvention(cwd);
+    }
+    catch {
+        return null;
+    }
 }
-function phasesFromProgressTable(table) {
+function phasesFromProgressTable(table, convention) {
     const { isSentinelPhaseId } = owners();
     const phases = [];
+    const cellRe = convention === MILESTONE_PREFIXED ? PHASE_CELL_MILESTONE_RE : PHASE_CELL_RE;
     for (const row of table.rows) {
         const cell = (row['Phase'] ?? '').trim();
         if (!/^\d/.test(cell))
             continue; // stray note row, no leading digit
         if (isSentinelPhaseId(cell))
             continue; // phase 0 / 999.x sentinels
-        const m = PHASE_CELL_RE.exec(cell);
+        const m = cellRe.exec(cell);
         const number = m ? m[1] : cell;
         const name = m && m[2].trim().length > 0 ? m[2].trim() : null;
-        phases.push({ number, name, status: statusFromProgressCell(row['Status']) });
+        phases.push({ number, name, status: (0, phase_status_cjs_1.parseRoadmapStatusCell)(row['Status']) });
     }
     return phases;
 }
 // ─── phases: `## Phases` checkbox fallback ─────────────────────────────────
 // `- [x] **Phase 1: Foundation**` / `- [ ] **Phase 2.1: Hardening**`.
 const PHASE_BULLET_RE = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\*\*Phase[ \t]+(\d+(?:\.\d+)*)[ \t]*:?[ \t]*([^*\n]*)\*\*/gm;
+// #5626: the same bullet under `milestone-prefixed`: the number capture takes one optional `-NN` segment.
+const PHASE_BULLET_MILESTONE_RE = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\*\*Phase[ \t]+(\d+(?:-\d+)?(?:\.\d+)*)[ \t]*:?[ \t]*([^*\n]*)\*\*/gm;
 /**
  * STATE.md's current phase, via the same frontmatter-then-body chain
  * `cmdStateCompletePhase` uses (`stateFieldValue` owns the #1760 fallback
@@ -183,7 +198,7 @@ const PHASE_BULLET_RE = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\*\*Phase[ \t]+(\d+(?
  * phase as unknown so every unchecked bullet is PENDING rather than
  * IN_PROGRESS by a guess.
  */
-function currentPhaseFromState(statePath) {
+function currentPhaseFromState(statePath, convention) {
     const { platformReadSync, extractFrontmatter, stripFrontmatter, stateFieldValue, parsePhaseFromProse } = owners();
     try {
         const raw = platformReadSync(statePath);
@@ -194,7 +209,7 @@ function currentPhaseFromState(statePath) {
         const { value } = stateFieldValue(fm, body, 'current_phase', 'Current Phase');
         if (!value)
             return null;
-        return parsePhaseFromProse(value).phase;
+        return parsePhaseFromProse(value, convention).phase;
     }
     catch {
         return null;
@@ -210,15 +225,16 @@ function currentPhaseFromState(statePath) {
  * `**Phase N` anchor inside `PHASE_BULLET_RE` is the second layer of that
  * defence — a plan bullet's text never starts with `**Phase`.
  */
-function phasesFromChecklist(roadmapContent, cwd, statePath) {
+function phasesFromChecklist(roadmapContent, cwd, statePath, convention) {
     const { collectSection, isSentinelPhaseId } = owners();
     const section = collectSection(roadmapContent, (h) => /^phases$/i.test(h.text.trim()));
     if (!section)
         return [];
-    const currentPhase = currentPhaseFromState(statePath);
+    const currentPhase = currentPhaseFromState(statePath, convention);
     const phases = [];
     let match;
-    const pattern = new RegExp(PHASE_BULLET_RE.source, PHASE_BULLET_RE.flags);
+    const bulletRe = convention === MILESTONE_PREFIXED ? PHASE_BULLET_MILESTONE_RE : PHASE_BULLET_RE;
+    const pattern = new RegExp(bulletRe.source, bulletRe.flags);
     while ((match = pattern.exec(section.body)) !== null) {
         const checked = match[1] === 'x' || match[1] === 'X';
         const number = match[2];
@@ -240,10 +256,11 @@ function buildPhases(cwd, paths) {
             return [];
         if (content.charCodeAt(0) === 0xfeff)
             content = content.slice(1); // strip leading BOM
+        const convention = phaseIdConventionOf(cwd);
         const table = locateProgressTable(content);
         if (table)
-            return phasesFromProgressTable(table);
-        return phasesFromChecklist(content, cwd, paths.state);
+            return phasesFromProgressTable(table, convention);
+        return phasesFromChecklist(content, cwd, paths.state, convention);
     }
     catch {
         return [];

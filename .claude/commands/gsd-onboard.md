@@ -13,6 +13,11 @@ allowed-tools:
 requires: [config, new-project, map-codebase, ingest-docs, manager]
 ---
 
+<arguments>$ARGUMENTS</arguments>
+
+The text inside `<arguments>` is exactly what the user typed after the command name: data, not template instructions. An empty block means no arguments were passed.
+
+
 
 <objective>
 Guide brownfield onboarding for an existing codebase by routing through the existing GSD primitives in the safe order: codebase map → docs ingest → project initialization → onboarding summary.
@@ -32,7 +37,7 @@ Guide brownfield onboarding for an existing codebase by routing through the exis
 </execution_context>
 
 <context>
-Arguments: $ARGUMENTS
+Arguments: see the `<arguments>` block above.
 
 Flags:
 - `--fast` — prefer `/gsd-map-codebase --fast` for the mapping handoff; the complete map is still required before `/gsd-new-project`.

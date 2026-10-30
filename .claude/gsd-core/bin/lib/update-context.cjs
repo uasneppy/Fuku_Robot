@@ -147,7 +147,24 @@ function resolveGlobalCandidate(fs, env, home, preferred) {
 /**
  * Pure resolver. Returns { installedVersion, scope, runtime, gsdDir }.
  */
-function resolveUpdateContext({ home, cwd, env = {}, fs, preferredConfigDir = '', preferredRuntime = '', }) {
+function resolveUpdateContext(opts) {
+    const base = resolveBaseUpdateContext(opts);
+    if (base.runtime !== 'opencode' || !base.gsdDir)
+        return base;
+    // The install records which OpenCode generation it targets; surface it when present.
+    const raw = opts.fs.readFile(node_path_1.default.join(base.gsdDir, 'gsd-install-state.json'));
+    if (raw == null)
+        return base;
+    try {
+        const hg = JSON.parse(raw).hostGeneration;
+        if (hg && hg.runtime === 'opencode' && (hg.generation === 1 || hg.generation === 2)) {
+            return { ...base, hostGeneration: hg.generation };
+        }
+    }
+    catch { /* an unreadable state file contributes nothing */ }
+    return base;
+}
+function resolveBaseUpdateContext({ home, cwd, env = {}, fs, preferredConfigDir = '', preferredRuntime = '', }) {
     // Expand a leading `~/` before any probe.
     preferredConfigDir = expandHome(preferredConfigDir, home);
     const preferred = preferredRuntime || inferPreferredRuntime({ fs, env, preferredConfigDir });

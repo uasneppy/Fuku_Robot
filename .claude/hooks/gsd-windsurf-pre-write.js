@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.15.0
+// gsd-hook-version: 1.19.0
 // gsd-windsurf-pre-write.js — Windsurf/Cascade pre_write_code hook (ADR-1239 / #2100)
 //
 // Cascade (Windsurf's agent) invokes this script before each file-write tool
@@ -31,17 +31,53 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { allow, deny } = require('./lib/hook-exit.js');
-const { reportIfUndetermined } = require('./lib/git-probe.js');
+const { reportIfUndetermined, BLOCKING_GUARD_PROBE_TIMEOUT_MS } = require('./lib/git-probe.js');
 
 // #3911 (ADR-3889 Phase 7): the exit(2) call site (block(), below) is
 // migrated to hook-exit.js's deny(undefined, reason) — see
 // gsd-windsurf-pre-command.js's identical note for the fixed defect
 // (terminateNow's fd 1/fd 2 writes now run in independent try/catch blocks).
 
-const SPAWNOPT = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000, windowsHide: true };
+// Shared blocking-guard probe budget (hooks/lib/git-probe.js, #5180): a timed-out
+// probe fails open, so it is sized for a starved host. Windsurf documents NO
+// hook timeout (docs.devin.ai/desktop/cascade/hooks lists only an aspirational
+// "sub-100ms" target) and this surface's registration entry
+// (buildWindsurfHookEntry in src/runtime-hooks-surface.cts) carries none, so the
+// host budget is UNKNOWN. This guard runs at most 3 sequential probes (15 s
+// worst case); that worst case is NOT claimed to fit any host budget — if
+// Windsurf kills the hook sooner, the host kill fails open exactly as a probe
+// timeout does. The guard keeps its fail-open posture either way.
+const SPAWNOPT = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: BLOCKING_GUARD_PROBE_TIMEOUT_MS, windowsHide: true };
+
+// #5048: GIT_OPTIONAL_LOCKS=0 on every git call from this hook. `git rev-parse`
+// never opens the index, so this is inert for today's callers; it is set anyway
+// so the read-only invariant has no holes if a `status` / `diff` caller is ever
+// added here. git refreshes the index and takes an *optional*
+// `.git/index.lock` on some reads, and this hook runs on every tool call, so a
+// read here can otherwise fail a concurrent `git add` / `git commit` with
+// `Unable to create '.git/index.lock': File exists`.
+//
+// The env block is owned by src/read-only-git-env.cts and shared with every
+// other read-only seam (built artifact, not a sibling hooks/-tree file — same
+// rule hooks/lib/git-cmd.js follows for token-scanner). It is read per spawn,
+// not snapshotted at load, so the two guards behave identically.
+// Parity: tests/git-optional-locks-parity.test.cjs.
+// A raw plugin-marketplace or git-clone install never ran `npm run build:lib`
+// (#3582), so the compiled owner can be absent. This guard only runs
+// `git rev-parse`, which never opens the index, so the unmodified environment
+// loses nothing; requiring the artifact unguarded would throw at load and the
+// containment guard would silently stop running.
+let readOnlyGitEnv = () => process.env;
+try {
+  const { ensureRuntimeBuild } = require('../gsd-core/bin/ensure-runtime-build.cjs');
+  ensureRuntimeBuild();
+  ({ readOnlyGitEnv } = require('../gsd-core/bin/lib/read-only-git-env.cjs'));
+} catch {
+  // artifact absent and not buildable: keep the inert fallback above
+}
 
 function git(args, cwd) {
-  return spawnSync('git', args, { ...SPAWNOPT, cwd });
+  return spawnSync('git', args, { ...SPAWNOPT, cwd, env: readOnlyGitEnv() });
 }
 
 // Walk up from `start` to find the nearest existing DIRECTORY (not merely an

@@ -47,6 +47,7 @@ exports.parseCalibrationDocument = parseCalibrationDocument;
 exports.renderCalibrationDocument = renderCalibrationDocument;
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- prompt-budget.cjs is an export= CommonJS module
 const promptBudget = require("./prompt-budget.cjs");
+const frontmatter_fence_cjs_1 = require("./frontmatter-fence.cjs");
 const { estimateTokens } = promptBudget;
 /**
  * Assert that a bare number is an UNCORRECTED projection.
@@ -239,11 +240,11 @@ function applyCalibration(rawTokens, factor) {
 function extractFrontmatterBlock(text, key) {
     if (typeof text !== 'string')
         return null;
-    // Anchor at byte 0 — CRLF-tolerant.
-    const fm = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|\r?$)/.exec(text);
-    if (fm === null)
+    // The block is the one the one fence owner finds (`locateFrontmatterFence`).
+    const fence = (0, frontmatter_fence_cjs_1.locateFrontmatterFence)(text);
+    if (!fence?.closed)
         return null;
-    const lines = fm[1].split(/\r?\n/);
+    const lines = text.slice(fence.openEnd, fence.bodyEnd).split(/\r?\n/);
     const startIdx = lines.findIndex((l) => l === `${key}:` || l.startsWith(`${key}:`));
     if (startIdx === -1)
         return null;

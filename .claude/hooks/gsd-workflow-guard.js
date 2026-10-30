@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.15.0
+// gsd-hook-version: 1.19.0
 // GSD Workflow Guard — PreToolUse hook
 // Detects when Claude attempts file edits outside a GSD workflow context
 // (no active /gsd- skill or Task subagent) and injects an advisory warning.
@@ -22,7 +22,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { tokenize, skipToSubcommand } = require('./lib/git-cmd.js');
 const { HOOK_ON_CRASH, allow, deny, crash } = require('./lib/hook-exit.js');
-const { reportIfUndetermined } = require('./lib/git-probe.js');
+const { reportIfUndetermined, BLOCKING_GUARD_PROBE_TIMEOUT_MS } = require('./lib/git-probe.js');
 
 // This guard is almost entirely advisory (fail open — a broken advisory must
 // never wedge every tool call), with ONE hard block (#3504 force-add-on-
@@ -81,17 +81,18 @@ function forceGitAddCwds(command, defaultCwd) {
 }
 
 function currentBranch(cwd) {
-  const result = spawnSync('git', ['branch', '--show-current'], {
+  const result = spawnSync('git', ['branch', '--show-current'], { // allow-index-refresh: reads HEAD only, never opens the index
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
     windowsHide: true,
     // #3504: bounded — this ran unbounded before, an indefinite hang under a
-    // wedged git would hang every PreToolUse call. Host wiring allows a 5s
-    // budget for the whole hook, so the probe gets 2s of it; a timeout
+    // wedged git would hang every PreToolUse call. The probe gets the shared
+    // blocking-guard budget (hooks/lib/git-probe.js, #5180), well inside the
+    // 120s host budget this guard is registered with (#3981); a timeout
     // returns '' (branch unknown), which both the block decision and the
     // fail-closed re-check treat as "cannot establish agent branch".
-    timeout: 2000,
+    timeout: BLOCKING_GUARD_PROBE_TIMEOUT_MS,
     killSignal: 'SIGTERM',
   });
   // #3911: a timeout/spawn-failure here previously degraded to '' exactly

@@ -26,7 +26,9 @@
  * phase-id.cts's toDir/getPhaseDirFromPhaseId.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INVALID_ACTIVE_WORKSTREAM_NAME_MESSAGE = void 0;
+exports.RESERVED_WORKSTREAM_NAMES = exports.INVALID_ACTIVE_WORKSTREAM_NAME_MESSAGE = void 0;
+exports.isReservedWorkstreamName = isReservedWorkstreamName;
+exports.reservedWorkstreamNameMessage = reservedWorkstreamNameMessage;
 exports.normalizeWorkstreamNameInput = normalizeWorkstreamNameInput;
 exports.hasInvalidPathSegment = hasInvalidPathSegment;
 exports.validateActiveWorkstreamName = validateActiveWorkstreamName;
@@ -36,6 +38,34 @@ exports.isValidActiveWorkstreamName = isValidActiveWorkstreamName;
 exports.assertValidActiveWorkstreamName = assertValidActiveWorkstreamName;
 exports.INVALID_ACTIVE_WORKSTREAM_NAME_MESSAGE = 'Invalid workstream name: must be alphanumeric, hyphens, underscores, or dots';
 const ACTIVE_WORKSTREAM_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+/**
+ * Names that pass the charset check but can never name a workstream (#4772).
+ * `none` reads as "no workstream" to every caller that types it, yet the path
+ * layer treated it as a literal directory, so `--ws none` silently resolved
+ * `.planning/workstreams/none/...` (and fell back to the root config). Single
+ * owner: resolveActiveWorkstream and workstream create/set all consume this list.
+ */
+exports.RESERVED_WORKSTREAM_NAMES = Object.freeze(['none']);
+/** True when `name` (trimmed, case-insensitive) is a reserved workstream name. */
+function isReservedWorkstreamName(name) {
+    const value = normalizeWorkstreamNameInput(name);
+    return value !== null && exports.RESERVED_WORKSTREAM_NAMES.includes(value.toLowerCase());
+}
+/**
+ * The error text shared by every site that rejects a reserved name. `source`
+ * (where the name came from: 'cli' | 'env' | 'store') picks a remedy that can
+ * actually be carried out: the rejection happens in the gsd-tools bootstrap
+ * before any verb runs, so advising `workstream set --clear` would fail too.
+ */
+function reservedWorkstreamNameMessage(name, source = null) {
+    const value = normalizeWorkstreamNameInput(name) ?? '';
+    const remedy = source === 'env'
+        ? 'unset GSD_WORKSTREAM for flat mode'
+        : source === 'store'
+            ? 'delete the stale active-workstream pointer for flat mode'
+            : 'omit --ws for flat mode';
+    return `Workstream name '${value}' is reserved and cannot name a workstream; ${remedy}`;
+}
 function normalizeWorkstreamNameInput(name) {
     const value = String(name ?? '').trim();
     return value || null;

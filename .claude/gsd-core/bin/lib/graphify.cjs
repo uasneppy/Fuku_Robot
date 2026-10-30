@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs");
+const runtime_slash_cjs_1 = require("./runtime-slash.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const capabilityStateMod = require("./capability-state.cjs");
 const { isCapabilityActive } = capabilityStateMod;
@@ -408,7 +409,7 @@ function graphifyQuery(cwd, term, options = {}) {
     const { graphPath, configured } = resolveGraphLocation(cwd, planningDir);
     if (!node_fs_1.default.existsSync(graphPath)) {
         return { error: configured
-                ? `Configured graph not found at ${graphPath}. Set graphify.graph_path or run /gsd:graphify build.`
+                ? `Configured graph not found at ${graphPath}. Set graphify.graph_path or run ${(0, runtime_slash_cjs_1.runtimeCommand)(cwd, 'graphify build')}.`
                 : 'No graph built yet. Run graphify build first.' };
     }
     const graph = safeReadJson(graphPath);
@@ -446,7 +447,7 @@ function graphifyStatus(cwd) {
     const { graphPath, configured } = resolveGraphLocation(cwd, planningDir);
     if (!node_fs_1.default.existsSync(graphPath)) {
         return { exists: false, graph_path: graphPath, message: configured
-                ? `Configured graph not found at ${graphPath}. Set graphify.graph_path or run /gsd:graphify build.`
+                ? `Configured graph not found at ${graphPath}. Set graphify.graph_path or run ${(0, runtime_slash_cjs_1.runtimeCommand)(cwd, 'graphify build')}.`
                 : 'No graph built yet. Run graphify build to create one.' };
     }
     const stat = node_fs_1.default.statSync(graphPath);

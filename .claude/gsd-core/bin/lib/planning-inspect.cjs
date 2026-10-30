@@ -71,7 +71,7 @@ const planningScopeMod = require("./planning-scope.cjs");
 const { SCOPE } = planningScopeMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const verificationMod = require("./verification.cjs");
-const { readVerificationStatus } = verificationMod;
+const { readVerificationStatus, VerificationStatusError, failOnVerificationStatusError } = verificationMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const phaseIdMod = require("./phase-id.cjs");
 const { phaseKeyFromDir, phaseKeyFromToken, phaseMarkdownRegexSource } = phaseIdMod;
@@ -304,6 +304,8 @@ function containmentEnforcingVerificationFs(planningRoot) {
             return node_fs_1.default.readFileSync(filePath, encoding);
         },
         statSync(filePath) {
+            // #5118: a code-less containment throw here is NOT "phase directory
+            // not found" — readVerificationStatus falls through to `missing`.
             assertContained(filePath);
             return node_fs_1.default.statSync(filePath);
         },
@@ -1016,6 +1018,17 @@ function buildPhaseGoalAndDependencies(cwd, roadmapDoc, phaseId, phaseDirLabel, 
 }
 // ─── Entry points ─────────────────────────────────────────────────────────────
 function buildPlanningInspect(cwd) {
+    return buildPlanningInspectResult(cwd).payload;
+}
+/**
+ * #5118: the inspect payload plus the first verification report whose
+ * `status` is outside the closed set (`statusError`, or `null`) — the
+ * aggregate CARRIES the owner's error in its own result, and `planning
+ * inspect` fails with it instead of printing an answer computed over a
+ * report the owner refused.
+ */
+function buildPlanningInspectResult(cwd) {
+    let statusError = null;
     const diagnostics = [];
     const paths = planningPaths(cwd);
     const planningExists = node_fs_1.default.existsSync(paths.planning);
@@ -1078,8 +1091,8 @@ function buildPlanningInspect(cwd) {
         // GAP 2 (#2790 follow-up security review): `readVerificationStatus`
         // (`src/verification.cts`) is a shared owner with its own unguarded
         // `readFileSync` — a `*-VERIFICATION.md` symlinked outside the planning
-        // root would leak an unrecognized `status:` value verbatim via its
-        // "Unexpected verification status '<value>'" `next_action` string. Fixed
+        // root would leak its unrecognized `status:` value verbatim (today via
+        // the VerificationStatusError message, #5118). Fixed
         // from THIS consumer's side via the injectable `opts.fs` seam that
         // function already exposes, never by touching its signature — see
         // `containmentEnforcingVerificationFs`'s doc comment. This same seam's
@@ -1094,9 +1107,22 @@ function buildPlanningInspect(cwd) {
         // (`superseded`) rather than document text, and GAP 1's directory
         // containment check already covers the escaped-DIRECTORY case for it —
         // so it needs no fix of its own.
-        const verification = readVerificationStatus(phaseDir, {
-            fs: containmentEnforcingVerificationFs(paths.planning),
-        });
+        // #5118: an out-of-set report status is carried, not thrown past the
+        // other phases — the row reads `status: null` and the command fails with
+        // the first such error once the payload is built.
+        let verification;
+        try {
+            verification = readVerificationStatus(phaseDir, {
+                fs: containmentEnforcingVerificationFs(paths.planning),
+            });
+        }
+        catch (err) {
+            if (!(err instanceof VerificationStatusError))
+                throw err;
+            if (statusError === null)
+                statusError = err;
+            verification = { status: null, next_action: err.message, route: '' };
+        }
         const token = /^(\d+(?:\.\d+)*)/.exec(phase.dir);
         const phaseId = token ? token[1] : null;
         const { goal, dependencies } = buildPhaseGoalAndDependencies(cwd, roadmapDoc, phaseId, phase.dir, diagnostics);
@@ -1129,6 +1155,8 @@ function buildPlanningInspect(cwd) {
             verification: {
                 status: verification.status,
                 next_action: verification.next_action ?? null,
+                // #5118: additive — the bare command the owner routes this status to.
+                route: verification.route,
             },
             roadmap_acceptance: {
                 checkbox: checkboxByPhaseKey.has(phaseKeyFromDir(phase.dir))
@@ -1150,7 +1178,7 @@ function buildPlanningInspect(cwd) {
     const phaseScope = worstScope(snapshot.phaseDirs.scope, snapshot.phases.scope, ...phaseRows.map((p) => p.scope));
     const acceptedPhases = makeFraction(phaseRows.filter((p) => p.complete).length, phaseRows.length, phaseScope, 'progress.accepted_phases', diagnostics);
     const completedPlans = makeFraction(phaseRows.reduce((sum, p) => sum + p.summary_count, 0), phaseRows.reduce((sum, p) => sum + p.plan_count, 0), phaseScope, 'progress.completed_plans', diagnostics);
-    return {
+    const payload = {
         schema_version: PLANNING_INSPECT_SCHEMA_VERSION,
         generated_from: {
             cwd: toPosix(cwd),
@@ -1178,6 +1206,7 @@ function buildPlanningInspect(cwd) {
         },
         diagnostics,
     };
+    return { payload, statusError };
 }
 /**
  * `planning inspect` — emit the schema-v1 snapshot.
@@ -1187,7 +1216,12 @@ function buildPlanningInspect(cwd) {
  * transparently on stdout. Bypassing `output()` would lose that for free.
  */
 function cmdPlanningInspect(cwd, raw) {
-    output(buildPlanningInspect(cwd), raw);
+    const { payload, statusError } = buildPlanningInspectResult(cwd);
+    // #5118: a read-only aggregate over a refused report prints nothing and
+    // fails with the error's own reason (`verification_status_invalid`).
+    if (statusError)
+        failOnVerificationStatusError(statusError);
+    output(payload, raw);
 }
 const planningInspect = {
     PLANNING_INSPECT_SCHEMA_VERSION,

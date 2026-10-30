@@ -19,20 +19,17 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const io = require("./io.cjs");
 const { output, error, formatDiagnosticToken } = io;
 const pattern_cjs_1 = require("./pattern.cjs");
+const gate_evidence_cjs_1 = require("./gate-evidence.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const planningWorkspace = require("./planning-workspace.cjs");
 const { planningPaths, planningDir, findContextMdIn } = planningWorkspace;
 const decisions_cjs_1 = require("./decisions.cjs");
 const markdown_sectionizer_cjs_1 = require("./markdown-sectionizer.cjs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const planScanMod = require("./plan-scan.cjs");
-const { scanPhasePlans } = planScanMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const phaseIdMod = require("./phase-id.cjs");
 const { scopeToPhase } = phaseIdMod;
@@ -143,21 +140,42 @@ function formatGapTable(rows) {
     }).join('\n');
     return `## Post-Planning Gap Analysis\n\n${header}\n${body}\n`;
 }
+function parseJsonEvidence(text, span) {
+    try {
+        return (0, gate_evidence_cjs_1.evidenceFound)(JSON.parse(text));
+    }
+    catch (err) {
+        return (0, gate_evidence_cjs_1.evidenceFromError)(err, span);
+    }
+}
+/**
+ * Is the gap analysis enabled? An ABSENT config means the default (enabled). A config that exists
+ * but cannot be read or parsed also runs the analysis (the conservative direction: the check is not
+ * silently switched off), and is reported in `unreadable` so the verdict is never a clean pass
+ * (#5170, ADR-5057 §4).
+ */
 function readGate(cwd) {
     const cfgPath = node_path_1.default.join(planningDir(cwd), 'config.json');
-    try {
-        const raw = JSON.parse(node_fs_1.default.readFileSync(cfgPath, 'utf-8'));
+    const text = (0, gate_evidence_cjs_1.readTextEvidence)(cfgPath);
+    if (text.kind === 'none')
+        return { enabled: true, unreadable: [] };
+    if (text.kind === 'unreadable')
+        return { enabled: true, unreadable: [{ reason: text.reason, span: cfgPath }] };
+    const parsed = parseJsonEvidence(text.value, cfgPath);
+    if (parsed.kind === 'unreadable')
+        return { enabled: true, unreadable: [{ reason: parsed.reason, span: cfgPath }] };
+    if (parsed.kind === 'found') {
+        const raw = parsed.value;
         if (raw && typeof raw === 'object' && 'workflow' in raw) {
             const wf = raw['workflow'];
             if (wf && typeof wf === 'object' && 'post_planning_gaps' in wf) {
                 const val = wf['post_planning_gaps'];
                 if (typeof val === 'boolean')
-                    return val;
+                    return { enabled: val, unreadable: [] };
             }
         }
     }
-    catch { /* fall through */ }
-    return true;
+    return { enabled: true, unreadable: [] };
 }
 /**
  * Same-prefix ascending numeric range, e.g. `SEL-01..SEL-03`. Both sides must
@@ -298,7 +316,10 @@ function normalizePhaseReqIds(rawVal) {
 }
 function runGapAnalysis(cwd, phaseDir, options = {}) {
     const phaseReqIds = normalizePhaseReqIds(options.phaseReqIds);
-    if (!readGate(cwd)) {
+    const gate = readGate(cwd);
+    const unreadable = [...gate.unreadable];
+    const unreadableField = () => (unreadable.length > 0 ? { unreadable } : {});
+    if (!gate.enabled) {
         return {
             enabled: false,
             rows: [],
@@ -311,7 +332,12 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
     }
     const absPhaseDir = node_path_1.default.isAbsolute(phaseDir) ? phaseDir : node_path_1.default.join(cwd, phaseDir);
     const reqPath = planningPaths(cwd).requirements;
-    const reqMd = node_fs_1.default.existsSync(reqPath) ? node_fs_1.default.readFileSync(reqPath, 'utf-8') : '';
+    // An absent REQUIREMENTS.md has no requirements; one that exists but cannot be read is `unreadable`
+    // (a thrown read used to crash, and `existsSync` said "absent" for an EACCES on a parent).
+    const reqRead = (0, gate_evidence_cjs_1.readTextEvidence)(reqPath);
+    if (reqRead.kind === 'unreadable')
+        unreadable.push({ reason: reqRead.reason, span: reqPath });
+    const reqMd = reqRead.kind === 'found' ? reqRead.value : '';
     let reqItems = parseRequirements(reqMd).map(r => ({ ...r, source: 'REQUIREMENTS.md' }));
     // Scope the requirements comparison to the phase's mapped REQ-IDs (#447).
     // A phase that maps no requirements (phase_req_ids null/TBD) must not report
@@ -325,7 +351,9 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
         const wanted = new Set(phaseReqIds);
         const foundIds = new Set(reqItems.map(r => r.id));
         reqItems = reqItems.filter(r => wanted.has(r.id));
-        ghostReqIds = phaseReqIds.filter(id => !foundIds.has(id));
+        // An unreadable REQUIREMENTS.md registers nothing, so "missing from REQUIREMENTS.md" would be a
+        // false claim about every ID; the unreadable read is reported instead.
+        ghostReqIds = reqRead.kind === 'unreadable' ? [] : phaseReqIds.filter(id => !foundIds.has(id));
     }
     // Read the phase directory once; reuse the listing for both context detection
     // and plan-file enumeration (avoids redundant readdirSync calls).
@@ -343,6 +371,8 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
     const phaseDirReadError = phaseDirScope === SCOPE.UNREADABLE
         ? `Could not read phase directory ${formatDiagnosticToken(absPhaseDir)}`
         : null;
+    if (phaseDirScope === SCOPE.UNREADABLE)
+        unreadable.push({ reason: 'the directory could not be listed', span: absPhaseDir });
     // #3511-class: scope the raw listing to this phase dir before the
     // phase-numbered -CONTEXT.md predicate. `phaseDirFiles` itself stays raw —
     // it is also reused below only as a `.length > 0` guard ahead of
@@ -351,31 +381,40 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
     const scopedPhaseDirFiles = scopeToPhase(phaseDirFiles, node_path_1.default.basename(absPhaseDir));
     const ctxFile = findContextMdIn(scopedPhaseDirFiles);
     const ctxPath = ctxFile ? node_path_1.default.join(absPhaseDir, ctxFile) : null;
-    const ctxMd = ctxPath ? node_fs_1.default.readFileSync(ctxPath, 'utf-8') : '';
+    const ctxRead = ctxPath ? (0, gate_evidence_cjs_1.readTextEvidence)(ctxPath) : null;
+    if (ctxPath && ctxRead && ctxRead.kind === 'unreadable')
+        unreadable.push({ reason: ctxRead.reason, span: ctxPath });
+    const ctxMd = ctxRead && ctxRead.kind === 'found' ? ctxRead.value : '';
     // Use extractDecisions so gap-checker can distinguish could-not-parse from none-present.
     const ctxExtraction = (0, decisions_cjs_1.extractDecisions)(ctxMd);
     const dItems = ctxExtraction.decisions.map(d => ({ ...d, source: 'CONTEXT.md' }));
     const items = [...reqItems, ...dItems];
     let planText = '';
-    try {
-        if (phaseDirFiles.length > 0) {
-            // #3183 (lint-plan-count-drift): source the live plan-file list from
-            // the single owner (scanPhasePlans) instead of a local `-PLAN\.md$`
-            // filter on the already-read listing — picks up bare PLAN.md, nested
-            // plans/, and excludes superseded plans, none of which the prior
-            // root-only exact-suffix filter did.
-            const files = scanPhasePlans(absPhaseDir).planFiles;
-            planText = files.map(f => {
-                try {
-                    return node_fs_1.default.readFileSync(node_path_1.default.join(absPhaseDir, f), 'utf-8');
-                }
-                catch {
-                    return '';
-                }
+    if (phaseDirFiles.length > 0) {
+        // #3183 (lint-plan-count-drift): source the live plan-file list from
+        // the single owner (scanPhasePlans) instead of a local `-PLAN\.md$`
+        // filter on the already-read listing — picks up bare PLAN.md, nested
+        // plans/, and excludes superseded plans, none of which the prior
+        // root-only exact-suffix filter did.
+        // #5170: a scan that did not see every plan (an existing nested plans/ that could not be read,
+        // SCOPE.TRUNCATED) is `unreadable`, never a short plan set that reports the missing plans' IDs
+        // as "Not covered".
+        const planSet = (0, gate_evidence_cjs_1.readPlanSetEvidence)(absPhaseDir);
+        if (planSet.kind === 'unreadable') {
+            unreadable.push({ reason: planSet.reason, span: planSet.span ?? absPhaseDir });
+        }
+        else {
+            planText = planSet.value.map(f => {
+                const planPath = node_path_1.default.join(absPhaseDir, f);
+                const plan = (0, gate_evidence_cjs_1.readTextEvidence)(planPath);
+                // A plan that exists but cannot be read is `unreadable`, never an empty slice of the text the
+                // coverage is detected in (it would report every ID it holds as "Not covered").
+                if (plan.kind === 'unreadable')
+                    unreadable.push({ reason: plan.reason, span: planPath });
+                return plan.kind === 'found' ? plan.value : '';
             }).join('\n');
         }
     }
-    catch { /* unreadable */ }
     // FIX D (#1365): surface decision could-not-parse independently of whether
     // requirements items exist. Without this, a could-not-parse on decisions is
     // silently masked whenever REQUIREMENTS.md has ≥1 item — the mismatch must
@@ -411,6 +450,7 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
                 counts: { total: rows.length, covered, uncovered },
                 phase_dir_read_error: phaseDirReadError,
                 phase_dir_scope: phaseDirScope,
+                ...unreadableField(),
             };
         }
         return {
@@ -421,6 +461,7 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
             counts: { total: 0, covered: 0, uncovered: 0 },
             phase_dir_read_error: phaseDirReadError,
             phase_dir_scope: phaseDirScope,
+            ...unreadableField(),
         };
     }
     // #1365: if no items at all, surface a clean no-check message.
@@ -439,6 +480,7 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
             counts: { total: 0, covered: 0, uncovered: 0 },
             phase_dir_read_error: phaseDirReadError,
             phase_dir_scope: phaseDirScope,
+            ...unreadableField(),
         };
     }
     const rows = sortRows([
@@ -458,6 +500,7 @@ function runGapAnalysis(cwd, phaseDir, options = {}) {
         counts: { total: rows.length, covered, uncovered },
         phase_dir_read_error: phaseDirReadError,
         phase_dir_scope: phaseDirScope,
+        ...unreadableField(),
     };
 }
 function cmdGapAnalysis(cwd, args, raw) {

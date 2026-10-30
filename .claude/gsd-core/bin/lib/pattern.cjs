@@ -44,6 +44,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MAX_USER_PATTERN_LEN = void 0;
 exports.escapeRegex = escapeRegex;
+exports.escapeEre = escapeEre;
 exports.literalPattern = literalPattern;
 exports.compileUserPattern = compileUserPattern;
 // re2js is vendored, not an npm dependency at runtime: gsd-core/bin/** is
@@ -65,6 +66,15 @@ const escapeBuiltin = typeof RegExp.escape === 'function'
 const escapeMetachars = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function escapeRegex(value) {
     return (escapeBuiltin ?? escapeMetachars)(value);
+}
+/**
+ * Escape `value` for a POSIX extended regular expression (e.g. `git log --extended-regexp
+ * --grep=…`). Always the plain backslash-escape of every ERE metacharacter, never
+ * `RegExp.escape`: that built-in writes a leading digit as `\x31`, which ERE does not read as a
+ * digit. #5139 (a plan id interpolated into a git `--grep` pattern).
+ */
+function escapeEre(value) {
+    return escapeMetachars(value);
 }
 function literalPattern(value, flags) {
     return new RegExp(escapeRegex(value), flags);

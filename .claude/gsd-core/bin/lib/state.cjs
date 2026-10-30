@@ -14,10 +14,13 @@ const node_path_1 = __importDefault(require("node:path"));
 const pattern_cjs_1 = require("./pattern.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ioMod = require("./io.cjs");
-const { output, error, declineNoOp, formatDiagnosticToken } = ioMod;
+const { output, error, declineNoOp, formatDiagnosticToken, ERROR_REASON } = ioMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cliExitModule = require("./cli-exit.cjs");
 const { ExitError } = cliExitModule;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const capabilityLedgerMod = require("./capability-ledger.cjs");
+const { readSmallRegularFile } = capabilityLedgerMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const stateContract = require("./state-contract.cjs");
 const { publishStateContract } = stateContract;
@@ -32,7 +35,7 @@ bracketMilestoneIntroSrcFor, } = phaseIdMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const roadmapParserMod = require("./roadmap-parser.cjs");
 // #3642: hasMilestoneSectioning no longer consumed here — its >=2 semantics answered sibling conflation, but this branch asks asserted-vs-section (>=1). It stays exported from roadmap-parser.cjs for its unit pins.
-const { getMilestoneInfo, extractCurrentMilestone, isMilestoneBoundedInRoadmap, hasAnyMilestoneSection } = roadmapParserMod;
+const { getMilestoneInfo, extractCurrentMilestone, isMilestoneBoundedInRoadmap, hasAnyMilestoneSection, classifyMilestoneScalar } = roadmapParserMod;
 const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const planningWorkspace = require("./planning-workspace.cjs");
@@ -60,7 +63,7 @@ const coreUtilsMod = require("./core-utils.cjs");
 const planDependencyGraphMod = require("./plan-dependency-graph.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const verificationMod = require("./verification.cjs");
-const { isPhaseComplete } = verificationMod;
+const { isPhaseComplete, VerificationStatusError } = verificationMod;
 // #4129: the single owner of "count the ROADMAP's milestone Complete rows"
 // (phase-lifecycle.cts) — reused for the completed-phases numerator floor so
 // this scan cannot grow a second ROADMAP parser. Pure computation module (no
@@ -316,19 +319,51 @@ function cmdStateGet(cwd, section, raw) {
         output({ error: `Section or field "${section}" not found` }, raw, '');
     }
 }
-function readTextArgOrFile(cwd, value, filePath, label) {
+/**
+ * #4926: cap on a `--<flag>-file` text input. Twice the 128 KiB one argv string
+ * can carry on Linux, so the file form never takes less than the inline form,
+ * and the entry echoed back on stdout stays small.
+ */
+const TEXT_FILE_MAX_BYTES = 256 * 1024;
+/**
+ * Resolve a text argument that may instead be supplied as a file (`--<flag>`
+ * or `--<flag>-file`).
+ *
+ * #4926: the file is a read-once INPUT — its contents are copied into
+ * STATE.md and the path itself is never written, recorded, or resolved
+ * again — so it is not a project-write resource and is not confined to the
+ * project root. A scratch file from an agent's temp directory is accepted.
+ * A relative path still resolves against the project root.
+ *
+ * A file that cannot be read is a caller error and goes through the fault
+ * path — stderr, non-zero exit (USAGE), `--json-errors` envelope — rather than
+ * an `{ added: false }` payload at exit 0 that a shell caller gating on `$?`
+ * reads as success while nothing was written.
+ *
+ * An unconfined path is hostile input, so the read goes through
+ * `readSmallRegularFile`: a FIFO, a device (`/dev/zero`, a piped `/dev/stdin`)
+ * or a directory is refused without blocking, and a file over
+ * TEXT_FILE_MAX_BYTES is refused without being read.
+ */
+function readTextArgOrFile(cwd, value, filePath, flag) {
     if (!filePath)
         return value;
-    // Path traversal guard: ensure file resolves within project directory
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/unbound-method
-    const { assertWithinRoot, PathAcceptance } = require('./security.cjs');
-    const contained = assertWithinRoot(filePath, cwd, `${label} path`, PathAcceptance.AbsoluteInsideRoot);
+    const refuse = (why) => error(`--${flag}-file could not be read: ${formatDiagnosticToken(filePath)}${why ? ` (${why})` : ''}`, ERROR_REASON.USAGE);
+    let content;
     try {
-        return node_fs_1.default.readFileSync(contained, 'utf-8').trimEnd();
+        content = readSmallRegularFile(node_path_1.default.resolve(cwd, filePath), TEXT_FILE_MAX_BYTES);
     }
-    catch {
-        throw new Error(`${label} file not found: ${filePath}`);
+    catch (err) {
+        const code = err.code;
+        if (code === 'EFBIG')
+            return refuse(`larger than ${TEXT_FILE_MAX_BYTES} bytes`);
+        if (code === 'EISDIR' || code === 'ENXIO')
+            return refuse('not a regular file');
+        return refuse(code);
     }
+    if (content === null)
+        return refuse('ENOENT');
+    return content.trimEnd();
 }
 function cmdStatePatch(cwd, patches, raw) {
     // Validate all field names before processing
@@ -735,7 +770,7 @@ function cmdStateAdvancePlan(cwd, raw) {
         // silently absorbed.
         const body = stripFrontmatter(content);
         const positionScope = matchCurrentPositionSection(body) ?? body;
-        const positionPhase = parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(positionScope, 'Phase')).phase;
+        const positionPhase = parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(positionScope, 'Phase'), resolvePhaseIdConvention(cwd)).phase;
         // #4093: a Current Position section with ZERO labeled fields has no
         // `Phase:` line either; frontmatter `current_phase` is the documented
         // survivor of body drift (the reporter's document still carried it, and
@@ -1080,7 +1115,7 @@ function computeUpdateProgressPreview(statePath, cwd) {
     const existingFm = extractFrontmatter(preContent, statePath);
     const preBody = stripFrontmatter(preContent);
     const storedMilestone = typeof existingFm['milestone'] === 'string' ? existingFm['milestone'] : null;
-    const builtFm = buildStateFrontmatter(preBody, cwd, storedMilestone, readStoredTotalPhases(existingFm), readStoredCompletedPhases(existingFm), readStoredTotalPlans(existingFm), readStoredCompletedPlans(existingFm));
+    const builtFm = buildStateFrontmatter(preBody, cwd, storedMilestone, readStoredTotalPhases(existingFm), readStoredCompletedPhases(existingFm), readStoredTotalPlans(existingFm), readStoredCompletedPlans(existingFm), isMilestoneExplicitlyNull(existingFm));
     const progress = builtFm['progress'];
     const percent = progress && typeof progress['percent'] === 'number' ? progress['percent'] : null;
     const completedPlans = progress && typeof progress['completed_plans'] === 'number' ? progress['completed_plans'] : null;
@@ -1224,25 +1259,19 @@ function cmdStateUpdateProgress(cwd, raw) {
 }
 function cmdStateAddDecision(cwd, options, raw) {
     const statePath = planningPaths(cwd).state;
-    if (!node_fs_1.default.existsSync(statePath)) {
-        output({ error: 'STATE.md not found' }, raw, undefined);
-        return;
-    }
+    // #4926: every refusal from this verb goes through the fault path (non-zero
+    // exit), so a caller gating on `$?` never reads success while nothing was written.
+    if (!node_fs_1.default.existsSync(statePath))
+        return error('STATE.md not found', ERROR_REASON.USAGE);
     const { phase, summary, summary_file, rationale, rationale_file } = options;
-    let summaryText = undefined;
-    let rationaleText = '';
-    try {
-        summaryText = readTextArgOrFile(cwd, summary, summary_file, 'summary');
-        rationaleText = readTextArgOrFile(cwd, rationale || '', rationale_file, 'rationale') || '';
-    }
-    catch (err) {
-        output({ added: false, reason: err.message }, raw, 'false');
-        return;
-    }
-    if (!summaryText) {
-        output({ error: 'summary required' }, raw, undefined);
-        return;
-    }
+    const summaryText = readTextArgOrFile(cwd, summary, summary_file, 'summary');
+    // The rationale is optional: blank, inline or file, means "no rationale".
+    const rationaleInput = readTextArgOrFile(cwd, rationale || '', rationale_file, 'rationale') || '';
+    const rationaleText = rationaleInput.trim() ? rationaleInput : '';
+    // A blank inline value is refused the same as a blank file (the file form is
+    // trimEnd()ed by readTextArgOrFile, the inline form is not).
+    if (!summaryText || !summaryText.trim())
+        return error('summary required — pass a non-blank --summary or --summary-file', ERROR_REASON.USAGE);
     // #3231/#3481: `--phase` omitted → resolve from the STATE.md being written, via
     // the canonical ladder `state prune` uses. A decision entry is a permanent
     // record, so a literal `[Phase ?]` written while `current_phase` sat three
@@ -1254,7 +1283,7 @@ function cmdStateAddDecision(cwd, options, raw) {
     if (!phaseId) {
         const rawState = node_fs_1.default.readFileSync(statePath, 'utf-8');
         const fm = extractFrontmatter(rawState, statePath);
-        phaseId = resolveCurrentPhaseId(fm, stripFrontmatter(rawState)) ?? undefined;
+        phaseId = resolveCurrentPhaseId(fm, stripFrontmatter(rawState), resolvePhaseIdConvention(cwd)) ?? undefined;
     }
     const entry = `- [Phase ${phaseId || '?'}]: ${summaryText}${rationaleText ? ` — ${rationaleText}` : ''}`;
     let _added = false;
@@ -1310,23 +1339,14 @@ function cmdStateAddDecision(cwd, options, raw) {
 }
 function cmdStateAddBlocker(cwd, text, raw) {
     const statePath = planningPaths(cwd).state;
-    if (!node_fs_1.default.existsSync(statePath)) {
-        output({ error: 'STATE.md not found' }, raw, undefined);
-        return;
-    }
+    // #4926: every refusal from this verb goes through the fault path (non-zero
+    // exit), so a caller gating on `$?` never reads success while nothing was written.
+    if (!node_fs_1.default.existsSync(statePath))
+        return error('STATE.md not found', ERROR_REASON.USAGE);
     const blockerOptions = typeof text === 'object' && text !== null ? text : { text: text };
-    let blockerText = undefined;
-    try {
-        blockerText = readTextArgOrFile(cwd, blockerOptions.text, blockerOptions.text_file, 'blocker');
-    }
-    catch (err) {
-        output({ added: false, reason: err.message }, raw, 'false');
-        return;
-    }
-    if (!blockerText) {
-        output({ error: 'text required' }, raw, undefined);
-        return;
-    }
+    const blockerText = readTextArgOrFile(cwd, blockerOptions.text, blockerOptions.text_file, 'text');
+    if (!blockerText || !blockerText.trim())
+        return error('text required — pass a non-blank --text or --text-file', ERROR_REASON.USAGE);
     const entry = `- ${blockerText}`;
     let _added = false;
     let created = false;
@@ -1379,25 +1399,16 @@ function cmdStateAddBlocker(cwd, text, raw) {
 }
 function cmdStateAddRoadmapEvolution(cwd, options, raw) {
     const statePath = planningPaths(cwd).state;
-    if (!node_fs_1.default.existsSync(statePath)) {
-        output({ error: 'STATE.md not found' }, raw, undefined);
-        return;
-    }
+    // #4926: every refusal from this verb goes through the fault path (non-zero
+    // exit), so a caller gating on `$?` never reads success while nothing was written.
+    if (!node_fs_1.default.existsSync(statePath))
+        return error('STATE.md not found', ERROR_REASON.USAGE);
     const { phase, action, after, note, note_file, urgent } = options;
-    let noteText = undefined;
-    try {
-        noteText = readTextArgOrFile(cwd, note, note_file, 'note');
-    }
-    catch (err) {
-        output({ added: false, reason: err.message }, raw, 'false');
-        return;
-    }
+    const noteText = readTextArgOrFile(cwd, note, note_file, 'note');
     // Reject missing / empty / whitespace-only notes — an evolution entry with no
     // narrative is meaningless and would corrupt the section with a dangling bullet.
-    if (!noteText || !noteText.trim()) {
-        output({ error: 'note required' }, raw, undefined);
-        return;
-    }
+    if (!noteText || !noteText.trim())
+        return error('note required — pass a non-blank --note or --note-file', ERROR_REASON.USAGE);
     // Flatten line breaks so the entry is always a single Markdown bullet. The
     // dedupe + rendering contract is line-oriented; a multiline --note-file would
     // otherwise spill continuation lines outside the bullet and defeat dedupe.
@@ -1417,7 +1428,7 @@ function cmdStateAddRoadmapEvolution(cwd, options, raw) {
     if (!phaseId) {
         const rawState = node_fs_1.default.readFileSync(statePath, 'utf-8');
         const fm = extractFrontmatter(rawState, statePath);
-        phaseId = resolveCurrentPhaseId(fm, stripFrontmatter(rawState)) ?? undefined;
+        phaseId = resolveCurrentPhaseId(fm, stripFrontmatter(rawState), resolvePhaseIdConvention(cwd)) ?? undefined;
     }
     const entry = `- Phase ${phaseId || '?'} ${actionText}${afterText}: ${flatNote}${urgentText}`;
     let duplicate = false;
@@ -1984,26 +1995,27 @@ function preferNewerLastActivity(existingFm, derivedFm) {
         derivedFm['last_activity'] = exRaw;
     }
 }
-function parseProsePhaseField(value) {
+function parseProsePhaseField(value, convention) {
     // #2121 Phase 2 (#2125): delegate to the canonical anchored parser so this
     // module holds no independent prose phase-id regex. Drives #2111 — the
     // anchored parser returns { phase: null } for a "Milestone vX.Y complete"
     // body line (the old unanchored regex mined the minor-version digit, e.g.
     // v0.5 -> "5"), so syncStateFrontmatter's #905 guard preserves the real
     // current_phase instead of clobbering it.
-    return parsePhaseFromProse(value);
+    // #5626: under `milestone-prefixed` the id is the whole `M-NN`; the convention comes from its owner.
+    return parsePhaseFromProse(value, convention);
 }
-function resolveStatePhase(fm, body) {
+function resolveStatePhase(fm, body, convention) {
     const currentPositionScope = matchCurrentPositionSection(body) ?? body;
     const frontmatterRaw = (0, state_document_cjs_1.stateFieldValue)(fm, body, 'current_phase', null).value;
     const legacyRaw = (0, state_document_cjs_1.stateFieldValue)(fm, currentPositionScope, null, 'Current Phase').value;
     const currentPositionRaw = (0, state_document_cjs_1.stateFieldValue)(fm, currentPositionScope, null, 'Phase').value;
     const sources = {
-        frontmatter: parseProsePhaseField(frontmatterRaw).phase,
-        legacy_current_phase: parseProsePhaseField(legacyRaw).phase,
-        current_position_phase: parseProsePhaseField(currentPositionRaw).phase,
+        frontmatter: parseProsePhaseField(frontmatterRaw, convention).phase,
+        legacy_current_phase: parseProsePhaseField(legacyRaw, convention).phase,
+        current_position_phase: parseProsePhaseField(currentPositionRaw, convention).phase,
     };
-    const prosePhase = parseProsePhaseField(currentPositionRaw);
+    const prosePhase = parseProsePhaseField(currentPositionRaw, convention);
     return {
         phase: sources.frontmatter ?? sources.legacy_current_phase ?? sources.current_position_phase,
         name: (0, state_document_cjs_1.stateFieldValue)(fm, body, 'current_phase_name', null).value
@@ -2058,9 +2070,9 @@ function resolveStatePhase(fm, body) {
  * Reconcile the two only by giving `resolveStatePhase` an explicit scope
  * parameter — never by pointing this at it and dropping the difference.
  */
-function resolveCurrentPhaseId(fm, body) {
+function resolveCurrentPhaseId(fm, body, convention) {
     const positionSection = sliceCurrentPositionSection(body);
-    const prosePhase = positionSection !== null ? parseProsePhaseField((0, state_document_cjs_1.stateFieldValue)(fm, positionSection, null, 'Phase').value).phase : null;
+    const prosePhase = positionSection !== null ? parseProsePhaseField((0, state_document_cjs_1.stateFieldValue)(fm, positionSection, null, 'Phase').value, convention).phase : null;
     return (0, state_document_cjs_1.stateFieldValue)(fm, body, 'current_phase', 'Current Phase').value ?? prosePhase;
 }
 function parseProseLastActivityField(value) {
@@ -2098,7 +2110,7 @@ function cmdStateSnapshot(cwd, raw) {
     // so it is scopeable exactly like Stopped At under ## Session. Fall back to
     // full-body search only when no ## Current Position section exists, so files
     // with no section heading keep their current behaviour.
-    const resolvedPhase = resolveStatePhase(fm, body);
+    const resolvedPhase = resolveStatePhase(fm, body, resolvePhaseIdConvention(cwd));
     const currentPhase = resolvedPhase.phase;
     const currentPhaseName = resolvedPhase.name;
     const totalPhasesRaw = (0, state_document_cjs_1.stateFieldValue)(fm, body, 'total_phases', 'Total Phases').value;
@@ -2393,6 +2405,112 @@ function countRoadmapPhaseHeadings(scope, convention, retiredPhaseNums, applyCon
     return count;
 }
 /**
+ * The phase directories every STATE.md frontmatter rebuild scans, and the
+ * ROADMAP facts derived alongside them — the ONE owner of that set (#5118).
+ *
+ * `phaseDirs` is milestone-scoped (`listMilestonePhaseDirs`), drops retired
+ * phases (#1514) and holds exactly one directory per normalized phase key
+ * (Bug #2445, deterministic tie-break #3355). `buildStateFrontmatter` counts
+ * from it, and `statePhaseDirsToScan` hands it to `phase remove`'s pre-write
+ * validation, so the two cannot disagree about which reports a rebuild reads.
+ */
+function scanStatePhaseDirs(cwd, phasesDir, phaseConvention, storedMilestone, 
+// `quiet` suppresses ONLY the duplicate-phase-key stderr warning. A pre-write
+// validation pass that is followed by the real rebuild scan sets it, so the
+// one command prints the warning once (the rebuild scan owns the warning).
+options = {}) {
+    // Read the current-milestone ROADMAP scope once: it feeds both the
+    // heading-based phase count and the retired/folded-phase
+    // exclusion (#1514). Computed before the disk scan so retired phases
+    // can be dropped from the dir set too.
+    let roadmapScope = null;
+    let roadmapRaw = null;
+    let retiredPhaseNums = new Set();
+    try {
+        const roadmapPath = node_path_1.default.join(planningDir(cwd), 'ROADMAP.md');
+        roadmapRaw = (0, shell_command_projection_cjs_1.platformReadSync)(roadmapPath);
+        if (roadmapRaw !== null) {
+            roadmapScope = extractCurrentMilestone(roadmapRaw, cwd);
+            retiredPhaseNums = extractRetiredPhaseNumbers(roadmapScope, phaseConvention);
+        }
+    }
+    catch { /* fall through: no roadmap scope → no retired exclusion */ }
+    // #3017: scope the milestone filter to the STORED milestone when available,
+    // so a state.* write doesn't auto-derive (and mis-bind) to a different
+    // milestone's heading and clobber the stored value + progress counts.
+    // #3185 (ADR-3180 Decision 1): "which phase directories belong to the
+    // CURRENT (stored) milestone" — routed through the canonical owner
+    // instead of a hand-rolled readdirSync + isDirInMilestone filter
+    // (which also never excluded sentinels, unlike the owner).
+    const { value: allMatchingDirs, scope: phaseDirScope } = listMilestonePhaseDirs(phasesDir, {
+        cwd,
+        versionOverride: storedMilestone ?? null,
+        phaseIdConvention: phaseConvention,
+    });
+    // Bug #2445: when stale phase dirs from a prior milestone remain in
+    // .planning/phases/ alongside new dirs with the same phase number,
+    // de-duplicate by normalized phase number keeping exactly one dir
+    // per key (deterministic tie-break: see #3355 below). This prevents
+    // double-counting (e.g. two "Phase 1" dirs).
+    const seenPhaseNums = new Map(); // normalizedNum -> dirName
+    for (const dir of allMatchingDirs) {
+        // #1514: a retired/folded phase keeps a directory but no completion
+        // artifact; drop it from the disk phase set so it counts toward
+        // neither the denominator nor the numerator (mirrors the heading
+        // exclusion below). Project-code-aware via phaseKeyFromDir.
+        if (retiredPhaseNums.size > 0 && retiredPhaseNums.has(phaseKeyFromDir(dir, phaseConvention)))
+            continue;
+        // #3185: dedup grouping routed through the canonical phaseKeyFromDir
+        // (src/phase-id.cts) instead of a local leading-digits regex that
+        // diverged from extractPhaseToken/phaseKeyFromDir on
+        // project-code-prefixed dirs (whole dirname fell through as the key,
+        // so a `PROJ-05`/`PROJ-05-slug` pair never deduped) and on
+        // multi-segment milestone dirs. Same key surface used two lines
+        // above for the retiredPhaseNums exclusion, so both filters agree.
+        const key = phaseKeyFromDir(dir, phaseConvention);
+        if (!seenPhaseNums.has(key)) {
+            seenPhaseNums.set(key, dir);
+        }
+        else {
+            // #3355: the survivor of a same-milestone collision must be
+            // chosen from repository CONTENT, never from filesystem state.
+            // The pre-#3355 tie-break was `mtimeMs` — a checkout-order
+            // signal — so two byte-identical checkouts of the same commit
+            // that wrote the colliding dirs in a different order picked
+            // different survivors, and progress.total_plans /
+            // completed_plans drifted across clones and CI runs. The
+            // directory NAME is git-tracked content and a total order, so
+            // the lexicographically-first dir wins deterministically. The
+            // collision is still a project-level defect (duplicate phase
+            // number in scope), so it is surfaced on stderr instead of
+            // being silently resolved. The Bug #2445 invariant — exactly
+            // one survivor per normalized phase number — is unchanged.
+            const incumbent = seenPhaseNums.get(key);
+            const survivor = dir < incumbent ? dir : incumbent;
+            seenPhaseNums.set(key, survivor);
+            if (options.quiet !== true)
+                process.stderr.write(`gsd: warning — phase directories '${incumbent}' and '${dir}' both normalize to phase key '${key}' (duplicate phase number in .planning/phases/); keeping '${survivor}' by deterministic lexicographic order. (#3355)\n`);
+        }
+    }
+    return {
+        phaseDirs: [...seenPhaseNums.values()],
+        phaseDirScope,
+        roadmapScope,
+        roadmapRaw,
+        retiredPhaseNums,
+    };
+}
+/**
+ * #5038: does existing frontmatter assert an explicit null milestone, as
+ * opposed to omitting the `milestone:` key? `extractFrontmatter` parses under
+ * FAILSAFE_SCHEMA, so YAML null arrives as a string; classification is
+ * delegated to classifyMilestoneScalar.
+ */
+function isMilestoneExplicitlyNull(existingFm) {
+    const raw = existingFm['milestone'];
+    return typeof raw === 'string' && classifyMilestoneScalar(raw).explicitNull;
+}
+/**
  * Extract machine-readable fields from STATE.md markdown body and build
  * a YAML frontmatter object. Allows hooks and scripts to read state
  * reliably via `state json` instead of fragile regex parsing.
@@ -2403,7 +2521,10 @@ function buildStateFrontmatter(bodyContent, cwd, storedMilestone, storedTotalPha
 // #3354/#3573 withhold condition the disk scan returns null for all four
 // counters, and these stored values are what the progress block falls back
 // to (else the keys are omitted).
-storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
+storedCompletedPhases, storedTotalPlans, storedCompletedPlans, 
+// #5038: explicit `milestone: null` (vs an absent key); withholds progress
+// counters on a sectioned ROADMAP without the unbound warning.
+milestoneExplicitlyNull) {
     // #2956: scope `Phase` extraction to ## Current Position (mirrors the read
     // path in cmdStateSnapshot and the Stopped At / Paused At ## Session scoping
     // below). Phase canonically lives in ## Current Position (templates/state.md);
@@ -2411,7 +2532,7 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
     // section overwrites current_phase here, and the next read surfaces it. Fall
     // back to full-body search when no ## Current Position section exists.
     const currentPositionScope = matchCurrentPositionSection(bodyContent) ?? bodyContent;
-    const prosePhase = parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(currentPositionScope, 'Phase'));
+    const prosePhase = parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(currentPositionScope, 'Phase'), cwd ? resolvePhaseIdConvention(cwd) : null);
     const currentPhase = (0, state_document_cjs_1.stateExtractField)(bodyContent, 'Current Phase') ?? prosePhase.phase;
     const currentPhaseName = (0, state_document_cjs_1.stateExtractField)(bodyContent, 'Current Phase Name') ?? prosePhase.name;
     const currentPlan = (0, state_document_cjs_1.stateExtractField)(bodyContent, 'Current Plan');
@@ -2505,79 +2626,12 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                 // on repeated buildStateFrontmatter invocations within the same process (#1967)
                 let cached = _diskScanCache.get(cwd);
                 if (!cached) {
-                    // Read the current-milestone ROADMAP scope once: it feeds both the
-                    // heading-based phase count below and the retired/folded-phase
-                    // exclusion (#1514). Computed before the disk scan so retired phases
-                    // can be dropped from the dir set too.
-                    let roadmapScope = null;
-                    let roadmapRaw = null;
-                    let retiredPhaseNums = new Set();
-                    try {
-                        const roadmapPath = node_path_1.default.join(planningDir(cwd), 'ROADMAP.md');
-                        roadmapRaw = (0, shell_command_projection_cjs_1.platformReadSync)(roadmapPath);
-                        if (roadmapRaw !== null) {
-                            roadmapScope = extractCurrentMilestone(roadmapRaw, cwd);
-                            retiredPhaseNums = extractRetiredPhaseNumbers(roadmapScope, phaseConvention);
-                        }
-                    }
-                    catch { /* fall through: no roadmap scope → no retired exclusion */ }
-                    // #3017: scope the milestone filter to the STORED milestone when available,
-                    // so a state.* write doesn't auto-derive (and mis-bind) to a different
-                    // milestone's heading and clobber the stored value + progress counts.
-                    // #3185 (ADR-3180 Decision 1): "which phase directories belong to the
-                    // CURRENT (stored) milestone" — routed through the canonical owner
-                    // instead of a hand-rolled readdirSync + isDirInMilestone filter
-                    // (which also never excluded sentinels, unlike the owner).
-                    const { value: allMatchingDirs, scope: phaseDirScope } = listMilestonePhaseDirs(phasesDir, {
-                        cwd,
-                        versionOverride: storedMilestone ?? null,
-                        phaseIdConvention: phaseConvention,
-                    });
-                    // Bug #2445: when stale phase dirs from a prior milestone remain in
-                    // .planning/phases/ alongside new dirs with the same phase number,
-                    // de-duplicate by normalized phase number keeping exactly one dir
-                    // per key (deterministic tie-break: see #3355 below). This prevents
-                    // double-counting (e.g. two "Phase 1" dirs).
-                    const seenPhaseNums = new Map(); // normalizedNum -> dirName
-                    for (const dir of allMatchingDirs) {
-                        // #1514: a retired/folded phase keeps a directory but no completion
-                        // artifact; drop it from the disk phase set so it counts toward
-                        // neither the denominator nor the numerator (mirrors the heading
-                        // exclusion below). Project-code-aware via phaseKeyFromDir.
-                        if (retiredPhaseNums.size > 0 && retiredPhaseNums.has(phaseKeyFromDir(dir, phaseConvention)))
-                            continue;
-                        // #3185: dedup grouping routed through the canonical phaseKeyFromDir
-                        // (src/phase-id.cts) instead of a local leading-digits regex that
-                        // diverged from extractPhaseToken/phaseKeyFromDir on
-                        // project-code-prefixed dirs (whole dirname fell through as the key,
-                        // so a `PROJ-05`/`PROJ-05-slug` pair never deduped) and on
-                        // multi-segment milestone dirs. Same key surface used two lines
-                        // above for the retiredPhaseNums exclusion, so both filters agree.
-                        const key = phaseKeyFromDir(dir, phaseConvention);
-                        if (!seenPhaseNums.has(key)) {
-                            seenPhaseNums.set(key, dir);
-                        }
-                        else {
-                            // #3355: the survivor of a same-milestone collision must be
-                            // chosen from repository CONTENT, never from filesystem state.
-                            // The pre-#3355 tie-break was `mtimeMs` — a checkout-order
-                            // signal — so two byte-identical checkouts of the same commit
-                            // that wrote the colliding dirs in a different order picked
-                            // different survivors, and progress.total_plans /
-                            // completed_plans drifted across clones and CI runs. The
-                            // directory NAME is git-tracked content and a total order, so
-                            // the lexicographically-first dir wins deterministically. The
-                            // collision is still a project-level defect (duplicate phase
-                            // number in scope), so it is surfaced on stderr instead of
-                            // being silently resolved. The Bug #2445 invariant — exactly
-                            // one survivor per normalized phase number — is unchanged.
-                            const incumbent = seenPhaseNums.get(key);
-                            const survivor = dir < incumbent ? dir : incumbent;
-                            seenPhaseNums.set(key, survivor);
-                            process.stderr.write(`gsd: warning — phase directories '${incumbent}' and '${dir}' both normalize to phase key '${key}' (duplicate phase number in .planning/phases/); keeping '${survivor}' by deterministic lexicographic order. (#3355)\n`);
-                        }
-                    }
-                    const phaseDirs = [...seenPhaseNums.values()];
+                    // The ROADMAP scope + the deduped, milestone-scoped disk phase set:
+                    // one owner (scanStatePhaseDirs, above buildStateFrontmatter) so the
+                    // #5118 pre-write validation in `phase remove` reads exactly this set.
+                    // #5038: an explicit-null `storedMilestone` is text, not a version;
+                    // pass a real null so it never reaches the phase-dir version filter.
+                    const { phaseDirs, phaseDirScope, roadmapScope, roadmapRaw, retiredPhaseNums, } = scanStatePhaseDirs(cwd, phasesDir, phaseConvention, milestoneExplicitlyNull ? null : storedMilestone);
                     let diskTotalPlans = 0;
                     let diskTotalSummaries = 0;
                     let diskCompletedPhases = 0;
@@ -2597,7 +2651,15 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                         // #612: `phaseConvention` threaded so a bracket phase dir resolves
                         // and scopes its verification report like its legacy twin — the
                         // read-side half of the same thread cmdStateSync gets below.
-                        if (isPhaseComplete(phaseDir, { convention: phaseConvention }).value.complete)
+                        const completion = isPhaseComplete(phaseDir, { convention: phaseConvention });
+                        // #5118 (no write before the error): every STATE.md write rebuilds
+                        // this frontmatter BEFORE its write, so a report whose `status` is
+                        // outside the closed set fails the write here — the owner's error,
+                        // rethrown past the best-effort catch below, nothing persisted and
+                        // nothing cached.
+                        if (completion.value.statusError)
+                            throw completion.value.statusError;
+                        if (completion.value.complete)
                             diskCompletedPhases++;
                     }
                     // Count phase headings from ROADMAP — single source of truth for
@@ -2618,6 +2680,21 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                         // phase-dir count only, and mark unbounded so percent is skipped
                         // downstream (mirrors the sync write-path guard).
                         let milestoneBounded = true;
+                        // #2828/#3642: distinguish a FLAT unmilestoned roadmap (no milestone
+                        // sectioning at all — only Phase headings) from a MILESTONED one
+                        // (milestone/version headings exist). Computed before the
+                        // boundedness gate so the explicit-null branch can use it (#5038).
+                        // #3642: the flat test uses the >=1 sibling (hasAnyMilestoneSection),
+                        // not the >=2 predicate. >=2 under-answers the question this branch
+                        // asks: with EXACTLY ONE milestone section and an asserted milestone
+                        // absent from the ROADMAP, >=2 read "flat" and the whole-document
+                        // count — which IS that single section's phases — was written as the
+                        // asserted milestone's total, silently clobbering the stored value.
+                        // The >=2 threshold governs SIBLING conflation; asserted-vs-section
+                        // needs only one section to go wrong. Zero sections (genuinely flat)
+                        // keeps the whole-document count, per #2828.
+                        const roadmapHasAnyMilestoneSection = roadmapRaw !== null
+                            && hasAnyMilestoneSection(roadmapRaw);
                         // #3216 fix (#1761 regression): use `assertedMilestoneVersion` —
                         // the version STATE.md actually asserts — not the scope-gated
                         // `milestone`. `milestone` is null on any non-COMPLETE identity
@@ -2635,27 +2712,19 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                             // defect, design row 17).
                             milestoneBounded = isMilestoneBounded(roadmapRaw, String(assertedMilestoneVersion).trim(), phaseConvention);
                         }
-                        // #2828: distinguish a FLAT unmilestoned roadmap (no milestone sectioning
-                        // at all — only Phase headings) from a MILESTONED-but-unbounded one
-                        // (milestone/version headings exist but the asserted one isn't among them).
-                        // On a flat roadmap the whole-doc count is correct (no sibling milestones to
-                        // conflate); on a sectioned-but-unbounded one it conflates siblings (#1761),
-                        // so fall back to phaseDirs.length.
+                        else if (milestoneExplicitlyNull && roadmapRaw !== null && roadmapHasAnyMilestoneSection) {
+                            // #5038: explicit null on a sectioned ROADMAP: no section owns
+                            // the counts, so treat as unbound for the withhold gate (the
+                            // warning below is skipped, null is deliberate).
+                            milestoneBounded = false;
+                        }
+                        // #2828: on a flat roadmap the whole-doc count is correct (no
+                        // sibling milestones to conflate); on a sectioned-but-unbounded one
+                        // it conflates siblings (#1761), so fall back to phaseDirs.length.
                         // #3184: routed through the single owner (roadmap-parser.cjs) —
                         // deliberately weaker than isMilestoneBoundedInRoadmap above (no
                         // version-token requirement); see hasMilestoneSectioning's own
                         // doc comment for why that distinction is load-bearing.
-                        // #3642: the flat test uses the >=1 sibling (hasAnyMilestoneSection),
-                        // not the >=2 predicate. >=2 under-answers the question this branch
-                        // asks: with EXACTLY ONE milestone section and an asserted milestone
-                        // absent from the ROADMAP, >=2 read "flat" and the whole-document
-                        // count — which IS that single section's phases — was written as the
-                        // asserted milestone's total, silently clobbering the stored value.
-                        // The >=2 threshold governs SIBLING conflation; asserted-vs-section
-                        // needs only one section to go wrong. Zero sections (genuinely flat)
-                        // keeps the whole-document count, per #2828.
-                        const roadmapHasAnyMilestoneSection = roadmapRaw !== null
-                            && hasAnyMilestoneSection(roadmapRaw);
                         const safeToUseRoadmapCount = milestoneBounded
                             || (roadmapPhaseCount > 0 && !roadmapHasAnyMilestoneSection);
                         // #3354: the milestoned-but-unbounded sibling of the #2828/#3204
@@ -2673,7 +2742,8 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                         // The degenerate un-sectioned zero-heading case keeps the
                         // phaseDirs.length fallback — with nothing declared anywhere else,
                         // the disk count is the only source and remains correct.
-                        const milestonedButUnbounded = !milestoneBounded && roadmapHasAnyMilestoneSection;
+                        // #5038: explicit null is withheld silently (explicitNullWithheld).
+                        const milestonedButUnbounded = !milestoneBounded && roadmapHasAnyMilestoneSection && !milestoneExplicitlyNull;
                         if (milestonedButUnbounded) {
                             process.stderr.write(`gsd: warning — milestone '${String(assertedMilestoneVersion ?? '').trim()}' is asserted in STATE.md but matches no ROADMAP heading, and the ROADMAP carries milestone section(s) — one (#3642) or several (#3354) — none matching it; the whole-document count would attribute a foreign section's phases to this milestone and the on-disk phase-directory count would understate the declared total, so the progress counters (total_phases, completed_phases, total_plans, completed_plans) are left at their stored values. (#3354/#3642/#4094)\n`);
                         }
@@ -2688,9 +2758,11 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                         // value instead. Without an asserted milestone (fresh project,
                         // pre-roadmap) the disk count is still the only source and stays
                         // authoritative (the #3354 doctrine's degenerate case).
+                        // #5038: an explicit null is not an asserted milestone.
                         const roadmapAbsentWithAssertedMilestone = roadmapRaw === null &&
                             typeof storedMilestone === 'string' &&
-                            storedMilestone.trim() !== '';
+                            storedMilestone.trim() !== '' &&
+                            !milestoneExplicitlyNull;
                         if (roadmapAbsentWithAssertedMilestone) {
                             process.stderr.write(`gsd: warning — milestone '${storedMilestone.trim()}' is asserted in STATE.md but ROADMAP.md is absent or unreadable, so the phase-heading total cannot be derived; the on-disk phase-directory count would understate the declared total, so the progress counters (total_phases, completed_phases, total_plans, completed_plans) are left at their stored values. (#3573) (#4094)\n`);
                         }
@@ -2703,7 +2775,9 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                         // Pre-#4094 only totalPhases was nulled here, so every resyncing
                         // write silently clobbered the three stored siblings with the
                         // under-scoped disk numbers.
-                        const diskCountsWithheld = milestonedButUnbounded || roadmapAbsentWithAssertedMilestone;
+                        // #5038: silent sibling of milestonedButUnbounded.
+                        const explicitNullWithheld = milestoneExplicitlyNull && !milestoneBounded && roadmapHasAnyMilestoneSection;
+                        const diskCountsWithheld = milestonedButUnbounded || roadmapAbsentWithAssertedMilestone || explicitNullWithheld;
                         // #4129: floor the completed-phases numerator at the ROADMAP's own
                         // milestone Complete-row count. The disk numerator counts ONLY
                         // phase dirs whose *-VERIFICATION.md routes `passed` (isPhaseComplete,
@@ -2726,8 +2800,14 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
                         // — no second ROADMAP parser here. A ROADMAP without a canonical
                         // `## Progress` table resolves no table → floor inert (disk count
                         // stands), the owner's own answer to "what is countable".
+                        // #5165: the milestone-grouped `## Progress` table keeps every
+                        // milestone's rows and sits OUTSIDE any narrower roadmapScope, so the
+                        // floor names the milestone STATE asserts (assertedMilestoneVersion —
+                        // present on every resync path, unlike the optional storedMilestone
+                        // parameter) and the owner counts only that milestone's rows. No row
+                        // for it => nulls => the floor is inert and the disk count stands.
                         const roadmapCompletedPhases = roadmapScope !== null && safeToUseRoadmapCount && !diskCountsWithheld
-                            ? deriveProgressFromRoadmap(roadmapScope).completedPhases
+                            ? deriveProgressFromRoadmap(roadmapScope, assertedMilestoneVersion ?? storedMilestone).completedPhases
                             : null;
                         const flooredCompletedPhases = roadmapCompletedPhases !== null
                             ? Math.max(diskCompletedPhases, roadmapCompletedPhases)
@@ -2796,9 +2876,13 @@ storedCompletedPhases, storedTotalPlans, storedCompletedPlans) {
              * crash `state show`; on failure this simply keeps whatever
              * frontmatter-derived totals/completedPhases/etc. were already set
              * above, a graceful degrade rather than a corrupted write (nothing is
-             * persisted from this block). */
+             * persisted from this block). #5118: an out-of-set verification
+             * report status is not a read failure to degrade over — rethrown. */
         }
-        catch { /* intentionally empty */ }
+        catch (err) {
+            if (err instanceof VerificationStatusError)
+                throw err;
+        }
     }
     // Derive percent from disk counts when available (ground truth).
     // Uses min(plan_fraction, phase_fraction) via computeProgressPercent so that
@@ -3150,6 +3234,8 @@ function applyAuthoritativeProgressSubkeys(fm, intent, opts) {
     for (const [subkey, value] of Object.entries(intent)) {
         if (typeof value !== 'number' || !Number.isFinite(value))
             continue;
+        if (subkey === 'percent')
+            continue; // composed below, never applied raw (#5165)
         if (!getFieldClassification(`progress.${subkey}`))
             continue;
         const isCompletedCounter = subkey === 'completed_phases' || subkey === 'completed_plans';
@@ -3167,10 +3253,18 @@ function applyAuthoritativeProgressSubkeys(fm, intent, opts) {
     }
     // percent: applied only when a completed counter moved (coherent with the
     // counters that just landed) or when no percent exists to contradict.
+    // #5165 / ADR-4629 §8.5: `computeProgressPercent` is the one composition
+    // owner (min(plan fraction, phase fraction)) that every resyncing write uses.
+    // When the block carries the counters it needs, the percent is composed by
+    // that owner over the counters just landed, so a later resyncing write
+    // cannot move what this transition wrote. The intent's own percent (a
+    // phase-only fraction) is only the fallback for a block without plan counts.
     const intentPercent = intent['percent'];
     if (typeof intentPercent === 'number' && Number.isFinite(intentPercent) && (completedMoved || (0, state_document_cjs_1.toFiniteNumber)(base['percent']) === null)) {
-        if (!Object.is(base['percent'], intentPercent)) {
-            base['percent'] = intentPercent;
+        const composed = (0, state_document_cjs_1.computeProgressPercent)((0, state_document_cjs_1.toFiniteNumber)(base['completed_plans']), (0, state_document_cjs_1.toFiniteNumber)(base['total_plans']), (0, state_document_cjs_1.toFiniteNumber)(base['completed_phases']), (0, state_document_cjs_1.toFiniteNumber)(base['total_phases']), SCOPE.COMPLETE);
+        const nextPercent = composed !== null ? composed : intentPercent;
+        if (!Object.is(base['percent'], nextPercent)) {
+            base['percent'] = nextPercent;
             changed = true;
         }
     }
@@ -3215,7 +3309,7 @@ function syncStateFrontmatter(content, cwd, authoritativeFm, sanctionedPermanent
     // milestoned-but-unbounded withhold can preserve it across the write
     // (the derived progress sub-block replaces the stored one wholesale below,
     // so an omitted key would otherwise DELETE the stored value).
-    const derivedFm = buildStateFrontmatter(body, cwd, storedMilestone, readStoredTotalPhases(existingFm), readStoredCompletedPhases(existingFm), readStoredTotalPlans(existingFm), readStoredCompletedPlans(existingFm));
+    const derivedFm = buildStateFrontmatter(body, cwd, storedMilestone, readStoredTotalPhases(existingFm), readStoredCompletedPhases(existingFm), readStoredTotalPlans(existingFm), readStoredCompletedPlans(existingFm), isMilestoneExplicitlyNull(existingFm));
     // Preserve existing frontmatter status when body-derived status is 'unknown'.
     // This prevents a missing Status: field in the body from overwriting a
     // previously valid status (e.g., 'executing' → 'unknown').
@@ -3754,7 +3848,10 @@ function assertStatePreservationOptions(options, caller) {
         throw err;
     }
 }
-function applyPostSyncPreservation(originalContent, transformedContent, syncedContent, statePath, options) {
+function applyPostSyncPreservation(originalContent, transformedContent, syncedContent, statePath, options, 
+// #5626: the project's phase-id convention, resolved by the caller from its cwd (null: unset). Trailing and
+// optional so `options` stays the fifth parameter the options guard and its callers rely on.
+phaseIdConvention = null) {
     assertStatePreservationOptions(options, 'applyPostSyncPreservation');
     const { resync, authoritativeFm, deriveProgressKeys, divergedFields, explicitProgressField, preWriteState } = options;
     // Bug #1230: delta heuristic — snapshot pre-transform body source fields so
@@ -3811,7 +3908,7 @@ function applyPostSyncPreservation(originalContent, transformedContent, syncedCo
     const preCurrentPositionScope = matchCurrentPositionSection(preBody) ?? preBody;
     const preBodyCurrentPlan = (0, state_document_cjs_1.stateExtractField)(preBody, 'Current Plan');
     const preBodyCurrentPhase = (0, state_document_cjs_1.stateExtractField)(preBody, 'Current Phase')
-        ?? parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(preCurrentPositionScope, 'Phase')).phase;
+        ?? parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(preCurrentPositionScope, 'Phase'), phaseIdConvention).phase;
     const preBodyPausedAt = (0, state_document_cjs_1.stateExtractField)(preSessionScope, 'Paused At');
     const preBodyLastActivityRaw = (0, state_document_cjs_1.stateExtractField)(preBody, 'Last Activity')
         ?? (0, state_document_cjs_1.stateExtractField)(preBody, 'Last activity');
@@ -3837,7 +3934,7 @@ function applyPostSyncPreservation(originalContent, transformedContent, syncedCo
     const postCurrentPositionScope = matchCurrentPositionSection(postBody) ?? postBody;
     const postBodyCurrentPlan = (0, state_document_cjs_1.stateExtractField)(postBody, 'Current Plan');
     const postBodyCurrentPhase = (0, state_document_cjs_1.stateExtractField)(postBody, 'Current Phase')
-        ?? parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(postCurrentPositionScope, 'Phase')).phase;
+        ?? parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(postCurrentPositionScope, 'Phase'), phaseIdConvention).phase;
     const postBodyPausedAt = (0, state_document_cjs_1.stateExtractField)(postSessionScope, 'Paused At');
     const postBodyLastActivityRaw = (0, state_document_cjs_1.stateExtractField)(postBody, 'Last Activity')
         ?? (0, state_document_cjs_1.stateExtractField)(postBody, 'Last activity');
@@ -4054,7 +4151,7 @@ function applyPostSyncPreservation(originalContent, transformedContent, syncedCo
 function syncAndPreserveStateMd(originalContent, transformedContent, statePath, cwd, options) {
     assertStatePreservationOptions(options, 'syncAndPreserveStateMd');
     const synced = syncStateFrontmatter(transformedContent, cwd, options.authoritativeFm);
-    return applyPostSyncPreservation(originalContent, transformedContent, synced, statePath, options);
+    return applyPostSyncPreservation(originalContent, transformedContent, synced, statePath, options, cwd ? resolvePhaseIdConvention(cwd) : null);
 }
 /**
  * Atomic read-modify-write for STATE.md.
@@ -4447,7 +4544,98 @@ function computeChangedFrontmatterFields(snapshotFm, persistedFm, bodyDeltas) {
  *   (#3818's own direction), which is why keeping it as the candidate
  *   source was rejected (design doc, Rejected #1).
  */
-function reconcileReportedFields(statePath, preWriteState, reported, divergedFields) {
+/**
+ * ADR-4629 §8.2 (epic #4629, C2): the value a reported/asserted target
+ * resolves to in one document side. Lifted verbatim out of
+ * `reconcileReportedFields` (it was the private `valueOf` closure) so the C2
+ * verifying executor reads a target through the SAME resolution chain the
+ * measured-delta reporter uses — ADR-4629 Decision 4: extend the reporter,
+ * never build a second one.
+ *
+ * #3471 review (unchanged): body-FIRST, frontmatter-key-FLAT-fallback,
+ * dotted-PATH-fallback last. Body-first mirrors the actual write precedence
+ * `patchCore`/`updateCore` apply (#1162's fix — a lowercase body label that
+ * happens to case-exact-match a frontmatter key must still resolve against
+ * the body). `field` a literal flat key (even one containing a `.`) is tried
+ * before it is split and walked as a dotted path (test matrix row 26) —
+ * `resolveFrontmatterPath` pins that same order for the frontmatter side.
+ *
+ * `Current Position` is special-cased: it names the WHOLE `## Current
+ * Position` section, not a single `Label: value` line, so `stateExtractField`
+ * can never resolve it (the root cause of the "Current Position undercount" —
+ * a transform could correctly push `'Current Position'` into its own
+ * `updated` list and it was still silently dropped, because both sides
+ * resolved to `null` and `null === null` failed the old `intended !== null`
+ * guard). `sliceCurrentPositionSection` is the existing fence-aware section
+ * locator (state-transition.cts) — reused rather than re-derived.
+ *
+ * C2 generalizes that special case: a name in `sectionTargets` (a declared
+ * `target: 'section'` assertion) resolves to its whole section body through
+ * the markdown-sectionizer seam (ADR-1372), never a hand-rolled regex.
+ * Existing callers pass no `sectionTargets` and resolve exactly as before.
+ */
+function readStateTarget(fm, body, field, sectionTargets) {
+    if (field === 'Current Position') {
+        const section = stateTransitionMod.sliceCurrentPositionSection(body);
+        return section !== null ? section.trim() : null;
+    }
+    if (sectionTargets.has(field)) {
+        const section = (0, markdown_sectionizer_cjs_1.collectSection)(body, (h) => h.text === field);
+        return section !== null ? section.body.trim() : null;
+    }
+    const bodyValue = (0, state_document_cjs_1.stateExtractField)(body, field);
+    if (bodyValue !== null)
+        return bodyValue;
+    if (Object.prototype.hasOwnProperty.call(fm, field))
+        return String(fm[field]);
+    if (field.includes('.')) {
+        const resolved = resolveFrontmatterPath(fm, field);
+        if (resolved !== STATE_FIELD_ABSENT) {
+            return stateScalarString(resolved);
+        }
+    }
+    return null;
+}
+const NO_SECTION_TARGETS = new Set();
+/**
+ * ADR-4629 §8.2 (C2): did this target measurably change between the two
+ * document sides? Lifted verbatim out of `reconcileReportedFields` (the private
+ * `changed` closure) for the same one-rule reason as `readStateTarget`.
+ *
+ * A target can itself be a declared derived leaf (e.g. `plannedPhaseCore`
+ * pushing `'progress.total_plans'` — state-transition.cts). `readStateTarget`'s
+ * null-vs-string convention cannot tell "absent from the frontmatter" apart
+ * from "resolved to the literal string 'null'/''", so it cannot carry the same
+ * materialization rule `computeChangedFrontmatterFields` applies. Those targets
+ * route through the SAME primitives (`resolveFrontmatterPath` + the
+ * `STATE_FIELD_ABSENT` sentinel + `stateFieldValuesDiffer`) instead of a
+ * second, parallel absence convention — one rule, reused, not duplicated.
+ */
+function stateTargetChanged(snapshotFm, snapshotBody, persistedFm, persistedBody, field, sectionTargets) {
+    const isDeclaredDerivedLeaf = field.includes('.') && Object.prototype.hasOwnProperty.call(FIELD_CLASSIFICATION, field);
+    if (isDeclaredDerivedLeaf && !sectionTargets.has(field)) {
+        const before = resolveFrontmatterPath(snapshotFm, field);
+        const after = resolveFrontmatterPath(persistedFm, field);
+        // Same generalized provenance rule as computeChangedFrontmatterFields:
+        // absent-in-snapshot-materializing-in-persisted is the disk scan
+        // catching a never-synced document up, not this write's own action.
+        if (before === STATE_FIELD_ABSENT && after !== STATE_FIELD_ABSENT)
+            return false;
+        return stateFieldValuesDiffer(before, after);
+    }
+    const before = readStateTarget(snapshotFm, snapshotBody, field, sectionTargets);
+    const after = readStateTarget(persistedFm, persistedBody, field, sectionTargets);
+    if (before === null && after === null)
+        return false;
+    if (before === null || after === null)
+        return true;
+    return before.trim() !== after.trim();
+}
+function reconcileReportedFields(statePath, preWriteState, reported, divergedFields, 
+// ADR-4629 §8.2 / Decision 4 (C2): names in `reported` that are declared
+// `target: 'section'` assertions, measured as whole-section deltas. Omitted
+// by every pre-C2 caller, whose output is unchanged.
+sectionTargets = NO_SECTION_TARGETS) {
     void divergedFields; // ADR-3473 §8.7 D18: out-param only, not a candidate source here.
     if (preWriteState.fm === undefined || preWriteState.body === undefined)
         return [];
@@ -4456,71 +4644,7 @@ function reconcileReportedFields(statePath, preWriteState, reported, divergedFie
     const persistedBody = stripFrontmatter(persisted);
     const snapshotFm = preWriteState.fm;
     const snapshotBody = preWriteState.body;
-    // #3471 review (unchanged by this rewrite): body-FIRST, frontmatter-key-
-    // FLAT-fallback, dotted-PATH-fallback last. Body-first mirrors the actual
-    // write precedence `patchCore`/`updateCore` apply (#1162's fix — a
-    // lowercase body label that happens to case-exact-match a frontmatter key
-    // must still resolve against the body). `field` a literal flat key (even
-    // one containing a `.`) is tried before it is split and walked as a
-    // dotted path (test matrix row 26) — `resolveFrontmatterPath` pins that
-    // same order for the frontmatter side alone.
-    //
-    // `Current Position` is special-cased: it names the WHOLE `## Current
-    // Position` section, not a single `Label: value` line, so
-    // `stateExtractField` can never resolve it (this is the root cause of the
-    // "Current Position undercount" — a transform can correctly push
-    // `'Current Position'` into its own `updated` list, and this function
-    // still silently dropped it, because `valueOf` returned `null` for BOTH
-    // sides and `null === null` failed the old `intended !== null` guard).
-    // `sliceCurrentPositionSection` is the existing fence-aware section
-    // locator (state-transition.cts) — reused rather than re-derived.
-    const valueOf = (fm, body, field) => {
-        if (field === 'Current Position') {
-            const section = stateTransitionMod.sliceCurrentPositionSection(body);
-            return section !== null ? section.trim() : null;
-        }
-        const bodyValue = (0, state_document_cjs_1.stateExtractField)(body, field);
-        if (bodyValue !== null)
-            return bodyValue;
-        if (Object.prototype.hasOwnProperty.call(fm, field))
-            return String(fm[field]);
-        if (field.includes('.')) {
-            const resolved = resolveFrontmatterPath(fm, field);
-            if (resolved !== STATE_FIELD_ABSENT) {
-                return stateScalarString(resolved);
-            }
-        }
-        return null;
-    };
-    // A field in `reported` can itself be a declared derived leaf (e.g.
-    // `plannedPhaseCore` pushing `'progress.total_plans'` — state-
-    // transition.cts:1752). `valueOf`'s null-vs-string convention cannot tell
-    // "absent from the frontmatter" apart from "resolved to the literal string
-    // 'null'/''", so it cannot carry the same materialization rule
-    // `computeChangedFrontmatterFields` applies below. Route these fields
-    // through the SAME primitives (`resolveFrontmatterPath` + the
-    // `STATE_FIELD_ABSENT` sentinel + `stateFieldValuesDiffer`) instead of a
-    // second, parallel absence convention — one rule, reused, not duplicated.
-    const isDeclaredDerivedLeaf = (candidate) => candidate.includes('.') && Object.prototype.hasOwnProperty.call(FIELD_CLASSIFICATION, candidate);
-    const changed = (field) => {
-        if (isDeclaredDerivedLeaf(field)) {
-            const before = resolveFrontmatterPath(snapshotFm, field);
-            const after = resolveFrontmatterPath(persistedFm, field);
-            // Same generalized provenance rule as computeChangedFrontmatterFields:
-            // absent-in-snapshot-materializing-in-persisted is the disk scan
-            // catching a never-synced document up, not this write's own action.
-            if (before === STATE_FIELD_ABSENT && after !== STATE_FIELD_ABSENT)
-                return false;
-            return stateFieldValuesDiffer(before, after);
-        }
-        const before = valueOf(snapshotFm, snapshotBody, field);
-        const after = valueOf(persistedFm, persistedBody, field);
-        if (before === null && after === null)
-            return false;
-        if (before === null || after === null)
-            return true;
-        return before.trim() !== after.trim();
-    };
+    const changed = (field) => stateTargetChanged(snapshotFm, snapshotBody, persistedFm, persistedBody, field, sectionTargets);
     // Candidate set = `reported` ∪ every frontmatter key (dotted-leaf
     // granularity) whose persisted value differs from the snapshot, minus the
     // provenance exclusion. A frontmatter-diff-discovered field is mapped
@@ -4548,6 +4672,362 @@ function reconcileReportedFields(statePath, preWriteState, reported, divergedFie
     }
     return reconciled;
 }
+/** Why a verified write failed. A closed set, frozen like `ERROR_REASON`. */
+const STATE_WRITE_INTENT_FAILURE = Object.freeze({
+    /** §8.3: the delta reached a region outside the declared scope. */
+    OUT_OF_SCOPE: 'out_of_scope',
+    /** §8.2: a `required` assertion did not land. */
+    REQUIRED_ASSERTION_MISSED: 'required_assertion_missed',
+    /** §8.2: the re-read file is not the content that was verified and written. */
+    REREAD_MISMATCH: 'reread_mismatch',
+});
+/**
+ * Split a STATE.md body into leaf units for the §8.3 diff: the preamble before
+ * the first heading, then one unit per heading running to the NEXT heading of
+ * any level, in document order. Leaf granularity means a declared
+ * `## Accumulated Context` scope reaches its `### Decisions` child by heading
+ * level (`stateSectionScopeUnits`), while an undeclared sibling section stays a separate unit. Built on
+ * the markdown-sectionizer seam (ADR-1372), which is fence-aware, so a `#` line
+ * inside a code fence is not a heading. A repeated heading gets an occurrence
+ * suffix so neither shadows the other.
+ */
+function collectStateBodyUnits(body) {
+    const units = new Map();
+    const sections = (0, markdown_sectionizer_cjs_1.collectSections)(body, () => true);
+    const preambleEnd = sections.length > 0 ? sections[0].heading.offset : body.length;
+    units.set('(preamble)', { text: body.slice(0, preambleEnd).trim(), level: 0, region: { region: 'preamble', name: '' } });
+    const occurrences = new Map();
+    for (const section of sections) {
+        const { heading } = section;
+        const base = `${'#'.repeat(heading.level)} ${heading.text}`;
+        const n = (occurrences.get(base) ?? 0) + 1;
+        occurrences.set(base, n);
+        units.set(n === 1 ? base : `${base} (#${n})`, {
+            text: section.body.trim(),
+            level: heading.level,
+            region: { region: 'section', name: heading.text },
+        });
+    }
+    return units;
+}
+/** The raw frontmatter region (everything before the body), for the unparseable-block case. */
+function stateFrontmatterRegion(content) {
+    return content.slice(0, content.length - stripFrontmatter(content).length);
+}
+/**
+ * The unit a declared field lives in: the first unit, in document order, where
+ * `stateExtractField` resolves it. That mirrors `stateExtractField`'s own
+ * first-match reading of the whole body, so a declared `Status` covers the one
+ * line the seam treats as `Status`, and not a second `Status:` line elsewhere.
+ */
+function stateFieldOwnerUnit(units, field) {
+    for (const [key, unit] of units) {
+        if ((0, state_document_cjs_1.stateExtractField)(unit.text, field) !== null)
+            return key;
+    }
+    return null;
+}
+/**
+ * The units a declared section covers: the FIRST unit, in document order, whose
+ * heading text is the declared name (the occurrence `readStateTarget` reads,
+ * through `collectSection`'s first match), plus every following unit nested
+ * under it by heading level. The section analogue of `stateFieldOwnerUnit`: a
+ * repeated heading of the same name, and that occurrence's children, are not
+ * covered, even though they sit under a heading with the same text.
+ */
+function stateSectionScopeUnits(units, sectionTargets) {
+    const covered = new Set();
+    const entries = [...units];
+    for (const name of sectionTargets) {
+        const start = entries.findIndex(([, u]) => u.region.region === 'section' && u.region.name === name);
+        if (start < 0)
+            continue;
+        const ownerLevel = entries[start][1].level;
+        covered.add(entries[start][0]);
+        for (let i = start + 1; i < entries.length && entries[i][1].level > ownerLevel; i++)
+            covered.add(entries[i][0]);
+    }
+    return covered;
+}
+/**
+ * ADR-4629 §8.2 + §8.3: verify one write against its declared intent. PURE —
+ * it compares two document sides and never touches disk.
+ *
+ * Both sides are first passed through `normalizeContent`, the OS projection
+ * seam's own normalization (CRLF strip, blank-line-run collapse, one trailing
+ * newline). `platformWriteSync` applies it to every STATE.md write, on this
+ * path and the legacy one alike, so it is the seam's behavior, not the
+ * intent's delta. Without it, a CRLF file would read as every section changed.
+ *
+ * §8.2 (verified post-state): every `required` assertion must land. With a
+ * declared `value`, "landed" means the target reads that value afterwards (an
+ * idempotent write that re-asserts the current value passes). Without one,
+ * "landed" means the target is still present AND measurably changed
+ * (`stateTargetChanged`, the measured-delta test `updated[]` uses); a deleted
+ * target has not landed. Best-effort assertions are NOT judged: their report
+ * bucket is ADR-4629 §8.4, an open question for Phase 3, so this result
+ * deliberately carries no best-effort field for a later phase to be bound by.
+ *
+ * §8.3 (bounded mutation): the delta must stay inside the declared scope.
+ *  - Body: diffed per leaf unit (`collectStateBodyUnits`). A changed unit is in
+ *    scope when it is the first occurrence of a section a declared
+ *    `target: 'section'` assertion names, or nested under that occurrence
+ *    (`stateSectionScopeUnits`). Otherwise it is in scope only when replaying the
+ *    post-values of the declared fields THAT UNIT OWNS (`stateFieldOwnerUnit`)
+ *    onto its pre text reproduces its post text, so any other edit in the same
+ *    section, or the same label in another section, is caught. A change in
+ *    section ORDER is its own out-of-scope region.
+ *  - Frontmatter: keys with a body source (`getFrontmatterBodySource`) are
+ *    judged through that source, because `syncStateFrontmatter` re-derives them
+ *    from the body on every write. When the seam's `bodyDeltas` show the source
+ *    moved, the body check above already bounded that move. A mirrored key that
+ *    changed with no body move, or with no `bodyDeltas` to show one, must be
+ *    declared. Every other key goes through `computeChangedFrontmatterFields`
+ *    (the reporter's rule: `last_updated` provenance exclusion, declared-leaf
+ *    materialization). A schema-declared key (a `FIELD_CLASSIFICATION` row)
+ *    that is absent before and present after is the seam catching a document
+ *    up, not the caller's action, the same provenance rule the reporter
+ *    applies. A key already present that the seam re-derives to a new value
+ *    (for example `progress.*` under `resync`) IS counted: §8.3 bounds what the
+ *    write changed, whoever computed it.
+ *  - A frontmatter key is declared when an assertion names it exactly, or when
+ *    it is one of the schema-declared leaves (`declaredLeavesOf`) of a key an
+ *    assertion names. Declaring `progress` therefore covers the closed set of
+ *    `progress.*` rows `FIELD_CLASSIFICATION` lists, the frontmatter analogue of
+ *    a `target: 'section'` assertion covering its child sections. Nothing else
+ *    widens: a declared leaf (`progress.percent`) never covers a sibling leaf,
+ *    and a dotted key outside the schema's leaf set is never covered by its
+ *    prefix.
+ *  - `scope: 'broad'` puts the WHOLE frontmatter in scope. That is ADR-4629
+ *    §8.3's own worked case (`milestoneSwitch` declares a whole-frontmatter
+ *    scope). The body stays bounded: broad is audited, not exempted.
+ *  - `kind: 'rebuild'` (`cmdStateSync`, `REGENERATE_STATE`) is unbounded by
+ *    contract (ADR-3408 §8.3; ADR-4629 §8.3 names those two and no more), so
+ *    §8.3 is skipped for it. §8.2 still applies.
+ *
+ * `Current Position` is always read as a whole section, in §8.2 and §8.3 alike,
+ * matching `readStateTarget`'s long-standing special case.
+ */
+function verifyStateWriteIntent(intent, preContent, postContent, statePath, bodyDeltas) {
+    // #5165: the write lands scoped to what it changed (platformWriteSync reads the file it replaces).
+    const pre = (0, shell_command_projection_cjs_1.normalizeContent)(statePath, preContent, { prior: preContent }).content;
+    const post = (0, shell_command_projection_cjs_1.normalizeContent)(statePath, postContent, { prior: preContent }).content;
+    const preFm = extractFrontmatter(pre, statePath);
+    const postFm = extractFrontmatter(post, statePath);
+    const preBody = stripFrontmatter(pre);
+    const postBody = stripFrontmatter(post);
+    const isSection = (a) => a.target === 'section' || a.field === 'Current Position';
+    const sectionTargets = new Set();
+    const fieldTargets = new Set();
+    for (const a of intent.assertions) {
+        if (isSection(a))
+            sectionTargets.add(a.field);
+        else
+            fieldTargets.add(a.field);
+    }
+    // §8.2 — required assertions.
+    const missedRequired = [];
+    for (const a of intent.assertions) {
+        if (a.requirement !== 'required')
+            continue;
+        const targets = isSection(a) ? new Set([a.field]) : NO_SECTION_TARGETS;
+        const actual = readStateTarget(postFm, postBody, a.field, targets);
+        const landed = a.value !== undefined
+            ? actual !== null && actual.trim() === a.value.trim()
+            : actual !== null && stateTargetChanged(preFm, preBody, postFm, postBody, a.field, targets);
+        if (!landed)
+            missedRequired.push(a.field);
+    }
+    // §8.3 — bounded mutation.
+    const outOfScope = [];
+    if (intent.kind !== 'rebuild') {
+        if (intent.scope !== 'broad') {
+            const declared = (key) => {
+                if (fieldTargets.has(key))
+                    return true;
+                const dot = key.indexOf('.');
+                if (dot <= 0)
+                    return false;
+                const parent = key.slice(0, dot);
+                return fieldTargets.has(parent) && declaredLeavesOf(parent).includes(key);
+            };
+            if (isUnparseableFrontmatter(preFm) || isUnparseableFrontmatter(postFm)) {
+                // An unparseable block has no keys to diff; judge the raw region.
+                if (stateFrontmatterRegion(pre) !== stateFrontmatterRegion(post)) {
+                    outOfScope.push({ region: 'frontmatter', name: '(unparseable block)' });
+                }
+            }
+            else {
+                const schemaMaterialized = (key) => Object.prototype.hasOwnProperty.call(FIELD_CLASSIFICATION, key)
+                    && resolveFrontmatterPath(preFm, key) === STATE_FIELD_ABSENT
+                    && resolveFrontmatterPath(postFm, key) !== STATE_FIELD_ABSENT;
+                // Non-body-sourced keys: `computeChangedFrontmatterFields` skips body-sourced
+                // keys entirely when handed no `bodyDeltas`; those are judged just below.
+                for (const key of computeChangedFrontmatterFields(preFm, postFm, undefined)) {
+                    if (!declared(key) && !schemaMaterialized(key))
+                        outOfScope.push({ region: 'frontmatter', name: key });
+                }
+                const topKeys = new Set([...Object.keys(preFm), ...Object.keys(postFm)]);
+                for (const key of topKeys) {
+                    if (stateTransitionMod.getFrontmatterBodySource(key) === null)
+                        continue;
+                    const before = resolveFrontmatterPath(preFm, key);
+                    const after = resolveFrontmatterPath(postFm, key);
+                    if (!stateFieldValuesDiffer(before, after))
+                        continue;
+                    if (before === STATE_FIELD_ABSENT)
+                        continue; // back-fill (the #1264 case), not the caller's action
+                    const delta = bodyDeltas ? bodyDeltas[key] : undefined;
+                    const bodyMoved = delta !== undefined
+                        && stateFieldValuesDiffer(delta.pre ?? STATE_FIELD_ABSENT, delta.post ?? STATE_FIELD_ABSENT);
+                    if (bodyMoved || declared(key))
+                        continue;
+                    outOfScope.push({ region: 'frontmatter', name: key });
+                }
+            }
+        }
+        const preUnits = collectStateBodyUnits(preBody);
+        const postUnits = collectStateBodyUnits(postBody);
+        const owners = new Map();
+        for (const field of fieldTargets) {
+            const owner = stateFieldOwnerUnit(postUnits, field) ?? stateFieldOwnerUnit(preUnits, field);
+            if (owner !== null)
+                owners.set(owner, [...(owners.get(owner) ?? []), field]);
+        }
+        const sectionScope = new Set([
+            ...stateSectionScopeUnits(preUnits, sectionTargets),
+            ...stateSectionScopeUnits(postUnits, sectionTargets),
+        ]);
+        for (const key of new Set([...preUnits.keys(), ...postUnits.keys()])) {
+            const before = preUnits.get(key);
+            const after = postUnits.get(key);
+            if (before !== undefined && after !== undefined && before.text === after.text)
+                continue;
+            const unit = (after ?? before);
+            if (sectionScope.has(key))
+                continue;
+            if (before !== undefined && after !== undefined) {
+                let replayed = before.text;
+                for (const field of owners.get(key) ?? []) {
+                    const next = (0, state_document_cjs_1.stateExtractField)(after.text, field);
+                    if (next === null)
+                        continue;
+                    const applied = (0, state_document_cjs_1.stateReplaceField)(replayed, field, next);
+                    if (applied !== null)
+                        replayed = applied;
+                }
+                if (replayed.trim() === after.text)
+                    continue;
+            }
+            outOfScope.push(unit.region);
+        }
+        const preOrder = [...preUnits.keys()].filter((k) => postUnits.has(k));
+        const postOrder = [...postUnits.keys()].filter((k) => preUnits.has(k));
+        if (preOrder.join('\n') !== postOrder.join('\n'))
+            outOfScope.push({ region: 'order', name: '' });
+    }
+    const reasons = [];
+    if (outOfScope.length > 0)
+        reasons.push(STATE_WRITE_INTENT_FAILURE.OUT_OF_SCOPE);
+    if (missedRequired.length > 0)
+        reasons.push(STATE_WRITE_INTENT_FAILURE.REQUIRED_ASSERTION_MISSED);
+    return Object.freeze({
+        ok: reasons.length === 0,
+        reasons: Object.freeze(reasons),
+        outOfScope: Object.freeze(outOfScope.map((r) => Object.freeze({ ...r }))),
+        missedRequired: Object.freeze(missedRequired),
+    });
+}
+const NO_UPDATED_FIELDS = Object.freeze([]);
+/**
+ * ADR-4629 §8.2 + §8.3: apply a declared `StateWriteIntent` through the one
+ * write seam and fail loud instead of reporting success.
+ *
+ * Under ONE lock (the same `acquireStateLock` `readModifyWriteStateMd` holds):
+ *   read -> transform -> `syncAndPreserveStateMd` (the owned composition,
+ *   driven by the intent's own `resync` / `deriveProgressKeys` /
+ *   `explicitProgressField`) -> verify the would-be content -> write only if
+ *   it verified -> re-read -> confirm the re-read file is exactly the verified
+ *   content (§8.2 verifies against the re-read file) -> report `updated[]`
+ *   from the measured disk delta.
+ * A §8.2/§8.3 violation is refused BEFORE the write, so the file is left
+ * untouched. The re-read check is the one failure found AFTER the write: if
+ * the re-read does not match what was verified, the result is
+ * `reasons: ['reread_mismatch']` with `written: true`. The file is NOT restored
+ * on that arm: the write reached disk but is not verified, and the result says
+ * so rather than attempting a restore through a write path that would itself
+ * normalize the bytes. Its `outOfScope` / `missedRequired` are empty, because
+ * the candidate content itself verified; what failed is the disk round-trip.
+ *
+ * "Loud" means the result, not an exception: a verification failure is a
+ * frozen `ok: false` value naming each reason, never a success payload.
+ * Turning that into a non-zero exit is the CLI caller's job, which lands with
+ * the first migrated caller (C3+). Construction errors (no intent, a rebuild
+ * intent) throw, like `createStateTransaction`'s.
+ *
+ * A transform whose output is byte-identical to its input is the #948 no-op:
+ * nothing is written, but the intent is still verified, so a `required`
+ * assertion that expected a change reports as missed rather than passing.
+ *
+ * Scope fence (C2): open-kind intents only. The two `rebuild` writers stay on
+ * `writeStateMd`, the sanctioned exception path (ADR-3408 §8.3). The intent's
+ * `snapshot` is not compared against the file read under the lock;
+ * optimistic concurrency on the prior value is outside ADR-4629 §8 as written.
+ */
+function applyStateWriteIntent(statePath, intent, transformFn, cwd, options = {}, clock) {
+    // Checked on an `unknown` view: `Array.isArray` on the typed ReadonlyArray would narrow it to `any[]`.
+    if (intent === null || typeof intent !== 'object' || !Array.isArray(intent.assertions)) {
+        const err = new Error('applyStateWriteIntent: a StateWriteIntent is required (build it with createStateWriteIntent). ' +
+            'Per ADR-4629 §8.1, an absent intent is a construction failure, not an unverified write.');
+        err.code = 'STATE_WRITE_INTENT_REQUIRED';
+        throw err;
+    }
+    if (intent.kind === 'rebuild') {
+        const err = new Error('applyStateWriteIntent: a rebuild intent cannot travel the preservation seam. The two rebuild ' +
+            'writers (cmdStateSync, REGENERATE_STATE) stay on writeStateMd per ADR-3408 §8.3; ADR-4629 §8.3 ' +
+            'treats them as unbounded by contract.');
+        err.code = 'STATE_TRANSACTION_KIND_INVALID';
+        throw err;
+    }
+    const lockPath = acquireStateLock(statePath, clock);
+    try {
+        const pre = (0, shell_command_projection_cjs_1.platformReadSync)(statePath) || '';
+        const transformed = transformFn(pre);
+        const unwritten = (verification) => Object.freeze({ ...verification, written: false, updated: NO_UPDATED_FIELDS });
+        if (transformed === pre) {
+            return unwritten(verifyStateWriteIntent(intent, pre, pre, statePath));
+        }
+        const preWriteState = {};
+        const candidate = syncAndPreserveStateMd(pre, transformed, statePath, cwd, {
+            resync: intent.resync,
+            deriveProgressKeys: intent.deriveProgressKeys,
+            explicitProgressField: intent.explicitProgressField,
+            authoritativeFm: options.authoritativeFm,
+            preWriteState,
+        });
+        const verification = verifyStateWriteIntent(intent, pre, candidate, statePath, preWriteState.bodyDeltas);
+        if (!verification.ok)
+            return unwritten(verification);
+        (0, shell_command_projection_cjs_1.platformWriteSync)(statePath, candidate);
+        const reread = (0, shell_command_projection_cjs_1.platformReadSync)(statePath) || '';
+        if (reread !== (0, shell_command_projection_cjs_1.normalizeContent)(statePath, candidate, { prior: pre }).content) {
+            return Object.freeze({
+                ok: false,
+                reasons: Object.freeze([STATE_WRITE_INTENT_FAILURE.REREAD_MISMATCH]),
+                outOfScope: verification.outOfScope,
+                missedRequired: verification.missedRequired,
+                written: true,
+                updated: NO_UPDATED_FIELDS,
+            });
+        }
+        const sectionTargets = new Set(intent.assertions.filter((a) => a.target === 'section' || a.field === 'Current Position').map((a) => a.field));
+        const updated = reconcileReportedFields(statePath, preWriteState, intent.assertions.map((a) => a.field), [], sectionTargets);
+        return Object.freeze({ ...verification, written: true, updated: Object.freeze(updated) });
+    }
+    finally {
+        releaseStateLock(lockPath);
+    }
+}
 function cmdStateJson(cwd, raw) {
     const statePath = planningPaths(cwd).state;
     if (!node_fs_1.default.existsSync(statePath)) {
@@ -4567,7 +5047,7 @@ function cmdStateJson(cwd, raw) {
     // reports the phase-directory count while the persisted file preserves the
     // stored total, exactly the write/read divergence #3354 closed for its shape.
     const storedMilestoneJson = typeof existingFm['milestone'] === 'string' ? existingFm['milestone'] : null;
-    const built = buildStateFrontmatter(body, cwd, storedMilestoneJson, readStoredTotalPhases(existingFm), readStoredCompletedPhases(existingFm), readStoredTotalPlans(existingFm), readStoredCompletedPlans(existingFm));
+    const built = buildStateFrontmatter(body, cwd, storedMilestoneJson, readStoredTotalPhases(existingFm), readStoredCompletedPhases(existingFm), readStoredTotalPlans(existingFm), readStoredCompletedPlans(existingFm), isMilestoneExplicitlyNull(existingFm));
     // ADR-3408 §8.5 / D3: route stopped_at / paused_at / status / current_phase /
     // current_phase_name / current_plan through the SAME `preserve-when-unchanged`
     // executor the write path uses (`applyPreserveWhenUnchanged`), instead of a
@@ -4596,7 +5076,7 @@ function cmdStateJson(cwd, raw) {
         const bodyPausedAt = (0, state_document_cjs_1.stateExtractField)(sessionScope, 'Paused At');
         const bodyPhaseSource = (0, state_document_cjs_1.stateExtractField)(body, 'Phase');
         const bodyCurrentPhase = (0, state_document_cjs_1.stateExtractField)(body, 'Current Phase')
-            ?? parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(positionScope, 'Phase')).phase;
+            ?? parseProsePhaseField((0, state_document_cjs_1.stateExtractField)(positionScope, 'Phase'), resolvePhaseIdConvention(cwd)).phase;
         const bodyCurrentPlan = (0, state_document_cjs_1.stateExtractField)(body, 'Current Plan');
         const bodyStatus = (0, state_document_cjs_1.stateExtractField)(body, 'Status');
         // #3836: mirrors applyPostSyncPreservation's own derivation (state.cts
@@ -4650,6 +5130,23 @@ function cmdStateJson(cwd, raw) {
     output(built, raw, JSON.stringify(built, null, 2));
 }
 /**
+ * 1-based position of the first plan with no summary, when SOME of the phase's plans already have
+ * one (a gap-closure re-entry: plans 1..17 are done and 18 and 19 are the gap plans, #4945).
+ * `null` when no plan is summarized yet, when every plan is, or when the phase directory cannot be
+ * found: the phase then starts at plan 1, exactly as before. Plans and summaries are paired by the
+ * phase locator's own rule, so this agrees with `init` and `phase-plan-index`.
+ */
+function firstPlanToRun(cwd, phaseNumber) {
+    const located = phaseLocatorMod.findPhaseInternal(cwd, String(phaseNumber));
+    if (!located || !located.found)
+        return null;
+    const { plans, incomplete_plans: incomplete } = located;
+    if (incomplete.length === 0 || incomplete.length === plans.length)
+        return null;
+    const index = plans.indexOf(incomplete[0]);
+    return index === -1 ? null : index + 1;
+}
+/**
  * Update STATE.md when a new phase begins execution.
  * Updates body text fields (Current focus, Status, Last Activity, Current Position)
  * and synchronizes frontmatter via writeStateMd.
@@ -4696,6 +5193,8 @@ function cmdStateBeginPhase(cwd, phaseNumber, phaseName, planCount, raw) {
         phaseNumber: phaseNumber,
         phaseName: phaseName ?? null,
         planCount: planCount ?? null,
+        // #4945: a gap-closure re-entry starts at the first plan still to run, not at plan 1.
+        startPlan: firstPlanToRun(cwd, phaseNumber),
     };
     const deps = {
         clock: clock_cjs_1.realClock,
@@ -5049,7 +5548,8 @@ function cmdStatePlannedPhase(cwd, phaseNumber, phaseName, planCount, raw) {
         if (!intent.phaseName) {
             const preFm = extractFrontmatter(content, statePath);
             const curatedName = preFm['current_phase_name'];
-            if (typeof curatedName === 'string' && curatedName.trim().length > 0) {
+            // #5369: a status fragment a pre-fix write left as the name is not curated; do not reassert it.
+            if (typeof curatedName === 'string' && curatedName.trim().length > 0 && !phaseIdMod.isPlannedPhaseStatusPhrase(curatedName)) {
                 rmwOptions.authoritativeFm = { current_phase_name: curatedName };
             }
         }
@@ -5278,7 +5778,7 @@ function cmdStateValidate(cwd, raw, opts = {}) {
     const { fm, body, scope: initialScope } = readStateFrontmatterScoped(content, statePath);
     const scope = initialScope;
     const status = (0, state_document_cjs_1.stateFieldValue)(fm, body, 'status', 'Status').value || '';
-    const resolvedPhase = resolveStatePhase(fm, body);
+    const resolvedPhase = resolveStatePhase(fm, body, resolvePhaseIdConvention(cwd));
     const currentPhase = resolvedPhase.phase;
     const totalPlansRaw = (0, state_document_cjs_1.stateFieldValue)(fm, body, 'total_plans_in_phase', 'Total Plans in Phase').value;
     const totalPlansInPhase = totalPlansRaw ? parseInt(totalPlansRaw, 10) : null;
@@ -5563,7 +6063,13 @@ function cmdStateSync(cwd, options, raw) {
         // #612: `syncConvention` threaded — the write-side half of
         // buildStateFrontmatter's thread above, so `state sync` and `state json`
         // keep agreeing on completed_phases under the bracket convention.
-        if (isPhaseComplete(dirPath, { convention: syncConvention }).value.complete)
+        // #5118 (no write before the error): `state sync` writes STATE.md only
+        // after this scan, so an out-of-set report status fails it here, having
+        // written nothing.
+        const completion = isPhaseComplete(dirPath, { convention: syncConvention });
+        if (completion.value.statusError)
+            throw completion.value.statusError;
+        if (completion.value.complete)
             diskCompletedPhases++;
         // Track the highest phase with incomplete plans (or any plans)
         const phaseMatch = dir.match(new RegExp(`^(${PHASE_NUMBER_TOKEN_SOURCE})`, 'i'));
@@ -5610,8 +6116,10 @@ function cmdStateSync(cwd, options, raw) {
     // set — leave Progress untouched (percent=null) rather than silently writing
     // fallback-derived wrong values. Projects without a milestone version (the common
     // sync-test shape) are unaffected: the gate only fires when a version is asserted.
-    const fmVersion = extractFrontmatter(content, statePath).milestone;
-    const versionStr = typeof fmVersion === 'string' && fmVersion.trim() ? fmVersion.trim() : null;
+    const syncFm = extractFrontmatter(content, statePath);
+    const fmVersion = syncFm.milestone;
+    const milestoneExplicitlyNull = isMilestoneExplicitlyNull(syncFm);
+    const versionStr = typeof fmVersion === 'string' && fmVersion.trim() && !milestoneExplicitlyNull ? fmVersion.trim() : null;
     let milestoneBounded = true;
     if (versionStr !== null && syncRoadmapRaw !== null) {
         // #3184: routed through the single owner (roadmap-parser.cjs) instead of
@@ -5619,6 +6127,10 @@ function cmdStateSync(cwd, options, raw) {
         // fix in buildStateFrontmatter above. #612 composes its gated bracket
         // extension on top inside isMilestoneBounded.
         milestoneBounded = isMilestoneBounded(syncRoadmapRaw, versionStr, syncConvention);
+    }
+    else if (milestoneExplicitlyNull && syncRoadmapRaw !== null && hasAnyMilestoneSection(syncRoadmapRaw)) {
+        // #5038: mirror buildStateFrontmatter's silent explicit-null withhold.
+        milestoneBounded = false;
     }
     let percent = null;
     if (!milestoneBounded) {
@@ -5720,7 +6232,7 @@ function cmdStatePrune(cwd, options, raw) {
     const body = stripFrontmatter(rawState);
     // Prune needs an integer cutoff, so it parses the resolved id itself; a
     // non-numeric or absent id lands on 0 and prune bails, as before.
-    const currentPhase = parseInt(String(resolveCurrentPhaseId(fm, body)), 10) || 0;
+    const currentPhase = parseInt(String(resolveCurrentPhaseId(fm, body, resolvePhaseIdConvention(cwd))), 10) || 0;
     const cutoff = currentPhase - keepRecent;
     if (cutoff <= 0) {
         emit({ pruned: false, reason: `Only ${currentPhase} phases — nothing to prune with --keep-recent ${keepRecent}` }, raw, 'false');
@@ -6169,6 +6681,35 @@ function cmdStateCompletePhase(cwd, raw, overridePhase) {
     if (wrote)
         publishStateContract(cwd);
 }
+/**
+ * #5118 (no write before the error): throws `VerificationStatusError` when a
+ * verification report in the set every STATE.md write rebuilds its frontmatter
+ * from carries a `status` outside the closed set — and returns having done
+ * nothing else. It runs `buildStateFrontmatter` itself (the SAME disk scan,
+ * milestone scoping and dedupe every write performs), so a caller that writes
+ * OTHER files before STATE.md (`phase complete`, `phase remove`, `quick
+ * archive`, `validate health --repair`) refuses for exactly the phases the
+ * STATE.md write would refuse for — the set cannot drift from a second copy.
+ */
+function assertVerificationReportsReadable(bodyContent, cwd) {
+    buildStateFrontmatter(bodyContent, cwd);
+}
+/**
+ * The phase directory NAMES (under `.planning/phases/`) a STATE.md frontmatter
+ * rebuild scans — milestone-scoped, retired phases dropped, one per phase key
+ * (`scanStatePhaseDirs`). For a caller that must validate the reports a rebuild
+ * WILL read after it has removed a directory of its own (`phase remove`): it
+ * takes this set and drops the directory it is about to delete (#5118).
+ */
+function statePhaseDirsToScan(cwd) {
+    const phasesDir = planningPaths(cwd).phases;
+    if (!node_fs_1.default.existsSync(phasesDir))
+        return [];
+    // quiet: this is a pre-write validation pass, always followed by the real
+    // rebuild scan (buildStateFrontmatter), which owns the duplicate-phase-key
+    // stderr warning — so the command prints it once, not twice.
+    return scanStatePhaseDirs(cwd, phasesDir, resolvePhaseIdConvention(cwd), undefined, { quiet: true }).phaseDirs;
+}
 module.exports = {
     stateExtractField: state_document_cjs_1.stateExtractField,
     stateReplaceField: state_document_cjs_1.stateReplaceField,
@@ -6178,6 +6719,8 @@ module.exports = {
     writeStateMd,
     readModifyWriteStateMd,
     syncStateFrontmatter,
+    assertVerificationReportsReadable,
+    statePhaseDirsToScan,
     // #3374: the shared post-sync preservation pass (snapshots + table-driven
     // applyStatePreservation + #2736 re-assert).
     applyPostSyncPreservation,
@@ -6239,6 +6782,12 @@ module.exports = {
     // pinning the table it reads (`_FRONTMATTER_KEY_TO_BODY_LABEL`) against
     // itself.
     _bodyLabelFor: bodyLabelFor,
+    // ADR-4629 §8.2/§8.3 (epic #4629, C2 #4866): the verifying executor and its
+    // pure verifier. No production caller constructs a StateWriteIntent yet (C3+),
+    // so these are reached only by their positive-control tests.
+    applyStateWriteIntent,
+    _verifyStateWriteIntent: verifyStateWriteIntent,
+    STATE_WRITE_INTENT_FAILURE,
     // Test seam (audit M1): inject a deterministic isPidAlive so the liveness-gated
     // steal decision is exercised without real pids. Mirrors capability-lock.cts.
     _setLockProbes(probes) {

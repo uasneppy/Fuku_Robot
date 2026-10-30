@@ -14,6 +14,7 @@ exports.isUnfilledFieldValue = isUnfilledFieldValue;
 exports.leadingCalendarDate = leadingCalendarDate;
 exports.isRealCalendarDate = isRealCalendarDate;
 exports.stateFieldContinuation = stateFieldContinuation;
+exports.fieldContinuationEnd = fieldContinuationEnd;
 exports.stateExtractField = stateExtractField;
 exports.stateFieldValue = stateFieldValue;
 exports.stateCurrentPositionSlice = stateCurrentPositionSlice;
@@ -30,6 +31,7 @@ const markdown_table_cjs_1 = require("./markdown-table.cjs");
 const phase_lifecycle_cjs_1 = require("./phase-lifecycle.cjs");
 const markdown_sectionizer_cjs_1 = require("./markdown-sectionizer.cjs");
 const pattern_cjs_1 = require("./pattern.cjs");
+const planning_document_cjs_1 = require("./planning-document.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- planning-scope.cjs is an export= CommonJS module
 const planningScopeMod = require("./planning-scope.cjs");
 const { SCOPE } = planningScopeMod;
@@ -358,6 +360,8 @@ const STATE_SIBLING_FIELD_LINE_RE = /^\*{0,2}[A-Za-z][A-Za-z0-9 _-]*\*{0,2}:{1,2
  * cannot wrap), or is followed by end-of-file, a blank line, Markdown
  * structure, or a sibling field.
  */
+/** The line terminators the STATE.md readers (JS `m`-flag `^`/`$`) treat as a line boundary. */
+const LINE_SEPARATOR_RE = /[\n\u2028\u2029]/;
 function stateFieldContinuation(content, fieldName) {
     const escaped = (0, pattern_cjs_1.escapeRegex)(fieldName);
     // Same two single-line grammars stateExtractField uses, in the same order, so
@@ -374,10 +378,21 @@ function stateFieldContinuation(content, fieldName) {
     // before testing for the newline.
     const afterValue = match.index + match[0].length;
     const rest = content.slice(afterValue).replace(/^\r/, '');
-    if (!rest.startsWith('\n'))
+    // #5460: U+2028 / U+2029 are line starts to the `m`-flag readers (and stop `(.+)`), so they end
+    // the value's line exactly as `\n` does.
+    if (!/^[\n\u2028\u2029]/.test(rest))
         return null; // end of file: nothing follows
-    const lines = rest.slice(1).split('\n').map((line) => line.replace(/\r$/, ''));
-    const continuation = [];
+    const lines = rest.slice(1).split(LINE_SEPARATOR_RE).map((line) => line.replace(/\r$/, ''));
+    const continuation = lines.slice(0, continuationLineCount(lines)).map((line) => line.trim());
+    return continuation.length ? continuation.join(' ') : null;
+}
+/**
+ * How many of the lines directly below a single-line field belong to its value: the scan
+ * `stateFieldContinuation` reports on, shared so a writer that replaces the value removes exactly
+ * the lines a validator would call its continuation (#4945). `lines` are CR-free.
+ */
+function continuationLineCount(lines) {
+    let count = 0;
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (!line.trim())
@@ -390,9 +405,37 @@ function stateFieldContinuation(content, fieldName) {
         // title, so stop before consuming it rather than after.
         if (i + 1 < lines.length && SETEXT_UNDERLINE_RE.test(lines[i + 1]))
             break;
-        continuation.push(line.trim());
+        count++;
     }
-    return continuation.length ? continuation.join(' ') : null;
+    return count;
+}
+/**
+ * The index just past a single-line field's value AND the continuation lines that wrap it
+ * (#4945). `valueEnd` is where the field's own line ends (before its line terminator). Replacing
+ * `content.slice(valueEnd, result)` with nothing removes every continuation line and the
+ * terminator in front of each, so the terminator after the last one stays. Returns `valueEnd`
+ * when nothing continues the value.
+ */
+function fieldContinuationEnd(content, valueEnd) {
+    const tail = content.slice(valueEnd);
+    // #5460: the readers' `m`-flag `^` also starts a line after U+2028 / U+2029, so a continuation
+    // scan that split on `\n` alone swallowed `...tail<U+2028>Stopped at: x` as ONE continuation line
+    // and deleted the sibling field with it. Each separator is one UTF-16 unit, like `\n`, so the
+    // removal arithmetic below is unchanged.
+    const first = /^(?:\r?\n|[\u2028\u2029])/.exec(tail);
+    if (!first)
+        return valueEnd;
+    const rawLines = tail.slice(first[0].length).split(LINE_SEPARATOR_RE);
+    const count = continuationLineCount(rawLines.map((line) => line.replace(/\r$/, '')));
+    if (count === 0)
+        return valueEnd;
+    let removed = first[0].length + (count - 1);
+    for (let i = 0; i < count; i++)
+        removed += rawLines[i].length;
+    // The terminator after the last continuation line stays; on a CRLF document that includes its CR.
+    if (rawLines[count - 1].endsWith('\r'))
+        removed -= 1;
+    return valueEnd + removed;
 }
 function stateExtractField(content, fieldName) {
     const escaped = (0, pattern_cjs_1.escapeRegex)(fieldName);
@@ -536,29 +579,106 @@ function joinFieldReplacement(prefix, newValue) {
 function stateReplaceField(content, fieldName, newValue) {
     const escaped = (0, pattern_cjs_1.escapeRegex)(fieldName);
     // Bold inline format: **FieldName:** value
-    // The label-to-value gap is same-line whitespace only (`[ \t]*`, mirroring the
-    // read side at stateExtractField). `\s*` here matched `\n`, so on an empty field
-    // `(.*)` captured the following line and the rebuild discarded it — the #4010
-    // data-loss. ADR-3180 §7.7 makes stateExtractField the same-line-confined owner;
-    // this aligns the writer to it.
     //
-    // #4243: the bold form is also ANCHORED to line start, with same-line leading
-    // whitespace only. The pre-fix pattern carried no `^` and no `m` flag, so a
-    // bold label quoted MID-SENTENCE inside prose — an Accumulated Context bullet
-    // mentioning `**Status:**` — captured the rewrite and destroyed the rest of
-    // its line, silently, whenever a whole-body caller fed this function every
-    // section (beginPhaseCore's tryField, advancePlanCore's Status/Current Plan
-    // writes). The plain branch below was always line-anchored; only the bold
-    // branch lagged. Anchoring reuses #4010's same-line confinement idiom (the
-    // leading class is `[ \t]*`, deliberately NOT the `\s*` the issue suggested —
-    // `^\s*\*\*` can consume the newlines before the label into the match and
-    // drop them on rebuild) and #4186's recognition-by-anchoring discipline: a
-    // write target must BE the whole declared line shape, never a substring
-    // guess inside prose. `$` is explicit-and-inert (`.` never crosses line
-    // terminators) and documents that the match ends at end-of-line.
-    const boldPattern = new RegExp(`^([ \\t]*\\*\\*${escaped}:\\*\\*[ \\t]*)(.*)$`, 'im');
-    if (boldPattern.test(content)) {
-        return content.replace(boldPattern, (_match, prefix) => joinFieldReplacement(prefix, newValue));
+    // #5007 (Phase 6 / ADR-4910 amendment): migrated off the hand-rolled
+    // `^([ \t]*\*\*${escaped}:\*\*[ \t]*)(.*)$` regex (which, per #4010/#4243
+    // below, already existed to fix real same-line-confinement and mid-prose
+    // data-loss bugs) onto `parsePlanningDoc` for LOCATING the field — same-
+    // line confinement AND fence/frontmatter exclusion (parseBoldFieldLine
+    // never matches inside a fenced block or frontmatter, which the removed
+    // regex could not tell apart from prose) — so this migration keeps
+    // #4010/#4243's fix and extends it, rather than replacing it with a
+    // weaker check.
+    //
+    // This does NOT go through the seam's `setFieldValue`/`serialize` write
+    // path. An earlier version of this migration did, via a since-removed
+    // `setFieldValue({ allowSeparator: true })` option (#5007) — that option
+    // spliced the caller's value across the FULL rest-of-line span
+    // (`valueSpan.start`..`trailingSpan.end`) to permit a value containing the
+    // grammar's ` — ` trailing-separator token (needed here: see the
+    // `${currentPhase} — COMPLETE` value below). It was removed after a
+    // failing-first reproduction proved it only avoided the write-time
+    // refusal: the bytes it writes are correct, but `parseBoldFieldLine`
+    // splits on ` — ` unconditionally on every read, with no escaping
+    // convention in this grammar to tell "atomic value containing the token"
+    // apart from "value plus hand-annotation". So the NEXT fresh
+    // `parsePlanningDoc` of that exact text — not the in-memory doc the
+    // option's own tests checked — silently re-truncates the value and
+    // demotes the rest to `trailingSpan`, with `findField`/`readNode`
+    // reporting a confident, wrong `ok: true` and no error. That is exactly
+    // the #4917 finding-2 corruption `setFieldValue`'s round-trip check
+    // exists to prevent, just moved one parse cycle downstream. This call
+    // site never reads STATE.md fields back through `parsePlanningDoc`/
+    // `findField` (reads go through `stateExtractField`'s own non-splitting
+    // regex, below), so it is safe HERE — but making that a shared, public
+    // option on the seam's `setFieldValue` was an attractive nuisance for any
+    // future `findField`/`readNode` caller (this same module already serves
+    // ROADMAP.md's `Plans`/`Depends on` fields that way). The full-rest-of-
+    // line splice is done locally, directly against `content`, instead —
+    // `parsePlanningDoc` is used only to locate the field's spans.
+    //
+    // Two deliberate deviations from a bare findField() call, both
+    // PRESERVING this function's own prior contract rather than adopting the
+    // seam's stricter defaults:
+    //
+    //  1. Label lookup here is case-INSENSITIVE (not findField's exact
+    //     match), mirroring the removed regex's `i` flag: callers in
+    //     state.cts/state-transition.cts pass a fieldName spelling that can
+    //     differ only in case from what a given template actually has (the
+    //     explicit 'Last Activity' / 'Last activity' fallback-call pairs at
+    //     those call sites), so a case-sensitive lookup would silently miss
+    //     matches the removed regex used to find.
+    //  2. Every write below replaces the FULL rest-of-line span
+    //     (`valueSpan.start`..`trailingSpan.end`) UNCONDITIONALLY, not only
+    //     when `newValue` contains the grammar's ` — ` separator token,
+    //     because `joinFieldReplacement` always discarded the OLD regex's
+    //     entire captured tail (`(.*)$` — both what the seam calls
+    //     `valueSpan` AND `trailingSpan`) and replaced it wholesale with the
+    //     new value. This call site never had a "preserve a hand-written
+    //     trailing annotation" contract, so writing anything narrower than
+    //     the full rest-of-line span here would be a NEW, untested behavior
+    //     this migration must not introduce as a side effect.
+    //
+    // Matching BOTH bold-placement spellings (`**Label:**` and `**Label**:`,
+    // `BOLD_FIELD_RE`) where the removed regex recognized only `**Label:**`
+    // is the same, already-precedented widening as the "Depends on"
+    // migration (src/phase.cts) — intentional, not scope creep.
+    //
+    // A parse failure, an absent/case-mismatched label, or a value containing
+    // a line break (\r/\n — would forge sibling structure on splice, the same
+    // hazard `setFieldValue` refuses unconditionally at #4917/ADR-4910
+    // Decision 2 & 4; this local splice has no seam call to inherit that
+    // refusal from, so it is re-checked here) falls through to the
+    // plain/pipe-table branches below unchanged — the same silent
+    // per-occurrence no-op-on-no-match contract the removed regex had for any
+    // input it didn't match.
+    const parsed = (0, planning_document_cjs_1.parsePlanningDoc)(content, 'STATE.md');
+    if (parsed.ok) {
+        let boldField = null;
+        for (const node of parsed.value.nodes) {
+            if (node.kind !== 'boldField')
+                continue;
+            if (node.label.toLowerCase() !== fieldName.toLowerCase())
+                continue;
+            boldField = node;
+            break;
+        }
+        if (boldField) {
+            // Replicates joinFieldReplacement's own `` `${newValue}` `` coercion
+            // (a caller may pass a non-string, e.g. a number, at the JS boundary
+            // even though the type signature says `string`) before the
+            // missing-separator normalization below: insert a single space when
+            // the existing label-to-value gap has none, so `**Status:**value`
+            // still becomes `**Status:** value` rather than gluing the two
+            // together.
+            const spacingText = parsed.value.source.slice(boldField.labelSpan.end, boldField.valueSpan.start);
+            const newValueStr = `${newValue}`;
+            const needsSeparator = newValueStr.length > 0 && !/[ \t]$/.test(spacingText);
+            const writeValue = `${needsSeparator ? ' ' : ''}${newValueStr}`;
+            if (!/[\r\n]/.test(writeValue)) {
+                return (content.slice(0, boldField.valueSpan.start) + writeValue + content.slice(boldField.trailingSpan.end));
+            }
+        }
     }
     // Plain line-start format: FieldName: value (same same-line confinement as above)
     const plainPattern = new RegExp(`(^${escaped}:[ \\t]*)(.*)`, 'im');

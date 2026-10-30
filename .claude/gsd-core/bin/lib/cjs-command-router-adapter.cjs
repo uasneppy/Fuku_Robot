@@ -21,9 +21,12 @@ const { createHub, ERROR_KINDS } = commandRoutingHub;
 // --json-errors). Enabling stderr-on-error unconditionally by default is a
 // separate, blast-radius-bearing change (it adds a second stderr line to the
 // --json-errors envelope) — deferred as its own follow-up.
+// #4975: #2620 wired only the env half — the gate was evaluated without the
+// project config. resolveDispatchLogger owns the whole opt-in decision
+// (GSD_AUDIT or `audit.enabled`) for every live seam.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const observabilityLogger = require("./observability/logger.cjs");
-const { createDefaultLogger, isAuditEnabled } = observabilityLogger;
+const { resolveDispatchLogger } = observabilityLogger;
 // Phase 2 (#1646): import ERROR_REASON so the UnknownCommand translation can
 // pass `sdk_unknown_command` as the second arg to error(), preserving the
 // JSON-error envelope contract that capability routers' tests assert on.
@@ -87,7 +90,8 @@ function routeHubCommandFamily({ family, args, subcommands, handlers, defaultSub
         // #2620: wire the reference logger onto the live dispatch path (ADR-0174 §6),
         // but only when observability is opt-in enabled — otherwise leave it unset
         // so the Hub falls back to the no-op logger and stays byte-for-byte silent.
-        logger: isAuditEnabled() ? createDefaultLogger({ cwd }) : undefined,
+        // #4975: the opt-in is GSD_AUDIT=1 or `audit.enabled` in this cwd's config.
+        logger: resolveDispatchLogger(cwd),
     });
     const result = hub.dispatch({
         family,
@@ -124,6 +128,13 @@ function routeHubCommandFamily({ family, args, subcommands, handlers, defaultSub
     }
     if (result.kind === ERROR_KINDS.HandlerRefusal) {
         error(result.reason);
+        return;
+    }
+    if (result.kind === ERROR_KINDS.VerificationStatusInvalid) {
+        // #5118: the Result carries the VerificationStatusError's own message and
+        // reason — the error owns its ERROR_REASON; nothing here restates it.
+        const invalid = result;
+        error(invalid.message, invalid.reason);
         return;
     }
     error(result.message);

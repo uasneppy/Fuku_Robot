@@ -33,7 +33,7 @@ const { extractFrontmatter, stripFrontmatter } = frontmatterMod;
 const markdown_table_cjs_1 = require("./markdown-table.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- verification.cjs is an export= CommonJS module
 const verificationMod = require("./verification.cjs");
-const { isPhaseComplete } = verificationMod;
+const { isPhaseComplete, isVerificationStatus, VERIFICATION_STATUS } = verificationMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- phase-id.cjs is an export= CommonJS module
 const phaseIdMod = require("./phase-id.cjs");
 const { phaseKeyFromDir, phaseKeyFromProse, parentPhaseKey } = phaseIdMod;
@@ -269,7 +269,10 @@ function readVerificationLedger(wsDir) {
     }
     const out = {};
     for (const [key, value] of Object.entries(parsed)) {
-        if (typeof value === 'string')
+        // #5118: an entry outside the closed enum (a stored `unknown` from an
+        // older run) reads as absent — the phase then fails CLOSED to
+        // `unrecorded`, the same posture as a corrupt ledger.
+        if (isVerificationStatus(value))
             out[key] = value;
     }
     return { state: 'ok', entries: out };
@@ -555,7 +558,7 @@ function inspectWorkstream(cwd, name, options = {}) {
         // unverified-fallback diagnostic (#3057 B4) — the closest existing idiom,
         // since `WorkstreamInventory`'s aggregate return shape carries no
         // per-phase verification detail for this to attach to.
-        if (verificationResult.staleCheckIndeterminate) {
+        if ('staleCheckIndeterminate' in verificationResult && verificationResult.staleCheckIndeterminate) {
             writeDiagnostic(`⚠ workstream-inventory: verification staleness check could not complete for phase directory '${dir}' in workstream '${name}' — routed as not-stale, but this was not actually verified. See #3057.\n`, { phaseDir: dir, reason: 'staleCheckIndeterminate' });
         }
         return {
@@ -566,14 +569,24 @@ function inspectWorkstream(cwd, name, options = {}) {
             summaryCount: counts.summaryCount,
             inMilestone: isDirInCurrentMilestone(dir),
             liveVerificationStatus: verificationResult.status,
+            // #5118: the owner's out-of-set report error, carried to the check below.
+            statusError: completionResult.value.statusError,
             // ADR-3180 §7.4 (#3186): the owner's verdict, read live off disk — never
             // ledger-adjusted (see the phaseFilesCounts map below; the ledger only
             // ever substitutes a 'missing' status with a remembered one, and under
-            // disk-strict neither 'missing' nor 'unrecorded' is ever complete, so
-            // there is nothing for the ledger to override here).
+            // disk-strict 'missing' is never complete, so there is nothing for the
+            // ledger to override here).
             complete: completionResult.value.complete,
         };
     });
+    // #5118 (no write before the error): this inspection WRITES the ledger
+    // below, so a report whose `status` is outside the closed set fails it
+    // first — the owner's own error thrown as-is (like `init *`, `phase *` and
+    // `state *`), which the CLI entry seam projects once into its reason and
+    // message; nothing persisted.
+    const firstStatusError = rawPhaseEntries.find((entry) => entry.statusError)?.statusError;
+    if (firstStatusError)
+        throw firstStatusError;
     // #2645: only the directory Bug #2445's de-dup rollup would actually pick
     // for a phase key may read or write that key's ledger entry. Letting every
     // same-keyed directory (including a stale leftover) write would let a
@@ -604,10 +617,11 @@ function inspectWorkstream(cwd, name, options = {}) {
     const verificationLedger = ledgerRead.entries;
     let ledgerDirty = false;
     for (const winner of ledgerWinnerByKey.values()) {
-        if (winner.liveVerificationStatus === 'missing')
+        const live = winner.liveVerificationStatus;
+        if (live === null || live === VERIFICATION_STATUS.MISSING)
             continue;
-        if (verificationLedger[winner.phaseKey] !== winner.liveVerificationStatus) {
-            verificationLedger[winner.phaseKey] = winner.liveVerificationStatus;
+        if (verificationLedger[winner.phaseKey] !== live) {
+            verificationLedger[winner.phaseKey] = live;
             ledgerDirty = true;
         }
     }
@@ -620,20 +634,16 @@ function inspectWorkstream(cwd, name, options = {}) {
         writeVerificationLedger(wsDir, verificationLedger);
     const phaseFilesCounts = rawPhaseEntries.map(entry => {
         const isLedgerWinner = ledgerWinnerByKey.get(entry.phaseKey) === entry;
+        // A live `missing` on the ledger winner reads the remembered verdict when
+        // there is one. #5118: the former `unrecorded` state ("adopted, never
+        // recorded") is deleted — its only reader, phaseStatusFromFacts, treats it
+        // exactly like `missing` (only `human_needed` changes the ladder, and under
+        // disk-strict neither is ever complete), so it was a dead distinction.
         let verificationStatus = entry.liveVerificationStatus;
-        if (entry.liveVerificationStatus === 'missing' && isLedgerWinner) {
-            if (ledgerRead.state === 'absent') {
-                // State 1: pre-adoption. Exactly today's behavior — 'missing' is
-                // NOT in FAILING_VERIFICATION_STATUSES, so this does not gate.
-                verificationStatus = 'missing';
-            }
-            else {
-                // States 2/3 ('corrupt' or 'ok'): this workstream has adopted the
-                // ledger. A remembered entry wins; no entry fails CLOSED to the
-                // 'unrecorded' sentinel rather than falling open to 'missing'.
-                const remembered = verificationLedger[entry.phaseKey];
-                verificationStatus = remembered !== undefined ? remembered : 'unrecorded';
-            }
+        if (entry.liveVerificationStatus === VERIFICATION_STATUS.MISSING && isLedgerWinner) {
+            const remembered = verificationLedger[entry.phaseKey];
+            if (remembered !== undefined)
+                verificationStatus = remembered;
         }
         return {
             directory: entry.directory,
