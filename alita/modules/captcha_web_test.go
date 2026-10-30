@@ -22,6 +22,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db"
 	dbcache "github.com/divkix/Alita_Robot/alita/db/cache"
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
+	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
 )
@@ -442,4 +443,167 @@ func TestCaptchaWebTracerJoinVerifyUnmute(t *testing.T) {
 			t.Fatal("stale initData changed the challenge or the attempt")
 		}
 	})
+}
+
+// handBuiltCallback builds callback data the way a modified client can send it: the codec's
+// 64-byte cap is a limit of the buttons the bot encodes, not of what arrives.
+func handBuiltCallback(namespace string, fields map[string]string) string {
+	values := url.Values{}
+	for k, v := range fields {
+		values.Set(k, v)
+	}
+	return namespace + "|v1|" + values.Encode()
+}
+
+// callMethodsSince lists the methods the client was called with from index start on.
+func callMethodsSince(client *moduleBotClient, start int) []string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	var out []string
+	for _, call := range client.calls[start:] {
+		out = append(out, call.Method)
+	}
+	return out
+}
+
+func callCount(client *moduleBotClient) int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return len(client.calls)
+}
+
+func TestCaptchaWebAttemptRefusesCallbacks(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	token := env.join(member)
+	before := env.attempt(member.Id)
+	if before == nil {
+		t.Fatal("no attempt after the join")
+	}
+
+	lastAnswerText := func(t *testing.T, want int) string {
+		t.Helper()
+		answers := env.client.callsFor("answerCallbackQuery")
+		if len(answers) != want {
+			t.Fatalf("answerCallbackQuery calls = %d, want %d", len(answers), want)
+		}
+		return fmt.Sprint(answers[len(answers)-1].Params["text"])
+	}
+	assertUntouched := func(t *testing.T) {
+		t.Helper()
+		after := env.attempt(member.Id)
+		if after == nil {
+			t.Fatal("the attempt row was removed")
+		}
+		if after.ID != before.ID || after.Answer != before.Answer || after.Attempts != 0 ||
+			after.MessageID != before.MessageID || after.RefreshCount != before.RefreshCount {
+			t.Fatalf("attempt changed: before %+v after %+v", before, after)
+		}
+		if restricts := env.client.callsFor("restrictChatMember"); len(restricts) != 1 {
+			t.Fatalf("restrictChatMember calls = %d, want only the join mute", len(restricts))
+		}
+		if photos := env.client.callsFor("sendPhoto"); len(photos) != 0 {
+			t.Fatalf("sendPhoto calls = %d, want no new image", len(photos))
+		}
+	}
+
+	verifyWith := func(answer string) string {
+		return handBuiltCallback("captcha_verify", map[string]string{"a": fmt.Sprint(before.ID), "u": "42", "s": answer})
+	}
+	for i, data := range []string{
+		verifyWith(before.Answer), // the stored answer itself
+		verifyWith("7"),           // a plain wrong answer
+		handBuiltCallback("captcha_refresh", map[string]string{"a": fmt.Sprint(before.ID), "u": "42", "r": "0"}),
+	} {
+		ctx := newModuleCallbackContext(env.bot, env.chat, member, data)
+		var err error
+		if i < 2 {
+			err = captchaModule.captchaVerifyCallback(env.bot, ctx)
+		} else {
+			err = captchaModule.captchaRefreshCallback(env.bot, ctx)
+		}
+		if err != nil {
+			t.Fatalf("callback %d error = %v", i, err)
+		}
+		if text := lastAnswerText(t, i+1); !strings.Contains(text, staffMarker("captcha_attempt_not_valid")) {
+			t.Fatalf("callback %d answered %q, want captcha_attempt_not_valid", i, text)
+		}
+		assertUntouched(t)
+	}
+
+	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("verify after the refused callbacks = %d %q, want 200 passed", status, answer.Result)
+	}
+}
+
+func TestCaptchaPassSharedByCallbackAndWeb(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+
+	// The button pass: a math attempt in its own chat.
+	buttonClient := newModuleBotClient()
+	buttonBot := newModuleTestBot(buttonClient)
+	buttonChat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Button Chat"}
+	withStaffLocale(t)
+	attempt, err := captcha.CreateCaptchaAttemptPreMessage(member.Id, buttonChat.Id, "7", 2)
+	if err != nil {
+		t.Fatalf("CreateCaptchaAttemptPreMessage() error = %v", err)
+	}
+	if err := captcha.UpdateCaptchaAttemptMessageID(attempt.ID, 123); err != nil {
+		t.Fatalf("UpdateCaptchaAttemptMessageID() error = %v", err)
+	}
+	if err := captcha.StoreMessageForCaptcha(member.Id, buttonChat.Id, attempt.ID, db.TEXT, "held", "", ""); err != nil {
+		t.Fatalf("StoreMessageForCaptcha() error = %v", err)
+	}
+	data := encodeCallbackData("captcha_verify", map[string]string{"a": fmt.Sprint(attempt.ID), "u": "42", "s": "7"})
+	if err := captchaModule.captchaVerifyCallback(buttonBot, newModuleCallbackContext(buttonBot, buttonChat, member, data)); err != nil {
+		t.Fatalf("captchaVerifyCallback() error = %v", err)
+	}
+
+	// The web pass: a Turnstile attempt in another chat.
+	env := newCaptchaWebEnv(t)
+	token := env.join(member)
+	webAttempt := env.attempt(member.Id)
+	if err := captcha.StoreMessageForCaptcha(member.Id, env.chat.Id, webAttempt.ID, db.TEXT, "held", "", ""); err != nil {
+		t.Fatalf("StoreMessageForCaptcha(web) error = %v", err)
+	}
+	start := callCount(env.client)
+	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("verify = %d %q, want 200 passed", status, answer.Result)
+	}
+
+	// getChat is read once more by the web pass for the greeting, and the button answers its
+	// callback query; neither is part of the shared pass.
+	passCalls := func(methods []string) []string {
+		var out []string
+		for _, m := range methods {
+			if m != "getChat" && m != "answerCallbackQuery" {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	got := passCalls(callMethodsSince(env.client, start))
+	want := passCalls(callMethodsSince(buttonClient, 0))
+	if len(want) < 5 || strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("web pass calls = %v, button pass calls = %v, want the same non-empty sequence", got, want)
+	}
+	for _, m := range []string{"restrictChatMember", "sendMessage", "deleteMessage"} {
+		if !strings.Contains(strings.Join(got, ","), m) {
+			t.Fatalf("pass calls %v lack %s", got, m)
+		}
+	}
+
+	for name, chatID := range map[string]int64{"button": buttonChat.Id, "web": env.chat.Id} {
+		if current, err := captcha.GetCaptchaAttempt(member.Id, chatID); err != nil || current != nil {
+			t.Fatalf("%s: attempt after the pass = %#v, %v; want nil, nil", name, current, err)
+		}
+		var muted int64
+		if err := db.DB.Model(&models.CaptchaMutedUsers{}).
+			Where("user_id = ? AND chat_id = ?", member.Id, chatID).Count(&muted).Error; err != nil {
+			t.Fatalf("%s: count captcha_muted_users: %v", name, err)
+		}
+		if muted != 0 {
+			t.Fatalf("%s: captcha_muted_users rows = %d, want none after a pass", name, muted)
+		}
+	}
 }
