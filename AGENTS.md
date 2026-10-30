@@ -234,6 +234,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (never a position, so a list that was reordered since it was drawn cannot link another group), and only then makes
   `resolveNamedStaffGroup`'s live creator check. An `s` that is not a positive number of at most 10 digits is an invalid
   request; one that names no row of the presser is refused with `staff_link_refuse_not_staff_owner` and links nothing.
+  Link without `s` makes `/linkstaff`'s own decision over the same live list (`decideOwnStaffGroup`): none is
+  `settings_staff_no_group`, one match with a group that could not be verified is `staff_check_failed` (never a one-button
+  picker), one clean match links at once, and several make the picker, which lists at most 8 and adds
+  `settings_staff_pick_more` (how many are missing and that `/linkstaff <id>` links any of them) when there are more.
   The Unlink card is the shared two-tap card of `settings_card.go`: `settingsCardRows` adds `[Yes | No]` and the
   navigation row, Yes carries `e` (unix minutes, `settingsCardLifetime` 5 minutes ahead, a variable only for tests), expiry
   is lazy (`settingsCardExpired`: a Yes whose minute is past redraws the page with `settings_card_expired` and runs

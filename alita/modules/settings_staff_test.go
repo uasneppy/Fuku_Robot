@@ -561,6 +561,44 @@ func TestSettingsStaffLink(t *testing.T) {
 		}
 	})
 
+	// /linkstaff without an argument fails closed when a candidate cannot be verified, even
+	// beside one verified match, because the unverified one might be a second match. The menu
+	// refuses the same way instead of showing a one-button picker (IN-04).
+	t.Run("one verified match beside an unverifiable one is refused like the command", func(t *testing.T) {
+		previousDelay := staffSelfDeleteAfter
+		staffSelfDeleteAfter = time.Hour
+		t.Cleanup(func() { staffSelfDeleteAfter = previousDelay })
+
+		env := newSettingsEnv(t)
+		good := settingsStaffTestOwnedStaffGroup(env, "Good Staff")
+		unverifiable := settingsStaffTestOwnedStaffGroup(env, "Unverifiable Staff")
+		env.fake.setFailure("getChatAdministrators", unverifiable.Id, errors.New("boom"))
+
+		env.send(env.admin, "/linkstaff")
+		if reply := env.lastReply(); !strings.Contains(reply, staffMarker("staff_check_failed")) {
+			t.Fatalf("/linkstaff replied %q, want staff_check_failed", reply)
+		}
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Fatalf("/linkstaff linked the group beside an unverifiable candidate: %+v", link)
+		}
+
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_check_failed"))
+		settingsStaffTestWantAbsent(t, text, staffMarker("settings_staff_pick"), good.Title)
+		if _, onPicker := settingsButtonByMarker(keyboard, "settings_btn_staff_pick_n"); onPicker {
+			t.Errorf("the menu showed a picker: %+v", keyboard)
+		}
+		if link := settingsStaffTestLinkOf(t, env); link != nil {
+			t.Errorf("the menu linked the group beside an unverifiable candidate: %+v", link)
+		}
+		if got := settingsStaffTestMessagesWith(env, good.Id, "staff_link_done"); got != 0 {
+			t.Errorf("the Staff Group got %d link notices, want none", got)
+		}
+	})
+
 	t.Run("a basic group is refused with its escaped title", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		settingsStaffTestOwnedStaffGroup(env, "Staff HQ")
@@ -611,6 +649,34 @@ func TestSettingsStaffPick(t *testing.T) {
 			settingsStaffTestWantFields(t, button, env.groupFields(env.admin, "a", "lk", "s", strconv.FormatUint(uint64(ids[i]), 10)))
 			settingsStaffTestWantAbsent(t, text+button.Text+button.CallbackData, chats[i].Title, strconv.FormatInt(chats[i].Id, 10))
 		}
+	})
+
+	// The picker lists settingsStaffPickMax groups. A presser with more is told how many are
+	// missing and that /linkstaff takes an ID, and a presser with no more is told nothing
+	// (IN-04).
+	t.Run("a presser with more Staff Groups than the picker lists is told how to link the rest", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		const owned = settingsStaffPickMax + 2
+		for i := 0; i < owned; i++ {
+			settingsStaffTestOwnedStaffGroup(env, fmt.Sprintf("Staff %02d", i))
+		}
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, staffMarker("settings_staff_pick_more")+" "+strconv.Itoa(owned-settingsStaffPickMax))
+		if got := len(settingsAllButtons(keyboard)); got != settingsStaffPickMax+2 {
+			t.Errorf("the picker has %d buttons, want %d picks and Back and Close", got, settingsStaffPickMax)
+		}
+	})
+
+	t.Run("a picker that lists every Staff Group has no more line", func(t *testing.T) {
+		env, _, _ := newPicker(t)
+		msgID := env.openMenu(env.admin)
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
+
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantAbsent(t, text, staffMarker("settings_staff_pick_more"))
 	})
 
 	t.Run("a private menu labels the buttons with the titles", func(t *testing.T) {

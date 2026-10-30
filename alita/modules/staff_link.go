@@ -175,6 +175,14 @@ func resolveOwnStaffGroup(b *gotgbot.Bot, issuer *gotgbot.User) (*models.StaffGr
 	if err != nil {
 		return nil, staffRefusalCheckFailedInPlace
 	}
+	return decideOwnStaffGroup(matched, unknown)
+}
+
+// decideOwnStaffGroup is the decision of /linkstaff without an argument over the live
+// verified list, shared with the settings menu's Link so the two cannot drift: several matches
+// need an explicit ID (the menu shows its picker instead), a candidate that could not be
+// verified fails closed, one match is used, and none is the no-Staff-Group refusal.
+func decideOwnStaffGroup(matched []models.StaffGroup, unknown int) (*models.StaffGroup, staffRefusal) {
 	// No candidate and no match are one refusal, so the text is the same.
 	switch {
 	case len(matched) > 1:

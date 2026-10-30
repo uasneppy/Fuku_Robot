@@ -350,16 +350,21 @@ func settingsStaffLinkRun(p *settingsPress) *settingsScreen {
 	p.answer("", false)
 
 	matched, unknown, err := listVerifiedOwnStaffGroups(p.b, &p.query.From)
-	switch {
-	case err != nil, len(matched) == 0 && unknown > 0:
+	if err != nil {
 		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, staffRefusalCheckFailedInPlace)))
-	case len(matched) == 0:
-		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, staffRefusalNoStaffGroup)))
-	case len(matched) == 1 && unknown == 0:
-		return settingsStaffLinkTo(p, &matched[0])
 	}
-	screen := renderSettingsStaffPicker(p.view(), matched, "")
-	return &screen
+	// The decision is /linkstaff's own (decideOwnStaffGroup): none, or one match beside a
+	// group that could not be verified, is a refusal, and one match links at once. Only
+	// several matches differ: the command asks for an explicit ID, the menu shows a picker.
+	only, refusal := decideOwnStaffGroup(matched, unknown)
+	switch refusal {
+	case staffRefusalNone:
+		return settingsStaffLinkTo(p, only)
+	case staffRefusalNeedStaffID:
+		screen := renderSettingsStaffPicker(p.view(), matched, "")
+		return &screen
+	}
+	return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, refusal)))
 }
 
 // settingsStaffPick handles lk with s, the staff_groups row ID of the Staff Group picked.
@@ -433,6 +438,10 @@ func renderSettingsStaffPicker(v settingsView, groups []models.StaffGroup, notic
 	}
 
 	body := []string{settingsText(v.Tr, "settings_staff_pick")}
+	if more := len(groups) - len(choices); more > 0 {
+		// The command can link any of them by its ID; the menu lists no more than fit.
+		body = append(body, settingsText(v.Tr, "settings_staff_pick_more", i18n.TranslationParams{"n": more}))
+	}
 	if !v.Private {
 		body = append(body, settingsText(v.Tr, "settings_staff_pick_private_hint"))
 	}
