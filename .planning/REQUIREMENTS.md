@@ -99,14 +99,14 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Settings menu
 
-- [ ] **MENU-01**: `/settings` in a group asks the admin whether to open the menu in the group or in their private chat with the bot.
-- [ ] **MENU-02**: A menu opened in the group can only be used by the admin who opened it. A menu opened in private manages the group it was opened from.
-- [ ] **MENU-03**: Every button press re-checks live that the presser is still an admin of the group being configured.
-- [ ] **MENU-04**: The menu edits one message in place, with Back and Close buttons.
-- [ ] **MENU-05**: The menu has a Staff Group page showing the `/staff` panel information. Linking and unlinking stay limited to the owner of both groups.
-- [ ] **MENU-06**: The menu has a Lockdown page showing the current state, a Lift button, and on/off switches and thresholds for each automatic trigger.
-- [ ] **MENU-07**: The menu has a Captcha page (mode, time limit) and an Antiflood page.
-- [ ] **MENU-08**: A setting changed in the menu is identical to the same setting changed by command.
+- [x] **MENU-01**: `/settings` in a group asks the admin whether to open the menu in the group or in their private chat with the bot.
+- [x] **MENU-02**: A menu opened in the group can only be used by the admin who opened it. A menu opened in private manages the group it was opened from.
+- [x] **MENU-03**: Every button press re-checks live that the presser is still an admin of the group being configured.
+- [x] **MENU-04**: The menu edits one message in place, with Back and Close buttons.
+- [x] **MENU-05**: The menu has a Staff Group page showing the `/staff` panel information. Linking and unlinking stay limited to the owner of both groups.
+- [x] **MENU-06**: The menu has a Lockdown page showing the current state, a Lift button, and on/off switches and thresholds for each automatic trigger.
+- [x] **MENU-07**: The menu has a Captcha page (mode, time limit) and an Antiflood page.
+- [x] **MENU-08**: A setting changed in the menu is identical to the same setting changed by command.
 
 ### Platform
 
@@ -221,14 +221,14 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | CAPT-06 | Phase 8 | Complete |
 | CAPT-07 | Phase 8 | Complete |
 | CAPT-08 | Phase 8 | Complete |
-| MENU-01 | Phase 9 | Pending |
-| MENU-02 | Phase 9 | Pending |
-| MENU-03 | Phase 9 | Pending |
-| MENU-04 | Phase 9 | Pending |
-| MENU-05 | Phase 9 | Pending |
-| MENU-06 | Phase 9 | Pending |
-| MENU-07 | Phase 9 | Pending |
-| MENU-08 | Phase 9 | Pending |
+| MENU-01 | Phase 9 | Complete |
+| MENU-02 | Phase 9 | Complete |
+| MENU-03 | Phase 9 | Complete |
+| MENU-04 | Phase 9 | Complete |
+| MENU-05 | Phase 9 | Complete |
+| MENU-06 | Phase 9 | Complete |
+| MENU-07 | Phase 9 | Complete |
+| MENU-08 | Phase 9 | Complete |
 | PLAT-01 | Phase 2 | Complete |
 | PLAT-02 | Phase 7 | Complete |
 | PLAT-03 | Phase 1 | Complete |

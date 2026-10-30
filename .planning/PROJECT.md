@@ -57,12 +57,15 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ A provably failed check or a timeout applies the group's failure action (kick by default, so the member can rejoin), exactly once whichever replica handles the join, the check or the timer; Cloudflare, network and setup faults retry and never kick, and a run of five failed solves with no pass is held back as a suspected key mismatch — Phase 8
 - ✓ The owner can deploy the captcha page from a documented guide (public HTTPS hostname, BotFather Mini App, Turnstile keys, reverse-proxy rules), the Turnstile secret is registered with the log redactor and never logged, the verify route is rate-limited and hardened, and the developer `/stats` shows the web captcha's counters — Phase 8
 
+- ✓ `/settings` in a group asks the admin to open the menu in the group or in private (a deep link `/start settings_<chat id>`). A menu opened in the group answers only its opener; a private menu manages the group it was opened from. One message is edited in place with Back and Close on every page, and every press re-checks live that the presser is still a creator or administrator of that group (anonymous admins re-enter through the proof tap) — Phase 9
+- ✓ The menu has a Staff Group page (the `/staff` panel read-only inside a Staff Group; Link and Unlink for the owner of both groups, with a two-tap card bound to the object it showed), a Lockdown page (state, a Lift card, an on/off switch and a stepper for each of the join, flood and AI triggers), a Captcha page (switch, mode, time limit, failure action) and an Antiflood page (limit, action, delete switch) — Phase 9
+- ✓ A setting changed in the menu is the same code path as the command: one apply function per setting holds the validation, the refusals, the write and its cache invalidation, and parity, drift and authority-parity tests prove the stored row, the cache and the refusals match. A menu opened in the group, or in private by an admin who is not the group's creator, never names the Staff Group — Phase 9
+
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
-**Settings menu (last)**
-- [ ] An inline-button settings menu configures each group, with "Staff Group" as one of its pages.
+All nine phases of the first milestone are shipped. No active requirements remain; follow-ups and deferred live checks are in STATE.md.
 
 ### Out of Scope
 
@@ -119,9 +122,9 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Only a person who owns both groups can link them; one Staff Group per group; auto-unlink on ownership change | Strongest guarantee that a Staff Group can't gain control of a group it shouldn't | ✓ Shipped — Phase 1 |
 | Lockdown = kick joiners + mute all except admins and approved users; admin-only manual lift | Stops a raid immediately and leaves the "safe again" call to a human | ⚠️ Revised — Phase 4: approved users are muted too (Telegram has no per-user exception to a locked default, spike 1, D-01/D-02); joiners are banned until the lift instead of kicked; the manual lift shipped |
 | Rules trigger lockdown; AI only assists | Fast and cheap enough to react to hundreds of joins; AI where judgement is needed | ✓ Shipped — Phases 6 and 7 (join surge, flood, AI burst; AI only adds to a count) |
-| Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | — Pending |
-| `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | ✓ Panel shipped — Phase 1; menu fold-in Phase 9 |
-| Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | — Pending |
+| Cloudflare Turnstile through a bot-hosted Mini App page | More private and less intrusive than reCAPTCHA; server-side verification | ✓ Good — Phase 8 (live Telegram and Cloudflare checks deferred, `08-SPIKE.md`) |
+| `/staff` panel first, folded into the settings menu later | Ships the Staff Group without waiting for the settings menu | ✓ Good — panel Phase 1; menu page Phase 9 (read-only panel inside a Staff Group, Link and Unlink elsewhere) |
+| Order: Staff Group → raid protection → web captcha → settings menu | Owner's priority | ✓ Good — Phases 1-9 shipped in this order |
 | Every staff action needs a Confirm tap showing the resolved target | `@usernames` can be stale or recycled; owner prefers safety over speed | ✓ Shipped — Phase 2 (5-minute card, issuer-only Confirm) |
 | Staff Group members aren't protected from staff actions; only each group's admins and owner, and the bot, are | Owner's call; staff are trusted, not immune | ✓ Shipped — Phase 2 |
 | Undo-everywhere button and a recent-actions list in `/staff` are in v1, backed by an audit record | Mistakes are reversible and accountable | ✓ Shipped — Phase 3 (live UAT passed) |
@@ -168,6 +171,11 @@ My trusted staff can protect every one of my communities from one place. We act 
 | Only a provable failed solve kicks; Cloudflare, network and setup faults retry, and a streak of five failed solves with no pass is held back as a suspected key mismatch | A bad site key and secret pair must not mass-kick real joiners | ✓ Good — Phase 8 (D-28; review WR-04 added the breaker) |
 | The live Telegram and Cloudflare checks are deferred; the phase ships a checklist (`08-SPIKE.md`) and the self-hosting guide | The checks need the owner's hostname, BotFather Mini App and Turnstile keys | ✓ Good — Phase 8 (owner's choice, "plan and build now, spike later") |
 | The verify route shares the bot's HTTP port; the guide and two startup warnings tell the owner to forward only `/captcha*` through the public proxy | A path allow-list in the bot would be a second place to get wrong | ✓ Good — Phase 8 (D-31) |
+| The menu is stateless and calls the commands' own apply functions (`applyCaptcha*`, `applyFlood*`, `applyAutoLockdown`, `applyLockdownLift`) | One setting, one code path: the menu can never drift from the command, and a press works on any replica with Redis down | ✓ Good — Phase 9 (D-12, D-13; parity, drift and authority-parity tests per setting) |
+| Every menu press re-checks the presser with a live `getChatMember` of the configured group, and each control declares the right it needs | The cached admin list is never the authority; a demoted admin is refused on the next tap | ✓ Good — Phase 9 (D-04, D-05; `settingsRight*`) |
+| Two-tap cards (Lift, Unlink) carry the object they were drawn for and an expiry, with no timer and no Redis key | A stale Yes can never lift a newer lockdown or unlink a newer link | ✓ Good — Phase 9 (D-33, from review WR-01) |
+| A group menu, and a private menu of an admin who is not the group's creator, never show the Staff Group's title or ID | Phase 1's rule that nothing about a link reaches the linked group's members, since a private menu is shown to every live admin | ✓ Good — Phase 9 (D-21 refined by D-32, from review WR-02) |
+| The antiflood first-write side effect (a first action or delete press stores limit 5 and turns antiflood on) is kept in the repository and announced in the menu | Fixing the repository would change `/setfloodmode` and `/delflood` too | ⚠️ Revisit — Phase 9 (D-27, D-34); the repository fix is a separate follow-up |
 
 ## Evolution
 
@@ -187,4 +195,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-30 after Phase 8*
+*Last updated: 2026-10-30 after Phase 9 (all phases of the first milestone shipped)*

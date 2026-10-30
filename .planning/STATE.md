@@ -1,19 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 09
-current_phase_name: settings-menu
-status: executing
-stopped_at: Phase 8 complete, ready to plan Phase 9
-last_updated: "2026-10-30T10:15:41.337Z"
+current_phase: 9
+status: completed
+stopped_at: Phase 9 complete — all phases complete
+last_updated: "2026-10-30T13:21:07.042Z"
 last_activity: 2026-10-30
-last_activity_desc: Phase 8 complete, transitioned to Phase 9
-state_head: ac7dab67c2ae328e2e72ed3c4e0537f0eced4fe0
+last_activity_desc: Phase 9 complete
+state_head: 9cca146dd79388f27a9691fc027662233b396423
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 106
-  completed_plans: 92
-  percent: 87
+  completed_plans: 106
+  percent: 100
 ---
 
 # Project State
@@ -23,21 +22,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-30)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 9 — Settings Menu
+**Current focus:** All phases complete — follow-ups and deferred live checks only
 
 ## Current Position
 
-Phase: 09 (settings-menu) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-30 — Phase 8 complete, transitioned to Phase 9
+Phase: 9 of 9 (Settings Menu) — complete
+Plan: 14 of 14
+Status: All phases complete
+Last activity: 2026-10-30 — Phase 9 complete
 
-Progress: [█████████░] 87%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 92
+- Total plans completed: 106
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -53,6 +52,7 @@ Progress: [█████████░] 87%
 | 6 | 13 | - | - |
 | 7 | 14 | - | - |
 | 8 | 11 | - | - |
+| 9 | 14 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -105,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 7]: The Gemini client (`alita/utils/gemini`) is stdlib-only so tools can import it without the pre-main database connection; the key travels only in the `x-goog-api-key` header. The spike tool (`scripts/gemini-spike/`) is the owner's way to measure accuracy, latency and cost.
 - [Phase 8]: A Turnstile attempt is an ordinary `captcha_attempts` row with a reserved `ts1:` answer; the Redis token (`alita:captcha:ch:<token>`) is only a handle, consumed by a user-compared Lua claim that is released on any error. Pass, failed solve and timeout are decided only by the conditional delete of the attempt row (`claimCaptchaPass`/`finishCaptchaPass` are shared with the button), so any replica can act. Both button callbacks refuse a `ts1:` attempt.
 - [Phase 8]: The page decides nothing: a pass needs signed `initData` (HMAC, 5 min, user must match) and a `siteverify` success echoing hostname, action `captcha_join` and `cdata`. Only provable failures kick (D-28); Cloudflare, network and setup faults retry with the token re-armed; five failed solves in a row with no pass are held back as a suspected key mismatch (`alita:captcha:streak`). The verify route has Redis rate windows, a readiness gate, a decided-answer replay marker and shares the bot's port: the owner's proxy must forward only `/captcha*`.
+- [Phase 9]: The settings menu (`settings|v1`) is stateless: no migration, model, Redis key, shutdown drain or handler group. Every press runs one pipeline (decode and allow-list, service identity, opener, live `getChatMember` of the presser in the configured group, the control's `settingsRight`), is answered exactly once and edits the one message. Every setting has one apply function beside its command, so menu and command cannot drift (parity, drift and authority-parity tests per setting). A page is one `registerSettingsPage` call from its own file.
+- [Phase 9]: Lift and Unlink cards carry the object they were drawn for (`r`, `l`) and a lazy expiry, so a stale Yes cannot hit a newer lockdown or link (D-33). A group menu, and a private menu of an admin who is not the group's creator, never name the Staff Group (D-21, D-32); `settingsStaffViewFor` is the one place that decides. A Lift from a group menu only wakes the worker (its redrawn menu is the notice); from a private menu it also posts the public notice (D-26).
 
 ### Pending Todos
 
@@ -118,6 +120,9 @@ None yet.
 - [Phase 8]: The owner accepted the live checks without running them ("All good, continue"): the Direct Link Mini App delivering the tapper's `initData` on Android, iOS, Desktop and Web, the Turnstile widget inside each WebView, the real `siteverify` hostname, the CSP and `frame-ancestors` list against a live widget, BotFather accepting the short name, a solve after the signed data is more than 5 minutes old (it shows the "invalid" copy today), a native-speaker read of the new strings in six languages, and `TestCaptchaModeTurnstileConstraint` in CI through `make test-postgres-integrity`. Steps are in `08-SPIKE.md`; the owner needs a public HTTPS hostname, a BotFather Mini App and Turnstile keys (one widget's site key and secret).
 - [Phase 8]: The security audit closed 49/49 threats (`08-SECURITY.md`, `threats_open: 0`); validation is compliant (`08-VALIDATION.md`, no gaps, 12 review-fix rows added). Open non-blocking notes: U-1 (low) the key-mismatch breaker is fleet-wide state that a hostile member can trip with 6 failed solves, which only delays the immediate kick (the attempt's own timeout still applies the failure action; per-chat tripping or counting only unforgeable codes would harden it); O-1 no test cancels the request mid-verify (the `WithoutCancel` path and the durable unmute row are tested); O-2 `TestPageHeadersAndNonce` compares the CSP header with `CSPFor` itself, so a weakened directive would not fail it; an old token after a re-join answers `expired` with the removal wording although the new attempt is untouched.
 - [Phase 8]: Code review found 0 critical and 7 warnings and 6 info notes; all 13 were fixed (`08-REVIEW-FIX.md`). Accepted limits: if Redis is also unreachable when a failed consume is released, the claim stays until the challenge expires and that member times out; a replica that crashes between a consume and a re-arm loses that member's challenge until the timeout; the rolling-deploy window before every replica has the `ts1:` guard.
+- [Phase 9]: The owner accepted the 14 live checks without running them ("Accept, test live later"): edit-in-place, Back and Close on every client, the Open in private deep link for an admin who never started the bot, a demoted opener, another member pressing the opener's menu and the anonymous-admin proof flow, fast stepper taps with a 429 and Close on a private menu older than 48 hours, the Staff Group page after a slow build, the picker with 9 or more groups, Link and Unlink from a group menu and a Lift from both menus, button truncation in hi and ru on a phone, a native-speaker read of the 83 `settings_*` strings in six languages, and the Captcha, Antiflood and Lockdown pages against the commands in a real group (including the 10 s local-cache skew between replicas). Steps are in `09-SPIKE.md`.
+- [Phase 9]: Code review found 0 critical, 5 warnings and 5 info notes; all 10 were fixed (`09-REVIEW-FIX.md`), with amendments D-32, D-33 and D-34 recorded in `09-CONTEXT.md`. Known and accepted: the antiflood first-write side effect (D-27) stays in the repository, so a first Ban, Kick or delete-switch press on a chat with no antiflood row stores limit 5 and turns antiflood on; the menu now says so (`settings_antiflood_now_on`). A repository fix (insert with limit 0) would also change `/setfloodmode` and `/delflood`, so it is a separate follow-up that must update `TestSetFloodModeOnFreshChatStoredLimit`, `TestSetFloodMsgDelOnFreshChatStoredLimit` and the AGENTS.md trap bullet. The `captcha_settings` and `antiflood` keys are not in `skipLocal`, so another replica can show an old value for up to `CACHE_LOCAL_TTL`, exactly as the commands can.
+- [Phase 9]: Remaining items that need the owner's environment, across all phases: `make test-postgres-integrity` in CI (including `TestCaptchaModeTurnstileConstraint`), `make lint` on a Go 1.26 golangci-lint, the Gemini spike with a paid-tier key, the Turnstile real-device checklist (`08-SPIKE.md`) and a deploy with the public `/captcha*` proxy rules.
 - [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
 - [Phase 1]: 10 of 11 live-Telegram UAT checks were deferred without being run (`phases/01-staff-group-links/01-UAT.md` Deferred Follow-Ups). CI had not run on PR #1 at phase close; the PostgreSQL trigger test passed locally against PostgreSQL 16.
 - [Phase 1]: Low, non-blocking security flag TF-01-06: a stranger's `/unlinkstaff` reply reveals whether the group is linked (`01-SECURITY.md`).
@@ -154,6 +159,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-18T05:45:00.000Z
-Stopped at: Phase 8 complete, ready to plan Phase 9
+Last session: 2026-10-30T13:30:00.000Z
+Stopped at: Phase 9 complete — all phases complete
 Resume file: None

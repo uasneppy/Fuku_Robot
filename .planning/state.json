@@ -46,13 +46,13 @@
     {
       "number": "9",
       "name": "Settings Menu",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 09 of 9 · 87% · executing"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-10-30T10:15:41.358Z"
+  "updated_at": "2026-10-30T13:21:07.075Z"
 }

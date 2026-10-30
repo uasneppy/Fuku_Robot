@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Automatic Raid Detection** - Join surges and new-member floods lock a group automatically; the old `/antiraid` is retired (completed 2026-10-29)
 - [x] **Phase 7: AI-Assisted Raid Detection** - TypeSafe (text) and Gemini (images) spam verdicts feed a burst trigger, while rules still decide (completed 2026-10-29)
 - [x] **Phase 8: Turnstile Web Captcha** - New members verify through Cloudflare Turnstile in a bot-hosted Telegram Mini App (completed 2026-10-30)
-- [ ] **Phase 9: Settings Menu** - `/settings` opens an inline-button menu with Staff Group, Lockdown, Captcha and Antiflood pages
+- [x] **Phase 9: Settings Menu** - `/settings` opens an inline-button menu with Staff Group, Lockdown, Captcha and Antiflood pages (completed 2026-10-30)
 
 ## Phase Details
 
@@ -415,7 +415,7 @@ Plans:
   4. The Lockdown page shows the current state, a working Lift button, and an on/off switch and threshold for each automatic trigger. The Captcha page sets the mode and time limit, and the Antiflood page configures antiflood.
   5. A setting changed in the menu is identical to the same setting changed by command, and both always show the same current value.
 
-**Plans:** 14/14 plans executed
+**Plans:** 14/14 plans complete
 **UI hint**: yes
 
 Plans:
@@ -458,4 +458,4 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
 | 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
 | 8. Turnstile Web Captcha | 11/11 | Complete    | 2026-10-30 |
-| 9. Settings Menu | 14/14 | In Progress|  |
+| 9. Settings Menu | 14/14 | Complete    | 2026-10-30 |
