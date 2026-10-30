@@ -1,12 +1,13 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 9
+current_phase_name: Settings Menu
 status: completed
 stopped_at: Phase 9 complete — all phases complete
-last_updated: "2026-10-30T13:21:07.042Z"
+last_updated: "2026-10-30T20:36:05.259Z"
 last_activity: 2026-10-30
 last_activity_desc: Phase 9 complete
-state_head: 9cca146dd79388f27a9691fc027662233b396423
+state_head: d2b368f8b88c33f6827d54f003f58d781f56aec6
 progress:
   total_phases: 9
   completed_phases: 9
@@ -29,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-30)
 Phase: 9 of 9 (Settings Menu) — complete
 Plan: 14 of 14
 Status: All phases complete
-Last activity: 2026-10-30 — Phase 9 complete
+Last activity: 2026-10-30 — Completed quick task 261030-rig: Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API
 
 Progress: [██████████] 100%
 
@@ -124,6 +125,7 @@ None yet.
 - [Phase 9]: Code review found 0 critical, 5 warnings and 5 info notes; all 10 were fixed (`09-REVIEW-FIX.md`), with amendments D-32, D-33 and D-34 recorded in `09-CONTEXT.md`. Known and accepted: the antiflood first-write side effect (D-27) stays in the repository, so a first Ban, Kick or delete-switch press on a chat with no antiflood row stores limit 5 and turns antiflood on; the menu now says so (`settings_antiflood_now_on`). A repository fix (insert with limit 0) would also change `/setfloodmode` and `/delflood`, so it is a separate follow-up that must update `TestSetFloodModeOnFreshChatStoredLimit`, `TestSetFloodMsgDelOnFreshChatStoredLimit` and the AGENTS.md trap bullet. The `captcha_settings` and `antiflood` keys are not in `skipLocal`, so another replica can show an old value for up to `CACHE_LOCAL_TTL`, exactly as the commands can.
 - [Phase 9]: The security audit closed 52/52 threats (`09-SECURITY.md`, `threats_open: 0`; 25 mitigations were mutation-checked); validation is compliant (`09-VALIDATION.md`, no gaps, 10 review-fix rows added). Open non-blocking notes: U-1 (low) the private press still answers "bot not in chat X" differently from "not an admin" (the deep link was fixed by IN-03; the press path needs a modified client and has no write or data impact); U-2 a modified-client admin can aim a settings callback at any bot message in a chat they administer; U-3 opening the Staff page runs `recheckLink`/`applyLinkHealth` for any live admin of a linked group, the same as `/staff`; U-4 hardening: the private path checks authority for `c` but writes to the ID `getChat` returned; O-6 no behavioural test asserts that the Lockdown page never starts a lockdown (it is held by the absence of code). Accepted risks AR-09-01..09 (group menus show the masked "Linked" line, cross-replica cache skew up to 10 s, the antiflood first write, menus never auto-close, no deep-link cooldown).
 - [Phase 9]: Remaining items that need the owner's environment, across all phases: `make test-postgres-integrity` in CI (including `TestCaptchaModeTurnstileConstraint`), `make lint` on a Go 1.26 golangci-lint, the Gemini spike with a paid-tier key, the Turnstile real-device checklist (`08-SPIKE.md`) and a deploy with the public `/captcha*` proxy rules.
+- [Quick 261030-rig]: Raid AI image checks now use Claude Haiku 5.5 (`claude-haiku-5-5`) through the Anthropic Messages API (`alita/utils/claude`, `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL`); `GEMINI_API_KEY` and `GEMINI_MODEL` are no longer read, so a deployment that set them must set `ANTHROPIC_API_KEY` to keep image checks (breaking). The request and response shapes (`anthropic-version 2026-10-21`, a forced one-field tool call, no `temperature`, `thinking` disabled, refusal and error fields) come from the claude-api reference notes and are verified only against `httptest` doubles; the owner's run of `go run ./scripts/claude-spike -probe` with a real key is the live check, and it also measures accuracy, latency and cost (the 0.85 bar and the 20/150/500 hourly budgets are one-line constants to retune for Haiku pricing). A few Gemini-era verdicts may be served from the 1 h verdict cache right after deploy. Closes Phase 7 note O-3 (`ValidModel` rejects `.` and `..`). Help text in `lockdown_help_msg` grew 3 units per language (pt now has 23 spare).
 - [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
 - [Phase 1]: 10 of 11 live-Telegram UAT checks were deferred without being run (`phases/01-staff-group-links/01-UAT.md` Deferred Follow-Ups). CI had not run on PR #1 at phase close; the PostgreSQL trigger test passed locally against PostgreSQL 16.
 - [Phase 1]: Low, non-blocking security flag TF-01-06: a stranger's `/unlinkstaff` reply reveals whether the group is linked (`01-SECURITY.md`).
@@ -149,6 +151,7 @@ None yet.
 | 261008-j3b | Give the staff and lockdown shutdown drains their full wait | 2026-10-08 | 6f7da31 | .planning/quick/261008-j3b-close-the-shutdown-timing-gap-the-shutdown-manager-gives-eac |
 | 261008-j3c | Make TestStaffActionNonStaffUnchanged robust to second boundaries | 2026-10-08 | 077ee2e | .planning/quick/261008-j3c-make-the-flaky-test-teststaffactionnonstaffunchanged-tmute-a |
 | 261008-j3d | Lockdown copy polish: no raw Telegram errors, warning markers, code-formatted help | 2026-10-08 | 924b5e6 | .planning/quick/261008-j3d-lockdown-copy-polish-from-planning-phases-04-manual-lockdown |
+| 261030-rig | Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API | 2026-10-30 | d2b368f | [261030-rig-change-gemini-to-claude-haiku-5-5-via-th](./quick/261030-rig-change-gemini-to-claude-haiku-5-5-via-th/) |
 
 ## Deferred Items
 
