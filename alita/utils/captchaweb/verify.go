@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -28,6 +32,17 @@ const (
 	// botRightsTimeout bounds the live check of the bot's own Restrict right that runs
 	// before any Cloudflare call.
 	botRightsTimeout = 3 * time.Second
+	// verifyMaxInFlight is how many verify requests are served at once on one replica; the
+	// next one is answered 503 retry without touching Redis or the backend.
+	verifyMaxInFlight = 64
+)
+
+// The route patterns (Go 1.22 method patterns), mounted by the HTTP server. A wrong method
+// on the verify path gets 405 from the mux, HEAD on the page works, and /captcha/ is a 404.
+const (
+	RoutePage   = "GET /captcha"
+	RouteVerify = "POST /captcha/verify"
+	RouteHealth = "GET /captcha/health"
 )
 
 // Result is the decided answer of the verify route.
@@ -111,6 +126,14 @@ type Options struct {
 	Store         *Store
 	Siteverify    *Client
 	Backend       Backend
+	// TrustedProxies are the proxies whose X-Forwarded-For is believed
+	// (CAPTCHA_WEB_TRUSTED_PROXIES). With none, the client address is RemoteAddr.
+	TrustedProxies []netip.Prefix
+	// Limiter counts the abuse windows; nil builds one on the Store's Redis client.
+	Limiter *Limiter
+	// StartNotReady builds the handler not ready: verify answers 503 retry and the health
+	// route reports unavailable until SetReady(true) (D-30). The zero value is ready at once.
+	StartNotReady bool
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 }
@@ -122,7 +145,11 @@ type Handler struct {
 	store      *Store
 	siteverify *Client
 	backend    Backend
+	limiter    *Limiter
+	trusted    []netip.Prefix
 	now        func() time.Time
+	ready      atomic.Bool
+	inflight   chan struct{}
 }
 
 // ErrBadOptions means NewHandler refused its options.
@@ -142,14 +169,57 @@ func NewHandler(opts Options) (*Handler, error) {
 	if now == nil {
 		now = time.Now
 	}
-	return &Handler{
+	limiter := opts.Limiter
+	if limiter == nil {
+		limiter = NewLimiter(opts.Store.client)
+	}
+	h := &Handler{
 		botToken:   opts.BotToken,
 		hostname:   strings.ToLower(base.Hostname()),
 		store:      opts.Store,
 		siteverify: opts.Siteverify,
 		backend:    opts.Backend,
+		limiter:    limiter,
+		trusted:    opts.TrustedProxies,
 		now:        now,
-	}, nil
+		inflight:   make(chan struct{}, verifyMaxInFlight),
+	}
+	h.ready.Store(!opts.StartNotReady)
+	return h, nil
+}
+
+// SetReady marks the handler ready (true) or not ready (false). While it is not ready, verify
+// answers 503 retry before reading anything and the health route reports unavailable.
+func (h *Handler) SetReady(ready bool) {
+	h.ready.Store(ready)
+}
+
+// Routes returns the three route patterns with their handlers, page being the Mini App page
+// handler, for the HTTP server to mount.
+func (h *Handler) Routes(page http.Handler) map[string]http.Handler {
+	return map[string]http.Handler{
+		RoutePage:   page,
+		RouteVerify: http.HandlerFunc(h.Verify),
+		RouteHealth: http.HandlerFunc(h.Health),
+	}
+}
+
+// Health answers 200 {"status":"ok"} when the handler is ready and Redis answers a PING
+// within RedisTimeout, and 503 {"status":"unavailable"} otherwise. The body never names an ID,
+// a setting or a secret (D-10).
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	status, body := http.StatusOK, `{"status":"ok"}`
+	if !h.ready.Load() || h.store.Ping(r.Context()) != nil {
+		status, body = http.StatusServiceUnavailable, `{"status":"unavailable"}`
+	}
+	hdr := w.Header()
+	hdr.Set("Content-Type", "application/json")
+	hdr.Set("Cache-Control", "no-store")
+	hdr.Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	if _, err := io.WriteString(w, body+"\n"); err != nil {
+		log.Debugf("[CaptchaWeb][Health] write failed: %v", err)
+	}
 }
 
 type verifyRequest struct {
@@ -171,8 +241,47 @@ func writeAnswer(w http.ResponseWriter, status int, answer Answer) {
 	}
 }
 
+// limitKeyForAddr is the per-address window key. An IPv6 client is counted by its /64, the
+// smallest block one subscriber holds, because a single host can otherwise mint 2^64 buckets.
+func limitKeyForAddr(addr netip.Addr) string {
+	if addr.Is6() {
+		if prefix, err := addr.Prefix(64); err == nil {
+			return limitIPKeyPrefix + prefix.Addr().String()
+		}
+	}
+	return limitIPKeyPrefix + addr.String()
+}
+
+// withinLimit counts one request in the window under key and reports whether the request may
+// go on. When it may not, the answer is already written: 429 retry with Retry-After in whole
+// seconds when the budget is spent, 503 retry when the window could not be counted (a Redis
+// error never lets a request through).
+func (h *Handler) withinLimit(w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
+	allowed, retryAfter, err := h.limiter.Allow(r.Context(), key, limit, verifyWindow)
+	if err != nil {
+		log.Warn("[CaptchaWeb][Verify] rate window failed")
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return false
+	}
+	if allowed {
+		return true
+	}
+	seconds := int64((retryAfter + time.Second - 1) / time.Second)
+	if seconds < 1 {
+		seconds = 1
+	}
+	w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
+	writeAnswer(w, http.StatusTooManyRequests, Answer{Result: ResultRetry})
+	return false
+}
+
 func decodeVerifyRequest(w http.ResponseWriter, r *http.Request) (verifyRequest, int, bool) {
 	var req verifyRequest
+	// Only JSON is accepted: a form post or a text/plain post from another site is refused
+	// before a byte of it is read (no CORS preflight can make it pass).
+	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
+		return req, http.StatusUnsupportedMediaType, false
+	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
@@ -204,14 +313,37 @@ func decodeVerifyRequest(w http.ResponseWriter, r *http.Request) (verifyRequest,
 // network or configuration fault, a bot that cannot restrict, or a Backend error before
 // anything was claimed (D-21).
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
+	// The server's write timeout is shorter than a siteverify call plus a pass. The error is
+	// ignored: a recorder or a wrapped writer may not support deadlines.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(verifyWriteDeadline))
+
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		writeAnswer(w, http.StatusMethodNotAllowed, Answer{Result: ResultInvalid})
 		return
 	}
-	// The server's write timeout is shorter than a siteverify call plus a pass. The error is
-	// ignored: a recorder or a wrapped writer may not support deadlines.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(verifyWriteDeadline))
+	// Until the modules are loaded (polling mode starts serving before they are) nothing is
+	// decided and nothing is read: the page retries (D-30).
+	if !h.ready.Load() {
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return
+	}
+	// A burst beyond the in-flight cap is refused at once, before any Redis or backend work.
+	select {
+	case h.inflight <- struct{}{}:
+		defer func() { <-h.inflight }()
+	default:
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return
+	}
+
+	// The per-address window comes before the body is read. Behind a shared proxy address with
+	// no trusted list there is no per-address bucket, and the per-user windows still apply.
+	if addr, bucket := ClientIP(r, h.trusted); bucket {
+		if !h.withinLimit(w, r, limitKeyForAddr(addr), verifyIPLimit) {
+			return
+		}
+	}
 
 	req, status, ok := decodeVerifyRequest(w, r)
 	if !ok {
@@ -224,9 +356,18 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
 		return
 	}
+	// From here on the user is the signed one, so the budgets below are spent by the member
+	// who sent the request and by nobody else (D-26).
+	userID := strconv.FormatInt(user.UserID, 10)
+	if !h.withinLimit(w, r, limitUserKeyPrefix+userID, verifyUserLimit) {
+		return
+	}
 	// A signed start_param is authoritative: the challenge the page posts must be it.
 	if user.StartParam != "" && user.StartParam != req.Challenge {
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
+		return
+	}
+	if !h.withinLimit(w, r, limitTokenUserKeyPrefix+req.Challenge+":"+userID, verifyTokenUserLimit) {
 		return
 	}
 
@@ -239,7 +380,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	}
 	switch consumed {
 	case ConsumeUnknown:
-		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
+		h.answerUnknown(w, r, req.Challenge, user.UserID)
 		return
 	case ConsumeWrongUser:
 		writeAnswer(w, http.StatusOK, Answer{Result: ResultNotForYou})
@@ -259,6 +400,27 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		fields:     log.Fields{"chat_id": rec.ChatID, "user_id": rec.UserID, "attempt_id": rec.AttemptID},
 	}
 	run.decide()
+}
+
+// answerUnknown answers a token the store no longer holds. When the token was decided in the
+// last 10 minutes the same verified member gets the same answer again, with no side effect
+// (their response was lost, or they tapped twice), and any other member gets not_for_you; with
+// no remembered decision the token is invalid (D-03).
+func (h *Handler) answerUnknown(w http.ResponseWriter, r *http.Request, token string, userID int64) {
+	decision, found, err := h.store.Done(r.Context(), token)
+	if err != nil {
+		log.WithField("user_id", userID).Warn("[CaptchaWeb][Verify] done marker lookup failed")
+		writeAnswer(w, http.StatusServiceUnavailable, Answer{Result: ResultRetry})
+		return
+	}
+	switch {
+	case !found:
+		writeAnswer(w, http.StatusOK, Answer{Result: ResultInvalid})
+	case decision.UserID != userID:
+		writeAnswer(w, http.StatusOK, Answer{Result: ResultNotForYou})
+	default:
+		writeAnswer(w, http.StatusOK, Answer{Result: decision.Result, Action: decision.Action})
+	}
 }
 
 // challengeRun is one consumed challenge being decided. Each step either answers or hands on,
@@ -296,6 +458,18 @@ func (c *challengeRun) rearm() {
 	}
 }
 
+// decided remembers the answer before it is written, so a response that is lost on the way
+// can be asked for again (D-03). A write failure is logged by outcome and changes nothing: the
+// answer is already decided.
+func (c *challengeRun) decided(result Result, action string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.r.Context()), 2*RedisTimeout)
+	defer cancel()
+	d := Decision{UserID: c.user.UserID, Result: result, Action: action}
+	if err := c.h.store.MarkDone(ctx, c.token, d); err != nil {
+		log.WithFields(c.fields).Warnf("[CaptchaWeb][Verify] done marker failed outcome=%s", result)
+	}
+}
+
 // retry gives the challenge back and answers retry with status.
 func (c *challengeRun) retry(status int) {
 	c.rearm()
@@ -312,6 +486,7 @@ func (c *challengeRun) expire() {
 		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] expire failed")
 	}
 	log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=expired")
+	c.decided(ResultExpired, c.action)
 	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultExpired, Action: c.action})
 }
 
@@ -370,6 +545,7 @@ func (c *challengeRun) pass() {
 	switch passed {
 	case PassOK:
 		log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=passed")
+		c.decided(ResultPassed, "")
 		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultPassed})
 	case PassLost:
 		c.expire()
@@ -396,5 +572,6 @@ func (c *challengeRun) fail(reason Reason) {
 		return
 	}
 	log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=failed reason=%s", reason)
+	c.decided(ResultFailed, c.action)
 	writeAnswer(c.w, http.StatusOK, Answer{Result: ResultFailed, Action: c.action})
 }

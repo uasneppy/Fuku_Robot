@@ -298,9 +298,10 @@ func TestCaptchaWebPassAfterExpiryExpiresAtOnce(t *testing.T) {
 		t.Fatalf("Cloudflare requests = %d, want none for an expired attempt", got)
 	}
 
-	// The challenge is spent: a second try is an unknown token.
-	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultInvalid {
-		t.Fatalf("second verify = %d %+v, want 200 invalid", status, answer)
+	// The challenge is spent: a second try from the same member gets the remembered answer
+	// again (D-03) and acts on nothing, which the assertions below pin.
+	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultExpired || answer.Action != "kick" {
+		t.Fatalf("second verify = %d %+v, want 200 expired with kick", status, answer)
 	}
 	if got := kicksOf(env.client, member.Id); got != 1 {
 		t.Fatalf("kicks after the second verify = %d, want still one", got)
@@ -545,8 +546,9 @@ func TestCaptchaWebFailedSolveAppliesAction(t *testing.T) {
 			}
 
 			status, answer = env.verify(member, token)
-			if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid {
-				t.Fatalf("second verify = %d %+v, want 200 invalid (one solve only)", status, answer)
+			// One solve only: the repeat gets the remembered answer (D-03) and changes nothing.
+			if status != http.StatusOK || answer.Result != captchaweb.ResultFailed || answer.Action != action {
+				t.Fatalf("second verify = %d %+v, want 200 failed with %s (one solve only)", status, answer, action)
 			}
 			if got := env.cfRequests.Load(); got != 1 {
 				t.Fatalf("Cloudflare requests = %d, want 1", got)
