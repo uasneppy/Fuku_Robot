@@ -1127,7 +1127,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The Turnstile page's script test is `node --test scripts/captcha-page/*.test.mjs` (the directory form does not work on
-  Node 22). It is run by the executor, not by `make test`: run it when the page changes. The page
+  Node 22). CI runs it in the `test` job (`actions/setup-node` with Node 22, before `make test`); it is not part of
+  `make test`, so run it yourself when the page changes. `TestPageLanguagesMatchScript` compares the page's `LANGS` array
+  with `captchaweb.PageLanguages`, so the two language lists cannot drift. The page
   (`alita/utils/captchaweb/page/captcha.html`) is served with a per-response nonce CSP (`captchaweb.CSPFor`) and must
   keep no inline `style` attribute and no inline event handler, because the CSP would block them. `make
   check-translations` cannot see the `captcha_web_` keys the page reads from `captchaweb.PageKeys`;

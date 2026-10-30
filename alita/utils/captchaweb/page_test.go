@@ -316,3 +316,28 @@ func TestPageNoScriptFallback(t *testing.T) {
 		t.Errorf("first-paint status %q was read from the string table", text)
 	}
 }
+
+// TestPageLanguagesMatchScript pins IN-05: the language list lives in PageLanguages (the string
+// tables the server embeds) and in the LANGS array of the page script (the languages the page
+// picks from). A language in one and not the other is a table the page never reads or a pick
+// with no strings, so the two must be the same list.
+func TestPageLanguagesMatchScript(t *testing.T) {
+	m := regexp.MustCompile(`(?m)^\s*var LANGS = \[([^\]]*)\];`).FindStringSubmatch(pageHTML)
+	if m == nil {
+		t.Fatal("the page script has no LANGS array")
+	}
+	var got []string
+	for _, item := range strings.Split(m[1], ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if len(item) < 2 || item[0] != '\'' || item[len(item)-1] != '\'' {
+			t.Fatalf("LANGS entry %q is not a single-quoted string", item)
+		}
+		got = append(got, item[1:len(item)-1])
+	}
+	if strings.Join(got, ",") != strings.Join(PageLanguages, ",") {
+		t.Fatalf("LANGS = %v, PageLanguages = %v: the lists must be the same", got, PageLanguages)
+	}
+}
