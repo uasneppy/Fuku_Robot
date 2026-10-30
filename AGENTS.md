@@ -234,7 +234,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is lazy (`settingsCardExpired`: a Yes whose minute is past redraws the page with `settings_card_expired` and runs
   nothing, an `e` that is not digits only, positive and 63-bit is an invalid request), there is no timer and no Redis
   key, and Yes goes through the whole press pipeline and then the action's own live checks (`runUnlinkGroup` checks the
-  creator of both groups again). Plan 09-12's Lift card uses the same helper.
+  creator of both groups again). The Lockdown page's Lift card uses the same helper.
+- The Lockdown page (`settings_lockdown.go`, page `l`) declares two more actions besides its trigger controls: `ls` Lift
+  ask and `ly` Lift Yes (with `e`). The Lift row is the first content row, drawn only while the chat's lockdown is
+  active (`models.LockdownStateActive`, a confirmed one or not); a lockdown being lifted, or none, shows no Lift. Both
+  actions declare `settingsRightRestrict`, so each press judges a live `getChatMember` record at the ask and again at
+  Yes (a demotion in between is refused with the alert `settings_no_restrict` and edits nothing). The ask reads the
+  lockdown fresh (`lockdownCurrentLookup`): none, one being lifted or an unreadable state redraws the page with the
+  command's own text (`lockdown_not_active`, `lockdown_lift_in_progress`, `lockdown_state_failed`) and draws no card;
+  an active one draws the card `lockdown_alert_lift_ask` (`renderSettingsLockdownLiftCard`, the stored group title
+  escaped and spliced in after translation). Yes goes through `settingsCardExpired` (an expired minute redraws with
+  `settings_card_expired` and lifts nothing), answers the press empty first, then lifts only through
+  `applyLockdownLift`; the menu never calls `setChatPermissions`, `BeginLift` or `FinishLift` itself. A recorded lift is
+  announced through `lockdownAnnounceLift` and every outcome redraws the page with the command's words as a notice
+  (`lockdownLiftApplyText`). The page never starts a lockdown.
 
 ## Permissions
 
@@ -572,8 +585,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the guard never needs Redis, and the pacer falls back to one replica's interval. Nothing but a confirmed
   `/unlockdown` ever ends a lockdown: no TTL, timer, Redis expiry, restart, worker cycle or expired ban lifts one, and
   `BeginLift` is reached only through `lockdownBeginLift` in `liftLockdownRow`, the one lift path shared by `/unlockdown`
-  and the alert's Lift Confirm (restore the stored permissions, then one conditional record, then `FinishLift`). The
-  button path also posts the public `lockdown_lifted` notice in the locked group, through `lockdownPaced`. The
+  (`applyLockdownLift`), the alert's Lift Confirm and the settings menu's Lift Yes (`applyLockdownLift`) (restore the
+  stored permissions, then one conditional record, then `FinishLift`). The alert's Lift and the settings menu's Lift
+  also post the public `lockdown_lifted` notice in the locked group, through `lockdownAnnounceLift` (`lockdownPaced`),
+  and wake the worker, so a lift by button is never silent, also from a private menu. The
   `chat_lockdowns` columns `trigger_count`, `trigger_window` (seconds) and `trigger_percent` (migration 20261018120000,
   with `idx_chat_lockdowns_chat_lift` on `(chat_id, lift_started_at)`) record the numbers behind an automatic trigger:
   `trigger_kind` is `manual`, `join_surge`, `flood` or `ai_burst`, and all three numbers are 0 for a manual lockdown
