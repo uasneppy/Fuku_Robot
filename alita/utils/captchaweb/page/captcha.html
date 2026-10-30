@@ -756,17 +756,17 @@ h1 {
     show('loading');
     onTurnstileLoaded = maybeRender;
 
-    var polls = 0;
+    var waited = 0;
     function poll() {
       if (hasTelegram()) {
         onTelegram();
         return;
       }
-      polls += 1;
-      if (polls * TELEGRAM_POLL_MS >= TELEGRAM_WAIT_MS) {
+      if (waited >= TELEGRAM_WAIT_MS) {
         show('unsupported');
         return;
       }
+      waited += TELEGRAM_POLL_MS;
       setTimeout(poll, TELEGRAM_POLL_MS);
     }
     poll();
