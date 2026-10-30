@@ -206,14 +206,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   present: `c` is accepted only on a message in a private chat and `u` only on one in a non-private chat, and each action
   takes an allow-listed field set (an unknown key is refused), all checked before any I/O. Steppers and toggles send the
   absolute target value (`v`), never a delta, so a double tap is harmless. Every press runs one pipeline, each step
-  refusing before the next (`settingsVerifyPress`): (1) decode and structure, refused with the alert
+  refusing before the next (`settingsPress.verify`): (1) decode and structure, refused with the alert
   `common_callback_invalid_request` (a missing message is `common_callback_message_unavailable`); (2) a Telegram service
   identity (`staffServiceUserIDs`) gets `lockdown_alert_post_as_yourself` before any lookup; (3) in a group menu
   `query.From.Id` must equal `u`, else `settings_not_your_menu`, with no lookup; (4) one live `getChatMember` of the presser
   in the group being configured (the message's chat for a group menu, `c` for a private one, after one `getChat` of `c`),
   creator or administrator, else `settings_not_admin`, and a failed lookup `settings_check_failed`; then (5) the right of
   the control. The callback is answered exactly once, only through `settingsPress.answer` (which calls
-  `answerStaffCallback`; no settings file calls `query.Answer`), and the menu message is edited in place; Telegram's
+  `answerStaffCallback`; no settings file calls `query.Answer`; `settingsCallback` defers an empty answer after its
+  recover, so a page that panics is recovered and still answers once), and the menu message is edited in place; Telegram's
   "message is not modified" is success, and a failed or rate-limited edit is logged once, never retried and never undoes
   a write. Close deletes the message and, when the delete fails, edits it to `settings_closed` with no keyboard. A page
   that cannot read its data is the cannot-open edit (`settings_cannot_open`, no keyboard, with the alert
@@ -1195,7 +1196,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `staff_link_done` and `staff_notice_unlinked_by` go to the Staff Group only, as the commands post them, and nothing about
   a link is posted into the linked group. Link and Unlink run `listVerifiedOwnStaffGroups`, `linkToStaffGroup`,
   `announceStaffLink`, `checkUnlinkAuthority` and `runUnlinkGroup`, so the menu and `/linkstaff` and `/unlinkstaff` cannot
-  diverge, and a refusal is the command's own text through `staffLinkRefusalText` or `staffUnlinkRefusalText` as a notice.
+  diverge, and a refusal is the command's own text through `staffLinkRefusalText` or `staffUnlinkRefusalText` as a notice, except that
+  a presser who owns no Staff Group gets `settings_staff_no_group` (`settingsStaffLinkRefusalText`), because the command's
+  text ends "send this command again", which is wrong in a button flow (D-34).
   The page reads the database first (a failed read is the cannot-open alert and edit), then answers the press empty, then
   makes its live health checks (`buildStaffPanelRows`, at most 2N+1 Telegram calls, `staffPanelBuildTimeout`), and a link
   the owner check removed draws as "Not linked" with no notice. Inside a Staff Group the page is the `/staff` panel

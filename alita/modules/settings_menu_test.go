@@ -247,6 +247,47 @@ func TestSettingsPressPipeline(t *testing.T) {
 			t.Errorf("a step answered %d times, want once", got)
 		}
 	})
+
+	// A page that panics is recovered by the callback's deferred recover, and the press is
+	// still answered once, so the client's spinner never runs until Telegram times it out
+	// (IN-05).
+	t.Run("a recovered panic still answers once", func(t *testing.T) {
+		const code, pageKey = "zq", "zq"
+		registerSettingsPage(settingsPage{
+			Key:      pageKey,
+			Order:    9999,
+			TitleKey: "settings_page_captcha",
+			Actions: map[string]settingsPageAction{
+				code: {Right: settingsRightAdmin, Run: func(*settingsPress) *settingsScreen {
+					panic("settings test: a page panicked")
+				}},
+			},
+		})
+		t.Cleanup(func() {
+			delete(settingsPages, pageKey)
+			delete(settingsActions, code)
+		})
+
+		env := newSettingsEnv(t)
+		msgID := env.openMenu(env.admin)
+		answers := env.answerCount()
+		edits := len(env.edits(env.chat.Id, msgID))
+
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", code))
+
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("a press whose page panicked was answered %d times, want exactly once", got)
+		}
+		if got := len(env.edits(env.chat.Id, msgID)) - edits; got != 0 {
+			t.Errorf("a press whose page panicked edited the menu %d times, want none", got)
+		}
+
+		// The menu still works afterwards.
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", settingsActBack))
+		if text, _ := env.lastEdit(env.chat.Id, msgID); !strings.Contains(text, staffMarker("settings_header_main")) {
+			t.Errorf("Back after a recovered panic drew %q, want the Main page", text)
+		}
+	})
 }
 
 // settingsMenuCaptchaButton returns the data of the Captcha button on a Main page.

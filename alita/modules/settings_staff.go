@@ -324,6 +324,17 @@ func settingsStaffPage(p *settingsPress) *settingsScreen {
 	return &screen
 }
 
+// settingsStaffLinkRefusalText is the text of a Link refusal: the command's own words
+// (staffLinkRefusalText), except that a presser with no Staff Group of their own gets the
+// menu's line, because the command's ends "then send this command again", which is wrong in
+// a button flow.
+func settingsStaffLinkRefusalText(p *settingsPress, refusal staffRefusal) string {
+	if refusal == staffRefusalNoStaffGroup {
+		return settingsText(p.tr, "settings_staff_no_group")
+	}
+	return staffLinkRefusalText(p.tr, refusal, p.group.Title)
+}
+
 // settingsStaffPickMax is how many Staff Groups the picker lists.
 const settingsStaffPickMax = 8
 
@@ -341,9 +352,9 @@ func settingsStaffLinkRun(p *settingsPress) *settingsScreen {
 	matched, unknown, err := listVerifiedOwnStaffGroups(p.b, &p.query.From)
 	switch {
 	case err != nil, len(matched) == 0 && unknown > 0:
-		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalCheckFailedInPlace, p.group.Title)))
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, staffRefusalCheckFailedInPlace)))
 	case len(matched) == 0:
-		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalNoStaffGroup, p.group.Title)))
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, staffRefusalNoStaffGroup)))
 	case len(matched) == 1 && unknown == 0:
 		return settingsStaffLinkTo(p, &matched[0])
 	}
@@ -367,7 +378,7 @@ func settingsStaffPick(p *settingsPress, raw string) *settingsScreen {
 
 	owned, err := staff.ListStaffGroupsByOwner(p.query.From.Id)
 	if err != nil {
-		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalCheckFailedInPlace, p.group.Title)))
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, staffRefusalCheckFailedInPlace)))
 	}
 	var picked *models.StaffGroup
 	for i := range owned {
@@ -377,11 +388,11 @@ func settingsStaffPick(p *settingsPress, raw string) *settingsScreen {
 		}
 	}
 	if picked == nil {
-		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalNotStaffOwner, p.group.Title)))
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, staffRefusalNotStaffOwner)))
 	}
 	staffGroup, refusal := resolveNamedStaffGroup(p.b, &p.query.From, strconv.FormatInt(picked.ChatID, 10))
 	if refusal != staffRefusalNone {
-		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, refusal, p.group.Title)))
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, refusal)))
 	}
 	return settingsStaffLinkTo(p, staffGroup)
 }
@@ -393,11 +404,11 @@ func settingsStaffPick(p *settingsPress, raw string) *settingsScreen {
 func settingsStaffLinkTo(p *settingsPress, staffGroup *models.StaffGroup) *settingsScreen {
 	out := linkToStaffGroup(p.b, &p.query.From, p.group, staffGroup)
 	if out.Refusal != staffRefusalNone {
-		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, out.Refusal, p.group.Title)))
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, out.Refusal)))
 	}
 	if out.Link == nil || out.StaffGroup == nil {
 		log.Errorf("[Settings] link outcome without a link for group %d", p.group.Id)
-		return settingsStaffRedraw(p, settingsNoticeWarn(staffLinkRefusalText(p.tr, staffRefusalCheckFailedInPlace, p.group.Title)))
+		return settingsStaffRedraw(p, settingsNoticeWarn(settingsStaffLinkRefusalText(p, staffRefusalCheckFailedInPlace)))
 	}
 	announceStaffLink(p.b, out)
 	return settingsStaffRedraw(p, settingsNoticeOK(settingsText(p.tr, "settings_notice_linked")))

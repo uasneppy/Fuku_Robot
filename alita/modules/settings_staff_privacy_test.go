@@ -79,6 +79,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					settingsNoticeWarn(settingsText(tr, "settings_card_expired")),
 					settingsNoticeWarn(settingsText(tr, "staff_check_failed")),
 					settingsNoticeWarn(settingsText(tr, "staff_link_no_staff_group")),
+					settingsNoticeWarn(settingsText(tr, "settings_staff_no_group")),
 				}
 				for r := staffRefusalNone + 1; r <= staffRefusalCheckFailed; r++ {
 					notices = append(notices, settingsNoticeWarn(staffLinkRefusalText(tr, r, groupView.GroupTitle)))

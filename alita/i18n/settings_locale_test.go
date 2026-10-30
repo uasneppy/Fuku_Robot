@@ -107,6 +107,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_antiflood_action_note":   {110, 154},
 	"settings_btn_antiflood_delete":    {36, 48},
 	"settings_card_expired":            {80, 112},
+	"settings_staff_no_group":          {120, 170},
 
 	// The /help entry (plan 09-13).
 	"settings_help_msg": {900, 1260},

@@ -505,14 +505,17 @@ func TestSettingsCardExpiry(t *testing.T) {
 }
 
 func TestSettingsStaffLink(t *testing.T) {
-	t.Run("an opener who owns no Staff Group gets the command's text", func(t *testing.T) {
+	t.Run("an opener who owns no Staff Group gets the menu's own line", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		msgID := env.openMenu(env.admin)
 		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
 
 		text, _ := env.lastEdit(env.chat.Id, msgID)
-		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_link_no_staff_group"),
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("settings_staff_no_group"),
 			staffMarker("settings_staff_not_linked"))
+		if strings.Contains(text, staffMarker("staff_link_no_staff_group")) {
+			t.Errorf("the menu shows the command's line, which tells the presser to send a command again: %q", text)
+		}
 		if link := settingsStaffTestLinkOf(t, env); link != nil {
 			t.Errorf("a link exists: %+v", link)
 		}
@@ -902,7 +905,9 @@ func TestSettingsAuthorityParityStaff(t *testing.T) {
 		msgID := env.openMenu(env.admin)
 		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "lk"))
 		text, _ := env.lastEdit(env.chat.Id, msgID)
-		settingsStaffTestWantContains(t, text, staffMarker("staff_link_no_staff_group"))
+		// Same refusal, nothing linked; only the wording differs, because the command's ends
+		// "send this command again" (IN-05).
+		settingsStaffTestWantContains(t, text, staffMarker("settings_staff_no_group"))
 		if link := settingsStaffTestLinkOf(t, env); link != nil {
 			t.Errorf("a refused press linked the group: %+v", link)
 		}

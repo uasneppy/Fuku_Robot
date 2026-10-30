@@ -16,7 +16,7 @@ import (
 )
 
 // The settings| callbacks carry no authority. Every press runs one pipeline, each step
-// refusing before the next runs (settingsVerifyPress): decode and structure with no I/O, a
+// refusing before the next runs (settingsPress.verify): decode and structure with no I/O, a
 // Telegram service identity, the opener of a group menu, one live getChatMember of the
 // presser in the group being configured, and then the right of the control. The menu keeps
 // no state of its own: no Redis key, so a press works on any replica with Redis down.
@@ -231,12 +231,17 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 	return true
 }
 
-// settingsVerifyPress runs steps 1 to 4 of the press pipeline in that order and returns the
-// verified press, or nil after answering the refusal. A refusal of steps 1 to 3 makes no
-// Telegram call; step 4 is the live getChatMember of the presser in the group being
-// configured. Nothing is read or written for a press that does not pass.
-func settingsVerifyPress(b *gotgbot.Bot, ctx *ext.Context, query *gotgbot.CallbackQuery) *settingsPress {
-	p := &settingsPress{b: b, ctx: ctx, query: query, tr: ctxTr(ctx)}
+// newSettingsPress is the press of a callback before any of its checks ran.
+func newSettingsPress(b *gotgbot.Bot, ctx *ext.Context, query *gotgbot.CallbackQuery) *settingsPress {
+	return &settingsPress{b: b, ctx: ctx, query: query, tr: ctxTr(ctx)}
+}
+
+// verify runs steps 1 to 4 of the press pipeline in that order and returns p, or nil after
+// answering the refusal. A refusal of steps 1 to 3 makes no Telegram call; step 4 is the live
+// getChatMember of the presser in the group being configured. Nothing is read or written for
+// a press that does not pass.
+func (p *settingsPress) verify() *settingsPress {
+	b, query := p.b, p.query
 	refuse := func(key string) *settingsPress {
 		p.answer(settingsText(p.tr, key), true)
 		return nil
@@ -339,7 +344,12 @@ func (m moduleStruct) settingsCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 	if !ok {
 		return ext.EndGroups
 	}
-	p := settingsVerifyPress(b, ctx, query)
+	press := newSettingsPress(b, ctx, query)
+	// Deferred after the recover above, so it runs first: a panic anywhere below, in the
+	// checks or in a page, still answers the query once instead of leaving the client's
+	// spinner running until Telegram times it out. A press that already answered is a no-op.
+	defer press.answer("", false)
+	p := press.verify()
 	if p == nil {
 		return ext.EndGroups
 	}
