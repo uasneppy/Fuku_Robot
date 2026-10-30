@@ -633,40 +633,21 @@ func (moduleStruct) captchaModeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 	}
 
 	mode := strings.ToLower(args[0])
-	if mode != "math" && mode != "text" && mode != "turnstile" {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("captcha_mode_invalid")
+	result := applyCaptchaMode(bot, chat.Id, mode)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case captchaInvalid, captchaRefused:
+		text, _ := tr.GetString(result.Key)
 		_, err := msg.Reply(bot, text, formatting.Shtml())
 		return err
-	}
-
-	// Turnstile is stored only when the bot can run it (D-05, D-09): a group switched to a
-	// mode that could only fall back would be a setting that lies.
-	if mode == "turnstile" {
-		if refusal := captchaWebModeRefusal(bot, chat); refusal != "" {
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			text, _ := tr.GetString(refusal)
-			_, err := msg.Reply(bot, text, formatting.Shtml())
-			return err
-		}
-	}
-
-	err := captcha.SetCaptchaMode(chat.Id, mode)
-	if err != nil {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		var text string
-		if errors.Is(err, captcha.ErrInvalidCaptchaMode) {
-			text, _ = tr.GetString("captcha_invalid_mode_error")
-		} else {
-			text, _ = tr.GetString("captcha_mode_failed")
-		}
+	case captchaSaveFailed:
+		text, _ := tr.GetString(result.Key)
 		if _, replyErr := msg.Reply(bot, text, formatting.Shtml()); replyErr != nil {
 			log.Warnf("[Captcha] Failed to send mode error message in chat %d: %v", chat.Id, replyErr)
 		}
-		return err
+		return result.Err
 	}
 
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	modeDesc, _ := tr.GetString("captcha_mode_math_desc")
 	switch mode {
 	case "text":
@@ -677,8 +658,41 @@ func (moduleStruct) captchaModeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 
 	textTemplate, _ := tr.GetString("captcha_mode_set_formatted")
 	text := fmt.Sprintf(textTemplate, mode, modeDesc)
-	_, err = msg.Reply(bot, text, formatting.Shtml())
+	_, err := msg.Reply(bot, text, formatting.Shtml())
 	return err
+}
+
+// applyCaptchaMode is the one path that changes a group's captcha mode, called by
+// /captchamode and by the settings menu. The mode is lower-cased and must be math, text or
+// turnstile. Turnstile is stored only when captchaWebModeRefusal finds nothing against it
+// (D-05, D-09 of Phase 8): a group switched to a mode that could only fall back would be a
+// setting that lies. Nothing is written on a refusal.
+func applyCaptchaMode(b *gotgbot.Bot, chatID int64, mode string) captchaApplyResult {
+	mode = strings.ToLower(mode)
+	if mode != "math" && mode != "text" && mode != "turnstile" {
+		return captchaApplyResult{Outcome: captchaInvalid, Key: "captcha_mode_invalid"}
+	}
+	if mode == "turnstile" {
+		if refusal := captchaWebModeRefusal(b, &gotgbot.Chat{Id: chatID}); refusal != "" {
+			return captchaApplyResult{Outcome: captchaRefused, Key: refusal}
+		}
+	}
+	if err := captcha.SetCaptchaMode(chatID, mode); err != nil {
+		if errors.Is(err, captcha.ErrInvalidCaptchaMode) {
+			return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_invalid_mode_error", Err: err}
+		}
+		return captchaApplyResult{Outcome: captchaSaveFailed, Key: "captcha_mode_failed", Err: err}
+	}
+	return captchaReadBack(chatID, "a mode change")
+}
+
+// captchaWebInstalled is the first Turnstile condition: a web captcha runtime is installed,
+// the bot has a username and the runtime has a Redis client. It does no I/O, so the settings
+// page can mark Turnstile unavailable without waiting, and captchaWebModeRefusal starts with
+// it so the page and the command never disagree.
+func captchaWebInstalled(bot *gotgbot.Bot) bool {
+	rt := captchaWebCurrent.Load()
+	return rt != nil && bot != nil && bot.Username != "" && rt.cfg.Redis != nil
 }
 
 // captchaWebModeRefusal decides whether /captchamode turnstile may be stored in chat and
@@ -690,7 +704,7 @@ func (moduleStruct) captchaModeCommand(bot *gotgbot.Bot, ctx *ext.Context) error
 // to mute and unmute, and an unknown answer refuses.
 func captchaWebModeRefusal(bot *gotgbot.Bot, chat *gotgbot.Chat) string {
 	rt := captchaWebCurrent.Load()
-	if rt == nil || bot == nil || bot.Username == "" || rt.cfg.Redis == nil {
+	if !captchaWebInstalled(bot) || rt == nil {
 		return "captcha_web_refuse_not_configured"
 	}
 
