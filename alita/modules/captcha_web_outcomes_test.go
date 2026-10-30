@@ -11,10 +11,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"gorm.io/gorm"
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/approvals"
@@ -719,5 +721,132 @@ func TestCaptchaWebFailedSolveSparesApprovedAndDisabled(t *testing.T) {
 				t.Fatal("the attempt row survived")
 			}
 		})
+	}
+}
+
+// beforeCallBotClient runs before once, before the first call of method, then passes every call
+// to the recording client. It lets a test land a database write at an exact point of a request.
+type beforeCallBotClient struct {
+	inner  *moduleBotClient
+	method string
+	before func()
+	once   sync.Once
+}
+
+func (b *beforeCallBotClient) RequestWithContext(ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	if method == b.method {
+		b.once.Do(b.before)
+	}
+	return b.inner.RequestWithContext(ctx, token, method, params, opts)
+}
+
+func (b *beforeCallBotClient) GetAPIURL(opts *gotgbot.RequestOpts) string {
+	return b.inner.GetAPIURL(opts)
+}
+
+func (b *beforeCallBotClient) FileURL(token, path string, opts *gotgbot.RequestOpts) string {
+	return b.inner.FileURL(token, path, opts)
+}
+
+// TestCaptchaWebLostClaimOfLiveAttemptIsRetry pins WR-01 for a pass: the claim also matches the
+// message ID read a moment before, and SendCaptcha stores that ID after its send returns. A tap
+// in that window loses the claim while the attempt is still live; the member must be told to
+// try again, not that their time ran out, and the challenge must be given back.
+func TestCaptchaWebLostClaimOfLiveAttemptIsRetry(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	env := newCaptchaWebEnv(t)
+	token := env.join(member)
+	attempt := env.attempt(member.Id)
+	stored := attempt.MessageID
+
+	// The tap arrives before SendCaptcha stored the message ID, and the store lands while the
+	// pass reads the chat (between its read of the attempt and its claim).
+	if err := db.DB.Model(&models.CaptchaAttempts{}).Where("id = ?", attempt.ID).Update("message_id", 0).Error; err != nil {
+		t.Fatalf("clear message_id: %v", err)
+	}
+	env.bot.BotClient = &beforeCallBotClient{inner: env.client, method: "getChat", before: func() {
+		if err := captcha.UpdateCaptchaAttemptMessageID(attempt.ID, stored); err != nil {
+			t.Errorf("UpdateCaptchaAttemptMessageID() error = %v", err)
+		}
+	}}
+
+	status, answer := env.verify(member, token)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultRetry || answer.Action != "" {
+		t.Fatalf("verify = %d %+v, want 200 retry (the attempt is still live)", status, answer)
+	}
+	if env.attempt(member.Id) == nil {
+		t.Fatal("the attempt row was lost")
+	}
+	if got := kicksOf(env.client, member.Id); got != 0 {
+		t.Fatalf("kicks = %d, want none", got)
+	}
+	if !env.mr.Exists(env.challengeKey(token)) {
+		t.Fatal("the challenge was not given back")
+	}
+
+	status, answer = env.verify(member, token)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("second verify = %d %+v, want 200 passed", status, answer)
+	}
+	if env.attempt(member.Id) != nil {
+		t.Fatal("the attempt row survived the pass")
+	}
+}
+
+// failNthAttemptRead makes the nth read of captcha_attempts after it is called fail with a
+// database error, once, through a real GORM callback on the test database.
+func failNthAttemptRead(t *testing.T, nth int32) {
+	t.Helper()
+	var seen atomic.Int32
+	name := "test:fail_attempt_read_" + t.Name()
+	err := db.DB.Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table == "captcha_attempts" && seen.Add(1) == nth {
+			_ = tx.AddError(errors.New("database is down"))
+		}
+	})
+	if err != nil {
+		t.Fatalf("register callback: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.DB.Callback().Query().Remove(name); err != nil {
+			t.Errorf("remove callback: %v", err)
+		}
+	})
+}
+
+// TestCaptchaWebFailedSolveDatabaseBlipIsRetry pins WR-01 for a failed solve: the timeout path
+// reports a database error as "not claimed", which looked like a lost claim. The row is still
+// there, nothing was decided, so the member must get their challenge back and nobody is kicked.
+func TestCaptchaWebFailedSolveDatabaseBlipIsRetry(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	env := newCaptchaWebEnv(t)
+	token := env.join(member)
+	env.setSiteverify(captchaweb.SiteverifyAnswerForTest(http.StatusOK, `{"success":false,"error-codes":["invalid-input-response"]}`))
+
+	// The reads of captcha_attempts in one verify: the preflight Attempt (1), the Fail's own
+	// read (2), then the read inside the timeout path (3), which is the one that fails.
+	failNthAttemptRead(t, 3)
+
+	status, answer := env.verify(member, token)
+	if status != http.StatusServiceUnavailable || answer.Result != captchaweb.ResultRetry {
+		t.Fatalf("verify = %d %+v, want 503 retry", status, answer)
+	}
+	if env.attempt(member.Id) == nil {
+		t.Fatal("the attempt row was lost to a database blip")
+	}
+	if got := kicksOf(env.client, member.Id); got != 0 {
+		t.Fatalf("kicks = %d, want none", got)
+	}
+	if !env.mr.Exists(env.challengeKey(token)) {
+		t.Fatal("the challenge was not given back")
+	}
+
+	// The blip is over: the same challenge now decides the failed solve once.
+	status, answer = env.verify(member, token)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultFailed || answer.Action != "kick" {
+		t.Fatalf("second verify = %d %+v, want 200 failed with kick", status, answer)
+	}
+	if got := kicksOf(env.client, member.Id); got != 1 {
+		t.Fatalf("kicks = %d, want exactly one", got)
 	}
 }

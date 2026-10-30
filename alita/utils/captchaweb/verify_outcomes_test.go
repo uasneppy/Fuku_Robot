@@ -31,14 +31,19 @@ type outcomeBackend struct {
 	CanRestrictErr error
 	Status         AttemptStatus
 	AttemptErr     error
-	PassResult     PassResult
-	PassErr        error
-	FailResult     ActionResult
-	FailErr        error
-	ExpireResult   ActionResult
-	ExpireErr      error
+	// LaterStatus and LaterAttemptErr, when set, answer every Attempt call after the first, so
+	// a test can show a row that changed between the preflight and a lost claim.
+	LaterStatus     *AttemptStatus
+	LaterAttemptErr error
+	PassResult      PassResult
+	PassErr         error
+	FailResult      ActionResult
+	FailErr         error
+	ExpireResult    ActionResult
+	ExpireErr       error
 
-	calls []string
+	calls        []string
+	attemptCalls int
 }
 
 func newOutcomeBackend() *outcomeBackend {
@@ -75,6 +80,13 @@ func (b *outcomeBackend) Attempt(context.Context, Record) (AttemptStatus, error)
 	b.record("attempt")
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.attemptCalls++
+	if b.attemptCalls > 1 && (b.LaterStatus != nil || b.LaterAttemptErr != nil) {
+		if b.LaterAttemptErr != nil {
+			return AttemptStatus{}, b.LaterAttemptErr
+		}
+		return *b.LaterStatus, nil
+	}
 	return b.Status, b.AttemptErr
 }
 
@@ -257,15 +269,39 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 			wantCalls:  []string{"bot_can_restrict", "attempt", "fail"},
 		},
 		{
-			name: "a failed solve that lost the claim expires and does not re-arm",
+			name: "a failed solve that lost the claim to a decided row expires and does not re-arm",
 			setup: func(o *outcomeHandler) {
 				o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("timeout-or-duplicate")))
 				o.Backend.FailResult = ActionLost
+				o.Backend.LaterStatus = &AttemptStatus{Live: false, Action: "kick"}
 			},
 			wantStatus: 200,
 			wantResult: ResultExpired,
 			wantAction: "kick",
-			wantCalls:  []string{"bot_can_restrict", "attempt", "fail", "expire"},
+			wantCalls:  []string{"bot_can_restrict", "attempt", "fail", "attempt", "expire"},
+		},
+		{
+			name: "a failed solve that lost the claim to a live row re-arms and does not expire",
+			setup: func(o *outcomeHandler) {
+				o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("timeout-or-duplicate")))
+				o.Backend.FailResult = ActionLost
+			},
+			wantStatus:  200,
+			wantResult:  ResultRetry,
+			wantRearmed: true,
+			wantCalls:   []string{"bot_can_restrict", "attempt", "fail", "attempt"},
+		},
+		{
+			name: "a failed solve that lost the claim and cannot read the row re-arms",
+			setup: func(o *outcomeHandler) {
+				o.setSiteverify(SiteverifyAnswerForTest(200, failureBody("timeout-or-duplicate")))
+				o.Backend.FailResult = ActionLost
+				o.Backend.LaterAttemptErr = errors.New("database down")
+			},
+			wantStatus:  503,
+			wantResult:  ResultRetry,
+			wantRearmed: true,
+			wantCalls:   []string{"bot_can_restrict", "attempt", "fail", "attempt"},
 		},
 		{
 			name: "a failed solve whose claim errored re-arms",
@@ -287,12 +323,34 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 			wantCalls:  []string{"bot_can_restrict", "attempt", "pass"},
 		},
 		{
-			name:       "a pass that lost the claim expires and does not re-arm",
-			setup:      func(o *outcomeHandler) { o.Backend.PassResult = PassLost },
+			name: "a pass that lost the claim to a decided row expires and does not re-arm",
+			setup: func(o *outcomeHandler) {
+				o.Backend.PassResult = PassLost
+				o.Backend.LaterStatus = &AttemptStatus{Live: false, Action: "kick"}
+			},
 			wantStatus: 200,
 			wantResult: ResultExpired,
 			wantAction: "kick",
-			wantCalls:  []string{"bot_can_restrict", "attempt", "pass", "expire"},
+			wantCalls:  []string{"bot_can_restrict", "attempt", "pass", "attempt", "expire"},
+		},
+		{
+			name:        "a pass that lost the claim to a live row re-arms and does not expire",
+			setup:       func(o *outcomeHandler) { o.Backend.PassResult = PassLost },
+			wantStatus:  200,
+			wantResult:  ResultRetry,
+			wantRearmed: true,
+			wantCalls:   []string{"bot_can_restrict", "attempt", "pass", "attempt"},
+		},
+		{
+			name: "a pass that lost the claim and cannot read the row re-arms",
+			setup: func(o *outcomeHandler) {
+				o.Backend.PassResult = PassLost
+				o.Backend.LaterAttemptErr = errors.New("database down")
+			},
+			wantStatus:  503,
+			wantResult:  ResultRetry,
+			wantRearmed: true,
+			wantCalls:   []string{"bot_can_restrict", "attempt", "pass", "attempt"},
 		},
 		{
 			name:       "a claimed pass whose unmute failed is a retry and does not re-arm",
@@ -388,6 +446,7 @@ func TestVerifyRouteRearmsOnlyOnRetry(t *testing.T) {
 			o.Backend.mu.Lock()
 			o.Backend.CanRestrict, o.Backend.CanRestrictErr, o.Backend.AttemptErr = true, nil, nil
 			o.Backend.PassResult, o.Backend.PassErr = PassOK, nil
+			o.Backend.LaterStatus, o.Backend.LaterAttemptErr = nil, nil
 			o.Backend.mu.Unlock()
 			if status, answer := o.post(member, token); status != 200 || answer.Result != ResultPassed {
 				t.Fatalf("second post = %d %+v, want 200 passed", status, answer)
@@ -684,7 +743,10 @@ func TestCaptchaWebNeverLogsInputs(t *testing.T) {
 		{"preflight error", plain(func(o *outcomeHandler) { o.Backend.CanRestrictErr = errors.New("secret in an error " + echoMarker) }), ResultRetry},
 		{"backend error", plain(func(o *outcomeHandler) { o.Backend.AttemptErr = errors.New("database says " + echoMarker) }), ResultRetry},
 		{"pass error", plain(func(o *outcomeHandler) { o.Backend.PassErr = errors.New("telegram says " + echoMarker) }), ResultRetry},
-		{"pass lost", plain(func(o *outcomeHandler) { o.Backend.PassResult = PassLost }), ResultExpired},
+		{"pass lost", plain(func(o *outcomeHandler) {
+			o.Backend.PassResult = PassLost
+			o.Backend.LaterStatus = &AttemptStatus{Live: false, Action: "kick"}
+		}), ResultExpired},
 		{"pass unmute failed", plain(func(o *outcomeHandler) { o.Backend.PassResult = PassUnmuteFailed }), ResultRetry},
 		{"fail error", plain(func(o *outcomeHandler) {
 			o.setSiteverify(echoingCloudflare(200, cloudflareCodes("timeout-or-duplicate")))
@@ -693,6 +755,7 @@ func TestCaptchaWebNeverLogsInputs(t *testing.T) {
 		{"fail lost, expire error", plain(func(o *outcomeHandler) {
 			o.setSiteverify(echoingCloudflare(200, cloudflareCodes("timeout-or-duplicate")))
 			o.Backend.FailResult = ActionLost
+			o.Backend.LaterStatus = &AttemptStatus{Live: false, Action: "kick"}
 			o.Backend.ExpireErr = errors.New("telegram says " + echoMarker)
 		}), ResultExpired},
 		{"not for you", func(o *outcomeHandler) (int, Answer, []string) {

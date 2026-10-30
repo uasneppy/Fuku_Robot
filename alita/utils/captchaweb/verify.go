@@ -510,6 +510,31 @@ func (c *challengeRun) retry(status int) {
 	writeAnswer(c.w, status, Answer{Result: ResultRetry})
 }
 
+// lostClaim handles a claim that was not won. "No claim" does not mean "the row is gone": the
+// claim also matches the message ID and the refresh count read a moment before, so a write that
+// landed in between (SendCaptcha storing the message ID after its send) loses it while the
+// attempt is still live. The attempt is read again: still live, the challenge is given back and
+// the member answers retry and can try again; confirmed gone or expired, the check expires; a
+// read that cannot be answered is a retry too, because expiring on a guess would tell a
+// member who may still pass that their time ran out (WR-01).
+func (c *challengeRun) lostClaim() {
+	ctx, cancel := c.work()
+	attempt, err := c.h.backend.Attempt(ctx, c.rec)
+	cancel()
+	switch {
+	case err != nil:
+		log.WithFields(c.fields).Warn("[CaptchaWeb][Verify] attempt lookup after a lost claim failed")
+		countError()
+		c.retry(http.StatusServiceUnavailable)
+	case attempt.Live:
+		log.WithFields(c.fields).Info("[CaptchaWeb][Verify] outcome=retry reason=claim_changed")
+		c.retry(http.StatusOK)
+	default:
+		c.action = attempt.Action
+		c.expire()
+	}
+}
+
 // expire applies the action to an attempt whose time is up or whose claim was lost, then
 // answers expired with the action. It never re-arms.
 func (c *challengeRun) expire() {
@@ -605,7 +630,7 @@ func (c *challengeRun) pass() {
 		c.decided(ResultPassed, "")
 		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultPassed})
 	case PassLost:
-		c.expire()
+		c.lostClaim()
 	default:
 		// Claimed, but the unmute failed: the Backend left a durable retry, so the challenge
 		// is not given back.
@@ -626,8 +651,9 @@ func (c *challengeRun) fail(reason Reason) {
 		return
 	}
 	if res == ActionLost {
-		// Lost the conditional delete to a timer or another replica.
-		c.expire()
+		// Lost the conditional delete, to a timer or another replica or to a write that
+		// changed the row (the challenge message ID, a refresh).
+		c.lostClaim()
 		return
 	}
 	log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] failed solve reason=%s", reason)

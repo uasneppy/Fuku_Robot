@@ -606,9 +606,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Exactly once on any replica: a pass, a failed solve and a timeout are decided only by the conditional delete of the
   attempt row (`CompleteCaptchaAttemptAtomic` or `ReleaseCaptchaAttemptAtomic`), never by a Redis flag, so a challenge
   issued on one replica passes on another and a timer, a cleanup tick and a check on three replicas cannot all act. A
-  check that arrives after `expires_at`, or that lost the claim (a pass or a failed solve whose delete matched nothing),
-  runs `expireCaptchaAttempt` at once through `captchaWebBackend.Expire` (idempotent through its own claim; a live row is
-  left to the timer) and answers `expired` with the action; it never unmutes. A claim whose unmute failed answers `retry`,
+  check that arrives after `expires_at` runs `expireCaptchaAttempt` at once through `captchaWebBackend.Expire`
+  (idempotent through its own claim; a live row is left to the timer) and answers `expired` with the action; it never
+  unmutes. A check that lost the claim (a pass or a failed solve whose delete matched nothing) does not assume the row is
+  gone, because the pass claim also matches the message ID and refresh count read a moment before and `SendCaptcha`
+  stores the message ID after its send: `challengeRun.lostClaim` reads the attempt again, and a still live attempt gives
+  the challenge back and answers `retry`, an unreadable one is a `retry` too, and only a row confirmed gone or expired
+  answers `expired`. For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
+  `settleCaptchaAttempt` (the timeout path reports a database error as "not claimed") and returns an error when the
+  attempt is still pending, so a blip re-arms the challenge instead of burning it (WR-01). A claim whose unmute failed answers `retry`,
   not `passed`: the claim already wrote the `captcha_muted_users` row due now, the 5-minute worker retries it, the
   challenge message is deleted and the token is not re-armed. A replica that crashes between the consume and a re-arm
   loses that member's challenge until the group's time limit ends the attempt (accepted).

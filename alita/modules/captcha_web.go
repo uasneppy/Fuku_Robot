@@ -388,6 +388,16 @@ func (b captchaWebBackend) Fail(_ context.Context, rec captchaweb.Record) (captc
 	if err != nil {
 		return captchaweb.ActionLost, err
 	}
+	if !settled.Claimed {
+		// Not claimed is either "someone else decided" or a fault that changed nothing (the
+		// timeout path swallows a database error as a lost claim). A row that is still there
+		// was not decided, so the call changed nothing and must say so.
+		if again, err := pendingTurnstileAttempt(rec); err != nil {
+			return captchaweb.ActionLost, err
+		} else if again != nil {
+			return captchaweb.ActionLost, errors.New("attempt still pending after an unclaimed fail")
+		}
+	}
 	return actionResultOf(settled.Claimed, settled.Applied), nil
 }
 
