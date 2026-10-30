@@ -38,12 +38,15 @@ const (
 	verifyMaxInFlight = 64
 )
 
-// The route patterns (Go 1.22 method patterns), mounted by the HTTP server. A wrong method
-// on the verify path gets 405 from the mux, HEAD on the page works, and /captcha/ is a 404.
+// The route patterns, mounted by the HTTP server. They carry no method on purpose: a Go 1.22
+// method pattern makes the mux answer a wrong method itself with a bare text 405 that has no
+// no-store, no nosniff and no JSON body, so each handler checks its own method and answers
+// 405 with the headers every answer of the route carries. A path that is not exactly one of
+// these (such as /captcha/) is a 404.
 const (
-	RoutePage   = "GET /captcha"
-	RouteVerify = "POST /captcha/verify"
-	RouteHealth = "GET /captcha/health"
+	RoutePage   = "/captcha"
+	RouteVerify = "/captcha/verify"
+	RouteHealth = "/captcha/health"
 )
 
 // Result is the decided answer of the verify route.
@@ -224,11 +227,15 @@ func (h *Handler) Routes(page http.Handler) map[string]http.Handler {
 }
 
 // Health answers 200 {"status":"ok"} when the handler is ready and Redis answers a PING
-// within RedisTimeout, and 503 {"status":"unavailable"} otherwise. The body never names an ID,
-// a setting or a secret (D-10).
+// within RedisTimeout, and 503 {"status":"unavailable"} otherwise; a method other than GET
+// and HEAD is a 405 with Allow. The body never names an ID, a setting or a secret (D-10).
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	status, body := http.StatusOK, `{"status":"ok"}`
-	if !h.ready.Load() || h.store.Ping(r.Context()) != nil {
+	switch {
+	case r.Method != http.MethodGet && r.Method != http.MethodHead:
+		w.Header().Set("Allow", "GET, HEAD")
+		status, body = http.StatusMethodNotAllowed, `{"status":"method_not_allowed"}`
+	case !h.ready.Load() || h.store.Ping(r.Context()) != nil:
 		status, body = http.StatusServiceUnavailable, `{"status":"unavailable"}`
 	}
 	hdr := w.Header()
@@ -352,8 +359,9 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(verifyWriteDeadline))
 
 	if r.Method != http.MethodPost {
+		// Not counted: a scanner's GET is no member's invalid answer.
 		w.Header().Set("Allow", http.MethodPost)
-		writeAnswer(w, http.StatusMethodNotAllowed, Answer{Result: ResultInvalid})
+		writeBody(w, http.StatusMethodNotAllowed, Answer{Result: ResultInvalid})
 		return
 	}
 	// Until the modules are loaded (polling mode starts serving before they are) nothing is

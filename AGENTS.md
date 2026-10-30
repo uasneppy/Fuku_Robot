@@ -67,8 +67,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TURNSTILE_SECRET_KEY` (some but not all stops startup, and the secret is registered with `logredact`). `main` builds
   the page's string tables from `i18n.StringTable(captchaweb.PageLanguages, captchaweb.PageKeys)` (a missing or empty
   key is fatal), installs the runtime with `modules.ConfigureCaptchaWeb` (`StartNotReady` true, `TrustedProxies` from
-  `CAPTCHA_WEB_TRUSTED_PROXIES`, a bad entry stops startup) and mounts `modules.CaptchaWebRoutes()` (`GET /captcha`,
-  `POST /captcha/verify`, `GET /captcha/health`) through `Server.Handle` with method patterns before `Start`. With the
+  `CAPTCHA_WEB_TRUSTED_PROXIES`, a bad entry stops startup) and mounts `modules.CaptchaWebRoutes()` (`/captcha`,
+  `/captcha/verify`, `/captcha/health`) through `Server.Handle` before `Start`. The patterns carry no method on purpose: a
+  Go 1.22 method pattern makes the mux answer a wrong method itself with a bare text 405 that has none of the headers
+  below, so each handler checks its own method (`Handler.Verify`: POST; `Handler.Health` and the page: GET and HEAD) and
+  answers 405 with `Allow`, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff` (a JSON body on verify and
+  health). `/captcha/` is a 404. A test drives all of it through a real `http.ServeMux` and `httptest.Server`. With the
   settings unset none of the three routes exists. Without Redis the runtime is not installed (the challenges live in
   Redis), `main` logs one warning, no route is mounted and Turnstile groups get the math captcha. The verify route
   answers 503 retry, and the health route 503, until `modules.MarkCaptchaWebReady` at the very end of `postInit`
@@ -645,7 +649,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   loses that member's challenge until the group's time limit ends the attempt (accepted).
   The verify route (`Handler.Verify`, `POST /captcha/verify`) refuses cheapest first: the handler's own write deadline is
   extended to 20 s (the HTTP server's `WriteTimeout` is 10 s, shorter than a siteverify call plus a pass), then a method
-  other than POST gets 405 with `Allow: POST`, then a handler that is not ready answers 503 retry, then the
+  other than POST gets 405 with `Allow: POST` (the handler checks it itself, see the mounting above; it is not counted in
+  the stats), then a handler that is not ready answers 503 retry, then the
   address window, then the body: `Content-Type` must be `application/json` (415), at most 16 KiB (413), no unknown field
   and no second JSON value (400), then the signed `initData` and the two per-user windows, and only then the in-flight
   slot: more than 64 requests holding a slot on the replica (`verifyMaxInFlight`) get 503 retry before the challenge is
@@ -656,7 +661,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   site can neither read it nor post a form to it. Work after the challenge is claimed never uses the request context (see
   above). A handler built with `Options.StartNotReady` answers 503 retry, reading nothing and touching neither Redis nor
   the backend, until `SetReady(true)` (polling mode starts the HTTP server before the modules load, D-30).
-  `GET /captcha/health` (`Handler.Health`) answers `200 {"status":"ok"}` only when the handler is ready and Redis answers a
+  `GET /captcha/health` (`Handler.Health`, any other method than GET and HEAD gets 405) answers `200 {"status":"ok"}` only when the handler is ready and Redis answers a
   `PING` within 250 ms, else `503 {"status":"unavailable"}`, and never names an ID, a setting or a secret. The patterns are
   `RoutePage`, `RouteVerify` and `RouteHealth`, returned by `Handler.Routes`.
 - The Turnstile verify route's client address is `captchaweb.ClientIP`: `RemoteAddr`, unless `RemoteAddr` is inside

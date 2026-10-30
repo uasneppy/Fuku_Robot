@@ -205,8 +205,9 @@ func (s *Server) RegisterPPROF() {
 	log.Info("[HTTPServer] Registered /debug/pprof/* endpoints")
 }
 
-// Handle mounts h on the server's mux under pattern, a Go 1.22 method pattern such as
-// "GET /captcha", and records the pattern so Start lists it among its endpoints. It must be
+// Handle mounts h on the server's mux under pattern, a Go 1.22 pattern such as "/captcha"
+// (the captcha routes carry no method, so their handlers answer a wrong method with their own
+// headers), and records the pattern so Start lists it among its endpoints. It must be
 // called before Start. The port, the timeouts and the TLS terminating proxy are the server's
 // own: a route mounted here shares them with /health, /metrics, pprof and the webhook.
 func (s *Server) Handle(pattern string, h http.Handler) {

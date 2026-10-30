@@ -328,39 +328,92 @@ func TestVerifyRouteLimitsAndHeaders(t *testing.T) {
 			}
 		})
 
-		t.Run("the three routes behave as a mux serves them", func(t *testing.T) {
+		t.Run("the three routes behave as a real server serves them", func(t *testing.T) {
 			o := newOutcomeHandler(t)
+			en := map[string]string{}
+			for _, key := range PageKeys {
+				en[key] = key
+			}
+			page, err := NewPage(PageOptions{SiteKey: "site-key", Strings: map[string]map[string]string{"en": en}})
+			if err != nil {
+				t.Fatalf("NewPage() error = %v", err)
+			}
 			mux := http.NewServeMux()
-			pageHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			})
-			for pattern, handler := range o.Handler.Routes(pageHandler) {
+			for pattern, handler := range o.Handler.Routes(page) {
 				mux.Handle(pattern, handler)
 			}
-			if RoutePage != "GET /captcha" || RouteVerify != "POST /captcha/verify" || RouteHealth != "GET /captcha/health" {
+			if RoutePage != "/captcha" || RouteVerify != "/captcha/verify" || RouteHealth != "/captcha/health" {
 				t.Fatalf("route patterns = %q %q %q", RoutePage, RouteVerify, RouteHealth)
 			}
-			do := func(method, path string) *httptest.ResponseRecorder {
-				req := httptest.NewRequest(method, path, nil)
-				req.RemoteAddr = "203.0.113.9:4000"
-				rec := httptest.NewRecorder()
-				mux.ServeHTTP(rec, req)
-				return rec
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+
+			do := func(method, path string) *http.Response {
+				req, err := http.NewRequest(method, server.URL+path, nil)
+				if err != nil {
+					t.Fatalf("NewRequest(%s %s): %v", method, path, err)
+				}
+				resp, err := server.Client().Do(req)
+				if err != nil {
+					t.Fatalf("%s %s: %v", method, path, err)
+				}
+				t.Cleanup(func() { _ = resp.Body.Close() })
+				return resp
 			}
-			for _, method := range []string{http.MethodOptions, http.MethodGet, http.MethodPut} {
-				rec := do(method, "/captcha/verify")
-				if rec.Code != http.StatusMethodNotAllowed || !strings.Contains(rec.Header().Get("Allow"), http.MethodPost) {
-					t.Fatalf("%s /captcha/verify: %d Allow=%q, want 405 with POST", method, rec.Code, rec.Header().Get("Allow"))
+
+			// A wrong method gets the handler's own 405: Allow, no-store and nosniff, as
+			// AGENTS.md documents, and for the verify route the JSON body of every answer.
+			wrong := []struct {
+				method, path, allow string
+				json                bool
+			}{
+				{http.MethodGet, "/captcha/verify", "POST", true},
+				{http.MethodOptions, "/captcha/verify", "POST", true},
+				{http.MethodPut, "/captcha/verify", "POST", true},
+				{http.MethodPost, "/captcha", "GET, HEAD", false},
+				{http.MethodDelete, "/captcha", "GET, HEAD", false},
+				{http.MethodPost, "/captcha/health", "GET, HEAD", true},
+			}
+			for _, tc := range wrong {
+				resp := do(tc.method, tc.path)
+				if resp.StatusCode != http.StatusMethodNotAllowed {
+					t.Fatalf("%s %s: status = %d, want 405", tc.method, tc.path, resp.StatusCode)
+				}
+				if got := resp.Header.Get("Allow"); got != tc.allow {
+					t.Fatalf("%s %s: Allow = %q, want %q", tc.method, tc.path, got, tc.allow)
+				}
+				if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+					t.Fatalf("%s %s: Cache-Control = %q, want no-store", tc.method, tc.path, got)
+				}
+				if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+					t.Fatalf("%s %s: X-Content-Type-Options = %q, want nosniff", tc.method, tc.path, got)
+				}
+				if tc.json {
+					if got := resp.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+						t.Fatalf("%s %s: Content-Type = %q, want JSON", tc.method, tc.path, got)
+					}
+				}
+				for key := range resp.Header {
+					if strings.HasPrefix(strings.ToLower(key), "access-control-") {
+						t.Fatalf("%s %s: CORS header %q", tc.method, tc.path, key)
+					}
 				}
 			}
-			if rec := do(http.MethodHead, "/captcha"); rec.Code != http.StatusOK {
-				t.Fatalf("HEAD /captcha: status = %d, want 200", rec.Code)
+			var answer Answer
+			if err := json.NewDecoder(do(http.MethodGet, "/captcha/verify").Body).Decode(&answer); err != nil || answer.Result != ResultInvalid {
+				t.Fatalf("GET /captcha/verify body = %+v, %v; want the JSON invalid answer", answer, err)
 			}
-			if rec := do(http.MethodGet, "/captcha/"); rec.Code != http.StatusNotFound {
-				t.Fatalf("GET /captcha/: status = %d, want 404", rec.Code)
+
+			for _, method := range []string{http.MethodGet, http.MethodHead} {
+				if resp := do(method, "/captcha"); resp.StatusCode != http.StatusOK {
+					t.Fatalf("%s /captcha: status = %d, want 200", method, resp.StatusCode)
+				}
+				if resp := do(method, "/captcha/health"); resp.StatusCode != http.StatusOK {
+					t.Fatalf("%s /captcha/health: status = %d, want 200", method, resp.StatusCode)
+				}
 			}
-			if rec := do(http.MethodGet, "/captcha/health"); rec.Code != http.StatusOK {
-				t.Fatalf("GET /captcha/health: status = %d, want 200", rec.Code)
+			if resp := do(http.MethodGet, "/captcha/"); resp.StatusCode != http.StatusNotFound {
+				t.Fatalf("GET /captcha/: status = %d, want 404", resp.StatusCode)
 			}
 		})
 	})

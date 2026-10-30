@@ -23,6 +23,7 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
 )
 
 func TestWebhookLimitsProcessingAndRejectsOverflow(t *testing.T) {
@@ -814,7 +815,8 @@ func TestWebhookAcceptsRecentRichBlockTypes(t *testing.T) {
 }
 
 // TestCaptchaWebRoutesRegistration registers the three captcha routes the way main does, with
-// method patterns through Handle, and drives them through the real mux.
+// the captchaweb route patterns (no method: the handlers check their own) through Handle, and
+// drives them through the real mux.
 func TestCaptchaWebRoutesRegistration(t *testing.T) {
 	s := New(0, time.Now())
 	s.RegisterHealth()
@@ -824,9 +826,9 @@ func TestCaptchaWebRoutesRegistration(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 	}
-	s.Handle("GET /captcha", tag("page"))
-	s.Handle("POST /captcha/verify", tag("verify"))
-	s.Handle("GET /captcha/health", tag("health"))
+	s.Handle(captchaweb.RoutePage, tag("page"))
+	s.Handle(captchaweb.RouteVerify, tag("verify"))
+	s.Handle(captchaweb.RouteHealth, tag("health"))
 
 	do := func(method, target string) *httptest.ResponseRecorder {
 		rr := httptest.NewRecorder()
@@ -848,14 +850,13 @@ func TestCaptchaWebRoutesRegistration(t *testing.T) {
 			t.Fatalf("POST /captcha/verify = %d via %q, want 200 via verify", rr.Code, rr.Header().Get("X-Handler"))
 		}
 	})
-	t.Run("verify refuses other methods with Allow POST", func(t *testing.T) {
+	t.Run("the mux leaves the method to the handler", func(t *testing.T) {
+		// A method pattern would make the mux answer these itself with a bare 405; the handler
+		// must be reached so that its own 405 (with its headers) is what the client sees.
 		for _, method := range []string{http.MethodGet, http.MethodOptions} {
 			rr := do(method, "/captcha/verify")
-			if rr.Code != http.StatusMethodNotAllowed {
-				t.Fatalf("%s /captcha/verify = %d, want 405", method, rr.Code)
-			}
-			if !strings.Contains(rr.Header().Get("Allow"), http.MethodPost) {
-				t.Fatalf("%s /captcha/verify Allow = %q, want POST in it", method, rr.Header().Get("Allow"))
+			if rr.Header().Get("X-Handler") != "verify" {
+				t.Fatalf("%s /captcha/verify reached %q, want the verify handler", method, rr.Header().Get("X-Handler"))
 			}
 		}
 	})
@@ -878,7 +879,7 @@ func TestCaptchaWebRoutesRegistration(t *testing.T) {
 	})
 	t.Run("Start lists the routes among its endpoints", func(t *testing.T) {
 		listed := strings.Join(s.endpointList(), " ")
-		for _, pattern := range []string{"GET /captcha", "POST /captcha/verify", "GET /captcha/health"} {
+		for _, pattern := range []string{captchaweb.RoutePage, captchaweb.RouteVerify, captchaweb.RouteHealth} {
 			if !strings.Contains(listed, pattern) {
 				t.Fatalf("endpoints %q lack %q", listed, pattern)
 			}

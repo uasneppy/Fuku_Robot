@@ -139,7 +139,7 @@ func newCaptchaWebRuntime(bot *gotgbot.Bot, cfg CaptchaWebConfig) (*captchaWebRu
 }
 
 // CaptchaWebRoutes returns the three web captcha routes (the page, the verify route and the
-// health check) keyed by their method patterns, for the HTTP server to mount before Start. It
+// health check) keyed by their patterns (no method, so each handler answers a wrong method itself), for the HTTP server to mount before Start. It
 // is nil while no runtime with a page is installed, so with the settings unset none of the
 // three routes exists (D-10).
 func CaptchaWebRoutes() map[string]http.Handler {
