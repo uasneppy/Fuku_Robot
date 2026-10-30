@@ -17,6 +17,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/divkix/Alita_Robot/alita/db/approvals"
 	"github.com/divkix/Alita_Robot/alita/db/captcha"
 	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
@@ -663,5 +664,60 @@ func TestCaptchaWebFailedActionNotAppliedIsNeutral(t *testing.T) {
 	status, answer = env.verify(member, token)
 	if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid || answer.Action != "" {
 		t.Fatalf("replay = %d %+v, want the same neutral answer", status, answer)
+	}
+}
+
+// TestCaptchaWebFailedSolveSparesApprovedAndDisabled pins WR-05: a failed solve takes the
+// decision the timer takes. A member approved mid-challenge, or a group that turned the captcha
+// off, is released and unmuted instead of kicked, and the page is not told of a removal.
+func TestCaptchaWebFailedSolveSparesApprovedAndDisabled(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	invalid := captchaweb.SiteverifyAnswerForTest(http.StatusOK, `{"success":false,"error-codes":["invalid-input-response"]}`)
+
+	cases := []struct {
+		name  string
+		spare func(t *testing.T, env *captchaWebEnv)
+	}{
+		{"approved mid-challenge", func(t *testing.T, env *captchaWebEnv) {
+			if err := approvals.AddApprovedUser(env.chat.Id, member.Id, 1, ""); err != nil {
+				t.Fatalf("AddApprovedUser() error = %v", err)
+			}
+		}},
+		{"captcha turned off mid-challenge", func(t *testing.T, env *captchaWebEnv) {
+			if err := captcha.SetCaptchaEnabled(env.chat.Id, false); err != nil {
+				t.Fatalf("SetCaptchaEnabled() error = %v", err)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newCaptchaWebEnv(t)
+			token := env.join(member)
+			tc.spare(t, env)
+			env.setSiteverify(invalid)
+
+			status, answer := env.verify(member, token)
+			if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid || answer.Action != "" {
+				t.Fatalf("verify = %d %+v, want 200 invalid with no action", status, answer)
+			}
+			if got := kicksOf(env.client, member.Id); got != 0 {
+				t.Fatalf("kicks = %d, want none for a spared member", got)
+			}
+			if bans := env.client.callsFor("banChatMember"); len(bans) != 0 {
+				t.Fatalf("banChatMember calls = %d, want none", len(bans))
+			}
+			if got := unmutesOf(t, env.client, member.Id); got == 0 {
+				t.Fatal("the spared member was not unmuted")
+			}
+			if deletes := callsWithMessageID(env.client, "deleteMessage", 9001); len(deletes) == 0 {
+				t.Fatal("the challenge message was not deleted")
+			}
+			if got := sentTextContaining(env.client, staffMarker("captcha_timeout_failure_kicked")); got != 0 {
+				t.Fatalf("removal notices = %d, want none", got)
+			}
+			if env.attempt(member.Id) != nil {
+				t.Fatal("the attempt row survived")
+			}
+		})
 	}
 }

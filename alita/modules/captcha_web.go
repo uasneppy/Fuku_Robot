@@ -363,10 +363,12 @@ func pendingTurnstileAttempt(rec captchaweb.Record) (*db.CaptchaAttempts, error)
 }
 
 // Fail implements captchaweb.Backend. A provably failed solve is the same event as a timeout,
-// so it runs handleCaptchaTimeout unchanged: the conditional delete of the attempt row decides
-// who applies the group's action, the challenge message is deleted and the failure notice is
-// posted (D-08). It reads the row and the settings first so that a database error is reported
-// as an error, with nothing changed, instead of looking like a lost claim.
+// so it runs settleCaptchaAttempt, the decision the timer makes: the conditional delete of the
+// attempt row decides who applies the group's action, the challenge message is deleted and the
+// failure notice is posted (D-08), except that an approved member or a group with the captcha
+// off is released and unmuted, with no removal reported. It reads the row first so that a
+// database error is reported as an error, with nothing changed, instead of looking like a lost
+// claim.
 func (b captchaWebBackend) Fail(_ context.Context, rec captchaweb.Record) (captchaweb.ActionResult, error) {
 	attempt, err := pendingTurnstileAttempt(rec)
 	if err != nil {
@@ -375,12 +377,18 @@ func (b captchaWebBackend) Fail(_ context.Context, rec captchaweb.Record) (captc
 	if attempt == nil {
 		return captchaweb.ActionLost, nil
 	}
-	settings, err := captcha.GetCaptchaSettings(rec.ChatID)
+	// The same decision as the timer: an approved member, or a group that turned the captcha
+	// off, is released and unmuted instead of punished.
+	settled, err := settleCaptchaAttempt(b.rt.bot, attempt)
+	if settled.Claimed && err != nil {
+		// The attempt is decided; only a follow-up step (an unmute retry) failed.
+		log.Warnf("[Captcha][Web] Fail of attempt %d was claimed but a follow-up failed: %v", rec.AttemptID, err)
+		err = nil
+	}
 	if err != nil {
 		return captchaweb.ActionLost, err
 	}
-	claimed, applied := handleCaptchaTimeout(b.rt.bot, rec.ChatID, rec.UserID, rec.AttemptID, 0, settings.FailureAction)
-	return actionResultOf(claimed, applied), nil
+	return actionResultOf(settled.Claimed, settled.Applied), nil
 }
 
 // actionResultOf maps the (claimed, applied) pair of the timeout path to the Backend result.

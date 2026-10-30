@@ -584,10 +584,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never the member's current attempt.
   Outcomes (D-28): only `invalid-input-response` and `timeout-or-duplicate` as the only error codes, and a confirmed token
   whose `cdata` belongs to another challenge, are a failed solve (`captchaweb.OutcomeFailed`); it runs
-  `handleCaptchaTimeout` once with the group's failure action through `captchaWebBackend.Fail` (kick is one
-  member-removing `unbanChatMember`, ban a `banChatMember`, mute the 24 h mute), deletes the challenge message, posts the
-  failure notice and answers `failed` with the action. Every other answer is a retry and kicks nobody: a transport
-  error, timeout, redirect (never followed, whatever transport the client has), 5xx, a body that does not parse or is over
+  `settleCaptchaAttempt` once through `captchaWebBackend.Fail`, the decision the timer, the cleanup tick and the late check
+  take as well: an approved member, or a group that turned the captcha off, is released and unmuted (no removal is
+  reported, the answer is the neutral `invalid`), and everyone else gets the group's failure action through
+  `handleCaptchaTimeout` (kick is one member-removing `unbanChatMember`, ban a `banChatMember`, mute the 24 h mute), the
+  challenge message is deleted, the failure notice is posted and the answer is `failed` with the action. Every other
+  answer is a retry and kicks nobody: a transport error, timeout, redirect (never followed, whatever transport the client has), 5xx, a body that does not parse or is over
   64 KiB, `internal-error`, `bad-request`, `missing-input-response`, an unknown or empty code list, a secret error
   (`missing-input-secret`, `invalid-input-secret`) and a hostname or action that does not match. The secret errors and the
   hostname and action mismatches are the owner's configuration faults (`Verdict.ConfigError`), logged once at Error as

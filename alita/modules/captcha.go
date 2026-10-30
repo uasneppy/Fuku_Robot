@@ -1325,25 +1325,42 @@ func expireCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (bool, 
 // failure action took effect. A released attempt (an approved member, or a group that turned
 // the captcha off) is claimed without any action applied.
 func expireCaptchaAttemptApplied(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (claimed, applied bool, err error) {
+	settled, err := settleCaptchaAttempt(bot, attempt)
+	if settled.Claimed && !settled.Released && captchaweb.IsReservedAnswer(attempt.Answer) {
+		captchaweb.CountExpired()
+	}
+	return settled.Claimed, settled.Applied, err
+}
+
+// captchaSettled is what settleCaptchaAttempt did with an attempt.
+type captchaSettled struct {
+	// Claimed is true when this call won the conditional delete of the attempt row.
+	Claimed bool
+	// Applied is true when the group's failure action then took effect.
+	Applied bool
+	// Released is true when the attempt was released without any action, because the member is
+	// approved or the group turned the captcha off.
+	Released bool
+}
+
+// settleCaptchaAttempt is the one decision about what happens to an attempt that is over, shared
+// by the timer, the cleanup tick, the web captcha's late check and its failed solve, so the
+// paths cannot drift: an approved member, and a group that turned the captcha off, are released
+// and unmuted instead of punished (AGENTS.md: approved users skip captcha); everyone else gets
+// the group's failure action through handleCaptchaTimeout. The conditional delete of the row
+// decides who acts.
+func settleCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (captchaSettled, error) {
 	if chat_status.IsApproved(bot, attempt.ChatID, attempt.UserID) {
-		if attempt.MessageID > 0 {
-			_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
-		}
-		claimed, err = releaseIncompleteCaptchaAttempt(bot, attempt)
-		return claimed, false, err
+		return releaseSparedCaptchaAttempt(bot, attempt)
 	}
 	settings, err := captcha.GetCaptchaSettings(attempt.ChatID)
 	if err != nil {
-		return false, false, fmt.Errorf("load captcha settings for chat %d: %w", attempt.ChatID, err)
+		return captchaSettled{}, fmt.Errorf("load captcha settings for chat %d: %w", attempt.ChatID, err)
 	}
 	if !settings.Enabled {
-		if attempt.MessageID > 0 {
-			_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
-		}
-		claimed, err = releaseIncompleteCaptchaAttempt(bot, attempt)
-		return claimed, false, err
+		return releaseSparedCaptchaAttempt(bot, attempt)
 	}
-	claimed, applied = handleCaptchaTimeout(
+	claimed, applied := handleCaptchaTimeout(
 		bot,
 		attempt.ChatID,
 		attempt.UserID,
@@ -1351,10 +1368,17 @@ func expireCaptchaAttemptApplied(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) 
 		attempt.MessageID,
 		settings.FailureAction,
 	)
-	if claimed && captchaweb.IsReservedAnswer(attempt.Answer) {
-		captchaweb.CountExpired()
+	return captchaSettled{Claimed: claimed, Applied: applied}, nil
+}
+
+// releaseSparedCaptchaAttempt deletes the challenge message and releases the attempt of a
+// member the captcha no longer applies to.
+func releaseSparedCaptchaAttempt(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) (captchaSettled, error) {
+	if attempt.MessageID > 0 {
+		_ = helpers.DeleteMessageWithErrorHandling(bot, attempt.ChatID, attempt.MessageID)
 	}
-	return claimed, applied, nil
+	claimed, err := releaseIncompleteCaptchaAttempt(bot, attempt)
+	return captchaSettled{Claimed: claimed, Released: true}, err
 }
 
 func handleCaptchaTimeout(bot *gotgbot.Bot, chatID, userID int64, attemptID uint, fallbackMessageID int64, action string) (bool, bool) {
