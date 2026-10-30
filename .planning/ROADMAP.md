@@ -375,13 +375,13 @@ Plans:
   4. A member who fails the Turnstile check, or doesn't pass within the group's time limit, is kicked and can rejoin to try again. This works no matter which bot replica handles the join or the check.
   5. The owner can deploy the captcha page by following the documented steps: a public HTTPS hostname, BotFather Mini App registration, and Turnstile keys. The Turnstile secret never appears in logs.
 
-**Plans:** 11 plans
+**Plans:** 2/11 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
-- [ ] 08-01-PLAN.md: Tracer. A joiner in a Turnstile group gets one Mini App button; a signed POST confirmed by Cloudflare unmutes them through the pass path shared with the button; forged buttons refused; math fallback, rollback, re-join and recovery
-- [ ] 08-02-PLAN.md: The four web captcha settings (plus trusted proxies) load all-or-nothing, the Turnstile secret is registered with `logredact`, env docs
+- [x] 08-01-PLAN.md: Tracer. A joiner in a Turnstile group gets one Mini App button; a signed POST confirmed by Cloudflare unmutes them through the pass path shared with the button; forged buttons refused; math fallback, rollback, re-join and recovery
+- [x] 08-02-PLAN.md: The four web captcha settings (plus trusted proxies) load all-or-nothing, the Turnstile secret is registered with `logredact`, env docs
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 08-03-PLAN.md: Strict `initData` validation pinned by the published known-answer vector; the `captchaweb` leaf-package test
@@ -432,5 +432,5 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
 | 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
-| 8. Turnstile Web Captcha | 0/TBD | Not started | - |
+| 8. Turnstile Web Captcha | 2/11 | In Progress|  |
 | 9. Settings Menu | 0/TBD | Not started | - |
