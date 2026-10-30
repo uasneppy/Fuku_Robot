@@ -3,9 +3,14 @@
 package modules
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +55,432 @@ func sentTextContaining(client *moduleBotClient, marker string) int {
 		}
 	}
 	return n
+}
+
+// unmutesOf counts the restrictChatMember calls that give userID the right to send messages.
+func unmutesOf(t *testing.T, client *moduleBotClient, userID int64) int {
+	t.Helper()
+	var n int
+	for _, call := range callsForUser(client, "restrictChatMember", userID) {
+		if permissionsOf(t, call).CanSendMessages {
+			n++
+		}
+	}
+	return n
+}
+
+// outcomeReplica is a second bot process of the same deployment: its own Telegram client and
+// bot, its own web captcha runtime, and the database and Redis of the env it was built from.
+type outcomeReplica struct {
+	client *moduleBotClient
+	bot    *gotgbot.Bot
+	rt     *captchaWebRuntime
+}
+
+// primary is the env's own replica.
+func (e *captchaWebEnv) primary() *outcomeReplica {
+	return &outcomeReplica{client: e.client, bot: e.bot, rt: e.rt}
+}
+
+// newOutcomeReplica starts another replica on the env's database, Redis and fake Cloudflare.
+// botID is its bot's user ID: the fake answers 999 as an administrator with every right and
+// any other ID as a plain member. The replica is not installed as the current runtime.
+func newOutcomeReplica(t *testing.T, env *captchaWebEnv, botID int64) *outcomeReplica {
+	t.Helper()
+	client := newModuleBotClient()
+	client.mu.Lock()
+	client.responses["getChat"] = json.RawMessage(
+		fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Captcha Chat"}`, env.chat.Id))
+	client.mu.Unlock()
+	bot := newModuleTestBot(client)
+	bot.Id = botID
+	rt, err := newCaptchaWebRuntime(bot, CaptchaWebConfig{
+		BaseURL:    "https://" + captchaWebTestHost,
+		ShortName:  "verify",
+		SiteKey:    "test-site-key",
+		Secret:     env.secret,
+		Redis:      env.redis,
+		Siteverify: env.rt.cfg.Siteverify,
+	})
+	if err != nil {
+		t.Fatalf("newCaptchaWebRuntime(replica) error = %v", err)
+	}
+	return &outcomeReplica{client: client, bot: bot, rt: rt}
+}
+
+// verify posts what a real page posts for user and token to this replica's handler. It
+// returns an error instead of failing, so goroutines can use it.
+func (r *outcomeReplica) verify(user gotgbot.User, token string) (int, captchaweb.Answer, error) {
+	initData := captchaweb.InitDataForTest(r.bot.Token, user.Id, user.FirstName, "en", token, time.Now())
+	body, err := json.Marshal(map[string]string{
+		"init_data":       initData,
+		"turnstile_token": captchaweb.TurnstileTokenForTest(token),
+		"challenge":       token,
+	})
+	if err != nil {
+		return 0, captchaweb.Answer{}, err
+	}
+	req := httptest.NewRequest(http.MethodPost, "/captcha/verify", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.rt.handler.Verify(rec, req)
+	var answer captchaweb.Answer
+	if err := json.Unmarshal(rec.Body.Bytes(), &answer); err != nil {
+		return rec.Code, answer, fmt.Errorf("verify answer is not JSON: %w", err)
+	}
+	return rec.Code, answer, nil
+}
+
+// outcomeRace joins iterations fresh members and, for each, starts the timeout of the
+// attempt on timer and the member's verify on checker at the same moment. Whatever the
+// interleaving, exactly one of two things must have happened to each member: they passed and
+// were unmuted once with nobody kicked, or they were kicked once and the check answered
+// expired with the action (CAPT-07, D-16).
+func outcomeRace(t *testing.T, env *captchaWebEnv, timer, checker *outcomeReplica, iterations int) {
+	t.Helper()
+	clients := []*moduleBotClient{env.client}
+	for _, r := range []*outcomeReplica{timer, checker} {
+		known := false
+		for _, c := range clients {
+			known = known || c == r.client
+		}
+		if !known {
+			clients = append(clients, r.client)
+		}
+	}
+
+	var passed, expired int
+	for i := 0; i < iterations; i++ {
+		member := gotgbot.User{Id: int64(6000 + i), FirstName: "Racer"}
+		token := env.join(member)
+		attempt := env.attempt(member.Id)
+		if attempt == nil {
+			t.Fatalf("iteration %d: no attempt after the join", i)
+		}
+
+		var (
+			wg         sync.WaitGroup
+			start      = make(chan struct{})
+			status     int
+			answer     captchaweb.Answer
+			verifyErr  error
+			timerWon   bool
+			timerError error
+		)
+		wg.Add(2)
+		// The timeout starts a little later each iteration, so over the run the check
+		// reaches its claim both before and after the timeout does.
+		lag := time.Duration(i) * 600 * time.Microsecond
+		go func() {
+			defer wg.Done()
+			<-start
+			time.Sleep(lag)
+			timerWon, timerError = expireCaptchaAttempt(timer.bot, attempt)
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			status, answer, verifyErr = checker.verify(member, token)
+		}()
+		close(start)
+		wg.Wait()
+
+		if verifyErr != nil || timerError != nil {
+			t.Fatalf("iteration %d: verify error = %v, timeout error = %v", i, verifyErr, timerError)
+		}
+		var kicks, unmutes int
+		for _, c := range clients {
+			kicks += kicksOf(c, member.Id)
+			unmutes += unmutesOf(t, c, member.Id)
+		}
+		switch {
+		case answer.Result == captchaweb.ResultPassed:
+			passed++
+			if status != http.StatusOK || kicks != 0 || unmutes != 1 || timerWon {
+				t.Fatalf("iteration %d: passed, but status %d, kicks %d, unmutes %d, timeout claimed %v; want 200, 0, 1, false",
+					i, status, kicks, unmutes, timerWon)
+			}
+		case answer.Result == captchaweb.ResultExpired:
+			expired++
+			if status != http.StatusOK || answer.Action != "kick" || kicks != 1 || unmutes != 0 || !timerWon {
+				t.Fatalf("iteration %d: expired, but status %d, action %q, kicks %d, unmutes %d, timeout claimed %v; want 200, kick, 1, 0, true",
+					i, status, answer.Action, kicks, unmutes, timerWon)
+			}
+		default:
+			t.Fatalf("iteration %d: verify = %d %+v, want passed or expired", i, status, answer)
+		}
+		if env.attemptRow(member.Id) != nil {
+			t.Fatalf("iteration %d: the attempt row survived", i)
+		}
+	}
+	t.Logf("%d passed, %d expired out of %d", passed, expired, iterations)
+}
+
+// withCaptchaLifecycleForTest runs the captcha lifecycle's task bookkeeping for the test and
+// puts the saved state back afterwards, so StopCaptchaLifecycle can be called inside.
+func withCaptchaLifecycleForTest(t *testing.T) {
+	t.Helper()
+	captchaLifecycleMu.Lock()
+	savedCtx, savedStop, savedDone := captchaLifecycleCtx, captchaLifecycleStop, captchaLifecycleDone
+	ctx, cancel := context.WithCancel(context.Background())
+	captchaLifecycleCtx, captchaLifecycleStop, captchaLifecycleDone = ctx, cancel, false
+	captchaLifecycleMu.Unlock()
+
+	t.Cleanup(func() {
+		cancel()
+		captchaLifecycleWG.Wait()
+		captchaLifecycleMu.Lock()
+		captchaLifecycleCtx, captchaLifecycleStop, captchaLifecycleDone = savedCtx, savedStop, savedDone
+		captchaLifecycleMu.Unlock()
+	})
+}
+
+// gatedBotClient is a hand-written gotgbot.BotClient that holds back one send, the success
+// note, until released, and passes everything else to the recording client.
+type gatedBotClient struct {
+	inner   *moduleBotClient
+	marker  string
+	reached chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newGatedBotClient(inner *moduleBotClient, marker string) *gatedBotClient {
+	return &gatedBotClient{inner: inner, marker: marker, reached: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (g *gatedBotClient) RequestWithContext(ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	if method == "sendMessage" && strings.Contains(fmt.Sprint(params["text"]), g.marker) {
+		g.once.Do(func() { close(g.reached) })
+		<-g.release
+	}
+	return g.inner.RequestWithContext(ctx, token, method, params, opts)
+}
+
+func (g *gatedBotClient) GetAPIURL(opts *gotgbot.RequestOpts) string { return g.inner.GetAPIURL(opts) }
+
+func (g *gatedBotClient) FileURL(token, path string, opts *gotgbot.RequestOpts) string {
+	return g.inner.FileURL(token, path, opts)
+}
+
+func TestCaptchaWebPassAfterExpiryExpiresAtOnce(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	token := env.join(member)
+	attempt := env.attempt(member.Id)
+
+	// No timer has run: the attempt's time is simply up.
+	if err := db.DB.Model(&db.CaptchaAttempts{}).Where("id = ?", attempt.ID).
+		Updates(map[string]any{
+			"created_at": time.Now().Add(-2 * time.Minute),
+			"expires_at": time.Now().Add(-time.Minute),
+		}).Error; err != nil {
+		t.Fatalf("expire the attempt: %v", err)
+	}
+
+	status, answer := env.verify(member, token)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultExpired || answer.Action != "kick" {
+		t.Fatalf("verify = %d %+v, want 200 expired with action kick", status, answer)
+	}
+	if got := kicksOf(env.client, member.Id); got != 1 {
+		t.Fatalf("kicks during the request = %d, want exactly one", got)
+	}
+	if deletes := callsWithMessageID(env.client, "deleteMessage", 9001); len(deletes) == 0 {
+		t.Fatal("the challenge message was not deleted")
+	}
+	if env.attemptRow(member.Id) != nil {
+		t.Fatal("the attempt row survived the expiry")
+	}
+	if got := unmutesOf(t, env.client, member.Id); got != 0 {
+		t.Fatalf("unmutes = %d, want none after the time was up", got)
+	}
+	if got := env.cfRequests.Load(); got != 0 {
+		t.Fatalf("Cloudflare requests = %d, want none for an expired attempt", got)
+	}
+
+	// The challenge is spent: a second try is an unknown token.
+	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultInvalid {
+		t.Fatalf("second verify = %d %+v, want 200 invalid", status, answer)
+	}
+	if got := kicksOf(env.client, member.Id); got != 1 {
+		t.Fatalf("kicks after the second verify = %d, want still one", got)
+	}
+}
+
+func TestCaptchaWebTimeoutAndVerifyOnDifferentReplicas(t *testing.T) {
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+
+	t.Run("a challenge issued on A passes on B", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		replicaB := newOutcomeReplica(t, env, 999)
+		token := env.join(member)
+
+		status, answer, err := replicaB.verify(member, token)
+		if err != nil || status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+			t.Fatalf("verify on B = %d %+v, %v; want 200 passed", status, answer, err)
+		}
+		if got := unmutesOf(t, replicaB.client, member.Id); got != 1 {
+			t.Fatalf("unmutes made by B = %d, want 1", got)
+		}
+		if got := unmutesOf(t, env.client, member.Id); got != 0 {
+			t.Fatalf("unmutes made by A = %d, want none", got)
+		}
+		if env.attempt(member.Id) != nil {
+			t.Fatal("the attempt survived a pass on B")
+		}
+	})
+
+	t.Run("the timeout on A races a check on B", func(t *testing.T) {
+		env := newCaptchaWebEnv(t)
+		outcomeRace(t, env, env.primary(), newOutcomeReplica(t, env, 999), 20)
+	})
+}
+
+func TestCaptchaWebPassVersusTimeoutRace(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	outcomeRace(t, env, env.primary(), env.primary(), 20)
+}
+
+func TestCaptchaWebUnmuteFailureSchedulesRetry(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	token := env.join(member)
+
+	env.client.mu.Lock()
+	env.client.errors["restrictChatMember"] = errors.New("telegram is down")
+	env.client.mu.Unlock()
+
+	status, answer := env.verify(member, token)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
+		t.Fatalf("verify = %d %+v, want 200 retry, never passed", status, answer)
+	}
+	if env.attemptRow(member.Id) != nil {
+		t.Fatal("the attempt row survived the claim")
+	}
+	row, err := captcha.GetMutedUser(member.Id, env.chat.Id)
+	if err != nil || row == nil {
+		t.Fatalf("captcha_muted_users row = %v, %v; want the durable retry", row, err)
+	}
+	if row.UnmuteAt.After(time.Now()) {
+		t.Fatalf("unmute due at %v, want due now", row.UnmuteAt)
+	}
+	due, err := captcha.GetUsersToUnmute()
+	if err != nil {
+		t.Fatalf("GetUsersToUnmute() error = %v", err)
+	}
+	var found bool
+	for _, u := range due {
+		found = found || (u.UserID == member.Id && u.ChatID == env.chat.Id)
+	}
+	if !found {
+		t.Fatal("the 5-minute worker would not find the member")
+	}
+	if deletes := callsWithMessageID(env.client, "deleteMessage", 9001); len(deletes) == 0 {
+		t.Fatal("the challenge message was not deleted")
+	}
+	if got := kicksOf(env.client, member.Id); got != 0 {
+		t.Fatalf("kicks = %d, want none after a claimed pass", got)
+	}
+
+	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultInvalid {
+		t.Fatalf("second verify = %d %+v, want 200 invalid", status, answer)
+	}
+}
+
+func TestCaptchaWebBotWithoutRightsIsRetry(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	token := env.join(member)
+	before := env.attempt(member.Id)
+	// The fake answers every ID but 999 as a plain member, so this bot cannot restrict.
+	powerless := newOutcomeReplica(t, env, 998)
+
+	status, answer, err := powerless.verify(member, token)
+	if err != nil || status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
+		t.Fatalf("verify = %d %+v, %v; want 200 retry", status, answer, err)
+	}
+	if got := env.cfRequests.Load(); got != 0 {
+		t.Fatalf("Cloudflare requests = %d, want none before the bot's rights are known", got)
+	}
+	if !env.mr.Exists(env.challengeKey(token)) {
+		t.Fatal("the challenge was not given back")
+	}
+	after := env.attempt(member.Id)
+	if after == nil || after.ID != before.ID || after.Answer != before.Answer || after.Attempts != before.Attempts {
+		t.Fatalf("attempt changed: before %+v after %+v", before, after)
+	}
+	if got := unmutesOf(t, powerless.client, member.Id) + unmutesOf(t, env.client, member.Id); got != 0 {
+		t.Fatalf("unmutes = %d, want none", got)
+	}
+	if got := kicksOf(powerless.client, member.Id) + kicksOf(env.client, member.Id); got != 0 {
+		t.Fatalf("kicks = %d, want none", got)
+	}
+
+	// An unknown answer is no better than a no.
+	powerless.client.mu.Lock()
+	powerless.client.errors["getChatMember"] = errors.New("flood wait")
+	powerless.client.mu.Unlock()
+	if status, answer, err := powerless.verify(member, token); err != nil || status != http.StatusOK || answer.Result != captchaweb.ResultRetry {
+		t.Fatalf("verify with an unreadable bot status = %d %+v, %v; want 200 retry", status, answer, err)
+	}
+
+	// The same token passes on a replica whose bot can restrict.
+	if status, answer := env.verify(member, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("verify on a capable bot = %d %+v, want 200 passed", status, answer)
+	}
+}
+
+func TestCaptchaWebFinishJoinsLifecycleDrain(t *testing.T) {
+	env := newCaptchaWebEnv(t)
+	withCaptchaLifecycleForTest(t)
+	first := gotgbot.User{Id: 42, FirstName: "First"}
+	second := gotgbot.User{Id: 43, FirstName: "Second"}
+
+	successMarker := staffMarker("greetings_captcha_verified_success")
+	gate := newGatedBotClient(env.client, successMarker)
+	env.bot.BotClient = gate
+
+	token := env.join(first)
+	if status, answer := env.verify(first, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("verify = %d %+v, want 200 passed", status, answer)
+	}
+	select {
+	case <-gate.reached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the finish step never reached the success note")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		StopCaptchaLifecycle()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		t.Fatal("StopCaptchaLifecycle returned while the finish step was still running")
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(gate.release)
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("StopCaptchaLifecycle did not return after the finish step ended")
+	}
+	if got := sentTextContaining(env.client, successMarker); got != 1 {
+		t.Fatalf("success notes after the drain = %d, want 1", got)
+	}
+	if sends := env.client.callsFor("sendMessage"); len(sends) < 3 {
+		t.Fatalf("sendMessage calls = %d, want the challenge, the success note and the greeting", len(sends))
+	}
+
+	// The lifecycle has stopped: the next pass finishes inline, before the handler returns.
+	token = env.join(second)
+	if status, answer := env.verify(second, token); status != http.StatusOK || answer.Result != captchaweb.ResultPassed {
+		t.Fatalf("verify after the stop = %d %+v, want 200 passed", status, answer)
+	}
+	if got := sentTextContaining(env.client, successMarker); got != 2 {
+		t.Fatalf("success notes right after the second pass = %d, want 2 (finish ran inline)", got)
+	}
 }
 
 func TestCaptchaWebFailedSolveAppliesAction(t *testing.T) {

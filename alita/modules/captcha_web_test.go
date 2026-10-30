@@ -575,12 +575,13 @@ func TestCaptchaPassSharedByCallbackAndWeb(t *testing.T) {
 		t.Fatalf("verify = %d %q, want 200 passed", status, answer.Result)
 	}
 
-	// getChat is read once more by the web pass for the greeting, and the button answers its
-	// callback query; neither is part of the shared pass.
+	// getChat is read once more by the web pass for the greeting, the web verify reads the
+	// bot's own getChatMember before it asks Cloudflare (plan 08-06), and the button answers
+	// its callback query; none of them is part of the shared pass.
 	passCalls := func(methods []string) []string {
 		var out []string
 		for _, m := range methods {
-			if m != "getChat" && m != "answerCallbackQuery" {
+			if m != "getChat" && m != "getChatMember" && m != "answerCallbackQuery" {
 				out = append(out, m)
 			}
 		}
