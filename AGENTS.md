@@ -1289,7 +1289,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   it. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
   has no locale manager of its own. `alita/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
-- Run the settings tests with `go test -tags testtools -race -count=1 -run '^TestSettings' ./alita/modules ./alita/i18n`.
+- Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./alita/modules ./alita/i18n`.
   Page tests add page-prefixed helpers in their own files (`settings_<page>_test.go`). Every setting the menu changes
   has a parity test (`TestSettingsParity*`: the menu press and the command leave the same stored row and the same
   cache), a drift test (`TestSettingsDrift*`: the page reads what the command reads) and an authority-parity test

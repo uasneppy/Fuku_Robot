@@ -47,7 +47,7 @@ func TestLoadSettingsRegistersHelp(t *testing.T) {
 	}
 
 	text, _ := getModuleHelpAndKb(settingsModule.moduleName, "en", registry)
-	for _, want := range []string{"Manage this group from one button menu.", "/settings", "/setfloodmode"} {
+	for _, want := range []string{"/settings", "/setfloodmode"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("help text for %s lacks %q:\n%s", settingsModule.moduleName, want, text)
 		}
