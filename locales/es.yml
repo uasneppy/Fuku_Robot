@@ -943,6 +943,32 @@ captcha_web_welcome: |
 
   ⏱ Tienes <b>%d minutos</b> para terminar.
 captcha_web_button: Verificar con Turnstile
+captcha_web_page_title: Verificación
+captcha_web_loading_title: Preparando todo
+captcha_web_loading_body: Estamos preparando la comprobación. Tardará un momento.
+captcha_web_ready_title: Verifica que eres humano
+captcha_web_ready_body: Completa la comprobación de abajo para unirte al grupo.
+captcha_web_widget_label: Control de seguridad
+captcha_web_verifying_title: Comprobando tu respuesta
+captcha_web_verifying_body: Espera un momento. No cierres esta página.
+captcha_web_passed_title: Verificación completada
+captcha_web_passed_body: Te damos la bienvenida al grupo. Esta página se cierra sola.
+captcha_web_failed_title: La verificación falló
+captcha_web_failed_body_kick: Fuiste expulsado del grupo. Puedes volver a unirte para intentarlo de nuevo.
+captcha_web_failed_body_ban: Fuiste vetado del grupo. Contacta con un admin si es un error.
+captcha_web_failed_body_mute: Sigues silenciado en el grupo. Contacta con un admin si es un error.
+captcha_web_expired_title: Se acabó el tiempo
+captcha_web_expired_body_kick: No terminaste a tiempo. Fuiste expulsado del grupo y puedes volver a unirte para intentarlo.
+captcha_web_expired_body_ban: No terminaste a tiempo. Fuiste vetado del grupo. Contacta con un admin si es un error.
+captcha_web_expired_body_mute: No terminaste a tiempo. Sigues silenciado en el grupo. Contacta con un admin si es un error.
+captcha_web_retry_title: Algo salió mal
+captcha_web_retry_body: Fue un problema de conexión, no un fallo de la comprobación. Inténtalo de nuevo antes de que acabe el tiempo.
+captcha_web_retry_button: Reintentar
+captcha_web_invalid_title: Este enlace no es válido
+captcha_web_invalid_body: Pertenece a otro miembro o ya se usó. No se cambió nada.
+captcha_web_unsupported_title: Ábrelo en Telegram
+captcha_web_unsupported_body: Usa el botón del chat del grupo. Si ya lo hiciste, desactiva los bloqueadores de contenido e inténtalo de nuevo.
+captcha_web_close_button: Cerrar
 captcha_failed_verify: Error al verificar. Por favor contacta a un administrador.
 captcha_wait_refresh: Por favor espera unos segundos antes de solicitar una nueva imagen.
 captcha_failed_generate: Error al generar nueva imagen, intenta de nuevo.

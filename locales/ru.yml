@@ -725,6 +725,32 @@ captcha_web_welcome: |
 
   ⏱ У вас есть <b>%d минут</b>, чтобы завершить.
 captcha_web_button: Подтвердить через Turnstile
+captcha_web_page_title: Проверка
+captcha_web_loading_title: Подготовка
+captcha_web_loading_body: Проверка готовится. Это займёт немного времени.
+captcha_web_ready_title: Подтвердите, что вы человек
+captcha_web_ready_body: Пройдите проверку ниже, чтобы вступить в группу.
+captcha_web_widget_label: Проверка безопасности
+captcha_web_verifying_title: Проверяем ваш ответ
+captcha_web_verifying_body: Пожалуйста, подождите. Не закрывайте эту страницу.
+captcha_web_passed_title: Проверка пройдена
+captcha_web_passed_body: Добро пожаловать в группу. Страница закроется сама.
+captcha_web_failed_title: Проверка не пройдена
+captcha_web_failed_body_kick: Вас удалили из группы. Вы можете вступить снова, чтобы повторить попытку.
+captcha_web_failed_body_ban: Вас заблокировали в группе. Если это ошибка, свяжитесь с админом.
+captcha_web_failed_body_mute: Вы остаётесь без права писать в группе. Если это ошибка, свяжитесь с админом.
+captcha_web_expired_title: Время вышло
+captcha_web_expired_body_kick: Вы не успели вовремя. Вас удалили из группы, и вы можете вступить снова, чтобы повторить попытку.
+captcha_web_expired_body_ban: Вы не успели вовремя. Вас заблокировали в группе. Если это ошибка, свяжитесь с админом.
+captcha_web_expired_body_mute: Вы не успели вовремя. Вы остаётесь без права писать в группе. Если это ошибка, свяжитесь с админом.
+captcha_web_retry_title: Что-то пошло не так
+captcha_web_retry_body: Это проблема соединения, а не неудачная проверка. Повторите, пока не истекло время.
+captcha_web_retry_button: Повторить
+captcha_web_invalid_title: Ссылка недействительна
+captcha_web_invalid_body: Она принадлежит другому участнику или уже использована. Ничего не изменено.
+captcha_web_unsupported_title: Откройте в Telegram
+captcha_web_unsupported_body: Нажмите кнопку в чате группы. Если вы так и сделали, отключите блокировщики контента и повторите.
+captcha_web_close_button: Закрыть
 captcha_failed_verify: Не удалось подтвердить. Пожалуйста, свяжитесь с администратором.
 captcha_wait_refresh: Пожалуйста, подождите несколько секунд перед запросом нового изображения.
 captcha_failed_generate: Не удалось сгенерировать новое изображение, попробуйте снова.

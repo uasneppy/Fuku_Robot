@@ -1009,6 +1009,32 @@ captcha_web_welcome: |
 
   ⏱ You have <b>%d minutes</b> to finish.
 captcha_web_button: Verify with Turnstile
+captcha_web_page_title: Verification
+captcha_web_loading_title: Getting ready
+captcha_web_loading_body: Setting up the check. This takes a moment.
+captcha_web_ready_title: Verify you are human
+captcha_web_ready_body: Complete the check below to join the group.
+captcha_web_widget_label: Security check
+captcha_web_verifying_title: Checking your answer
+captcha_web_verifying_body: Please wait. Do not close this page.
+captcha_web_passed_title: You are verified
+captcha_web_passed_body: Welcome to the group. This page closes by itself.
+captcha_web_failed_title: Verification failed
+captcha_web_failed_body_kick: You were removed from the group. You can rejoin to try again.
+captcha_web_failed_body_ban: You were banned from the group. Contact an admin if this is a mistake.
+captcha_web_failed_body_mute: You stay muted in the group. Contact an admin if this is a mistake.
+captcha_web_expired_title: Time ran out
+captcha_web_expired_body_kick: You did not finish in time. You were removed from the group and can rejoin to try again.
+captcha_web_expired_body_ban: You did not finish in time. You were banned from the group. Contact an admin if this is a mistake.
+captcha_web_expired_body_mute: You did not finish in time. You stay muted in the group. Contact an admin if this is a mistake.
+captcha_web_retry_title: Something went wrong
+captcha_web_retry_body: This was a connection problem, not a failed check. Try again before the time limit ends.
+captcha_web_retry_button: Try again
+captcha_web_invalid_title: This link is not valid
+captcha_web_invalid_body: It belongs to another member or was already used. Nothing was changed.
+captcha_web_unsupported_title: Open this in Telegram
+captcha_web_unsupported_body: Use the button in the group chat. If you did, turn off content blockers and try again.
+captcha_web_close_button: Close
 captcha_failed_verify: Failed to verify. Please contact an admin.
 captcha_wait_refresh: Please wait a few seconds before requesting a new image.
 captcha_failed_generate: Failed to generate new image, try again.

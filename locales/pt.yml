@@ -908,6 +908,32 @@ captcha_web_welcome: |
 
   ⏱ Você tem <b>%d minutos</b> para concluir.
 captcha_web_button: Verificar com Turnstile
+captcha_web_page_title: Verificação
+captcha_web_loading_title: Preparando tudo
+captcha_web_loading_body: Preparando a verificação. Isso leva só um instante.
+captcha_web_ready_title: Confirme que é humano
+captcha_web_ready_body: Conclua a verificação abaixo para entrar no grupo.
+captcha_web_widget_label: Verificação de segurança
+captcha_web_verifying_title: Verificando sua resposta
+captcha_web_verifying_body: Aguarde. Não feche esta página.
+captcha_web_passed_title: Você foi verificado
+captcha_web_passed_body: Bem-vindo ao grupo. Esta página fecha sozinha.
+captcha_web_failed_title: A verificação falhou
+captcha_web_failed_body_kick: Você foi removido do grupo. Você pode entrar de novo para tentar outra vez.
+captcha_web_failed_body_ban: Você foi banido do grupo. Fale com um admin se for um engano.
+captcha_web_failed_body_mute: Você continua silenciado no grupo. Fale com um admin se for um engano.
+captcha_web_expired_title: O tempo acabou
+captcha_web_expired_body_kick: Você não terminou a tempo. Foi removido do grupo e pode entrar de novo para tentar outra vez.
+captcha_web_expired_body_ban: Você não terminou a tempo. Foi banido do grupo. Fale com um admin se for um engano.
+captcha_web_expired_body_mute: Você não terminou a tempo. Continua silenciado no grupo. Fale com um admin se for um engano.
+captcha_web_retry_title: Algo deu errado
+captcha_web_retry_body: Foi um problema de conexão, não uma verificação reprovada. Tente de novo antes de o tempo acabar.
+captcha_web_retry_button: Tentar de novo
+captcha_web_invalid_title: Este link não é válido
+captcha_web_invalid_body: Ele pertence a outro membro ou já foi usado. Nada foi alterado.
+captcha_web_unsupported_title: Abra no Telegram
+captcha_web_unsupported_body: Use o botão no chat do grupo. Se já usou, desative bloqueadores de conteúdo e tente de novo.
+captcha_web_close_button: Fechar
 captcha_failed_verify: Falha na verificação. Por favor contate um admin.
 captcha_wait_refresh: Por favor espere alguns segundos antes de solicitar uma nova imagem.
 captcha_failed_generate: Falha ao gerar nova imagem, tente novamente.

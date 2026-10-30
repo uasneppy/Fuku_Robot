@@ -519,6 +519,32 @@ captcha_web_welcome: |
 
   ⏱ Vous avez <b>%d minutes</b> pour terminer.
 captcha_web_button: Vérifier avec Turnstile
+captcha_web_page_title: Vérification
+captcha_web_loading_title: Préparation en cours
+captcha_web_loading_body: Préparation de la vérification. Cela prend un instant.
+captcha_web_ready_title: Prouvez que vous êtes humain
+captcha_web_ready_body: Terminez la vérification ci-dessous pour rejoindre le groupe.
+captcha_web_widget_label: Contrôle de sécurité
+captcha_web_verifying_title: Vérification de la réponse
+captcha_web_verifying_body: Veuillez patienter. Ne fermez pas cette page.
+captcha_web_passed_title: Vous êtes vérifié
+captcha_web_passed_body: Bienvenue dans le groupe. Cette page se ferme toute seule.
+captcha_web_failed_title: Échec de la vérification
+captcha_web_failed_body_kick: Vous avez été retiré du groupe. Vous pouvez le rejoindre à nouveau pour réessayer.
+captcha_web_failed_body_ban: Vous avez été banni du groupe. Contactez un admin si c'est une erreur.
+captcha_web_failed_body_mute: Vous restez muet dans le groupe. Contactez un admin si c'est une erreur.
+captcha_web_expired_title: Temps écoulé
+captcha_web_expired_body_kick: Vous n'avez pas terminé à temps. Vous avez été retiré du groupe et pouvez le rejoindre pour réessayer.
+captcha_web_expired_body_ban: Vous n'avez pas terminé à temps. Vous avez été banni du groupe. Contactez un admin si c'est une erreur.
+captcha_web_expired_body_mute: Vous n'avez pas terminé à temps. Vous restez muet dans le groupe. Contactez un admin si c'est une erreur.
+captcha_web_retry_title: Un problème est survenu
+captcha_web_retry_body: Il s'agit d'un problème de connexion, pas d'un échec de la vérification. Réessayez avant la fin du délai.
+captcha_web_retry_button: Réessayer
+captcha_web_invalid_title: Ce lien n'est pas valide
+captcha_web_invalid_body: Il appartient à un autre membre ou a déjà été utilisé. Rien n'a été modifié.
+captcha_web_unsupported_title: Ouvrez ceci dans Telegram
+captcha_web_unsupported_body: Utilisez le bouton dans le chat du groupe. Si c'est fait, désactivez les bloqueurs de contenu et réessayez.
+captcha_web_close_button: Fermer
 captcha_failed_verify: Échec de la vérification. Veuillez contacter un administrateur.
 captcha_wait_refresh: Veuillez attendre quelques secondes avant de demander une nouvelle image.
 captcha_failed_generate: Échec de la génération d'une nouvelle image, réessayez.
