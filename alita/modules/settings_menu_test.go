@@ -491,7 +491,7 @@ func TestSettingsCallbackBytes(t *testing.T) {
 		t.Run(variant.name, func(t *testing.T) {
 			check(t, "Main", renderSettingsMain(variant.view, entries, ""))
 			for _, minutes := range []int{1, 5, 10} {
-				check(t, fmt.Sprintf("Captcha %d", minutes), renderSettingsCaptcha(variant.view, &models.CaptchaSettings{Timeout: minutes}, ""))
+				check(t, fmt.Sprintf("Captcha %d", minutes), renderSettingsCaptcha(variant.view, &models.CaptchaSettings{Timeout: minutes}, settingsCaptchaWeb{}, ""))
 			}
 		})
 	}

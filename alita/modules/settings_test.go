@@ -74,13 +74,21 @@ func settingsPageButton(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton,
 func settingsStepper(t *testing.T, env *settingsEnv, msgID int64) []gotgbot.InlineKeyboardButton {
 	t.Helper()
 	_, keyboard := env.lastEdit(env.chat.Id, msgID)
-	if len(keyboard) != 2 {
-		t.Fatalf("Captcha page has %d keyboard rows, want the stepper row and the navigation row", len(keyboard))
+	// The Captcha page holds more rows than the stepper (toggle, mode, action), so the
+	// stepper is the row whose buttons set the time control t.
+	for _, row := range keyboard {
+		for _, button := range row {
+			if settingsButtonFields(t, button)["t"] != settingsCaptchaTime {
+				continue
+			}
+			if len(row) != 3 {
+				t.Fatalf("Captcha page stepper row has %d buttons, want 3", len(row))
+			}
+			return row
+		}
 	}
-	if len(keyboard[0]) != 3 {
-		t.Fatalf("Captcha page stepper row has %d buttons, want 3", len(keyboard[0]))
-	}
-	return keyboard[0]
+	t.Fatalf("Captcha page keyboard %+v has no stepper row", keyboard)
+	return nil
 }
 
 func TestSettingsTracer(t *testing.T) {
