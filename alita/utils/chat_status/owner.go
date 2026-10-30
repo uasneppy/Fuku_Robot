@@ -42,9 +42,11 @@ var liveCheckTimeout = 8 * time.Second
 // descriptions that say the bot is not in the chat.
 var botMissingMarkers = []string{"bot was kicked", "bot is not a member", "chat not found"}
 
-// isBotMissingError reports whether err is a Telegram answer saying the bot is
-// no longer in the chat (kicked, never a member, or the chat is gone).
-func isBotMissingError(err error) bool {
+// IsBotMissingError reports whether err is a Telegram answer saying the bot is
+// no longer in the chat (kicked, never a member, or the chat is gone). Callers use
+// it to tell "the bot is not in that chat, or the chat is gone" from a lookup that
+// merely failed (flood wait, timeout, server error), which says nothing about it.
+func IsBotMissingError(err error) bool {
 	var tgErr *gotgbot.TelegramError
 	if !errors.As(err, &tgErr) {
 		return false
@@ -74,7 +76,7 @@ func FetchBotMember(b *gotgbot.Bot, chatID int64) (gotgbot.MergedChatMember, Bot
 
 	member, err := b.GetChatMemberWithContext(ctx, chatID, b.Id, nil)
 	if err != nil {
-		if isBotMissingError(err) {
+		if IsBotMissingError(err) {
 			return gotgbot.MergedChatMember{}, BotMemberMissing, nil
 		}
 		return gotgbot.MergedChatMember{}, BotMemberUnknown, err

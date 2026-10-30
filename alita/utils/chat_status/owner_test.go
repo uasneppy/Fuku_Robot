@@ -212,6 +212,33 @@ func TestFetchBotMemberTimeoutIsUnknown(t *testing.T) {
 	}
 }
 
+// IsBotMissingError says "the bot is not in that chat, or the chat is gone" and
+// nothing else: a failed lookup must never read as a missing bot.
+func TestIsBotMissingError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"bot was kicked", &gotgbot.TelegramError{Code: 403, Description: "Forbidden: bot was kicked from the supergroup chat"}, true},
+		{"bot is not a member, any case", &gotgbot.TelegramError{Code: 403, Description: "Forbidden: Bot is not a member of the supergroup chat"}, true},
+		{"chat not found", &gotgbot.TelegramError{Code: 400, Description: "Bad Request: chat not found"}, true},
+		{"wrapped telegram error", fmt.Errorf("lookup: %w", &gotgbot.TelegramError{Code: 400, Description: "Bad Request: chat not found"}), true},
+		{"server error", &gotgbot.TelegramError{Code: 500, Description: "Internal Server Error"}, false},
+		{"user not found", &gotgbot.TelegramError{Code: 400, Description: "Bad Request: user not found"}, false},
+		{"flood wait", &gotgbot.TelegramError{Code: 429, Description: "Too Many Requests: retry after 5"}, false},
+		{"plain error", errors.New("bot was kicked"), false},
+		{"nil", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsBotMissingError(tc.err); got != tc.want {
+				t.Fatalf("IsBotMissingError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
 // An API error must never read as a mismatch: only a mismatch may remove state.
 func TestCheckOwnerUnknownOnError(t *testing.T) {
 	cases := map[string]error{
