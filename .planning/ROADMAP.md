@@ -415,8 +415,33 @@ Plans:
   4. The Lockdown page shows the current state, a working Lift button, and an on/off switch and threshold for each automatic trigger. The Captcha page sets the mode and time limit, and the Antiflood page configures antiflood.
   5. A setting changed in the menu is identical to the same setting changed by command, and both always show the same current value.
 
-**Plans:** TBD
+**Plans:** 14 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+- [ ] 09-01-PLAN.md: Tracer. `/settings` in a group, the choice message, Open here, the Main page, the full press pipeline and rights, the Captcha time stepper through `applyCaptchaTimeout` shared with `/captchatime`, Back and Close
+- [ ] 09-02-PLAN.md: Staff seams: the panel row split into head and status, a length limit on the panel text, the link flow split into `listVerifiedOwnStaffGroups`, `linkToStaffGroup` and `announceStaffLink`
+- [ ] 09-03-PLAN.md: Antiflood first-write characterization and `applyFloodLimit/Mode/Delete` with a database read-back, shared by the commands
+- [ ] 09-04-PLAN.md: `applyAutoLockdown`, `applyLockdownLift`, `lockdownAnnounceLift` and `lockdownStatusHead`, shared by the lockdown commands and the alert
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09-05-PLAN.md: Every page and card string in all 7 languages, with ceiling, label-length and privacy-placeholder tests
+- [ ] 09-06-PLAN.md: `applyCaptchaEnabled`, `applyCaptchaMode` (Turnstile's three refusals) and `applyCaptchaAction`, shared by the captcha commands
+- [ ] 09-07-PLAN.md: Open in private: `/start settings_<id>` with a live admin check, and the cannot-open edit for a dead private menu
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09-08-PLAN.md: Captcha page: on/off, mode and failure action, with parity, drift and authority parity
+- [ ] 09-09-PLAN.md: Antiflood page: Off then 3..100, mute/ban/kick, the delete switch, with the bot-admin rule
+- [ ] 09-10-PLAN.md: Lockdown page: the state and the three automatic triggers' switches and thresholds
+- [ ] 09-11-PLAN.md: Staff Group page: health, Link with the picker, Unlink with a second tap, the read-only panel, and the group-menu privacy test
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 09-12-PLAN.md: Lift from the Lockdown page with a second tap, the public notice, and parity with `/unlockdown`
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 09-13-PLAN.md: `settings_help_msg`, `alt_names.Settings`, the generated command page, the command and permission references, AGENTS.md testing notes
+- [ ] 09-14-PLAN.md: The owner's real-client checklist `09-SPIKE.md`
 
 ## Progress
 

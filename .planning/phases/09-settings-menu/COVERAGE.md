@@ -1,0 +1,5 @@
+# API Coverage: Phase 9 (Settings Menu)
+
+No external API integration: the settings menu is an inline-keyboard UI over settings the bot already stores, and it only makes Telegram Bot API calls the bot already makes elsewhere, so there is no third-party surface to cover.
+
+For the record, the Telegram methods the menu uses (all already used by the bot today): `sendMessage` (the choice message, the private Main page, the public lift notice, the Staff Group notices), `editMessageText` (every page, card and note edited in place), `answerCallbackQuery` (one answer per press, toast or alert), `deleteMessage` (Close), `getChatMember` (the live admin and right check of every press and of `/start settings_<id>`), `getChat` (the group of a private menu, the lift's permission read), `getChatAdministrators` (through `chat_status.CheckOwner` for Staff Group link and unlink), `setChatPermissions` (the lift, through `liftLockdownRow`), and the `/start` deep-link payload `settings_<chat id>`. Live behaviour of these calls on real clients is the owner's checklist in `09-SPIKE.md`.
