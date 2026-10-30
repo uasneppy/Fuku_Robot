@@ -375,8 +375,32 @@ Plans:
   4. A member who fails the Turnstile check, or doesn't pass within the group's time limit, is kicked and can rejoin to try again. This works no matter which bot replica handles the join or the check.
   5. The owner can deploy the captcha page by following the documented steps: a public HTTPS hostname, BotFather Mini App registration, and Turnstile keys. The Turnstile secret never appears in logs.
 
-**Plans:** TBD
+**Plans:** 11 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+- [ ] 08-01-PLAN.md: Tracer. A joiner in a Turnstile group gets one Mini App button; a signed POST confirmed by Cloudflare unmutes them through the pass path shared with the button; forged buttons refused; math fallback, rollback, re-join and recovery
+- [ ] 08-02-PLAN.md: The four web captcha settings (plus trusted proxies) load all-or-nothing, the Turnstile secret is registered with `logredact`, env docs
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 08-03-PLAN.md: Strict `initData` validation pinned by the published known-answer vector; the `captchaweb` leaf-package test
+- [ ] 08-04-PLAN.md: Append-only migration widening `chk_captcha_mode` (legacy inline check dropped too), `SetCaptchaMode` accepts turnstile, PostgreSQL guarantee in CI
+- [ ] 08-05-PLAN.md: The embedded Mini App page: per-response nonce CSP, 9 states, `cData` binding, one POST per token, `node --test` for its script
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 08-06-PLAN.md: A failed check kicks once, Cloudflare and setup faults retry with the token re-armed, timeouts and checks decide once on any replica, nothing secret is logged
+- [ ] 08-07-PLAN.md: The 26 page strings in all 7 languages, the per-language string table, the locale parity test
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 08-08-PLAN.md: Verify-route hardening: Redis windows per IP, user and challenge, trusted-proxy client address, JSON-only limits, readiness gate, health check, consume-once and replay
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 08-09-PLAN.md: `/captchamode turnstile` with its three ordered refusals; the mode texts in all 7 languages and the commands page
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 08-10-PLAN.md: The routes on the bot's port when configured, `MarkCaptchaWebReady`, shared-port warnings, the developer `/stats` counters
+- [ ] 08-11-PLAN.md: The self-hosting guide (D-15) and the owner's real-device checklist `08-SPIKE.md` (D-18)
 
 ### Phase 9: Settings Menu
 
