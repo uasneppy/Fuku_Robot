@@ -90,7 +90,7 @@ Change: the three hostnames and the two keys. Never use Cloudflare's dummy test 
 
 - [ ] Web K  [ ] Web A  [ ] Desktop
 
-Steps: open the button on a Web client. Open the browser console on the Mini App frame.
+Steps: open the button on a Web client. Open the browser console on the Mini App frame. Do the same on a Managed widget on every other client you can inspect (Android and Desktop remote debugging): Cloudflare's own CSP guidance names `challenges.cloudflare.com` for scripts and frames, but the exact list for a given widget mode could not be confirmed offline, so this is the first run of the policy against a live widget. Watch the console from before the widget loads until after the passed screen, and note every CSP violation by directive and blocked source, including the ones that appear only when the widget is solved or refreshed.
 
 Pass looks like: the page shows normally and the console holds no Content-Security-Policy violation, apart from one cosmetic `style-src` warning if Telegram's own script injects a `<style>` element in Web clients (known, harmless).
 
@@ -182,6 +182,18 @@ If not: if BotFather accepts a name the bot refuses at startup (the error names 
 
 Change: loosen the short-name pattern in `alita/config/config.go`, then rerun the config test.
 
+### 14. Signed data older than 5 minutes (IN-06)
+
+- [ ] Android  [ ] iOS  [ ] Desktop  [ ] Web
+
+Steps: open the button, then leave the page open without solving for more than 5 minutes (stay inside `/captchatime`: raise it to 10 minutes for this check). Solve the widget after the 5 minutes, and read what the page shows and what the bot log says. Then press Try again if the page offers it, and finally close the sheet and open the button again from the group chat.
+
+Pass looks like: the server accepts signed Telegram data only for 5 minutes after the app was opened (`InitDataMaxAge`), so the late solve is answered `invalid` and the page shows "This link is not valid" ("It belongs to another member or was already used. Nothing was changed."). That copy is wrong for this case, and the widget's Try again cannot refresh the signed data. The challenge is not consumed by a stale answer, so reopening the button from the group chat gets a fresh page and the member can still pass inside the time limit. Record exactly what the member sees, whether Try again appears, and whether reopening the button recovers.
+
+If not: if the late solve passes, the age limit is not enforced (a bug). If reopening the button does not recover, the stale answer consumed the challenge (a bug: only a verified, well-formed request may use it up).
+
+Change: nothing in code from this check alone. It is an open product question whether the stale case should get its own answer or copy (see the fix report's "open" note); record the evidence here. `InitDataMaxAge` is in `alita/utils/captchaweb/initdata.go`.
+
 ## What to read in the output
 
 There is no tool output, only three places to look:
@@ -232,6 +244,7 @@ These are the same behaviours `08-VALIDATION.md` lists as manual-only, with the 
 9. `/captchamode turnstile` in a group where the bot is an administrator with Restrict members replies with the confirmation, and with the right removed refuses and keeps the mode (plan 08-09). Run it once next to check 1.
 10. The `captcha_web_*` strings in es, fr, hi, id, pt and ru read naturally, if you can read them, or ask a native speaker (plan 08-07). Check 10 shows them on the page.
 11. CI only, not yours: `TestCaptchaModeTurnstileConstraint` runs against PostgreSQL in `make test-postgres-integrity` (plan 08-04).
+12. Added by the code review: signed data older than 5 minutes and what the member sees (check 14), and the CSP against a Managed widget on every inspectable client (check 6).
 
 ## What the checklist never does
 
