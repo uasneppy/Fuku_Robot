@@ -15,16 +15,17 @@ import (
 
 	"github.com/divkix/Alita_Robot/alita/config"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
-	"github.com/divkix/Alita_Robot/alita/utils/gemini"
+	"github.com/divkix/Alita_Robot/alita/utils/claude"
 	"github.com/divkix/Alita_Robot/alita/utils/logredact"
 )
 
-// The raid-only Gemini check of one image (RAID-04, PLAT-02). A worker of the raid AI pool
-// fetches the one frame raidAIMediaRef picked, asks Gemini for a spam probability, and
-// reports a verdict at or above raidAIImageBar to the AI burst counter. Nothing here
-// deletes, restricts, bans or posts, and only the image and the code-owned instruction go
-// to Google: no caption, name, chat or user data (D-12). The check is inert without
-// GEMINI_API_KEY. A blocked, failed, slow or unreadable answer is no verdict.
+// The raid-only Claude image check (RAID-04, PLAT-02). A worker of the raid AI pool
+// fetches the one frame raidAIMediaRef picked, asks Claude through the Anthropic API for a
+// spam probability, and reports a verdict at or above raidAIImageBar to the AI burst
+// counter. Nothing here deletes, restricts, bans or posts, and only the image and the
+// code-owned instruction go to Anthropic: no caption, name, chat or user data (D-12). The
+// check is inert without ANTHROPIC_API_KEY. A refused, failed, slow or unreadable answer is
+// no verdict.
 //
 // Logs carry chat, user and message IDs, the media kind and an HTTP status only. An error
 // that could carry a URL or a key is rebuilt or scrubbed before it is logged.
@@ -54,7 +55,7 @@ const (
 	raidAIBudgetTTL = 2 * time.Hour
 )
 
-// The hourly Gemini budgets (D-20): code constants, held in variables only so a test can make
+// The hourly image-check budgets (D-20): code constants, held in variables only so a test can make
 // them small. Production code never reassigns them. The per-account budget sits in front of
 // the two shared ones (WR-01): one account posting distinct photos spends its own 20 units
 // and then nothing else, so it can neither empty its group's 150 nor the fleet's 500.
@@ -65,18 +66,15 @@ var (
 )
 
 var (
-	// raidAIGeminiEndpoint is the Gemini API host. A variable only so a test points it at an
+	// raidAIClaudeEndpoint is the Anthropic API host. A variable only so a test points it at an
 	// httptest server; production code never reassigns it.
-	raidAIGeminiEndpoint = gemini.DefaultEndpoint
-	// raidAIGeminiHTTP is the transport of the Gemini calls; nil is the client's own, which
+	raidAIClaudeEndpoint = claude.DefaultEndpoint
+	// raidAIClaudeHTTP is the transport of the provider calls; nil is the client's own, which
 	// has the call timeout and follows no redirect. A variable only for tests.
-	raidAIGeminiHTTP *http.Client
+	raidAIClaudeHTTP *http.Client
 
-	// raidAIBlocked counts the image checks Google's safety filters refused to judge.
+	// raidAIBlocked counts the image checks the provider refused to judge (a refusal stop).
 	raidAIBlocked atomic.Int64
-
-	// raidAIModelWarned makes the deprecated-model warning appear once per process.
-	raidAIModelWarned atomic.Bool
 
 	// raidAIImageFlight lets the jobs that carry one image (one file_unique_id) in one chat at
 	// the same moment share a single verdict step, so a flood of the same sticker costs one
@@ -90,23 +88,23 @@ func raidAIHourStamp(t time.Time) string {
 	return t.UTC().Format("2006010215")
 }
 
-// raidAIGeminiClient builds the Gemini client of one job from the configured key and model.
-// It returns nil without GEMINI_API_KEY.
-func raidAIGeminiClient() *gemini.Client {
-	key := config.AppConfig.GeminiAPIKey
+// raidAIClaudeClient builds the Claude client of one job from the configured key and model.
+// It returns nil without ANTHROPIC_API_KEY.
+func raidAIClaudeClient() *claude.Client {
+	key := config.AppConfig.AnthropicAPIKey
 	if key == "" {
 		return nil
 	}
-	return &gemini.Client{
-		Endpoint: raidAIGeminiEndpoint,
+	return &claude.Client{
+		Endpoint: raidAIClaudeEndpoint,
 		APIKey:   key,
-		Model:    config.AppConfig.GeminiModel,
-		HTTP:     raidAIGeminiHTTP,
+		Model:    config.AppConfig.AnthropicModel,
+		HTTP:     raidAIClaudeHTTP,
 	}
 }
 
 // raidAIScrub replaces every secret in text, the last line of defence for an error the
-// callers above already rebuild: the bot token and the Gemini key never reach a log.
+// callers above already rebuild: the bot token and the Anthropic key never reach a log.
 func raidAIScrub(text string, secrets ...string) string {
 	for _, secret := range secrets {
 		if secret != "" {
@@ -117,18 +115,18 @@ func raidAIScrub(text string, secrets ...string) string {
 }
 
 // raidAIImageResult is what the verdict step of one image gives its jobs: the spam
-// probability, and whether it was served without a Gemini call of this job.
+// probability, and whether it was served without a provider call of this job.
 type raidAIImageResult struct {
 	probability float64
 	cached      bool
 	ok          bool
-	// refused is set when the step stopped before any Gemini call for a reason that belongs
+	// refused is set when the step stopped before any provider call for a reason that belongs
 	// to this moment (a paused breaker, a budget refusal, a Redis error), so the rest of the
 	// image's album may still be judged.
 	refused bool
 }
 
-// raidAIProcessImage runs one image job. Before any Gemini call it passes, in order: the
+// raidAIProcessImage runs one image job. Before any provider call it passes, in order: the
 // album gate (an album is judged once), the fire-latch skip (a lockdown was just attempted, so
 // more checks are wasted), the verdict cache (one image is judged once an hour), the budgets
 // (20 calls per account, 150 per group and 500 in all per hour, D-20), and only then the download and the
@@ -141,7 +139,7 @@ func raidAIProcessImage(ctx context.Context, job raidAIJob) {
 	if job.media == nil || !raidAIImageConfigured() {
 		return
 	}
-	client := raidAIGeminiClient()
+	client := raidAIClaudeClient()
 	if client == nil {
 		return
 	}
@@ -231,7 +229,7 @@ func raidAIAlbumFirst(client *redis.Client, job raidAIJob) bool {
 }
 
 // raidAIAlbumRelease gives the album's gate back after the photo that took it was refused for a
-// transient reason before any Gemini call, so the next photo of the album can be judged instead
+// transient reason before any provider call, so the next photo of the album can be judged instead
 // of the whole album being dropped for the gate's 120 seconds. A photo outside an album has no
 // gate. Best effort: a failed delete leaves the gate to expire.
 func raidAIAlbumRelease(client *redis.Client, job raidAIJob) {
@@ -341,10 +339,10 @@ func raidAIReserveBudget(client *redis.Client, chatID, userID int64) bool {
 }
 
 // raidAIImageVerdict is the step after the cheap guards: the verdict cache, the budgets, then
-// the download and the Gemini call. It counts every outcome and returns the probability when
+// the download and the provider call. It counts every outcome and returns the probability when
 // there is a verdict.
 func raidAIImageVerdict(
-	ctx context.Context, client *gemini.Client, redisClient *redis.Client, job raidAIJob, fields log.Fields,
+	ctx context.Context, client *claude.Client, redisClient *redis.Client, job raidAIJob, fields log.Fields,
 ) raidAIImageResult {
 	uid := job.media.FileUniqueID
 	if uid != "" {
@@ -359,7 +357,7 @@ func raidAIImageVerdict(
 		}
 	}
 	// The breakers come before the budget: a paused chat, or a paused provider, spends no unit.
-	if raidAIGeminiPaused(job.chat.Id) {
+	if raidAIImagePaused(job.chat.Id) {
 		raidAIShed.Add(1)
 		return raidAIImageResult{refused: true}
 	}
@@ -390,51 +388,28 @@ func raidAIImageVerdict(
 		case ctx.Err() != nil:
 			// Cut off by the shutdown drain: no verdict, and not the provider's failure.
 			raidAIShed.Add(1)
-		case errors.Is(err, gemini.ErrBlocked):
+		case errors.Is(err, claude.ErrBlocked):
 			// The provider answered: a refusal to judge this image is not an outage.
-			raidAIGeminiRecordSuccess(job.chat.Id)
+			raidAIImageRecordSuccess(job.chat.Id)
 			raidAIBlocked.Add(1)
-			log.WithFields(fields).Info("[RaidDetection] AI image check blocked by the provider's safety filters, no verdict")
+			log.WithFields(fields).Info("[RaidDetection] AI image check refused by the provider, no verdict")
 		default:
-			raidAIGeminiRecordFailure(job.chat.Id, err)
+			raidAIImageRecordFailure(job.chat.Id, err)
 			raidAIFailed.Add(1)
 			entry := log.WithFields(fields)
-			var httpErr *gemini.HTTPError
+			var httpErr *claude.HTTPError
 			if errors.As(err, &httpErr) {
-				entry = entry.WithField("status", httpErr.Status)
+				entry = entry.WithField("status", httpErr.Status).WithField("error_type", httpErr.Type)
 			}
 			entry.Warnf("[RaidDetection] AI image check failed, no verdict: %s",
 				raidAIScrub(err.Error(), token, client.APIKey))
 		}
 		return raidAIImageResult{}
 	}
-	raidAIGeminiRecordSuccess(job.chat.Id)
+	raidAIImageRecordSuccess(job.chat.Id)
 	raidAIChecked.Add(1)
-	raidAIWarnModelStage(verdict)
 	if uid != "" {
 		raidAIStoreVerdict(redisClient, uid, verdict.SpamProbability)
 	}
 	return raidAIImageResult{probability: verdict.SpamProbability, ok: true}
-}
-
-// raidAIWarnModelStage logs one warning per process when the answer says the configured
-// model is on its way out (LEGACY, DEPRECATED or RETIRED), naming the model id and the
-// stage, so the owner changes GEMINI_MODEL before the model stops answering.
-func raidAIWarnModelStage(verdict *gemini.Verdict) {
-	switch verdict.ModelStage {
-	case "LEGACY", "DEPRECATED", "RETIRED":
-	default:
-		return
-	}
-	if !raidAIModelWarned.CompareAndSwap(false, true) {
-		return
-	}
-	model := verdict.Model
-	if model == "" {
-		model = config.AppConfig.GeminiModel
-	}
-	log.WithFields(log.Fields{
-		"model": model,
-		"stage": verdict.ModelStage,
-	}).Warnf("[RaidDetection] Gemini model %s is %s, set GEMINI_MODEL to a current model", model, verdict.ModelStage)
 }

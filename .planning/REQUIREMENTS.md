@@ -81,7 +81,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **RAID-01**: A burst of joins within a short window automatically triggers a lockdown.
 - [x] **RAID-02**: A burst of messages, photos, GIFs or stickers, mostly from recently joined members, automatically triggers a lockdown.
 - [x] **RAID-03**: A burst of AI spam verdicts within a short window automatically triggers a lockdown.
-- [x] **RAID-04**: Borderline text is classified with the existing TypeSafe AI check. Borderline photos, GIFs and stickers are classified with Gemini (`gemini-3.5-flash-lite`, owner-provided key).
+- [x] **RAID-04**: Borderline text is classified with the existing TypeSafe AI check. Borderline photos, GIFs and stickers are classified with Claude Haiku 5.5 through the Anthropic API (`claude-haiku-5-5`, owner-provided key; switched from Gemini in quick task 261030-rig).
 - [x] **RAID-05**: Rules, not AI, decide when to lock. AI verdicts only feed the counters in RAID-03.
 - [x] **RAID-06**: Automatic triggers are on by default in every group, with conservative thresholds. An admin can turn each one off or tune its threshold.
 - [x] **RAID-07**: Admins and approved users never count toward detection.
@@ -111,7 +111,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 ### Platform
 
 - [x] **PLAT-01**: Everything works with several bot replicas running at once. Fan-out pacing, detection counters, captcha challenges and lockdown state are shared, not per process.
-- [x] **PLAT-02**: New secrets (Turnstile secret key, Gemini API key) never appear in logs.
+- [x] **PLAT-02**: New secrets (Turnstile secret key, Anthropic API key) never appear in logs.
 - [x] **PLAT-03**: Every new message and button label exists in all 7 languages.
 - [x] **PLAT-04**: The deployment steps for the captcha page are documented: public HTTPS hostname, BotFather Mini App registration, Turnstile keys.
 
@@ -158,7 +158,7 @@ Deferred. Tracked but not in this roadmap.
 | Auto-lifting lockdowns | An admin decides when it's safe |
 | Locking every linked group when one is raided | One attacked group shouldn't silence the rest |
 | Sending every message to AI | Too slow and costly; AI only assists rule-based detection |
-| Gemini for text | Owner's decision: TypeSafe stays for text, Gemini for images only |
+| Gemini for text | Owner's decision: TypeSafe stays for text, a vision model for images only (Gemini at first, Claude Haiku 5.5 since quick task 261030-rig) |
 | Google reCAPTCHA | Turnstile was chosen as more private |
 | Retrying inside the captcha page | Owner's decision: one solve only |
 | A web admin dashboard | Settings stay in Telegram; smaller attack surface |

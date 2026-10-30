@@ -171,17 +171,17 @@ func TestAutoLockdown(t *testing.T) {
 }
 
 // withAIKeys sets the two AI provider keys of the server for one test: TypeSafe (which
-// also needs ENABLE_AISPAM) and Gemini. An empty string means not configured.
-func withAIKeys(t *testing.T, typeSafe, gemini string) {
+// also needs ENABLE_AISPAM) and the image provider. An empty string means not configured.
+func withAIKeys(t *testing.T, typeSafe, image string) {
 	t.Helper()
-	previousKey, previousEnabled, previousGemini := config.AppConfig.TypeSafeAPIKey, config.AppConfig.EnableAISpam, config.AppConfig.GeminiAPIKey
+	previousKey, previousEnabled, previousImage := config.AppConfig.TypeSafeAPIKey, config.AppConfig.EnableAISpam, config.AppConfig.AnthropicAPIKey
 	config.AppConfig.TypeSafeAPIKey = typeSafe
 	config.AppConfig.EnableAISpam = true
-	config.AppConfig.GeminiAPIKey = gemini
+	config.AppConfig.AnthropicAPIKey = image
 	t.Cleanup(func() {
 		config.AppConfig.TypeSafeAPIKey = previousKey
 		config.AppConfig.EnableAISpam = previousEnabled
-		config.AppConfig.GeminiAPIKey = previousGemini
+		config.AppConfig.AnthropicAPIKey = previousImage
 	})
 }
 
@@ -234,7 +234,7 @@ func TestAutolockdownAI(t *testing.T) {
 	t.Run("one provider is enough for no notice", func(t *testing.T) {
 		env := newLockdownEnv(t)
 		raidCleanup(t, env.chat.Id)
-		withAIKeys(t, "", "gemini-test-key")
+		withAIKeys(t, "", "anthropic-test-key")
 
 		env.send(env.admin, "/autolockdown")
 

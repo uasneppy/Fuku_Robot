@@ -22,14 +22,14 @@ import (
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/divkix/Alita_Robot/alita/config"
-	"github.com/divkix/Alita_Robot/alita/utils/gemini"
+	"github.com/divkix/Alita_Robot/alita/utils/claude"
 )
 
-// raidAITestKey is the Gemini key of the image tests, shaped like a real one.
-const raidAITestKey = "AIzaSyImageTestKey_0123456789abcdefgh"
+// raidAITestKey is the Anthropic key of the image tests, shaped like a real one and obviously fake.
+const raidAITestKey = "sk-ant-api03-FAKEIMAGETESTKEY0123456789abcdefghijkl"
 
 // raidAITestModel is the model id of the image tests.
-const raidAITestModel = "gemini-test-lite"
+const raidAITestModel = "test-vision-lite"
 
 // raidAITestJPEG, raidAITestPNG and raidAITestWebP are the smallest byte strings
 // http.DetectContentType takes for each type; tag makes them distinct.
@@ -86,7 +86,7 @@ func (c *raidAIFileClient) getFiles() []string {
 	return append([]string(nil), c.fileIDs...)
 }
 
-// raidAIImageEnv is a raid AI env with Gemini configured and answered by a test server, the
+// raidAIImageEnv is a raid AI env with Claude configured and answered by a test server, the
 // Telegram file download served by another, and getFile answered by a wrapper of the fake.
 type raidAIImageEnv struct {
 	*lockdownEnv
@@ -97,25 +97,25 @@ type raidAIImageEnv struct {
 	served   map[string]raidAIServed
 	handler  http.HandlerFunc
 	bodies   [][]byte
-	geminiN  atomic.Int64
+	claudeN  atomic.Int64
 	fileHits atomic.Int64
 }
 
-// newRaidAIImageEnv is newRaidAIEnv plus GEMINI_API_KEY and GEMINI_MODEL set in the config
-// for the test, a file server, the wrapped bot client and a Gemini server counting its
+// newRaidAIImageEnv is newRaidAIEnv plus ANTHROPIC_API_KEY and ANTHROPIC_MODEL set in the config
+// for the test, a file server, the wrapped bot client and a Claude server counting its
 // requests. Until a test installs another handler it answers a 0.9 spam probability.
 func newRaidAIImageEnv(t *testing.T) *raidAIImageEnv {
 	t.Helper()
 	env := &raidAIImageEnv{lockdownEnv: newRaidAIEnv(t), served: make(map[string]raidAIServed)}
-	// Breaker state is process-wide: a test that makes Gemini fail must not pause the next.
-	resetRaidAIGeminiBreakers(t)
+	// Breaker state is process-wide: a test that makes Claude fail must not pause the next.
+	resetRaidAIImageBreakers(t)
 
-	previousKey, previousModel := config.AppConfig.GeminiAPIKey, config.AppConfig.GeminiModel
-	config.AppConfig.GeminiAPIKey = raidAITestKey
-	config.AppConfig.GeminiModel = raidAITestModel
+	previousKey, previousModel := config.AppConfig.AnthropicAPIKey, config.AppConfig.AnthropicModel
+	config.AppConfig.AnthropicAPIKey = raidAITestKey
+	config.AppConfig.AnthropicModel = raidAITestModel
 	t.Cleanup(func() {
-		config.AppConfig.GeminiAPIKey = previousKey
-		config.AppConfig.GeminiModel = previousModel
+		config.AppConfig.AnthropicAPIKey = previousKey
+		config.AppConfig.AnthropicModel = previousModel
 	})
 
 	env.files = httptest.NewServer(http.HandlerFunc(env.serveFile))
@@ -123,12 +123,12 @@ func newRaidAIImageEnv(t *testing.T) *raidAIImageEnv {
 	env.client = &raidAIFileClient{lockdownFake: env.fake, base: env.files.URL, rawFile: make(map[string]string)}
 	env.bot.BotClient = env.client
 
-	server := httptest.NewServer(http.HandlerFunc(env.serveGemini))
+	server := httptest.NewServer(http.HandlerFunc(env.serveClaude))
 	t.Cleanup(server.Close)
-	previousEndpoint, previousHTTP := raidAIGeminiEndpoint, raidAIGeminiHTTP
-	raidAIGeminiEndpoint = server.URL
-	raidAIGeminiHTTP = &http.Client{Timeout: 5 * time.Second}
-	t.Cleanup(func() { raidAIGeminiEndpoint, raidAIGeminiHTTP = previousEndpoint, previousHTTP })
+	previousEndpoint, previousHTTP := raidAIClaudeEndpoint, raidAIClaudeHTTP
+	raidAIClaudeEndpoint = server.URL
+	raidAIClaudeHTTP = &http.Client{Timeout: 5 * time.Second}
+	t.Cleanup(func() { raidAIClaudeEndpoint, raidAIClaudeHTTP = previousEndpoint, previousHTTP })
 
 	env.answerProbability(0.9)
 	return env
@@ -156,9 +156,9 @@ func (e *raidAIImageEnv) serveFile(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(entry.body)
 }
 
-func (e *raidAIImageEnv) serveGemini(w http.ResponseWriter, r *http.Request) {
+func (e *raidAIImageEnv) serveClaude(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
-	e.geminiN.Add(1)
+	e.claudeN.Add(1)
 	e.mu.Lock()
 	e.bodies = append(e.bodies, body)
 	handler := e.handler
@@ -173,47 +173,68 @@ func (e *raidAIImageEnv) serve(path string, entry raidAIServed) {
 	e.served[path] = entry
 }
 
-// answerWith installs the Gemini server's handler.
+// answerWith installs the Claude server's handler.
 func (e *raidAIImageEnv) answerWith(handler http.HandlerFunc) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.handler = handler
 }
 
-// raidAIGeminiAnswer is a generateContent answer carrying probability, with the given
-// model stage when it is not empty.
-func raidAIGeminiAnswer(probability float64, stage string) string {
-	text, _ := json.Marshal(map[string]any{"category": "scam", "spam_probability": probability})
+// raidAIClaudeAnswer is a Messages answer carrying probability in the forced tool call.
+func raidAIClaudeAnswer(probability float64) string {
 	answer := map[string]any{
-		"candidates": []any{map[string]any{
-			"content":      map[string]any{"parts": []any{map[string]any{"text": string(text)}}},
-			"finishReason": "STOP",
+		"id":    "msg_test",
+		"type":  "message",
+		"role":  "assistant",
+		"model": raidAITestModel,
+		"content": []any{map[string]any{
+			"type":  "tool_use",
+			"id":    "toolu_test",
+			"name":  claude.ToolName,
+			"input": map[string]any{"spam_probability": probability},
 		}},
-		"modelVersion": raidAITestModel,
-	}
-	if stage != "" {
-		answer["modelStatus"] = map[string]any{"modelStage": stage}
+		"stop_reason": "tool_use",
+		"usage":       map[string]any{"input_tokens": 700, "output_tokens": 20},
 	}
 	raw, _ := json.Marshal(answer)
 	return string(raw)
 }
 
-// answerProbability makes the Gemini server answer a spam probability.
+// raidAIClaudeRefusal is a Messages answer that declined to judge the image: HTTP 200 with a
+// refusal stop and no content.
+func raidAIClaudeRefusal() string {
+	return `{"id":"msg_test","type":"message","role":"assistant","model":"` + raidAITestModel + `",` +
+		`"content":[],"stop_reason":"refusal",` +
+		`"stop_details":{"type":"refusal","category":"general_harms","explanation":"declined"},` +
+		`"usage":{"input_tokens":700,"output_tokens":0}}`
+}
+
+// raidAIClaudeError is the Anthropic error envelope of an HTTP error answer.
+func raidAIClaudeError(errType, message string) string {
+	raw, _ := json.Marshal(map[string]any{
+		"type":       "error",
+		"error":      map[string]any{"type": errType, "message": message},
+		"request_id": "req_test",
+	})
+	return string(raw)
+}
+
+// answerProbability makes the Claude server answer a spam probability.
 func (e *raidAIImageEnv) answerProbability(probability float64) {
 	e.answerWith(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(raidAIGeminiAnswer(probability, "")))
+		_, _ = w.Write([]byte(raidAIClaudeAnswer(probability)))
 	})
 }
 
-// geminiRequests is how many requests the Gemini server received.
-func (e *raidAIImageEnv) geminiRequests() int { return int(e.geminiN.Load()) }
+// claudeRequests is how many requests the Claude server received.
+func (e *raidAIImageEnv) claudeRequests() int { return int(e.claudeN.Load()) }
 
-// geminiBody returns the nth request body the Gemini server received.
-func (e *raidAIImageEnv) geminiBody(n int) []byte {
+// claudeBody returns the nth request body the Claude server received.
+func (e *raidAIImageEnv) claudeBody(n int) []byte {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if n >= len(e.bodies) {
-		e.t.Fatalf("the Gemini server received %d requests, want at least %d", len(e.bodies), n+1)
+		e.t.Fatalf("the Claude server received %d requests, want at least %d", len(e.bodies), n+1)
 	}
 	return e.bodies[n]
 }
@@ -225,27 +246,28 @@ func (e *raidAIImageEnv) sendMedia(user gotgbot.User, msg gotgbot.Message) {
 	e.dispatchMessage(e.chat, msg)
 }
 
-// inlineImages parses a Gemini request body into the inline images it carries.
-func inlineImages(t *testing.T, body []byte) []struct{ MimeType, Data string } {
+// requestImages parses a Claude request body into the image blocks it carries.
+func requestImages(t *testing.T, body []byte) []struct{ MimeType, Data string } {
 	t.Helper()
 	var parsed struct {
-		Contents []struct {
-			Parts []struct {
-				InlineData *struct {
-					MimeType string `json:"mimeType"`
-					Data     string `json:"data"`
-				} `json:"inlineData"`
-			} `json:"parts"`
-		} `json:"contents"`
+		Messages []struct {
+			Content []struct {
+				Type   string `json:"type"`
+				Source *struct {
+					MediaType string `json:"media_type"`
+					Data      string `json:"data"`
+				} `json:"source"`
+			} `json:"content"`
+		} `json:"messages"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		t.Fatalf("decode the Gemini request: %v", err)
+		t.Fatalf("decode the Claude request: %v", err)
 	}
 	var images []struct{ MimeType, Data string }
-	for _, content := range parsed.Contents {
-		for _, part := range content.Parts {
-			if part.InlineData != nil {
-				images = append(images, struct{ MimeType, Data string }{part.InlineData.MimeType, part.InlineData.Data})
+	for _, message := range parsed.Messages {
+		for _, block := range message.Content {
+			if block.Type == "image" && block.Source != nil {
+				images = append(images, struct{ MimeType, Data string }{block.Source.MediaType, block.Source.Data})
 			}
 		}
 	}
@@ -294,11 +316,11 @@ func TestRaidAIMedia(t *testing.T) {
 		if got := env.fileHits.Load(); got != 1 {
 			t.Errorf("downloads = %d, want 1", got)
 		}
-		if got := env.geminiRequests(); got != 1 {
-			t.Fatalf("Gemini requests = %d, want 1", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Fatalf("Claude requests = %d, want 1", got)
 		}
-		body := env.geminiBody(0)
-		images := inlineImages(t, body)
+		body := env.claudeBody(0)
+		images := requestImages(t, body)
 		if len(images) != 1 || images[0].MimeType != "image/jpeg" {
 			t.Fatalf("inline images = %+v, want exactly one image/jpeg", images)
 		}
@@ -307,7 +329,7 @@ func TestRaidAIMedia(t *testing.T) {
 		}
 		for _, leak := range []string{"t.me", member.FirstName, env.chat.Title, fmt.Sprint(member.Id), "SPAM"} {
 			if strings.Contains(string(body), leak) {
-				t.Errorf("the Gemini request contains %q: only the image and the instruction may leave", leak)
+				t.Errorf("the Claude request contains %q: only the image and the instruction may leave", leak)
 			}
 		}
 		items, err := env.redis.ZMembers(raidKey(env.chat.Id, "av"))
@@ -329,8 +351,8 @@ func TestRaidAIMedia(t *testing.T) {
 		env.sendMedia(member, gotgbot.Message{Photo: photoSizes()})
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 1 {
-			t.Fatalf("Gemini requests = %d, want 1: the case would prove nothing", got)
+		if got := env.claudeRequests(); got != 1 {
+			t.Fatalf("Claude requests = %d, want 1: the case would prove nothing", got)
 		}
 		if got := aiVerdictSetSize(env.lockdownEnv, "av"); got != 0 {
 			t.Errorf("verdict items = %d, want 0 below the bar", got)
@@ -358,7 +380,7 @@ func TestRaidAIMedia(t *testing.T) {
 		env := newRaidAIImageEnv(t)
 		member := env.newMembers(1, 2*time.Hour)[0]
 		env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(`{"promptFeedback":{"blockReason":"IMAGE_SAFETY"}}`))
+			_, _ = w.Write([]byte(raidAIClaudeRefusal()))
 		})
 		before := GetRaidAIStats()
 
@@ -405,61 +427,27 @@ func TestRaidAIMedia(t *testing.T) {
 		if got := env.client.getFiles(); len(got) != 0 {
 			t.Errorf("getFile asked for %v, want nothing for an established member", got)
 		}
-		if got := env.geminiRequests(); got != 0 {
-			t.Errorf("Gemini requests = %d, want 0", got)
+		if got := env.claudeRequests(); got != 0 {
+			t.Errorf("Claude requests = %d, want 0", got)
 		}
 	})
 
 	t.Run("no key, nothing leaves", func(t *testing.T) {
 		env := newRaidAIImageEnv(t)
 		member := env.newMembers(1, 2*time.Hour)[0]
-		config.AppConfig.GeminiAPIKey = ""
+		config.AppConfig.AnthropicAPIKey = ""
 
 		env.sendMedia(member, gotgbot.Message{Photo: photoSizes(), Caption: "SPAM t.me/x"})
 		env.settleAI()
 
 		if got := env.client.getFiles(); len(got) != 0 {
-			t.Errorf("getFile asked for %v, want nothing without GEMINI_API_KEY", got)
+			t.Errorf("getFile asked for %v, want nothing without ANTHROPIC_API_KEY", got)
 		}
 		if got := env.fileHits.Load(); got != 0 {
 			t.Errorf("downloads = %d, want 0", got)
 		}
-		if got := env.geminiRequests(); got != 0 {
-			t.Errorf("Gemini requests = %d, want 0", got)
-		}
-	})
-
-	t.Run("a deprecated model warns once", func(t *testing.T) {
-		env := newRaidAIImageEnv(t)
-		members := env.newMembers(2, 2*time.Hour)
-		env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(raidAIGeminiAnswer(0.1, "DEPRECATED")))
-		})
-		raidAIModelWarned.Store(false)
-		t.Cleanup(func() { raidAIModelWarned.Store(false) })
-		hook := captureLogs(t, log.InfoLevel)
-
-		// Two different images: the same one would be served from the verdict cache.
-		env.sendMedia(members[0], gotgbot.Message{Photo: photoNamed("warn-a")})
-		env.settleAI()
-		env.sendMedia(members[1], gotgbot.Message{Photo: photoNamed("warn-b")})
-		env.settleAI()
-
-		if got := env.geminiRequests(); got != 2 {
-			t.Fatalf("Gemini requests = %d, want 2: the case would prove nothing", got)
-		}
-		warnings := 0
-		for _, entry := range hook.AllEntries() {
-			if entry.Level != log.WarnLevel {
-				continue
-			}
-			line := entry.Message + fmt.Sprint(entry.Data)
-			if strings.Contains(line, raidAITestModel) && strings.Contains(line, "DEPRECATED") {
-				warnings++
-			}
-		}
-		if warnings != 1 {
-			t.Errorf("model-stage warnings = %d, want exactly 1 naming the model and the stage", warnings)
+		if got := env.claudeRequests(); got != 0 {
+			t.Errorf("Claude requests = %d, want 0", got)
 		}
 	})
 
@@ -472,8 +460,8 @@ func TestRaidAIMedia(t *testing.T) {
 		env.sendMedia(member, gotgbot.Message{Photo: photoNamed("act-b")})
 		env.settleAI()
 
-		if got := env.geminiRequests(); got != 2 {
-			t.Fatalf("Gemini requests = %d, want 2: the case would prove nothing", got)
+		if got := env.claudeRequests(); got != 2 {
+			t.Fatalf("Claude requests = %d, want 2: the case would prove nothing", got)
 		}
 		env.wantNoActions()
 		if got := len(env.calls("unbanChatMember")); got != 0 {
@@ -534,10 +522,10 @@ func TestRaidAIMedia(t *testing.T) {
 			{"a voice note sends nothing", gotgbot.Message{Voice: &gotgbot.Voice{FileId: "voice"}}, "", ""},
 			{"a text sends nothing", gotgbot.Message{Text: "hello"}, "", ""},
 			{"a photo over 5 MiB sends nothing", gotgbot.Message{
-				Photo: []gotgbot.PhotoSize{{FileId: "huge", Width: 1024, Height: 1024, FileSize: gemini.MaxImageBytes + 1}},
+				Photo: []gotgbot.PhotoSize{{FileId: "huge", Width: 1024, Height: 1024, FileSize: claude.MaxImageBytes + 1}},
 			}, "", ""},
 			{"a sticker over 5 MiB sends nothing", gotgbot.Message{
-				Sticker: &gotgbot.Sticker{FileId: "huge", Type: "regular", FileSize: gemini.MaxImageBytes + 1},
+				Sticker: &gotgbot.Sticker{FileId: "huge", Type: "regular", FileSize: claude.MaxImageBytes + 1},
 			}, "", ""},
 		}
 		for _, tc := range cases {
@@ -590,10 +578,10 @@ func TestRaidAIMedia(t *testing.T) {
 				if got := env.client.getFiles(); len(got) != 1 || got[0] != tc.wantFile {
 					t.Fatalf("getFile asked for %v, want exactly %q", got, tc.wantFile)
 				}
-				if got := env.geminiRequests(); got != 1 {
-					t.Fatalf("Gemini requests = %d, want 1", got)
+				if got := env.claudeRequests(); got != 1 {
+					t.Fatalf("Claude requests = %d, want 1", got)
 				}
-				images := inlineImages(t, env.geminiBody(0))
+				images := requestImages(t, env.claudeBody(0))
 				if len(images) != 1 || images[0].MimeType != tc.wantMIME {
 					t.Errorf("inline images = %+v, want exactly one %s", images, tc.wantMIME)
 				}
@@ -623,12 +611,12 @@ func TestRaidAIMedia(t *testing.T) {
 				env.client.rawFile["p800"] = `{"file_id":"p800","file_unique_id":"u","file_path":"files/p800"}`
 				env.serve("files/p800", raidAIServed{
 					status: http.StatusOK,
-					body:   append(raidAITestJPEG("big"), bytes.Repeat([]byte{0x41}, gemini.MaxImageBytes)...),
+					body:   append(raidAITestJPEG("big"), bytes.Repeat([]byte{0x41}, claude.MaxImageBytes)...),
 				})
 			}, true},
 			{"a file that declares over 5 MiB", func(env *raidAIImageEnv) {
 				env.client.rawFile["p800"] = fmt.Sprintf(
-					`{"file_id":"p800","file_unique_id":"u","file_size":%d,"file_path":"files/p800"}`, gemini.MaxImageBytes+1)
+					`{"file_id":"p800","file_unique_id":"u","file_size":%d,"file_path":"files/p800"}`, claude.MaxImageBytes+1)
 			}, false},
 			{"an empty file path", func(env *raidAIImageEnv) {
 				env.client.rawFile["p800"] = `{"file_id":"p800","file_unique_id":"u","file_size":100}`
@@ -653,8 +641,8 @@ func TestRaidAIMedia(t *testing.T) {
 				env.sendMedia(member, gotgbot.Message{Photo: photoSizes()})
 				env.settleAI()
 
-				if got := env.geminiRequests(); got != 0 {
-					t.Errorf("Gemini requests = %d, want 0 for a refused file", got)
+				if got := env.claudeRequests(); got != 0 {
+					t.Errorf("Claude requests = %d, want 0 for a refused file", got)
 				}
 				if got := env.fileHits.Load() > 0; got != tc.wantDownload {
 					t.Errorf("file server asked = %v, want %v", got, tc.wantDownload)
@@ -700,7 +688,7 @@ func everythingLogged(out *lockedBuffer, hook *logrustest.Hook) string {
 	return all.String()
 }
 
-// TestRaidAISecretsNeverLogged shows no failure of an image check writes the Gemini key or
+// TestRaidAISecretsNeverLogged shows no failure of an image check writes the Anthropic key or
 // the bot token (which is in the Telegram file URL) anywhere: the global logger runs at
 // debug level with its hooks replaced by an empty set, so the redaction hook does not run
 // and only the code under test keeps the secrets out.
@@ -711,35 +699,35 @@ func TestRaidAISecretsNeverLogged(t *testing.T) {
 		// setup breaks one half of the check; it returns strings that must not be logged
 		// besides the key and the token, and a function reading what must stay at zero.
 		setup func(t *testing.T, env *raidAIImageEnv) (forbidden []string, untouched func() int64)
-		// gemini is whether a direct Classify call is also made to read the client's error.
-		gemini bool
+		// provider is whether a direct Classify call is also made to read the client's error.
+		provider bool
 		// download is whether a direct raidAIDownload call is also made to read its error.
 		download bool
 	}{
-		{name: "a Gemini 400 that echoes the key", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+		{name: "a Claude 400 that echoes the key", provider: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
 			env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(`{"error":{"code":400,"message":"API key not valid: ` + raidAITestKey +
-					`. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID"}]}}`))
+				_, _ = w.Write([]byte(raidAIClaudeError("invalid_request_error",
+					"invalid x-api-key: "+raidAITestKey+". Please pass a valid API key.")))
 			})
 			return nil, nil
 		}},
-		{name: "a Gemini 500 whose body is the key", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+		{name: "a Claude 500 whose body is the key", provider: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
 			env.answerWith(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(raidAITestKey))
 			})
 			return nil, nil
 		}},
-		{name: "a Gemini server closed before the call", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+		{name: "a Claude server closed before the call", provider: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
 			dead := httptest.NewServer(http.NotFoundHandler())
-			raidAIGeminiEndpoint = dead.URL
+			raidAIClaudeEndpoint = dead.URL
 			dead.Close()
 			return nil, nil
 		}},
-		{name: "a Gemini call that hangs past a shortened timeout", gemini: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
+		{name: "a Claude call that hangs past a shortened timeout", provider: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
 			env.answerWith(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() })
-			raidAIGeminiHTTP = &http.Client{Timeout: 200 * time.Millisecond}
+			raidAIClaudeHTTP = &http.Client{Timeout: 200 * time.Millisecond}
 			return nil, nil
 		}},
 		{name: "a file server closed before the download", download: true, setup: func(t *testing.T, env *raidAIImageEnv) ([]string, func() int64) {
@@ -772,13 +760,13 @@ func TestRaidAISecretsNeverLogged(t *testing.T) {
 
 			var directErr error
 			switch {
-			case tc.gemini:
-				_, directErr = raidAIGeminiClient().Classify(context.Background(),
-					gemini.Image{MIMEType: "image/jpeg", Data: raidAITestJPEG("direct")})
+			case tc.provider:
+				_, directErr = raidAIClaudeClient().Classify(context.Background(),
+					claude.Image{MIMEType: "image/jpeg", Data: raidAITestJPEG("direct")})
 			case tc.download:
 				_, directErr = raidAIDownload(context.Background(), env.bot, "p800")
 			}
-			if (tc.gemini || tc.download) && directErr == nil {
+			if (tc.provider || tc.download) && directErr == nil {
 				t.Fatal("the direct call succeeded: the case would prove nothing")
 			}
 			if directErr != nil {

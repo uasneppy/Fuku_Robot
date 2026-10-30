@@ -65,7 +65,7 @@ const (
 var raidAIStopWait = 1 * time.Second
 
 // ENABLE_AISPAM is the global AI kill switch: with it off the raid AI path sends nothing to
-// either provider (TypeSafe for texts, Gemini for images), whatever keys are set (WR-02).
+// either provider (TypeSafe for texts, Anthropic Claude for images), whatever keys are set (WR-02).
 
 // raidAITextConfigured reports whether a provider is set up to judge texts: the same
 // TypeSafe configuration /aispam needs, which includes the ENABLE_AISPAM kill switch.
@@ -73,10 +73,10 @@ func raidAITextConfigured() bool {
 	return config.AppConfig.EnableAISpam && config.AppConfig.TypeSafeAPIKey != ""
 }
 
-// raidAIImageConfigured reports whether a provider is set up to judge images: a Gemini key
+// raidAIImageConfigured reports whether a provider is set up to judge images: an Anthropic key
 // and the ENABLE_AISPAM kill switch on.
 func raidAIImageConfigured() bool {
-	return config.AppConfig.EnableAISpam && config.AppConfig.GeminiAPIKey != ""
+	return config.AppConfig.EnableAISpam && config.AppConfig.AnthropicAPIKey != ""
 }
 
 // raidAIConfigured reports whether any AI provider of the raid path is set up and not
@@ -161,7 +161,7 @@ func raidAICheckCandidate(client *redis.Client, chatID, userID int64, hash strin
 // raidAIJob is one check for the pool. It carries copies, never the update, so a worker
 // holds nothing of the dispatcher. The text is sent to TypeSafe and is never logged. An
 // image job has a media reference and no text: the frame is fetched by the worker and is
-// the only thing that goes to Gemini.
+// the only thing that goes to Anthropic.
 type raidAIJob struct {
 	bot         *gotgbot.Bot
 	chat        gotgbot.Chat
@@ -275,7 +275,7 @@ func raidAIWatchText(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, userI
 // raidAIWatchImage applies the image rule to one photo, GIF, sticker or video of a
 // supergroup member: only a new member's media is a candidate (D-01), and the frame that
 // would be sent is already chosen (media). The order is the text path's: the provider is
-// configured (without GEMINI_API_KEY nothing is fetched and nothing leaves, D-11, D-21),
+// configured (without ANTHROPIC_API_KEY nothing is fetched and nothing leaves, D-11, D-21),
 // Redis, the chat's settings, the candidate script with an empty hash (so only "is the
 // sender new" is asked and nothing is recorded), the carve-outs, then the enqueue. The
 // media job carries no caption, name or text, so none can reach the provider (D-12).
@@ -397,14 +397,14 @@ type RaidAIStats struct {
 	Shed int64
 	// Failed is the checks that got no verdict from the provider.
 	Failed int64
-	// Blocked is the image checks Google's safety filters refused to judge. A block is no
+	// Blocked is the image checks the provider refused to judge (a refusal stop). A refusal is no
 	// verdict and is counted apart from Failed, so an owner can see how many images the
-	// filters keep from the check.
+	// provider declines to judge.
 	Blocked int64
-	// Capped is the image checks an hourly Gemini budget refused (20 per account in a group,
+	// Capped is the image checks an hourly provider budget refused (20 per account in a group,
 	// 150 per group, 500 in all). A capped check is no verdict and costs nothing.
 	Capped int64
-	// Cached is the image checks that needed no Gemini call: the image's verdict was cached,
+	// Cached is the image checks that needed no provider call: the image's verdict was cached,
 	// the photo belonged to an album already judged, or a lockdown was being started.
 	Cached int64
 }
@@ -479,7 +479,7 @@ func raidAIEnqueue(job raidAIJob) bool {
 	}
 }
 
-// raidAIProcessJob runs one queued check: an image job goes to the Gemini check, any other
+// raidAIProcessJob runs one queued check: an image job goes to the Claude check, any other
 // to TypeSafe.
 func raidAIProcessJob(job raidAIJob) {
 	if job.media != nil {

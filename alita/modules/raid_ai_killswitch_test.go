@@ -19,11 +19,11 @@ func switchAISpamOff(t *testing.T) {
 	t.Cleanup(func() { config.AppConfig.EnableAISpam = previous })
 }
 
-// TestRaidAIKillSwitch proves ENABLE_AISPAM=false stops the whole raid AI path, the Gemini
+// TestRaidAIKillSwitch proves ENABLE_AISPAM=false stops the whole raid AI path, the text and
 // image checks included, even with both provider keys set (WR-02).
 func TestRaidAIKillSwitch(t *testing.T) {
 	t.Run("the configured checks follow the switch", func(t *testing.T) {
-		withAIKeys(t, "typesafe-test-key", "gemini-test-key")
+		withAIKeys(t, "typesafe-test-key", "anthropic-test-key")
 		if !raidAITextConfigured() || !raidAIImageConfigured() || !raidAIConfigured() {
 			t.Fatal("with both keys and the switch on the raid AI path must be configured")
 		}
@@ -34,7 +34,7 @@ func TestRaidAIKillSwitch(t *testing.T) {
 		}
 	})
 
-	t.Run("a new member's photo is not fetched or sent to Gemini", func(t *testing.T) {
+	t.Run("a new member's photo is not fetched or sent to the image provider", func(t *testing.T) {
 		env := newRaidAIImageEnv(t)
 		member := env.newMembers(1, 2*time.Hour)[0]
 		switchAISpamOff(t)
@@ -46,8 +46,8 @@ func TestRaidAIKillSwitch(t *testing.T) {
 		if got := env.client.getFiles(); len(got) != 0 {
 			t.Errorf("getFile asked for %v, want nothing with ENABLE_AISPAM off", got)
 		}
-		if got := env.geminiRequests(); got != 0 {
-			t.Errorf("Gemini requests = %d, want 0", got)
+		if got := env.claudeRequests(); got != 0 {
+			t.Errorf("Claude requests = %d, want 0", got)
 		}
 		if got := GetRaidAIStats(); got != before {
 			t.Errorf("stats moved from %+v to %+v, want no change", before, got)
@@ -71,8 +71,8 @@ func TestRaidAIKillSwitch(t *testing.T) {
 		if got := env.client.getFiles(); len(got) != 0 {
 			t.Errorf("getFile asked for %v, want nothing", got)
 		}
-		if got := env.geminiRequests(); got != 0 {
-			t.Errorf("Gemini requests = %d, want 0", got)
+		if got := env.claudeRequests(); got != 0 {
+			t.Errorf("Claude requests = %d, want 0", got)
 		}
 	})
 
@@ -107,7 +107,7 @@ func TestRaidAIKillSwitch(t *testing.T) {
 	t.Run("/autolockdown says AI checks are not set up", func(t *testing.T) {
 		env := newLockdownEnv(t)
 		raidCleanup(t, env.chat.Id)
-		withAIKeys(t, "typesafe-test-key", "gemini-test-key")
+		withAIKeys(t, "typesafe-test-key", "anthropic-test-key")
 		switchAISpamOff(t)
 
 		env.send(env.admin, "/autolockdown")

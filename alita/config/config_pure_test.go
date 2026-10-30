@@ -8,7 +8,7 @@ import (
 
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
-	"github.com/divkix/Alita_Robot/alita/utils/gemini"
+	"github.com/divkix/Alita_Robot/alita/utils/claude"
 	"github.com/divkix/Alita_Robot/alita/utils/logredact"
 )
 
@@ -436,41 +436,44 @@ func setRequiredConfigEnv(t *testing.T) {
 	t.Setenv("REDIS_ADDRESS", "redis:6379")
 	t.Setenv("REDIS_PASSWORD", "")
 	t.Setenv("REDIS_URL", "")
+	// A key exported on a developer machine must never leak into a test.
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("ANTHROPIC_MODEL", "")
 }
 
 // t.Setenv() is incompatible with parallel execution.
-func TestGeminiConfig(t *testing.T) {
+func TestAnthropicConfig(t *testing.T) {
 	t.Run("key and model load", func(t *testing.T) {
 		setRequiredConfigEnv(t)
-		t.Setenv("GEMINI_API_KEY", "AIzaSyTestKeyForConfig_0123456789abcdefg")
-		t.Setenv("GEMINI_MODEL", "gemini-3.5-flash")
+		t.Setenv("ANTHROPIC_API_KEY", "sk-ant-api03-FAKEconfigKEY0123456789abcdefg")
+		t.Setenv("ANTHROPIC_MODEL", "test-vision-lite")
 
 		cfg, err := LoadConfig()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if cfg.GeminiAPIKey != "AIzaSyTestKeyForConfig_0123456789abcdefg" {
-			t.Errorf("GeminiAPIKey: got %q", cfg.GeminiAPIKey)
+		if cfg.AnthropicAPIKey != "sk-ant-api03-FAKEconfigKEY0123456789abcdefg" {
+			t.Errorf("AnthropicAPIKey: got %q", cfg.AnthropicAPIKey)
 		}
-		if cfg.GeminiModel != "gemini-3.5-flash" {
-			t.Errorf("GeminiModel: got %q, want %q", cfg.GeminiModel, "gemini-3.5-flash")
+		if cfg.AnthropicModel != "test-vision-lite" {
+			t.Errorf("AnthropicModel: got %q, want %q", cfg.AnthropicModel, "test-vision-lite")
 		}
 	})
 
 	t.Run("model defaults", func(t *testing.T) {
 		setRequiredConfigEnv(t)
-		t.Setenv("GEMINI_API_KEY", "")
-		t.Setenv("GEMINI_MODEL", "")
+		t.Setenv("ANTHROPIC_API_KEY", "")
+		t.Setenv("ANTHROPIC_MODEL", "")
 
 		cfg, err := LoadConfig()
 		if err != nil {
 			t.Fatalf("a missing key must not fail LoadConfig: %v", err)
 		}
-		if cfg.GeminiAPIKey != "" {
-			t.Errorf("GeminiAPIKey: got %q, want empty", cfg.GeminiAPIKey)
+		if cfg.AnthropicAPIKey != "" {
+			t.Errorf("AnthropicAPIKey: got %q, want empty", cfg.AnthropicAPIKey)
 		}
-		if cfg.GeminiModel != gemini.DefaultModel {
-			t.Errorf("GeminiModel: got %q, want %q", cfg.GeminiModel, gemini.DefaultModel)
+		if cfg.AnthropicModel != claude.DefaultModel {
+			t.Errorf("AnthropicModel: got %q, want %q", cfg.AnthropicModel, claude.DefaultModel)
 		}
 	})
 
@@ -478,36 +481,36 @@ func TestGeminiConfig(t *testing.T) {
 		for name, model := range map[string]string{
 			"path traversal": "../v1/files",
 			"too long":       strings.Repeat("a", 65),
-			"query":          "gemini?key=x",
+			"query":          "model?key=x",
 		} {
 			t.Run(name, func(t *testing.T) {
 				setRequiredConfigEnv(t)
-				t.Setenv("GEMINI_MODEL", model)
+				t.Setenv("ANTHROPIC_MODEL", model)
 
 				cfg, err := LoadConfig()
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if cfg.GeminiModel != gemini.DefaultModel {
-					t.Errorf("GeminiModel: got %q, want %q", cfg.GeminiModel, gemini.DefaultModel)
+				if cfg.AnthropicModel != claude.DefaultModel {
+					t.Errorf("AnthropicModel: got %q, want %q", cfg.AnthropicModel, claude.DefaultModel)
 				}
 			})
 		}
 	})
 
 	t.Run("a rejected model is not logged", func(t *testing.T) {
-		const pasted = "AIzaSyPastedIntoTheWrongVariable 0123456789"
+		const pasted = "sk-ant-api03-PastedIntoTheWrongVariable 0123456789"
 		hook := logrustest.NewGlobal()
 		defer hook.Reset()
 		setRequiredConfigEnv(t)
-		t.Setenv("GEMINI_MODEL", pasted)
+		t.Setenv("ANTHROPIC_MODEL", pasted)
 
 		cfg, err := LoadConfig()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if cfg.GeminiModel != gemini.DefaultModel {
-			t.Fatalf("GeminiModel: got %q, want the default", cfg.GeminiModel)
+		if cfg.AnthropicModel != claude.DefaultModel {
+			t.Fatalf("AnthropicModel: got %q, want the default", cfg.AnthropicModel)
 		}
 		warned := false
 		for _, entry := range hook.AllEntries() {
@@ -515,27 +518,27 @@ func TestGeminiConfig(t *testing.T) {
 			for _, value := range entry.Data {
 				line += " " + fmt.Sprint(value)
 			}
-			if strings.Contains(line, pasted) || strings.Contains(line, "AIzaSy") {
-				t.Errorf("a log line carries the rejected GEMINI_MODEL value: %q", line)
+			if strings.Contains(line, pasted) || strings.Contains(line, "sk-ant-") {
+				t.Errorf("a log line carries the rejected ANTHROPIC_MODEL value: %q", line)
 			}
-			if strings.Contains(entry.Message, "GEMINI_MODEL") {
+			if strings.Contains(entry.Message, "ANTHROPIC_MODEL") {
 				warned = true
 			}
 		}
 		if !warned {
-			t.Error("no warning names GEMINI_MODEL: the case would prove nothing")
+			t.Error("no warning names ANTHROPIC_MODEL: the case would prove nothing")
 		}
 	})
 
 	t.Run("the key is registered", func(t *testing.T) {
-		const key = "AIzaSyRegisteredSecretForTest_abcdefghij"
+		const key = "sk-ant-api03-RegisteredSecretForTest_abcdefghij"
 		const botToken = "registersecretsbottoken"
 		forgetRegisteredSecrets(t)
-		registerSecrets(&Config{GeminiAPIKey: key, BotToken: botToken})
+		registerSecrets(&Config{AnthropicAPIKey: key, BotToken: botToken})
 
 		got := logredact.Scrub("calling model with key=" + key + " and " + botToken)
 		if strings.Contains(got, key) {
-			t.Errorf("Gemini key leaked: %q", got)
+			t.Errorf("Anthropic key leaked: %q", got)
 		}
 		if strings.Contains(got, botToken) {
 			t.Errorf("bot token no longer registered: %q", got)
@@ -544,10 +547,10 @@ func TestGeminiConfig(t *testing.T) {
 			t.Errorf("expected %q in %q", logredact.Placeholder, got)
 		}
 
-		// A value the AIza shape pattern cannot match proves the exact-value
+		// A value the sk-ant- shape pattern cannot match proves the exact-value
 		// registration on its own.
-		const plain = "plain-gemini-key-registered-by-exact-value"
-		registerSecrets(&Config{GeminiAPIKey: plain})
+		const plain = "plain-anthropic-key-registered-by-exact-value"
+		registerSecrets(&Config{AnthropicAPIKey: plain})
 		if got := logredact.Scrub("key=" + plain); strings.Contains(got, plain) {
 			t.Errorf("exact-value registration missing: %q", got)
 		}

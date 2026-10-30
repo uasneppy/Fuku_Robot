@@ -12,10 +12,10 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
-	"github.com/divkix/Alita_Robot/alita/utils/gemini"
+	"github.com/divkix/Alita_Robot/alita/utils/claude"
 )
 
-// Picking the one frame of a message the image check sends to Gemini, and downloading it
+// Picking the one frame of a message the image check sends to Anthropic, and downloading it
 // without ever exposing the bot token. The Telegram file URL holds the token, and
 // net/http errors embed the URL, so nothing in this file wraps, formats or logs a request,
 // a file or a URL: every error is rebuilt from its cause (D-12, PLAT-02).
@@ -98,7 +98,7 @@ func raidAIThumbnailRef(thumbnail *gotgbot.PhotoSize, kind string) (raidAIMedia,
 
 // raidAIPhotoRef takes the photo size whose larger side is nearest to raidAIPhotoTarget.
 // The first of two equally near sizes wins, which is the smaller one, as Telegram lists
-// sizes in ascending order. A size that declares more than gemini.MaxImageBytes is refused.
+// sizes in ascending order. A size that declares more than claude.MaxImageBytes is refused.
 func raidAIPhotoRef(sizes []gotgbot.PhotoSize) (raidAIMedia, bool) {
 	best := -1
 	bestDistance := int64(0)
@@ -122,70 +122,70 @@ func raidAIPhotoRef(sizes []gotgbot.PhotoSize) (raidAIMedia, bool) {
 }
 
 // raidAIFrame is a candidate frame, refused when it declares a size over the largest image
-// the Gemini client takes.
+// the Claude client takes.
 func raidAIFrame(fileID, uniqueID string, size int64, kind string) (raidAIMedia, bool) {
-	if fileID == "" || size > gemini.MaxImageBytes {
+	if fileID == "" || size > claude.MaxImageBytes {
 		return raidAIMedia{}, false
 	}
 	return raidAIMedia{FileID: fileID, FileUniqueID: uniqueID, FileSize: size, Kind: kind}, true
 }
 
 // raidAIDownload fetches the file fileID with getFile and a plain GET and returns it as a
-// Gemini image. It refuses a file that is empty, over gemini.MaxImageBytes, or not a JPEG,
+// Claude image. It refuses a file that is empty, over claude.MaxImageBytes, or not a JPEG,
 // PNG or WebP by its bytes (the type is sniffed, never taken from a header or a name), a
 // path a local Bot API server returns as an absolute one, and any redirect. Every error is
 // rebuilt: a transport error from its cause, a bad status as the code alone, so neither the
 // bot token nor the URL is in an error, whatever the caller does with it.
-func raidAIDownload(ctx context.Context, b *gotgbot.Bot, fileID string) (gemini.Image, error) {
+func raidAIDownload(ctx context.Context, b *gotgbot.Bot, fileID string) (claude.Image, error) {
 	if b == nil || fileID == "" {
-		return gemini.Image{}, errors.New("telegram file download: no file")
+		return claude.Image{}, errors.New("telegram file download: no file")
 	}
 	// gotgbot sanitises the errors of its own requests.
 	file, err := b.GetFileWithContext(ctx, fileID, nil)
 	if err != nil {
-		return gemini.Image{}, fmt.Errorf("telegram getFile: %w", err)
+		return claude.Image{}, fmt.Errorf("telegram getFile: %w", err)
 	}
 	if file == nil || file.FilePath == "" || strings.HasPrefix(file.FilePath, "/") {
-		return gemini.Image{}, errors.New("telegram file download: no downloadable path")
+		return claude.Image{}, errors.New("telegram file download: no downloadable path")
 	}
-	if file.FileSize > gemini.MaxImageBytes {
-		return gemini.Image{}, errors.New("telegram file download: file too large")
+	if file.FileSize > claude.MaxImageBytes {
+		return claude.Image{}, errors.New("telegram file download: file too large")
 	}
 
 	// The request error is not wrapped: it would carry the URL.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, file.URL(b, nil), nil)
 	if err != nil {
-		return gemini.Image{}, errors.New("telegram file download: build request")
+		return claude.Image{}, errors.New("telegram file download: build request")
 	}
 	resp, err := raidAIFileHTTPClient.Do(req)
 	if err != nil {
 		var ue *url.Error
 		if errors.As(err, &ue) && ue.Err != nil {
-			return gemini.Image{}, fmt.Errorf("telegram file download: %w", ue.Err)
+			return claude.Image{}, fmt.Errorf("telegram file download: %w", ue.Err)
 		}
-		return gemini.Image{}, errors.New("telegram file download: request failed")
+		return claude.Image{}, errors.New("telegram file download: request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return gemini.Image{}, fmt.Errorf("telegram file download: status %d", resp.StatusCode)
+		return claude.Image{}, fmt.Errorf("telegram file download: status %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, gemini.MaxImageBytes+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, claude.MaxImageBytes+1))
 	if err != nil {
-		return gemini.Image{}, errors.New("telegram file download: read failed")
+		return claude.Image{}, errors.New("telegram file download: read failed")
 	}
-	if len(data) > gemini.MaxImageBytes {
-		return gemini.Image{}, errors.New("telegram file download: file too large")
+	if len(data) > claude.MaxImageBytes {
+		return claude.Image{}, errors.New("telegram file download: file too large")
 	}
 	if len(data) == 0 {
-		return gemini.Image{}, errors.New("telegram file download: empty file")
+		return claude.Image{}, errors.New("telegram file download: empty file")
 	}
 
 	mimeType, _, _ := strings.Cut(http.DetectContentType(data), ";")
 	switch mimeType {
 	case "image/jpeg", "image/png", "image/webp":
 	default:
-		return gemini.Image{}, fmt.Errorf("telegram file download: not a supported image (%s)", mimeType)
+		return claude.Image{}, fmt.Errorf("telegram file download: not a supported image (%s)", mimeType)
 	}
-	return gemini.Image{MIMEType: mimeType, Data: data}, nil
+	return claude.Image{MIMEType: mimeType, Data: data}, nil
 }

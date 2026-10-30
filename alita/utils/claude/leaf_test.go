@@ -1,6 +1,6 @@
 //go:build testtools
 
-package gemini
+package claude
 
 import (
 	"go/parser"
@@ -11,10 +11,10 @@ import (
 	"testing"
 )
 
-// TestGeminiPackageIsLeaf keeps the package a standard-library leaf. The spike
+// TestClaudePackageIsLeaf keeps the package a standard-library leaf. The spike
 // tool imports it, and an import of alita/config or alita/db would run their
 // init functions, which connect to PostgreSQL before main.
-func TestGeminiPackageIsLeaf(t *testing.T) {
+func TestClaudePackageIsLeaf(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestGeminiPackageIsLeaf(t *testing.T) {
 			// Standard library paths have no dot in their first element.
 			first, _, _ := strings.Cut(path, "/")
 			if strings.Contains(first, ".") {
-				t.Errorf("%s imports %q: the gemini package may import the standard library only", name, path)
+				t.Errorf("%s imports %q: the claude package may import the standard library only", name, path)
 			}
 		}
 	}

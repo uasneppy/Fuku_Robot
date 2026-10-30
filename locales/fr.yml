@@ -2757,7 +2757,7 @@ lockdown_help_msg: |
 
   Je verrouille aussi ce groupe de moi-même quand un raid commence : 15 arrivées en 60 secondes (vague), ou 30 messages, photos, GIF ou stickers en 30 secondes, dont au moins 60 % viennent d'au moins 3 membres arrivés depuis moins de 24 heures (déluge). Valeurs par défaut, déclencheurs actifs par défaut ; <code>/autolockdown</code> affiche celles de ce groupe. Ne comptent jamais les admins, les utilisateurs approuvés ni les commandes que je traite. Je publie un court avis au verrouillage, et l'alerte indique le déclencheur. Dans les 10 minutes après une levée, je ne reverrouille pas seul. Si je vois un raid sans pouvoir verrouiller (admin avec le droit de restreindre des membres, dans un supergroupe), j'en avertis le groupe Staff et le canal de journal, au plus une fois par jour. Ces réglages ne sont pas sauvegardés.
 
-  Déclencheur IA : les textes suspects de membres arrivés depuis moins de 24 h sont vérifiés par TypeSafe, leurs photos, GIF et stickers par Google Gemini (si configuré). 5 verdicts de spam venant de 3 comptes en 120 s verrouillent le groupe ; un seul verdict ne le fait jamais, et l'IA ne supprime ni ne bannit jamais.
+  Déclencheur IA : les textes suspects de membres arrivés depuis moins de 24 h sont vérifiés par TypeSafe, leurs photos, GIF et stickers par Anthropic Claude (si configuré). 5 verdicts de spam venant de 3 comptes en 120 s verrouillent le groupe ; un seul verdict ne le fait jamais, et l'IA ne supprime ni ne bannit jamais.
 
   🔓 Lever le verrouillage : lève le verrouillage comme <code>/unlockdown</code>. Mêmes droits que /unlockdown, vérifiés en direct ; être dans le groupe Staff ne suffit pas.
 

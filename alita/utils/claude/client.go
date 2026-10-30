@@ -1,11 +1,11 @@
-// Package gemini is the Gemini generateContent client of the AI raid checks.
+// Package claude is the Anthropic Messages client of the raid AI image checks.
 //
-// It imports the standard library only, so the scripts/gemini-spike tool can
-// use it without pulling in alita/config or alita/db, whose init functions
-// connect to PostgreSQL before main. The API key travels only in the
-// x-goog-api-key header, never in a URL, and nothing in this package logs:
-// callers log, and every error returned here is free of the key.
-package gemini
+// It imports the standard library only, so a spike tool can use it without
+// pulling in alita/config or alita/db, whose init functions connect to
+// PostgreSQL before main. The API key travels only in the x-api-key header,
+// never in a URL, and nothing in this package logs: callers log, and every
+// error returned here is free of the key.
+package claude
 
 import (
 	"bytes"
@@ -22,17 +22,20 @@ import (
 )
 
 const (
-	// DefaultEndpoint is the Gemini API host.
-	DefaultEndpoint = "https://generativelanguage.googleapis.com"
-	// DefaultModel is the model used when GEMINI_MODEL is not set.
-	DefaultModel = "gemini-3.5-flash-lite"
-	// Timeout bounds one whole Classify or GetModel call, retry included.
+	// DefaultEndpoint is the Anthropic API host.
+	DefaultEndpoint = "https://api.anthropic.com"
+	// DefaultModel is the model used when ANTHROPIC_MODEL is not set.
+	DefaultModel = "claude-haiku-5-5"
+	// APIVersion is the anthropic-version header value.
+	APIVersion = "2026-10-21"
+	// Timeout bounds one whole Classify call, retry included.
 	Timeout = 8 * time.Second
 	// MaxImageBytes is the largest image sent inline.
 	MaxImageBytes = 5 << 20
 
 	maxResponseBytes = 1 << 20
-	apiKeyHeader     = "x-goog-api-key"
+	apiKeyHeader     = "x-api-key"
+	versionHeader    = "anthropic-version"
 
 	// retryWait is the wait before the one retry when the server names none.
 	retryWait = 500 * time.Millisecond
@@ -43,39 +46,19 @@ const (
 
 var (
 	// ErrNotConfigured means the client has no API key.
-	ErrNotConfigured = errors.New("gemini: no API key configured")
+	ErrNotConfigured = errors.New("claude: no API key configured")
 	// ErrInvalidModel means the model name is not a plain model id.
-	ErrInvalidModel = errors.New("gemini: invalid model name")
+	ErrInvalidModel = errors.New("claude: invalid model name")
 	// ErrUnsupportedImage means the image type or size cannot be sent.
-	ErrUnsupportedImage = errors.New("gemini: unsupported image")
+	ErrUnsupportedImage = errors.New("claude: unsupported image")
 )
 
-var modelPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+var modelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// ValidModel reports whether name is safe to put in the request path: 1 to 64
-// letters, digits, dots, underscores or hyphens.
+// ValidModel reports whether name is a plain model id: 1 to 64 letters,
+// digits, dots, underscores or hyphens, the first a letter or digit.
 func ValidModel(name string) bool {
 	return modelPattern.MatchString(name)
-}
-
-// Options changes the request for the spike tool's comparisons. Its zero value
-// is the production request.
-type Options struct {
-	// SchemaField picks the structured-output spelling: "" or
-	// "responseJsonSchema" (default), "responseSchema" or "responseFormat".
-	SchemaField string
-	// ThinkingLevel is empty for MINIMAL on gemini-3 models and nothing on
-	// others, "off" to send none, or a level name to send as given.
-	ThinkingLevel string
-	// OmitTemperature leaves the temperature out instead of sending 0.
-	OmitTemperature bool
-	// MediaResolution is empty for MEDIA_RESOLUTION_MEDIUM.
-	MediaResolution string
-	// SafetyThreshold, when set, adds safetySettings with this threshold for
-	// the four adjustable harm categories. Production sends none.
-	SafetyThreshold string
-	// Store, when not nil, is sent as the request's store flag.
-	Store *bool
 }
 
 // Image is one picture sent inline.
@@ -85,13 +68,13 @@ type Image struct {
 	Data     []byte
 }
 
-// Client calls the Gemini API. Build one per use; it holds no state besides
-// its fields and is safe for concurrent use.
+// Client calls the Anthropic Messages API. Build one per use; it holds no
+// state besides its fields and is safe for concurrent use.
 type Client struct {
 	// Endpoint is the API host, without a trailing path. Empty means
 	// DefaultEndpoint; tests point it at an httptest server.
 	Endpoint string
-	// APIKey is sent in the x-goog-api-key header only.
+	// APIKey is sent in the x-api-key header only.
 	APIKey string
 	// Model is the model id, for example DefaultModel.
 	Model string
@@ -124,10 +107,6 @@ func (c *Client) baseURL() string {
 	return strings.TrimRight(c.Endpoint, "/")
 }
 
-func (c *Client) modelURL(suffix string) string {
-	return c.baseURL() + "/v1beta/models/" + url.PathEscape(c.Model) + suffix
-}
-
 func imageSupported(img Image) bool {
 	switch img.MIMEType {
 	case "image/jpeg", "image/png", "image/webp":
@@ -138,7 +117,7 @@ func imageSupported(img Image) bool {
 }
 
 // Classify sends one image and returns the model's spam probability. Every
-// failure is an error and no verdict: a block, a truncated answer, an
+// failure is an error and no verdict: a refusal, a truncated answer, an
 // unreadable or out-of-range number all wrap ErrNoVerdict.
 func (c *Client) Classify(ctx context.Context, img Image) (*Verdict, error) {
 	if c.APIKey == "" {
@@ -153,30 +132,30 @@ func (c *Client) Classify(ctx context.Context, img Image) (*Verdict, error) {
 
 	payload, err := json.Marshal(buildRequest(c.Model, c.Options, img))
 	if err != nil {
-		return nil, errors.New("gemini: encode request")
+		return nil, errors.New("claude: encode request")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 
-	body, err := c.exec(ctx, http.MethodPost, c.modelURL(":generateContent"), payload)
+	body, err := c.exec(ctx, http.MethodPost, c.baseURL()+"/v1/messages", payload)
 	if err != nil {
 		return nil, err
 	}
 	return parseVerdict(body)
 }
 
-// ModelInfo is the part of models.get the spike tool reports.
+// ModelInfo is the metadata the models endpoint reports for a model. The spike
+// tool prints it so the owner can check the model id and its limits.
 type ModelInfo struct {
-	Name                       string   `json:"name"`
-	DisplayName                string   `json:"displayName"`
-	InputTokenLimit            int      `json:"inputTokenLimit"`
-	OutputTokenLimit           int      `json:"outputTokenLimit"`
-	SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+	ID             string `json:"id"`
+	DisplayName    string `json:"display_name"`
+	MaxInputTokens int    `json:"max_input_tokens"`
+	MaxTokens      int    `json:"max_tokens"`
 }
 
-// GetModel reads the configured model's metadata (models.get). The spike tool
-// uses it to check that the model exists and takes images; the bot does not.
+// GetModel reads the configured model's metadata (GET /v1/models/{id}). The
+// spike tool uses it to check the model id before a run.
 func (c *Client) GetModel(ctx context.Context) (*ModelInfo, error) {
 	if c.APIKey == "" {
 		return nil, ErrNotConfigured
@@ -188,20 +167,20 @@ func (c *Client) GetModel(ctx context.Context) (*ModelInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 
-	body, err := c.exec(ctx, http.MethodGet, c.modelURL(""), nil)
+	body, err := c.exec(ctx, http.MethodGet, c.baseURL()+"/v1/models/"+url.PathEscape(c.Model), nil)
 	if err != nil {
 		return nil, err
 	}
 	var info ModelInfo
 	if err := json.Unmarshal(body, &info); err != nil {
-		return nil, errors.New("gemini: unreadable model metadata")
+		return nil, errors.New("claude: unreadable model metadata")
 	}
 	return &info, nil
 }
 
 // exec makes the request and, for a 429 or 5xx, one more attempt when the wait
-// is at most maxRetryWait. The wait is the server's retryDelay or Retry-After,
-// else retryWait. Any other failure is final.
+// is at most maxRetryWait. The wait is the server's retry-after, else
+// retryWait. Any other failure is final.
 func (c *Client) exec(ctx context.Context, method, target string, payload []byte) ([]byte, error) {
 	body, err := c.send(ctx, method, target, payload)
 	if err == nil {
@@ -244,9 +223,10 @@ func (c *Client) send(ctx context.Context, method, target string, payload []byte
 	// The request error is not wrapped: it would carry the URL.
 	req, err := http.NewRequestWithContext(ctx, method, target, reader)
 	if err != nil {
-		return nil, errors.New("gemini: build request")
+		return nil, errors.New("claude: build request")
 	}
 	req.Header.Set(apiKeyHeader, c.APIKey)
+	req.Header.Set(versionHeader, APIVersion)
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -278,7 +258,7 @@ func (c *Client) transportError(err error) error {
 		err = ue.Err
 	}
 	if c.APIKey != "" && strings.Contains(err.Error(), c.APIKey) {
-		return errors.New("gemini: request failed")
+		return errors.New("claude: request failed")
 	}
-	return fmt.Errorf("gemini: request failed: %w", err)
+	return fmt.Errorf("claude: request failed: %w", err)
 }
