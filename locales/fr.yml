@@ -512,6 +512,13 @@ captcha_welcome_math_text: |
   <b>%s = ?</b>
 
   ⏱ Vous avez <b>%d minutes</b> pour répondre.
+captcha_web_welcome: |
+  👋 Bienvenue %s !
+
+  Appuyez sur le bouton ci-dessous pour vérifier que vous êtes humain.
+
+  ⏱ Vous avez <b>%d minutes</b> pour terminer.
+captcha_web_button: Vérifier avec Turnstile
 captcha_failed_verify: Échec de la vérification. Veuillez contacter un administrateur.
 captcha_wait_refresh: Veuillez attendre quelques secondes avant de demander une nouvelle image.
 captcha_failed_generate: Échec de la génération d'une nouvelle image, réessayez.

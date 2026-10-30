@@ -6,7 +6,7 @@ type CaptchaSettings struct {
 	ID            uint      `gorm:"primaryKey;autoIncrement" json:"-"`
 	ChatID        int64     `gorm:"column:chat_id;uniqueIndex;not null" json:"chat_id,omitempty"`
 	Enabled       bool      `gorm:"column:enabled;default:false" json:"enabled,omitempty"`
-	CaptchaMode   string    `gorm:"column:captcha_mode;default:'math';check:chk_captcha_mode,captcha_mode IN ('math','text')" json:"captcha_mode,omitempty"`
+	CaptchaMode   string    `gorm:"column:captcha_mode;default:'math';check:chk_captcha_mode,captcha_mode IN ('math','text','turnstile')" json:"captcha_mode,omitempty"`
 	Timeout       int       `gorm:"column:timeout;default:2;check:chk_captcha_timeout_range,timeout BETWEEN 1 AND 10" json:"timeout,omitempty"`
 	FailureAction string    `gorm:"column:failure_action;default:'kick';check:chk_captcha_failure_action,failure_action IN ('kick','ban','mute')" json:"failure_action,omitempty"`
 	MaxAttempts   int       `gorm:"column:max_attempts;default:3;check:chk_captcha_max_attempts_range,max_attempts BETWEEN 1 AND 10" json:"max_attempts,omitempty"`
