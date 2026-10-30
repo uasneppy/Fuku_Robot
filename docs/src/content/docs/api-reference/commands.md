@@ -30,6 +30,12 @@ This page provides a complete reference of all commands available in Alita Robot
 | `/promote` | Promote a user to admin | Admin | ❌ | — |
 | `/title` | Set a custom admin title | Admin | ❌ | — |
 
+#### ⚙️ Settings
+
+| Command | Description | Permission | Disableable | Aliases |
+|---------|-------------|------------|-------------|---------|
+| `/settings` | Open the settings menu, here in the group or in private; every change is the same as the matching command | Admin | ❌ | — |
+
 ### Moderation
 
 #### 🌊 Antiflood
@@ -460,6 +466,7 @@ No commands — passive background tracker. See [module page](/commands/users/) 
 | `/sban` | Bans | Silently ban a user | Admin |
 | `/setflood` | Antiflood | Set the flood trigger limit | Admin |
 | `/setfloodmode` | Antiflood | Set the flood action mode | Admin |
+| `/settings` | Settings | Open the settings menu, here in the group or in private | Admin |
 | `/setgoodbye` | Greetings | Set the goodbye message | Admin |
 | `/setrules` | Rules | Set the group rules | Admin |
 | `/setwarnlimit` | Warns | Set the warn limit before action | Admin |
