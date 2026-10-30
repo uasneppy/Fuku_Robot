@@ -40,7 +40,7 @@ func init() {
 		Open:      settingsLockdownOpen,
 		Actions: map[string]settingsPageAction{
 			settingsActLiftAsk: {Right: settingsRightRestrict, Run: settingsLockdownLiftAsk},
-			settingsActLiftYes: {Fields: []string{"e"}, Right: settingsRightRestrict, Run: settingsLockdownLiftYes},
+			settingsActLiftYes: {Fields: []string{"e", "r"}, Right: settingsRightRestrict, Run: settingsLockdownLiftYes},
 		},
 		Controls: map[string]settingsControl{
 			settingsTriggerJoins: {Right: settingsRightRestrict, Set: settingsLockdownSetTrigger(autoTriggerJoins)},
@@ -292,7 +292,11 @@ func settingsLockdownAtBound(p *settingsPress, trigger string, target int) bool 
 func renderSettingsLockdownLiftCard(v settingsView, row *models.ChatLockdown) settingsScreen {
 	prompt := lockdownGroupText(v.Tr, "lockdown_alert_lift_ask", row)
 	k := newSettingsKeyboard(v)
-	settingsCardRows(k, map[string]string{"a": settingsActLiftYes}, settingsPageLockdown)
+	settingsCardRows(k, map[string]string{
+		"a": settingsActLiftYes,
+		// The lockdown this card was drawn for: Yes lifts that one and no other (D-33).
+		"r": strconv.FormatUint(uint64(row.ID), 10),
+	}, settingsPageLockdown)
 	return k.screen(settingsCompose(v, "settings_page_lockdown", []string{prompt}, "", false))
 }
 
@@ -325,7 +329,10 @@ func settingsLockdownLiftRefusal(p *settingsPress, result lockdownLiftApply) *se
 // redraws the page with settings_card_expired and lifts nothing. Otherwise the press is
 // answered first (the lift can outlast the callback, D-31) and the lift goes only through
 // applyLockdownLift, the path /unlockdown uses, which reads the lockdown fresh and records
-// the lift through the conditional BeginLift, so of two Yes presses one wins. Every outcome
+// the lift through the conditional BeginLift, so of two Yes presses one wins. The card carries
+// the ID of the lockdown it was drawn for (r, a bad one is an invalid request before any
+// lookup) and a lockdown now current under another ID is "already lifted" with nothing lifted
+// (D-33, applyLockdownLiftOf). Every outcome
 // redraws the page with the command's words as a notice. A recorded lift redraws the page
 // before anything is announced: the announcement waits for a pacer slot (up to a minute) and
 // the card with its live Yes must not stay on screen meanwhile (WR-04). It is then announced
@@ -336,7 +343,8 @@ func settingsLockdownLiftRefusal(p *settingsPress, result lockdownLiftApply) *se
 // the worker (D-26 as amended).
 func settingsLockdownLiftYes(p *settingsPress) *settingsScreen {
 	expired, ok := settingsCardExpired(p.fields)
-	if !ok {
+	cardLockdown, idOK := settingsCardObjectID(p.fields, "r")
+	if !ok || !idOK {
 		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
 		return nil
 	}
@@ -345,7 +353,9 @@ func settingsLockdownLiftYes(p *settingsPress) *settingsScreen {
 	}
 	p.answer("", false)
 
-	result := applyLockdownLift(context.Background(), p.b, p.group.Id, &p.query.From)
+	// Only the lockdown the card was drawn for is lifted: a newer one (the card's was lifted
+	// by someone else and a raid started another) is "already lifted" and nothing is touched.
+	result := applyLockdownLiftOf(context.Background(), p.b, p.group.Id, &p.query.From, uint(cardLockdown))
 	if result.Outcome != liftApplyDone {
 		return settingsLockdownLiftRefusal(p, result)
 	}

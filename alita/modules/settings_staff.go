@@ -49,7 +49,7 @@ func init() {
 		Actions: map[string]settingsPageAction{
 			settingsStaffActLink:      {Fields: []string{"s"}, Right: settingsRightAdmin, Run: settingsStaffLinkRun},
 			settingsStaffActUnlinkAsk: {Right: settingsRightAdmin, Run: settingsStaffUnlinkAsk},
-			settingsStaffActUnlinkYes: {Fields: []string{"e"}, Right: settingsRightAdmin, Run: settingsStaffUnlinkYes},
+			settingsStaffActUnlinkYes: {Fields: []string{"e", "l"}, Right: settingsRightAdmin, Run: settingsStaffUnlinkYes},
 			settingsStaffActPage:      {Fields: []string{"v"}, Right: settingsRightAdmin, Run: settingsStaffPage},
 		},
 	})
@@ -468,7 +468,11 @@ func renderSettingsStaffUnlinkCard(v settingsView, link models.StaffGroupLink) s
 	prompt = lockdownSplice(prompt, staffGroupTitleToken, staffDisplayTitle(link.GroupTitle))
 
 	k := newSettingsKeyboard(v)
-	settingsCardRows(k, map[string]string{"a": settingsStaffActUnlinkYes}, settingsPageStaff)
+	settingsCardRows(k, map[string]string{
+		"a": settingsStaffActUnlinkYes,
+		// The link this card was drawn for: Yes unlinks that one and no other (D-33).
+		"l": strconv.FormatUint(uint64(link.ID), 10),
+	}, settingsPageStaff)
 	return k.screen(settingsCompose(v, "settings_page_staff", []string{prompt}, "", false))
 }
 
@@ -492,13 +496,15 @@ func settingsStaffUnlinkAsk(p *settingsPress) *settingsScreen {
 }
 
 // settingsStaffUnlinkYes handles uy, the second tap. A Yes whose expiry minute has passed
-// redraws the page with settings_card_expired and unlinks nothing. Otherwise runUnlinkGroup
-// runs, which checks the live creator of both groups again and deletes the link with a
+// redraws the page with settings_card_expired and unlinks nothing. The card carries the ID of
+// the link it was drawn for (l, a bad one is an invalid request before any lookup). Otherwise
+// runUnlinkGroup runs, which checks the live creator of both groups again and deletes the link with a
 // conditional delete, so of two Yes presses one wins and posts the one notice to the Staff
 // Group.
 func settingsStaffUnlinkYes(p *settingsPress) *settingsScreen {
 	expired, ok := settingsCardExpired(p.fields)
-	if !ok {
+	cardLink, idOK := settingsCardObjectID(p.fields, "l")
+	if !ok || !idOK {
 		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
 		return nil
 	}
@@ -511,7 +517,10 @@ func settingsStaffUnlinkYes(p *settingsPress) *settingsScreen {
 	if err != nil {
 		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, staffUnlinkCheckFailedInPlace, "")))
 	}
-	if link == nil {
+	// Only the link the card was drawn for is removed: a group that was unlinked and linked
+	// again since (a new row, perhaps to another Staff Group) is "no longer linked" for this
+	// card and nothing is touched (D-33).
+	if link == nil || int64(link.ID) != cardLink {
 		return settingsStaffRedraw(p, settingsNoticeWarn(staffUnlinkRefusalText(p.tr, staffUnlinkNotLinked, "")))
 	}
 	switch refusal, _ := runUnlinkGroup(p.b, &p.query.From, *link); refusal {

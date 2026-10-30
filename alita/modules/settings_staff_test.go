@@ -897,6 +897,78 @@ func TestSettingsStaffUnlink(t *testing.T) {
 		}
 	})
 
+	// D-33 (WR-01): the Yes of an Unlink card removes the link the card was drawn for and no
+	// other.
+	t.Run("Yes carries the link it was drawn for", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		link := settingsStaffTestLinkOf(t, env)
+		_, keyboard := ask(t, env, env.admin)
+
+		fields := settingsButtonFields(t, keyboard[0][0])
+		if fields["l"] != strconv.FormatUint(uint64(link.ID), 10) || len(fields) != 4 {
+			t.Errorf("Yes fields = %v, want a=uy, the opener, e and l = %d", fields, link.ID)
+		}
+	})
+
+	t.Run("a card of a link that was replaced does not remove the new link", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		first := settingsStaffTestLinkOf(t, env)
+		msgID, keyboard := ask(t, env, env.admin)
+
+		// The link of the card is removed and the group is linked again, to another Staff
+		// Group: a new row.
+		if deleted, err := staff.DeleteLink(first.ID); err != nil || !deleted {
+			t.Fatalf("delete the first link: %v, %v", deleted, err)
+		}
+		otherStaff := newLockdownStaffGroup(env.lockdownEnv)
+		env.fake.setCreator(otherStaff.Id, env.admin.Id)
+		linkLockdownGroupTo(env.lockdownEnv, otherStaff)
+		second := settingsStaffTestLinkOf(t, env)
+		if second == nil || second.ID == first.ID {
+			t.Fatalf("setup: the second link = %+v beside the first %+v", second, first)
+		}
+		notices := settingsStaffTestMessagesWith(env, otherStaff.Id, "staff_notice_unlinked_by")
+
+		env.pressRaw(env.chat, env.admin, msgID, keyboard[0][0].CallbackData)
+
+		now := settingsStaffTestLinkOf(t, env)
+		if now == nil || now.ID != second.ID {
+			t.Fatalf("link after the stale Yes = %+v, want the second link %d untouched", now, second.ID)
+		}
+		if got := settingsStaffTestMessagesWith(env, otherStaff.Id, "staff_notice_unlinked_by"); got != notices {
+			t.Errorf("a stale Yes posted %d unlink notices", got-notices)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsStaffTestWantContains(t, text, settingsNoticeWarnIcon+staffMarker("staff_unlink_not_linked"))
+	})
+
+	t.Run("a Yes with a forged l is an invalid request", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsStaffTestLinked(env)
+		link := settingsStaffTestLinkOf(t, env)
+		msgID, _ := ask(t, env, env.admin)
+		edits := len(env.edits(env.chat.Id, msgID))
+
+		for _, l := range []string{"", "0", "-3", "abc", "1 2", "9223372036854775808"} {
+			fields := env.groupFields(env.admin, "a", "uy", "e", settingsCardExpiry(time.Now()))
+			if l != "" {
+				fields["l"] = l
+			}
+			env.press(env.admin, msgID, fields)
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("l = %q answered %q alert %v, want the invalid request alert", l, answer, alert)
+			}
+		}
+		if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+			t.Errorf("a forged Yes edited the menu %d times", got-edits)
+		}
+		if now := settingsStaffTestLinkOf(t, env); now == nil || now.ID != link.ID {
+			t.Fatalf("a forged Yes changed the link: %+v", now)
+		}
+	})
+
 	t.Run("an admin who created neither group is refused at the ask", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		settingsStaffTestLinked(env)
@@ -1088,6 +1160,25 @@ func TestSettingsStaffCallbackBytes(t *testing.T) {
 						t.Errorf("the private pick button is %d bytes, want 46", len(button.CallbackData))
 					}
 				}
+			}
+			// The Unlink Yes carries the link row ID l beside e (D-33); the worst case here is a
+			// 10-digit ID, and every button of the card is held to 64 bytes above.
+			yes := 0
+			for _, button := range settingsAllButtons(screens["card"].Keyboard.InlineKeyboard) {
+				if fields := settingsButtonFields(t, button); fields["a"] == "uy" {
+					yes++
+					if fields["l"] != "4294967295" {
+						t.Errorf("the Unlink Yes carries l = %q, want the link ID", fields["l"])
+					}
+				}
+			}
+			if yes != 1 {
+				t.Errorf("the Unlink card has %d Yes buttons, want 1", yes)
+			}
+			wide := link
+			wide.ID = 99999999999999999
+			if card := renderSettingsStaffUnlinkCard(v, wide); card.Omitted != 0 {
+				t.Errorf("a 17-digit link ID omitted %d card buttons, want none", card.Omitted)
 			}
 			if got := len(settingsAllButtons(screens["picker"].Keyboard.InlineKeyboard)); got != settingsStaffPickMax+2 {
 				t.Errorf("the picker has %d buttons, want %d picks and Back and Close", got, settingsStaffPickMax)

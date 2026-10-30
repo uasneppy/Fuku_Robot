@@ -444,7 +444,8 @@ const (
 // lockdownLiftApply is what applyLockdownLift reports.
 type lockdownLiftApply struct {
 	Outcome lockdownLiftApplyOutcome
-	// Row is the lockdown that was read; nil for liftApplyStateFailed and liftApplyNotActive.
+	// Row is the lockdown that was read; nil for liftApplyStateFailed, liftApplyNotActive and a
+	// liftApplyLost that applyLockdownLiftOf returned for a lockdown other than the confirmed one.
 	Row *models.ChatLockdown
 	// Lift is liftLockdownRow's result; meaningful once a lift was tried.
 	Lift lockdownLiftResult
@@ -459,12 +460,24 @@ type lockdownLiftApply struct {
 // conditional record. The caller has already judged the actor's authority and posts
 // whatever the outcome needs said.
 func applyLockdownLift(ctx context.Context, b *gotgbot.Bot, chatID int64, actor *gotgbot.User) lockdownLiftApply {
+	return applyLockdownLiftOf(ctx, b, chatID, actor, 0)
+}
+
+// applyLockdownLiftOf is applyLockdownLift for a caller that confirmed one particular
+// lockdown (the settings menu's Lift card): when onlyID is not zero and the lockdown now
+// current for the chat is another row, nothing is lifted and the outcome is liftApplyLost
+// ("already lifted"), because the confirmation was for a lockdown that is gone. The row is
+// read once, so no lockdown can start between the comparison and the lift.
+func applyLockdownLiftOf(ctx context.Context, b *gotgbot.Bot, chatID int64, actor *gotgbot.User, onlyID uint) lockdownLiftApply {
 	row, err := lockdownCurrentLookup(chatID)
 	if err != nil {
 		return lockdownLiftApply{Outcome: liftApplyStateFailed}
 	}
 	if row == nil {
 		return lockdownLiftApply{Outcome: liftApplyNotActive}
+	}
+	if onlyID != 0 && row.ID != onlyID {
+		return lockdownLiftApply{Outcome: liftApplyLost}
 	}
 	if row.State == models.LockdownStateLifting {
 		return lockdownLiftApply{Outcome: liftApplyInProgress, Row: row}

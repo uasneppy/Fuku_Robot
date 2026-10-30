@@ -82,8 +82,11 @@ func TestSettingsLockdownLift(t *testing.T) {
 		t.Errorf("card buttons = %q, %q, want Yes then No", yes.Text, no.Text)
 	}
 	yesFields := settingsButtonFields(t, yes)
-	if yesFields["a"] != "ly" || yesFields["u"] != owner || !regexp.MustCompile(`^\d+$`).MatchString(yesFields["e"]) || len(yesFields) != 3 {
-		t.Errorf("Yes fields = %v, want a=ly, the opener and a numeric expiry", yesFields)
+	if yesFields["a"] != "ly" || yesFields["u"] != owner || !regexp.MustCompile(`^\d+$`).MatchString(yesFields["e"]) || len(yesFields) != 4 {
+		t.Errorf("Yes fields = %v, want a=ly, the opener, a numeric expiry and the lockdown", yesFields)
+	}
+	if yesFields["r"] != fmt.Sprint(row.ID) {
+		t.Errorf("Yes carries r = %q, want the ID %d of the lockdown the card was drawn for", yesFields["r"], row.ID)
 	}
 	if fields := settingsButtonFields(t, no); fmt.Sprint(fields) != fmt.Sprint(map[string]string{"a": "no", "p": "l", "u": owner}) {
 		t.Errorf("No fields = %v, want a=no back to page l", fields)
@@ -514,7 +517,9 @@ func TestSettingsParityLockdownLift(t *testing.T) {
 			}
 
 			env.send(env.admin, "/unlockdown")
-			yes := map[string]string{"a": "ly", "u": fmt.Sprint(env.admin.Id), "e": settingsCardExpiry(time.Now())}
+			yes := map[string]string{
+				"a": "ly", "u": fmt.Sprint(env.admin.Id), "e": settingsCardExpiry(time.Now()), "r": fmt.Sprint(menuRow.ID),
+			}
 			data := encodeCallbackData(settingsCallbackNamespace, yes)
 			if data == "" {
 				t.Fatalf("hand-built Yes %v did not encode", yes)
@@ -603,18 +608,25 @@ func TestSettingsLockdownLiftCallbackBytes(t *testing.T) {
 		})
 	}
 
-	// The private Yes is the longest button of the card: a=ly, the 14-character chat ID and
-	// an 8-digit expiry minute.
+	// The private Yes is the longest button of the card: a=ly, the 14-character chat ID, an
+	// 8-digit expiry minute and the lockdown row ID, here a 10-digit one (more than four
+	// billion lockdowns). A row ID of up to 17 digits still fits 64 bytes.
 	private := settingsView{Tr: tr, Private: true, OwnerKey: "c", OwnerValue: "-1001234567890", GroupID: -1001234567890, GroupTitle: "G"}
-	card := renderSettingsLockdownLiftCard(private, active.Row)
+	longRow := *active.Row
+	longRow.ID = 4294967295
+	card := renderSettingsLockdownLiftCard(private, &longRow)
 	var yesData string
 	for _, button := range settingsAllButtons(card.Keyboard.InlineKeyboard) {
 		if settingsButtonFields(t, button)["a"] == "ly" {
 			yesData = button.CallbackData
 		}
 	}
-	if len(yesData) != 44 {
-		t.Errorf("the private Yes is %d bytes (%q), want 44", len(yesData), yesData)
+	if len(yesData) != 57 {
+		t.Errorf("the private Yes is %d bytes (%q), want 57", len(yesData), yesData)
+	}
+	longRow.ID = 99999999999999999
+	if wide := renderSettingsLockdownLiftCard(private, &longRow); wide.Omitted != 0 {
+		t.Errorf("a 17-digit lockdown row ID omitted %d card buttons, want none", wide.Omitted)
 	}
 }
 
@@ -688,4 +700,93 @@ func TestSettingsLockdownLiftRedrawsBeforeAnnouncing(t *testing.T) {
 	if redraw > announce {
 		t.Errorf("the menu was redrawn at call %d, after the announcement at call %d: the Yes card stayed on screen while the notice waited", redraw, announce)
 	}
+}
+
+// TestSettingsLockdownLiftBindsItsLockdown pins D-33: the Yes of a Lift card lifts the
+// lockdown the card was drawn for and no other (WR-01).
+func TestSettingsLockdownLiftBindsItsLockdown(t *testing.T) {
+	t.Run("a card of a lifted lockdown does not lift the next one", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		first, msgID, yes := settingsLiftTestCard(t, env)
+
+		// Another admin lifts the first lockdown, then a raid starts a second one.
+		env.send(env.admin, "/unlockdown")
+		second := env.lockAsAdmin("second raid")
+		if second.ID == first.ID {
+			t.Fatalf("setup: the second lockdown reuses row %d", first.ID)
+		}
+		restores := settingsLiftTestRestores(env)
+		notices := len(env.repliesWith(staffMarker("lockdown_lifted")))
+		answers := env.answerCount()
+
+		env.pressRaw(env.chat, env.admin, msgID, yes.CallbackData)
+
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the Yes press was answered %d times, want once", got)
+		}
+		if got := settingsLiftTestRestores(env) - restores; got != 0 {
+			t.Errorf("a stale Yes made %d restore calls on the new lockdown, want none", got)
+		}
+		still := env.freshRow(second.ID)
+		if still.State != models.LockdownStateActive || still.LiftedBy != nil {
+			t.Errorf("the second lockdown is %q (lifted by %v), want still active and untouched", still.State, still.LiftedBy)
+		}
+		if got := len(env.repliesWith(staffMarker("lockdown_lifted"))); got != notices {
+			t.Errorf("a stale Yes posted %d lift notices", got-notices)
+		}
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("lockdown_already_lifted")) {
+			t.Errorf("page %q does not say the lockdown was already lifted", text)
+		}
+		if !settingsLiftTestHasButton(keyboard, "lockdown_alert_btn_lift") {
+			t.Errorf("the redrawn page %+v hides the Lift button of the still active lockdown", keyboard)
+		}
+	})
+
+	t.Run("a bad r is an invalid request before any lookup", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		row, msgID, _ := settingsLiftTestCard(t, env)
+		restores := settingsLiftTestRestores(env)
+		edits := len(env.edits(env.chat.Id, msgID))
+
+		for _, r := range []string{"", "0", "-3", "abc", "1 2", "9223372036854775808"} {
+			fields := env.groupFields(env.admin, "a", "ly", "e", settingsCardExpiry(time.Now()))
+			if r != "" {
+				fields["r"] = r
+			}
+			env.press(env.admin, msgID, fields)
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("r = %q answered %q alert %v, want the invalid request alert", r, answer, alert)
+			}
+		}
+		if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+			t.Errorf("a forged Yes edited the menu %d times", got-edits)
+		}
+		if got := settingsLiftTestRestores(env) - restores; got != 0 {
+			t.Errorf("a forged Yes made %d restore calls", got)
+		}
+		if still := env.freshRow(row.ID); still.State != models.LockdownStateActive {
+			t.Errorf("State = %q, want active", still.State)
+		}
+	})
+
+	t.Run("an r that names another lockdown lifts nothing", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		row, msgID, _ := settingsLiftTestCard(t, env)
+		restores := settingsLiftTestRestores(env)
+
+		fields := env.groupFields(env.admin, "a", "ly", "e", settingsCardExpiry(time.Now()), "r", fmt.Sprint(row.ID+1000))
+		env.press(env.admin, msgID, fields)
+
+		if got := settingsLiftTestRestores(env) - restores; got != 0 {
+			t.Errorf("a Yes for another lockdown made %d restore calls", got)
+		}
+		if still := env.freshRow(row.ID); still.State != models.LockdownStateActive {
+			t.Errorf("State = %q, want active", still.State)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		if !strings.Contains(text, staffMarker("lockdown_already_lifted")) {
+			t.Errorf("page %q does not say already lifted", text)
+		}
+	})
 }

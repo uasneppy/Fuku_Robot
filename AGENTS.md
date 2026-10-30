@@ -198,8 +198,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   again) shows `lockdown_revoke_already` instead.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood), `t` control, `v` the absolute target value; `e` (confirm expiry) and `s`
-  (Staff Group row ID) arrive with the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
+  `l` lockdown, `c` captcha, `f` antiflood), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
+  the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
   Close, `tg` toggle, `st` set, `no` cancel a card back to page `p`; a page declares its own codes through
   `registerSettingsPage`, which panics at init on a duplicate page key or action code. Exactly one of `c` and `u` is
@@ -219,7 +220,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a write. Close deletes the message and, when the delete fails, edits it to `settings_closed` with no keyboard. A page
   that cannot read its data is the cannot-open edit (`settings_cannot_open`, no keyboard, with the alert
   `settings_cannot_open_alert`). Every button's data is at most 64 bytes for a 14-character chat ID and a 10-digit user
-  ID; an encode that overflows is counted in `settingsScreen.Omitted` and logged, and a worst-case test fails on any.
+  ID (a Lift or Unlink Yes also carries a row ID, which fits up to 17 digits); an encode that overflows is counted in `settingsScreen.Omitted` and logged, and a worst-case test fails on any.
   A new page is one `registerSettingsPage` call from its own file's `init` plus its strings, and never edits
   `settings_pages.go`. A private press makes two Telegram calls, `getChatMember` of the presser in `c` and `getChat` of
   `c`; an error of either that `chat_status.IsBotMissingError` recognises ("bot was kicked", "bot is not a member",
@@ -228,7 +229,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is not authenticated, so it can name a channel or a private chat the presser administers) is the same cannot-open edit
   with its alert and no write, as the deep link refuses it. A group menu's pipeline is unchanged.
 - The Staff Group page (`settings_staff.go`, page `s`) declares four actions: `lk` Link (with an optional `s`), `ua` Unlink
-  ask, `uy` Unlink Yes (with `e`) and `pg` (with `v`, the page of the read-only panel, parsed by `settingsParseNumber`
+  ask, `uy` Unlink Yes (with `e` and `l`) and `pg` (with `v`, the page of the read-only panel, parsed by `settingsParseNumber`
   and clamped; a value that is not a number is an invalid request). `s` is the staff_groups row ID, never a chat ID:
   a pick lists the presser's own Staff Groups again (`staff.ListStaffGroupsByOwner`), takes the row whose ID equals `s`
   (never a position, so a list that was reordered since it was drawn cannot link another group), and only then makes
@@ -243,9 +244,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is lazy (`settingsCardExpired`: a Yes whose minute is past redraws the page with `settings_card_expired` and runs
   nothing, an `e` that is not digits only, positive and 63-bit is an invalid request), there is no timer and no Redis
   key, and Yes goes through the whole press pipeline and then the action's own live checks (`runUnlinkGroup` checks the
-  creator of both groups again). The Lockdown page's Lift card uses the same helper.
+  creator of both groups again). A card binds the object it was drawn for (D-33): Yes carries `l`, the `staff_group_links`
+  row ID, parsed by `settingsCardObjectID` (a positive 63-bit number of at most 19 digits, else an invalid request
+  answered before any lookup, like `e`), and after the live authority checks the link current for the group is read and
+  a link under another ID (the card's was unlinked and the group linked again, perhaps to another Staff Group) is
+  answered `staff_unlink_not_linked` with nothing removed. The Lockdown page's Lift card uses the same helper.
 - The Lockdown page (`settings_lockdown.go`, page `l`) declares two more actions besides its trigger controls: `ls` Lift
-  ask and `ly` Lift Yes (with `e`). The Lift row is the first content row, drawn only while the chat's lockdown is
+  ask and `ly` Lift Yes (with `e` and `r`, the `chat_lockdowns` row ID the card was drawn for, parsed like `l`). The Lift row is the first content row, drawn only while the chat's lockdown is
   active (`models.LockdownStateActive`, a confirmed one or not); a lockdown being lifted, or none, shows no Lift. Both
   actions declare `settingsRightRestrict`, so each press judges a live `getChatMember` record at the ask and again at
   Yes (a demotion in between is refused with the alert `settings_no_restrict` and edits nothing). The ask reads the
@@ -254,7 +259,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   an active one draws the card `lockdown_alert_lift_ask` (`renderSettingsLockdownLiftCard`, the stored group title
   escaped and spliced in after translation). Yes goes through `settingsCardExpired` (an expired minute redraws with
   `settings_card_expired` and lifts nothing), answers the press empty first, then lifts only through
-  `applyLockdownLift`; the menu never calls `setChatPermissions`, `BeginLift` or `FinishLift` itself. Every outcome redraws the page with the command's words as a notice
+  `applyLockdownLiftOf` (`applyLockdownLift` for one confirmed row: it reads the chat's current lockdown once, and a row
+  under another ID than `r` is `liftApplyLost`, `lockdown_already_lifted`, with nothing lifted, so a stale Yes can never
+  lift a newer lockdown); the menu never calls `setChatPermissions`, `BeginLift` or `FinishLift` itself. Every outcome redraws the page with the command's words as a notice
   (`lockdownLiftApplyText`), and a recorded lift redraws it before anything is announced (the announcement waits for a
   pacer slot, up to a minute, and the card with its live Yes must not stay on screen meanwhile). A lift from a private
   menu is then announced through `lockdownAnnounceLift`; a lift from a menu opened in the group only wakes the worker,
