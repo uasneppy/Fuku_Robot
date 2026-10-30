@@ -235,33 +235,88 @@ const (
 	ConsumeOK
 )
 
-// consumeScript deletes a challenge only when it belongs to the verified user.
+// consumeScript claims a challenge for the verified user. The key is not deleted here: it gets a
+// claim field and is deleted only after the caller has read and parsed the reply, so a reply
+// that is lost or unreadable can be undone (WR-03). A claimed key is used up for every other
+// caller.
 //
-// KEYS[1] = the challenge hash. ARGV[1] = the verified user ID as a decimal string.
-// Returns {0} for an unknown challenge, {2} for another member's (nothing changed), and
-// {1, pttl, HGETALL} after deleting the member's own.
+// KEYS[1] = the challenge hash. ARGV[1] = the verified user ID as a decimal string. ARGV[2] =
+// the claim's nonce. Returns {0} for an unknown or already claimed challenge, {2} for another
+// member's (nothing changed), and {1, pttl, HGETALL} after claiming the member's own.
 var consumeScript = redis.NewScript(`
 local u = redis.call('HGET', KEYS[1], 'u')
 if not u then return {0} end
 if u ~= ARGV[1] then return {2} end
-local all = redis.call('HGETALL', KEYS[1])
+if redis.call('HEXISTS', KEYS[1], 'k') == 1 then return {0} end
 local ttl = redis.call('PTTL', KEYS[1])
-redis.call('DEL', KEYS[1])
+local all = redis.call('HGETALL', KEYS[1])
+redis.call('HSET', KEYS[1], 'k', ARGV[2])
 return {1, ttl, all}
 `)
 
-// ConsumeIfUser deletes the challenge when it belongs to userID and returns its record and
-// the time it had left. Another member's verify changes nothing: the barrier is the signed
-// user ID, never the secrecy of the public token. An unparsable record is an error, never
-// ConsumeOK.
+// finishScript deletes a challenge claimed with nonce, and only that claim.
+//
+// KEYS[1] = the challenge hash. ARGV[1] = the nonce.
+var finishScript = redis.NewScript(`
+if redis.call('HGET', KEYS[1], 'k') == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+return 0
+`)
+
+// releaseScript gives a challenge claimed with nonce back, and only that claim.
+//
+// KEYS[1] = the challenge hash. ARGV[1] = the nonce.
+var releaseScript = redis.NewScript(`
+if redis.call('HGET', KEYS[1], 'k') == ARGV[1] then return redis.call('HDEL', KEYS[1], 'k') end
+return 0
+`)
+
+// ConsumeIfUser uses up the challenge when it belongs to userID and returns its record and the
+// time it had left. Another member's verify changes nothing: the barrier is the signed user ID,
+// never the secrecy of the public token. An unparsable record is an error, never ConsumeOK.
+//
+// A non-nil error means the challenge was not used up: the claim is taken in Redis first, the
+// reply is read and parsed, and only then is the key deleted, so a reply that is lost (the
+// context ends or the connection drops after Redis ran the script) or unreadable releases the
+// claim and the member can try again. If that release itself cannot reach Redis the claim stays
+// until the challenge expires, and the member times out as for any other fault of Redis.
 func (s *Store) ConsumeIfUser(ctx context.Context, token string, userID int64) (ConsumeResult, Record, time.Duration, error) {
 	if !ValidToken(token) {
 		return ConsumeUnknown, Record{}, 0, nil
 	}
+	nonce, err := NewToken()
+	if err != nil {
+		return ConsumeUnknown, Record{}, 0, err
+	}
+	key := KeyPrefix + token
+
+	result, rec, left, err := s.claimChallenge(ctx, key, userID, nonce)
+	if err != nil {
+		s.settleClaim(ctx, releaseScript, key, nonce)
+		return ConsumeUnknown, Record{}, 0, err
+	}
+	if result == ConsumeOK {
+		// The key is used up for everyone while it carries the claim, so a failed delete only
+		// leaves a harmless husk that expires with the challenge (and Rearm overwrites).
+		s.settleClaim(ctx, finishScript, key, nonce)
+	}
+	return result, rec, left, nil
+}
+
+// settleClaim runs finishScript or releaseScript on a context of its own: the one the claim ran
+// under may be the very thing that ended.
+func (s *Store) settleClaim(ctx context.Context, script *redis.Script, key, nonce string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), RedisTimeout)
+	defer cancel()
+	_ = script.Run(ctx, s.client, []string{key}, nonce).Err()
+}
+
+// claimChallenge runs consumeScript and parses its reply. It changes the key only by adding
+// the claim field.
+func (s *Store) claimChallenge(ctx context.Context, key string, userID int64, nonce string) (ConsumeResult, Record, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(ctx, RedisTimeout)
 	defer cancel()
 
-	raw, err := consumeScript.Run(ctx, s.client, []string{KeyPrefix + token}, strconv.FormatInt(userID, 10)).Slice()
+	raw, err := consumeScript.Run(ctx, s.client, []string{key}, strconv.FormatInt(userID, 10), nonce).Slice()
 	if err != nil {
 		return ConsumeUnknown, Record{}, 0, err
 	}
@@ -287,7 +342,8 @@ func (s *Store) ConsumeIfUser(ctx context.Context, token string, userID int64) (
 	return ConsumeUnknown, Record{}, 0, ErrInvalidChallenge
 }
 
-// rearmScript puts a consumed challenge back, only when the key is absent and time remains.
+// rearmScript puts a consumed challenge back, only when the key is absent (or is only the husk of
+// a claim whose delete failed) and time remains.
 //
 // KEYS[1] = the challenge hash. ARGV = remaining ms, user, attempt, chat, expiry ms (all
 // decimal strings, because Lua numbers lose exactness above 14 digits). Returns 1 when the
@@ -295,7 +351,10 @@ func (s *Store) ConsumeIfUser(ctx context.Context, token string, userID int64) (
 var rearmScript = redis.NewScript(`
 local ms = tonumber(ARGV[1])
 if not ms or ms <= 0 then return 0 end
-if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  if redis.call('HEXISTS', KEYS[1], 'k') == 0 then return 0 end
+  redis.call('DEL', KEYS[1])
+end
 redis.call('HSET', KEYS[1], 'u', ARGV[2], 'a', ARGV[3], 'c', ARGV[4], 'x', ARGV[5])
 redis.call('PEXPIRE', KEYS[1], ms)
 return 1

@@ -5,14 +5,18 @@ package captchaweb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // rebuild replaces the handler of o with one built from the same dependencies and the options
@@ -794,6 +798,93 @@ func TestVerifyRouteReplaysDecision(t *testing.T) {
 		o.Redis.Set(DoneKeyPrefix+"tok4", "garbage")
 		if _, found, err := o.Store.Done(ctx, "tok4"); err != nil || found {
 			t.Fatalf("Done(garbage) = (%v, %v), want not found", found, err)
+		}
+	})
+}
+
+// dropReplyHook runs a Redis script for real and then reports an error to the caller, as a
+// connection that drops after Redis executed the command does: the effect happened, the reply
+// did not arrive.
+type dropReplyHook struct{ drop atomic.Bool }
+
+func (h *dropReplyHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+
+func (h *dropReplyHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		err := next(ctx, cmd)
+		name := strings.ToLower(cmd.Name())
+		if err == nil && (name == "eval" || name == "evalsha") && h.drop.CompareAndSwap(true, false) {
+			return errors.New("connection reset by peer")
+		}
+		return err
+	}
+}
+
+func (h *dropReplyHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+
+// TestChallengeStoreConsumeIsUndoneByAnError pins WR-03: a ConsumeIfUser that returns an error
+// used up nothing. The key is claimed first and deleted only once the reply was parsed, so a
+// reply that is lost after Redis ran the script, or one that does not parse, leaves the
+// challenge for the member's next tap.
+func TestChallengeStoreConsumeIsUndoneByAnError(t *testing.T) {
+	const member = int64(42)
+
+	t.Run("a reply lost after the script ran", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		hook := &dropReplyHook{}
+		o.Store.client.AddHook(hook)
+		token, rec := o.issue(member)
+
+		hook.drop.Store(true)
+		if _, _, _, err := o.Store.ConsumeIfUser(context.Background(), token, member); err == nil {
+			t.Fatal("ConsumeIfUser() = nil error, want the lost reply")
+		}
+		if got := o.Redis.HGet(o.key(token), "u"); got != "42" {
+			t.Fatalf("challenge owner after the lost reply = %q, want the challenge intact", got)
+		}
+		if o.Redis.HGet(o.key(token), "k") != "" {
+			t.Fatal("the claim marker was left behind")
+		}
+
+		got, gotRec, left, err := o.Store.ConsumeIfUser(context.Background(), token, member)
+		if err != nil || got != ConsumeOK || gotRec.AttemptID != rec.AttemptID || left <= 0 {
+			t.Fatalf("second ConsumeIfUser() = %v, %+v, %v, %v; want ConsumeOK with the record", got, gotRec, left, err)
+		}
+		if o.Redis.Exists(o.key(token)) {
+			t.Fatal("a consumed challenge is still stored")
+		}
+	})
+
+	t.Run("a record that does not parse", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		token, _ := NewToken()
+		o.Redis.HSet(o.key(token), "u", "42", "a", "not-a-number", "c", "-1001234", "x", "1")
+		o.Redis.SetTTL(o.key(token), 5*time.Minute)
+
+		if got, _, _, err := o.Store.ConsumeIfUser(context.Background(), token, member); err == nil || got == ConsumeOK {
+			t.Fatalf("ConsumeIfUser() = %v, %v; want an error and never ConsumeOK", got, err)
+		}
+		if o.Redis.HGet(o.key(token), "u") != "42" || o.Redis.HGet(o.key(token), "k") != "" {
+			t.Fatal("the unparsable record was consumed or left claimed")
+		}
+	})
+
+	t.Run("a claimed key is used up for everyone until it is released", func(t *testing.T) {
+		o := newOutcomeHandler(t)
+		token, rec := o.issue(member)
+		// A claim whose delete never ran: another caller must see the challenge as used.
+		o.Redis.HSet(o.key(token), "k", "some-claim")
+		if got, _, _, err := o.Store.ConsumeIfUser(context.Background(), token, member); err != nil || got != ConsumeUnknown {
+			t.Fatalf("ConsumeIfUser() over a claim = %v, %v; want ConsumeUnknown", got, err)
+		}
+		// A re-arm overwrites the husk, with the record intact.
+		if ok, err := o.Store.Rearm(context.Background(), token, rec, time.Minute); !ok || err != nil {
+			t.Fatalf("Rearm() over a husk = %v, %v; want true", ok, err)
+		}
+		if o.Redis.HGet(o.key(token), "k") != "" || o.Redis.HGet(o.key(token), "u") != "42" {
+			t.Fatal("the re-armed challenge still carries the claim")
 		}
 	})
 }

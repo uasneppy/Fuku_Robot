@@ -406,7 +406,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   public, because it is the `startapp` value of the group's URL button: the barrier is the signed `initData` `user.id`,
   never the token's secrecy. `SendCaptcha` writes it for a Turnstile attempt (`Store.Issue`, one round trip under 250 ms)
   and the verify handler consumes it with a user-compared Lua script (`Store.ConsumeIfUser`): an unknown or used key
-  answers nothing, another member's verify changes nothing (`not_for_you`), and only the target's deletes it. It is Redis
+  answers nothing, another member's verify changes nothing (`not_for_you`), and only the target's uses it up. The script
+  claims the key (a `k` field holding a random nonce) and does not delete it: the reply is read and parsed first, then a
+  second script deletes the key only while it still carries that nonce, and any error after the script ran (a reply lost
+  because the context ended or the connection dropped, a record that does not parse) releases the claim with the same
+  nonce, so an error from `ConsumeIfUser` always means nothing was used up and the member can tap again. A claimed key is
+  used up for every other caller, which keeps 50 parallel verifies to one; `Rearm` treats a key that still carries a
+  claim (a delete that failed) as absent. The handler runs the claim on `context.WithoutCancel` of the request with a
+  750 ms deadline, so a client that disconnects never abandons it, and the release and the delete run on a context of
+  their own. If Redis is unreachable for the release too, the claim stays until the challenge expires and the member
+  times out as for any other Redis fault (accepted, WR-03). It is Redis
   only and sits outside the `alita:cache:` prefix beside the existing `alita:captcha:refresh:cooldown:*`, so
   `CLEAR_CACHE_ON_STARTUP` keeps it; a Redis flush loses the open challenges and those members time out as usual. A retry
   puts the same key back with `Store.Rearm` (one Lua script, bounded by `RedisTimeout`): the time it had left when it was

@@ -404,8 +404,12 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The claim runs detached from the request: a client that disconnects must not abandon it
+	// half way. Its own deadline bounds it, and an error means nothing was used up.
 	consumedAt := time.Now()
-	consumed, rec, left, err := h.store.ConsumeIfUser(r.Context(), req.Challenge, user.UserID)
+	consumeCtx, cancelConsume := context.WithTimeout(context.WithoutCancel(r.Context()), 3*RedisTimeout)
+	consumed, rec, left, err := h.store.ConsumeIfUser(consumeCtx, req.Challenge, user.UserID)
+	cancelConsume()
 	if err != nil {
 		log.WithField("user_id", user.UserID).Warn("[CaptchaWeb][Verify] challenge store failed")
 		countError()
