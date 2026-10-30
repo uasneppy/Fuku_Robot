@@ -691,7 +691,12 @@ func applyCaptchaMode(b *gotgbot.Bot, chatID int64, mode string) captchaApplyRes
 // page can mark Turnstile unavailable without waiting, and captchaWebModeRefusal starts with
 // it so the page and the command never disagree.
 func captchaWebInstalled(bot *gotgbot.Bot) bool {
-	rt := captchaWebCurrent.Load()
+	return captchaWebRuntimeInstalled(captchaWebCurrent.Load(), bot)
+}
+
+// captchaWebRuntimeInstalled is captchaWebInstalled for a runtime the caller already loaded,
+// so a caller that goes on to use the runtime judges and uses the same one.
+func captchaWebRuntimeInstalled(rt *captchaWebRuntime, bot *gotgbot.Bot) bool {
 	return rt != nil && bot != nil && bot.Username != "" && rt.cfg.Redis != nil
 }
 
@@ -704,7 +709,7 @@ func captchaWebInstalled(bot *gotgbot.Bot) bool {
 // to mute and unmute, and an unknown answer refuses.
 func captchaWebModeRefusal(bot *gotgbot.Bot, chat *gotgbot.Chat) string {
 	rt := captchaWebCurrent.Load()
-	if !captchaWebInstalled(bot) || rt == nil {
+	if !captchaWebRuntimeInstalled(rt, bot) {
 		return "captcha_web_refuse_not_configured"
 	}
 
