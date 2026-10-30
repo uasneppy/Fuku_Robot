@@ -104,7 +104,9 @@ func ClientIP(r *http.Request, trusted []netip.Prefix) (addr netip.Addr, bucket 
 		if inPrefixes(entry, trusted) {
 			continue
 		}
-		return entry, true
+		// A private, loopback or link-local entry (an inner proxy that is not in the trusted
+		// list) is shared by every client behind it, so it is no bucket either (IN-02).
+		return entry, !sharedAddress(entry)
 	}
 	return peer, false
 }

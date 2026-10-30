@@ -61,6 +61,22 @@ func TestClientIP(t *testing.T) {
 			wantBucket: true,
 		},
 		{
+			name:       "trusted peer: a shared private entry from the chain is no bucket",
+			remote:     "10.0.0.5:4000",
+			headers:    map[string][]string{"X-Forwarded-For": {"172.16.0.7"}},
+			trusted:    "10.0.0.0/8",
+			wantAddr:   "172.16.0.7",
+			wantBucket: false,
+		},
+		{
+			name:       "trusted peer: a loopback entry from the chain is no bucket",
+			remote:     "10.0.0.5:4000",
+			headers:    map[string][]string{"X-Forwarded-For": {"198.51.100.7, 127.0.0.1"}},
+			trusted:    "10.0.0.0/8",
+			wantAddr:   "127.0.0.1",
+			wantBucket: false,
+		},
+		{
 			name:       "trusted peer: a chain that is all trusted falls back to the peer",
 			remote:     "10.0.0.5:4000",
 			headers:    map[string][]string{"X-Forwarded-For": {"10.0.0.7, 10.0.0.9"}},

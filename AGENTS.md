@@ -668,8 +668,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `CAPTCHA_WEB_TRUSTED_PROXIES` (`captchaweb.ParseTrustedProxies`, comma-separated IPs and CIDRs), in which case
   `X-Forwarded-For` (all header lines as one list) is walked from the right to the first address outside the list. `X-Real-IP`
   and `CF-Connecting-IP` are never read, because anyone can send them. A chain that is empty, all trusted or unparsable
-  falls back to `RemoteAddr`. With a loopback, private or link-local peer and no trusted list, or a trusted proxy's own
-  address, every request would share one address, so the per-address window is skipped (`bucket` false) and the per-user
+  falls back to `RemoteAddr`. With a loopback, private or link-local peer and no trusted list, a trusted proxy's own
+  address, or such an address taken from `X-Forwarded-For` (an inner proxy that is not in the list), every request would
+  share one address, so the per-address window is skipped (`bucket` false) and the per-user
   windows still apply.
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
