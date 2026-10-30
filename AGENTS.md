@@ -658,6 +658,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Subsystem traps
 
 - Approved users skip antiflood, locks, blacklists, and captcha.
+- Antiflood first write (D-27): on a chat with no `antiflood_settings` row, the first `/setfloodmode` (pinned for ban) or
+  `/delflood` stores `flood_limit` 5, the model's `default:5`, because the repository's `FirstOrCreate` insert leaves
+  the limit at its Go zero value; an admin who only picks an action or turns message deleting on therefore also turns
+  antiflood on at 5 messages. `TestSetFloodModeOnFreshChatStoredLimit` and `TestSetFloodMsgDelOnFreshChatStoredLimit`
+  (`alita/db/antiflood`) pin it, and a Mute press on an unconfigured chat writes no row at all (the cached default is
+  already mute). The menu's action and delete presses call the same `applyFlood*` functions, so it keeps this on
+  purpose and draws the stored row from their database read-back, never a guess. A repository fix (insert with limit 0
+  on the first write) would change `/setfloodmode` and `/delflood` too, so it is a separate follow-up and must update
+  those two tests and this bullet.
 - Antiflood counters are in-process (per replica). The raid detection counters (`alita:raid:*`) are Redis-only: without
   Redis the automatic triggers do nothing, and `/lockdown` still works.
 - Fed-ban lookups cache per `(fed, user)` with a negative sentinel; every ban/unban write must invalidate it.
@@ -1280,6 +1289,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   it. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
   has no locale manager of its own. `alita/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
+- Run the settings tests with `go test -tags testtools -race -count=1 -run '^TestSettings' ./alita/modules ./alita/i18n`.
+  Page tests add page-prefixed helpers in their own files (`settings_<page>_test.go`). Every setting the menu changes
+  has a parity test (`TestSettingsParity*`: the menu press and the command leave the same stored row and the same
+  cache), a drift test (`TestSettingsDrift*`: the page reads what the command reads) and an authority-parity test
+  (`TestSettingsAuthorityParity*`: the menu refuses what the command refuses, with the right the control declares),
+  and every page has a worst-case callback test (`TestSettings*CallbackBytes`, 64 bytes) and a length test in all 7
+  languages (`TestSettings*PageFitsEveryLocale`); a new setting in the menu adds all of them. `TestSettingsStaffPrivacy`
+  guards D-21 (a group menu never names the Staff Group), `TestSettingsHelpFitsOneMessage` holds `settings_help_msg`
+  to one Telegram message in every language, and `TestLoadSettingsRegistersHelp` guards the `/help` entry. No settings
+  guarantee rests on PostgreSQL (no migration, no partial index, no `CHECK`), so nothing of the menu joins
+  `make test-postgres-integrity`.
 
 ## Commits
 
