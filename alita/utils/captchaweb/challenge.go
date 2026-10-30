@@ -206,6 +206,48 @@ func (s *Store) ConsumeIfUser(ctx context.Context, token string, userID int64) (
 	return ConsumeUnknown, Record{}, 0, ErrInvalidChallenge
 }
 
+// rearmScript puts a consumed challenge back, only when the key is absent and time remains.
+//
+// KEYS[1] = the challenge hash. ARGV = remaining ms, user, attempt, chat, expiry ms (all
+// decimal strings, because Lua numbers lose exactness above 14 digits). Returns 1 when the
+// challenge was written and 0 when nothing was.
+var rearmScript = redis.NewScript(`
+local ms = tonumber(ARGV[1])
+if not ms or ms <= 0 then return 0 end
+if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+redis.call('HSET', KEYS[1], 'u', ARGV[2], 'a', ARGV[3], 'c', ARGV[4], 'x', ARGV[5])
+redis.call('PEXPIRE', KEYS[1], ms)
+return 1
+`)
+
+// Rearm gives a consumed challenge back so the member can try again (D-21). It writes the
+// same four fields under token with remaining as the time to live, never a fresh lifetime, and
+// does nothing when the key exists again or remaining is not positive, so a re-arm can never
+// stretch a challenge past its attempt or overwrite another one. It reports whether it wrote.
+func (s *Store) Rearm(ctx context.Context, token string, rec Record, remaining time.Duration) (bool, error) {
+	if !ValidToken(token) {
+		return false, ErrInvalidChallenge
+	}
+	ms := remaining.Milliseconds()
+	if ms <= 0 {
+		return false, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, RedisTimeout)
+	defer cancel()
+
+	wrote, err := rearmScript.Run(ctx, s.client, []string{KeyPrefix + token},
+		strconv.FormatInt(ms, 10),
+		strconv.FormatInt(rec.UserID, 10),
+		strconv.FormatUint(uint64(rec.AttemptID), 10),
+		strconv.FormatInt(rec.ChatID, 10),
+		strconv.FormatInt(rec.ExpiresAt.UnixMilli(), 10),
+	).Int64()
+	if err != nil {
+		return false, err
+	}
+	return wrote == 1, nil
+}
+
 func parseConsumed(raw []any) (Record, time.Duration, error) {
 	if len(raw) != 3 {
 		return Record{}, 0, ErrInvalidChallenge

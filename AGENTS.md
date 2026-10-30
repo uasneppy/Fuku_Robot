@@ -384,7 +384,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and the verify handler consumes it with a user-compared Lua script (`Store.ConsumeIfUser`): an unknown or used key
   answers nothing, another member's verify changes nothing (`not_for_you`), and only the target's deletes it. It is Redis
   only and sits outside the `alita:cache:` prefix beside the existing `alita:captcha:refresh:cooldown:*`, so
-  `CLEAR_CACHE_ON_STARTUP` keeps it; a Redis flush loses the open challenges and those members time out as usual.
+  `CLEAR_CACHE_ON_STARTUP` keeps it; a Redis flush loses the open challenges and those members time out as usual. A retry
+  puts the same key back with `Store.Rearm` (one Lua script, bounded by `RedisTimeout`): the time it had left when it was
+  consumed minus the time since, written only when the key is absent and time remains, so a re-arm never stretches a
+  challenge past its attempt and never overwrites another one.
 - `captcha_settings.captcha_mode` is `math`, `text` or `turnstile` under `chk_captcha_mode` (migration 20261030120000).
   That migration drops `chk_captcha_mode` and the legacy inline column check of 20250807103246 (PostgreSQL named it
   `captcha_settings_captcha_mode_check`, and no later migration removed it, so every database the chain built had two
@@ -525,6 +528,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `rollbackCaptchaAttempt`), with no fallback to math from inside a failed join. A re-join replaces the attempt, so the
   old token answers `expired` and never touches the new attempt: the backend matches the challenge record's attempt ID,
   never the member's current attempt.
+  Outcomes (D-28): only `invalid-input-response` and `timeout-or-duplicate` as the only error codes, and a confirmed token
+  whose `cdata` belongs to another challenge, are a failed solve (`captchaweb.OutcomeFailed`); it runs
+  `handleCaptchaTimeout` once with the group's failure action through `captchaWebBackend.Fail` (kick is one
+  member-removing `unbanChatMember`, ban a `banChatMember`, mute the 24 h mute), deletes the challenge message, posts the
+  failure notice and answers `failed` with the action. Every other answer is a retry and kicks nobody: a transport
+  error, timeout, redirect (never followed, whatever transport the client has), 5xx, a body that does not parse or is over
+  64 KiB, `internal-error`, `bad-request`, `missing-input-response`, an unknown or empty code list, a secret error
+  (`missing-input-secret`, `invalid-input-secret`) and a hostname or action that does not match. The secret errors and the
+  hostname and action mismatches are the owner's configuration faults (`Verdict.ConfigError`), logged once at Error as
+  `[CaptchaWeb] siteverify configuration fault: <reason>` by reason name only. A retry gives the token back through
+  `Store.Rearm` with its remaining lifetime; a wrong user, an unknown token, a failed solve, an expiry and a pass never
+  re-arm. The bot's own Restrict right is checked live (`BotCanRestrict`, 3 s, never the admin cache) before any
+  Cloudflare call, and a bot without it, or an unknown answer, is a retry. A `Backend` method returns an error only when
+  it changed nothing, which is what makes the re-arm after one safe.
+  Exactly once on any replica: a pass, a failed solve and a timeout are decided only by the conditional delete of the
+  attempt row (`CompleteCaptchaAttemptAtomic` or `ReleaseCaptchaAttemptAtomic`), never by a Redis flag, so a challenge
+  issued on one replica passes on another and a timer, a cleanup tick and a check on three replicas cannot all act. A
+  check that arrives after `expires_at`, or that lost the claim (a pass or a failed solve whose delete matched nothing),
+  runs `expireCaptchaAttempt` at once through `captchaWebBackend.Expire` (idempotent through its own claim; a live row is
+  left to the timer) and answers `expired` with the action; it never unmutes. A claim whose unmute failed answers `retry`,
+  not `passed`: the claim already wrote the `captcha_muted_users` row due now, the 5-minute worker retries it, the
+  challenge message is deleted and the token is not re-armed. A replica that crashes between the consume and a re-arm
+  loses that member's challenge until the group's time limit ends the attempt (accepted).
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
