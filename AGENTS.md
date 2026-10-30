@@ -62,6 +62,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   jobs are dropped as no verdict. A lockdown start still running after the wait is cut off with the process and leaves at
   worst an unconfirmed row that the lockdown worker settles.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
+- The Turnstile web captcha is configured in `main` (`registerCaptchaWeb`) when `config.AppConfig.CaptchaWebConfigured()`
+  holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
+  `TURNSTILE_SECRET_KEY` (some but not all stops startup, and the secret is registered with `logredact`). `main` builds
+  the page's string tables from `i18n.StringTable(captchaweb.PageLanguages, captchaweb.PageKeys)` (a missing or empty
+  key is fatal), installs the runtime with `modules.ConfigureCaptchaWeb` (`StartNotReady` true, `TrustedProxies` from
+  `CAPTCHA_WEB_TRUSTED_PROXIES`, a bad entry stops startup) and mounts `modules.CaptchaWebRoutes()` (`GET /captcha`,
+  `POST /captcha/verify`, `GET /captcha/health`) through `Server.Handle` with method patterns before `Start`. With the
+  settings unset none of the three routes exists. Without Redis the runtime is not installed (the challenges live in
+  Redis), `main` logs one warning, no route is mounted and Turnstile groups get the math captcha. The verify route
+  answers 503 retry, and the health route 503, until `modules.MarkCaptchaWebReady` at the very end of `postInit`
+  (polling mode starts the HTTP server before the modules load, D-30). No new shutdown drain is added: the HTTP server's
+  own `Stop` runs first and a web pass's finish joins `StopCaptchaLifecycle`. The captcha routes share the port with
+  `/metrics`, `/db_metrics`, `/health`, pprof and the webhook, so `modules.CaptchaWebStartupWarnings` makes `main` warn
+  when `METRICS_AUTH_TOKEN` or `CAPTCHA_WEB_TRUSTED_PROXIES` is empty, and the owner's public proxy must forward only
+  `/captcha` and `/captcha/*` (D-31; the bot enforces no path allow-list).
 
 ## Handlers
 
@@ -90,6 +105,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
+- The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 
 ## Callbacks
 
@@ -415,6 +431,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   instead), and a marker write error is logged by outcome name and never changes the answer. Parallel verifies of one
   token act once because only the Lua consume of `alita:captcha:ch:<token>` succeeds for one of them. It is Redis only and
   outside the cache prefix.
+- The developer `/stats` also gets the web captcha's counters: `getStats` appends `captchaWebStatsSection` after
+  `raidAIStatsSection` (issued, passed, failed, expired, invalid, retry, limited, errors). They are in-memory numbers of the
+  replica that answers (`captchaweb.StatsSnapshot`), start at zero on every restart and are never fleet totals, and the
+  section holds no token, initData, ID or Cloudflare text. Each event is counted once: `writeAnswer` counts a decided
+  answer by its result (`invalid` and `not_for_you` as invalid; an `expired` answer is not counted, because the expiry is
+  counted where the attempt was claimed), `writeLimited` counts a 429 or an in-flight 503 as limited and not as retry, a
+  remembered answer replayed from `alita:captcha:done:<token>` counts nothing, `captchaweb.CountIssued` runs in
+  `SendCaptcha` once a Turnstile challenge message was sent and its ID stored, and `captchaweb.CountExpired` runs in
+  `expireCaptchaAttempt` when `handleCaptchaTimeout` claimed an attempt whose answer is reserved (the timer, the cleanup
+  tick and a late check all go through it). Errors are configuration faults (`Verdict.ConfigError`), backend and Redis
+  errors and a failed unmute; a Cloudflare 5xx or a network fault is a retry only.
 - `captcha_settings.captcha_mode` is `math`, `text` or `turnstile` under `chk_captcha_mode` (migration 20261030120000).
   That migration drops `chk_captcha_mode` and the legacy inline column check of 20250807103246 (PostgreSQL named it
   `captcha_settings_captcha_mode_check`, and no later migration removed it, so every database the chain built had two
@@ -1049,6 +1076,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `127.0.0.1` and `::1`), because the key goes there in a header, and it exits 1 when every request failed.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
+- The Turnstile page's script test is `node --test scripts/captcha-page/*.test.mjs` (the directory form does not work on
+  Node 22). It is run by the executor, not by `make test`: run it when the page changes. The page
+  (`alita/utils/captchaweb/page/captcha.html`) is served with a per-response nonce CSP (`captchaweb.CSPFor`) and must
+  keep no inline `style` attribute and no inline event handler, because the CSP would block them. `make
+  check-translations` cannot see the `captcha_web_` keys the page reads from `captchaweb.PageKeys`;
+  `TestCaptchaWebLocaleKeys` (`alita/i18n`) guards them in all 7 locales (present, not empty, length and no markup), and
+  `TestStringTable` guards the table `main` builds from them.
 - The harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
   `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown
   models are in `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` and

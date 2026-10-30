@@ -812,3 +812,76 @@ func TestWebhookAcceptsRecentRichBlockTypes(t *testing.T) {
 		t.Fatal("rich-message update was accepted but not dispatched")
 	}
 }
+
+// TestCaptchaWebRoutesRegistration registers the three captcha routes the way main does, with
+// method patterns through Handle, and drives them through the real mux.
+func TestCaptchaWebRoutesRegistration(t *testing.T) {
+	s := New(0, time.Now())
+	s.RegisterHealth()
+	tag := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Handler", name)
+			w.WriteHeader(http.StatusOK)
+		})
+	}
+	s.Handle("GET /captcha", tag("page"))
+	s.Handle("POST /captcha/verify", tag("verify"))
+	s.Handle("GET /captcha/health", tag("health"))
+
+	do := func(method, target string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		s.mux.ServeHTTP(rr, httptest.NewRequest(method, target, nil))
+		return rr
+	}
+
+	t.Run("page answers GET and HEAD", func(t *testing.T) {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			rr := do(method, "/captcha")
+			if rr.Code != http.StatusOK || rr.Header().Get("X-Handler") != "page" {
+				t.Fatalf("%s /captcha = %d via %q, want 200 via page", method, rr.Code, rr.Header().Get("X-Handler"))
+			}
+		}
+	})
+	t.Run("verify answers POST", func(t *testing.T) {
+		rr := do(http.MethodPost, "/captcha/verify")
+		if rr.Code != http.StatusOK || rr.Header().Get("X-Handler") != "verify" {
+			t.Fatalf("POST /captcha/verify = %d via %q, want 200 via verify", rr.Code, rr.Header().Get("X-Handler"))
+		}
+	})
+	t.Run("verify refuses other methods with Allow POST", func(t *testing.T) {
+		for _, method := range []string{http.MethodGet, http.MethodOptions} {
+			rr := do(method, "/captcha/verify")
+			if rr.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("%s /captcha/verify = %d, want 405", method, rr.Code)
+			}
+			if !strings.Contains(rr.Header().Get("Allow"), http.MethodPost) {
+				t.Fatalf("%s /captcha/verify Allow = %q, want POST in it", method, rr.Header().Get("Allow"))
+			}
+		}
+	})
+	t.Run("health answers GET", func(t *testing.T) {
+		rr := do(http.MethodGet, "/captcha/health")
+		if rr.Code != http.StatusOK || rr.Header().Get("X-Handler") != "health" {
+			t.Fatalf("GET /captcha/health = %d via %q, want 200 via health", rr.Code, rr.Header().Get("X-Handler"))
+		}
+	})
+	t.Run("trailing slash is not the page", func(t *testing.T) {
+		if rr := do(http.MethodGet, "/captcha/"); rr.Code != http.StatusNotFound {
+			t.Fatalf("GET /captcha/ = %d, want 404", rr.Code)
+		}
+	})
+	t.Run("the bot's own health route still answers", func(t *testing.T) {
+		rr := do(http.MethodGet, "/health")
+		if got := rr.Header().Get("Content-Type"); got != "application/json" {
+			t.Fatalf("GET /health Content-Type = %q, want application/json (route missing?)", got)
+		}
+	})
+	t.Run("Start lists the routes among its endpoints", func(t *testing.T) {
+		listed := strings.Join(s.endpointList(), " ")
+		for _, pattern := range []string{"GET /captcha", "POST /captcha/verify", "GET /captcha/health"} {
+			if !strings.Contains(listed, pattern) {
+				t.Fatalf("endpoints %q lack %q", listed, pattern)
+			}
+		}
+	})
+}
