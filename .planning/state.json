@@ -41,7 +41,7 @@
     {
       "number": "8",
       "name": "Turnstile Web Captcha",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "9",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 08 of 9 · 78% · executing"
+    "label": "Advance to the next step (plan phase 9)",
+    "reason": "Phase 9 of 9 — needs a plan"
   },
-  "updated_at": "2026-10-30T00:22:25.973Z"
+  "updated_at": "2026-10-30T08:25:04.081Z"
 }

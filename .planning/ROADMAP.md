@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Lockdown Alerts and Response** - Each lockdown alerts the Staff Group and log channel with Lift, "Ban N recent joiners" and "Revoke link" buttons (completed 2026-10-18)
 - [x] **Phase 6: Automatic Raid Detection** - Join surges and new-member floods lock a group automatically; the old `/antiraid` is retired (completed 2026-10-29)
 - [x] **Phase 7: AI-Assisted Raid Detection** - TypeSafe (text) and Gemini (images) spam verdicts feed a burst trigger, while rules still decide (completed 2026-10-29)
-- [ ] **Phase 8: Turnstile Web Captcha** - New members verify through Cloudflare Turnstile in a bot-hosted Telegram Mini App
+- [x] **Phase 8: Turnstile Web Captcha** - New members verify through Cloudflare Turnstile in a bot-hosted Telegram Mini App (completed 2026-10-30)
 - [ ] **Phase 9: Settings Menu** - `/settings` opens an inline-button menu with Staff Group, Lockdown, Captcha and Antiflood pages
 
 ## Phase Details
@@ -375,7 +375,7 @@ Plans:
   4. A member who fails the Turnstile check, or doesn't pass within the group's time limit, is kicked and can rejoin to try again. This works no matter which bot replica handles the join or the check.
   5. The owner can deploy the captcha page by following the documented steps: a public HTTPS hostname, BotFather Mini App registration, and Turnstile keys. The Turnstile secret never appears in logs.
 
-**Plans:** 11/11 plans executed
+**Plans:** 11/11 plans complete
 **UI hint**: yes
 
 Plans:
@@ -432,5 +432,5 @@ Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 nee
 | 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
 | 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
 | 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
-| 8. Turnstile Web Captcha | 11/11 | In Progress|  |
+| 8. Turnstile Web Captcha | 11/11 | Complete    | 2026-10-30 |
 | 9. Settings Menu | 0/TBD | Not started | - |

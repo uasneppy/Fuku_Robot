@@ -88,14 +88,14 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Captcha
 
-- [ ] **CAPT-01**: An admin can set a group's captcha mode to Turnstile. Math and text modes stay available as fallbacks.
-- [ ] **CAPT-02**: In Turnstile mode, a new member is muted on join and gets a challenge message with a button that opens the bot's captcha page as a Telegram Mini App.
-- [ ] **CAPT-03**: Only the new member the challenge was issued to can pass it. A challenge can't be reused or passed by anyone else.
-- [ ] **CAPT-04**: Passing is decided only on the bot's server: Telegram's signed user data and Cloudflare's Turnstile verification. The page never reports a pass on its own.
-- [ ] **CAPT-05**: A member who passes is unmuted. Their pending messages are replayed, the greeting runs, and the challenge is cleaned up, exactly as with the existing captcha.
-- [ ] **CAPT-06**: A failed Turnstile check counts as failing the captcha (one solve only). The member is kicked and can rejoin to try again.
-- [ ] **CAPT-07**: A member who doesn't pass within the group's time limit is kicked and can rejoin to try again.
-- [ ] **CAPT-08**: The captcha page is shown in the user's language, using the bot's 7 languages.
+- [x] **CAPT-01**: An admin can set a group's captcha mode to Turnstile. Math and text modes stay available as fallbacks.
+- [x] **CAPT-02**: In Turnstile mode, a new member is muted on join and gets a challenge message with a button that opens the bot's captcha page as a Telegram Mini App.
+- [x] **CAPT-03**: Only the new member the challenge was issued to can pass it. A challenge can't be reused or passed by anyone else.
+- [x] **CAPT-04**: Passing is decided only on the bot's server: Telegram's signed user data and Cloudflare's Turnstile verification. The page never reports a pass on its own.
+- [x] **CAPT-05**: A member who passes is unmuted. Their pending messages are replayed, the greeting runs, and the challenge is cleaned up, exactly as with the existing captcha.
+- [x] **CAPT-06**: A failed Turnstile check counts as failing the captcha (one solve only). The member is kicked and can rejoin to try again.
+- [x] **CAPT-07**: A member who doesn't pass within the group's time limit is kicked and can rejoin to try again.
+- [x] **CAPT-08**: The captcha page is shown in the user's language, using the bot's 7 languages.
 
 ### Settings menu
 
@@ -113,7 +113,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **PLAT-01**: Everything works with several bot replicas running at once. Fan-out pacing, detection counters, captcha challenges and lockdown state are shared, not per process.
 - [x] **PLAT-02**: New secrets (Turnstile secret key, Gemini API key) never appear in logs.
 - [x] **PLAT-03**: Every new message and button label exists in all 7 languages.
-- [ ] **PLAT-04**: The deployment steps for the captcha page are documented: public HTTPS hostname, BotFather Mini App registration, Turnstile keys.
+- [x] **PLAT-04**: The deployment steps for the captcha page are documented: public HTTPS hostname, BotFather Mini App registration, Turnstile keys.
 
 ## v2 Requirements
 
@@ -213,14 +213,14 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | RAID-05 | Phase 7 | Complete |
 | RAID-06 | Phase 6 | Complete |
 | RAID-07 | Phase 6 | Complete |
-| CAPT-01 | Phase 8 | Pending |
-| CAPT-02 | Phase 8 | Pending |
-| CAPT-03 | Phase 8 | Pending |
-| CAPT-04 | Phase 8 | Pending |
-| CAPT-05 | Phase 8 | Pending |
-| CAPT-06 | Phase 8 | Pending |
-| CAPT-07 | Phase 8 | Pending |
-| CAPT-08 | Phase 8 | Pending |
+| CAPT-01 | Phase 8 | Complete |
+| CAPT-02 | Phase 8 | Complete |
+| CAPT-03 | Phase 8 | Complete |
+| CAPT-04 | Phase 8 | Complete |
+| CAPT-05 | Phase 8 | Complete |
+| CAPT-06 | Phase 8 | Complete |
+| CAPT-07 | Phase 8 | Complete |
+| CAPT-08 | Phase 8 | Complete |
 | MENU-01 | Phase 9 | Pending |
 | MENU-02 | Phase 9 | Pending |
 | MENU-03 | Phase 9 | Pending |
@@ -232,7 +232,7 @@ Which phases cover which requirements. Each v1 requirement maps to exactly one p
 | PLAT-01 | Phase 2 | Complete |
 | PLAT-02 | Phase 7 | Complete |
 | PLAT-03 | Phase 1 | Complete |
-| PLAT-04 | Phase 8 | Pending |
+| PLAT-04 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 64 total

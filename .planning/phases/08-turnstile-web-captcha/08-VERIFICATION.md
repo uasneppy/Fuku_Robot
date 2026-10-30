@@ -1,7 +1,7 @@
 ---
 phase: 08-turnstile-web-captcha
 verified: 2026-10-30T03:10:00Z
-status: human_needed
+status: passed
 score: 5/5 roadmap success criteria verified by code and automated tests (live-client behaviour deferred by the owner)
 behavior_unverified: 0
 overrides_applied: 0
@@ -37,7 +37,7 @@ human_verification:
 
 **Phase Goal:** As a group admin, I want to verify new members with Turnstile in a Telegram Mini App, so that bots stay out with little friction.
 **Verified:** 2026-10-30
-**Status:** human_needed (every automated truth holds; the deferred live-device checks are listed above and are not gaps)
+**Status:** passed (every automated truth holds; the deferred live-device checks are listed above and were accepted by the owner on 2026-10-30, see Human Verification Outcome)
 **Re-verification:** No, initial verification
 
 ## Goal Achievement
@@ -137,6 +137,18 @@ Routes (`/captcha` GET, `/captcha/verify` POST, `/captcha/health`) match `verify
 ## Gaps Summary
 
 No gaps. All five roadmap success criteria and all nine requirements are implemented, wired and covered by passing tests. Remaining uncertainty is limited to behaviour that needs real Telegram clients, a real Cloudflare widget and the owner's BotFather, which the owner deferred ("plan and build now, spike later") and which are listed under `human_verification` and in `08-SPIKE.md`.
+
+## Human Verification Outcome
+
+On 2026-10-30 the owner reviewed the eight `human_verification` items above and answered "All good, continue". The status moved from `human_needed` to `passed` on that basis. The checks were not run: they need the owner's public HTTPS hostname, a BotFather Mini App, Cloudflare Turnstile keys, real Telegram clients and a PostgreSQL run. They stay open as deferred live checks, with exact steps in `08-SPIKE.md`:
+
+- the Direct Link Mini App delivering the tapper's `initData` on Android, iOS, Desktop and Web, and a second member's tap being refused;
+- the Turnstile widget rendering and returning a token inside each Telegram WebView, and the real `siteverify` hostname;
+- the CSP and the `frame-ancestors` host list against a live managed widget, and a solve after the signed data is more than 5 minutes old (it currently shows the "invalid" copy);
+- BotFather accepting the short name and the Web App URL;
+- a native-speaker read of the new strings in es, fr, hi, id, pt and ru;
+- `TestCaptchaModeTurnstileConstraint` in CI through `make test-postgres-integrity`;
+- a key pair check (site key and secret from one widget) so the key-mismatch breaker never has to trip.
 
 ---
 

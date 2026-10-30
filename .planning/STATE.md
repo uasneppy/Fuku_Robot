@@ -1,43 +1,43 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 08
-current_phase_name: turnstile-web-captcha
-status: executing
-stopped_at: Phase 7 complete, ready to plan Phase 8
-last_updated: "2026-10-30T00:22:25.949Z"
-last_activity: 2026-10-29
-last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: d1eb2bf15fa226dc1bd0507f5b7b5ec8634a8269
+current_phase: 9
+current_phase_name: Settings Menu
+status: planning
+stopped_at: Phase 8 complete, ready to plan Phase 9
+last_updated: "2026-10-30T08:25:04.040Z"
+last_activity: 2026-10-30
+last_activity_desc: Phase 8 complete, transitioned to Phase 9
+state_head: 4dce7e584b71116a65b4cd71c5e4e60b25909e30
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 92
-  completed_plans: 81
-  percent: 78
+  completed_plans: 92
+  percent: 89
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-18)
+See: .planning/PROJECT.md (updated 2026-10-30)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 6 — Automatic Raid Detection
+**Current focus:** Phase 9 — Settings Menu
 
 ## Current Position
 
-Phase: 08 (turnstile-web-captcha) — READY TO EXECUTE
+Phase: 9 — Settings Menu
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-29 — Phase 7 complete, transitioned to Phase 8
+Status: Ready to plan
+Last activity: 2026-10-30 — Phase 8 complete, transitioned to Phase 9
 
-Progress: [████████░░] 78%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 81
+- Total plans completed: 92
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -52,6 +52,7 @@ Progress: [████████░░] 78%
 | 5 | 14 | - | - |
 | 6 | 13 | - | - |
 | 7 | 14 | - | - |
+| 8 | 11 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -102,6 +103,8 @@ Recent decisions affecting current work:
 - [Phase 6]: The flood counter is two watchers (group `-4` and group `12`) sharing `raidFloodCountUpdate`; group `12` must stay after every other handler group. The old `/antiraid` mode is a pointer command and `alita:antiraid:*` keys are swept at startup.
 - [Phase 7]: AI verdicts only add to a Redis count (`raidAIRecordVerdict`, items `:av`, accounts `:aa`); the rule (threshold from at least 3 accounts in 120 s) fires `raidFire` with `ai_burst`, off the worker on its own goroutine. Settings are the `ai_enabled`/`ai_threshold` columns of `chat_raid_detection`. The candidate watcher is handler group 2; the raid AI pool, its budgets, breakers and the `StopRaidAI` drain are separate from `/aispam`. Phase 8 must register the Turnstile secret with `logredact.RegisterSecret` (the Turnstile half of PLAT-02) and keep new handler groups below 12.
 - [Phase 7]: The Gemini client (`alita/utils/gemini`) is stdlib-only so tools can import it without the pre-main database connection; the key travels only in the `x-goog-api-key` header. The spike tool (`scripts/gemini-spike/`) is the owner's way to measure accuracy, latency and cost.
+- [Phase 8]: A Turnstile attempt is an ordinary `captcha_attempts` row with a reserved `ts1:` answer; the Redis token (`alita:captcha:ch:<token>`) is only a handle, consumed by a user-compared Lua claim that is released on any error. Pass, failed solve and timeout are decided only by the conditional delete of the attempt row (`claimCaptchaPass`/`finishCaptchaPass` are shared with the button), so any replica can act. Both button callbacks refuse a `ts1:` attempt.
+- [Phase 8]: The page decides nothing: a pass needs signed `initData` (HMAC, 5 min, user must match) and a `siteverify` success echoing hostname, action `captcha_join` and `cdata`. Only provable failures kick (D-28); Cloudflare, network and setup faults retry with the token re-armed; five failed solves in a row with no pass are held back as a suspected key mismatch (`alita:captcha:streak`). The verify route has Redis rate windows, a readiness gate, a decided-answer replay marker and shares the bot's port: the owner's proxy must forward only `/captcha*`.
 
 ### Pending Todos
 
@@ -112,7 +115,8 @@ None yet.
 - [Phase 7]: The owner accepted the seven live checks without running them ("All good, continue"): the Gemini spike with a paid-tier key (the 0.85 image bar, the GIF/video thumbnail choice, the model id, latency, cost, safety-block rate), a real AI burst, two replicas, `make test-postgres-integrity` for the new `ai_threshold` CHECK, a native-speaker read of the translations (the es, pt and id help paragraphs were shortened; pt has 26 units of headroom against Telegram's 4096), a live log grep for the Gemini key and bot token, and `make lint` on Go 1.26. Code review WR-01..WR-05 and IN-01..IN-09 were all fixed (`07-REVIEW-FIX.md`).
 - [Phase 7]: The security audit closed 48/48 threats (`07-SECURITY.md`, `threats_open: 0`); validation is compliant (`07-VALIDATION.md`, no gaps). Open non-blocking notes: O-1 (worth a follow-up) the raid-only TypeSafe text path has no hourly volume cap or verdict cache like the Gemini 20/150/500 guards, so a sustained link flood from fresh accounts could spend roughly 14,000 TypeSafe calls an hour (bounded only by the 4-worker pool, the 128-job queue and the candidate rule; D-20 names Gemini only), and a per-account and per-chat hourly counter for text jobs would close it; O-2 `aispamCarvedOut` on the group 2 path uses the bot client's default timeout; O-3 `ValidModel` accepts `.` and `..`; O-8 five crafted unusable Gemini answers can pause one chat's image trigger for 5 minutes (join and flood triggers are unaffected). Accepted risks AR-07-01..04 and transfer TR-07-01 (images and texts go to Google and TypeSafe by the owner's choice).
 - [Phase 7]: Accepted limit: a follower of a shared image verdict inherits the leader's refusal only within one chat; overlap across replicas is covered only once a verdict is cached. A rolling deploy can make an `ai off` setting read as on for up to 30 minutes (documented in AGENTS.md).
-- [Phase 8]: Spike gate. Test Direct Link Mini App launch from a group, and Turnstile rendering in Telegram WebViews. The owner must provide a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
+- [Phase 8]: The owner accepted the live checks without running them ("All good, continue"): the Direct Link Mini App delivering the tapper's `initData` on Android, iOS, Desktop and Web, the Turnstile widget inside each WebView, the real `siteverify` hostname, the CSP and `frame-ancestors` list against a live widget, BotFather accepting the short name, a solve after the signed data is more than 5 minutes old (it shows the "invalid" copy today), a native-speaker read of the new strings in six languages, and `TestCaptchaModeTurnstileConstraint` in CI through `make test-postgres-integrity`. Steps are in `08-SPIKE.md`; the owner needs a public HTTPS hostname, a BotFather Mini App and Turnstile keys (one widget's site key and secret).
+- [Phase 8]: Code review found 0 critical and 7 warnings and 6 info notes; all 13 were fixed (`08-REVIEW-FIX.md`). Accepted limits: if Redis is also unreachable when a failed consume is released, the claim stays until the challenge expires and that member times out; a replica that crashes between a consume and a re-arm loses that member's challenge until the timeout; the rolling-deploy window before every replica has the `ts1:` guard.
 - [Phase 1]: The live ownership-transfer check (does `chat_owner_changed`/`chat_member` arrive, with the bot as admin and as a member) was never run; UAT tests 3-4 were deferred. The hourly sweep removes stale links whatever Telegram sends.
 - [Phase 1]: 10 of 11 live-Telegram UAT checks were deferred without being run (`phases/01-staff-group-links/01-UAT.md` Deferred Follow-Ups). CI had not run on PR #1 at phase close; the PostgreSQL trigger test passed locally against PostgreSQL 16.
 - [Phase 1]: Low, non-blocking security flag TF-01-06: a stranger's `/unlinkstaff` reply reveals whether the group is linked (`01-SECURITY.md`).
@@ -150,5 +154,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-10-18T05:45:00.000Z
-Stopped at: Phase 7 complete, ready to plan Phase 8
+Stopped at: Phase 8 complete, ready to plan Phase 9
 Resume file: None

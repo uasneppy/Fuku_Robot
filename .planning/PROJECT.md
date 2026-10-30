@@ -52,16 +52,16 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ A burst of AI spam verdicts starts a lockdown on its own: 5 spam verdicts from at least 3 different accounts within 120 s by default, counted across replicas in Redis. `/aispam` delete verdicts feed it, and so do suspicious texts, photos, GIFs and stickers from members who joined in the last 24 h, checked off the update path (text by TypeSafe, images by Google Gemini when `GEMINI_API_KEY` is set). Ordinary messages and established members' messages are never sent to any AI — Phase 7
 - ✓ AI never decides alone and never blocks: one verdict, one account or a duplicate delivery never locks; a slow, failing, rate-limited, unreadable or unconfigured provider means no verdict; the join-surge and flood triggers keep working with every provider down; `ENABLE_AISPAM=false` stops it all; hourly spend caps (20 per account, 150 per group, 500 in all) bound the Gemini cost — Phase 7
 - ✓ `/autolockdown ai [N|on|off]` turns the AI trigger on or off and sets its threshold (3 to 500) with the same live authority and anonymous-admin proof as the other two triggers; the alert names "AI spam" and its count and lists the recent joiners behind it; the Gemini key and the Telegram file URL never reach a log or an error; a stdlib-only client and a spike tool for the owner's own accuracy, latency and cost run ship with it — Phase 7
+- ✓ An admin can set a group's captcha mode to Turnstile (`/captchamode turnstile`, beside math and text). A new member is muted on joining and gets one message whose button opens the bot's captcha page as a Telegram Mini App in their own language (7 languages); when the web captcha is not set up, Redis does not answer or the bot has no username, the member gets the group's math captcha instead — Phase 8
+- ✓ Only the member the challenge was issued to can pass it, and only the bot's server decides: Telegram's signed user data (HMAC, 5-minute window, user must match) plus Cloudflare's server-side verification of the token, bound to hostname, action and the challenge. A wrong member, a reused token, a forged button or a page reporting a pass by itself never unmutes anyone; a pass unmutes, replays held messages, greets and cleans up exactly like the button captcha — Phase 8
+- ✓ A provably failed check or a timeout applies the group's failure action (kick by default, so the member can rejoin), exactly once whichever replica handles the join, the check or the timer; Cloudflare, network and setup faults retry and never kick, and a run of five failed solves with no pass is held back as a suspected key mismatch — Phase 8
+- ✓ The owner can deploy the captcha page from a documented guide (public HTTPS hostname, BotFather Mini App, Turnstile keys, reverse-proxy rules), the Turnstile secret is registered with the log redactor and never logged, the verify route is rate-limited and hardened, and the developer `/stats` shows the web captcha's counters — Phase 8
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
-**Web captcha (third)**
-- [ ] New members verify through Cloudflare Turnstile on a Telegram Mini App page the bot hosts, with server-side token verification.
-- [ ] A member who doesn't pass within the time limit is kicked and can rejoin to try again.
-
-**Settings menu (fourth)**
+**Settings menu (last)**
 - [ ] An inline-button settings menu configures each group, with "Staff Group" as one of its pages.
 
 ### Out of Scope
@@ -163,6 +163,11 @@ My trusted staff can protect every one of my communities from one place. We act 
 | The raid AI path has its own bounded pool, breakers, budgets and verdict cache, apart from `/aispam`'s queue | A 100-image raid must not shed real `/aispam` moderation, and an image flood must not burn the owner's Gemini quota | ✓ Good — Phase 7 (D-18, D-20; review WR-01 added the per-account cap) |
 | The AI burst lists recent joiners only; established members' `/aispam` verdicts still count toward the threshold | "Ban N recent joiners" must never offer an established member | ✓ Good — Phase 7 (review WR-04) |
 | `ENABLE_AISPAM=false` is the one global switch for all AI checks, text and images; no key means no outbound call | The owner must be able to stop every AI call with one setting | ✓ Good — Phase 7 (review WR-02) |
+| A Turnstile attempt is an ordinary `captcha_attempts` row with a reserved `ts1:` answer, and the Redis token is only a handle | One attempt per member per group, the timer, the cleanup tick and restart recovery cover it unchanged; the pass path is shared with the button so the two cannot drift | ✓ Good — Phase 8 (D-01, D-25; both button callbacks refuse a `ts1:` attempt) |
+| Pass, failed solve and timeout are decided only by the conditional delete of the attempt row; Redis holds handles, rate windows and replay markers, never the decision | Exactly once on any replica, as for lockdown alerts | ✓ Good — Phase 8 (D-16; review WR-01/WR-02/WR-03 hardened the lost-claim, replay and consume paths) |
+| Only a provable failed solve kicks; Cloudflare, network and setup faults retry, and a streak of five failed solves with no pass is held back as a suspected key mismatch | A bad site key and secret pair must not mass-kick real joiners | ✓ Good — Phase 8 (D-28; review WR-04 added the breaker) |
+| The live Telegram and Cloudflare checks are deferred; the phase ships a checklist (`08-SPIKE.md`) and the self-hosting guide | The checks need the owner's hostname, BotFather Mini App and Turnstile keys | ✓ Good — Phase 8 (owner's choice, "plan and build now, spike later") |
+| The verify route shares the bot's HTTP port; the guide and two startup warnings tell the owner to forward only `/captcha*` through the public proxy | A path allow-list in the bot would be a second place to get wrong | ✓ Good — Phase 8 (D-31) |
 
 ## Evolution
 
@@ -182,4 +187,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-29 after Phase 7*
+*Last updated: 2026-10-30 after Phase 8*
