@@ -107,6 +107,9 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_antiflood_action_note":   {110, 154},
 	"settings_btn_antiflood_delete":    {36, 48},
 	"settings_card_expired":            {80, 112},
+
+	// The /help entry (plan 09-13).
+	"settings_help_msg": {900, 1260},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -359,5 +362,58 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// settingsHelpCommands are the commands settings_help_msg must name: /settings itself and
+// the eleven commands every menu change is the same as.
+var settingsHelpCommands = []string{
+	"/settings", "/linkstaff", "/unlinkstaff", "/unlockdown", "/autolockdown", "/captcha",
+	"/captchamode", "/captchatime", "/captchaaction", "/setflood", "/setfloodmode", "/delflood",
+}
+
+// TestSettingsHelpFitsOneMessage holds the /help entry of the settings menu to the UI-SPEC
+// ceiling (900 runes in English, 1260 in the others), to the b tag only, to naming every
+// command it stands for, and, with the module help header, to one Telegram message.
+func TestSettingsHelpFitsOneMessage(t *testing.T) {
+	var failures []string
+	for _, lang := range staffLocales {
+		data := loadStaffLocale(t, lang)
+		help, _ := data["settings_help_msg"].(string)
+		header, _ := data["helpers_module_help_header"].(string)
+		if strings.TrimSpace(help) == "" {
+			failures = append(failures, fmt.Sprintf("%s: settings_help_msg is missing or empty", lang))
+			continue
+		}
+
+		ceiling := 1260
+		if lang == "en" {
+			ceiling = 900
+		}
+		if runes := utf8.RuneCountInString(help); runes > ceiling {
+			failures = append(failures, fmt.Sprintf("%s: settings_help_msg has %d characters, ceiling %d", lang, runes, ceiling))
+		}
+
+		for _, match := range settingsTagPattern.FindAllStringSubmatch(help, -1) {
+			if tag := strings.ToLower(match[1]); tag != "b" {
+				failures = append(failures, fmt.Sprintf("%s: settings_help_msg uses the tag <%s>, only b is allowed", lang, tag))
+			}
+		}
+
+		for _, command := range settingsHelpCommands {
+			if !strings.Contains(help, command) {
+				failures = append(failures, fmt.Sprintf("%s: settings_help_msg does not name %s", lang, command))
+			}
+		}
+
+		total := lockdownHelpLength(strings.ReplaceAll(header, "%s", "Settings")) + lockdownHelpLength(help)
+		t.Logf("%s: help %d of %d UTF-16 units, headroom %d", lang, total, lockdownHelpTelegramLimit, lockdownHelpTelegramLimit-total)
+		if total > lockdownHelpTelegramLimit {
+			failures = append(failures, fmt.Sprintf("%s: help header and settings_help_msg are %d characters, over Telegram's %d", lang, total, lockdownHelpTelegramLimit))
+		}
+	}
+	sort.Strings(failures)
+	for _, failure := range failures {
+		t.Error(failure)
 	}
 }
