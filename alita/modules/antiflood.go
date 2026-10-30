@@ -18,6 +18,7 @@ import (
 	"github.com/divkix/Alita_Robot/alita/db"
 	"github.com/divkix/Alita_Robot/alita/db/antiflood"
 	"github.com/divkix/Alita_Robot/alita/db/lang"
+	"github.com/divkix/Alita_Robot/alita/db/models"
 	"github.com/divkix/Alita_Robot/alita/i18n"
 	"github.com/divkix/Alita_Robot/alita/utils/cache"
 	"github.com/divkix/Alita_Robot/alita/utils/chat_status"
@@ -418,6 +419,84 @@ func (m *moduleStruct) checkFlood(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.ContinueGroups
 }
 
+// floodOffWords are the arguments /setflood reads as "turn antiflood off".
+var floodOffWords = []string{"off", "no", "false", "0"}
+
+// floodModes are the only actions a command or the settings page may write. warn, tban and
+// tmute stay valid in the database check but are never written (D-20).
+var floodModes = []string{"ban", "kick", "mute"}
+
+// floodApplyOutcome is what an apply function did with its input.
+type floodApplyOutcome int
+
+const (
+	// floodApplied is the zero value: the value was valid and stored.
+	floodApplied floodApplyOutcome = iota
+	// floodDisabled means a limit of 0 was stored, which turns antiflood off.
+	floodDisabled
+	// floodOutOfRange means the limit was neither 0 nor 3..100; nothing was written.
+	floodOutOfRange
+	// floodUnknownMode means the action was not ban, kick or mute; nothing was written.
+	floodUnknownMode
+	// floodSaveFailed means the repository returned an error; Err holds it.
+	floodSaveFailed
+)
+
+// floodApplyResult is the verdict of an apply function. Stored is the row read back from the
+// database after a successful write (nil otherwise, or when the read-back failed), so a caller
+// shows what is stored and never what it assumes.
+type floodApplyResult struct {
+	Outcome floodApplyOutcome
+	Stored  *models.AntifloodSettings
+	Err     error
+}
+
+// floodReadBack reads the chat's antiflood row uncached after a write. A failed read-back is
+// logged and returns nil; the write already happened.
+func floodReadBack(ctx context.Context, chatID int64) *models.AntifloodSettings {
+	stored, err := antiflood.GetAntifloodSettingsContext(ctx, chatID)
+	if err != nil {
+		log.Warnf("[Antiflood] read-back after write failed for chat %d: %v", chatID, err)
+		return nil
+	}
+	return stored
+}
+
+// floodSaved turns the result of a repository write into a floodApplyResult.
+func floodSaved(ctx context.Context, chatID int64, ok floodApplyOutcome, err error) floodApplyResult {
+	if err != nil {
+		return floodApplyResult{Outcome: floodSaveFailed, Err: err}
+	}
+	return floodApplyResult{Outcome: ok, Stored: floodReadBack(ctx, chatID)}
+}
+
+// applyFloodLimit validates and stores the antiflood limit: 0 turns antiflood off, 3..100 sets
+// the limit, anything else writes nothing. The repository write invalidates its own cache key.
+func applyFloodLimit(ctx context.Context, chatID int64, limit int) floodApplyResult {
+	switch {
+	case limit == 0:
+		return floodSaved(ctx, chatID, floodDisabled, antiflood.SetFloodContext(ctx, chatID, 0))
+	case limit >= 3 && limit <= 100:
+		return floodSaved(ctx, chatID, floodApplied, antiflood.SetFloodContext(ctx, chatID, limit))
+	default:
+		return floodApplyResult{Outcome: floodOutOfRange}
+	}
+}
+
+// applyFloodMode validates and stores the antiflood action. Only ban, kick and mute are
+// accepted, exactly as spelled; the caller lower-cases user text first.
+func applyFloodMode(ctx context.Context, chatID int64, mode string) floodApplyResult {
+	if !slices.Contains(floodModes, mode) {
+		return floodApplyResult{Outcome: floodUnknownMode}
+	}
+	return floodSaved(ctx, chatID, floodApplied, antiflood.SetFloodModeContext(ctx, chatID, mode))
+}
+
+// applyFloodDelete stores whether messages that caused a flood are deleted.
+func applyFloodDelete(ctx context.Context, chatID int64, on bool) floodApplyResult {
+	return floodSaved(ctx, chatID, floodApplied, antiflood.SetFloodMsgDelContext(ctx, chatID, on))
+}
+
 func (m *moduleStruct) setFlood(b *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
 	connectedChat := chat_status.IsUserConnected(b, ctx, true, true)
@@ -434,31 +513,33 @@ func (m *moduleStruct) setFlood(b *gotgbot.Bot, ctx *ext.Context) error {
 	if len(args) == 0 {
 		replyText, _ = tr.GetString(strings.ToLower(m.moduleName) + "_errors_expected_args")
 	} else {
-		if slices.Contains([]string{"off", "no", "false", "0"}, strings.ToLower(args[0])) {
-			if err := antiflood.SetFloodContext(tracing.UpdateContext(ctx), chat.Id, 0); err != nil {
-				log.Errorf("[Antiflood] SetFlood failed for chat %d: %v", chat.Id, err)
+		limit, parsed := 0, true
+		if !slices.Contains(floodOffWords, strings.ToLower(args[0])) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				parsed = false
+				replyText, _ = tr.GetString(strings.ToLower(m.moduleName) + "_errors_invalid_int")
+			} else if num == 0 {
+				// "00" or "-0" is not an off word; the command has always called it out of range.
+				num = -1
+			}
+			limit = num
+		}
+		if parsed {
+			result := applyFloodLimit(tracing.UpdateContext(ctx), chat.Id, limit)
+			switch result.Outcome {
+			case floodSaveFailed:
+				log.Errorf("[Antiflood] SetFlood failed for chat %d: %v", chat.Id, result.Err)
 				errText, _ := tr.GetString("common_settings_save_failed")
 				_, _ = msg.Reply(b, errText, formatting.Shtml())
 				return ext.EndGroups
-			}
-			replyText, _ = tr.GetString(strings.ToLower(m.moduleName) + "_setflood_disabled")
-		} else {
-			num, err := strconv.Atoi(args[0])
-			if err != nil {
-				replyText, _ = tr.GetString(strings.ToLower(m.moduleName) + "_errors_invalid_int")
-			} else {
-				if num < 3 || num > 100 {
-					replyText, _ = tr.GetString(strings.ToLower(m.moduleName) + "_errors_set_in_limit")
-				} else {
-					if err := antiflood.SetFloodContext(tracing.UpdateContext(ctx), chat.Id, num); err != nil {
-						log.Errorf("[Antiflood] SetFlood failed for chat %d: %v", chat.Id, err)
-						errText, _ := tr.GetString("common_settings_save_failed")
-						_, _ = msg.Reply(b, errText, formatting.Shtml())
-						return ext.EndGroups
-					}
-					temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_setflood_success")
-					replyText = fmt.Sprintf(temp, num)
-				}
+			case floodDisabled:
+				replyText, _ = tr.GetString(strings.ToLower(m.moduleName) + "_setflood_disabled")
+			case floodApplied:
+				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_setflood_success")
+				replyText = fmt.Sprintf(temp, limit)
+			default:
+				replyText, _ = tr.GetString(strings.ToLower(m.moduleName) + "_errors_set_in_limit")
 			}
 		}
 	}
@@ -524,20 +605,21 @@ func (m *moduleStruct) setFloodMode(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	if len(args) > 0 {
 		selectedMode := strings.ToLower(args[0])
-		if slices.Contains([]string{"ban", "kick", "mute"}, selectedMode) {
-			if err := antiflood.SetFloodModeContext(tracing.UpdateContext(ctx), chat.Id, selectedMode); err != nil {
-				log.Errorf("[Antiflood] SetFloodMode failed for chat %d: %v", chat.Id, err)
-				errText, _ := tr.GetString("common_settings_save_failed")
-				_, _ = msg.Reply(b, errText, formatting.Shtml())
-				return ext.EndGroups
-			}
+		result := applyFloodMode(tracing.UpdateContext(ctx), chat.Id, selectedMode)
+		switch result.Outcome {
+		case floodSaveFailed:
+			log.Errorf("[Antiflood] SetFloodMode failed for chat %d: %v", chat.Id, result.Err)
+			errText, _ := tr.GetString("common_settings_save_failed")
+			_, _ = msg.Reply(b, errText, formatting.Shtml())
+			return ext.EndGroups
+		case floodApplied:
 			temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_setfloodmode_success")
 			_, err := msg.Reply(b, fmt.Sprintf(temp, selectedMode), formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 			}
 			return ext.EndGroups
-		} else {
+		default:
 			temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_setfloodmode_unknown_type")
 			_, err := msg.Reply(b, fmt.Sprintf(temp, args[0]), formatting.Shtml())
 			if err != nil {
@@ -569,22 +651,19 @@ func (m *moduleStruct) setFloodDeleter(b *gotgbot.Bot, ctx *ext.Context) error {
 	if len(args) > 0 {
 		selectedMode := strings.ToLower(args[0])
 		switch selectedMode {
-		case "on", "yes":
-			if err := antiflood.SetFloodMsgDelContext(tracing.UpdateContext(ctx), chat.Id, true); err != nil {
-				log.Errorf("[Antiflood] SetFloodMsgDel failed for chat %d: %v", chat.Id, err)
+		case "on", "yes", "off", "no":
+			on := selectedMode == "on" || selectedMode == "yes"
+			if result := applyFloodDelete(tracing.UpdateContext(ctx), chat.Id, on); result.Outcome == floodSaveFailed {
+				log.Errorf("[Antiflood] SetFloodMsgDel failed for chat %d: %v", chat.Id, result.Err)
 				errText, _ := tr.GetString("common_settings_save_failed")
 				_, _ = msg.Reply(b, errText, formatting.Shtml())
 				return ext.EndGroups
 			}
-			text, _ = tr.GetString(strings.ToLower(m.moduleName) + "_flood_deleter_enabled")
-		case "off", "no":
-			if err := antiflood.SetFloodMsgDelContext(tracing.UpdateContext(ctx), chat.Id, false); err != nil {
-				log.Errorf("[Antiflood] SetFloodMsgDel failed for chat %d: %v", chat.Id, err)
-				errText, _ := tr.GetString("common_settings_save_failed")
-				_, _ = msg.Reply(b, errText, formatting.Shtml())
-				return ext.EndGroups
+			if on {
+				text, _ = tr.GetString(strings.ToLower(m.moduleName) + "_flood_deleter_enabled")
+			} else {
+				text, _ = tr.GetString(strings.ToLower(m.moduleName) + "_flood_deleter_disabled")
 			}
-			text, _ = tr.GetString(strings.ToLower(m.moduleName) + "_flood_deleter_disabled")
 		default:
 			text, _ = tr.GetString(strings.ToLower(m.moduleName) + "_flood_deleter_invalid_option")
 		}
