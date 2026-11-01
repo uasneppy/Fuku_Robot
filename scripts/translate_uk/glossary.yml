@@ -1,0 +1,47 @@
+# Glossary for scripts/translate_uk.
+# Fill in "uk" with the stem you want for each term (a stem, because Ukrainian inflects:
+# "бан" matches бан, бану, забанити). The editor warns when a text that contains the
+# English term does not use it. List rejected variants under "forbidden". A term with an
+# empty "uk" is ignored. russian_words are flagged as likely Russian leftovers.
+terms:
+  - en: ban
+    uk: ""
+  - en: unban
+    uk: ""
+  - en: mute
+    uk: ""
+  - en: unmute
+    uk: ""
+  - en: kick
+    uk: ""
+  - en: warn
+    uk: ""
+  - en: captcha
+    uk: ""
+  - en: lockdown
+    uk: ""
+  - en: staff group
+    uk: ""
+  - en: approved user
+    uk: ""
+  - en: admin
+    uk: ""
+  - en: federation
+    uk: ""
+  - en: blacklist
+    uk: ""
+  - en: antiflood
+    uk: ""
+  - en: filter
+    uk: ""
+  - en: note
+    uk: ""
+  - en: rules
+    uk: ""
+  - en: report
+    uk: ""
+  - en: log channel
+    uk: ""
+  - en: raid
+    uk: ""
+russian_words: [что, это, или, как, только, если, чтобы, когда]

@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ukrainian translation</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #5d6675; --line: #d9dde4;
+  --accent: #1f6feb; --accent-ink: #ffffff;
+  --ok: #1a7f37; --ok-bg: #e6f4ea; --warn: #8a5a00; --warn-bg: #fff4d6; --bad: #b42318; --bad-bg: #fde8e6;
+  --chip: #e9edf3;
+}
+:root:not([data-theme="light"]) { color-scheme: light dark; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --panel: #181e27; --ink: #e6e9ef; --muted: #98a1b0; --line: #2a3340;
+    --accent: #4c8dff; --accent-ink: #0b1220;
+    --ok: #56d364; --ok-bg: #12301b; --warn: #e3b341; --warn-bg: #33290d; --bad: #ff8b82; --bad-bg: #3a1815;
+    --chip: #232c39;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+.progress { flex: 1; height: 8px; background: var(--chip); border-radius: 4px; overflow: hidden; min-width: 80px; }
+.progress div { height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+#totals { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#banner { margin: 12px 16px 0; padding: 10px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); }
+main { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px; align-items: start; }
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; position: sticky; top: 64px; max-height: calc(100vh - 80px); display: flex; flex-direction: column; gap: 8px; }
+aside input[type=search] { width: 100%; padding: 6px 8px; font: inherit; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 0; }
+aside ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
+#modules { max-height: 30vh; flex: none; }
+#keys { flex: 1; min-height: 120px; }
+aside li button { width: 100%; text-align: left; border: 0; border-radius: 4px; padding: 4px 6px; background: none; display: flex; gap: 8px; justify-content: space-between; align-items: baseline; }
+aside li button[aria-current=true] { background: var(--chip); font-weight: 600; }
+aside li .count { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+#keys li button { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; justify-content: flex-start; align-items: center; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 2px solid var(--muted); }
+.dot.done { background: var(--ok); border-color: var(--ok); }
+.dot.reopened { background: var(--warn); border-color: var(--warn); }
+.dot.bad { background: var(--bad); border-color: var(--bad); }
+.dot.draft { box-shadow: 0 0 0 2px var(--accent); }
+#editor { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.keyline { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; margin-bottom: 12px; }
+.keyline code { font-size: 16px; font-weight: 600; }
+.badge { padding: 1px 8px; border-radius: 10px; font-size: 12px; background: var(--chip); color: var(--muted); }
+.badge.done { background: var(--ok-bg); color: var(--ok); }
+.badge.reopened { background: var(--warn-bg); color: var(--warn); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cols h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+.en, textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 8px; }
+.en { background: var(--bg); }
+textarea { background: var(--panel); color: var(--ink); resize: vertical; min-height: 44px; display: block; }
+.tok { background: var(--chip); border-radius: 3px; padding: 0 2px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.chip { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; padding: 1px 7px; border-radius: 10px; background: var(--ok-bg); color: var(--ok); }
+.chip.missing { background: var(--bad-bg); color: var(--bad); }
+.issues { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.issues li { padding: 6px 10px; border-radius: 6px; }
+.issues .block { background: var(--bad-bg); color: var(--bad); }
+.issues .warn { background: var(--warn-bg); color: var(--warn); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.actions .hint { color: var(--muted); font-size: 13px; }
+.hints h3 { margin-top: 16px; }
+.hints ul { margin: 0; padding-left: 18px; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
+#toast.show { opacity: 1; }
+@media (max-width: 900px) {
+  header { flex-wrap: wrap; row-gap: 8px; }
+  .progress { flex: 1 1 100%; order: 3; }
+  main { grid-template-columns: 1fr; padding: 12px; }
+  aside { position: static; max-height: none; }
+  #keys { max-height: 40vh; }
+  #editor { order: -1; }
+  .cols { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ukrainian translation</h1>
+  <div class="progress" role="progressbar" aria-label="Confirmed keys" id="progress"><div id="bar"></div></div>
+  <span id="totals">loading…</span>
+  <button id="reload" type="button" title="Re-read the files from disk">Reload</button>
+</header>
+<div id="banner" hidden></div>
+<main>
+  <aside>
+    <input id="filter" type="search" placeholder="Filter keys or text…" aria-label="Filter keys or text">
+    <label><input type="checkbox" id="onlyOpen"> Unconfirmed only</label>
+    <h2>Modules</h2>
+    <ul id="modules"></ul>
+    <h2>Keys</h2>
+    <ul id="keys"></ul>
+  </aside>
+  <section id="editor" aria-live="off"></section>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+'use strict';
+
+// Everything the server sends is put on the page with textContent, never innerHTML:
+// the texts contain <b> and <code> on purpose and must be shown, not interpreted.
+const TOKEN_RE = /%%|%(?:\[\d+\])?[sdvfbtoxX]|\{[^{}]+\}|<\/?\p{L}[^<>]*>/gu;
+
+const app = { keys: [], orphans: [], byKey: new Map(), module: null, key: null };
+const drafts = new Map();   // key -> string[] typed but not saved
+let checkTimer = null, checkSeq = 0, lastCheck = null, busy = false;
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else node.setAttribute(k, v);
+  }
+  for (const kid of kids) if (kid != null) node.append(kid);
+  return node;
+}
+
+const UNREACHABLE = 'The editor is not reachable. Is "go run ./scripts/translate_uk" still running? Your text is still on this page.';
+
+// api never throws: a stopped or restarted server must not leave the page waiting
+// on a request that failed, because the typed drafts live only in this tab.
+async function api(path, body) {
+  const opts = body === undefined ? {} : {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  };
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch (_) {
+    return { status: 0, data: { error: UNREACHABLE } };
+  }
+  let data = {};
+  try { data = await res.json(); } catch (_) { /* leave empty */ }
+  return { status: res.status, data };
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function setState(data) {
+  app.keys = data.keys || [];
+  app.orphans = data.orphans || [];
+  app.byKey = new Map(app.keys.map((k) => [k.key, k]));
+}
+
+function status(k) {
+  if (k.blocking && k.blocking.length) return 'bad';
+  if (k.confirmed) return 'done';
+  if (k.reopened) return 'reopened';
+  return 'open';
+}
+
+function modules() {
+  const m = new Map();
+  for (const k of app.keys) {
+    const e = m.get(k.module) || { name: k.module, confirmed: 0, total: 0 };
+    e.total++;
+    if (k.confirmed) e.confirmed++;
+    m.set(k.module, e);
+  }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function visibleKeys() {
+  const q = $('filter').value.trim().toLowerCase();
+  const onlyOpen = $('onlyOpen').checked;
+  return app.keys.filter((k) => {
+    if (!q && app.module && k.module !== app.module) return false;
+    if (q && !(k.key.toLowerCase().includes(q) || k.en.join('\n').toLowerCase().includes(q) || k.uk.join('\n').toLowerCase().includes(q))) return false;
+    if (onlyOpen && k.confirmed) return false;
+    return true;
+  });
+}
+
+function renderHeader() {
+  const total = app.keys.length;
+  const done = app.keys.filter((k) => k.confirmed).length;
+  $('totals').textContent = `${done} / ${total} confirmed`;
+  $('bar').style.width = total ? `${(100 * done) / total}%` : '0';
+  $('progress').setAttribute('aria-valuenow', String(done));
+  $('progress').setAttribute('aria-valuemax', String(total));
+  const b = $('banner');
+  if (app.orphans.length) {
+    b.hidden = false;
+    b.textContent = `uk.yml has ${app.orphans.length} key(s) that en.yml no longer has and they are removed on the next save: ${app.orphans.join(', ')}`;
+  } else {
+    b.hidden = true;
+  }
+}
+
+function renderModules() {
+  const ul = $('modules');
+  ul.replaceChildren();
+  for (const m of modules()) {
+    const btn = el('button', { type: 'button' }, el('span', { text: m.name }), el('span', { class: 'count', text: `${m.confirmed}/${m.total}` }));
+    if (m.name === app.module) btn.setAttribute('aria-current', 'true');
+    btn.addEventListener('click', () => {
+      app.module = m.name;
+      $('filter').value = '';
+      const first = visibleKeys().find((k) => !k.confirmed) || visibleKeys()[0];
+      if (first) app.key = first.key;
+      renderAll();
+    });
+    ul.append(el('li', {}, btn));
+  }
+}
+
+function renderKeys() {
+  const ul = $('keys');
+  ul.replaceChildren();
+  for (const k of visibleKeys()) {
+    const dot = el('span', { class: `dot ${status(k)}${drafts.has(k.key) ? ' draft' : ''}`, 'aria-hidden': 'true' });
+    const btn = el('button', { type: 'button', title: statusText(k) }, dot, el('span', { text: k.key }));
+    if (k.key === app.key) btn.setAttribute('aria-current', 'true');
+    btn.addEventListener('click', () => { app.key = k.key; renderAll(); });
+    ul.append(el('li', {}, btn));
+  }
+}
+
+function statusText(k) {
+  if (k.blocking && k.blocking.length) return 'has a problem';
+  if (k.confirmed) return 'confirmed';
+  if (k.reopened) return 'English changed since you confirmed it';
+  return 'not confirmed';
+}
+
+function highlighted(text) {
+  const frag = document.createDocumentFragment();
+  let last = 0;
+  for (const m of text.matchAll(TOKEN_RE)) {
+    frag.append(text.slice(last, m.index));
+    frag.append(el('span', { class: 'tok', text: m[0] }));
+    last = m.index + m[0].length;
+  }
+  frag.append(text.slice(last));
+  return frag;
+}
+
+function autosize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = `${ta.scrollHeight + 2}px`;
+}
+
+function currentTexts() {
+  return [...document.querySelectorAll('#editor textarea')].map((t) => t.value);
+}
+
+function renderEditor() {
+  const ed = $('editor');
+  ed.replaceChildren();
+  const k = app.byKey.get(app.key);
+  if (!k) {
+    ed.append(el('p', { text: app.keys.length ? 'Pick a key on the left.' : 'No keys loaded.' }));
+    return;
+  }
+  const texts = drafts.get(k.key) || k.uk;
+  const badge = k.confirmed ? el('span', { class: 'badge done', text: 'Confirmed' })
+    : k.reopened ? el('span', { class: 'badge reopened', text: 'English changed, re-check' })
+      : el('span', { class: 'badge', text: 'Not confirmed' });
+  ed.append(el('div', { class: 'keyline' }, el('code', { text: k.key }), badge, k.list ? el('span', { class: 'badge', text: `list of ${k.en.length}` }) : null));
+
+  const enCol = el('div', {}, el('h3', { text: 'English' }));
+  k.en.forEach((t) => { const d = el('div', { class: 'en' }); d.append(highlighted(t)); enCol.append(d); });
+  const ukCol = el('div', {}, el('h3', { text: 'Ukrainian' }));
+  texts.forEach((t, i) => {
+    const ta = el('textarea', { 'aria-label': k.list ? `Ukrainian item ${i + 1}` : 'Ukrainian translation', spellcheck: 'true', lang: 'uk' });
+    ta.value = t;
+    ta.addEventListener('input', () => { autosize(ta); onEdit(); });
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); act('confirm'); }
+    });
+    ukCol.append(ta);
+  });
+  ed.append(el('div', { class: 'cols' }, enCol, ukCol));
+
+  ed.append(el('div', { class: 'chips', id: 'chips', 'aria-label': 'Placeholders and tags in the English text' }));
+  ed.append(el('ul', { class: 'issues', id: 'issues' }));
+  ed.append(el('div', { class: 'actions' },
+    el('button', { type: 'button', id: 'save', text: 'Save' }),
+    el('button', { type: 'button', id: 'confirm', class: 'primary', text: 'Confirm and next' }),
+    el('button', { type: 'button', id: 'revert', text: 'Revert' }),
+    el('button', { type: 'button', id: 'next', text: 'Next unconfirmed' }),
+    el('span', { class: 'hint', text: 'Ctrl+Enter confirms and moves on' })));
+  $('save').addEventListener('click', () => act('save'));
+  $('confirm').addEventListener('click', () => act('confirm'));
+  $('revert').addEventListener('click', () => { drafts.delete(k.key); renderAll(); });
+  $('next').addEventListener('click', () => goNext(true));
+
+  if (k.hints && k.hints.length) {
+    const box = el('div', { class: 'hints' }, el('h3', { text: 'Glossary' }));
+    const ul = el('ul');
+    for (const h of k.hints) ul.append(el('li', { text: `${h.en} → ${h.uk || '(not chosen yet)'}` }));
+    box.append(ul);
+    ed.append(box);
+  }
+  ed.querySelectorAll('textarea').forEach(autosize);
+  lastCheck = k;
+  paintCheck(k);
+  scheduleCheck(0);
+}
+
+function paintCheck(res) {
+  const k = app.byKey.get(app.key);
+  if (!k) return;
+  const joined = currentTexts().join('\n');
+  const chips = $('chips');
+  if (!chips) return;
+  chips.replaceChildren();
+  for (const t of k.tokens || []) chips.append(el('span', { class: `chip${joined.includes(t) ? '' : ' missing'}`, text: t, title: joined.includes(t) ? 'present' : 'missing from the Ukrainian text' }));
+  const list = $('issues');
+  list.replaceChildren();
+  for (const i of res.blocking || []) list.append(el('li', { class: 'block', text: `Cannot save: ${i.message}` }));
+  for (const i of res.warnings || []) list.append(el('li', { class: 'warn', text: `Check: ${i.message}` }));
+  const hasDraft = drafts.has(k.key);
+  const blocked = (res.blocking || []).length > 0;
+  $('save').disabled = busy || !hasDraft || blocked;
+  $('confirm').disabled = busy || blocked || (k.confirmed && !hasDraft);
+  $('revert').disabled = !hasDraft;
+}
+
+function onEdit() {
+  const k = app.byKey.get(app.key);
+  const texts = currentTexts();
+  if (JSON.stringify(texts) === JSON.stringify(k.uk)) drafts.delete(k.key); else drafts.set(k.key, texts);
+  renderKeys();
+  paintCheck(lastCheck || k);
+  scheduleCheck(250);
+}
+
+function scheduleCheck(ms) {
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(runCheck, ms);
+}
+
+async function runCheck() {
+  const k = app.byKey.get(app.key);
+  if (!k) return;
+  const seq = ++checkSeq;
+  const { status: st, data } = await api('/api/check', { key: k.key, uk: currentTexts() });
+  if (seq !== checkSeq) return;   // a newer keystroke owns the screen
+  if (st === 0) { toast(data.error); return; }
+  if (st !== 200) return;
+  lastCheck = data;
+  paintCheck(data);
+}
+
+async function act(kind) {
+  const k = app.byKey.get(app.key);
+  if (!k || busy) return;
+  const btn = $(kind);
+  if (btn && btn.disabled) return;
+  busy = true;
+  paintCheck(lastCheck || k);
+  let st, data;
+  try {
+    ({ status: st, data } = await api(kind === 'confirm' ? '/api/confirm' : '/api/save', { key: k.key, uk: currentTexts() }));
+  } finally {
+    // Whatever happened, the buttons must come back: a stuck "busy" would make
+    // reloading the page, and so losing every unsaved draft, the only way out.
+    busy = false;
+    paintCheck(lastCheck || k);
+  }
+  if (st === 422) {
+    lastCheck = { blocking: data.issues, warnings: [] };
+    paintCheck(lastCheck);
+    return;
+  }
+  if (st !== 200) {
+    toast(data.error || `Save failed (HTTP ${st})`);
+    return;
+  }
+  app.byKey.set(data.key, data);
+  app.keys = app.keys.map((x) => (x.key === data.key ? data : x));
+  drafts.delete(data.key);
+  toast(kind === 'confirm' ? 'Confirmed' : 'Saved');
+  if (kind === 'confirm') goNext(false); else renderAll();
+}
+
+function goNext(announce) {
+  const list = visibleKeys();
+  const at = list.findIndex((x) => x.key === app.key);
+  const after = list.slice(at + 1).concat(list.slice(0, at + 1));
+  const next = after.find((x) => !x.confirmed && x.key !== app.key) || after.find((x) => !x.confirmed);
+  if (next) app.key = next.key;
+  else if (announce || list.length) toast('Nothing left to confirm in this list');
+  renderAll();
+  const ta = document.querySelector('#editor textarea');
+  if (ta) ta.focus();
+}
+
+function renderAll() {
+  renderHeader();
+  renderModules();
+  renderKeys();
+  renderEditor();
+}
+
+async function refresh(first) {
+  const { status: st, data } = await api('/api/state');
+  if (st !== 200) {
+    $('totals').textContent = data.error || `cannot load (HTTP ${st})`;
+    return;
+  }
+  const kept = new Map(drafts);
+  setState(data);
+  for (const key of kept.keys()) if (!app.byKey.has(key)) drafts.delete(key);
+  if (first || !app.byKey.has(app.key)) {
+    const open = app.keys.find((k) => !k.confirmed) || app.keys[0];
+    if (open) { app.key = open.key; app.module = open.module; }
+  }
+  if (!first && document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
+    // The owner is typing: refresh the lists and counts, not the box under their cursor.
+    renderHeader(); renderModules(); renderKeys();
+    return;
+  }
+  renderAll();
+}
+
+$('filter').addEventListener('input', renderKeys);
+$('onlyOpen').addEventListener('change', renderKeys);
+$('reload').addEventListener('click', () => refresh(false).then(() => toast('Reloaded from disk')));
+window.addEventListener('focus', () => refresh(false));
+window.addEventListener('beforeunload', (e) => {
+  if (drafts.size) { e.preventDefault(); e.returnValue = ''; }
+});
+refresh(true);
+</script>
+</body>
+</html>

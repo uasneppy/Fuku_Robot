@@ -1,0 +1,11 @@
+admin_ok: "Done <b>%s</b>"
+misc_runs:
+  - Runs away.
+  - Nope.
+help_configuration_step-1: "Step one"
+multi_line: |
+  First line
+  Second line
+plain_yes: "yes"
+pseudo: "Use <code>/ban <userhandle></code>, 100% of {first}"
+only_in_english: "Only here"

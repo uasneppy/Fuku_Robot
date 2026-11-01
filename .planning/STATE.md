@@ -4,10 +4,10 @@ current_phase: 9
 current_phase_name: Settings Menu
 status: completed
 stopped_at: Phase 9 complete — all phases complete
-last_updated: "2026-10-30T20:36:05.259Z"
+last_updated: "2026-11-01T13:23:43.461Z"
 last_activity: 2026-10-30
 last_activity_desc: Phase 9 complete
-state_head: d2b368f8b88c33f6827d54f003f58d781f56aec6
+state_head: 13a4a3b94d9eaeab913695640568e0be6d4b9648
 progress:
   total_phases: 9
   completed_phases: 9
@@ -152,6 +152,9 @@ None yet.
 | 261008-j3c | Make TestStaffActionNonStaffUnchanged robust to second boundaries | 2026-10-08 | 077ee2e | .planning/quick/261008-j3c-make-the-flaky-test-teststaffactionnonstaffunchanged-tmute-a |
 | 261008-j3d | Lockdown copy polish: no raw Telegram errors, warning markers, code-formatted help | 2026-10-08 | 924b5e6 | .planning/quick/261008-j3d-lockdown-copy-polish-from-planning-phases-04-manual-lockdown |
 | 261030-rig | Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API | 2026-10-30 | d2b368f | [261030-rig-change-gemini-to-claude-haiku-5-5-via-th](./quick/261030-rig-change-gemini-to-claude-haiku-5-5-via-th/) |
+| 261101-h7w | Design spec for the Ukrainian translation tool (docs only) | 2026-11-01 | e6a67d8 | [261101-h7w-write-design-spec-no-implementation-for-](./quick/261101-h7w-write-design-spec-no-implementation-for-/) |
+| 8 | Implementation plan for the Ukrainian translation tool (docs only) | 2026-11-01 | 964f369 | — |
+| 261101-hlf | Implement the Ukrainian translation tool, plan Tasks 1-9 (PR #4) | 2026-11-01 | 13a4a3b | [261101-hlf-implement-ukrainian-translation-tool-scr](./quick/261101-hlf-implement-ukrainian-translation-tool-scr/) |
 
 ## Deferred Items
 

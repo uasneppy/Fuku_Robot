@@ -1,0 +1,2 @@
+# Confirmed Ukrainian translations: key<TAB>first 8 hex characters of sha256(English text).
+# Written by scripts/translate_uk. Delete a line to un-confirm that key.
