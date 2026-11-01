@@ -1,6 +1,6 @@
 # Ukrainian translation tool — design
 
-Date: 2026-11-01 · Status: awaiting review · Scope: design only, nothing is implemented yet
+Date: 2026-11-01 · Status: approved by the owner; addendum at the end added during planning · Scope: design only, nothing is implemented yet
 
 ## Goal
 
@@ -142,3 +142,30 @@ strings and bring the list back for a decision.
 - Safety claim checked against code: the picker uses `ENABLED_LOCALES` and the callback uses the allow-list, so an
   unregistered draft is not user-reachable; the loader does load it, which is stated.
 - Not verified yet: that every existing test passes with the draft file present. That is the first check in the plan.
+
+## Addendum (planning phase, 2026-11-01)
+
+Facts found while planning, and the changes to the design they force. The first three are small additions to the
+tool; the last is a scope decision for the owner.
+
+1. **One list-valued key.** `locales/en.yml` has 1,418 top-level keys, all strings except `misc_runs`, a list of 4
+   strings. The tool edits a list key as N boxes; the Ukrainian list must have the same number of items as the
+   English one (blocking check), and writing keeps it a YAML sequence.
+2. **Keys the checks must not misread.** Three keys contain a hyphen (`help_configuration_step-1`..`-3`); some
+   strings contain `%` followed by a space (`100% of`), `{first}`-style tokens in help prose, `&lt;` entities and
+   pseudo-tags such as `<userhandle>` or `<yes>`. Tags are therefore compared as opaque tokens, `%` counts only when
+   it forms a verb (`%s`, `%d`, `%v`, `%[1]s`, `%%`), and the number of `<` and `>` characters must match.
+3. **Keeping `uk.yml` in step with `en.yml` afterwards.** `AGENTS.md` makes `make check-translations` require every
+   key in every locale, so each new English key needs a Ukrainian entry from now on. The tool therefore also has
+   `-sync` (append missing keys to `uk.yml`, filled from `ru.yml` or else English, unconfirmed), the editor shows such
+   keys as unconfirmed, and a key removed from `en.yml` is reported as an orphan. `AGENTS.md` gets one line telling
+   developers to run it.
+4. **Local-server guard.** The editor writes files, so it only listens on a loopback address, rejects a `Host` that is
+   not `127.0.0.1`, `localhost` or `::1` (DNS rebinding), and requires `Content-Type: application/json` and a
+   same-origin `Origin` on writes.
+5. **"Translate everything" is wider than the locale files.** Owner decision, 2026-11-01: admin commands and
+   notifications must be Ukrainian too. The help texts, command descriptions and notification texts are all in the
+   locale files, so they are covered by the tool. What is still English in Go code is listed in the implementation
+   plan under "Not in this plan" and needs its own design (some of it is stored in the database). Telegram only
+   recognises Latin letters, digits and `_` in slash command names, so `/ban` itself cannot be Ukrainian; its
+   description can.
