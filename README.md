@@ -769,7 +769,7 @@ parse falls back to its default, with only a warning in the log.
 | `DISPATCHER_MAX_ROUTINES` | `200` | Updates processed at the same time (1–1000) |
 | `HTTP_MAX_IDLE_CONNS` | `100` | Idle connections kept for the Bot API client |
 | `HTTP_MAX_IDLE_CONNS_PER_HOST` | `50` | Idle connections per host for the Bot API client |
-| `ENABLED_LOCALES` | `en` | Comma-separated languages offered by `/lang`: `en,es,fr,hi,id,pt,ru` |
+| `ENABLED_LOCALES` | `uk,en,es,fr,hi,id,pt,ru` | Comma-separated languages offered by `/lang`. `uk` (the default language) is always offered |
 | `DEBUG` | `false` | Debug logging with caller info; also changes the monitoring defaults below |
 
 </details>

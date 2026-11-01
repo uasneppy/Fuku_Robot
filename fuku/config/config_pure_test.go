@@ -132,8 +132,8 @@ func TestLoadConfig(t *testing.T) {
 		if len(cfg.AllowedUpdates) == 0 {
 			t.Errorf("AllowedUpdates: expected non-empty slice")
 		}
-		if len(cfg.ValidLangCodes) != 1 || cfg.ValidLangCodes[0] != "uk" {
-			t.Errorf("ValidLangCodes: got %v, want [uk]", cfg.ValidLangCodes)
+		if len(cfg.ValidLangCodes) != 8 || cfg.ValidLangCodes[0] != "uk" {
+			t.Errorf("ValidLangCodes: got %v, want uk first and all 8 languages", cfg.ValidLangCodes)
 		}
 	})
 
@@ -555,4 +555,24 @@ func TestAnthropicConfig(t *testing.T) {
 			t.Errorf("exact-value registration missing: %q", got)
 		}
 	})
+}
+
+// TestValidLangCodesAlwaysOfferDefault: a restricted ENABLED_LOCALES must still offer
+// Ukrainian, so a chat that switched away can always switch back.
+func TestValidLangCodesAlwaysOfferDefault(t *testing.T) {
+	t.Setenv("ENABLED_LOCALES", "en")
+	t.Setenv("BOT_TOKEN", "test-token")
+	t.Setenv("OWNER_ID", "12345")
+	t.Setenv("MESSAGE_DUMP", "67890")
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("REDIS_ADDRESS", "redis:6379")
+	t.Setenv("REDIS_PASSWORD", "")
+	t.Setenv("REDIS_URL", "")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got := cfg.ValidLangCodes; len(got) != 2 || got[0] != "uk" || got[1] != "en" {
+		t.Errorf("ValidLangCodes = %v, want [uk en]", got)
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -492,7 +493,12 @@ func LoadConfig() (*Config, error) {
 
 	cfg.ValidLangCodes = typeConvertor{str: os.Getenv("ENABLED_LOCALES")}.StringArray()
 	if (len(cfg.ValidLangCodes) == 1 && cfg.ValidLangCodes[0] == "") || (len(cfg.ValidLangCodes) == 0) {
-		cfg.ValidLangCodes = []string{"uk"}
+		cfg.ValidLangCodes = []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"}
+	}
+	// The default language is always offered, so a restricted list can never leave a
+	// chat unable to switch back to it.
+	if !slices.Contains(cfg.ValidLangCodes, "uk") {
+		cfg.ValidLangCodes = append([]string{"uk"}, cfg.ValidLangCodes...)
 	}
 
 	return cfg, nil
