@@ -494,3 +494,26 @@ func TestStateCarriesTokensHintsAndWarnings(t *testing.T) {
 		t.Errorf("warnings = %+v, want ru_word from the glossary list", k.Warnings)
 	}
 }
+
+func TestPreviewJudgesTextWithoutWriting(t *testing.T) {
+	p := mustInit(t)
+	ukBefore, progBefore := readFile(t, p.UkPath), readFile(t, p.ProgressPath)
+
+	k, err := p.Preview("admin_ok", []string{"Готово"})
+	if err != nil || !hasCode(k.Blocking, "placeholders") || k.UK[0] != "Готово" {
+		t.Fatalf("preview of broken text: %+v %v", k, err)
+	}
+	k, err = p.Preview("admin_ok", []string{"Всё готово <b>%s</b>"})
+	if err != nil || len(k.Blocking) != 0 || !hasCode(k.Warnings, "cyrillic_ru") {
+		t.Fatalf("preview of valid but Russian text: %+v %v", k, err)
+	}
+	if k.Confirmed {
+		t.Fatal("a preview never confirms")
+	}
+	if _, err := p.Preview("no_such_key", []string{"x"}); !errors.Is(err, ErrUnknownKey) {
+		t.Fatalf("want ErrUnknownKey, got %v", err)
+	}
+	if readFile(t, p.UkPath) != ukBefore || readFile(t, p.ProgressPath) != progBefore {
+		t.Fatal("Preview wrote a file")
+	}
+}

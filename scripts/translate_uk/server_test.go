@@ -139,6 +139,7 @@ func TestForeignHostIsRefused(t *testing.T) {
 		{"GET", "/", nil},
 		{"GET", "/api/state", nil},
 		{"POST", "/api/confirm", saveBody("admin_ok", "Готово <b>%s</b>")},
+		{"POST", "/api/check", saveBody("admin_ok", "Готово <b>%s</b>")},
 	} {
 		if rec := do(t, h, c.method, c.path, c.body, evil); rec.Code != 403 {
 			t.Errorf("%s %s with a foreign Host: status %d, want 403", c.method, c.path, rec.Code)
@@ -233,5 +234,28 @@ func TestRunRefusesNonLoopbackAddress(t *testing.T) {
 	code, _, errOut := runIn(t, p, "-addr", "0.0.0.0:0")
 	if code != 2 || !strings.Contains(errOut, "loopback") {
 		t.Fatalf("exit %d, stderr %q", code, errOut)
+	}
+}
+
+func TestCheckEndpointReturnsIssuesWithoutWriting(t *testing.T) {
+	p := mustInit(t)
+	h := newServer(p)
+	before := readFile(t, p.UkPath) + readFile(t, p.ProgressPath)
+	rec := do(t, h, "POST", "/api/check", saveBody("admin_ok", "Всё готово"), nil)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	var k KeyState
+	if err := json.Unmarshal(rec.Body.Bytes(), &k); err != nil || !hasCode(k.Blocking, "placeholders") || !hasCode(k.Warnings, "cyrillic_ru") {
+		t.Fatalf("response %+v %v", k, err)
+	}
+	if readFile(t, p.UkPath)+readFile(t, p.ProgressPath) != before {
+		t.Fatal("/api/check wrote a file")
+	}
+	if rec := do(t, h, "POST", "/api/check", saveBody("no_such_key", "x"), nil); rec.Code != 404 {
+		t.Fatalf("unknown key: %d", rec.Code)
+	}
+	if rec := do(t, h, "POST", "/api/check", saveBody("admin_ok", "x"), map[string]string{"Origin": "https://evil.example"}); rec.Code != 403 {
+		t.Fatalf("foreign origin: %d", rec.Code)
 	}
 }

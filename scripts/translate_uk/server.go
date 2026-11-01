@@ -37,8 +37,9 @@ func newServer(p *Project) http.Handler {
 	// themselves, with an Allow header.
 	mux.HandleFunc("/", s.index)
 	mux.HandleFunc("/api/state", s.state)
-	mux.HandleFunc("/api/save", s.write(false))
-	mux.HandleFunc("/api/confirm", s.write(true))
+	mux.HandleFunc("/api/check", s.post(s.p.Preview))
+	mux.HandleFunc("/api/save", s.post(s.p.Save))
+	mux.HandleFunc("/api/confirm", s.post(s.p.Confirm))
 	return s.guard(mux)
 }
 
@@ -107,7 +108,9 @@ func (s *server) state(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
-func (s *server) write(confirm bool) http.HandlerFunc {
+// post builds a handler for a JSON {key, uk} request that runs action on it. check,
+// save and confirm share it, and with it every guard.
+func (s *server) post(action func(key string, uk []string) (KeyState, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
@@ -144,12 +147,7 @@ func (s *server) write(confirm bool) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be {\"key\": string, \"uk\": [string, ...]}"})
 			return
 		}
-		var ks KeyState
-		if confirm {
-			ks, err = s.p.Confirm(req.Key, req.UK)
-		} else {
-			ks, err = s.p.Save(req.Key, req.UK)
-		}
+		ks, err := action(req.Key, req.UK)
 		var ve *ValidationError
 		switch {
 		case errors.As(err, &ve):

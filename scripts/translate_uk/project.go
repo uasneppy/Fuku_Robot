@@ -164,23 +164,29 @@ func tokensOf(en []string) []string {
 	return out
 }
 
+// keyStateFor judges one key's text; Preview uses it alone so a keystroke does not
+// re-judge all 1,400 keys.
+func keyStateFor(s *sources, en, uk Entry) KeyState {
+	k := KeyState{
+		Key: en.Key, Module: ModuleOf(en.Key), EN: en.Parts, UK: uk.Parts, List: en.List,
+		Confirmed: s.prog.Confirmed(en.Key, en.Parts),
+		Blocking:  BlockingIssues(en.Parts, uk.Parts),
+		Hints:     s.gloss.Hints(en.Parts),
+		Tokens:    tokensOf(en.Parts),
+	}
+	k.Reopened = !k.Confirmed && s.prog.Has(en.Key)
+	k.Warnings = append(k.Warnings, Warnings(en.Parts, uk.Parts)...)
+	k.Warnings = append(k.Warnings, s.gloss.Check(en.Parts, uk.Parts)...)
+	k.Warnings = append(k.Warnings, s.gloss.FlagRussian(uk.Parts)...)
+	return k
+}
+
 func buildState(s *sources) *State {
 	merged, _, orphans := merge(s.en, s.ru, s.uk)
 	st := &State{Orphans: orphans}
 	mods := map[string]*ModuleSummary{}
 	for i, e := range s.en {
-		uk := merged[i]
-		k := KeyState{
-			Key: e.Key, Module: ModuleOf(e.Key), EN: e.Parts, UK: uk.Parts, List: e.List,
-			Confirmed: s.prog.Confirmed(e.Key, e.Parts),
-			Blocking:  BlockingIssues(e.Parts, uk.Parts),
-			Hints:     s.gloss.Hints(e.Parts),
-			Tokens:    tokensOf(e.Parts),
-		}
-		k.Reopened = !k.Confirmed && s.prog.Has(e.Key)
-		k.Warnings = append(k.Warnings, Warnings(e.Parts, uk.Parts)...)
-		k.Warnings = append(k.Warnings, s.gloss.Check(e.Parts, uk.Parts)...)
-		k.Warnings = append(k.Warnings, s.gloss.FlagRussian(uk.Parts)...)
+		k := keyStateFor(s, e, merged[i])
 		st.Keys = append(st.Keys, k)
 		m := mods[k.Module]
 		if m == nil {
@@ -293,6 +299,23 @@ func (p *Project) Sync() (int, error) {
 		return 0, nil
 	}
 	return added, WriteLocale(p.UkPath, out)
+}
+
+// Preview judges candidate text for a key exactly as Save would, but writes nothing,
+// so the editor can show problems while the owner types. The returned state carries
+// the candidate text and the key's stored confirmation, not a new one.
+func (p *Project) Preview(key string, uk []string) (KeyState, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s, err := p.read()
+	if err != nil {
+		return KeyState{}, err
+	}
+	pos := slices.IndexFunc(s.en, func(e Entry) bool { return e.Key == key })
+	if pos < 0 {
+		return KeyState{}, fmt.Errorf("%w %q", ErrUnknownKey, key)
+	}
+	return keyStateFor(s, s.en[pos], Entry{Key: key, Parts: slices.Clone(uk), List: s.en[pos].List}), nil
 }
 
 // Save stores a translation without confirming it. Changed text loses any
