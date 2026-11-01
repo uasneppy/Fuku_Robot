@@ -20,7 +20,7 @@ func skipIfNoDb(t *testing.T) {
 func TestLanguageCRUD(t *testing.T) {
 	skipIfNoDb(t)
 
-	t.Run("group defaults to en", func(t *testing.T) {
+	t.Run("group defaults to uk", func(t *testing.T) {
 		chatID := time.Now().UnixNano()
 
 		t.Cleanup(func() {
@@ -29,12 +29,12 @@ func TestLanguageCRUD(t *testing.T) {
 		})
 
 		lang := getGroupLanguage(chatID)
-		if lang != "en" {
+		if lang != "uk" {
 			t.Fatalf("expected default language 'en', got %q", lang)
 		}
 	})
 
-	t.Run("user defaults to en", func(t *testing.T) {
+	t.Run("user defaults to uk", func(t *testing.T) {
 		userID := time.Now().UnixNano()
 
 		t.Cleanup(func() {
@@ -43,7 +43,7 @@ func TestLanguageCRUD(t *testing.T) {
 		})
 
 		lang := getUserLanguage(userID)
-		if lang != "en" {
+		if lang != "uk" {
 			t.Fatalf("expected default language 'en', got %q", lang)
 		}
 	})
@@ -181,11 +181,11 @@ func TestGetLanguageFromPrivateAndGroupContexts(t *testing.T) {
 		cache.DeleteCache(cache.CacheKey("chat_lang", groupID))
 	})
 
-	if got := GetLanguage(nil); got != "en" {
-		t.Fatalf("GetLanguage(nil) = %q, want en", got)
+	if got := GetLanguage(nil); got != "uk" {
+		t.Fatalf("GetLanguage(nil) = %q, want uk", got)
 	}
-	if got := GetLanguage(&ext.Context{}); got != "en" {
-		t.Fatalf("GetLanguage(empty context) = %q, want en", got)
+	if got := GetLanguage(&ext.Context{}); got != "uk" {
+		t.Fatalf("GetLanguage(empty context) = %q, want uk", got)
 	}
 
 	if err := ChangeUserLanguage(userID, "es"); err != nil {
@@ -212,8 +212,8 @@ func TestGetLanguageFromPrivateAndGroupContexts(t *testing.T) {
 		}},
 		nil,
 	)
-	if got := GetLanguage(noSenderCtx); got != "en" {
-		t.Fatalf("GetLanguage(private without sender) = %q, want en", got)
+	if got := GetLanguage(noSenderCtx); got != "uk" {
+		t.Fatalf("GetLanguage(private without sender) = %q, want uk", got)
 	}
 
 	if err := ChangeGroupLanguage(groupID, "fr"); err != nil {

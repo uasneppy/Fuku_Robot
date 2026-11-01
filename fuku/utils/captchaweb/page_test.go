@@ -140,7 +140,7 @@ func TestPageHeadersAndNonce(t *testing.T) {
 
 func TestPageEmbedsSafeStrings(t *testing.T) {
 	tables := testPageTables()
-	tables["en"]["captcha_web_page_title"] = "</script><script>alert(1)</script>  & more"
+	tables["uk"]["captcha_web_page_title"] = "</script><script>alert(1)</script>  & more"
 	siteKey := `0x"quoted" key`
 	p := newTestPage(t, siteKey, tables)
 
@@ -276,9 +276,9 @@ func TestNewPageRefuses(t *testing.T) {
 	}
 	for _, missing := range PageKeys {
 		tables := testPageTables()
-		delete(tables["en"], missing)
+		delete(tables["uk"], missing)
 		if _, err := NewPage(PageOptions{SiteKey: "k", Strings: tables}); err == nil {
-			t.Errorf("an en table without %s was accepted", missing)
+			t.Errorf("a uk table without %s was accepted", missing)
 		}
 	}
 }
@@ -297,7 +297,7 @@ func TestPageNoScriptFallback(t *testing.T) {
 	if caption == "" || !strings.Contains(caption, "JavaScript") {
 		t.Errorf("noscript caption = %q, want a hard-coded English line about JavaScript", caption)
 	}
-	if strings.Contains(caption, "en:captcha_web_") {
+	if strings.Contains(caption, "uk:captcha_web_") {
 		t.Errorf("noscript caption %q was read from the string table", caption)
 	}
 

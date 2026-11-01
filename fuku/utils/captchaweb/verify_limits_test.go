@@ -330,11 +330,11 @@ func TestVerifyRouteLimitsAndHeaders(t *testing.T) {
 
 		t.Run("the three routes behave as a real server serves them", func(t *testing.T) {
 			o := newOutcomeHandler(t)
-			en := map[string]string{}
+			uk := map[string]string{}
 			for _, key := range PageKeys {
-				en[key] = key
+				uk[key] = key
 			}
-			page, err := NewPage(PageOptions{SiteKey: "site-key", Strings: map[string]map[string]string{"en": en}})
+			page, err := NewPage(PageOptions{SiteKey: "site-key", Strings: map[string]map[string]string{"uk": uk}})
 			if err != nil {
 				t.Fatalf("NewPage() error = %v", err)
 			}

@@ -177,7 +177,7 @@ func TestTranslateHandlesReplyAndHTTPBranches(t *testing.T) {
 	}{
 		{name: "missing direct text", text: "/tr es", wantCalls: 1},
 		{name: "reply without text", text: "/tr es", wantCalls: 1},
-		{name: "reply text defaults target", text: "/tr", replyText: "hello", body: `[["hola","en"]]`, wantCalls: 1, wantTarget: "en"},
+		{name: "reply text defaults target", text: "/tr", replyText: "hello", body: `[["hola","en"]]`, wantCalls: 1, wantTarget: "uk"},
 		{name: "reply caption target", text: "/tr hi", replyCap: "hello", body: `[["namaste","en"]]`, wantCalls: 1, wantTarget: "hi"},
 		{name: "parse error", text: "/tr es hello", body: `[[]]`, wantCalls: 1, wantTarget: "es"},
 	}

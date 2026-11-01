@@ -132,8 +132,8 @@ func TestLoadConfig(t *testing.T) {
 		if len(cfg.AllowedUpdates) == 0 {
 			t.Errorf("AllowedUpdates: expected non-empty slice")
 		}
-		if len(cfg.ValidLangCodes) != 1 || cfg.ValidLangCodes[0] != "en" {
-			t.Errorf("ValidLangCodes: got %v, want [en]", cfg.ValidLangCodes)
+		if len(cfg.ValidLangCodes) != 1 || cfg.ValidLangCodes[0] != "uk" {
+			t.Errorf("ValidLangCodes: got %v, want [uk]", cfg.ValidLangCodes)
 		}
 	})
 
