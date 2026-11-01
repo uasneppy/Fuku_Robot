@@ -40,7 +40,7 @@ func initHelpButtonsFrom(registry *moduleStruct) gotgbot.InlineKeyboardMarkup {
 		})
 	}
 	zb := slices.Collect(slices.Chunk(kb, 3))
-	tr := i18n.MustNewTranslator("en")
+	tr := i18n.MustNewTranslator("uk")
 	backText, _ := tr.GetString("helpers_back_button")
 	zb = append(zb, []gotgbot.InlineKeyboardButton{{
 		Text:         backText,

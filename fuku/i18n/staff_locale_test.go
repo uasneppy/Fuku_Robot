@@ -15,7 +15,7 @@ import (
 
 const staffKeyPrefix = "staff_"
 
-var staffLocales = []string{"en", "es", "fr", "hi", "id", "pt", "ru"}
+var staffLocales = []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"}
 
 // staffPlaceholderPattern matches {name} tokens exactly and case-sensitively.
 var staffPlaceholderPattern = regexp.MustCompile(`\{(\w+)\}`)

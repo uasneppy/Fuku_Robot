@@ -56,14 +56,14 @@ test('language', () => {
   assert.equal(page.resolveLanguage('pt-BR'), 'pt');
   assert.equal(page.resolveLanguage('in'), 'id');
   assert.equal(page.resolveLanguage('ID'), 'id');
-  assert.equal(page.resolveLanguage('de'), 'en');
+  assert.equal(page.resolveLanguage('de'), 'uk');
   assert.equal(page.resolveLanguage('hi_IN'), 'hi');
   assert.equal(page.resolveLanguage(undefined, 'fr-CA'), 'fr');
   assert.equal(page.resolveLanguage('', 'ru'), 'ru');
-  assert.equal(page.resolveLanguage(undefined), 'en');
-  assert.equal(page.resolveLanguage(undefined, undefined), 'en');
-  assert.equal(page.resolveLanguage(42, null), 'en');
-  for (const code of ['en', 'es', 'fr', 'hi', 'id', 'pt', 'ru']) {
+  assert.equal(page.resolveLanguage(undefined), 'uk');
+  assert.equal(page.resolveLanguage(undefined, undefined), 'uk');
+  assert.equal(page.resolveLanguage(42, null), 'uk');
+  for (const code of ['uk', 'en', 'es', 'fr', 'hi', 'id', 'pt', 'ru']) {
     assert.equal(page.resolveLanguage(code), code);
   }
 });
@@ -93,7 +93,7 @@ test('cData', async () => {
 });
 
 test('turnstile language', () => {
-  for (const code of ['en', 'es', 'fr', 'hi', 'id', 'pt', 'ru']) {
+  for (const code of ['uk', 'en', 'es', 'fr', 'hi', 'id', 'pt', 'ru']) {
     assert.equal(page.turnstileLanguage(code), code);
   }
   assert.equal(page.turnstileLanguage('de'), 'auto');

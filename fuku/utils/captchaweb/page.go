@@ -49,14 +49,14 @@ var PageKeys = []string{
 
 // PageLanguages are the languages the page carries a string table for. The page picks one
 // from the member's Telegram language, for display only.
-var PageLanguages = []string{"en", "es", "fr", "hi", "id", "pt", "ru"}
+var PageLanguages = []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"}
 
 // PageOptions configures NewPage.
 type PageOptions struct {
 	// SiteKey is the public Turnstile site key the widget is rendered with.
 	SiteKey string
-	// Strings maps a language to its page strings, keyed by PageKeys. The en table must
-	// hold every key; another language may lack keys and then falls back to en in the page.
+	// Strings maps a language to its page strings, keyed by PageKeys. The uk table must
+	// hold every key; another language may lack keys and then falls back to uk in the page.
 	Strings map[string]map[string]string
 }
 
@@ -78,18 +78,18 @@ type pageData struct {
 }
 
 // NewPage parses the embedded page once and marshals the string tables once. It refuses an
-// empty site key and an en table that is missing any of PageKeys (or holds an empty value).
+// empty site key and a uk table that is missing any of PageKeys (or holds an empty value).
 func NewPage(opts PageOptions) (*Page, error) {
 	if opts.SiteKey == "" {
 		return nil, errors.New("captchaweb: page needs a Turnstile site key")
 	}
-	en := opts.Strings["en"]
-	if en == nil {
-		return nil, errors.New("captchaweb: page needs an en string table")
+	uk := opts.Strings["uk"]
+	if uk == nil {
+		return nil, errors.New("captchaweb: page needs a uk string table")
 	}
 	for _, key := range PageKeys {
-		if en[key] == "" {
-			return nil, fmt.Errorf("captchaweb: en page table lacks %s", key)
+		if uk[key] == "" {
+			return nil, fmt.Errorf("captchaweb: uk page table lacks %s", key)
 		}
 	}
 

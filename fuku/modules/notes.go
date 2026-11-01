@@ -935,7 +935,7 @@ func LoadNotes(dispatcher *ext.Dispatcher) {
 	SetModuleHelp(notesModule.moduleName, [][]gotgbot.InlineKeyboardButton{
 		{
 			{
-				Text:         trS(i18n.MustNewTranslator("en"), "button_formatting"),
+				Text:         trS(i18n.MustNewTranslator("uk"), "button_formatting"),
 				CallbackData: encodeCallbackData("helpq", map[string]string{"m": "Formatting"}),
 			},
 		},

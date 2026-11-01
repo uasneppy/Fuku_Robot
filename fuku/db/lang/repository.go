@@ -30,23 +30,23 @@ func checkUserInfo(userId int64) (userc *models.User) {
 
 func GetLanguage(ctx *ext.Context) string {
 	if ctx == nil {
-		return "en"
+		return "uk"
 	}
 
 	chat := ctx.EffectiveChat
 	if chat == nil {
 		log.Warn("[GetLanguage] Unable to determine chat context, using default language")
-		return "en"
+		return "uk"
 	}
 
 	if chat.Type == "private" {
 		if ctx.EffectiveSender == nil {
 			log.Debug("[GetLanguage] No sender in private chat context, using default language")
-			return "en"
+			return "uk"
 		}
 		user := ctx.EffectiveSender.User
 		if user == nil {
-			return "en"
+			return "uk"
 		}
 		return getUserLanguageContext(tracing.UpdateContext(ctx), user.Id)
 	}
@@ -77,18 +77,18 @@ func getCachedLanguage(ctx context.Context, key string, model any, idColumn stri
 		var result struct{ Language string }
 		err := db.DB.WithContext(ctx).Model(model).Select("language").Where(map[string]any{idColumn: id}).Take(&result).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "en", nil
+			return "uk", nil
 		}
 		if err != nil {
 			return "", err
 		}
 		if result.Language == "" {
-			return "en", nil
+			return "uk", nil
 		}
 		return result.Language, nil
 	})
 	if err != nil {
-		return "en"
+		return "uk"
 	}
 	return language
 }

@@ -49,7 +49,7 @@ type ManagerConfig struct {
 func DefaultManagerConfig() ManagerConfig {
 	return ManagerConfig{
 		Loader: LoaderConfig{
-			DefaultLanguage: "en",
+			DefaultLanguage: "uk",
 			StrictMode:      false,
 		},
 	}

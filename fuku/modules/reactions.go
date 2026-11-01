@@ -51,11 +51,11 @@ func LoadReactions(dispatcher *ext.Dispatcher) {
 	DefaultHelpRegistry().helpableKb["Reactions"] = [][]gotgbot.InlineKeyboardButton{
 		{
 			{
-				Text:         "Add Reaction",
+				Text:         "Додати реакцію",
 				CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "add"}),
 			},
 			{
-				Text:         "Remove Reaction",
+				Text:         "Видалити реакцію",
 				CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "remove"}),
 			},
 		},

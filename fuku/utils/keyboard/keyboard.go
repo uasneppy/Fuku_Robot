@@ -56,7 +56,7 @@ func MakeLanguageKeyboard() [][]gotgbot.InlineKeyboardButton {
 }
 
 func InitButtons(b *gotgbot.Bot, chatId, userId int64) gotgbot.InlineKeyboardMarkup {
-	tr := i18n.MustNewTranslator("en")
+	tr := i18n.MustNewTranslator("uk")
 	adminText, _ := tr.GetString("helpers_admin_commands")
 	if adminText == "" {
 		adminText = "Admin commands"

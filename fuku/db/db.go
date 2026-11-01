@@ -42,8 +42,8 @@ const (
 )
 
 const (
-	DefaultWelcome = "Hey {first}, how are you?"
-	DefaultGoodbye = "Sad to see you leaving {first}"
+	DefaultWelcome = "Привіт, {first}, як справи?"
+	DefaultGoodbye = "Шкода, що ти йдеш, {first}"
 )
 
 func getSpanAttributes(model any) []attribute.KeyValue {

@@ -486,7 +486,7 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 
 	config.AppConfig.WorkingMode = mode
 
-	tr := i18n.MustNewTranslator("en")
+	tr := i18n.MustNewTranslator("uk")
 	startDesc, _ := tr.GetString("main_bot_command_start")
 	helpDesc, _ := tr.GetString("main_bot_command_help")
 	_, err := b.SetMyCommands(
@@ -496,7 +496,6 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 		},
 		&gotgbot.SetMyCommandsOpts{
 			Scope:        gotgbot.BotCommandScopeAllPrivateChats{},
-			LanguageCode: "en",
 		},
 	)
 	if err != nil {

@@ -303,7 +303,7 @@ func TestStaffPanelRenderFitsInEveryLocale(t *testing.T) {
 		models.StaffHealthBotMissing, models.StaffHealthBotNotAdmin, models.StaffHealthBotCannotRestrict, models.StaffHealthOK,
 	}
 
-	for _, lang := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+	for _, lang := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		raw, err := os.ReadFile("../../locales/" + lang + ".yml")
 		if err != nil {
 			t.Fatalf("read locale %s: %v", lang, err)

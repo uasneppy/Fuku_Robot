@@ -396,7 +396,7 @@ func (moduleStruct) donate(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	_, err := b.SendMessage(chat.Id,
 		func() string {
-			tr := i18n.MustNewTranslator("en")
+			tr := i18n.MustNewTranslator("uk")
 			text, _ := tr.GetString("help_donatetext")
 			return text
 		}(),
@@ -458,7 +458,7 @@ func (moduleStruct) botConfig(b *gotgbot.Bot, ctx *ext.Context) error {
 		text      string
 	)
 
-	tr := i18n.MustNewTranslator("en")
+	tr := i18n.MustNewTranslator("uk")
 
 	switch response {
 	case "step1":

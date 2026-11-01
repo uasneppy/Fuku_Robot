@@ -21,7 +21,7 @@ var languagesModule = moduleStruct{moduleName: "Languages"}
 
 func (moduleStruct) genFullLanguageKb() [][]gotgbot.InlineKeyboardButton {
 	keyboard := keyboard.MakeLanguageKeyboard()
-	tr := i18n.MustNewTranslator("en")
+	tr := i18n.MustNewTranslator("uk")
 	helpTranslateText, _ := tr.GetString("language_help_translate")
 	keyboard = append(
 		keyboard,
@@ -104,7 +104,7 @@ func (moduleStruct) langBtnHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 		})
 		return ext.EndGroups
 	}
-	if !slices.Contains([]string{"en", "es", "fr", "hi", "ru", "pt", "id"}, language) {
+	if !slices.Contains([]string{"uk", "en", "es", "fr", "hi", "ru", "pt", "id"}, language) {
 		log.Warnf("[Language] Unsupported callback language: %s", language)
 		currentTr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		errText, _ := currentTr.GetString("language_invalid_selection")

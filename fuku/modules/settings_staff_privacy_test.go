@@ -60,7 +60,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 			{ID: 9, ChatID: settingsStaffPrivacyChatID - 2, OwnerUserID: 55, Title: settingsStaffPrivacyTitle + " 3"},
 		}
 
-		for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+		for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 			t.Run(code, func(t *testing.T) {
 				tr := i18n.MustNewTranslator(code)
 				groupView := settingsView{

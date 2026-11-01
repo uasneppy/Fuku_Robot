@@ -147,10 +147,10 @@ func WarnUser(userId, chatId int64, reason string) (int, []string, error) {
 			}
 			warnrc.Reasons = append(warnrc.Reasons, reason)
 		} else {
-			tr := i18n.MustNewTranslator("en")
+			tr := i18n.MustNewTranslator("uk")
 			noReason, _ := tr.GetString("db_warn_no_reason")
 			if noReason == "" {
-				noReason = "No Reason"
+				noReason = "Без причини"
 			}
 			warnrc.Reasons = append(warnrc.Reasons, noReason)
 		}

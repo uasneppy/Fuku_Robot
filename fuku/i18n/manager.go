@@ -15,7 +15,7 @@ func GetManager() *LocaleManager {
 	managerOnce.Do(func() {
 		managerInstance = &LocaleManager{
 			localeMaps:  make(map[string]map[string]any),
-			defaultLang: "en",
+			defaultLang: "uk",
 		}
 	})
 	return managerInstance

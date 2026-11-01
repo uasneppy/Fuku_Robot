@@ -492,7 +492,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg.ValidLangCodes = typeConvertor{str: os.Getenv("ENABLED_LOCALES")}.StringArray()
 	if (len(cfg.ValidLangCodes) == 1 && cfg.ValidLangCodes[0] == "") || (len(cfg.ValidLangCodes) == 0) {
-		cfg.ValidLangCodes = []string{"en"}
+		cfg.ValidLangCodes = []string{"uk"}
 	}
 
 	return cfg, nil

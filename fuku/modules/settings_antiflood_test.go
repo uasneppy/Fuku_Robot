@@ -819,7 +819,7 @@ func TestSettingsAntifloodCallbackBytes(t *testing.T) {
 
 func TestSettingsAntifloodPageFitsEveryLocale(t *testing.T) {
 	withRealLocales(t)
-	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		t.Run(code, func(t *testing.T) {
 			tr := i18n.MustNewTranslator(code)
 			view := settingsView{

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -233,7 +233,7 @@ h1 {
 (function () {
   'use strict';
 
-  var LANGS = ['en', 'es', 'fr', 'hi', 'id', 'pt', 'ru'];
+  var LANGS = ['uk', 'en', 'es', 'fr', 'hi', 'id', 'pt', 'ru'];
   var CHALLENGE_RE = /^[A-Za-z0-9_-]{1,64}$/;
   var START_PARAM_RE = /(?:^|[?&#])tgWebAppStartParam=([^&#]*)/;
   var TELEGRAM_WAIT_MS = 8000;
@@ -270,17 +270,17 @@ h1 {
   var booted = false;
 
   function normalizeLang(code) {
-    if (typeof code !== 'string') { return 'en'; }
+    if (typeof code !== 'string') { return 'uk'; }
     var base = code.toLowerCase().split('-')[0].split('_')[0];
     if (base === 'in') { base = 'id'; }
-    return LANGS.indexOf(base) >= 0 ? base : 'en';
+    return LANGS.indexOf(base) >= 0 ? base : 'uk';
   }
 
   // Display only: the language never decides anything the server trusts.
   function resolveLanguage(telegramCode, navigatorCode) {
     if (typeof telegramCode === 'string' && telegramCode !== '') { return normalizeLang(telegramCode); }
     if (typeof navigatorCode === 'string' && navigatorCode !== '') { return normalizeLang(navigatorCode); }
-    return 'en';
+    return 'uk';
   }
 
   function turnstileLanguage(code) {
@@ -513,7 +513,7 @@ h1 {
     function t(key) {
       var own = tables[lang];
       var v = own ? own[key] : undefined;
-      if (typeof v !== 'string' || v === '') { v = tables.en ? tables.en[key] : undefined; }
+      if (typeof v !== 'string' || v === '') { v = tables.uk ? tables.uk[key] : undefined; }
       return typeof v === 'string' ? v : '';
     }
 

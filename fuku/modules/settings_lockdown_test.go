@@ -777,7 +777,7 @@ func TestSettingsLockdownPageFitsEveryLocale(t *testing.T) {
 		Triggers: &models.ChatRaidDetection{JoinEnabled: true, JoinThreshold: 500, FloodEnabled: false, FloodThreshold: 500, AIEnabled: true, AIThreshold: 500},
 	}
 
-	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		t.Run(code, func(t *testing.T) {
 			tr := i18n.MustNewTranslator(code)
 			notice := settingsNoticeWarn(autolockdownApplyText(tr, autoLockdownApplyResult{Outcome: autoApplyRange}))

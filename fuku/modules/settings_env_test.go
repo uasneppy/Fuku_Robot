@@ -70,7 +70,7 @@ func newSettingsEnvWith(t *testing.T, opts settingsEnvOptions) *settingsEnv {
 func withRealLocales(t *testing.T) {
 	t.Helper()
 	files := make(map[string]string)
-	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		raw, err := os.ReadFile("../../locales/" + code + ".yml")
 		if err != nil {
 			t.Fatalf("read %s.yml: %v", code, err)

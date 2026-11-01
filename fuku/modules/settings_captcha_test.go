@@ -749,7 +749,7 @@ func TestSettingsCaptchaPageFitsEveryLocale(t *testing.T) {
 	withRealLocales(t)
 	// 64 runes of characters that grow when escaped or take two UTF-16 units.
 	title := strings.Repeat("&<ж😀", 16)
-	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		t.Run(code, func(t *testing.T) {
 			tr := i18n.MustNewTranslator(code)
 			for _, view := range []settingsView{

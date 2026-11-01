@@ -684,7 +684,7 @@ func LoadFilters(dispatcher *ext.Dispatcher) {
 		{
 			{
 				Text: func() string {
-					tr := i18n.MustNewTranslator("en")
+					tr := i18n.MustNewTranslator("uk")
 					t, _ := tr.GetString("common_formatting_button")
 					return t
 				}(),

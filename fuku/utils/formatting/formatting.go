@@ -216,7 +216,7 @@ func replaceFormatPlaceholders(s string, values [len(formatPlaceholderTokens)]st
 }
 
 func FormattingReplacer(b *gotgbot.Bot, chat *gotgbot.Chat, user *gotgbot.User, oldMsg string, buttons []db.Button) (res string, btns []db.Button) {
-	const language = "en"
+	const language = "uk"
 
 	if strings.IndexByte(oldMsg, '{') < 0 {
 		// No '{' means no placeholder can match: the body is returned untouched.

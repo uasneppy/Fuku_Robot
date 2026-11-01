@@ -229,7 +229,7 @@ func TestCaptchaModeTurnstileRefusals(t *testing.T) {
 // TestCaptchaModeListsTurnstileInEveryLanguage holds the four texts that list the captcha
 // modes to the truth in all 7 languages, and checks the two replies that carry them.
 func TestCaptchaModeListsTurnstileInEveryLanguage(t *testing.T) {
-	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		raw, err := os.ReadFile("../../locales/" + code + ".yml")
 		if err != nil {
 			t.Fatalf("read %s.yml: %v", code, err)

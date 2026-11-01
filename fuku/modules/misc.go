@@ -385,7 +385,7 @@ func (moduleStruct) translate(b *gotgbot.Bot, ctx *ext.Context) error {
 			return ext.EndGroups
 		}
 		if len(args) == 0 {
-			toLang = "en"
+			toLang = "uk"
 		} else {
 			toLang = args[0]
 		}

@@ -634,7 +634,7 @@ func TestSettingsLockdownLiftCardFitsEveryLocale(t *testing.T) {
 	withRealLocales(t)
 	title := string([]rune(strings.Repeat("&<ü✓", 32)))
 	row := &models.ChatLockdown{ChatID: -1001234567890, ChatTitle: title, State: models.LockdownStateActive}
-	for _, code := range []string{"en", "es", "fr", "hi", "id", "pt", "ru"} {
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		t.Run(code, func(t *testing.T) {
 			view := settingsView{
 				Tr: i18n.MustNewTranslator(code), OwnerKey: "u", OwnerValue: "9999999999",
