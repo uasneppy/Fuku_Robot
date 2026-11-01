@@ -159,7 +159,9 @@ func TestForeignOriginIsRefused(t *testing.T) {
 	p := mustInit(t)
 	h := newServer(p)
 	body := saveBody("admin_ok", "Готово <b>%s</b>")
-	for _, origin := range []string{"https://evil.example", "null", "http://127.0.0.1.evil.example"} {
+	// Same-origin means the page's own host and port: another local web app on
+	// another port is as foreign as a website.
+	for _, origin := range []string{"https://evil.example", "null", "http://127.0.0.1.evil.example", "http://localhost:3000", "http://127.0.0.1:9999", "http://localhost:8080", "https://127.0.0.1:8080"} {
 		if rec := do(t, h, "POST", "/api/confirm", body, map[string]string{"Origin": origin}); rec.Code != 403 {
 			t.Errorf("Origin %q: status %d, want 403", origin, rec.Code)
 		}
@@ -167,7 +169,7 @@ func TestForeignOriginIsRefused(t *testing.T) {
 	if keyOf(t, mustLoad(t, p), "admin_ok").Confirmed {
 		t.Fatal("a refused request confirmed a key")
 	}
-	for _, origin := range []string{"http://127.0.0.1:8080", "http://localhost:3000", ""} {
+	for _, origin := range []string{"http://127.0.0.1:8080", ""} {
 		if rec := do(t, h, "POST", "/api/save", body, map[string]string{"Origin": origin}); rec.Code != 200 {
 			t.Errorf("Origin %q should be allowed, got %d: %s", origin, rec.Code, rec.Body)
 		}

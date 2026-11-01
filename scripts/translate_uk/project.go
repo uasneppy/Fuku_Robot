@@ -396,6 +396,7 @@ func (p *Project) Check() (string, bool) {
 	var unconfirmed, blocked []string
 	var blockedMsgs []string
 	apostrophes := map[string]int{}
+	apostropheKeys := map[string][]string{}
 	warned, confirmed := 0, 0
 	for _, k := range st.Keys {
 		if k.Confirmed {
@@ -403,6 +404,9 @@ func (p *Project) Check() (string, bool) {
 			for _, part := range k.UK {
 				for _, m := range apostropheRe.FindAllStringSubmatch(part, -1) {
 					apostrophes[m[1]]++
+					if keys := apostropheKeys[m[1]]; len(keys) == 0 || keys[len(keys)-1] != k.Key {
+						apostropheKeys[m[1]] = append(keys, k.Key)
+					}
 				}
 			}
 		} else {
@@ -443,12 +447,36 @@ func (p *Project) Check() (string, bool) {
 	}
 	if len(apostrophes) > 1 {
 		ok = false
-		var parts []string
-		for ch, n := range apostrophes {
-			parts = append(parts, fmt.Sprintf("%s x%d", ch, n))
+		// The most used character wins; the owner has to fix the keys that use any
+		// other one, so those are the ones named (counts alone would send them
+		// grepping through a thousand keys).
+		chars := make([]string, 0, len(apostrophes))
+		for ch := range apostrophes {
+			chars = append(chars, ch)
 		}
-		sort.Strings(parts)
-		fmt.Fprintf(&b, "\nMixed apostrophe characters in confirmed texts (%s): pick one and use it everywhere\n", strings.Join(parts, ", "))
+		sort.Slice(chars, func(i, j int) bool {
+			if apostrophes[chars[i]] != apostrophes[chars[j]] {
+				return apostrophes[chars[i]] > apostrophes[chars[j]]
+			}
+			return chars[i] < chars[j]
+		})
+		var counts []string
+		for _, ch := range chars {
+			counts = append(counts, fmt.Sprintf("%s x%d", ch, apostrophes[ch]))
+		}
+		var fix []string
+		for _, ch := range chars[1:] {
+			fix = append(fix, apostropheKeys[ch]...)
+		}
+		shown := fix
+		if len(shown) > 25 {
+			shown = shown[:25]
+		}
+		fmt.Fprintf(&b, "\nMixed apostrophe characters in confirmed texts (%s). Change these to %s: %s", strings.Join(counts, ", "), chars[0], strings.Join(shown, ", "))
+		if len(fix) > len(shown) {
+			fmt.Fprintf(&b, ", ... (%d more)", len(fix)-len(shown))
+		}
+		b.WriteString("\n")
 	}
 	if warned > 0 {
 		fmt.Fprintf(&b, "\n%d keys have warnings (these never block).\n", warned)

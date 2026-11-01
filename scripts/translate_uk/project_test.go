@@ -420,12 +420,23 @@ func TestCheckFailsOnMixedApostrophes(t *testing.T) {
 	if report, ok := p.Check(); !ok {
 		t.Fatalf("a single apostrophe style is fine:\n%s", report)
 	}
+	if _, err := p.Confirm("only_in_english", []string{"м'яч"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := p.Confirm("pseudo", []string{"Використовуйте <code>/ban <userhandle></code>, 100% від {first} м’ят"}); err != nil {
 		t.Fatal(err)
 	}
 	report, ok := p.Check()
 	if ok || !strings.Contains(report, "apostrophe") {
 		t.Fatalf("two apostrophe characters must fail Check:\n%s", report)
+	}
+	// At the end of 1,400 keys "’ x5" is useless: the owner must be told which keys.
+	section := report[strings.Index(report, "apostrophe"):]
+	if !strings.Contains(section, "pseudo") {
+		t.Fatalf("the report must name the key that uses the rarer character:\n%s", report)
+	}
+	if strings.Contains(section, "plain_yes") || strings.Contains(section, "only_in_english") {
+		t.Fatalf("keys that use the common character must not be listed as the ones to fix:\n%s", report)
 	}
 }
 

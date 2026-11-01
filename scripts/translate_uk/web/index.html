@@ -129,11 +129,20 @@ function el(tag, props, ...kids) {
   return node;
 }
 
+const UNREACHABLE = 'The editor is not reachable. Is "go run ./scripts/translate_uk" still running? Your text is still on this page.';
+
+// api never throws: a stopped or restarted server must not leave the page waiting
+// on a request that failed, because the typed drafts live only in this tab.
 async function api(path, body) {
   const opts = body === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   };
-  const res = await fetch(path, opts);
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch (_) {
+    return { status: 0, data: { error: UNREACHABLE } };
+  }
   let data = {};
   try { data = await res.json(); } catch (_) { /* leave empty */ }
   return { status: res.status, data };
@@ -348,7 +357,9 @@ async function runCheck() {
   if (!k) return;
   const seq = ++checkSeq;
   const { status: st, data } = await api('/api/check', { key: k.key, uk: currentTexts() });
-  if (seq !== checkSeq || st !== 200) return;   // a newer keystroke owns the screen
+  if (seq !== checkSeq) return;   // a newer keystroke owns the screen
+  if (st === 0) { toast(data.error); return; }
+  if (st !== 200) return;
   lastCheck = data;
   paintCheck(data);
 }
@@ -360,8 +371,15 @@ async function act(kind) {
   if (btn && btn.disabled) return;
   busy = true;
   paintCheck(lastCheck || k);
-  const { status: st, data } = await api(kind === 'confirm' ? '/api/confirm' : '/api/save', { key: k.key, uk: currentTexts() });
-  busy = false;
+  let st, data;
+  try {
+    ({ status: st, data } = await api(kind === 'confirm' ? '/api/confirm' : '/api/save', { key: k.key, uk: currentTexts() }));
+  } finally {
+    // Whatever happened, the buttons must come back: a stuck "busy" would make
+    // reloading the page, and so losing every unsaved draft, the only way out.
+    busy = false;
+    paintCheck(lastCheck || k);
+  }
   if (st === 422) {
     lastCheck = { blocking: data.issues, warnings: [] };
     paintCheck(lastCheck);
@@ -369,7 +387,6 @@ async function act(kind) {
   }
   if (st !== 200) {
     toast(data.error || `Save failed (HTTP ${st})`);
-    paintCheck(lastCheck || k);
     return;
   }
   app.byKey.set(data.key, data);

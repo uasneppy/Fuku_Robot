@@ -52,9 +52,12 @@ func hostAllowed(hostport string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
-func originAllowed(origin string) bool {
+// originAllowed is a same-origin check: the Origin of a write must be the page's own
+// host and port. Allowing any loopback origin would let a dev server on another
+// local port post translations.
+func originAllowed(origin, host string) bool {
 	u, err := url.Parse(origin)
-	return err == nil && u.Scheme == "http" && hostAllowed(u.Host)
+	return err == nil && u.Scheme == "http" && hostAllowed(u.Host) && strings.EqualFold(u.Host, host)
 }
 
 func (s *server) guard(next http.Handler) http.Handler {
@@ -121,7 +124,7 @@ func (s *server) post(action func(key string, uk []string) (KeyState, error)) ht
 			writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "send application/json"})
 			return
 		}
-		if origin := r.Header.Get("Origin"); origin != "" && !originAllowed(origin) {
+		if origin := r.Header.Get("Origin"); origin != "" && !originAllowed(origin, r.Host) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-site request refused"})
 			return
 		}

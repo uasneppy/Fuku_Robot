@@ -73,6 +73,12 @@ func TestTagsMustMatch(t *testing.T) {
 		{"pseudo-tag dropped", "Use <userhandle>", "Використовуйте користувача", "tags"},
 		{"pseudo-tag added", "Use it", "Використовуйте <ще>", "tags"},
 		{"telegram tag misspelled", "<code>x</code>", "<cod>х</code>", "tags"},
+		// Telegram's other spellings are real tags too: renaming one would make
+		// Telegram reject the whole message.
+		{"strike is a telegram tag", "<strike>x</strike>", "<закреслено>х</закреслено>", "tags"},
+		{"del is a telegram tag", "<del>x</del>", "<видалено>х</видалено>", "tags"},
+		{"ins is a telegram tag", "<ins>x</ins>", "<вставлено>х</вставлено>", "tags"},
+		{"tg-emoji is a telegram tag", `<tg-emoji emoji-id="1">x</tg-emoji>`, `<емодзі>х</емодзі>`, "tags"},
 		{"comparison signs are not tags", "if a < b and c > d", "якщо a < b і c > d", ""},
 	})
 }
@@ -82,6 +88,7 @@ func TestNestingChecked(t *testing.T) {
 		{"crossed tags refused", "<b><i>x</i></b>", "<b><i>х</b></i>", "nesting"},
 		{"well nested accepted", "<b><i>x</i></b>", "<i><b>х</b></i>", ""},
 		// A quirk already in the English text must not block the translation.
+		{"crossed strike is refused", "<strike><b>x</b></strike>", "<strike><b>х</strike></b>", "nesting"},
 		{"english already crossed is skipped", "<b>x<i>y</b></i>", "<b>х<i>у</b></i>", ""},
 	})
 }

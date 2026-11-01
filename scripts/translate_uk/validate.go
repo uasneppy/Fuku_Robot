@@ -36,6 +36,7 @@ var (
 var telegramTags = map[string]bool{
 	"b": true, "i": true, "u": true, "s": true, "em": true, "strong": true,
 	"code": true, "pre": true, "a": true, "blockquote": true, "tg-spoiler": true, "span": true,
+	"strike": true, "del": true, "ins": true, "tg-emoji": true,
 }
 
 // PlaceholdersOf returns the sorted multiset of printf verbs and {name} tokens.
