@@ -77,6 +77,9 @@ func (p *Progress) Confirmed(key string, en []string) bool {
 	return ok && h == SourceHash(en)
 }
 
+// Has is true when the key has a stored confirmation, whether or not it still matches.
+func (p *Progress) Has(key string) bool { _, ok := p.hashes[key]; return ok }
+
 func (p *Progress) Confirm(key string, en []string) { p.hashes[key] = SourceHash(en) }
 
 func (p *Progress) Unconfirm(key string) { delete(p.hashes, key) }
