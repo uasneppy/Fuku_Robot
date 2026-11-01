@@ -40,16 +40,16 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_undo.go
-    - alita/modules/staff_undo_test.go
+    - fuku/modules/staff_undo.go
+    - fuku/modules/staff_undo_test.go
   modified:
-    - alita/db/staff/actions.go
-    - alita/db/staff/actions_test.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff_action_card.go
-    - alita/modules/staff_action_test.go
-    - alita/modules/staff.go
+    - fuku/db/staff/actions.go
+    - fuku/db/staff/actions_test.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff_action_card.go
+    - fuku/modules/staff_action_test.go
+    - fuku/modules/staff.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -78,10 +78,10 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoTracer"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoTracer"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoButtonRules"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoButtonRules"
         status: pass
     human_judgment: false
   - id: D2
@@ -89,7 +89,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoButtonOnFallback"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoButtonOnFallback"
         status: pass
     human_judgment: false
   - id: D3
@@ -97,7 +97,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoTracer"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoTracer"
         status: pass
     human_judgment: false
   - id: D4
@@ -105,10 +105,10 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoAllSkipped"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoAllSkipped"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoPresserNeedsTheRestrictRight"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoPresserNeedsTheRestrictRight"
         status: pass
     human_judgment: false
   - id: D5
@@ -116,10 +116,10 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoAccess"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoAccess"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionClaimUndo"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionClaimUndo"
         status: pass
     human_judgment: false
   - id: D6
@@ -127,13 +127,13 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoAfterRekey"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoAfterRekey"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoOriginalEditFails"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoOriginalEditFails"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoCardsDoNotCross"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoCardsDoNotCross"
         status: pass
     human_judgment: false
   - id: D7
@@ -141,13 +141,13 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoAllSkipped"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoAllSkipped"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoOrder"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoOrder"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionFinalizeUndo"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionFinalizeUndo"
         status: pass
     human_judgment: false
   - id: D8
@@ -155,7 +155,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoRestoresPriorRestriction"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoRestoresPriorRestriction"
         status: pass
     human_judgment: false
 
@@ -202,14 +202,14 @@ The tracer's `<verify>` was run end to end after the GREEN commit and again as p
 
 ## Files Created/Modified
 
-- `alita/modules/staff_undo.go` - the undo feature (button, card, Ask, Confirm, original-summary edit, targets, run, per-group chain, call execution) and the `staffClaimUndo` seam
-- `alita/modules/staff_undo_test.go` - eleven tests and their helpers
-- `alita/db/staff/actions.go` and `actions_test.go` - `SetSummaryMessage`, `ClaimUndo`, `SaveUndoResult`, `FinalizeUndo` and three tests
-- `alita/modules/staff_action_run.go` - `staffGroupPrechecks`, `Finish` returning a keyboard, `Delivered`, the action spec's Undo keyboard and summary-message follow-up
-- `alita/modules/staff_action_summary.go` - `composeStaffSummary`, the undo header branch, `editStaffActionMessageWithMarkup`, markup on the final edit and the fallback send, the message ID returned by the delivery
-- `alita/modules/staff_action_card.go` - `UndoOf`, `UndoKind`, their storage, and the action Confirm's refusal of an undo card
-- `alita/modules/staff.go` - `ya`, `yc`, `yn` and their dispatch
-- `alita/modules/staff_action_test.go` - one Phase 2 assertion updated (see Deviations)
+- `fuku/modules/staff_undo.go` - the undo feature (button, card, Ask, Confirm, original-summary edit, targets, run, per-group chain, call execution) and the `staffClaimUndo` seam
+- `fuku/modules/staff_undo_test.go` - eleven tests and their helpers
+- `fuku/db/staff/actions.go` and `actions_test.go` - `SetSummaryMessage`, `ClaimUndo`, `SaveUndoResult`, `FinalizeUndo` and three tests
+- `fuku/modules/staff_action_run.go` - `staffGroupPrechecks`, `Finish` returning a keyboard, `Delivered`, the action spec's Undo keyboard and summary-message follow-up
+- `fuku/modules/staff_action_summary.go` - `composeStaffSummary`, the undo header branch, `editStaffActionMessageWithMarkup`, markup on the final edit and the fallback send, the message ID returned by the delivery
+- `fuku/modules/staff_action_card.go` - `UndoOf`, `UndoKind`, their storage, and the action Confirm's refusal of an undo card
+- `fuku/modules/staff.go` - `ya`, `yc`, `yn` and their dispatch
+- `fuku/modules/staff_action_test.go` - one Phase 2 assertion updated (see Deviations)
 - `locales/*.yml` (7 files) - `staff_undo_button`, `staff_undo_label`, `staff_undo_card_applies`, `staff_undo_marker`, `staff_undo_not_applied_note`, `staff_undo_already`, `staff_undo_not_available`
 - `AGENTS.md` - the undo rules in the decision, data, trap and callback sections
 
@@ -225,14 +225,14 @@ See `key-decisions` above. The ones worth repeating: the presser is the card's i
 - **Found during:** Task 1 regression run
 - **Issue:** `TestStaffActionTracer` ended with `wantNoKeyboard` on the last edit of a ban summary. The plan's own must-have is that this summary now carries the Undo button.
 - **Fix:** it now asserts that no Confirm or Cancel button remains and that any button left is the Undo button, keeping its intent (the card's buttons are gone).
-- **Files modified:** `alita/modules/staff_action_test.go`
+- **Files modified:** `fuku/modules/staff_action_test.go`
 - **Commit:** `ec40cae`
 
 **2. [Rule 1 - Correctness] "Already undone by <name>" alert uses a plain name, not an escaped one**
 - **Found during:** Task 1 (writing `staffUndoAsk`)
 - **Issue:** the plan says the name is spliced in escaped. An `answerCallbackQuery` text is plain text, so escaping would show `&lt;` and `&amp;` to the user.
 - **Fix:** the alert splices the name collapsed and cut to 64 runes without escaping; the same sentence on a card (HTML) is escaped. `staffUndoAlreadyText` takes a flag for which one.
-- **Files modified:** `alita/modules/staff_undo.go`
+- **Files modified:** `fuku/modules/staff_undo.go`
 - **Commit:** `ec40cae`
 
 ### Additions beyond the plan text
@@ -245,18 +245,18 @@ See `key-decisions` above. The ones worth repeating: the presser is the card's i
 
 ## Issues Encountered
 
-- `make lint` is unavailable (golangci-lint is built with go1.25 and refuses the go1.26.0 module); `gofmt -l` on the touched files, `go vet -tags testtools ./alita/modules ./alita/db/staff` and `CGO_ENABLED=0 go build ./...` are clean.
+- `make lint` is unavailable (golangci-lint is built with go1.25 and refuses the go1.26.0 module); `gofmt -l` on the touched files, `go vet -tags testtools ./fuku/modules ./fuku/db/staff` and `CGO_ENABLED=0 go build ./...` are clean.
 - Tests ran on SQLite only. The new SQL is plain (conditional `UPDATE ... WHERE ... IS NULL`, `outcome <> 'done' AND undo_outcome = ''`) and portable, but it has not run against PostgreSQL here.
 - The worktree command guard refuses some shell shapes (heredocs holding non-ASCII text, `git` inside `&&` chains); locale edits went through a script file in the scratchpad and git calls were issued one per command.
-- `gofmt -l alita/modules` still lists `greetings_command_test.go`, unformatted at the base commit and out of scope.
+- `gofmt -l fuku/modules` still lists `greetings_command_test.go`, unformatted at the base commit and out of scope.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndoTracer$' -v ./alita/modules` - PASS
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndo' -v ./alita/modules` - all PASS (decision tests and the eleven new tests, including `TestStaffUndoButtonOnFallback` and `TestStaffUndoOrder`)
-- `go test -tags testtools -race -count=1 -run '^TestStaffAction(ClaimUndo|FinalizeUndo|SetSummaryMessage)$' -v ./alita/db/staff` - all PASS
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/staff ./alita/i18n` - ok (modules 127 s)
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs` - pass, no drift
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndoTracer$' -v ./fuku/modules` - PASS
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndo' -v ./fuku/modules` - all PASS (decision tests and the eleven new tests, including `TestStaffUndoButtonOnFallback` and `TestStaffUndoOrder`)
+- `go test -tags testtools -race -count=1 -run '^TestStaffAction(ClaimUndo|FinalizeUndo|SetSummaryMessage)$' -v ./fuku/db/staff` - all PASS
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/staff ./fuku/i18n` - ok (modules 127 s)
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs` - pass, no drift
 - Acceptance criteria of both tasks re-run and passing: `func executeStaffUndoCall(`, `UseIndependentChatPermissions: true`, `decideStaffUndo(card.UndoKind`, `staff.ClaimUndo(`, `undo_started_at IS NULL`, `func staffGroupPrechecks(`, `func composeStaffSummary(tr *i18n.Translator, header string`, `staffActUndoAsk = "ya"`, `"undo_of"`, zero admin-cache calls in `staff_undo.go`, `staff_undo_button` once in each of es fr hi id pt ru, AGENTS.md mentions `decideStaffUndo` and `undo_kind`, `a.SummaryChatID != staffChatID`, `gofmt -l` clean on the touched files, `go.mod` and `go.sum` unchanged
 
 ## Known Stubs

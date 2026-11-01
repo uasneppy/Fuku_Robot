@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/divkix/Alita_Robot/alita/utils/claude"
+	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
 )
 
 const testKey = "sk-ant-api03-SPIKEFAKESPIKEFAKESPIKEFAKESPIKEFAKE0123456789"

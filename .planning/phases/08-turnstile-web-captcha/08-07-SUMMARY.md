@@ -28,9 +28,9 @@ tech-stack:
 
 key-files:
   created:
-    - alita/i18n/table.go
-    - alita/i18n/table_test.go
-    - alita/i18n/captcha_web_locale_test.go
+    - fuku/i18n/table.go
+    - fuku/i18n/table_test.go
+    - fuku/i18n/captcha_web_locale_test.go
   modified:
     - locales/en.yml
     - locales/es.yml
@@ -53,7 +53,7 @@ coverage:
     requirement: "CAPT-08"
     verification:
       - kind: unit
-        ref: "alita/i18n/captcha_web_locale_test.go#TestCaptchaWebLocaleKeys"
+        ref: "fuku/i18n/captcha_web_locale_test.go#TestCaptchaWebLocaleKeys"
         status: pass
     human_judgment: true
     rationale: "The test checks structure, length, plainness and the English rejoin rule only. Whether each translation reads naturally and keeps the meaning and tone is a native-speaker review item"
@@ -62,7 +62,7 @@ coverage:
     requirement: "CAPT-08"
     verification:
       - kind: unit
-        ref: "alita/i18n/table_test.go#TestStringTable"
+        ref: "fuku/i18n/table_test.go#TestStringTable"
         status: pass
     human_judgment: false
 
@@ -85,7 +85,7 @@ status: complete
 
 - Added the 26 page keys of `captchaweb.PageKeys` to all 7 locale files in one block after `captcha_web_button`. English is exactly the UI-SPEC table. The other six are natural translations kept within "Max other" (titles 32/34, bodies 140, buttons 22 runes). Only the English `captcha_web_failed_body_kick` and `captcha_web_expired_body_kick` promise a rejoin.
 - `TestCaptchaWebLocaleKeys`: the `captcha_web_` key set of every locale equals English's; every value is a non-empty string; page keys hold no `<`, `&`, `%` or `{` and no emoji, and fit their length ceiling (English against Max EN, the rest against Max other); the other `captcha_web_` keys (the welcome message and the button) keep English's `%s`/`%d` sequence; the length table covers exactly `captchaweb.PageKeys`; in English only the kick bodies say "rejoin".
-- `LocaleManager.StringTable(langs, keys)` in `alita/i18n/table.go`: one `GetTranslator` per language, one `GetString` per key. A key a language lacks falls back to English, an unknown language gets the English values, and a key missing, empty or blank in English returns an error naming the language and key and no table.
+- `LocaleManager.StringTable(langs, keys)` in `fuku/i18n/table.go`: one `GetTranslator` per language, one `GetString` per key. A key a language lacks falls back to English, an unknown language gets the English values, and a key missing, empty or blank in English returns an error naming the language and key and no table.
 - `TestStringTable` covers the real 7 locale files (26 non-empty strings in each of 7 maps, es differs from en, ru close button is the ru file's value), the English fallback, a key missing in English, a blank English value and an unknown language.
 
 ## Task Commits
@@ -97,11 +97,11 @@ status: complete
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -count=1 -run '^TestCaptchaWebLocaleKeys$' -v ./alita/i18n`: PASS (ran, not "no tests").
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestStringTable$' -v ./alita/i18n`: PASS, all 5 subtests ran.
-- `CGO_ENABLED=1 go test -tags testtools -count=1 ./alita/i18n`: PASS.
+- `CGO_ENABLED=1 go test -tags testtools -count=1 -run '^TestCaptchaWebLocaleKeys$' -v ./fuku/i18n`: PASS (ran, not "no tests").
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestStringTable$' -v ./fuku/i18n`: PASS, all 5 subtests ran.
+- `CGO_ENABLED=1 go test -tags testtools -count=1 ./fuku/i18n`: PASS.
 - `make check-translations`: all translations present.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/i18n`, `gofmt -l alita/i18n`: clean.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/i18n`, `gofmt -l fuku/i18n`: clean.
 - Acceptance greps: the five sample keys count 5 in each of the 7 files; `grep -c '^captcha_web_' locales/en.yml` is 28; `captchaweb.PageKeys` appears 5 times in the parity test; the `StringTable` signature matches exactly; `go.mod` and `go.sum` unchanged.
 - `make lint` was not run: golangci-lint in this sandbox is built with go1.25 against the module's go1.26.0. `gofmt` and `go vet -tags testtools` stand in for it.
 
@@ -113,7 +113,7 @@ status: complete
 - **Found during:** Task 2
 - **Issue:** The plan says StringTable fails on an empty English value. `GetString` returns a whitespace-only value as found, so a blank English string would have shipped a blank page state (T-08-30).
 - **Fix:** `StringTable` trims before the empty check; `TestStringTable` has an "empty in English" subtest using a blank value.
-- **Files modified:** `alita/i18n/table.go`, `alita/i18n/table_test.go`
+- **Files modified:** `fuku/i18n/table.go`, `fuku/i18n/table_test.go`
 - **Commit:** `c157db9`
 
 **2. [Harness instruction] Commit trailer**
@@ -140,5 +140,5 @@ None. No new endpoint, auth path or trust boundary. T-08-29 (markup or placehold
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/i18n/table.go`, `alita/i18n/table_test.go`, `alita/i18n/captcha_web_locale_test.go`.
+- Created files exist: `fuku/i18n/table.go`, `fuku/i18n/table_test.go`, `fuku/i18n/captcha_web_locale_test.go`.
 - Commits `930c0a4`, `f8a5508`, `d1612be`, `c157db9` are in `git log` (4 commits from the base, matching `commits: 4`).

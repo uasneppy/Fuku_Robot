@@ -11,25 +11,25 @@ Line numbers refer to the files as read on 2026-10-05. The Phase 2 map (`../02-s
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |---|---|---|---|---|
 | `migrations/20261005120000_add_staff_actions.sql` (new) | migration | CRUD | `migrations/20261004120000_add_staff_groups_and_links.sql` | exact |
-| `alita/db/models/staff_action.go` (new) | model | CRUD | `alita/db/models/staff.go` | exact |
-| `alita/db/staff/actions.go` (new) | repository | CRUD + conditional-claim | `alita/db/staff/repository.go` (`SetLinkHealth`, `DeleteLinkIfOwner`) | exact |
-| `alita/db/staff/rekey.go` (modify) | repository | batch tx | itself, lines 33-53 | exact |
-| `alita/modules/staff_action_decide.go` (modify: add `decideStaffUndo`) | utility | transform | itself, `decideStaffAction` lines 162-281 | exact (sibling) |
-| `alita/modules/staff_action_record.go` (new) | service | CRUD (write-ahead) | `alita/modules/staff_action_run.go` per-group chain | role-match |
-| `alita/modules/staff_action_run.go` (modify: generalize coordinator) | service | batch fan-out | itself, lines 186-401 | exact |
-| `alita/modules/staff_action_summary.go` (modify: header param, markup edit/send, undo lines) | utility | transform + streaming edit | itself, lines 289-533 | exact |
-| `alita/modules/staff_action_card.go` (modify: `undo_of`, header branch, Confirm hook) | store | event-driven | itself, lines 744-861 | exact |
-| `alita/modules/staff_undo.go` (new: ask/confirm/original-edit) | controller | event-driven (callback) | `staffActionConfirm` in `staff_action_card.go` | role-match |
-| `alita/modules/staff_history.go` (new: list, detail, paging) | controller | request-response | `alita/modules/staff_panel.go` (`renderStaffPanel`, `staffPanelRebuild`) | role-match |
-| `alita/modules/staff_log.go` (new: log post, paced) | service | event-driven (fire per group) | `alita/utils/actionlog/actionlog.go` + `staffPaced` | role-match |
-| `alita/utils/actionlog/actionlog.go` (modify: `Destination` seam) | utility | request-response | itself, lines 16-34 | exact |
-| `alita/modules/staff.go` (modify: callback codes + switch) | controller | event-driven | itself, lines 44-55, 249-272 | exact |
-| `alita/modules/staff_panel.go` (modify: "Recent actions" button) | component | request-response | itself, `staffRefreshButton` lines 355-368 | exact |
+| `fuku/db/models/staff_action.go` (new) | model | CRUD | `fuku/db/models/staff.go` | exact |
+| `fuku/db/staff/actions.go` (new) | repository | CRUD + conditional-claim | `fuku/db/staff/repository.go` (`SetLinkHealth`, `DeleteLinkIfOwner`) | exact |
+| `fuku/db/staff/rekey.go` (modify) | repository | batch tx | itself, lines 33-53 | exact |
+| `fuku/modules/staff_action_decide.go` (modify: add `decideStaffUndo`) | utility | transform | itself, `decideStaffAction` lines 162-281 | exact (sibling) |
+| `fuku/modules/staff_action_record.go` (new) | service | CRUD (write-ahead) | `fuku/modules/staff_action_run.go` per-group chain | role-match |
+| `fuku/modules/staff_action_run.go` (modify: generalize coordinator) | service | batch fan-out | itself, lines 186-401 | exact |
+| `fuku/modules/staff_action_summary.go` (modify: header param, markup edit/send, undo lines) | utility | transform + streaming edit | itself, lines 289-533 | exact |
+| `fuku/modules/staff_action_card.go` (modify: `undo_of`, header branch, Confirm hook) | store | event-driven | itself, lines 744-861 | exact |
+| `fuku/modules/staff_undo.go` (new: ask/confirm/original-edit) | controller | event-driven (callback) | `staffActionConfirm` in `staff_action_card.go` | role-match |
+| `fuku/modules/staff_history.go` (new: list, detail, paging) | controller | request-response | `fuku/modules/staff_panel.go` (`renderStaffPanel`, `staffPanelRebuild`) | role-match |
+| `fuku/modules/staff_log.go` (new: log post, paced) | service | event-driven (fire per group) | `fuku/utils/actionlog/actionlog.go` + `staffPaced` | role-match |
+| `fuku/utils/actionlog/actionlog.go` (modify: `Destination` seam) | utility | request-response | itself, lines 16-34 | exact |
+| `fuku/modules/staff.go` (modify: callback codes + switch) | controller | event-driven | itself, lines 44-55, 249-272 | exact |
+| `fuku/modules/staff_panel.go` (modify: "Recent actions" button) | component | request-response | itself, `staffRefreshButton` lines 355-368 | exact |
 | `locales/{en,es,fr,hi,id,pt,ru}.yml` (modify) | config | n/a | existing `staff_act_*` keys | exact |
-| `alita/db/staff/testmain_test.go`, `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` (modify AutoMigrate lists) | test | n/a | themselves | exact |
-| `alita/db/staff/actions_test.go` (new) | test | CRUD | `alita/db/staff/rekey_test.go`, `repository_test.go` | role-match |
-| `alita/modules/staff_undo_test.go`, `staff_history_test.go`, `staff_log_test.go`, `staff_action_record_test.go` (new) | test | n/a | `staff_action_progress_test.go` + `staff_action_fake_test.go` | role-match |
-| `alita/modules/staff_action_fake_test.go`, `staff_helpers_test.go`, `staff_panel_render_test.go` (modify) | test | n/a | themselves | exact |
+| `fuku/db/staff/testmain_test.go`, `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go` (modify AutoMigrate lists) | test | n/a | themselves | exact |
+| `fuku/db/staff/actions_test.go` (new) | test | CRUD | `fuku/db/staff/rekey_test.go`, `repository_test.go` | role-match |
+| `fuku/modules/staff_undo_test.go`, `staff_history_test.go`, `staff_log_test.go`, `staff_action_record_test.go` (new) | test | n/a | `staff_action_progress_test.go` + `staff_action_fake_test.go` | role-match |
+| `fuku/modules/staff_action_fake_test.go`, `staff_helpers_test.go`, `staff_panel_render_test.go` (modify) | test | n/a | themselves | exact |
 | `AGENTS.md` (modify) | doc | n/a | existing Staff bullets | exact |
 
 ## Pattern Assignments
@@ -57,9 +57,9 @@ Column layout for `staff_actions` and `staff_action_groups`: copy the full skele
 
 ---
 
-### `alita/db/models/staff_action.go` (model, CRUD)
+### `fuku/db/models/staff_action.go` (model, CRUD)
 
-**Analog:** `alita/db/models/staff.go`.
+**Analog:** `fuku/db/models/staff.go`.
 
 **Pattern** (lines 20-32, 37-51): GORM tags mirror the SQL, `check:` tags carried, `TableName()` returns the migration's table name, `time.Time` for `created_at`/`updated_at` (needed because `RekeyChat` writes `updated_at`):
 ```go
@@ -77,11 +77,11 @@ Use `*time.Time` for nullable `finished_at`, `undo_started_at`, `undo_finished_a
 
 ---
 
-### `alita/db/staff/actions.go` (repository, CRUD + exactly-once claim)
+### `fuku/db/staff/actions.go` (repository, CRUD + exactly-once claim)
 
-**Analog:** `alita/db/staff/repository.go`.
+**Analog:** `fuku/db/staff/repository.go`.
 
-**Imports/error style:** `log "github.com/sirupsen/logrus"`, `gorm.io/gorm`, `db`, `models`, `alitaerrors "github.com/divkix/Alita_Robot/alita/utils/errors"`; every failure is `log.Errorf("[Staff] Fn: %v", err)` then `return ..., alitaerrors.Wrapf(err, "...")` (repository.go 401-402, 425-426).
+**Imports/error style:** `log "github.com/sirupsen/logrus"`, `gorm.io/gorm`, `db`, `models`, `fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"`; every failure is `log.Errorf("[Staff] Fn: %v", err)` then `return ..., fukuerrors.Wrapf(err, "...")` (repository.go 401-402, 425-426).
 
 **Exactly-once claim (copy for `ClaimUndo`)** (`SetLinkHealth`, lines 429-438, map update so zero values are never skipped, `RowsAffected == 1` is the claim):
 ```go
@@ -90,7 +90,7 @@ result := db.DB.Model(&models.StaffGroupLink{}).
 	Updates(map[string]any{"health": health, "updated_at": time.Now()})
 if result.Error != nil {
 	log.Errorf("[Staff] SetLinkHealth: %v", result.Error)
-	return false, alitaerrors.Wrapf(result.Error, "set staff link %d health", id)
+	return false, fukuerrors.Wrapf(result.Error, "set staff link %d health", id)
 }
 if result.RowsAffected != 1 {
 	return false, nil
@@ -104,7 +104,7 @@ if result.RowsAffected != 1 {
 
 ---
 
-### `alita/db/staff/rekey.go` (modify)
+### `fuku/db/staff/rekey.go` (modify)
 
 **Analog:** itself. Add one row to the `updates` table (lines 35-42); the loop already writes `updated_at`:
 ```go
@@ -118,11 +118,11 @@ updates := []struct {
 	// add: {&models.StaffAction{}, "staff_chat_id"},
 }
 ```
-Do NOT re-key `summary_chat_id` or `staff_action_groups.group_chat_id`. Update the doc comment (lines 14-18). Tests: `rekey_test.go` (`rekeySeed`, `TestRekeyChatMovesStaffGroupAndLinks` at line 51) extend with a `StaffAction` row. All three harness `AutoMigrate` lists must gain `&models.StaffAction{}, &models.StaffActionGroup{}` in the same task: `alita/db/staff/testmain_test.go` line 14 (`testdb.Run(m, &models.StaffGroup{}, &models.StaffGroupLink{})`), `alita/modules/test_harness_test.go` (~361), `alita/db/testmain_test.go` (~78).
+Do NOT re-key `summary_chat_id` or `staff_action_groups.group_chat_id`. Update the doc comment (lines 14-18). Tests: `rekey_test.go` (`rekeySeed`, `TestRekeyChatMovesStaffGroupAndLinks` at line 51) extend with a `StaffAction` row. All three harness `AutoMigrate` lists must gain `&models.StaffAction{}, &models.StaffActionGroup{}` in the same task: `fuku/db/staff/testmain_test.go` line 14 (`testdb.Run(m, &models.StaffGroup{}, &models.StaffGroupLink{})`), `fuku/modules/test_harness_test.go` (~361), `fuku/db/testmain_test.go` (~78).
 
 ---
 
-### `alita/modules/staff_action_decide.go` (modify: `decideStaffUndo`)
+### `fuku/modules/staff_action_decide.go` (modify: `decideStaffUndo`)
 
 **Analog:** `decideStaffAction` in the same file (lines 162-281).
 
@@ -147,7 +147,7 @@ Full verdict matrix: 03-RESEARCH.md Pattern 3. Add `staffReasonText` arms in `st
 
 ---
 
-### `alita/modules/staff_action_run.go` (modify: generalize)
+### `fuku/modules/staff_action_run.go` (modify: generalize)
 
 **Analog:** itself.
 
@@ -178,7 +178,7 @@ Undo calls: `executeStaffUndoCall` delegates ban/unban/unmute to `executeStaffCa
 
 ---
 
-### `alita/modules/staff_action_summary.go` (modify)
+### `fuku/modules/staff_action_summary.go` (modify)
 
 **Analog:** itself.
 
@@ -196,7 +196,7 @@ _, _, err := b.EditMessageTextWithContext(ctx, &gotgbot.EditMessageTextOpts{
 
 ---
 
-### `alita/modules/staff_action_card.go` (modify)
+### `fuku/modules/staff_action_card.go` (modify)
 
 **Analog:** itself.
 
@@ -214,7 +214,7 @@ Abort shape (lines 795-799): `text, _ := staffTr.GetString("staff_act_abort_chec
 
 ---
 
-### `alita/modules/staff_undo.go` (new: `staffUndoAsk`, `staffUndoConfirm`, original edit)
+### `fuku/modules/staff_undo.go` (new: `staffUndoAsk`, `staffUndoConfirm`, original edit)
 
 **Analog:** `staffActionConfirm` (`staff_action_card.go` 744-861). Copy the order exactly:
 
@@ -244,9 +244,9 @@ Reuse `staff_btn_confirm` / `staff_btn_cancel` labels.
 
 ---
 
-### `alita/modules/staff_history.go` (new: list, detail, paging)
+### `fuku/modules/staff_history.go` (new: list, detail, paging)
 
-**Analog:** `alita/modules/staff_panel.go`.
+**Analog:** `fuku/modules/staff_panel.go`.
 
 **Access check (copy)** `staffPanelRebuild` lines 504-531: `GetStaffGroupFresh(chat.Id)`; nil -> `staff_cb_expired`; `IsUserInChatWithError`; `!member` -> `staff_cb_members_only`; answer once BEFORE the heavy work; then `editStaffMessage(b, query.Message, text, keyboard)` (line 539):
 ```go
@@ -261,9 +261,9 @@ answerStaffCallback(b, query, "", false)
 
 ---
 
-### `alita/modules/staff_log.go` (new: log post)
+### `fuku/modules/staff_log.go` (new: log post)
 
-**Analogs:** `alita/utils/actionlog/actionlog.go` (destination + header) and `staffPaced` (`staff_action_run.go` 170-174) for the send.
+**Analogs:** `fuku/utils/actionlog/actionlog.go` (destination + header) and `staffPaced` (`staff_action_run.go` 170-174) for the send.
 
 **Destination logic to extract (actionlog.go 16-34):**
 ```go
@@ -274,11 +274,11 @@ if settings == nil || !logchannels.CategoryEnabled(settings, category) { return 
 title := html.EscapeString(chat.Title)
 header := fmt.Sprintf("<b>%s</b> (<code>%d</code>)\n", title, chat.Id)
 ```
-Split into `actionlog.Destination(chat, category) (channelID int64, header string, ok bool)`; `Log` calls it and sends exactly as before (other callers byte-identical). Category constant: `logchannels.CategoryAdmin` (`alita/db/logchannels/repository.go` line 22). The staff module builds `*gotgbot.Chat{Id: link.GroupChatID, Title: link.GroupTitle, Type: "supergroup"}`, then sends inside `staffPaced` with the closure shape from `fetchLiveMember` (run.go 407-426): `callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)`. Mention: `formatting.MentionHtml(id, name)` (actionlog.go 43). Failures are `log.Warnf`/`Debugf` only and never touch the result (matches `Log`'s "failures are swallowed" comment). Translator for the linked group: `staffChatTranslator(link.GroupChatID)` (`staff_notify.go` 24-26). Never include the Staff Group title or ID in the body (assert in test). Cap reason runes before `html.EscapeString`.
+Split into `actionlog.Destination(chat, category) (channelID int64, header string, ok bool)`; `Log` calls it and sends exactly as before (other callers byte-identical). Category constant: `logchannels.CategoryAdmin` (`fuku/db/logchannels/repository.go` line 22). The staff module builds `*gotgbot.Chat{Id: link.GroupChatID, Title: link.GroupTitle, Type: "supergroup"}`, then sends inside `staffPaced` with the closure shape from `fetchLiveMember` (run.go 407-426): `callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)`. Mention: `formatting.MentionHtml(id, name)` (actionlog.go 43). Failures are `log.Warnf`/`Debugf` only and never touch the result (matches `Log`'s "failures are swallowed" comment). Translator for the linked group: `staffChatTranslator(link.GroupChatID)` (`staff_notify.go` 24-26). Never include the Staff Group title or ID in the body (assert in test). Cap reason runes before `html.EscapeString`.
 
 ---
 
-### `alita/modules/staff.go` (modify: callback routing)
+### `fuku/modules/staff.go` (modify: callback routing)
 
 **Analog:** itself. Add codes to the const block (lines 44-55) next to `staffActRunConfirm = "xc"` / `staffActRunCancel = "xn"`: new `ya` (undo ask), `yc`/`yn` (undo confirm/cancel), `rc` (recent list), `dt` (detail). Taken codes: `uy un ul uc ux rf pg xc xn`. Add switch cases before `default` (lines 264-268):
 ```go
@@ -295,7 +295,7 @@ Every branch answers the query exactly once.
 
 ---
 
-### `alita/modules/staff_panel.go` (modify: "Recent actions" button)
+### `fuku/modules/staff_panel.go` (modify: "Recent actions" button)
 
 **Analog:** `staffRefreshButton` (lines 355-368) for the button, `renderStaffPanel` (lines 307-324) for where the row goes. Add one row built the same way (`a=rc&o=0`, new label key) before the unlink rows; keep `renderStaffPanel` I/O-free. Update `panelSplitKeyboard` in `staff_panel_render_test.go` (~61-90), whose `default:` branch calls `t.Errorf` on an unknown action.
 
@@ -303,7 +303,7 @@ Every branch answers the query exactly once.
 
 ### Tests
 
-**Fixtures to extend (all exist, tracked):** `staff_action_fake_test.go` (stateful fake, add full permission set on `staffFakeMember`, honour `use_independent_chat_permissions`, keep struct-valued `permissions` params), `staff_helpers_test.go` (`staffCleanup` ~263 must delete audit rows; `withStaffLocale(t)` swaps strings for `staffMarker(key)`, assert keys not literals), `withMiniredis(t)` in `antiraid_miniredis_test.go`. Repo tests: model on `alita/db/staff/rekey_test.go` (`rekeySeed`, `cleanupStaffRows`, `//go:build testtools`, package `staff`). Shutdown tests: copy `TestStopStaffActionsFinalizes` in `staff_action_progress_test.go` (restore `staffActionsCtx` in `t.Cleanup`). Use an injected clock or generous margins for undo timing (flaky `tmute_as_a_reply` is a known blocker). No mock libraries.
+**Fixtures to extend (all exist, tracked):** `staff_action_fake_test.go` (stateful fake, add full permission set on `staffFakeMember`, honour `use_independent_chat_permissions`, keep struct-valued `permissions` params), `staff_helpers_test.go` (`staffCleanup` ~263 must delete audit rows; `withStaffLocale(t)` swaps strings for `staffMarker(key)`, assert keys not literals), `withMiniredis(t)` in `antiraid_miniredis_test.go`. Repo tests: model on `fuku/db/staff/rekey_test.go` (`rekeySeed`, `cleanupStaffRows`, `//go:build testtools`, package `staff`). Shutdown tests: copy `TestStopStaffActionsFinalizes` in `staff_action_progress_test.go` (restore `staffActionsCtx` in `t.Cleanup`). Use an injected clock or generous margins for undo timing (flaky `tmute_as_a_reply` is a known blocker). No mock libraries.
 
 ---
 
@@ -314,7 +314,7 @@ Every branch answers the query exactly once.
 **Apply to:** the undo per-group chain (actor = the presser). Admin cache and `IsUserAdmin` are never used.
 
 ### Exactly-once effects
-**Source:** `alita/db/staff/repository.go` 411-441 (`SetLinkHealth`) and 388-409 (`DeleteLinkIfOwner`); card Lua CAS in `staff_action_card.go` 469.
+**Source:** `fuku/db/staff/repository.go` 411-441 (`SetLinkHealth`) and 388-409 (`DeleteLinkIfOwner`); card Lua CAS in `staff_action_card.go` 469.
 **Apply to:** `ClaimUndo` (D-09), per-group result writes, finalize.
 
 ### Panic recovery on goroutines
@@ -330,7 +330,7 @@ Translate first, splice user text after, always escaped (`staff_recheck.go` 93-9
 `log.Warnf("[StaffActions] ...: %v", err)` / `log.Errorf("[Staff] ...")`; log-post failures at warn or debug; never log `ext.EndGroups`.
 
 ### Operational keys and AGENTS.md
-No new Redis key family (undo cards reuse `alita:staff:act:<token>` with `action=undo`). Update AGENTS.md in the same commits (list in 03-RESEARCH.md "AGENTS.md edits required").
+No new Redis key family (undo cards reuse `fuku:staff:act:<token>` with `action=undo`). Update AGENTS.md in the same commits (list in 03-RESEARCH.md "AGENTS.md edits required").
 
 ## No Analog Found
 
@@ -342,6 +342,6 @@ No new Redis key family (undo cards reuse `alita:staff:act:<token>` with `action
 
 ## Metadata
 
-**Analog search scope:** `alita/modules/staff*.go`, `alita/db/staff`, `alita/db/models/staff.go`, `alita/utils/actionlog`, `alita/db/logchannels`, `migrations/`.
+**Analog search scope:** `fuku/modules/staff*.go`, `fuku/db/staff`, `fuku/db/models/staff.go`, `fuku/utils/actionlog`, `fuku/db/logchannels`, `migrations/`.
 **Files read:** ~14 (targeted ranges), 19 cited paths confirmed in `git ls-files`.
 **Pattern extraction date:** 2026-10-05

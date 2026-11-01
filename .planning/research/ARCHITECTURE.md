@@ -1,6 +1,6 @@
 # Architecture Research
 
-**Domain:** Telegram group-management bot (Go, gotgbot v2, GORM/PostgreSQL, Redis). Subsequent milestone on the existing Alita Robot fork: Staff Group fan-out moderation, raid lockdown, Turnstile Mini App captcha, inline settings menu.
+**Domain:** Telegram group-management bot (Go, gotgbot v2, GORM/PostgreSQL, Redis). Subsequent milestone on the existing Fuku Robot fork: Staff Group fan-out moderation, raid lockdown, Turnstile Mini App captcha, inline settings menu.
 **Researched:** 2026-10-04
 **Confidence:** HIGH for how the new code attaches to the existing codebase (read from source). MEDIUM for Telegram and Cloudflare platform behaviour (web sources, primary docs were egress-blocked). LOW for two flagged items (approved-user permission exceptions, image classification). Both need a short spike. See "Open Questions / Spikes".
 
@@ -33,7 +33,7 @@ New components are marked `[NEW]`. Handler group numbers follow `AGENTS.md`.
    4 antiflood (per-user, in-process, unchanged)                               |
  5/6 locks, 7 blacklists, 8 reports, 9 filters, 10 pins, 11 log-channel        |
                                                                                |
- +--------------------- modules layer (alita/modules) -----------------------+ |
+ +--------------------- modules layer (fuku/modules) -----------------------+ |
  | [NEW] staff.go           designate / link / unlink / /staff panel         | |
  | [NEW] staff_actions.go   gated command interceptor -> fan-out op          | |
  | [NEW] staff_ownership.go chat_member watcher + periodic sweeper           | |
@@ -54,13 +54,13 @@ New components are marked `[NEW]`. Handler group numbers follow `AGENTS.md`.
    +------------+-------------------------------------------------------------------------+
                 |
    +------------v-------------------------------------------------------------------------+
-   | Repositories (alita/db/<domain>) + cache.GetFromCacheOrLoad / DeleteCache            |
+   | Repositories (fuku/db/<domain>) + cache.GetFromCacheOrLoad / DeleteCache            |
    | [NEW] db/staff   [NEW] db/lockdown   [CHANGED] db/captcha (mode enum)                |
    +------------+---------------------------------------+---------------------------------+
                 |                                       |
-        PostgreSQL (migrations/*.sql)           Redis: cache (alita:cache:*) and operational
+        PostgreSQL (migrations/*.sql)           Redis: cache (fuku:cache:*) and operational
         [NEW] staff_groups, staff_group_links,  keys outside the cache prefix
-        chat_lockdowns, lockdown_joiners,       [NEW] alita:raid:* counters (ephemeral only)
+        chat_lockdowns, lockdown_joiners,       [NEW] fuku:raid:* counters (ephemeral only)
         lockdown_settings; captcha_mode enum
 ```
 
@@ -89,7 +89,7 @@ migrations/
   2026100500xxxx_add_staff_groups.sql          # staff_groups, staff_group_links
   2026100600xxxx_add_lockdown.sql              # chat_lockdowns, lockdown_joiners, lockdown_settings
   2026100700xxxx_captcha_mode_turnstile.sql    # DROP/ADD chk_captcha_mode (name verified in 20260412000000_*)
-alita/
+fuku/
   config/                                      # + TurnstileSiteKey, TurnstileSecretKey, PublicBaseURL, MiniAppShortName
   db/
     models/staff.go, lockdown.go               # TableName() must match migration names exactly
@@ -289,8 +289,8 @@ The ownership watcher must **not** be group 0: `bot_updates.go` registers a grou
 ```
 JOIN SIGNALS (service message AND ChatMemberUpdated both arrive; neither is guaranteed)
   group -5 lockdown guard handles both signals
-     ZADD alita:raid:joins:<chat>  (member = userID, score = ts)   // member = user => both signals dedupe
-     ZADD alita:raid:newmembers:<chat> (userID, joinTs)             // for "new member" weighting
+     ZADD fuku:raid:joins:<chat>  (member = userID, score = ts)   // member = user => both signals dedupe
+     ZADD fuku:raid:newmembers:<chat> (userID, joinTs)             // for "new member" weighting
      if lockdown active: kick joiner (+ record in lockdown_joiners) and return EndGroups
                          (so greetings/captcha at group 0 never welcome or challenge a kicked user)
      else: join-rate rule (reuse trackJoinScript semantics) -> Trigger?
@@ -378,13 +378,13 @@ button  cfg|v1|p=<page>&a=<open|t|set|inc|dec>&v=<val>
 | `2` | free | **Raid flood detector** (after users tracker `-1`, before aispam `3` and antiflood `4`), always `ContinueGroups` |
 | `3` | aispam | + one hook call after a delete verdict |
 
-Update `AGENTS.md` in the same commit that allocates `-3` and `2`, and add `alita:raid:*` to its list of operational Redis keys that sit outside `alita:cache:`.
+Update `AGENTS.md` in the same commit that allocates `-3` and `2`, and add `fuku:raid:*` to its list of operational Redis keys that sit outside `fuku:cache:`.
 
 ---
 
 ## Data Model (migrations; names must match `TableName()`)
 
-Use timestamps greater than `20261001120000` (the current latest). One transaction per file. No `CREATE INDEX CONCURRENTLY`. Update both `alita/db/migrations/runner.go` and `scripts/migrate_psql.sh` only if the applier changes, which it should not. Add every new model to the relevant `testmain_test.go` AutoMigrate list.
+Use timestamps greater than `20261001120000` (the current latest). One transaction per file. No `CREATE INDEX CONCURRENTLY`. Update both `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` only if the applier changes, which it should not. Add every new model to the relevant `testmain_test.go` AutoMigrate list.
 
 | Table | Key columns | Constraints / indexes | Cache keys to `DeleteCache` on write |
 |-------|-------------|-----------------------|--------------------------------------|
@@ -396,7 +396,7 @@ Use timestamps greater than `20261001120000` (the current latest). One transacti
 | `captcha_settings` | extend `chk_captcha_mode` to include `'turnstile'` | `DROP CONSTRAINT IF EXISTS` then `ADD` (same name as in `20260412000000_*`); update the model's `check:` tag so the SQLite test schema agrees | existing captcha-settings key |
 
 Rules that come straight from AGENTS and bite here:
-- **Authority reads are uncached.** The executor and the lockdown callbacks read links and lockdown rows straight from the DB. The cached copies serve only the cheap gate (`IsStaffGroup`) and UI. Also add `staff_`/`lockdown_active` prefixes to `skipLocal` (`alita/db/cache/local.go`) so a second replica cannot serve a stale link for `CACHE_LOCAL_TTL`.
+- **Authority reads are uncached.** The executor and the lockdown callbacks read links and lockdown rows straight from the DB. The cached copies serve only the cheap gate (`IsStaffGroup`) and UI. Also add `staff_`/`lockdown_active` prefixes to `skipLocal` (`fuku/db/cache/local.go`) so a second replica cannot serve a stale link for `CACHE_LOCAL_TTL`.
 - Writes that set booleans to `false` (`enabled`, `ai_assist`) must use `UpdateRecordWithZeroValues`; both update helpers return `gorm.ErrRecordNotFound` on no match.
 - Never discard a DB error on these state-changing paths (Engage, Link, Unlink, Lift).
 
@@ -410,7 +410,7 @@ Rules that come straight from AGENTS and bite here:
 | **antiflood** (`4`, in-process per replica) | Unchanged. It is per-user. The raid flood detector is cross-user and Redis-backed because it must be cluster-wide. | Do not extend antiflood's `syncHelperMap`. Different keying and different scope. |
 | **aispam** (`3`, queue of 256, 4 workers, breaker) | Producer of one signal (post-delete hook) and host of the assist classifier. | Reuse `aispamBreakerPaused`. Give the raid classifier its own queue and per-chat cooldown so a raid cannot starve per-message checks. The Jev state struct is **text-only** (`aispamState`), so "classify borderline images" has no existing path (Spike 4). |
 | **captcha** (`-10` sweeper, group 0 challenge) | Lockdown kicks joiners at `-5` *before* group 0, so no captcha starts for them. Users already pending keep their attempt. | **Trap:** `unmuteCaptchaUser` (and `/unmute`, `/unrestrict`) compute permissions from `resolveUnmutePermissions(getChat)`. During a lockdown `getChat().Permissions` is all-false, so a captcha pass or timeout would write the *locked* defaults as that user's own restriction and they stay muted after the lift. Make `resolveUnmutePermissions` (single choke point, `chat_permissions.go`) return the active lockdown's snapshot when one exists. |
-| **greetings** (group 0) | `leftMember` posts goodbye messages and `cleanService` deletes join messages. | Lockdown kicks fire `chat_member` left updates, so a raid produces N goodbye messages. Skip goodbye when the update's actor (`ChatMember.From.Id`) is the bot, or when a short Redis flag `alita:raid:kicked:<chat>:<user>` is set. Do **not** call `claimRecentJoinProcessing` from the lockdown guard. Its dedupe key is shared with greetings and claiming it first would suppress welcome/captcha for legitimate joiners. |
+| **greetings** (group 0) | `leftMember` posts goodbye messages and `cleanService` deletes join messages. | Lockdown kicks fire `chat_member` left updates, so a raid produces N goodbye messages. Skip goodbye when the update's actor (`ChatMember.From.Id`) is the bot, or when a short Redis flag `fuku:raid:kicked:<chat>:<user>` is set. Do **not** call `claimRecentJoinProcessing` from the lockdown guard. Its dedupe key is shared with greetings and claiming it first would suppress welcome/captcha for legitimate joiners. |
 | **approvals** | Exempt from lockdown mute and from the flood detector. | Chat-level mute does not exempt them automatically. See Spike 1. |
 | **log channels** (`actionlog`) | Staff actions use `actionlog.Admin` per affected group (category `admin`, per-category toggles honoured). Lockdown alerts need buttons. | `actionlog.Log` takes no `ReplyMarkup`. Add `LogWithMarkup` (returns the sent message ref) and use it for alerts. The helper needs a `*gotgbot.Chat` with `Title` for its header, so source titles from the `chats` table. |
 | **federations** | Untouched. `/fban` keeps its own path and `enforceFedBan` stays at `-6`. | Staff fan-out does not write fed bans and does not read them. |
@@ -568,7 +568,7 @@ Phase 4  Settings menu  (needs the pages to exist: captcha, lockdown settings, a
 
 ## Sources
 
-- Repository source, read 2026-10-04 (HIGH): `AGENTS.md`; `alita/utils/helpers/command_pipeline.go`; `alita/modules/{antiraid,captcha,greetings,membership,bot_updates,federations,moderation,bans,aispam,antiflood,users,logchannels,callback_codec,chat_permissions,registry,anonymous_admin_router}.go`; `alita/utils/{chat_status,callbackcodec,actionlog,extraction,httpserver}/`; `alita/db/{captcha,federations,logchannels,cache,antiraid,models}`; `alita/config/config.go`; `main.go`; `migrations/`.
+- Repository source, read 2026-10-04 (HIGH): `AGENTS.md`; `fuku/utils/helpers/command_pipeline.go`; `fuku/modules/{antiraid,captcha,greetings,membership,bot_updates,federations,moderation,bans,aispam,antiflood,users,logchannels,callback_codec,chat_permissions,registry,anonymous_admin_router}.go`; `fuku/utils/{chat_status,callbackcodec,actionlog,extraction,httpserver}/`; `fuku/db/{captcha,federations,logchannels,cache,antiraid,models}`; `fuku/config/config.go`; `main.go`; `migrations/`.
 - gotgbot v2 rc.36 vendored source in the module cache (HIGH): `ext/handlers/command.go` (Command struct and `CheckUpdate`), `request.go` (`TelegramError`), `gen_types.go` (`ResponseParameters.RetryAfter`, `WebAppInfo`), `gen_methods.go` (`SetChatPermissions`, `RestrictChatMember` options).
 - Telegram Mini Apps initData validation and Direct Link behaviour (MEDIUM, secondary): https://docs.telegram-mini-apps.com/platform/init-data , https://docs.telegram-mini-apps.com/packages/tma-js-init-data-node/validating , https://core.telegram.org/bots/webapps (search snippet only; fetch blocked)
 - `web_app` inline button private-chat restriction (MEDIUM): https://docs.python-telegram-bot.org/en/stable/telegram.inlinekeyboardbutton.html
@@ -576,5 +576,5 @@ Phase 4  Settings menu  (needs the pages to exist: captcha, lockdown settings, a
 - `use_independent_chat_permissions` semantics (MEDIUM): https://docs.aiogram.dev/en/dev-3.x/api/methods/restrict_chat_member.html
 
 ---
-*Architecture research for: Fuku Robot (Alita fork) Staff Group, raid lockdown, Turnstile captcha, settings menu*
+*Architecture research for: Fuku Robot (Fuku fork) Staff Group, raid lockdown, Turnstile captcha, settings menu*
 *Researched: 2026-10-04*

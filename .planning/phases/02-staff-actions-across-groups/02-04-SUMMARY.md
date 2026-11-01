@@ -33,14 +33,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/db/user/find_by_username_test.go
-    - alita/modules/staff_action_target_test.go
+    - fuku/db/user/find_by_username_test.go
+    - fuku/modules/staff_action_target_test.go
   modified:
-    - alita/db/user/repository.go
-    - alita/modules/staff_action_parse.go
-    - alita/modules/staff_action.go
-    - alita/modules/staff_action_parse_test.go
-    - alita/modules/staff_action_dispatch_test.go
+    - fuku/db/user/repository.go
+    - fuku/modules/staff_action_parse.go
+    - fuku/modules/staff_action.go
+    - fuku/modules/staff_action_parse_test.go
+    - fuku/modules/staff_action_dispatch_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -67,13 +67,13 @@ coverage:
     requirement: "STAFF-01"
     verification:
       - kind: integration
-        ref: "alita/db/user/find_by_username_test.go#TestFindUsersByUsernameCaseInsensitiveNewestFirst"
+        ref: "fuku/db/user/find_by_username_test.go#TestFindUsersByUsernameCaseInsensitiveNewestFirst"
         status: pass
       - kind: integration
-        ref: "alita/db/user/find_by_username_test.go#TestFindUsersByUsernameReturnsDatabaseError"
+        ref: "fuku/db/user/find_by_username_test.go#TestFindUsersByUsernameReturnsDatabaseError"
         status: pass
       - kind: integration
-        ref: "alita/db/user/find_by_username_test.go#TestFindUsersByUsernameUnderscoreIsLiteral"
+        ref: "fuku/db/user/find_by_username_test.go#TestFindUsersByUsernameUnderscoreIsLiteral"
         status: pass
     human_judgment: false
   - id: D2
@@ -81,13 +81,13 @@ coverage:
     requirement: "STAFF-03"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_parse_test.go#TestStaffActionParseUsername"
+        ref: "fuku/modules/staff_action_parse_test.go#TestStaffActionParseUsername"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_parse_test.go#TestStaffActionParseTextMention"
+        ref: "fuku/modules/staff_action_parse_test.go#TestStaffActionParseTextMention"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_parse_test.go#TestStaffActionParseBareReply"
+        ref: "fuku/modules/staff_action_parse_test.go#TestStaffActionParseBareReply"
         status: pass
     human_judgment: false
   - id: D3
@@ -95,13 +95,13 @@ coverage:
     requirement: "STAFF-01"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionUsernameTarget"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionUsernameTarget"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionTextMention"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionTextMention"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionUsernameCaseInsensitive"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionUsernameCaseInsensitive"
         status: pass
     human_judgment: false
   - id: D4
@@ -109,16 +109,16 @@ coverage:
     requirement: "STAFF-03"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionUsernameUnknown"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionUsernameUnknown"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionUsernameNeverFallsBackToChannels"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionUsernameNeverFallsBackToChannels"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionUsernameAmbiguous"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionUsernameAmbiguous"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionUsernameLookupError"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionUsernameLookupError"
         status: pass
     human_judgment: false
   - id: D5
@@ -126,13 +126,13 @@ coverage:
     requirement: "STAFF-03"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionBareReplyHint"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionBareReplyHint"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionReplyWithExplicitTarget"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionReplyWithExplicitTarget"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionBadUsername"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionBadUsername"
         status: pass
     human_judgment: false
   - id: D6
@@ -140,13 +140,13 @@ coverage:
     requirement: "STAFF-13"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_target_test.go#TestStaffActionRefusedVariants"
+        ref: "fuku/modules/staff_action_target_test.go#TestStaffActionRefusedVariants"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
         status: pass
     human_judgment: false
   - id: D7
@@ -192,21 +192,21 @@ status: complete
 
 Both tasks are `tdd="true"`; each has a RED commit before its GREEN commit.
 
-- **Task 1 RED (`85535e0`):** `go test -tags testtools -race -count=1 -run '^TestFindUsersByUsername|^TestGetUserIdByUserNameUnchanged' ./alita/db/user` exited 1. Five target tests failed on the planned behaviour, for example `FindUsersByUsername("SPAMBOT1") ids = [], want [9102 9101] (newest last_activity first)`, `limit 1 ids = [], want [9112]`, `FindUsersByUsername = ([], <nil>), want one row` and `FindUsersByUsername error = nil, want the database error`. The no-match, empty-input and `GetUserIdByUserName` guards passed at once, as regression guards should. The RED commit declares a stub `FindUsersByUsername` returning `(nil, nil)` so the tests compile.
-- **Task 1 GREEN (`2cd9997`):** the same command and `go test -tags testtools -race -count=1 ./alita/db/user` pass.
-- **Task 2 RED (`e9e70aa`):** `go test -tags testtools -race -count=1 -run '^TestStaffAction(Parse|Username|BadUsername|TextMention|BareReplyHint|ReplyWithExplicitTarget|RefusedVariants|NonStaffUnchanged|Anonymous)' ./alita/modules` exited 1 on about 60 failing tests and sub-tests, all on planned behaviour: `parse "/ban @SpamBot1 2d x" result = 2, want 0`, `result = 1, want BareReply`, `messages to the Staff Group = ["@@staff-act-hint-bad-target@@"], want exactly one with staff_act_username_unknown`, `messages ... = ["@@staff-act-hint-need-target@@"], want exactly one with staff_act_hint_no_reply`, the variant cases answering `@@chat-status-user-admin-cmd-error@@` from the per-group handler instead of the variant hint, 18 anonymous-variant sub-tests with no reply, and `staff commands = 7, want the 7 staff commands and the 6 refused variants`. `TestStaffActionNonStaffUnchanged`, `TestStaffActionReplyWithExplicitTarget` and the parser cases that pin already-true behaviour passed at once. The RED commit declares the two new parse result constants, the `Refused` field, `staffUsernameMatchLimit` and `staffUserLookup` so the tests compile; nothing in it parses a username or mention.
-- **Task 2 GREEN (`b3c883c`):** the same command passes (21 s), plus the full `./alita/modules ./alita/db/user ./alita/i18n` race run, `TestStaffLocaleKeys`, `make check-translations` and `make check-docs`.
+- **Task 1 RED (`85535e0`):** `go test -tags testtools -race -count=1 -run '^TestFindUsersByUsername|^TestGetUserIdByUserNameUnchanged' ./fuku/db/user` exited 1. Five target tests failed on the planned behaviour, for example `FindUsersByUsername("SPAMBOT1") ids = [], want [9102 9101] (newest last_activity first)`, `limit 1 ids = [], want [9112]`, `FindUsersByUsername = ([], <nil>), want one row` and `FindUsersByUsername error = nil, want the database error`. The no-match, empty-input and `GetUserIdByUserName` guards passed at once, as regression guards should. The RED commit declares a stub `FindUsersByUsername` returning `(nil, nil)` so the tests compile.
+- **Task 1 GREEN (`2cd9997`):** the same command and `go test -tags testtools -race -count=1 ./fuku/db/user` pass.
+- **Task 2 RED (`e9e70aa`):** `go test -tags testtools -race -count=1 -run '^TestStaffAction(Parse|Username|BadUsername|TextMention|BareReplyHint|ReplyWithExplicitTarget|RefusedVariants|NonStaffUnchanged|Anonymous)' ./fuku/modules` exited 1 on about 60 failing tests and sub-tests, all on planned behaviour: `parse "/ban @SpamBot1 2d x" result = 2, want 0`, `result = 1, want BareReply`, `messages to the Staff Group = ["@@staff-act-hint-bad-target@@"], want exactly one with staff_act_username_unknown`, `messages ... = ["@@staff-act-hint-need-target@@"], want exactly one with staff_act_hint_no_reply`, the variant cases answering `@@chat-status-user-admin-cmd-error@@` from the per-group handler instead of the variant hint, 18 anonymous-variant sub-tests with no reply, and `staff commands = 7, want the 7 staff commands and the 6 refused variants`. `TestStaffActionNonStaffUnchanged`, `TestStaffActionReplyWithExplicitTarget` and the parser cases that pin already-true behaviour passed at once. The RED commit declares the two new parse result constants, the `Refused` field, `staffUsernameMatchLimit` and `staffUserLookup` so the tests compile; nothing in it parses a username or mention.
+- **Task 2 GREEN (`b3c883c`):** the same command passes (21 s), plus the full `./fuku/modules ./fuku/db/user ./fuku/i18n` race run, `TestStaffLocaleKeys`, `make check-translations` and `make check-docs`.
 - **REFACTOR:** none.
 - `gsd_run check tdd-red-evidence` was not run (no resolver in this sandbox); the evidence above records command, exit code, failing tests and assertion text instead.
 
 ## Files Created/Modified
 
-- `alita/db/user/repository.go` - `FindUsersByUsername`
-- `alita/db/user/find_by_username_test.go` - lookup tests, including a failing database
-- `alita/modules/staff_action_parse.go` - `staffUsernameRe`, `utf16Len`, `staffMentionAt`, the three target forms, two new parse results
-- `alita/modules/staff_action.go` - `Refused`, six variant rows, `staffUserLookup`, `staffUsernameMatchLimit`, `resolveStaffTarget`, the ambiguity list, hint mappings
-- `alita/modules/staff_action_target_test.go` - end-to-end target, refusal and variant tests
-- `alita/modules/staff_action_parse_test.go`, `staff_action_dispatch_test.go` - parser cases; non-staff and anonymous suites widened to the new commands
+- `fuku/db/user/repository.go` - `FindUsersByUsername`
+- `fuku/db/user/find_by_username_test.go` - lookup tests, including a failing database
+- `fuku/modules/staff_action_parse.go` - `staffUsernameRe`, `utf16Len`, `staffMentionAt`, the three target forms, two new parse results
+- `fuku/modules/staff_action.go` - `Refused`, six variant rows, `staffUserLookup`, `staffUsernameMatchLimit`, `resolveStaffTarget`, the ambiguity list, hint mappings
+- `fuku/modules/staff_action_target_test.go` - end-to-end target, refusal and variant tests
+- `fuku/modules/staff_action_parse_test.go`, `staff_action_dispatch_test.go` - parser cases; non-staff and anonymous suites widened to the new commands
 - `locales/*.yml` (7), `AGENTS.md`
 
 ## Decisions Made
@@ -223,8 +223,8 @@ Small additions inside the planned scope: a `staffLastSeen` fallback (last activ
 
 ## Deferred Issues
 
-- `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit. Pre-existing and unrelated, left alone.
-- `make lint` cannot run in this sandbox (the installed golangci-lint is built with go1.25, the module targets 1.26.0). `gofmt -l` on all changed Go files (clean), `go vet -tags testtools ./alita/...`, `CGO_ENABLED=0 go build ./...`, `make check-translations` and `make check-docs` all pass.
+- `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit. Pre-existing and unrelated, left alone.
+- `make lint` cannot run in this sandbox (the installed golangci-lint is built with go1.25, the module targets 1.26.0). `gofmt -l` on all changed Go files (clean), `go vet -tags testtools ./fuku/...`, `CGO_ENABLED=0 go build ./...`, `make check-translations` and `make check-docs` all pass.
 - Human check, outstanding: in a throwaway Staff Group, mention a user who has no username with `/ban <mention> 1h test` (pick the person from Telegram's suggestion list so a real `text_mention` entity is sent) and confirm the card shows their name and ID; then try an `@username` shared by two test accounts to see the ambiguity list.
 - Not done and not in scope: a functional index on `LOWER(username)`. The plain-index scan is acceptable at this deployment size (RESEARCH Q6) and no migration was added.
 
@@ -246,10 +246,10 @@ None - no external service configuration required.
 
 ## Verification Run
 
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/user ./alita/i18n` - pass
-- `go test -tags testtools -count=1 ./alita/...` - pass
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/user ./fuku/i18n` - pass
+- `go test -tags testtools -count=1 ./fuku/...` - pass
 - `CGO_ENABLED=0 go build ./...` - pass
-- `go vet -tags testtools ./alita/...` - pass
+- `go vet -tags testtools ./fuku/...` - pass
 - `make check-translations`, `make check-docs` - pass
 - Acceptance greps: `func FindUsersByUsername(username string, limit int) ([]models.User, error)`, `LOWER(username) = LOWER(?)`, `staffUserLookup = user.FindUsersByUsername`, `Name: "dmute", Refused: true`, `extractEntityText(` in the parser all match; the count of `extraction.(GetUserId|ExtractUserAndText|ExtractUser)(` calls in the two staff files is 0
 - go.mod and go.sum untouched
@@ -265,6 +265,6 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-- Created files `alita/db/user/find_by_username_test.go` and `alita/modules/staff_action_target_test.go` exist.
+- Created files `fuku/db/user/find_by_username_test.go` and `fuku/modules/staff_action_target_test.go` exist.
 - Task commits `85535e0`, `2cd9997`, `e9e70aa`, `b3c883c` are present in `git log`, and `git rev-list --count 36f1e70..HEAD` was 4 when this file was written.
 - All task acceptance criteria and the plan-level verification commands were re-run and pass (see Verification Run).

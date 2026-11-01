@@ -10,7 +10,7 @@ last_mapped_at: 2026-10-04
 
 ## System Overview
 
-Alita Robot is a Telegram group-management bot built on a layered event-driven architecture with a priority-ordered handler system. The system processes Telegram updates through a dispatcher that routes them to priority-ordered handlers, which interact with a PostgreSQL database and Redis cache layer.
+Fuku Robot is a Telegram group-management bot built on a layered event-driven architecture with a priority-ordered handler system. The system processes Telegram updates through a dispatcher that routes them to priority-ordered handlers, which interact with a PostgreSQL database and Redis cache layer.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -19,7 +19,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 │  Priority: Captcha Sweeper → Fed-Ban → Antiraid → Admin Cache    │
 │           → Users Tracker → Commands → Spam → Flood → Locks      │
 │           → Blacklists → Reports → Filters → Pins → Logging      │
-│  Location: `alita/modules/` (30+ module files)                   │
+│  Location: `fuku/modules/` (30+ module files)                   │
 └──────────────────┬───────────────────────────────────────────────┘
                    │
         ┌──────────┴──────────┬────────────────┐
@@ -37,7 +37,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 │ • Bans       │    │ • Approvals  │  │ • Language       │
 │              │    │ • AI Spam    │  │ • Misc Commands  │
 │              │    │              │  │                  │
-│ `alita/      │    │ `alita/      │  │ `alita/modules/` │
+│ `fuku/      │    │ `fuku/      │  │ `fuku/modules/` │
 │ modules/`    │    │ modules/`    │  │                  │
 └──────────────┘    └──────────────┘  └──────────────────┘
         │                   │                │
@@ -56,7 +56,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
         │   Internationalization│
         │   i18n Translator     │
         │                       │
-        │ `alita/i18n/`         │
+        │ `fuku/i18n/`         │
         │ `locales/*.yml` (7)   │
         └───────────────────────┘
                     │
@@ -65,15 +65,15 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
         ├───────────────────────────────────────────────┤
         │  PostgreSQL (GORM ORM)  │   Redis + Local LRU │
         │                         │   (two-tier cache)  │
-        │ • `alita/db/migrations` │                     │
+        │ • `fuku/db/migrations` │                     │
         │   (40+ SQL migrations)  │  • Generation-based │
-        │ • `alita/db/models/`    │    invalidation     │
-        │ • `alita/db/<domain>/`  │  • 10s local TTL    │
+        │ • `fuku/db/models/`    │    invalidation     │
+        │ • `fuku/db/<domain>/`  │  • 10s local TTL    │
         │   (30+ repositories)    │    (configurable)   │
         │ • Direct queries (GORM) │  • Redis prefix:    │
-        │ • Upserts & batches     │    `alita:cache:*`  │
+        │ • Upserts & batches     │    `fuku:cache:*`  │
         │ • Error tracing         │  • Oper. keys:      │
-        │                         │    `alita:*`        │
+        │                         │    `fuku:*`        │
         │ User, Chat, Filters,    │                     │
         │ Warns, Bans, Notes,     │                     │
         │ Locks, Federations,     │                     │
@@ -86,15 +86,15 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 | Component | Responsibility | File |
 |-----------|----------------|------|
 | Dispatcher | Routes updates to handlers by priority group | `main.go` (lines 129, 373-379) |
-| Module Registry | Registers handlers with priority order; loads in sorted order | `alita/modules/registry.go` |
+| Module Registry | Registers handlers with priority order; loads in sorted order | `fuku/modules/registry.go` |
 | Handler Groups | Organize execution: -10 (captcha) through 11 (logging) | `AGENTS.md` |
-| Command Pipeline | Builds context, checks permissions, invokes command handler | `alita/utils/helpers/command_pipeline.go` |
-| Database Repos | Read via cache layer; write with cache invalidation | `alita/db/<domain>/` (30+ files) |
-| Cache Layer | Two-tier: local in-process LRU + Redis; generation-based invalidation | `alita/db/cache/` |
-| i18n Translator | Loads 7 locales; translates strings on-demand | `alita/i18n/` |
-| HTTP Server | Health checks, metrics, webhook (or polling health) | `alita/utils/httpserver/` |
-| Shutdown Manager | LIFO drain of goroutines and resources within 60s | `alita/utils/shutdown/` |
-| Monitoring | Stats collection, error tracking, activity monitoring, performance remediation | `alita/utils/monitoring/` |
+| Command Pipeline | Builds context, checks permissions, invokes command handler | `fuku/utils/helpers/command_pipeline.go` |
+| Database Repos | Read via cache layer; write with cache invalidation | `fuku/db/<domain>/` (30+ files) |
+| Cache Layer | Two-tier: local in-process LRU + Redis; generation-based invalidation | `fuku/db/cache/` |
+| i18n Translator | Loads 7 locales; translates strings on-demand | `fuku/i18n/` |
+| HTTP Server | Health checks, metrics, webhook (or polling health) | `fuku/utils/httpserver/` |
+| Shutdown Manager | LIFO drain of goroutines and resources within 60s | `fuku/utils/shutdown/` |
+| Monitoring | Stats collection, error tracking, activity monitoring, performance remediation | `fuku/utils/monitoring/` |
 
 ## Pattern Overview
 
@@ -112,49 +112,49 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 
 **Handler/Dispatcher Layer:**
 - Purpose: Process Telegram updates; dispatch to priority-ordered modules
-- Location: `alita/modules/`, `main.go` (lines 105-302)
+- Location: `fuku/modules/`, `main.go` (lines 105-302)
 - Contains: Handler registration, command wrappers, permission checks, callback routing
 - Depends on: gotgbot/v2 dispatcher, i18n, chat_status utilities, database repos
 - Used by: Main dispatcher loop in polling or webhook mode
 
 **Command Pipeline Layer:**
 - Purpose: Build CommandContext, check permissions, invoke handlers
-- Location: `alita/utils/helpers/command_pipeline.go`
+- Location: `fuku/utils/helpers/command_pipeline.go`
 - Contains: CommandDescriptor, CheckFunc (permission predicates), WrapCommand wrapper
 - Depends on: chat_status, i18n, extraction utilities, CommandContext builder
 - Used by: Individual module command handlers
 
 **Permission & Chat Status Layer:**
 - Purpose: Predicate checks for admin status, group-only, disabled commands, approvals
-- Location: `alita/utils/chat_status/`
+- Location: `fuku/utils/chat_status/`
 - Contains: IsUserAdmin, IsGroupAdmin, RequireGroup, CheckDisabledCmd (return bools, never reply)
 - Depends on: Cache layer (admin list caching), chat/user models
 - Used by: Command pipeline, handlers via predicates or PermissionResponder
 
 **Internationalization Layer:**
 - Purpose: Localize messages across 7 languages (en, es, fr, hi, id, pt, ru)
-- Location: `alita/i18n/`, `locales/` (embedded), `alita/db/lang/`
+- Location: `fuku/i18n/`, `locales/` (embedded), `fuku/db/lang/`
 - Contains: Translator (stateful per language), cache of parsed YAML, fallback to English
 - Depends on: Embedded locale files, user language preference from DB
 - Used by: All handlers calling tr.GetString(key)
 
 **Database/Persistence Layer:**
 - Purpose: Model definitions and repository pattern for domain-specific data access
-- Location: `alita/db/models/`, `alita/db/<domain>/` (30+ domain directories)
+- Location: `fuku/db/models/`, `fuku/db/<domain>/` (30+ domain directories)
 - Contains: GORM models (User, Chat, ChatFilters, etc.), repository functions (Create, Update, Delete, Get)
 - Depends on: PostgreSQL connection, GORM ORM, cache layer for reads
 - Used by: Handlers, cached loaders, upsert paths
 
 **Cache Layer (Two-Tier):**
 - Purpose: Reduce database load via local LRU (10s) + Redis (configurable)
-- Location: `alita/db/cache/`, `alita/utils/cache/`
+- Location: `fuku/db/cache/`, `fuku/utils/cache/`
 - Contains: GetFromCacheOrLoad (with concurrent-load dedup), DeleteCache, generation-based invalidation
 - Depends on: Redis client, msgpack serialization, local LRU expirable map
 - Used by: Repository read functions; generation counter bumped on DeleteCache to prevent stale writes
 
 **HTTP Server & Monitoring Layer:**
 - Purpose: Health checks, metrics export, webhook reception (alternative to polling)
-- Location: `alita/utils/httpserver/`, `alita/utils/monitoring/`
+- Location: `fuku/utils/httpserver/`, `fuku/utils/monitoring/`
 - Contains: HTTP routes (/health, /metrics, /webhook), stats collection, error callbacks, activity tracking
 - Depends on: Main dispatcher, shutdown manager, tracer provider
 - Used by: Docker healthcheck, Prometheus scraping, Telegram webhook polling
@@ -181,7 +181,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 1. **Join Message Arrives** → `ChatMemberUpdated` or service message with `new_chat_member`
 2. **Membership Handler** → Captcha sweeper (-10) or antiraid (priority 230) runs
 3. **Join Deduplication** → `claimRecentJoinProcessing` prevents duplicate processing
-4. **Redis-Based Tracking** → Antiraid stores `alita:antiraid:*` counters (in-process backup)
+4. **Redis-Based Tracking** → Antiraid stores `fuku:antiraid:*` counters (in-process backup)
 5. **Rate Limit Check** → Compare join count against thresholds in timeframe
 6. **Auto-Action** → Mute, kick, or ban users; restart captcha
 7. **Expiry Poller** → Background task (`modules.StopAntiRaidExpiryPoller`) cleans expired records
@@ -202,10 +202,10 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 - Admin cache: Refreshed per-command (memoized within update)
 
 **Redis (Cluster-Wide):**
-- Federation ban lookups: `alita:cache:fban:<fed>:<user>`
-- Anti-raid join counters: `alita:antiraid:*` (NOT under cache prefix; survives `CLEAR_CACHE_ON_STARTUP`)
-- Anonymous admin flag: `alita:anonAdmin:*`
-- Captcha pending flag: `alita:cache:captcha_pending:<chat>` (MUST invalidate after insert)
+- Federation ban lookups: `fuku:cache:fban:<fed>:<user>`
+- Anti-raid join counters: `fuku:antiraid:*` (NOT under cache prefix; survives `CLEAR_CACHE_ON_STARTUP`)
+- Anonymous admin flag: `fuku:anonAdmin:*`
+- Captcha pending flag: `fuku:cache:captcha_pending:<chat>` (MUST invalidate after insert)
 
 **Database (Persistent):**
 - Users, chats, filters, warns, bans, notes, locks, settings, federations
@@ -215,13 +215,13 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 
 **Module (moduleStruct):**
 - Purpose: Encapsulates a bot feature (antiflood, filters, warns, etc.)
-- Location: `alita/modules/<feature>.go`
+- Location: `fuku/modules/<feature>.go`
 - Pattern: Exported Load function + receiver methods (value receivers) + init() registration
 - Example: `adminModule.adminlist(c *helpers.CommandContext) error` → returns `ext.EndGroups` on success or error
 
 **CommandDescriptor:**
 - Purpose: Metadata for command registration (name, aliases, group, checks, disableable flag)
-- Location: `alita/utils/helpers/command_pipeline.go`
+- Location: `fuku/utils/helpers/command_pipeline.go`
 - Used by: `WrapCommand` to register with dispatcher and disabling system
 
 **CheckFunc:**
@@ -232,13 +232,13 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 
 **CommandContext:**
 - Purpose: Request-scoped bundling of bot, update, chat, message, user, translator
-- Location: `alita/utils/helpers/command_pipeline.go`
+- Location: `fuku/utils/helpers/command_pipeline.go`
 - Passed to: All command handlers and check functions
 - Lifetime: Built per-command, discarded after response
 
 **Repository:**
 - Purpose: Domain-specific data access (e.g., user.EnsureUserInDb, warns.GetWarnsCount)
-- Location: `alita/db/<domain>/repository.go` (30+ domains)
+- Location: `fuku/db/<domain>/repository.go` (30+ domains)
 - Pattern: Public functions using GORM; internal use of `cache.GetFromCacheOrLoad` and `cache.DeleteCache`
 - Example: `func GetUserBasicInfoCached(userId int64) (*models.User, error)` wraps GORM in cache
 
@@ -260,7 +260,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
   10. Enter idle loop
 
 **Webhook Handler (when USE_WEBHOOKS=true):**
-- Location: `alita/utils/httpserver/webhook.go`
+- Location: `fuku/utils/httpserver/webhook.go`
 - Triggers: Telegram sends POST to `/telegram/webhook/<token>`
 - Responsibilities:
   1. Verify webhook signature (WEBHOOK_SECRET)
@@ -276,15 +276,15 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 
 ## Architectural Constraints
 
-- **Threading:** Concurrent: the gotgbot dispatcher runs up to `DISPATCHER_MAX_ROUTINES` (default 200) updates in parallel goroutines (`main.go`, `alita/config/config.go`), so handlers must be race-safe; async writes to users table join WaitGroup drained by `modules.DrainUsersAsyncWrites` on shutdown
+- **Threading:** Concurrent: the gotgbot dispatcher runs up to `DISPATCHER_MAX_ROUTINES` (default 200) updates in parallel goroutines (`main.go`, `fuku/config/config.go`), so handlers must be race-safe; async writes to users table join WaitGroup drained by `modules.DrainUsersAsyncWrites` on shutdown
 - **Global state:** 
   - `defaultHelpRegistry` (module enable/disable map) — guarded by `ableMapMu`
   - `db.DB` (GORM connection) — shared across handlers; migrations run on startup if `AUTO_MIGRATE=true`
   - `cacheGenerations` array (4096 stripe counters for generation-based invalidation)
-- **Circular imports:** Import hierarchy: stdlib → third-party (gotgbot, gorm, logrus) → internal (`alita/db` → `alita/modules` → `alita/utils`)
+- **Circular imports:** Import hierarchy: stdlib → third-party (gotgbot, gorm, logrus) → internal (`fuku/db` → `fuku/modules` → `fuku/utils`)
 - **Database initialization order:**
-  - `alita/config` init → `alita/db` init (connects to Postgres, runs migrations, may fail startup)
-  - No DB access in `init()` functions running before `alita/db` init
+  - `fuku/config` init → `fuku/db` init (connects to Postgres, runs migrations, may fail startup)
+  - No DB access in `init()` functions running before `fuku/db` init
   - CLI modes (`--version`, `--health`) skip DB init via `isCliModeActive()` check
 - **Shutdown order (LIFO within 60s):**
   1. Database close
@@ -306,7 +306,7 @@ Alita Robot is a Telegram group-management bot built on a layered event-driven a
 
 **Why it's wrong:** Silent failures lead to stale state; cache invalidation (DeleteCache) may not be paired with failed write, causing database and cache to diverge.
 
-**Do this instead:** Check error before cache invalidation. Example from `alita/db/user/repository.go` line 38: `result := db.DB.Where(...).Assign(...).FirstOrCreate(...); if result.Error != nil { log.Errorf(...); return result.Error }`
+**Do this instead:** Check error before cache invalidation. Example from `fuku/db/user/repository.go` line 38: `result := db.DB.Where(...).Assign(...).FirstOrCreate(...); if result.Error != nil { log.Errorf(...); return result.Error }`
 
 ### Fire-and-Forget Goroutines Without Panic Recovery
 

@@ -11,7 +11,7 @@ provides:
   - AntiRaid page describing the retired raid mode, the automatic triggers with defaults, /autolockdown, the /autoantiraid alias and the carry-over
   - reference pages (commands, callbacks, database schema, environment) matching the new behaviour
   - backup page stating that /autolockdown settings are not carried (D-20)
-  - architecture and self-hosting pages showing handler groups -7 and -4, the alita:raid:* keys and the new files
+  - architecture and self-hosting pages showing handler groups -7 and -4, the fuku:raid:* keys and the new files
 affects: [06-13 docs regeneration]
 
 actuals:
@@ -71,14 +71,14 @@ status: complete
   - `commands/backup/index.md`: backups do not carry `/autolockdown` settings, the AntiRaid module's old `antiraid_settings` no longer controls anything (D-20).
 - Task 2 (commit bde7fd8): the hand-written pages.
   - `handler-groups.md`: antiraid row removed, rows for -7 and -4 added, prose and both worked examples updated.
-  - `caching.md`: `raid_detection` settings key and the `alita:raid:*` keys replace the antiraid keys; `skipLocal` and `CLEAR_CACHE_ON_STARTUP` prose updated.
+  - `caching.md`: `raid_detection` settings key and the `fuku:raid:*` keys replace the antiraid keys; `skipLocal` and `CLEAR_CACHE_ON_STARTUP` prose updated.
   - `request-flow.mdx`, `project-structure.mdx` (new file list and `raiddetection` repository), `self-hosting/database.md` (`chat_raid_detection` row, `antiraid_settings` legacy), `commands/index.mdx` (AntiRaid card says retired and points to Lockdown).
 
 ## Verification
 
 - Marker check over the six frozen pages: no "marker lost" line.
 - `make check-docs`: "No drift detected" after each task.
-- Acceptance greps: `autolockdown` in the AntiRaid page 7, `chat_raid_detection` in database-schema 3, `autolockdown` in backup 2, `| -4 ` 1, `| -7 ` 1, `chat_raid_detection` in self-hosting/database 1, `alita:raid:` in caching 7.
+- Acceptance greps: `autolockdown` in the AntiRaid page 7, `chat_raid_detection` in database-schema 3, `autolockdown` in backup 2, `| -4 ` 1, `| -7 ` 1, `chat_raid_detection` in self-hosting/database 1, `fuku:raid:` in caching 7.
 - `git diff --exit-code go.mod go.sum`: clean.
 
 ## Deviations from Plan

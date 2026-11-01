@@ -22,15 +22,15 @@ tech-stack:
 key-files:
   created:
     - migrations/20261011150000_add_lockdown_link_revoke.sql
-    - alita/modules/lockdown_revoke_test.go
+    - fuku/modules/lockdown_revoke_test.go
   modified:
-    - alita/db/models/lockdown.go
-    - alita/db/lockdown/alerts.go
-    - alita/db/lockdown/alerts_test.go
-    - alita/modules/lockdown_alert.go
-    - alita/modules/lockdown_alert_callbacks.go
-    - alita/modules/lockdown_worker.go
-    - alita/modules/lockdown_fake_test.go
+    - fuku/db/models/lockdown.go
+    - fuku/db/lockdown/alerts.go
+    - fuku/db/lockdown/alerts_test.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/lockdown_alert_callbacks.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/modules/lockdown_fake_test.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -93,7 +93,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 - **Found during:** Task 1 (reading `lockdownPostAlertSlot`)
 - **Issue:** the keyboard is built before `RecordAlertPosted` stores the link, so `slot.Link` was still empty and the plan's "Revoke when `lockdownLinkRevocable(slot.Link)`" would never have shown it on the first post, only after a refresh.
 - **Fix:** `lockdownPostAlertSlot` sets `slot.Link = link` (the link the rendered text shows, the same value it stores) before `lockdownAlertKeyboard`.
-- **Files modified:** `alita/modules/lockdown_alert.go`
+- **Files modified:** `fuku/modules/lockdown_alert.go`
 - **Commit:** c2817d0
 
 ### Process notes
@@ -104,12 +104,12 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownRevokeLink$|^TestLockdownAlertInviteLink$' -v ./alita/modules`: pass.
-- `go test -tags testtools -race -count=1 -run '^TestLockdownRevokeLinkRefusals$|^TestLockdownRevokeLink$' -v ./alita/modules`: pass (10 refusal subtests).
-- `go test -tags testtools -race -count=1 -run '^TestRecordLinkRevoked$|^TestAlertSync$|^TestAlertClose$' -v ./alita/db/lockdown`: pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules ./alita/db/lockdown`: pass (59 s).
-- Full `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/lockdown ./alita/db/models ./alita/i18n`: pass (modules 213 s); no intermittent failure seen in this run (the 05-08 setup flake recorded in `deferred-items.md` did not appear).
-- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown ./alita/db/models`: clean. `gofmt -l` on every touched Go file prints nothing. `git diff --exit-code go.mod go.sum` exits 0.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownRevokeLink$|^TestLockdownAlertInviteLink$' -v ./fuku/modules`: pass.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownRevokeLinkRefusals$|^TestLockdownRevokeLink$' -v ./fuku/modules`: pass (10 refusal subtests).
+- `go test -tags testtools -race -count=1 -run '^TestRecordLinkRevoked$|^TestAlertSync$|^TestAlertClose$' -v ./fuku/db/lockdown`: pass.
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules ./fuku/db/lockdown`: pass (59 s).
+- Full `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/lockdown ./fuku/db/models ./fuku/i18n`: pass (modules 213 s); no intermittent failure seen in this run (the 05-08 setup flake recorded in `deferred-items.md` did not appear).
+- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown ./fuku/db/models`: clean. `gofmt -l` on every touched Go file prints nothing. `git diff --exit-code go.mod go.sum` exits 0.
 - Acceptance greps pass: latest migration file, 0 transaction statements or `CONCURRENTLY`, `RevokeChatInviteLinkWithContext(` with `slot.Link`, `synced := lockdownSyncAlertCopies(ctx, b)`, `CanInviteUsers`, `can_invite_users` in AGENTS.md, `func lockdownRevokeRefusalKey(`, `lockdown_revoke_busy` once in each of the 7 locale files.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
 - Not run: applying the migration on PostgreSQL 16 (the plan's human check; SQLite only here) and a real Telegram revoke.
@@ -130,4 +130,4 @@ None.
 
 ## Self-Check: PASSED
 
-`migrations/20261011150000_add_lockdown_link_revoke.sql` and `alita/modules/lockdown_revoke_test.go` exist; commits 9bec408, c2817d0, 0eedc54 and 46134e5 are on the branch.
+`migrations/20261011150000_add_lockdown_link_revoke.sql` and `fuku/modules/lockdown_revoke_test.go` exist; commits 9bec408, c2817d0, 0eedc54 and 46134e5 are on the branch.

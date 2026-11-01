@@ -35,12 +35,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_undo_restore_test.go
-    - alita/modules/staff_undo_log_test.go
+    - fuku/modules/staff_undo_restore_test.go
+    - fuku/modules/staff_undo_log_test.go
   modified:
-    - alita/modules/staff_action_fake_test.go
-    - alita/modules/staff_log.go
-    - alita/modules/staff_undo.go
+    - fuku/modules/staff_action_fake_test.go
+    - fuku/modules/staff_log.go
+    - fuku/modules/staff_undo.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -66,7 +66,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_restore_test.go#TestStaffUndoRestores"
+        ref: "fuku/modules/staff_undo_restore_test.go#TestStaffUndoRestores"
         status: pass
     human_judgment: false
   - id: D2
@@ -74,7 +74,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_restore_test.go#TestStaffUndoRestores"
+        ref: "fuku/modules/staff_undo_restore_test.go#TestStaffUndoRestores"
         status: pass
     human_judgment: true
     rationale: "The fake models the implied-permission rule from the gotgbot doc comment; live Telegram behaviour (research A3) cannot be proven here and is a manual check in 03-VALIDATION.md and plan 03-09"
@@ -83,13 +83,13 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_restore_test.go#TestStaffUndoChangedSince"
+        ref: "fuku/modules/staff_undo_restore_test.go#TestStaffUndoChangedSince"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_restore_test.go#TestStaffUndoNotAppliedOriginally"
+        ref: "fuku/modules/staff_undo_restore_test.go#TestStaffUndoNotAppliedOriginally"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_restore_test.go#TestStaffUndoLinkRemoved"
+        ref: "fuku/modules/staff_undo_restore_test.go#TestStaffUndoLinkRemoved"
         status: pass
     human_judgment: false
   - id: D4
@@ -97,7 +97,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_restore_test.go#TestStaffUndoPresserRights"
+        ref: "fuku/modules/staff_undo_restore_test.go#TestStaffUndoPresserRights"
         status: pass
     human_judgment: false
   - id: D5
@@ -105,16 +105,16 @@ coverage:
     requirement: "STAFF-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_log_test.go#TestStaffUndoLogPosts"
+        ref: "fuku/modules/staff_undo_log_test.go#TestStaffUndoLogPosts"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_log_test.go#TestStaffUndoLogFailureKeepsDone"
+        ref: "fuku/modules/staff_undo_log_test.go#TestStaffUndoLogFailureKeepsDone"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_log_test.go#TestStaffUndoLogCategoryOff"
+        ref: "fuku/modules/staff_undo_log_test.go#TestStaffUndoLogCategoryOff"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_log_test.go#TestStaffReverseKind"
+        ref: "fuku/modules/staff_undo_log_test.go#TestStaffReverseKind"
         status: pass
     human_judgment: false
 
@@ -156,11 +156,11 @@ completed: 2026-10-05
 
 ## Files Created/Modified
 
-- `alita/modules/staff_undo_restore_test.go` - the restore, changed-since, not-applied, link-removed and presser-rights tests and their helpers
-- `alita/modules/staff_undo_log_test.go` - the undo log tests
-- `alita/modules/staff_action_fake_test.go` - `staffImpliedPermissions` and its use in `restrictChatMember`
-- `alita/modules/staff_log.go` - `sendStaffLogPost`, `staffReverseKind`, `composeStaffUndoLog`, `postStaffUndoLog`
-- `alita/modules/staff_undo.go` - `AfterGroup` posts for done groups; `card.IssuerName` is the presser at Confirm
+- `fuku/modules/staff_undo_restore_test.go` - the restore, changed-since, not-applied, link-removed and presser-rights tests and their helpers
+- `fuku/modules/staff_undo_log_test.go` - the undo log tests
+- `fuku/modules/staff_action_fake_test.go` - `staffImpliedPermissions` and its use in `restrictChatMember`
+- `fuku/modules/staff_log.go` - `sendStaffLogPost`, `staffReverseKind`, `composeStaffUndoLog`, `postStaffUndoLog`
+- `fuku/modules/staff_undo.go` - `AfterGroup` posts for done groups; `card.IssuerName` is the presser at Confirm
 - `locales/*.yml` (7 files) - `staff_log_undoes`
 - `AGENTS.md` - undo log-post rule
 
@@ -179,18 +179,18 @@ None - plan executed exactly as written. (Task 1 ended as `test(03-08)` with no 
 
 ## Issues Encountered
 
-- `make lint` is unavailable here (golangci-lint is built with go1.25 and refuses the go1.26.0 module). `gofmt -l` on the touched files, `go vet -tags testtools ./alita/modules` and `CGO_ENABLED=0 go build ./...` are clean. `gofmt -l alita/modules/` also lists `greetings_command_test.go`, which this plan does not touch.
+- `make lint` is unavailable here (golangci-lint is built with go1.25 and refuses the go1.26.0 module). `gofmt -l` on the touched files, `go vet -tags testtools ./fuku/modules` and `CGO_ENABLED=0 go build ./...` are clean. `gofmt -l fuku/modules/` also lists `greetings_command_test.go`, which this plan does not touch.
 - Tests ran on SQLite only; nothing in this plan adds SQL.
-- The worktree command guard refuses chained git commands; git calls were issued one per command. While mutation-testing, a `git checkout -- alita/modules/staff_undo.go` also discarded the uncommitted GREEN edits to that file; they were re-applied before the commit and the full suite was run after.
+- The worktree command guard refuses chained git commands; git calls were issued one per command. While mutation-testing, a `git checkout -- fuku/modules/staff_undo.go` also discarded the uncommitted GREEN edits to that file; they were re-applied before the commit and the full suite was run after.
 - Carried over: `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` is flaky across a second boundary (STATE.md). It did not fail in the full package run here.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Restores|ChangedSince|NotAppliedOriginally|LinkRemoved|PresserRights)' -v ./alita/modules` - all PASS (including `TestStaffUndoRestores`, 8 subtests)
-- `go test -tags testtools -race -count=1 -run '^TestStaffAction|^TestStopStaffActions|^TestStaffUndo' ./alita/modules` - ok
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndoLog|^TestStaffReverseKind$|^TestStaffActionLog' -v ./alita/modules` - all PASS (including `TestStaffUndoLogPosts`)
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/staff` - ok (modules 138 s)
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs` - pass, no drift
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Restores|ChangedSince|NotAppliedOriginally|LinkRemoved|PresserRights)' -v ./fuku/modules` - all PASS (including `TestStaffUndoRestores`, 8 subtests)
+- `go test -tags testtools -race -count=1 -run '^TestStaffAction|^TestStopStaffActions|^TestStaffUndo' ./fuku/modules` - ok
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndoLog|^TestStaffReverseKind$|^TestStaffActionLog' -v ./fuku/modules` - all PASS (including `TestStaffUndoLogPosts`)
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/staff` - ok (modules 138 s)
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs` - pass, no drift
 - Acceptance criteria re-run and passing: the flag name in the fake, 8 `t.Run(` in the restore test, `composeStaffUndoLog` and `"#STAFF_UNDO"` in `staff_log.go`, `postStaffUndoLog(` in `staff_undo.go`, the key once in each of es fr hi id pt ru, `STAFF_UNDO` in AGENTS.md, `gofmt -l` clean on the touched files, `go.mod` and `go.sum` unchanged
 
 ## Known Stubs
@@ -211,7 +211,7 @@ None.
 
 ## Self-Check: PASSED
 
-- `alita/modules/staff_undo_restore_test.go` and `alita/modules/staff_undo_log_test.go` exist; the modified files exist.
+- `fuku/modules/staff_undo_restore_test.go` and `fuku/modules/staff_undo_log_test.go` exist; the modified files exist.
 - Commits `b4a0d7b`, `249bdb5` and `449bf90` exist; `test(03-08)` precedes `feat(03-08)` for Task 2.
 
 ---

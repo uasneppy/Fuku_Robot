@@ -36,7 +36,7 @@ Pass looks like: the reply is the choice message ("Where do you want to open the
 
 If not: if Open here sends a second message instead of editing, the edit failed (look in the log for the chat and message ID). If a button does nothing and no alert shows, the press was not answered. If the name pings you, the line is a mention (it must not be).
 
-Change: nothing in a constant. Report the client and the log line. The choice screen is built in `alita/modules/settings.go` (`settingsChoiceScreen`) and the pages in `alita/modules/settings_pages.go`.
+Change: nothing in a constant. Report the client and the log line. The choice screen is built in `fuku/modules/settings.go` (`settingsChoiceScreen`) and the pages in `fuku/modules/settings_pages.go`.
 
 ### 2. Open in private for an admin who never started the bot (research A-row on deep links)
 
@@ -48,7 +48,7 @@ Pass looks like: the URL button opens the bot's chat, Start sends `/start settin
 
 If not: if the URL button does nothing, Telegram refused the link (check the bot's username). If Start opens the chat but no menu arrives, the `/start` payload was lost: some clients drop it when the chat is opened by a first Start (record the client). If the bot answers "That settings link is not valid", the payload was cut or changed. If a menu for the wrong group arrives, stop and report it: the payload names the group and nothing else may decide it.
 
-Change: nothing in a constant. The handler `settingsStartDeepLink` and the URL builder `settingsPrivateURL` are both in `alita/modules/settings.go`.
+Change: nothing in a constant. The handler `settingsStartDeepLink` and the URL builder `settingsPrivateURL` are both in `fuku/modules/settings.go`.
 
 ### 3. Another member and a demoted admin pressing the opener's menu
 
@@ -108,7 +108,7 @@ Pass looks like: the choice message appears in the topic where the command was s
 
 If not: if an edit lands in General or fails, record the topic type and the log line. Edits that fail leave the menu as it was and the user can send `/settings` again.
 
-Change: nothing yet. If edits fail in topics, the fix is a code change in the menu's edit path (`settingsPress` in `alita/modules/settings_menu.go`) to carry the thread of the message; open an issue with the evidence.
+Change: nothing yet. If edits fail in topics, the fix is a code change in the menu's edit path (`settingsPress` in `fuku/modules/settings_menu.go`) to carry the thread of the message; open an issue with the evidence.
 
 ### 8. Fast stepper tapping and the 429 on edits (research A5)
 
@@ -132,7 +132,7 @@ Pass looks like: the bot cannot delete a private message that old, so the messag
 
 If not: if Close on an old message shows nothing and leaves the buttons, the fallback edit failed too; record the Telegram error text from the log (it is logged, not shown). If the removed-bot press shows the generic "couldn't check your rights" alert instead, the error was not recognised as a missing bot; record the log line.
 
-Change: the edit fallback is in the menu's Close path (`settingsPress` in `alita/modules/settings_menu.go`); the missing-bot recognition is `chat_status.IsBotMissingError` in `alita/utils/chat_status`. Add the new error text there if Telegram words it differently.
+Change: the edit fallback is in the menu's Close path (`settingsPress` in `fuku/modules/settings_menu.go`); the missing-bot recognition is `chat_status.IsBotMissingError` in `fuku/utils/chat_status`. Add the new error text there if Telegram words it differently.
 
 ### 10. The Staff Group page: callback validity after a slow build (research A4)
 
@@ -144,7 +144,7 @@ Pass looks like: the tap stops its spinner almost at once (the bot answers the p
 
 If not: if the spinner runs for more than a few seconds before the page, the answer was not sent first; report the log. If the page takes close to 45 seconds with many groups, the build bound is the limit.
 
-Change: `staffPanelPageSize` (8) and `staffPanelBuildTimeout` (45 s) in `alita/modules/staff_panel.go`. Lower the page size if the build is too slow; do not raise the timeout past what a callback allows.
+Change: `staffPanelPageSize` (8) and `staffPanelBuildTimeout` (45 s) in `fuku/modules/staff_panel.go`. Lower the page size if the build is too slow; do not raise the timeout past what a callback allows.
 
 ### 11. Lift from the menu, in both variants
 
@@ -156,7 +156,7 @@ Pass looks like: Yes restores the group's message rights and the group shows exa
 
 If not: if the notice is missing from the group in the private variant, report it: a lift by button must never be silent. If two notices appear, the double Yes lifted twice.
 
-Change: the card lifetime, `settingsCardLifetime` in `alita/modules/settings_card.go`. Everything else is a server rule (`applyLockdownLift`).
+Change: the card lifetime, `settingsCardLifetime` in `fuku/modules/settings_card.go`. Everything else is a server rule (`applyLockdownLift`).
 
 ### 12. Link and Unlink from a group menu: nothing in the group names the Staff Group
 
@@ -168,7 +168,7 @@ Pass looks like: with one Staff Group, Link links at once; the Staff Group recei
 
 If not: if any group menu text, button, alert or notice names the Staff Group, stop and report the language and screen. If the Staff Group gets no notice, report the log line.
 
-Change: this is a server rule (`settingsStaffViewFor` in `alita/modules/settings_staff.go` is the one place that decides what a group menu may show). The picker labels are `settings_btn_staff_pick_n` in `locales/*.yml`.
+Change: this is a server rule (`settingsStaffViewFor` in `fuku/modules/settings_staff.go` is the one place that decides what a group menu may show). The picker labels are `settings_btn_staff_pick_n` in `locales/*.yml`.
 
 ### 13. Captcha, Antiflood and Lockdown trigger pages against the commands
 
@@ -229,14 +229,14 @@ These are known and accepted. A check that shows one of them is a pass, not a fa
 
 | What | Where |
 |---|---|
-| Card lifetime, `settingsCardLifetime` (5 minutes) | `alita/modules/settings_card.go` |
-| Captcha time stepper (-1, +1) | `alita/modules/settings_captcha.go` |
-| Antiflood stepper (-10, -1, +1, +10) and its range, `settingsFloodMinLimit` (3) and `settingsFloodMaxLimit` (100) | `alita/modules/settings_antiflood.go` |
-| Lockdown trigger steppers (-10, -1, +1, +10) | `alita/modules/settings_lockdown.go` |
-| Staff Group page size, `staffPanelPageSize` (8), and build bound, `staffPanelBuildTimeout` (45 s) | `alita/modules/staff_panel.go` |
-| The 64 character group title cap (`maxStaffDisplayTitleRunes`, used by `staffDisplayTitle`) and the 20 character button title cap | `alita/modules/staff_panel.go` |
+| Card lifetime, `settingsCardLifetime` (5 minutes) | `fuku/modules/settings_card.go` |
+| Captcha time stepper (-1, +1) | `fuku/modules/settings_captcha.go` |
+| Antiflood stepper (-10, -1, +1, +10) and its range, `settingsFloodMinLimit` (3) and `settingsFloodMaxLimit` (100) | `fuku/modules/settings_antiflood.go` |
+| Lockdown trigger steppers (-10, -1, +1, +10) | `fuku/modules/settings_lockdown.go` |
+| Staff Group page size, `staffPanelPageSize` (8), and build bound, `staffPanelBuildTimeout` (45 s) | `fuku/modules/staff_panel.go` |
+| The 64 character group title cap (`maxStaffDisplayTitleRunes`, used by `staffDisplayTitle`) and the 20 character button title cap | `fuku/modules/staff_panel.go` |
 | Alert, label and notice wording | `locales/*.yml` (all seven files, keys starting `settings_`) |
-| Missing-bot error recognition | `chat_status.IsBotMissingError` in `alita/utils/chat_status` |
+| Missing-bot error recognition | `chat_status.IsBotMissingError` in `fuku/utils/chat_status` |
 
 After any code change run `make test`, `make check-translations` and `make lint`.
 

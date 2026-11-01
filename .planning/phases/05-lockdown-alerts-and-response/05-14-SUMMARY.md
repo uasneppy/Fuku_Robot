@@ -32,7 +32,7 @@ key-files:
     - docs/src/content/docs/commands/staff/index.md
     - Makefile
     - AGENTS.md
-    - alita/modules/greetings_command_test.go
+    - fuku/modules/greetings_command_test.go
 key-decisions:
   - "The three button lines of lockdown_help_msg are plain lines led by the button's emoji, not x-bullets: TestLockdownStringsHaveBalancedTags requires exactly three x-bullets, each starting with a code-tagged command."
   - "Blank lines separate the alert paragraph and each button line, so the generated docs render them as separate paragraphs instead of one run-on block."
@@ -60,9 +60,9 @@ Note: `commits: 3` counts the two task commits and the gofmt commit made before 
 - **Help text (`lockdown_help_msg`, all 7 locales)**: a new block after the existing paragraphs. It says the alert goes to the Staff Group (if linked) and to the log channel (if the admin log category is on) and what it shows (trigger, joined just before and since, up to 10 accounts, the invite link most of them used); then one line per button. Lift lifts like `/unlockdown` and needs the owner or an admin who can restrict members, checked live, with Staff Group membership not enough. Ban recent joiners bans the burst's accounts for good so they can't rejoin, says it cannot be undone, leaves out admins, approved users and people an admin let in, and notes that a later press bans only new accounts. Revoke link revokes the link the raid used only if the bot created it, says other admins' links must be revoked in Telegram, and needs the owner or an admin who can invite users. A last line says every button asks for a confirmation only the presser can give, to press the buttons as yourself (not as an anonymous admin or a channel), and that a reminder comes every hour while the group stays locked and stops at the lift. Nothing is said about the banned accounts' messages: the ban call sends no `revoke_messages` (orchestrator note).
 - **Help text (`staff_help_msg`, all 7 locales)**: one line after the `/staff` bullet saying a linked group's alert and hourly reminders appear in the Staff Group with the three buttons that only that group's admins can use.
 - **Docs**: `make generate-docs` regenerated `commands/lockdown/index.md` and `commands/staff/index.md`; `make check-docs` reports no drift.
-- **Makefile**: `TestBeginAlert` and `TestBanRunStart` added to the `-run` list of `test-postgres-integrity` (beside `TestStartLockdownOneActivePerChat`; `./alita/db/lockdown` was already in its package list).
+- **Makefile**: `TestBeginAlert` and `TestBanRunStart` added to the `-run` list of `test-postgres-integrity` (beside `TestStartLockdownOneActivePerChat`; `./fuku/db/lockdown` was already in its package list).
 - **AGENTS.md pass** (below).
-- **`alita/modules/greetings_command_test.go`**: one stray blank line removed by `gofmt -w`, so the gate's `gofmt -l` is clean.
+- **`fuku/modules/greetings_command_test.go`**: one stray blank line removed by `gofmt -w`, so the gate's `gofmt -l` is clean.
 
 ## AGENTS.md final pass
 
@@ -70,12 +70,12 @@ Every sentence naming a Phase 5 identifier, key, table, callback field or worker
 
 - **Contradiction**: the `lockdown|v1` bullet said the card expiry `e` "is written now and not yet checked". Plan 05-04 enforces it; the bullet now describes the lazy expiry (a Confirm with `e` before the current unix minute edits the card to `lockdown_alert_card_expired` and does nothing else, no timer, no Redis key).
 - **Plan-number leftovers**: "Plan 05-07 saves its snapshot" in the tracker bullet now names `chat_lockdown_burst`.
-- **Testing**: the line "the Phase 5 models are added to the harness lists ... today `alita/modules/test_harness_test.go`" was stale. It now says `ChatLockdownAlert`, `ChatLockdownBurst` and `ChatLockdownBanRun` are in `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go` only, that the `alita/db` package's own tests never touch them, and what `make test-postgres-integrity` covers.
+- **Testing**: the line "the Phase 5 models are added to the harness lists ... today `fuku/modules/test_harness_test.go`" was stale. It now says `ChatLockdownAlert`, `ChatLockdownBurst` and `ChatLockdownBanRun` are in `fuku/modules/test_harness_test.go` and `fuku/db/lockdown/testmain_test.go` only, that the `fuku/db` package's own tests never touch them, and what `make test-postgres-integrity` covers.
 - **Callbacks, added** (what 05-04 did not document, as the orchestrator asked): the single bullet is now five. The dispatcher's check order (service identity answered "post as yourself" before any read; copy id parse; copy row honoured only on its own chat, answered "no longer valid" with no lockdown read and no presser lookup; lockdown; stale press; action), `SetAllowChannel(true)` (moved here from Data), the strict field parsing (`lockdownParseCopyID`, `lockdownParseAsker`, `lockdownParseCardFields`), the confirm card's expiry minute `e`, `lockdown_alert_no_restrict` for an administrator without `can_restrict_members`, the invite-right authority for Revoke, and `lockdownRevokeRefusalKey` (Telegram's raw text goes to the log only).
 - **Structure**: the Data bullet for `chat_lockdown_alerts` now holds the table facts only (row per copy, slot key, `message_id`, `body`, `link`, the claim and state columns, fresh reads, never in backup). The behaviour that sat in Data moved to Subsystem traps, once each: alert decision and destinations, copy delivery and stale-claim resume, the `edit_pending` refresh step, and reminders (with one added sentence on what a reminder shows).
 - **Checked and unchanged**: ban decision table and claim-before-call rules, the Ban button's fresh-approvals rule, the stop at the lift, `#LOCKDOWN_BAN`, no staff audit, close at the lift, `liftLockdownRow` as the one lift path, the Redis key list, the migrations and `chat_lockdown_ban_runs` rules.
 
-All acceptance greps hold: `TestBeginAlert` and `TestBanRunStart` once each in the Makefile, `lockdown|v1`, `chat_lockdown_alerts`, `chat_lockdown_burst`, `chat_lockdown_ban_runs`, `alita:lockdown:recent:`, `liftLockdownRow`, `#LOCKDOWN_BAN` and `lockdownReminderEvery` all present in AGENTS.md, `git diff --exit-code go.mod go.sum` exits 0, and no plan number remains in AGENTS.md.
+All acceptance greps hold: `TestBeginAlert` and `TestBanRunStart` once each in the Makefile, `lockdown|v1`, `chat_lockdown_alerts`, `chat_lockdown_burst`, `chat_lockdown_ban_runs`, `fuku:lockdown:recent:`, `liftLockdownRow`, `#LOCKDOWN_BAN` and `lockdownReminderEvery` all present in AGENTS.md, `git diff --exit-code go.mod go.sum` exits 0, and no plan number remains in AGENTS.md.
 
 ## Task commits
 
@@ -96,8 +96,8 @@ All acceptance greps hold: `TestBeginAlert` and `TestBanRunStart` once each in t
 - **Files modified:** the 7 locale files
 - **Commit:** ea11d0b
 
-**2. [Rule 3 - Blocking] The gate's `gofmt -l alita main.go` listed a file that predates Phase 5**
-- **Issue:** `alita/modules/greetings_command_test.go` has one extra blank line (also noted by plans 05-01, 05-04, 05-07, 05-10..05-13). The gate requires an empty list.
+**2. [Rule 3 - Blocking] The gate's `gofmt -l fuku main.go` listed a file that predates Phase 5**
+- **Issue:** `fuku/modules/greetings_command_test.go` has one extra blank line (also noted by plans 05-01, 05-04, 05-07, 05-10..05-13). The gate requires an empty list.
 - **Fix:** `gofmt -w` on that file, one line removed, committed on its own.
 - **Commit:** 6b5a24b
 
@@ -109,14 +109,14 @@ All acceptance greps hold: `TestBeginAlert` and `TestBanRunStart` once each in t
 ## Verification
 
 - `make check-docs`: no drift. `make check-translations`: all translations present.
-- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$|^TestStaffLocaleKeys$|^TestLockdownStringsHaveBalancedTags$' -v ./alita/i18n`: pass; whole `./alita/i18n`: pass. `TestStaffPanel*` (including `TestStaffPanelRenderFitsInEveryLocale`, which proves the longer staff help still fits or falls back to the hint): pass.
+- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$|^TestStaffLocaleKeys$|^TestLockdownStringsHaveBalancedTags$' -v ./fuku/i18n`: pass; whole `./fuku/i18n`: pass. `TestStaffPanel*` (including `TestStaffPanelRenderFitsInEveryLocale`, which proves the longer staff help still fits or falls back to the hint): pass.
 - Acceptance: `grep -c 'Revoke link'` and `grep -c "can't rejoin"` on the generated lockdown page print 1 each.
 - **`make test` (full suite, race, coverage, skip gate): exit 0**, 4 min 44 s, 61 `ok` package lines, no `--- FAIL`. The skips it lists are the PostgreSQL-only tests (`TestRepositoryMigrationChain`, `TestRunMigrations_*`, `TestApplyMigration_*`, `TestUpdateChat`, ...), which ran on PostgreSQL below. No intermittent failure appeared in this run.
-- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./...`: no diagnostics. `gofmt -l alita main.go`: empty after the gofmt commit. `git diff --exit-code go.mod go.sum`: unchanged.
+- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./...`: no diagnostics. `gofmt -l fuku main.go`: empty after the gofmt commit. `git diff --exit-code go.mod go.sum`: unchanged.
 - **PostgreSQL 16 (run locally this time).** `/usr/lib/postgresql/16/bin` was available, and `initdb` as the `postgres` user worked through `setpriv`, in a scratch cluster under `/var/tmp` with a local Redis. Against it:
-  - `ALITA_TEST_MIGRATION_CHAIN=true go test -tags testtools -run '^TestRepositoryMigrationChain$' ./alita/db/migrations`: pass; all 50 migrations apply, including the four Phase 5 files (`20261011120000`, `130000`, `140000`, `150000`), and index verification reports 0 missing.
-  - `ALITA_TEST_DATABASE=true make test-postgres-integrity`: exit 0, every listed test passes, including `TestBeginAlert` (4 subtests), `TestBanRunStart` (6 subtests) and `TestStartLockdownOneActivePerChat`.
-  - Bonus: the whole `./alita/db/lockdown` package under `-race -p 1` against PostgreSQL: pass.
+  - `FUKU_TEST_MIGRATION_CHAIN=true go test -tags testtools -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations`: pass; all 50 migrations apply, including the four Phase 5 files (`20261011120000`, `130000`, `140000`, `150000`), and index verification reports 0 missing.
+  - `FUKU_TEST_DATABASE=true make test-postgres-integrity`: exit 0, every listed test passes, including `TestBeginAlert` (4 subtests), `TestBanRunStart` (6 subtests) and `TestStartLockdownOneActivePerChat`.
+  - Bonus: the whole `./fuku/db/lockdown` package under `-race -p 1` against PostgreSQL: pass.
   The cluster and Redis were stopped afterwards.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code; `go vet -tags testtools` and `gofmt -l` stand in for it.
 
@@ -138,4 +138,4 @@ None.
 
 ## Self-Check: PASSED
 
-Commits ea11d0b, 0161ed6 and 6b5a24b are on the branch. Files modified exist: the 7 locale files, the two generated docs pages, `Makefile`, `AGENTS.md`, `alita/modules/greetings_command_test.go`. `STATE.md` and `ROADMAP.md` were not touched.
+Commits ea11d0b, 0161ed6 and 6b5a24b are on the branch. Files modified exist: the 7 locale files, the two generated docs pages, `Makefile`, `AGENTS.md`, `fuku/modules/greetings_command_test.go`. `STATE.md` and `ROADMAP.md` were not touched.

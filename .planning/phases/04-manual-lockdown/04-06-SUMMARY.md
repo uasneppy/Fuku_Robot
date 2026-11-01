@@ -30,14 +30,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/lockdown_durability_test.go
+    - fuku/modules/lockdown_durability_test.go
   modified:
-    - alita/db/lockdown/joiners.go
-    - alita/db/lockdown/joiners_test.go
-    - alita/db/lockdown/repository.go
-    - alita/db/lockdown/repository_test.go
-    - alita/modules/lockdown_worker.go
-    - alita/modules/lockdown.go
+    - fuku/db/lockdown/joiners.go
+    - fuku/db/lockdown/joiners_test.go
+    - fuku/db/lockdown/repository.go
+    - fuku/db/lockdown/repository_test.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/modules/lockdown.go
     - AGENTS.md
 
 key-decisions:
@@ -58,10 +58,10 @@ coverage:
     requirement: "LOCK-05"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_durability_test.go#TestLockdownLiftResumesAfterRestart"
+        ref: "fuku/modules/lockdown_durability_test.go#TestLockdownLiftResumesAfterRestart"
         status: pass
       - kind: integration
-        ref: "alita/db/lockdown/joiners_test.go#TestReleaseStaleClaims"
+        ref: "fuku/db/lockdown/joiners_test.go#TestReleaseStaleClaims"
         status: pass
     human_judgment: false
   - id: D2
@@ -69,7 +69,7 @@ coverage:
     requirement: "LOCK-05"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_durability_test.go#TestLockdownStopDuringCall"
+        ref: "fuku/modules/lockdown_durability_test.go#TestLockdownStopDuringCall"
         status: pass
     human_judgment: false
   - id: D3
@@ -77,7 +77,7 @@ coverage:
     requirement: "LOCK-05"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_durability_test.go#TestLockdownBanRetriesAndFailures"
+        ref: "fuku/modules/lockdown_durability_test.go#TestLockdownBanRetriesAndFailures"
         status: pass
     human_judgment: false
   - id: D4
@@ -85,10 +85,10 @@ coverage:
     requirement: "LOCK-05"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_durability_test.go#TestLockdownSettlesUnconfirmedLock"
+        ref: "fuku/modules/lockdown_durability_test.go#TestLockdownSettlesUnconfirmedLock"
         status: pass
       - kind: integration
-        ref: "alita/db/lockdown/repository_test.go#TestListUnconfirmed"
+        ref: "fuku/db/lockdown/repository_test.go#TestListUnconfirmed"
         status: pass
     human_judgment: false
   - id: D5
@@ -96,7 +96,7 @@ coverage:
     requirement: "LOCK-05"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_durability_test.go#TestLockdownSurvivesRedisFlush"
+        ref: "fuku/modules/lockdown_durability_test.go#TestLockdownSurvivesRedisFlush"
         status: pass
     human_judgment: true
     rationale: "The tests use miniredis and a nil client; how the production pacer behaves against a real Redis outage mid-run is a live check"
@@ -105,7 +105,7 @@ coverage:
     requirement: "LOCK-05"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_durability_test.go#TestLockdownNeverLiftsOnItsOwn"
+        ref: "fuku/modules/lockdown_durability_test.go#TestLockdownNeverLiftsOnItsOwn"
         status: pass
     human_judgment: false
 
@@ -168,7 +168,7 @@ See `key-decisions` above.
 - **Found during:** Task 1 (`TestLockdownStopDuringCall`, run under `-race`)
 - **Issue:** `StopLockdownWorker` waited on `lockdownWorkerWG` in a helper goroutine that could outlive its own timeout; a later `StartLockdownWorker` called `Add(1)` on the same WaitGroup, which the race detector reported. The plan requires a new worker to finish the lift after a stopped one.
 - **Fix:** one `done` channel per run (`lockdownWorkerDone`), closed when the worker goroutine ends; Stop waits on it with the timeout and clears the state only when it is still its own run.
-- **Files modified:** alita/modules/lockdown_worker.go
+- **Files modified:** fuku/modules/lockdown_worker.go
 - **Verification:** `TestLockdownStopDuringCall` passes 25 times in a row under `-race`.
 - **Committed in:** 8e2c9db
 
@@ -176,7 +176,7 @@ See `key-decisions` above.
 - **Found during:** Task 2 (designing the D-14 branch)
 - **Issue:** the plan runs the settling "synchronously when /lockdown meets an unconfirmed row" with no age condition. A row younger than a minute may be its own command's, between `Start` and `ConfirmLocked`; settling it reads permissions that are not locked yet and would delete it, leaving a locked group with no row.
 - **Fix:** the command settles only a row older than `lockdownUnconfirmedGrace`; a younger one is reported as already active. It re-reads the active row after settling.
-- **Files modified:** alita/modules/lockdown.go
+- **Files modified:** fuku/modules/lockdown.go
 - **Verification:** subtest "lockdown meets a young unconfirmed row"
 - **Committed in:** 9bc14d2
 
@@ -184,7 +184,7 @@ See `key-decisions` above.
 - **Found during:** Task 1 (writing `TestLockdownLiftResumesAfterRestart`)
 - **Issue:** the plan's test text has a stale unbanning row released "back to banned" in one cycle and unbanned "the next cycle", but its own step 3 runs the release first in the cycle, so the row is unbanned in the same cycle.
 - **Fix:** the test asserts the specified implementation: A is released and unbanned in the first cycle, B (live claim) is untouched until its claim passes 2 minutes, then unbanned; one tally with 4 unbanned.
-- **Files modified:** alita/modules/lockdown_durability_test.go
+- **Files modified:** fuku/modules/lockdown_durability_test.go
 - **Committed in:** eb1db09
 
 ---
@@ -195,7 +195,7 @@ See `key-decisions` above.
 
 - This environment's Bash tool refused compound commands and heredocs combined with other commands; they were split into plain separate calls.
 - A first version of `TestLockdownStopDuringCall` asserted the tally right after the lockdown read `lifted`, but the tally is posted just after that update; it flaked once in 15 runs. The test now waits for the tally message before asserting exactly one.
-- Pre-existing, not touched: `gofmt -l alita/modules` lists `greetings_command_test.go` (noted in 04-04 and 04-05).
+- Pre-existing, not touched: `gofmt -l fuku/modules` lists `greetings_command_test.go` (noted in 04-04 and 04-05).
 
 ## Known Limitations (carried forward, not stubs)
 
@@ -214,12 +214,12 @@ None beyond the plan's `<threat_model>`: T-04-20 (crash mid-lift leaving joiners
 ## Verification Run
 
 - Named plan tests, all with `-tags testtools -race -count=1` and passing: `TestLockdownLiftResumesAfterRestart`, `TestLockdownStopDuringCall`, `TestLockdownBanRetriesAndFailures`, `TestReleaseStaleClaims`, `TestLockdownSettlesUnconfirmedLock` (8 subtests), `TestLockdownSurvivesRedisFlush`, `TestLockdownNeverLiftsOnItsOwn`, `TestListUnconfirmed`. The restart, stop and retry tests also passed 25 runs in a row under `-race`.
-- Plan-level: `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/lockdown ./alita/db` ok; `git diff --exit-code go.mod go.sum` unchanged.
+- Plan-level: `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/lockdown ./fuku/db` ok; `git diff --exit-code go.mod go.sum` unchanged.
 - `make test`: exit 0 (70.0% coverage, no FAIL lines in the log). The known flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown .`, `make check-translations` (all present, no new keys), `make check-docs` (no drift), `gofmt -l` on the touched Go files (clean): all pass.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown .`, `make check-translations` (all present, no new keys), `make check-docs` (no drift), `gofmt -l` on the touched Go files (clean): all pass.
 - Acceptance criteria re-run, all pass: `lockdownStaleClaim = 2 * time.Minute`, `lockdown.ReleaseStaleClaims(` and `lockdownUnconfirmedGrace = time.Minute` in lockdown_worker.go; `settleUnconfirmedLockdown(` in lockdown.go; the `BeginLift(` count outside lockdown.go prints 0; AGENTS.md contains "older than 2 minutes"; `git log` shows each `test(04-06)` before its `feat(04-06)`.
 - `make lint`: not run. The installed golangci-lint 2.5.0 is built with go1.25 and refuses the go1.26.0 module (environment limitation).
-- PostgreSQL: not run. No throwaway cluster was set up. `ReleaseStaleClaims` uses `lockdown_id IN (SELECT id FROM chat_lockdowns WHERE state = ?)` and `ListUnconfirmedFresh` a plain comparison on `updated_at`; both ran on SQLite only. Command left for the orchestrator or CI, with the migration chain applied first: `DATABASE_URL=<postgres url> ALITA_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/db/lockdown`.
+- PostgreSQL: not run. No throwaway cluster was set up. `ReleaseStaleClaims` uses `lockdown_id IN (SELECT id FROM chat_lockdowns WHERE state = ?)` and `ListUnconfirmedFresh` a plain comparison on `updated_at`; both ran on SQLite only. Command left for the orchestrator or CI, with the migration chain applied first: `DATABASE_URL=<postgres url> FUKU_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/db/lockdown`.
 
 ## End-of-Phase UAT Items (live Telegram, not run)
 

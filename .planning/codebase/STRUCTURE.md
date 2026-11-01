@@ -35,7 +35,7 @@ last_mapped_at: 2026-10-04
 │   └── codebase/                   # This directory: architecture & structure docs
 ├── debug.docker-compose.yml        # Local dev: PostgreSQL + Redis + bot
 │
-├── alita/                          # Core bot package
+├── fuku/                          # Core bot package
 │   ├── main.go                     # LoadModules, InitialChecks, ListModules
 │   ├── main_test.go                # Package-level tests
 │   │
@@ -257,15 +257,15 @@ last_mapped_at: 2026-10-04
 - Purpose: Project root; Go module entry point, build configs, CI/CD definitions
 - Contains: main.go, Makefile, go.mod, configs (Docker, Heroku, pre-commit)
 
-**`alita/`:**
-- Purpose: Core bot package (github.com/divkix/Alita_Robot/alita)
+**`fuku/`:**
+- Purpose: Core bot package (github.com/uasneppy/fuku_robot/fuku)
 - Contains: Config, database, modules, utilities, i18n
 
-**`alita/config/`:**
+**`fuku/config/`:**
 - Purpose: Environment variable parsing and configuration
 - Contains: AppConfig struct (BotToken, HTTPPort, etc.), env value getters
 
-**`alita/db/`:**
+**`fuku/db/`:**
 - Purpose: Data persistence layer (GORM + PostgreSQL + cache)
 - Key files:
   - `db.go`: Global CRUD functions (CreateRecord, UpdateRecord, DeleteRecord)
@@ -275,16 +275,16 @@ last_mapped_at: 2026-10-04
   - `cache/`: Two-tier cache (local LRU + Redis)
   - `migrations/`: SQL migration files (schema source of truth)
 
-**`alita/db/models/`:**
+**`fuku/db/models/`:**
 - Purpose: GORM data models (User, Chat, Warns, Bans, etc.)
 - Convention: Each model has `TableName()` method returning migration table name
 
-**`alita/db/<domain>/`:**
+**`fuku/db/<domain>/`:**
 - Purpose: Feature-specific data access (user, warns, filters, etc.)
 - Contains: `repository.go` (public CRUD), `optimized.go` (batch queries), tests
 - Pattern: Reads use `cache.GetFromCacheOrLoad`; writes call `cache.DeleteCache` after GORM update
 
-**`alita/db/cache/`:**
+**`fuku/db/cache/`:**
 - Purpose: Two-tier cache system (local in-process LRU + Redis)
 - Key files:
   - `loader.go`: `GetFromCacheOrLoad` (concurrent load dedup, generation counters)
@@ -292,17 +292,17 @@ last_mapped_at: 2026-10-04
   - `ttl.go`: TTL configuration per key type
   - `local.go`: In-process LRU (10s TTL by default)
 
-**`alita/db/migrations/`:**
+**`fuku/db/migrations/`:**
 - Purpose: SQL schema migrations (source of truth)
 - Naming: Timestamp (e.g., 1693650789_create_users.sql); sorted by filename
 - Key file: `runner.go` pairs with `scripts/migrate_psql.sh`
 
-**`alita/i18n/`:**
+**`fuku/i18n/`:**
 - Purpose: Localization system
 - Contains: Translator (per-language instance), Manager (loads and parses YAML)
 - Embedded locales: `locales/` directory (7 languages + config.yml)
 
-**`alita/modules/`:**
+**`fuku/modules/`:**
 - Purpose: Bot feature implementations (30+ feature modules)
 - Key files:
   - `core.go`: Module registry structure, enable/disable map
@@ -311,7 +311,7 @@ last_mapped_at: 2026-10-04
 - Pattern: Each module registers via `RegisterLegacyModule(name, priority, LoadFunc)` in init()
 - Handler groups: -10 (captcha) through 11 (logging)
 
-**`alita/utils/`:**
+**`fuku/utils/`:**
 - Purpose: Cross-cutting utilities
 - Sub-packages:
   - `helpers/`: Command pipeline, CommandContext, WrapCommand
@@ -346,31 +346,31 @@ last_mapped_at: 2026-10-04
 
 **Entry Points:**
 - `main.go` (line 41): Bot startup, initialization sequence
-- `alita/main.go`: LoadModules, InitialChecks
-- `alita/utils/httpserver/webhook.go`: Webhook update reception
+- `fuku/main.go`: LoadModules, InitialChecks
+- `fuku/utils/httpserver/webhook.go`: Webhook update reception
 
 **Configuration:**
-- `alita/config/config.go`: Environment parsing
-- `alita/config/types.go`: AppConfig struct definition
+- `fuku/config/config.go`: Environment parsing
+- `fuku/config/types.go`: AppConfig struct definition
 - `.env`: Local development (auto-loaded by godotenv)
 - `app.json`: Heroku manifest
 
 **Core Logic:**
-- `alita/modules/registry.go`: RegisterLegacyModule, LoadAllModules (execution order)
-- `alita/modules/core.go`: Module struct, enable/disable map
-- `alita/utils/helpers/command_pipeline.go`: Command dispatch, permission checks
-- `alita/db/db.go`: Global CRUD functions (CreateRecord, UpdateRecord)
-- `alita/db/cache/loader.go`: GetFromCacheOrLoad (cache invalidation strategy)
+- `fuku/modules/registry.go`: RegisterLegacyModule, LoadAllModules (execution order)
+- `fuku/modules/core.go`: Module struct, enable/disable map
+- `fuku/utils/helpers/command_pipeline.go`: Command dispatch, permission checks
+- `fuku/db/db.go`: Global CRUD functions (CreateRecord, UpdateRecord)
+- `fuku/db/cache/loader.go`: GetFromCacheOrLoad (cache invalidation strategy)
 
 **Database & Persistence:**
-- `alita/db/migrations/`: SQL schema files (source of truth)
-- `alita/db/migrations/runner.go`: Migration applier
-- `alita/db/models/`: GORM struct definitions
-- `alita/db/<domain>/repository.go`: Domain-specific repository functions
+- `fuku/db/migrations/`: SQL schema files (source of truth)
+- `fuku/db/migrations/runner.go`: Migration applier
+- `fuku/db/models/`: GORM struct definitions
+- `fuku/db/<domain>/repository.go`: Domain-specific repository functions
 
 **Testing:**
-- `alita/db/testmain_test.go`: Test setup (AutoMigrate, miniredis)
-- `alita/modules/test_harness_test.go`: Shared test fixtures
+- `fuku/db/testmain_test.go`: Test setup (AutoMigrate, miniredis)
+- `fuku/modules/test_harness_test.go`: Shared test fixtures
 - `*_test.go`: Unit tests (co-located with implementation)
 - `*_command_test.go`: Command-specific tests
 
@@ -384,9 +384,9 @@ last_mapped_at: 2026-10-04
 - `<feature>_testtools.go`: Build-tagged test helpers (go build -tags testtools)
 
 **Directories:**
-- `alita/db/<domain>/`: One directory per feature domain (user, warns, filters, etc.)
-- `alita/modules/`: One .go file per feature module or logical grouping
-- `alita/utils/<concern>/`: Utility packages organized by concern (cache, chat_status, helpers, etc.)
+- `fuku/db/<domain>/`: One directory per feature domain (user, warns, filters, etc.)
+- `fuku/modules/`: One .go file per feature module or logical grouping
+- `fuku/utils/<concern>/`: Utility packages organized by concern (cache, chat_status, helpers, etc.)
 
 **Functions:**
 - `Load<Feature>()`: Module loader function registered in init() (e.g., `LoadWarns()`, `LoadAntiflood()`)
@@ -397,7 +397,7 @@ last_mapped_at: 2026-10-04
 
 **Database:**
 - Tables: Lowercase plural (users, chats, chat_filters, warns, etc.) in `migrations/*.sql`
-- Models: CamelCase (User, Chat, ChatFilters, Warns) in `alita/db/models/*.go`
+- Models: CamelCase (User, Chat, ChatFilters, Warns) in `fuku/db/models/*.go`
 - Columns: Lowercase with underscores (user_id, created_at, is_inactive) in SQL
 
 **Telegram Message Keys (i18n):**
@@ -409,12 +409,12 @@ last_mapped_at: 2026-10-04
 
 **New Feature (e.g., reputation system):**
 1. **Database:**
-   - Add migration: `alita/db/migrations/1693999999_create_reputation.sql`
-   - Add model: `alita/db/models/reputation.go`
-   - Add repository: `alita/db/reputation/repository.go` (with GetFromCacheOrLoad, DeleteCache)
+   - Add migration: `fuku/db/migrations/1693999999_create_reputation.sql`
+   - Add model: `fuku/db/models/reputation.go`
+   - Add repository: `fuku/db/reputation/repository.go` (with GetFromCacheOrLoad, DeleteCache)
    
 2. **Module:**
-   - Add handler: `alita/modules/reputation.go` with:
+   - Add handler: `fuku/modules/reputation.go` with:
      - `LoadReputation(dispatcher)` function
      - `init()` calling `RegisterLegacyModule("Reputation", <priority>, LoadReputation)`
      - Handler methods with value receiver on `moduleStruct`
@@ -425,12 +425,12 @@ last_mapped_at: 2026-10-04
    - Run `make check-translations` to verify
    
 4. **Tests:**
-   - Co-locate: `alita/modules/reputation_test.go` (unit tests)
-   - Add to AutoMigrate: `alita/db/testmain_test.go` (include RepModel)
+   - Co-locate: `fuku/modules/reputation_test.go` (unit tests)
+   - Add to AutoMigrate: `fuku/db/testmain_test.go` (include RepModel)
    - Use fixtures: `internal/testdb.Run()` for SQLite, miniredis for Redis
 
 **New Command (e.g., /rep_info):**
-1. Add handler in module: `alita/modules/reputation.go`
+1. Add handler in module: `fuku/modules/reputation.go`
 2. Register with pipeline:
    ```go
    helpers.WrapCommand(dispatcher, helpers.CommandDescriptor{
@@ -444,17 +444,17 @@ last_mapped_at: 2026-10-04
    })
    ```
 3. Add locale keys: `reputation_rep_info_*` in all locale files
-4. Test: `alita/modules/reputation_command_test.go`
+4. Test: `fuku/modules/reputation_command_test.go`
 
 **New Utility:**
 1. Determine concern: Is it permission-checking? Error handling? Formatting?
-2. Add to existing package if same concern, or create new `alita/utils/<concern>/`
+2. Add to existing package if same concern, or create new `fuku/utils/<concern>/`
 3. Keep functions pure (no side effects); export as needed
-4. Add tests: `alita/utils/<concern>/<func>_test.go`
+4. Add tests: `fuku/utils/<concern>/<func>_test.go`
 
 ## Special Directories
 
-**`alita/db/migrations/`:**
+**`fuku/db/migrations/`:**
 - Purpose: SQL schema source of truth
 - Generated: No (hand-written SQL)
 - Committed: Yes
@@ -468,8 +468,8 @@ last_mapped_at: 2026-10-04
 - Key: go:embed directive in main.go embeds all files at compile time
 - Constraint: Must include all 7 language files + config.yml; missing keys break at runtime
 
-**`alita/db/cache/`:**
-- Purpose: Cache layer (distinct from `alita/utils/cache/`)
+**`fuku/db/cache/`:**
+- Purpose: Cache layer (distinct from `fuku/utils/cache/`)
 - Generated: No
 - Committed: Yes
 - Key: Generation-based invalidation (4096 stripes); local LRU (10s TTL); Redis backend

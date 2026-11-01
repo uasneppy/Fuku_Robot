@@ -1,0 +1,226 @@
+package tracing
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/uasneppy/fuku_robot/fuku/utils/metrics"
+	"github.com/uasneppy/fuku_robot/fuku/utils/updatememo"
+)
+
+func injectTraceContext(ctx *ext.Context) (skipped bool) {
+	if ctx != nil && ctx.Data != nil {
+		if _, exists := ctx.Data[ContextDataKey]; exists {
+			return true
+		}
+	}
+
+	traceCtx, span := StartSpan(context.Background(), "dispatcher.processUpdate")
+	defer span.End()
+
+	if ctx.Data == nil {
+		ctx.Data = make(map[string]any)
+	}
+	ctx.Data[ContextDataKey] = traceCtx
+	return false
+}
+
+func TestTracingProcessor_InjectsContext(t *testing.T) {
+	ctx := &ext.Context{
+		Data: nil,
+	}
+
+	skipped := injectTraceContext(ctx)
+	if skipped {
+		t.Fatal("should not skip injection when no context exists")
+	}
+
+	raw, ok := ctx.Data[ContextDataKey]
+	if !ok {
+		t.Fatal("ctx.Data must contain the trace context entry after injection")
+	}
+	if _, ok := raw.(context.Context); !ok {
+		t.Fatalf("trace context entry must be of type context.Context (got %T)", raw)
+	}
+}
+
+func TestTracingProcessor_PreservesExistingContext(t *testing.T) {
+	existingCtx := context.WithValue(context.Background(), contextTestKey("existing"), "yes")
+
+	ctx := &ext.Context{
+		Data: map[string]any{
+			ContextDataKey: existingCtx,
+		},
+	}
+
+	skipped := injectTraceContext(ctx)
+	if !skipped {
+		t.Fatal("should skip injection when context already exists")
+	}
+
+	extracted, ok := ctx.Data[ContextDataKey].(context.Context)
+	if !ok {
+		t.Fatal("existing trace context entry must be a context.Context")
+	}
+	if extracted != existingCtx {
+		t.Error("TracingProcessor should not overwrite an existing context")
+	}
+	if extracted.Value(contextTestKey("existing")) != "yes" {
+		t.Error("Existing context values should be preserved")
+	}
+}
+
+func TestTracingProcessor_InitializesNilData(t *testing.T) {
+	ctx := &ext.Context{
+		Data: nil,
+	}
+
+	injectTraceContext(ctx)
+
+	if ctx.Data == nil {
+		t.Fatal("TracingProcessor should initialize nil Data map")
+	}
+	if _, ok := ctx.Data[ContextDataKey]; !ok {
+		t.Fatal("ctx.Data must contain the trace context key after injection")
+	}
+}
+
+func TestTracingProcessor_SkipsSpanForWebhookContext(t *testing.T) {
+	webhookCtx := context.WithValue(context.Background(), contextTestKey("webhook"), "true")
+
+	ctx := &ext.Context{
+		Data: map[string]any{
+			ContextDataKey: webhookCtx,
+		},
+	}
+
+	skipped := injectTraceContext(ctx)
+	if !skipped {
+		t.Fatal("should skip span creation when webhook context already exists")
+	}
+
+	raw := ctx.Data[ContextDataKey]
+	if raw != webhookCtx {
+		t.Fatal("webhook context must not be replaced")
+	}
+}
+
+func TestTracingProcessorProcessUpdateInjectsContext(t *testing.T) {
+	ctx := &ext.Context{}
+	processor := TracingProcessor{}
+	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, ctx); err != nil {
+		t.Fatalf("ProcessUpdate() error = %v", err)
+	}
+
+	raw, ok := ctx.Data[ContextDataKey]
+	if !ok {
+		t.Fatal("ProcessUpdate() did not inject tracing context")
+	}
+	if _, ok := raw.(context.Context); !ok {
+		t.Fatalf("ProcessUpdate() context entry type = %T, want context.Context", raw)
+	}
+}
+
+func TestTracingProcessorProcessUpdateInjectsUpdateMemo(t *testing.T) {
+	ctx := &ext.Context{}
+	processor := TracingProcessor{}
+	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, ctx); err != nil {
+		t.Fatalf("ProcessUpdate() error = %v", err)
+	}
+
+	if updatememo.From(ctx) == nil {
+		t.Fatal("ProcessUpdate() did not inject a per-update memo")
+	}
+}
+
+func TestTracingProcessorProcessUpdatePreservesExistingContext(t *testing.T) {
+	existingCtx := context.WithValue(context.Background(), contextTestKey("existing"), "true")
+	ctx := &ext.Context{
+		Data: map[string]any{
+			ContextDataKey: existingCtx,
+		},
+	}
+	processor := TracingProcessor{}
+	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, ctx); err != nil {
+		t.Fatalf("ProcessUpdate() error = %v", err)
+	}
+
+	if got := ctx.Data[ContextDataKey]; got != existingCtx {
+		t.Fatalf("ProcessUpdate() replaced existing context: got %v, want %v", got, existingCtx)
+	}
+}
+
+func TestTracingProcessorProcessUpdateRunsCallback(t *testing.T) {
+	// Do not use t.Parallel() - tests global state.
+	var called atomic.Int32
+	SetOnProcessUpdateCallback(func() {
+		called.Add(1)
+	})
+	defer SetOnProcessUpdateCallback(nil)
+
+	processor := TracingProcessor{}
+	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, &ext.Context{}); err != nil {
+		t.Fatalf("ProcessUpdate() error = %v", err)
+	}
+	if called.Load() != 1 {
+		t.Fatalf("ProcessUpdate() callback calls = %d, want 1", called.Load())
+	}
+}
+
+type contextTestKey string
+
+func TestRunOnProcessUpdateCallback_InvokesRegisteredCallback(t *testing.T) {
+	// Do not use t.Parallel() - tests global state
+
+	var called atomic.Int32
+	SetOnProcessUpdateCallback(func() {
+		called.Add(1)
+	})
+	defer SetOnProcessUpdateCallback(nil)
+
+	runOnProcessUpdateCallback()
+
+	if called.Load() != 1 {
+		t.Errorf("expected callback to be called exactly once, got %d calls", called.Load())
+	}
+
+	runOnProcessUpdateCallback()
+	if called.Load() != 2 {
+		t.Errorf("expected callback to be called twice, got %d calls", called.Load())
+	}
+}
+
+func TestTracingProcessorProcessUpdateCountsTopLevelUpdatesOnly(t *testing.T) {
+	processor := TracingProcessor{}
+	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+
+	before := testutil.ToFloat64(metrics.UpdatesProcessed)
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, &ext.Context{}); err != nil {
+		t.Fatalf("ProcessUpdate() error = %v", err)
+	}
+	if got := testutil.ToFloat64(metrics.UpdatesProcessed) - before; got != 1 {
+		t.Fatalf("updates processed delta = %v, want 1", got)
+	}
+
+	nested := &ext.Context{Data: map[string]any{ContextDataKey: context.Background()}}
+	before = testutil.ToFloat64(metrics.UpdatesProcessed)
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, nested); err != nil {
+		t.Fatalf("nested ProcessUpdate() error = %v", err)
+	}
+	if got := testutil.ToFloat64(metrics.UpdatesProcessed) - before; got != 0 {
+		t.Fatalf("nested updates processed delta = %v, want 0", got)
+	}
+}

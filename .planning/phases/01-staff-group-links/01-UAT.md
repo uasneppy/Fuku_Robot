@@ -57,7 +57,7 @@ expected: /staff keeps working under the new ID and the links follow. (Dispatche
 result: skipped
 reason: "Deferred follow-up: Just mark all tests complete for now"
 
-### 10. PostgreSQL migration and trigger on the deploy path (plan 01-01 D5, plan 01-04). Deploy with AUTO_MIGRATE=true against a real PostgreSQL and run ALITA_TEST_DATABASE=true make test-postgres-integrity in CI.
+### 10. PostgreSQL migration and trigger on the deploy path (plan 01-01 D5, plan 01-04). Deploy with AUTO_MIGRATE=true against a real PostgreSQL and run FUKU_TEST_DATABASE=true make test-postgres-integrity in CI.
 expected: Both migrations apply once, checksums recorded; TestStaffExclusivityTrigger passes (5 subtests including the 20-round concurrency race) and is not skipped.
 result: skipped
 reason: "Deferred follow-up: Just mark all tests complete for now"

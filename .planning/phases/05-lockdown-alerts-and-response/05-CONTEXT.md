@@ -23,7 +23,7 @@ Out of scope:
 - **D-01:** The alert goes to the linked Staff Group (if any) and to the group's log channel. Nothing extra is posted in the locked group, because the `/lockdown` reply is already there. A group with neither destination gets no alert.
 - **D-02:** The burst of a manual `/lockdown` has two parts:
   - every joiner the lockdown recorded (`chat_lockdown_joiners`);
-  - anyone who joined in the 10 minutes before the lockdown, read from antiraid's Redis join list (`alita:antiraid:joins:<chat>`). This part is best effort and is empty without Redis.
+  - anyone who joined in the 10 minutes before the lockdown, read from antiraid's Redis join list (`fuku:antiraid:joins:<chat>`). This part is best effort and is empty without Redis.
 
   Phase 6's automatic triggers will define their own burst.
 - **D-03:** The alert lists up to 10 accounts, each with name, @username and ID, followed by "and N more". Bots are marked.
@@ -89,13 +89,13 @@ Out of scope:
 ## Existing Code Insights
 
 ### Reusable Assets
-- **Lockdown state** (`alita/db/lockdown`): fresh reads, conditional updates, and the joiner rows with names, `invite_link`, `join_path`, `performer_id`, `state` and `ban_until` (migration 20261006120000).
-- **Lift and authority:** `lockdownBeginLift`, `requireLockdownAuthority` and the lift worker's tally (`alita/modules/lockdown*.go`).
-- **Lockdown pacer:** `lockdownPaced` / `lockdownPacer`, fleet-wide, keys `alita:lockdown:pace:*`.
+- **Lockdown state** (`fuku/db/lockdown`): fresh reads, conditional updates, and the joiner rows with names, `invite_link`, `join_path`, `performer_id`, `state` and `ban_until` (migration 20261006120000).
+- **Lift and authority:** `lockdownBeginLift`, `requireLockdownAuthority` and the lift worker's tally (`fuku/modules/lockdown*.go`).
+- **Lockdown pacer:** `lockdownPaced` / `lockdownPacer`, fleet-wide, keys `fuku:lockdown:pace:*`.
 - **Staff Group lookups:** the Staff Group link for a group, and the `/staff` panel's 🔒 marker (`lockdown.ListActiveByChatsFresh`).
 - **Log channel posts:** `sendStaffLogPost` in `staff_log.go`.
 - **Confirm cards:** the Redis-backed card hash with a Lua compare-and-set, an issuer-only Confirm and expiry (`staff_action_card.go`).
-- **Antiraid's recent-joins list:** a Redis sorted set per chat, `alita:antiraid:joins:<chat>` (`antiraid.go`).
+- **Antiraid's recent-joins list:** a Redis sorted set per chat, `fuku:antiraid:joins:<chat>` (`antiraid.go`).
 
 ### Established Patterns
 - **Authority:** a live `getChatMember` for every press, never the admin cache.

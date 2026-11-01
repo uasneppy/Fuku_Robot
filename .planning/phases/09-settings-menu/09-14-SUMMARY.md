@@ -39,7 +39,7 @@ actuals:
 
 `09-SPIKE.md` follows `08-SPIKE.md`: why it exists, before you start, 14 numbered checks (each with steps, Pass looks like, If not, Change), what to read in the output, accepted limits (no auto-close, name not mention, 10 s cross-replica skew D-28, antiflood first-write limit D-27), decisions, constants and where they live, the live-only list mapped to `09-VALIDATION.md`, and what the checklist never does. Checks 1 to 12 are the planned ones in the planned order. Check 13 collects the pending human items of the page plans; check 14 is the translation read.
 
-Every command, button label, alert text and constant named was grepped in `alita/` and `locales/en.yml`.
+Every command, button label, alert text and constant named was grepped in `fuku/` and `locales/en.yml`.
 
 ## Deviations from Plan
 

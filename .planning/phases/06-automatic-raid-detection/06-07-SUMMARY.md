@@ -28,17 +28,17 @@ tech-stack:
   added: []
   patterns:
     - "Exactly-once public notice: only the raidFire call whose startLockdownRow returned Started posts it"
-    - "Once-a-day cross-replica gate: SET NX EX 86400 on alita:raid:{chat}:warn, a lost gate or Redis error sends nothing"
+    - "Once-a-day cross-replica gate: SET NX EX 86400 on fuku:raid:{chat}:warn, a lost gate or Redis error sends nothing"
     - "User text (group title) escaped and spliced after translation through a token; the trigger sentence is spliced the same way so its percent sign never meets the translator's printf pass"
 
 key-files:
   created:
-    - alita/modules/raid_notice_test.go
-    - alita/modules/testredis_test.go
+    - fuku/modules/raid_notice_test.go
+    - fuku/modules/testredis_test.go
   modified:
-    - alita/modules/raid_trigger.go
-    - alita/modules/lockdown_fake_test.go
-    - alita/i18n/lockdown_locale_test.go
+    - fuku/modules/raid_trigger.go
+    - fuku/modules/lockdown_fake_test.go
+    - fuku/i18n/lockdown_locale_test.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -48,7 +48,7 @@ key-files:
     - locales/pt.yml
     - locales/ru.yml
   removed:
-    - alita/modules/antiraid_miniredis_test.go
+    - fuku/modules/antiraid_miniredis_test.go
 
 key-decisions:
   - "The notice is sent by raidFire itself, after the latch is set for the outcome, and only for lockdownStartStarted, so a lockdown an admin or another trigger already started is never announced twice"
@@ -81,7 +81,7 @@ status: complete
 ## Accomplishments
 
 - `raidPostNotice` (D-13): the `raidFire` call that gets `lockdownStartStarted` posts one message in the locked group, in the group's language and through `lockdownPaced`: the trigger line with its numbers, `lockdown_note_approved_muted`, and the no-delete and no-invite notes `/lockdown` adds when `res.BotMember` lacks those rights. A failed send is logged at warn and changes nothing.
-- `raidWarnCannotLock` (D-14, D-19): for `NotSupergroup`, `BotCannotRestrict` and `LockFailed` no lockdown is started and one warning naming the group and the trigger goes to the linked Staff Group (Staff Group language) and the log channel (admin category, group language, usual header first). One `SET NX EX 86400` on `alita:raid:{<chat>}:warn` gates both copies across replicas; a Redis error or a lost `SetNX` sends nothing. Bot rights unreadable, permissions unreadable, state failed and lock unknown only log.
+- `raidWarnCannotLock` (D-14, D-19): for `NotSupergroup`, `BotCannotRestrict` and `LockFailed` no lockdown is started and one warning naming the group and the trigger goes to the linked Staff Group (Staff Group language) and the log channel (admin category, group language, usual header first). One `SET NX EX 86400` on `fuku:raid:{<chat>}:warn` gates both copies across replicas; a Redis error or a lost `SetNX` sends nothing. Bot rights unreadable, permissions unreadable, state failed and lock unknown only log.
 - `lockdownTriggerSentence` renders the time-less trigger sentence; the warning uses it now and plan 06-08 reuses it.
 - 7 locale keys in all 7 files; the three warning keys start with the warning marker and are in `lockdownWarningKeys`.
 - `withMiniredis` moved to `testredis_test.go` beside `withMiniredisServer`, and `lockdownEnv.redis` keeps the server so the 24-hour dedupe is tested by fast-forwarding Redis time. `antiraid_miniredis_test.go` is gone, which also unblocks deleting the antiraid tests in 06-10.
@@ -108,11 +108,11 @@ Compile scaffolding in the Task 2 RED commit: the move of `withMiniredis` into `
 
 ## Files Created/Modified
 
-- `alita/modules/raid_trigger.go` - `raidPostNotice`, `raidWarnCannotLock`, `raidSend`, `lockdownTriggerSentence`, `raidPartWarn`, `raidWarnEvery`, `raidPostTimeout`, `raidTriggerToken`; the outcome switch at the end of `raidFire`
-- `alita/modules/raid_notice_test.go` - `TestRaidAutoNotice`, `TestRaidCannotLockWarnsOncePerDay`
-- `alita/modules/testredis_test.go` - `withMiniredisServer`, `withMiniredis` (moved)
-- `alita/modules/lockdown_fake_test.go` - `lockdownEnv.redis`
-- `alita/i18n/lockdown_locale_test.go` - three keys added to `lockdownWarningKeys`
+- `fuku/modules/raid_trigger.go` - `raidPostNotice`, `raidWarnCannotLock`, `raidSend`, `lockdownTriggerSentence`, `raidPartWarn`, `raidWarnEvery`, `raidPostTimeout`, `raidTriggerToken`; the outcome switch at the end of `raidFire`
+- `fuku/modules/raid_notice_test.go` - `TestRaidAutoNotice`, `TestRaidCannotLockWarnsOncePerDay`
+- `fuku/modules/testredis_test.go` - `withMiniredisServer`, `withMiniredis` (moved)
+- `fuku/modules/lockdown_fake_test.go` - `lockdownEnv.redis`
+- `fuku/i18n/lockdown_locale_test.go` - three keys added to `lockdownWarningKeys`
 - `locales/*.yml` - `lockdown_auto_started_join_surge`, `lockdown_auto_started_flood`, `lockdown_trigger_join_surge`, `lockdown_trigger_flood`, `lockdown_auto_cant_lock_rights`, `lockdown_auto_cant_lock_basic`, `lockdown_auto_cant_lock_refused`
 - `AGENTS.md` - one bullet under Data
 
@@ -128,7 +128,7 @@ See `key-decisions`. One is worth a second look: the `SetNX` gate is taken befor
 - **Found during:** Task 2 (writing the RED test)
 - **Issue:** The plan names `deliveryEnv` as the fixture ("a Staff Group and a log channel"), but it also types `/lockdown raid`, which would start a lockdown before the trigger runs.
 - **Fix:** A small `warnEnv` helper in `raid_notice_test.go` links the Staff Group and sets the log channel without starting anything; it uses the same `linkLockdownStaffGroup`, `setStaffLogChannel` and `wantAlertHeader` pieces.
-- **Files modified:** `alita/modules/raid_notice_test.go`
+- **Files modified:** `fuku/modules/raid_notice_test.go`
 - **Committed in:** `e2068b1`
 
 ### Additions beyond the plan's behaviour list
@@ -143,18 +143,18 @@ See `key-decisions`. One is worth a second look: the `SetNX` gate is taken befor
 
 ## Issues Encountered
 
-- `make lint` and a golangci-lint run cannot lint Go 1.26 here; `gofmt -l alita/modules alita/i18n` (clean) and `go vet -tags testtools ./alita/modules ./alita/i18n` (clean) stand in. `greetings_command_test.go` was not touched.
+- `make lint` and a golangci-lint run cannot lint Go 1.26 here; `gofmt -l fuku/modules fuku/i18n` (clean) and `go vet -tags testtools ./fuku/modules ./fuku/i18n` (clean) stand in. `greetings_command_test.go` was not touched.
 - No PostgreSQL server exists here and none was started; all tests ran on SQLite plus miniredis.
 - The sandbox rejected compound shell commands in several calls, so file edits that were first attempted as a Python script were redone with the Edit tool and locale fragments were appended with a plain `cat >>`.
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestRaidCannotLockWarnsOncePerDay$|^TestRaidAutoNotice$' -v ./alita/modules`: PASS, every subtest
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/modules`: ok (264 s), so every test using `withMiniredis` still compiles and passes
-- `CGO_ENABLED=1 go test -tags testtools -count=1 -run '^TestLockdownWarningLines$|^TestLockdownLocaleKeys$|^TestLockdownStringsHaveBalancedTags$' ./alita/i18n`: ok
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestRaidCannotLockWarnsOncePerDay$|^TestRaidAutoNotice$' -v ./fuku/modules`: PASS, every subtest
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/modules`: ok (264 s), so every test using `withMiniredis` still compiles and passes
+- `CGO_ENABLED=1 go test -tags testtools -count=1 -run '^TestLockdownWarningLines$|^TestLockdownLocaleKeys$|^TestLockdownStringsHaveBalancedTags$' ./fuku/i18n`: ok
 - `make check-translations`: all translations present; `make check-docs`: no drift
 - `CGO_ENABLED=0 go build ./...`: ok; `git diff --exit-code go.mod go.sum`: clean
-- Acceptance greps: `lockdown_auto_started_join_surge:` and `lockdown_trigger_flood:` appear once in each of the 7 locale files; `func lockdownTriggerSentence(`, `func raidPostNotice(`, `func raidWarnCannotLock(` match; `antiraid_miniredis_test.go` is gone and `func withMiniredis(` is in `testredis_test.go`; `grep -c 'lockdown_auto_cant_lock_' alita/i18n/lockdown_locale_test.go` prints 3
+- Acceptance greps: `lockdown_auto_started_join_surge:` and `lockdown_trigger_flood:` appear once in each of the 7 locale files; `func lockdownTriggerSentence(`, `func raidPostNotice(`, `func raidWarnCannotLock(` match; `antiraid_miniredis_test.go` is gone and `func withMiniredis(` is in `testredis_test.go`; `grep -c 'lockdown_auto_cant_lock_' fuku/i18n/lockdown_locale_test.go` prints 3
 
 ## Known Stubs
 
@@ -162,7 +162,7 @@ None.
 
 ## Threat Flags
 
-None. The new Redis key `alita:raid:{<chat>}:warn` is under the already documented `alita:raid:*` prefix. T-06-22 (spam) is covered by the SET NX gate, the Started-only notice and `lockdownPaced`; T-06-23 (title injection) by escaping and post-translation splicing (the `title is escaped` subtest); T-06-24 (wrong destination) by the uncached staff link and `actionlog.Destination`.
+None. The new Redis key `fuku:raid:{<chat>}:warn` is under the already documented `fuku:raid:*` prefix. T-06-22 (spam) is covered by the SET NX gate, the Started-only notice and `lockdownPaced`; T-06-23 (title injection) by escaping and post-translation splicing (the `title is escaped` subtest); T-06-24 (wrong destination) by the uncached staff link and `actionlog.Destination`.
 
 ## Next Phase Readiness
 
@@ -172,5 +172,5 @@ None. The new Redis key `alita:raid:{<chat>}:warn` is under the already document
 
 ## Self-Check: PASSED
 
-- `alita/modules/raid_notice_test.go`, `alita/modules/testredis_test.go`: present
+- `fuku/modules/raid_notice_test.go`, `fuku/modules/testredis_test.go`: present
 - Commits `83071ba`, `192bccd`, `e2068b1`, `50de04f`: present in `git log`

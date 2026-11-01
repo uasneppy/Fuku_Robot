@@ -8,7 +8,7 @@ requires:
   - phase: 07-ai-assisted-raid-detection
     provides: the raid AI watcher, pool, counters, settings columns and ai_burst kind (plans 07-01 to 07-09, 07-14)
 provides:
-  - architecture pages showing handler group 2, the raid AI pool, every new alita:raid:* AI key and the new code locations
+  - architecture pages showing handler group 2, the raid AI pool, every new fuku:raid:* AI key and the new code locations
   - reference pages showing ai_enabled / ai_threshold, the ai_burst trigger kind, /autolockdown ai
   - aispam page telling admins what goes to TypeSafe and Google Gemini and that AI never locks alone
 affects: [07-12 generated lockdown help text, phase verification]
@@ -52,7 +52,7 @@ coverage:
         status: pass
     human_judgment: false
   - id: D2
-    description: "caching.md lists av, aa, aispammers, ar, ag, ab, aibudget and aiv keys with lifetimes; project-structure.mdx lists raid_ai*.go, alita/utils/gemini and scripts/gemini-spike"
+    description: "caching.md lists av, aa, aispammers, ar, ag, ab, aibudget and aiv keys with lifetimes; project-structure.mdx lists raid_ai*.go, fuku/utils/gemini and scripts/gemini-spike"
     requirement: PLAT-02
     verification:
       - kind: other
@@ -90,7 +90,7 @@ status: complete
 
 ## Accomplishments
 
-- Task 1 (`62b69f6`): `handler-groups.md` gets the group 2 row for `raidAIWatcher`, a note that the watcher never blocks and a note that AI never decides alone (at least N verdicts from at least 3 accounts within 120 s, N defaulting to 5), and group 2 steps in two walkthroughs. `request-flow.mdx` lists group 2 before aispam. `caching.md` gains rows for `:av`/`:aa`, `:aispammers`, `:ar:{userId}`, `:ag:{mediaGroupId}`, `:ab:{hour}` with `alita:raid:aibudget:{hour}`, and `alita:raid:aiv:{fileUniqueId}`, each with its lifetime (checked against `raid_ai*.go`). `project-structure.mdx` lists the five `raid_ai*.go` files, `alita/utils/gemini/` and `scripts/gemini-spike/`.
+- Task 1 (`62b69f6`): `handler-groups.md` gets the group 2 row for `raidAIWatcher`, a note that the watcher never blocks and a note that AI never decides alone (at least N verdicts from at least 3 accounts within 120 s, N defaulting to 5), and group 2 steps in two walkthroughs. `request-flow.mdx` lists group 2 before aispam. `caching.md` gains rows for `:av`/`:aa`, `:aispammers`, `:ar:{userId}`, `:ag:{mediaGroupId}`, `:ab:{hour}` with `fuku:raid:aibudget:{hour}`, and `fuku:raid:aiv:{fileUniqueId}`, each with its lifetime (checked against `raid_ai*.go`). `project-structure.mdx` lists the five `raid_ai*.go` files, `fuku/utils/gemini/` and `scripts/gemini-spike/`.
 - Task 2 (`a51d832`): `database-schema.md` documents `ai_enabled` (TRUE) and `ai_threshold` (5, `chk_chat_raid_detection_ai` 3..500), migration `20261029120000`, the pre-migration cached value reading as on at 5, and the `ai_burst` kind (count = verdict items, window 120, percent 0, no migration needed). `database.md` and `commands.md` name the AI trigger and `ai`. `aispam/index.md` has a new "AI Spam And Raid Protection" section (delete verdicts feed the trigger, never locks alone, raid text checks via TypeSafe, images via Gemini, nothing sent without keys, paid-tier Gemini key recommended, `/autolockdown ai off`) and `GEMINI_API_KEY` in the operator table.
 
 ## Task Commits
@@ -107,7 +107,7 @@ Notes: the `commands/antiraid` and `commands/lockdown` pages are generated from 
 ## Verification
 
 - `make check-docs`: no drift. `make check-translations`: all present. `CGO_ENABLED=0 go build ./...`: exit 0.
-- Task 1 acceptance: `raidAIWatcher` 1, `alita:raid:aibudget` 1, `aiv` 1, `gemini-spike` 1, `raid_ai.go` 1 (all pass).
+- Task 1 acceptance: `raidAIWatcher` 1, `fuku:raid:aibudget` 1, `aiv` 1, `gemini-spike` 1, `raid_ai.go` 1 (all pass).
 - Task 2 acceptance: `ai_threshold` 2, `ai_burst` 3, `Gemini` 4, `TypeSafe` 3, MANUALLY MAINTAINED marker present in aispam, database-schema and commands pages (all pass).
 
 ## Pending human verification

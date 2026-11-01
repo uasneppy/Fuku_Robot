@@ -30,8 +30,8 @@ worktree, on SQLite and miniredis (no PostgreSQL).
 
 **Status:** fixed: requires human verification (logic change)
 **Commit:** f057260
-**Files modified:** `alita/modules/settings_card.go`, `alita/modules/settings_lockdown.go`,
-`alita/modules/settings_staff.go`, `alita/modules/lockdown.go`, `AGENTS.md`, tests
+**Files modified:** `fuku/modules/settings_card.go`, `fuku/modules/settings_lockdown.go`,
+`fuku/modules/settings_staff.go`, `fuku/modules/lockdown.go`, `AGENTS.md`, tests
 **Applied fix (D-33):**
 - The Lift card's Yes carries `r` (the `chat_lockdowns` row ID) and the Unlink card's Yes
   carries `l` (the `staff_group_links` row ID), beside `e`. `settingsCardObjectID` parses
@@ -54,8 +54,8 @@ worktree, on SQLite and miniredis (no PostgreSQL).
 
 **Status:** fixed: requires human verification (logic change)
 **Commit:** 51859e1
-**Files modified:** `alita/modules/settings_menu.go`, `alita/modules/settings_pages.go`,
-`alita/modules/settings_staff.go`, `AGENTS.md`, tests
+**Files modified:** `fuku/modules/settings_menu.go`, `fuku/modules/settings_pages.go`,
+`fuku/modules/settings_staff.go`, `AGENTS.md`, tests
 **Applied fix (D-32):** `settingsView.Creator` is set from the press's own live
 `getChatMember` record (status creator, private menu only, no extra Telegram call).
 `settingsStaffViewFor` stays the one deciding place: `Full` is the creator's private menu or
@@ -71,7 +71,7 @@ says.
 
 **Status:** fixed
 **Commit:** 3362e7e
-**Files modified:** `alita/modules/settings_antiflood.go`, `alita/i18n/settings_locale_test.go`,
+**Files modified:** `fuku/modules/settings_antiflood.go`, `fuku/i18n/settings_locale_test.go`,
 `locales/*.yml` (7), `AGENTS.md`, tests
 **Applied fix (D-34):** the repository and the commands are unchanged. In
 `settingsFloodSetMode` and `settingsFloodSetDelete` the redraw adds the warning notice
@@ -86,8 +86,8 @@ the notice.
 
 **Status:** fixed
 **Commit:** 7044ea8
-**Files modified:** `alita/modules/settings_lockdown.go`,
-`alita/modules/settings_lockdown_lift_test.go`, `AGENTS.md`
+**Files modified:** `fuku/modules/settings_lockdown.go`,
+`fuku/modules/settings_lockdown_lift_test.go`, `AGENTS.md`
 **Applied fix:** `settingsLockdownLiftYes` redraws the page first (`p.edit`) and returns nil;
 only then does a private menu call `lockdownAnnounceLift` (public `lockdown_lifted` notice,
 D-26). A menu opened in the group skips the public post, because its redrawn menu already says
@@ -101,7 +101,7 @@ posts exactly one notice and wakes the worker.
 
 **Status:** fixed
 **Commit:** 7c69874
-**Files modified:** `alita/modules/settings_menu.go`, `alita/modules/settings_private_test.go`,
+**Files modified:** `fuku/modules/settings_menu.go`, `fuku/modules/settings_private_test.go`,
 `AGENTS.md`
 **Applied fix:** after `getChat(c)`, a result that is not `group` or `supergroup` is
 `p.cannotOpen()` (`settings_cannot_open` plus its alert), like the deep link. New cases in
@@ -112,7 +112,7 @@ cannot-open edit, no captcha row written. The test fails without the fix.
 
 **Status:** fixed
 **Commit:** 2924f0f
-**Files modified:** `AGENTS.md`, `alita/modules/settings_help_test.go`
+**Files modified:** `AGENTS.md`, `fuku/modules/settings_help_test.go`
 **Applied fix:** the documented command is `-run '^(TestSettings|TestLoadSettings)'`, and
 `TestLoadSettingsRegistersHelp` asserts the command names `/settings` and `/setfloodmode`
 only.
@@ -121,7 +121,7 @@ only.
 
 **Status:** fixed
 **Commit:** dd3f922
-**Files modified:** `alita/modules/captcha.go`
+**Files modified:** `fuku/modules/captcha.go`
 **Applied fix:** new `captchaWebRuntimeInstalled(rt, bot)`; `captchaWebInstalled` is a thin
 wrapper over it, and `captchaWebModeRefusal` loads the runtime once and uses that value for
 the installed check and the Redis `PING`. Refusal order and behaviour are unchanged; the
@@ -131,7 +131,7 @@ existing captcha mode tests pass unchanged.
 
 **Status:** fixed
 **Commit:** 2e51158
-**Files modified:** `alita/modules/settings.go`, `alita/modules/settings_private_test.go`,
+**Files modified:** `fuku/modules/settings.go`, `fuku/modules/settings_private_test.go`,
 `AGENTS.md`
 **Applied fix:** a bot-missing or chat-gone error at the `getChatMember` step is answered
 `settings_start_not_admin`. `settings_cannot_open` stays for the later steps (gone at
@@ -142,8 +142,8 @@ AGENTS.md deep-link bullet were adjusted.
 
 **Status:** fixed
 **Commit:** 4f5f7f3
-**Files modified:** `alita/modules/staff_link.go`, `alita/modules/settings_staff.go`,
-`alita/i18n/settings_locale_test.go`, `locales/*.yml` (7), `AGENTS.md`, tests
+**Files modified:** `fuku/modules/staff_link.go`, `fuku/modules/settings_staff.go`,
+`fuku/i18n/settings_locale_test.go`, `locales/*.yml` (7), `AGENTS.md`, tests
 **Applied fix:** `/linkstaff`'s decision is now one shared function, `decideOwnStaffGroup`;
 Link without `s` uses it, so one match beside a group that could not be verified is
 `staff_check_failed` instead of a one-button picker (several matches still make the picker,
@@ -155,8 +155,8 @@ check against the command.
 
 **Status:** fixed
 **Commit:** dc7d91b
-**Files modified:** `alita/modules/settings_menu.go`, `alita/modules/settings_staff.go`,
-`alita/i18n/settings_locale_test.go`, `locales/*.yml` (7), `AGENTS.md`, tests
+**Files modified:** `fuku/modules/settings_menu.go`, `fuku/modules/settings_staff.go`,
+`fuku/i18n/settings_locale_test.go`, `locales/*.yml` (7), `AGENTS.md`, tests
 **Applied fix (D-34):** new `settings_staff_no_group` (all 7 locales, no "send this command
 again") is used for the no-Staff-Group refusal in the Link flow through
 `settingsStaffLinkRefusalText`; other refusals keep the command's words. `settingsCallback`
@@ -190,11 +190,11 @@ miniredis only, no PostgreSQL started.
 
 | Command | Result |
 |---|---|
-| `go test -tags testtools -race -count=1 -v -run '^(TestSettings\|TestLoadSettings)' ./alita/modules ./alita/i18n` | pass |
-| `go test -tags testtools -race -count=1 -run 'Captcha\|Antiflood\|Flood\|LinkStaff\|Unlink\|StaffLink\|StaffSeams\|Lockdown(Apply\|Alert\|Lift\|Announce\|Status)\|ApplyLockdown\|ApplyAutoLockdown' ./alita/modules` | pass |
+| `go test -tags testtools -race -count=1 -v -run '^(TestSettings\|TestLoadSettings)' ./fuku/modules ./fuku/i18n` | pass |
+| `go test -tags testtools -race -count=1 -run 'Captcha\|Antiflood\|Flood\|LinkStaff\|Unlink\|StaffLink\|StaffSeams\|Lockdown(Apply\|Alert\|Lift\|Announce\|Status)\|ApplyLockdown\|ApplyAutoLockdown' ./fuku/modules` | pass |
 | `CGO_ENABLED=0 go build ./...` | pass |
-| `go vet -tags testtools ./alita/...` | clean |
-| `gofmt -l alita` | empty |
+| `go vet -tags testtools ./fuku/...` | clean |
+| `gofmt -l fuku` | empty |
 | `make check-translations` | all present |
 | `make check-docs` | no drift |
 

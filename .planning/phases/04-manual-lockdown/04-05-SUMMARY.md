@@ -30,14 +30,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/lockdown_requests_test.go
-    - alita/modules/lockdown_isolation_test.go
+    - fuku/modules/lockdown_requests_test.go
+    - fuku/modules/lockdown_isolation_test.go
   modified:
-    - alita/modules/lockdown_guard.go
-    - alita/modules/lockdown_worker.go
-    - alita/modules/greetings.go
-    - alita/modules/antiraid.go
-    - alita/modules/lockdown_fake_test.go
+    - fuku/modules/lockdown_guard.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/modules/greetings.go
+    - fuku/modules/antiraid.go
+    - fuku/modules/lockdown_fake_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -72,7 +72,7 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_requests_test.go#TestLockdownGuardDeclinesJoinRequest"
+        ref: "fuku/modules/lockdown_requests_test.go#TestLockdownGuardDeclinesJoinRequest"
         status: pass
     human_judgment: true
     rationale: "Whether Telegram delivers a chat_join_request update to a bot with can_invite_users in a real supergroup, and lets a declined person request again at once (research A11), is a live UAT item"
@@ -81,7 +81,7 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_requests_test.go#TestLockdownJoinRequestFailsClosed"
+        ref: "fuku/modules/lockdown_requests_test.go#TestLockdownJoinRequestFailsClosed"
         status: pass
     human_judgment: false
   - id: D3
@@ -89,7 +89,7 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_requests_test.go#TestLockdownAcceptButtonRefuses"
+        ref: "fuku/modules/lockdown_requests_test.go#TestLockdownAcceptButtonRefuses"
         status: pass
     human_judgment: true
     rationale: "The alert wording and how it reads in the Telegram client are a UAT item"
@@ -98,7 +98,7 @@ coverage:
     requirement: "LOCK-04"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_isolation_test.go#TestLockdownAffectsOnlyItsChat"
+        ref: "fuku/modules/lockdown_isolation_test.go#TestLockdownAffectsOnlyItsChat"
         status: pass
     human_judgment: false
   - id: D5
@@ -106,7 +106,7 @@ coverage:
     requirement: "LOCK-04"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_isolation_test.go#TestAntiRaidStepsAsideDuringLockdown"
+        ref: "fuku/modules/lockdown_isolation_test.go#TestAntiRaidStepsAsideDuringLockdown"
         status: pass
     human_judgment: false
 ---
@@ -160,14 +160,14 @@ See `key-decisions` above.
 - **Found during:** Task 1 (designing `recordLockdownRequest`)
 - **Issue:** the plan's pseudo-code ends every request with ext.EndGroups. If the lift started between the lockdown read and the row write, the row is withdrawn by `lockdownPendingHeld` and no worker would ever decline it, leaving a request that is neither declined nor seen by greetings.
 - **Fix:** `recordLockdownRequest` returns whether the lockdown holds the request; when the lift got there first the handler returns ext.ContinueGroups so the group's own join-request handling applies.
-- **Files modified:** alita/modules/lockdown_guard.go
+- **Files modified:** fuku/modules/lockdown_guard.go
 - **Committed in:** 570801a
 
 **2. [Rule 2 - Missing Critical] One second margin on the reclaim cut-off**
 - **Found during:** Task 1
 - **Issue:** the plan says "notAfter = now (any age)". `ReclaimJoin` matches `updated_at < notAfter`, and a row the worker finished a microsecond ago could miss that strict comparison.
 - **Fix:** notAfter is `time.Now().Add(time.Second)`; the update is still conditional on the finished states, so the margin only widens "any age".
-- **Files modified:** alita/modules/lockdown_guard.go
+- **Files modified:** fuku/modules/lockdown_guard.go
 - **Committed in:** 570801a
 
 ---
@@ -177,7 +177,7 @@ See `key-decisions` above.
 ## Issues Encountered
 
 - A Bash command that mentioned both `git` and other commands in one compound line was refused by the sandbox twice ("too complex to verify"); commands were split into plain separate calls.
-- Pre-existing, not touched: `gofmt -l alita/modules` lists `greetings_command_test.go` (noted in 04-04).
+- Pre-existing, not touched: `gofmt -l fuku/modules` lists `greetings_command_test.go` (noted in 04-04).
 
 ## Known Limitations (carried forward, not stubs)
 
@@ -197,12 +197,12 @@ None beyond the plan's `<threat_model>`: T-04-17 (request approved during a lock
 ## Verification Run
 
 - Named plan tests, all with `-tags testtools -race -count=1` and passing: `TestLockdownGuardDeclinesJoinRequest`, `TestLockdownJoinRequestFailsClosed`, `TestLockdownAcceptButtonRefuses`, `TestLockdownAffectsOnlyItsChat`, `TestAntiRaidStepsAsideDuringLockdown`.
-- Plan-level: `go test -tags testtools -race -count=1 -run 'AntiRaid|Antiraid|Lockdown|Unlockdown|Greeting|JoinRequest|Captcha' ./alita/modules ./alita/db/lockdown` ok; `-run 'Greeting|JoinRequest|PendingJoins' ./alita/modules` ok.
+- Plan-level: `go test -tags testtools -race -count=1 -run 'AntiRaid|Antiraid|Lockdown|Unlockdown|Greeting|JoinRequest|Captcha' ./fuku/modules ./fuku/db/lockdown` ok; `-run 'Greeting|JoinRequest|PendingJoins' ./fuku/modules` ok.
 - `make test`: exit 0 (69.8% coverage, no FAIL lines in the log). The known flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown .`, `make check-translations` (all present), `make generate-docs` then `make check-docs` (no drift), `gofmt -l` on the touched Go files (clean), `git diff --exit-code go.mod go.sum` (unchanged): all pass.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown .`, `make check-translations` (all present), `make generate-docs` then `make check-docs` (no drift), `gofmt -l` on the touched Go files (clean), `git diff --exit-code go.mod go.sum` (unchanged): all pass.
 - Acceptance criteria re-run, all pass: the exact `NewChatJoinRequest(chatjoinrequest.All, lockdownModule.lockdownOnJoinRequest)` and `var lockdownActiveLookup = lockdown.GetActiveFresh` lines match; `greetings_join_request_lockdown` is in greetings.go and once in each of es, fr, hi, id, pt, ru; AGENTS.md contains "Accept button" and "returns at once while a lockdown is active"; `lockdown.GetActiveFresh(chat.Id)` is in antiraid.go; `git log` shows each `test(04-05)` before its `feat(04-05)`.
 - `make lint`: not run. The installed golangci-lint 2.5.0 is built with go1.25 and refuses the go1.26.0 module (environment limitation).
-- PostgreSQL: not run. No throwaway cluster was set up; the request path uses the existing conditional updates (`RecordJoin`, `ReclaimJoin`, `ClaimJoiner`, `MoveJoiner`, `CancelPending`) with no new SQL, all exercised on SQLite only. Command left for the orchestrator or CI, with the migration chain applied first: `DATABASE_URL=<postgres url> ALITA_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/db/lockdown`.
+- PostgreSQL: not run. No throwaway cluster was set up; the request path uses the existing conditional updates (`RecordJoin`, `ReclaimJoin`, `ClaimJoiner`, `MoveJoiner`, `CancelPending`) with no new SQL, all exercised on SQLite only. Command left for the orchestrator or CI, with the migration chain applied first: `DATABASE_URL=<postgres url> FUKU_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/db/lockdown`.
 
 ## End-of-Phase UAT Items (live Telegram, not run)
 

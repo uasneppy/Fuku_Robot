@@ -21,14 +21,14 @@ tech-stack:
 key-files:
   created:
     - migrations/20261011120000_add_lockdown_alerts.sql
-    - alita/db/lockdown/alerts.go
-    - alita/modules/lockdown_alert.go
-    - alita/modules/lockdown_alert_test.go
+    - fuku/db/lockdown/alerts.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/lockdown_alert_test.go
   modified:
-    - alita/db/models/lockdown.go
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_worker.go
-    - alita/modules/test_harness_test.go
+    - fuku/db/models/lockdown.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/modules/test_harness_test.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -61,9 +61,9 @@ Note: `commits: 3` counts the code and test commits made before this SUMMARY; th
 ## What was built
 
 - **Migration `20261011120000_add_lockdown_alerts.sql`**: `chat_lockdowns.chat_title`, `chat_lockdowns.alert_started_at`, and `chat_lockdown_alerts` with the unique slot `uk_chat_lockdown_alerts_slot (lockdown_id, kind, seq, dest)`, three CHECK constraints, two indexes, and a SQL-only cascade foreign key. No top-level transaction statements, every statement idempotent.
-- **Models**: `ChatLockdownAlert`, `AlertKind*`, `AlertDest*`, `AlertState*`, plus `ChatLockdown.ChatTitle` and `AlertStartedAt`. The model is in the `alita/modules` test harness AutoMigrate list.
-- **Repository `alita/db/lockdown/alerts.go`**: `AlertPlan`, `BeginAlert`, `ListAlertsToPlanFresh`, `ListPendingAlertSlotsFresh` (pending copies of active lockdowns only), `GetAlertSlotFresh`, `ClaimAlertSlot`, `RecordAlertPosted`, `ReleaseAlertSlot`, `FailAlertSlot`. All fresh reads, conditional updates with `RowsAffected == 1`.
-- **Module `alita/modules/lockdown_alert.go`**: `lockdownAlertDestinations` (uncached `staff.GetLinkOfGroupFresh`), `lockdownPlanAlerts`, `lockdownPostAlerts`, `lockdownRenderAlert` (group, name and reason spliced in after translation through tokens), `lockdownGroupLabel` (bold escaped title, or the chat ID in code tags when empty).
+- **Models**: `ChatLockdownAlert`, `AlertKind*`, `AlertDest*`, `AlertState*`, plus `ChatLockdown.ChatTitle` and `AlertStartedAt`. The model is in the `fuku/modules` test harness AutoMigrate list.
+- **Repository `fuku/db/lockdown/alerts.go`**: `AlertPlan`, `BeginAlert`, `ListAlertsToPlanFresh`, `ListPendingAlertSlotsFresh` (pending copies of active lockdowns only), `GetAlertSlotFresh`, `ClaimAlertSlot`, `RecordAlertPosted`, `ReleaseAlertSlot`, `FailAlertSlot`. All fresh reads, conditional updates with `RowsAffected == 1`.
+- **Module `fuku/modules/lockdown_alert.go`**: `lockdownAlertDestinations` (uncached `staff.GetLinkOfGroupFresh`), `lockdownPlanAlerts`, `lockdownPostAlerts`, `lockdownRenderAlert` (group, name and reason spliced in after translation through tokens), `lockdownGroupLabel` (bold escaped title, or the chat ID in code tags when empty).
 - **Wiring**: `/lockdown` stores the title (capped at 128 runes) and calls `wakeLockdownWorker()` after `ConfirmLocked`; its replies are unchanged. `runLockdownCycle` runs plan then post after the settle step.
 - **Locale keys** `lockdown_alert_title` and `lockdown_alert_trigger_manual` in all 7 locales.
 - **AGENTS.md**: Data bullet for the new table/columns and the Testing note.
@@ -96,12 +96,12 @@ Otherwise the plan was executed as written.
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertGate$|^TestLockdownAlertPostsOnce$' ./alita/modules`: pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|StaffPanel|StaffBan' ./alita/modules`: pass (Task 1 run), and `Lockdown|Unlockdown` again after Task 2: pass.
-- `go test -tags testtools -race ./alita/db/lockdown ./alita/db/models ./alita/db/migrations ./alita/db`: pass.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown ./alita/db/models`: clean.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertGate$|^TestLockdownAlertPostsOnce$' ./fuku/modules`: pass.
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|StaffPanel|StaffBan' ./fuku/modules`: pass (Task 1 run), and `Lockdown|Unlockdown` again after Task 2: pass.
+- `go test -tags testtools -race ./fuku/db/lockdown ./fuku/db/models ./fuku/db/migrations ./fuku/db`: pass.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown ./fuku/db/models`: clean.
 - `TestLockdownLocaleKeys` and `make check-translations`: pass.
-- `gofmt -l` on all touched Go files prints nothing. golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code, so `go vet` and `gofmt` were used instead. (`alita/modules/greetings_command_test.go` is reported by `gofmt -l` but is pre-existing and untouched.)
+- `gofmt -l` on all touched Go files prints nothing. golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code, so `go vet` and `gofmt` were used instead. (`fuku/modules/greetings_command_test.go` is reported by `gofmt -l` but is pre-existing and untouched.)
 - `go.mod` and `go.sum` unchanged.
 - Not run: the PostgreSQL human-check for applying the migration (no PostgreSQL server in the sandbox). The migration is plain idempotent SQL; the SQLite tests exercise the GORM model, not the SQL file.
 

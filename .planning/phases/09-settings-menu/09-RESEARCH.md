@@ -15,7 +15,7 @@
 - **D-04:** Every button press re-checks live with `getChatMember` that the presser is still the creator or an administrator of the group being configured (the callback's group in private, the chat the message sits in for a group menu). A failed lookup refuses, like the lockdown buttons. A demoted admin's press is refused and edits nothing.
 - **D-05:** Changing a setting needs the same right the matching command needs, checked live per setting, so the menu can never do more than the command: lockdown Lift and the lockdown trigger switches and thresholds need the creator or an administrator with `can_restrict_members` (`lockdownButtonAuthority` / `requireAutoLockdownAuthority`'s rule); Staff Group link and unlink need the live owner of both groups (`chat_status.CheckOwner`, the `/linkstaff` and `/unlinkstaff` rules); captcha and antiflood changes need the admin right those commands check. A refusal shows the command's own refusal text (or an alert) and writes nothing.
 - **D-06:** One message, edited in place. The main page has buttons Staff Group, Lockdown, Captcha, Antiflood and Close. Every sub-page has Back and Close. Close deletes the menu message; when it cannot (private chat after 48 h, or a missing right) it edits the message to a short "Menu closed" note with no buttons.
-- **D-07:** Callback data uses a new `settings|v1` namespace through `alita/utils/callbackcodec` only (64-byte cap, never `strings.Split`). Fields: page, action, and the group ID (private menu) or the opener's ID (group menu), plus a value where a step needs one. Chat IDs are up to 14 characters with the sign, so a field set stays under the cap; an encode overflow is a bug caught by a test, never a dead button.
+- **D-07:** Callback data uses a new `settings|v1` namespace through `fuku/utils/callbackcodec` only (64-byte cap, never `strings.Split`). Fields: page, action, and the group ID (private menu) or the opener's ID (group menu), plus a value where a step needs one. Chat IDs are up to 14 characters with the sign, so a field set stays under the cap; an encode overflow is a bug caught by a test, never a dead button.
 - **D-08:** No free-text input and no Redis state. Numbers move with stepper buttons, choices with buttons, and confirmation with a second tap. The menu is stateless, so it works without Redis and on any replica.
 - **D-09:** Dangerous actions (Lift lockdown, Unlink Staff Group) ask for a second tap in place ("Lift now? Yes / No") before they run. The Yes press re-checks authority live again and carries an expiry minute like the lockdown cards, so a stale confirm is refused.
 - **D-10:** Language: a menu opened in the group speaks the group's language; a menu opened in private speaks the admin's language. All strings are new `settings_*` keys in all 7 locale files, and every user-controlled string (group titles, names) is escaped and spliced in after the translator.
@@ -38,7 +38,7 @@
 
 - The exact `settings|v1` field names and abbreviations, and how a stepper encodes its direction and size (for example a step of 1, 5 or 10 for thresholds).
 - Whether the main page and sub-pages share one render pipeline with a header and footer, the exact layout, emoji and wording (settled in `09-UI-SPEC.md`).
-- Where the apply functions live (a new `alita/modules/settings_apply.go` or beside each command) and how the typed results are named.
+- Where the apply functions live (a new `fuku/modules/settings_apply.go` or beside each command) and how the typed results are named.
 - How the `/start` payload branch is wired into the existing help module's `start` handler without changing its other behaviour.
 
 ### Deferred Ideas (OUT OF SCOPE)
@@ -71,7 +71,7 @@ Read this session: `/home/user/Fuku_Robot/.claude/CLAUDE.md` (it embeds `AGENTS.
 
 - Go 1.26.0, gotgbot v2, GORM, Redis. Stay on the existing stack; no new dependency is needed. `CGO_ENABLED=0 go build ./...` for compile checks; tests need `CGO_ENABLED=1` and `-tags testtools`; the only valid full run is `make test`.
 - Commands go through `helpers.WrapCommand`; admin commands that must work for anonymous admins also need `RegisterAnonymousAdminHandler` + `anonPipelineHandler`. Handler methods use value receivers on `moduleStruct`. Modules register in `init()` with `RegisterLegacyModule(name, priority, load)`; duplicates are dropped silently.
-- Callbacks: encode/decode only through `alita/utils/callbackcodec`; `encodeCallbackData` returns `""` on overflow (a dead button), so a test must prove no page ever overflows.
+- Callbacks: encode/decode only through `fuku/utils/callbackcodec`; `encodeCallbackData` returns `""` on overflow (a dead button), so a test must prove no page ever overflows.
 - Every write `cache.DeleteCache`s the keys it affects. Never discard a DB error on a state-changing path.
 - Every fire-and-forget goroutine starts with `defer error_handling.RecoverFromPanic(...)`. This phase should need none; direct callback handlers still start with `defer error_handling.RecoverFromPanic("settings", "Settings")` (pattern: `verifyAnonymousAdmin`).
 - A missing i18n key returns `""`: copy key names from `locales/en.yml`; all 7 locale files; `make check-translations` only sees literal `GetString` keys (use a `switch` with literal keys).
@@ -84,7 +84,7 @@ Read this session: `/home/user/Fuku_Robot/.claude/CLAUDE.md` (it embeds `AGENTS.
 
 ## Summary
 
-Phase 9 is a wiring phase. Every setting the menu changes already has a command handler, a repository setter that calls `cache.DeleteCache`, and reply texts in all 7 locales. The work is (1) pulling the validate-write-invalidate core of seven command bodies into apply functions that take an explicit chat (the commands read `ctx.EffectiveChat`, which in a private menu is the private chat, so they cannot be called as they are), (2) a callback handler with a fixed press pipeline, (3) four page loaders and pure renderers, (4) a `/settings` command, a `/start` deep-link branch and about 85 new locale keys. No migration, no model, no Redis key, no shutdown drain, no handler group is added. The harness `AutoMigrate` list already contains every model the pages read (`alita/modules/test_harness_test.go:329-376`).
+Phase 9 is a wiring phase. Every setting the menu changes already has a command handler, a repository setter that calls `cache.DeleteCache`, and reply texts in all 7 locales. The work is (1) pulling the validate-write-invalidate core of seven command bodies into apply functions that take an explicit chat (the commands read `ctx.EffectiveChat`, which in a private menu is the private chat, so they cannot be called as they are), (2) a callback handler with a fixed press pipeline, (3) four page loaders and pure renderers, (4) a `/settings` command, a `/start` deep-link branch and about 85 new locale keys. No migration, no model, no Redis key, no shutdown drain, no handler group is added. The harness `AutoMigrate` list already contains every model the pages read (`fuku/modules/test_harness_test.go:329-376`).
 
 The UI contract is right about almost everything, but reading the code turned up eight points where it is wrong, silent or blocked by the existing code. The most important: (a) `/setflood`, `/setfloodmode` and `/delflood` call `chat_status.IsUserConnected(b, ctx, true, true)`, and the second `true` makes the **bot being an admin** a requirement with its own refusal text, so the "admin only" row of the authority table is wrong; (b) `SetFloodMode` and `SetFloodMsgDel` on a chat with no row create it through `FirstOrCreate`, and the model's `default:5` on `flood_limit` probably switches antiflood on at limit 5, so the "page drawn from the apply result, not a re-read" rule would show Off while the stored value is 5; (c) `antiflood.GetFloodContext` swallows read errors and returns defaults, so a D-11 "cannot open" page needs `GetAntifloodSettingsCachedContext`; (d) `captcha_settings` and `antiflood` are not in `skipLocal`, so another replica can show the old value for up to 10 s; (e) the `/staff` panel renderer cannot be reused as is (it always adds the Add group, Recent and Unlink buttons and the full help). The remaining points are in "Spec Deltas" below.
 
@@ -94,12 +94,12 @@ The UI contract is right about almost everything, but reading the code turned up
 
 | Capability | Primary Tier | Secondary Tier | Rationale |
 |------------|-------------|----------------|-----------|
-| Menu rendering and press handling | API / Backend (bot process, `alita/modules`) | Telegram client (inline keyboard) | The bot renders text and keyboards; Telegram only displays them |
+| Menu rendering and press handling | API / Backend (bot process, `fuku/modules`) | Telegram client (inline keyboard) | The bot renders text and keyboards; Telegram only displays them |
 | Authority (admin, restrict, owner of both) | API / Backend, live Telegram calls | none | Never the admin cache, never callback data (AGENTS.md Permissions) |
 | Setting storage | Database (`captcha_settings`, `antiflood_settings`, `chat_raid_detection`, `staff_group_links`, `chat_lockdowns`) | Cache (Redis plus the 10 s in-process layer) | Repositories already own reads (cached) and writes (`DeleteCache`) |
 | Menu state | none | none | Stateless by D-08: ownership and target travel in callback data, the live check supplies authority |
 | Deep link entry | Telegram client (URL button) | API (`/start` handler) | Anyone can tap a URL button; authority is decided only when `/start` arrives |
-| Localisation | API / Backend (`alita/i18n`, 7 locales) | none | Group language for group menus, user language for private menus (`lang.GetLanguage` already does this) |
+| Localisation | API / Backend (`fuku/i18n`, 7 locales) | none | Group language for group menus, user language for private menus (`lang.GetLanguage` already does this) |
 
 ## Standard Stack
 
@@ -108,24 +108,24 @@ The UI contract is right about almost everything, but reading the code turned up
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
 | `github.com/PaulSonOfLars/gotgbot/v2` | `v2.0.0-rc.36.0.20260919140833-240296efadb4` (module dir resolved by `go list -m`) | callbacks, `EditText`, `MaybeInaccessibleMessage` | the repo's Telegram client |
-| `alita/utils/callbackcodec` | in-repo | `settings\|v1\|...` encode/decode with the 64-byte cap | AGENTS.md Callbacks |
-| `alita/i18n` | in-repo | translator, 7 locales | AGENTS.md |
+| `fuku/utils/callbackcodec` | in-repo | `settings\|v1\|...` encode/decode with the 64-byte cap | AGENTS.md Callbacks |
+| `fuku/i18n` | in-repo | translator, 7 locales | AGENTS.md |
 | GORM, go-redis, gocache | as in `go.mod` | repositories already written | no new queries are needed |
 
 ### Supporting (in-repo seams to call, not to rewrite)
 
 | Seam | File:line | Use |
 |------|-----------|-----|
-| `lockdownLiveMember` | `alita/modules/lockdown.go:108` | live `getChatMember`, 5 s |
-| `staffIssuerSkipReason` | `alita/modules/staff_action_run.go:615` | creator / admin with `can_restrict_members` |
-| `liftLockdownRow` | `alita/modules/lockdown.go:485` | the one lift path |
-| `autolockdownWrite` / `writeAutoLockdown` / `parseAutoLockdownArgs` | `alita/modules/autolockdown.go:133`, `136`, `78` | the one trigger write path |
-| `runUnlinkGroup`, `checkUnlinkAuthority` | `alita/modules/staff_unlink.go:78`, `52` | unlink |
-| `resolveNamedStaffGroup`, `checkLinkTarget`, `storeLink` | `alita/modules/staff_link.go:208`, `232`, `254` | link pieces |
-| `buildStaffPanelRows`, `markLockedRows`, `composeStaffPanelText`, `staffPanelTextFor` | `alita/modules/staff_panel.go:419`, `464`, `206`, `271` | Staff page |
-| `editStaffMessage`, `isMessageNotModified` | `alita/modules/staff_unlink.go:205`, `staff_panel.go:506` | edit in place |
+| `lockdownLiveMember` | `fuku/modules/lockdown.go:108` | live `getChatMember`, 5 s |
+| `staffIssuerSkipReason` | `fuku/modules/staff_action_run.go:615` | creator / admin with `can_restrict_members` |
+| `liftLockdownRow` | `fuku/modules/lockdown.go:485` | the one lift path |
+| `autolockdownWrite` / `writeAutoLockdown` / `parseAutoLockdownArgs` | `fuku/modules/autolockdown.go:133`, `136`, `78` | the one trigger write path |
+| `runUnlinkGroup`, `checkUnlinkAuthority` | `fuku/modules/staff_unlink.go:78`, `52` | unlink |
+| `resolveNamedStaffGroup`, `checkLinkTarget`, `storeLink` | `fuku/modules/staff_link.go:208`, `232`, `254` | link pieces |
+| `buildStaffPanelRows`, `markLockedRows`, `composeStaffPanelText`, `staffPanelTextFor` | `fuku/modules/staff_panel.go:419`, `464`, `206`, `271` | Staff page |
+| `editStaffMessage`, `isMessageNotModified` | `fuku/modules/staff_unlink.go:205`, `staff_panel.go:506` | edit in place |
 | `callbackQueryFromContext`, `encodeCallbackData`, `decodeCallbackData`, `answerStaffCallback` | `callback_context.go:8`, `callback_codec.go:15`, `35`, `staff.go:301` | plumbing |
-| `RegisterDeepLinkHandler` | `alita/modules/deeplink_router.go:21` | the `/start` payload branch |
+| `RegisterDeepLinkHandler` | `fuku/modules/deeplink_router.go:21` | the `/start` payload branch |
 
 ### Alternatives Considered
 
@@ -182,7 +182,7 @@ No external package is installed by this phase, so the gate has nothing to check
 ### Recommended Project Structure
 
 ```
-alita/modules/
+fuku/modules/
 ├── settings.go            # settingsModule var, settingsDesc, LoadSettings, /settings command, deep link, init()
 ├── settings_menu.go       # callback entry, field parsing, press context, steps 1-5, edit/close helpers
 ├── settings_pages.go      # page table, snapshots, shared header/footer renderer, keyboard helpers
@@ -191,7 +191,7 @@ alita/modules/
 ├── settings_captcha.go    # Captcha page
 ├── settings_antiflood.go  # Antiflood page
 └── settings_apply.go      # apply functions + typed results shared with the commands
-alita/i18n/settings_locale_test.go        # parity, placeholders, ceilings, help length
+fuku/i18n/settings_locale_test.go        # parity, placeholders, ceilings, help length
 ```
 
 ### Pattern 1: One callback entry and one pipeline (MENU-02, MENU-03, MENU-04)
@@ -201,7 +201,7 @@ alita/i18n/settings_locale_test.go        # parity, placeholders, ceilings, help
 **Why one function:** the order is the security property (service identity before any lookup, opener before the live check, live check before any read or write). A per-action copy would drift.
 
 **Facts the planner needs:**
-- `ctx.EffectiveChat` in a callback update is the chat of the message the button sits in, and `EffectiveSender.User` is the presser (`gotgbot ext/context.go`, `case update.CallbackQuery != nil`). So `lang.GetLanguage(ctx)` (`alita/db/lang/repository.go:31-54`) already gives the group's language for a group menu and the user's language for a private menu: `ctxTr(ctx)` is the whole of D-10.
+- `ctx.EffectiveChat` in a callback update is the chat of the message the button sits in, and `EffectiveSender.User` is the presser (`gotgbot ext/context.go`, `case update.CallbackQuery != nil`). So `lang.GetLanguage(ctx)` (`fuku/db/lang/repository.go:31-54`) already gives the group's language for a group menu and the user's language for a private menu: `ctxTr(ctx)` is the whole of D-10.
 - `query.Message` is a `gotgbot.MaybeInaccessibleMessage`. `GetChat`, `GetMessageId`, `EditText` and `Delete` exist on both concrete types (`gen_helpers.go:233`, `312`; `gen_types.go:3430`, `3440`). Treat only `query.Message == nil` as `common_callback_message_unavailable` (the existing code does the same, e.g. `bans.go:1014-1018`); an `InaccessibleMessage` still carries chat and message ID and can be edited.
 - `answerInvalidCallback` (`callback_codec.go:51`) answers a toast without `ShowAlert`; the contract wants an alert, so write a small `settingsAnswer(b, query, text, alert)` helper (or call `answerStaffCallback`, `staff.go:301`, which takes the alert flag) and use it everywhere so "answered exactly once" is one choke point. A test counts `answerCallbackQuery` calls per press.
 - Answer **after** step 5 and **before** the apply/redraw for presses that make Telegram calls (captcha off restores every pending user, `disableCaptchaForChat` `captcha.go:548`; Lift does `getChat` + `setChatPermissions`; the Staff page makes up to 2N+1 calls). Refusals decided by an apply function are then notices, which the contract already says.
@@ -323,7 +323,7 @@ Decision flow in the menu: zero verified -> notice `staff_link_no_staff_group`; 
 - State: `lockdown.GetCurrentFresh(chatID)` (`lockdown/repository.go:137`, active row, else the lifting row with the highest ID). For `lifting` also `lockdown.TallyJoiners(row.ID)` (`:170`) and the existing `lockdownLiftingStatusText` (`lockdown_status.go:135`) for "x of y done". The body lines of `/lockdownstatus` are assembled inline in the handler (`lockdown_status.go:56-101`); extract only the head (`lockdown_status_active` or `_auto` with `lockdownTriggerSentence`, `lockdownReasonLine`, `lockdown_status_unconfirmed`) into a pure `lockdownStatusHead(tr, row)`; the page does not need the removed/declined/permission lines, and the permissions line is a Telegram call.
 - Reason line: reuse `lockdownReasonLine` (`lockdown.go:258`, key `lockdown_reason_line` = `"Reason: {reason}"`, `en.yml:2884`) instead of the new `settings_lockdown_reason` the UI contract lists (D-23). Cut the reason at 200 runes before escaping (`lockdownCapRunes`, `:181`).
 - Names: the head uses `lockdownMention` (`:231`, an HTML mention link). In a group menu that is fine (an edit does not notify); keep it.
-- Triggers: read with `autolockdownReadSettings(chatID)` (`autolockdown.go:256`, bounded by `raidSettingsTimeout` = 2 s, `raid_join.go:16`; the `raidSettingsLookup` variable is the test seam, `raid_join.go:22`). Writes: `applyAutoLockdown` -> `autolockdownWrite`. `raid_detection` is in `skipLocal` (`alita/db/cache/local.go:68-71`), so a redraw on another replica is fresh.
+- Triggers: read with `autolockdownReadSettings(chatID)` (`autolockdown.go:256`, bounded by `raidSettingsTimeout` = 2 s, `raid_join.go:16`; the `raidSettingsLookup` variable is the test seam, `raid_join.go:22`). Writes: `applyAutoLockdown` -> `autolockdownWrite`. `raid_detection` is in `skipLocal` (`fuku/db/cache/local.go:68-71`), so a redraw on another replica is fresh.
 - AI line: `raidAIConfigured()` (`raid_ai.go:84`) decides `lockdown_auto_ai_unavailable`.
 - Lift: ask = fresh `GetCurrentFresh`, not active -> notice `lockdown_already_lifted` / `lockdown_not_active` (not a card); live `staffIssuerSkipReason` -> card with `lockdown_alert_lift_ask` (`{group}` only in `en.yml:2926`; pass the escaped title through a token and splice, like `lockdownGroupText`, `lockdown_alert_callbacks.go:204`). Yes = steps 1-5 again, expiry check, fresh row again, `liftLockdownRow(ctx, b, row, actorID, name)` with `name := lockdownCapRunes(staffFullName(&query.From), lockdownNameMaxRunes)` (as `:294`). Outcome mapping is the `unlockdown` switch (`lockdown.go:434-442`).
 - **Public notice (gap in the UI contract):** `/unlockdown` replies into the group, and the alert button path posts `lockdownPostLiftNotice(b, ld, lockdownLiftedText(staffChatTranslator(ld.ChatID), ...))` then `wakeLockdownWorker()` (`lockdown_alert_callbacks.go:314-317`). A Lift from a private menu would otherwise leave the group unaware. Recommendation: do what the alert path does, in both menu variants.
@@ -416,7 +416,7 @@ Not a rename/refactor of identifiers, so the full inventory does not apply. The 
 | Secrets/env vars | None new | none |
 | Build artifacts | None (no new binary, no generated Go) | `make generate-docs` regenerates Markdown only |
 
-**Redis keys:** none added (D-08). **Migrations:** none. **Models:** none new; the existing `AutoMigrate` list already contains `CaptchaSettings`, `AntifloodSettings`, `StaffGroup`, `StaffGroupLink`, `ChatLockdown`, `LockdownJoiner`, `ChatRaidDetection` (`alita/modules/test_harness_test.go:344`, `355`, `366-375`). **Shutdown drains:** none added; menu presses are short synchronous handlers and a Lift in flight at shutdown behaves like the existing alert Lift.
+**Redis keys:** none added (D-08). **Migrations:** none. **Models:** none new; the existing `AutoMigrate` list already contains `CaptchaSettings`, `AntifloodSettings`, `StaffGroup`, `StaffGroupLink`, `ChatLockdown`, `LockdownJoiner`, `ChatRaidDetection` (`fuku/modules/test_harness_test.go:344`, `355`, `366-375`). **Shutdown drains:** none added; menu presses are short synchronous handlers and a Lift in flight at shutdown behaves like the existing alert Lift.
 
 ## Common Pitfalls
 
@@ -430,7 +430,7 @@ Not a rename/refactor of identifiers, so the full inventory does not apply. The 
 `GetFloodContext` returns `Limit 0, Action "mute"` on any error (`repository.go:20-30`), so an unreadable database looks like "antiflood off". The Antiflood page needs a real error for D-11: call `GetAntifloodSettingsCachedContext` (`optimized.go:48`), the same cache entry the command reads, and treat an error as cannot-open. Likewise `GetCaptchaSettingsContext` returns the error (`captcha/repository.go:31-54`).
 
 ### Pitfall 4: Staleness across replicas
-`captcha_settings` and `antiflood` keys are not in `skipLocal` (`alita/db/cache/local.go:42-72` lists only `captcha_pending`, `staff_group`, `staff_link_of`, `raid_detection`). `DeleteCache` evicts the local copy on the writing replica only, so a second replica can show the old value for `CACHE_LOCAL_TTL` (default 10 s, AGENTS.md Data). The command has the same skew. Recommendation: accept and document; adding the keys to `skipLocal` would add a Redis round trip to every group message (`checkFlood` reads antiflood first, `antiflood.go:261`) and every join. The pressing replica is always consistent. Cheap mitigation for an immediate redraw: the apply function returns the DB read-back.
+`captcha_settings` and `antiflood` keys are not in `skipLocal` (`fuku/db/cache/local.go:42-72` lists only `captcha_pending`, `staff_group`, `staff_link_of`, `raid_detection`). `DeleteCache` evicts the local copy on the writing replica only, so a second replica can show the old value for `CACHE_LOCAL_TTL` (default 10 s, AGENTS.md Data). The command has the same skew. Recommendation: accept and document; adding the keys to `skipLocal` would add a Redis round trip to every group message (`checkFlood` reads antiflood first, `antiflood.go:261`) and every join. The pressing replica is always consistent. Cheap mitigation for an immediate redraw: the apply function returns the DB read-back.
 
 ### Pitfall 5: Opener check with anonymous admins and channels
 Callback `From` is always a real user, so `u` equality is well defined. After the anonymous proof the tapper is the sender and becomes `u` (`bot_updates.go:221-222`). A press whose `From` is a service identity (`staffServiceUserIDs`, `staff_action_decide.go:513`: `var staffServiceUserIDs = map[int64]bool{777000: true, 1087968824: true, 136817688: true}`) is refused first. A callback from a message in a channel is not delivered to a handler without `SetAllowChannel(true)`, which the menu does not set.
@@ -463,13 +463,13 @@ Raid thresholds 3..500 (`raiddetection.MinThreshold`/`MaxThreshold`, `raiddetect
 `check-translations` sees literal `GetString` keys only (`scripts/check_translations/main.go`); the locale test must cover the whole `settings_` set. Generated docs read only `locales/en.yml`; `make check-docs` fails on drift.
 
 ### Pitfall 15: Stale worktree copy
-`/home/user/Fuku_Robot/.claude/worktrees/agent-aae3302fd6b0eafae/` holds an older copy of the module. Greps over `.` hit it; scope searches to `alita/`.
+`/home/user/Fuku_Robot/.claude/worktrees/agent-aae3302fd6b0eafae/` holds an older copy of the module. Greps over `.` hit it; scope searches to `fuku/`.
 
 ## Code Examples
 
 ### Strict group-ID parse shared by callback and deep link
 ```go
-// Source: alita/modules/staff_link.go:74-92 (existing). Reuse, do not re-implement.
+// Source: fuku/modules/staff_link.go:74-92 (existing). Reuse, do not re-implement.
 func parseStaffChatIDArg(arg string) (int64, bool) {
 	if arg == "" || len(arg) > maxStaffChatIDArgLen { return 0, false }
 	// optional leading minus, digits only, and id >= 0 is rejected
@@ -479,7 +479,7 @@ func parseStaffChatIDArg(arg string) (int64, bool) {
 
 ### Expiry-minute card (stateless)
 ```go
-// Source: alita/modules/lockdown_alert_callbacks.go:227-239 and 273-282 (existing pattern).
+// Source: fuku/modules/lockdown_alert_callbacks.go:227-239 and 273-282 (existing pattern).
 expiry := strconv.FormatInt(time.Now().Add(settingsCardLifetime).Unix()/60, 10) // (new const, mirrors lockdownCardLifetime)
 confirm := encodeCallbackData("settings", map[string]string{"a": "ly", "c": groupStr, "e": expiry})
 // at Yes:  if expiryMinute < time.Now().Unix()/60 { notice settings_card_expired; no write }
@@ -554,24 +554,24 @@ No question blocks planning.
 
 | # | What | Where | Change |
 |---|------|-------|--------|
-| 1 | Captcha command bodies | `alita/modules/captcha.go`: `captchaAdminGate` 445, `captchaCommand` 465, `disableCaptchaForChat` 548, `captchaModeCommand` 587, `captchaWebModeRefusal` 658, `captchaTimeCommand` 683, `captchaActionCommand` 728, `LoadCaptcha` 2256 | call `applyCaptcha*`; gate and replies stay |
-| 2 | Captcha repository | `alita/db/captcha/repository.go`: `GetCaptchaSettingsContext` 31, `SetCaptchaEnabled` 56, `SetCaptchaMode` 76, `SetCaptchaTimeout` 97, `SetCaptchaFailureAction` 136; errors 19-24 | none; each setter already calls `cache.DeleteCache(cache.CacheKey("captcha_settings", chatID))` |
-| 3 | Antiflood commands | `alita/modules/antiflood.go`: `setFlood` 421, `flood` 475, `setFloodMode` 514, `setFloodDeleter` 557, `LoadAntiflood` 607 | call `applyFlood*`; `IsUserConnected` calls stay |
-| 4 | Antiflood repository | `alita/db/antiflood/repository.go` 15-98, `optimized.go` 17-52 | none (see Pitfall 2) |
-| 5 | Autolockdown | `alita/modules/autolockdown.go`: `requireAutoLockdownAuthority` 49, `autoLockdownChange` 62, `parseAutoLockdownArgs` 78, `autolockdownWrite` 133, `writeAutoLockdown` 136, `autolockdownApply` 195, `autolockdownReadSettings` 256 | extract `applyAutoLockdown`; keep the variable seam |
-| 6 | Raid settings repository | `alita/db/raiddetection/repository.go`: `GetSettings` 72, `ErrThresholdOutOfRange` 104, `Set*` 129+ | none |
-| 7 | Lock / lift | `alita/modules/lockdown.go`: `requireLockdownGroup` 93, `lockdownLiveMember` 108, `requireLockdownAuthority` 131, `unlockdown` 401, `liftLockdownRow` 485, `lockdownLiftedText` 536; `lockdown_alert_callbacks.go`: `lockdownButtonAuthority` 165, `lockdownLiftConfirm` 264, `lockdownPostLiftNotice` 704; `lockdown_status.go` 31-101 | extract `applyLockdownLift` and `lockdownStatusHead` |
-| 8 | Staff link | `alita/modules/staff_link.go`: `parseStaffChatIDArg` 74, `resolveOwnStaffGroup` 173, `resolveNamedStaffGroup` 208, `checkLinkTarget` 232, `runLinkGroup` 273, `staffLinkRefusalText` 328, `deliverLinkOutcome` 381 | split as in Pattern 5 |
-| 9 | Staff unlink | `alita/modules/staff_unlink.go`: `checkUnlinkAuthority` 52, `runUnlinkGroup` 78, `staffUnlinkRefusalText` 115, `editStaffMessage` 205, `staffUnlinkConfirmPrompt` 317 | none |
-| 10 | Staff panel | `alita/modules/staff_panel.go`: `renderStaffRow` 162, `staffPanelView` 190, `composeStaffPanelText` 206, `staffPanelTextFor` 271, `renderStaffPanel` 297, `buildStaffPanelRows` 419, `markLockedRows` 464, `isMessageNotModified` 506 | split `renderStaffRow`; add `limit` |
-| 11 | Staff reads | `alita/db/staff/repository.go`: `GetStaffGroupFresh` 204, `ListStaffGroupsByOwner` 302, `GetLinkOfGroupFresh` 325, `DeleteLink` 360 | none |
-| 12 | `/start` | `alita/modules/help.go`: `start` 335 (private 2-arg path -> `HandleDeepLink`, 361-374 group path), `getBotUsername` 29; `deeplink_router.go` 21-48 | none; register from `settings.go` |
-| 13 | Anonymous re-entry | `alita/modules/anonymous_admin_router.go` 14-30; `moderation.go` `pipelineHandler` 340, `anonPipelineHandler` 349; `bot_updates.go` `verifyAnonymousAdmin` 118 | register `settings` |
-| 14 | Registration and help | `alita/modules/registry.go` 21; `core.go` `SetModuleEnabled` 42; `help_system.go` 58; `locales/config.yml` `alt_names` | add `Settings` |
+| 1 | Captcha command bodies | `fuku/modules/captcha.go`: `captchaAdminGate` 445, `captchaCommand` 465, `disableCaptchaForChat` 548, `captchaModeCommand` 587, `captchaWebModeRefusal` 658, `captchaTimeCommand` 683, `captchaActionCommand` 728, `LoadCaptcha` 2256 | call `applyCaptcha*`; gate and replies stay |
+| 2 | Captcha repository | `fuku/db/captcha/repository.go`: `GetCaptchaSettingsContext` 31, `SetCaptchaEnabled` 56, `SetCaptchaMode` 76, `SetCaptchaTimeout` 97, `SetCaptchaFailureAction` 136; errors 19-24 | none; each setter already calls `cache.DeleteCache(cache.CacheKey("captcha_settings", chatID))` |
+| 3 | Antiflood commands | `fuku/modules/antiflood.go`: `setFlood` 421, `flood` 475, `setFloodMode` 514, `setFloodDeleter` 557, `LoadAntiflood` 607 | call `applyFlood*`; `IsUserConnected` calls stay |
+| 4 | Antiflood repository | `fuku/db/antiflood/repository.go` 15-98, `optimized.go` 17-52 | none (see Pitfall 2) |
+| 5 | Autolockdown | `fuku/modules/autolockdown.go`: `requireAutoLockdownAuthority` 49, `autoLockdownChange` 62, `parseAutoLockdownArgs` 78, `autolockdownWrite` 133, `writeAutoLockdown` 136, `autolockdownApply` 195, `autolockdownReadSettings` 256 | extract `applyAutoLockdown`; keep the variable seam |
+| 6 | Raid settings repository | `fuku/db/raiddetection/repository.go`: `GetSettings` 72, `ErrThresholdOutOfRange` 104, `Set*` 129+ | none |
+| 7 | Lock / lift | `fuku/modules/lockdown.go`: `requireLockdownGroup` 93, `lockdownLiveMember` 108, `requireLockdownAuthority` 131, `unlockdown` 401, `liftLockdownRow` 485, `lockdownLiftedText` 536; `lockdown_alert_callbacks.go`: `lockdownButtonAuthority` 165, `lockdownLiftConfirm` 264, `lockdownPostLiftNotice` 704; `lockdown_status.go` 31-101 | extract `applyLockdownLift` and `lockdownStatusHead` |
+| 8 | Staff link | `fuku/modules/staff_link.go`: `parseStaffChatIDArg` 74, `resolveOwnStaffGroup` 173, `resolveNamedStaffGroup` 208, `checkLinkTarget` 232, `runLinkGroup` 273, `staffLinkRefusalText` 328, `deliverLinkOutcome` 381 | split as in Pattern 5 |
+| 9 | Staff unlink | `fuku/modules/staff_unlink.go`: `checkUnlinkAuthority` 52, `runUnlinkGroup` 78, `staffUnlinkRefusalText` 115, `editStaffMessage` 205, `staffUnlinkConfirmPrompt` 317 | none |
+| 10 | Staff panel | `fuku/modules/staff_panel.go`: `renderStaffRow` 162, `staffPanelView` 190, `composeStaffPanelText` 206, `staffPanelTextFor` 271, `renderStaffPanel` 297, `buildStaffPanelRows` 419, `markLockedRows` 464, `isMessageNotModified` 506 | split `renderStaffRow`; add `limit` |
+| 11 | Staff reads | `fuku/db/staff/repository.go`: `GetStaffGroupFresh` 204, `ListStaffGroupsByOwner` 302, `GetLinkOfGroupFresh` 325, `DeleteLink` 360 | none |
+| 12 | `/start` | `fuku/modules/help.go`: `start` 335 (private 2-arg path -> `HandleDeepLink`, 361-374 group path), `getBotUsername` 29; `deeplink_router.go` 21-48 | none; register from `settings.go` |
+| 13 | Anonymous re-entry | `fuku/modules/anonymous_admin_router.go` 14-30; `moderation.go` `pipelineHandler` 340, `anonPipelineHandler` 349; `bot_updates.go` `verifyAnonymousAdmin` 118 | register `settings` |
+| 14 | Registration and help | `fuku/modules/registry.go` 21; `core.go` `SetModuleEnabled` 42; `help_system.go` 58; `locales/config.yml` `alt_names` | add `Settings` |
 | 15 | Locales | `locales/{en,es,fr,hi,id,pt,ru}.yml` (+ `config.yml`) | ~85 `settings_*` keys + `settings_help_msg` |
 | 16 | Callback plumbing | `callback_codec.go` 15-56, `callback_context.go` 8, `staff.go` `answerStaffCallback` 301 | none |
-| 17 | Cache | `alita/db/cache/local.go` `skipLocal` 56-72 | none (decision: no change) |
-| 18 | Test harness | `alita/modules/test_harness_test.go` (`newModuleBotClient` 61, `newModuleCallbackContext` 184, AutoMigrate 329), `lockdown_fake_test.go` (`lockdownFake` 33, `newLockdownEnv` 339), `staff_action_fake_test.go` (`setMember` 139, `edits` 648, `lastAnswer` 677), `staff_helpers_test.go` (`withStaffLocale` 209) | add a `settingsEnv` that wraps `lockdownEnv` and loads `LoadSettings` |
+| 17 | Cache | `fuku/db/cache/local.go` `skipLocal` 56-72 | none (decision: no change) |
+| 18 | Test harness | `fuku/modules/test_harness_test.go` (`newModuleBotClient` 61, `newModuleCallbackContext` 184, AutoMigrate 329), `lockdown_fake_test.go` (`lockdownFake` 33, `newLockdownEnv` 339), `staff_action_fake_test.go` (`setMember` 139, `edits` 648, `lastAnswer` 677), `staff_helpers_test.go` (`withStaffLocale` 209) | add a `settingsEnv` that wraps `lockdownEnv` and loads `LoadSettings` |
 
 ## Environment Availability
 
@@ -593,14 +593,14 @@ No question blocks planning.
 | Property | Value |
 |----------|-------|
 | Framework | Go `testing`, `-tags testtools`, `-race` |
-| Config file | none; harness in `alita/modules/test_harness_test.go`, `internal/testdb` |
-| Quick run command | `go test -tags testtools -race -count=1 -run '^TestSettings' ./alita/modules ./alita/i18n` |
+| Config file | none; harness in `fuku/modules/test_harness_test.go`, `internal/testdb` |
+| Quick run command | `go test -tags testtools -race -count=1 -run '^TestSettings' ./fuku/modules ./fuku/i18n` |
 | Full suite command | `make test` |
 
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| MENU-01 | `/settings` replies with Open here + URL button; non-admin and basic group refused; anon admin gets proof then choice; `/start settings_<id>` branch (valid, invalid, non-admin, check failed, group gone) | integration (dispatcher, `lockdownEnv`) | `go test -tags testtools -race -count=1 -run '^TestSettingsCommand\|^TestSettingsStart' ./alita/modules` | no, Wave 0 |
+| MENU-01 | `/settings` replies with Open here + URL button; non-admin and basic group refused; anon admin gets proof then choice; `/start settings_<id>` branch (valid, invalid, non-admin, check failed, group gone) | integration (dispatcher, `lockdownEnv`) | `go test -tags testtools -race -count=1 -run '^TestSettingsCommand\|^TestSettingsStart' ./fuku/modules` | no, Wave 0 |
 | MENU-02 | `u` / `c` structural rules; another user refused with `settings_not_your_menu`; forwarded-menu cases; private menu manages only `c` | integration | `-run '^TestSettingsOwnership'` | no |
 | MENU-03 | step order (service id before lookup, opener before live check, demoted admin refused and nothing edited, lookup failure refuses); exactly one answer per press | integration | `-run '^TestSettingsPressPipeline'` | no |
 | MENU-04 | one message edited in place, Back/Close, Close falls back to edit, not-modified is success, no dead button for worst-case IDs | integration + pure render | `-run '^TestSettingsNavigation\|^TestSettingsCallbackBytes'` | no |
@@ -615,19 +615,19 @@ Drift table (one table feeds both entries): raid threshold 2, 3, 500, 501; captc
 
 ### Sampling Rate
 - **Per task commit:** the quick run for the files touched.
-- **Per wave merge:** `go test -tags testtools -race -count=1 ./alita/modules ./alita/i18n ./alita/db/antiflood ./alita/db/captcha`.
+- **Per wave merge:** `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/i18n ./fuku/db/antiflood ./fuku/db/captcha`.
 - **Phase gate:** `make test`, `make lint`, `make check-translations`, `make check-docs` green; `node --test scripts/captcha-page/*.test.mjs` is untouched by this phase.
 
 ### Wave 0 Gaps
 - [ ] Characterization tests that pin today's reply keys for `/captcha*`, `/setflood*`, `/delflood`, `/autolockdown`, `/unlockdown`, `/linkstaff`, `/unlinkstaff` before the refactor (several already exist, listed below).
-- [ ] `TestSetFloodModeOnFreshChatStoredLimit` in `alita/db/antiflood` (settles A1).
-- [ ] `settingsEnv` fixture in `alita/modules/settings_env_test.go`: lockdown env plus a Staff Group fixture (`linkLockdownStaffGroup`, `lockdown_alert_test.go:22`), per-user member records (`staffActionFake.setMember`), a press helper building `gotgbot.CallbackQuery{Message: gotgbot.Message{...}}` like `staffActionEnv.tapData` (`staff_action_fake_test.go:582`), and `lastAnswer`/`edits` accessors.
-- [ ] `alita/i18n/settings_locale_test.go` (pattern: `lockdown_locale_test.go`, `captcha_web_locale_test.go`): key parity over `settings_*`, non-empty, identical placeholder sets (`staffPlaceholders`), per-key ceilings from the UI-SPEC table, alert keys ≤ 200 characters, `settings_help_msg` fits one message with the header (`lockdownHelpLength` approach, 4096 units), reused Staff texts keep the placeholders in the privacy table, no `<i>/<u>/<pre>/<a>` tags.
+- [ ] `TestSetFloodModeOnFreshChatStoredLimit` in `fuku/db/antiflood` (settles A1).
+- [ ] `settingsEnv` fixture in `fuku/modules/settings_env_test.go`: lockdown env plus a Staff Group fixture (`linkLockdownStaffGroup`, `lockdown_alert_test.go:22`), per-user member records (`staffActionFake.setMember`), a press helper building `gotgbot.CallbackQuery{Message: gotgbot.Message{...}}` like `staffActionEnv.tapData` (`staff_action_fake_test.go:582`), and `lastAnswer`/`edits` accessors.
+- [ ] `fuku/i18n/settings_locale_test.go` (pattern: `lockdown_locale_test.go`, `captcha_web_locale_test.go`): key parity over `settings_*`, non-empty, identical placeholder sets (`staffPlaceholders`), per-key ceilings from the UI-SPEC table, alert keys ≤ 200 characters, `settings_help_msg` fits one message with the header (`lockdownHelpLength` approach, 4096 units), reused Staff texts keep the placeholders in the privacy table, no `<i>/<u>/<pre>/<a>` tags.
 - [ ] No new DB guarantee (no migration, no partial index, no CHECK, no conditional update): nothing to add to `make test-postgres-integrity`.
 
 **Existing tests that pin the refactored replies and must stay green:**
 - Captcha: `TestCaptchaCommandTogglesAndDisplaysSettings`, `TestCaptchaCommandRejectsUnknownOption`, `TestCaptchaDisableFinalizesAttemptsAndRestoresUsers`, `TestCaptchaSubcommandsCreateSettingsWithDefaults`, `TestCaptchaSubcommandsRequireArgumentsOrShowCurrentSettings`, `TestCaptchaSubcommandsRejectInvalidValues`, `TestCaptchaCommandsPropagateGotgbotRequestErrors` (errors must still be returned), `TestCaptchaModeTurnstile`, `TestCaptchaModeTurnstileRefusals`, `TestCaptchaModeListsTurnstileInEveryLanguage`, `TestLoadCaptchaRegistersHelpAndHandlers` (`captcha_command_test.go`, `captcha_mode_turnstile_test.go`).
-- Antiflood: `TestAntifloodCommandsUpdateSettingsAndDisplay`, `TestAntifloodCommandsHandleDisabledAndValidationBranches` (`antiflood_command_test.go:25`, `65`) and `alita/db/antiflood/repository_test.go`.
+- Antiflood: `TestAntifloodCommandsUpdateSettingsAndDisplay`, `TestAntifloodCommandsHandleDisabledAndValidationBranches` (`antiflood_command_test.go:25`, `65`) and `fuku/db/antiflood/repository_test.go`.
 - Autolockdown: `TestAutoLockdown`, `TestAutolockdownAI`, `TestAutoLockdownArgs`, `TestAutoLockdownAuthority`, `TestAutoLockdownBadInput`, `TestAutoLockdownBasicGroup`, `TestAutoLockdownSaveFails` (replaces `autolockdownWrite`), `TestAutoLockdownReadsAreBounded` (replaces `raidSettingsLookup`).
 - Lift: `TestLockdownLiftManualChange`, `TestLockdownLiftRestoreFailure`, `TestUnlockdownLiftsOnce`, `TestUnlockdownWithoutLockdown`, `TestLockdownLiftRecordFailure` (replaces `lockdownBeginLift`), `lockdown_alert_lift_test.go`, `TestLockdownAnonymousAdminProof`.
 - Staff: `staff_panel_render_test.go` (pins `renderStaffRow`/`renderStaffPanel`/`composeStaffPanelText` output), `staff_unlink_button_test.go`, `staff_history_test.go`, and the link tests that call `runLinkGroup`/`resolveOwnStaffGroup`/`deliverLinkOutcome`.
@@ -685,8 +685,8 @@ This phase integrates no external API or service. The Telegram Bot API methods u
 ### Primary (HIGH confidence; files read this session)
 - `/home/user/Fuku_Robot/.planning/phases/09-settings-menu/09-CONTEXT.md`, `09-UI-SPEC.md`; `.planning/REQUIREMENTS.md` (MENU-01..08); `.planning/ROADMAP.md`, `.planning/STATE.md`; `.planning/config.json`
 - `/home/user/Fuku_Robot/.claude/CLAUDE.md`, `/home/user/Fuku_Robot/AGENTS.md`
-- Go sources under `/home/user/Fuku_Robot/alita/`: `modules/{captcha,antiflood,autolockdown,lockdown,lockdown_alert_callbacks,lockdown_status,staff,staff_link,staff_unlink,staff_panel,help,deeplink_router,anonymous_admin_router,callback_codec,callback_context,i18n_helpers,registry}.go`, `modules/bot_updates.go` (118-228), `modules/moderation.go` (337-360), `db/captcha/repository.go`, `db/antiflood/{repository,optimized}.go`, `db/raiddetection/repository.go`, `db/staff/repository.go`, `db/lockdown/repository.go`, `db/cache/local.go`, `db/lang/repository.go`, `db/models/{antiflood,captcha,raid_detection,staff,lockdown}.go`, `utils/chat_status/{chat_status,access,owner}.go`, `utils/helpers/command_pipeline.go`, `utils/callbackcodec/callbackcodec.go`
-- Test infrastructure: `alita/modules/{test_harness_test,lockdown_fake_test,staff_action_fake_test,staff_helpers_test,antiflood_command_test,captcha_command_test}.go`, `alita/i18n/{lockdown_locale_test,captcha_web_locale_test}.go`, `scripts/check_translations/main.go`, `scripts/generate_docs/parsers.go`
+- Go sources under `/home/user/Fuku_Robot/fuku/`: `modules/{captcha,antiflood,autolockdown,lockdown,lockdown_alert_callbacks,lockdown_status,staff,staff_link,staff_unlink,staff_panel,help,deeplink_router,anonymous_admin_router,callback_codec,callback_context,i18n_helpers,registry}.go`, `modules/bot_updates.go` (118-228), `modules/moderation.go` (337-360), `db/captcha/repository.go`, `db/antiflood/{repository,optimized}.go`, `db/raiddetection/repository.go`, `db/staff/repository.go`, `db/lockdown/repository.go`, `db/cache/local.go`, `db/lang/repository.go`, `db/models/{antiflood,captcha,raid_detection,staff,lockdown}.go`, `utils/chat_status/{chat_status,access,owner}.go`, `utils/helpers/command_pipeline.go`, `utils/callbackcodec/callbackcodec.go`
+- Test infrastructure: `fuku/modules/{test_harness_test,lockdown_fake_test,staff_action_fake_test,staff_helpers_test,antiflood_command_test,captcha_command_test}.go`, `fuku/i18n/{lockdown_locale_test,captcha_web_locale_test}.go`, `scripts/check_translations/main.go`, `scripts/generate_docs/parsers.go`
 - gotgbot module source (`ext/context.go`, `gen_helpers.go`, `gen_types.go`, `custom_helpers.go`) in the Go module cache at `github.com/!paul!son!of!lars/gotgbot/v2@v2.0.0-rc.36.0.20260919140833-240296efadb4`
 
 ### Secondary (MEDIUM confidence)
@@ -703,4 +703,4 @@ This phase integrates no external API or service. The Telegram Bot API methods u
 - Pitfalls: HIGH for 2-4 and 11 (code-derived); MEDIUM for platform behaviours (assumed).
 
 **Research date:** 2026-10-30
-**Valid until:** 2026-11-30 (the code under `alita/modules` changes with every phase; re-check line numbers if another phase lands first)
+**Valid until:** 2026-11-30 (the code under `fuku/modules` changes with every phase; re-check line numbers if another phase lands first)

@@ -125,7 +125,7 @@ Evidence at L1 depth:
 - All 32 named mitigation tests exist.
 - `make test` passed after every wave merge.
 - Every Per-Task Verification Map command in `02-VALIDATION.md` passed under `-race` on the phase head.
-- A non-comment grep of `alita/modules/staff_action*.go` finds no admin-cache predicate.
+- A non-comment grep of `fuku/modules/staff_action*.go` finds no admin-cache predicate.
 - `crypto/rand` is imported in `staff_action_card.go`.
 - `git diff 039c915 HEAD -- go.mod go.sum` is empty.
 

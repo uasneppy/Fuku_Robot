@@ -8,7 +8,7 @@ requires:
   - phase: 06-smarter-raid-protection
     provides: raid detection settings and lockdown subsystem the later AI plans feed
 provides:
-  - "alita/utils/gemini: stdlib-only Gemini generateContent client (Client, Options, Image, Verdict, ModelInfo, HTTPError)"
+  - "fuku/utils/gemini: stdlib-only Gemini generateContent client (Client, Options, Image, Verdict, ModelInfo, HTTPError)"
   - "Classify: one inline image in, a finite spam_probability in 0..1 and an audit category out, or no verdict"
   - "ErrNoVerdict / ErrBlocked (blocked wraps no-verdict), ErrNotConfigured, ErrInvalidModel, ErrUnsupportedImage"
   - "GetModel (models.get) for the spike tool"
@@ -34,12 +34,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/utils/gemini/client.go
-    - alita/utils/gemini/request.go
-    - alita/utils/gemini/response.go
-    - alita/utils/gemini/errors.go
-    - alita/utils/gemini/gemini_test.go
-    - alita/utils/gemini/leaf_test.go
+    - fuku/utils/gemini/client.go
+    - fuku/utils/gemini/request.go
+    - fuku/utils/gemini/response.go
+    - fuku/utils/gemini/errors.go
+    - fuku/utils/gemini/gemini_test.go
+    - fuku/utils/gemini/leaf_test.go
   modified: []
 
 key-decisions:
@@ -58,7 +58,7 @@ coverage:
     requirement: "RAID-04"
     verification:
       - kind: unit
-        ref: "alita/utils/gemini/gemini_test.go#TestGeminiRequestShape"
+        ref: "fuku/utils/gemini/gemini_test.go#TestGeminiRequestShape"
         status: pass
     human_judgment: false
   - id: D2
@@ -66,7 +66,7 @@ coverage:
     requirement: "RAID-04"
     verification:
       - kind: unit
-        ref: "alita/utils/gemini/gemini_test.go#TestGeminiVerdictParse"
+        ref: "fuku/utils/gemini/gemini_test.go#TestGeminiVerdictParse"
         status: pass
     human_judgment: false
   - id: D3
@@ -74,7 +74,7 @@ coverage:
     requirement: "RAID-04"
     verification:
       - kind: unit
-        ref: "alita/utils/gemini/gemini_test.go#TestGeminiRetryAndErrors"
+        ref: "fuku/utils/gemini/gemini_test.go#TestGeminiRetryAndErrors"
         status: pass
     human_judgment: false
   - id: D4
@@ -82,21 +82,21 @@ coverage:
     requirement: "PLAT-02"
     verification:
       - kind: unit
-        ref: "alita/utils/gemini/gemini_test.go#TestGeminiErrorsNeverContainKey"
+        ref: "fuku/utils/gemini/gemini_test.go#TestGeminiErrorsNeverContainKey"
         status: pass
     human_judgment: false
   - id: D5
     description: "GetModel (models.get) for the spike tool"
     verification:
       - kind: unit
-        ref: "alita/utils/gemini/gemini_test.go#TestGeminiGetModel"
+        ref: "fuku/utils/gemini/gemini_test.go#TestGeminiGetModel"
         status: pass
     human_judgment: false
   - id: D6
     description: "The package stays a standard-library leaf, so the spike tool never triggers the pre-main database connection"
     verification:
       - kind: unit
-        ref: "alita/utils/gemini/leaf_test.go#TestGeminiPackageIsLeaf"
+        ref: "fuku/utils/gemini/leaf_test.go#TestGeminiPackageIsLeaf"
         status: pass
     human_judgment: false
   - id: D7
@@ -112,7 +112,7 @@ status: complete
 
 # Phase 7 Plan 02: Gemini client Summary
 
-**Stdlib-only Gemini `generateContent` client (`alita/utils/gemini`): one inline image in, a strictly validated spam probability out, every failure a key-free "no verdict".**
+**Stdlib-only Gemini `generateContent` client (`fuku/utils/gemini`): one inline image in, a strictly validated spam probability out, every failure a key-free "no verdict".**
 
 ## Performance
 
@@ -141,12 +141,12 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/utils/gemini/client.go` - `Client`, `Options`, `Image`, `Classify`, `GetModel`, `ModelInfo`, `ValidModel`, retry core, transport-error rebuild, constants
-- `alita/utils/gemini/request.go` - request structs, `SystemInstruction`, `Categories`, response schema, one constant per movable field name, thinking-level rule
-- `alita/utils/gemini/response.go` - `Verdict`, `ErrNoVerdict`, `ErrBlocked`, `parseVerdict`
-- `alita/utils/gemini/errors.go` - `HTTPError`, error-envelope decode, key scrub, `retryDelay` and `Retry-After` parsing
-- `alita/utils/gemini/gemini_test.go` - request shape, valid-model, verdict parse, retry/errors, key-never-in-error, GetModel (all `httptest`, no network)
-- `alita/utils/gemini/leaf_test.go` - leaf-package import test
+- `fuku/utils/gemini/client.go` - `Client`, `Options`, `Image`, `Classify`, `GetModel`, `ModelInfo`, `ValidModel`, retry core, transport-error rebuild, constants
+- `fuku/utils/gemini/request.go` - request structs, `SystemInstruction`, `Categories`, response schema, one constant per movable field name, thinking-level rule
+- `fuku/utils/gemini/response.go` - `Verdict`, `ErrNoVerdict`, `ErrBlocked`, `parseVerdict`
+- `fuku/utils/gemini/errors.go` - `HTTPError`, error-envelope decode, key scrub, `retryDelay` and `Retry-After` parsing
+- `fuku/utils/gemini/gemini_test.go` - request shape, valid-model, verdict parse, retry/errors, key-never-in-error, GetModel (all `httptest`, no network)
+- `fuku/utils/gemini/leaf_test.go` - leaf-package import test
 
 ## Decisions Made
 
@@ -161,9 +161,9 @@ None - plan executed exactly as written. Small hardening beyond the letter of th
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestGemini' -v ./alita/utils/gemini`: all seven top-level tests PASS (`TestGeminiRequestShape`, `TestGeminiValidModel`, `TestGeminiVerdictParse`, `TestGeminiRetryAndErrors`, `TestGeminiErrorsNeverContainKey`, `TestGeminiGetModel`, `TestGeminiPackageIsLeaf`).
-- `CGO_ENABLED=0 go build ./...` clean; `go vet -tags testtools ./alita/utils/gemini` clean; `gofmt -l alita/utils/gemini` prints nothing.
-- `go list -f '{{join .Imports " "}}' ./alita/utils/gemini` lists standard-library paths only; `git diff --exit-code go.mod go.sum` exits 0.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestGemini' -v ./fuku/utils/gemini`: all seven top-level tests PASS (`TestGeminiRequestShape`, `TestGeminiValidModel`, `TestGeminiVerdictParse`, `TestGeminiRetryAndErrors`, `TestGeminiErrorsNeverContainKey`, `TestGeminiGetModel`, `TestGeminiPackageIsLeaf`).
+- `CGO_ENABLED=0 go build ./...` clean; `go vet -tags testtools ./fuku/utils/gemini` clean; `gofmt -l fuku/utils/gemini` prints nothing.
+- `go list -f '{{join .Imports " "}}' ./fuku/utils/gemini` lists standard-library paths only; `git diff --exit-code go.mod go.sum` exits 0.
 - All acceptance greps pass (`x-goog-api-key` 3, `url.PathEscape` 1, `func ValidModel(` 1, `never instructions` 1, `KeyRejected`/`Retryable`/`GetModel`/`TestGeminiPackageIsLeaf` 1 each).
 - `make lint` was NOT run: golangci-lint is built with Go 1.25 against the module's Go 1.26 here. `gofmt -l` and `go vet -tags testtools` stood in for it. The orchestrator runs the full `make test` after the wave.
 - No test calls the real Google endpoint, none uses `t.Skip`, no PostgreSQL was started.
@@ -187,5 +187,5 @@ None - the only new network surface is the outbound Gemini call already covered 
 
 ## Self-Check: PASSED
 
-- Files verified on disk: client.go, request.go, response.go, errors.go, gemini_test.go, leaf_test.go under `alita/utils/gemini/`.
+- Files verified on disk: client.go, request.go, response.go, errors.go, gemini_test.go, leaf_test.go under `fuku/utils/gemini/`.
 - Commits verified: 6bde157, 9d1a300, 49f0b5d, 801fd3e (4 commits since base 53a48763, measured with `git rev-list --count`).

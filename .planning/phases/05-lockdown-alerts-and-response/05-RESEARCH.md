@@ -13,7 +13,7 @@
 - **D-01:** The alert goes to the linked Staff Group (if any) and to the group's log channel. Nothing extra is posted in the locked group, because the `/lockdown` reply is already there. A group with neither destination gets no alert.
 - **D-02:** The burst of a manual `/lockdown` has two parts:
   - every joiner the lockdown recorded (`chat_lockdown_joiners`);
-  - anyone who joined in the 10 minutes before the lockdown, read from antiraid's Redis join list (`alita:antiraid:joins:<chat>`). This part is best effort and is empty without Redis.
+  - anyone who joined in the 10 minutes before the lockdown, read from antiraid's Redis join list (`fuku:antiraid:joins:<chat>`). This part is best effort and is empty without Redis.
 
   Phase 6's automatic triggers will define their own burst.
 - **D-03:** The alert lists up to 10 accounts, each with name, @username and ID, followed by "and N more". Bots are marked.
@@ -95,9 +95,9 @@ Research found four problems with the discussed design that need an owner decisi
 The planner must verify every plan against these. CLAUDE.md imports AGENTS.md (`@../AGENTS.md`) and adds the stack and security constraints.
 
 - **Stack:** Go 1.26.0, gotgbot v2, GORM on PostgreSQL (SQLite in tests), Redis. No new dependencies.
-- **Migrations:** append-only, timestamp greater than every existing file (latest is `20261006120000_add_chat_lockdowns.sql`), one transaction per file, no top-level `BEGIN`/`COMMIT`/`ROLLBACK`, no `CREATE INDEX CONCURRENTLY`. Never `gorm.AutoMigrate` in production code. If `alita/db/migrations/runner.go` changes, `scripts/migrate_psql.sh` changes with it.
+- **Migrations:** append-only, timestamp greater than every existing file (latest is `20261006120000_add_chat_lockdowns.sql`), one transaction per file, no top-level `BEGIN`/`COMMIT`/`ROLLBACK`, no `CREATE INDEX CONCURRENTLY`. Never `gorm.AutoMigrate` in production code. If `fuku/db/migrations/runner.go` changes, `scripts/migrate_psql.sh` changes with it.
 - **Data:** every write `cache.DeleteCache`s the keys it affects; the lockdown tables are read fresh and never cached, so none applies, and any cache added later needs `skipLocal` plus `DeleteCache` on every write. Lockdown tables are never part of backup/export/import/reset. Models define `TableName()`.
-- **Commands and callbacks:** commands go through `helpers.WrapCommand` (Phase 5 adds no command); callbacks only through `alita/utils/callbackcodec` (`<ns>|v1|<url-encoded>`, 64-byte cap); `encodeCallbackData` returns `""` on overflow and ships a dead button, so user text goes behind a token or stays out. The new namespace must not start with `antiraid`.
+- **Commands and callbacks:** commands go through `helpers.WrapCommand` (Phase 5 adds no command); callbacks only through `fuku/utils/callbackcodec` (`<ns>|v1|<url-encoded>`, 64-byte cap); `encodeCallbackData` returns `""` on overflow and ships a dead button, so user text goes behind a token or stays out. The new namespace must not start with `antiraid`.
 - **Permissions:** `chat_status` predicates return bools and never reply; lockdown authority is a live `getChatMember`, never the admin cache or the service IDs; a failed lookup refuses.
 - **Handlers:** group numbers are execution order; watchers return `ext.ContinueGroups`; handler methods use value receivers on `moduleStruct`; fire-and-forget goroutines start with `defer error_handling.RecoverFromPanic(...)`.
 - **Shutdown:** the lockdown worker drain is registered after DB-close with `lockdownWorkerStopWait` (5 s) plus grace. New worker steps must be bounded per cycle and stop on `ctx.Err()`.
@@ -106,7 +106,7 @@ The planner must verify every plan against these. CLAUDE.md imports AGENTS.md (`
 - **Never discard a DB error on a state-changing path.** `UpdateRecord` skips zero values (use `UpdateRecordWithZeroValues` or explicit `Updates(map...)` for `false`/`0`/`""`).
 - **Secrets:** register any new secret with `logredact.RegisterSecret` (Phase 5 adds none).
 - **Telegram limits:** fan-out respects Bot API limits and reports partial failures, never drops them; pacing is fleet-wide (`lockdownPaced`), not per replica.
-- **Commits:** Conventional Commits; user-visible changes need `feat:` or `fix:`. Update `AGENTS.md` in the same commit as any change that invalidates a rule (this phase changes the "`BeginLift` only through `lockdownBeginLift` in `unlockdown`" sentence, adds the `lockdown|` callback namespace and the `alita:lockdown:recent:*` key family, and documents the new tables).
+- **Commits:** Conventional Commits; user-visible changes need `feat:` or `fix:`. Update `AGENTS.md` in the same commit as any change that invalidates a rule (this phase changes the "`BeginLift` only through `lockdownBeginLift` in `unlockdown`" sentence, adds the `lockdown|` callback namespace and the `fuku:lockdown:recent:*` key family, and documents the new tables).
 - **Workflow:** edits start from a GSD command (`/gsd-execute-phase` for planned work).
 
 ## Architectural Responsibility Map
@@ -131,14 +131,14 @@ The planner must verify every plan against these. CLAUDE.md imports AGENTS.md (`
 | `github.com/PaulSonOfLars/gotgbot/v2` | v2.0.0-rc.36.0.20260919140833-240296efadb4 `[VERIFIED: /root/go/pkg/mod/github.com/!paul!son!of!lars/gotgbot/v2@v2.0.0-rc.36.0.20260919140833-240296efadb4]` | `SendMessage`, `EditMessageText`, `EditMessageReplyMarkup`, `RevokeChatInviteLink`, `BanChatMember`, `AnswerCallbackQuery` | Already the bot client; all methods used below exist (`gen_methods.go:2294`, `2361`, `4689`) |
 | `gorm.io/gorm` + PostgreSQL / SQLite (tests) | existing | New tables, conditional updates | Repo standard; `RowsAffected == 1` is the exactly-once idiom |
 | `github.com/redis/go-redis/v9` | existing | Recent-joins zset (best effort), pacer keys | Already used by antiraid and the pacers |
-| `alita/utils/callbackcodec` | in repo | `lockdown|v1|...`, 64-byte cap | AGENTS.md: only way to encode callbacks |
-| `alita/utils/ratelimit` `TelegramPacer` via `lockdownPaced` | in repo | Fleet-wide pacing of every worker Telegram call | D-10; slot more than 60 s away fails at once as rate limited |
+| `fuku/utils/callbackcodec` | in repo | `lockdown|v1|...`, 64-byte cap | AGENTS.md: only way to encode callbacks |
+| `fuku/utils/ratelimit` `TelegramPacer` via `lockdownPaced` | in repo | Fleet-wide pacing of every worker Telegram call | D-10; slot more than 60 s away fails at once as rate limited |
 
 ### Supporting
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
 | `github.com/alicebob/miniredis/v2` | v2.39.0 (CLAUDE.md) | Tracker and pacer tests | Tests only; real fixtures, no mock libraries |
-| `alita/utils/actionlog` `Destination` | in repo | Resolves log channel and header, honours the category switch | Reuse for the log-channel destination (`actionlog.Destination(chat, logchannels.CategoryAdmin)`) |
+| `fuku/utils/actionlog` `Destination` | in repo | Resolves log channel and header, honours the category switch | Reuse for the log-channel destination (`actionlog.Destination(chat, logchannels.CategoryAdmin)`) |
 
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
@@ -169,7 +169,7 @@ The planner must verify every plan against these. CLAUDE.md imports AGENTS.md (`
 (lockdown.go:387)                        │  (tx: conditional UPDATE alert_started_at,   (confirmed in
                                          │   INSERT slots staff/log, INSERT pre-burst)   settleUnconfirmed)
 group -7 join handlers ──ZADD──▶ Redis   │                                               │
-alita:lockdown:recent:<chat> ◀───read────┘ (snapshot before the tx, best effort)         │
+fuku:lockdown:recent:<chat> ◀───read────┘ (snapshot before the tx, best effort)         │
                                          ▼                                               ▼
                          chat_lockdown_alerts (slot rows: pending)  ◀── lockdownPlanAlerts (cycle step, finds
                                          │                              confirmed active rows with no alert yet)
@@ -182,7 +182,7 @@ alita:lockdown:recent:<chat> ◀───read────┘ (snapshot before th
               old reminder loses   drop buttons,           ban permanent,         lift tally)
               buttons)             record closed)          mark kept/response_ban)
    │              │                    │                      │
-   └──────────────┴──── lockdownPaced (alita:lockdown:pace:*) ┴──▶ Telegram
+   └──────────────┴──── lockdownPaced (fuku:lockdown:pace:*) ┴──▶ Telegram
                                                                          ▲
 Staff Group / log channel button press ─▶ lockdown|v1 callback handler ──┘
    a=lk (Lift ask) / a=bn (Ban ask) / a=rk (Revoke ask)   → live getChatMember of the LOCKED group
@@ -196,29 +196,29 @@ Staff Group / log channel button press ─▶ lockdown|v1 callback handler ─�
 ### Recommended Project Structure
 ```
 migrations/20261011120000_add_lockdown_alerts.sql   # name must sort after 20261006120000
-alita/db/models/lockdown_alert.go                   # ChatLockdownAlert, ChatLockdownBurst, ChatLockdownBanRun (+ TableName)
-alita/db/lockdown/alerts.go                         # BeginAlert, slot claims, reminders, close claims, link revoke record
-alita/db/lockdown/burst.go                          # burst rows, candidate query, run claims
-alita/modules/lockdown_alert.go                     # render alert/reminder/closed text, post/close/remind worker steps
-alita/modules/lockdown_alert_callbacks.go           # lockdown| namespace: ask/confirm/cancel for lift, ban, revoke
-alita/modules/lockdown_response.go                  # decideLockdownResponseBan + ban run executor
-alita/modules/lockdown_recent.go                    # Redis recent-joins tracker (write at group -7, snapshot read)
-alita/modules/lockdown.go                           # extract shared lift function; call lockdownBeginAlert after ConfirmLocked
-alita/modules/lockdown_worker.go                    # add steps to runLockdownCycle; settle path calls BeginAlert
+fuku/db/models/lockdown_alert.go                   # ChatLockdownAlert, ChatLockdownBurst, ChatLockdownBanRun (+ TableName)
+fuku/db/lockdown/alerts.go                         # BeginAlert, slot claims, reminders, close claims, link revoke record
+fuku/db/lockdown/burst.go                          # burst rows, candidate query, run claims
+fuku/modules/lockdown_alert.go                     # render alert/reminder/closed text, post/close/remind worker steps
+fuku/modules/lockdown_alert_callbacks.go           # lockdown| namespace: ask/confirm/cancel for lift, ban, revoke
+fuku/modules/lockdown_response.go                  # decideLockdownResponseBan + ban run executor
+fuku/modules/lockdown_recent.go                    # Redis recent-joins tracker (write at group -7, snapshot read)
+fuku/modules/lockdown.go                           # extract shared lift function; call lockdownBeginAlert after ConfirmLocked
+fuku/modules/lockdown_worker.go                    # add steps to runLockdownCycle; settle path calls BeginAlert
 ```
 
 ### Pattern 1: Exactly-once alert gate (hook points)
 **What:** The alert is "decided" once per lockdown by one conditional update that, in the same transaction, inserts the destination slots and the pre-lockdown burst snapshot. Posting is separate and retryable.
 **Where it hooks:** the one place a lockdown becomes confirmed in each path.
-- `/lockdown`: `lockdown.ConfirmLocked(row.ID)` at `alita/modules/lockdown.go:387-391` `[VERIFIED: lockdown.go:387]`:
+- `/lockdown`: `lockdown.ConfirmLocked(row.ID)` at `fuku/modules/lockdown.go:387-391` `[VERIFIED: lockdown.go:387]`:
   ```
   	if _, err := lockdown.ConfirmLocked(row.ID); err != nil {
   		if _, retryErr := lockdown.ConfirmLocked(row.ID); retryErr != nil {
   ```
   Call the gate right after (success or not): a confirm that failed twice is settled later by the worker.
 - Worker settle path: `settleUnconfirmedLockdown` (`lockdown_worker.go:100`) calls `lockdown.ConfirmLocked(ld.ID)` at line 124; its doc says "Settling never posts a message" (`lockdown_worker.go:132`). Phase 5 deliberately changes that for the alert only. Do not call the gate from inside settle; a cycle step `lockdownPlanAlerts` ("every active row with `locked_at IS NOT NULL AND alert_started_at IS NULL`") covers both paths and crashes between `ConfirmLocked` and the gate.
-- Gate SQL: `UPDATE chat_lockdowns SET alert_started_at=?, chat_title=? WHERE id=? AND state='active' AND locked_at IS NOT NULL AND alert_started_at IS NULL`; `RowsAffected == 1` ⇒ this caller inserts slots in the same transaction. Same idiom as `ConfirmLocked`/`BeginLift` `[VERIFIED: alita/db/lockdown/repository.go:193-203, 255-272]`.
-- Destinations are decided inside the winner: Staff Group via `staff.GetLinkOfGroupFresh(chatID)` (uncached authority read `[VERIFIED: alita/db/staff/repository.go:325]`) → `link.StaffChatID`; log channel via `actionlog.Destination(chat, logchannels.CategoryAdmin)` (returns `ok=false` for a chat with no log channel or the category off `[VERIFIED: alita/utils/actionlog/actionlog.go:21-33, Destination]`). No destination ⇒ gate still stamps `alert_started_at` and inserts no slots (so a Staff Group linked three hours later never receives a stale alert).
+- Gate SQL: `UPDATE chat_lockdowns SET alert_started_at=?, chat_title=? WHERE id=? AND state='active' AND locked_at IS NOT NULL AND alert_started_at IS NULL`; `RowsAffected == 1` ⇒ this caller inserts slots in the same transaction. Same idiom as `ConfirmLocked`/`BeginLift` `[VERIFIED: fuku/db/lockdown/repository.go:193-203, 255-272]`.
+- Destinations are decided inside the winner: Staff Group via `staff.GetLinkOfGroupFresh(chatID)` (uncached authority read `[VERIFIED: fuku/db/staff/repository.go:325]`) → `link.StaffChatID`; log channel via `actionlog.Destination(chat, logchannels.CategoryAdmin)` (returns `ok=false` for a chat with no log channel or the category off `[VERIFIED: fuku/utils/actionlog/actionlog.go:21-33, Destination]`). No destination ⇒ gate still stamps `alert_started_at` and inserts no slots (so a Staff Group linked three hours later never receives a stale alert).
 - Reuse note: `sendStaffLogPost` (`staff_log.go:87`) cannot post the alert: it takes a `StaffGroupLink`, uses `staffPaced` (the staff budget, not `lockdownPaced`), discards the sent message (`_, err := b.SendMessageWithContext(...)`, line 100) and sends no keyboard `[VERIFIED: staff_log.go:87-109]`. Write a new `lockdownSendAlert` that returns the message ID, uses `lockdownPaced`, and sends `ReplyMarkup`.
 - Phase 6 forward compatibility: make the gate take a `lockdownAlertInfo{TriggerKind string; Counts ...}` argument; LOCK-10's "single alert" is then automatic because `uk_chat_lockdowns_active` already allows one active row per chat `[VERIFIED: migration 20261006120000:53]`.
 
@@ -239,8 +239,8 @@ alita/modules/lockdown_worker.go                    # add steps to runLockdownCy
 
 ### Pattern 4: Stateless confirm cards and the `lockdown|v1` namespace
 **What:** Ask button → handler checks authority and posts a new message (reply to the alert) with Confirm/Cancel. Confirm data embeds the asker: `lockdown|v1|a=lc&r=<slot id>&u=<asker id>&e=<unix minutes>`. Confirm refuses unless `query.From.Id == u`.
-- Namespace: register `callbackquery.Prefix("lockdown|")` next to the others. Existing prefixes are `backup, change_language, restrict, unrestrict, unbanall|, rmAllApprovals, rmAllFilters, filters_overwrite, deleteMsg, reactions_help, staff|, rmAllNotes, notes.overwrite, formatting, anon_admin, join_request, report, connbtns, captcha_verify, captcha_refresh, rmAllChatWarns, rmWarn, fed namespace, rmAllBlacklist, unpinallbtn, helpq, configuration, about, antiraid` `[VERIFIED: grep of callbackquery.Prefix in alita/modules]`; none is a prefix of `lockdown|`, and `lockdown|` does not begin with `antiraid` (the Phase 4 trap).
-- Byte budget: `callbackcodec.MaxCallbackDataLen = 64` `[VERIFIED: alita/utils/callbackcodec/callbackcodec.go: MaxCallbackDataLen = 64]`. Worst case `lockdown|v1|a=lc&e=99999999&r=999999999&u=9999999999999999` is 58 bytes; keep user IDs as the only unbounded field and add a `TestLockdownCallbackDataFitsLimit` with 16-digit IDs. `encodeCallbackData` returns `""` on overflow (a dead button) `[VERIFIED: alita/modules/callback_codec.go:15-25]`, so every keyboard builder must treat `""` as "do not send".
+- Namespace: register `callbackquery.Prefix("lockdown|")` next to the others. Existing prefixes are `backup, change_language, restrict, unrestrict, unbanall|, rmAllApprovals, rmAllFilters, filters_overwrite, deleteMsg, reactions_help, staff|, rmAllNotes, notes.overwrite, formatting, anon_admin, join_request, report, connbtns, captcha_verify, captcha_refresh, rmAllChatWarns, rmWarn, fed namespace, rmAllBlacklist, unpinallbtn, helpq, configuration, about, antiraid` `[VERIFIED: grep of callbackquery.Prefix in fuku/modules]`; none is a prefix of `lockdown|`, and `lockdown|` does not begin with `antiraid` (the Phase 4 trap).
+- Byte budget: `callbackcodec.MaxCallbackDataLen = 64` `[VERIFIED: fuku/utils/callbackcodec/callbackcodec.go: MaxCallbackDataLen = 64]`. Worst case `lockdown|v1|a=lc&e=99999999&r=999999999&u=9999999999999999` is 58 bytes; keep user IDs as the only unbounded field and add a `TestLockdownCallbackDataFitsLimit` with 16-digit IDs. `encodeCallbackData` returns `""` on overflow (a dead button) `[VERIFIED: fuku/modules/callback_codec.go:15-25]`, so every keyboard builder must treat `""` as "do not send".
 - Service identities: refuse `staffServiceUserIDs[query.From.Id]` before any lookup `[VERIFIED: staff_action_decide.go:513 `var staffServiceUserIDs = map[int64]bool{777000: true, 1087968824: true, 136817688: true}`; used at staff_undo.go:213]`. A callback's `from` is the real pressing user (`CallbackQuery.From` is documented "Sender" `[CITED: gotgbot gen_types.go:1226]`), so this is defence in depth and the "anonymous admin" refusal of D-05 never triggers in practice.
 - Expiry `e` is lazy: on a late Confirm edit the card to "expired". No Redis timer is needed. Every authority fact is re-checked live at Confirm, so a stale card is harmless.
 - Answer every press exactly once (`answerStaffCallback` pattern, `staff.go` `answerStaffCallback`), including denials.
@@ -249,14 +249,14 @@ alita/modules/lockdown_worker.go                    # add steps to runLockdownCy
 **What:** Confirm inserts a `chat_lockdown_ban_runs` row (`UNIQUE (lockdown_id) WHERE state='running'`, so a second concurrent run is impossible; same partial-index idiom as `uk_chat_lockdowns_active`) with the card chat/message. The worker executes it; whichever replica wins the final conditional update (`running → done`) edits the card with banned/skipped/failed and posts one `#LOCKDOWN_BAN` log message (through `actionlog.Destination`, admin category).
 - Targets: burst rows `chat_lockdown_burst (lockdown_id, user_id UNIQUE, first_name, username, is_bot, invite_link, source pre|joiner, state '' |acting|banned|skipped|failed, reason, detail, run_id, claimed_at, attempts)`. Pre-lockdown snapshot rows are inserted by the alert gate; joiner-sourced rows are inserted lazily at Confirm with `INSERT ... SELECT FROM chat_lockdown_joiners ... ON CONFLICT DO NOTHING` for states `pending, acting, banned, ban_failed` (and, see Open Question Q4, `declined`), never `exempt` (an admin let them in), `cancelled`, `unbanned`.
 - Per account, in this order, all paced through `lockdownPaced`:
-  1. `approvals.IsUserApproved(chatID, userID)` `[VERIFIED: alita/db/approvals/repository.go:31]` → skip `approved` (no Telegram call).
+  1. `approvals.IsUserApproved(chatID, userID)` `[VERIFIED: fuku/db/approvals/repository.go:31]` → skip `approved` (no Telegram call).
   2. user is `b.Id` → skip `bot_self`.
   3. live `getChatMember` → `decideLockdownResponseBan(member, row)` (pure function, like `decideStaffAction`): `creator|administrator` → skip `admin`; `kicked` with `isLockdownBan(member, row.BanUntil)` → ban permanent (upgrade the lockdown's own ban); `kicked` with `UntilDate == 0` or any other end date → skip `already_banned` (D-10: left alone); `left|member|restricted` → ban permanent.
   4. permanent ban = `BanChatMember` with no `UntilDate`. Doc: "If user is banned for more than 366 days or less than 30 seconds from the current time they are considered to be banned forever" `[CITED: gotgbot gen_methods.go:420]`; omitting it is forever. It also always deletes the user's messages in supergroups (`RevokeMessages` "Always True for supergroups and channels" `[CITED: gen_methods.go:422]`), so the confirm text must say so.
 - Interlock with the Phase 4 worker and the lift (this is the part most likely to be gotten wrong). For a joiner-sourced account claim its joiner row first with `lockdown.ClaimJoiner(id, from, JoinerStateActing)` where `from` is its current state (`pending` or `banned`); a lost claim means the worker or the lift owns it, so skip with `busy`. After a successful permanent ban move the row `acting → kept` with `detail = "response_ban"` (use `lockdown.MoveJoiner`; `kept` is final and not in `unfinishedJoinerStates` `[VERIFIED: repository.go:27-32]`). Why this order is safe:
   - `lockdownBanOne` reads the live status and then bans in separate calls (`lockdown_worker.go:379-390`). Without the claim, a permanent ban placed between its read and its write would be overwritten by the 330-day marker ban and then lifted. The claim excludes it.
   - The lift claims `banned → unbanning` (`lockdown_worker.go:495`). Without the claim, the lift's live read could precede the permanent ban and its `UnbanChatMember(OnlyIfBanned)` would undo it. Both claims are conditional on the same row state, so exactly one wins.
-  - A crash mid-run: `ReleaseStaleClaims` returns an `acting` row of an active lockdown to `pending` and of a lifting one to `banned` `[VERIFIED: alita/db/lockdown/joiners.go:289-296 doc comment]`; in both cases the existing live check (`isLockdownBan`, `lockdownBanOne`'s deliberate check) keeps a permanent ban. Burst rows need an equivalent stale release.
+  - A crash mid-run: `ReleaseStaleClaims` returns an `acting` row of an active lockdown to `pending` and of a lifting one to `banned` `[VERIFIED: fuku/db/lockdown/joiners.go:289-296 doc comment]`; in both cases the existing live check (`isLockdownBan`, `lockdownBanOne`'s deliberate check) keeps a permanent ban. Burst rows need an equivalent stale release.
 - Even without the `kept` mark the lift is safe: a permanent ban reports `until_date` 0, and `isLockdownBan` returns false when `m.UntilDate == 0` `[VERIFIED: lockdown_marker.go:21 `if m.Status != gotgbot.ChatMemberStatusKicked || banUntil == 0 || m.UntilDate == 0 {`]`. The `kept`/`response_ban` mark makes it explicit, saves the lift a `getChatMember`, and lets the lift tally say "banned on purpose" (text `lockdown_lift_tally_kept` already reads "...or banned them on purpose" `[VERIFIED: locales/en.yml:2881]`).
 - No pre-existing state needs altering: the joiner `state` CHECK `('pending', 'acting', 'banned', 'ban_failed', 'declined', 'decline_failed', 'exempt', 'cancelled', 'unbanning', 'unbanned', 'kept', 'unban_failed')` `[VERIFIED: migrations/20261006120000_add_chat_lockdowns.sql:81]` already contains everything needed, so no CHECK rewrite is required.
 - Stop conditions: before each account re-read the lockdown fresh; if no longer `active`, stop and report "stopped: lockdown lifted" in the result. Bound the run by the pacer (not a hard cap), but cap the per-press list shown on the card.
@@ -265,7 +265,7 @@ alita/modules/lockdown_worker.go                    # add steps to runLockdownCy
 ### Pattern 6: Revoke link
 **What:** The alert's displayed link comes from joiner rows (`SELECT invite_link, COUNT(*) ... WHERE lockdown_id = ? AND invite_link <> '' GROUP BY invite_link ORDER BY 2 DESC LIMIT 2`) plus the pre-lockdown snapshot rows. D-13: top link with its count and "+N other links".
 - Facts: `ChatMemberUpdated.InviteLink` is "Chat invite link, which was used by the user to join the chat; for joining by invite link events only" `[CITED: gotgbot gen_types.go:2655]`. `ChatInviteLink.InviteLink`: "If the link was created by another chat administrator, then the second part of the link will be replaced with \"...\"" `[CITED: gotgbot gen_types.go:1960]`. `RevokeChatInviteLink`: "Use this method to revoke an invite link created by the bot. If the primary link is revoked, a new link is automatically generated. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights." `[CITED: gotgbot gen_methods.go:4685]`.
-- Consequence (F2): a link the bot sees as `https://t.me/+abc...` was made by another admin and cannot be revoked by the bot. Only a full link (no `...`) is revocable, which in this codebase means a link the bot exported itself (e.g. the `/invitelink` command uses `GetChat(...).InviteLink` `[VERIFIED: alita/modules/admin.go:404 area]`). Show the "Revoke link" button only when the displayed link has no `...`; otherwise show the link plus a hint line "created by another admin; revoke it in Telegram's invite link list" (new locale key).
+- Consequence (F2): a link the bot sees as `https://t.me/+abc...` was made by another admin and cannot be revoked by the bot. Only a full link (no `...`) is revocable, which in this codebase means a link the bot exported itself (e.g. the `/invitelink` command uses `GetChat(...).InviteLink` `[VERIFIED: fuku/modules/admin.go:404 area]`). Show the "Revoke link" button only when the displayed link has no `...`; otherwise show the link plus a hint line "created by another admin; revoke it in Telegram's invite link list" (new locale key).
 - The handler reads the link from the slot row (`link` column) at press time, never from callback data (64-byte cap and trust). Authority: live `getChatMember(lockedChat, presser)`: creator, or administrator with `CanInviteUsers` `[VERIFIED: MergedChatMember.CanInviteUsers exists, gen_types.go:2067]`. Check the bot's own `can_invite_users` first via `chat_status.FetchBotMember` and refuse with a friendly line if missing.
 - Record once: `UPDATE chat_lockdowns SET link_revoked_at=?, link_revoked_by=?, link_revoked_by_name=?, link_revoked_link=? WHERE id=? AND link_revoked_at IS NULL`. Call Telegram first, record only on success; on Telegram refusal map the error class to a friendly line (Phase 4 quick task 261008-j3d removed raw Telegram text from replies); log the raw error at warn. Then edit every live copy of the alert to `body + "Link revoked by X"` and drop the Revoke button.
 
@@ -283,8 +283,8 @@ alita/modules/lockdown_worker.go                    # add steps to runLockdownCy
 
 ### Pattern 9: Recent-joins tracker (Finding F1)
 See F1 below. Group -7 handlers (`lockdownOnJoinMember`, `lockdownOnJoinMessage`) run for every supergroup join before anything else and return `ext.ContinueGroups` when there is no lockdown (`lockdown_guard.go:128-130, 196-198`). Add one best-effort Redis write there.
-- Key `alita:lockdown:recent:<chat>` (inside the existing operational family `alita:lockdown:*`, outside `alita:cache:` so it survives `CLEAR_CACHE_ON_STARTUP` `[CITED: AGENTS.md Data section]`). Sorted set, score = join unix time, member = compact JSON of `{id, name (≤64 runes), username, bot, link}` so the same user dedupes across the `chat_member` and service-message paths and the sample needs no extra lookup.
-- Trim by time (`ZREMRANGEBYSCORE ... -inf now-600`), cap by rank (`ZREMRANGEBYRANK 0 -501`), `EXPIRE 700`. One pipelined round trip with a short timeout (`cache.ContextWithTimeout()` is 5 s, too long on a hot path `[VERIFIED: alita/utils/cache/cache.go:32-34]`; use ~250 ms). Skip silently without Redis.
+- Key `fuku:lockdown:recent:<chat>` (inside the existing operational family `fuku:lockdown:*`, outside `fuku:cache:` so it survives `CLEAR_CACHE_ON_STARTUP` `[CITED: AGENTS.md Data section]`). Sorted set, score = join unix time, member = compact JSON of `{id, name (≤64 runes), username, bot, link}` so the same user dedupes across the `chat_member` and service-message paths and the sample needs no extra lookup.
+- Trim by time (`ZREMRANGEBYSCORE ... -inf now-600`), cap by rank (`ZREMRANGEBYRANK 0 -501`), `EXPIRE 700`. One pipelined round trip with a short timeout (`cache.ContextWithTimeout()` is 5 s, too long on a hot path `[VERIFIED: fuku/utils/cache/cache.go:32-34]`; use ~250 ms). Skip silently without Redis.
 - Snapshot read happens in the alert gate before the transaction: members with score ≤ `locked_at`.
 
 ### Anti-Patterns to Avoid
@@ -300,7 +300,7 @@ See F1 below. Group -7 handlers (`lockdownOnJoinMember`, `lockdownOnJoinMessage`
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
 | Exactly-once posting across replicas | A Redis lock or an in-memory flag | Conditional `UPDATE`/`INSERT ... ON CONFLICT DO NOTHING` and `RowsAffected == 1` | Survives restarts and Redis loss; the repo idiom |
-| Telegram pacing / 429 handling | A new rate limiter | `lockdownPaced` (`lockdownPacer`, keys `alita:lockdown:pace:*`) | Fleet-wide; a slot over 60 s away fails at once |
+| Telegram pacing / 429 handling | A new rate limiter | `lockdownPaced` (`lockdownPacer`, keys `fuku:lockdown:pace:*`) | Fleet-wide; a slot over 60 s away fails at once |
 | Callback encoding | `strings.Split` on `|` | `encodeCallbackData` / `decodeCallbackData` | AGENTS.md; handles URL-encoding and the 64-byte cap |
 | Live authority | Admin cache, `IsUserAdmin` | `lockdownLiveMember` + a shared rights helper split out of `requireLockdownAuthority` | Phase 4 D-11; a failed lookup refuses |
 | Ban/unban status decisions | Ad-hoc `if`s in the executor | A pure `decideLockdownResponseBan` table, like `decideStaffAction` / `decideLockdownJoin` | Keeps "never shorten or lift a ban" in one testable place |
@@ -357,7 +357,7 @@ Answer the callback (toast) before the long work, then edit the card with the ou
 
 ### Callback data (verified API)
 ```go
-// Source: alita/modules/callback_codec.go:15 encodeCallbackData; alita/utils/callbackcodec
+// Source: fuku/modules/callback_codec.go:15 encodeCallbackData; fuku/utils/callbackcodec
 confirm := encodeCallbackData(lockdownCallbackNamespace, map[string]string{
 	"a": lockdownActLiftConfirm, // "lc"
 	"r": strconv.FormatUint(uint64(slot.ID), 10),
@@ -387,7 +387,7 @@ func decideLockdownResponseBan(m gotgbot.MergedChatMember, banUntil int64) (ban 
 
 ### Exactly-once reminder slot
 ```sql
--- Source pattern: alita/db/lockdown/joiners.go RecordJoin (ON CONFLICT DO NOTHING, RowsAffected == 1)
+-- Source pattern: fuku/db/lockdown/joiners.go RecordJoin (ON CONFLICT DO NOTHING, RowsAffected == 1)
 INSERT INTO chat_lockdown_alerts (lockdown_id, kind, seq, dest, dest_chat_id, state, claimed_at, ...)
 VALUES (?, 'reminder', ?, ?, ?, 'posting', now(), ...)
 ON CONFLICT (lockdown_id, kind, seq, dest) DO NOTHING;   -- winner posts; loser does nothing
@@ -449,13 +449,13 @@ Rules that apply: no top-level `BEGIN`/`COMMIT`, no `CREATE INDEX CONCURRENTLY`,
 | make | `make test`, `make check-translations`, `make generate-docs` | ✓ | /usr/bin/make | — |
 | golangci-lint | `make lint` | ✓ but too old | 2.5.0 built with go1.25.1 | Use `go vet` and `gofmt` only (known tooling gap, STATE.md) |
 | Redis | tests use miniredis (in-process) | ✓ | redis-server 7.0.15 present, not needed | miniredis |
-| PostgreSQL | migration-chain test (`ALITA_TEST_MIGRATION_CHAIN=true`), `make test-postgres-integrity` | ✗ server not running (`pg_isready`: no response); psql client and `/usr/lib/postgresql/16` present | 16 | Start a local cluster or Docker (docker client present, daemon not verified); otherwise rely on SQLite tests and review the SQL by hand |
+| PostgreSQL | migration-chain test (`FUKU_TEST_MIGRATION_CHAIN=true`), `make test-postgres-integrity` | ✗ server not running (`pg_isready`: no response); psql client and `/usr/lib/postgresql/16` present | 16 | Start a local cluster or Docker (docker client present, daemon not verified); otherwise rely on SQLite tests and review the SQL by hand |
 | core.telegram.org | Bot API doc lookups | ✗ blocked by the egress policy (CONNECT 403) | — | gotgbot doc comments (mirror the Bot API) |
 
 **Missing dependencies with no fallback:** none blocking.
 **Missing dependencies with fallback:** PostgreSQL for the migration chain (SQLite covers behaviour; the new SQL must be reviewed against the chain test before merge), Bot API site (use gotgbot comments and UAT).
 
-Baseline run in this session: `go test -tags testtools -race -count=1 -run '^TestUnlockdownLiftsOnce$|^TestLockdownCommandStarts$' ./alita/modules` → `ok ... 1.646s` (first build 74 s). `[VERIFIED: shell]`
+Baseline run in this session: `go test -tags testtools -race -count=1 -run '^TestUnlockdownLiftsOnce$|^TestLockdownCommandStarts$' ./fuku/modules` → `ok ... 1.646s` (first build 74 s). `[VERIFIED: shell]`
 
 ## Validation Architecture
 
@@ -464,14 +464,14 @@ Baseline run in this session: `go test -tags testtools -race -count=1 -run '^Tes
 |----------|-------|
 | Framework | Go `testing`, build tag `testtools`, SQLite via `internal/testdb`, miniredis, hand-written `gotgbot.BotClient` fakes (`lockdownFake` embeds `staffActionFake`) |
 | Config file | none; `-tags testtools` is mandatory (AGENTS.md) |
-| Quick run command | `go test -tags testtools -race -count=1 -run '^TestLockdown' ./alita/modules` |
-| Repository tests | `go test -tags testtools -race -count=1 ./alita/db/lockdown` |
+| Quick run command | `go test -tags testtools -race -count=1 -run '^TestLockdown' ./fuku/modules` |
+| Repository tests | `go test -tags testtools -race -count=1 ./fuku/db/lockdown` |
 | Full suite command | `make test` |
 
 ### Phase Requirements → Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| LOCK-11 | Alert gate runs once; two cycles/replicas post one alert per destination | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownAlertPostsOnce$' ./alita/modules` | ❌ Wave 0 |
+| LOCK-11 | Alert gate runs once; two cycles/replicas post one alert per destination | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownAlertPostsOnce$' ./fuku/modules` | ❌ Wave 0 |
 | LOCK-11 | Alert to Staff Group and log channel; none when neither exists; log category off | integration | `... -run '^TestLockdownAlertDestinations$'` | ❌ Wave 0 |
 | LOCK-11 | Settle path (unconfirmed row confirmed by worker) also alerts | integration | `... -run '^TestLockdownAlertAfterSettle$'` | ❌ Wave 0 |
 | LOCK-11 | Sample: 10 max, "and N more", bots marked, names HTML-escaped, pre-lockdown members from tracker | unit/integration | `... -run '^TestLockdownAlertSample$'` | ❌ Wave 0 |
@@ -492,20 +492,20 @@ Baseline run in this session: `go test -tags testtools -race -count=1 -run '^Tes
 | LOCK-13 | Revoke: only live creator/admin with can_invite_users; truncated (`...`) link has no button; success edits "Link revoked by X"; Telegram refusal answered with a mapped line; once only | integration | `... -run '^TestLockdownRevokeLink$'` | ❌ Wave 0 |
 | LOCK-14 | One reminder per hour per destination, one replica posts, previous reminder loses buttons, none after lift, no catch-up after downtime | integration | `... -run '^TestLockdownReminders$'` | ❌ Wave 0 |
 | all | Callback data fits 64 bytes with 16-digit IDs; unknown action answered once | unit | `... -run '^TestLockdownCallbackData$'` | ❌ Wave 0 |
-| repo | `BeginAlert` once; slot uniqueness; claim/release; close claim; link revoke once; burst candidate query; run uniqueness | repository | `go test -tags testtools -race -count=1 -run '^(TestBeginAlert|TestAlertSlots|TestBurst|TestBanRun)' ./alita/db/lockdown` | ❌ Wave 0 |
-| platform | Migration applies on PostgreSQL | chain | `ALITA_TEST_MIGRATION_CHAIN=true DATABASE_URL=... go test -tags testtools -run '^TestRepositoryMigrationChain$' ./alita/db/migrations` | ✅ existing (needs PG) |
+| repo | `BeginAlert` once; slot uniqueness; claim/release; close claim; link revoke once; burst candidate query; run uniqueness | repository | `go test -tags testtools -race -count=1 -run '^(TestBeginAlert|TestAlertSlots|TestBurst|TestBanRun)' ./fuku/db/lockdown` | ❌ Wave 0 |
+| platform | Migration applies on PostgreSQL | chain | `FUKU_TEST_MIGRATION_CHAIN=true DATABASE_URL=... go test -tags testtools -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations` | ✅ existing (needs PG) |
 | PLAT-03 | New keys in all 7 locale files | script | `make check-translations` | ✅ existing |
 | docs | Help text change reflected in generated docs | script | `make check-docs` (fix: `make generate-docs`) | ✅ existing |
 
 Tests assert observable behaviour (message sent, row persisted, call made or not made), through `withStaffLocale` markers (`staffMarker("key")`), never literals. No mock libraries.
 
 ### Sampling Rate
-- **Per task commit:** `go test -tags testtools -race -count=1 -run '^TestLockdown' ./alita/modules ./alita/db/lockdown` plus `go vet ./...` and `gofmt -l alita` (golangci-lint here is built with Go 1.25).
-- **Per wave merge:** `go test -tags testtools -race -count=1 ./alita/...`
+- **Per task commit:** `go test -tags testtools -race -count=1 -run '^TestLockdown' ./fuku/modules ./fuku/db/lockdown` plus `go vet ./...` and `gofmt -l fuku` (golangci-lint here is built with Go 1.25).
+- **Per wave merge:** `go test -tags testtools -race -count=1 ./fuku/...`
 - **Phase gate:** `make test`, `make check-translations`, `make check-docs` green before `/gsd-verify-work`; migration-chain test on PostgreSQL if a server can be started.
 
 ### Wave 0 Gaps
-- [ ] Add `ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun` to the three `AutoMigrate` lists named in AGENTS.md: `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go`, `alita/db/lockdown/testmain_test.go`; extend `lockdownCleanup` (`lockdown_fake_test.go`) to delete the new rows (children first).
+- [ ] Add `ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun` to the three `AutoMigrate` lists named in AGENTS.md: `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go`, `fuku/db/lockdown/testmain_test.go`; extend `lockdownCleanup` (`lockdown_fake_test.go`) to delete the new rows (children first).
 - [ ] `lockdownFake`: handle `editMessageReplyMarkup`, `revokeChatInviteLink` (scriptable via `script(...)`, records `invite_link`), per-chat message IDs for a channel, a `banChatMember` hook (`onBan`) to interleave the race tests, and `getChatMember` for many burst users (`setMember`). The base `staffActionFake` already answers `sendMessage` (returns a message ID), `editMessageText`, `banChatMember`, `unbanChatMember`, `getChat` `[VERIFIED: staff_action_fake_test.go:296-418]`.
 - [ ] `lockdownEnv` helpers: link the env chat to a Staff Group and set a log channel (`logchannels.Set`), `press(from, chat, msgID, data)` modelled on `pressJoinRequest` (`lockdown_fake_test.go:462`), `slots()` / `alertText()` readers, and an `ageAlert(...)` helper like `ageJoiner` (`lockdown_fake_test.go:496`) to make reminders due without sleeping (or a shortened `lockdownReminderEvery`).
 - [ ] Test seams as package variables (Phase 4 style): `lockdownReminderEvery`, `lockdownRecentLookup`, `lockdownAlertDestinations`.
@@ -544,7 +544,7 @@ Tests assert observable behaviour (message sent, row persisted, call made or not
 ## Sources
 
 ### Primary (HIGH confidence)
-- Repository files read this session (cited inline with paths and lines): `alita/modules/lockdown.go`, `lockdown_worker.go`, `lockdown_guard.go`, `lockdown_marker.go`, `lockdown_status.go`, `lockdown_perms.go`, `staff_log.go`, `staff_action_card.go`, `staff_action_run.go`, `staff_undo.go`, `staff.go`, `antiraid.go`; `alita/db/lockdown/repository.go`, `joiners.go`; `alita/db/models/lockdown.go`; `migrations/20261006120000_add_chat_lockdowns.sql`, `20260518113000_add_antiraid_settings.sql`; test fakes `lockdown_fake_test.go`, `staff_action_fake_test.go`; `AGENTS.md`; `.planning/phases/04-manual-lockdown/04-CONTEXT.md`, `04-RESEARCH.md`; `.planning/research/PITFALLS.md` (Pitfall 12).
+- Repository files read this session (cited inline with paths and lines): `fuku/modules/lockdown.go`, `lockdown_worker.go`, `lockdown_guard.go`, `lockdown_marker.go`, `lockdown_status.go`, `lockdown_perms.go`, `staff_log.go`, `staff_action_card.go`, `staff_action_run.go`, `staff_undo.go`, `staff.go`, `antiraid.go`; `fuku/db/lockdown/repository.go`, `joiners.go`; `fuku/db/models/lockdown.go`; `migrations/20261006120000_add_chat_lockdowns.sql`, `20260518113000_add_antiraid_settings.sql`; test fakes `lockdown_fake_test.go`, `staff_action_fake_test.go`; `AGENTS.md`; `.planning/phases/04-manual-lockdown/04-CONTEXT.md`, `04-RESEARCH.md`; `.planning/research/PITFALLS.md` (Pitfall 12).
 - gotgbot doc comments in `/root/go/pkg/mod/github.com/!paul!son!of!lars/gotgbot/v2@v2.0.0-rc.36.0.20260919140833-240296efadb4/gen_methods.go` and `gen_types.go` (mirror of the Bot API text): revoke, ban, edit, `ChatInviteLink`, `ChatMemberUpdated`, `CallbackQuery`.
 
 ### Secondary (MEDIUM confidence)

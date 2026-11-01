@@ -20,7 +20,7 @@ Requirements: SETUP-01 to SETUP-08, PLAT-03.
 ### Linking flow
 - **D-01:** The main way to link is an **"Add group" button in `/staff`**. It opens Telegram's group picker through a `t.me/<bot>?startgroup=<payload>` link. When the owner picks a group, Telegram posts `/start@<bot> <payload>` there with the owner as sender. The bot then runs the live owner-of-both checks (D-03) and links the group. Where Telegram supports it, the link also asks for the bot's admin rights in the same step (restrict members, delete messages). The payload only says *which Staff Group*. It never grants authority, because the live checks do.
   - Research must confirm three things: the picker works when the bot is already in the chosen group; `/start@bot <payload>` arrives in the group with the picking user as `from`; and what the payload length and character limits are.
-  - Today `/start` in a group (`alita/modules/help.go`, `start`) only replies with "ask me in PM", so the group `/start <payload>` path is new.
+  - Today `/start` in a group (`fuku/modules/help.go`, `start`) only replies with "ask me in PM", so the group `/start <payload>` path is new.
 - **D-02:** There is also a typed fallback, **`/linkstaff`**, sent in the group being linked.
   - With no argument, it links to the Staff Group the issuer owns, when there is exactly one. Candidates are found by recorded owner, then verified live.
   - If the issuer owns several Staff Groups, `/linkstaff <staff group ID>` is required. `/staff` displays that ID.
@@ -110,22 +110,22 @@ Requirements: SETUP-01 to SETUP-08, PLAT-03.
 ## Existing Code Insights
 
 ### Reusable Assets
-- `chat_status.RequireUserOwner` (`alita/utils/chat_status/access.go`): a live `getChatMember` check for `creator`, with no cache. It's the base for every owner-of-both check. It needs a variant that takes an explicit chat ID, so one call can check the *other* group.
-- `federations.joinFed` / `leaveFed` (`alita/modules/federations.go`): the nearest linking pattern. They run in the group being joined, with an owner check, and give a typed reply for each refusal.
+- `chat_status.RequireUserOwner` (`fuku/utils/chat_status/access.go`): a live `getChatMember` check for `creator`, with no cache. It's the base for every owner-of-both check. It needs a variant that takes an explicit chat ID, so one call can check the *other* group.
+- `federations.joinFed` / `leaveFed` (`fuku/modules/federations.go`): the nearest linking pattern. They run in the group being joined, with an owner check, and give a typed reply for each refusal.
 - `deeplink_router.go`: `RegisterDeepLinkHandler` / `HandleDeepLink`. Today it only handles private-chat `/start <arg>`. The group `/start@bot <payload>` that the picker sends needs a new route (`help.go` `start` currently answers "ask me in PM" in groups).
-- `alita/utils/callbackcodec`: namespaced callback data under 64 bytes, for the panel's Add group, Unlink, Confirm and Refresh buttons.
+- `fuku/utils/callbackcodec`: namespaced callback data under 64 bytes, for the panel's Add group, Unlink, Confirm and Refresh buttons.
 - The anonymous-admin flow (`bot_updates.go`, `RegisterAnonymousAdminHandler`, `anon_admin` callback), if anonymous owners are supported.
 - Background task patterns: `startCaptchaWorkers` (`captcha.go`) and the ticker loops in `antiraid.go` and `aispam.go`. They use a lifecycle context, `error_handling.RecoverFromPanic`, and a shutdown hook. The hourly re-check should follow them.
 
 ### Established Patterns
-- Repository pattern: `alita/db/<domain>/`. Reads use `cache.GetFromCacheOrLoad`, and writes call `cache.DeleteCache` after commit. The research says authority reads (links used to decide ownership or actions) bypass the cache.
+- Repository pattern: `fuku/db/<domain>/`. Reads use `cache.GetFromCacheOrLoad`, and writes call `cache.DeleteCache` after commit. The research says authority reads (links used to decide ownership or actions) bypass the cache.
 - Commands are registered with `helpers.WrapCommand(dispatcher, CommandDescriptor{...}, handler)`. Failed checks are answered by the pipeline, not the handler.
-- Handler groups: a `chat_member` watcher must not sit in group 0, because `bot_updates.go` already has a group-0 `NewChatMember(ExtractAdminUpdateStatusChange, …)` that would shadow it. `AllowedUpdates` already includes `chat_member` and `my_chat_member` (`alita/config/config.go`).
+- Handler groups: a `chat_member` watcher must not sit in group 0, because `bot_updates.go` already has a group-0 `NewChatMember(ExtractAdminUpdateStatusChange, …)` that would shadow it. `AllowedUpdates` already includes `chat_member` and `my_chat_member` (`fuku/config/config.go`).
 - Migrations: SQL files in `migrations/`. The latest is `20261001120000_*`, so new files need a later timestamp. Also add new models to the test AutoMigrate lists in `testmain_test.go`.
 
 ### Integration Points
-- New module `alita/modules/staff.go` (or similar), registered via `RegisterLegacyModule`.
-- New repo `alita/db/staff/` with models and migrations for Staff Groups and links.
+- New module `fuku/modules/staff.go` (or similar), registered via `RegisterLegacyModule`.
+- New repo `fuku/db/staff/` with models and migrations for Staff Groups and links.
 - `/start` in groups (`help.go`) is routed to the staff picker payload handler.
 - Chat migration: a new handler for service messages that carry `migrate_to_chat_id` / `migrate_from_chat_id`.
 - Locale files: all 7, for every new string (`make check-translations`).

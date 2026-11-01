@@ -30,12 +30,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_ai_media.go
-    - alita/modules/raid_ai_image.go
-    - alita/modules/raid_ai_media_test.go
+    - fuku/modules/raid_ai_media.go
+    - fuku/modules/raid_ai_image.go
+    - fuku/modules/raid_ai_media_test.go
   modified:
-    - alita/modules/raid_ai.go
-    - alita/modules/raid_ai_text_test.go
+    - fuku/modules/raid_ai.go
+    - fuku/modules/raid_ai_text_test.go
     - AGENTS.md
 
 key-decisions:
@@ -79,12 +79,12 @@ status: complete
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestRaidAISecretsNeverLogged|TestRaidAIMedia)$' -v ./alita/modules`: PASS (all subtests).
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown|Backup' ./alita/modules`: ok (151 s).
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/utils/gemini`, `gofmt -l alita` clean, `git diff --exit-code go.mod go.sum` clean.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestRaidAISecretsNeverLogged|TestRaidAIMedia)$' -v ./fuku/modules`: PASS (all subtests).
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown|Backup' ./fuku/modules`: ok (151 s).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/utils/gemini`, `gofmt -l fuku` clean, `git diff --exit-code go.mod go.sum` clean.
 - `make lint` was not run: golangci-lint is built with Go 1.25 against the module's Go 1.26, so `go vet` and `gofmt -l` stood in for it. The orchestrator runs the full `make test` after the wave.
 - Mutation check: wrapping the raw request error instead of `ue.Err` in `raidAIDownload` made TestRaidAISecretsNeverLogged fail on the returned error and on the log; reverted.
-- Acceptance greps: `raidAIImageBar = 0.85` 1, `http.ErrUseLastResponse` 1, `http.DetectContentType` 1, `raidAIProcessImage(` in raid_ai.go 1, `x-goog-api-key` and `alita/utils/gemini` in AGENTS.md present, `ue.Err` in raid_ai_media.go 2, `func TestRaidAISecretsNeverLogged(` 1.
+- Acceptance greps: `raidAIImageBar = 0.85` 1, `http.ErrUseLastResponse` 1, `http.DetectContentType` 1, `raidAIProcessImage(` in raid_ai.go 1, `x-goog-api-key` and `fuku/utils/gemini` in AGENTS.md present, `ue.Err` in raid_ai_media.go 2, `func TestRaidAISecretsNeverLogged(` 1.
 
 ## Deviations from Plan
 

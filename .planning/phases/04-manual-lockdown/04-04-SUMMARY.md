@@ -30,15 +30,15 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/lockdown_decide_test.go
-    - alita/modules/lockdown_paths_test.go
+    - fuku/modules/lockdown_decide_test.go
+    - fuku/modules/lockdown_paths_test.go
   modified:
-    - alita/db/lockdown/joiners.go
-    - alita/db/lockdown/joiners_test.go
-    - alita/modules/lockdown_guard.go
-    - alita/modules/lockdown_worker.go
-    - alita/modules/lockdown_fake_test.go
-    - alita/modules/lockdown_guard_policy_test.go
+    - fuku/db/lockdown/joiners.go
+    - fuku/db/lockdown/joiners_test.go
+    - fuku/modules/lockdown_guard.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/modules/lockdown_fake_test.go
+    - fuku/modules/lockdown_guard_policy_test.go
     - AGENTS.md
 
 key-decisions:
@@ -66,10 +66,10 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownGuardDedupesTwoPaths"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownGuardDedupesTwoPaths"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownGuardServiceMessageVariants"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownGuardServiceMessageVariants"
         status: pass
     human_judgment: true
     rationale: "Live delivery order of chat_member versus service message and a real anonymous admin's sender_chat (research A3, A4, A5) are UAT items; the fake dispatcher proves handler behaviour, not Telegram's delivery"
@@ -78,19 +78,19 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownGuardDedupesTwoPaths"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownGuardDedupesTwoPaths"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownRejoinAfterUnban"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownRejoinAfterUnban"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownJoinAfterDeclinedRequest"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownJoinAfterDeclinedRequest"
         status: pass
       - kind: unit
-        ref: "alita/db/lockdown/joiners_test.go#TestReclaimJoin"
+        ref: "fuku/db/lockdown/joiners_test.go#TestReclaimJoin"
         status: pass
       - kind: unit
-        ref: "alita/db/lockdown/joiners_test.go#TestJoinMsgs"
+        ref: "fuku/db/lockdown/joiners_test.go#TestJoinMsgs"
         status: pass
     human_judgment: false
   - id: D3
@@ -98,7 +98,7 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownMixedServiceMessage"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownMixedServiceMessage"
         status: pass
     human_judgment: false
   - id: D4
@@ -106,7 +106,7 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownApprovalRace"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownApprovalRace"
         status: pass
     human_judgment: true
     rationale: "Whether Telegram puts the approving admin in chat_member.from and the joiner in the service message's from (research A3, A5) is a live UAT item"
@@ -115,13 +115,13 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: unit
-        ref: "alita/modules/lockdown_decide_test.go#TestDecideLockdownJoin"
+        ref: "fuku/modules/lockdown_decide_test.go#TestDecideLockdownJoin"
         status: pass
       - kind: unit
-        ref: "alita/modules/lockdown_decide_test.go#TestDecideLockdownJoinInvariants"
+        ref: "fuku/modules/lockdown_decide_test.go#TestDecideLockdownJoinInvariants"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownAdminAddedJoinerExempt"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownAdminAddedJoinerExempt"
         status: pass
     human_judgment: false
   - id: D6
@@ -129,10 +129,10 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownSuppressesGoodbye"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownSuppressesGoodbye"
         status: pass
       - kind: unit
-        ref: "alita/db/lockdown/joiners_test.go#TestHasJoinerBanFresh"
+        ref: "fuku/db/lockdown/joiners_test.go#TestHasJoinerBanFresh"
         status: pass
     human_judgment: false
   - id: D7
@@ -140,10 +140,10 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: command
-        ref: "grep -v '^[[:space:]]*//' alita/modules/lockdown_guard.go | grep -c 'claimRecentJoinProcessing\\|GetRedisClient\\|GetMarshal' prints 0"
+        ref: "grep -v '^[[:space:]]*//' fuku/modules/lockdown_guard.go | grep -c 'claimRecentJoinProcessing\\|GetRedisClient\\|GetMarshal' prints 0"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_paths_test.go#TestLockdownGuardDedupesTwoPaths"
+        ref: "fuku/modules/lockdown_paths_test.go#TestLockdownGuardDedupesTwoPaths"
         status: pass
     human_judgment: false
 ---
@@ -195,30 +195,30 @@ See `key-decisions` above.
 
 **1. [Rule 3 - Blocking] `TestDecideLockdownJoin` already existed in `lockdown_guard_policy_test.go`**
 - **Found during:** Task 2 (writing `lockdown_decide_test.go`)
-- **Issue:** Plan 04-03 had put `TestDecideLockdownJoin` in `lockdown_guard_policy_test.go`. The plan names `alita/modules/lockdown_decide_test.go` as its home; leaving both would not compile (duplicate function).
+- **Issue:** Plan 04-03 had put `TestDecideLockdownJoin` in `lockdown_guard_policy_test.go`. The plan names `fuku/modules/lockdown_decide_test.go` as its home; leaving both would not compile (duplicate function).
 - **Fix:** moved the table into `lockdown_decide_test.go` (adding two cases: a bot added by a live creator on the service path, a live administrator on the service path, and the kicked/restricted performer statuses) and added `TestDecideLockdownJoinInvariants`; removed the old copy.
-- **Files modified:** alita/modules/lockdown_decide_test.go, alita/modules/lockdown_guard_policy_test.go
+- **Files modified:** fuku/modules/lockdown_decide_test.go, fuku/modules/lockdown_guard_policy_test.go
 - **Committed in:** b78f9a3
 
 **2. [Rule 2 - Missing Critical] Reclaim failure and lift-start race on a reclaimed row**
 - **Found during:** Task 1 (designing the existing-row rules)
 - **Issue:** the 04-03 withdrawal (delete a pending row when the lift started first) fits a brand new row, but a reclaimed row carries an earlier join's history, and a database error while reclaiming must not leave a ban the lift cannot find.
 - **Fix:** a reclaimed row withdrawn by a lift that started first is moved pending to cancelled (`lockdownPendingHeld(..., reclaimed=true)`); a failed reclaim lets the joiner in (fail open, logged), like a failed insert.
-- **Files modified:** alita/modules/lockdown_guard.go
+- **Files modified:** fuku/modules/lockdown_guard.go
 - **Committed in:** 9db0d5b
 
 **3. [Rule 2 - Missing Critical] `SetJoinMsg` and `ClearJoinMsg` leave `updated_at` alone**
 - **Found during:** Task 1
 - **Issue:** a plain `Updates` would stamp `updated_at`, so a second delivery that only attaches a message ID (or the worker clearing it) would open a new 20 s window and could make a real re-join look like a duplicate.
 - **Fix:** both use `UpdateColumn`; `TestJoinMsgs` asserts `updated_at` is unchanged.
-- **Files modified:** alita/db/lockdown/joiners.go
+- **Files modified:** fuku/db/lockdown/joiners.go
 - **Committed in:** 9db0d5b
 
 **4. [Rule 2 - Missing Critical] A rate limit must not drop a join message delete**
 - **Found during:** Task 1
 - **Issue:** the plan says to clear `join_msg_id` "whatever the delete returns"; a pacer refusal or shutdown is not an answer from Telegram, and clearing then would skip the delete for good.
 - **Fix:** `lockdownDeleteJoinMessages` leaves the row for the next cycle on a rate limit or shutdown and clears it after any real answer (success or error).
-- **Files modified:** alita/modules/lockdown_worker.go
+- **Files modified:** fuku/modules/lockdown_worker.go
 - **Committed in:** 9db0d5b
 
 ---
@@ -228,7 +228,7 @@ See `key-decisions` above.
 ## Issues Encountered
 
 - A Bash call with a long Python heredoc was refused twice by the sandbox ("too complex to verify"); file edits went through the Edit and Write tools and short commands.
-- Pre-existing, not touched: `gofmt -l alita/modules` lists `greetings_command_test.go`.
+- Pre-existing, not touched: `gofmt -l fuku/modules` lists `greetings_command_test.go`.
 
 ## Known Limitations (carried forward, not stubs)
 
@@ -246,13 +246,13 @@ None beyond the plan's `<threat_model>`: T-04-14 (live performer lookup, failed 
 
 ## Verification Run
 
-- Plan tests, all with `-tags testtools -race -count=1` and passing: `TestLockdownGuardDedupesTwoPaths`, `TestLockdownMixedServiceMessage`, `TestLockdownRejoinAfterUnban`, `TestLockdownJoinAfterDeclinedRequest`, `TestLockdownApprovalRace`, `TestLockdownGuardServiceMessageVariants`, `TestDecideLockdownJoin`, `TestLockdownAdminAddedJoinerExempt`, `TestLockdownSuppressesGoodbye` (./alita/modules); `TestReclaimJoin`, `TestJoinMsgs`, `TestHasJoinerBanFresh` (./alita/db/lockdown). The lockdown, joiner and decision tests also pass with `-count=8`.
-- Plan-level verification: `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|Joiner|RecordJoin|ReclaimJoin|JoinMsgs' ./alita/modules ./alita/db/lockdown` and `-run 'Greeting|Captcha|AntiRaid' ./alita/modules`: both ok. `git diff go.mod go.sum`: unchanged.
+- Plan tests, all with `-tags testtools -race -count=1` and passing: `TestLockdownGuardDedupesTwoPaths`, `TestLockdownMixedServiceMessage`, `TestLockdownRejoinAfterUnban`, `TestLockdownJoinAfterDeclinedRequest`, `TestLockdownApprovalRace`, `TestLockdownGuardServiceMessageVariants`, `TestDecideLockdownJoin`, `TestLockdownAdminAddedJoinerExempt`, `TestLockdownSuppressesGoodbye` (./fuku/modules); `TestReclaimJoin`, `TestJoinMsgs`, `TestHasJoinerBanFresh` (./fuku/db/lockdown). The lockdown, joiner and decision tests also pass with `-count=8`.
+- Plan-level verification: `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|Joiner|RecordJoin|ReclaimJoin|JoinMsgs' ./fuku/modules ./fuku/db/lockdown` and `-run 'Greeting|Captcha|AntiRaid' ./fuku/modules`: both ok. `git diff go.mod go.sum`: unchanged.
 - `make test`: exit 0 (69.8% coverage). The known flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown .`, `make check-translations` (all present, no locale keys added), `make check-docs` (no drift), `gofmt -l` on the plan's touched files (clean): all pass.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown .`, `make check-translations` (all present, no locale keys added), `make check-docs` (no drift), `gofmt -l` on the plan's touched files (clean): all pass.
 - Acceptance criteria re-run, all pass: `lockdownJoinDedupeWindow = 20 * time.Second` matches; `SetAllowBot(true)` matches; the comment-stripped guard has 0 matches for `claimRecentJoinProcessing|GetRedisClient|GetMarshal`; the exact `ReclaimJoin` signature matches; `func (m moduleStruct) lockdownOnKicked(` matches; `grep -c AddHandlerToGroup` prints 3; AGENTS.md contains "no goodbye"; `git log --oneline` shows each `test(04-04)` commit before its `feat(04-04)` commit.
 - `make lint`: not run. The installed golangci-lint 2.5.0 is built with go1.25 and refuses the go1.26.0 module (environment limitation).
-- PostgreSQL: not run. No throwaway cluster was set up; the new conditional updates (`ReclaimJoin`, `SetJoinMsg`, `ListJoinMsgsToDeleteFresh`, `HasJoinerBanFresh`) ran on SQLite only. Command left for the orchestrator or CI, with the migration chain applied first: `DATABASE_URL=<postgres url> ALITA_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/db/lockdown`. The `updated_at < ?` cut-off is passed as a UTC time, matching the UTC values the repository writes.
+- PostgreSQL: not run. No throwaway cluster was set up; the new conditional updates (`ReclaimJoin`, `SetJoinMsg`, `ListJoinMsgsToDeleteFresh`, `HasJoinerBanFresh`) ran on SQLite only. Command left for the orchestrator or CI, with the migration chain applied first: `DATABASE_URL=<postgres url> FUKU_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/db/lockdown`. The `updated_at < ?` cut-off is passed as a UTC time, matching the UTC values the repository writes.
 
 ## End-of-Phase UAT Items (live Telegram, not run)
 

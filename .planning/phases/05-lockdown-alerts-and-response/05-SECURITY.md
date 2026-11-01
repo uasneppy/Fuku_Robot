@@ -117,7 +117,7 @@ Related limits recorded in `AGENTS.md` and the plans, not register threats: a cr
 | Open | 0 |
 
 Evidence at L1 depth:
-- The auditor checked every `mitigate` threat in code with file and line evidence, and ran the 37 tests the mitigations name under `-race`. They all pass: 26 in `./alita/modules`, 9 in `./alita/db/lockdown` and 2 in `./alita/i18n`.
+- The auditor checked every `mitigate` threat in code with file and line evidence, and ran the 37 tests the mitigations name under `-race`. They all pass: 26 in `./fuku/modules`, 9 in `./fuku/db/lockdown` and 2 in `./fuku/i18n`.
 - T-05-40 was open, below the block threshold. The Ban line of the help did not say who may press it, and the `/unlockdown` line did not say that response bans stay. Both are fixed in c21b400 in all 7 locales; `make check-translations` and `make check-docs` are clean, and the locale and lockdown tests pass.
 - All 12 code review findings (`05-REVIEW-FIX.md`) were confirmed fixed in code.
 - The guarantees that rest on PostgreSQL-only behaviour are in `make test-postgres-integrity`: the partial unique index, the reminder-slot `ON CONFLICT` and the conditional updates. They run in CI. 05-14 ran an earlier version of the list on PostgreSQL 16; the seven tests added by WR-03 have not yet run on PostgreSQL.

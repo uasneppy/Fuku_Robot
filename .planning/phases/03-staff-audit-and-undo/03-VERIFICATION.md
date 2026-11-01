@@ -28,20 +28,20 @@ covered_files:
   - .planning/phases/03-staff-audit-and-undo/03-11-SUMMARY.md
   - .planning/phases/03-staff-audit-and-undo/03-12-PLAN.md
   - .planning/phases/03-staff-audit-and-undo/03-12-SUMMARY.md
-  - alita/db/models/staff_action.go
-  - alita/db/staff/actions.go
-  - alita/db/staff/rekey.go
-  - alita/modules/staff.go
-  - alita/modules/staff_action_card.go
-  - alita/modules/staff_action_decide.go
-  - alita/modules/staff_action_record.go
-  - alita/modules/staff_action_run.go
-  - alita/modules/staff_action_summary.go
-  - alita/modules/staff_history.go
-  - alita/modules/staff_log.go
-  - alita/modules/staff_panel.go
-  - alita/modules/staff_undo.go
-  - alita/utils/actionlog/actionlog.go
+  - fuku/db/models/staff_action.go
+  - fuku/db/staff/actions.go
+  - fuku/db/staff/rekey.go
+  - fuku/modules/staff.go
+  - fuku/modules/staff_action_card.go
+  - fuku/modules/staff_action_decide.go
+  - fuku/modules/staff_action_record.go
+  - fuku/modules/staff_action_run.go
+  - fuku/modules/staff_action_summary.go
+  - fuku/modules/staff_history.go
+  - fuku/modules/staff_log.go
+  - fuku/modules/staff_panel.go
+  - fuku/modules/staff_undo.go
+  - fuku/utils/actionlog/actionlog.go
   - migrations/20261005120000_add_staff_actions.sql
 
 covered_digest: "v2:sha256:0aeff01275aaacd9ea42953425a0793a65a865fd6640f3a5ea92d074e1debcea"
@@ -124,7 +124,7 @@ Yes. The gap listed eight missing items. Each one exists in the merged code:
 | Detail view shows a dead undo's pending groups as interrupted, display only | `staff_history.go:383-401` |
 | Locale keys in 7 files, AGENTS.md and docs, regression tests | All ten new keys exist in all 7 locale files (grep count 7 each), `make check-translations` passes, AGENTS.md lines 24-32, 82-83, 105-111 and 198-203 and the staff docs page state the rule, and the named tests exist and pass |
 
-`staff_history_undone_by` has no remaining reference in `alita/` or `locales/`.
+`staff_history_undone_by` has no remaining reference in `fuku/` or `locales/`.
 
 ### Judgment on the code review's new warnings
 
@@ -139,11 +139,11 @@ Yes. The gap listed eight missing items. Each one exists in the merged code:
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `alita/db/staff/actions.go` | `ClaimUndo` returns the claim time; `ReleaseUndo`; `ActionTally.UndoDone` | ✓ VERIFIED | `ClaimUndo` truncates to the microsecond UTC (`actions.go:280-298`); `ReleaseUndo` at `308-345`; the tally at `172-234`. Never cached, so no `DeleteCache` applies. |
-| `alita/modules/staff_action_run.go` | `Reached`, `joinStaffRuns`, `startJoinedStaffRun` | ✓ VERIFIED | `staff_action_run.go:31-34, 231-256`. |
-| `alita/modules/staff_undo.go` | `staffUndoStateOf`, `staffUndoClaimedText`, release in `Finish`, end-of-run original edit, drain join | ✓ VERIFIED | See Truths 7-12. |
-| `alita/modules/staff_history.go` | four-state segment and display-only conversion | ✓ VERIFIED | `staff_history.go:72-139, 373-401`. |
-| `alita/modules/staff_undo_claim_test.go`, `staff_undo_shutdown_test.go`, `staff_history_test.go`, `actions_test.go` | named regression tests | ✓ VERIFIED | All 13 named tests exist, use the real SQLite harness, miniredis and the hand-written Telegram fake, and pass. |
+| `fuku/db/staff/actions.go` | `ClaimUndo` returns the claim time; `ReleaseUndo`; `ActionTally.UndoDone` | ✓ VERIFIED | `ClaimUndo` truncates to the microsecond UTC (`actions.go:280-298`); `ReleaseUndo` at `308-345`; the tally at `172-234`. Never cached, so no `DeleteCache` applies. |
+| `fuku/modules/staff_action_run.go` | `Reached`, `joinStaffRuns`, `startJoinedStaffRun` | ✓ VERIFIED | `staff_action_run.go:31-34, 231-256`. |
+| `fuku/modules/staff_undo.go` | `staffUndoStateOf`, `staffUndoClaimedText`, release in `Finish`, end-of-run original edit, drain join | ✓ VERIFIED | See Truths 7-12. |
+| `fuku/modules/staff_history.go` | four-state segment and display-only conversion | ✓ VERIFIED | `staff_history.go:72-139, 373-401`. |
+| `fuku/modules/staff_undo_claim_test.go`, `staff_undo_shutdown_test.go`, `staff_history_test.go`, `actions_test.go` | named regression tests | ✓ VERIFIED | All 13 named tests exist, use the real SQLite harness, miniredis and the hand-written Telegram fake, and pass. |
 | `locales/*.yml` (7), `AGENTS.md`, `docs/.../commands/staff/index.md` | new keys, rules, help text | ✓ VERIFIED | Grep shows 7 of 7 locales for every new key; `make check-translations` passes. |
 
 ### Key Link Verification
@@ -171,7 +171,7 @@ Yes. The gap listed eight missing items. Each one exists in the merged code:
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Phase 3 test families, including the 13 gap-closure tests | `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestStaff(Undo\|History\|ActionLog\|ActionRecord\|ActionTally\|ActionReleaseUndo)\|^TestStopStaffActions' ./alita/modules ./alita/db/staff` | `ok alita/modules 36.6s`, `ok alita/db/staff 1.1s` | ✓ PASS |
+| Phase 3 test families, including the 13 gap-closure tests | `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestStaff(Undo\|History\|ActionLog\|ActionRecord\|ActionTally\|ActionReleaseUndo)\|^TestStopStaffActions' ./fuku/modules ./fuku/db/staff` | `ok fuku/modules 36.6s`, `ok fuku/db/staff 1.1s` | ✓ PASS |
 | Production build | `CGO_ENABLED=0 go build ./...` | exit 0 | ✓ PASS |
 | Locale parity | `make check-translations` | "All translations are present!" | ✓ PASS |
 | Debt markers in the changed source | grep for TBD, FIXME, XXX in `staff_undo.go`, `staff_history.go`, `actions.go`, `staff_action_run.go` | none | ✓ PASS |
@@ -198,13 +198,13 @@ All four IDs appear in plan frontmatter and in REQUIREMENTS.md. Nothing in REQUI
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| `alita/modules/staff_undo.go` | 667-682 | Falls through to `FinalizeUndo` after an ambiguous release (WR-03) | ⚠️ Warning | Rare double fault leaves a record with no claim and a stale finish time. |
-| `alita/modules/staff_undo.go` | 762-777 | `Reached` set for pacer refusals, 429s and mid-wait cancels (WR-01) | ⚠️ Warning | Keeps the claim in a rare case where nothing was written. Fails closed. |
-| `alita/modules/staff_undo.go` | 702-714 | "Changed nothing" for groups of unknown effect (WR-02) | ⚠️ Warning | Over-claims for panicked or interrupted groups. |
-| `alita/modules/staff_undo.go` | 702-715 | `Delivered` ignores `landedMsgID`, so the original says "see the reply" when no reply landed (review IN-01) | ℹ️ Info | The record is unaffected. |
-| `alita/modules/staff_history.go` | 307-325 | History press answered before the read (WR-04, carried) | ⚠️ Warning | A database error on a page press is a silent no-op. |
-| `alita/db/staff/rekey.go` | 53 | Re-key bumps `updated_at`, which flips dead undos to "running" for 30 minutes (review IN-04) | ℹ️ Info | The undo states widen this existing effect. |
-| `alita/modules/staff_history.go` | 136, 372, 389 | English-only timestamp format; Prev ignores a shrunk page; `ClaimUndo` not bound to the Staff Group in SQL; `staffCallRestore` arithmetic (review IN-03, IN-05..IN-07) | ℹ️ Info | Carried forward, no effect on any criterion. |
+| `fuku/modules/staff_undo.go` | 667-682 | Falls through to `FinalizeUndo` after an ambiguous release (WR-03) | ⚠️ Warning | Rare double fault leaves a record with no claim and a stale finish time. |
+| `fuku/modules/staff_undo.go` | 762-777 | `Reached` set for pacer refusals, 429s and mid-wait cancels (WR-01) | ⚠️ Warning | Keeps the claim in a rare case where nothing was written. Fails closed. |
+| `fuku/modules/staff_undo.go` | 702-714 | "Changed nothing" for groups of unknown effect (WR-02) | ⚠️ Warning | Over-claims for panicked or interrupted groups. |
+| `fuku/modules/staff_undo.go` | 702-715 | `Delivered` ignores `landedMsgID`, so the original says "see the reply" when no reply landed (review IN-01) | ℹ️ Info | The record is unaffected. |
+| `fuku/modules/staff_history.go` | 307-325 | History press answered before the read (WR-04, carried) | ⚠️ Warning | A database error on a page press is a silent no-op. |
+| `fuku/db/staff/rekey.go` | 53 | Re-key bumps `updated_at`, which flips dead undos to "running" for 30 minutes (review IN-04) | ℹ️ Info | The undo states widen this existing effect. |
+| `fuku/modules/staff_history.go` | 136, 372, 389 | English-only timestamp format; Prev ignores a shrunk page; `ClaimUndo` not bound to the Staff Group in SQL; `staffCallRestore` arithmetic (review IN-03, IN-05..IN-07) | ℹ️ Info | Carried forward, no effect on any criterion. |
 | Phase 3 files | - | TBD, FIXME, XXX | none found | |
 
 ### Human Verification Required

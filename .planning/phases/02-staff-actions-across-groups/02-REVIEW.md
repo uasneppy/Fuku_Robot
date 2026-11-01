@@ -5,15 +5,15 @@ depth: standard
 files_reviewed: 10
 files_reviewed_list:
   - AGENTS.md
-  - alita/modules/staff_action_card.go
-  - alita/modules/staff_action_fake_test.go
-  - alita/modules/staff_action_flood_test.go
-  - alita/modules/staff_action_lifecycle_test.go
-  - alita/modules/staff_action_progress_test.go
-  - alita/modules/staff_action_run.go
-  - alita/modules/staff_action_summary.go
-  - alita/utils/ratelimit/telegram_pacer.go
-  - alita/utils/ratelimit/telegram_pacer_test.go
+  - fuku/modules/staff_action_card.go
+  - fuku/modules/staff_action_fake_test.go
+  - fuku/modules/staff_action_flood_test.go
+  - fuku/modules/staff_action_lifecycle_test.go
+  - fuku/modules/staff_action_progress_test.go
+  - fuku/modules/staff_action_run.go
+  - fuku/modules/staff_action_summary.go
+  - fuku/utils/ratelimit/telegram_pacer.go
+  - fuku/utils/ratelimit/telegram_pacer_test.go
 findings:
   critical: 0
   warning: 1
@@ -68,7 +68,7 @@ One residual weakness remains in each half, and neither blocks the resolution: W
 
 ### WR-03: A `retry_after` at the `MaxWait` cap makes all but one concurrent worker fail instead of retrying
 
-**File:** `alita/utils/ratelimit/telegram_pacer.go:155` (`d > p.opts.MaxWait` in `Do`), `:172-174` (`wait`), `:91-93` (Lua threshold)
+**File:** `fuku/utils/ratelimit/telegram_pacer.go:155` (`d > p.opts.MaxWait` in `Do`), `:172-174` (`wait`), `:91-93` (Lua threshold)
 **Issue:** Two different thresholds guard the same wait. `Do` accepts a `retry_after` whose block `d` is at most `MaxWait`, so a 429 with `retry_after = 60` is retried. But the refusal in `wait` and in the script compares the whole slot distance `slot - now` against MaxWait, and that distance includes the queue behind the block.
 
 Trace with the production values (4 workers, 100 ms interval, MaxWait 60 s):
@@ -99,26 +99,26 @@ Apply the same rule in `reserveLocal` (compare `p.localBlock.Sub(now)`) and in `
 
 ### IN-07: A lost target lock is only logged; the run keeps writing
 
-**File:** `alita/modules/staff_action_run.go:231-236`
+**File:** `fuku/modules/staff_action_run.go:231-236`
 **Issue:** When the renewal returns `held == false` (another card now holds the target lock), the coordinator logs a warning and the fan-out continues. The lock exists to stop two staff actions on one target from running at once and, with them, the restrict-replaces-ban race that `decideStaffAction` guards against. Reaching this branch needs the key to vanish and a second Confirm to take it, so it is rare. But the run then has no exclusivity and proceeds anyway.
 **Fix:** Cancel the run's own fan-out context when the lock is lost, and let the remaining groups read "interrupted". For example, derive `runCtx, cancelRun := context.WithCancel(ctx)` for the fan-out and call `cancelRun()` in the `!held` branch. Keep the plain warning for a Redis error, which is "unknown", not "lost".
 
 ### IN-08: Retry waits are truncated to 60 s, so a `retry_after` above 60 s burns attempts
 
-**File:** `alita/modules/staff_action_summary.go:411-416` (`staffRetryAfterWait`), `:458-470` (`editStaffActionFinal`), `:473-486` (`sendStaffSummaryPart`)
+**File:** `fuku/modules/staff_action_summary.go:411-416` (`staffRetryAfterWait`), `:458-470` (`editStaffActionFinal`), `:473-486` (`sendStaffSummaryPart`)
 **Issue:** The cap makes `staffRetryAfterWait` return at most 60 s, however long Telegram asked. With a 3-attempt loop, a `retry_after` above about 120 s makes the final edit fail, and the fallback send faces the same chat-level flood and may fail as well. The new 210 s budget could cover a longer wait, but the loop never uses it. This only matters for flood waits above a minute, which is rare for message edits, so the first review's WR-01 is resolved for the cases it described.
 **Fix:** When `retry_after` fits the remaining budget (`wait <= time.Until(deadline)`), wait the full `retry_after` instead of the cap. Only a value that cannot fit should end the loop, and it should end it at once so the fallback runs.
 
 ### IN-09: Two new timing tests install their 429 script after the run has started
 
-**File:** `alita/modules/staff_action_progress_test.go:325-327` (`TestStaffActionProgressBacksOffAfter429`), `:362-364` (`TestStaffActionFinalEditWaitsForHold`)
+**File:** `fuku/modules/staff_action_progress_test.go:325-327` (`TestStaffActionProgressBacksOffAfter429`), `:362-364` (`TestStaffActionFinalEditWaitsForHold`)
 **Issue:** Both tests call `env.startRun(...)` and only then `env.fake.script("editMessageText", ..., staffFake429(n))`. The run's coordinator already ticks every 20 ms. Under `-race` load, a progress edit can land before the script is queued. The 429 then goes to a later edit, and the assertions index `times[1]` as the rate-limited edit, so they would measure the wrong gap or fail. The fan-out delays (25 ms and up) make this unlikely, not impossible, so the tests are a flake risk.
 **Fix:** Queue the script before the Confirm tap (script `nil` for the Confirm edit first, then the 429, as `TestStaffActionFinalEditLongRetryAfter` does), or split `startRun` so the script goes in between the card and the tap.
 
 ### IN-10: New tests leak shared state when they fail early
 
-**File:** `alita/modules/staff_action_flood_test.go:22-30`, `alita/modules/staff_action_lifecycle_test.go:652-680` (`heldStaffRun` subtests)
-**Issue:** `TestStaffActionBlockAboveMaxWaitFailsFast` sets the shared `alita:staff:pace:block` key and deletes it only on the happy path. A `t.Fatalf` between the two leaves a 2-minute block in miniredis. Every later staff test then fails fast with "rate limited", which hides the real cause of the second failure. In `heldStaffRun`, a failure before `finish()` leaves the run goroutine alive, and the `t.Cleanup` that restores `staffTargetLockRenewEvery` can then race with that goroutine, which reads it.
+**File:** `fuku/modules/staff_action_flood_test.go:22-30`, `fuku/modules/staff_action_lifecycle_test.go:652-680` (`heldStaffRun` subtests)
+**Issue:** `TestStaffActionBlockAboveMaxWaitFailsFast` sets the shared `fuku:staff:pace:block` key and deletes it only on the happy path. A `t.Fatalf` between the two leaves a 2-minute block in miniredis. Every later staff test then fails fast with "rate limited", which hides the real cause of the second failure. In `heldStaffRun`, a failure before `finish()` leaves the run goroutine alive, and the `t.Cleanup` that restores `staffTargetLockRenewEvery` can then race with that goroutine, which reads it.
 **Fix:** Register `t.Cleanup(func() { client.Del(cache.Context, blockKey) })` right after setting the block. In `heldStaffRun`, register `t.Cleanup(env.waitRuns)` after `releaseRun`. Cleanups run last in first out, so the wait runs after the release and before the variable is restored.
 
 ---

@@ -30,16 +30,16 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/lockdown_status.go
-    - alita/modules/lockdown_status_test.go
-    - alita/modules/lockdown_lift_test.go
-    - alita/modules/lockdown_anon_test.go
+    - fuku/modules/lockdown_status.go
+    - fuku/modules/lockdown_status_test.go
+    - fuku/modules/lockdown_lift_test.go
+    - fuku/modules/lockdown_anon_test.go
   modified:
-    - alita/db/lockdown/repository.go
-    - alita/db/lockdown/repository_test.go
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_fake_test.go
-    - alita/utils/chat_status/chat_status.go
+    - fuku/db/lockdown/repository.go
+    - fuku/db/lockdown/repository_test.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_fake_test.go
+    - fuku/utils/chat_status/chat_status.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -71,10 +71,10 @@ coverage:
     requirement: "LOCK-09"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_status_test.go#TestLockdownStatusCommand"
+        ref: "fuku/modules/lockdown_status_test.go#TestLockdownStatusCommand"
         status: pass
       - kind: unit
-        ref: "alita/db/lockdown/repository_test.go#TestLockdownCurrentAndTally"
+        ref: "fuku/db/lockdown/repository_test.go#TestLockdownCurrentAndTally"
         status: pass
     human_judgment: false
   - id: D2
@@ -82,7 +82,7 @@ coverage:
     requirement: "LOCK-07"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_lift_test.go#TestLockdownLiftManualChange"
+        ref: "fuku/modules/lockdown_lift_test.go#TestLockdownLiftManualChange"
         status: pass
     human_judgment: true
     rationale: "Exactness against a real getChat answer (research A1) still needs the live check carried over from plan 04-01"
@@ -91,10 +91,10 @@ coverage:
     requirement: "LOCK-05"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_lift_test.go#TestLockdownLiftRestoreFailure"
+        ref: "fuku/modules/lockdown_lift_test.go#TestLockdownLiftRestoreFailure"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_lift_test.go#TestLockdownLiftRecordFailure"
+        ref: "fuku/modules/lockdown_lift_test.go#TestLockdownLiftRecordFailure"
         status: pass
     human_judgment: false
   - id: D4
@@ -102,10 +102,10 @@ coverage:
     requirement: "LOCK-06"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_lift_test.go#TestUnlockdownLiftsOnce (SQLite, -race -count=10)"
+        ref: "fuku/modules/lockdown_lift_test.go#TestUnlockdownLiftsOnce (SQLite, -race -count=10)"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_lift_test.go#TestUnlockdownWithoutLockdown"
+        ref: "fuku/modules/lockdown_lift_test.go#TestUnlockdownWithoutLockdown"
         status: pass
       - kind: integration
         ref: "BeginLift conditional update on PostgreSQL 16"
@@ -117,7 +117,7 @@ coverage:
     requirement: "LOCK-06"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_anon_test.go#TestLockdownAnonymousAdminProof"
+        ref: "fuku/modules/lockdown_anon_test.go#TestLockdownAnonymousAdminProof"
         status: pass
     human_judgment: true
     rationale: "The fake proves the flow; a real anonymous admin tapping the real proof button in a live supergroup is a UAT item"
@@ -165,7 +165,7 @@ status: complete
 
 ## Files Created/Modified
 
-See the frontmatter `key-files`. Behaviour lives in `alita/modules/lockdown.go` (`unlockdown`, `requireLockdownAuthority`, `lockdownRefuse`, `requireLockdownGroup`, the `lockdownBeginLift` seam, anonymous registrations), `alita/modules/lockdown_status.go`, `alita/db/lockdown/repository.go` and `alita/utils/chat_status/chat_status.go` (`PromptAnonAdminProof`).
+See the frontmatter `key-files`. Behaviour lives in `fuku/modules/lockdown.go` (`unlockdown`, `requireLockdownAuthority`, `lockdownRefuse`, `requireLockdownGroup`, the `lockdownBeginLift` seam, anonymous registrations), `fuku/modules/lockdown_status.go`, `fuku/db/lockdown/repository.go` and `fuku/utils/chat_status/chat_status.go` (`PromptAnonAdminProof`).
 
 ## Decisions Made
 
@@ -182,7 +182,7 @@ See the frontmatter `key-files`. Behaviour lives in `alita/modules/lockdown.go` 
 - **Issue:** `verifyAnonymousAdmin` sets `ctx.CallbackQuery = nil`, which clears the callback query of the embedded `*gotgbot.Update`. After that `chat_status.extractChatFromContext`, behind `helpers.RequireGroup` and `PermissionResponder`, finds no chat: `RequireGroup` returns false and every refusal reply is dropped, with no log. The plan assumed "the existing pipeline re-runs `requireLockdownAuthority` live for the tapper", which only works if the group check and the refusal work after the proof.
 - **First attempt (reverted):** made `extractChatFromContext` fall back to `ctx.EffectiveChat`. It fixed the flow but broke `TestUnapproveAllCallbackCancelInvalidAndUnavailableMessage`, which relies on a callback with no message finding no chat (caught by `make test`, commit `c0a5021`).
 - **Final fix:** `extractChatFromContext`, `helpers.RequireGroup` and `PermissionResponder` are untouched. The lockdown commands use their own `requireLockdownGroup` (reads `c.Chat`) and `lockdownRefuse` (translates with `c.Tr`, replies through `c.Msg`).
-- **Files modified:** `alita/modules/lockdown.go`, `alita/modules/lockdown_status.go`, `alita/utils/chat_status/chat_status.go` and `access_test.go` (back to unchanged apart from `PromptAnonAdminProof`), `AGENTS.md`
+- **Files modified:** `fuku/modules/lockdown.go`, `fuku/modules/lockdown_status.go`, `fuku/utils/chat_status/chat_status.go` and `access_test.go` (back to unchanged apart from `PromptAnonAdminProof`), `AGENTS.md`
 - **Verification:** `TestLockdownAnonymousAdminProof` (4 subtests, including the refusal replies after the proof), `TestUnapproveAll...`, and a full `make test` pass
 - **Committed in:** `8c8306c`
 
@@ -197,7 +197,7 @@ See the frontmatter `key-files`. Behaviour lives in `alita/modules/lockdown.go` 
 
 - **A likely pre-existing bug outside this plan (not fixed, for the orchestrator):** the same silent failure after the anonymous-admin proof should affect every migrated command that lists `helpers.RequireGroup()` in its checks and re-enters through `anonPipelineHandler` (the `ban` family, `restrict`, `unrestrict`): `RequireGroup` returns false and sends nothing. I proved it only for the lockdown commands (debug output showed check 0, `RequireGroup`, returning false); I did not run a ban flow. Logged in `deferred-items.md`.
 - **PostgreSQL not run.** `TestUnlockdownLiftsOnce` and `TestLockdownCurrentAndTally` ran on SQLite only. The `su postgres` cluster commands carried over from plan 04-01's summary were not attempted. `BeginLift` as one conditional UPDATE is the same statement 04-01 already exercises on SQLite; run it on PostgreSQL from the main checkout.
-- **`make lint` cannot run here** (golangci-lint 2.5.0 was built with go1.25 and refuses the go1.26.0 module). `gofmt -l` is clean on every touched file (it lists `alita/modules/greetings_command_test.go`, which this plan does not touch), and `go vet -tags testtools` is clean on the touched packages.
+- **`make lint` cannot run here** (golangci-lint 2.5.0 was built with go1.25 and refuses the go1.26.0 module). `gofmt -l` is clean on every touched file (it lists `fuku/modules/greetings_command_test.go`, which this plan does not touch), and `go vet -tags testtools` is clean on the touched packages.
 - **`make test`:** the first run failed on `TestUnapproveAllCallbackCancelInvalidAndUnavailableMessage`, caused by my first Task 3 fix (see Deviations). After the fix `make test` exits 0 with no `--- FAIL`. The flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail.
 - `gsd_run` is not available in this agent, so the broken-windows ledger (`.planning/WINDOWS.md`) was not appended. STATE.md, ROADMAP.md and REQUIREMENTS.md are the orchestrator's. Requirement IDs LOCK-05, LOCK-06, LOCK-07 and LOCK-09 are shared with later plans, so none should read complete from this plan alone.
 
@@ -209,7 +209,7 @@ See the frontmatter `key-files`. Behaviour lives in `alita/modules/lockdown.go` 
 | `TestLockdownLiftManualChange` (6), `TestLockdownLiftRestoreFailure`, `TestUnlockdownWithoutLockdown` (3), `TestLockdownLiftRecordFailure` | pass |
 | `TestUnlockdownLiftsOnce` `-race -count=10` | pass, no DATA RACE |
 | `TestLockdownAnonymousAdminProof` (4 subtests) | pass |
-| `go test -tags testtools -race -count=1 -run 'Lockdown\|Unlockdown' ./alita/modules ./alita/db/lockdown` and `./alita/utils/chat_status` | pass |
+| `go test -tags testtools -race -count=1 -run 'Lockdown\|Unlockdown' ./fuku/modules ./fuku/db/lockdown` and `./fuku/utils/chat_status` | pass |
 | `make test` (whole repository, after the final fix) | exit 0, no `--- FAIL`; PostgreSQL-only tests skipped as the result checker allows |
 | `make check-translations`, `make check-docs` (after `make generate-docs`) | pass, no drift |
 | `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools` on touched packages | clean |

@@ -6,7 +6,7 @@ tags: [gemini, spike, cli-tool, accuracy, cost, probe, stdlib]
 
 requires:
   - phase: 07-ai-assisted-raid-detection
-    provides: "alita/utils/gemini client (Classify, GetModel, Options, HTTPError, ErrBlocked) from plan 07-02"
+    provides: "fuku/utils/gemini client (Classify, GetModel, Options, HTTPError, ErrBlocked) from plan 07-02"
 provides:
   - "scripts/gemini-spike: standalone tool with a labelled accuracy, latency, token and cost run, -probe and -models-get"
   - "07-SPIKE.md: the owner's guide (samples, run order, reading, decision table, constants to edit, live-only checks)"
@@ -41,7 +41,7 @@ key-files:
 key-decisions:
   - "A file counts as labelled only if it has an image extension and a spam/ or ham/ parent folder (else a spam_ or ham_ prefix); one labelOf function covers both rules"
   - "The tool refuses to run (exit 2) before building any client when GEMINI_API_KEY is empty; -fake-key substitutes the built-in fake key only together with -probe"
-  - "-probe exits 1 when the API rejected a field name ('Invalid JSON payload'), because that means a request spelling in alita/utils/gemini needs a fix"
+  - "-probe exits 1 when the API rejected a field name ('Invalid JSON payload'), because that means a request spelling in fuku/utils/gemini needs a fix"
   - "CSV goes to standard output (or -csv file) followed by the summary on standard output; the scan line and skipped counts go to standard error"
   - "Bars are flagged when probability >= bar; blocked and failed images are counted apart and excluded from the matrix and every rate"
   - "Percentiles use nearest rank; cost = (prompt*in + (candidates+thoughts)*out)/1e6, with prices as flags defaulting to 0.30 and 2.50 and a printed 'verify at ai.google.dev/gemini-api/docs/pricing' note"
@@ -164,9 +164,9 @@ None - plan executed exactly as written. Small additions inside the plan's own t
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -race -count=1 -v ./scripts/gemini-spike`: all nine tests PASS (`TestSpikeLabels`, `TestSpikeSummary`, `TestSpikeCost`, `TestSpikeNoKeyMakesNoRequest`, `TestSpikeRefusesBadFlags`, `TestSpikeOptionsReachTheRequest`, `TestSpikeProbeVerdicts`, `TestSpikeProbeRefusesWithoutAnyKey`, `TestSpikeModelsGet`). Also green with `-tags testtools`, together with `./alita/utils/gemini`.
+- `CGO_ENABLED=1 go test -race -count=1 -v ./scripts/gemini-spike`: all nine tests PASS (`TestSpikeLabels`, `TestSpikeSummary`, `TestSpikeCost`, `TestSpikeNoKeyMakesNoRequest`, `TestSpikeRefusesBadFlags`, `TestSpikeOptionsReachTheRequest`, `TestSpikeProbeVerdicts`, `TestSpikeProbeRefusesWithoutAnyKey`, `TestSpikeModelsGet`). Also green with `-tags testtools`, together with `./fuku/utils/gemini`.
 - `CGO_ENABLED=0 go build ./...` clean; `go vet ./scripts/gemini-spike` and `go vet -tags testtools ./scripts/gemini-spike` clean; `gofmt -l scripts/gemini-spike` prints nothing.
-- Acceptance: imports are standard library plus `github.com/divkix/Alita_Robot/alita/utils/gemini` only (checked with `go list -f '{{.Imports}}'`); `GEMINI_API_KEY` in `main.go` (3), `func run(` (1), `func summarize(` (1), `func probeVariants(` (1), `fake-key` and `models-get` present; `07-SPIKE.md` contains `D-22`, `raidAIImageBar` and `paid`; `git diff --exit-code go.mod go.sum` exits 0.
+- Acceptance: imports are standard library plus `github.com/uasneppy/fuku_robot/fuku/utils/gemini` only (checked with `go list -f '{{.Imports}}'`); `GEMINI_API_KEY` in `main.go` (3), `func run(` (1), `func summarize(` (1), `func probeVariants(` (1), `fake-key` and `models-get` present; `07-SPIKE.md` contains `D-22`, `raidAIImageBar` and `paid`; `git diff --exit-code go.mod go.sum` exits 0.
 - `make lint` was NOT run: golangci-lint is built with Go 1.25 against the module's Go 1.26 here. `gofmt -l` and `go vet` stood in for it. The orchestrator runs the full `make test` after the wave (it compiles and runs `./scripts/gemini-spike` through `./...`).
 - No test calls a real host, none uses `t.Skip`, no mock library, no PostgreSQL was started.
 

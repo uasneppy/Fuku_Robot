@@ -28,12 +28,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_health_test.go
+    - fuku/modules/staff_health_test.go
   modified:
-    - alita/db/staff/repository.go
-    - alita/db/staff/repository_test.go
-    - alita/modules/staff_recheck.go
-    - alita/modules/staff_watchers.go
+    - fuku/db/staff/repository.go
+    - fuku/db/staff/repository_test.go
+    - fuku/modules/staff_recheck.go
+    - fuku/modules/staff_watchers.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -59,10 +59,10 @@ coverage:
     requirement: SETUP-08
     verification:
       - kind: unit
-        ref: "alita/modules/staff_health_test.go#TestStaffHealthTracer"
+        ref: "fuku/modules/staff_health_test.go#TestStaffHealthTracer"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_health_test.go#TestStaffHealthTransitions"
+        ref: "fuku/modules/staff_health_test.go#TestStaffHealthTransitions"
         status: pass
     human_judgment: false
   - id: D2
@@ -70,7 +70,7 @@ coverage:
     requirement: SETUP-08
     verification:
       - kind: unit
-        ref: "alita/modules/staff_health_test.go#TestStaffHealthRecovery"
+        ref: "fuku/modules/staff_health_test.go#TestStaffHealthRecovery"
         status: pass
     human_judgment: false
   - id: D3
@@ -78,13 +78,13 @@ coverage:
     requirement: PLAT-03
     verification:
       - kind: unit
-        ref: "alita/modules/staff_health_test.go#TestStaffHealthNoRepeat"
+        ref: "fuku/modules/staff_health_test.go#TestStaffHealthNoRepeat"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_health_test.go#TestStaffHealthConcurrentPostsOnce"
+        ref: "fuku/modules/staff_health_test.go#TestStaffHealthConcurrentPostsOnce"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/repository_test.go#TestStaffRepoSetLinkHealthConcurrentOneWinner"
+        ref: "fuku/db/staff/repository_test.go#TestStaffRepoSetLinkHealthConcurrentOneWinner"
         status: pass
     human_judgment: false
   - id: D4
@@ -92,7 +92,7 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_health_test.go#TestStaffHealthIgnoresUnrelatedChats"
+        ref: "fuku/modules/staff_health_test.go#TestStaffHealthIgnoresUnrelatedChats"
         status: pass
     human_judgment: false
   - id: D5
@@ -100,10 +100,10 @@ coverage:
     requirement: SETUP-08
     verification:
       - kind: unit
-        ref: "alita/db/staff/repository_test.go#TestStaffRepoSetLinkHealthChangesOnceAndInvalidates"
+        ref: "fuku/db/staff/repository_test.go#TestStaffRepoSetLinkHealthChangesOnceAndInvalidates"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/repository_test.go#TestStaffRepoSetLinkHealthRejectsUnknownValue"
+        ref: "fuku/db/staff/repository_test.go#TestStaffRepoSetLinkHealthRejectsUnknownValue"
         status: pass
     human_judgment: false
   - id: D6
@@ -153,11 +153,11 @@ commits: 2
 
 ## Files Created/Modified
 
-- `alita/db/staff/repository.go` - `SetLinkHealth(id, health) (changed bool, err error)`: conditional UPDATE through a map, cache invalidation of the group's keys when a row changed
-- `alita/modules/staff_recheck.go` - `applyLinkHealth` and `staffHealthNoticeText` (literal-key switch, title spliced in after translation)
-- `alita/modules/staff_watchers.go` - `onBotChatMember` and its `handlers.NewMyChatMember` registration at group -3
-- `alita/modules/staff_health_test.go` - tracer plus transitions, recovery, no-repeat, concurrency and unrelated-chat tests
-- `alita/db/staff/repository_test.go` - `TestStaffRepoSetLinkHealth*`
+- `fuku/db/staff/repository.go` - `SetLinkHealth(id, health) (changed bool, err error)`: conditional UPDATE through a map, cache invalidation of the group's keys when a row changed
+- `fuku/modules/staff_recheck.go` - `applyLinkHealth` and `staffHealthNoticeText` (literal-key switch, title spliced in after translation)
+- `fuku/modules/staff_watchers.go` - `onBotChatMember` and its `handlers.NewMyChatMember` registration at group -3
+- `fuku/modules/staff_health_test.go` - tracer plus transitions, recovery, no-repeat, concurrency and unrelated-chat tests
+- `fuku/db/staff/repository_test.go` - `TestStaffRepoSetLinkHealth*`
 - `locales/*.yml` (7) - `staff_notice_health_bot_missing`, `staff_notice_health_bot_not_admin`, `staff_notice_health_bot_cannot_restrict`, `staff_notice_health_ok`
 
 ## Decisions Made
@@ -192,8 +192,8 @@ None. The new surface (one `my_chat_member` watcher, one conditional UPDATE) is 
 
 - `go test -tags testtools -race -count=1 -timeout 10m ./...` passes
 - `go vet -tags testtools ./...` clean; `gofmt -l` clean on touched files
-- `go test -tags testtools -race -count=1 -run '^TestStaffHealth' ./alita/modules`: 21 PASS lines (parents and subtests, including the pre-existing `TestStaffHealthFromBot` that shares the prefix)
-- `go test -tags testtools -race -count=1 -run '^TestStaffRepoSetLinkHealth' ./alita/db/staff`: 4 PASS lines
+- `go test -tags testtools -race -count=1 -run '^TestStaffHealth' ./fuku/modules`: 21 PASS lines (parents and subtests, including the pre-existing `TestStaffHealthFromBot` that shares the prefix)
+- `go test -tags testtools -race -count=1 -run '^TestStaffRepoSetLinkHealth' ./fuku/db/staff`: 4 PASS lines
 - `TestStaffLocaleKeys`, `make check-translations`, `make check-docs` pass; `git diff --exit-code go.mod go.sum` clean
 - Acceptance greps: `handlers.NewMyChatMember` present in `staff_watchers.go`; `SetLinkHealth(id uint, health string) (changed bool, err error)` present; no bare `return nil` in `staff_watchers.go`; no non-literal `GetString(` key in `staff_recheck.go`
 

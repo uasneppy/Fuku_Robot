@@ -16,24 +16,24 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/divkix/Alita_Robot/alita/utils/constants"
+	"github.com/uasneppy/fuku_robot/fuku/utils/constants"
 
-	"github.com/divkix/Alita_Robot/alita"
-	"github.com/divkix/Alita_Robot/alita/config"
-	"github.com/divkix/Alita_Robot/alita/db"
-	dbmonitoring "github.com/divkix/Alita_Robot/alita/db/monitoring"
-	"github.com/divkix/Alita_Robot/alita/i18n"
-	"github.com/divkix/Alita_Robot/alita/modules"
-	"github.com/divkix/Alita_Robot/alita/utils/cache"
-	"github.com/divkix/Alita_Robot/alita/utils/captchaweb"
-	"github.com/divkix/Alita_Robot/alita/utils/error_handling"
-	alitaerrors "github.com/divkix/Alita_Robot/alita/utils/errors"
-	"github.com/divkix/Alita_Robot/alita/utils/formatting"
-	"github.com/divkix/Alita_Robot/alita/utils/helpers"
-	"github.com/divkix/Alita_Robot/alita/utils/httpserver"
-	"github.com/divkix/Alita_Robot/alita/utils/monitoring"
-	"github.com/divkix/Alita_Robot/alita/utils/shutdown"
-	"github.com/divkix/Alita_Robot/alita/utils/tracing"
+	"github.com/uasneppy/fuku_robot/fuku"
+	"github.com/uasneppy/fuku_robot/fuku/config"
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	dbmonitoring "github.com/uasneppy/fuku_robot/fuku/db/monitoring"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/modules"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
+	"github.com/uasneppy/fuku_robot/fuku/utils/captchaweb"
+	"github.com/uasneppy/fuku_robot/fuku/utils/error_handling"
+	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
+	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
+	"github.com/uasneppy/fuku_robot/fuku/utils/httpserver"
+	"github.com/uasneppy/fuku_robot/fuku/utils/monitoring"
+	"github.com/uasneppy/fuku_robot/fuku/utils/shutdown"
+	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
 
 //go:embed locales
@@ -123,7 +123,7 @@ func main() {
 
 	botUsername := resolveBotUsername(b)
 
-	if err := alita.InitialChecks(b); err != nil {
+	if err := fuku.InitialChecks(b); err != nil {
 		log.Fatalf("Initial checks failed: %v", err)
 	}
 
@@ -417,7 +417,7 @@ func dispatcherErrorHandler(_ *gotgbot.Bot, ctx *ext.Context, err error) ext.Dis
 		"error_type": fmt.Sprintf("%T", err),
 	}
 
-	if wrappedErr, ok := err.(*alitaerrors.WrappedError); ok {
+	if wrappedErr, ok := err.(*fukuerrors.WrappedError); ok {
 		logFields["file"] = wrappedErr.File
 		logFields["line"] = wrappedErr.Line
 		logFields["function"] = wrappedErr.Function
@@ -476,13 +476,13 @@ func registerCaptchaWeb(b *gotgbot.Bot, httpServer *httpserver.Server, localeMan
 }
 
 func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
-	alita.LoadModules(d)
+	fuku.LoadModules(d)
 	if err := modules.StartCaptchaLifecycle(b); err != nil {
 		log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 	}
 	modules.StartStaffSweeper(b)
 	modules.StartLockdownWorker(b)
-	log.Infof("[Modules] Loaded modules: %s", alita.ListModules())
+	log.Infof("[Modules] Loaded modules: %s", fuku.ListModules())
 
 	config.AppConfig.WorkingMode = mode
 
@@ -505,7 +505,7 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 	log.Info("Custom bot commands set for private chats")
 
 	_, err = b.SendMessage(config.AppConfig.MessageDump,
-		fmt.Sprintf("<b>Started Bot!</b>\n<b>Mode:</b> %s\n<b>Loaded Modules:</b>\n%s", mode, alita.ListModules()),
+		fmt.Sprintf("<b>Started Bot!</b>\n<b>Mode:</b> %s\n<b>Loaded Modules:</b>\n%s", mode, fuku.ListModules()),
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
 		},

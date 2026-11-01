@@ -6,7 +6,7 @@ tags: [raid-detection, join-surge, service-message, redis, lua, gotgbot]
 
 requires:
   - phase: 06-automatic-raid-detection
-    provides: raidCountMemberJoin, raidJoinCounts, recordRaidJoins, raidFire, the alita:raid joined set
+    provides: raidCountMemberJoin, raidJoinCounts, recordRaidJoins, raidFire, the fuku:raid joined set
 provides:
   - raidCountMessageJoins, the service-message path of the join surge, counted by the same rule as the chat_member path
   - lockdownMemberJoinInput and lockdownMessageJoinInputs, the one place the guard and the counter build a join's input
@@ -32,11 +32,11 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_join_test.go
-    - alita/modules/raid_counters_test.go
+    - fuku/modules/raid_join_test.go
+    - fuku/modules/raid_counters_test.go
   modified:
-    - alita/modules/lockdown_guard.go
-    - alita/modules/raid_join.go
+    - fuku/modules/lockdown_guard.go
+    - fuku/modules/raid_join.go
     - AGENTS.md
 
 key-decisions:
@@ -114,7 +114,7 @@ status: complete
 
 ## Issues Encountered
 
-- `make lint` cannot run here (golangci-lint is built with go1.25 and the module needs go1.26). `gofmt -l` on the four plan files printed nothing and `go vet -tags testtools ./alita/modules` was clean in its place.
+- `make lint` cannot run here (golangci-lint is built with go1.25 and the module needs go1.26). `gofmt -l` on the four plan files printed nothing and `go vet -tags testtools ./fuku/modules` was clean in its place.
 - No PostgreSQL server exists in this sandbox and none was started. Every test here runs on SQLite and miniredis.
 - `raidKey` carries the chat ID as a hash tag and miniredis does not enforce slots, so cluster behaviour is not exercised; the script touches one key.
 
@@ -125,9 +125,9 @@ status: complete
 | `go test -tags testtools -race -run '^TestRaidJoinDoubleDelivery$\|^TestRaidJoinServiceMessage$'` | pass (1 + 3 subtests) |
 | `go test -tags testtools -race -run '^TestRaidJoinExemptions$\|^TestRaidJoinBelowThreshold$\|^TestRaidJoinScript$\|^TestRaidInertWithoutRedis$'` | pass (14 + 2 + 5 subtests, plus the Redis-less test) |
 | The ten named guard suites (`TestLockdownGuard*`, `TestLockdownMixedServiceMessage`, `TestLockdownJoinAfterDeclinedRequest`, `TestLockdownRejoinAfterUnban`, `TestLockdownApprovalRace`, `TestLockdownAdminAddedJoinerExempt`, `TestLockdownSuppressesGoodbye`, `TestLockdownJoinRequestFailsClosed`, `TestLockdownAcceptButtonRefuses`, `TestDecideLockdownJoin*`) | pass, including `TestLockdownGuardDedupesTwoPaths` and `TestLockdownGuardServiceMessageVariants` |
-| `go test -tags testtools -race -run 'Lockdown\|Unlockdown\|Raid' ./alita/modules` | pass (after the last commit) |
-| `go test -tags testtools -race -run 'Join\|Greet\|Captcha\|Antiraid\|AntiRaid' ./alita/modules` | pass |
-| `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules`, `gofmt -l` | clean |
+| `go test -tags testtools -race -run 'Lockdown\|Unlockdown\|Raid' ./fuku/modules` | pass (after the last commit) |
+| `go test -tags testtools -race -run 'Join\|Greet\|Captcha\|Antiraid\|AntiRaid' ./fuku/modules` | pass |
+| `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules`, `gofmt -l` | clean |
 | Task 1 acceptance (hook line 239 precedes the `lockdownActiveLookup` line 241 of `lockdownOnJoinMessage`; exactly 2 builder definitions) | met |
 | Task 2 acceptance (`grep -c 't.Run('` of `raid_join_test.go` is 19, at least 13; gofmt; `git diff --exit-code go.mod go.sum`) | met |
 
@@ -155,4 +155,4 @@ The flood trigger (06-04) and the settings commands (06-05) can build on `raidJo
 
 ## Self-Check: PASSED
 
-Created files exist (`alita/modules/raid_join_test.go`, `alita/modules/raid_counters_test.go`); commits `129580a`, `6b21209` and `8973ea9` are in `git log`; `STATE.md` and `ROADMAP.md` are untouched.
+Created files exist (`fuku/modules/raid_join_test.go`, `fuku/modules/raid_counters_test.go`); commits `129580a`, `6b21209` and `8973ea9` are in `git log`; `STATE.md` and `ROADMAP.md` are untouched.

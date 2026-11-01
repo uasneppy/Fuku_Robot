@@ -33,14 +33,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_history.go
-    - alita/modules/staff_history_test.go
+    - fuku/modules/staff_history.go
+    - fuku/modules/staff_history_test.go
   modified:
-    - alita/db/staff/actions.go
-    - alita/db/staff/actions_test.go
-    - alita/modules/staff.go
-    - alita/modules/staff_panel.go
-    - alita/modules/staff_panel_render_test.go
+    - fuku/db/staff/actions.go
+    - fuku/db/staff/actions_test.go
+    - fuku/modules/staff.go
+    - fuku/modules/staff_panel.go
+    - fuku/modules/staff_panel_render_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -68,13 +68,13 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffPanelRenderRecentButton"
+        ref: "fuku/modules/staff_history_test.go#TestStaffPanelRenderRecentButton"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryList"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryList"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryAccess"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryAccess"
         status: pass
     human_judgment: false
   - id: D2
@@ -82,16 +82,16 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryLine"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryLine"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionListFresh"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionListFresh"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionTally"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionTally"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistorySameSecond"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistorySameSecond"
         status: pass
     human_judgment: false
   - id: D3
@@ -99,13 +99,13 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryPageBoundary"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryPageBoundary"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryEmpty"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryEmpty"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryShrunkPageHidesNothing"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryShrunkPageHidesNothing"
         status: pass
     human_judgment: false
   - id: D4
@@ -113,10 +113,10 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryAccess"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryAccess"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryList"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryList"
         status: pass
     human_judgment: false
   - id: D5
@@ -124,13 +124,13 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryLengthCap"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryLengthCap"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryCallbackBudget"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryCallbackBudget"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryUnfinished"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryUnfinished"
         status: pass
     human_judgment: false
   - id: D6
@@ -175,11 +175,11 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/db/staff/actions.go` - `ActionTally`, `ListActionsFresh`, `TallyActionGroups`
-- `alita/modules/staff_history.go` - constants, `staffHistoryCut`, `staffHistoryDuration`, `staffHistoryState`, `staffHistoryLine`, `renderStaffHistory`, `staffRecentButton`, `staffHistoryList`
-- `alita/modules/staff.go` - `staffActRecent = "rc"` and its dispatch case
-- `alita/modules/staff_panel.go` - Recent actions row after Refresh; GoDoc keyboard order
-- `alita/modules/staff_history_test.go`, `alita/db/staff/actions_test.go`, `alita/modules/staff_panel_render_test.go` - the tests listed in the plan plus `seedStaffActions` and `panelButtons.recent`
+- `fuku/db/staff/actions.go` - `ActionTally`, `ListActionsFresh`, `TallyActionGroups`
+- `fuku/modules/staff_history.go` - constants, `staffHistoryCut`, `staffHistoryDuration`, `staffHistoryState`, `staffHistoryLine`, `renderStaffHistory`, `staffRecentButton`, `staffHistoryList`
+- `fuku/modules/staff.go` - `staffActRecent = "rc"` and its dispatch case
+- `fuku/modules/staff_panel.go` - Recent actions row after Refresh; GoDoc keyboard order
+- `fuku/modules/staff_history_test.go`, `fuku/db/staff/actions_test.go`, `fuku/modules/staff_panel_render_test.go` - the tests listed in the plan plus `seedStaffActions` and `panelButtons.recent`
 - `locales/*.yml` (7 files) - eight new keys each
 - `AGENTS.md` - history callback rule in the Callbacks section
 
@@ -203,21 +203,21 @@ status: complete
 - **Found during:** Task 1 (RED)
 - **Issue:** The new tests call `renderStaffHistory`, `staffHistoryLine`, `staffRecentButton`, `ListActionsFresh` and `TallyActionGroups`, so the test packages do not compile without them, and a compile error is INVALID_RED, not a failing assertion.
 - **Fix:** `aefb31d` carries stubs that return zero values, so every new test failed on its first behavior assertion. The real bodies came in `9cc525a`.
-- **Files modified:** `alita/db/staff/actions.go`, `alita/modules/staff_history.go`
+- **Files modified:** `fuku/db/staff/actions.go`, `fuku/modules/staff_history.go`
 - **Committed in:** `aefb31d`
 
 **2. [Rule 2 - Missing critical functionality] Whitespace is collapsed in cut names and reasons**
 - **Found during:** Task 1 (design of `staffHistoryCut`)
 - **Issue:** A reason typed over several lines would put a newline inside an entry. That breaks the one-line-per-entry layout and a line could be mistaken for the start of the next entry.
 - **Fix:** `staffHistoryCut` joins `strings.Fields` before cutting, so every entry stays on one line.
-- **Files modified:** `alita/modules/staff_history.go`
+- **Files modified:** `fuku/modules/staff_history.go`
 - **Committed in:** `9cc525a`
 
 **3. [Rule 1 - Bug in plan] The hostile-input length test cannot reach the shrink path**
 - **Found during:** Task 2
 - **Issue:** `TestStaffHistoryLengthCap` as specified (10 records, 64-rune names, 200-rune reasons) fits in the cap, because the plan's own field caps (16 and 24 runes) bound a line to roughly 350 units. The test's "when fewer than 10 lines are shown" branch is never taken, so the cursor logic on a shrunk page was untested.
 - **Fix:** The test keeps the plan's assertions (length, escaping, conditional Next offset) and a new `TestStaffHistoryShrunkPageHidesNothing` forces the shrink with a 600-character translation: the page shows fewer than 10 entries, Next offset equals the number shown, and the next page numbers on from it.
-- **Files modified:** `alita/modules/staff_history_test.go`
+- **Files modified:** `fuku/modules/staff_history_test.go`
 - **Committed in:** `6b15a37`
 
 **4. Task 2's closing commit is `docs`, not `feat`**
@@ -236,10 +236,10 @@ status: complete
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/staff` - ok (modules 115 s)
-- `-run '^TestStaffHistory|^TestStaffPanelRender' -v ./alita/modules` - all PASS, including `TestStaffHistoryList`
-- `-run '^TestStaffAction(ListFresh|Tally)$' -v ./alita/db/staff` - both PASS
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n` - ok; `make check-translations` - all present; `make check-docs` - no drift
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/staff` - ok (modules 115 s)
+- `-run '^TestStaffHistory|^TestStaffPanelRender' -v ./fuku/modules` - all PASS, including `TestStaffHistoryList`
+- `-run '^TestStaffAction(ListFresh|Tally)$' -v ./fuku/db/staff` - both PASS
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n` - ok; `make check-translations` - all present; `make check-docs` - no drift
 - Task 1 and Task 2 acceptance criteria (greps, `gofmt -l`, `git diff --exit-code go.mod go.sum`) - all pass
 
 ## Known Stubs
@@ -262,7 +262,7 @@ None.
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/modules/staff_history.go`, `alita/modules/staff_history_test.go`.
+- Created files exist: `fuku/modules/staff_history.go`, `fuku/modules/staff_history_test.go`.
 - Commits `aefb31d`, `9cc525a`, `6b15a37` and `cdecc63` exist; `test(03-04)` precedes `feat(03-04)` for the code task.
 
 ---

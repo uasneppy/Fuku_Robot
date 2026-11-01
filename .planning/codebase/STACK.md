@@ -71,9 +71,9 @@ last_mapped_at: 2026-10-04
 ## Key Dependencies
 
 **Critical:**
-- `gorm.io/gorm` - ORM backbone; all database operations flow through it (`alita/db/*.go`)
-- `github.com/PaulSonOfLars/gotgbot/v2` - Telegram Bot API wrapper; enables all bot commands, handlers, and updates (`alita/modules/*.go`)
-- `github.com/redis/go-redis/v9` - Production cache layer; required unless `DisableCache=true`. Stores operational state and read-through cache (`alita/utils/cache/`)
+- `gorm.io/gorm` - ORM backbone; all database operations flow through it (`fuku/db/*.go`)
+- `github.com/PaulSonOfLars/gotgbot/v2` - Telegram Bot API wrapper; enables all bot commands, handlers, and updates (`fuku/modules/*.go`)
+- `github.com/redis/go-redis/v9` - Production cache layer; required unless `DisableCache=true`. Stores operational state and read-through cache (`fuku/utils/cache/`)
 
 **Infrastructure:**
 - `go.opentelemetry.io/otel/*` v1.46.0 suite - Distributed tracing; exports to OTLP or stdout for observability
@@ -84,7 +84,7 @@ last_mapped_at: 2026-10-04
 
 **Environment:**
 - Loaded via `github.com/joho/godotenv` from `.env` file (in cwd) before startup
-- Bot token, database URL, Redis address must be set or startup fails (see `alita/config/config.go`)
+- Bot token, database URL, Redis address must be set or startup fails (see `fuku/config/config.go`)
 - Feature flags (webhooks, AI spam, tracing, monitoring) controlled via environment variables
 
 **Build:**
@@ -98,7 +98,7 @@ last_mapped_at: 2026-10-04
 **Development:**
 - Go 1.26.0 with module support
 - SQLite (via cgo for `gorm.io/driver/sqlite` when running tests with `-tags testtools`)
-- PostgreSQL server for integration tests (optional; uses SQLite if `ALITA_TEST_DATABASE` is unset)
+- PostgreSQL server for integration tests (optional; uses SQLite if `FUKU_TEST_DATABASE` is unset)
 - Redis server or miniredis (in-memory substitute for testing)
 - make, bash for Makefile targets
 

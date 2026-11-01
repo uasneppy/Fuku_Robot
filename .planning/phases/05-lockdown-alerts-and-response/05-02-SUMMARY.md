@@ -19,11 +19,11 @@ tech-stack:
     - "stateless confirm card: asker u and expiry e travel in callback data; every fact is re-checked live at Confirm"
 key-files:
   created:
-    - alita/modules/lockdown_alert_callbacks.go
-    - alita/modules/lockdown_alert_lift_test.go
+    - fuku/modules/lockdown_alert_callbacks.go
+    - fuku/modules/lockdown_alert_lift_test.go
   modified:
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_alert.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_alert.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -56,7 +56,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## What was built
 
-- **`liftLockdownRow` (`alita/modules/lockdown.go`)**: the body of `/unlockdown` from the manual-change read to `FinishLift`, moved unchanged, returning a `lockdownLiftResult` (outcome done / restore failed / record failed / lost, plus manual change, finished and unbanning count). It is the only caller of the `lockdownBeginLift` seam. `lockdownLiftedText` builds the public notice. `/unlockdown` keeps its reads and its lifting-state reply and maps the outcome to the same replies as before.
+- **`liftLockdownRow` (`fuku/modules/lockdown.go`)**: the body of `/unlockdown` from the manual-change read to `FinishLift`, moved unchanged, returning a `lockdownLiftResult` (outcome done / restore failed / record failed / lost, plus manual change, finished and unbanning count). It is the only caller of the `lockdownBeginLift` seam. `lockdownLiftedText` builds the public notice. `/unlockdown` keeps its reads and its lifting-state reply and maps the outcome to the same replies as before.
 - **Alert keyboard (`lockdown_alert.go`)**: `lockdownAlertKeyboard` puts one `a=lk&r=<copy row id>` button on every copy; an encoding overflow is logged and the button is left out. Constants for the namespace and actions, and `lockdownCardLifetime` (5 min).
 - **Callbacks (`lockdown_alert_callbacks.go`)**: `lockdownAlertCallback` decodes `lockdown|v1`, loads the copy row and its lockdown fresh, and dispatches `lk` / `lc` / `x`. `lockdownButtonAuthority` is a live `getChatMember` of `ld.ChatID` (creator, or administrator with `can_restrict_members`); a failed lookup refuses. Ask posts a card replying to the alert (Confirm carries asker `u` and expiry `e`, Cancel carries `u`). Confirm requires `u == presser`, re-checks the lockdown and the presser live, runs `liftLockdownRow`, edits the card to its final text and posts the notice through `lockdownPaced`. Every outcome is told on the card: lifted, restore failed, record failed, already lifted (fresh lifter and time); Cancel belongs to the asker.
 - **Registration**: `callbackquery.Prefix("lockdown|")` in `LoadLockdown`.
@@ -94,9 +94,9 @@ Otherwise the plan was executed as written.
 ## Verification
 
 - `go test -tags testtools -race -count=1 -run '^TestLockdownAlertLift$'` and `-run '^TestLockdownAlertLiftOutcomes$|...'` (with the four unchanged lift tests): pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules`: pass. The whole `./alita/modules` package under `-race`: pass (180 s).
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules`: pass. The whole `./fuku/modules` package under `-race`: pass (180 s).
 - `TestLockdownLocaleKeys`, `make check-translations`, `make check-docs` (no drift): pass.
-- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./alita/modules`: clean. `gofmt -l` on the four touched Go files prints nothing. golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code, so `go vet` and `gofmt` were used instead.
+- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./fuku/modules`: clean. `gofmt -l` on the four touched Go files prints nothing. golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code, so `go vet` and `gofmt` were used instead.
 - `go.mod` and `go.sum` unchanged. `grep 'lockdownBeginLift('` outside tests: one line, in `lockdown.go`.
 - Not run: any PostgreSQL check (no server in the sandbox; this plan adds no migration). Not run: a manual UAT press from a real Staff Group (assumption A1: a callback from a button on a bot post carries the real presser in `from`).
 

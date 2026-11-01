@@ -1,4 +1,4 @@
-// Package main provides a documentation generator for Alita Robot.
+// Package main provides a documentation generator for Fuku Robot.
 // It parses the codebase and generates Markdown documentation for Blume.
 package main
 
@@ -62,7 +62,7 @@ var config Config
 func main() {
 	// Parse flags
 	flag.StringVar(&config.LocalesPath, "locales", "locales", "Path to locales directory")
-	flag.StringVar(&config.ModulesPath, "modules", "alita/modules", "Path to modules directory")
+	flag.StringVar(&config.ModulesPath, "modules", "fuku/modules", "Path to modules directory")
 	flag.StringVar(&config.DocsOutputPath, "output", "docs/src/content/docs", "Output path for generated docs")
 	var inventoryMode bool
 	flag.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
@@ -90,7 +90,7 @@ func main() {
 		return
 	}
 
-	log.Info("🚀 Starting Alita Robot Documentation Generator")
+	log.Info("🚀 Starting Fuku Robot Documentation Generator")
 
 	// Parse all sources
 	log.Info("📖 Parsing translations...")
@@ -266,7 +266,7 @@ func generateInventory(projectRoot string) error {
 	for moduleName, sourceFile := range moduleSet {
 		invMod := InventoryModule{
 			Module:     moduleName,
-			SourceFile: filepath.Join("alita", "modules", sourceFile),
+			SourceFile: filepath.Join("fuku", "modules", sourceFile),
 		}
 
 		// Mark bot_updates as internal

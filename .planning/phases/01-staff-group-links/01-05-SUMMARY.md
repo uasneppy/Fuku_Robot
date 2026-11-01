@@ -34,18 +34,18 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_link.go
-    - alita/modules/staff_notify.go
-    - alita/modules/staff_link_test.go
-    - alita/modules/staff_link_refusals_test.go
-    - alita/modules/staff_picker_test.go
+    - fuku/modules/staff_link.go
+    - fuku/modules/staff_notify.go
+    - fuku/modules/staff_link_test.go
+    - fuku/modules/staff_link_refusals_test.go
+    - fuku/modules/staff_picker_test.go
   modified:
-    - alita/modules/staff.go
-    - alita/modules/staff_panel.go
-    - alita/modules/deeplink_router.go
-    - alita/modules/help.go
-    - alita/db/staff/repository.go
-    - alita/db/staff/repository_test.go
+    - fuku/modules/staff.go
+    - fuku/modules/staff_panel.go
+    - fuku/modules/deeplink_router.go
+    - fuku/modules/help.go
+    - fuku/db/staff/repository.go
+    - fuku/db/staff/repository_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -75,7 +75,7 @@ coverage:
     requirement: "SETUP-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffTracer$' ./alita/modules#TestLinkStaffTracer"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffTracer$' ./fuku/modules#TestLinkStaffTracer"
         status: pass
     human_judgment: false
   - id: D2
@@ -83,10 +83,10 @@ coverage:
     requirement: "SETUP-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffWarns' ./alita/modules#TestLinkStaffWarnsWhenBotLacksRights"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffWarns' ./fuku/modules#TestLinkStaffWarnsWhenBotLacksRights"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffHealthFromBot$' ./alita/modules#TestStaffHealthFromBot"
+        ref: "go test -tags testtools -race -run '^TestStaffHealthFromBot$' ./fuku/modules#TestStaffHealthFromBot"
         status: pass
     human_judgment: false
   - id: D3
@@ -94,13 +94,13 @@ coverage:
     requirement: "SETUP-04"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffRefusals' ./alita/modules#TestLinkStaffRefusalsUniformForStranger"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffRefusals' ./fuku/modules#TestLinkStaffRefusalsUniformForStranger"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffRefusals' ./alita/modules#TestLinkStaffRefusalsToStaffGroup"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffRefusals' ./fuku/modules#TestLinkStaffRefusalsToStaffGroup"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffSelfDeletingReply$' ./alita/modules#TestLinkStaffSelfDeletingReply"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffSelfDeletingReply$' ./fuku/modules#TestLinkStaffSelfDeletingReply"
         status: pass
     human_judgment: false
   - id: D4
@@ -108,10 +108,10 @@ coverage:
     requirement: "SETUP-04"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffRefusalsAnonymous$' ./alita/modules#TestLinkStaffRefusalsAnonymous"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffRefusalsAnonymous$' ./fuku/modules#TestLinkStaffRefusalsAnonymous"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffPickerRefusesAnonymous$' ./alita/modules#TestStaffPickerRefusesAnonymous"
+        ref: "go test -tags testtools -race -run '^TestStaffPickerRefusesAnonymous$' ./fuku/modules#TestStaffPickerRefusesAnonymous"
         status: pass
     human_judgment: false
   - id: D5
@@ -119,7 +119,7 @@ coverage:
     requirement: "SETUP-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffNoArgument$' ./alita/modules#TestLinkStaffNoArgument"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffNoArgument$' ./fuku/modules#TestLinkStaffNoArgument"
         status: pass
     human_judgment: false
   - id: D6
@@ -127,10 +127,10 @@ coverage:
     requirement: "SETUP-04"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffRepoCreateLink' ./alita/db/staff#TestStaffRepoCreateLinkConcurrentSameGroupMakesOneRow"
+        ref: "go test -tags testtools -race -run '^TestStaffRepoCreateLink' ./fuku/db/staff#TestStaffRepoCreateLinkConcurrentSameGroupMakesOneRow"
         status: pass
       - kind: integration
-        ref: "ALITA_TEST_DATABASE=true go test -tags testtools -race -p 1 ./alita/db/staff (fresh database with the migration chain applied)"
+        ref: "FUKU_TEST_DATABASE=true go test -tags testtools -race -p 1 ./fuku/db/staff (fresh database with the migration chain applied)"
         status: pass
     human_judgment: false
   - id: D7
@@ -138,10 +138,10 @@ coverage:
     requirement: "SETUP-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffPicker|^TestStartGroupPayloadIgnoresJunk$|^TestStaffPanelHasAddGroupButton$|^TestStartCommandRepliesInPrivateAndGroup$' ./alita/modules#TestStaffPickerLinksGroup"
+        ref: "go test -tags testtools -race -run '^TestStaffPicker|^TestStartGroupPayloadIgnoresJunk$|^TestStaffPanelHasAddGroupButton$|^TestStartCommandRepliesInPrivateAndGroup$' ./fuku/modules#TestStaffPickerLinksGroup"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffPickerRefusesStranger$' ./alita/modules#TestStaffPickerRefusesStranger"
+        ref: "go test -tags testtools -race -run '^TestStaffPickerRefusesStranger$' ./fuku/modules#TestStaffPickerRefusesStranger"
         status: pass
     human_judgment: false
   - id: D8
@@ -149,7 +149,7 @@ coverage:
     requirement: "SETUP-04"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestLinkStaffNoticeFailure$' ./alita/modules#TestLinkStaffNoticeFailure"
+        ref: "go test -tags testtools -race -run '^TestLinkStaffNoticeFailure$' ./fuku/modules#TestLinkStaffNoticeFailure"
         status: pass
     human_judgment: false
   - id: D9
@@ -157,7 +157,7 @@ coverage:
     requirement: "PLAT-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./alita/i18n#TestStaffLocaleKeys"
+        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./fuku/i18n#TestStaffLocaleKeys"
         status: pass
       - kind: other
         ref: "make check-translations && make check-docs"
@@ -174,7 +174,7 @@ coverage:
     requirement: "SETUP-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffHealthFromBot$' ./alita/modules#TestStaffHealthFromBot"
+        ref: "go test -tags testtools -race -run '^TestStaffHealthFromBot$' ./fuku/modules#TestStaffHealthFromBot"
         status: pass
     human_judgment: false
 
@@ -200,7 +200,7 @@ status: complete
 - The SETUP-04 ordering edge is closed and tested: anonymous sender, named or sole verified Staff Group and its live creator, then target type, target not a Staff Group, target live creator, bot health, insert. Until the Staff Group's creator is proven, every refusal is a self-deleting reply in the issuing group and the named chat gets zero messages; a stranger sees the same text for a real Staff Group and for any other ID.
 - `/linkstaff` without an argument verifies each recorded Staff Group live and never picks by order.
 - The Add group button opens Telegram's picker with the restrict and delete rights requested; `/start@bot stf_<digits>` in a group runs the same flow. The group deep-link registry is new, `start()` routes to it only when there is a payload, and junk payloads keep the old reply.
-- Plan-level verification: `make test` exit 0 (twice, the second after the last code change), `go vet -tags testtools ./...` clean, golangci-lint v2.13.1 `--new-from-rev` 0 issues and the dupl pass 0 issues, `make check-translations` and `make check-docs` pass, `go build ./...` clean, `go.mod` and `go.sum` unchanged, `gofmt -l` empty on the changed files. `ALITA_TEST_DATABASE=true go test ./alita/db/staff` and `make test-postgres-integrity` pass against a fresh PostgreSQL 16 database with the migration chain applied (dropped afterwards).
+- Plan-level verification: `make test` exit 0 (twice, the second after the last code change), `go vet -tags testtools ./...` clean, golangci-lint v2.13.1 `--new-from-rev` 0 issues and the dupl pass 0 issues, `make check-translations` and `make check-docs` pass, `go build ./...` clean, `go.mod` and `go.sum` unchanged, `gofmt -l` empty on the changed files. `FUKU_TEST_DATABASE=true go test ./fuku/db/staff` and `make test-postgres-integrity` pass against a fresh PostgreSQL 16 database with the migration chain applied (dropped afterwards).
 
 ## Task Commits
 
@@ -231,7 +231,7 @@ See `key-decisions` above. In short: refusal destination is decided by proof of 
 - **Found during:** Task 2 verification (SQLite concurrency test: `database is locked`), then plan-level verification on a trigger-bearing PostgreSQL database (`CreateLink(group is a Staff Group)` returned the trigger's generic `staff role conflict ... SQLSTATE 23514` instead of `ErrRoleConflict`).
 - **Issue:** Task 1's check-then-insert transaction read first, then wrote: SQLite refuses that lock upgrade when another connection committed in between, and on PostgreSQL the 01-04 trigger rejected the insert before the in-transaction check could name the reason. My first attempted fix (insert first, checks after) fixed SQLite but made the trigger error pre-empt the precise reason.
 - **Fix:** `checkLinkRoles` runs once before the transaction (precise `ErrStaffGroupMissing` / `ErrRoleConflict`) and again inside it after the insert (holds at the moment of write); the insert is first inside the transaction so it takes its write lock up front. `GetStaffGroup` and `GetLinkOfGroup` now share a generic `getCachedRow` loader (the dupl linter flagged the copy).
-- **Files modified:** alita/db/staff/repository.go
+- **Files modified:** fuku/db/staff/repository.go
 - **Verification:** `TestStaffRepoCreateLink*` on SQLite (three repeated runs) and on PostgreSQL with the trigger; `make test`; dupl and default lint 0 issues.
 - **Commit:** 774371e
 
@@ -239,14 +239,14 @@ See `key-decisions` above. In short: refusal destination is decided by proof of 
 - **Found during:** Task 2 design, against prohibition P2 ("no link confirmation ... is ever posted in the linked group").
 - **Issue:** The plan says that if the Staff Group notice fails, fall back to a self-deleting reply in the issuing group. For a successful link that reply would be a link confirmation visible to the group's members.
 - **Fix:** The fallback applies to refusals only. A failed success notice is logged at warn by `sendStaffNotice` and nothing is sent to the linked group. `TestLinkStaffNoticeFailure` covers both halves.
-- **Files modified:** alita/modules/staff_link.go
+- **Files modified:** fuku/modules/staff_link.go
 - **Commit:** 5435159
 
 **3. [Rule 2 - Missing critical] One match plus an unverifiable candidate fails closed for /linkstaff without an argument**
 - **Found during:** Task 2.
 - **Issue:** The plan specifies zero matches with an unknown, zero matches, and several matches. With exactly one match next to a candidate whose check failed, the unknown one could be a second match, so picking the first would be picking by luck.
 - **Fix:** Any unverifiable candidate with fewer than two matches gives `staff_check_failed` in place. `TestLinkStaffNoArgument` has a subtest for it.
-- **Files modified:** alita/modules/staff_link.go
+- **Files modified:** fuku/modules/staff_link.go
 - **Commit:** 5435159
 
 **4. [Rule 2 - Missing critical] Extra tests beyond the plan's list**
@@ -279,8 +279,8 @@ None beyond the plan's threat model. T-01-13 (forged payload or `/linkstaff <id>
 ## Issues Encountered
 
 - The Task 3 human check (real Telegram picker with the bot already in the group, not in it, and with Remain anonymous on) was not run; it is coverage item D10 for the verifier. `/linkstaff` is the fallback if the picker misbehaves.
-- `gofmt -l` still reports `alita/modules/greetings_command_test.go`, a pre-existing file outside this plan; not touched.
-- The module tests were not run against PostgreSQL: with `ALITA_TEST_DATABASE=true` the modules test setup calls AutoMigrate, which fails on a migration-chain schema (`uni_users_user_id` does not exist). This is pre-existing and CI runs the module tests on SQLite; the repository tests, which are what touch PostgreSQL behaviour here, were run against the chain database.
+- `gofmt -l` still reports `fuku/modules/greetings_command_test.go`, a pre-existing file outside this plan; not touched.
+- The module tests were not run against PostgreSQL: with `FUKU_TEST_DATABASE=true` the modules test setup calls AutoMigrate, which fails on a migration-chain schema (`uni_users_user_id` does not exist). This is pre-existing and CI runs the module tests on SQLite; the repository tests, which are what touch PostgreSQL behaviour here, were run against the chain database.
 - `.planning/WINDOWS.md` does not exist, so no broken-windows entries were appended; there are no stubs or skipped tests to record.
 
 ## Next Phase Readiness

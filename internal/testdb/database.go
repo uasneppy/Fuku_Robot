@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/divkix/Alita_Robot/alita/db"
-	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
 // Run gives each repository test process an isolated database unless PostgreSQL was explicitly enabled.
@@ -18,7 +18,7 @@ func Run(m *testing.M, tables ...any) int {
 	if db.DB != nil {
 		return m.Run()
 	}
-	dir, err := os.MkdirTemp("", "alita-repository-tests-")
+	dir, err := os.MkdirTemp("", "fuku-repository-tests-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

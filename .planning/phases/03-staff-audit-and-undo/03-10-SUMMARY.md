@@ -32,14 +32,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_undo_claim_test.go
+    - fuku/modules/staff_undo_claim_test.go
   modified:
-    - alita/db/staff/actions.go
-    - alita/db/staff/actions_test.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_undo.go
-    - alita/modules/staff_undo_test.go
-    - alita/modules/staff_undo_lifecycle_test.go
+    - fuku/db/staff/actions.go
+    - fuku/db/staff/actions_test.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_undo.go
+    - fuku/modules/staff_undo_test.go
+    - fuku/modules/staff_undo_lifecycle_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -67,10 +67,10 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_claim_test.go#TestStaffUndoClaimReleased"
+        ref: "fuku/modules/staff_undo_claim_test.go#TestStaffUndoClaimReleased"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoAllSkipped"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoAllSkipped"
         status: pass
     human_judgment: false
   - id: D2
@@ -78,10 +78,10 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionReleaseUndo"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionReleaseUndo"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionClaimUndo"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionClaimUndo"
         status: pass
     human_judgment: false
   - id: D3
@@ -89,13 +89,13 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_claim_test.go#TestStaffUndoNothingChanged"
+        ref: "fuku/modules/staff_undo_claim_test.go#TestStaffUndoNothingChanged"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_claim_test.go#TestStaffUndoPanicKeepsClaim"
+        ref: "fuku/modules/staff_undo_claim_test.go#TestStaffUndoPanicKeepsClaim"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStopStaffActionsUndo"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStopStaffActionsUndo"
         status: pass
     human_judgment: false
   - id: D4
@@ -103,10 +103,10 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoTracer"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoTracer"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_test.go#TestStaffUndoOriginalEditFails"
+        ref: "fuku/modules/staff_undo_test.go#TestStaffUndoOriginalEditFails"
         status: pass
     human_judgment: false
   - id: D5
@@ -114,7 +114,7 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: other
-        ref: "make check-translations && make check-docs && go test -tags testtools -run '^TestStaffLocaleKeys$' ./alita/i18n"
+        ref: "make check-translations && make check-docs && go test -tags testtools -run '^TestStaffLocaleKeys$' ./fuku/i18n"
         status: pass
     human_judgment: true
     rationale: "Key presence and doc drift are automated; translation quality of es, fr, hi, id, pt and ru text needs a human reader"
@@ -161,12 +161,12 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/db/staff/actions.go` - `ClaimUndo` returns the claim time; new `ReleaseUndo`
-- `alita/db/staff/actions_test.go` - `TestStaffActionReleaseUndo`, updated `TestStaffActionClaimUndo`
-- `alita/modules/staff_action_run.go` - `Reached` on `staffGroupResult`, set by `sweepPending`
-- `alita/modules/staff_undo.go` - release in `Finish`, original edit in `Delivered`, released note in the final render, `Reached` in `runStaffUndoInGroup`
-- `alita/modules/staff_undo_claim_test.go` - new: `TestStaffUndoClaimReleased`, `TestStaffUndoNothingChanged`, `TestStaffUndoPanicKeepsClaim`
-- `alita/modules/staff_undo_test.go`, `alita/modules/staff_undo_lifecycle_test.go` - revised `TestStaffUndoAllSkipped`, `TestStaffUndoOriginalEditFails`, claim-winner subtest, `TestStopStaffActionsUndo` (now two subtests, polling the fake instead of sleeping), `TestStaffUndoTracer` ordering assertion
+- `fuku/db/staff/actions.go` - `ClaimUndo` returns the claim time; new `ReleaseUndo`
+- `fuku/db/staff/actions_test.go` - `TestStaffActionReleaseUndo`, updated `TestStaffActionClaimUndo`
+- `fuku/modules/staff_action_run.go` - `Reached` on `staffGroupResult`, set by `sweepPending`
+- `fuku/modules/staff_undo.go` - release in `Finish`, original edit in `Delivered`, released note in the final render, `Reached` in `runStaffUndoInGroup`
+- `fuku/modules/staff_undo_claim_test.go` - new: `TestStaffUndoClaimReleased`, `TestStaffUndoNothingChanged`, `TestStaffUndoPanicKeepsClaim`
+- `fuku/modules/staff_undo_test.go`, `fuku/modules/staff_undo_lifecycle_test.go` - revised `TestStaffUndoAllSkipped`, `TestStaffUndoOriginalEditFails`, claim-winner subtest, `TestStopStaffActionsUndo` (now two subtests, polling the fake instead of sleeping), `TestStaffUndoTracer` ordering assertion
 - `locales/*.yml` (7) - `staff_undo_marker_nothing`, `staff_undo_released_note`, extended `staff_help_msg`
 - `docs/src/content/docs/commands/staff/index.md` - regenerated
 - `AGENTS.md` - ReleaseUndo, the reached rule, the end-of-run original edit
@@ -186,15 +186,15 @@ None.
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffAction(ClaimUndo|ReleaseUndo|FinalizeUndo)$' ./alita/db/staff` - pass
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndo|^TestStopStaffActions|^TestStaffHistory|^TestStaffAction' ./alita/modules` - pass
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs` - pass
-- `go vet -tags testtools ./alita/modules ./alita/db/staff`, `CGO_ENABLED=0 go build ./...`, `gofmt -l` on touched files - clean
+- `go test -tags testtools -race -count=1 -run '^TestStaffAction(ClaimUndo|ReleaseUndo|FinalizeUndo)$' ./fuku/db/staff` - pass
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndo|^TestStopStaffActions|^TestStaffHistory|^TestStaffAction' ./fuku/modules` - pass
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs` - pass
+- `go vet -tags testtools ./fuku/modules ./fuku/db/staff`, `CGO_ENABLED=0 go build ./...`, `gofmt -l` on touched files - clean
 - `git diff go.mod go.sum` against the plan base - empty
 - `make test` - exit 0 (full suite, race, coverage 69.1%)
 - `make lint` - could not run: the installed golangci-lint was built with go1.25 and refuses the go1.26.0 module ("the Go language version (go1.25) used to build golangci-lint is lower than the targeted Go version (1.26.0)"). This is an environment limit, not a code finding. `gofmt` and `go vet` are clean.
 - The known flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail in any run.
-- `gofmt -l alita/modules` lists `greetings_command_test.go`, which this plan did not touch (pre-existing).
+- `gofmt -l fuku/modules` lists `greetings_command_test.go`, which this plan did not touch (pre-existing).
 
 ## Known Stubs
 
@@ -214,6 +214,6 @@ Gap G-03-4 claim half is closed; ready for the remaining gap-closure plan or re-
 
 ## Self-Check: PASSED
 
-- Created file present: `alita/modules/staff_undo_claim_test.go`
+- Created file present: `fuku/modules/staff_undo_claim_test.go`
 - Commits present: `2320085`, `4438d66`, `cc4e88c`, `36bef0c`
 - All acceptance criteria greps for both tasks matched; `git log` shows the `test(03-10)` commits before their `fix(03-10)` commits.

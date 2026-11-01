@@ -52,7 +52,7 @@ Telegram limits this contract is built inside:
 | Limit | Value | Where it bites |
 |-------|-------|----------------|
 | Message text | 4096 characters after parsing; the bot caps its own HTML at 3800 UTF-16 units (`staffPanelMaxUTF16`) | only the Staff Group page opened inside a Staff Group can approach it; every page is held to the cap by a test |
-| Callback data | 64 bytes, through `alita/utils/callbackcodec` only, namespace `settings` (`settings\|v1\|...`) | table "Callback data" below, worst case 53 bytes |
+| Callback data | 64 bytes, through `fuku/utils/callbackcodec` only, namespace `settings` (`settings\|v1\|...`) | table "Callback data" below, worst case 53 bytes |
 | Buttons | at most 8 per row, 100 per message | widest row used is 5; most buttons on one page is 21 (Lockdown) |
 | `answerCallbackQuery` alert text | 200 characters, plain text (no HTML) | every key used as an alert is held to 120 EN / 160 other |
 | Button label | no hard limit, but clients cut it with an ellipsis at roughly 20 visible characters on a 3-per-row line, about 40 on a full-width row | ceilings per key in the locale table |

@@ -86,9 +86,9 @@ Audit scope: undo flow clarity and completeness, history view layout and paging,
 
 **Files audited:**
 - `/home/user/Fuku_Robot/locales/en.yml` lines 2792-2832 (41 Phase 03 keys)
-- `/home/user/Fuku_Robot/alita/modules/staff_undo.go` lines 145-275 (undo card and header composition)
-- `/home/user/Fuku_Robot/alita/modules/staff_history.go` lines 94-142 (history line rendering)
-- `/home/user/Fuku_Robot/alita/modules/staff_log.go` lines 56-77 (log post composition)
+- `/home/user/Fuku_Robot/fuku/modules/staff_undo.go` lines 145-275 (undo card and header composition)
+- `/home/user/Fuku_Robot/fuku/modules/staff_history.go` lines 94-142 (history line rendering)
+- `/home/user/Fuku_Robot/fuku/modules/staff_log.go` lines 56-77 (log post composition)
 
 ---
 
@@ -132,9 +132,9 @@ Audit scope: undo flow clarity and completeness, history view layout and paging,
   - Severity: Low (context is clear from position)
 
 **Code references:**
-- `alita/modules/staff_undo.go` lines 144-156 (undo header with emoji)
-- `alita/modules/staff_history.go` lines 72-92 (state markers)
-- `alita/modules/staff_log.go` lines 26-40 (hashtags)
+- `fuku/modules/staff_undo.go` lines 144-156 (undo header with emoji)
+- `fuku/modules/staff_history.go` lines 72-92 (state markers)
+- `fuku/modules/staff_log.go` lines 26-40 (hashtags)
 - `locales/en.yml` lines 2796-2825 (all emoji in locale keys)
 
 ---
@@ -174,10 +174,10 @@ Audit scope: undo flow clarity and completeness, history view layout and paging,
   - Severity: Low (emoji signal is sufficient for scanning)
 
 **Code references:**
-- `alita/modules/staff_history.go` lines 42-48 (escaping and field cutting)
-- `alita/modules/staff_log.go` lines 45-53 (reason cutting and escaping)
-- `alita/modules/staff_log.go` lines 68-76 (mention formatting and escaping)
-- `alita/modules/staff_undo.go` lines 57-73 (undo name escaping)
+- `fuku/modules/staff_history.go` lines 42-48 (escaping and field cutting)
+- `fuku/modules/staff_log.go` lines 45-53 (reason cutting and escaping)
+- `fuku/modules/staff_log.go` lines 68-76 (mention formatting and escaping)
+- `fuku/modules/staff_undo.go` lines 57-73 (undo name escaping)
 
 ---
 
@@ -222,10 +222,10 @@ Audit scope: undo flow clarity and completeness, history view layout and paging,
   - Severity: Low (context is clear from multiple messages)
 
 **Code references:**
-- `alita/modules/staff_history.go` lines 38-48 (field cutting, escaping)
-- `alita/modules/staff_history.go` line 136 (timestamp format, hardcoded English)
-- `alita/modules/staff_history.go` line 185 (UTF-16 fit logic)
-- `alita/modules/staff_log.go` lines 50-53 (reason cutting and escaping)
+- `fuku/modules/staff_history.go` lines 38-48 (field cutting, escaping)
+- `fuku/modules/staff_history.go` line 136 (timestamp format, hardcoded English)
+- `fuku/modules/staff_history.go` line 185 (UTF-16 fit logic)
+- `fuku/modules/staff_log.go` lines 50-53 (reason cutting and escaping)
 
 ---
 
@@ -290,9 +290,9 @@ Undo this action in the 3 group(s) where it was applied? Each group is checked a
   - Severity: Low (design choice; noted in REVIEW-DISPOSITION.md as IN-06, open)
 
 **Code references:**
-- `alita/modules/staff_history.go` lines 163-239 (renderStaffHistory, offset paging)
-- `alita/modules/staff_undo.go` lines 320-334 (undo card composition, spacing)
-- `alita/modules/staff_action_summary.go` lines 364-440 (summary render, UTF-16 fit, from Phase 02, reused)
+- `fuku/modules/staff_history.go` lines 163-239 (renderStaffHistory, offset paging)
+- `fuku/modules/staff_undo.go` lines 320-334 (undo card composition, spacing)
+- `fuku/modules/staff_action_summary.go` lines 364-440 (summary render, UTF-16 fit, from Phase 02, reused)
 
 ---
 
@@ -378,11 +378,11 @@ Undo this action in the 3 group(s) where it was applied? Each group is checked a
   - Severity: Low (undo still succeeds, just marker is missing; user can verify in history detail view)
 
 **Files audited:**
-- `alita/modules/staff_undo.go` lines 196-334 (Ask handler, Confirm start)
-- `alita/modules/staff_history.go` lines 94-239 (history list and detail, access checks)
-- `alita/modules/staff_log.go` lines 112-175 (action and undo post composition)
-- `alita/modules/staff_action_undo_decide_test.go` (undo decision table and invariants)
-- `alita/modules/staff_undo_lifecycle_test.go` (card lifecycle, presser-only, shutdown)
+- `fuku/modules/staff_undo.go` lines 196-334 (Ask handler, Confirm start)
+- `fuku/modules/staff_history.go` lines 94-239 (history list and detail, access checks)
+- `fuku/modules/staff_log.go` lines 112-175 (action and undo post composition)
+- `fuku/modules/staff_action_undo_decide_test.go` (undo decision table and invariants)
+- `fuku/modules/staff_undo_lifecycle_test.go` (card lifecycle, presser-only, shutdown)
 - `locales/en.yml` lines 2811-2832 (undo and history state keys)
 
 ---
@@ -390,11 +390,11 @@ Undo this action in the 3 group(s) where it was applied? Each group is checked a
 ## Files Audited
 
 ### Source Code (Non-Test)
-- `/home/user/Fuku_Robot/alita/modules/staff_undo.go` (807 lines: undo button, card lifecycle, Confirm, presser-only checks)
-- `/home/user/Fuku_Robot/alita/modules/staff_history.go` (613 lines: history list, detail view, paging, access)
-- `/home/user/Fuku_Robot/alita/modules/staff_log.go` (175 lines: action and undo post composition, pacing)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_decide.go` (undo decision table, inherited from Phase 02 with undo extensions)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_summary.go` (summary rendering and continuation, inherited from Phase 02, reused for undo)
+- `/home/user/Fuku_Robot/fuku/modules/staff_undo.go` (807 lines: undo button, card lifecycle, Confirm, presser-only checks)
+- `/home/user/Fuku_Robot/fuku/modules/staff_history.go` (613 lines: history list, detail view, paging, access)
+- `/home/user/Fuku_Robot/fuku/modules/staff_log.go` (175 lines: action and undo post composition, pacing)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_decide.go` (undo decision table, inherited from Phase 02 with undo extensions)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_summary.go` (summary rendering and continuation, inherited from Phase 02, reused for undo)
 
 ### Locale Files (All 7 Verified Complete)
 - `/home/user/Fuku_Robot/locales/en.yml` lines 2792-2832 (41 Phase 03 keys)

@@ -65,8 +65,8 @@ import (
     log "github.com/sirupsen/logrus"
     
     // Internal
-    "github.com/divkix/Alita_Robot/alita/config"
-    "github.com/divkix/Alita_Robot/alita/db"
+    "github.com/uasneppy/fuku_robot/fuku/config"
+    "github.com/uasneppy/fuku_robot/fuku/db"
 )
 ```
 
@@ -76,7 +76,7 @@ import (
 ## Error Handling
 
 **Custom Error Wrapper:**
-- Location: `alita/utils/errors/errors.go`
+- Location: `fuku/utils/errors/errors.go`
 - Use `errors.Wrap(err, message)` to wrap errors with context (file, line, function)
 - Use `errors.Wrapf(err, format, args...)` for formatted error messages
 - Pattern: Return `nil` if err is nil; always wrap before returning
@@ -190,10 +190,10 @@ if err != nil {
 - No barrel/index files pattern used; each package imports specifically needed files
 
 **Package Structure:**
-- Domain-focused packages: `alita/db/<domain>/` for data access
-- Module packages: `alita/modules/<feature>.go` for feature implementations
-- Utility packages: `alita/utils/<concern>/` for cross-cutting functionality
-- Config packages: `alita/config/` for environment and startup configuration
+- Domain-focused packages: `fuku/db/<domain>/` for data access
+- Module packages: `fuku/modules/<feature>.go` for feature implementations
+- Utility packages: `fuku/utils/<concern>/` for cross-cutting functionality
+- Config packages: `fuku/config/` for environment and startup configuration
 
 ## Receiver Functions
 

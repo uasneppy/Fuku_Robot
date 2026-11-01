@@ -32,15 +32,15 @@ tech-stack:
 
 key-files:
   created:
-    - alita/utils/captchaweb/limiter.go
-    - alita/utils/captchaweb/clientip.go
-    - alita/utils/captchaweb/limiter_test.go
-    - alita/utils/captchaweb/clientip_test.go
-    - alita/utils/captchaweb/verify_limits_test.go
+    - fuku/utils/captchaweb/limiter.go
+    - fuku/utils/captchaweb/clientip.go
+    - fuku/utils/captchaweb/limiter_test.go
+    - fuku/utils/captchaweb/clientip_test.go
+    - fuku/utils/captchaweb/verify_limits_test.go
   modified:
-    - alita/utils/captchaweb/verify.go
-    - alita/utils/captchaweb/challenge.go
-    - alita/modules/captcha_web_outcomes_test.go
+    - fuku/utils/captchaweb/verify.go
+    - fuku/utils/captchaweb/challenge.go
+    - fuku/modules/captcha_web_outcomes_test.go
     - AGENTS.md
 
 key-decisions:
@@ -58,7 +58,7 @@ coverage:
     requirement: CAPT-03
     verification:
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestVerifyRouteWrongUserChangesNothing"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestVerifyRouteWrongUserChangesNothing"
         status: pass
     human_judgment: false
   - id: D2
@@ -66,13 +66,13 @@ coverage:
     requirement: CAPT-04
     verification:
       - kind: unit
-        ref: "alita/utils/captchaweb/limiter_test.go#TestWindowLimiter"
+        ref: "fuku/utils/captchaweb/limiter_test.go#TestWindowLimiter"
         status: pass
       - kind: unit
-        ref: "alita/utils/captchaweb/clientip_test.go#TestClientIP"
+        ref: "fuku/utils/captchaweb/clientip_test.go#TestClientIP"
         status: pass
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestVerifyRouteLimitsAndHeaders"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestVerifyRouteLimitsAndHeaders"
         status: pass
     human_judgment: false
   - id: D3
@@ -80,7 +80,7 @@ coverage:
     requirement: CAPT-04
     verification:
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestVerifyRouteLimitsAndHeaders"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestVerifyRouteLimitsAndHeaders"
         status: pass
     human_judgment: false
   - id: D4
@@ -88,13 +88,13 @@ coverage:
     requirement: CAPT-04
     verification:
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestVerifyRouteReadinessGate"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestVerifyRouteReadinessGate"
         status: pass
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestHealthRoute"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestHealthRoute"
         status: pass
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestVerifyRouteOutlivesServerWriteTimeout"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestVerifyRouteOutlivesServerWriteTimeout"
         status: pass
     human_judgment: false
   - id: D5
@@ -102,10 +102,10 @@ coverage:
     requirement: CAPT-03
     verification:
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestChallengeStoreConsumeOnce"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestChallengeStoreConsumeOnce"
         status: pass
       - kind: integration
-        ref: "alita/utils/captchaweb/verify_limits_test.go#TestVerifyRouteReplaysDecision"
+        ref: "fuku/utils/captchaweb/verify_limits_test.go#TestVerifyRouteReplaysDecision"
         status: pass
     human_judgment: false
 ---
@@ -116,11 +116,11 @@ coverage:
 
 ## Accomplishments
 
-- Three fixed windows (`alita:captcha:rl:ip:<ip>` 60, `rl:u:<user>` 20, `rl:t:<token>:<user>` 8, per 60 s) in one Lua script; a Redis error answers 503 retry, a spent budget 429 retry with `Retry-After`. The token and user windows are keyed by the signed initData user, so a griefer hammering a target's token spends only their own budget and the target still passes.
+- Three fixed windows (`fuku:captcha:rl:ip:<ip>` 60, `rl:u:<user>` 20, `rl:t:<token>:<user>` 8, per 60 s) in one Lua script; a Redis error answers 503 retry, a spent budget 429 retry with `Retry-After`. The token and user windows are keyed by the signed initData user, so a griefer hammering a target's token spends only their own budget and the target still passes.
 - `ClientIP` reads `RemoteAddr`, or the rightmost untrusted `X-Forwarded-For` entry behind `CAPTCHA_WEB_TRUSTED_PROXIES`; `X-Real-IP` and `CF-Connecting-IP` are never read.
 - Verify order: write deadline extended, method, ready flag, 64-in-flight cap, address window, content type (415), 16 KiB cap (413), strict JSON (400), initData, user window, start_param, token-and-user window, consume.
 - `Handler.SetReady`, `Options.StartNotReady`, `Handler.Health` (`{"status":"ok"|"unavailable"}` only), `Handler.Routes` and the three route constants for plan 08-10 to mount.
-- `alita:captcha:done:<token>` (`<user>:<result>[:<action>]`, 10 minutes): written before the answer for passed, failed and expired, replayed to the same verified user, `not_for_you` for another, never written for a retry.
+- `fuku:captcha:done:<token>` (`<user>:<result>[:<action>]`, 10 minutes): written before the answer for passed, failed and expired, replayed to the same verified user, `not_for_you` for another, never written for a retry.
 - AGENTS.md: rate-window Data bullet, done-marker Data bullet, client-address rule, and the verify route rules under the Turnstile captcha bullet.
 
 ## Task Commits
@@ -137,7 +137,7 @@ Each RED commit does not compile on its own (the symbols it tests do not exist y
 - **Found during:** Task 3
 - **Issue:** `TestCaptchaWebPassAfterExpiryExpiresAtOnce` and `TestCaptchaWebFailedSolveAppliesAction` asserted a second verify of a decided token answers `invalid`. D-03 (this plan) makes it replay the decided answer with no side effect.
 - **Fix:** both now expect the replayed `expired` and `failed` with the same action; their existing assertions that nothing was kicked, banned or sent again stay.
-- **Files modified:** `alita/modules/captcha_web_outcomes_test.go`
+- **Files modified:** `fuku/modules/captcha_web_outcomes_test.go`
 - **Commit:** `165c9ee`
 
 **2. [Rule 2 - Security] IPv6 clients counted by /64** (not in the plan): a single host owns a whole /64, so a per-/128 key would give an attacker unlimited buckets. `limitKeyForAddr` masks IPv6 to /64. Commit `592e167`.
@@ -146,11 +146,11 @@ Each RED commit does not compile on its own (the symbols it tests do not exist y
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/utils/captchaweb`: ok; `TestChallengeStoreConsumeOnce` also ran 20 times under `-race` clean.
-- `go test ... -run 'Captcha' ./alita/modules`: ok (includes every `TestCaptchaWeb` and `TestSendCaptchaTurnstile` test).
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/utils/captchaweb ./alita/modules`, `gofmt -l alita/utils/captchaweb` all clean; `go.mod` and `go.sum` unchanged.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/utils/captchaweb`: ok; `TestChallengeStoreConsumeOnce` also ran 20 times under `-race` clean.
+- `go test ... -run 'Captcha' ./fuku/modules`: ok (includes every `TestCaptchaWeb` and `TestSendCaptchaTurnstile` test).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/utils/captchaweb ./fuku/modules`, `gofmt -l fuku/utils/captchaweb` all clean; `go.mod` and `go.sum` unchanged.
 - `make lint` could not run in this sandbox (golangci-lint is built with go1.25, the module is go1.26.0); `gofmt` and `go vet` were run instead. The whole `make test` was not run (the orchestrator runs it between waves).
-- Acceptance greps: `SetWriteDeadline` 1, route constants 3, `SetReady` 1, `StartNotReady` in AGENTS.md present, `alita:captcha:rl:` and `alita:captcha:done:` in AGENTS.md present, no `X-Real-IP` or `CF-Connecting-IP` outside comments in `clientip.go`.
+- Acceptance greps: `SetWriteDeadline` 1, route constants 3, `SetReady` 1, `StartNotReady` in AGENTS.md present, `fuku:captcha:rl:` and `fuku:captcha:done:` in AGENTS.md present, no `X-Real-IP` or `CF-Connecting-IP` outside comments in `clientip.go`.
 
 ## Known Stubs
 

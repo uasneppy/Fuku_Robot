@@ -32,21 +32,21 @@ tech-stack:
 key-files:
   created:
     - migrations/20261005120000_add_staff_actions.sql
-    - alita/db/models/staff_action.go
-    - alita/db/staff/actions.go
-    - alita/db/staff/actions_test.go
-    - alita/modules/staff_action_record.go
-    - alita/modules/staff_action_record_test.go
+    - fuku/db/models/staff_action.go
+    - fuku/db/staff/actions.go
+    - fuku/db/staff/actions_test.go
+    - fuku/modules/staff_action_record.go
+    - fuku/modules/staff_action_record_test.go
   modified:
-    - alita/db/staff/rekey.go
-    - alita/db/staff/rekey_test.go
-    - alita/db/staff/testmain_test.go
-    - alita/db/testmain_test.go
-    - alita/modules/test_harness_test.go
-    - alita/modules/staff_helpers_test.go
-    - alita/modules/staff_action_fake_test.go
-    - alita/modules/staff_action_card.go
-    - alita/modules/staff_action_run.go
+    - fuku/db/staff/rekey.go
+    - fuku/db/staff/rekey_test.go
+    - fuku/db/staff/testmain_test.go
+    - fuku/db/testmain_test.go
+    - fuku/modules/test_harness_test.go
+    - fuku/modules/staff_helpers_test.go
+    - fuku/modules/staff_action_fake_test.go
+    - fuku/modules/staff_action_card.go
+    - fuku/modules/staff_action_run.go
     - AGENTS.md
 
 key-decisions:
@@ -68,10 +68,10 @@ coverage:
     requirement: "STAFF-10"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_record_test.go#TestStaffActionRecordFinalize"
+        ref: "fuku/modules/staff_action_record_test.go#TestStaffActionRecordFinalize"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_record_test.go#TestStaffActionRecordPerGroup"
+        ref: "fuku/modules/staff_action_record_test.go#TestStaffActionRecordPerGroup"
         status: pass
     human_judgment: false
   - id: D2
@@ -79,10 +79,10 @@ coverage:
     requirement: "STAFF-10"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_record_test.go#TestStaffActionRecordsPriorState"
+        ref: "fuku/modules/staff_action_record_test.go#TestStaffActionRecordsPriorState"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_record_test.go#TestStaffActionRecordEveryKind"
+        ref: "fuku/modules/staff_action_record_test.go#TestStaffActionRecordEveryKind"
         status: pass
     human_judgment: false
   - id: D3
@@ -90,10 +90,10 @@ coverage:
     requirement: "STAFF-10"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_record_test.go#TestStaffActionRecordFailureFailsClosed"
+        ref: "fuku/modules/staff_action_record_test.go#TestStaffActionRecordFailureFailsClosed"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_record_test.go#TestStaffActionRecordNoRecordOnAbort"
+        ref: "fuku/modules/staff_action_record_test.go#TestStaffActionRecordNoRecordOnAbort"
         status: pass
     human_judgment: false
   - id: D4
@@ -101,10 +101,10 @@ coverage:
     requirement: "STAFF-10"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_record_test.go#TestStopStaffActionsRecordsInterrupted"
+        ref: "fuku/modules/staff_action_record_test.go#TestStopStaffActionsRecordsInterrupted"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionRecordRoundTrip"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionRecordRoundTrip"
         status: pass
     human_judgment: false
   - id: D5
@@ -112,7 +112,7 @@ coverage:
     requirement: "STAFF-10"
     verification:
       - kind: unit
-        ref: "alita/db/staff/rekey_test.go#TestRekeyChatMovesStaffActions"
+        ref: "fuku/db/staff/rekey_test.go#TestRekeyChatMovesStaffActions"
         status: pass
     human_judgment: false
   - id: D6
@@ -158,15 +158,15 @@ status: complete
 ## Files Created/Modified
 
 - `migrations/20261005120000_add_staff_actions.sql` - two tables, three CHECK constraints, one index, SQL-only parent/child foreign key
-- `alita/db/models/staff_action.go` - `StaffAction`, `StaffActionGroup`, outcome constants
-- `alita/db/staff/actions.go` - `CreateAction`, `SavePrior`, `SaveGroupResult`, `FinalizeAction`, `GetActionFresh`, `ListActionGroupsFresh`; never cached
-- `alita/db/staff/rekey.go` - re-keys `staff_actions.staff_chat_id`
-- `alita/modules/staff_action_record.go` - prior-state capture and JSON mapping, record builder, test seams, result save and finalize
-- `alita/modules/staff_action_card.go` - `ActionID` and `IssuerName` (in-memory only); the record is created in `staffActionConfirm` before the run
-- `alita/modules/staff_action_run.go` - write-ahead prior state, per-group result save, finalize before delivery
-- `alita/modules/staff_action_fake_test.go` - `staffFakeMember.Perms`, restricted members report and store a full permission set
-- `alita/modules/staff_action_record_test.go`, `alita/db/staff/actions_test.go`, `alita/db/staff/rekey_test.go` - the tests listed in the plan
-- `alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`, `alita/db/testmain_test.go`, `alita/modules/staff_helpers_test.go` - audit models in the AutoMigrate lists, audit rows in `staffCleanup`
+- `fuku/db/models/staff_action.go` - `StaffAction`, `StaffActionGroup`, outcome constants
+- `fuku/db/staff/actions.go` - `CreateAction`, `SavePrior`, `SaveGroupResult`, `FinalizeAction`, `GetActionFresh`, `ListActionGroupsFresh`; never cached
+- `fuku/db/staff/rekey.go` - re-keys `staff_actions.staff_chat_id`
+- `fuku/modules/staff_action_record.go` - prior-state capture and JSON mapping, record builder, test seams, result save and finalize
+- `fuku/modules/staff_action_card.go` - `ActionID` and `IssuerName` (in-memory only); the record is created in `staffActionConfirm` before the run
+- `fuku/modules/staff_action_run.go` - write-ahead prior state, per-group result save, finalize before delivery
+- `fuku/modules/staff_action_fake_test.go` - `staffFakeMember.Perms`, restricted members report and store a full permission set
+- `fuku/modules/staff_action_record_test.go`, `fuku/db/staff/actions_test.go`, `fuku/db/staff/rekey_test.go` - the tests listed in the plan
+- `fuku/modules/test_harness_test.go`, `fuku/db/staff/testmain_test.go`, `fuku/db/testmain_test.go`, `fuku/modules/staff_helpers_test.go` - audit models in the AutoMigrate lists, audit rows in `staffCleanup`
 - `AGENTS.md` - audit record rules
 
 ## Decisions Made
@@ -200,15 +200,15 @@ Both code tasks followed RED then GREEN with no refactor commit.
 **1. [Rule 3 - Blocking] Models and read functions are in the Task 2 RED commit**
 - **Found during:** Task 2 (RED)
 - **Issue:** The RED tests read the record through `models.StaffAction` and `staff.ListActionGroupsFresh`, and the harness AutoMigrate lists reference the models, so the test package does not compile without them. A compile error is INVALID_RED, not a failing assertion.
-- **Fix:** `alita/db/models/staff_action.go` and the two read-only functions in `alita/db/staff/actions.go` went into the RED commit `ccb681a`; nothing wrote a record yet, so every test failed on its first assertion. The write functions came in the GREEN commit.
-- **Files modified:** `alita/db/models/staff_action.go`, `alita/db/staff/actions.go`
+- **Fix:** `fuku/db/models/staff_action.go` and the two read-only functions in `fuku/db/staff/actions.go` went into the RED commit `ccb681a`; nothing wrote a record yet, so every test failed on its first assertion. The write functions came in the GREEN commit.
+- **Files modified:** `fuku/db/models/staff_action.go`, `fuku/db/staff/actions.go`
 - **Committed in:** `ccb681a`
 
 **2. [Rule 1 - Bug in plan] "Unmute over a partial restriction" cannot use CanSendMessages true**
 - **Found during:** Task 3 (tests)
 - **Issue:** The plan's behavior gives the partial set `CanSendMessages true` yet says the member "reads muted". The fake reports `can_send_messages` from the permission set (as the plan also specifies), so a set with `CanSendMessages true` reads unmuted and `/unmute` is skipped with no write and no prior state.
 - **Fix:** The test's partial set has `CanSendMessages false` (so the staff's unmute applies) and keeps `CanSendPolls`, `CanInviteUsers` and `CanPinMessages` true; it asserts the stored JSON decodes to exactly that set (the three optional flags come back as explicit false, since the live read carries them as plain booleans).
-- **Files modified:** `alita/modules/staff_action_record_test.go`
+- **Files modified:** `fuku/modules/staff_action_record_test.go`
 - **Committed in:** `7542caf`
 
 ---
@@ -220,13 +220,13 @@ Both code tasks followed RED then GREEN with no refactor commit.
 
 - **PostgreSQL migration chain not run here.** The plan's Task 3 verify starts a throwaway cluster with `su postgres -c ...`; the worktree isolation guard refuses `su` and `runuser`, and PostgreSQL will not run as root. In place of it: the runner's statement splitter was run on the new file (3 statements: table, index, table) with a throwaway test that was not committed, the migrations package tests pass, and the same models migrate on SQLite. `TestRepositoryMigrationChain` still has to run against PostgreSQL, in CI (which runs it) or from the main checkout by the orchestrator.
 - `make lint` could not run: the installed golangci-lint is built with go1.25 and refuses the go1.26.0 module. `gofmt`, `go vet -tags testtools` and `CGO_ENABLED=0 go build ./...` are clean.
-- Not in this plan's scope: `gofmt -l` flags `alita/modules/greetings_command_test.go`, which was already unformatted at the base commit.
+- Not in this plan's scope: `gofmt -l` flags `fuku/modules/greetings_command_test.go`, which was already unformatted at the base commit.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/staff ./alita/db` - ok (modules 115 s)
-- `-run '^TestStaffAction|^TestStopStaffActions' ./alita/modules` (Phase 2 regression plus the new tests) - ok
-- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./alita/modules ./alita/db/staff ./alita/db/models` - clean
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/staff ./fuku/db` - ok (modules 115 s)
+- `-run '^TestStaffAction|^TestStopStaffActions' ./fuku/modules` (Phase 2 regression plus the new tests) - ok
+- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./fuku/modules ./fuku/db/staff ./fuku/db/models` - clean
 - `git diff --exit-code go.mod go.sum` - clean
 - Task 2 and Task 3 acceptance criteria (grep and file checks) - all pass
 - `TestRepositoryMigrationChain` against PostgreSQL - not run (see Issues Encountered)

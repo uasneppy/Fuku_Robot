@@ -6,52 +6,52 @@ files_reviewed: 60
 files_reviewed_list:
   - AGENTS.md
   - Makefile
-  - alita/db/lockdown/joiners.go
-  - alita/db/lockdown/joiners_lift_test.go
-  - alita/db/lockdown/joiners_test.go
-  - alita/db/lockdown/repository.go
-  - alita/db/lockdown/repository_test.go
-  - alita/db/lockdown/testmain_test.go
-  - alita/db/models/lockdown.go
-  - alita/db/testmain_test.go
-  - alita/i18n/lockdown_locale_test.go
-  - alita/modules/antiraid.go
-  - alita/modules/bans.go
-  - alita/modules/captcha.go
-  - alita/modules/chat_permissions.go
-  - alita/modules/chat_permissions_test.go
-  - alita/modules/greetings.go
-  - alita/modules/lockdown.go
-  - alita/modules/lockdown_anon_test.go
-  - alita/modules/lockdown_decide_test.go
-  - alita/modules/lockdown_durability_test.go
-  - alita/modules/lockdown_fake_test.go
-  - alita/modules/lockdown_guard.go
-  - alita/modules/lockdown_guard_policy_test.go
-  - alita/modules/lockdown_guard_test.go
-  - alita/modules/lockdown_isolation_test.go
-  - alita/modules/lockdown_lift_joiners_test.go
-  - alita/modules/lockdown_lift_test.go
-  - alita/modules/lockdown_marker.go
-  - alita/modules/lockdown_paths_test.go
-  - alita/modules/lockdown_perms.go
-  - alita/modules/lockdown_perms_test.go
-  - alita/modules/lockdown_refusals_test.go
-  - alita/modules/lockdown_requests_test.go
-  - alita/modules/lockdown_staff_test.go
-  - alita/modules/lockdown_status.go
-  - alita/modules/lockdown_status_test.go
-  - alita/modules/lockdown_test.go
-  - alita/modules/lockdown_unmute_test.go
-  - alita/modules/lockdown_worker.go
-  - alita/modules/mute.go
-  - alita/modules/staff_action_decide.go
-  - alita/modules/staff_action_decide_test.go
-  - alita/modules/staff_action_run.go
-  - alita/modules/staff_panel.go
-  - alita/modules/staff_panel_render_test.go
-  - alita/modules/test_harness_test.go
-  - alita/utils/chat_status/chat_status.go
+  - fuku/db/lockdown/joiners.go
+  - fuku/db/lockdown/joiners_lift_test.go
+  - fuku/db/lockdown/joiners_test.go
+  - fuku/db/lockdown/repository.go
+  - fuku/db/lockdown/repository_test.go
+  - fuku/db/lockdown/testmain_test.go
+  - fuku/db/models/lockdown.go
+  - fuku/db/testmain_test.go
+  - fuku/i18n/lockdown_locale_test.go
+  - fuku/modules/antiraid.go
+  - fuku/modules/bans.go
+  - fuku/modules/captcha.go
+  - fuku/modules/chat_permissions.go
+  - fuku/modules/chat_permissions_test.go
+  - fuku/modules/greetings.go
+  - fuku/modules/lockdown.go
+  - fuku/modules/lockdown_anon_test.go
+  - fuku/modules/lockdown_decide_test.go
+  - fuku/modules/lockdown_durability_test.go
+  - fuku/modules/lockdown_fake_test.go
+  - fuku/modules/lockdown_guard.go
+  - fuku/modules/lockdown_guard_policy_test.go
+  - fuku/modules/lockdown_guard_test.go
+  - fuku/modules/lockdown_isolation_test.go
+  - fuku/modules/lockdown_lift_joiners_test.go
+  - fuku/modules/lockdown_lift_test.go
+  - fuku/modules/lockdown_marker.go
+  - fuku/modules/lockdown_paths_test.go
+  - fuku/modules/lockdown_perms.go
+  - fuku/modules/lockdown_perms_test.go
+  - fuku/modules/lockdown_refusals_test.go
+  - fuku/modules/lockdown_requests_test.go
+  - fuku/modules/lockdown_staff_test.go
+  - fuku/modules/lockdown_status.go
+  - fuku/modules/lockdown_status_test.go
+  - fuku/modules/lockdown_test.go
+  - fuku/modules/lockdown_unmute_test.go
+  - fuku/modules/lockdown_worker.go
+  - fuku/modules/mute.go
+  - fuku/modules/staff_action_decide.go
+  - fuku/modules/staff_action_decide_test.go
+  - fuku/modules/staff_action_run.go
+  - fuku/modules/staff_panel.go
+  - fuku/modules/staff_panel_render_test.go
+  - fuku/modules/test_harness_test.go
+  - fuku/utils/chat_status/chat_status.go
   - docs/src/content/docs/commands/lockdown/index.md
   - docs/src/content/docs/commands/staff/index.md
   - locales/config.yml
@@ -83,7 +83,7 @@ status: issues_found
 
 Reviewed the Manual Lockdown phase: the `chat_lockdowns` / `chat_lockdown_joiners` schema and repositories, the group `-7` join guard, the DB-driven worker, `/lockdown`, `/unlockdown` and `/lockdownstatus`, the `resolveUnmutePermissions` change, the greetings Accept-button refusal, the antiraid step-aside, the `/staff` marker and the staff-ban-over-lockdown-ban branch. For the pre-existing files only the phase diff was reviewed.
 
-The core design holds up. Every state move is one conditional update. The restore-before-record order in `/unlockdown` is correct. Names, reasons and Telegram error text are escaped and spliced in after translation. Live `getChatMember` authority is used throughout. The gotgbot error path strips the bot token before it can reach `telegramErrorDetail`. All 7 locales carry every key and every placeholder matches. `make check-translations` and `make check-docs` pass here, and the `alita/db/lockdown` and `alita/i18n` tests pass.
+The core design holds up. Every state move is one conditional update. The restore-before-record order in `/unlockdown` is correct. Names, reasons and Telegram error text are escaped and spliced in after translation. Live `getChatMember` authority is used throughout. The gotgbot error path strips the bot token before it can reach `telegramErrorDetail`. All 7 locales carry every key and every placeholder matches. `make check-translations` and `make check-docs` pass here, and the `fuku/db/lockdown` and `fuku/i18n` tests pass.
 
 Gaps found:
 - One path contradicts owner decision D-05: a deliberate ban can be turned into a lockdown ban and then lifted.
@@ -96,7 +96,7 @@ Known accepted items (the D-24 race, `make lint` not runnable, the anonymous-adm
 
 ### CR-01: The worker's ban overwrites a deliberate ban, and the lift then removes it (violates D-05)
 
-**File:** `alita/modules/lockdown_worker.go:366-390` (also `alita/db/lockdown/joiners.go:128-142`, `alita/modules/lockdown_marker.go:20-29`)
+**File:** `fuku/modules/lockdown_worker.go:366-390` (also `fuku/db/lockdown/joiners.go:128-142`, `fuku/modules/lockdown_marker.go:20-29`)
 
 **Issue:** `lockdownBanOne` calls `banChatMember(chat, user, until_date=row.BanUntil)` for a pending row without first looking at the user's live status. The guard records the joiner as `pending` the moment they join, and the worker bans later. Under a raid that gap can be long. The pacer spaces calls 100 ms apart, `lockdownWorkerBatch` is 50 and a slot up to 60 s away is still accepted, so hundreds of rows can queue.
 
@@ -124,7 +124,7 @@ Add a test that bans the user directly between `RecordJoin` and the worker cycle
 
 ### WR-01: An ambiguous lock failure deletes the only copy of the pre-lockdown permissions and says "nothing changed"
 
-**File:** `alita/modules/lockdown.go:375-381`
+**File:** `fuku/modules/lockdown.go:375-381`
 
 **Issue:** When `setLockdownPermissions` returns any error, `/lockdown` calls `DeleteUnconfirmed(row.ID)` and replies "Telegram refused the lock, so nothing changed". `setLockdownPermissions` can fail without Telegram having refused anything:
 - the 10 s `lockdownCallTimeout` expires after the request was applied;
@@ -154,7 +154,7 @@ Add a new `lockdown_lock_unknown` key to all 7 locale files, and a test whose fa
 
 ### WR-02: Joiner bans expire after 330 days, so a lockdown can outlive its own enforcement
 
-**File:** `alita/modules/lockdown_marker.go:31-40`
+**File:** `fuku/modules/lockdown_marker.go:31-40`
 
 **Issue:** The "banned until the lift" mechanism (D-04) is implemented as a Telegram ban with `until_date = join time + 330 days`. The phase also states that a lockdown never ends on its own and has no TTL. An abandoned or forgotten lockdown, or one on a group whose admins left, therefore silently stops banning after 330 days:
 - Each raider's ban lapses 330 days after their own join.
@@ -172,7 +172,7 @@ This is a limit of the marker design. Nothing documents it for the owner or stat
 
 ### IN-01: Duplicated join-policy conditions and an unreachable verdict
 
-**File:** `alita/modules/lockdown_guard.go:60-90`
+**File:** `fuku/modules/lockdown_guard.go:60-90`
 
 **Issue:** `lockdownNeedsPerformerLookup` re-states the first six conditions of `decideLockdownJoin`. If one is changed without the other, the performer lookup is skipped while the decision depends on it, or the reverse. A mistake there fails closed, as a ban, but it would still be a silent behaviour drift. `lockdownJoinDecline` is returned by `decideLockdownJoin` for `JoinPathRequest`, but no production caller passes that path. `lockdownOnJoinRequest` records the row directly, and `recordLockdownJoin` has a `default:` branch only for verdicts that never occur.
 
@@ -180,7 +180,7 @@ This is a limit of the marker design. Nothing documents it for the owner or stat
 
 ### IN-02: AGENTS.md says the snapshot never goes through the typed `ChatPermissions`, but `resolveUnmutePermissions` does that
 
-**File:** `alita/modules/chat_permissions.go:66-80` (rule stated in `AGENTS.md`, Data section, `chat_lockdowns` bullet)
+**File:** `fuku/modules/chat_permissions.go:66-80` (rule stated in `AGENTS.md`, Data section, `chat_lockdowns` bullet)
 
 **Issue:** The rule is that `pre_permissions` is "never passed through the typed `gotgbot.ChatPermissions`". `resolveUnmutePermissions` unmarshals `PrePermissions` into `gotgbot.ChatPermissions`, whose `omitempty` bools and `*bool` fields lose "explicitly off". The code is defensible here. It is a per-user restriction in which an omitted false means restricted, and it matches what the live-defaults path did before. As written, the rule and the code disagree, and the next reader will either "fix" the code or stop trusting the rule.
 
@@ -188,7 +188,7 @@ This is a limit of the marker design. Nothing documents it for the owner or stat
 
 ### IN-03: A fourth copy of the Group Anonymous Bot ID
 
-**File:** `alita/modules/lockdown_guard.go:19-21`
+**File:** `fuku/modules/lockdown_guard.go:19-21`
 
 **Issue:** `1087968824` already exists as `chat_status.groupAnonymousBot`, `helpers.groupAnonymousBotID` and `staffServiceUserIDs`. This phase adds `lockdownGroupAnonymousBot`. A shared exported constant would remove the drift risk.
 
@@ -196,7 +196,7 @@ This is a limit of the marker design. Nothing documents it for the owner or stat
 
 ### IN-04: Fed-ban enforcement is skipped for banned joiners of a locked group, and a "request gone" is recorded as declined
 
-**File:** `alita/modules/lockdown_guard.go:266-278` and `alita/modules/lockdown_worker.go:342-345`
+**File:** `fuku/modules/lockdown_guard.go:266-278` and `fuku/modules/lockdown_worker.go:342-345`
 
 **Issue:** The guard ends the update with `ext.EndGroups` at `-7` for a banned joiner, so fed-ban (`-6`, `enforceFedBan` on the join service message) never runs for them.
 - A federation-banned user who joins a locked group is banned with the lockdown marker only.

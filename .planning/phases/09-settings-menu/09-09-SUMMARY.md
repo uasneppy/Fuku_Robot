@@ -29,8 +29,8 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/settings_antiflood.go
-    - alita/modules/settings_antiflood_test.go
+    - fuku/modules/settings_antiflood.go
+    - fuku/modules/settings_antiflood_test.go
   modified: []
 
 key-decisions:
@@ -46,10 +46,10 @@ coverage:
     requirement: "MENU-07"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAntifloodPage"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAntifloodPage"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAntifloodStepper"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAntifloodStepper"
         status: pass
     human_judgment: false
   - id: D2
@@ -57,13 +57,13 @@ coverage:
     requirement: "MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAntifloodFreshChat"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAntifloodFreshChat"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsParityAntiflood"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsParityAntiflood"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsDriftAntiflood"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsDriftAntiflood"
         status: pass
     human_judgment: false
   - id: D3
@@ -71,10 +71,10 @@ coverage:
     requirement: "MENU-07"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAntifloodStoredLegacyAction"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAntifloodStoredLegacyAction"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAntifloodReadFailure"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAntifloodReadFailure"
         status: pass
     human_judgment: false
   - id: D4
@@ -82,17 +82,17 @@ coverage:
     requirement: "MENU-03"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAuthorityParityAntiflood"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAuthorityParityAntiflood"
         status: pass
     human_judgment: false
   - id: D5
     description: "Every Antiflood button fits 64 bytes in both menu variants and the page fits 3800 UTF-16 units in all 7 locales"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAntifloodCallbackBytes"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAntifloodCallbackBytes"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_antiflood_test.go#TestSettingsAntifloodPageFitsEveryLocale"
+        ref: "fuku/modules/settings_antiflood_test.go#TestSettingsAntifloodPageFitsEveryLocale"
         status: pass
     human_judgment: false
   - id: D6
@@ -114,7 +114,7 @@ status: complete
 
 - **Duration:** about 20 min
 - **Tasks:** 2 of 2
-- **Files:** 2 created (`alita/modules/settings_antiflood.go`, `alita/modules/settings_antiflood_test.go`)
+- **Files:** 2 created (`fuku/modules/settings_antiflood.go`, `fuku/modules/settings_antiflood_test.go`)
 - **Commits:** 3 (`4176c38` RED, `1f5ab0a` feature, `50fbea5` parity and limits tests), then this SUMMARY
 
 ## Accomplishments
@@ -137,9 +137,9 @@ status: complete
 
 - `CGO_ENABLED=0 go build ./...`: ok
 - Task 2 verify command (eleven named tests, run with `-v`, all `--- PASS`): `TestSettingsParityAntiflood`, `TestSettingsDriftAntiflood`, `TestSettingsAuthorityParityAntiflood`, `TestSettingsAntifloodCallbackBytes`, `TestSettingsAntifloodPageFitsEveryLocale`, `TestSettingsAntifloodPage`, `TestSettingsAntifloodStepper`, `TestSettingsAntifloodFreshChat`, `TestSettingsAntifloodStoredLegacyAction`, `TestSettingsAntifloodReadFailure`, `TestAntifloodCommandsUpdateSettingsAndDisplay`.
-- Pinning set: `-run '^(TestSettings|TestApplyFlood|TestAntiflood|TestLoadAntiflood)'` on `./alita/modules`: ok (all earlier settings tests still pass with a fourth page registered).
+- Pinning set: `-run '^(TestSettings|TestApplyFlood|TestAntiflood|TestLoadAntiflood)'` on `./fuku/modules`: ok (all earlier settings tests still pass with a fourth page registered).
 - Mutation check: giving the limit control `settingsRightAdmin` instead of `settingsRightAdminFloodBot` makes `TestSettingsAuthorityParityAntiflood` fail (the step wrote a row with the bot not an admin); restored before commit.
-- `go vet -tags testtools ./alita/modules/` clean, `gofmt -l alita/` empty, `make check-translations` and `make check-docs` clean. `make lint` was not run: golangci-lint is built with go1.25 against the go1.26.0 module in this sandbox, so `gofmt` and `go vet` stand in. The whole `make test` was not run (the orchestrator runs it between waves).
+- `go vet -tags testtools ./fuku/modules/` clean, `gofmt -l fuku/` empty, `make check-translations` and `make check-docs` clean. `make lint` was not run: golangci-lint is built with go1.25 against the go1.26.0 module in this sandbox, so `gofmt` and `go vet` stand in. The whole `make test` was not run (the orchestrator runs it between waves).
 - Acceptance greps: one call each of `applyFloodLimit(`, `applyFloodMode(`, `applyFloodDelete(`; `settingsRightAdminFloodBot` on the three controls; `GetAntifloodSettingsCachedContext` is the seam default. `git diff --name-only b3c964c..HEAD` lists only the two plan files.
 
 ## Deviations from Plan
@@ -171,4 +171,4 @@ On a real bot and group (bot an administrator), as a group admin: send `/setting
 
 ## Self-Check: PASSED
 
-- `alita/modules/settings_antiflood.go` and `alita/modules/settings_antiflood_test.go` exist; `4176c38`, `1f5ab0a` and `50fbea5` are in `git log` on this branch; the working tree was clean after the last code commit.
+- `fuku/modules/settings_antiflood.go` and `fuku/modules/settings_antiflood_test.go` exist; `4176c38`, `1f5ab0a` and `50fbea5` are in `git log` on this branch; the working tree was clean after the last code commit.

@@ -52,7 +52,7 @@ Run these from the repository root.
    go run ./scripts/gemini-spike -probe -fake-key
    ```
 
-   Every line should say `shape accepted, key refused`. A line starting `field rejected` means the API does not know a field name in `alita/utils/gemini/request.go`. Tell the developer, because that variant's spelling needs a one-line fix. (The tool exits 1 in that case.)
+   Every line should say `shape accepted, key refused`. A line starting `field rejected` means the API does not know a field name in `fuku/utils/gemini/request.go`. Tell the developer, because that variant's spelling needs a one-line fix. (The tool exits 1 in that case.)
 2. **The same check with your key.** It sends about 14 tiny 1x1 images and costs a fraction of a cent:
 
    ```bash
@@ -110,12 +110,12 @@ Run these from the repository root.
 
 | What | Where |
 |---|---|
-| Image bar (`0.85`) | `raidAIImageBar` in `alita/modules/raid_ai_image.go` |
-| Media resolution | `defaultMediaRes` in `alita/utils/gemini/request.go` |
-| Thinking level | `thinkingMinimal` and the rule in `thinkingLevelFor` in `alita/utils/gemini/request.go` |
-| Temperature | `gen[fieldTemperature] = 0` in `buildRequest`, `alita/utils/gemini/request.go` |
-| Hourly budgets (150 per group, 500 in all) | `raidAIChatHourlyBudget` and `raidAIGlobalHourlyBudget` in `alita/modules/raid_ai_image.go` |
-| Thumbnail or skip per media type | the media rules in `alita/modules/raid_ai_media.go` |
+| Image bar (`0.85`) | `raidAIImageBar` in `fuku/modules/raid_ai_image.go` |
+| Media resolution | `defaultMediaRes` in `fuku/utils/gemini/request.go` |
+| Thinking level | `thinkingMinimal` and the rule in `thinkingLevelFor` in `fuku/utils/gemini/request.go` |
+| Temperature | `gen[fieldTemperature] = 0` in `buildRequest`, `fuku/utils/gemini/request.go` |
+| Hourly budgets (150 per group, 500 in all) | `raidAIChatHourlyBudget` and `raidAIGlobalHourlyBudget` in `fuku/modules/raid_ai_image.go` |
+| Thumbnail or skip per media type | the media rules in `fuku/modules/raid_ai_media.go` |
 | Model | the `GEMINI_MODEL` environment variable (no code change) |
 
 After any code change run `make test` and `make lint`.
@@ -134,4 +134,4 @@ After any code change run `make test` and `make lint`.
 
 - It does not read the key from a flag, and it does not print it.
 - It does not send anything without the key. `-probe -fake-key` uses a built-in fake key and no real image.
-- It does not touch your bot, your database or your groups. It uses only the Gemini client in `alita/utils/gemini`.
+- It does not touch your bot, your database or your groups. It uses only the Gemini client in `fuku/utils/gemini`.

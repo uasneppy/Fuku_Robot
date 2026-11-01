@@ -10,7 +10,7 @@ requires:
   - phase: 02-staff-actions-across-groups
     provides: "runStaffActionFanOut / runStaffActionInGroup / executeStaffCall (02-01..02-03), decideStaffAction table, card lifecycle and per-target lock (02-05), staffActionEnv harness and the stateful staffActionFake"
 provides:
-  - "ratelimit.TelegramPacer: Redis slot reservation (alita:staff:pace:next), shared retry_after block (alita:staff:pace:block), bounded retry wrapper Do, ErrRateLimited, RetryAfterSeconds, local fallback"
+  - "ratelimit.TelegramPacer: Redis slot reservation (fuku:staff:pace:next), shared retry_after block (fuku:staff:pace:block), bounded retry wrapper Do, ErrRateLimited, RetryAfterSeconds, local fallback"
   - "Every staff fan-out Telegram call goes through staffPaced: issuer and target getChatMember, getChat, the write call, the bot-rights probe and the owner recheck's getChatAdministrators"
   - "Four groups at once (errgroup SetLimit(4)); a panicking worker's group is reported 'failed: internal error', never dropped"
   - "D-19 failure reasons from a live, paced bot-rights probe: bot isn't an admin, bot lacks ban rights, group not found, rate limited, internal error"
@@ -39,15 +39,15 @@ tech-stack:
 
 key-files:
   created:
-    - alita/utils/ratelimit/telegram_pacer.go
-    - alita/utils/ratelimit/telegram_pacer_test.go
-    - alita/modules/staff_action_scale_test.go
+    - fuku/utils/ratelimit/telegram_pacer.go
+    - fuku/utils/ratelimit/telegram_pacer_test.go
+    - fuku/modules/staff_action_scale_test.go
   modified:
-    - alita/modules/staff_recheck.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_action_decide.go
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff_action_fake_test.go
+    - fuku/modules/staff_recheck.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_action_decide.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff_action_fake_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -58,7 +58,7 @@ key-files:
     - AGENTS.md
 
 key-decisions:
-  - "The pacer stays a leaf utility: it imports the utils cache package for the Redis client and nothing from alita/modules; the staff module owns the keys and the tuning through the staffActionPacer variable"
+  - "The pacer stays a leaf utility: it imports the utils cache package for the Redis client and nothing from fuku/modules; the staff module owns the keys and the tuning through the staffActionPacer variable"
   - "A 429 is detected only through errors.As on *gotgbot.TelegramError (Code 429 with ResponseParams.RetryAfter > 0); a retry_after equal to MaxWait is waited, one above it fails the group at once but still extends the shared block"
   - "The write-failure probe and the lookup-failure probe run only for a Telegram 400 or 403; a 5xx, a timeout or a cancelled context is never turned into 'bot isn't an admin'"
   - "A bot whose live status is creator after a 400/403 is not blamed: the failure is shown as Telegram's own text"
@@ -91,7 +91,7 @@ completed: 2026-10-05
 - Staff fan-out: every Telegram call of a run is paced (both `getChatMember` lookups, `getChat` and the restrict for unmute as two paced calls, the write call, the probe, and the owner recheck through `newPacedStaffOwnerPass`). `recheckLink` is unchanged; the seam is a field on `staffOwnerPass` that only the fan-out sets.
 - Four workers (`errgroup.SetLimit(staffActionWorkers)`), each with `defer error_handling.RecoverFromPanic("staffActionWorker", "StaffActions")` writing only its own slot; after `Wait` every slot still pending becomes `failed: internal error`.
 - D-19 classification by live probe (`chat_status.FetchBotMember`, paced), never by error text. A recheck that is still rate limited reads "rate limited, gave up after retries" and never removes a link.
-- Five locale keys in all 7 locale files; AGENTS.md Data bullet for `alita:staff:pace:next` and `alita:staff:pace:block`.
+- Five locale keys in all 7 locale files; AGENTS.md Data bullet for `fuku:staff:pace:next` and `fuku:staff:pace:block`.
 
 ## Task Commits
 
@@ -112,11 +112,11 @@ RED then GREEN for both tasks, in order.
 
 ## Verification run
 
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/utils/ratelimit ./alita/i18n`: ok (modules about 112 s whole package, `-run '^TestStaff'` about 72 s)
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/utils/ratelimit ./fuku/i18n`: ok (modules about 112 s whole package, `-run '^TestStaff'` about 72 s)
 - The 8 new fan-out tests under `-race -count=3`: ok. The pacer tests under `-race -count=5`: ok.
 - Existing Phase 1 panel, sweeper, watcher and ownership tests pass untouched (they call `newStaffOwnerPass()`, whose behaviour is unchanged).
 - `make check-translations`: all translations present. `TestStaffLocaleKeys`: ok. `make check-docs`: no drift.
-- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./alita/...`: clean. `gofmt -l` is clean for every file touched. `git diff go.mod go.sum`: empty.
+- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./fuku/...`: clean. `gofmt -l` is clean for every file touched. `git diff go.mod go.sum`: empty.
 - `make lint` was not run: golangci-lint in this sandbox is built with go1.25 against module go1.26.0, so `gofmt -l` and `go vet` stand in for it.
 - The `<human-check>` (five or more real test groups, optionally a second replica) is not done and remains for the owner.
 
@@ -128,21 +128,21 @@ RED then GREEN for both tasks, in order.
 - **Found during:** Task 1
 - **Issue:** the RESEARCH script writes the next-slot key with a fixed `PX` TTL. With a long shared block (up to 60 s) or a deep queue, the slot recorded for later callers is further ahead than any fixed TTL, so the key could expire and let later callers jump the queue.
 - **Fix:** the script sets `PX slot - now + interval + slack` (slack 1000 ms passed as ARGV[2]). The probed behaviour (waits 0, interval, 2 x interval, block honoured) is unchanged.
-- **Files modified:** alita/utils/ratelimit/telegram_pacer.go
+- **Files modified:** fuku/utils/ratelimit/telegram_pacer.go
 - **Commit:** 7de61c3
 
 **2. [Rule 2 - Missing critical functionality] 5 s local backoff after a Redis failure**
 - **Found during:** Task 1 (the Redis-down test took 1.2 s)
 - **Issue:** with Redis down, go-redis retries dialling for about 0.4 s per command, so every paced call (and every block write) paid that delay even though the run was meant to continue locally.
 - **Fix:** after a Redis failure the pacer stays on its local interval for 5 s before trying Redis again; the warn is still logged at most once a minute.
-- **Files modified:** alita/utils/ratelimit/telegram_pacer.go
+- **Files modified:** fuku/utils/ratelimit/telegram_pacer.go
 - **Commit:** 7de61c3
 
 **3. [Rule 2 - Missing critical functionality] A panic inside a paced owner check cannot read as "owner matches"**
 - **Found during:** Task 2
 - **Issue:** `staffOwnerOutcome`'s zero value is `OwnerMatch`. If a worker panicked inside the memoised `CheckOwner` (a `sync.Once` is then spent), every other worker sharing the pass would have read an owner match with no error.
 - **Fix:** on the paced path only, the entry is set to OwnerUnknown with an error before `run` executes. The unpaced path (`call == nil`) is exactly the old code.
-- **Files modified:** alita/modules/staff_recheck.go
+- **Files modified:** fuku/modules/staff_recheck.go
 - **Commit:** fd5d57b
 
 ### Interpretation notes (not deviations)
@@ -161,7 +161,7 @@ None. The pacer skeleton in the RED commit was replaced in the GREEN commit; not
 
 ## Threat Flags
 
-None. The two new Redis keys (`alita:staff:pace:next`, `alita:staff:pace:block`) are operational keys outside the `alita:cache:` prefix and carry no user data. Mitigations for T-02-24 to T-02-27 are covered by TestTelegramPacerFleetSpacing, TestStaffActionWorkersBounded, TestTelegramPacerSharedBlock, TestStaffActionFailureClassification and TestTelegramPacerRetryAfterCap.
+None. The two new Redis keys (`fuku:staff:pace:next`, `fuku:staff:pace:block`) are operational keys outside the `fuku:cache:` prefix and carry no user data. Mitigations for T-02-24 to T-02-27 are covered by TestTelegramPacerFleetSpacing, TestStaffActionWorkersBounded, TestTelegramPacerSharedBlock, TestStaffActionFailureClassification and TestTelegramPacerRetryAfterCap.
 
 ## Issues Encountered
 
@@ -173,6 +173,6 @@ Plan 02-07 (batched summary edits) can build on `staffPaced` being intentionally
 
 ## Self-Check: PASSED
 
-- Files present: `alita/utils/ratelimit/telegram_pacer.go`, `alita/utils/ratelimit/telegram_pacer_test.go`, `alita/modules/staff_action_scale_test.go`
+- Files present: `fuku/utils/ratelimit/telegram_pacer.go`, `fuku/utils/ratelimit/telegram_pacer_test.go`, `fuku/modules/staff_action_scale_test.go`
 - Commits present: 1921365, 7de61c3, 4a080d5, fd5d57b
-- Acceptance greps: `staffActionPacer.Do(` in staff_action_run.go, `func newPacedStaffOwnerPass` in staff_recheck.go, `SetLimit(staffActionWorkers)` and `RecoverFromPanic("staffActionWorker", "StaffActions")` in staff_action_run.go, `alita:staff:pace:block` in AGENTS.md, `func (p *TelegramPacer) Do(ctx context.Context, call func(context.Context) error) error` and `var ErrRateLimited` in the pacer, and no `Alita_Robot/alita/modules` import in the pacer.
+- Acceptance greps: `staffActionPacer.Do(` in staff_action_run.go, `func newPacedStaffOwnerPass` in staff_recheck.go, `SetLimit(staffActionWorkers)` and `RecoverFromPanic("staffActionWorker", "StaffActions")` in staff_action_run.go, `fuku:staff:pace:block` in AGENTS.md, `func (p *TelegramPacer) Do(ctx context.Context, call func(context.Context) error) error` and `var ErrRateLimited` in the pacer, and no `Fuku_Robot/fuku/modules` import in the pacer.

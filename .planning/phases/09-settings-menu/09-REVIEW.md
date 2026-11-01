@@ -4,42 +4,42 @@ reviewed: 2026-10-30T00:00:00Z
 depth: deep
 files_reviewed: 40
 files_reviewed_list:
-  - alita/modules/settings.go
-  - alita/modules/settings_menu.go
-  - alita/modules/settings_pages.go
-  - alita/modules/settings_card.go
-  - alita/modules/settings_captcha.go
-  - alita/modules/settings_antiflood.go
-  - alita/modules/settings_lockdown.go
-  - alita/modules/settings_staff.go
-  - alita/modules/captcha.go
-  - alita/modules/antiflood.go
-  - alita/modules/autolockdown.go
-  - alita/modules/lockdown.go
-  - alita/modules/lockdown_alert_callbacks.go
-  - alita/modules/lockdown_status.go
-  - alita/modules/staff_link.go
-  - alita/modules/staff_panel.go
-  - alita/utils/chat_status/owner.go
-  - alita/i18n/test_helper.go
-  - alita/modules/settings_env_test.go
-  - alita/modules/settings_menu_test.go
-  - alita/modules/settings_test.go
-  - alita/modules/settings_captcha_test.go
-  - alita/modules/settings_antiflood_test.go
-  - alita/modules/settings_lockdown_test.go
-  - alita/modules/settings_lockdown_lift_test.go
-  - alita/modules/settings_staff_test.go
-  - alita/modules/settings_staff_privacy_test.go
-  - alita/modules/settings_private_test.go
-  - alita/modules/settings_help_test.go
-  - alita/modules/captcha_apply_test.go
-  - alita/modules/antiflood_apply_test.go
-  - alita/modules/lockdown_apply_test.go
-  - alita/modules/staff_seams_test.go
-  - alita/db/antiflood/repository_test.go
-  - alita/i18n/settings_locale_test.go
-  - alita/utils/chat_status/owner_test.go
+  - fuku/modules/settings.go
+  - fuku/modules/settings_menu.go
+  - fuku/modules/settings_pages.go
+  - fuku/modules/settings_card.go
+  - fuku/modules/settings_captcha.go
+  - fuku/modules/settings_antiflood.go
+  - fuku/modules/settings_lockdown.go
+  - fuku/modules/settings_staff.go
+  - fuku/modules/captcha.go
+  - fuku/modules/antiflood.go
+  - fuku/modules/autolockdown.go
+  - fuku/modules/lockdown.go
+  - fuku/modules/lockdown_alert_callbacks.go
+  - fuku/modules/lockdown_status.go
+  - fuku/modules/staff_link.go
+  - fuku/modules/staff_panel.go
+  - fuku/utils/chat_status/owner.go
+  - fuku/i18n/test_helper.go
+  - fuku/modules/settings_env_test.go
+  - fuku/modules/settings_menu_test.go
+  - fuku/modules/settings_test.go
+  - fuku/modules/settings_captcha_test.go
+  - fuku/modules/settings_antiflood_test.go
+  - fuku/modules/settings_lockdown_test.go
+  - fuku/modules/settings_lockdown_lift_test.go
+  - fuku/modules/settings_staff_test.go
+  - fuku/modules/settings_staff_privacy_test.go
+  - fuku/modules/settings_private_test.go
+  - fuku/modules/settings_help_test.go
+  - fuku/modules/captcha_apply_test.go
+  - fuku/modules/antiflood_apply_test.go
+  - fuku/modules/lockdown_apply_test.go
+  - fuku/modules/staff_seams_test.go
+  - fuku/db/antiflood/repository_test.go
+  - fuku/i18n/settings_locale_test.go
+  - fuku/utils/chat_status/owner_test.go
   - locales/config.yml
   - locales/en.yml (and es, fr, hi, id, pt, ru: settings_* keys)
   - docs/src/content/docs/commands/settings/index.md
@@ -76,7 +76,7 @@ The refactors are behaviour-preserving. I diffed the old command bodies against 
 Mechanical checks:
 - `go build` and `go vet` are clean.
 - `golangci-lint` reports nothing for the touched packages.
-- `go test -tags testtools -run 'TestSettings|TestLoadSettings' ./alita/modules` passes, as does `./alita/i18n`.
+- `go test -tags testtools -run 'TestSettings|TestLoadSettings' ./fuku/modules` passes, as does `./fuku/i18n`.
 - Placeholders and tags agree across all 7 locales for the 80 `settings_*` keys.
 - Every locale key the new Go code uses exists.
 - Every `settings_*_test.go` carries the `testtools` build tag, so `OverrideManagerLanguagesForTest` is not compiled into production.
@@ -92,7 +92,7 @@ I found no blocker. The five warnings are:
 
 ### WR-01: Lift Yes and Unlink Yes act on the current object, not the one the card showed
 
-**File:** `alita/modules/settings_lockdown.go:331-347`, `alita/modules/settings_staff.go:479-505`, `alita/modules/settings_card.go:45-64`
+**File:** `fuku/modules/settings_lockdown.go:331-347`, `fuku/modules/settings_staff.go:479-505`, `fuku/modules/settings_card.go:45-64`
 **Issue:** The Yes button carries only `a` and the owner field plus the expiry `e`. At Yes, `settingsLockdownLiftYes` calls `applyLockdownLift(chat)`, which lifts whatever lockdown is current for the chat. `settingsStaffUnlinkYes` re-reads `GetLinkOfGroupFresh(chat)` and unlinks whatever link is current. Nothing binds the second tap to the object the admin confirmed.
 
 The card stays on screen for 5 to 6 minutes. This sequence is possible in that window:
@@ -109,7 +109,7 @@ The same applies to Unlink after an unlink and re-link to another Staff Group. T
 
 ### WR-02: A private menu shows the Staff Group title and chat ID to any admin of the linked group
 
-**File:** `alita/modules/settings_staff.go:99-119` (`settingsStaffViewFor`), `settings_staff.go:252-254` (`settingsStaffRead`), `alita/modules/settings_menu.go:287-325`
+**File:** `fuku/modules/settings_staff.go:99-119` (`settingsStaffViewFor`), `settings_staff.go:252-254` (`settingsStaffRead`), `fuku/modules/settings_menu.go:287-325`
 **Issue:** `Full` is set for any private menu, and the private press only proves that the presser is a live creator or administrator of the linked group. A moderator admin of group G who is not in the Staff Group, and not its creator, can open `/start settings_<G>` and read the Staff Group's title and chat ID. `data.linkStaff` is read for every private press, and `settings_staff_linked_to` prints both.
 
 The Phase 1 invariant in AGENTS.md is that nothing about a link is shown to the linked group's members. D-21 relaxes this for the private menu on the assumption that only staff read it. That assumption does not hold, because the private audience is "any admin of G". The group-menu masked line ("Linked to a Staff Group.") already tells every member that the group is linked. That follows D-21 but is a weaker posture than D-06 and D-07.
@@ -121,7 +121,7 @@ The Phase 1 invariant in AGENTS.md is that nothing about a link is shown to the 
 
 ### WR-03: One tap on Ban, Kick or the delete switch silently turns antiflood on at 5 messages
 
-**File:** `alita/modules/settings_antiflood.go:315-345`, `alita/modules/antiflood.go` (`applyFloodMode`, `applyFloodDelete`), `alita/db/antiflood/repository.go:33-103`
+**File:** `fuku/modules/settings_antiflood.go:315-345`, `fuku/modules/antiflood.go` (`applyFloodMode`, `applyFloodDelete`), `fuku/db/antiflood/repository.go:33-103`
 **Issue:** On a chat with no `antiflood_settings` row, the cached default is limit 0 (off). The menu's action buttons (ban or kick) and the delete switch call `FirstOrCreate`, which inserts a row with the model default `flood_limit: 5`. A Ban press on a chat that shows "Antiflood is off" therefore makes the bot start punishing anyone who sends 5 messages in the flood window. The page redraws from a read-back, so a careful admin could notice, but the screen shows no notice about it.
 
 AGENTS.md records this as accepted (D-27) because the commands behave the same. A command is typed deliberately and replies "mode set to ban". A menu button a user taps to browse options is much easier to hit by accident.
@@ -135,7 +135,7 @@ If the repository must stay unchanged:
 
 ### WR-04: The lift announcement blocks the page redraw while the Yes button is still live
 
-**File:** `alita/modules/settings_lockdown.go:340-347`, `alita/modules/lockdown_alert_callbacks.go:713-729` (`lockdownPostLiftNotice`)
+**File:** `fuku/modules/settings_lockdown.go:340-347`, `fuku/modules/lockdown_alert_callbacks.go:713-729` (`lockdownPostLiftNotice`)
 **Issue:** `settingsLockdownLiftYes` calls `lockdownAnnounceLift` before it returns the screen, and the caller edits the message only after the return. `lockdownAnnounceLift` posts through `lockdownPaced`, which can wait up to `MaxWait` (60 s) for a slot and has a 30 s send timeout. The lockdown is already lifted, yet the card, with its live Yes button, is still shown for that whole time. A second Yes then lands on `liftApplyInProgress` or not-active, and the admin sees a stale card for up to a minute. The alert's own Lift Confirm edits the card first and posts afterwards.
 
 In a group menu the group also gets two messages for one lift: the public `lockdown_lifted` notice and the redrawn page with the same text as a notice.
@@ -143,7 +143,7 @@ In a group menu the group also gets two messages for one lift: the public `lockd
 
 ### WR-05: The private press path never checks the chat type of `c`
 
-**File:** `alita/modules/settings_menu.go:311-324` (compare `alita/modules/settings.go:141-143`)
+**File:** `fuku/modules/settings_menu.go:311-324` (compare `fuku/modules/settings.go:141-143`)
 **Issue:** The deep link refuses anything but a group or supergroup. The press pipeline accepts whatever `getChat(c)` returns. AGENTS.md says callback data is not authenticated by Telegram. A user with a raw MTProto client can send an arbitrary `settings|v1|c=<id>` payload on a message of their own private chat, and the only gates are that `c` is negative and the presser is a live admin of it.
 
 A channel the bot is in and the presser administers passes. The Captcha and Antiflood pages then draw and write `captcha_settings` or `antiflood_settings` rows for a channel ID. `IsBotAdmin` and `IsUserAdmin` are also evaluated against a channel there. The impact is low, because the presser needs admin rights there. It breaks the "private press equals deep-link rules" symmetry and writes junk rows.
@@ -160,25 +160,25 @@ Add a case to `TestSettingsOwnership` using a fake `getChat` that returns a chan
 
 ### IN-01: The documented test command skips one of the new tests, and one test asserts an English literal
 
-**File:** `AGENTS.md` (Testing bullet "Run the settings tests with ... `-run '^TestSettings'`"), `alita/modules/settings_help_test.go:49`
+**File:** `AGENTS.md` (Testing bullet "Run the settings tests with ... `-run '^TestSettings'`"), `fuku/modules/settings_help_test.go:49`
 **Issue:** `TestLoadSettingsRegistersHelp` does not match `^TestSettings`. The same bullet cites it as a guard, but the recommended invocation never runs it. `make test` does run it. The test also asserts the literal English help text ("Manage this group from one button menu."), which AGENTS.md says not to do (assert observable behaviour, not literals). Editing the help copy would break it for no behavioural reason.
 **Fix:** Use `-run '^(TestSettings|TestLoadSettings)'` in AGENTS.md. In the test, assert on the `/settings` and `/setfloodmode` command names only.
 
 ### IN-02: `captchaWebModeRefusal` loads `captchaWebCurrent` twice
 
-**File:** `alita/modules/captcha.go:704-708`
+**File:** `fuku/modules/captcha.go:704-708`
 **Issue:** `rt := captchaWebCurrent.Load()` runs first, then `captchaWebInstalled(bot)` loads it again, and the later `rt.cfg.Redis.Ping` uses the first copy. The runtime is only installed at startup, so the window is theoretical. The `|| rt == nil` guard makes it safe, but the two loads can in principle disagree.
 **Fix:** Give `captchaWebInstalled` a helper that takes `rt`, or return `rt` from one call, so the checks and the use share one load.
 
 ### IN-03: The deep link answers differently for "bot not in chat" and "not an admin"
 
-**File:** `alita/modules/settings.go:118-142`
+**File:** `fuku/modules/settings.go:118-142`
 **Issue:** Any user can send `/start settings_-100…` with an arbitrary negative ID. The answer is `settings_cannot_open` when the bot is missing or the chat is gone, and `settings_start_not_admin` otherwise. That is a small oracle for "is the bot in chat X". Each probe also costs one to two Bot API calls with no per-user limit. Chat IDs are large, so this is hard to exploit. It is worth noting because the other refusals were designed not to leak.
 **Fix:** Optionally return `settings_start_not_admin` for the bot-missing case too, and apply a small per-user cooldown on the deep link.
 
 ### IN-04: The Link picker lists at most 8 Staff Groups, and one-match-plus-unknown becomes a picker
 
-**File:** `alita/modules/settings_staff.go:328`, `settings_staff.go:343-351`, `settings_staff.go:415-422`
+**File:** `fuku/modules/settings_staff.go:328`, `settings_staff.go:343-351`, `settings_staff.go:415-422`
 **Issue:** There are two points of drift from `/linkstaff`:
 - A presser who owns more than 8 verified Staff Groups cannot reach the 9th from the menu. The picker truncates silently. The command can link any of them by explicit ID.
 - With one match and `unknown > 0`, the command fails closed with `staff_check_failed`. The menu shows a one-button picker.
@@ -188,7 +188,7 @@ Neither grants more authority than the command, because the pick re-verifies liv
 
 ### IN-05: Several refusal texts reused from the commands read oddly inside a menu, and a panic leaves the spinner running
 
-**File:** `alita/modules/settings_staff.go:344-347`, `alita/modules/settings_menu.go:329-344`
+**File:** `fuku/modules/settings_staff.go:344-347`, `fuku/modules/settings_menu.go:329-344`
 **Issue:**
 - `staff_link_no_staff_group` ends with "…then send this command again", which is wrong in a button flow.
 - `settingsCallback` defers `RecoverFromPanic`, which swallows a panic, but the query is then never answered. The client shows a spinner until Telegram times it out.

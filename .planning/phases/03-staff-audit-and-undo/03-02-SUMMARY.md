@@ -31,9 +31,9 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_action_undo_decide_test.go
+    - fuku/modules/staff_action_undo_decide_test.go
   modified:
-    - alita/modules/staff_action_decide.go
+    - fuku/modules/staff_action_decide.go
 
 key-decisions:
   - "Kick and any unknown kind are rejected first with fail_lookup, ahead of the admin and prior-state guards"
@@ -53,7 +53,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionTable"
+        ref: "fuku/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionTable"
         status: pass
     human_judgment: false
   - id: D2
@@ -61,10 +61,10 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionTable"
+        ref: "fuku/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionTable"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionInvariants"
+        ref: "fuku/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionInvariants"
         status: pass
     human_judgment: false
   - id: D3
@@ -72,7 +72,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionTable"
+        ref: "fuku/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionTable"
         status: pass
     human_judgment: false
   - id: D4
@@ -80,7 +80,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionInvariants"
+        ref: "fuku/modules/staff_action_undo_decide_test.go#TestStaffUndoDecisionInvariants"
         status: pass
     human_judgment: false
   - id: D5
@@ -88,10 +88,10 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_undo_decide_test.go#TestStaffUndoReasonOutcomes"
+        ref: "fuku/modules/staff_action_undo_decide_test.go#TestStaffUndoReasonOutcomes"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_decide_test.go#TestStaffActionDecisionInvariants"
+        ref: "fuku/modules/staff_action_decide_test.go#TestStaffActionDecisionInvariants"
         status: pass
     human_judgment: false
 
@@ -112,7 +112,7 @@ status: complete
 
 ## Accomplishments
 
-- `decideStaffUndo(orig, prior, applied, live, now)` sits beside `decideStaffAction` in `alita/modules/staff_action_decide.go`. `decideStaffAction`, `staffVerdict` and every Phase 2 constant are unchanged, and the Phase 2 decision tests pass unmodified.
+- `decideStaffUndo(orig, prior, applied, live, now)` sits beside `decideStaffAction` in `fuku/modules/staff_action_decide.go`. `decideStaffAction`, `staffVerdict` and every Phase 2 constant are unchanged, and the Phase 2 decision tests pass unmodified.
 - The shared guards run in a fixed order: unsupported kind, live creator or administrator, no captured prior state, a ban or mute whose own end date has passed, then the left-behind check (`staffUndoLeftBehind`), then the per-kind column. A restore or re-ban reaches a kicked or left target only after the left-behind check, which is the one sanctioned exception to the Phase 2 rule and is documented in the function's GoDoc.
 - Restores: ban over member or left is unbanned; ban or mute over a running restriction is put back with the recorded permission set and end date (`staffCallRestore`); ban over a shorter ban still running is re-banned with its original end date; unban is re-banned and unmute re-restricted. A prior end date at or inside `now + 120` is lifted (ban, mute) or skipped as `skip_restriction_ended` (unban, unmute).
 - `TestStaffUndoDecisionInvariants` walks 5 kinds x 50 priors x 3 applied states x 9 live statuses x 3 live end dates (20250 combinations) and checks eight invariants, the six the plan names plus two more (a restore carries exactly the recorded permission set; no call without a captured prior state). It fails if no combination makes a call.
@@ -127,8 +127,8 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/modules/staff_action_decide.go` - undo reasons, `staffCallRestore`, `staffUndoMinRemaining`, `staffAppliedState`, `staffUndoVerdict`, `staffUndoEnded`, `staffUndoSameUntil`, `staffUndoLeftBehind`, `decideStaffUndo` and the four per-kind columns; `staffReasonOutcome` arms for the eight new reasons
-- `alita/modules/staff_action_undo_decide_test.go` - `TestStaffUndoDecisionTable` (ban, mute, unban, unmute, kick, unknown kind), `TestStaffUndoDecisionInvariants`, `TestStaffUndoReasonOutcomes`
+- `fuku/modules/staff_action_decide.go` - undo reasons, `staffCallRestore`, `staffUndoMinRemaining`, `staffAppliedState`, `staffUndoVerdict`, `staffUndoEnded`, `staffUndoSameUntil`, `staffUndoLeftBehind`, `decideStaffUndo` and the four per-kind columns; `staffReasonOutcome` arms for the eight new reasons
+- `fuku/modules/staff_action_undo_decide_test.go` - `TestStaffUndoDecisionTable` (ban, mute, unban, unmute, kick, unknown kind), `TestStaffUndoDecisionInvariants`, `TestStaffUndoReasonOutcomes`
 
 ## Decisions Made
 
@@ -154,14 +154,14 @@ Both tasks followed RED then GREEN with no refactor commit.
 - **Found during:** Task 1 (RED)
 - **Issue:** The test file uses `decideStaffUndo`, the new reasons, `staffCallRestore`, `staffAppliedState` and `staffUndoVerdict`, so the package does not compile without them. A compile error is INVALID_RED, not a failing assertion.
 - **Fix:** The RED commit `2c63efa` carries the new constants, types and a placeholder `decideStaffUndo` that returns `skip_no_prior_state`, so every row fails on its own assertion. The table logic, helpers and `staffReasonOutcome` arms came in GREEN.
-- **Files modified:** `alita/modules/staff_action_decide.go`
+- **Files modified:** `fuku/modules/staff_action_decide.go`
 - **Commit:** `2c63efa`
 
 **2. [Rule 1 - Bug in plan] Kick must be rejected before the left-behind check**
 - **Found during:** Task 2 (RED)
 - **Issue:** The plan orders the guards admin, prior, ended, left-behind, per-kind, and says a kick returns `fail_lookup`. `staffUndoLeftBehind` is false for kick, so a kick would never reach the per-kind default and would read `skip_changed_since`, `skip_target_admin` or `skip_no_prior_state` instead.
 - **Fix:** `decideStaffUndo` returns `fail_lookup` for kick and any unknown kind first. Behaviour for ban, mute, unban and unmute is the plan's order.
-- **Files modified:** `alita/modules/staff_action_decide.go`
+- **Files modified:** `fuku/modules/staff_action_decide.go`
 - **Commit:** `211a761`
 
 **3. Extra table rows beyond the plan's list.** The table also covers a live administrator and no captured prior state for each kind, a prior that is not a state the kind can follow (for example unban over a prior member), the exact 30-second boundary for Telegram's permanent rule, a dated mute extended since, and the margin on both sides for unban and unmute. These add coverage and change no behavior.
@@ -173,14 +173,14 @@ Both tasks followed RED then GREEN with no refactor commit.
 
 ## Issues Encountered
 
-- `make lint` is unavailable (golangci-lint is built with go1.25 and refuses the go1.26.0 module); `gofmt -l`, `go vet -tags testtools ./alita/modules` and `CGO_ENABLED=0 go build ./...` are clean.
+- `make lint` is unavailable (golangci-lint is built with go1.25 and refuses the go1.26.0 module); `gofmt -l`, `go vet -tags testtools ./fuku/modules` and `CGO_ENABLED=0 go build ./...` are clean.
 - The worktree guard refused a command that redirected output into the git directory, so the plan-commit ledger of the commit protocol was kept in the scratchpad instead; `commits: 4` and `plan_head_before` come from `git rev-list --count f48b988..HEAD` against the base SHA the spawn check verified.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecision(Table|Invariants)$|^TestStaffUndoReasonOutcomes$' -v ./alita/modules` - all three PASS
-- `go test -tags testtools -race -count=1 -run '^TestStaffAction' ./alita/modules` - ok (Phase 2 regression, unmodified)
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecision|^TestStaffUndoReasonOutcomes$|^TestStaffActionDecision' ./alita/modules` - ok
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecision(Table|Invariants)$|^TestStaffUndoReasonOutcomes$' -v ./fuku/modules` - all three PASS
+- `go test -tags testtools -race -count=1 -run '^TestStaffAction' ./fuku/modules` - ok (Phase 2 regression, unmodified)
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecision|^TestStaffUndoReasonOutcomes$|^TestStaffActionDecision' ./fuku/modules` - ok
 - Acceptance greps: `func decideStaffUndo(` signature, `staffCallRestore staffAPICall = staffCallUnmute + 1`, `const staffUndoMinRemaining int64 = 120`, `staffVerdict` still two fields, `decideStaffUndoUnban`, `decideStaffUndoUnmute`, `staffReasonUndone` count 14 (8 or more required) - all pass
 - `gofmt -l` on both files prints nothing; `git diff --exit-code go.mod go.sum` clean
 
@@ -200,7 +200,7 @@ None. This plan adds a pure function and tests; it adds no endpoint, auth path, 
 
 ## Self-Check: PASSED
 
-- Created file exists: `alita/modules/staff_action_undo_decide_test.go`.
+- Created file exists: `fuku/modules/staff_action_undo_decide_test.go`.
 - Commits `2c63efa`, `ee0dc53`, `1797279` and `211a761` exist; `test(03-02)` precedes `feat(03-02)` for both tasks.
 
 ---

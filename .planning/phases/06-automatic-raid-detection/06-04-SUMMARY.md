@@ -6,11 +6,11 @@ tags: [raid-detection, message-flood, redis, lua, gotgbot, handler-group]
 
 requires:
   - phase: 06-automatic-raid-detection
-    provides: raidFire, raidTrigger, the alita:raid:{chat}:joined set, raidSettingsLookup, lockdownAlertTriggerLine flood branch
+    provides: raidFire, raidTrigger, the fuku:raid:{chat}:joined set, raidSettingsLookup, lockdownAlertTriggerLine flood branch
 provides:
   - the group -4 flood watcher (raidFloodWatcher) registered in LoadLockdown
   - raidFloodItemKey (what counts as user content, albums once) and raidFloodCounts (the 60% and 3-account rule)
-  - raidFloodScript, the Lua script behind alita:raid:{chat}:fi, :fn and :fa
+  - raidFloodScript, the Lua script behind fuku:raid:{chat}:fi, :fn and :fa
 affects: [06-05, 06-06, phase-07-ai-trigger]
 
 actuals:
@@ -32,10 +32,10 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_flood.go
-    - alita/modules/raid_flood_test.go
+    - fuku/modules/raid_flood.go
+    - fuku/modules/raid_flood_test.go
   modified:
-    - alita/modules/lockdown.go
+    - fuku/modules/lockdown.go
     - AGENTS.md
 
 key-decisions:
@@ -100,8 +100,8 @@ status: complete
 - **Found during:** Task 1 (verification, the wider Lockdown/Unlockdown/Raid/Antiflood/Blacklist/Lock run)
 - **Issue:** the plan defines a command as a text whose first entity is a `bot_command` at offset 0. gotgbot's command handler also runs a text that begins with `/` with no entity, and the existing lockdown tests send commands that way (`env.send(env.admin, "/lockdown")`). The watcher counted them as text, so it called getChat and the admin list on every such command, which changed existing tests' Telegram call counts and consumed their scripted getChat and getChatMember failures (about ten subtests of `TestLockdownSettlesUnconfirmedLock`, `TestUnlockdownWithoutLockdown`, `TestLockdownCommandsRefuseNonAuthority` and `TestLockdownRefusals` failed).
 - **Fix:** `raidFloodIsCommand` also treats a text starting with `/` followed by a non-space character as a command, mirroring the dispatcher. Real Telegram always sends the entity, so production behaviour is the plan's rule; the extra form only matters for entity-less text, which the dispatcher runs as a command anyway. No existing test or assertion was edited. AGENTS.md states the rule as implemented.
-- **Files modified:** `alita/modules/raid_flood.go`, `AGENTS.md`
-- **Verification:** `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|Raid|Antiflood|Blacklist|Lock' ./alita/modules` passes; `TestRaidFloodItemKey` pins `command with no entity` and `a lone slash` (counts).
+- **Files modified:** `fuku/modules/raid_flood.go`, `AGENTS.md`
+- **Verification:** `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|Raid|Antiflood|Blacklist|Lock' ./fuku/modules` passes; `TestRaidFloodItemKey` pins `command with no entity` and `a lone slash` (counts).
 - **Committed in:** `5e1c39f` (part of the Task 1 GREEN commit)
 
 ---
@@ -110,15 +110,15 @@ status: complete
 
 ## Issues Encountered
 
-- `make lint` cannot run here (golangci-lint cannot lint Go 1.26); `gofmt -l` on the touched files and `go vet -tags testtools ./alita/modules` stand in and are clean. `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit; it was left alone.
+- `make lint` cannot run here (golangci-lint cannot lint Go 1.26); `gofmt -l` on the touched files and `go vet -tags testtools ./fuku/modules` stand in and are clean. `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit; it was left alone.
 - No PostgreSQL server was available or started; every test used SQLite and miniredis. The full `make test` was not run (the orchestrator owns it).
 - `docs/src/content/docs/architecture/handler-groups.md` still lists the old group table (it has no `-7` or `-4` rows and still shows antiraid at `-5`); `make check-docs` reports no drift, and the page is part of the antiraid retirement later in the phase, so it was not touched here.
 
 ## Verification
 
 - `TestRaidFlood`, `TestRaidFloodItemKey`, `TestRaidFloodExemptions`, `TestRaidFloodRule`, `TestRaidFloodScript`: pass with `-tags testtools -race`.
-- `-run 'Lockdown|Unlockdown|Raid|Antiflood|Blacklist|Lock' ./alita/modules`: pass (about 91 s).
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules`, `make check-docs`: clean. `git diff --exit-code go.mod go.sum`: clean.
+- `-run 'Lockdown|Unlockdown|Raid|Antiflood|Blacklist|Lock' ./fuku/modules`: pass (about 91 s).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules`, `make check-docs`: clean. `git diff --exit-code go.mod go.sum`: clean.
 - Acceptance criteria: `raidFloodGroup = -4` and the `lockdownModule.raidFloodWatcher), raidFloodGroup)` registration match; `return ext.ContinueGroups` appears 10 times and `ext.EndGroups` 0 times outside comments in `raid_flood.go`; the AGENTS.md group list entry matches once; `raidFloodItemKey` and `raidFloodCounts` exist.
 
 ## Known Stubs
@@ -137,7 +137,7 @@ None beyond the plan's threat model: T-06-11 (sender_chat skip, pinned by `sende
 
 ## Self-Check: PASSED
 
-- `alita/modules/raid_flood.go`, `alita/modules/raid_flood_test.go`: found.
+- `fuku/modules/raid_flood.go`, `fuku/modules/raid_flood_test.go`: found.
 - Commits `66a8189`, `5e1c39f`, `220e867`: found in `git log`.
 - `git rev-list --count bbacab3..HEAD` was 3 before this file.
 

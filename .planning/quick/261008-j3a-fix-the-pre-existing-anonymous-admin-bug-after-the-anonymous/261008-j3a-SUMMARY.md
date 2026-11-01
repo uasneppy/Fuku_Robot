@@ -6,12 +6,12 @@ tags: [anon-admin, bans, chat_status, bugfix]
 requires: []
 provides:
   - anonymous-admin proof tap re-enters the command with a message update and its own chat
-affects: [alita/modules/bot_updates.go, AGENTS.md]
+affects: [fuku/modules/bot_updates.go, AGENTS.md]
 key-files:
-  created: [alita/modules/anon_admin_reentry_test.go]
+  created: [fuku/modules/anon_admin_reentry_test.go]
   modified:
-    - alita/modules/bot_updates.go
-    - alita/modules/bot_updates_test.go
+    - fuku/modules/bot_updates.go
+    - fuku/modules/bot_updates_test.go
     - AGENTS.md
     - .planning/phases/04-manual-lockdown/deferred-items.md
 status: complete
@@ -39,7 +39,7 @@ actuals:
 - Targeted anon tests (TestAnonymousAdminBanAfterProof x3, TestVerifyAnonymousAdmin*, TestLockdownAnonymousAdminProof, TestUnapproveAllCallbackCancelInvalidAndUnavailableMessage): pass.
 - `CGO_ENABLED=0 go build ./...`: OK.
 - `make test`: passed (exit 0), first run, no flaky failure.
-- `make lint`: could not run in this environment (golangci-lint was built with go1.25, config targets 1.26.0). `go vet -tags testtools ./alita/modules` is clean.
+- `make lint`: could not run in this environment (golangci-lint was built with go1.25, config targets 1.26.0). `go vet -tags testtools ./fuku/modules` is clean.
 - Scope: changed files are only the plan's files_modified. No lockdown*.go, locales, chat_status or helpers source.
 
 ## Deviations from Plan

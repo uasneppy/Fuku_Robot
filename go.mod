@@ -1,4 +1,4 @@
-module github.com/divkix/Alita_Robot
+module github.com/uasneppy/fuku_robot
 
 go 1.26.0
 

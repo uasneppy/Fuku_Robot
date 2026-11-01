@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const pagePath = fileURLToPath(new URL('../../alita/utils/captchaweb/page/captcha.html', import.meta.url));
+const pagePath = fileURLToPath(new URL('../../fuku/utils/captchaweb/page/captcha.html', import.meta.url));
 const pageHTML = fs.readFileSync(pagePath, 'utf8');
 const scriptMatch = /<script[^>]*id="captcha-main"[^>]*>([\s\S]*?)<\/script>/.exec(pageHTML);
 assert.ok(scriptMatch, 'the page has no script with id captcha-main');

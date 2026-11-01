@@ -29,9 +29,9 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - alita/modules/autolockdown.go
-    - alita/modules/autolockdown_test.go
-    - alita/i18n/lockdown_locale_test.go
+    - fuku/modules/autolockdown.go
+    - fuku/modules/autolockdown_test.go
+    - fuku/i18n/lockdown_locale_test.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -54,7 +54,7 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: unit
-        ref: "alita/modules/autolockdown_test.go#TestAutolockdownAI"
+        ref: "fuku/modules/autolockdown_test.go#TestAutolockdownAI"
         status: pass
     human_judgment: false
   - id: D2
@@ -62,10 +62,10 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: unit
-        ref: "alita/modules/autolockdown_test.go#TestAutolockdownAI"
+        ref: "fuku/modules/autolockdown_test.go#TestAutolockdownAI"
         status: pass
       - kind: unit
-        ref: "alita/modules/autolockdown_test.go#TestAutoLockdownArgs"
+        ref: "fuku/modules/autolockdown_test.go#TestAutoLockdownArgs"
         status: pass
     human_judgment: false
   - id: D3
@@ -73,7 +73,7 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/modules/autolockdown_test.go#TestAutolockdownAI/the_next_burst_follows_the_change_on_any_replica"
+        ref: "fuku/modules/autolockdown_test.go#TestAutolockdownAI/the_next_burst_follows_the_change_on_any_replica"
         status: pass
     human_judgment: false
   - id: D4
@@ -99,7 +99,7 @@ status: complete
 
 ## Accomplishments
 
-- `autoTriggerAI` in `alita/modules/autolockdown.go`: a parse case and a write case (`raiddetection.SetAIThreshold` for a number, `raiddetection.SetAIEnabled` for on/off). The authority check (`requireAutoLockdownAuthority`), the anonymous-admin re-entry and the basic-group refusal are unchanged and run before the word is parsed, so `ai` is refused exactly like `joins` and `flood`.
+- `autoTriggerAI` in `fuku/modules/autolockdown.go`: a parse case and a write case (`raiddetection.SetAIThreshold` for a number, `raiddetection.SetAIEnabled` for on/off). The authority check (`requireAutoLockdownAuthority`), the anonymous-admin re-entry and the basic-group refusal are unchanged and run before the word is parsed, so `ai` is refused exactly like `joins` and `flood`.
 - The status shows the AI line after the flood line through `autolockdownTriggerLine`, then `lockdown_auto_ai_unavailable` when `raidAIConfigured()` is false. A server with only one of the two providers shows no notice.
 - Locale keys in all 7 files: new `lockdown_auto_ai_on`, `lockdown_auto_ai_off`, `lockdown_auto_ai_unavailable`; changed `lockdown_auto_hint` and `lockdown_auto_usage`, which now name `/autolockdown ai N|on|off`. Placeholders are unchanged (`{threshold}`).
 - `TestAutolockdownAI` (view and change subtests), new `TestAutoLockdownArgs` rows and the `wantAutoAIRow` helper. The burst subtests run through the real `/aispam` path: `/autolockdown ai 3`, `dbcache.ResetLocalForTest()`, then 3 spam verdicts from 3 accounts lock with `TriggerCount` 3; with `ai off`, 6 verdicts lock nothing and write nothing to the verdict sets.
@@ -138,11 +138,11 @@ Notes, not deviations:
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^(TestAutolockdownAI|TestAutoLockdown|TestAutoLockdownArgs|TestAutoLockdownAuthority|TestAutoLockdownBadInput|TestAutoLockdownBasicGroup|TestAutoLockdownSaveFails)$' ./alita/modules`: pass (18 `TestAutolockdownAI` subtests).
-- `go test -tags testtools -race -count=1 -run 'AutoLockdown|Autolockdown|AntiRaid|Raid' ./alita/modules`: pass.
-- `go test -tags testtools -count=1 -run '^(TestLockdownLocaleKeys|TestLockdownStringsHaveBalancedTags|TestLockdownHelpFitsOneMessage)$' -v ./alita/i18n`: pass, 7 headroom lines.
+- `go test -tags testtools -race -count=1 -run '^(TestAutolockdownAI|TestAutoLockdown|TestAutoLockdownArgs|TestAutoLockdownAuthority|TestAutoLockdownBadInput|TestAutoLockdownBasicGroup|TestAutoLockdownSaveFails)$' ./fuku/modules`: pass (18 `TestAutolockdownAI` subtests).
+- `go test -tags testtools -race -count=1 -run 'AutoLockdown|Autolockdown|AntiRaid|Raid' ./fuku/modules`: pass.
+- `go test -tags testtools -count=1 -run '^(TestLockdownLocaleKeys|TestLockdownStringsHaveBalancedTags|TestLockdownHelpFitsOneMessage)$' -v ./fuku/i18n`: pass, 7 headroom lines.
 - `make check-translations` and `make check-docs`: clean.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/i18n`, `gofmt -l` on the touched files: clean (`alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit and was left alone).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/i18n`, `gofmt -l` on the touched files: clean (`fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit and was left alone).
 - `make lint` could not run here: golangci-lint is built with Go 1.25 and the module is Go 1.26. `go vet` and `gofmt` stood in for it. The orchestrator runs the full `make test` after the wave.
 
 ## Threat Model
@@ -168,6 +168,6 @@ Ready for the rest of wave 4. Plan 07-12 starts from the headroom table above.
 
 ## Self-Check: PASSED
 
-- Modified files exist: `alita/modules/autolockdown.go`, `alita/modules/autolockdown_test.go`, `alita/i18n/lockdown_locale_test.go`, `AGENTS.md`, `locales/{en,es,fr,hi,id,pt,ru}.yml`.
+- Modified files exist: `fuku/modules/autolockdown.go`, `fuku/modules/autolockdown_test.go`, `fuku/i18n/lockdown_locale_test.go`, `AGENTS.md`, `locales/{en,es,fr,hi,id,pt,ru}.yml`.
 - Commits `1241c24`, `19dc2e0`, `193abb1`, `5f76d6e` exist; `git rev-list --count` from the base is 4.
 - All acceptance criteria of both tasks pass (`autoTriggerAI` 5 matches, `lockdown_auto_ai_unavailable` and `raidAIConfigured()` 1 each, 1 per locale, `/autolockdown ai` 2 in en.yml, `joins|flood|ai` in AGENTS.md).

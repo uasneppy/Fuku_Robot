@@ -7,47 +7,47 @@ files_reviewed_list:
   - .claude/CLAUDE.md
   - AGENTS.md
   - Makefile
-  - alita/db/cache/local.go
-  - alita/db/cache/local_test.go
-  - alita/db/models/staff.go
-  - alita/db/staff/exclusivity_postgres_test.go
-  - alita/db/staff/rekey.go
-  - alita/db/staff/rekey_test.go
-  - alita/db/staff/repository.go
-  - alita/db/staff/repository_test.go
-  - alita/db/staff/testmain_test.go
-  - alita/db/testmain_test.go
-  - alita/i18n/staff_locale_test.go
-  - alita/modules/deeplink_router.go
-  - alita/modules/help.go
-  - alita/modules/staff.go
-  - alita/modules/staff_health_test.go
-  - alita/modules/staff_helpers_test.go
-  - alita/modules/staff_link.go
-  - alita/modules/staff_link_refusals_test.go
-  - alita/modules/staff_link_test.go
-  - alita/modules/staff_migrate_test.go
-  - alita/modules/staff_notify.go
-  - alita/modules/staff_ownership_test.go
-  - alita/modules/staff_panel.go
-  - alita/modules/staff_panel_render_test.go
-  - alita/modules/staff_panel_test.go
-  - alita/modules/staff_picker_test.go
-  - alita/modules/staff_recheck.go
-  - alita/modules/staff_setstaff_test.go
-  - alita/modules/staff_sweeper.go
-  - alita/modules/staff_sweeper_test.go
-  - alita/modules/staff_test.go
-  - alita/modules/staff_unlink.go
-  - alita/modules/staff_unlink_button_test.go
-  - alita/modules/staff_unlink_test.go
-  - alita/modules/staff_unset_test.go
-  - alita/modules/staff_watchers.go
-  - alita/modules/test_harness_test.go
-  - alita/utils/chat_status/owner.go
-  - alita/utils/chat_status/owner_test.go
-  - alita/utils/helpers/command_pipeline.go
-  - alita/utils/helpers/command_pipeline_test.go
+  - fuku/db/cache/local.go
+  - fuku/db/cache/local_test.go
+  - fuku/db/models/staff.go
+  - fuku/db/staff/exclusivity_postgres_test.go
+  - fuku/db/staff/rekey.go
+  - fuku/db/staff/rekey_test.go
+  - fuku/db/staff/repository.go
+  - fuku/db/staff/repository_test.go
+  - fuku/db/staff/testmain_test.go
+  - fuku/db/testmain_test.go
+  - fuku/i18n/staff_locale_test.go
+  - fuku/modules/deeplink_router.go
+  - fuku/modules/help.go
+  - fuku/modules/staff.go
+  - fuku/modules/staff_health_test.go
+  - fuku/modules/staff_helpers_test.go
+  - fuku/modules/staff_link.go
+  - fuku/modules/staff_link_refusals_test.go
+  - fuku/modules/staff_link_test.go
+  - fuku/modules/staff_migrate_test.go
+  - fuku/modules/staff_notify.go
+  - fuku/modules/staff_ownership_test.go
+  - fuku/modules/staff_panel.go
+  - fuku/modules/staff_panel_render_test.go
+  - fuku/modules/staff_panel_test.go
+  - fuku/modules/staff_picker_test.go
+  - fuku/modules/staff_recheck.go
+  - fuku/modules/staff_setstaff_test.go
+  - fuku/modules/staff_sweeper.go
+  - fuku/modules/staff_sweeper_test.go
+  - fuku/modules/staff_test.go
+  - fuku/modules/staff_unlink.go
+  - fuku/modules/staff_unlink_button_test.go
+  - fuku/modules/staff_unlink_test.go
+  - fuku/modules/staff_unset_test.go
+  - fuku/modules/staff_watchers.go
+  - fuku/modules/test_harness_test.go
+  - fuku/utils/chat_status/owner.go
+  - fuku/utils/chat_status/owner_test.go
+  - fuku/utils/helpers/command_pipeline.go
+  - fuku/utils/helpers/command_pipeline_test.go
   - docs/src/content/docs/commands/staff/index.md
   - locales/config.yml
   - locales/en.yml
@@ -80,7 +80,7 @@ status: issues_found
 
 ## Summary
 
-Reviewed the Staff Group / link feature: migrations (including the Postgres exclusivity trigger), `alita/db/staff`,
+Reviewed the Staff Group / link feature: migrations (including the Postgres exclusivity trigger), `fuku/db/staff`,
 the `chat_status` live-owner helpers, all `staff*.go` modules, the group deep-link route, locales and the CI skip
 gate. The authority model is sound: every authority read goes through uncached `*Fresh` reads plus live
 `CheckOwner`, only `OwnerMismatch` removes state, anonymous senders are rejected, and removals/health changes are
@@ -97,7 +97,7 @@ behind a long live rebuild, an unauthenticated Cancel button, and a stale record
 
 ### WR-01: Staff Group "owner changed" / "status removed" notices are unbounded and can be lost after the data is already deleted
 
-**File:** `alita/modules/staff_recheck.go:106-120`, `alita/modules/staff.go:329-334`, `alita/modules/staff.go:347-361`
+**File:** `fuku/modules/staff_recheck.go:106-120`, `fuku/modules/staff.go:329-334`, `fuku/modules/staff.go:347-361`
 **Issue:** `postStaffOwnerChangedNotice` joins every removed title into one message, and `staffUnsetConfirm`
 renders every removed link with `renderUnlinkedGroups`, with no length cap. Each row is up to 64 title runes (more
 once HTML-escaped) plus `<code>id</code>`, so roughly 40-60 links exceed Telegram's 4096-character limit. Both
@@ -119,7 +119,7 @@ for _, chunk := range chunkByUTF16(lines, staffPanelMaxUTF16) {
 
 ### WR-02: A link to a deleted or unreachable group can never be unlinked on its own
 
-**File:** `alita/modules/staff_unlink.go:52-72`, `alita/utils/chat_status/owner.go:101-107`
+**File:** `fuku/modules/staff_unlink.go:52-72`, `fuku/utils/chat_status/owner.go:101-107`
 **Issue:** `checkUnlinkAuthority` requires a live `OwnerMatch` for the linked group. When the group is deleted,
 or the bot was kicked, `getChatAdministrators` fails and `CheckOwner` returns `OwnerUnknown` by design (so it never
 auto-removes). `recheckLink` and the sweeper therefore never remove the link either (they only act on
@@ -134,7 +134,7 @@ verified Staff Group creator to drop a link whose group is provably gone does no
 
 ### WR-03: Callback queries are answered only after a full live panel rebuild (up to 45 s)
 
-**File:** `alita/modules/staff_unlink.go:231-247`, `alita/modules/staff_unlink.go:249-258`, `alita/modules/staff_unlink.go:411-418`
+**File:** `fuku/modules/staff_unlink.go:231-247`, `fuku/modules/staff_unlink.go:249-258`, `fuku/modules/staff_unlink.go:411-418`
 **Issue:** `staffPanelRebuild` deliberately answers the callback before the live checks ("they can outlast the
 callback's validity"). `finishStaffPanelPress` (Confirm and Cancel) and `staffUnlinkExpired` do the opposite: they
 call `staffRerenderPanel` -> `buildStaffPanel`, which performs up to 2N+1 sequential Telegram calls (8 s timeout
@@ -157,7 +157,7 @@ For `staffUnlinkExpired`, answer with the expired toast first and refresh afterw
 
 ### WR-04: `/unsetstaff` Cancel button has no authority check
 
-**File:** `alita/modules/staff.go:340-345`
+**File:** `fuku/modules/staff.go:340-345`
 **Issue:** `staffUnlinkCancel` was explicitly hardened ("so a bystander cannot dismiss the creator's prompt"), but
 `staffUnsetCancel` edits the message and answers with no check at all. Any member of the Staff Group (or any chat
 where such a message exists) can press Cancel on the creator's confirmation and replace it with "Cancelled. This
@@ -168,7 +168,7 @@ at least verify `GetStaffGroupFresh` before claiming the group is still a Staff 
 
 ### WR-05: `/setstaff` on an existing Staff Group never refreshes the recorded owner
 
-**File:** `alita/modules/staff.go:130-151`, `alita/db/staff/repository.go:69-102`
+**File:** `fuku/modules/staff.go:130-151`, `fuku/db/staff/repository.go:69-102`
 **Issue:** `CreateStaffGroup` is deliberately idempotent and leaves the existing row's `owner_user_id` untouched.
 After ownership of a Staff Group is transferred, the new live creator who runs `/setstaff` passes the live creator
 check, is told "already a Staff Group", and the recorded owner stays the old user until a watcher update or the
@@ -181,7 +181,7 @@ creator has just been verified) before replying, and log the error without refus
 
 ### WR-06: Two links resolved from a stale panel row can be unlinked without re-reading the link after the live checks
 
-**File:** `alita/modules/staff_unlink.go:78-95`
+**File:** `fuku/modules/staff_unlink.go:78-95`
 **Issue:** `runUnlinkGroup` receives a `models.StaffGroupLink` value loaded before two sequential live API calls
 (up to 16 s) and finally deletes with `staff.DeleteLink(link.ID)`, an unconditional delete by ID. Everywhere else
 the module uses a conditional claim (`DeleteLinkIfOwner`). The row ID is never reused so this cannot delete the
@@ -206,7 +206,7 @@ about the module's commands.
 
 ### IN-02: Comments reference planning artifacts and plans, one of them inaccurate
 
-**File:** `alita/modules/staff_watchers.go:154-155`, `alita/modules/staff_panel.go:406`, `alita/modules/staff_sweeper.go:226`
+**File:** `fuku/modules/staff_watchers.go:154-155`, `fuku/modules/staff_panel.go:406`, `fuku/modules/staff_sweeper.go:226`
 **Issue:** Source comments cite planning IDs (`T-01-29`, `P4`, `D-10`, `D-15.2`, "Plans 01-09 (panel) and 01-10
 (sweeper)"). These are meaningless once `.planning/` is archived. The `rekeyFromTelegramError` comment is also wrong:
 the panel (01-09) never calls it; only the sweeper and `recheckStaffGroup` do. Consequently a linked group that
@@ -216,7 +216,7 @@ migrated while the bot was down shows as "unknown" in the panel until the next h
 
 ### IN-03: A single "no creator listed" observation removes every link of a Staff Group
 
-**File:** `alita/modules/staff_recheck.go:262-299`, `alita/utils/chat_status/owner.go:119`
+**File:** `fuku/modules/staff_recheck.go:262-299`, `fuku/utils/chat_status/owner.go:119`
 **Issue:** `CheckOwner` returns `(OwnerMismatch, 0, nil)` when the admin list has no creator. `recheckStaffGroup`
 then proceeds with `liveOwner == 0`, and `link.OwnerUserID != 0` is true for every link, so all links are deleted in
 one pass. That follows the documented rule, but it is a bulk, unrecoverable action based on one response with no
@@ -226,7 +226,7 @@ second look, and the notice lists the groups only. Consider requiring `liveOwner
 
 ### IN-04: Minor duplication and unbounded Redis call in the sweeper
 
-**File:** `alita/db/staff/repository.go:24`, `alita/modules/staff_panel.go:26`, `alita/modules/staff_sweeper.go:171`
+**File:** `fuku/db/staff/repository.go:24`, `fuku/modules/staff_panel.go:26`, `fuku/modules/staff_sweeper.go:171`
 **Issue:** The 64-rune title cap exists twice (`maxStaffTitleRunes`/`trimStaffTitle` and
 `maxStaffDisplayTitleRunes`/`staffDisplayTitle`); stored titles are never refreshed after a group rename, so panels
 show stale names. `acquireStaffSweepLock` uses `cache.Context` with no timeout, so a hung Redis blocks the sweeper

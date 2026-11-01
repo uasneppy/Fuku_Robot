@@ -64,7 +64,7 @@ Not in this phase:
 - How unlinked or renamed groups show in history and detail: probably the stored title at action time, marked as no longer linked. Undo should skip groups that are no longer linked, with a reason.
 - Undo on actions that ran before Phase 3 shipped: they have no record, so there is no button.
 - Whether pressing Undo while the original run is still going is impossible because the button appears only on the final summary, or is refused.
-- How undo interacts with the per-target fan-out lock (`alita:staff:lock:target:<id>`). It should take the same lock, so an undo and a new action on the same person never race.
+- How undo interacts with the per-target fan-out lock (`fuku:staff:lock:target:<id>`). It should take the same lock, so an undo and a new action on the same person never race.
 - The exact locale wording for every new string, in all 7 locale files.
 - The reason length cap for log posts (Pitfall A suggests about 300 characters) and how history lines truncate long names and reasons.
 
@@ -91,7 +91,7 @@ Not in this phase:
   - migrations: append-only, timestamped, one transaction per file;
   - `cache.DeleteCache` on every write;
   - `callbackcodec` with its 64-byte cap and `""` on overflow;
-  - the `alita:staff:*` operational keys, the staff action card and the per-target lock;
+  - the `fuku:staff:*` operational keys, the staff action card and the per-target lock;
   - the StaffActions bullets (`decideStaffAction` is the only place calls are chosen; live `getChatMember` authority);
   - staff tables never in backup or export;
   - 7 locales;
@@ -110,24 +110,24 @@ Not in this phase:
 ## Existing Code Insights
 
 ### Reusable Assets
-- `alita/modules/staff_action_decide.go`: `decideStaffAction(kind, staffTargetState, newUntil)`, `staffTargetStateFrom(MergedChatMember)` and the `staffReason` and outcome types. Undo's reverse calls must be chosen here. D-02's restore-prior and D-04's "changed since" likely need new kinds or reasons added inside this table, not bypassing it.
-- `alita/modules/staff_action_run.go`:
+- `fuku/modules/staff_action_decide.go`: `decideStaffAction(kind, staffTargetState, newUntil)`, `staffTargetStateFrom(MergedChatMember)` and the `staffReason` and outcome types. Undo's reverse calls must be chosen here. D-02's restore-prior and D-04's "changed since" likely need new kinds or reasons added inside this table, not bypassing it.
+- `fuku/modules/staff_action_run.go`:
   - `startStaffActionRun`, `runStaffActionFanOut` and `runStaffActionInGroup`: the coordinator, progress and per-group pipeline that undo should run through.
   - `fetchLiveMember`, `staffIssuerSkipReason`, `executeStaffCall`, `classifyStaffFailure`.
   - `staffPaced`: the fleet-wide pacer for every call, log posts included (D-12).
   - `StopStaffActions`: restart handling.
-- `alita/modules/staff_action_summary.go`: `composeStaffActionSummary` / `renderStaffActionSummaryFinal` (overflow and continuation rules), `staffResultLine`, `staffSummaryTally*`, `editStaffActionMessage`, `staffRetryAfter*`. To be reused for the undo reply (D-08) and the history detail view (D-15).
-- `alita/modules/staff_action_card.go`: the card model to copy for the undo confirm card (D-07):
-  - the Redis hash at `alita:staff:act:<token>`;
+- `fuku/modules/staff_action_summary.go`: `composeStaffActionSummary` / `renderStaffActionSummaryFinal` (overflow and continuation rules), `staffResultLine`, `staffSummaryTally*`, `editStaffActionMessage`, `staffRetryAfter*`. To be reused for the undo reply (D-08) and the history detail view (D-15).
+- `fuku/modules/staff_action_card.go`: the card model to copy for the undo confirm card (D-07):
+  - the Redis hash at `fuku:staff:act:<token>`;
   - Lua create and compare-and-set transition scripts;
   - states pending, running, done, cancelled, expired, aborted;
   - `staffActionCardDoneTTL` = 1 h, which is why undo needs a DB record;
   - the per-target lock helpers.
-- `alita/utils/actionlog/actionlog.go`: `Log(b, chat, category, html)` checks `logchannels.CategoryEnabled` and adds the group header. `Admin(...)` is the per-group format. Staff posts can reuse `Log` with a staff-specific body (D-11), but the send has to go through `staffPaced` (D-12), and `Log` currently calls `SendMessageWithErrorHandling` directly.
-- `alita/db/logchannels/repository.go`: `CategoryAdmin` and `CategoryEnabled`. The categories are columns, so D-10 avoids a migration.
-- `alita/modules/staff_panel.go`: `renderStaffPanel`, `staffPagingRow`, `staffRefreshButton`, `staffPanelTextFor` (UTF-16 length cap) and `staffPanelRebuild`. The history view (D-14) mirrors this paging and length-cap approach.
-- `alita/modules/staff.go`: the `staff` callbackcodec namespace and action constants, and `staffCallback` routing. New "recent", "detail", "undo" and "undo-confirm" actions go here.
-- `alita/db/staff/repository.go`: `ListLinksByStaffFresh` (fan-out order), `GetStaffGroupFresh` (Staff Group authority) and `RekeyChat` (migration). The audit repository joins this domain or sits beside it.
+- `fuku/utils/actionlog/actionlog.go`: `Log(b, chat, category, html)` checks `logchannels.CategoryEnabled` and adds the group header. `Admin(...)` is the per-group format. Staff posts can reuse `Log` with a staff-specific body (D-11), but the send has to go through `staffPaced` (D-12), and `Log` currently calls `SendMessageWithErrorHandling` directly.
+- `fuku/db/logchannels/repository.go`: `CategoryAdmin` and `CategoryEnabled`. The categories are columns, so D-10 avoids a migration.
+- `fuku/modules/staff_panel.go`: `renderStaffPanel`, `staffPagingRow`, `staffRefreshButton`, `staffPanelTextFor` (UTF-16 length cap) and `staffPanelRebuild`. The history view (D-14) mirrors this paging and length-cap approach.
+- `fuku/modules/staff.go`: the `staff` callbackcodec namespace and action constants, and `staffCallback` routing. New "recent", "detail", "undo" and "undo-confirm" actions go here.
+- `fuku/db/staff/repository.go`: `ListLinksByStaffFresh` (fan-out order), `GetStaffGroupFresh` (Staff Group authority) and `RekeyChat` (migration). The audit repository joins this domain or sits beside it.
 
 ### Established Patterns
 - Authority reads are fresh and uncached. Exactly-once effects come from conditional writes (RowsAffected == 1) or Redis compare-and-set. This applies to "undone once" (D-09).

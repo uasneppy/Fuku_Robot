@@ -28,12 +28,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/settings_private_test.go
+    - fuku/modules/settings_private_test.go
   modified:
-    - alita/modules/settings.go
-    - alita/modules/settings_menu.go
-    - alita/utils/chat_status/owner.go
-    - alita/utils/chat_status/owner_test.go
+    - fuku/modules/settings.go
+    - fuku/modules/settings_menu.go
+    - fuku/utils/chat_status/owner.go
+    - fuku/utils/chat_status/owner_test.go
     - AGENTS.md
 
 key-decisions:
@@ -79,7 +79,7 @@ status: complete
 - **Found during:** Task 1 (writing TestSettingsStartDeepLink)
 - **Issue:** The plan lists `settings_ -100` among payloads that reply `settings_start_invalid`. `/start settings_ -100` is three words, so the existing `start` handler sees three arguments, logs "Unexpected number of args" and sends nothing; the deep link handler never runs. Making it reply would need an edit to `help.go`, which D-29 forbids.
 - **Fix:** The test asserts the real behaviour for that input (nothing sent, no `getChatMember` call) in its own subtest; I added `settings_-100abc` to the invalid table to keep a mixed digit and letter case. AGENTS.md notes the three-word case.
-- **Files modified:** alita/modules/settings_private_test.go, AGENTS.md
+- **Files modified:** fuku/modules/settings_private_test.go, AGENTS.md
 - **Commit:** 15cca98, bed5a49
 
 **Total deviations:** 1 (a wrong test expectation in the plan, no production impact). **Impact:** none; all listed invalid payloads that can reach the handler are refused before any lookup.
@@ -87,9 +87,9 @@ status: complete
 ## Verification
 
 - `CGO_ENABLED=0 go build ./...`: ok
-- `TestIsBotMissingError` and the full `./alita/utils/chat_status` package: pass
-- `TestSettingsStartDeepLink`, `TestSettingsPrivateRoundTrip`, `TestSettingsPrivateMenu`, `TestSettingsTracer`, `TestSettingsOwnership`, `TestSettingsPressPipeline`, `TestHandleGroupDeepLinkUsesLongestPrefix`: each ran with `-v` and passed; `-run 'TestSettings|DeepLink|TestStart|Staff.*Picker'` over `./alita/modules` also passes
-- `go vet -tags testtools ./alita/modules/ ./alita/utils/chat_status/`: clean; `gofmt -l` on the touched files: empty
+- `TestIsBotMissingError` and the full `./fuku/utils/chat_status` package: pass
+- `TestSettingsStartDeepLink`, `TestSettingsPrivateRoundTrip`, `TestSettingsPrivateMenu`, `TestSettingsTracer`, `TestSettingsOwnership`, `TestSettingsPressPipeline`, `TestHandleGroupDeepLinkUsesLongestPrefix`: each ran with `-v` and passed; `-run 'TestSettings|DeepLink|TestStart|Staff.*Picker'` over `./fuku/modules` also passes
+- `go vet -tags testtools ./fuku/modules/ ./fuku/utils/chat_status/`: clean; `gofmt -l` on the touched files: empty
 - `make lint` was not run: golangci-lint in this sandbox is built with go1.25 against a go1.26.0 module, so `gofmt` and `go vet` stood in
 - The whole `make test` was not run (the orchestrator runs it between waves)
 - No PostgreSQL was started; no migration or model was added
@@ -108,5 +108,5 @@ None. The deep link adds no new endpoint; it is a `/start` payload judged by a l
 
 ## Self-Check: PASSED
 
-- alita/modules/settings_private_test.go exists; commits 15cca98, 847e588, fb20b19, bed5a49 exist in the log
+- fuku/modules/settings_private_test.go exists; commits 15cca98, 847e588, fb20b19, bed5a49 exist in the log
 - Acceptance greps: `func IsBotMissingError(` and its call in `FetchBotMember`, `func settingsStartDeepLink(` and `RegisterDeepLinkHandler(settingsStartPrefix, settingsStartDeepLink)`, `IsBotMissingError(` in both settings.go and settings_menu.go, `settingsStartDeepLink` in AGENTS.md: all found; `git diff --stat` for help.go and deeplink_router.go: empty

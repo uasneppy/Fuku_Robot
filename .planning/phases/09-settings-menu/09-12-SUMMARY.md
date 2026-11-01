@@ -26,9 +26,9 @@ actuals:
 
 key-files:
   created:
-    - alita/modules/settings_lockdown_lift_test.go
+    - fuku/modules/settings_lockdown_lift_test.go
   modified:
-    - alita/modules/settings_lockdown.go
+    - fuku/modules/settings_lockdown.go
     - AGENTS.md
 
 key-decisions:
@@ -46,10 +46,10 @@ coverage:
     requirement: "MENU-06"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLift"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLift"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftOutcomes"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftOutcomes"
         status: pass
     human_judgment: false
   - id: D2
@@ -57,10 +57,10 @@ coverage:
     requirement: "MENU-06"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLift"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLift"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftPrivate"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftPrivate"
         status: pass
     human_judgment: false
   - id: D3
@@ -68,10 +68,10 @@ coverage:
     requirement: "MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftTwice"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftTwice"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftOutcomes"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftOutcomes"
         status: pass
     human_judgment: false
   - id: D4
@@ -79,10 +79,10 @@ coverage:
     requirement: "MENU-03"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftAuthority"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftAuthority"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftExpired"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftExpired"
         status: pass
     human_judgment: false
   - id: D5
@@ -90,13 +90,13 @@ coverage:
     requirement: "MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsParityLockdownLift"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsParityLockdownLift"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftCallbackBytes"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftCallbackBytes"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftCardFitsEveryLocale"
+        ref: "fuku/modules/settings_lockdown_lift_test.go#TestSettingsLockdownLiftCardFitsEveryLocale"
         status: pass
     human_judgment: false
   - id: D6
@@ -133,7 +133,7 @@ The plan's text says the alert's Lift Confirm and `/unlockdown` both reach the l
 
 ## Verification
 
-- `CGO_ENABLED=0 go build ./...` passes; `go vet -tags testtools ./alita/modules/` passes; `gofmt -l alita/` prints nothing. `make lint` was not run: golangci-lint in this sandbox is built with go1.25 against a go1.26.0 module, so gofmt and go vet stand in for it.
+- `CGO_ENABLED=0 go build ./...` passes; `go vet -tags testtools ./fuku/modules/` passes; `gofmt -l fuku/` prints nothing. `make lint` was not run: golangci-lint in this sandbox is built with go1.25 against a go1.26.0 module, so gofmt and go vet stand in for it.
 - Task 2's verify command (the ten named tests, with `-v`) passes with every `--- PASS` line seen.
 - No migration, model, Redis key, shutdown drain or locale key was added; PostgreSQL was not started.
 
@@ -156,5 +156,5 @@ On a real test group with the bot as an administrator who may restrict members:
 
 ## Self-Check: PASSED
 
-- FOUND: alita/modules/settings_lockdown_lift_test.go, alita/modules/settings_lockdown.go, AGENTS.md
+- FOUND: fuku/modules/settings_lockdown_lift_test.go, fuku/modules/settings_lockdown.go, AGENTS.md
 - FOUND commits: 8eaac14, 64c0a95, 6c5fb01

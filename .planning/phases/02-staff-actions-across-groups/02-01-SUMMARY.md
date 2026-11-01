@@ -10,7 +10,7 @@ requires:
     provides: "Staff Group and link tables, cached gate and Fresh reads, recheckLink with shared staffOwnerPass, sendStaffNotice, staff| callback namespace, staffBotClient test fake"
 provides:
   - "StaffActions module (priority 65): raw /ban interceptor ahead of Bans (70) and Mutes (80), pass-through outside Staff Groups"
-  - "Redis confirm card (alita:staff:act:<token>) with a Lua compare-and-set state machine and issuer-only Confirm and Cancel"
+  - "Redis confirm card (fuku:staff:act:<token>) with a Lua compare-and-set state machine and issuer-only Confirm and Cancel"
   - "Per-group live check chain and fan-out run with the staffGroupResult outcome model and 13 reason codes"
   - "Pure decideStaffAction (ban column of the status table), parser, summary renderer and delivery"
   - "staff_act_* locale keys in all 7 locales"
@@ -40,18 +40,18 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_action.go
-    - alita/modules/staff_action_parse.go
-    - alita/modules/staff_action_card.go
-    - alita/modules/staff_action_decide.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff_action_fake_test.go
-    - alita/modules/staff_action_test.go
-    - alita/modules/staff_action_gates_test.go
-    - alita/modules/staff_action_dispatch_test.go
+    - fuku/modules/staff_action.go
+    - fuku/modules/staff_action_parse.go
+    - fuku/modules/staff_action_card.go
+    - fuku/modules/staff_action_decide.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff_action_fake_test.go
+    - fuku/modules/staff_action_test.go
+    - fuku/modules/staff_action_gates_test.go
+    - fuku/modules/staff_action_dispatch_test.go
   modified:
-    - alita/modules/staff.go
+    - fuku/modules/staff.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -81,7 +81,7 @@ coverage:
     requirement: "STAFF-01"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_test.go#TestStaffActionTracer"
+        ref: "fuku/modules/staff_action_test.go#TestStaffActionTracer"
         status: pass
     human_judgment: false
   - id: D2
@@ -89,13 +89,13 @@ coverage:
     requirement: "STAFF-03"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionCancel"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionCancel"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionCardIssuerOnly"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionCardIssuerOnly"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionCardTapAnswers"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionCardTapAnswers"
         status: pass
     human_judgment: false
   - id: D3
@@ -103,13 +103,13 @@ coverage:
     requirement: "STAFF-05"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_test.go#TestStaffActionSkipsWhereIssuerNotAdmin"
+        ref: "fuku/modules/staff_action_test.go#TestStaffActionSkipsWhereIssuerNotAdmin"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionPerGroupGates"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionPerGroupGates"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionStaffChatNeverActedOn"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionStaffChatNeverActedOn"
         status: pass
     human_judgment: false
   - id: D4
@@ -117,7 +117,7 @@ coverage:
     requirement: "STAFF-04"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionConfirmAborts"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionConfirmAborts"
         status: pass
     human_judgment: false
   - id: D5
@@ -125,7 +125,7 @@ coverage:
     requirement: "STAFF-06"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
         status: pass
     human_judgment: false
   - id: D6
@@ -133,16 +133,16 @@ coverage:
     requirement: "STAFF-13"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionStaleGatePassesThrough"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionStaleGatePassesThrough"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionModuleOrder"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionModuleOrder"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionCommandNamesExact"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionCommandNamesExact"
         status: pass
     human_judgment: false
   - id: D7
@@ -150,13 +150,13 @@ coverage:
     requirement: "STAFF-02"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionParseHints"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionParseHints"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionNoLinks"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionNoLinks"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_gates_test.go#TestStaffActionRedisRequired"
+        ref: "fuku/modules/staff_action_gates_test.go#TestStaffActionRedisRequired"
         status: pass
     human_judgment: false
   - id: D8
@@ -185,7 +185,7 @@ status: complete
 
 ## Accomplishments
 
-- A Staff Group member sends `/ban <numeric ID> [reason]` and gets one confirm card as a reply, showing the action, the target's stored name (or "unknown name") with the ID, "permanent", the reason (or "no reason given") and "Applies to N linked group(s)". Nothing is applied before Confirm. The buttons carry only `staff|v1|a=xc|xn&t=<16 hex>` (32 bytes); everything else lives in the Redis hash `alita:staff:act:<token>`.
+- A Staff Group member sends `/ban <numeric ID> [reason]` and gets one confirm card as a reply, showing the action, the target's stored name (or "unknown name") with the ID, "permanent", the reason (or "no reason given") and "Applies to N linked group(s)". Nothing is applied before Confirm. The buttons carry only `staff|v1|a=xc|xn&t=<16 hex>` (32 bytes); everything else lives in the Redis hash `fuku:staff:act:<token>`.
 - Only the issuer's own tap moves the card, and only once, through a Lua compare-and-set that also checks expiry. Other members get the issuer-only alert; repeat taps get "already handled" without any edit; Cancel edits the card to "Cancelled by <name>" and never deletes it.
 - After Confirm the bot re-checks the Staff Group, the issuer's membership and the link list, then visits each linked group in link-id order: owner recheck through `recheckLink`, live `getChatMember` for the issuer (creator, or administrator with `can_restrict_members`), bot and Telegram service ID short-circuit, live `getChatMember` for the target, then the decision table. A group that fails any step gets no write and a line saying why. The Staff Group is never written to, and nothing is posted into linked groups.
 - The ban column of the decision table bans members, upgrades a temporary ban to permanent, bans a target who left or never joined ("banned (not in group)"), and skips already-permanently-banned targets and group creators or administrators.
@@ -204,7 +204,7 @@ status: complete
 
 Task 2 and Task 3 are `tdd="true"`, but Task 1 was a tracer that already implemented most of their contract, so only part of the work had a genuine RED step.
 
-- **Task 2 RED:** `e66317e` adds `staff_action_gates_test.go`. Run before the Cancel code: `go test -tags testtools -race -count=1 -run '^TestStaffAction(Cancel|CardIssuerOnly|...)$' ./alita/modules` exited 1 with exactly two failures, both on assertions for the planned behaviour: `TestStaffActionCancel` ("card button actions = [xc], want [xc xn]") and `TestStaffActionCardIssuerOnly` (an `xn` tap answered `staff_cb_expired` instead of the issuer-only alert). All other tests in the file passed at once because Task 1 already built those branches.
+- **Task 2 RED:** `e66317e` adds `staff_action_gates_test.go`. Run before the Cancel code: `go test -tags testtools -race -count=1 -run '^TestStaffAction(Cancel|CardIssuerOnly|...)$' ./fuku/modules` exited 1 with exactly two failures, both on assertions for the planned behaviour: `TestStaffActionCancel` ("card button actions = [xc], want [xc xn]") and `TestStaffActionCardIssuerOnly` (an `xn` tap answered `staff_cb_expired` instead of the issuer-only alert). All other tests in the file passed at once because Task 1 already built those branches.
 - **Task 2 GREEN:** `764f47e` adds the Cancel button, `staffActionCancel` and `staff_act_card_cancelled`; the same command then passed.
 - **Task 3:** every test passed on first run (unexpected GREEN), because the interceptor, gate and anonymous refusal were Task 1 work. To show the new tests can fail, two mutations were applied and reverted: returning `ext.EndGroups` for a non-staff chat made `TestStaffActionNonStaffUnchanged` and `TestStaffActionStaleGatePassesThrough` fail; accepting any issuer made `TestStaffActionSkipsWhereIssuerNotAdmin` fail. The cached-gate pre-check on its own is not observable (the fresh read falls through to the same behaviour), so it is a performance guard, not a tested contract.
 - **REFACTOR:** none.
@@ -212,15 +212,15 @@ Task 2 and Task 3 are `tdd="true"`, but Task 1 was a tracer that already impleme
 
 ## Files Created/Modified
 
-- `alita/modules/staff_action.go` - StaffActions module registration (priority 65), `/ban` interceptor, cached gate, `handleStaffAction` up to the card
-- `alita/modules/staff_action_parse.go` - `parseStaffActionArgs`, `capStaffReason` (200 runes), request types
-- `alita/modules/staff_action_card.go` - Redis card, token, Lua scripts, Confirm and Cancel callbacks, abort and answer helpers
-- `alita/modules/staff_action_decide.go` - kinds, outcomes, 13 reasons, target state, `decideStaffAction` (ban column)
-- `alita/modules/staff_action_run.go` - per-group check chain, fan-out run, `fetchLiveMember`, `executeStaffCall`
-- `alita/modules/staff_action_summary.go` - header, result lines, summary render, edit and fallback delivery
-- `alita/modules/staff.go` - `xc` and `xn` actions and their callback cases
-- `alita/modules/staff_action_fake_test.go` - stateful `BotClient` fake and `staffActionEnv` harness
-- `alita/modules/staff_action_test.go`, `staff_action_gates_test.go`, `staff_action_dispatch_test.go` - 17 named tests
+- `fuku/modules/staff_action.go` - StaffActions module registration (priority 65), `/ban` interceptor, cached gate, `handleStaffAction` up to the card
+- `fuku/modules/staff_action_parse.go` - `parseStaffActionArgs`, `capStaffReason` (200 runes), request types
+- `fuku/modules/staff_action_card.go` - Redis card, token, Lua scripts, Confirm and Cancel callbacks, abort and answer helpers
+- `fuku/modules/staff_action_decide.go` - kinds, outcomes, 13 reasons, target state, `decideStaffAction` (ban column)
+- `fuku/modules/staff_action_run.go` - per-group check chain, fan-out run, `fetchLiveMember`, `executeStaffCall`
+- `fuku/modules/staff_action_summary.go` - header, result lines, summary render, edit and fallback delivery
+- `fuku/modules/staff.go` - `xc` and `xn` actions and their callback cases
+- `fuku/modules/staff_action_fake_test.go` - stateful `BotClient` fake and `staffActionEnv` harness
+- `fuku/modules/staff_action_test.go`, `staff_action_gates_test.go`, `staff_action_dispatch_test.go` - 17 named tests
 - `locales/*.yml` (7) - 31 `staff_act_*` keys each
 - `AGENTS.md` - interceptor exception, card key family, staff actions authority rule
 
@@ -239,26 +239,26 @@ Task 2 and Task 3 are `tdd="true"`, but Task 1 was a tracer that already impleme
 - **Found during:** Task 1
 - **Issue:** the plan's signature `abortStaffActionCard(b, card, chatID, msgID, text)` cannot render the header the plan says it must prepend without a translator.
 - **Fix:** added a `tr *i18n.Translator` parameter.
-- **Files modified:** `alita/modules/staff_action_card.go`
+- **Files modified:** `fuku/modules/staff_action_card.go`
 - **Committed in:** `52635fe`
 
 **2. [Rule 1 - Bug] Test helper treated any keyboard as a staff card**
 - **Found during:** Task 3 (`TestStaffActionStaleGatePassesThrough`)
 - **Issue:** the per-group `/ban` that the stale gate falls through to replies with an Unban button, so `wantNoCard` failed on a correct result.
 - **Fix:** `wantNoCard` now fails only on staff Confirm or Cancel buttons.
-- **Files modified:** `alita/modules/staff_action_gates_test.go`
+- **Files modified:** `fuku/modules/staff_action_gates_test.go`
 - **Committed in:** `719ba3b`
 
 **3. [Rule 3 - Blocking] Dispatch test needed the sender to be a live creator**
 - **Found during:** Task 3
 - **Issue:** the fake's default `getChatMember` answer for 777000 is "member", so the per-group `CanUserRestrict` check refused.
 - **Fix:** the test stores a creator record for 777000 in that chat.
-- **Files modified:** `alita/modules/staff_action_dispatch_test.go`
+- **Files modified:** `fuku/modules/staff_action_dispatch_test.go`
 - **Committed in:** `719ba3b`
 
 **4. [Rule 2 - Missing critical] Wording of the unused-var lint**
 - `staffActionsCancel` has no caller until plan 02-07 adds the shutdown stop, so it carries `//nolint:unused` with the reason.
-- **Files modified:** `alita/modules/staff_action_run.go`
+- **Files modified:** `fuku/modules/staff_action_run.go`
 - **Committed in:** `52635fe`
 
 ---
@@ -268,8 +268,8 @@ Task 2 and Task 3 are `tdd="true"`, but Task 1 was a tracer that already impleme
 
 ## Deferred Issues
 
-- `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit (found by `gofmt -l`). Pre-existing and unrelated, left alone.
-- `make lint` cannot run in this sandbox: the installed golangci-lint was built with go1.25 and the module targets 1.26.0 (the same toolchain limit recorded in Phase 1). `go vet -tags testtools ./alita/...`, `gofmt -l` on the changed files, `make check-translations` and `make check-docs` all pass.
+- `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit (found by `gofmt -l`). Pre-existing and unrelated, left alone.
+- `make lint` cannot run in this sandbox: the installed golangci-lint was built with go1.25 and the module targets 1.26.0 (the same toolchain limit recorded in Phase 1). `go vet -tags testtools ./fuku/...`, `gofmt -l` on the changed files, `make check-translations` and `make check-docs` all pass.
 
 ## Issues Encountered
 
@@ -289,10 +289,10 @@ None - no external service configuration required.
 
 ## Verification Run
 
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/i18n` - pass
-- `go test -tags testtools -race -count=1 -run '^TestStaff' ./alita/modules` - pass (Phase 1 staff suites included)
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/i18n` - pass
+- `go test -tags testtools -race -count=1 -run '^TestStaff' ./fuku/modules` - pass (Phase 1 staff suites included)
 - `CGO_ENABLED=0 go build ./...` - pass
-- `go vet -tags testtools ./alita/...` - pass
+- `go vet -tags testtools ./fuku/...` - pass
 - `make check-translations`, `make check-docs` - pass
 - `git diff --exit-code go.mod go.sum` - unchanged
 - Comment-filtered grep for `IsUserAdmin|CanUserRestrict|GetAdminCacheUser|RequireUserAdmin` over `staff_action*.go` - no matches

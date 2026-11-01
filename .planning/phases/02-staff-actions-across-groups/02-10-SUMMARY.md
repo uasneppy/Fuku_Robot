@@ -29,9 +29,9 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - alita/modules/staff_action_card.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_action_lifecycle_test.go
+    - fuku/modules/staff_action_card.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_action_lifecycle_test.go
     - AGENTS.md
 
 key-decisions:
@@ -50,7 +50,7 @@ coverage:
     requirement: "PLAT-01"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockRenewedDuringRun/renews_its_own_lock"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockRenewedDuringRun/renews_its_own_lock"
         status: pass
     human_judgment: false
   - id: D2
@@ -58,10 +58,10 @@ coverage:
     requirement: "PLAT-01"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockRenewedDuringRun/re-takes_a_lock_that_vanished"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockRenewedDuringRun/re-takes_a_lock_that_vanished"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockRenewedDuringRun/leaves_a_foreign_lock_alone"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockRenewedDuringRun/leaves_a_foreign_lock_alone"
         status: pass
     human_judgment: false
   - id: D3
@@ -96,9 +96,9 @@ status: complete
 
 ## Accomplishments
 
-- Closed the lock half of verification Gap 2 (code review WR-02): `renewStaffTargetLockScript` (`GET` equals token then `PEXPIRE` and return 1; key missing then `SET ... PX` and return 2; any other value returns 0 and writes nothing) and `renewStaffTargetLock(target, token) (held bool, err error)` in `alita/modules/staff_action_card.go`.
+- Closed the lock half of verification Gap 2 (code review WR-02): `renewStaffTargetLockScript` (`GET` equals token then `PEXPIRE` and return 1; key missing then `SET ... PX` and return 2; any other value returns 0 and writes nothing) and `renewStaffTargetLock(target, token) (held bool, err error)` in `fuku/modules/staff_action_card.go`.
 - The coordinator in `startStaffActionRun` has a `lockRenew` ticker (`staffTargetLockRenewEvery`) beside the edit ticker. An error or a lock found held by another card is logged at warn and the run continues; no group result changes. The ticker is stopped explicitly when the fan-out ends, so renewal never outlives the fan-out and the deferred compare-and-delete release still frees the lock after delivery.
-- AGENTS.md carries both WR-02 rules: the renewal clause on the `alita:staff:lock:target:<id>` bullet and the pacer's "MaxWait (60 s) ... fails at once as rate limited, with no Telegram request and without taking the slot" sentence.
+- AGENTS.md carries both WR-02 rules: the renewal clause on the `fuku:staff:lock:target:<id>` bullet and the pacer's "MaxWait (60 s) ... fails at once as rate limited, with no Telegram request and without taking the slot" sentence.
 
 ## Task Commits
 
@@ -122,7 +122,7 @@ Task 1 is `type="tracer"` with an automated-only `<verify>`; both verify command
 
 | Check | Result |
 |-------|--------|
-| `go test -tags testtools -race -count=1 -run '^TestStaffActionTargetLockRenewedDuringRun$' -v ./alita/modules` | pass, three subtests |
+| `go test -tags testtools -race -count=1 -run '^TestStaffActionTargetLockRenewedDuringRun$' -v ./fuku/modules` | pass, three subtests |
 | `go test ... -run '^TestStaffActionTargetLock\|^TestStaffActionOwnCardDoubleTap$\|^TestStaffActionConfirm'` | pass |
 | `make test` (race, coverage, skip gate) | exit 0 |
 | `make check-translations` | all present |
@@ -130,7 +130,7 @@ Task 1 is `type="tracer"` with an automated-only `<verify>`; both verify command
 | `go vet -tags testtools ./...` | clean |
 | `CGO_ENABLED=0 go build ./...` | clean |
 | `git diff --exit-code go.mod go.sum` | unchanged |
-| `gofmt -l alita main.go` | only the pre-existing `alita/modules/greetings_command_test.go` |
+| `gofmt -l fuku main.go` | only the pre-existing `fuku/modules/greetings_command_test.go` |
 | `make lint` | could not run, see below |
 
 Acceptance criteria greps (card.go declarations, run.go ticker and call, AGENTS.md `staffTargetLockRenewEvery`, flattened `without taking the slot` count 1, `PX` only in the re-take branch) all match.
@@ -149,7 +149,7 @@ None.
 
 ## Threat Flags
 
-None. No new endpoints, auth paths or schema; the only new Redis traffic is the renewal script on the existing `alita:staff:lock:target:<id>` key.
+None. No new endpoints, auth paths or schema; the only new Redis traffic is the renewal script on the existing `fuku:staff:lock:target:<id>` key.
 
 ## Pending Human Verification
 
@@ -163,5 +163,5 @@ Expected: every card ends on a final summary (or a new message carrying it) with
 
 ## Self-Check: PASSED
 
-- Files present: `alita/modules/staff_action_card.go`, `alita/modules/staff_action_run.go`, `alita/modules/staff_action_lifecycle_test.go`, `AGENTS.md`.
+- Files present: `fuku/modules/staff_action_card.go`, `fuku/modules/staff_action_run.go`, `fuku/modules/staff_action_lifecycle_test.go`, `AGENTS.md`.
 - Commits present: `2555826`, `be4f3e3`, `8a7f48c`, `36f15f8`; `git rev-list --count 8b16c7c..HEAD` is 4.

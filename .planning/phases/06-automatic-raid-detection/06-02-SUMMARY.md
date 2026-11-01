@@ -10,7 +10,7 @@ requires:
 provides:
   - chat_raid_detection (flags, thresholds 3..500, carry-over of the old auto threshold clamped per D-18 and D-22)
   - raiddetection.GetSettings and Defaults, a cached read where a missing row means both triggers on (15 and 30)
-  - the alita:raid:{chat}:joined join counter and its Lua script, inert without Redis
+  - the fuku:raid:{chat}:joined join counter and its Lua script, inert without Redis
   - raidCountMemberJoin in the group -7 chat_member guard and raidFire, the shared trigger start
 affects: [06-03, 06-04, 06-05, 06-06, phase-07-ai-trigger]
 
@@ -34,15 +34,15 @@ tech-stack:
 key-files:
   created:
     - migrations/20261018130000_add_chat_raid_detection.sql
-    - alita/db/models/raid_detection.go
-    - alita/db/raiddetection/repository.go
-    - alita/modules/raid_counters.go
-    - alita/modules/raid_join.go
-    - alita/modules/raid_trigger.go
-    - alita/modules/raid_join_surge_test.go
+    - fuku/db/models/raid_detection.go
+    - fuku/db/raiddetection/repository.go
+    - fuku/modules/raid_counters.go
+    - fuku/modules/raid_join.go
+    - fuku/modules/raid_trigger.go
+    - fuku/modules/raid_join_surge_test.go
   modified:
-    - alita/modules/lockdown_guard.go
-    - alita/modules/test_harness_test.go
+    - fuku/modules/lockdown_guard.go
+    - fuku/modules/test_harness_test.go
     - AGENTS.md
 
 key-decisions:
@@ -80,7 +80,7 @@ status: complete
 - A 16th join starts no second lockdown and makes no second `setChatPermissions` call.
 - `chat_raid_detection` holds per-chat flags and thresholds (CHECK 3..500). A missing row means both triggers on at 15 and 30, a stored threshold or an off switch is followed, and an unreadable settings read counts nothing. The migration copies every non-zero old auto threshold, clamped into 3..500 in both directions.
 - A join still makes at most one live `getChatMember` of its performer: the counter hands the status it read to the guard.
-- AGENTS.md documents the settings table, the `alita:raid:*` keys, the join surge rule and the harness entry.
+- AGENTS.md documents the settings table, the `fuku:raid:*` keys, the join surge rule and the harness entry.
 
 ## Task Commits
 
@@ -109,7 +109,7 @@ status: complete
 - **Found during:** Task 1 (RED)
 - **Issue:** `raidCleanup` in the test names `models.ChatRaidDetection`, and the harness must migrate it, so a test-only commit could not compile. The plan allows scaffolding in a RED commit.
 - **Fix:** `7833ff9` also holds the migration, the model and the harness `AutoMigrate` entry, so the model never exists without its schema in any commit. Everything else (repository, counter, hook, trigger) is in the GREEN commit.
-- **Files modified:** `migrations/20261018130000_add_chat_raid_detection.sql`, `alita/db/models/raid_detection.go`, `alita/modules/test_harness_test.go`
+- **Files modified:** `migrations/20261018130000_add_chat_raid_detection.sql`, `fuku/db/models/raid_detection.go`, `fuku/modules/test_harness_test.go`
 - **Committed in:** `7833ff9`
 
 ---
@@ -118,17 +118,17 @@ status: complete
 
 ## Issues Encountered
 
-- `make lint` cannot run here (golangci-lint is built with go1.25 and the module needs go1.26). `gofmt -l alita/modules alita/db migrations` printed nothing and `go vet -tags testtools ./alita/modules ./alita/db/models ./alita/db/raiddetection` was clean in its place.
-- No PostgreSQL server exists in this sandbox and none was started. The migration is plain idempotent DDL plus one `INSERT ... ON CONFLICT DO NOTHING` (no transaction statements, no concurrent build); `go test ./alita/db/migrations` passes. The PostgreSQL proof (applying the file, the CHECK against the clamped carry-over) is CI's migration chain and plan 06-11's carry-over test. The model's `check:` tags ran on SQLite through `AutoMigrate`.
+- `make lint` cannot run here (golangci-lint is built with go1.25 and the module needs go1.26). `gofmt -l fuku/modules fuku/db migrations` printed nothing and `go vet -tags testtools ./fuku/modules ./fuku/db/models ./fuku/db/raiddetection` was clean in its place.
+- No PostgreSQL server exists in this sandbox and none was started. The migration is plain idempotent DDL plus one `INSERT ... ON CONFLICT DO NOTHING` (no transaction statements, no concurrent build); `go test ./fuku/db/migrations` passes. The PostgreSQL proof (applying the file, the CHECK against the clamped carry-over) is CI's migration chain and plan 06-11's carry-over test. The model's `check:` tags ran on SQLite through `AutoMigrate`.
 
 ## Verification Run
 
 | Check | Result |
 |-------|--------|
-| `go test -tags testtools -race -run '^TestRaidJoinSurge$\|^TestRaidJoinSurgeSettings$' ./alita/modules` | pass (1 + 4 subtests) |
-| `go test -tags testtools -race -run 'Lockdown\|Unlockdown\|Raid' ./alita/modules ./alita/db/lockdown` | pass (after the last commit) |
-| `go test -tags testtools -race -run 'Join\|Greet\|Captcha\|Antiraid\|AntiRaid\|Staff' ./alita/modules` | pass |
-| `go test -tags testtools ./alita/db/migrations` | pass |
+| `go test -tags testtools -race -run '^TestRaidJoinSurge$\|^TestRaidJoinSurgeSettings$' ./fuku/modules` | pass (1 + 4 subtests) |
+| `go test -tags testtools -race -run 'Lockdown\|Unlockdown\|Raid' ./fuku/modules ./fuku/db/lockdown` | pass (after the last commit) |
+| `go test -tags testtools -race -run 'Join\|Greet\|Captcha\|Antiraid\|AntiRaid\|Staff' ./fuku/modules` | pass |
+| `go test -tags testtools ./fuku/db/migrations` | pass |
 | `CGO_ENABLED=0 go build ./...`, `go vet`, `gofmt -l` | clean |
 | Task 1 acceptance criteria (latest migration name, no BEGIN/COMMIT/CONCURRENTLY, clamp expression once, D-22 named, hook before `lockdownActiveLookup`, `startLockdownRow(` in the trigger, harness entry, AGENTS.md mentions) | all met |
 | Task 2 acceptance criteria (5 `t.Run(` calls, gofmt) | met |
@@ -158,4 +158,4 @@ The service-message path, the shared input builders and the exemption tests (06-
 
 ## Self-Check: PASSED
 
-Created files exist (`migrations/20261018130000_add_chat_raid_detection.sql`, `alita/db/models/raid_detection.go`, `alita/db/raiddetection/repository.go`, `alita/modules/raid_counters.go`, `alita/modules/raid_join.go`, `alita/modules/raid_trigger.go`, `alita/modules/raid_join_surge_test.go`); commits `7833ff9`, `fd4e94c` and `08bcf65` are in `git log`.
+Created files exist (`migrations/20261018130000_add_chat_raid_detection.sql`, `fuku/db/models/raid_detection.go`, `fuku/db/raiddetection/repository.go`, `fuku/modules/raid_counters.go`, `fuku/modules/raid_join.go`, `fuku/modules/raid_trigger.go`, `fuku/modules/raid_join_surge_test.go`); commits `7833ff9`, `fd4e94c` and `08bcf65` are in `git log`.

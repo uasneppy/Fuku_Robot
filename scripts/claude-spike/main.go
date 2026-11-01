@@ -1,5 +1,5 @@
 // Command claude-spike is the owner's spike tool for the raid AI image checks.
-// It sends labelled sample images through the same alita/utils/claude client
+// It sends labelled sample images through the same fuku/utils/claude client
 // the bot uses and prints accuracy, latency, tokens and an estimated cost, so
 // the owner can check the request shape and the 0.85 bar against the live
 // Anthropic API before relying on it.
@@ -8,7 +8,7 @@
 // never prints it. Every sample image is sent to Anthropic during a run. The
 // tool is not part of the bot and imports nothing from the repository except
 // the standard-library-only claude package, so it never triggers the database
-// connection that alita/config and alita/db make before main.
+// connection that fuku/config and fuku/db make before main.
 package main
 
 import (
@@ -26,7 +26,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/divkix/Alita_Robot/alita/utils/claude"
+	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
 )
 
 const (
@@ -477,7 +477,7 @@ const fakeAPIKey = "spike-fake-key-not-a-real-key"
 
 // runProbe sends one tiny request per probe variant and prints how the API
 // answered each. It exits 1 when the API rejected a field, because that means
-// a request spelling in alita/utils/claude needs a fix.
+// a request spelling in fuku/utils/claude needs a fix.
 func runProbe(client *claude.Client, cfg *config, key string, stdout, stderr io.Writer) int {
 	variants := probeVariants()
 	if key == fakeAPIKey {

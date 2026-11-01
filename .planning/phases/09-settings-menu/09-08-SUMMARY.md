@@ -19,12 +19,12 @@ tech-stack:
   patterns: [one apply function per setting shared by command and menu, redraw from the stored row]
 key-files:
   created:
-    - alita/modules/settings_captcha_test.go
+    - fuku/modules/settings_captcha_test.go
   modified:
-    - alita/modules/settings_captcha.go
-    - alita/modules/settings_test.go
-    - alita/modules/settings_menu_test.go
-    - alita/modules/settings_private_test.go
+    - fuku/modules/settings_captcha.go
+    - fuku/modules/settings_test.go
+    - fuku/modules/settings_menu_test.go
+    - fuku/modules/settings_private_test.go
 key-decisions:
   - "Mode and action values only need the shape of a lower-case word; the apply function then refuses an unknown word with the command's own text"
   - "A stored Turnstile on an unavailable web captcha shows both the selected mark and the unavailable mark"
@@ -72,14 +72,14 @@ plan_head_after: 327721480bf2c4433b9c549691d433a0c1f273b4
 - **Found during:** Task 1 (running the plan's verify command) and Task 2 (broader `TestSettings` run)
 - **Issue:** `settingsStepper` in `settings_test.go` required exactly two keyboard rows, `settings_private_test.go` indexed `keyboard[0]` as the stepper in two places, and `settings_menu_test.go` called the old three-argument `renderSettingsCaptcha`.
 - **Fix:** The stepper is found by its control (`t=t`) instead of its position; the render call passes `settingsCaptchaWeb{}`. No assertion was weakened.
-- **Files modified:** `alita/modules/settings_test.go`, `alita/modules/settings_private_test.go`, `alita/modules/settings_menu_test.go`
+- **Files modified:** `fuku/modules/settings_test.go`, `fuku/modules/settings_private_test.go`, `fuku/modules/settings_menu_test.go`
 - **Commits:** `78ef8c8`, `3277214`
 
 **2. [Rule 1 - Plan inconsistency] Strict value parsing versus the drift test**
 - **Found during:** Task 1 design
 - **Issue:** The plan says each setter answers the alert `common_callback_invalid_request` for any value outside the allowed set, but `TestSettingsDriftCaptcha` expects a hand-built `image` mode to show the command's `captcha_mode_invalid` notice (and `warn` to show `captcha_action_invalid`).
 - **Fix:** The mode and action setters reject only a value that is not 1 to 16 lower-case ASCII letters (invalid-request alert); a well-shaped word the command would refuse goes to the apply function and shows its own notice. The toggle stays strictly `0` or `1`. Either way nothing is stored, and the menu refuses exactly what the command refuses.
-- **Files modified:** `alita/modules/settings_captcha.go`
+- **Files modified:** `fuku/modules/settings_captcha.go`
 
 **3. Commit trailer**
 - The plan text prints `Co-Authored-By: Claude Opus 5.5`; the commits carry the trailer lines the harness supplied (`Claude Sonnet 5.5`), as the executor notes require.
@@ -94,8 +94,8 @@ None. No new endpoint, auth path, file access or schema. T-09-28, T-09-29 and T-
 
 ## Verification Notes
 
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules/`, `gofmt -l alita/` (empty) and `make check-translations` pass. `make lint` could not run here (golangci-lint is built with go1.25 against module go1.26.0), so `gofmt` and `go vet` stood in for it.
-- `go test -tags testtools -race -count=1 -run '^(TestSettings|TestCaptcha)' ./alita/modules` passes (51 s). The whole package and `make test` were not run (the orchestrator runs them between waves).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules/`, `gofmt -l fuku/` (empty) and `make check-translations` pass. `make lint` could not run here (golangci-lint is built with go1.25 against module go1.26.0), so `gofmt` and `go vet` stood in for it.
+- `go test -tags testtools -race -count=1 -run '^(TestSettings|TestCaptcha)' ./fuku/modules` passes (51 s). The whole package and `make test` were not run (the orchestrator runs them between waves).
 - The RED commit was made before the implementation commit, but the tests were not run against the base commit in isolation, so "red first" is by commit order only.
 
 ## Pending human verification (deferred to 09-SPIKE.md, not blocking)
@@ -106,6 +106,6 @@ None. No new endpoint, auth path, file access or schema. T-09-28, T-09-29 and T-
 
 ## Self-Check: PASSED
 
-- `alita/modules/settings_captcha.go`, `alita/modules/settings_captcha_test.go`: present.
+- `fuku/modules/settings_captcha.go`, `fuku/modules/settings_captcha_test.go`: present.
 - Commits `b32de92`, `78ef8c8`, `3277214`: present on `worktree-agent-a12b8e37ee8c2f959`.
 - Eight named tests report `--- PASS`.

@@ -31,11 +31,11 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_status_test.go
+    - fuku/modules/raid_status_test.go
   modified:
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_status.go
-    - alita/modules/lockdown_alert.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_status.go
+    - fuku/modules/lockdown_alert.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -111,10 +111,10 @@ Both tasks have a `test(06-08)` commit before their `feat(06-08)` commit. Each R
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|Raid' ./alita/modules`: ok (116 s)
-- `TestLockdownLocaleKeys`, `TestLockdownStringsHaveBalancedTags` (`./alita/i18n`): pass
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|Raid' ./fuku/modules`: ok (116 s)
+- `TestLockdownLocaleKeys`, `TestLockdownStringsHaveBalancedTags` (`./fuku/i18n`): pass
 - `make check-translations`: all translations present; `make check-docs`: no drift
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules`: clean
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules`: clean
 - `gofmt -l` on the four touched Go files: nothing; `go.mod` and `go.sum` unchanged
 - `make lint` could not run here (golangci-lint cannot lint Go 1.26); `gofmt` and `go vet` stand in. The full `make test` was left to the orchestrator.
 
@@ -128,5 +128,5 @@ None. `/lockdownstatus` keeps `requireLockdownAuthority(false)` and the reminder
 
 ## Self-Check: PASSED
 
-- `alita/modules/raid_status_test.go` exists; commits `9ee0722`, `48f57d0`, `fd01135`, `2626d3a` exist on the branch.
+- `fuku/modules/raid_status_test.go` exists; commits `9ee0722`, `48f57d0`, `fd01135`, `2626d3a` exist on the branch.
 - Acceptance criteria re-run: `func lockdownStartedAutomatically(` in `lockdown_status.go`; `lockdownTriggerSentence(` count 1 in each of `lockdown.go`, `lockdown_status.go`, `lockdown_alert.go`; `lockdown_status_active_auto:` once in each of the 7 locale files; `gofmt -l` prints nothing; `git diff --exit-code go.mod go.sum` exits 0.

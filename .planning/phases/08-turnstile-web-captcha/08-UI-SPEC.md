@@ -35,7 +35,7 @@ variables by `telegram-web-app.js`, each with a safe fallback (section Color). T
 exposes no corner-radius parameter, so radius is fixed (12 px).
 
 Project scan (Step 2): no `components.json`, `tailwind.config.*`, `package.json`, or any `.tsx`/`.css` in the repo.
-The Go HTTP server (`alita/utils/httpserver/server.go`) is the only host. Nothing existing to reuse or re-specify.
+The Go HTTP server (`fuku/utils/httpserver/server.go`) is the only host. Nothing existing to reuse or re-specify.
 
 ---
 

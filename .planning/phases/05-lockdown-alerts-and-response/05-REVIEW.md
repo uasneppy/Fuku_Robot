@@ -6,41 +6,41 @@ files_reviewed: 49
 files_reviewed_list:
   - AGENTS.md
   - Makefile
-  - alita/db/approvals/repository.go
-  - alita/db/approvals/repository_test.go
-  - alita/db/lockdown/alerts.go
-  - alita/db/lockdown/alerts_test.go
-  - alita/db/lockdown/burst.go
-  - alita/db/lockdown/burst_test.go
-  - alita/db/lockdown/joiners.go
-  - alita/db/lockdown/links.go
-  - alita/db/lockdown/links_test.go
-  - alita/db/lockdown/testmain_test.go
-  - alita/db/models/lockdown.go
-  - alita/modules/greetings_command_test.go
-  - alita/modules/lockdown.go
-  - alita/modules/lockdown_alert.go
-  - alita/modules/lockdown_alert_auth_test.go
-  - alita/modules/lockdown_alert_callbacks.go
-  - alita/modules/lockdown_alert_close_test.go
-  - alita/modules/lockdown_alert_delivery_test.go
-  - alita/modules/lockdown_alert_lift_test.go
-  - alita/modules/lockdown_alert_link_test.go
-  - alita/modules/lockdown_alert_sample_test.go
-  - alita/modules/lockdown_alert_test.go
-  - alita/modules/lockdown_ban_run_test.go
-  - alita/modules/lockdown_ban_test.go
-  - alita/modules/lockdown_fake_test.go
-  - alita/modules/lockdown_guard.go
-  - alita/modules/lockdown_recent.go
-  - alita/modules/lockdown_recent_test.go
-  - alita/modules/lockdown_reminder_test.go
-  - alita/modules/lockdown_response.go
-  - alita/modules/lockdown_response_test.go
-  - alita/modules/lockdown_revoke_test.go
-  - alita/modules/lockdown_status.go
-  - alita/modules/lockdown_worker.go
-  - alita/modules/test_harness_test.go
+  - fuku/db/approvals/repository.go
+  - fuku/db/approvals/repository_test.go
+  - fuku/db/lockdown/alerts.go
+  - fuku/db/lockdown/alerts_test.go
+  - fuku/db/lockdown/burst.go
+  - fuku/db/lockdown/burst_test.go
+  - fuku/db/lockdown/joiners.go
+  - fuku/db/lockdown/links.go
+  - fuku/db/lockdown/links_test.go
+  - fuku/db/lockdown/testmain_test.go
+  - fuku/db/models/lockdown.go
+  - fuku/modules/greetings_command_test.go
+  - fuku/modules/lockdown.go
+  - fuku/modules/lockdown_alert.go
+  - fuku/modules/lockdown_alert_auth_test.go
+  - fuku/modules/lockdown_alert_callbacks.go
+  - fuku/modules/lockdown_alert_close_test.go
+  - fuku/modules/lockdown_alert_delivery_test.go
+  - fuku/modules/lockdown_alert_lift_test.go
+  - fuku/modules/lockdown_alert_link_test.go
+  - fuku/modules/lockdown_alert_sample_test.go
+  - fuku/modules/lockdown_alert_test.go
+  - fuku/modules/lockdown_ban_run_test.go
+  - fuku/modules/lockdown_ban_test.go
+  - fuku/modules/lockdown_fake_test.go
+  - fuku/modules/lockdown_guard.go
+  - fuku/modules/lockdown_recent.go
+  - fuku/modules/lockdown_recent_test.go
+  - fuku/modules/lockdown_reminder_test.go
+  - fuku/modules/lockdown_response.go
+  - fuku/modules/lockdown_response_test.go
+  - fuku/modules/lockdown_revoke_test.go
+  - fuku/modules/lockdown_status.go
+  - fuku/modules/lockdown_worker.go
+  - fuku/modules/test_harness_test.go
   - docs/src/content/docs/commands/lockdown/index.md
   - docs/src/content/docs/commands/staff/index.md
   - locales/en.yml
@@ -75,7 +75,7 @@ status: issues_found
 The review covered the Phase 5 lockdown alerts, reminders, and the Ban recent joiners, Revoke link and Lift buttons.
 
 Files read:
-- In full: `alita/modules/lockdown_alert.go`, `alita/modules/lockdown_alert_callbacks.go`, `alita/modules/lockdown_response.go`, `alita/db/lockdown/alerts.go`, `alita/db/lockdown/burst.go`, `alita/modules/lockdown_recent.go` and `alita/db/lockdown/links.go`.
+- In full: `fuku/modules/lockdown_alert.go`, `fuku/modules/lockdown_alert_callbacks.go`, `fuku/modules/lockdown_response.go`, `fuku/db/lockdown/alerts.go`, `fuku/db/lockdown/burst.go`, `fuku/modules/lockdown_recent.go` and `fuku/db/lockdown/links.go`.
 - Diffs only: `lockdown.go`, `lockdown_guard.go`, `lockdown_worker.go`, `lockdown_status.go`, `joiners.go`, `approvals/repository.go`, the models, the migrations and the locale additions.
 
 What holds up:
@@ -96,7 +96,7 @@ Nothing found is a correctness or security blocker. The three WARNINGs are:
 
 ### WR-01: Ban run result (card edit and #LOCKDOWN_BAN post) is lost for good when the first delivery fails
 
-**File:** `alita/modules/lockdown_response.go:320-327, 473-505`
+**File:** `fuku/modules/lockdown_response.go:320-327, 473-505`
 
 **Issue:** `lockdownProcessBanRun` calls `FinishBanRun`, and only the caller whose conditional update won calls `lockdownBanRunResult`. That function makes one paced edit of the card and one paced log post. It has no retry and no stored "result delivered" flag. Once `FinishBanRun` moves the run out of `running`, nothing ever looks at that run again.
 
@@ -111,7 +111,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### WR-02: Ban run does not enforce "no permanent ban after a lift started" across the paced wait
 
-**File:** `alita/modules/lockdown_response.go:298-316, 183-200`
+**File:** `fuku/modules/lockdown_response.go:298-316, 183-200`
 
 **Issue:** The lockdown is read again before each account. After that read, `lockdownPaced` can wait up to 60 s for a slot before it calls `getChatMember` and `banChatMember`. If a lift is recorded during that wait, the account still gets its permanent ban, against D-12 and AGENTS.md. The wait is longest when the pacer is busiest, which is during a raid.
 
@@ -119,7 +119,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### WR-03: New PostgreSQL-only guarantees are not in the `test-postgres-integrity` run list
 
-**File:** `Makefile:39-43`, `alita/db/lockdown/alerts.go:322, 493, 402`, `alita/db/lockdown/burst.go:263`
+**File:** `Makefile:39-43`, `fuku/db/lockdown/alerts.go:322, 493, 402`, `fuku/db/lockdown/burst.go:263`
 
 **Issue:** These guarantees run only on SQLite in CI:
 - `RecordLinkRevoked`: one revoke wins.
@@ -133,7 +133,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### IN-01: A staff alert copy is posted to the destination chosen at plan time without re-checking the link
 
-**File:** `alita/modules/lockdown_alert.go:562-620`
+**File:** `fuku/modules/lockdown_alert.go:562-620`
 
 **Issue:** The log copy is checked again just before sending; the staff copy is not. If the group was unlinked while the copy was pending, the alert's details land in a former Staff Group.
 
@@ -141,7 +141,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### IN-02: A Revoke Confirm that loses the race can show a misleading refusal
 
-**File:** `alita/modules/lockdown_alert_callbacks.go:656-668`
+**File:** `fuku/modules/lockdown_alert_callbacks.go:656-668`
 
 **Issue:** When two admins confirm Revoke together, Telegram can refuse the second call. That admin is then told the link "no longer works or was not made by me" instead of "already revoked by X".
 
@@ -157,7 +157,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### IN-04: One `attempts` counter serves post, refresh and close of an alert copy
 
-**File:** `alita/db/lockdown/alerts.go:402-437`, `alita/modules/lockdown_alert.go:825, 949`
+**File:** `fuku/db/lockdown/alerts.go:402-437`, `fuku/modules/lockdown_alert.go:825, 949`
 
 **Issue:** Failed refreshes use up the attempts that the close step later needs. A copy can then be closed as failed after a single close attempt and keep its live buttons.
 
@@ -165,7 +165,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### IN-05: `SetBanRunCard` is dead production code
 
-**File:** `alita/db/lockdown/burst.go:247-257`
+**File:** `fuku/db/lockdown/burst.go:247-257`
 
 **Issue:** Only a test calls it.
 
@@ -181,7 +181,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### IN-07: Revoke refusal mapping is broad
 
-**File:** `alita/modules/lockdown_alert_callbacks.go:507-529`
+**File:** `fuku/modules/lockdown_alert_callbacks.go:507-529`
 
 **Issue:** Two refusals are mapped too broadly:
 - Any "not found" text, including "chat not found", is shown as "this link no longer works".
@@ -191,7 +191,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### IN-08: Alert copies posted after a revoke, and the Ban label, can be stale
 
-**File:** `alita/modules/lockdown_alert.go:621-636`, `alita/db/lockdown/alerts.go:342-348`
+**File:** `fuku/modules/lockdown_alert.go:621-636`, `fuku/db/lockdown/alerts.go:342-348`
 
 **Issue:** Two things can go stale, though pressing a button is safe in both cases:
 - An initial copy still pending when the revoke is recorded is posted without the "link revoked" footer.
@@ -201,7 +201,7 @@ If the edit fails, the card stays on "Banning N…" forever. If the post fails, 
 
 ### IN-09: One revoke per lockdown hides Revoke for a later raid link
 
-**File:** `alita/modules/lockdown_alert.go:114`, `alita/db/lockdown/alerts.go:322`
+**File:** `fuku/modules/lockdown_alert.go:114`, `fuku/db/lockdown/alerts.go:322`
 
 **Issue:** This follows the documented decision of one revoke per lockdown. If the raid moves to another link the bot made, staff must revoke that link by hand.
 

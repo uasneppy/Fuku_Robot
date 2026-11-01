@@ -31,10 +31,10 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_action_progress_test.go
-    - alita/modules/staff_action_fake_test.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_action_progress_test.go
+    - fuku/modules/staff_action_fake_test.go
     - AGENTS.md
 
 key-decisions:
@@ -54,7 +54,7 @@ coverage:
     requirement: "STAFF-12"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_progress_test.go#TestStaffActionFinalEditLongRetryAfter"
+        ref: "fuku/modules/staff_action_progress_test.go#TestStaffActionFinalEditLongRetryAfter"
         status: pass
     human_judgment: false
   - id: D2
@@ -62,7 +62,7 @@ coverage:
     requirement: "STAFF-08"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_progress_test.go#TestStaffActionFinalPartsOwnBudget"
+        ref: "fuku/modules/staff_action_progress_test.go#TestStaffActionFinalPartsOwnBudget"
         status: pass
     human_judgment: false
   - id: D3
@@ -70,10 +70,10 @@ coverage:
     requirement: "STAFF-12"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_progress_test.go#TestStaffActionProgressBacksOffAfter429"
+        ref: "fuku/modules/staff_action_progress_test.go#TestStaffActionProgressBacksOffAfter429"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_progress_test.go#TestStaffActionFinalEditWaitsForHold"
+        ref: "fuku/modules/staff_action_progress_test.go#TestStaffActionFinalEditWaitsForHold"
         status: pass
     human_judgment: false
   - id: D4
@@ -81,7 +81,7 @@ coverage:
     requirement: "STAFF-08"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_progress_test.go#TestStaffRetryAfterClamp"
+        ref: "fuku/modules/staff_action_progress_test.go#TestStaffRetryAfterClamp"
         status: pass
     human_judgment: false
 
@@ -132,10 +132,10 @@ Notes that are not deviations:
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run 'Staff|staff' ./alita/modules`: ok (111 s)
+- `go test -tags testtools -race -count=1 -run 'Staff|staff' ./fuku/modules`: ok (111 s)
 - Task 1 and Task 2 targeted verify commands: all listed tests `--- PASS`
-- `go test -tags testtools -race -count=1 ./alita/utils/ratelimit ./alita/i18n`: ok
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules`: clean
+- `go test -tags testtools -race -count=1 ./fuku/utils/ratelimit ./fuku/i18n`: ok
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules`: clean
 - `make check-docs`: no drift; `make check-translations`: all present
 - `git diff --exit-code go.mod go.sum`: unchanged
 - `gofmt -l` on the four touched Go files: nothing

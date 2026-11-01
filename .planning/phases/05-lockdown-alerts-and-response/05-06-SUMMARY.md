@@ -19,13 +19,13 @@ tech-stack:
     - "stale alert claims released at the top of every cycle like stale joiner claims, no attempt counted"
 key-files:
   created:
-    - alita/modules/lockdown_alert_delivery_test.go
+    - fuku/modules/lockdown_alert_delivery_test.go
   modified:
-    - alita/modules/lockdown_alert.go
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_worker.go
-    - alita/db/lockdown/alerts.go
-    - alita/db/lockdown/alerts_test.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/db/lockdown/alerts.go
+    - fuku/db/lockdown/alerts_test.go
     - AGENTS.md
 key-decisions:
   - "The log channel is resolved again just before the send; a channel that no longer takes the admin category gets nothing, and the copy goes through the usual three tries and is then ended as failed (the lookup cannot tell a turned-off category from a failed read)."
@@ -71,7 +71,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 - **Found during:** Task 1 (`TestLockdownAlertLiftFromLogChannel`)
 - **Issue:** `handlers.NewCallback` ignores callbacks from channel messages unless `SetAllowChannel(true)`; the plan did not mention it, so the log copy's button would have been dead in production.
 - **Fix:** registered the `lockdown|` handler with `SetAllowChannel(true)`; AGENTS.md notes it.
-- **Files modified:** `alita/modules/lockdown.go`, `AGENTS.md`
+- **Files modified:** `fuku/modules/lockdown.go`, `AGENTS.md`
 - **Commit:** 6a43326
 
 **2. [Rule 2 - Missing critical functionality] Re-check of the log destination before sending**
@@ -87,14 +87,14 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertDestinations$|^TestLockdownAlertLiftFromLogChannel$' ./alita/modules`: pass.
-- `go test -tags testtools -race -count=1 -run '^TestLockdownAlert|^TestStaffLog' ./alita/modules`: pass.
-- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertDelivery$|^TestLockdownAlertAfterSettle$' ./alita/modules`: pass; the concurrent-cycles subtest also passed 5 runs in a row.
-- `go test -tags testtools -race -count=1 -run '^TestReleaseStaleAlertClaims$|^TestBeginAlert$|^TestAlertSlots$|^TestAlertClose$|^TestReleaseStaleClaims$' -v ./alita/db/lockdown`: pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules ./alita/db/lockdown`: pass (47 s).
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown`: clean. `gofmt -l` on the touched Go files prints nothing. `go.mod` and `go.sum` unchanged.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertDestinations$|^TestLockdownAlertLiftFromLogChannel$' ./fuku/modules`: pass.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownAlert|^TestStaffLog' ./fuku/modules`: pass.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertDelivery$|^TestLockdownAlertAfterSettle$' ./fuku/modules`: pass; the concurrent-cycles subtest also passed 5 runs in a row.
+- `go test -tags testtools -race -count=1 -run '^TestReleaseStaleAlertClaims$|^TestBeginAlert$|^TestAlertSlots$|^TestAlertClose$|^TestReleaseStaleClaims$' -v ./fuku/db/lockdown`: pass.
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules ./fuku/db/lockdown`: pass (47 s).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown`: clean. `gofmt -l` on the touched Go files prints nothing. `go.mod` and `go.sum` unchanged.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
-- Not run: the whole `./alita/modules` package under `-race`, any PostgreSQL check, and a manual press on a real channel copy. Tests use SQLite, miniredis and a fake Telegram client.
+- Not run: the whole `./fuku/modules` package under `-race`, any PostgreSQL check, and a manual press on a real channel copy. Tests use SQLite, miniredis and a fake Telegram client.
 
 ## Threat surface
 
@@ -106,4 +106,4 @@ None.
 
 ## Self-Check: PASSED
 
-`alita/modules/lockdown_alert_delivery_test.go` exists; commits d917e4f, 6a43326, 4ba16ee and a9a30ee are on the branch.
+`fuku/modules/lockdown_alert_delivery_test.go` exists; commits d917e4f, 6a43326, 4ba16ee and a9a30ee are on the branch.

@@ -23,8 +23,8 @@ status: all_fixed
 Verification ran in the main checkout on branch `claude/cool-hamilton-hvs9nl` (no worktree, as instructed).
 PostgreSQL was never started; PostgreSQL-only tests run in CI. `CGO_ENABLED=0 go build ./...`,
 `go vet -tags testtools ./...`, `gofmt -l`, `make check-translations` and `make check-docs` are clean.
-`CGO_ENABLED=1 go test -tags testtools -race -count=1` passes for `alita/modules`, `alita/config`, `alita/utils/gemini`,
-`alita/utils/logredact`, `alita/db/raiddetection`, `alita/i18n` and `scripts/gemini-spike`. `make test` and `make lint`
+`CGO_ENABLED=1 go test -tags testtools -race -count=1` passes for `fuku/modules`, `fuku/config`, `fuku/utils/gemini`,
+`fuku/utils/logredact`, `fuku/db/raiddetection`, `fuku/i18n` and `scripts/gemini-spike`. `make test` and `make lint`
 were not run (`golangci-lint` cannot lint Go 1.26 here; the orchestrator runs `make test`). No locale file was touched,
 so `TestLockdownHelpFitsOneMessage` is unaffected.
 
@@ -32,11 +32,11 @@ so `TestLockdownHelpFitsOneMessage` is unaffected.
 
 ### WR-01: One new account can exhaust the per-group and the fleet-wide Gemini budget
 
-**Files modified:** `alita/modules/raid_ai_image.go`, `alita/modules/raid_ai.go`, `alita/modules/raid_ai_budget_test.go`,
+**Files modified:** `fuku/modules/raid_ai_image.go`, `fuku/modules/raid_ai.go`, `fuku/modules/raid_ai_budget_test.go`,
 `AGENTS.md`, `docs/src/content/docs/architecture/caching.md`, `docs/src/content/docs/commands/aispam/index.md`
 **Commit:** 15ad328
 **Applied fix:** `raidAIReserveBudget(client, chatID, userID)` now takes one unit of a per-account budget first
-(`alita:raid:{<chat>}:abu:<user>:<hour>`, `raidAIUserHourlyBudget` = 20, a variable only so a test can shrink it), with
+(`fuku:raid:{<chat>}:abu:<user>:<hour>`, `raidAIUserHourlyBudget` = 20, a variable only so a test can shrink it), with
 the same atomic `INCR`+`EXPIRE` and `{chat}`-tagged key as the shared budgets. An account over its cap is counted in
 `RaidAIStats.Capped` and spends neither the group's nor the fleet's unit. The verdict cache is read before any budget, so
 a cached verdict still costs nothing. Tests: one account posting 12 distinct photos with a cap of 4 makes exactly 4 Gemini
@@ -45,8 +45,8 @@ sticker posted four times by an account with a cap of 1 makes one call and is ne
 
 ### WR-02: `ENABLE_AISPAM=false` does not stop the Gemini image checks
 
-**Files modified:** `alita/modules/raid_ai.go`, `alita/modules/raid_ai_image.go`, `alita/config/config.go`,
-`alita/modules/raid_ai_killswitch_test.go` (new), `sample.env`, `docs/src/content/docs/api-reference/environment.md`,
+**Files modified:** `fuku/modules/raid_ai.go`, `fuku/modules/raid_ai_image.go`, `fuku/config/config.go`,
+`fuku/modules/raid_ai_killswitch_test.go` (new), `sample.env`, `docs/src/content/docs/api-reference/environment.md`,
 `docs/src/content/docs/commands/aispam/index.md`, `AGENTS.md`
 **Commit:** 3e76ad6
 **Applied fix:** `raidAIImageConfigured()` now requires `EnableAISpam` as well as a Gemini key, so `raidAIConfigured()`
@@ -59,7 +59,7 @@ photo is not fetched or sent; a queued image job and a queued text job are dropp
 
 ### WR-03: Raid-only text checks send chat description, rules and sender profile
 
-**Files modified:** `alita/modules/raid_ai.go`, `alita/modules/aispam_jev.go`, `alita/modules/raid_ai_request_test.go` (new),
+**Files modified:** `fuku/modules/raid_ai.go`, `fuku/modules/aispam_jev.go`, `fuku/modules/raid_ai_request_test.go` (new),
 `sample.env`, `docs/src/content/docs/commands/aispam/index.md`, `AGENTS.md`
 **Commit:** 307020d
 **Applied fix:** The raid-only call builds its own `raidAIState` (`raidAIStateOf`): chat title and language, the sender's
@@ -73,8 +73,8 @@ claimed more and was left alone (no locale change). `sample.env`, the `/aispam` 
 
 ### WR-04: The AI-burst snapshot puts established members into "Ban N recent joiners"
 
-**Files modified:** `alita/modules/raid_ai_count.go`, `alita/modules/lockdown_alert.go`, `alita/modules/raid_trigger.go`,
-`alita/modules/raid_ai_burst_test.go`, `AGENTS.md`, `docs/src/content/docs/architecture/caching.md`
+**Files modified:** `fuku/modules/raid_ai_count.go`, `fuku/modules/lockdown_alert.go`, `fuku/modules/raid_trigger.go`,
+`fuku/modules/raid_ai_burst_test.go`, `AGENTS.md`, `docs/src/content/docs/architecture/caching.md`
 **Commit:** af8db15
 **Applied fix:** `raidAISpammersScript` now saves an account only when the `:joined` set scores it within 24 h, scored by that
 join time; an account with no recent score is never saved. Established accounts still count toward the threshold and the
@@ -87,28 +87,28 @@ shared fixture `aiSpammers()` now makes three recent joiners; the old three-with
 
 ### WR-05: The test harness waits for AI jobs and posts but not for the lockdown starts in between
 
-**Files modified:** `alita/modules/test_harness_test.go`, `alita/modules/staff_action_fake_test.go`,
-`alita/modules/lockdown_alert_test.go`, `alita/modules/raid_ai_integration_test.go`
+**Files modified:** `fuku/modules/test_harness_test.go`, `fuku/modules/staff_action_fake_test.go`,
+`fuku/modules/lockdown_alert_test.go`, `fuku/modules/raid_ai_integration_test.go`
 **Commit:** f347dd0
 **Applied fix:** `callsFor`, `sentTo`, `sentChats` and `callsSince` now wait `raidAIJobs`, then `raidAIFires`, then
 `raidPosts`, the order `settleAI` uses. No other helper waited on the trackers.
 
 ### IN-01: `raidAIGeminiPause.reason` is written and never read
 
-**Files modified:** `alita/modules/raid_ai_breaker.go`
+**Files modified:** `fuku/modules/raid_ai_breaker.go`
 **Commit:** 7fa479a
 **Applied fix:** The write-only field is removed; the warning keeps logging its local reason. No behaviour change, so no new test.
 
 ### IN-02: An invalid `GEMINI_MODEL` is logged verbatim before secrets are registered
 
-**Files modified:** `alita/config/config.go`, `alita/config/config_pure_test.go`
+**Files modified:** `fuku/config/config.go`, `fuku/config/config_pure_test.go`
 **Commit:** 4499365
 **Applied fix:** The warning now says only that the value was rejected and how many characters it had. Test: a value shaped
 like a pasted key falls back to the default, a warning names `GEMINI_MODEL`, and no log line carries the value.
 
 ### IN-03: The Gemini per-chat breaker silently stops tracking new chats past 10000
 
-**Files modified:** `alita/modules/raid_ai_breaker.go`, `alita/modules/raid_ai_breaker_test.go`, `AGENTS.md`
+**Files modified:** `fuku/modules/raid_ai_breaker.go`, `fuku/modules/raid_ai_breaker_test.go`, `AGENTS.md`
 **Commit:** 9907fbb
 **Applied fix:** A full map first evicts idle breakers (no failures, not paused); if every tracked chat is failing or paused,
 the new chat stays untracked and one warning per process says so. Tests: a full map of idle breakers makes room and the new
@@ -116,7 +116,7 @@ chat gets paused after five failures; a full map of failing chats logs exactly o
 
 ### IN-04: Album gate and cross-chat `singleflight` edge cases
 
-**Files modified:** `alita/modules/raid_ai_image.go`, `alita/modules/raid_ai_budget_test.go`, `AGENTS.md`
+**Files modified:** `fuku/modules/raid_ai_image.go`, `fuku/modules/raid_ai_budget_test.go`, `AGENTS.md`
 **Commit:** 2c36980
 **Applied fix:** Both edges closed, the fix was small. The singleflight is keyed by chat ID and `file_unique_id`, so another
 chat no longer inherits a leader's refusal (the verdict cache still serves it afterwards). The album gate stays where it is
@@ -128,8 +128,8 @@ costs one call only; a chat B photo overlapping a failing chat A call for the sa
 
 ### IN-05: Real-time sleeps in two tests
 
-**Files modified:** `alita/modules/raid_ai_budget_test.go`, `alita/modules/raid_ai_breaker_test.go`,
-`alita/modules/aispam_test.go`, `alita/modules/aispam.go`
+**Files modified:** `fuku/modules/raid_ai_budget_test.go`, `fuku/modules/raid_ai_breaker_test.go`,
+`fuku/modules/aispam_test.go`, `fuku/modules/aispam.go`
 **Commit:** 3cccfed
 **Applied fix:** The overlap test waits (polling `waitUntil`) for the leader to be inside the gated Gemini handler and for all
 three jobs to have asked Redis for the fire latch (counted with miniredis's pre-hook), instead of sleeping 200 ms; the gate
@@ -139,8 +139,8 @@ breaker test and the `/aispam` cooldown test move a clock instead of sleeping. B
 
 ### IN-06: The config test leaves secrets in the global redaction registry
 
-**Files modified:** `alita/utils/logredact/reset_testtools.go` (new, `testtools` tag), `alita/config/config_pure_test.go`,
-`alita/config/redact_reset_testtools_test.go` (new), `alita/config/redact_reset_default_test.go` (new, `!testtools` no-op)
+**Files modified:** `fuku/utils/logredact/reset_testtools.go` (new, `testtools` tag), `fuku/config/config_pure_test.go`,
+`fuku/config/redact_reset_testtools_test.go` (new), `fuku/config/redact_reset_default_test.go` (new, `!testtools` no-op)
 **Commit:** a72516d
 **Applied fix:** `logredact.ResetForTest()` (testtools only) empties the exact-value registry. The config tests call it through
 `forgetRegisteredSecrets` (from `setRequiredConfigEnv`, which LoadConfig-based tests use, and from the registration test); a
@@ -166,7 +166,7 @@ encoded exit 0 for an all-failed run and now expects exit 1 (its other assertion
 
 ### IN-09: Two literals duplicate named constants
 
-**Files modified:** `alita/utils/gemini/response.go`, `alita/modules/raid_ai_image.go`
+**Files modified:** `fuku/utils/gemini/response.go`, `fuku/modules/raid_ai_image.go`
 **Commit:** be28b1a
 **Applied fix:** `safeToken` uses `maxTokenRunes`, `raidAIScrub` uses `logredact.Placeholder`. No behaviour change; the existing
 Gemini and secrets-never-logged tests cover both.

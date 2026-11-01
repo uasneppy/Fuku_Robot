@@ -1,5 +1,5 @@
 ------------------------------ MODULE FloodReset ------------------------------
-(* Model of updateFloodWithSettings in alita/modules/antiflood.go.
+(* Model of updateFloodWithSettings in fuku/modules/antiflood.go.
    One user's flood slot is a pointer in a sync.Map. The burst window is Idle
    seconds. The cleaner only deletes the pointer after a much longer delay, so
    an idle slot is still present.

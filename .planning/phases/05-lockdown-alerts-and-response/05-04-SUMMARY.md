@@ -21,9 +21,9 @@ tech-stack:
     - "confirm cards keep no state: asker u and expiry minute e travel in the callback data"
 key-files:
   created:
-    - alita/modules/lockdown_alert_auth_test.go
+    - fuku/modules/lockdown_alert_auth_test.go
   modified:
-    - alita/modules/lockdown_alert_callbacks.go
+    - fuku/modules/lockdown_alert_callbacks.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -60,7 +60,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 - **Card fields**: `lockdownParseAsker`, `lockdownParseCardFields` (u and e positive 63-bit integers) and `lockdownParseCopyID`. A Confirm or Cancel with a bad field is answered "no longer valid" before any lookup; another user's press is answered "not yours" and edits nothing; a Confirm whose expiry minute is before the current unix minute answers once, edits the card to `lockdown_alert_card_expired` and lifts nothing. No timer and no Redis key.
 - **Locale keys** in all 7 files: `lockdown_alert_post_as_yourself`, `lockdown_alert_no_restrict`, `lockdown_alert_card_expired`.
 
-## Tests (`alita/modules/lockdown_alert_auth_test.go`)
+## Tests (`fuku/modules/lockdown_alert_auth_test.go`)
 
 - `TestLockdownAlertLiftAuthority`: staff member who is not an admin, admin without restrict, failed lookup, the three service identities (no `getChatMember` call names them), forged chat (the env chat and a random chat, no lookup of the presser, nothing posted in the forged chat), creator allowed, admin demoted before Confirm. Every refusal case asserts one answer, no `setChatPermissions`, no new message in the Staff Group and the lockdown still active.
 - `TestLockdownAlertConfirmCard`: expired card (then a fresh card lifts), double confirm (one `setChatPermissions`, second card text "already lifted"), two askers (one lift, one "done" card, one "already lifted" card), seven bad-field variants (no `getChatMember`, no write), and a full Lift, Confirm and next cycle with `cache.DisableRedisForTest()` that lifts the lockdown and closes the alert. Each press is asserted to give exactly one `answerCallbackQuery`.
@@ -94,12 +94,12 @@ Otherwise the plan was executed as written.
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertLiftAuthority$|^TestLockdownAlertConfirmCard$|^TestLockdownCallbackData$' ./alita/modules`: pass (all subtests).
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules`: pass (40 s).
-- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./alita/i18n` and `make check-translations`: pass.
-- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./alita/modules`: clean. `gofmt -l` on the two touched Go files prints nothing. The package-wide `gofmt -l alita/modules` reports `greetings_command_test.go`, which this plan does not touch (pre-existing). golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertLiftAuthority$|^TestLockdownAlertConfirmCard$|^TestLockdownCallbackData$' ./fuku/modules`: pass (all subtests).
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules`: pass (40 s).
+- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./fuku/i18n` and `make check-translations`: pass.
+- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./fuku/modules`: clean. `gofmt -l` on the two touched Go files prints nothing. The package-wide `gofmt -l fuku/modules` reports `greetings_command_test.go`, which this plan does not touch (pre-existing). golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code.
 - `grep` for `utils/cache|db/cache` in `lockdown_alert_callbacks.go`: no matches.
-- Not run: the whole `./alita/modules` package under `-race`, any PostgreSQL check, and a manual UAT press from a real Staff Group.
+- Not run: the whole `./fuku/modules` package under `-race`, any PostgreSQL check, and a manual UAT press from a real Staff Group.
 
 ## Threat surface
 
@@ -111,4 +111,4 @@ None.
 
 ## Self-Check: PASSED
 
-`alita/modules/lockdown_alert_auth_test.go` exists, and commits 54fdbf3, 44e9ecf, 5255b44 and 3540528 are on the branch.
+`fuku/modules/lockdown_alert_auth_test.go` exists, and commits 54fdbf3, 44e9ecf, 5255b44 and 3540528 are on the branch.

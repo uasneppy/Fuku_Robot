@@ -33,17 +33,17 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/settings.go
-    - alita/modules/settings_menu.go
-    - alita/modules/settings_pages.go
-    - alita/modules/settings_captcha.go
-    - alita/modules/settings_env_test.go
-    - alita/modules/settings_test.go
-    - alita/modules/settings_menu_test.go
-    - alita/i18n/settings_locale_test.go
+    - fuku/modules/settings.go
+    - fuku/modules/settings_menu.go
+    - fuku/modules/settings_pages.go
+    - fuku/modules/settings_captcha.go
+    - fuku/modules/settings_env_test.go
+    - fuku/modules/settings_test.go
+    - fuku/modules/settings_menu_test.go
+    - fuku/i18n/settings_locale_test.go
   modified:
-    - alita/modules/captcha.go
-    - alita/i18n/test_helper.go
+    - fuku/modules/captcha.go
+    - fuku/i18n/test_helper.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -72,10 +72,10 @@ coverage:
     requirement: "MENU-01"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_test.go#TestSettingsCommand"
+        ref: "fuku/modules/settings_test.go#TestSettingsCommand"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_menu_test.go#TestSettingsAnonymousAdmin"
+        ref: "fuku/modules/settings_menu_test.go#TestSettingsAnonymousAdmin"
         status: pass
     human_judgment: false
   - id: D2
@@ -83,16 +83,16 @@ coverage:
     requirement: "MENU-02, MENU-03, MENU-04"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_test.go#TestSettingsTracer"
+        ref: "fuku/modules/settings_test.go#TestSettingsTracer"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_menu_test.go#TestSettingsPressPipeline"
+        ref: "fuku/modules/settings_menu_test.go#TestSettingsPressPipeline"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_menu_test.go#TestSettingsOwnership"
+        ref: "fuku/modules/settings_menu_test.go#TestSettingsOwnership"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_menu_test.go#TestSettingsNavigation"
+        ref: "fuku/modules/settings_menu_test.go#TestSettingsNavigation"
         status: pass
     human_judgment: false
   - id: D3
@@ -100,10 +100,10 @@ coverage:
     requirement: "MENU-07, MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_test.go#TestSettingsParityCaptchaTime"
+        ref: "fuku/modules/settings_test.go#TestSettingsParityCaptchaTime"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_test.go#TestSettingsDriftCaptchaTime"
+        ref: "fuku/modules/settings_test.go#TestSettingsDriftCaptchaTime"
         status: pass
     human_judgment: false
   - id: D4
@@ -111,17 +111,17 @@ coverage:
     requirement: "MENU-03"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_menu_test.go#TestSettingsRights"
+        ref: "fuku/modules/settings_menu_test.go#TestSettingsRights"
         status: pass
     human_judgment: false
   - id: D5
     description: "Callback data fits 64 bytes in both menu variants; locale keys exist in all 7 languages within their ceilings"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_menu_test.go#TestSettingsCallbackBytes"
+        ref: "fuku/modules/settings_menu_test.go#TestSettingsCallbackBytes"
         status: pass
       - kind: unit
-        ref: "alita/i18n/settings_locale_test.go#TestSettingsLocaleKeys"
+        ref: "fuku/i18n/settings_locale_test.go#TestSettingsLocaleKeys"
         status: pass
     human_judgment: false
   - id: D6
@@ -164,10 +164,10 @@ status: complete
 ## Verification
 
 - `CGO_ENABLED=0 go build ./...`: ok
-- `go test -tags testtools -race -count=1 -v -run '^TestSettings'` on `./alita/modules` (14 top-level tests, all PASS) and `TestSettingsLocaleKeys` / `TestLockdownLocaleKeys` on `./alita/i18n` (all 7 language subtests PASS)
-- The five captcha pinning tests (`TestCaptchaSubcommandsCreateSettingsWithDefaults`, `...RequireArgumentsOrShowCurrentSettings`, `...RejectInvalidValues`, `TestCaptchaCommandsPropagateGotgbotRequestErrors`, `TestLoadCaptchaRegistersHelpAndHandlers`): PASS. Also `-run 'Help|Anonymous|Captcha|Antiflood|Registry|Registered|LoadAllModules'` on `./alita/modules` and the whole `./alita/i18n` and `./alita/db/captcha` packages: PASS.
+- `go test -tags testtools -race -count=1 -v -run '^TestSettings'` on `./fuku/modules` (14 top-level tests, all PASS) and `TestSettingsLocaleKeys` / `TestLockdownLocaleKeys` on `./fuku/i18n` (all 7 language subtests PASS)
+- The five captcha pinning tests (`TestCaptchaSubcommandsCreateSettingsWithDefaults`, `...RequireArgumentsOrShowCurrentSettings`, `...RejectInvalidValues`, `TestCaptchaCommandsPropagateGotgbotRequestErrors`, `TestLoadCaptchaRegistersHelpAndHandlers`): PASS. Also `-run 'Help|Anonymous|Captcha|Antiflood|Registry|Registered|LoadAllModules'` on `./fuku/modules` and the whole `./fuku/i18n` and `./fuku/db/captcha` packages: PASS.
 - `make check-translations`: all translations present. `make check-docs`: no drift.
-- `go vet -tags testtools ./alita/modules/ ./alita/i18n/` and `gofmt -l alita/`: clean. `make lint` was not run: golangci-lint is built with go1.25 and cannot lint this go1.26.0 module in the sandbox, so `go vet` and `gofmt` stand in. The whole `make test` was not run (the orchestrator runs it between waves).
+- `go vet -tags testtools ./fuku/modules/ ./fuku/i18n/` and `gofmt -l fuku/`: clean. `make lint` was not run: golangci-lint is built with go1.25 and cannot lint this go1.26.0 module in the sandbox, so `go vet` and `gofmt` stand in. The whole `make test` was not run (the orchestrator runs it between waves).
 - Mutation check of the security ordering: disabling the opener check, or the admin-status check, in `settingsVerifyPress` made `TestSettingsOwnership` and `TestSettingsPressPipeline` fail, and the code was restored.
 - Acceptance greps: `applyCaptchaTimeout` defined in `captcha.go` and called from `settings_captcha.go`; `RegisterLegacyModule("Settings", 239, LoadSettings)`, `RegisterAnonymousAdminHandler("settings"` and `requireLockdownAuthority(false)` present in `settings.go`; `grep -c "^settings_"` prints 23 for each of the 7 locale files; `query.Answer(` appears in none of the four settings files; AGENTS.md has `settings|v1`, `settingsRightAdminFloodBot`, `applyCaptchaTimeout` and `registerSettingsPage`.
 
@@ -177,9 +177,9 @@ status: complete
 
 **1. [Rule 3 - Blocking] Real-locale tests need a locale manager the test binary does not have**
 - **Found during:** Task 1 (the "command sees the menu's change" and `TestSettingsGroupLanguage` tests with `RealLocale: true`)
-- **Issue:** the plan assumes `i18n.MustNewTranslator("es")` returns the real Spanish text in a module test, but no locale manager is initialised in the `alita/modules` test binary (`locale manager not initialized`), and `OverrideManagerForTest` only installs one English string set.
-- **Fix:** added `OverrideManagerLanguagesForTest(yamlByLang)` (testtools build tag) to `alita/i18n/test_helper.go`; `newSettingsEnvWith(RealLocale)` installs the seven real locale files through it.
-- **Files modified:** `alita/i18n/test_helper.go` (not in the plan's `files_modified`), `alita/modules/settings_env_test.go`
+- **Issue:** the plan assumes `i18n.MustNewTranslator("es")` returns the real Spanish text in a module test, but no locale manager is initialised in the `fuku/modules` test binary (`locale manager not initialized`), and `OverrideManagerForTest` only installs one English string set.
+- **Fix:** added `OverrideManagerLanguagesForTest(yamlByLang)` (testtools build tag) to `fuku/i18n/test_helper.go`; `newSettingsEnvWith(RealLocale)` installs the seven real locale files through it.
+- **Files modified:** `fuku/i18n/test_helper.go` (not in the plan's `files_modified`), `fuku/modules/settings_env_test.go`
 - **Commit:** `9582256`
 
 **2. [Rule 1 - Bug in the plan's test] "/captcha shows 3" cannot be asserted with the marker locale**
@@ -216,6 +216,6 @@ On a real bot and group, as a group admin: send `/settings`; tap Open here (the 
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/modules/settings.go`, `settings_menu.go`, `settings_pages.go`, `settings_captcha.go`, `settings_env_test.go`, `settings_test.go`, `settings_menu_test.go`, `alita/i18n/settings_locale_test.go` (checked on disk).
+- Created files exist: `fuku/modules/settings.go`, `settings_menu.go`, `settings_pages.go`, `settings_captcha.go`, `settings_env_test.go`, `settings_test.go`, `settings_menu_test.go`, `fuku/i18n/settings_locale_test.go` (checked on disk).
 - Commits present: `faabfe4`, `9582256`, `c2f6e25`, `a726978` (`git log` on this branch).
 - All three tasks' `<verify>` commands and acceptance criteria re-run and green (see Verification).

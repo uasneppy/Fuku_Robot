@@ -4,7 +4,7 @@
 
 <p><b>A Telegram group manager written in Go: moderation, anti-spam, captcha, federations and more.</b></p>
 
-<p>A fork of <a href="https://github.com/Divkix/Alita_Robot">Alita Robot</a> by <a href="https://github.com/Divkix">Divkix</a></p>
+<p>A fork of <a href="https://github.com/Divkix/Alita_Robot">the upstream project</a> by <a href="https://github.com/Divkix">Divkix</a></p>
 
 <p>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white" alt="Go 1.26"></a>
@@ -15,7 +15,7 @@
 </p>
 
 <p>
-  <a href="#-whats-different-from-alita">What's different</a> •
+  <a href="#-whats-different-from-upstream">What's different</a> •
   <a href="#-features">Features</a> •
   <a href="#-commands">Commands</a> •
   <a href="#-getting-started">Getting started</a> •
@@ -26,7 +26,7 @@
 
 ---
 
-**Fuku Robot** is [uasneppy](https://github.com/uasneppy)'s fork of **Alita Robot**, a Telegram group-management bot
+**Fuku Robot** is [uasneppy](https://github.com/uasneppy)'s fork of an open-source project (see Credits), a Telegram group-management bot
 written in Go on top of [gotgbot](https://github.com/PaulSonOfLars/gotgbot). It moderates groups (bans, mutes, warns,
 purges), keeps spam out (antiflood, anti-raid, join captcha, blacklists, locks and an optional AI spam filter), stores
 notes, filters, rules and greetings, and ties several groups together through federations, connections and log
@@ -36,13 +36,13 @@ The long-term goal of the fork is a GroupHelp-style bot for the owner's own comm
 protects every linked group at once, plus stronger raid protection.
 
 > [!NOTE]
-> Right now the `main` branch runs **upstream Alita Robot's code unchanged** (upstream commit `34ba3f6`, version
+> Right now the `main` branch runs **the upstream project's code unchanged** (upstream commit `34ba3f6`, version
 > string `2.23.14`). The Fuku-specific features are being built on a separate branch and are not merged yet.
-> See [What's different from Alita](#-whats-different-from-alita) for the details.
+> See [What's different from upstream](#-whats-different-from-upstream) for the details.
 
 ## 📑 Table of contents
 
-- [What's different from Alita](#-whats-different-from-alita)
+- [What's different from upstream](#-whats-different-from-upstream)
 - [Features](#-features)
 - [Commands](#-commands)
 - [Architecture](#-architecture)
@@ -56,16 +56,16 @@ protects every linked group at once, plus stronger raid protection.
 - [Documentation](#-documentation)
 - [Credits & License](#-credits--license)
 
-## 🔀 What's different from Alita
+## 🔀 What's different from upstream
 
 ### On `main` today
 
-| | Fuku Robot `main` | Upstream Alita Robot |
+| | Fuku Robot `main` | Upstream Fuku Robot |
 | --- | --- | --- |
 | Bot code | Identical to upstream commit `34ba3f6` (3 Oct 2026). Apart from this README, `main` has no commits of its own. | Still moving. In October 2026 upstream `main` was 74 commits ahead, with tags up to `v2.26.1`. |
-| Names inside the code | Unchanged: Go module `github.com/divkix/Alita_Robot`, binary `alita_robot`, Redis keys under `alita:`, Docker labels and service names. | Same |
-| What users see | The bot's name and username come from BotFather, so you can call it Fuku. Some built-in texts still say "Alita", and the `/start` and `/about` menus link to upstream's support group and update channel. | Same |
-| Deploy manifests | Still point at upstream: `docker-compose.yml` pulls `ghcr.io/divkix/alita_robot:latest`, and `app.json` and `.goreleaser.yaml` name the upstream repository and image. | Same |
+| Names inside the code | Unchanged: Go module `github.com/uasneppy/fuku_robot`, binary `fuku_robot`, Redis keys under `fuku:`, Docker labels and service names. | Same |
+| What users see | The bot's name and username come from BotFather, so you can call it Fuku. Some built-in texts still say "Fuku", and the `/start` and `/about` menus link to upstream's support group and update channel. | Same |
+| Deploy manifests | Still point at upstream: `docker-compose.yml` pulls `ghcr.io/uasneppy/fuku_robot:latest`, and `app.json` and `.goreleaser.yaml` name the upstream repository and image. | Same |
 
 Upstream `main` now has features this fork's `main` lacks, for example expiring warns, optional CAS and lols.bot checks
 on new members, and stored reports with a report card in the log channel. See
@@ -565,8 +565,8 @@ flowchart TD
     end
 
     D --> Groups
-    Groups --> M["alita/modules<br/>30 modules + help"]
-    M --> R["alita/db repositories"]
+    Groups --> M["fuku/modules<br/>30 modules + help"]
+    M --> R["fuku/db repositories"]
     R -->|"reads"| L["In-process LRU<br/>CACHE_LOCAL_TTL"]
     L -->|"miss"| RD[("Redis<br/>cache + antiraid state")]
     RD -->|"miss"| PG[("PostgreSQL<br/>schema from migrations/*.sql")]
@@ -575,7 +575,7 @@ flowchart TD
     M -->|"replies and actions"| TG
 ```
 
-- **Startup.** `alita/config` loads `.env` and validates it. `alita/db` connects to PostgreSQL (5 attempts) and runs
+- **Startup.** `fuku/config` loads `.env` and validates it. `fuku/db` connects to PostgreSQL (5 attempts) and runs
   the SQL migrations when `AUTO_MIGRATE=true`. `main.go` then sets up Redis, the embedded locales, tracing, the bot
   client, the dispatcher, the monitors and the HTTP server. It loads the modules, registers `/start` and `/help` for
   private chats, and posts a "Started Bot!" message to `MESSAGE_DUMP`.
@@ -583,7 +583,7 @@ flowchart TD
   end it. A module registers itself in `init()`. Newer commands go through `helpers.WrapCommand`, a pipeline that
   runs the permission and disable checks; older ones register `handlers.NewCommand` directly. See
   [handler groups](docs/src/content/docs/architecture/handler-groups.md) and [AGENTS.md](AGENTS.md).
-- **Data.** Each domain has a repository package in `alita/db/<domain>/`. Reads go through a cache loader (process
+- **Data.** Each domain has a repository package in `fuku/db/<domain>/`. Reads go through a cache loader (process
   memory, then Redis, then PostgreSQL), and every write invalidates the keys it affects.
 - **Shutdown.** Handlers stop in reverse order (HTTP server or updater, background workers, DB connections), so
   in-flight work is drained before the database closes.
@@ -637,17 +637,17 @@ listed under [Configuration](#-configuration).
 
 [`docker-compose.yml`](docker-compose.yml) starts the bot together with PostgreSQL 17 and Redis 7. It sets
 `AUTO_MIGRATE=true`, `USE_WEBHOOKS=true` and `DROP_PENDING_UPDATES=true`, publishes port 8080 and health-checks the
-container with `alita_robot --health`. You need a public HTTPS domain that proxies to port 8080.
+container with `fuku_robot --health`. You need a public HTTPS domain that proxies to port 8080.
 
 > [!WARNING]
-> The stock compose file pulls **upstream's** published image (`ghcr.io/divkix/alita_robot:latest`), so it runs
+> The stock compose file pulls **upstream's** published image (`ghcr.io/uasneppy/fuku_robot:latest`), so it runs
 > upstream's latest release and not this repository's code. To run this fork, build it locally with an override file.
 > `local.docker-compose.yml` is already git-ignored:
 >
 > ```yaml
 > # local.docker-compose.yml
 > services:
->   alita:
+>   fuku:
 >     image: fuku-robot:local
 >     build:
 >       context: .
@@ -657,12 +657,12 @@ container with `alita_robot --health`. You need a public HTTPS domain that proxi
 ```bash
 # .env must define BOT_TOKEN, OWNER_ID, MESSAGE_DUMP, WEBHOOK_DOMAIN and WEBHOOK_SECRET
 docker compose -f docker-compose.yml -f local.docker-compose.yml up -d --build
-docker compose logs -f alita
+docker compose logs -f fuku
 ```
 
 Compose passes only those five variables from `.env` into the bot container. Put any other option (for example
-`TYPESAFE_API_KEY` or `METRICS_AUTH_TOKEN`) under `services.alita.environment` in your override file. The stack also
-ships fixed database and Redis passwords (`alita` / `redis`). Neither service publishes a port, but change the
+`TYPESAFE_API_KEY` or `METRICS_AUTH_TOKEN`) under `services.fuku.environment` in your override file. The stack also
+ships fixed database and Redis passwords (`fuku` / `redis`). Neither service publishes a port, but change the
 passwords if you reuse the stack elsewhere.
 
 ### 3b. Run a local debug stack (polling mode)
@@ -674,7 +674,7 @@ to `.env` first:
 ```ini
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<choose-a-password>
-POSTGRES_DB=alita_robot
+POSTGRES_DB=fuku_robot
 REDIS_PASSWORD=<choose-a-password>
 AUTO_MIGRATE=true
 ```
@@ -694,9 +694,9 @@ The stack also defines an optional local Bot API server (`aiogram/telegram-bot-a
 make run                       # = go run main.go; long polling unless USE_WEBHOOKS=true
 
 # or build a static binary
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o alita_robot .
-./alita_robot                  # keep migrations/ next to it when AUTO_MIGRATE=true
-./alita_robot --version        # prints the version and exits
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o fuku_robot .
+./fuku_robot                  # keep migrations/ next to it when AUTO_MIGRATE=true
+./fuku_robot --version        # prints the version and exits
 ```
 
 Locales are embedded in the binary. Migrations are read from `MIGRATIONS_PATH` (default `migrations`).
@@ -721,8 +721,8 @@ In both modes the HTTP server runs, so `/health` and `/metrics` are always avail
 
 ## 🔧 Configuration
 
-The bot reads every variable below in [`alita/config/config.go`](alita/config/config.go), except the `OTEL_*`
-variables, which [`alita/utils/tracing/tracing.go`](alita/utils/tracing/tracing.go) reads.
+The bot reads every variable below in [`fuku/config/config.go`](fuku/config/config.go), except the `OTEL_*`
+variables, which [`fuku/utils/tracing/tracing.go`](fuku/utils/tracing/tracing.go) reads.
 [`sample.env`](sample.env) is an annotated template. Booleans accept `true`, `yes` or `1`. An integer that fails to
 parse falls back to its default, with only a warning in the log.
 
@@ -750,7 +750,7 @@ parse falls back to its default, with only a warning in the log.
 | `DISABLE_CACHE` | `false` | Skip the read-through cache so every read hits PostgreSQL. The bot keeps running, degraded, without Redis. |
 | `CACHE_LOCAL_TTL` | `10` | Seconds a value stays in process memory (0–300; `0` turns the local layer off) |
 | `CACHE_LOCAL_MAX_ENTRIES` | `50000` | Size of the in-process LRU (100–1,000,000) |
-| `CLEAR_CACHE_ON_STARTUP` | `false` | Delete `alita:cache:*` keys at startup; operational keys are kept |
+| `CLEAR_CACHE_ON_STARTUP` | `false` | Delete `fuku:cache:*` keys at startup; operational keys are kept |
 
 </details>
 
@@ -826,7 +826,7 @@ parse falls back to its default, with only a warning in the log.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTLP gRPC endpoint. When empty and the console exporter is off, tracing is disabled. |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Connect without TLS (`true`) |
 | `OTEL_EXPORTER_CONSOLE` | `false` | Pretty-print spans to stderr (`true`) |
-| `OTEL_SERVICE_NAME` | `alita_robot` | Service name on the spans |
+| `OTEL_SERVICE_NAME` | `fuku_robot` | Service name on the spans |
 | `OTEL_TRACES_SAMPLE_RATE` | `1.0` | Sampling ratio, clamped to 0.0–1.0 |
 
 </details>
@@ -839,7 +839,7 @@ parse falls back to its default, with only a warning in the log.
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `debug.docker-compose.yml` (PostgreSQL container and the bot's `DATABASE_URL`) |
 | `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` | `debug.docker-compose.yml` (local Bot API server) |
 | `PSQL_DB_HOST`, `PSQL_DB_PORT`, `PSQL_DB_NAME`, `PSQL_DB_USER`, `PSQL_DB_PASSWORD`, `PSQL_DB_SSLMODE` | `make psql-migrate`, `make psql-status`, `make psql-reset` |
-| `ALITA_TEST_DATABASE`, `ALITA_TEST_MIGRATION_CHAIN` | Tests: opt in to the PostgreSQL-backed tests and the migration-chain test (both use `DATABASE_URL`) |
+| `FUKU_TEST_DATABASE`, `FUKU_TEST_MIGRATION_CHAIN` | Tests: opt in to the PostgreSQL-backed tests and the migration-chain test (both use `DATABASE_URL`) |
 
 </details>
 
@@ -857,7 +857,7 @@ parse falls back to its default, with only a warning in the log.
 | `POST /webhook` | Telegram updates; only registered in webhook mode |
 | `/debug/pprof/` | Go profiling; only when `ENABLE_PPROF=true` |
 
-`alita_robot --health` calls `/health` on the configured port and exits `0` or `1`, which suits distroless images
+`fuku_robot --health` calls `/health` on the configured port and exits `0` or `1`, which suits distroless images
 without curl. Logs are JSON (logrus), and known secrets are redacted. More in
 [monitoring](docs/src/content/docs/self-hosting/monitoring.md) and
 [profiling](docs/src/content/docs/self-hosting/profiling.md).
@@ -867,7 +867,7 @@ without curl. Logs are JSON (logrus), and known secrets are redacted. More in
 ```text
 Fuku_Robot/
 ├── main.go                    # entry point: cache, locales, tracing, bot, HTTP server, webhook or polling
-├── alita/
+├── fuku/
 │   ├── main.go                # LoadModules, ListModules, InitialChecks
 │   ├── config/                # every env var: parsing, defaults, validation
 │   ├── db/                    # GORM connection, migration runner, one repository package per domain
@@ -898,7 +898,7 @@ Fuku_Robot/
 | --- | --- |
 | `make run` | `go run main.go` |
 | `make test` | The full test suite: `-tags testtools -race`, coverage, result gate |
-| `make test-postgres-integrity` | PostgreSQL-only integrity tests (needs `DATABASE_URL` and `ALITA_TEST_DATABASE=true`) |
+| `make test-postgres-integrity` | PostgreSQL-only integrity tests (needs `DATABASE_URL` and `FUKU_TEST_DATABASE=true`) |
 | `make lint` · `make check-duplicates` | golangci-lint v2; duplicate-code check |
 | `make check-translations` | Report locale keys missing from any language |
 | `make generate-docs` · `make check-docs` | Regenerate the docs pages, or fail on drift |
@@ -912,13 +912,13 @@ Fuku_Robot/
 
 ```bash
 make test                                                            # always use the Makefile target
-go test -tags testtools -race -count=1 -run '^TestName$' ./alita/db/warns   # a single test
+go test -tags testtools -race -count=1 -run '^TestName$' ./fuku/db/warns   # a single test
 CGO_ENABLED=0 go build ./...                                         # quick compile check
 ```
 
 - Tests need `CGO_ENABLED=1` (SQLite); production builds use `CGO_ENABLED=0`. Without `-tags testtools`, test files
   are silently left out.
-- Tests run on SQLite and miniredis by default. Set `DATABASE_URL` and `ALITA_TEST_DATABASE=true` to use real
+- Tests run on SQLite and miniredis by default. Set `DATABASE_URL` and `FUKU_TEST_DATABASE=true` to use real
   PostgreSQL.
 - Before adding a module, migration or command, read [AGENTS.md](AGENTS.md). It covers migration naming and checksums,
   cache invalidation, handler groups, the locale rule (every new key goes into all 7 files) and conventional commits.
@@ -945,8 +945,8 @@ You can also use GitHub's **Sync fork** button. After syncing `main`, merge it i
 
 ## 📚 Documentation
 
-- **Upstream docs site:** [alita-docs.divkix.me](https://alita-docs.divkix.me) covers setup, configuration and every
-  module of Alita Robot. Most of it applies to this fork's `main` too.
+- **Upstream docs site:** [link](https://alita-docs.divkix.me) covers setup, configuration and every
+  module of Fuku Robot. Most of it applies to this fork's `main` too.
 - **In this repository:** the same site's sources live in [`docs/`](docs/README.md). Good starting points are
   [Docker](docs/src/content/docs/self-hosting/docker.mdx),
   [from source](docs/src/content/docs/self-hosting/source.mdx),
@@ -959,7 +959,7 @@ You can also use GitHub's **Sync fork** button. After syncing `main`, merge it i
 
 ## 🙏 Credits & License
 
-Fuku Robot is built entirely on **[Alita Robot](https://github.com/Divkix/Alita_Robot)** by
+Fuku Robot is built entirely on **[the upstream project](https://github.com/Divkix/Alita_Robot)** by
 **[Divanshu Chauhan (Divkix)](https://github.com/Divkix)** and
 [its contributors](https://github.com/Divkix/Alita_Robot/graphs/contributors). Almost every line of code, test,
 translation and document in this repository comes from that project. Thank you!
@@ -973,5 +973,5 @@ License. Any copy or substantial portion of the software must include the origin
 permission notice from [`LICENSE`](LICENSE).
 
 <div align="center">
-<sub>Fuku Robot is an independent fork and is not affiliated with or endorsed by the Alita Robot project.</sub>
+<sub>Fuku Robot is an independent fork and is not affiliated with or endorsed by the Fuku Robot project.</sub>
 </div>

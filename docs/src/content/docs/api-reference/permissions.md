@@ -6,12 +6,12 @@ description: Complete reference of permission checking functions
 
 # 🔐 Permission System
 
-This page documents all permission checking functions in Alita Robot.
+This page documents all permission checking functions in Fuku Robot.
 
 ## Overview
 
 - **Total Functions**: 26
-- **Location**: `alita/utils/chat_status/ (chat_status.go, access.go, permission_responder.go)`
+- **Location**: `fuku/utils/chat_status/ (chat_status.go, access.go, permission_responder.go)`
 
 ## Function Summary
 
@@ -115,7 +115,7 @@ IsBotAdmin checks if the bot has administrator privileges in the specified chat.
 
 ### PermissionResponder
 
-Located in `alita/utils/chat_status/permission_responder.go`.
+Located in `fuku/utils/chat_status/permission_responder.go`.
 
 Centralizes permission-failure messaging with support for callback-query answers and chat replies.
 

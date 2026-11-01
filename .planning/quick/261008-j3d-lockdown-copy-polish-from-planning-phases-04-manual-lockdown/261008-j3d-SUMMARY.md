@@ -10,15 +10,15 @@ provides:
   - "Lockdown replies carry no Telegram error text; the raw description goes to [Lockdown] log lines"
   - "Warning marker on the five lockdown failure lines in 7 locales"
   - "Help bullets in <code> spans; /lockdown help says it applies at once"
-affects: [alita/modules/lockdown.go, locales, docs/lockdown]
+affects: [fuku/modules/lockdown.go, locales, docs/lockdown]
 key-files:
   modified:
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_refusals_test.go
-    - alita/modules/lockdown_lift_test.go
-    - alita/modules/lockdown_lock_unknown_test.go
-    - alita/modules/lockdown_durability_test.go
-    - alita/i18n/lockdown_locale_test.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_refusals_test.go
+    - fuku/modules/lockdown_lift_test.go
+    - fuku/modules/lockdown_lock_unknown_test.go
+    - fuku/modules/lockdown_durability_test.go
+    - fuku/i18n/lockdown_locale_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -52,10 +52,10 @@ Lockdown replies no longer show Telegram's raw error text. They give one next st
 
 ## Verification
 
-- Lockdown, StaffPanel, RenderStaffRow, StaffLocale tests (`./alita/modules ./alita/i18n`, race): pass
+- Lockdown, StaffPanel, RenderStaffRow, StaffLocale tests (`./fuku/modules ./fuku/i18n`, race): pass
 - `make check-translations`: pass. `make generate-docs` then `make check-docs`: no drift; only `commands/lockdown/index.md` changed
 - `CGO_ENABLED=0 go build ./...`: pass. `go vet -tags testtools` on both packages: clean
-- `make test`: all packages pass except the root package `github.com/divkix/Alita_Robot`, which fails on a data race (`lockdown.ListJoinMsgsToDeleteFresh` read in the lockdown worker started by `TestPostInitSetsCommandsAndStartupMessage`). The same failure occurs on the base commit dab6c0b (checked by running `go test -race .` on an extracted copy), and no file touched here is involved. `alita/modules` passed (208 s). The flaky `tmute_as_a_reply` test did not fail.
+- `make test`: all packages pass except the root package `github.com/uasneppy/fuku_robot`, which fails on a data race (`lockdown.ListJoinMsgsToDeleteFresh` read in the lockdown worker started by `TestPostInitSetsCommandsAndStartupMessage`). The same failure occurs on the base commit dab6c0b (checked by running `go test -race .` on an extracted copy), and no file touched here is involved. `fuku/modules` passed (208 s). The flaky `tmute_as_a_reply` test did not fail.
 - `make lint`: could not run ("the Go language version (go1.25) used to build golangci-lint is lower than the targeted Go version (1.26.0)"). `gofmt` is clean on touched files.
 - `greetings_join_request_lockdown` has no diff in any locale.
 

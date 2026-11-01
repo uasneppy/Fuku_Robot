@@ -16,9 +16,9 @@ tech-stack:
   patterns: ["one apply function per setting, command maps the typed result to its unchanged reply"]
 key-files:
   created:
-    - alita/modules/captcha_apply_test.go
+    - fuku/modules/captcha_apply_test.go
   modified:
-    - alita/modules/captcha.go
+    - fuku/modules/captcha.go
 key-decisions:
   - "The shared read-back helper captchaReadBack uses context.Background(), because the plan's signatures for the three apply functions carry no context"
   - "No Settings read-back after a failed cleanup (captchaCleanupFailed): the command never needed it"
@@ -54,8 +54,8 @@ actuals:
 3. Task 2 (mode, captchaWebInstalled): `f1cb094`
 
 ## Verification
-- `CGO_ENABLED=0 go build ./...` clean; `go vet -tags testtools ./alita/modules/` clean; `gofmt -l alita/` empty.
-- All 15 tests named by the two verify blocks ran and passed (`-v`, `-race`); the pre-existing 11 are unedited. `go test -run Captcha ./alita/modules` also passes (24 s).
+- `CGO_ENABLED=0 go build ./...` clean; `go vet -tags testtools ./fuku/modules/` clean; `gofmt -l fuku/` empty.
+- All 15 tests named by the two verify blocks ran and passed (`-v`, `-race`); the pre-existing 11 are unedited. `go test -run Captcha ./fuku/modules` also passes (24 s).
 - `make lint` was not run: golangci-lint is built with go1.25 and cannot lint the go1.26 module in this sandbox. `gofmt` and `go vet` were run instead.
 
 ## Deviations from Plan
@@ -76,5 +76,5 @@ None. T-09-22 (Turnstile refusal order) is covered by `TestApplyCaptchaMode` and
 None. AGENTS.md was not edited: the `/captchamode turnstile` bullet stays true.
 
 ## Self-Check: PASSED
-- `alita/modules/captcha_apply_test.go` exists; `applyCaptchaEnabled`, `applyCaptchaAction`, `applyCaptchaMode`, `captchaWebInstalled` are defined in `alita/modules/captcha.go`.
+- `fuku/modules/captcha_apply_test.go` exists; `applyCaptchaEnabled`, `applyCaptchaAction`, `applyCaptchaMode`, `captchaWebInstalled` are defined in `fuku/modules/captcha.go`.
 - Commits `bfcce2b`, `eaf1674`, `f1cb094` exist on the branch.

@@ -9,7 +9,7 @@ requires:
     provides: "TurnstileAction, CDataPrefix, CData, ValidToken and the verify handler's Answer shape (passed, failed, expired, invalid, not_for_you, retry plus action)"
 provides:
   - "captchaweb.Page, NewPage(PageOptions{SiteKey, Strings}), Page.ServeHTTP, CSPFor, PageKeys (26), PageLanguages (7)"
-  - "alita/utils/captchaweb/page/captcha.html: the embedded Mini App page with the 9-state machine and window.CaptchaPage"
+  - "fuku/utils/captchaweb/page/captcha.html: the embedded Mini App page with the 9-state machine and window.CaptchaPage"
   - "scripts/captcha-page/captcha-page.test.mjs: node --test coverage of the page script (24 tests)"
 affects: [08-07 builds the string tables from the locale files, 08-10 mounts Page at GET /captcha and records the page rules in AGENTS.md, 08-11 spike checklist]
 
@@ -29,9 +29,9 @@ tech-stack:
 
 key-files:
   created:
-    - alita/utils/captchaweb/page.go
-    - alita/utils/captchaweb/page/captcha.html
-    - alita/utils/captchaweb/page_test.go
+    - fuku/utils/captchaweb/page.go
+    - fuku/utils/captchaweb/page/captcha.html
+    - fuku/utils/captchaweb/page_test.go
     - scripts/captcha-page/captcha-page.test.mjs
   modified: []
 
@@ -51,7 +51,7 @@ coverage:
     requirement: CAPT-08
     verification:
       - kind: unit
-        ref: "alita/utils/captchaweb/page_test.go#TestPageHeadersAndNonce"
+        ref: "fuku/utils/captchaweb/page_test.go#TestPageHeadersAndNonce"
         status: pass
     human_judgment: false
   - id: D2
@@ -59,7 +59,7 @@ coverage:
     requirement: CAPT-08
     verification:
       - kind: unit
-        ref: "alita/utils/captchaweb/page_test.go#TestPageEmbedsSafeStrings"
+        ref: "fuku/utils/captchaweb/page_test.go#TestPageEmbedsSafeStrings"
         status: pass
     human_judgment: false
   - id: D3
@@ -67,13 +67,13 @@ coverage:
     requirement: CAPT-08
     verification:
       - kind: unit
-        ref: "alita/utils/captchaweb/page_test.go#TestPageStructure"
+        ref: "fuku/utils/captchaweb/page_test.go#TestPageStructure"
         status: pass
       - kind: unit
-        ref: "alita/utils/captchaweb/page_test.go#TestNewPageRefuses"
+        ref: "fuku/utils/captchaweb/page_test.go#TestNewPageRefuses"
         status: pass
       - kind: unit
-        ref: "alita/utils/captchaweb/page_test.go#TestPageNoScriptFallback"
+        ref: "fuku/utils/captchaweb/page_test.go#TestPageNoScriptFallback"
         status: pass
     human_judgment: false
   - id: D4
@@ -133,12 +133,12 @@ status: complete
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -v ./alita/utils/captchaweb`: `--- PASS` for `TestPageHeadersAndNonce`, `TestPageEmbedsSafeStrings`, `TestPageStructure`, `TestNewPageRefuses`, `TestPageNoScriptFallback`; package `ok`.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -v ./fuku/utils/captchaweb`: `--- PASS` for `TestPageHeadersAndNonce`, `TestPageEmbedsSafeStrings`, `TestPageStructure`, `TestNewPageRefuses`, `TestPageNoScriptFallback`; package `ok`.
 - `node --test scripts/captcha-page/*.test.mjs` (Node v22.22.0): `# tests 24`, `# pass 24`, `# fail 0`; five consecutive runs were identical.
-- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./alita/utils/captchaweb`: clean. `gofmt -l alita/utils/captchaweb`: nothing. `git diff --exit-code go.mod go.sum`: no diff.
+- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./fuku/utils/captchaweb`: clean. `gofmt -l fuku/utils/captchaweb`: nothing. `git diff --exit-code go.mod go.sum`: no diff.
 - `make lint` was not run: golangci-lint is built with go1.25 and cannot lint the go1.26.0 module in this sandbox; `go vet` and `gofmt -l` stand in.
 - Acceptance greps: `//go:embed page/captcha.html` 1; the `frame-ancestors` string 1; `api.js?render=explicit` 1; `telegram-web-app.js` 1; `credentials: 'omit'` 1; `.innerHTML =` 0; `cData`, `tgWebAppStartParam`, `AbortController`, `CaptchaPage` all at least 1; `from 'node:test'` 1; `func TestPageNoScriptFallback(` 1.
-- I did not run `make test` or the `./alita/modules` package; the plan changes no shared code.
+- I did not run `make test` or the `./fuku/modules` package; the plan changes no shared code.
 
 ## Deviations from Plan
 
@@ -154,7 +154,7 @@ status: complete
 - **Found during:** Task 3 (the boot test advances fake timers to 7999 ms and expects loading)
 - **Issue:** the poll counted the wait before it ran, so the 32nd poll at 7750 ms already crossed the 8000 ms line.
 - **Fix:** the elapsed time is checked before it is advanced.
-- **Files modified:** alita/utils/captchaweb/page/captcha.html
+- **Files modified:** fuku/utils/captchaweb/page/captcha.html
 - **Commit:** `410d47f`
 
 **3. [Rule 3 - Blocking] Commit trailer model name**
@@ -201,5 +201,5 @@ Plan 08-07 can build `PageOptions.Strings` from the locale files (keys are the f
 
 ## Self-Check: PASSED
 
-- `alita/utils/captchaweb/page.go`, `alita/utils/captchaweb/page/captcha.html`, `alita/utils/captchaweb/page_test.go`, `scripts/captcha-page/captcha-page.test.mjs`: FOUND
+- `fuku/utils/captchaweb/page.go`, `fuku/utils/captchaweb/page/captcha.html`, `fuku/utils/captchaweb/page_test.go`, `scripts/captcha-page/captcha-page.test.mjs`: FOUND
 - Commits `f2f7cc0`, `a852bc5`, `257ad38`, `410d47f`, `803a246`: FOUND

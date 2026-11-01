@@ -30,7 +30,7 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_ai_integration_test.go
+    - fuku/modules/raid_ai_integration_test.go
   modified: []
 
 key-decisions:
@@ -46,28 +46,28 @@ coverage:
     requirement: "RAID-03"
     verification:
       - kind: integration
-        ref: "go test -tags testtools -race -run '^TestRaidAIImageBurst$' ./alita/modules"
+        ref: "go test -tags testtools -race -run '^TestRaidAIImageBurst$' ./fuku/modules"
         status: pass
   - id: D2
     description: "The raid AI path never writes to Telegram and one verdict, four verdicts from three accounts and five from two never lock, over text, photo and mixed paths"
     requirement: "RAID-05"
     verification:
       - kind: integration
-        ref: "go test -tags testtools -race -run '^TestRaidAINeverActs$' ./alita/modules"
+        ref: "go test -tags testtools -race -run '^TestRaidAINeverActs$' ./fuku/modules"
         status: pass
   - id: D3
     description: "With the AI providers hung, failing, rate limited, unreadable, unconfigured, paused or shed, every update returns within 500 ms and the join surge and flood triggers still lock"
     requirement: "RAID-05"
     verification:
       - kind: integration
-        ref: "go test -tags testtools -race -run '^TestRaidAIFailOpen$' ./alita/modules"
+        ref: "go test -tags testtools -race -run '^TestRaidAIFailOpen$' ./fuku/modules"
         status: pass
   - id: D4
     description: "The full phase gate: make test, check-translations, check-docs, build, vet, gofmt, go.mod unchanged"
     requirement: "PLAT-02"
     verification:
       - kind: other
-        ref: "make test (exit=0, 63 ok packages); make check-translations; make check-docs; CGO_ENABLED=0 go build ./...; go vet -tags testtools ./...; gofmt -l alita main.go scripts"
+        ref: "make test (exit=0, 63 ok packages); make check-translations; make check-docs; CGO_ENABLED=0 go build ./...; go vet -tags testtools ./...; gofmt -l fuku main.go scripts"
         status: pass
 ---
 
@@ -88,7 +88,7 @@ coverage:
 
 ## Files Created/Modified
 
-- `alita/modules/raid_ai_integration_test.go` (created): the three tests and their helpers (`aiPhoto`, `serveGeminiByFileName`, `callsSince`, `failOpenModes`, `dispatchWithin`, `probeFailOpen`). No production file changed, `go.mod` and `go.sum` unchanged.
+- `fuku/modules/raid_ai_integration_test.go` (created): the three tests and their helpers (`aiPhoto`, `serveGeminiByFileName`, `callsSince`, `failOpenModes`, `dispatchWithin`, `probeFailOpen`). No production file changed, `go.mod` and `go.sum` unchanged.
 
 ## Phase Gate
 
@@ -99,7 +99,7 @@ coverage:
 | `make check-docs` | no drift |
 | `CGO_ENABLED=0 go build ./...` | pass |
 | `go vet -tags testtools ./...` | pass |
-| `gofmt -l alita main.go scripts` | prints nothing |
+| `gofmt -l fuku main.go scripts` | prints nothing |
 | `git diff 6c1ee23 -- go.mod go.sum` | empty |
 | `make lint` | not run: golangci-lint is built with Go 1.25 and cannot lint the module's Go 1.26. `go vet` and `gofmt` stand in |
 | PostgreSQL (migration 20261029120000 chain, `make test-postgres-integrity`: `TestRaidDetectionSettings`, `TestRaidDetectionCarryOver`) | not run here by rule; runs in CI |
@@ -138,5 +138,5 @@ None. Every provider in the tests is an `httptest` server set through the produc
 
 ## Self-Check: PASSED
 
-- `alita/modules/raid_ai_integration_test.go`: found
+- `fuku/modules/raid_ai_integration_test.go`: found
 - Commits `e81f26c` and `78fd138`: found

@@ -31,10 +31,10 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_undo_shutdown_test.go
+    - fuku/modules/staff_undo_shutdown_test.go
   modified:
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_undo.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_undo.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -56,7 +56,7 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_shutdown_test.go#TestStaffUndoShutdownWindow"
+        ref: "fuku/modules/staff_undo_shutdown_test.go#TestStaffUndoShutdownWindow"
         status: pass
     human_judgment: false
   - id: D2
@@ -64,7 +64,7 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_shutdown_test.go#TestStaffUndoConfirmAfterStop"
+        ref: "fuku/modules/staff_undo_shutdown_test.go#TestStaffUndoConfirmAfterStop"
         status: pass
     human_judgment: false
   - id: D3
@@ -72,7 +72,7 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: other
-        ref: "make check-translations; go test -tags testtools ./alita/i18n -run TestStaffLocaleKeys"
+        ref: "make check-translations; go test -tags testtools ./fuku/i18n -run TestStaffLocaleKeys"
         status: pass
     human_judgment: false
 
@@ -113,9 +113,9 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/modules/staff_action_run.go` - `joinStaffRuns`, `startJoinedStaffRun`, `startStaffRun` wrapper
-- `alita/modules/staff_undo.go` - Confirm joins the drain before the claim, restart refusal, `startStaffUndoRun` takes the run context
-- `alita/modules/staff_undo_shutdown_test.go` - `TestStaffUndoShutdownWindow`, `TestStaffUndoConfirmAfterStop`, `resetStaffActionsContextAfter`
+- `fuku/modules/staff_action_run.go` - `joinStaffRuns`, `startJoinedStaffRun`, `startStaffRun` wrapper
+- `fuku/modules/staff_undo.go` - Confirm joins the drain before the claim, restart refusal, `startStaffUndoRun` takes the run context
+- `fuku/modules/staff_undo_shutdown_test.go` - `TestStaffUndoShutdownWindow`, `TestStaffUndoConfirmAfterStop`, `resetStaffActionsContextAfter`
 - `locales/{en,es,fr,hi,id,pt,ru}.yml` - `staff_undo_abort_restarting`
 - `AGENTS.md` - the StopStaffActions drain rule for undo Confirms
 
@@ -130,11 +130,11 @@ None - plan executed exactly as written. Hindi and Indonesian wording refers to 
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(ConfirmAfterStop|ShutdownWindow)$|^TestStopStaffActions' -v ./alita/modules`: PASS, both new tests plus the three TestStopStaffActions tests.
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndo|^TestStaffAction|^TestStaffHistory' ./alita/modules`: ok (run after each task).
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n`: ok; `make check-translations`: all present; `make check-docs`: no drift.
-- `go vet -tags testtools ./alita/modules ./alita/db/staff`: clean; `CGO_ENABLED=0 go build ./...`: ok; `git diff b342f07 -- go.mod go.sum`: empty.
-- All acceptance-criteria greps and `gofmt -l` on the touched files: pass (the one `gofmt -l` hit, `alita/modules/greetings_command_test.go`, is pre-existing and untouched).
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(ConfirmAfterStop|ShutdownWindow)$|^TestStopStaffActions' -v ./fuku/modules`: PASS, both new tests plus the three TestStopStaffActions tests.
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndo|^TestStaffAction|^TestStaffHistory' ./fuku/modules`: ok (run after each task).
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n`: ok; `make check-translations`: all present; `make check-docs`: no drift.
+- `go vet -tags testtools ./fuku/modules ./fuku/db/staff`: clean; `CGO_ENABLED=0 go build ./...`: ok; `git diff b342f07 -- go.mod go.sum`: empty.
+- All acceptance-criteria greps and `gofmt -l` on the touched files: pass (the one `gofmt -l` hit, `fuku/modules/greetings_command_test.go`, is pre-existing and untouched).
 - `make test` (full run): exit 0, 60 packages ok, no FAIL. The known flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail.
 - `make lint` was not run: the installed golangci-lint was built with go1.25 and refuses the go1.26.0 module.
 
@@ -152,5 +152,5 @@ None. T-03-33 and T-03-34 are mitigated as planned: the Confirm joins the drain 
 
 ## Self-Check: PASSED
 
-- FOUND: alita/modules/staff_undo_shutdown_test.go
+- FOUND: fuku/modules/staff_undo_shutdown_test.go
 - FOUND commits: 385a6b4, 3b3aead, fc0f7d7, 4eadd0c

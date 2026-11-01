@@ -10,7 +10,7 @@ goal: find_root_cause_only
 
 hypothesis: CONFIRMED (all three parts reproduced with real fixtures, see Evidence T1-T4)
 bug_class: Bohrbug (deterministic design gap; reproduces on every run with the given inputs)
-test: done; scratch test alita/modules/zz_scratch_g034_test.go was run and deleted (worktree has no source changes)
+test: done; scratch test fuku/modules/zz_scratch_g034_test.go was run and deleted (worktree has no source changes)
 expecting: n/a
 next_action: none; resolved by 03-10..03-12 and confirmed in UAT test 6.
 
@@ -39,7 +39,7 @@ reasoning_checkpoint:
     - "code: claim taken before any effect and never released (staff_undo.go 394-416, actions.go ClaimUndo)"
     - "code: labels keyed on UndoStartedAt only; list tally lacks undo counts (staff_history.go 69-80, actions.go TallyActionGroups)"
     - "code: dead-run conversion only for the action, not the undo (staff_history.go 338-349, staff_action_record.go 208-226)"
-    - "environment: shutdown ordering; claim-to-WG.Add window, and the shutdown manager's 10 s per-handler cap (alita/utils/shutdown/graceful.go:83) is shorter than StopStaffActions' 30 s wait, so a graceful shutdown can still close the DB before FinalizeUndo"
+    - "environment: shutdown ordering; claim-to-WG.Add window, and the shutdown manager's 10 s per-handler cap (fuku/utils/shutdown/graceful.go:83) is shorter than StopStaffActions' 30 s wait, so a graceful shutdown can still close the DB before FinalizeUndo"
     - "data: record has no per-group 'write attempted' marker; fail_interrupted / fail_rate_limited / fail_group_not_found are written both before and after a write call, so the stored reason alone can't tell whether a write was reached"
   and_gate: |
     Partly yes. Symptom 1 (claim kept) needs only the code cause (unconditional latch). Symptom 3 (⏳ forever)
@@ -77,7 +77,7 @@ started: discovered during UAT, after phase 3 execution (design gap, present sin
   evidence: |
     Partly eliminated. Polling mode: shutdown LIFO runs updater.Stop first, and gotgbot's Updater.Stop calls
     Dispatcher.Stop, which waits on the dispatcher waitGroup for in-flight handlers (ext/dispatcher.go:213-214)
-    before StopStaffActions runs. Webhook mode: httpServer.Stop (alita/utils/httpserver/server.go:419-452)
+    before StopStaffActions runs. Webhook mode: httpServer.Stop (fuku/utils/httpserver/server.go:419-452)
     closes the dispatch queue and waits for dispatchWG within a 10 s budget. So the window (T3) is reachable
     only when a Confirm handler outlives those drains, or on a hard crash. It is a contributing trigger for the
     "crashed undo" state, not the main path for symptom 1.
@@ -91,7 +91,7 @@ started: discovered during UAT, after phase 3 execution (design gap, present sin
   implication: No known-pattern candidate; investigate from scratch.
 
 - timestamp: 2026-10-06T00:10:00Z
-  checked: alita/modules/staff_undo.go staffUndoConfirm (lines 394-430)
+  checked: fuku/modules/staff_undo.go staffUndoConfirm (lines 394-430)
   found: |
     Order at Confirm: claim via staffClaimUndo -> staff.ClaimUndo (line 399) -> editStaffUndoneOriginal (line 416,
     a Telegram edit of the original summary to "Undone by X, see the reply" and removal of its Undo button) ->
@@ -100,7 +100,7 @@ started: discovered during UAT, after phase 3 execution (design gap, present sin
   implication: The claim and the "Undone" marker are both committed before any evidence of effect exists.
 
 - timestamp: 2026-10-06T00:12:00Z
-  checked: alita/db/staff/actions.go ClaimUndo (270-285) and FinalizeUndo (329-358); grep for any writer that
+  checked: fuku/db/staff/actions.go ClaimUndo (270-285) and FinalizeUndo (329-358); grep for any writer that
     clears undo_started_at
   found: |
     ClaimUndo: UPDATE staff_actions SET undo_by, undo_by_name, undo_started_at=now WHERE id=? AND
@@ -181,8 +181,8 @@ started: discovered during UAT, after phase 3 execution (design gap, present sin
     StopStaffActionsUndo, OriginalEditFails and Tracer need their assertions revised by the fix.
 
 - timestamp: 2026-10-06T09:18:00Z
-  checked: Scratch test (alita/modules/zz_scratch_g034_test.go, real fixtures newStaffActionEnv: SQLite +
-    miniredis + fake BotClient), `go test -tags testtools -race -count=1 -run TestScratchG034 ./alita/modules/`
+  checked: Scratch test (fuku/modules/zz_scratch_g034_test.go, real fixtures newStaffActionEnv: SQLite +
+    miniredis + fake BotClient), `go test -tags testtools -race -count=1 -run TestScratchG034 ./fuku/modules/`
   found: |
     All four PASS (= bug observed):
     T1 ZeroEffectUndoKeepsClaim: Bob plain member in both groups. 0 unban calls. Rows done/skipped
@@ -202,8 +202,8 @@ started: discovered during UAT, after phase 3 execution (design gap, present sin
     observation. Scratch file deleted afterwards; `git status` shows only .planning/debug/.
 
 - timestamp: 2026-10-06T09:25:00Z
-  checked: main.go shutdown registration (158-293), alita/utils/shutdown/graceful.go (67-109), gotgbot
-    ext/updater.go Stop (244-263) and ext/dispatcher.go Stop (213-217), alita/utils/httpserver/server.go Stop
+  checked: main.go shutdown registration (158-293), fuku/utils/shutdown/graceful.go (67-109), gotgbot
+    ext/updater.go Stop (244-263) and ext/dispatcher.go Stop (213-217), fuku/utils/httpserver/server.go Stop
   found: |
     LIFO order: updater.Stop (polling) or httpServer.Stop (webhook) -> DrainAISpamChecks -> StopStaffActions ->
     StopStaffSweeper -> ... -> closeDBConnections. Polling: Dispatcher.Stop waits for in-flight handlers.
@@ -218,8 +218,8 @@ started: discovered during UAT, after phase 3 execution (design gap, present sin
 
 root_cause: |
   The undo flow conflates "an undo was claimed" with "the action was undone", in three places.
-  (1) Claim: staffUndoConfirm (alita/modules/staff_undo.go:394-416) takes the D-09 latch through
-  staff.ClaimUndo (alita/db/staff/actions.go:270-285) and edits the original summary to "Undone by X" BEFORE any
+  (1) Claim: staffUndoConfirm (fuku/modules/staff_undo.go:394-416) takes the D-09 latch through
+  staff.ClaimUndo (fuku/db/staff/actions.go:270-285) and edits the original summary to "Undone by X" BEFORE any
   group is visited. The run's Finish (staff_undo.go:540-559) only calls FinalizeUndo and never looks at the
   per-group results. No repository function can clear undo_started_at, so the latch is permanent whatever the
   run did, even with zero Telegram writes. The run also doesn't record whether a group reached its write call,
@@ -252,8 +252,8 @@ verification: |
   staff_history_undo_test.go and actions_test.go (make test green after each plan). Confirmed live by the user in
   03-UAT.md test 6 (re-run of test 4 after gap closure), passed 2026-10-06.
 files_changed:
-  - alita/db/staff/actions.go
-  - alita/modules/staff_action_run.go
-  - alita/modules/staff_history.go
-  - alita/modules/staff_undo.go
+  - fuku/db/staff/actions.go
+  - fuku/modules/staff_action_run.go
+  - fuku/modules/staff_history.go
+  - fuku/modules/staff_undo.go
   - locales/*.yml (all 7)

@@ -5,51 +5,51 @@ depth: deep
 files_reviewed: 61
 files_reviewed_list:
   - AGENTS.md
-  - alita/config/config.go
-  - alita/config/config_pure_test.go
-  - alita/db/devs/repository.go
-  - alita/db/devs/repository_test.go
-  - alita/db/models/lockdown.go
-  - alita/db/models/raid_detection.go
-  - alita/db/raiddetection/repository.go
-  - alita/db/raiddetection/repository_test.go
-  - alita/db/raiddetection/stats.go
-  - alita/db/raiddetection/stats_test.go
-  - alita/i18n/lockdown_locale_test.go
-  - alita/modules/aispam.go
-  - alita/modules/autolockdown.go
-  - alita/modules/autolockdown_test.go
-  - alita/modules/devs.go
-  - alita/modules/lockdown.go
-  - alita/modules/lockdown_alert.go
-  - alita/modules/lockdown_alert_test.go
-  - alita/modules/lockdown_status.go
-  - alita/modules/raid_ai.go
-  - alita/modules/raid_ai_breaker.go
-  - alita/modules/raid_ai_breaker_test.go
-  - alita/modules/raid_ai_budget_test.go
-  - alita/modules/raid_ai_burst_test.go
-  - alita/modules/raid_ai_count.go
-  - alita/modules/raid_ai_image.go
-  - alita/modules/raid_ai_integration_test.go
-  - alita/modules/raid_ai_media.go
-  - alita/modules/raid_ai_media_test.go
-  - alita/modules/raid_ai_pool_test.go
-  - alita/modules/raid_ai_stats_test.go
-  - alita/modules/raid_ai_text_test.go
-  - alita/modules/raid_join_surge_test.go
-  - alita/modules/raid_trigger.go
-  - alita/modules/shutdown_drains.go
-  - alita/modules/staff_action_fake_test.go
-  - alita/modules/test_harness_test.go
-  - alita/utils/gemini/client.go
-  - alita/utils/gemini/errors.go
-  - alita/utils/gemini/gemini_test.go
-  - alita/utils/gemini/leaf_test.go
-  - alita/utils/gemini/request.go
-  - alita/utils/gemini/response.go
-  - alita/utils/logredact/logredact.go
-  - alita/utils/logredact/logredact_test.go
+  - fuku/config/config.go
+  - fuku/config/config_pure_test.go
+  - fuku/db/devs/repository.go
+  - fuku/db/devs/repository_test.go
+  - fuku/db/models/lockdown.go
+  - fuku/db/models/raid_detection.go
+  - fuku/db/raiddetection/repository.go
+  - fuku/db/raiddetection/repository_test.go
+  - fuku/db/raiddetection/stats.go
+  - fuku/db/raiddetection/stats_test.go
+  - fuku/i18n/lockdown_locale_test.go
+  - fuku/modules/aispam.go
+  - fuku/modules/autolockdown.go
+  - fuku/modules/autolockdown_test.go
+  - fuku/modules/devs.go
+  - fuku/modules/lockdown.go
+  - fuku/modules/lockdown_alert.go
+  - fuku/modules/lockdown_alert_test.go
+  - fuku/modules/lockdown_status.go
+  - fuku/modules/raid_ai.go
+  - fuku/modules/raid_ai_breaker.go
+  - fuku/modules/raid_ai_breaker_test.go
+  - fuku/modules/raid_ai_budget_test.go
+  - fuku/modules/raid_ai_burst_test.go
+  - fuku/modules/raid_ai_count.go
+  - fuku/modules/raid_ai_image.go
+  - fuku/modules/raid_ai_integration_test.go
+  - fuku/modules/raid_ai_media.go
+  - fuku/modules/raid_ai_media_test.go
+  - fuku/modules/raid_ai_pool_test.go
+  - fuku/modules/raid_ai_stats_test.go
+  - fuku/modules/raid_ai_text_test.go
+  - fuku/modules/raid_join_surge_test.go
+  - fuku/modules/raid_trigger.go
+  - fuku/modules/shutdown_drains.go
+  - fuku/modules/staff_action_fake_test.go
+  - fuku/modules/test_harness_test.go
+  - fuku/utils/gemini/client.go
+  - fuku/utils/gemini/errors.go
+  - fuku/utils/gemini/gemini_test.go
+  - fuku/utils/gemini/leaf_test.go
+  - fuku/utils/gemini/request.go
+  - fuku/utils/gemini/response.go
+  - fuku/utils/logredact/logredact.go
+  - fuku/utils/logredact/logredact_test.go
   - locales/en.yml
   - locales/es.yml
   - locales/fr.yml
@@ -85,7 +85,7 @@ status: issues_found
 The review covered the Gemini leaf client, the raid AI watcher, pool, breakers, budgets and verdict counter, the `ai_burst` trigger plumbing, the settings columns and migration, `/autolockdown ai`, the shutdown drain, the locales and the spike tool. Cross-file calls were traced from the group 2 watcher and from `processAISpam` through `raidAIRecordVerdict` and `raidFire` to the alert snapshot.
 
 Checks run here (PostgreSQL was not started):
-- `go test -tags testtools -race -count=1` passed for `alita/modules` (whole package, 308 s), `alita/utils/gemini`, `alita/utils/logredact`, `alita/db/raiddetection`, `alita/db/devs`, `alita/db/models`, `alita/config`, `alita/i18n` and `scripts/gemini-spike`.
+- `go test -tags testtools -race -count=1` passed for `fuku/modules` (whole package, 308 s), `fuku/utils/gemini`, `fuku/utils/logredact`, `fuku/db/raiddetection`, `fuku/db/devs`, `fuku/db/models`, `fuku/config`, `fuku/i18n` and `scripts/gemini-spike`.
 - `go vet -tags testtools` is clean on the touched packages, and `CGO_ENABLED=0 go build ./...` succeeds.
 - `golangci-lint` could not run (the installed binary was built with Go 1.25, the module targets 1.26).
 - Migration `20261029120000` and the `chk_chat_raid_detection_ai` CHECK were not executed against PostgreSQL. I read the SQL and the grammar is valid; CI's migration-chain step and `TestRaidDetectionSettings` have to confirm it.
@@ -102,7 +102,7 @@ There are no blockers. I tried to build a path where one verdict, one account, o
   - The Gemini key travels only in `x-goog-api-key`. Errors are rebuilt from `ue.Err`, `HTTPError.Error()` never prints the server message, and redirects are not followed.
   - The Telegram file URL is never wrapped or logged. The download error is rebuilt, status errors carry the code alone, and the token is scrubbed as a last step.
   - `GEMINI_MODEL` is validated with `ValidModel` and `url.PathEscape`d.
-- **Spike tool.** It sends nothing without a key or `-fake-key -probe`, never prints the key, and `go list -deps` shows it imports only `alita/utils/gemini`.
+- **Spike tool.** It sends nothing without a key or `-fake-key -probe`, never prints the key, and `go list -deps` shows it imports only `fuku/utils/gemini`.
 
 The warnings below are cost, consent, kill-switch, blast-radius and test-reliability problems, not correctness holes in the fire rule.
 
@@ -110,7 +110,7 @@ The warnings below are cost, consent, kill-switch, blast-radius and test-reliabi
 
 ### WR-01: One new account can exhaust the per-group and the fleet-wide Gemini budget, blinding the AI trigger everywhere
 
-**File:** `alita/modules/raid_ai_image.go:278-301` (`raidAIReserveBudget`), `alita/modules/raid_ai.go:279-321` (`raidAIWatchImage`)
+**File:** `fuku/modules/raid_ai_image.go:278-301` (`raidAIReserveBudget`), `fuku/modules/raid_ai.go:279-321` (`raidAIWatchImage`)
 
 **Issue:** The hourly budgets (150 per group, 500 in all) are keyed by chat and by hour only. Any account that joined in the last 24 h is a candidate for every photo, GIF and sticker it posts, and nothing limits one account. The cache saves a repeat of the same file, but each different photo reserves one unit before the download.
 
@@ -142,7 +142,7 @@ Pass `job.userID` from `raidAIImageVerdict`, and add a test where one member pos
 
 ### WR-02: `ENABLE_AISPAM=false` does not stop the Gemini image checks, and there is no runtime kill switch for them
 
-**File:** `alita/modules/raid_ai.go:73-76` (`raidAIImageConfigured`), `sample.env:114-117`
+**File:** `fuku/modules/raid_ai.go:73-76` (`raidAIImageConfigured`), `sample.env:114-117`
 
 **Issue:** `raidAITextConfigured()` honours `EnableAISpam`, but `raidAIImageConfigured()` is just `GeminiAPIKey != ""`. `sample.env` still describes `ENABLE_AISPAM` as the "Global kill switch for the AI spam filter ... Set to false to stop all AI spam checks without deploying". With a Gemini key set, setting it to false stops TypeSafe calls and leaves every member image going to Google.
 
@@ -160,7 +160,7 @@ Update the `sample.env` comment (and `raidAIConfigured`'s doc) to say "stops all
 
 ### WR-03: Raid-only text checks send chat description, rules and sender profile for chats that never opted in to `/aispam`, and the disclosure and `sample.env` say otherwise
 
-**File:** `alita/modules/raid_ai.go:501-518` (`raidAIProcessText` building `task.state(nil, 1)`), `alita/modules/aispam.go:129-151`, `sample.env:105-107`, `locales/en.yml` (`lockdown_help_msg`, AI paragraph)
+**File:** `fuku/modules/raid_ai.go:501-518` (`raidAIProcessText` building `task.state(nil, 1)`), `fuku/modules/aispam.go:129-151`, `sample.env:105-107`, `locales/en.yml` (`lockdown_help_msg`, AI paragraph)
 
 **Issue:** `aispamTask.state` includes the chat title, the chat description (a live `getChat`), the chat rules, the sender's days since first seen and warn count, besides the text. `/aispam` discloses all of that in `aispam_data_notice`, and a chat has to switch it on first.
 
@@ -181,7 +181,7 @@ Otherwise extend the `lockdown_help_msg` sentence in all 7 locales ("with the gr
 
 ### WR-04: The AI-burst snapshot puts established members into "Ban N recent joiners"
 
-**File:** `alita/modules/raid_ai_count.go:210-228` (`raidAISpammersScript`), `alita/modules/lockdown_alert.go:294-307` (`lockdownMergeSnapshot`), `alita/modules/lockdown_alert.go:227-243`
+**File:** `fuku/modules/raid_ai_count.go:210-228` (`raidAISpammersScript`), `fuku/modules/lockdown_alert.go:294-307` (`lockdownMergeSnapshot`), `fuku/modules/lockdown_alert.go:227-243`
 
 **Issue:** The `/aispam` delete verdicts of established members count (D-19). The snapshot script keeps accounts with no recent `:joined` score and scores them by their verdict time. `lockdownBurstSnapshot` then saves them as `pre` burst rows with a `JoinedAt` that is really a verdict time.
 
@@ -203,7 +203,7 @@ If the owner wants established members in the sample, list them in the text but 
 
 ### WR-05: The test harness waits for AI jobs and posts but not for the lockdown starts in between
 
-**File:** `alita/modules/test_harness_test.go:158-159`, `alita/modules/staff_action_fake_test.go:195-196`, `alita/modules/lockdown_alert_test.go:61-62`, `alita/modules/raid_ai_integration_test.go:67-68`
+**File:** `fuku/modules/test_harness_test.go:158-159`, `fuku/modules/staff_action_fake_test.go:195-196`, `fuku/modules/lockdown_alert_test.go:61-62`, `fuku/modules/raid_ai_integration_test.go:67-68`
 
 **Issue:** Each read helper (`callsFor`, `sentTo`, `sentChats`, `callsSince`) now calls `raidAIJobs.wait()` and then `raidPosts.wait()`. A verdict hands the start to `raidAIFireAsync`, which is counted in `raidAIFires`, a third tracker.
 
@@ -223,7 +223,7 @@ raidPosts.wait()
 
 ### IN-01: `raidAIGeminiPause.reason` is written and never read
 
-**File:** `alita/modules/raid_ai_breaker.go:55-59`, `:153`
+**File:** `fuku/modules/raid_ai_breaker.go:55-59`, `:153`
 
 **Issue:** The `reason` field of the provider-wide pause is assigned under the mutex but nothing reads it (the log line uses the local `reason`). Dead state.
 
@@ -231,7 +231,7 @@ raidPosts.wait()
 
 ### IN-02: An invalid `GEMINI_MODEL` is logged verbatim before secrets are registered
 
-**File:** `alita/config/config.go:464-468`, `:521`
+**File:** `fuku/config/config.go:464-468`, `:521`
 
 **Issue:** `setDefaults` runs inside `LoadConfig`, before `registerSecrets(cfg)`. The warning prints the rejected value with `%q`. If two variables are swapped by mistake (a key pasted into `GEMINI_MODEL`), the key is logged unredacted, though the `AIza...` shape pattern would catch a Google key if the hook is already installed.
 
@@ -239,7 +239,7 @@ raidPosts.wait()
 
 ### IN-03: The Gemini per-chat breaker silently stops tracking new chats past 10000
 
-**File:** `alita/modules/raid_ai_breaker.go:94-97`
+**File:** `fuku/modules/raid_ai_breaker.go:94-97`
 
 **Issue:** Once the map holds `raidAIGeminiBreakerMaxChats` entries, `raidAIGeminiRecordFailure` returns for an untracked chat, so that chat can never be paused and every one of its images keeps calling a failing provider (within its budget). Entries are never pruned. It matches the `/aispam` breaker's behaviour and is unlikely for a private bot, but the failure is silent.
 
@@ -247,7 +247,7 @@ raidPosts.wait()
 
 ### IN-04: Album gate and cross-chat `singleflight` edge cases
 
-**File:** `alita/modules/raid_ai_image.go:148`, `:153-169`, `:192-209`
+**File:** `fuku/modules/raid_ai_image.go:148`, `:153-169`, `:192-209`
 
 **Issue:** Two fail-open edges:
 - The album gate is taken before the fire-latch check, the cache, the breaker and the budget. If the first job is then refused for a transient reason (a paused chat, a Redis error on the budget), the rest of the album is dropped for 120 s even though they could have been judged.
@@ -259,7 +259,7 @@ Neither can cause a lock; both only lower the count.
 
 ### IN-05: Real-time sleeps in two tests
 
-**File:** `alita/modules/raid_ai_budget_test.go:168`, `alita/modules/raid_ai_breaker_test.go:103`
+**File:** `fuku/modules/raid_ai_budget_test.go:168`, `fuku/modules/raid_ai_breaker_test.go:103`
 
 **Issue:** The budget test sleeps 200 ms to let three posts overlap. If a slow runner is late, the third job hits the verdict cache and the test passes without having proved the overlap. The TypeSafe breaker test waits out a 50 ms cooldown in real time because that breaker has no clock seam, unlike the Gemini one.
 
@@ -267,7 +267,7 @@ Neither can cause a lock; both only lower the count.
 
 ### IN-06: The config test leaves secrets in the global redaction registry
 
-**File:** `alita/config/config_pure_test.go` (`TestGeminiConfig`, "the key is registered")
+**File:** `fuku/config/config_pure_test.go` (`TestGeminiConfig`, "the key is registered")
 
 **Issue:** `registerSecrets` registers three values in the process-wide `logredact` registry and the test never removes them. `logredact`'s own tests use a `reset()`; `config` cannot reach it. Later tests in the package are scrubbed by those values.
 
@@ -275,7 +275,7 @@ Neither can cause a lock; both only lower the count.
 
 ### IN-07: In a rolling deploy an old replica's cached settings override an admin's `ai off`
 
-**File:** `alita/db/raiddetection/repository.go:65-75`
+**File:** `fuku/db/raiddetection/repository.go:65-75`
 
 **Issue:** The normalisation treats `AIThreshold == 0` as "not populated" and sets `AIEnabled = true`. The settings cache is shared in Redis, so an old-build replica that reloads a row after an admin ran `/autolockdown ai off` writes an entry without the AI fields, and new replicas read it as AI on for up to the 30-minute TTL. AGENTS.md accepts rolling-deploy caveats of this class, and a single-replica deploy is unaffected.
 
@@ -291,7 +291,7 @@ Neither can cause a lock; both only lower the count.
 
 ### IN-09: Two literals duplicate named constants
 
-**File:** `alita/utils/gemini/response.go:162` (`truncateRunes(s, 40)` against `maxTokenRunes` in `errors.go`), `alita/modules/raid_ai_image.go:105` (`"[REDACTED]"` against `gemini`'s `redacted` and `logredact.Placeholder`)
+**File:** `fuku/utils/gemini/response.go:162` (`truncateRunes(s, 40)` against `maxTokenRunes` in `errors.go`), `fuku/modules/raid_ai_image.go:105` (`"[REDACTED]"` against `gemini`'s `redacted` and `logredact.Placeholder`)
 
 **Issue:** The same value is spelled in two places, so a change to one leaves the other behind.
 

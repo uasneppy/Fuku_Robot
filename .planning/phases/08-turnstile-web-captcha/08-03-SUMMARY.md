@@ -16,10 +16,10 @@ tech-stack:
   patterns: ["go/parser ImportsOnly leaf test with a named allow-list"]
 key-files:
   created:
-    - alita/utils/captchaweb/initdata_test.go
-    - alita/utils/captchaweb/leaf_test.go
+    - fuku/utils/captchaweb/initdata_test.go
+    - fuku/utils/captchaweb/leaf_test.go
   modified:
-    - alita/utils/captchaweb/initdata.go
+    - fuku/utils/captchaweb/initdata.go
 key-decisions:
   - "Raw initData over 4096 bytes is refused before parsing"
   - "hash must be exactly 64 lowercase hex characters before it is decoded"
@@ -45,7 +45,7 @@ completed: 2026-10-30
 - `ValidateInitData` (same signature) now refuses a raw string over 4096 bytes and a hash that is not 64 lowercase hex characters, before the HMAC is compared. Plan 08-01 already had the HMAC with `hmac.Equal`, the 5 minute window, the 60 s future skew, repeated-key rejection and the user checks; this plan found and closed the two gaps (uppercase hex hash accepted, no size cap).
 - `TestInitDataKnownAnswer` validates the init-data-golang vector (proves `signature` stays in the data-check string) and the Telegram-Mini-Apps docs vector (no signature), and checks the removed-signature, one-character-hash and swapped-token cases.
 - `TestInitDataRejects` covers 19 rejections (changed, added, removed field, two hashes, repeated key, uppercase hash, 63-char hash, other bot token, 5m01s old, 61 s ahead, missing and non-numeric auth_date, bad user JSON, id 0 and -5, bot user, no user, 4097 bytes, empty) each returning `ErrInvalidInitData` and an empty `InitData`, plus the accepted boundaries (exactly 5 minutes old, exactly 60 s ahead).
-- `TestCaptchaWebPackageIsLeaf` fails if any non-test file imports beyond the standard library, go-redis and logrus. Checked against a deliberate `alita/config` import (fails as expected, probe file removed).
+- `TestCaptchaWebPackageIsLeaf` fails if any non-test file imports beyond the standard library, go-redis and logrus. Checked against a deliberate `fuku/config` import (fails as expected, probe file removed).
 
 ## Task Commits
 
@@ -57,10 +57,10 @@ completed: 2026-10-30
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^(TestInitDataKnownAnswer|TestInitDataRejects)$' -v ./alita/utils/captchaweb`: both PASS (RED run before the fix showed `hash_in_uppercase_hex` and `raw_string_of_4097_bytes` failing).
-- `go test -tags testtools -race -count=1 ./alita/utils/captchaweb`: ok.
-- `go test -tags testtools -race -count=1 -run '^TestCaptchaWeb' -v ./alita/modules`: `TestCaptchaWebTracerJoinVerifyUnmute`, `TestCaptchaWebAttemptRefusesCallbacks`, `TestCaptchaWebRejoinInvalidatesOldChallenge` PASS.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/utils/captchaweb`, `gofmt -l alita/utils/captchaweb`: clean. `make lint` was not run (golangci-lint is built with go1.25 against module go1.26.0 in this sandbox); gofmt and go vet stand in for it.
+- `go test -tags testtools -race -count=1 -run '^(TestInitDataKnownAnswer|TestInitDataRejects)$' -v ./fuku/utils/captchaweb`: both PASS (RED run before the fix showed `hash_in_uppercase_hex` and `raw_string_of_4097_bytes` failing).
+- `go test -tags testtools -race -count=1 ./fuku/utils/captchaweb`: ok.
+- `go test -tags testtools -race -count=1 -run '^TestCaptchaWeb' -v ./fuku/modules`: `TestCaptchaWebTracerJoinVerifyUnmute`, `TestCaptchaWebAttemptRefusesCallbacks`, `TestCaptchaWebRejoinInvalidatesOldChallenge` PASS.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/utils/captchaweb`, `gofmt -l fuku/utils/captchaweb`: clean. `make lint` was not run (golangci-lint is built with go1.25 against module go1.26.0 in this sandbox); gofmt and go vet stand in for it.
 - Acceptance greps: `hmac.Equal` 1, `ValidateInitData` signature 1, each vector hash 1 line in the test, `parser.ImportsOnly` 1, go-redis path in leaf test 1.
 
 ## Deviations from Plan
@@ -71,7 +71,7 @@ completed: 2026-10-30
 - **Found during:** Task 1 (RED run)
 - **Issue:** `hex.DecodeString` accepts uppercase, so a hash re-cased by an attacker or proxy still verified; no cap on the raw string.
 - **Fix:** `isLowerHex64` check before decoding; `initDataMaxBytes = 4096` check at the top.
-- **Files modified:** alita/utils/captchaweb/initdata.go
+- **Files modified:** fuku/utils/captchaweb/initdata.go
 - **Commit:** 2dff605
 
 ### Process notes

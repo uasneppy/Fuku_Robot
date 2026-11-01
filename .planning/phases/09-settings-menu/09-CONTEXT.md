@@ -34,7 +34,7 @@ Out of scope:
 
 ### Menu shape (MENU-04)
 - **D-06:** One message, edited in place. The main page has buttons Staff Group, Lockdown, Captcha, Antiflood and Close. Every sub-page has Back and Close. Close deletes the menu message; when it cannot (private chat after 48 h, or a missing right) it edits the message to a short "Menu closed" note with no buttons.
-- **D-07:** Callback data uses a new `settings|v1` namespace through `alita/utils/callbackcodec` only (64-byte cap, never `strings.Split`). Fields: page, action, and the group ID (private menu) or the opener's ID (group menu), plus a value where a step needs one. Chat IDs are up to 14 characters with the sign, so a field set stays under the cap; an encode overflow is a bug caught by a test, never a dead button.
+- **D-07:** Callback data uses a new `settings|v1` namespace through `fuku/utils/callbackcodec` only (64-byte cap, never `strings.Split`). Fields: page, action, and the group ID (private menu) or the opener's ID (group menu), plus a value where a step needs one. Chat IDs are up to 14 characters with the sign, so a field set stays under the cap; an encode overflow is a bug caught by a test, never a dead button.
 - **D-08:** No free-text input and no Redis state. Numbers move with stepper buttons, choices with buttons, and confirmation with a second tap. The menu is stateless, so it works without Redis and on any replica.
 - **D-09:** Dangerous actions (Lift lockdown, Unlink Staff Group) ask for a second tap in place ("Lift now? Yes / No") before they run. The Yes press re-checks authority live again and carries an expiry minute like the lockdown cards, so a stale confirm is refused.
 - **D-10:** Language: a menu opened in the group speaks the group's language; a menu opened in private speaks the admin's language. All strings are new `settings_*` keys in all 7 locale files, and every user-controlled string (group titles, names) is escaped and spliced in after the translator.
@@ -76,7 +76,7 @@ Where `09-UI-SPEC.md` and these amendments differ, the amendments win; `09-RESEA
 ### Claude's Discretion
 - The exact `settings|v1` field names and abbreviations, and how a stepper encodes its direction and size (for example a step of 1, 5 or 10 for thresholds).
 - Whether the main page and sub-pages share one render pipeline with a header and footer, the exact layout, emoji and wording (settled in `09-UI-SPEC.md`).
-- Where the apply functions live (a new `alita/modules/settings_apply.go` or beside each command) and how the typed results are named.
+- Where the apply functions live (a new `fuku/modules/settings_apply.go` or beside each command) and how the typed results are named.
 - How the `/start` payload branch is wired into the existing help module's `start` handler without changing its other behaviour.
 
 </decisions>
@@ -85,11 +85,11 @@ Where `09-UI-SPEC.md` and these amendments differ, the amendments win; `09-RESEA
 ## Existing Code Insights
 
 ### Reusable Assets
-- **Staff Group:** `alita/modules/staff.go` (`setStaff`), `staff_link.go` (`linkStaff`, unlink handlers), `staff_panel.go` (`renderStaffPanel`, `buildStaffPanelRows`, `buildStaffPanel`, `staffPanelPage`, `staffPanelRefresh`), `alita/db/staff` (`*Fresh` reads), `chat_status.CheckOwner`.
-- **Lockdown:** `lockdown.go` (`requireLockdownAuthority`, `liftLockdownRow`, `/unlockdown`), `lockdown_alert_callbacks.go` (`lockdownButtonAuthority`, `lockdownInviteAuthority`, the two-tap confirm card with asker and expiry in the data), `autolockdown.go` (`autolockdownApply`, `requireAutoLockdownAuthority`), `alita/db/raiddetection` (`GetSettings`, the six `Set*` upserts), `alita/db/lockdown` (fresh state reads).
-- **Captcha:** `captcha.go` (`captchaCommand`, `captchaModeCommand` with `captchaWebModeRefusal`, the time and action commands, `captchaAdminGate`), `alita/db/captcha` (`GetCaptchaSettings`, `SetCaptchaMode` and the other setters).
-- **Antiflood:** `antiflood.go` (`setFlood`, `setFloodMode`, `setFloodDeleter`, `flood`), `alita/db/antiflood` (`GetFlood`, `SetFlood`, `SetFloodMode`, delete setter).
-- **Callbacks and permissions:** `alita/utils/callbackcodec` (`Encode`, `Decode`, `Field`), `callbackquery.Prefix`, the anonymous-admin re-entry (`RegisterAnonymousAdminHandler`), `chat_status` live predicates (`FetchBotMember`, `CheckOwner`), `helpers.WrapCommand`.
+- **Staff Group:** `fuku/modules/staff.go` (`setStaff`), `staff_link.go` (`linkStaff`, unlink handlers), `staff_panel.go` (`renderStaffPanel`, `buildStaffPanelRows`, `buildStaffPanel`, `staffPanelPage`, `staffPanelRefresh`), `fuku/db/staff` (`*Fresh` reads), `chat_status.CheckOwner`.
+- **Lockdown:** `lockdown.go` (`requireLockdownAuthority`, `liftLockdownRow`, `/unlockdown`), `lockdown_alert_callbacks.go` (`lockdownButtonAuthority`, `lockdownInviteAuthority`, the two-tap confirm card with asker and expiry in the data), `autolockdown.go` (`autolockdownApply`, `requireAutoLockdownAuthority`), `fuku/db/raiddetection` (`GetSettings`, the six `Set*` upserts), `fuku/db/lockdown` (fresh state reads).
+- **Captcha:** `captcha.go` (`captchaCommand`, `captchaModeCommand` with `captchaWebModeRefusal`, the time and action commands, `captchaAdminGate`), `fuku/db/captcha` (`GetCaptchaSettings`, `SetCaptchaMode` and the other setters).
+- **Antiflood:** `antiflood.go` (`setFlood`, `setFloodMode`, `setFloodDeleter`, `flood`), `fuku/db/antiflood` (`GetFlood`, `SetFlood`, `SetFloodMode`, delete setter).
+- **Callbacks and permissions:** `fuku/utils/callbackcodec` (`Encode`, `Decode`, `Field`), `callbackquery.Prefix`, the anonymous-admin re-entry (`RegisterAnonymousAdminHandler`), `chat_status` live predicates (`FetchBotMember`, `CheckOwner`), `helpers.WrapCommand`.
 - **Start/help:** `help.go` registers `start` (`DefaultHelpRegistry().start`); the payload branch for `settings_<id>` is added there.
 
 ### Established Patterns
@@ -100,7 +100,7 @@ Where `09-UI-SPEC.md` and these amendments differ, the amendments win; `09-RESEA
 - The docs generator reads `locales/en.yml`; a new command's help text must fit Telegram's 4096-character limit in every locale.
 
 ### Integration Points
-- New `alita/modules/settings.go` (command, callback handler, pages) registered with `RegisterLegacyModule`; `/settings` added to the help registry and the generated docs; a `settings_apply` layer shared with `captcha.go`, `antiflood.go`, `autolockdown.go`, `staff_link.go` and the lockdown commands.
+- New `fuku/modules/settings.go` (command, callback handler, pages) registered with `RegisterLegacyModule`; `/settings` added to the help registry and the generated docs; a `settings_apply` layer shared with `captcha.go`, `antiflood.go`, `autolockdown.go`, `staff_link.go` and the lockdown commands.
 - `help.go` `start` handler: the `settings_<id>` payload branch.
 - `AGENTS.md`: the settings menu callback namespace, the authority rule per setting, the apply-function rule (a command and the menu never diverge), and the `/start` payload rule.
 

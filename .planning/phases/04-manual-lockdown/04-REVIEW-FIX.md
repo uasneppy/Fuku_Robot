@@ -26,7 +26,7 @@ Scope was Critical and Warning only (CR-01, WR-01, WR-02). IN-01 to IN-04 were n
 
 ### CR-01: The worker's ban overwrites a deliberate ban, and the lift then removes it (violates D-05)
 
-**Files modified:** `alita/modules/lockdown_worker.go`, `alita/modules/lockdown_ban_live_test.go`, `AGENTS.md`
+**Files modified:** `fuku/modules/lockdown_worker.go`, `fuku/modules/lockdown_ban_live_test.go`, `AGENTS.md`
 **Commit:** 005c802
 **Status:** fixed: requires human verification (logic change)
 **Applied fix:** `lockdownBanOne` now reads the joiner's live `getChatMember` in the same paced unit as the ban.
@@ -46,7 +46,7 @@ Residual: a ban placed in the instant between the live look-up and the `banChatM
 
 ### WR-01: An ambiguous lock failure deletes the only copy of the pre-lockdown permissions and says "nothing changed"
 
-**Files modified:** `alita/modules/lockdown.go`, `alita/modules/lockdown_fake_test.go`, `alita/modules/lockdown_lock_unknown_test.go`, `locales/{en,es,fr,hi,id,pt,ru}.yml`, `AGENTS.md`
+**Files modified:** `fuku/modules/lockdown.go`, `fuku/modules/lockdown_fake_test.go`, `fuku/modules/lockdown_lock_unknown_test.go`, `locales/{en,es,fr,hi,id,pt,ru}.yml`, `AGENTS.md`
 **Commit:** 8749ab9
 **Status:** fixed: requires human verification (logic change)
 **Applied fix:** a new `lockdownDefinitiveRefusal` treats only a `*gotgbot.TelegramError` with a 4xx code as a refusal. For that, the unconfirmed row is deleted and `lockdown_lock_failed` is shown, as before. For anything else (timeout, dropped connection, unreadable answer, 5xx) the row is kept unconfirmed and `/lockdown` answers with the new `lockdown_lock_unknown` key, added to all 7 locales with `{detail}`. The worker's existing `settleUnconfirmedLockdown` then confirms or drops the row from the live permissions, and `/unlockdown` can restore from the kept snapshot at once. A 5xx is treated as ambiguous rather than refused (a deliberate narrowing of the review's "any `*gotgbot.TelegramError`"), because Telegram does not promise a 5xx means "not applied".
@@ -60,7 +60,7 @@ Verified to fail on the pre-fix `lockdown.go` and pass after. The existing 400 "
 
 ### WR-02: Joiner bans expire after 330 days, so a lockdown can outlive its own enforcement
 
-**Files modified:** `alita/modules/lockdown_worker.go`, `alita/modules/lockdown_marker.go`, `alita/db/models/lockdown.go`, `alita/db/lockdown/joiners.go`, `alita/db/lockdown/joiners_lift_test.go`, `alita/modules/lockdown_expired_test.go`, `locales/{en,es,fr,hi,id,pt,ru}.yml`, `docs/src/content/docs/commands/lockdown/index.md` (generated), `AGENTS.md`
+**Files modified:** `fuku/modules/lockdown_worker.go`, `fuku/modules/lockdown_marker.go`, `fuku/db/models/lockdown.go`, `fuku/db/lockdown/joiners.go`, `fuku/db/lockdown/joiners_lift_test.go`, `fuku/modules/lockdown_expired_test.go`, `locales/{en,es,fr,hi,id,pt,ru}.yml`, `docs/src/content/docs/commands/lockdown/index.md` (generated), `AGENTS.md`
 **Commit:** d14718f
 **Status:** fixed: requires human verification (logic change)
 **Option taken:** (a) plus (c) of the review: document the 330-day ceiling as an accepted limit, and count a lapsed ban as "expired" in the tally. Not (b), the re-ban machine. Re-banning would add a new write path, a new claim/expiry state and more Telegram traffic on a group nobody is looking at, for a lockdown the owner decided never ends on its own but which in practice is lifted long before 330 days. The smaller fix removes the untrue statement and tells the admins about the limit.
@@ -81,11 +81,11 @@ None. IN-01 to IN-04 are out of scope for `fix_scope: critical_warning`.
 
 Ran in the main checkout on branch `claude/cool-hamilton-hvs9nl`, not a worktree.
 
-- After each fix: `go test -tags testtools -race -count=1 -run 'Lockdown|Joiner|StaffAction' ./alita/modules ./alita/db/lockdown` passed; `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./alita/modules ./alita/db/lockdown` clean; `gofmt -l` clean on every touched file.
+- After each fix: `go test -tags testtools -race -count=1 -run 'Lockdown|Joiner|StaffAction' ./fuku/modules ./fuku/db/lockdown` passed; `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown` clean; `gofmt -l` clean on every touched file.
 - `make check-translations`, `make generate-docs` and `make check-docs` pass (no drift) after the two locale-changing fixes.
 - Each new test was shown to fail with the fix reverted (`git stash` of the production file only) and pass with it.
 - `make test` once at the end: exit 0, no `FAIL` lines, coverage 70.1%. The known flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail.
-- `make lint` was not run: golangci-lint is built with go1.25 and the module is go1.26.0. `gofmt -l alita` reports only `alita/modules/greetings_command_test.go`, which this phase did not touch and is not part of these fixes.
+- `make lint` was not run: golangci-lint is built with go1.25 and the module is go1.26.0. `gofmt -l fuku` reports only `fuku/modules/greetings_command_test.go`, which this phase did not touch and is not part of these fixes.
 
 ---
 

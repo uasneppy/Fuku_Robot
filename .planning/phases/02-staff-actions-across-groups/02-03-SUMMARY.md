@@ -32,16 +32,16 @@ tech-stack:
 
 key-files:
   created:
-    - alita/utils/extraction/duration_token_test.go
-    - alita/modules/staff_action_parse_test.go
-    - alita/modules/staff_action_timed_test.go
+    - fuku/utils/extraction/duration_token_test.go
+    - fuku/modules/staff_action_parse_test.go
+    - fuku/modules/staff_action_timed_test.go
   modified:
-    - alita/utils/extraction/extraction.go
-    - alita/modules/staff_action_parse.go
-    - alita/modules/staff_action.go
-    - alita/modules/staff_action_card.go
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff_action_dispatch_test.go
+    - fuku/utils/extraction/extraction.go
+    - fuku/modules/staff_action_parse.go
+    - fuku/modules/staff_action.go
+    - fuku/modules/staff_action_card.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff_action_dispatch_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -68,10 +68,10 @@ coverage:
     requirement: "STAFF-02"
     verification:
       - kind: unit
-        ref: "alita/utils/extraction/duration_token_test.go#TestParseDurationToken"
+        ref: "fuku/utils/extraction/duration_token_test.go#TestParseDurationToken"
         status: pass
       - kind: unit
-        ref: "alita/utils/extraction/duration_token_test.go#TestParseDurationTokenAgreesWithExistingGrammar"
+        ref: "fuku/utils/extraction/duration_token_test.go#TestParseDurationTokenAgreesWithExistingGrammar"
         status: pass
     human_judgment: false
   - id: D2
@@ -79,13 +79,13 @@ coverage:
     requirement: "STAFF-02"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_parse_test.go#TestStaffActionParseOptionalDuration"
+        ref: "fuku/modules/staff_action_parse_test.go#TestStaffActionParseOptionalDuration"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_parse_test.go#TestStaffActionParseRequiredDuration"
+        ref: "fuku/modules/staff_action_parse_test.go#TestStaffActionParseRequiredDuration"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_parse_test.go#TestStaffActionParseNoDuration"
+        ref: "fuku/modules/staff_action_parse_test.go#TestStaffActionParseNoDuration"
         status: pass
     human_judgment: false
   - id: D3
@@ -93,16 +93,16 @@ coverage:
     requirement: "STAFF-03"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionTimedBan"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionTimedBan"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionTimedMute"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionTimedMute"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionTimedLabelIsExact"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionTimedLabelIsExact"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionTbanTmuteWork"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionTbanTmuteWork"
         status: pass
     human_judgment: false
   - id: D4
@@ -110,13 +110,13 @@ coverage:
     requirement: "STAFF-01"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionTimedNeverShortens"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionTimedNeverShortens"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionOverLimitIsPermanent"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionOverLimitIsPermanent"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionLimitBoundary"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionLimitBoundary"
         status: pass
     human_judgment: false
   - id: D5
@@ -124,10 +124,10 @@ coverage:
     requirement: "STAFF-02"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionTbanTmuteNeedDuration"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionTbanTmuteNeedDuration"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_timed_test.go#TestStaffActionDurationTokenRules"
+        ref: "fuku/modules/staff_action_timed_test.go#TestStaffActionDurationTokenRules"
         status: pass
     human_judgment: false
   - id: D6
@@ -135,13 +135,13 @@ coverage:
     requirement: "STAFF-13"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
         status: pass
       - kind: unit
-        ref: "alita/utils/extraction/duration_token_test.go#TestParseTemporaryDurationUnchanged"
+        ref: "fuku/utils/extraction/duration_token_test.go#TestParseTemporaryDurationUnchanged"
         status: pass
     human_judgment: false
   - id: D7
@@ -185,22 +185,22 @@ status: complete
 
 Both tasks are `tdd="true"`; each has a RED commit before its GREEN commit.
 
-- **Task 1 RED (`c79e810`):** `go test -tags testtools -count=1 -run 'ParseDurationToken|ParseTemporaryDuration' ./alita/utils/extraction` exited 1: `TestParseDurationToken` failed on 10 sub-tests (every valid and error case) with "matched = false, want true", and `TestParseDurationTokenAgreesWithExistingGrammar` failed on "want a valid duration". `go test -tags testtools -race -count=1 -run '^TestStaffActionParse' ./alita/modules` exited 1 on 16 sub-tests, each on the planned behaviour, for example `parse "/ban 42 2d spam" = {sec 0, ... reason "2d spam"}, want {sec 172800, amount 2, unit "d", ... reason "spam"}` and `parse "/tban 42 spam" result = 0, want 3`. `TestParseTemporaryDurationUnchanged` and the pure no-duration and "stays in the reason" cases passed at once, which is expected: they are regression guards that must hold before and after. The RED commit declares the new types, constants, error values, spec field and a stub `ParseDurationToken` returning not-matched so the tests compile; nothing in it parses a duration.
+- **Task 1 RED (`c79e810`):** `go test -tags testtools -count=1 -run 'ParseDurationToken|ParseTemporaryDuration' ./fuku/utils/extraction` exited 1: `TestParseDurationToken` failed on 10 sub-tests (every valid and error case) with "matched = false, want true", and `TestParseDurationTokenAgreesWithExistingGrammar` failed on "want a valid duration". `go test -tags testtools -race -count=1 -run '^TestStaffActionParse' ./fuku/modules` exited 1 on 16 sub-tests, each on the planned behaviour, for example `parse "/ban 42 2d spam" = {sec 0, ... reason "2d spam"}, want {sec 172800, amount 2, unit "d", ... reason "spam"}` and `parse "/tban 42 spam" result = 0, want 3`. `TestParseTemporaryDurationUnchanged` and the pure no-duration and "stays in the reason" cases passed at once, which is expected: they are regression guards that must hold before and after. The RED commit declares the new types, constants, error values, spec field and a stub `ParseDurationToken` returning not-matched so the tests compile; nothing in it parses a duration.
 - **Task 1 GREEN (`5e762a5`):** the same commands pass, plus `TestTemporaryUntilDate` and all `^TestStaff` tests.
-- **Task 2 RED (`e09160f`):** `go test -tags testtools -race -count=1 -run '^TestStaffAction(TimedBan|TimedLabelIsExact|TimedMute|TimedNeverShortens|OverLimitIsPermanent|LimitBoundary|TbanTmuteNeedDuration|TbanTmuteWork|DurationTokenRules|KickIgnoresDuration|NonStaffUnchanged|Anonymous)$' ./alita/modules` exited 1 on 25 failing tests/sub-tests, all on planned behaviour: the card read "permanent" where "2 day(s)" was wanted, `until_date = 0, want Confirm time + 86400` on both upgrade cases, "write calls = [banChatMember...] want none" where a shorter timed action must be skipped, "no confirm card was sent" for `/tban` and `/tmute` (not registered), "messages to the Staff Group = [], want exactly one with staff_act_hint_need_duration", and "staff commands = 1, want ..." for the widened command-count check. The permanent-ban-skip case, `TestStaffActionDurationTokenRules`, `TestStaffActionKickIgnoresDuration` and `TestStaffActionNonStaffUnchanged` passed at once (already-true behaviour or regression guards).
+- **Task 2 RED (`e09160f`):** `go test -tags testtools -race -count=1 -run '^TestStaffAction(TimedBan|TimedLabelIsExact|TimedMute|TimedNeverShortens|OverLimitIsPermanent|LimitBoundary|TbanTmuteNeedDuration|TbanTmuteWork|DurationTokenRules|KickIgnoresDuration|NonStaffUnchanged|Anonymous)$' ./fuku/modules` exited 1 on 25 failing tests/sub-tests, all on planned behaviour: the card read "permanent" where "2 day(s)" was wanted, `until_date = 0, want Confirm time + 86400` on both upgrade cases, "write calls = [banChatMember...] want none" where a shorter timed action must be skipped, "no confirm card was sent" for `/tban` and `/tmute` (not registered), "messages to the Staff Group = [], want exactly one with staff_act_hint_need_duration", and "staff commands = 1, want ..." for the widened command-count check. The permanent-ban-skip case, `TestStaffActionDurationTokenRules`, `TestStaffActionKickIgnoresDuration` and `TestStaffActionNonStaffUnchanged` passed at once (already-true behaviour or regression guards).
 - **Task 2 GREEN (`739bdc1`):** the set above passes, plus `TestStaffActionHeaderDuration`, `TestStaffLocaleKeys`, `make check-translations` and `make check-docs`.
 - **REFACTOR:** none.
 - `gsd_run check tdd-red-evidence` was not run (no `gsd_run` resolver in this sandbox); the evidence above records command, exit code, failing tests and assertion text instead.
 
 ## Files Created/Modified
 
-- `alita/utils/extraction/extraction.go` - `DurationSpec`, `ErrDurationInvalid`, `ErrDurationTooLong`, `ParseDurationToken`; `ExtractTime` and `parseTemporaryDuration` untouched
-- `alita/utils/extraction/duration_token_test.go` - token grammar, agreement with the per-group grammar, pinned per-group answers
-- `alita/modules/staff_action_parse.go` - `staffDurationMode`, duration fields on the request, two new parse results, `readStaffDuration`
-- `alita/modules/staff_action.go` - `Duration` on the command spec, `tban` and `tmute` rows, hint replies, duration copied to the card
-- `alita/modules/staff_action_card.go` - duration fields in the hash (tolerant load), `newUntil` computed once at Confirm
-- `alita/modules/staff_action_summary.go` - `staffDurationLabel`, used by the header
-- `alita/modules/staff_action_parse_test.go`, `staff_action_timed_test.go` - new tests; `staff_action_dispatch_test.go` - non-staff and anonymous suites widened to tban and tmute
+- `fuku/utils/extraction/extraction.go` - `DurationSpec`, `ErrDurationInvalid`, `ErrDurationTooLong`, `ParseDurationToken`; `ExtractTime` and `parseTemporaryDuration` untouched
+- `fuku/utils/extraction/duration_token_test.go` - token grammar, agreement with the per-group grammar, pinned per-group answers
+- `fuku/modules/staff_action_parse.go` - `staffDurationMode`, duration fields on the request, two new parse results, `readStaffDuration`
+- `fuku/modules/staff_action.go` - `Duration` on the command spec, `tban` and `tmute` rows, hint replies, duration copied to the card
+- `fuku/modules/staff_action_card.go` - duration fields in the hash (tolerant load), `newUntil` computed once at Confirm
+- `fuku/modules/staff_action_summary.go` - `staffDurationLabel`, used by the header
+- `fuku/modules/staff_action_parse_test.go`, `staff_action_timed_test.go` - new tests; `staff_action_dispatch_test.go` - non-staff and anonymous suites widened to tban and tmute
 - `locales/*.yml` (7) - 7 keys each; `AGENTS.md` - staff durations rule
 
 ## Decisions Made
@@ -217,8 +217,8 @@ Small additions inside the planned scope: `TestStaffActionTimedLabelIsExact`, `T
 
 ## Deferred Issues
 
-- `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit. Pre-existing and unrelated, left alone.
-- `make lint` cannot run in this sandbox (installed golangci-lint is built with go1.25, module targets 1.26.0). `gofmt -l` on all changed Go files (clean), `go vet -tags testtools ./alita/...`, `CGO_ENABLED=0 go build ./...`, `make check-translations` and `make check-docs` all pass.
+- `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit. Pre-existing and unrelated, left alone.
+- `make lint` cannot run in this sandbox (installed golangci-lint is built with go1.25, module targets 1.26.0). `gofmt -l` on all changed Go files (clean), `go vet -tags testtools ./fuku/...`, `CGO_ENABLED=0 go build ./...`, `make check-translations` and `make check-docs` all pass.
 - Human check, outstanding: in a throwaway Staff Group with two linked supergroups, run `/ban <test id> 2d test` and Confirm; each group should show the member as restricted-out until about 48 hours later (Telegram's own banned-until display), and a following `/ban <id> 1d` should read "skipped: already banned" in both.
 
 ## Issues Encountered
@@ -239,13 +239,13 @@ None - no external service configuration required.
 
 ## Verification Run
 
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/utils/extraction ./alita/i18n` - pass
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n` - pass
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/utils/extraction ./fuku/i18n` - pass
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n` - pass
 - `CGO_ENABLED=0 go build ./...` - pass
-- `go vet -tags testtools ./alita/...` - pass
+- `go vet -tags testtools ./fuku/...` - pass
 - `make check-translations`, `make check-docs` - pass
 - Acceptance greps: `func ParseDurationToken(token string) (spec DurationSpec, matched bool, err error)`, `ErrDurationTooLong` and `extraction.TemporaryUntilDate(` and `"duration_s"` in the card, `extraction.ParseDurationToken(` in the parser, `Name: "tban"` in `staff_action.go` - all match
-- `go test -tags testtools -count=1 -run '^TestTemporaryUntilDate$' ./alita/utils/extraction` - pass
+- `go test -tags testtools -count=1 -run '^TestTemporaryUntilDate$' ./fuku/utils/extraction` - pass
 - go.mod and go.sum untouched
 
 ## Next Phase Readiness
@@ -259,6 +259,6 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-- Created files `alita/utils/extraction/duration_token_test.go`, `alita/modules/staff_action_parse_test.go`, `alita/modules/staff_action_timed_test.go` exist.
+- Created files `fuku/utils/extraction/duration_token_test.go`, `fuku/modules/staff_action_parse_test.go`, `fuku/modules/staff_action_timed_test.go` exist.
 - Task commits `c79e810`, `5e762a5`, `e09160f`, `739bdc1` are present in `git log`, and `git rev-list --count e4cb3c0..HEAD` was 4 when this file was written.
 - All task acceptance criteria and the plan-level verification commands were re-run and pass (see Verification Run).

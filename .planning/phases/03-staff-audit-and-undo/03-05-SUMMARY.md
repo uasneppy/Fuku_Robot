@@ -37,11 +37,11 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - alita/modules/staff_history.go
-    - alita/modules/staff_history_test.go
-    - alita/modules/staff_action_record.go
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff.go
+    - fuku/modules/staff_history.go
+    - fuku/modules/staff_history_test.go
+    - fuku/modules/staff_action_record.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -70,10 +70,10 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetail"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetail"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffResultsFromRecord"
+        ref: "fuku/modules/staff_history_test.go#TestStaffResultsFromRecord"
         status: pass
     human_judgment: false
   - id: D2
@@ -81,7 +81,7 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailBack"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailBack"
         status: pass
     human_judgment: false
   - id: D3
@@ -89,13 +89,13 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailUnlinked"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailUnlinked"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailUndoOutcome"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailUndoOutcome"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffReasonText"
+        ref: "fuku/modules/staff_history_test.go#TestStaffReasonText"
         status: pass
     human_judgment: false
   - id: D4
@@ -103,10 +103,10 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailUnfinished"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailUnfinished"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailLong"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailLong"
         status: pass
     human_judgment: false
   - id: D5
@@ -114,10 +114,10 @@ coverage:
     requirement: "SETUP-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailAccess"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailAccess"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailCallbackBudget"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailCallbackBudget"
         status: pass
     human_judgment: false
 ---
@@ -156,11 +156,11 @@ RED and GREEN commits exist for both tasks, in order. RED was verified as intent
 
 ## Files Created/Modified
 
-- `alita/modules/staff_history.go` - detail buttons in `renderStaffHistory`, `renderStaffHistoryDetail`, `fitStaffHistoryDetail`, `staffHistoryDetail` handler, shared `staffHistoryGate` and `parseStaffHistoryOffset`
-- `alita/modules/staff_action_record.go` - `staffCardFromRecord`, `staffResultsFromRecord`, `staffUndoResultsFromRecord`, `staffGroupsBySeq`
-- `alita/modules/staff_action_summary.go` - `staffReasonText` arms for the eight undo reasons
-- `alita/modules/staff.go` - `staffActDetail = "dt"` and its dispatch case
-- `alita/modules/staff_history_test.go` - ten new tests plus helper updates
+- `fuku/modules/staff_history.go` - detail buttons in `renderStaffHistory`, `renderStaffHistoryDetail`, `fitStaffHistoryDetail`, `staffHistoryDetail` handler, shared `staffHistoryGate` and `parseStaffHistoryOffset`
+- `fuku/modules/staff_action_record.go` - `staffCardFromRecord`, `staffResultsFromRecord`, `staffUndoResultsFromRecord`, `staffGroupsBySeq`
+- `fuku/modules/staff_action_summary.go` - `staffReasonText` arms for the eight undo reasons
+- `fuku/modules/staff.go` - `staffActDetail = "dt"` and its dispatch case
+- `fuku/modules/staff_history_test.go` - ten new tests plus helper updates
 - `locales/*.yml` (7 files) - `staff_history_back_list`, `staff_history_unlinked`, `staff_history_undone_by`, `staff_history_more_groups`, `staff_undo_unbanned`, `staff_undo_unmuted`, `staff_undo_ban_restored`, `staff_undo_restriction_restored`, `staff_undo_skip_not_applied`, `staff_undo_skip_changed_since`, `staff_undo_skip_restriction_ended`, `staff_undo_skip_no_prior_state`
 - `AGENTS.md` - Callbacks bullet for the detail view
 
@@ -176,14 +176,14 @@ See `key-decisions` above. The two worth repeating: record IDs are parsed as 63-
 - **Found during:** Task 1 (threat T-03-15, oversize detail text)
 - **Issue:** `staffActionHeader` escapes the stored reason in full. A reason typed at Telegram's message limit would make the header alone exceed the 3800-unit cap, and the edit would fail.
 - **Fix:** `renderStaffHistoryDetail` cuts the reason to 300 runes plus an ellipsis in its own copy of the card (`staffHistoryDetailReasonRunes`). `TestStaffHistoryDetailLong` uses a 5000-character reason to prove the text stays under the cap.
-- **Files modified:** alita/modules/staff_history.go
+- **Files modified:** fuku/modules/staff_history.go
 - **Commit:** a01556c
 
 **2. [Rule 1 - Bug prevention] Record ID parsed as 63-bit**
 - **Found during:** Task 1 (design of the forged-ID path)
 - **Issue:** `strconv.ParseUint(..., 64)` accepts values up to 2^64-1, which `database/sql` rejects for a bigint column. A forged ID would surface as a "check failed" alert and a logged error instead of the expired answer.
 - **Fix:** parse with bit size 63; `TestStaffHistoryDetailAccess/bad id` includes 18446744073709551615.
-- **Files modified:** alita/modules/staff_history.go
+- **Files modified:** fuku/modules/staff_history.go
 - **Commit:** a01556c
 
 **3. [Plan-adjacent] Existing 03-04 test helpers updated**
@@ -198,13 +198,13 @@ See `key-decisions` above. The two worth repeating: record IDs are parsed as 63-
 
 ## Issues Encountered
 
-- `make lint` is unavailable here (golangci-lint is built with go1.25, the module is go1.26.0); `go vet -tags testtools ./alita/modules` is clean instead.
-- `gofmt -l alita/modules` lists `greetings_command_test.go`, which this plan does not touch. Left alone as out of scope.
+- `make lint` is unavailable here (golangci-lint is built with go1.25, the module is go1.26.0); `go vet -tags testtools ./fuku/modules` is clean instead.
+- `gofmt -l fuku/modules` lists `greetings_command_test.go`, which this plan does not touch. Left alone as out of scope.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 ./alita/modules` - pass (123 s)
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n` - pass
+- `go test -tags testtools -race -count=1 ./fuku/modules` - pass (123 s)
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n` - pass
 - `make check-translations` - all 7 locales complete (1086 keys)
 - `make check-docs` - no drift
 - `CGO_ENABLED=0 go build ./...` - pass

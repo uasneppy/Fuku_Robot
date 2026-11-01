@@ -29,13 +29,13 @@ tech-stack:
 
 key-files:
   created:
-    - alita/db/raiddetection/stats.go
-    - alita/db/raiddetection/stats_test.go
-    - alita/db/migrations/raid_carry_over_test.go
+    - fuku/db/raiddetection/stats.go
+    - fuku/db/raiddetection/stats_test.go
+    - fuku/db/migrations/raid_carry_over_test.go
   modified:
-    - alita/db/devs/repository.go
-    - alita/db/devs/repository_test.go
-    - alita/db/devs/testmain_test.go
+    - fuku/db/devs/repository.go
+    - fuku/db/devs/repository_test.go
+    - fuku/db/devs/testmain_test.go
 
 key-decisions:
   - "Stats lines: Raid detection with Custom settings, Join surge off and Flood off; chats without a row use the defaults and are not counted"
@@ -50,13 +50,13 @@ coverage:
     requirement: LOCK-15
     verification:
       - kind: unit
-        ref: "alita/db/raiddetection/stats_test.go#TestLoadRaidDetectionStats"
+        ref: "fuku/db/raiddetection/stats_test.go#TestLoadRaidDetectionStats"
         status: pass
       - kind: unit
-        ref: "alita/db/devs/repository_test.go#TestLoadAllStats_IncludesModuleCounts"
+        ref: "fuku/db/devs/repository_test.go#TestLoadAllStats_IncludesModuleCounts"
         status: pass
       - kind: unit
-        ref: "alita/db/devs/repository_test.go#TestLoadAllStats"
+        ref: "fuku/db/devs/repository_test.go#TestLoadAllStats"
         status: pass
     human_judgment: false
   - id: D2
@@ -100,16 +100,16 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/db/raiddetection/stats.go` - LoadRaidDetectionStats
-- `alita/db/raiddetection/stats_test.go` - TestLoadRaidDetectionStats
-- `alita/db/devs/repository.go` - stats lines repointed, antiraid import dropped
-- `alita/db/devs/repository_test.go` - new labels, seed rows and expected text
-- `alita/db/devs/testmain_test.go` - `ChatRaidDetection` added to AutoMigrate (`AntiRaidSettings` kept, the model still exists)
-- `alita/db/migrations/raid_carry_over_test.go` - TestRaidDetectionCarryOver
+- `fuku/db/raiddetection/stats.go` - LoadRaidDetectionStats
+- `fuku/db/raiddetection/stats_test.go` - TestLoadRaidDetectionStats
+- `fuku/db/devs/repository.go` - stats lines repointed, antiraid import dropped
+- `fuku/db/devs/repository_test.go` - new labels, seed rows and expected text
+- `fuku/db/devs/testmain_test.go` - `ChatRaidDetection` added to AutoMigrate (`AntiRaidSettings` kept, the model still exists)
+- `fuku/db/migrations/raid_carry_over_test.go` - TestRaidDetectionCarryOver
 
 ## Decisions Made
 
-See frontmatter `key-decisions`. The test gates on `ALITA_TEST_DATABASE=true` plus `DATABASE_URL` (skip otherwise), not on the migration-chain flag `ALITA_TEST_MIGRATION_CHAIN`, as the plan specifies; if the migrated tables are absent it fails with a message naming the missing table.
+See frontmatter `key-decisions`. The test gates on `FUKU_TEST_DATABASE=true` plus `DATABASE_URL` (skip otherwise), not on the migration-chain flag `FUKU_TEST_MIGRATION_CHAIN`, as the plan specifies; if the migrated tables are absent it fails with a message naming the missing table.
 
 ## Deviations from Plan
 
@@ -117,9 +117,9 @@ None - plan executed exactly as written. (The compile scaffold in the RED commit
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/db/raiddetection ./alita/db/devs ./alita/db/migrations` - all ok.
-- `CGO_ENABLED=1 go test -tags testtools -count=1 -run '^TestRaidDetectionCarryOver$' -v ./alita/db/migrations` - `--- SKIP: TestRaidDetectionCarryOver`.
-- `CGO_ENABLED=0 go build ./...` ok; `go vet -tags testtools ./alita/db/...` clean; `gofmt -l alita/db` prints nothing.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/db/raiddetection ./fuku/db/devs ./fuku/db/migrations` - all ok.
+- `CGO_ENABLED=1 go test -tags testtools -count=1 -run '^TestRaidDetectionCarryOver$' -v ./fuku/db/migrations` - `--- SKIP: TestRaidDetectionCarryOver`.
+- `CGO_ENABLED=0 go build ./...` ok; `go vet -tags testtools ./fuku/db/...` clean; `gofmt -l fuku/db` prints nothing.
 - Acceptance greps pass (`raiddetection.LoadRaidDetectionStats()` in devs/repository.go; `models.ChatRaidDetection{}` count 1 in devs/testmain_test.go; migration filename and `Rollback` present in the carry-over test).
 - `go.mod` and `go.sum` unchanged against the base commit.
 - `make lint` could not run here (golangci-lint cannot lint Go 1.26 in this environment); `go vet` and `gofmt -l` stood in. The full `make test` was left to the orchestrator.

@@ -58,7 +58,7 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
   - `staff_panel_refresh_button: "🔄 Refresh"`
   - `staff_panel_prev: "⬅️ Prev"` / `staff_panel_next: "Next ➡️"`
 - Error messages include remediation steps (e.g., "Make me an admin, then send the command again")
-- Help text is well-structured with * for bold and × for bullets (alita/modules/staff.go lines 68-87 show proper Markdown-to-HTML conversion)
+- Help text is well-structured with * for bold and × for bullets (fuku/modules/staff.go lines 68-87 show proper Markdown-to-HTML conversion)
 - **All 7 locales verified complete:** 63 `staff_*` keys present in en.yml, es.yml, fr.yml, hi.yml, id.yml, pt.yml, ru.yml (verified via grep)
 - Locale keys are copy-friendly: `staff_panel_chat_id`, `staff_set_done`, `staff_link_done` all interpolate data cleanly
 
@@ -72,7 +72,7 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
 
 **Files audited:**
 - `locales/en.yml` lines 2639-2711 (63 staff_* keys)
-- `alita/modules/staff.go` lines 62-150 (message handling and reply wording)
+- `fuku/modules/staff.go` lines 62-150 (message handling and reply wording)
 
 ---
 
@@ -83,7 +83,7 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
   - ✅ = "Bot is admin" YES
   - ❌ = "Bot can restrict" NO
   - ❔ = "Owner matches" UNKNOWN
-  - Defined in `alita/modules/staff_panel.go` lines 65-74
+  - Defined in `fuku/modules/staff_panel.go` lines 65-74
 - Action buttons use recognizable emoji icons:
   - ➕ "Add group" (international symbol for add)
   - 🔄 "Refresh" (universal reload symbol)
@@ -99,7 +99,7 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
 - **BLOCKER-adjacent:** Unlink button lacks icon, inconsistent with pattern:
   - `staff_panel_unlink_button: "Unlink {group}"` is text-only
   - All other action buttons (Add, Refresh, Prev/Next) have emoji prefixes
-  - Breaks the established visual convention (alita/modules/staff_panel.go line 385)
+  - Breaks the established visual convention (fuku/modules/staff_panel.go line 385)
 - Bullet points in help text use × (multiplication sign), not standard:
   - `staff_help_msg` line 2643-2650 shows "× /setstaff:" style bullets
   - × may render as different characters in some Telegram clients (font-dependent)
@@ -109,8 +109,8 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
   - Hard to visually distinguish "Problem: ..." from regular content
 
 **Code references:**
-- `alita/modules/staff_panel.go` lines 65-74 (statusIcon), 308-325 (keyboard layout), 345-388 (button rendering)
-- `alita/modules/staff_link.go` (unlink button definition)
+- `fuku/modules/staff_panel.go` lines 65-74 (statusIcon), 308-325 (keyboard layout), 345-388 (button rendering)
+- `fuku/modules/staff_link.go` (unlink button definition)
 
 ---
 
@@ -142,8 +142,8 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
 
 **Files audited:**
 - `locales/en.yml` staff_* keys (2639-2711)
-- `alita/modules/staff_panel.go` lines 191-249 (text composition)
-- `alita/modules/staff.go` lines 62-66 (reply function)
+- `fuku/modules/staff_panel.go` lines 191-249 (text composition)
+- `fuku/modules/staff.go` lines 62-66 (reply function)
 
 ---
 
@@ -164,7 +164,7 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
   - Ensures consistent rendering across clients
 - Reasonable fallback for length overflow:
   - When message exceeds 3800 UTF-16 units, help swaps to a hint (staff_panel_help_hint), then rows are dropped with a note
-  - Keeps readability intact (alita/modules/staff_panel.go lines 256-272)
+  - Keeps readability intact (fuku/modules/staff_panel.go lines 256-272)
 
 **Issues:**
 - No variation in font weight beyond bold/normal:
@@ -177,15 +177,15 @@ Audit scope: copywriting, button labels, error messages, visual hierarchy via em
   - No dividers or separators between sections (could use "---" as a divider, but might be overkill)
 
 **Code references:**
-- `alita/modules/staff_panel.go` lines 191-249 (composeStaffPanelText), 256-272 (staffPanelTextFor with length cap)
-- `alita/modules/staff.go` line 199 (ToTelegramHTML call)
+- `fuku/modules/staff_panel.go` lines 191-249 (composeStaffPanelText), 256-272 (staffPanelTextFor with length cap)
+- `fuku/modules/staff.go` line 199 (ToTelegramHTML call)
 - `locales/en.yml` lines 2639-2650 (help text structure)
 
 ---
 
 ### Pillar 5: Spacing (3/4)
 
-**Audit method:** Examined line-break patterns in message composition (alita/modules/staff_panel.go).
+**Audit method:** Examined line-break patterns in message composition (fuku/modules/staff_panel.go).
 
 **Pattern analysis:**
 ```
@@ -231,7 +231,7 @@ time                 ← single break: \n
   - Row below hint might appear far down screen on small displays
 
 **Code references:**
-- `alita/modules/staff_panel.go` lines 191-249 (spacing constants: `\n` = "\\n", `\n\n` = "\\n\\n")
+- `fuku/modules/staff_panel.go` lines 191-249 (spacing constants: `\n` = "\\n", `\n\n` = "\\n\\n")
 
 ---
 
@@ -257,14 +257,14 @@ time                 ← single break: \n
 - Confirmation flow for destructive actions:
   - ✅ Unlink: "Are you sure you want to unlink {group}? Staff commands will no longer reach it." (clear consequence)
   - ✅ Unset: "Are you sure? Removing Staff status will unlink {count} group(s) from this Staff Group."
-  - Both with Confirm/Cancel buttons (alita/modules/staff.go lines 212-226)
+  - Both with Confirm/Cancel buttons (fuku/modules/staff.go lines 212-226)
 - Live permission re-checks on every button press:
   - ✅ Refresh callback checks "Staff Group member" via `IsUserInChatWithError` (not cached admin list)
   - ✅ Unlink callback re-checks owner status live before acting
-  - ✅ Page callback checks membership live (alita/modules/staff_panel.go test assertions)
+  - ✅ Page callback checks membership live (fuku/modules/staff_panel.go test assertions)
   - Excellent security pattern: authority cannot be stale
 - Auto-delete of command messages:
-  - ✅ `/linkstaff` and `/unlinkstaff` commands deleted when bot has permission (alita/modules/staff_link.go)
+  - ✅ `/linkstaff` and `/unlinkstaff` commands deleted when bot has permission (fuku/modules/staff_link.go)
   - ✅ Keeps linked group quiet (D-07 requirement)
 - Pagination and button availability:
   - ✅ 8 groups per page, Prev/Next only shown when needed
@@ -279,7 +279,7 @@ time                 ← single break: \n
   - No message shown to user; appears to hang
   - Expected behavior: send "🔄 Loading..." message, edit once checks complete
   - Severity: High (UX feels broken), but timeouts are rare with small groups
-  - Evidence: `alita/modules/staff_panel.go` line 30: `staffPanelBuildTimeout = 45 * time.Second`
+  - Evidence: `fuku/modules/staff_panel.go` line 30: `staffPanelBuildTimeout = 45 * time.Second`
 
 - **Removed links disappear silently:**
   - When panel is built and a link is found to have a changed owner, it's removed and notice posted to Staff Group
@@ -298,19 +298,19 @@ time                 ← single break: \n
   - Panel is not shown at all; authority of linked groups is unknown
   - Expected: show a degraded panel with "⚠️ Could not verify status" for each group
   - Severity: Medium (rare, but UX is poor when it happens)
-  - Evidence: `alita/modules/staff.go` lines 160-164
+  - Evidence: `fuku/modules/staff.go` lines 160-164
 
 - **Callback data length not validated visually:**
   - If a group title is very long (e.g., 1000 runes), the button will be silently dropped with a log warning
   - User sees fewer Unlink buttons than groups shown, but no explanation
   - Severity: Low (happens only with pathological titles; documented in code)
-  - Evidence: `alita/modules/staff_panel.go` lines 374-387 (button generation)
+  - Evidence: `fuku/modules/staff_panel.go` lines 374-387 (button generation)
 
 **Files audited:**
-- `alita/modules/staff.go` lines 62-300 (command handlers, confirmation flow)
-- `alita/modules/staff_panel.go` lines 282-388 (panel rendering, button logic)
-- `alita/modules/staff_unlink.go` (unlink action flow)
-- `alita/modules/staff_sweeper.go` (health check and removal)
+- `fuku/modules/staff.go` lines 62-300 (command handlers, confirmation flow)
+- `fuku/modules/staff_panel.go` lines 282-388 (panel rendering, button logic)
+- `fuku/modules/staff_unlink.go` (unlink action flow)
+- `fuku/modules/staff_sweeper.go` (health check and removal)
 - `locales/en.yml` staff_* keys (error, success, confirmation messages)
 
 ---
@@ -318,11 +318,11 @@ time                 ← single break: \n
 ## Files Audited
 
 ### Source Code
-- `/home/user/Fuku_Robot/alita/modules/staff.go` (lines 1-300+)
-- `/home/user/Fuku_Robot/alita/modules/staff_panel.go` (lines 1-541)
-- `/home/user/Fuku_Robot/alita/modules/staff_link.go` (staff picking and linking flow)
-- `/home/user/Fuku_Robot/alita/modules/staff_unlink.go` (unlink action)
-- `/home/user/Fuku_Robot/alita/modules/staff_sweeper.go` (background checks and notices)
+- `/home/user/Fuku_Robot/fuku/modules/staff.go` (lines 1-300+)
+- `/home/user/Fuku_Robot/fuku/modules/staff_panel.go` (lines 1-541)
+- `/home/user/Fuku_Robot/fuku/modules/staff_link.go` (staff picking and linking flow)
+- `/home/user/Fuku_Robot/fuku/modules/staff_unlink.go` (unlink action)
+- `/home/user/Fuku_Robot/fuku/modules/staff_sweeper.go` (background checks and notices)
 
 ### Locale Files (All 7 Verified Complete)
 - `/home/user/Fuku_Robot/locales/en.yml` lines 2639-2711 (63 keys)

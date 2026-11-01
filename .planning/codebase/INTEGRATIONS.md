@@ -18,7 +18,7 @@ last_mapped_at: 2026-10-04
 **AI Spam Detection (Optional):**
 - TypeSafe Jev - Per-chat AI-powered spam filter with calibrated probability decisions
   - Service: https://typesafe.ai (external SaaS)
-  - SDK/Client: Custom HTTP client (`alita/modules/aispam_jev.go` via standard library `net/http`)
+  - SDK/Client: Custom HTTP client (`fuku/modules/aispam_jev.go` via standard library `net/http`)
   - Auth: `TYPESAFE_API_KEY` environment variable (single bot-wide credential)
   - Endpoint: Configured via `OTEL_EXPORTER_OTLP_ENDPOINT` logic or hardcoded (production endpoint)
   - Feature gate: `ENABLE_AISPAM` (default: true) and `TYPESAFE_API_KEY` (default: empty, feature inert without it)
@@ -31,7 +31,7 @@ last_mapped_at: 2026-10-04
   - Features: Includes DB operations, request handlers, custom spans
   - Fallback: Console exporter if `OTEL_EXPORTER_CONSOLE=true`
   - Configuration: TLS disabled if `OTEL_EXPORTER_OTLP_INSECURE=true`
-  - Service name: `OTEL_SERVICE_NAME` (default: "alita_robot")
+  - Service name: `OTEL_SERVICE_NAME` (default: "fuku_robot")
   - Sampling: `OTEL_TRACES_SAMPLE_RATE` (0.0-1.0, default: 1.0)
 
 ## Data Storage
@@ -45,13 +45,13 @@ last_mapped_at: 2026-10-04
 
 - SQLite (testing only)
   - Location: In-memory or `gorm.io/driver/sqlite`
-  - Used when `ALITA_TEST_DATABASE` is not set or false in test runs
+  - Used when `FUKU_TEST_DATABASE` is not set or false in test runs
   - Requires CGO in test builds
 
 **File Storage:**
 - Telegram Bot API file storage - All media (photos, documents, backups) are stored on Telegram servers
   - Access: Via `backupDownloadBaseURL` (`https://api.telegram.org/file/bot<token>/<path>`)
-  - Implementation: `alita/modules/backup.go` downloads federation backups using this endpoint
+  - Implementation: `fuku/modules/backup.go` downloads federation backups using this endpoint
 
 **Caching:**
 - Redis 7+ (required for production deployments unless `DisableCache=true`)
@@ -62,7 +62,7 @@ last_mapped_at: 2026-10-04
   - Architecture: Two-layer read-through caching
     - L1: In-process LRU cache with `CACHE_LOCAL_TTL` (default 10s, max 300s)
     - L2: Redis backend for distributed invalidation
-  - Key prefix: `alita:cache:*` for cacheable data; `alita:<domain>:*` for operational state
+  - Key prefix: `fuku:cache:*` for cacheable data; `fuku:<domain>:*` for operational state
   - Max entries (L1): `CACHE_LOCAL_MAX_ENTRIES` (default: 50000)
   - Clear on startup: `CLEAR_CACHE_ON_STARTUP` (default: false)
   - In-memory substitute: `github.com/alicebob/miniredis/v2` for testing
@@ -113,7 +113,7 @@ last_mapped_at: 2026-10-04
     - OTLP gRPC: Exports to `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g., Datadog, Jaeger, Grafana Tempo)
     - Stdout: Console output if `OTEL_EXPORTER_CONSOLE=true`
   - Spans: Generated for DB operations, HTTP requests, module processing
-  - Initialization: `alita/utils/tracing/tracing.go`
+  - Initialization: `fuku/utils/tracing/tracing.go`
 
 **Performance Monitoring:**
 - Flag: `ENABLE_PERFORMANCE_MONITORING` (default: true in production, false in debug)
@@ -128,7 +128,7 @@ last_mapped_at: 2026-10-04
 - Self-hosted: Linux server running Docker containers or standalone binary
 - Dokploy-compatible: Predefined Docker Compose stack; environment variables set via UI
 - Containerization: Multi-stage Dockerfile (see `docker/` directory) with distroless images for production
-- Image registry: GHCR (`ghcr.io/divkix/alita_robot:latest`)
+- Image registry: GHCR (`ghcr.io/uasneppy/fuku_robot:latest`)
 
 **CI Pipeline:**
 - GitHub Actions (`.github/workflows/`)

@@ -20,14 +20,14 @@ tech-stack:
     - "a posted copy's claimed_at doubles as the close claim; a conditional update decides the winner"
 key-files:
   created:
-    - alita/db/lockdown/alerts_test.go
-    - alita/modules/lockdown_alert_close_test.go
+    - fuku/db/lockdown/alerts_test.go
+    - fuku/modules/lockdown_alert_close_test.go
   modified:
-    - alita/db/lockdown/alerts.go
-    - alita/db/lockdown/testmain_test.go
-    - alita/modules/lockdown_alert.go
-    - alita/modules/lockdown_alert_callbacks.go
-    - alita/modules/lockdown_worker.go
+    - fuku/db/lockdown/alerts.go
+    - fuku/db/lockdown/testmain_test.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/lockdown_alert_callbacks.go
+    - fuku/modules/lockdown_worker.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -61,8 +61,8 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## What was built
 
-- **Close claims (`alita/db/lockdown/alerts.go`)**: `ListAlertSlotsToCloseFresh` (posted, unclosed, unclaimed copies of lockdowns that are not active, newest ID first), `ClaimAlertClose` (conditional update of `claimed_at`), `RecordAlertClosed` (`closed_at`, claim cleared, `buttons_live` and `edit_pending` false, detail), `ReleaseAlertClose` (claim cleared, an attempt counted only when asked). Rows of an active lockdown are never listed. No cache is involved, as for the rest of the alert tables.
-- **Closing (`alita/modules/lockdown_alert.go`)**: `lockdownLiftedFooter` (lifter mention and `lift_started_at` spliced in after translation), `lockdownEditGone`, `lockdownCloseAlerts` (the worker step), `lockdownCloseSlotNow` (one copy at once) and a shared `lockdownCloseClaimed`. One paced `EditMessageTextWithContext` of the stored body plus the footer, HTML, link previews off, no reply markup. Success, "message is not modified" and a gone message close the copy; a rate limit or shutdown releases the claim without an attempt and ends the step for that cycle; any other failure costs an attempt and the third closes the copy with Telegram's reason.
+- **Close claims (`fuku/db/lockdown/alerts.go`)**: `ListAlertSlotsToCloseFresh` (posted, unclosed, unclaimed copies of lockdowns that are not active, newest ID first), `ClaimAlertClose` (conditional update of `claimed_at`), `RecordAlertClosed` (`closed_at`, claim cleared, `buttons_live` and `edit_pending` false, detail), `ReleaseAlertClose` (claim cleared, an attempt counted only when asked). Rows of an active lockdown are never listed. No cache is involved, as for the rest of the alert tables.
+- **Closing (`fuku/modules/lockdown_alert.go`)**: `lockdownLiftedFooter` (lifter mention and `lift_started_at` spliced in after translation), `lockdownEditGone`, `lockdownCloseAlerts` (the worker step), `lockdownCloseSlotNow` (one copy at once) and a shared `lockdownCloseClaimed`. One paced `EditMessageTextWithContext` of the stored body plus the footer, HTML, link previews off, no reply markup. Success, "message is not modified" and a gone message close the copy; a rate limit or shutdown releases the claim without an attempt and ends the step for that cycle; any other failure costs an attempt and the third closes the copy with Telegram's reason.
 - **Worker hook (`lockdown_worker.go`)**: `runLockdownCycle` runs `closed := lockdownCloseAlerts(ctx, b)` after `lockdownProcessLifts` and ORs it into the progress result.
 - **Stale buttons (`lockdown_alert_callbacks.go`)**: `lockdownStalePress`, called before the action switch when the copy's lockdown is not active. It answers `lockdown_alert_already_lifted` (plain text), then closes the copy through `lockdownCloseSlotNow` when the pressed message is the copy itself (chat and message ID match the row), or edits a confirm card to the same text. It posts no card, lifts nothing and never reads the chat's current lockdown.
 - **Locale key** `lockdown_alert_lifted_footer` in all 7 locale files ("🔓 Lifted by {name} at {time}." and translations).
@@ -85,7 +85,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## Deviations from Plan
 
-**1. [Task 1 - RED shape] The repository tests failed to compile instead of failing at runtime.** `ListAlertSlotsToCloseFresh` and the other close functions did not exist at the RED commit, so `./alita/db/lockdown` did not build. The module test `TestLockdownAlertClosedAtLift` failed at runtime in all six subtests. `TestBeginAlert` and `TestAlertSlots` exercise code from 05-01/05-02, so they passed as soon as the package built; only `TestAlertClose` depends on the new functions.
+**1. [Task 1 - RED shape] The repository tests failed to compile instead of failing at runtime.** `ListAlertSlotsToCloseFresh` and the other close functions did not exist at the RED commit, so `./fuku/db/lockdown` did not build. The module test `TestLockdownAlertClosedAtLift` failed at runtime in all six subtests. `TestBeginAlert` and `TestAlertSlots` exercise code from 05-01/05-02, so they passed as soon as the package built; only `TestAlertClose` depends on the new functions.
 
 **2. [Task 2 - two subtests passed at RED] "confirm card of a lockdown lifted meanwhile" and "an old alert never touches a newer lockdown" already passed before the fix**, because 05-02's Lift Ask and Confirm already refuse a non-active lockdown and the copy row already names its own lockdown. Only "lift button of a lifted lockdown" failed (the alert was never edited). The new stale path moves the check ahead of every action and adds the close.
 
@@ -101,11 +101,11 @@ Otherwise the plan was executed as written.
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules ./alita/db/lockdown`: pass (modules 36 s, repository 1 s).
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules ./fuku/db/lockdown`: pass (modules 36 s, repository 1 s).
 - The named tests pass with `-v`: `TestLockdownAlertClosedAtLift`, `TestLockdownAlertStaleButtons`, `TestLockdownAlertLift`, `TestLockdownAlertLiftOutcomes`, `TestBeginAlert`, `TestAlertSlots`, `TestAlertClose`.
 - `TestLockdownLocaleKeys`, `make check-translations` and `make check-docs` (no drift): pass.
-- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./alita/modules ./alita/db/lockdown`: clean. `gofmt -l` on all touched Go files prints nothing. `git diff --exit-code go.mod go.sum`: unchanged. golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code, so `go vet` and `gofmt` were used instead.
-- Not run: the whole `./alita/modules` package under `-race` (only the `Lockdown|Unlockdown` selection), any PostgreSQL check, and a manual UAT press from a real Staff Group.
+- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown`: clean. `gofmt -l` on all touched Go files prints nothing. `git diff --exit-code go.mod go.sum`: unchanged. golangci-lint was not run: the installed one is built with Go 1.25 and cannot lint Go 1.26 code, so `go vet` and `gofmt` were used instead.
+- Not run: the whole `./fuku/modules` package under `-race` (only the `Lockdown|Unlockdown` selection), any PostgreSQL check, and a manual UAT press from a real Staff Group.
 
 ## Threat surface
 
@@ -117,4 +117,4 @@ None.
 
 ## Self-Check: PASSED
 
-`alita/db/lockdown/alerts_test.go` and `alita/modules/lockdown_alert_close_test.go` exist, and commits 07a3827, 108fbf0, 5c79cd0 and fa21a82 are on the branch.
+`fuku/db/lockdown/alerts_test.go` and `fuku/modules/lockdown_alert_close_test.go` exist, and commits 07a3827, 108fbf0, 5c79cd0 and fa21a82 are on the branch.

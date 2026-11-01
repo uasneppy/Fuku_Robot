@@ -18,11 +18,11 @@ tech-stack:
     - "user text (an invite link) built outside the translator and spliced in after it through a token (lockdownLinkToken)"
 key-files:
   created:
-    - alita/db/lockdown/links.go
-    - alita/db/lockdown/links_test.go
-    - alita/modules/lockdown_alert_link_test.go
+    - fuku/db/lockdown/links.go
+    - fuku/db/lockdown/links_test.go
+    - fuku/modules/lockdown_alert_link_test.go
   modified:
-    - alita/modules/lockdown_alert.go
+    - fuku/modules/lockdown_alert.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -54,8 +54,8 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## What was built
 
-- **`alita/db/lockdown/links.go`**: `InviteLinkCount{Link, Count}` and `TopInviteLinksFresh(lockdownID)`. Two grouped reads (pre-lockdown burst rows; joiner rows of users with no pre row), merged in Go and sorted by count descending then link ascending. Empty links are ignored; a user with a pre row and a later joiner row counts once, by the pre row. Always read fresh, never cached, so no cache key applies.
-- **`alita/modules/lockdown_alert.go`**: `lockdownLinkRevocable` (non-empty, no "..." and no "…"), `lockdownRenderLinkLine(tr, links) (text, top)` (link escaped in code tags and spliced in after translation through `lockdownLinkToken`; the foreign-link pointer after the link line; the "+N other links" line when more than one link was used) and `lockdownRenderAlert` now returns `(text, link)`. `lockdownPostAlertSlot` passes the shown link to `RecordAlertPosted`. A failed link read leaves the line out (warn log) and the alert still posts.
+- **`fuku/db/lockdown/links.go`**: `InviteLinkCount{Link, Count}` and `TopInviteLinksFresh(lockdownID)`. Two grouped reads (pre-lockdown burst rows; joiner rows of users with no pre row), merged in Go and sorted by count descending then link ascending. Empty links are ignored; a user with a pre row and a later joiner row counts once, by the pre row. Always read fresh, never cached, so no cache key applies.
+- **`fuku/modules/lockdown_alert.go`**: `lockdownLinkRevocable` (non-empty, no "..." and no "…"), `lockdownRenderLinkLine(tr, links) (text, top)` (link escaped in code tags and spliced in after translation through `lockdownLinkToken`; the foreign-link pointer after the link line; the "+N other links" line when more than one link was used) and `lockdownRenderAlert` now returns `(text, link)`. `lockdownPostAlertSlot` passes the shown link to `RecordAlertPosted`. A failed link read leaves the line out (warn log) and the alert still posts.
 - **Locale keys in all 7 files**: `lockdown_alert_link_line`, `lockdown_alert_link_others`, `lockdown_alert_link_foreign`.
 
 ## Tests
@@ -74,10 +74,10 @@ None - plan executed as written. `lockdownLinkRevocable` was added in Task 2 tog
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertInviteLink$' -v ./alita/modules`: pass (6 subtests).
-- `go test -tags testtools -race -count=1 -run '^TestTopInviteLinks$' -v ./alita/db/lockdown`: pass (4 subtests).
-- `go test -tags testtools -race -count=1 -run 'Lockdown' ./alita/modules ./alita/db/lockdown`: pass (49 s).
-- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown`: clean. `gofmt -l` on the four touched Go files prints nothing. `git diff --exit-code go.mod go.sum` exits 0.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertInviteLink$' -v ./fuku/modules`: pass (6 subtests).
+- `go test -tags testtools -race -count=1 -run '^TestTopInviteLinks$' -v ./fuku/db/lockdown`: pass (4 subtests).
+- `go test -tags testtools -race -count=1 -run 'Lockdown' ./fuku/modules ./fuku/db/lockdown`: pass (49 s).
+- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown`: clean. `gofmt -l` on the four touched Go files prints nothing. `git diff --exit-code go.mod go.sum` exits 0.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
 - Not run: any PostgreSQL check (SQLite only) and a real Telegram post. Assumption A7 (a bot-created link arrives in full in chat_member updates) stays for UAT; if Telegram cuts it too, the link is simply flagged as not revocable.
 
@@ -91,4 +91,4 @@ None.
 
 ## Self-Check: PASSED
 
-`alita/db/lockdown/links.go`, `alita/db/lockdown/links_test.go` and `alita/modules/lockdown_alert_link_test.go` exist; commits 1645a19, 92b41f0, c2b50cb and d9b2e27 are on the branch.
+`fuku/db/lockdown/links.go`, `fuku/db/lockdown/links_test.go` and `fuku/modules/lockdown_alert_link_test.go` exist; commits 1645a19, 92b41f0, c2b50cb and d9b2e27 are on the branch.

@@ -10,26 +10,26 @@ Decision IDs (D-xx), Pattern N, Pitfall N and line numbers for `captcha.go` refe
 
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |---|---|---|---|---|
-| `alita/utils/captchaweb/store.go` (+ `limiter.go`) | service (Redis Lua) | request-response, event-driven (one-time token) | `alita/modules/raid_counters.go` | role-match (same Lua + `{key}` + miniredis idiom) |
-| `alita/utils/captchaweb/siteverify.go` | client (stdlib leaf) | request-response | `alita/utils/gemini/client.go` | exact |
-| `alita/utils/captchaweb/initdata.go`, `clientip.go`, `settings.go`, `stats.go` | utility | transform | `alita/utils/gemini/client.go` (leaf style, `ValidModel` regex helper); `alita/modules/raid_ai.go:375-424` (atomic counters) | partial |
-| `alita/utils/captchaweb/handler.go` (+ `page/captcha.html`) | controller (HTTP) | request-response | `alita/utils/httpserver/server.go` (`webhookHandler`, `requireMetricsAuth`, `RegisterDBMetrics`) | role-match |
-| `alita/utils/captchaweb/*_test.go` + fake-Cloudflare helper | test | request-response | `alita/utils/gemini/gemini_test.go:64-100`, `leaf_test.go` | exact |
-| `alita/utils/httpserver/server.go` (add `Handle`, endpoint log) | controller/config | request-response | itself (`RegisterDBMetrics`, `Start` endpoints list) | exact |
-| `alita/modules/captcha_web.go` | service (Backend impl) | CRUD + event-driven | `alita/modules/raid_counters.go` (`raidRedis`), `devs.go:362-379` (stats), `raid_ai.go:375-424` | role-match |
-| `alita/modules/captcha.go` (edits) | controller | request-response | itself | exact |
-| `alita/modules/devs.go` (stats section) | controller | request-response | `raidAIStatsSection` same file | exact |
-| `alita/modules/captcha_web_test.go` | test | integration | `alita/modules/lockdown_fake_test.go`, `test_harness_test.go:42-74` | role-match |
+| `fuku/utils/captchaweb/store.go` (+ `limiter.go`) | service (Redis Lua) | request-response, event-driven (one-time token) | `fuku/modules/raid_counters.go` | role-match (same Lua + `{key}` + miniredis idiom) |
+| `fuku/utils/captchaweb/siteverify.go` | client (stdlib leaf) | request-response | `fuku/utils/gemini/client.go` | exact |
+| `fuku/utils/captchaweb/initdata.go`, `clientip.go`, `settings.go`, `stats.go` | utility | transform | `fuku/utils/gemini/client.go` (leaf style, `ValidModel` regex helper); `fuku/modules/raid_ai.go:375-424` (atomic counters) | partial |
+| `fuku/utils/captchaweb/handler.go` (+ `page/captcha.html`) | controller (HTTP) | request-response | `fuku/utils/httpserver/server.go` (`webhookHandler`, `requireMetricsAuth`, `RegisterDBMetrics`) | role-match |
+| `fuku/utils/captchaweb/*_test.go` + fake-Cloudflare helper | test | request-response | `fuku/utils/gemini/gemini_test.go:64-100`, `leaf_test.go` | exact |
+| `fuku/utils/httpserver/server.go` (add `Handle`, endpoint log) | controller/config | request-response | itself (`RegisterDBMetrics`, `Start` endpoints list) | exact |
+| `fuku/modules/captcha_web.go` | service (Backend impl) | CRUD + event-driven | `fuku/modules/raid_counters.go` (`raidRedis`), `devs.go:362-379` (stats), `raid_ai.go:375-424` | role-match |
+| `fuku/modules/captcha.go` (edits) | controller | request-response | itself | exact |
+| `fuku/modules/devs.go` (stats section) | controller | request-response | `raidAIStatsSection` same file | exact |
+| `fuku/modules/captcha_web_test.go` | test | integration | `fuku/modules/lockdown_fake_test.go`, `test_harness_test.go:42-74` | role-match |
 | `main.go` (route registration, readiness mark) | config/wiring | request-response | itself (`:235-241`, `:434-440`) | exact |
-| `alita/db/models/captcha.go`, `alita/db/captcha/repository.go` | model / repository | CRUD | themselves | exact |
-| `alita/db/constraints_test.go`, new `TestSetCaptchaModeAcceptsTurnstile` | test | CRUD | `constraints_test.go:127-139` | exact |
+| `fuku/db/models/captcha.go`, `fuku/db/captcha/repository.go` | model / repository | CRUD | themselves | exact |
+| `fuku/db/constraints_test.go`, new `TestSetCaptchaModeAcceptsTurnstile` | test | CRUD | `constraints_test.go:127-139` | exact |
 | `migrations/20261030120000_allow_turnstile_captcha_mode.sql` | migration | batch | `migrations/20261029120000_add_raid_detection_ai.sql` (header style) + `migrations/20260412000000_add_missing_check_constraints.sql` (the constraint) | role-match |
-| `alita/db/migrations/captcha_mode_test.go` (`TestCaptchaModeTurnstileConstraint`) | test (PG-only) | batch | `alita/db/migrations/raid_carry_over_test.go:47-77` | exact |
+| `fuku/db/migrations/captcha_mode_test.go` (`TestCaptchaModeTurnstileConstraint`) | test (PG-only) | batch | `fuku/db/migrations/raid_carry_over_test.go:47-77` | exact |
 | `Makefile` `test-postgres-integrity` | config | batch | itself, line 41 `-run` regex | exact |
-| `alita/config/config.go` | config | transform | `GeminiAPIKey` additions (`:196-207`, `:342-346`, `:480-490`) | exact |
-| `alita/config/config_test.go` (`TestCaptchaWebConfig`) | test | transform | existing config tests (not read; planner to grep `ValidateConfig`) | role-match |
-| `locales/{en,es,fr,hi,id,pt,ru}.yml` | config (i18n) | - | `lockdown_*` keys + `alita/i18n/lockdown_locale_test.go` | exact |
-| `alita/i18n/captcha_web_locale_test.go` | test | transform | `alita/i18n/lockdown_locale_test.go:1-60` | exact |
+| `fuku/config/config.go` | config | transform | `GeminiAPIKey` additions (`:196-207`, `:342-346`, `:480-490`) | exact |
+| `fuku/config/config_test.go` (`TestCaptchaWebConfig`) | test | transform | existing config tests (not read; planner to grep `ValidateConfig`) | role-match |
+| `locales/{en,es,fr,hi,id,pt,ru}.yml` | config (i18n) | - | `lockdown_*` keys + `fuku/i18n/lockdown_locale_test.go` | exact |
+| `fuku/i18n/captcha_web_locale_test.go` | test | transform | `fuku/i18n/lockdown_locale_test.go:1-60` | exact |
 | `docs/.../self-hosting/captcha-web.md` | docs | - | `docs/.../self-hosting/webhooks.md` (hand-written, no marker) | role-match |
 | `docs/.../api-reference/environment.md`, `sample.env` | docs | - | `GEMINI_API_KEY` blocks (`environment.md:73-96`, `:592-593`; `sample.env:127-141`) | exact |
 | `scripts/captcha-page/*.test.mjs` | test (node) | transform | none (`scripts/gemini-spike/` for dir layout only) | no analog |
@@ -39,11 +39,11 @@ Decision IDs (D-xx), Pattern N, Pitfall N and line numbers for `captcha.go` refe
 
 ## Pattern Assignments
 
-### `alita/utils/captchaweb/store.go` and `limiter.go` (service, Lua + Redis)
+### `fuku/utils/captchaweb/store.go` and `limiter.go` (service, Lua + Redis)
 
-**Analog:** `alita/modules/raid_counters.go`
+**Analog:** `fuku/modules/raid_counters.go`
 
-Do not copy `raidRedis()` as is: it is package-private to `modules` and `captchaweb` must not import `alita/utils/cache` through `alita/db`. Inject a `redis.Cmdable` (or `*redis.Client`) into `NewStore`. `alita/utils/cache` is not under `alita/db`, but keep the leaf free of `alita/config` and `alita/db` (D-29); take the client from `main.go`.
+Do not copy `raidRedis()` as is: it is package-private to `modules` and `captchaweb` must not import `fuku/utils/cache` through `fuku/db`. Inject a `redis.Cmdable` (or `*redis.Client`) into `NewStore`. `fuku/utils/cache` is not under `fuku/db`, but keep the leaf free of `fuku/config` and `fuku/db` (D-29); take the client from `main.go`.
 
 **Imports / constants** (`raid_counters.go:1-48`):
 ```go
@@ -55,17 +55,17 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
-	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 const (
-	// raidKeyPrefix starts every key of the family. It sits outside alita:cache:, so
+	// raidKeyPrefix starts every key of the family. It sits outside fuku:cache:, so
 	// CLEAR_CACHE_ON_STARTUP keeps it.
-	raidKeyPrefix = "alita:raid:"
+	raidKeyPrefix = "fuku:raid:"
 	// raidRedisTimeout bounds the one Redis round trip the join hot path makes.
 	raidRedisTimeout = 250 * time.Millisecond
 )
 ```
-Copy: key family constants outside `alita:cache:` (new family `alita:captcha:ch:`, `:done:`, `:rl:`; `alita:captcha:refresh:cooldown:*` already exists), 250 ms bound per round trip.
+Copy: key family constants outside `fuku:cache:` (new family `fuku:captcha:ch:`, `:done:`, `:rl:`; `fuku:captcha:refresh:cooldown:*` already exists), 250 ms bound per round trip.
 
 **Lua script pattern** (`raid_counters.go:84-121`):
 ```go
@@ -80,24 +80,24 @@ return raidJoinScript.Run(ctx, client, []string{raidKey(chatID, raidPartJoined)}
 ```
 Copy: doc comment above each script naming `KEYS[1]` and `ARGV` order; `redis.NewScript`; `.Run(ctx, client, keys, args...)`. The three scripts (consume-if-user, rearm, window) are given verbatim in RESEARCH Pattern 10 lines 397-418; use them. Store ids as decimal strings in hash fields (Lua numbers lose exactness above 14 digits). The `{chat}` hash tag does not apply (single-key scripts); the test for "wrong user returns `{2}` and leaves the key" is the one to write first.
 
-**Tests:** miniredis, as `alita/modules/lockdown_fake_test.go:16` (`github.com/alicebob/miniredis/v2`) and `alita/utils/cache/startup_test.go:13` (`miniredis.RunT(t)`). In `captchaweb` tests build `redis.NewClient(&redis.Options{Addr: mr.Addr()})` directly (no `cache.SetRedisClientForTest` needed since the store takes a client).
+**Tests:** miniredis, as `fuku/modules/lockdown_fake_test.go:16` (`github.com/alicebob/miniredis/v2`) and `fuku/utils/cache/startup_test.go:13` (`miniredis.RunT(t)`). In `captchaweb` tests build `redis.NewClient(&redis.Options{Addr: mr.Addr()})` directly (no `cache.SetRedisClientForTest` needed since the store takes a client).
 
 ---
 
-### `alita/utils/captchaweb/siteverify.go` (client, request-response)
+### `fuku/utils/captchaweb/siteverify.go` (client, request-response)
 
-**Analog:** `alita/utils/gemini/client.go` (stdlib-only leaf)
+**Analog:** `fuku/utils/gemini/client.go` (stdlib-only leaf)
 
 **Package doc and leaf rule** (`client.go:1-8`):
 ```go
 // Package gemini is the Gemini generateContent client of the AI raid checks.
 //
 // It imports the standard library only, so the scripts/gemini-spike tool can
-// use it without pulling in alita/config or alita/db, whose init functions
+// use it without pulling in fuku/config or fuku/db, whose init functions
 // connect to PostgreSQL before main. ... nothing in this package logs:
 // callers log, and every error returned here is free of the key.
 ```
-Copy the intent: `captchaweb` imports stdlib plus `github.com/redis/go-redis/v9` only (D-29 says no `alita/db`; the Gemini leaf test forbids all dotted paths, so for captchaweb the leaf test must allow go-redis but forbid `Alita_Robot/alita/db`, `alita/config`, `alita/modules`).
+Copy the intent: `captchaweb` imports stdlib plus `github.com/redis/go-redis/v9` only (D-29 says no `fuku/db`; the Gemini leaf test forbids all dotted paths, so for captchaweb the leaf test must allow go-redis but forbid `Fuku_Robot/fuku/db`, `fuku/config`, `fuku/modules`).
 
 **Constants and sentinel errors** (`client.go:22-57`): a `const` block with `DefaultEndpoint`, `Timeout = 8 * time.Second`, `maxResponseBytes = 1 << 20`; sentinel `errors.New("gemini: ...")`. Use `DefaultEndpoint = "https://challenges.cloudflare.com/turnstile/v0/siteverify"`, `Timeout = 5 * time.Second`, `maxResponseBytes = 64 << 10`.
 
@@ -121,16 +121,16 @@ Copy as `Client{Endpoint, Secret, HTTP}`. Secret goes in the JSON body (Cloudfla
 
 ---
 
-### `alita/utils/captchaweb/initdata.go`, `clientip.go`, `settings.go`, `stats.go` (utility, transform)
+### `fuku/utils/captchaweb/initdata.go`, `clientip.go`, `settings.go`, `stats.go` (utility, transform)
 
-**Analog for validation helper style:** `alita/utils/gemini/client.go:59-66`
+**Analog for validation helper style:** `fuku/utils/gemini/client.go:59-66`
 ```go
 var modelPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 func ValidModel(name string) bool { return modelPattern.MatchString(name) }
 ```
 Copy: pre-compiled `^[A-Za-z0-9_-]{1,64}$` for the challenge token and short name. HMAC code is given in RESEARCH Pattern 2 (`deriveKey`, `sign`, `hmac.Equal`); no repo analog.
 
-**Analog for counters:** `alita/modules/raid_ai.go:375-424` (`atomic.Int64` vars, `GetRaidAIStats()` snapshot struct)
+**Analog for counters:** `fuku/modules/raid_ai.go:375-424` (`atomic.Int64` vars, `GetRaidAIStats()` snapshot struct)
 ```go
 raidAIChecked atomic.Int64
 ...
@@ -142,9 +142,9 @@ Copy as `stats.go` `Snapshot()` (issued, passed, failed, expired, invalid, retry
 
 ---
 
-### `alita/utils/captchaweb/handler.go` and `page/captcha.html` (controller, request-response)
+### `fuku/utils/captchaweb/handler.go` and `page/captcha.html` (controller, request-response)
 
-**Analog:** `alita/utils/httpserver/server.go`
+**Analog:** `fuku/utils/httpserver/server.go`
 
 **Body cap, method check, generic errors** (`server.go:238-262`, `webhookHandler`):
 ```go
@@ -167,7 +167,7 @@ Differences for verify: use Go 1.22 method patterns (`POST /captcha/verify`) so 
 
 **JSON health handler** (`server.go:110-139`, `RegisterHealth`): `Content-Type: application/json`, `json.NewEncoder(w).Encode(...)`, log encode failure with `log.Errorf("[HTTPServer] Failed to encode ...")`. Copy for `GET /captcha/health` (`{"status":"ok"|"unavailable"}`, 503 when Redis `PING` over 250 ms fails).
 
-**Panic recovery:** every goroutine starts with `defer error_handling.RecoverFromPanic("<fn>", "<mod>")` (`server.go:222`, `alita/utils/error_handling/error_handling.go:16`). `captchaweb` cannot import `alita/utils/error_handling` if it imports db; check, otherwise recover locally. The detached finish task lives in `modules` where it can.
+**Panic recovery:** every goroutine starts with `defer error_handling.RecoverFromPanic("<fn>", "<mod>")` (`server.go:222`, `fuku/utils/error_handling/error_handling.go:16`). `captchaweb` cannot import `fuku/utils/error_handling` if it imports db; check, otherwise recover locally. The detached finish task lives in `modules` where it can.
 
 **Write timeout trap:** `Start()` sets `WriteTimeout: 10 * time.Second` (`server.go:381-384`); verify handler starts with `http.NewResponseController(w).SetWriteDeadline(time.Now().Add(20*time.Second))` and ignores the error (ResponseRecorder returns one).
 
@@ -175,7 +175,7 @@ Differences for verify: use Go 1.22 method patterns (`POST /captcha/verify`) so 
 
 ---
 
-### `alita/utils/httpserver/server.go` (add generic `Handle`)
+### `fuku/utils/httpserver/server.go` (add generic `Handle`)
 
 **Analog:** same file, `RegisterDBMetrics` (`server.go:177-195`) and `Start` endpoint list (`:386-393`).
 ```go
@@ -187,13 +187,13 @@ if s.pprofEnabled { endpoints = append(endpoints, "/debug/pprof/*") }
 ```
 Add `func (s *Server) Handle(pattern string, h http.Handler)` that calls `s.mux.Handle` and logs `[HTTPServer] Registered %s`; add a `captchaEnabled` flag so `Start` appends `/captcha*` to `endpoints`. Note `s.bot` is set only by `RegisterWebhook` (`:206`), so the captcha handler gets the bot by injection. Warn pattern for the shared port (D-31): copy `RegisterMetrics` (`:169-175`) `if s.metricsAuthToken == "" { log.Warn("[HTTPServer] METRICS_AUTH_TOKEN is not set ...") }`.
 
-Test analog: `alita/utils/httpserver/server_test.go:28-60` (`New(0, time.Now())`, `httptest`) for `TestCaptchaWebRoutesRegistration`.
+Test analog: `fuku/utils/httpserver/server_test.go:28-60` (`New(0, time.Now())`, `httptest`) for `TestCaptchaWebRoutesRegistration`.
 
 ---
 
 ### Fake-Cloudflare helper and `captchaweb` tests (test)
 
-**Analog:** `alita/utils/gemini/gemini_test.go:64-100`
+**Analog:** `fuku/utils/gemini/gemini_test.go:64-100`
 ```go
 func newTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *recorder) {
 	t.Helper()
@@ -214,9 +214,9 @@ Copy the recorder, `writeJSON`, and an `Endpoint`-injected client. Fake switches
 
 ---
 
-### `alita/modules/captcha_web.go` (service, Backend impl) and `captcha.go` edits
+### `fuku/modules/captcha_web.go` (service, Backend impl) and `captcha.go` edits
 
-**Analog:** `alita/modules/raid_counters.go:63-77` for Redis acquisition with a one-time "no Redis" notice:
+**Analog:** `fuku/modules/raid_counters.go:63-77` for Redis acquisition with a one-time "no Redis" notice:
 ```go
 var raidNoRedisLogged atomic.Bool
 func raidRedis() *redis.Client {
@@ -282,17 +282,17 @@ stats := devs.LoadAllStats() + raidAIStatsSection()
 ```
 Add `captchaWebStatsSection()` with the same heading shape and numbers only; append `+ captchaWebStatsSection()` at `devs.go:407`.
 
-**Module tests:** `alita/modules/test_harness_test.go:49-59` (`newModuleTestBot` with `Username: "AlitaTestBot"`, `Token: "999:test"`) and `lockdown_fake_test.go:268-300` (`lockdownEnv` with miniredis) for a second "replica" test. Redis: `cache.SetRedisClientForTest(t, client)` (`alita/utils/cache/test_setup_testtools.go:144`).
+**Module tests:** `fuku/modules/test_harness_test.go:49-59` (`newModuleTestBot` with `Username: "FukuTestBot"`, `Token: "999:test"`) and `lockdown_fake_test.go:268-300` (`lockdownEnv` with miniredis) for a second "replica" test. Redis: `cache.SetRedisClientForTest(t, client)` (`fuku/utils/cache/test_setup_testtools.go:144`).
 
 ---
 
-### `alita/db/models/captcha.go` and `alita/db/captcha/repository.go` (CRUD)
+### `fuku/db/models/captcha.go` and `fuku/db/captcha/repository.go` (CRUD)
 
 **Model tag** (`models/captcha.go:9`): change `check:chk_captcha_mode,captcha_mode IN ('math','text')` to include `'turnstile'`. GORM builds the CHECK from this tag in SQLite tests, so no `AutoMigrate` list changes (model already in every list).
 
 **Repository** (`repository.go:73-91`): change `if mode != "math" && mode != "text" { return ErrInvalidCaptchaMode }` to accept `turnstile`. Keep `cache.DeleteCache(cache.CacheKey("captcha_settings", chatID))` after the write (already present).
 
-**Test:** extend `alita/db/constraints_test.go:135` `validModes := []string{"math", "text"}` with `"turnstile"`; add `TestSetCaptchaModeAcceptsTurnstile` in `alita/db/captcha` (add its name to nothing; SQLite).
+**Test:** extend `fuku/db/constraints_test.go:135` `validModes := []string{"math", "text"}` with `"turnstile"`; add `TestSetCaptchaModeAcceptsTurnstile` in `fuku/db/captcha` (add its name to nothing; SQLite).
 
 ---
 
@@ -302,7 +302,7 @@ Add `captchaWebStatsSection()` with the same heading shape and numbers only; app
 
 **Constraint analog:** `migrations/20260412000000_add_missing_check_constraints.sql:13` drops with `ALTER TABLE captcha_settings DROP CONSTRAINT IF EXISTS chk_captcha_mode;` then adds `ADD CONSTRAINT chk_captcha_mode CHECK (captcha_mode IN ('math', 'text')) NOT VALID;` (`:24-26`).
 
-Statements (no `BEGIN`/`COMMIT`; `DROP IF EXISTS` first because `alita/db/migrations/runner.go:530-575` wraps `ALTER TABLE ... ADD CONSTRAINT ... ;` in a `DO` block that swallows `duplicate_object`, and `scripts/migrate_psql.sh:75` does the same; keep the ADD multi-line so the regex matches as for the old file):
+Statements (no `BEGIN`/`COMMIT`; `DROP IF EXISTS` first because `fuku/db/migrations/runner.go:530-575` wraps `ALTER TABLE ... ADD CONSTRAINT ... ;` in a `DO` block that swallows `duplicate_object`, and `scripts/migrate_psql.sh:75` does the same; keep the ADD multi-line so the regex matches as for the old file):
 ```sql
 ALTER TABLE captcha_settings DROP CONSTRAINT IF EXISTS chk_captcha_mode;
 ALTER TABLE captcha_settings
@@ -313,15 +313,15 @@ No change to `runner.go` or `migrate_psql.sh` is needed. Name must sort after `2
 
 ---
 
-### `alita/db/migrations/captcha_mode_test.go` (PG-only test) and `Makefile`
+### `fuku/db/migrations/captcha_mode_test.go` (PG-only test) and `Makefile`
 
-**Analog:** `alita/db/migrations/raid_carry_over_test.go:47-77`: skips unless `ALITA_TEST_DATABASE=true` and `DATABASE_URL` set, opens `gorm.Open(postgres.Open(dsn), ...)`, checks tables exist ("the migration chain must run before this test"), executes the migration file via `cleanSupabaseSQL` + `splitSQLStatements`. Copy for `TestCaptchaModeTurnstileConstraint` (turnstile accepted, `bogus` rejected). Never run PostgreSQL locally.
+**Analog:** `fuku/db/migrations/raid_carry_over_test.go:47-77`: skips unless `FUKU_TEST_DATABASE=true` and `DATABASE_URL` set, opens `gorm.Open(postgres.Open(dsn), ...)`, checks tables exist ("the migration chain must run before this test"), executes the migration file via `cleanSupabaseSQL` + `splitSQLStatements`. Copy for `TestCaptchaModeTurnstileConstraint` (turnstile accepted, `bogus` rejected). Never run PostgreSQL locally.
 
-**Makefile** line 41: append `|TestCaptchaModeTurnstileConstraint` inside the `(...)$$` alternation of the `-run` regex (anchored with `$$`; `./alita/db/migrations` is already in the package list at line 44).
+**Makefile** line 41: append `|TestCaptchaModeTurnstileConstraint` inside the `(...)$$` alternation of the `-run` regex (anchored with `$$`; `./fuku/db/migrations` is already in the package list at line 44).
 
 ---
 
-### `alita/config/config.go` (config)
+### `fuku/config/config.go` (config)
 
 **Analog:** the Gemini additions.
 
@@ -342,15 +342,15 @@ func registerSecrets(cfg *Config) {
 ```
 Append `cfg.TurnstileSecretKey` (≥6 chars is enforced inside `RegisterSecret`, `logredact.go:85-97`). The site key is public, not registered.
 
-Validation (`ValidateConfig`, `:212`): style is `return fmt.Errorf("X is required")`. For the "all four or none" rule, name missing variables only, never values. Use stdlib `net/url`; `alita/config` must not import anything reaching `alita/db`. The `setDefaults` note at `:467-474` is the model for "never log the rejected value; `setDefaults` runs before `registerSecrets`".
+Validation (`ValidateConfig`, `:212`): style is `return fmt.Errorf("X is required")`. For the "all four or none" rule, name missing variables only, never values. Use stdlib `net/url`; `fuku/config` must not import anything reaching `fuku/db`. The `setDefaults` note at `:467-474` is the model for "never log the rejected value; `setDefaults` runs before `registerSecrets`".
 
-Tests: new `TestCaptchaWebConfig` (none, partial, bad scheme, query/fragment, secret scrubbed through `logredact`). `alita/utils/logredact/reset_testtools.go` offers the test reset.
+Tests: new `TestCaptchaWebConfig` (none, partial, bad scheme, query/fragment, secret scrubbed through `logredact`). `fuku/utils/logredact/reset_testtools.go` offers the test reset.
 
 ---
 
-### `locales/*.yml` and `alita/i18n/captcha_web_locale_test.go`
+### `locales/*.yml` and `fuku/i18n/captcha_web_locale_test.go`
 
-**Analog:** `alita/i18n/lockdown_locale_test.go` (`TestLockdownLocaleKeys`, lines 38-60+): gathers keys by prefix (`lockdownKeyPrefix = "lockdown_"`) plus an extras list, then per locale (`staffLocales`, `loadStaffLocale(t, lang)`) checks parity both directions, non-empty, identical placeholders. Copy as `captchaWebKeys` (prefix `captcha_web_`, extras `captcha_mode_turnstile_desc`), and add the UI-SPEC max lengths and the "no placeholders/format verbs in page keys" rule. Reason: `make check-translations` only sees literal `GetString("key")` (Pitfall 16); the 26 page keys are read dynamically. Challenge-message and refusal keys are read with literal `GetString`, so the existing check covers them.
+**Analog:** `fuku/i18n/lockdown_locale_test.go` (`TestLockdownLocaleKeys`, lines 38-60+): gathers keys by prefix (`lockdownKeyPrefix = "lockdown_"`) plus an extras list, then per locale (`staffLocales`, `loadStaffLocale(t, lang)`) checks parity both directions, non-empty, identical placeholders. Copy as `captchaWebKeys` (prefix `captcha_web_`, extras `captcha_mode_turnstile_desc`), and add the UI-SPEC max lengths and the "no placeholders/format verbs in page keys" rule. Reason: `make check-translations` only sees literal `GetString("key")` (Pitfall 16); the 26 page keys are read dynamically. Challenge-message and refusal keys are read with literal `GetString`, so the existing check covers them.
 
 Edited keys in all 7 files: `captcha_mode_specify`, `captcha_mode_invalid`, `captcha_help_msg`, `captcha_invalid_mode_error` (en.yml lines ~976, 977, 289, 1561). `captcha_mode_set_formatted` (`en.yml:1734`) takes `(%s mode, %s description)`.
 
@@ -376,27 +376,27 @@ Edited keys in all 7 files: `captcha_mode_specify`, `captcha_mode_invalid`, `cap
 
 ### `AGENTS.md` (same commit)
 
-**Analog:** the Phase 7 raid bullets under "Data" and "Subsystem traps". Add: the `alita:captcha:ch:*`/`done`/`rl` key families outside `alita:cache:`; the `ts1:` reserved answer and the callback guard; the readiness gate (`MarkCaptchaWebReady`); the shutdown rule (post-pass tasks join `captchaLifecycleWG`, no new drain); the shared-port note (D-31); `captchaweb` leaf rule. Also update the "Callbacks" and test-harness bullets if their facts change.
+**Analog:** the Phase 7 raid bullets under "Data" and "Subsystem traps". Add: the `fuku:captcha:ch:*`/`done`/`rl` key families outside `fuku:cache:`; the `ts1:` reserved answer and the callback guard; the readiness gate (`MarkCaptchaWebReady`); the shutdown rule (post-pass tasks join `captchaLifecycleWG`, no new drain); the shared-port note (D-31); `captchaweb` leaf rule. Also update the "Callbacks" and test-harness bullets if their facts change.
 
 ---
 
 ## Shared Patterns
 
 ### Secrets and logging
-**Source:** `alita/config/config.go:480-490`, `alita/utils/logredact/logredact.go:85`
+**Source:** `fuku/config/config.go:480-490`, `fuku/utils/logredact/logredact.go:85`
 **Apply to:** `config.go`, `siteverify.go`, `handler.go`
 Register the Turnstile secret via `registerSecrets`. Never log or wrap request bodies, tokens, `initData`, Cloudflare responses or `*url.Error` (Pitfall 8; AGENTS.md "A file the bot downloads itself never puts its URL in an error"). Log categories use `log.Errorf("[Category][Function]: %v", err)` (CLAUDE.md).
 
 ### Fire-and-forget goroutines
-**Source:** `alita/utils/error_handling/error_handling.go:16`, used at `server.go:222`, `captcha.go` `time.AfterFunc` blocks (`defer error_handling.RecoverFromPanic("captchaSummaryMsgDelete", "captcha")`)
+**Source:** `fuku/utils/error_handling/error_handling.go:16`, used at `server.go:222`, `captcha.go` `time.AfterFunc` blocks (`defer error_handling.RecoverFromPanic("captchaSummaryMsgDelete", "captcha")`)
 **Apply to:** every new goroutine and `time.AfterFunc` in `captcha_web.go` and `captcha.go`.
 
 ### Redis operational keys
-**Source:** `alita/modules/raid_counters.go:20-47`
-**Apply to:** `captchaweb` store and limiters. Outside `alita:cache:`, 250 ms bounds, best effort, exactly-once from conditional DB writes (`CompleteCaptchaAttemptAtomic` / `ReleaseCaptchaAttemptAtomic`, `repository.go:380-453`), Redis only holds short-lived tokens.
+**Source:** `fuku/modules/raid_counters.go:20-47`
+**Apply to:** `captchaweb` store and limiters. Outside `fuku:cache:`, 250 ms bounds, best effort, exactly-once from conditional DB writes (`CompleteCaptchaAttemptAtomic` / `ReleaseCaptchaAttemptAtomic`, `repository.go:380-453`), Redis only holds short-lived tokens.
 
 ### Cache invalidation after attempt insert
-**Source:** `alita/db/captcha/repository.go:204-226` (`createCaptchaAttemptPreMessage` invalidates `alita:cache:captcha_pending:<chat>` after commit)
+**Source:** `fuku/db/captcha/repository.go:204-226` (`createCaptchaAttemptPreMessage` invalidates `fuku:cache:captcha_pending:<chat>` after commit)
 **Apply to:** `SendCaptcha` Turnstile path. No new insert path is added, so reuse the existing call; do not add a second insert.
 
 ### Failure and timeout reuse
@@ -410,14 +410,14 @@ Register the Turnstile secret via `registerSecrets`. Never log or wrap request b
 
 | File | Role | Data Flow | Reason |
 |---|---|---|---|
-| `alita/utils/captchaweb/page/captcha.html` and inline JS | UI asset | request-response | No frontend exists in the repo (docs site is Astro/Blume under `docs/`, unrelated). Use `08-UI-SPEC.md` and RESEARCH Pattern 7. Embed with `embed.FS` and `html/template`; nonce on every `<script>`/`<style>`; no inline `style=` attributes (Pitfall 18). |
+| `fuku/utils/captchaweb/page/captcha.html` and inline JS | UI asset | request-response | No frontend exists in the repo (docs site is Astro/Blume under `docs/`, unrelated). Use `08-UI-SPEC.md` and RESEARCH Pattern 7. Embed with `embed.FS` and `html/template`; nonce on every `<script>`/`<style>`; no inline `style=` attributes (Pitfall 18). |
 | `scripts/captcha-page/*.test.mjs` | test (node `--test` + `vm`) | transform | No JS test tooling in the repo; node is not a project dependency and not part of `make test` (Pitfall 23). For directory convention only, see `scripts/gemini-spike/` (`main.go`, `main_test.go`, one folder per tool). Record the executor-run result in the summary and list unautomated checks in `08-SPIKE.md`. |
 | `initData` HMAC validator internals | utility | transform | No HMAC/signature validation exists in the repo. Use RESEARCH Pattern 2 (key `WebAppData`, `signature` kept in the check string, `hmac.Equal`, injectable clock for the published known-answer vectors). |
 | Trusted-proxy `ClientIP` | utility | transform | `net/netip` rightmost-untrusted walk is new; spec in RESEARCH Pattern 6 ("Client address and the proxy"). |
 
 ## Metadata
 
-**Analog search scope:** `alita/modules/`, `alita/utils/{gemini,httpserver,ratelimit,cache,logredact}`, `alita/db/{captcha,models,migrations}`, `alita/config`, `alita/i18n`, `migrations/`, `main.go`, `Makefile`, `docs/src/content/docs/{self-hosting,api-reference}`, `sample.env`, `scripts/`, `.planning/phases/07-*`
+**Analog search scope:** `fuku/modules/`, `fuku/utils/{gemini,httpserver,ratelimit,cache,logredact}`, `fuku/db/{captcha,models,migrations}`, `fuku/config`, `fuku/i18n`, `migrations/`, `main.go`, `Makefile`, `docs/src/content/docs/{self-hosting,api-reference}`, `sample.env`, `scripts/`, `.planning/phases/07-*`
 **Files scanned/read:** about 30
 **Tracked-source gate:** `git ls-files` confirmed tracked for the 13 key analog files checked; no capability mirror paths used
 **Pattern extraction date:** 2026-10-29

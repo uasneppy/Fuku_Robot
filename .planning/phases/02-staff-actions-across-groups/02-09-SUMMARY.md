@@ -7,10 +7,10 @@ tags: [telegram, rate-limit, pacer, redis, lua, gap-closure]
 
 requires:
   - phase: 02-staff-actions-across-groups
-    provides: "The fleet-wide TelegramPacer (alita:staff:pace:next / alita:staff:pace:block) and staffPaced (02-06), the error classifiers that map ErrRateLimited to staff_act_fail_rate_limited (02-06, 02-07), the staffActionEnv harness"
+    provides: "The fleet-wide TelegramPacer (fuku:staff:pace:next / fuku:staff:pace:block) and staffPaced (02-06), the error classifiers that map ErrRateLimited to staff_act_fail_rate_limited (02-06, 02-07), the staffActionEnv harness"
 provides:
   - "A paced call whose slot is more than MaxWait away fails at once with an error wrapping ratelimit.ErrRateLimited: no sleep, no Telegram request, no slot taken (Gap 2 pacer half, WR-02, T-02-36)"
-  - "reserveSlotScript takes the caller's max wait (ARGV[3]) and returns before its SET when the slot is beyond it, so refused callers leave alita:staff:pace:next untouched (T-02-37)"
+  - "reserveSlotScript takes the caller's max wait (ARGV[3]) and returns before its SET when the slot is beyond it, so refused callers leave fuku:staff:pace:next untouched (T-02-37)"
   - "reserveLocal (Redis-down fallback) refuses an over-cap slot the same way and does not move localNext"
   - "retry_after is clamped to pacerMaxRetryAfterSeconds (86400) before it is multiplied by RetryAfterUnit, so math.MaxInt64 gives a positive bounded block (T-02-38)"
 affects: [02-10-target-lock-heartbeat, phase-03-audit-undo]
@@ -32,10 +32,10 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_action_flood_test.go
+    - fuku/modules/staff_action_flood_test.go
   modified:
-    - alita/utils/ratelimit/telegram_pacer.go
-    - alita/utils/ratelimit/telegram_pacer_test.go
+    - fuku/utils/ratelimit/telegram_pacer.go
+    - fuku/utils/ratelimit/telegram_pacer_test.go
 
 key-decisions:
   - "The shared block is not clamped to MaxWait. The full retry_after is still recorded (research Q2, plan 02-06, T-02-27) so no replica sends into a flood Telegram asked it to wait out; wait now turns the block into a fast refusal. TestTelegramPacerSharedBlock and TestTelegramPacerRetryAfterCap pass unchanged."
@@ -60,12 +60,12 @@ A Telegram block longer than the pacer's 60 s cap now fails every paced staff ca
 
 ## Accomplishments
 
-- Tracer: `TestStaffActionBlockAboveMaxWaitFailsFast` sets `alita:staff:pace:block` for 2 minutes against a 60 s MaxWait. A staff `/ban` over 2 linked groups ends in about 0.3 s with both groups "failed: rate limited"; no `getChatAdministrators`, `getChatMember` or write request reaches either group. After the block key is deleted the next `/ban 4242` bans in both groups, which proves refused callers did not push `alita:staff:pace:next`.
+- Tracer: `TestStaffActionBlockAboveMaxWaitFailsFast` sets `fuku:staff:pace:block` for 2 minutes against a 60 s MaxWait. A staff `/ban` over 2 linked groups ends in about 0.3 s with both groups "failed: rate limited"; no `getChatAdministrators`, `getChatMember` or write request reaches either group. After the block key is deleted the next `/ban 4242` bans in both groups, which proves refused callers did not push `fuku:staff:pace:next`.
 - `wait` returns a wrapped `ErrRateLimited` when the reserved slot is more than MaxWait away. A slot exactly at MaxWait is still waited (boundary pinned).
 - `reserveSlotScript` gains `ARGV[3]` (MaxWait in ms) and returns `slot - now` without the SET when the slot is beyond it. Subtest "a refused caller takes no slot" checks NextKey value and TTL are unchanged.
 - `reserveLocal` refuses over-cap slots without moving `localNext`. `TestTelegramPacerLocalRefusesAboveMaxWait` shows a refused call does not stop the next call once the local block is within the cap.
 - `retry_after` clamped to 86400 before the multiplication; `math.MaxInt64` fails the call after exactly 1 invocation with a positive block of at most 86400 x RetryAfterUnit.
-- The package stays a leaf: no import from `alita/modules`.
+- The package stays a leaf: no import from `fuku/modules`.
 
 ## Task Commits
 
@@ -83,12 +83,12 @@ A Telegram block longer than the pacer's 60 s cap now fails every paced staff ca
 
 ## Verification
 
-- `go test -tags testtools -race -count=3 -run '^TestTelegramPacer' ./alita/utils/ratelimit`: pass
-- `go test -tags testtools -race -count=1 ./alita/utils/ratelimit`: pass
-- `go test -tags testtools -race -count=1 -run 'Staff|staff' ./alita/modules`: pass (109 s)
-- `go vet -tags testtools ./alita/utils/ratelimit ./alita/modules` and `CGO_ENABLED=0 go build ./...`: clean
+- `go test -tags testtools -race -count=3 -run '^TestTelegramPacer' ./fuku/utils/ratelimit`: pass
+- `go test -tags testtools -race -count=1 ./fuku/utils/ratelimit`: pass
+- `go test -tags testtools -race -count=1 -run 'Staff|staff' ./fuku/modules`: pass (109 s)
+- `go vet -tags testtools ./fuku/utils/ratelimit ./fuku/modules` and `CGO_ENABLED=0 go build ./...`: clean
 - `git diff --exit-code go.mod go.sum`: unchanged
-- `make lint` could not run in this sandbox (golangci-lint built with go1.25, module targets go1.26.0). `gofmt -l` on the touched files prints nothing and `go vet` is clean instead. `make test` (full suite) was not run; the ratelimit package and every Staff/staff test in `alita/modules` were.
+- `make lint` could not run in this sandbox (golangci-lint built with go1.25, module targets go1.26.0). `gofmt -l` on the touched files prints nothing and `go vet` is clean instead. `make test` (full suite) was not run; the ratelimit package and every Staff/staff test in `fuku/modules` were.
 
 ## Deviations from Plan
 
@@ -98,7 +98,7 @@ A Telegram block longer than the pacer's 60 s cap now fails every paced staff ca
 - **Found during:** Task 2 (the overflow test showed the clamp edit was also missing from `Do`)
 - **Issue:** A scripted replace for the `p.block(d)` comment and the Task 2 clamp used the wrong indentation, so both silently did not apply in Task 1's GREEN commit. The Task 1 behavior (refusal in `wait`, Lua ARGV[3]) was unaffected.
 - **Fix:** Added the "full retry_after is recorded on purpose" comment together with the clamp in the Task 2 GREEN commit.
-- **Files modified:** alita/utils/ratelimit/telegram_pacer.go
+- **Files modified:** fuku/utils/ratelimit/telegram_pacer.go
 - **Commit:** d405211
 
 Otherwise, the plan executed as written.
@@ -117,6 +117,6 @@ None. No new network endpoints, auth paths or schema changes; the change only na
 
 ## Self-Check: PASSED
 
-- FOUND: alita/modules/staff_action_flood_test.go, alita/utils/ratelimit/telegram_pacer.go, alita/utils/ratelimit/telegram_pacer_test.go
+- FOUND: fuku/modules/staff_action_flood_test.go, fuku/utils/ratelimit/telegram_pacer.go, fuku/utils/ratelimit/telegram_pacer_test.go
 - FOUND commits: 9ac135e, fb7572c, 3569dce, d405211
-- Acceptance greps: `if delay > p.opts.MaxWait`, `ARGV[3]`, `p.opts.MaxWait.Milliseconds()`, `const pacerMaxRetryAfterSeconds = 86400`, `min(seconds, pacerMaxRetryAfterSeconds)` all match; no `alita/modules` import in telegram_pacer.go
+- Acceptance greps: `if delay > p.opts.MaxWait`, `ARGV[3]`, `p.opts.MaxWait.Milliseconds()`, `const pacerMaxRetryAfterSeconds = 86400`, `min(seconds, pacerMaxRetryAfterSeconds)` all match; no `fuku/modules` import in telegram_pacer.go

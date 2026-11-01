@@ -29,12 +29,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/lockdown_apply_test.go
+    - fuku/modules/lockdown_apply_test.go
   modified:
-    - alita/modules/autolockdown.go
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_alert_callbacks.go
-    - alita/modules/lockdown_status.go
+    - fuku/modules/autolockdown.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_alert_callbacks.go
+    - fuku/modules/lockdown_status.go
 
 key-decisions:
   - "applyAutoLockdown still refuses a basic group itself, but autolockdownApply keeps its own early basic-group check so the parse errors and the status view of a basic group reply exactly as before"
@@ -52,10 +52,10 @@ coverage:
     requirement: "MENU-06"
     verification:
       - kind: unit
-        ref: "alita/modules/lockdown_apply_test.go#TestApplyAutoLockdown"
+        ref: "fuku/modules/lockdown_apply_test.go#TestApplyAutoLockdown"
         status: pass
       - kind: unit
-        ref: "alita/modules/autolockdown_test.go#TestAutoLockdown, TestAutolockdownAI, TestAutoLockdownArgs, TestAutoLockdownAuthority, TestAutoLockdownBadInput, TestAutoLockdownBasicGroup, TestAutoLockdownSaveFails, TestAutoLockdownReadsAreBounded"
+        ref: "fuku/modules/autolockdown_test.go#TestAutoLockdown, TestAutolockdownAI, TestAutoLockdownArgs, TestAutoLockdownAuthority, TestAutoLockdownBadInput, TestAutoLockdownBasicGroup, TestAutoLockdownSaveFails, TestAutoLockdownReadsAreBounded"
         status: pass
     human_judgment: false
   - id: D2
@@ -63,10 +63,10 @@ coverage:
     requirement: "MENU-06"
     verification:
       - kind: unit
-        ref: "alita/modules/lockdown_apply_test.go#TestApplyLockdownLift"
+        ref: "fuku/modules/lockdown_apply_test.go#TestApplyLockdownLift"
         status: pass
       - kind: unit
-        ref: "alita/modules/lockdown_lift_test.go#TestLockdownLiftManualChange, TestLockdownLiftRestoreFailure, TestUnlockdownLiftsOnce, TestUnlockdownWithoutLockdown, TestLockdownLiftRecordFailure"
+        ref: "fuku/modules/lockdown_lift_test.go#TestLockdownLiftManualChange, TestLockdownLiftRestoreFailure, TestUnlockdownLiftsOnce, TestUnlockdownWithoutLockdown, TestLockdownLiftRecordFailure"
         status: pass
     human_judgment: false
   - id: D3
@@ -74,10 +74,10 @@ coverage:
     requirement: "MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/lockdown_apply_test.go#TestLockdownAnnounceLift"
+        ref: "fuku/modules/lockdown_apply_test.go#TestLockdownAnnounceLift"
         status: pass
       - kind: unit
-        ref: "alita/modules/lockdown_alert_lift_test.go#TestLockdownAlertLift, TestLockdownAlertLiftOutcomes"
+        ref: "fuku/modules/lockdown_alert_lift_test.go#TestLockdownAlertLift, TestLockdownAlertLiftOutcomes"
         status: pass
     human_judgment: false
   - id: D4
@@ -85,10 +85,10 @@ coverage:
     requirement: "MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/lockdown_apply_test.go#TestLockdownStatusHead"
+        ref: "fuku/modules/lockdown_apply_test.go#TestLockdownStatusHead"
         status: pass
       - kind: unit
-        ref: "alita/modules/lockdown_status_test.go#TestLockdownStatusCommand"
+        ref: "fuku/modules/lockdown_status_test.go#TestLockdownStatusCommand"
         status: pass
     human_judgment: false
 
@@ -128,9 +128,9 @@ status: complete
 - `CGO_ENABLED=0 go build ./...`: clean.
 - Task 1 command: nine named tests, all `--- PASS` (eight pre-existing, unedited).
 - Task 2 command: twelve named tests, all `--- PASS` (nine pre-existing, unedited).
-- Wider pass over `LockdownStatus|LockdownTrigger|AutoAntiRaid|AntiRaid|LockdownAlert|LockdownAlready|Unlockdown` in `./alita/modules`: ok.
-- `go vet -tags testtools ./alita/modules/` clean; `gofmt -l` empty on the five touched files. `make lint` was not run: golangci-lint in this sandbox is built with go1.25 against the module's go1.26.0, so gofmt and go vet stand in for it.
-- The whole `./alita/modules` package and `make test` were not run (about 5 minutes; the orchestrator runs `make test` between waves).
+- Wider pass over `LockdownStatus|LockdownTrigger|AutoAntiRaid|AntiRaid|LockdownAlert|LockdownAlready|Unlockdown` in `./fuku/modules`: ok.
+- `go vet -tags testtools ./fuku/modules/` clean; `gofmt -l` empty on the five touched files. `make lint` was not run: golangci-lint in this sandbox is built with go1.25 against the module's go1.26.0, so gofmt and go vet stand in for it.
+- The whole `./fuku/modules` package and `make test` were not run (about 5 minutes; the orchestrator runs `make test` between waves).
 
 ## Deviations from Plan
 

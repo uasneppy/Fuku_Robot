@@ -28,12 +28,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_recheck.go
-    - alita/modules/staff_ownership_test.go
+    - fuku/modules/staff_recheck.go
+    - fuku/modules/staff_ownership_test.go
   modified:
-    - alita/modules/staff_watchers.go
-    - alita/db/staff/repository.go
-    - alita/db/staff/repository_test.go
+    - fuku/modules/staff_watchers.go
+    - fuku/db/staff/repository.go
+    - fuku/db/staff/repository_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -60,10 +60,10 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipTracer"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipTracer"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipPayloadIsOnlyAHint"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipPayloadIsOnlyAHint"
         status: pass
     human_judgment: false
   - id: D2
@@ -71,10 +71,10 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipStaffGroupChanged"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipStaffGroupChanged"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipStaffGroupHasNoCreatorRemovesAllLinks"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipStaffGroupHasNoCreatorRemovesAllLinks"
         status: pass
     human_judgment: false
   - id: D3
@@ -82,16 +82,16 @@ coverage:
     requirement: PLAT-03
     verification:
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipOwnerLeft"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipOwnerLeft"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipSameNewOwnerStillUnlinks"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipSameNewOwnerStillUnlinks"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipUnknownKeepsLink"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipUnknownKeepsLink"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipConcurrentRechecksPostOnce"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipConcurrentRechecksPostOnce"
         status: pass
     human_judgment: false
   - id: D4
@@ -99,7 +99,7 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_ownership_test.go#TestStaffOwnershipChatMemberCreatorTransition"
+        ref: "fuku/modules/staff_ownership_test.go#TestStaffOwnershipChatMemberCreatorTransition"
         status: pass
     human_judgment: false
   - id: D5
@@ -131,7 +131,7 @@ commits: 3
 ## Provenance: prior attempt versus this run
 
 - **Cherry-picked from the prior attempt:** commit `8ce997f` (now `78b2cff` here), the whole of Task 1: `DeleteLinkIfOwner`, `staff_recheck.go` (`staffOwnerPass`, `recheckLink`, notice helpers), `onOwnershipMessage`, the two notice keys in all 7 locales, and the tracer plus payload tests. I inspected it against Task 1 and re-ran the tracer verify (both tests pass) before keeping it.
-- **Ported from the prior attempt's uncommitted working tree:** `alita/modules/staff_ownership_test.go` (all Task 2 behavior tests, plus the `clearCreator` fake helper) and `alita/db/staff/repository_test.go` (the `DeleteLinkIfOwner*` and `UpdateStaffGroupOwner*` tests), copied verbatim after reading them against the plan's `<behavior>` list.
+- **Ported from the prior attempt's uncommitted working tree:** `fuku/modules/staff_ownership_test.go` (all Task 2 behavior tests, plus the `clearCreator` fake helper) and `fuku/db/staff/repository_test.go` (the `DeleteLinkIfOwner*` and `UpdateStaffGroupOwner*` tests), copied verbatim after reading them against the plan's `<behavior>` list.
 - **Written in this run:** `UpdateStaffGroupOwner`, `recheckStaffGroup`/`staffRecheckSummary`, `staffCreatorTransition`, `onCreatorChatMember`, the `recheckChatOwnership` extension to Staff Groups, the `NewChatMember` registration, and the AGENTS.md trap.
 
 ## Accomplishments
@@ -152,10 +152,10 @@ commits: 3
 
 ## Files Created/Modified
 
-- `alita/modules/staff_recheck.go` - `staffOwnerPass`, `recheckLink`, `recheckStaffGroup`, removal notices
-- `alita/modules/staff_watchers.go` - ownership message and creator `chat_member` watchers at group -3, `recheckChatOwnership`
-- `alita/db/staff/repository.go` - `DeleteLinkIfOwner`, `UpdateStaffGroupOwner`
-- `alita/modules/staff_ownership_test.go`, `alita/db/staff/repository_test.go` - tests
+- `fuku/modules/staff_recheck.go` - `staffOwnerPass`, `recheckLink`, `recheckStaffGroup`, removal notices
+- `fuku/modules/staff_watchers.go` - ownership message and creator `chat_member` watchers at group -3, `recheckChatOwnership`
+- `fuku/db/staff/repository.go` - `DeleteLinkIfOwner`, `UpdateStaffGroupOwner`
+- `fuku/modules/staff_ownership_test.go`, `fuku/db/staff/repository_test.go` - tests
 - `locales/*.yml` (7) - `staff_notice_unlinked_group_owner_changed`, `staff_notice_unlinked_staff_owner_changed`
 - `AGENTS.md` - staff authority trap
 
@@ -171,7 +171,7 @@ None - plan executed exactly as written. The RED commit carries minimal compile 
 
 ## Issues Encountered
 
-None. `gofmt -l` flags `alita/modules/greetings_command_test.go`, which this plan did not touch (pre-existing, out of scope).
+None. `gofmt -l` flags `fuku/modules/greetings_command_test.go`, which this plan did not touch (pre-existing, out of scope).
 
 ## Known Stubs
 

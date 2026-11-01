@@ -76,7 +76,7 @@ Built from the `<threat_model>` blocks of plans 03-01 to 03-12. The supply-chain
 | T-03-20 | Tampering | editing an unrelated message after a Staff Group migration | medium | mitigate | Original edited and replied to only when summary_chat_id equals the pressing chat (TestStaffUndoAfterRekey) | closed |
 | T-03-21 | Elevation of privilege | non-member, service identity or non-presser driving an undo | high | mitigate | Live membership at Ask and Confirm; staffServiceUserIDs refusal; Lua issuer (presser) check on Confirm and Cancel (TestStaffUndoOutsider, TestStaffUndoCardPresserOnly) | closed |
 | T-03-22 | Tampering | double undo from a second card, stale client or replica | high | mitigate | ClaimUndo conditional update as the last step before the run; Ask refuses claimed records (TestStaffUndoOnce, TestStaffUndoOnceAcrossReplicas) | closed |
-| T-03-23 | Tampering | undo racing a staff action on the same person | medium | mitigate | Same alita:staff:lock:target:<id> lock taken at undo Confirm (TestStaffUndoTargetLock) | closed |
+| T-03-23 | Tampering | undo racing a staff action on the same person | medium | mitigate | Same fuku:staff:lock:target:<id> lock taken at undo Confirm (TestStaffUndoTargetLock) | closed |
 | T-03-24 | Repudiation | shutdown leaving a half-finished undo unrecorded | medium | mitigate | Sweep with fail_interrupted, FinalizeUndo off the cancelled context, StopStaffActions drain (TestStopStaffActionsUndo) | closed |
 | T-03-25 | Tampering | restore widening or narrowing permissions through Telegram's implied-permission rule | medium | mitigate | Restore sends use_independent_chat_permissions with the recorded struct; the fake applies the implication rule without the flag, so TestStaffUndoRestores "ban over a partial restriction" fails if the flag is dropped | closed |
 | T-03-26 | Elevation of privilege | undo acting where the presser lacks rights, or where the original was not applied, or in an unlinked group | high | mitigate | Per-group presser check, not-applied filter before any read, link lookup (TestStaffUndoPresserRights, TestStaffUndoNotAppliedOriginally, TestStaffUndoLinkRemoved) | closed |
@@ -125,9 +125,9 @@ Related owner decisions recorded at UAT (code-review findings, not register thre
 | Open | 0 |
 
 Evidence at L1 depth:
-- Every test a mitigation names exists and passed under `-race` on the phase head: 306 top-level `TestStaff*`, `TestStop*` and `TestRekeyChat*` tests in `alita/modules` and `alita/db/staff`, plus `TestActionLog*` and `TestStaffTablesStayOutOfBackup`.
+- Every test a mitigation names exists and passed under `-race` on the phase head: 306 top-level `TestStaff*`, `TestStop*` and `TestRekeyChat*` tests in `fuku/modules` and `fuku/db/staff`, plus `TestActionLog*` and `TestStaffTablesStayOutOfBackup`.
 - The six mitigations that name no test were checked in code:
-  - T-03-04: `alita/db/staff/actions.go` uses no cache, and `TestStaffTablesStayOutOfBackup` covers backup exclusion.
+  - T-03-04: `fuku/db/staff/actions.go` uses no cache, and `TestStaffTablesStayOutOfBackup` covers backup exclusion.
   - T-03-06: `staffUndoMinRemaining = 120` in `staff_action_decide.go`, with boundary tests in `staff_action_undo_decide_test.go`.
   - T-03-17: the undo Confirm checks `card.Issuer != query.From.Id`.
   - T-03-18: `decideStaffUndo` and `staffUndoLeftBehind`.

@@ -83,8 +83,8 @@ Audit scope: copywriting clarity and completeness, visual hierarchy via emoji an
 **Files audited:**
 - `locales/en.yml` lines 2726-2789 (64 staff_act_* keys)
 - `locales/es.yml, fr.yml, hi.yml, id.yml, pt.yml, ru.yml` (all complete)
-- `alita/modules/staff_action.go` lines 82-180 (reply logic and hint mapping)
-- `alita/modules/staff_action_summary.go` lines 50-186 (action and reason text rendering)
+- `fuku/modules/staff_action.go` lines 82-180 (reply logic and hint mapping)
+- `fuku/modules/staff_action_summary.go` lines 50-186 (action and reason text rendering)
 
 ---
 
@@ -130,8 +130,8 @@ Audit scope: copywriting clarity and completeness, visual hierarchy via emoji an
   - Severity: Low (context is clear from multiple messages)
 
 **Code references:**
-- `alita/modules/staff_action_summary.go` lines 32-130 (icon and name rendering)
-- `alita/modules/staff_action_summary.go` lines 188-210 (result line rendering)
+- `fuku/modules/staff_action_summary.go` lines 32-130 (icon and name rendering)
+- `fuku/modules/staff_action_summary.go` lines 188-210 (result line rendering)
 
 ---
 
@@ -172,8 +172,8 @@ Audit scope: copywriting clarity and completeness, visual hierarchy via emoji an
   - Could add bold counts: `"✅ <b>{d}</b> · ⏭ <b>{s}</b> · ❌ <b>{f}</b>"` for emphasis
 
 **Code references:**
-- `alita/modules/staff_action_summary.go` lines 108-130 (target display and header)
-- `alita/modules/staff_action_summary.go` lines 134-186 (reason text rendering)
+- `fuku/modules/staff_action_summary.go` lines 108-130 (target display and header)
+- `fuku/modules/staff_action_summary.go` lines 134-186 (reason text rendering)
 - `locales/en.yml` lines 2726-2789 (reason keys)
 
 ---
@@ -200,7 +200,7 @@ Audit scope: copywriting clarity and completeness, visual hierarchy via emoji an
   - Help text uses `*bold*` and × for bullets, converted via `formatting.ToTelegramHTML()`
   - Ensures consistent rendering
 - UTF-16 aware for length measurement:
-  - `alita/modules/staff_action_summary.go` imports `"unicode/utf16"`
+  - `fuku/modules/staff_action_summary.go` imports `"unicode/utf16"`
   - Summary render respects Telegram's 4096 UTF-16 code-unit limit
   - Collapse and overflow logic use UTF-16 length, not byte or rune length
 
@@ -221,9 +221,9 @@ Audit scope: copywriting clarity and completeness, visual hierarchy via emoji an
   - Severity: Low (text is still readable)
 
 **Code references:**
-- `alita/modules/staff_action_summary.go` lines 120-130 (header composition)
-- `alita/modules/staff_action_summary.go` lines 368-440 (summary render, UTF-16 fit logic)
-- `alita/modules/staff_action_card.go` lines 75-80 (card text composition)
+- `fuku/modules/staff_action_summary.go` lines 120-130 (header composition)
+- `fuku/modules/staff_action_summary.go` lines 368-440 (summary render, UTF-16 fit logic)
+- `fuku/modules/staff_action_card.go` lines 75-80 (card text composition)
 
 ---
 
@@ -278,8 +278,8 @@ More groups are listed... (continuation marker, if any)
   - Severity: Low (context is clear)
 
 **Code references:**
-- `alita/modules/staff_action_summary.go` lines 364-440 (renderStaffActionSummaryFinal, spacing logic)
-- `alita/modules/staff_action_summary.go` lines 290-320 (line assembly, UTF-16 fit)
+- `fuku/modules/staff_action_summary.go` lines 364-440 (renderStaffActionSummaryFinal, spacing logic)
+- `fuku/modules/staff_action_summary.go` lines 290-320 (line assembly, UTF-16 fit)
 
 ---
 
@@ -369,10 +369,10 @@ More groups are listed... (continuation marker, if any)
   - Severity: Low (design choice; final tally is sufficient)
 
 **Files audited:**
-- `alita/modules/staff_action.go` lines 122-220 (main handler, confirmation gate)
-- `alita/modules/staff_action_card.go` lines 200-300 (card lifecycle, expiry, Confirm action)
-- `alita/modules/staff_action_run.go` lines 1-150 (fan-out execution, error handling)
-- `alita/modules/staff_action_summary.go` lines 120-440 (result rendering, continuation)
+- `fuku/modules/staff_action.go` lines 122-220 (main handler, confirmation gate)
+- `fuku/modules/staff_action_card.go` lines 200-300 (card lifecycle, expiry, Confirm action)
+- `fuku/modules/staff_action_run.go` lines 1-150 (fan-out execution, error handling)
+- `fuku/modules/staff_action_summary.go` lines 120-440 (result rendering, continuation)
 - `locales/en.yml` lines 2726-2789 (error, success, state messages)
 
 ---
@@ -380,12 +380,12 @@ More groups are listed... (continuation marker, if any)
 ## Files Audited
 
 ### Source Code (Non-Test)
-- `/home/user/Fuku_Robot/alita/modules/staff_action.go` (lines 1-300+)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_parse.go` (target and duration parsing)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_card.go` (card lifecycle, expiry, Confirm/Cancel)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_run.go` (fan-out execution, per-group checks)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_summary.go` (result rendering and layout)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_decide.go` (decision logic for each action)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action.go` (lines 1-300+)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_parse.go` (target and duration parsing)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_card.go` (card lifecycle, expiry, Confirm/Cancel)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_run.go` (fan-out execution, per-group checks)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_summary.go` (result rendering and layout)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_decide.go` (decision logic for each action)
 
 ### Locale Files (All 7 Verified Complete)
 - `/home/user/Fuku_Robot/locales/en.yml` lines 2726-2789 (64 staff_act_* keys)
@@ -442,6 +442,6 @@ Phase 02 follows the same chat-based UI patterns as Phase 01 (HTML messages, inl
 
 ## Orchestrator Note (2026-10-05)
 
-**Fix #1 is not accurate as written.** `staffActionConfirm` already gives immediate feedback. At `alita/modules/staff_action_card.go:812`, it edits the card into the summary with every linked group shown as ⏳ before it calls `startStaffActionRun`. The coordinator from plan 02-07 then batches live edits at most every 2.5 s. The tap therefore never appears unresponsive while groups are checked. A callback toast on Confirm would be extra polish, not a missing state.
+**Fix #1 is not accurate as written.** `staffActionConfirm` already gives immediate feedback. At `fuku/modules/staff_action_card.go:812`, it edits the card into the summary with every linked group shown as ⏳ before it calls `startStaffActionRun`. The coordinator from plan 02-07 then batches live edits at most every 2.5 s. The tap therefore never appears unresponsive while groups are checked. A callback toast on Confirm would be extra polish, not a missing state.
 
 Fixes #2 (emoji prefixes on hints) and #3 (a marker on the collapsed done count) are optional copy and visual polish. They are left for the owner to decide at verification.

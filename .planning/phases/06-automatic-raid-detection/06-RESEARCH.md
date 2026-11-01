@@ -15,7 +15,7 @@
   - Users an admin added or approved never count (RAID-07, and the same performer rule as the Phase 4 guard). Neither do approved users or the bot itself.
   - Join requests do not count, because they don't let anyone in.
 - **D-03:** Carry-over (LOCK-15): a group's non-zero `antiraid_settings.auto_antiraid_threshold` becomes its join-surge threshold. A group where it was 0 (off) gets the new default, on at 15, because the owner chose triggers on by default.
-- **D-04:** Counting is shared across replicas through Redis, read from the existing 10-minute join tracker (`alita:lockdown:recent:<chat>`, Phase 5) or a key beside it.
+- **D-04:** Counting is shared across replicas through Redis, read from the existing 10-minute join tracker (`fuku:lockdown:recent:<chat>`, Phase 5) or a key beside it.
   - Without Redis the trigger is inert and logs once; manual `/lockdown` still works.
   - A count is never a ban decision. It only starts a lockdown.
 
@@ -88,12 +88,12 @@
 Treated as locked, same authority as CONTEXT.md decisions.
 
 - Go 1.26.0, gotgbot v2, GORM (PostgreSQL; SQLite in tests), Redis. No new dependencies are needed (see Package Legitimacy Audit).
-- Migrations: append-only, timestamp greater than every existing file (latest is `20261011160000_add_lockdown_ban_run_report.sql`), one transaction per file, no top-level `BEGIN`/`COMMIT`, no `CREATE INDEX CONCURRENTLY`. Never call `gorm.AutoMigrate` in production code. If the applier changes, change `alita/db/migrations/runner.go` and `scripts/migrate_psql.sh` together (this phase adds a file only, so neither changes).
-- Every write `cache.DeleteCache`s the keys it affects. Reads via `cache.GetFromCacheOrLoad` with `cache.CacheKey`. Two packages are named `cache`: loader and generation guards are in `alita/db/cache`, not `alita/utils/cache`. Freshness-critical keys go in `skipLocal` (`alita/db/cache/local.go`).
+- Migrations: append-only, timestamp greater than every existing file (latest is `20261011160000_add_lockdown_ban_run_report.sql`), one transaction per file, no top-level `BEGIN`/`COMMIT`, no `CREATE INDEX CONCURRENTLY`. Never call `gorm.AutoMigrate` in production code. If the applier changes, change `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` together (this phase adds a file only, so neither changes).
+- Every write `cache.DeleteCache`s the keys it affects. Reads via `cache.GetFromCacheOrLoad` with `cache.CacheKey`. Two packages are named `cache`: loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`. Freshness-critical keys go in `skipLocal` (`fuku/db/cache/local.go`).
 - Commands via `helpers.WrapCommand` (+ `RegisterAnonymousAdminHandler` for admin commands). Watchers return `ext.ContinueGroups`; a group-0 watcher returning `nil` kills later group-0 handlers. Value receivers on `moduleStruct`. Do not add replies for failed checks; the pipeline sends them.
 - Every fire-and-forget goroutine starts with `defer error_handling.RecoverFromPanic(...)`. Never discard a DB error on a state-changing path.
 - Locale keys in all 7 locale files (`en es fr hi id pt ru`); a typo'd key ships an empty message. Copy names from `locales/en.yml`. `make check-translations` only sees literal `GetString` keys.
-- Operational Redis keys sit outside `alita:cache:`; a new Redis key family or handler group updates `AGENTS.md` in the same commit.
+- Operational Redis keys sit outside `fuku:cache:`; a new Redis key family or handler group updates `AGENTS.md` in the same commit.
 - Tests: `-tags testtools`, real fixtures (`internal/testdb.Run`, miniredis, hand-written `gotgbot.BotClient` fakes), no mock libraries, assert observable behaviour. `make test` is the only valid full run (not to be run by this research). Postgres-only guarantees go in the `make test-postgres-integrity` `-run` list.
 - Telegram limits: respect rate limits and report partial failures; callback data capped at 64 bytes through `callbackcodec` (this phase adds no buttons).
 - Security: the per-group admin check is never skipped; new secrets would be registered with `logredact.RegisterSecret` (this phase adds none).
@@ -103,7 +103,7 @@ Treated as locked, same authority as CONTEXT.md decisions.
 
 Phase 6 is mostly wiring, because Phases 4 and 5 already built everything that happens after a lock. The new work is four things: (1) a pair of Redis sliding-window counters that live beside the Phase 5 join tracker, (2) a flood watcher at a new handler group, (3) a shared start-lockdown function extracted from `/lockdown` so a trigger can run the same snapshot/lock/confirm sequence with no command context, and (4) retiring the 962-line `antiraid.go` down to pointer commands, an alias and a stale-key sweep.
 
-The decisive design facts, all verified in the code this session: the existing tracker `alita:lockdown:recent:<chat>` stores JSON members that differ per delivery (name, link), so its `ZCARD` double counts and it cannot be the surge counter; a new user-ID-keyed ZSET gives dedupe of the two join deliveries for free and doubles as the 24-hour "recently joined" set. gotgbot's default `handlers.NewMessage` already excludes edited messages, channel posts and `IsBot()` senders, but `Sender.IsBot()` is false whenever `sender_chat` is set, so anonymous-admin and linked-channel posts must be excluded explicitly. Group `-4` is unused, runs after the join guard (-7) and fed-ban (-6) and before aispam (3), antiflood (4) and locks (5/6), so it is the right group. Exactly-once lockdown and alert already come from `uk_chat_lockdowns_active` + `lockdown.Start` + `BeginAlert`; the trigger layer only needs a short Redis latch so a sustained flood does not hammer Telegram and the database on every message.
+The decisive design facts, all verified in the code this session: the existing tracker `fuku:lockdown:recent:<chat>` stores JSON members that differ per delivery (name, link), so its `ZCARD` double counts and it cannot be the surge counter; a new user-ID-keyed ZSET gives dedupe of the two join deliveries for free and doubles as the 24-hour "recently joined" set. gotgbot's default `handlers.NewMessage` already excludes edited messages, channel posts and `IsBot()` senders, but `Sender.IsBot()` is false whenever `sender_chat` is set, so anonymous-admin and linked-channel posts must be excluded explicitly. Group `-4` is unused, runs after the join guard (-7) and fed-ban (-6) and before aispam (3), antiflood (4) and locks (5/6), so it is the right group. Exactly-once lockdown and alert already come from `uk_chat_lockdowns_active` + `lockdown.Start` + `BeginAlert`; the trigger layer only needs a short Redis latch so a sustained flood does not hammer Telegram and the database on every message.
 
 Three things the CONTEXT does not spell out and the planner must decide or confirm (see Open Questions): the alert must render the trigger line localized per destination, so the count/window/percent should be stored as columns on `chat_lockdowns` rather than baked into the `reason` string; a flood lockdown's "Ban N recent joiners" burst would be empty (flooders joined hours ago, outside the 10-minute tracker) unless the flooding accounts are saved for the alert; and `withMiniredis`, which a dozen test files use, lives in `antiraid_miniredis_test.go`, so deleting the antiraid tests must first move that helper.
 
@@ -139,14 +139,14 @@ No new packages. [VERIFIED: go.mod]
 ### Supporting
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `alita/utils/callbackcodec` | in repo | callback encode/decode | Not needed this phase (no buttons; Phase 9 adds them) |
-| `alita/utils/error_handling` | in repo | `RecoverFromPanic` | Top of every new handler |
+| `fuku/utils/callbackcodec` | in repo | callback encode/decode | Not needed this phase (no buttons; Phase 9 adds them) |
+| `fuku/utils/error_handling` | in repo | `RecoverFromPanic` | Top of every new handler |
 
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
 | One Lua script per counter | Pipelined `ZADD`+`ZREMRANGEBYSCORE`+`ZCARD` | A pipeline is not atomic across replicas; the flood ratio needs three consistent counts and the 24h `ZSCORE` branch. Lua is already the repo's pattern for multi-step Redis state. |
-| New user-ID-keyed ZSET for joins | Reuse `alita:lockdown:recent:<chat>` | Its members are JSON that differ per delivery (name, link), so `ZCARD` counts one join twice. Dedupe is done at read time in `readLockdownRecentJoins`, not by Redis. Keep it as is for the alert snapshot. |
+| New user-ID-keyed ZSET for joins | Reuse `fuku:lockdown:recent:<chat>` | Its members are JSON that differ per delivery (name, link), so `ZCARD` counts one join twice. Dedupe is done at read time in `readLockdownRecentJoins`, not by Redis. Keep it as is for the alert snapshot. |
 | Redis cooldown key after a lift | DB read of `lift_started_at` | A Redis key is lost on flush and needs lift-path code; the DB row already records the lift. |
 
 **Installation:** none.
@@ -190,7 +190,7 @@ No external packages are installed or added by this phase. Every dependency name
       |      items>=T && new*100>=60*items && accounts>=3 ---------+        |
       |                                                            v        |
       |                                          raidFire(kind, count, ...) |
-      |                         1 latch SET NX EX 60 (alita:raid:{chat}:fire)
+      |                         1 latch SET NX EX 60 (fuku:raid:{chat}:fire)
       |                         2 cooldown: lift_started_at within 10 min?  |
       |                         3 startLockdownRow  (shared with /lockdown) |
       |                              live bot rights -> getChat -> Start    |
@@ -212,17 +212,17 @@ No external packages are installed or added by this phase. Every dependency name
 ```
 migrations/
 └── 20261018120000_add_chat_raid_detection.sql   # table, trigger columns, index, carry-over INSERT
-alita/db/models/
+fuku/db/models/
 ├── raid_detection.go            # ChatRaidDetection + TableName "chat_raid_detection"
 └── lockdown.go                  # + LockdownTriggerJoinSurge/Flood consts, 3 trigger columns on ChatLockdown
-alita/db/raiddetection/          # NEW domain package (settings repository)
+fuku/db/raiddetection/          # NEW domain package (settings repository)
 ├── repository.go                # Get (cached, defaults on not-found), SetJoin, SetFlood (column-targeted upsert)
 ├── repository_test.go
 └── testmain_test.go
-alita/db/lockdown/
+fuku/db/lockdown/
 └── cooldown.go                  # RecentlyLiftedFresh(chatID, since) (+ test)
-alita/db/cache/local.go          # skipLocal += raid_detection prefix
-alita/modules/
+fuku/db/cache/local.go          # skipLocal += raid_detection prefix
+fuku/modules/
 ├── lockdown_start.go            # NEW startLockdownRow (extracted from lockdown.go)
 ├── raid_counters.go             # Lua scripts, key builders, recordJoins / recordFloodItem
 ├── raid_trigger.go              # raidFire: latch, cooldown, start, notice, warn
@@ -250,9 +250,9 @@ break
 **When to use:** the flood watcher at `-4` returns `ext.ContinueGroups` on every path, including after it fired a lockdown.
 
 ### Pattern 2: Handler-group map and where `-4` sits
-`AGENTS.md` Handlers: "`-10` captcha sweeper · `-7` lockdown join guard · `-6` fed-ban · `-5` antiraid · `-3` staff watchers ... `-2` admin-cache · `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ...". A grep of `handlerGroup:`/`AddHandlerToGroup` across `alita/modules` found no `-4` (fed is `fedHandlerGroup = -6`, staff watchers `handlerGroup: -3`, antiraid `handlerGroup: -5`). [VERIFIED: grep + AGENTS.md]
+`AGENTS.md` Handlers: "`-10` captcha sweeper · `-7` lockdown join guard · `-6` fed-ban · `-5` antiraid · `-3` staff watchers ... `-2` admin-cache · `-1` users tracker · `0` commands/help/greetings · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ...". A grep of `handlerGroup:`/`AddHandlerToGroup` across `fuku/modules` found no `-4` (fed is `fedHandlerGroup = -6`, staff watchers `handlerGroup: -3`, antiraid `handlerGroup: -5`). [VERIFIED: grep + AGENTS.md]
 
-**Recommendation: group `-4`.** It runs after the join guard, fed-ban and (now removed) antiraid, and before aispam (3), antiflood (4), locks (5/6) and blacklists (7), so a message that those later end (delete, mute, ban) was already counted. Antiflood itself returns `ext.ContinueGroups` on most paths and skips `MediaGroupId != ""` messages entirely (so antiflood does not see albums; the new counter must). [VERIFIED: alita/modules/antiflood.go:242-262]. Register it inside `LoadLockdown` (one module, one help page), with `dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, ...), raidFloodGroup)` where `raidFloodGroup = -4`. Update `AGENTS.md` (remove `-5 antiraid`, add `-4 raid flood counter`) and `docs/src/content/docs/architecture/handler-groups.md`.
+**Recommendation: group `-4`.** It runs after the join guard, fed-ban and (now removed) antiraid, and before aispam (3), antiflood (4), locks (5/6) and blacklists (7), so a message that those later end (delete, mute, ban) was already counted. Antiflood itself returns `ext.ContinueGroups` on most paths and skips `MediaGroupId != ""` messages entirely (so antiflood does not see albums; the new counter must). [VERIFIED: fuku/modules/antiflood.go:242-262]. Register it inside `LoadLockdown` (one module, one help page), with `dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, ...), raidFloodGroup)` where `raidFloodGroup = -4`. Update `AGENTS.md` (remove `-5 antiraid`, add `-4 raid flood counter`) and `docs/src/content/docs/architecture/handler-groups.md`.
 
 ### Pattern 3: Join-side counting (reuse the Phase 4 performer rule)
 Both group `-7` join handlers already call `trackLockdownRecentJoins(...)` first, "best effort and first". Add one more best-effort call right after it, before the active-lockdown lookup, so the join that tips the threshold is judged by the lockdown it just started:
@@ -285,23 +285,23 @@ return lockdownJoinBan
 ```
 The users who count are recorded in the Redis `joined` set (so "recently joined" for the flood ratio means "joined and was not admin-added/approved"). Admin-added users are deliberately not "new members" for the ratio: this only lowers the ratio, i.e. fewer false positives.
 
-### Pattern 4: Redis key layout (new family `alita:raid:*`)
-Operational keys, outside `alita:cache:`, so `CLEAR_CACHE_ON_STARTUP` does not clear them. Use a Redis hash tag on the chat ID so the multi-key flood script is cluster-safe (a single node ignores it). Chat IDs are numeric (negative for groups), so a key can never be injected. [ASSUMED: hash tags are harmless here; the repo has no cluster use today.]
+### Pattern 4: Redis key layout (new family `fuku:raid:*`)
+Operational keys, outside `fuku:cache:`, so `CLEAR_CACHE_ON_STARTUP` does not clear them. Use a Redis hash tag on the chat ID so the multi-key flood script is cluster-safe (a single node ignores it). Chat IDs are numeric (negative for groups), so a key can never be injected. [ASSUMED: hash tags are harmless here; the repo has no cluster use today.]
 
 | Key | Type | Member -> score | Window / cap / TTL |
 |-----|------|-----------------|--------------------|
-| `alita:raid:{<chat>}:joined` | ZSET | user ID -> join time (unix ms, latest join) | 24 h window, cap 5000 (trim oldest), PEXPIRE 25 h |
-| `alita:raid:{<chat>}:fi` | ZSET | item key (`m:<message_id>` or `g:<media_group_id>`) -> ms | 30 s window, cap 2000, PEXPIRE 2 min |
-| `alita:raid:{<chat>}:fn` | ZSET | same item key, only items from recent joiners -> ms | same |
-| `alita:raid:{<chat>}:fa` | ZSET | user ID of a recent joiner who posted -> last post ms | same |
-| `alita:raid:{<chat>}:fire` | string | latch value `1` | `SET NX EX 60` |
-| `alita:raid:{<chat>}:warn` | string | warning dedupe | `SET NX EX 86400` |
+| `fuku:raid:{<chat>}:joined` | ZSET | user ID -> join time (unix ms, latest join) | 24 h window, cap 5000 (trim oldest), PEXPIRE 25 h |
+| `fuku:raid:{<chat>}:fi` | ZSET | item key (`m:<message_id>` or `g:<media_group_id>`) -> ms | 30 s window, cap 2000, PEXPIRE 2 min |
+| `fuku:raid:{<chat>}:fn` | ZSET | same item key, only items from recent joiners -> ms | same |
+| `fuku:raid:{<chat>}:fa` | ZSET | user ID of a recent joiner who posted -> last post ms | same |
+| `fuku:raid:{<chat>}:fire` | string | latch value `1` | `SET NX EX 60` |
+| `fuku:raid:{<chat>}:warn` | string | warning dedupe | `SET NX EX 86400` |
 
-Existing precedent for the family and TTL style: `lockdownRecentKeyPrefix = "alita:lockdown:recent:"`, window 10 min, cap 500, TTL 700 s, timeout 250 ms. [VERIFIED: alita/modules/lockdown_recent.go:21-29]. Keep the same 250 ms bound (`lockdownRecentTimeout`) on the join hot path and use a similar bound on the message path; errors are logged at debug and treated as "no information", never as a trigger and never as a ban.
+Existing precedent for the family and TTL style: `lockdownRecentKeyPrefix = "fuku:lockdown:recent:"`, window 10 min, cap 500, TTL 700 s, timeout 250 ms. [VERIFIED: fuku/modules/lockdown_recent.go:21-29]. Keep the same 250 ms bound (`lockdownRecentTimeout`) on the join hot path and use a similar bound on the message path; errors are logged at debug and treated as "no information", never as a trigger and never as a ban.
 
 `ZADD` without `NX` is intended for `joined`: the member is the user ID, so the two deliveries of one join (chat_member + service message) collapse into one member by construction, and a re-join refreshes recency. The surge count is `ZCOUNT joined (now-60s +inf`, i.e. distinct accounts that joined in the last 60 s. Do not use `ZCARD` of the tracker and do not use `ZADD NX` here (NX would keep an old score and make a rejoining user look 23 hours old).
 
-Why not reuse `alita:lockdown:recent:<chat>`: `trackLockdownRecentJoins` stores `json.Marshal(lockdownRecentJoin{UserID, Name, Username, Bot, Link})` as the member and uses `ZAddNX`, so the same user delivered twice with and without an invite link is two members; `readLockdownRecentJoins` merges them "by user ID at read time". [VERIFIED: lockdown_recent.go:36-45, 82, 92, 128-157]
+Why not reuse `fuku:lockdown:recent:<chat>`: `trackLockdownRecentJoins` stores `json.Marshal(lockdownRecentJoin{UserID, Name, Username, Bot, Link})` as the member and uses `ZAddNX`, so the same user delivered twice with and without an invite link is two members; `readLockdownRecentJoins` merges them "by user ID at read time". [VERIFIED: lockdown_recent.go:36-45, 82, 92, 128-157]
 
 ### Pattern 5: Lua scripts (atomic across replicas)
 Time is passed in from Go (`time.Now().UnixMilli()`), the repo's own pattern (`trackJoinScript` takes `now` as an argument). Clock skew between replicas is NTP-small against 30-60 s windows. [ASSUMED]. Make the clock injectable (`var raidNow = time.Now`) so tests are deterministic.
@@ -332,13 +332,13 @@ Do the trigger start **synchronously in the handler** (guarded by `defer error_h
 ### Pattern 7: Settings repository (column-targeted upsert, no GORM zero-value trap)
 Model without `default:` tags on the booleans (a Go `false` on a `default:true` column is omitted by GORM Create and the DB default silently turns it back on; this is the CLAUDE.md "Updating Record Without Checking Zero Values" anti-pattern). Defaults live in Go (`defaultRaidDetection(chatID)`: both on, 15 and 30) and in the SQL `DEFAULT`s. Writes are one statement per trigger using `clause.OnConflict{Columns: chat_id, DoUpdates: AssignmentColumns(...)}` over only that trigger's columns, so two admins changing `joins` and `flood` at once cannot clobber each other (a read-modify-write of the whole row would). `DeleteCache(cache.CacheKey("raid_detection", chatID))` after the write. Read via `GetFromCacheOrLoad(ctx, key, cache.CacheTTLRaidDetection, loader)` where the loader returns the defaults on `gorm.ErrRecordNotFound` (same shape as `antiraid.getAntiRaidSettingsRawContext`).
 
-`skipLocal` addition, following the verbatim pattern in `alita/db/cache/local.go` (`staffGroupPrefix = CacheKey("staff_group") + ":"`, `return strings.HasPrefix(key, captchaPendingPrefix) || ...`):
+`skipLocal` addition, following the verbatim pattern in `fuku/db/cache/local.go` (`staffGroupPrefix = CacheKey("staff_group") + ":"`, `return strings.HasPrefix(key, captchaPendingPrefix) || ...`):
 ```go
 raidDetectionPrefix = CacheKey("raid_detection") + ":"
 // ... in skipLocal:
     strings.HasPrefix(key, raidDetectionPrefix)
 ```
-and extend `alita/db/cache/local_test.go:286` (the prefix list) with `"raid_detection"` and `"raid_detectionx"` in the negative list.
+and extend `fuku/db/cache/local_test.go:286` (the prefix list) with `"raid_detection"` and `"raid_detectionx"` in the negative list.
 
 Cost note: D-12 means every counted message does one Redis GET for the settings (local layer skipped) plus one script call. Order the cheap in-memory filters first (see Pitfall 3).
 
@@ -362,7 +362,7 @@ Argument grammar (recommended): `joins|flood` then `on|off|<N>`. `N` sets the th
 ### Pattern 9: Trigger evaluation and the latch
 ```text
 raidFire(b, chat, kind, count, window, percent):
-  if !latch(SET NX EX 60 alita:raid:{chat}:fire)            -> return   // another handler/replica is on it
+  if !latch(SET NX EX 60 fuku:raid:{chat}:fire)            -> return   // another handler/replica is on it
   recently lifted (lift_started_at within 10 min)?          -> return   // D-15 (leave latch)
   r := startLockdownRow(kind, count, window, percent)
   switch r.Outcome:
@@ -371,10 +371,10 @@ raidFire(b, chat, kind, count, window, percent):
     cannotLock / notSupergroup / lockFailed:  warn once/day, extend latch to ~10 min
     transient (botCheckFailed, stateFailed, readFailed):  PEXPIRE latch 10 s
 ```
-The latch is load shedding only. Correctness is `uk_chat_lockdowns_active` + `lockdown.Start`: its comment says "exactly one caller ever sees true for a chat, on any replica", and `Start` inserts *before* the lock call, so a loser never makes a `setChatPermissions` call. [VERIFIED: alita/db/lockdown/repository.go:48-66]. Exactly one alert: `BeginAlert`'s conditional `UPDATE ... alert_started_at IS NULL` [VERIFIED: alita/db/lockdown/alerts.go:48-50], run by the worker only. A trigger that loses `Start` because another trigger just won sees `startAlreadyActive` and does nothing. If the winner's lock is definitively refused it deletes its unconfirmed row; the loser's latch expires in 60 s and the still-high counters re-fire it, so a raid is not lost.
+The latch is load shedding only. Correctness is `uk_chat_lockdowns_active` + `lockdown.Start`: its comment says "exactly one caller ever sees true for a chat, on any replica", and `Start` inserts *before* the lock call, so a loser never makes a `setChatPermissions` call. [VERIFIED: fuku/db/lockdown/repository.go:48-66]. Exactly one alert: `BeginAlert`'s conditional `UPDATE ... alert_started_at IS NULL` [VERIFIED: fuku/db/lockdown/alerts.go:48-50], run by the worker only. A trigger that loses `Start` because another trigger just won sees `startAlreadyActive` and does nothing. If the winner's lock is definitively refused it deletes its unconfirmed row; the loser's latch expires in 60 s and the still-high counters re-fire it, so a raid is not lost.
 
 ### Anti-Patterns to Avoid
-- **Deciding on `ZCARD` of `alita:lockdown:recent:*`:** double counts; see Pattern 4.
+- **Deciding on `ZCARD` of `fuku:lockdown:recent:*`:** double counts; see Pattern 4.
 - **Per-replica in-memory counters:** antiflood's are per replica (AGENTS.md); PLAT-01 requires shared detection counters.
 - **Using `IsBot()` alone to skip anonymous admins:** `Sender.IsBot()` returns `s.Chat == nil && s.User != nil && s.User.IsBot`, so it is false when `sender_chat` is set. [VERIFIED: gotgbot `sender.go:137`]. Check `Sender.Chat != nil` explicitly.
 - **Writing the trigger start in its own goroutine:** would need a drain and recover wiring for no gain.
@@ -394,7 +394,7 @@ The latch is load shedding only. Correctness is `uk_chat_lockdowns_active` + `lo
 | Log/Staff destination resolution for the warning | New lookups | `staff.GetLinkOfGroupFresh` + `actionlog.Destination(chat, logchannels.CategoryAdmin)` (as `lockdownAlertDestinations` does) | Same checks as every log post |
 | Per-chat language for notice/warning | `i18n` by hand | `staffChatTranslator(chatID)` | Returns the translator for a chat's own language without a command context |
 | Parsing `/autolockdown` N | Custom parser | `strconv.Atoi` + range check + `lockdownCommandArgs` | Trivial; keep bounds as constants |
-| Stale-key sweep | Per-key lookups | One `SCAN alita:antiraid:*` + `UNLINK` | Bounded, idempotent |
+| Stale-key sweep | Per-key lookups | One `SCAN fuku:antiraid:*` + `UNLINK` | Bounded, idempotent |
 
 **Key insight:** every hard problem here (exactly-once, authority, pacing, crash recovery, alerts) was solved in Phases 4-5. The risk in this phase is *integration*: extracting the start sequence without changing `/lockdown`, and getting the Redis counters and exemptions right.
 
@@ -404,20 +404,20 @@ This phase retires a module and migrates a setting, so the inventory is required
 
 | Category | Items Found | Action Required |
 |----------|-------------|------------------|
-| Stored data | `antiraid_settings` rows (`raid_time`, `raid_action_time`, `auto_antiraid_threshold`, table created by `20260518113000_add_antiraid_settings.sql`, FK to `chats` ON DELETE CASCADE when `chats` exists). Backup/export/import/reset still reads and writes `models.AntiRaidSettings` (`alita/db/backup/backup.go:23,338,466,566,882,958`, `types.go:96,119,203`). Dev `/stats` reads `antiraid.LoadAntiRaidStats()` (`alita/db/devs/repository.go:185,289-291`). | **Data migration** (one INSERT...SELECT, D-03) for the non-zero thresholds. **Code edit**: after the migration `/autoantiraid` writes only `chat_raid_detection`, so `auto_antiraid_threshold` drifts and the backup "antiraid" module and dev stats become misleading. Recommend: leave the backup module and table alone (append-only, out of scope), switch the dev-stats lines to the new table or drop them, and document that restoring an old backup does not change detection settings (Open Question 5). |
+| Stored data | `antiraid_settings` rows (`raid_time`, `raid_action_time`, `auto_antiraid_threshold`, table created by `20260518113000_add_antiraid_settings.sql`, FK to `chats` ON DELETE CASCADE when `chats` exists). Backup/export/import/reset still reads and writes `models.AntiRaidSettings` (`fuku/db/backup/backup.go:23,338,466,566,882,958`, `types.go:96,119,203`). Dev `/stats` reads `antiraid.LoadAntiRaidStats()` (`fuku/db/devs/repository.go:185,289-291`). | **Data migration** (one INSERT...SELECT, D-03) for the non-zero thresholds. **Code edit**: after the migration `/autoantiraid` writes only `chat_raid_detection`, so `auto_antiraid_threshold` drifts and the backup "antiraid" module and dev stats become misleading. Recommend: leave the backup module and table alone (append-only, out of scope), switch the dev-stats lines to the new table or drop them, and document that restoring an old backup does not change detection settings (Open Question 5). |
 | Live service config | None. No external UI/DB-held config references the string `antiraid`; Telegram config is only `allowed_updates` (already includes `chat_member` for the Phase 4 guard). Verified by grep of non-test, non-docs source: only the files listed in this research mention antiraid. | None |
 | OS-registered state | None. The expiry poller is an in-process goroutine, not an OS task. | None |
 | Secrets / env vars | None reference antiraid by name (`docs/.../environment.md:455` mentions "Active anti-raid state" only in prose about `CLEAR_CACHE_ON_STARTUP`). No new secrets this phase, so no `logredact.RegisterSecret`. | Reword the prose line; no code |
 | Build artifacts / installed packages | None. No package rename. `coverage.out` in the repo root mentions antiraid; it is a generated artifact. | None |
-| **Redis (live keys)** | `alita:antiraid:state:<chat>` (raid mode; TTL up to 366 days via `maxAntiRaidDuration`) and `alita:antiraid:joins:<chat>` (60 s) [VERIFIED: antiraid.go:37-39,124-130]. They sit outside `alita:cache:` so `CLEAR_CACHE_ON_STARTUP` never clears them (`alita/utils/cache/startup_test.go:16,37` uses `alita:antiraid:state:-1001` as the preserved example). | **Startup sweep** (D-16, recommended over lazy): in the shrunken `LoadAntiRaid`, when Redis is available, one recover-protected goroutine does `SCAN MATCH alita:antiraid:* COUNT 100` + `UNLINK`, once per process. Nothing reads these keys after this phase, so a late or missed sweep only wastes memory. Rolling deploy: an old replica could briefly recreate a state key; the next restart's sweep removes it. |
+| **Redis (live keys)** | `fuku:antiraid:state:<chat>` (raid mode; TTL up to 366 days via `maxAntiRaidDuration`) and `fuku:antiraid:joins:<chat>` (60 s) [VERIFIED: antiraid.go:37-39,124-130]. They sit outside `fuku:cache:` so `CLEAR_CACHE_ON_STARTUP` never clears them (`fuku/utils/cache/startup_test.go:16,37` uses `fuku:antiraid:state:-1001` as the preserved example). | **Startup sweep** (D-16, recommended over lazy): in the shrunken `LoadAntiRaid`, when Redis is available, one recover-protected goroutine does `SCAN MATCH fuku:antiraid:* COUNT 100` + `UNLINK`, once per process. Nothing reads these keys after this phase, so a late or missed sweep only wastes memory. Rolling deploy: an old replica could briefly recreate a state key; the next restart's sweep removes it. |
 
 **Nothing found in:** Live service config, OS-registered state, Secrets/env, Build artifacts (verified by the greps above).
 
 ## Common Pitfalls
 
 ### Pitfall 1: `withMiniredis` lives in a file this phase deletes
-**What goes wrong:** `withMiniredis` is defined in `alita/modules/antiraid_miniredis_test.go:22`. It is called from `aispam_test.go:333`, `staff_*_test.go`, `lockdown_fake_test.go:337`, `filters_command_test.go` and more. Deleting the antiraid test files breaks the whole package's test build.
-**How to avoid:** first task of the retire step: move `withMiniredis` (and its imports) to a new `alita/modules/testredis_test.go` (build tag `testtools`), then delete/replace `antiraid_test.go` (1034 lines) and `antiraid_miniredis_test.go`. Also fix `callback_nil_handlers_test.go:16,49` (`antiRaid := &antiRaidStruct{}` and the `antiRaidCallbackHandler` row) and delete `TestAntiRaidStepsAsideDuringLockdown` in `lockdown_isolation_test.go:240` (it references `LoadAntiRaid`, `antiRaidModule.enableRaid/disableRaid`, `joinsKey`, `antiraid.SetAutoAntiRaidThreshold`).
+**What goes wrong:** `withMiniredis` is defined in `fuku/modules/antiraid_miniredis_test.go:22`. It is called from `aispam_test.go:333`, `staff_*_test.go`, `lockdown_fake_test.go:337`, `filters_command_test.go` and more. Deleting the antiraid test files breaks the whole package's test build.
+**How to avoid:** first task of the retire step: move `withMiniredis` (and its imports) to a new `fuku/modules/testredis_test.go` (build tag `testtools`), then delete/replace `antiraid_test.go` (1034 lines) and `antiraid_miniredis_test.go`. Also fix `callback_nil_handlers_test.go:16,49` (`antiRaid := &antiRaidStruct{}` and the `antiRaidCallbackHandler` row) and delete `TestAntiRaidStepsAsideDuringLockdown` in `lockdown_isolation_test.go:240` (it references `LoadAntiRaid`, `antiRaidModule.enableRaid/disableRaid`, `joinsKey`, `antiraid.SetAutoAntiRaidThreshold`).
 **Warning signs:** `undefined: withMiniredis` at compile time.
 
 ### Pitfall 2: Anonymous admins and channels slip past `IsBot()`
@@ -463,7 +463,7 @@ D-14 lists "not an admin with the restrict right, or not a supergroup". `startPe
 If the latch is deleted on every outcome, a sustained flood re-runs `getChatMember` + DB reads on every message past the threshold. Keep it for 60 s; extend it on "can't lock"; shorten it to ~10 s only on transient failures.
 
 ### Pitfall 12: Antiraid removal touches more than the module
-Files and places that mention the module (grep this session): `main.go:196-200` (shutdown handler "Stopping anti-raid expiry poller..."), `alita/modules/antiraid.go`, `antiraid_test.go`, `antiraid_miniredis_test.go`, `callback_nil_handlers_test.go`, `lockdown_isolation_test.go`, `lockdown_guard.go` and `lockdown.go` (comments naming antiraid -5), `staff_sweeper.go:117` (comment only), `test_harness_test.go:350` and `alita/db/testmain_test.go:68` (keep `AntiRaidSettings` in AutoMigrate; the table stays), `locales/*.yml` (`antiraid_*` keys, `antiraid_help_msg`), `locales/config.yml:9` (`AntiRaid: [antiraid, raid]`), `docs/...` (see Documentation list), `AGENTS.md`. `helpers.AddCmdToDisableable("antiraid")` is dropped. `parseDuration`, `formatDuration`, `banRaidMember` and the Redis helpers die with the module (nothing else uses `parseDuration`/`formatDuration`/`maxAntiRaidDuration`: grep found no other non-test use).
+Files and places that mention the module (grep this session): `main.go:196-200` (shutdown handler "Stopping anti-raid expiry poller..."), `fuku/modules/antiraid.go`, `antiraid_test.go`, `antiraid_miniredis_test.go`, `callback_nil_handlers_test.go`, `lockdown_isolation_test.go`, `lockdown_guard.go` and `lockdown.go` (comments naming antiraid -5), `staff_sweeper.go:117` (comment only), `test_harness_test.go:350` and `fuku/db/testmain_test.go:68` (keep `AntiRaidSettings` in AutoMigrate; the table stays), `locales/*.yml` (`antiraid_*` keys, `antiraid_help_msg`), `locales/config.yml:9` (`AntiRaid: [antiraid, raid]`), `docs/...` (see Documentation list), `AGENTS.md`. `helpers.AddCmdToDisableable("antiraid")` is dropped. `parseDuration`, `formatDuration`, `banRaidMember` and the Redis helpers die with the module (nothing else uses `parseDuration`/`formatDuration`/`maxAntiRaidDuration`: grep found no other non-test use).
 
 ### Pitfall 13: ZSET score precision and cap trimming
 Millisecond epochs (~1.8e12) are exact in a double. Capping `joined` at 5000 drops the *oldest* joiners, so under an extreme raid some real recent joiners stop counting as recent; this is bounded memory over precision and acceptable.
@@ -475,7 +475,7 @@ During a rolling deploy an old replica can still run `onJoin` and temp-ban. Docu
 
 ### Lua: join script (verified against miniredis v2.39.0)
 ```lua
--- KEYS[1] = alita:raid:{chat}:joined
+-- KEYS[1] = fuku:raid:{chat}:joined
 -- ARGV: 1=now_ms 2=surge_window_ms 3=recent_ms(24h) 4=cap 5=ttl_ms 6..N=user ids
 local now = tonumber(ARGV[1])
 for i = 6, #ARGV do
@@ -552,7 +552,7 @@ err := db.DB.Clauses(clause.OnConflict{
 }).Create(&row).Error
 if err == nil { cache.DeleteCache(cache.CacheKey("raid_detection", chatID)) }
 ```
-(`alita/db/cache` `cache.CacheKey`/`cache.DeleteCache` as used in `alita/db/antiraid/repository.go:43`.)
+(`fuku/db/cache` `cache.CacheKey`/`cache.DeleteCache` as used in `fuku/db/antiraid/repository.go:43`.)
 
 ### Migration (one file, timestamp > 20261011160000)
 ```sql
@@ -580,13 +580,13 @@ FROM antiraid_settings
 WHERE auto_antiraid_threshold > 0
 ON CONFLICT (chat_id) DO NOTHING;
 ```
-Notes: no FK on `chat_id` (the staff/lockdown precedent: "There is deliberately no foreign key on chat IDs"). `trigger_kind VARCHAR(16)` already fits `join_surge` (10) and `flood` (5): the column is declared `trigger_kind VARCHAR(16) NOT NULL DEFAULT 'manual',` [VERIFIED: migrations/20261006120000_add_chat_lockdowns.sql:34]. No existing migration uses `INSERT` or `ON CONFLICT` (grep found none), but the runner executes each statement with `tx.Exec` after `cleanSupabaseSQL`/`splitSQLStatements`, which only rewrite `CREATE TABLE/INDEX/TYPE` and `ALTER TABLE ... ADD CONSTRAINT`, and an `UPDATE` data statement precedent exists in `20261011160000_add_lockdown_ban_run_report.sql`; the new migration must still be proven by the PostgreSQL migration-chain test in CI (`ALITA_TEST_MIGRATION_CHAIN=true`, `repository_chain_test.go`). [VERIFIED: runner.go:392-470]. SQL comments with semicolons are fine (existing migrations have them). The old threshold column is unchanged.
+Notes: no FK on `chat_id` (the staff/lockdown precedent: "There is deliberately no foreign key on chat IDs"). `trigger_kind VARCHAR(16)` already fits `join_surge` (10) and `flood` (5): the column is declared `trigger_kind VARCHAR(16) NOT NULL DEFAULT 'manual',` [VERIFIED: migrations/20261006120000_add_chat_lockdowns.sql:34]. No existing migration uses `INSERT` or `ON CONFLICT` (grep found none), but the runner executes each statement with `tx.Exec` after `cleanSupabaseSQL`/`splitSQLStatements`, which only rewrite `CREATE TABLE/INDEX/TYPE` and `ALTER TABLE ... ADD CONSTRAINT`, and an `UPDATE` data statement precedent exists in `20261011160000_add_lockdown_ban_run_report.sql`; the new migration must still be proven by the PostgreSQL migration-chain test in CI (`FUKU_TEST_MIGRATION_CHAIN=true`, `repository_chain_test.go`). [VERIFIED: runner.go:392-470]. SQL comments with semicolons are fine (existing migrations have them). The old threshold column is unchanged.
 
 ### Shutdown change
 `main.go:196-200` currently registers `modules.StopAntiRaidExpiryPoller()`. Remove that handler. No new shutdown drain is needed because the trigger runs synchronously inside the update handler and everything after the lock is the already-registered `RegisterLockdownWorkerDrain`. [VERIFIED: main.go:196-222]
 
 ### Trigger line localization (new keys use the `lockdown_` prefix so `TestLockdownLocaleKeys` covers all 7 locales for free)
-`alita/i18n/lockdown_locale_test.go` checks every key starting with `lockdown_` for parity, non-empty values and identical placeholders in all 7 locales. [VERIFIED: alita/i18n/lockdown_locale_test.go:10-85]. Recommended new keys (names are suggestions): `lockdown_alert_trigger_join_surge` ("Join surge: {count} joins in {window} s. Locked automatically at {time}."), `lockdown_alert_trigger_flood` ("Flood: {count} messages in {window} s, {percent}% from new members. Locked automatically at {time}."), `lockdown_auto_notice_join_surge`, `lockdown_auto_notice_flood` (public notice, names the count, says locked automatically and that an admin can `/unlockdown`), `lockdown_auto_cant_lock_warning`, `lockdown_auto_status*`, `lockdown_auto_joins_set`, `lockdown_auto_flood_set`, `lockdown_auto_usage`, `lockdown_auto_range`, `lockdown_auto_save_failed`, `lockdown_antiraid_retired`. The group title and any name must be spliced in after translation with the existing tokens (`lockdownGroupToken`, `lockdownNameToken`). `lockdownRenderAlert` switches on `ld.TriggerKind` for its trigger line (today it always uses `lockdown_alert_trigger_manual`, `lockdown_alert.go:472-478`); the status text and `lockdownAlreadyActiveText` should show the same trigger line for non-manual kinds instead of "started by <bot>".
+`fuku/i18n/lockdown_locale_test.go` checks every key starting with `lockdown_` for parity, non-empty values and identical placeholders in all 7 locales. [VERIFIED: fuku/i18n/lockdown_locale_test.go:10-85]. Recommended new keys (names are suggestions): `lockdown_alert_trigger_join_surge` ("Join surge: {count} joins in {window} s. Locked automatically at {time}."), `lockdown_alert_trigger_flood` ("Flood: {count} messages in {window} s, {percent}% from new members. Locked automatically at {time}."), `lockdown_auto_notice_join_surge`, `lockdown_auto_notice_flood` (public notice, names the count, says locked automatically and that an admin can `/unlockdown`), `lockdown_auto_cant_lock_warning`, `lockdown_auto_status*`, `lockdown_auto_joins_set`, `lockdown_auto_flood_set`, `lockdown_auto_usage`, `lockdown_auto_range`, `lockdown_auto_save_failed`, `lockdown_antiraid_retired`. The group title and any name must be spliced in after translation with the existing tokens (`lockdownGroupToken`, `lockdownNameToken`). `lockdownRenderAlert` switches on `ld.TriggerKind` for its trigger line (today it always uses `lockdown_alert_trigger_manual`, `lockdown_alert.go:472-478`); the status text and `lockdownAlreadyActiveText` should show the same trigger line for non-manual kinds instead of "started by <bot>".
 
 ## State of the Art
 
@@ -601,8 +601,8 @@ Notes: no FK on `chat_id` (the staff/lockdown precedent: "There is deliberately 
 ## Documentation and Test Files Touched by Retiring antiraid
 
 - Docs (several are frozen with `<!-- MANUALLY MAINTAINED: do not regenerate -->` and must be edited by hand): `docs/src/content/docs/commands/antiraid/index.md` (frozen), `docs/src/content/docs/api-reference/commands.md` (frozen; AntiRaid rows at ~44-51, 345-350, 425-426), `api-reference/callbacks.md` (~44, 105-110), `architecture/handler-groups.md` (row for -5 at line 17, prose at 36-37, 52, 61), `architecture/caching.md` (~30, 59-60, 120), `architecture/request-flow.mdx` (~242, 291), `architecture/project-structure.mdx` (~34, 58), `api-reference/environment.md:455`, `self-hosting/database.md:266`, `api-reference/database-schema.md:701-719` (and add the new table), `commands/backup/index.md:39`, `commands/index.mdx:32`. The Lockdown page is generated: add `/autolockdown` to `lockdown_help_msg` in all 7 locales, add `autolockdown` to `Lockdown:` in `locales/config.yml:34`, rewrite `antiraid_help_msg`, then run `make generate-docs` and `make check-docs`.
-- `AGENTS.md`: Handlers list (remove `-5 antiraid`, add `-4`), "Operational Redis keys" line (add `alita:raid:*`), the Data bullets (new `chat_raid_detection`, the `alita:raid:*` keys, the trigger columns, "never part of backup/export/import/reset"), the "Antiraid is Redis-only..." trap and the "Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown ... (until Phase 6 retires it)" bullet, and the new Subsystem traps (latch, cooldown, warn dedupe, fixed windows, flood item rules).
-- Test files: replace `antiraid_test.go`/`antiraid_miniredis_test.go` (keep `withMiniredis` first), edit `callback_nil_handlers_test.go`, delete `TestAntiRaidStepsAsideDuringLockdown`, add `models.ChatRaidDetection` to the AutoMigrate lists in `alita/modules/test_harness_test.go` (list at ~315-360), `alita/db/testmain_test.go` (~44-85) and the new `alita/db/raiddetection/testmain_test.go`. `ChatLockdown`'s new columns need no list change (already migrated by model).
+- `AGENTS.md`: Handlers list (remove `-5 antiraid`, add `-4`), "Operational Redis keys" line (add `fuku:raid:*`), the Data bullets (new `chat_raid_detection`, the `fuku:raid:*` keys, the trigger columns, "never part of backup/export/import/reset"), the "Antiraid is Redis-only..." trap and the "Antiraid's join handler (`onJoin`, group `-5`) returns at once while a confirmed lockdown ... (until Phase 6 retires it)" bullet, and the new Subsystem traps (latch, cooldown, warn dedupe, fixed windows, flood item rules).
+- Test files: replace `antiraid_test.go`/`antiraid_miniredis_test.go` (keep `withMiniredis` first), edit `callback_nil_handlers_test.go`, delete `TestAntiRaidStepsAsideDuringLockdown`, add `models.ChatRaidDetection` to the AutoMigrate lists in `fuku/modules/test_harness_test.go` (list at ~315-360), `fuku/db/testmain_test.go` (~44-85) and the new `fuku/db/raiddetection/testmain_test.go`. `ChatLockdown`'s new columns need no list change (already migrated by model).
 
 ## Assumptions Log
 
@@ -614,7 +614,7 @@ Notes: no FK on `chat_id` (the staff/lockdown precedent: "There is deliberately 
 | A4 | `/autolockdown joins N` also turns the trigger on; `off` keeps the threshold | Pattern 8 | Owner might prefer N to leave an off trigger off |
 | A5 | Threshold bounds joins 3..500, flood 10..1000 for new input; DB CHECK 1..1000 | Pattern 8, Pitfall 7 | Owner wants other bounds |
 | A6 | Counted item kinds beyond text/photo/GIF/sticker (video, voice, document, ...) | Pitfall 4 | Narrower or wider detection than the owner expects |
-| A7 | A new `alita:raid:*` family is acceptable (vs. nesting under `alita:lockdown:`) | Pattern 4 | Rename before coding; AGENTS.md says to document the family either way |
+| A7 | A new `fuku:raid:*` family is acceptable (vs. nesting under `fuku:lockdown:`) | Pattern 4 | Rename before coding; AGENTS.md says to document the family either way |
 | A8 | Synchronous trigger start inside the handler is acceptable latency (~1-3 s, one winner per 60 s per chat) | Pattern 6 | If not, move to a tracked goroutine with a drain |
 | A9 | `GREATEST` clamp is not applied to carried thresholds (verbatim copy per D-03) | Pitfall 7 | Groups with threshold 1-2 lock on the first join |
 | A10 | Cooldown read error means "skip this attempt and retry soon" rather than "start anyway" | Pattern 9 | A transient DB error delays one lockdown by ~10 s |
@@ -653,14 +653,14 @@ Notes: no FK on `chat_id` (the staff/lockdown precedent: "There is deliberately 
 | Property | Value |
 |----------|-------|
 | Framework | Go `testing` (+ `testify` assertions only), SQLite via `internal/testdb.Run`, miniredis, hand-written `gotgbot.BotClient` fakes (`lockdownFake`) |
-| Config file | none; build tag `testtools`; harness `alita/modules/test_harness_test.go`, `alita/modules/lockdown_fake_test.go` (`newLockdownEnv`) |
-| Quick run command | `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestRaid|^TestAutoLockdown|^TestLockdown' ./alita/modules ./alita/db/raiddetection ./alita/db/lockdown` |
+| Config file | none; build tag `testtools`; harness `fuku/modules/test_harness_test.go`, `fuku/modules/lockdown_fake_test.go` (`newLockdownEnv`) |
+| Quick run command | `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestRaid|^TestAutoLockdown|^TestLockdown' ./fuku/modules ./fuku/db/raiddetection ./fuku/db/lockdown` |
 | Full suite command | `make test` (the only valid full run; not run by research) |
 
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| RAID-01 | N distinct self-joins within 60 s lock the group; row has `trigger_kind=join_surge`, `trigger_count>=N`, `StartedBy=bot`; alert trigger line names the surge and count | integration (dispatcher + fake bot + miniredis) | `go test -tags testtools -race -count=1 -run '^TestRaidJoinSurge' ./alita/modules` | no, Wave 0 |
+| RAID-01 | N distinct self-joins within 60 s lock the group; row has `trigger_kind=join_surge`, `trigger_count>=N`, `StartedBy=bot`; alert trigger line names the surge and count | integration (dispatcher + fake bot + miniredis) | `go test -tags testtools -race -count=1 -run '^TestRaidJoinSurge' ./fuku/modules` | no, Wave 0 |
 | RAID-01 | Same join delivered as chat_member and service message counts once | integration | `-run '^TestRaidJoinDoubleDelivery$'` | no |
 | RAID-01 | Below threshold / outside 60 s window does not lock | integration | `-run '^TestRaidJoinBelowThreshold$'` | no |
 | RAID-01 | Lua join script: dedupe, window, 24 h trim, cap (miniredis) | unit | `-run '^TestRaidJoinScript$'` | no |
@@ -669,33 +669,33 @@ Notes: no FK on `chat_id` (the staff/lockdown precedent: "There is deliberately 
 | RAID-02 | Lua flood script: counts, new-member subset, accounts, window drain | unit | `-run '^TestRaidFloodScript$'` | no |
 | RAID-07 | Admin-added joiner, approved joiner, the bot itself, a join request never count toward the surge | integration | `-run '^TestRaidJoinExemptions$'` | no |
 | RAID-07 | Admin, approved user, bot, service IDs (777000, 1087968824, 136817688), anonymous-admin post (`sender_chat` = group), linked-channel auto-forward never count toward flood | integration | `-run '^TestRaidFloodExemptions$'` | no |
-| RAID-06 | Both triggers on by default for a chat with no row; `/autolockdown` shows state; `joins 20`, `joins off`, `flood on` change it; the next burst follows the new setting on a second "replica" (clear the local layer) | integration + repo | `-run '^TestAutoLockdown'` ; `go test -tags testtools -race -count=1 ./alita/db/raiddetection` | no |
-| RAID-06 | Setting `false` persists (GORM zero-value trap); joins write does not clobber flood columns; `DeleteCache` invalidates | repo | `-run '^TestRaidDetectionSettings'` ./alita/db/raiddetection | no |
-| RAID-06 | `skipLocal` covers the raid_detection key and not `raid_detectionx` | unit | `go test -tags testtools -race -count=1 -run '^TestSkipLocalMatchesFreshnessCriticalKeys$' ./alita/db/cache` (extend `local_test.go:286`) | extend |
+| RAID-06 | Both triggers on by default for a chat with no row; `/autolockdown` shows state; `joins 20`, `joins off`, `flood on` change it; the next burst follows the new setting on a second "replica" (clear the local layer) | integration + repo | `-run '^TestAutoLockdown'` ; `go test -tags testtools -race -count=1 ./fuku/db/raiddetection` | no |
+| RAID-06 | Setting `false` persists (GORM zero-value trap); joins write does not clobber flood columns; `DeleteCache` invalidates | repo | `-run '^TestRaidDetectionSettings'` ./fuku/db/raiddetection | no |
+| RAID-06 | `skipLocal` covers the raid_detection key and not `raid_detectionx` | unit | `go test -tags testtools -race -count=1 -run '^TestSkipLocalMatchesFreshnessCriticalKeys$' ./fuku/db/cache` (extend `local_test.go:286`) | extend |
 | RAID-06 (D-10) | View needs any live admin; change needs creator or `can_restrict_members`; anonymous admin gets the proof prompt and re-enters; non-admin refused; failed lookup refuses | integration | `-run '^TestAutoLockdownAuthority$'` | no |
 | LOCK-10 | Join surge and flood fire together: exactly one `chat_lockdowns` active row, one `setChatPermissions` call, one alert slot set after the worker cycle | integration | `-run '^TestRaidTriggersSingleLockdown$'` | no |
 | LOCK-10 | Two goroutines ("replicas") evaluate the same burst concurrently: one lockdown | integration (`-race`) | `-run '^TestRaidTriggersConcurrent$'` | no |
 | LOCK-10 | Existing guarantee `uk_chat_lockdowns_active` + `Start` + `BeginAlert` (no new conditional update added) | PG integrity | already in `make test-postgres-integrity`: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` | yes |
 | D-14 | Bot not admin / no restrict right: no lockdown, one warning to Staff Group and log channel; second trigger the same day posts nothing (miniredis `FastForward` 24 h then posts again) | integration | `-run '^TestRaidCannotLockWarnsOncePerDay$'` | no |
 | D-15 | After `/unlockdown`, a burst within 10 minutes starts nothing; after aging `lift_started_at` by 11 minutes it does | integration | `-run '^TestRaidCooldownAfterLift$'` | no |
-| D-13 | Public notice posted once in the locked group by the winner only; alert/status trigger lines per kind in all locales | integration + i18n | `-run '^TestRaidAutoNotice$'` ; `go test -tags testtools -race -count=1 -run '^TestLockdownLocaleKeys$' ./alita/i18n` | no / yes |
+| D-13 | Public notice posted once in the locked group by the winner only; alert/status trigger lines per kind in all locales | integration + i18n | `-run '^TestRaidAutoNotice$'` ; `go test -tags testtools -race -count=1 -run '^TestLockdownLocaleKeys$' ./fuku/i18n` | no / yes |
 | D-04 | Without Redis: counters inert, one log line, `/lockdown` still works | integration | `-run '^TestRaidInertWithoutRedis$'` | no |
 | LOCK-15 | `/antiraid`, `/raidtime`, `/raidactiontime` reply with the pointer text; `/autoantiraid 20` sets joins=20 and enabled, `/autoantiraid off` disables | integration | `-run '^TestAntiRaidRetired'` | no |
-| LOCK-15 | A join while the old `alita:antiraid:state:<chat>` key exists bans nobody; the startup sweep deletes `alita:antiraid:*` keys | integration | `-run '^TestAntiRaidRetiredNoBan$'`, `-run '^TestAntiRaidKeySweep$'` | no |
-| LOCK-15 (D-03) | Migration copies non-zero thresholds only, leaves zero/missing rows to defaults, is idempotent | PG chain / PG integrity | `ALITA_TEST_MIGRATION_CHAIN=true` migration chain + a `TestRaidDetectionCarryOver` added to the `make test-postgres-integrity` `-run` list; CI only (no PostgreSQL here) | no |
+| LOCK-15 | A join while the old `fuku:antiraid:state:<chat>` key exists bans nobody; the startup sweep deletes `fuku:antiraid:*` keys | integration | `-run '^TestAntiRaidRetiredNoBan$'`, `-run '^TestAntiRaidKeySweep$'` | no |
+| LOCK-15 (D-03) | Migration copies non-zero thresholds only, leaves zero/missing rows to defaults, is idempotent | PG chain / PG integrity | `FUKU_TEST_MIGRATION_CHAIN=true` migration chain + a `TestRaidDetectionCarryOver` added to the `make test-postgres-integrity` `-run` list; CI only (no PostgreSQL here) | no |
 | Docs / i18n | Generated docs in sync; no missing literal keys | gate | `make generate-docs && make check-docs`; `make check-translations` | n/a |
 
 ### Sampling Rate
 - **Per task commit:** the quick run command above (the relevant `-run` subset).
-- **Per wave merge:** `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/modules ./alita/db/...`
-- **Phase gate:** `make test`, `make lint`, `make check-translations`, `make check-docs` green, plus the CI migration chain and `make test-postgres-integrity` (add `TestRaidDetectionCarryOver` to the Makefile `-run` list, which is `$`-anchored, and `./alita/db/raiddetection` to its package list if the test lives there).
+- **Per wave merge:** `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/...`
+- **Phase gate:** `make test`, `make lint`, `make check-translations`, `make check-docs` green, plus the CI migration chain and `make test-postgres-integrity` (add `TestRaidDetectionCarryOver` to the Makefile `-run` list, which is `$`-anchored, and `./fuku/db/raiddetection` to its package list if the test lives there).
 
 ### Wave 0 Gaps
-- [ ] `alita/modules/testredis_test.go` - receives `withMiniredis` before `antiraid_miniredis_test.go` is deleted
-- [ ] `alita/modules/raid_*_test.go`, `autolockdown_test.go`, `antiraid_retired_test.go` - cover the rows above; add helpers on `lockdownEnv` to send photo/sticker/GIF/album messages with a given `From` and to seed the 24 h joined set at a chosen age
-- [ ] `alita/db/raiddetection/{repository_test.go,testmain_test.go}` - `testdb.Run(m, &models.ChatRaidDetection{})`
-- [ ] `alita/db/lockdown` test for `RecentlyLiftedFresh` and for the new trigger columns round-tripping through `Start`
-- [ ] Add `&models.ChatRaidDetection{}` to the AutoMigrate lists of `alita/modules/test_harness_test.go` and `alita/db/testmain_test.go`
+- [ ] `fuku/modules/testredis_test.go` - receives `withMiniredis` before `antiraid_miniredis_test.go` is deleted
+- [ ] `fuku/modules/raid_*_test.go`, `autolockdown_test.go`, `antiraid_retired_test.go` - cover the rows above; add helpers on `lockdownEnv` to send photo/sticker/GIF/album messages with a given `From` and to seed the 24 h joined set at a chosen age
+- [ ] `fuku/db/raiddetection/{repository_test.go,testmain_test.go}` - `testdb.Run(m, &models.ChatRaidDetection{})`
+- [ ] `fuku/db/lockdown` test for `RecentlyLiftedFresh` and for the new trigger columns round-tripping through `Start`
+- [ ] Add `&models.ChatRaidDetection{}` to the AutoMigrate lists of `fuku/modules/test_harness_test.go` and `fuku/db/testmain_test.go`
 - [ ] Clock seam `raidNow` and a settings lookup seam (like `lockdownActiveLookup`) so tests control time and failures
 - [ ] Framework install: none
 
@@ -732,12 +732,12 @@ Notes: no FK on `chat_id` (the staff/lockdown precedent: "There is deliberately 
 ### Primary (HIGH confidence, files opened this session)
 - `.planning/phases/06-automatic-raid-detection/06-CONTEXT.md`, `.planning/REQUIREMENTS.md`, `.planning/STATE.md`, `.planning/ROADMAP.md` (Phase 6 section), `.planning/config.json`
 - `AGENTS.md`, `.claude/CLAUDE.md` (via the session context)
-- `alita/modules/lockdown.go` (whole), `lockdown_guard.go` (whole), `lockdown_recent.go` (whole), `lockdown_perms.go`, `lockdown_status.go`, `lockdown_alert.go` (1-200, 330-660), `antiraid.go` (whole), `antiflood.go` (40-300), `users.go` (150-215)
-- `alita/db/lockdown/repository.go` (1-520), `burst.go` (1-140), `alerts.go` (AlertPlan, BeginAlert), `alita/db/antiraid/repository.go`, `optimized.go`, `alita/db/models/lockdown.go`, `antiraid.go`
-- `alita/db/cache/local.go`, `ttl.go`, `loader.go` (1-115); `alita/utils/cache` (`IsRedisAvailable`); `alita/utils/chat_status` (`IsUserAdmin`, `FetchBotMember`, `update_memo.go`); `alita/utils/actionlog` (`Destination`); `alita/utils/helpers/command_pipeline.go`
-- `main.go:120-320`; `migrations/20260518113000_add_antiraid_settings.sql`, `20261006120000_add_chat_lockdowns.sql`, `20261011160000_add_lockdown_ban_run_report.sql`; `alita/db/migrations/runner.go` (392-560), `repository_chain_test.go`
+- `fuku/modules/lockdown.go` (whole), `lockdown_guard.go` (whole), `lockdown_recent.go` (whole), `lockdown_perms.go`, `lockdown_status.go`, `lockdown_alert.go` (1-200, 330-660), `antiraid.go` (whole), `antiflood.go` (40-300), `users.go` (150-215)
+- `fuku/db/lockdown/repository.go` (1-520), `burst.go` (1-140), `alerts.go` (AlertPlan, BeginAlert), `fuku/db/antiraid/repository.go`, `optimized.go`, `fuku/db/models/lockdown.go`, `antiraid.go`
+- `fuku/db/cache/local.go`, `ttl.go`, `loader.go` (1-115); `fuku/utils/cache` (`IsRedisAvailable`); `fuku/utils/chat_status` (`IsUserAdmin`, `FetchBotMember`, `update_memo.go`); `fuku/utils/actionlog` (`Destination`); `fuku/utils/helpers/command_pipeline.go`
+- `main.go:120-320`; `migrations/20260518113000_add_antiraid_settings.sql`, `20261006120000_add_chat_lockdowns.sql`, `20261011160000_add_lockdown_ban_run_report.sql`; `fuku/db/migrations/runner.go` (392-560), `repository_chain_test.go`
 - gotgbot v2 source in the module cache: `ext/dispatcher.go`, `ext/handlers/message.go`, `ext/handlers/filters/message/message.go`, `sender.go`, `gen_types.go` (`ChatMemberUpdated`, `Message` fields)
-- Tests read for patterns: `lockdown_fake_test.go`, `lockdown_test.go`, `lockdown_recent_test.go`, `lockdown_isolation_test.go`, `antiraid_miniredis_test.go`, `callback_nil_handlers_test.go`, `alita/i18n/lockdown_locale_test.go`, `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go`, `alita/db/lockdown/testmain_test.go`
+- Tests read for patterns: `lockdown_fake_test.go`, `lockdown_test.go`, `lockdown_recent_test.go`, `lockdown_isolation_test.go`, `antiraid_miniredis_test.go`, `callback_nil_handlers_test.go`, `fuku/i18n/lockdown_locale_test.go`, `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go`, `fuku/db/lockdown/testmain_test.go`
 - Runtime check: both Lua scripts executed against the repo's miniredis v2.39.0 (temporary program inside the module, removed afterwards; `git status` clean)
 
 ### Secondary (MEDIUM confidence)

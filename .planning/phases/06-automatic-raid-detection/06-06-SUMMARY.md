@@ -33,11 +33,11 @@ tech-stack:
 
 key-files:
   created:
-    - alita/db/lockdown/cooldown.go
-    - alita/db/lockdown/cooldown_test.go
-    - alita/modules/raid_trigger_test.go
+    - fuku/db/lockdown/cooldown.go
+    - fuku/db/lockdown/cooldown_test.go
+    - fuku/modules/raid_trigger_test.go
   modified:
-    - alita/modules/raid_trigger.go
+    - fuku/modules/raid_trigger.go
     - AGENTS.md
 
 key-decisions:
@@ -53,7 +53,7 @@ coverage:
     requirement: "LOCK-10"
     verification:
       - kind: integration
-        ref: "alita/modules/raid_trigger_test.go#TestRaidTriggersSingleLockdown"
+        ref: "fuku/modules/raid_trigger_test.go#TestRaidTriggersSingleLockdown"
         status: pass
     human_judgment: false
   - id: D2
@@ -61,24 +61,24 @@ coverage:
     requirement: "LOCK-10"
     verification:
       - kind: integration
-        ref: "alita/modules/raid_trigger_test.go#TestRaidTriggersConcurrent"
+        ref: "fuku/modules/raid_trigger_test.go#TestRaidTriggersConcurrent"
         status: pass
     human_judgment: false
   - id: D3
     description: "For 10 minutes after a lift the triggers start nothing and call nothing; after that they lock again"
     verification:
       - kind: integration
-        ref: "alita/modules/raid_trigger_test.go#TestRaidCooldownAfterLift"
+        ref: "fuku/modules/raid_trigger_test.go#TestRaidCooldownAfterLift"
         status: pass
       - kind: unit
-        ref: "alita/db/lockdown/cooldown_test.go#TestRecentlyLiftedFresh"
+        ref: "fuku/db/lockdown/cooldown_test.go#TestRecentlyLiftedFresh"
         status: pass
     human_judgment: false
   - id: D4
     description: "The fire latch lasts 60 s, 10 s or 10 minutes by outcome, and a held latch makes no Telegram call"
     verification:
       - kind: integration
-        ref: "alita/modules/raid_trigger_test.go#TestRaidLatch"
+        ref: "fuku/modules/raid_trigger_test.go#TestRaidLatch"
         status: pass
     human_judgment: false
 
@@ -104,7 +104,7 @@ status: complete
 - `lockdown.RecentlyLiftedFresh(chatID, since)` is one fresh query on `(chat_id, lift_started_at)` (index from migration 20261018120000), any lockdown state, never cached. `raidFire` calls it with `time.Now() - raidLiftQuiet` (10 minutes); true means silence. A lift older than 11 minutes lets the next qualifying join lock again (`TestRaidCooldownAfterLift` moves `lift_started_at` back with a direct update).
 - The latch is set by outcome in `raidOutcomeLatch`: 60 s for started, already active and lock unknown (the worker settles an unknown lock); `raidRetryLatch` (10 s) for a failed bot-rights check, unreadable permissions and a failed state write; `raidCantLockLatch` (10 minutes) for not a supergroup, a bot that cannot restrict, and a lock Telegram refused. An unreadable active or lift read also shortens it to 10 s.
 - `TestRaidTriggersConcurrent` feeds 20 joins, 10 per dispatcher, from two goroutines on the same bot, fake, database and Redis. The "latch deleted" variant runs a third goroutine that deletes the latch in a loop, so every counted join past the threshold reaches the start path and the database alone has to give one `chat_lockdowns` row, one `setChatPermissions` call and one alert copy. Run 8 times under `-race` with no failure.
-- AGENTS.md: the `alita:raid:{<chat>}:fire` bullet now states the active check, the quiet period and the latch lengths.
+- AGENTS.md: the `fuku:raid:{<chat>}:fire` bullet now states the active check, the quiet period and the latch lengths.
 
 ## Task Commits
 
@@ -121,7 +121,7 @@ status: complete
 
 - Task 1 RED (`bed6bc1`) needed no scaffolding. `TestRaidTriggersSingleLockdown` failed on its own assertion in both subtests ("getChatMember calls about the bot = 3, want 1/2: a trigger that finds a lockdown active makes no Telegram call"). `TestRaidTriggersConcurrent` passed on the RED commit, as the plan anticipated: the database guarantee (`uk_chat_lockdowns_active` plus `lockdown.Start`) already gives one lockdown, so those cases pin that guarantee rather than the new code. GREEN (`ea8efc4`) made all pass; a mutation check (`if false && active != nil`) made both single-lockdown subtests fail again, then it was reverted.
 - Task 1 test correction in the GREEN commit: the surge-then-flood subtest first counted calls that came from the flood watcher loading the chat's admin list on its first counted message (one `getChatMember` of the bot and one `getChat`), not from the trigger. The test now sends one item before taking its snapshot. The RED failure of the flood-then-surge subtest (which has a warm admin list) was already a true trigger-call failure.
-- Task 2 RED (`a8855fc`) needed compile scaffolding: `alita/db/lockdown/cooldown.go` held a stub `RecentlyLiftedFresh` returning `false, nil`, because the test file calls it and Go needs it to compile. With it, `TestRecentlyLiftedFresh` failed on its assertions (three of five subtests), `TestRaidCooldownAfterLift` failed on "a lockdown started within 10 minutes of a lift", and four `TestRaidLatch` subtests failed on the latch length. GREEN (`d6e253d`) replaced the stub and made all pass.
+- Task 2 RED (`a8855fc`) needed compile scaffolding: `fuku/db/lockdown/cooldown.go` held a stub `RecentlyLiftedFresh` returning `false, nil`, because the test file calls it and Go needs it to compile. With it, `TestRecentlyLiftedFresh` failed on its assertions (three of five subtests), `TestRaidCooldownAfterLift` failed on "a lockdown started within 10 minutes of a lift", and four `TestRaidLatch` subtests failed on the latch length. GREEN (`d6e253d`) replaced the stub and made all pass.
 - No `refactor(06-06)` commit was needed.
 
 ## Deviations from Plan
@@ -132,30 +132,30 @@ status: complete
 - **Found during:** Task 2
 - **Issue:** the plan names "started", "transient", "cannot lock" and "latched". The outcome switch also has unreadable permissions, a refused lock and a lock whose answer was lost, and an untested branch of a switch that decides how long a failing group is left alone is a regression risk.
 - **Fix:** `TestRaidLatch` also has "lock answer lost" (60 s kept, row kept unconfirmed), "permissions unreadable" (10 s) and "lock refused" (10 minutes, no row). "transient" also drops the latch and shows the next join locks.
-- **Files modified:** `alita/modules/raid_trigger_test.go`
+- **Files modified:** `fuku/modules/raid_trigger_test.go`
 - **Commit:** `a8855fc`
 
 **2. [Rule 3 - Blocking] raidRetryLatch and its helper arrived in Task 1**
 - **Found during:** Task 1
 - **Issue:** Task 1's read-error path shortens the latch to 10 s, but the plan lists `raidRetryLatch` under Task 2.
 - **Fix:** Task 1 added `raidRetryLatch` and `raidShortenLatch`; Task 2 renamed the helper `raidSetLatch` (it now also lengthens) and added the other two constants.
-- **Files modified:** `alita/modules/raid_trigger.go`
+- **Files modified:** `fuku/modules/raid_trigger.go`
 - **Commits:** `ea8efc4`, `d6e253d`
 
 **Total deviations:** 2 auto-fixed (1 missing coverage, 1 ordering). **Impact:** none on behaviour; AGENTS.md edits are confined to the one `:fire` bullet.
 
 ## Issues Encountered
 
-- `make lint` cannot run here (golangci-lint cannot lint Go 1.26); `gofmt -l` on the touched files and `go vet -tags testtools ./alita/modules ./alita/db/lockdown` stand in and are clean. `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit and was left alone.
+- `make lint` cannot run here (golangci-lint cannot lint Go 1.26); `gofmt -l` on the touched files and `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown` stand in and are clean. `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit and was left alone.
 - No PostgreSQL server was available or started; all tests used SQLite and miniredis. `TestRecentlyLiftedFresh` compares timestamps and runs on both backends, but only SQLite was exercised. The partial unique index and `BeginAlert` remain proven on PostgreSQL by `TestStartLockdownOneActivePerChat` and `TestBeginAlert` in `make test-postgres-integrity`; this plan adds no new guarantee that rests on a conditional update, so that target's `-run` list is unchanged.
 - The full `make test` was not run (the orchestrator owns it).
 - Plan 06-05 runs in parallel and writes `chat_raid_detection` rows through `/autolockdown`; this plan uses only a chat's default settings and shares no file with it except `AGENTS.md`, where only the `:fire` bullet changed.
 
 ## Verification
 
-- `TestRaidTriggersSingleLockdown`, `TestRaidTriggersConcurrent`, `TestLockdownStartRow`, `TestRaidCooldownAfterLift`, `TestRaidLatch` (`./alita/modules`) and `TestRecentlyLiftedFresh` (`./alita/db/lockdown`): pass with `-tags testtools -race`, no "DATA RACE".
-- `-run 'Lockdown|Unlockdown|Raid' ./alita/modules ./alita/db/lockdown`: pass (about 105 s for the modules package).
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown`, `gofmt -l` on the touched files: clean. `git diff --exit-code go.mod go.sum`: clean.
+- `TestRaidTriggersSingleLockdown`, `TestRaidTriggersConcurrent`, `TestLockdownStartRow`, `TestRaidCooldownAfterLift`, `TestRaidLatch` (`./fuku/modules`) and `TestRecentlyLiftedFresh` (`./fuku/db/lockdown`): pass with `-tags testtools -race`, no "DATA RACE".
+- `-run 'Lockdown|Unlockdown|Raid' ./fuku/modules ./fuku/db/lockdown`: pass (about 105 s for the modules package).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown`, `gofmt -l` on the touched files: clean. `git diff --exit-code go.mod go.sum`: clean.
 - Acceptance criteria: `lockdown.GetActiveFresh(chat.Id)` in `raid_trigger.go`; `grep -c 't.Run('` in `raid_trigger_test.go` prints 10 (at least 3 required); `raidLiftQuiet = 10 * time.Minute`; `func RecentlyLiftedFresh(` in `cooldown.go`.
 
 ## Known Stubs
@@ -173,7 +173,7 @@ None beyond the plan's threat model: T-06-19 (one lockdown, one alert: `TestRaid
 
 ## Self-Check: PASSED
 
-- `alita/db/lockdown/cooldown.go`, `alita/db/lockdown/cooldown_test.go`, `alita/modules/raid_trigger_test.go`: found.
+- `fuku/db/lockdown/cooldown.go`, `fuku/db/lockdown/cooldown_test.go`, `fuku/modules/raid_trigger_test.go`: found.
 - Commits `bed6bc1`, `ea8efc4`, `a8855fc`, `d6e253d`: found in `git log`.
 - `git rev-list --count 946dd04c83f44b06bebf81d7ecbd97ebe074111a..HEAD` was 4 before this file.
 

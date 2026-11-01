@@ -10,12 +10,12 @@ provides:
 affects: [main.go, docker-compose.yml, AGENTS.md]
 key-files:
   created:
-    - alita/utils/shutdown/graceful_testtools.go
-    - alita/modules/shutdown_drains.go
-    - alita/modules/shutdown_drains_test.go
+    - fuku/utils/shutdown/graceful_testtools.go
+    - fuku/modules/shutdown_drains.go
+    - fuku/modules/shutdown_drains_test.go
   modified:
-    - alita/utils/shutdown/graceful.go
-    - alita/utils/shutdown/graceful_test.go
+    - fuku/utils/shutdown/graceful.go
+    - fuku/utils/shutdown/graceful_test.go
     - main.go
     - docker-compose.yml
     - AGENTS.md
@@ -47,19 +47,19 @@ The shutdown manager now gives the staff-action and lockdown-worker drains their
 - `graceful_testtools.go` (`//go:build testtools`): `RunForTest`. Not in production builds.
 - `shutdown_drains.go`: `shutdownDrainGrace`, `RegisterStaffActionsDrain` (`staffActionStopWait` + grace), `RegisterLockdownWorkerDrain` (`lockdownWorkerStopWait` + grace).
 - `main.go`: both inline handlers replaced by the helpers in the same slots (sweeper < staff drain < lockdown drain < AI spam). LIFO order unchanged.
-- `docker-compose.yml`: `stop_grace_period: 75s` on the `alita` service only.
+- `docker-compose.yml`: `stop_grace_period: 75s` on the `fuku` service only.
 - `AGENTS.md` "Startup and shutdown": per-handler timeout rule, both helpers, webhook/polling worst case, deploy grace requirement. Handlers/Permissions sections (j3a) untouched.
 
 ## Verification
 
 - Red-first: `TestShutdownWaitsForStaffRunSummary` failed to compile before the implementation.
 - Mutation checks (not committed): staff drain via plain `RegisterHandler` makes `TestShutdownWaitsForStaffRunSummary` fail (pending lines still on the card); lockdown drain with default allowance makes `TestShutdownWaitsForLockdownWorker` fail (1 joiner row still `unbanning`). Both restored.
-- `go test -tags testtools -race ./alita/utils/shutdown/` passes (existing tests + 3 new guard tests: outlasts default, default still applies for RegisterHandler/0/negative, bounded by budget).
-- `go test -tags testtools -race -count=5 -run '^(TestShutdownWaitsForStaffRunSummary|TestShutdownWaitsForLockdownWorker)$' ./alita/modules/` passes.
+- `go test -tags testtools -race ./fuku/utils/shutdown/` passes (existing tests + 3 new guard tests: outlasts default, default still applies for RegisterHandler/0/negative, bounded by budget).
+- `go test -tags testtools -race -count=5 -run '^(TestShutdownWaitsForStaffRunSummary|TestShutdownWaitsForLockdownWorker)$' ./fuku/modules/` passes.
 - `go test -tags testtools -race -count=1 .` (main package) passes.
-- `go test -tags testtools -race -count=1 -timeout 15m ./alita/modules/` passes (192 s).
+- `go test -tags testtools -race -count=1 -timeout 15m ./fuku/modules/` passes (192 s).
 - `CGO_ENABLED=0 go build ./...` passes; `go vet -tags testtools` on modules, shutdown and main is clean.
-- `make lint` could not run here (installed golangci-lint built with Go 1.25); used `go vet -tags testtools` and `gofmt -l` instead. `gofmt -l` flags only `alita/modules/greetings_command_test.go`, which is pre-existing and untouched by this item.
+- `make lint` could not run here (installed golangci-lint built with Go 1.25); used `go vet -tags testtools` and `gofmt -l` instead. `gofmt -l` flags only `fuku/modules/greetings_command_test.go`, which is pre-existing and untouched by this item.
 
 ## Deviations from Plan
 

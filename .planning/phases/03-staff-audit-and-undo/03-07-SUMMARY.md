@@ -30,11 +30,11 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_undo_lifecycle_test.go
+    - fuku/modules/staff_undo_lifecycle_test.go
   modified:
-    - alita/modules/staff_undo.go
-    - alita/modules/staff_action_card.go
-    - alita/modules/staff_undo_test.go
+    - fuku/modules/staff_undo.go
+    - fuku/modules/staff_action_card.go
+    - fuku/modules/staff_undo_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -60,13 +60,13 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardCancel"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardCancel"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardExpires"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardExpires"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardDoubleTap"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardDoubleTap"
         status: pass
     human_judgment: false
   - id: D2
@@ -74,7 +74,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardPresserOnly"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoCardPresserOnly"
         status: pass
     human_judgment: false
   - id: D3
@@ -82,7 +82,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoOutsider"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoOutsider"
         status: pass
     human_judgment: false
   - id: D4
@@ -90,10 +90,10 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoOnce"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoOnce"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoOnceAcrossReplicas"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoOnceAcrossReplicas"
         status: pass
     human_judgment: false
   - id: D5
@@ -101,7 +101,7 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoTargetLock"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoTargetLock"
         status: pass
     human_judgment: false
   - id: D6
@@ -109,10 +109,10 @@ coverage:
     requirement: "STAFF-11"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStopStaffActionsUndo"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStopStaffActionsUndo"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_lifecycle_test.go#TestStaffUndoNoTimeLimit"
+        ref: "fuku/modules/staff_undo_lifecycle_test.go#TestStaffUndoNoTimeLimit"
         status: pass
     human_judgment: false
 
@@ -153,10 +153,10 @@ completed: 2026-10-05
 
 ## Files Created/Modified
 
-- `alita/modules/staff_undo_lifecycle_test.go` - ten tests and four small helpers (`undoMember`, `undoFinishedBan`, `unbansIn`, `undoStartedAt`)
-- `alita/modules/staff_action_card.go` - undo wording branch in `answerStaffCardClaim`
-- `alita/modules/staff_undo.go` - service-identity refusals, presser-only wording at the early issuer check
-- `alita/modules/staff_undo_test.go` - one 03-06 assertion moved to the new wording (see Deviations)
+- `fuku/modules/staff_undo_lifecycle_test.go` - ten tests and four small helpers (`undoMember`, `undoFinishedBan`, `unbansIn`, `undoStartedAt`)
+- `fuku/modules/staff_action_card.go` - undo wording branch in `answerStaffCardClaim`
+- `fuku/modules/staff_undo.go` - service-identity refusals, presser-only wording at the early issuer check
+- `fuku/modules/staff_undo_test.go` - one 03-06 assertion moved to the new wording (see Deviations)
 - `locales/*.yml` (7 files) - `staff_undo_card_presser_only`
 - `AGENTS.md` - undo drain, undo lock and refusal rules
 
@@ -172,7 +172,7 @@ See `key-decisions`. The one worth repeating: Task 2 changed no production code 
 - **Found during:** Task 1 (GREEN)
 - **Issue:** `TestStaffUndoAccess/only the member who pressed Undo can confirm` expected `staff_act_card_issuer_only`, which the plan replaces for undo cards.
 - **Fix:** it now expects `staff_undo_card_presser_only`, same alert flag.
-- **Files modified:** `alita/modules/staff_undo_test.go`
+- **Files modified:** `fuku/modules/staff_undo_test.go`
 - **Committed in:** `5e9a038`
 
 ### Additions beyond the plan text
@@ -184,17 +184,17 @@ See `key-decisions`. The one worth repeating: Task 2 changed no production code 
 
 ## Issues Encountered
 
-- `make lint` is unavailable here (golangci-lint is built with go1.25 and refuses the go1.26.0 module). `gofmt -l` on the touched files, `go vet -tags testtools ./alita/modules` and `CGO_ENABLED=0 go build ./...` are clean.
+- `make lint` is unavailable here (golangci-lint is built with go1.25 and refuses the go1.26.0 module). `gofmt -l` on the touched files, `go vet -tags testtools ./fuku/modules` and `CGO_ENABLED=0 go build ./...` are clean.
 - Tests ran on SQLite only; nothing in this plan adds SQL.
 - The worktree command guard refused chained shell commands and heredocs with non-ASCII text; the locale edit ran from a script written with the Write tool into the scratchpad, and git calls were issued one per command.
 - Carried over: `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` is flaky across a second boundary (STATE.md). It did not fail in the full package run here. New timing tests use the existing timer variables with generous margins and assert states, not wall-clock seconds.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Card|Outsider)' -v ./alita/modules` - all PASS (including `TestStaffUndoOutsider` and `TestStaffUndoCardPresserOnly`)
-- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Once|TargetLock|NoTimeLimit)|^TestStopStaffActionsUndo$' -v ./alita/modules` - all PASS (including `TestStaffUndoOnceAcrossReplicas` and `TestStopStaffActionsUndo`)
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/staff` - ok (modules 134 s)
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs` - pass, no drift
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Card|Outsider)' -v ./fuku/modules` - all PASS (including `TestStaffUndoOutsider` and `TestStaffUndoCardPresserOnly`)
+- `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Once|TargetLock|NoTimeLimit)|^TestStopStaffActionsUndo$' -v ./fuku/modules` - all PASS (including `TestStaffUndoOnceAcrossReplicas` and `TestStopStaffActionsUndo`)
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/staff` - ok (modules 134 s)
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs` - pass, no drift
 - Acceptance criteria re-run and passing: `staff_undo_card_presser_only` in `staff_action_card.go`, `staffServiceUserIDs[` twice in `staff_undo.go`, the key once in each of es fr hi id pt ru, `FinalizeUndo` and "undo's Confirm takes the same lock" in AGENTS.md, `gofmt -l` clean, `go.mod` and `go.sum` unchanged
 
 ## Known Stubs
@@ -216,7 +216,7 @@ None.
 
 ## Self-Check: PASSED
 
-- `alita/modules/staff_undo_lifecycle_test.go` exists; the modified files exist.
+- `fuku/modules/staff_undo_lifecycle_test.go` exists; the modified files exist.
 - Commits `5ccb508`, `5e9a038`, `3df295c` and `9199e85` exist; `test(03-07)` precedes `feat(03-07)` for both tasks.
 
 ---

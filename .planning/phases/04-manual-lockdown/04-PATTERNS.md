@@ -11,23 +11,23 @@ Excerpts are copied from the analog files read this session. Line numbers refer 
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |-------------------|------|-----------|----------------|---------------|
 | `migrations/20261006120000_add_chat_lockdowns.sql` | migration | CRUD / state machine | `migrations/20261005120000_add_staff_actions.sql` (+ `20260730010000_enforce_channel_username_ownership.sql` for the partial unique index) | exact |
-| `alita/db/models/lockdown.go` | model | CRUD | `alita/db/models/staff_action.go` | exact |
-| `alita/db/lockdown/repository.go` | repository (fresh reads, conditional writes) | CRUD / state machine | `alita/db/staff/actions.go` (`ClaimUndo`, `ReleaseUndo`, `GetActionFresh`) | exact |
-| `alita/db/lockdown/testmain_test.go` and repo tests | test | CRUD | `alita/db/staff/testmain_test.go` | exact |
-| `alita/modules/lockdown.go` (commands, `LoadLockdown`, `init()` priority 238) | module / command | request-response | `alita/modules/staff.go` (`LoadStaff`) + `alita/modules/bans.go:1104-1138` (anon registration) | role-match |
-| `alita/modules/lockdown_perms.go` (raw getChat / setChatPermissions) | utility | request-response | `alita/modules/staff_action_run.go` `fetchLiveMember` / `executeStaffCall` (paced, per-call timeout) | partial (raw JSON path is new) |
-| `alita/modules/lockdown_guard.go` (group -7 join guard + pure `decideLockdownJoin`) | middleware / watcher | event-driven | `alita/modules/staff_watchers.go` (group -3 watchers) + `decideStaffAction` in `staff_action_decide.go` | role-match |
-| `alita/modules/lockdown_worker.go` (Start/Stop worker, pacer, claims) | service (background) | batch / event-driven | `alita/modules/staff_sweeper.go` + `staffActionPacer` in `staff_action_run.go:169-184` | role-match |
-| `alita/modules/chat_permissions.go` (modify `resolveUnmutePermissions`) | utility | transform | itself (lines 47-53) | exact |
+| `fuku/db/models/lockdown.go` | model | CRUD | `fuku/db/models/staff_action.go` | exact |
+| `fuku/db/lockdown/repository.go` | repository (fresh reads, conditional writes) | CRUD / state machine | `fuku/db/staff/actions.go` (`ClaimUndo`, `ReleaseUndo`, `GetActionFresh`) | exact |
+| `fuku/db/lockdown/testmain_test.go` and repo tests | test | CRUD | `fuku/db/staff/testmain_test.go` | exact |
+| `fuku/modules/lockdown.go` (commands, `LoadLockdown`, `init()` priority 238) | module / command | request-response | `fuku/modules/staff.go` (`LoadStaff`) + `fuku/modules/bans.go:1104-1138` (anon registration) | role-match |
+| `fuku/modules/lockdown_perms.go` (raw getChat / setChatPermissions) | utility | request-response | `fuku/modules/staff_action_run.go` `fetchLiveMember` / `executeStaffCall` (paced, per-call timeout) | partial (raw JSON path is new) |
+| `fuku/modules/lockdown_guard.go` (group -7 join guard + pure `decideLockdownJoin`) | middleware / watcher | event-driven | `fuku/modules/staff_watchers.go` (group -3 watchers) + `decideStaffAction` in `staff_action_decide.go` | role-match |
+| `fuku/modules/lockdown_worker.go` (Start/Stop worker, pacer, claims) | service (background) | batch / event-driven | `fuku/modules/staff_sweeper.go` + `staffActionPacer` in `staff_action_run.go:169-184` | role-match |
+| `fuku/modules/chat_permissions.go` (modify `resolveUnmutePermissions`) | utility | transform | itself (lines 47-53) | exact |
 | callers: `mute.go:228`, `bans.go:817`, `captcha.go:1396`, `staff_action_run.go:667` | modify | request-response | `staff_action_run.go:658-669` (already propagates errors) | exact |
-| `alita/modules/staff_panel.go` (marker on row) | component (pure render) | transform | `renderStaffRow` lines 154-172, `buildStaffPanel` 449-464 | exact |
-| `alita/modules/staff_action_decide.go` / `staff_action_run.go` (`LockdownBan` flag) | utility | transform | `staffTargetState` 104-125, `decideStaffBan` 207-224 | exact |
-| `alita/modules/greetings.go` `joinRequestHandler` (D-25 accept alert) | handler | request-response | itself, lines 903-955 | exact |
-| `alita/utils/chat_status/` exported anon-proof prompt | utility | request-response | `checkAnonAdmin` `chat_status.go:63-79` | exact |
+| `fuku/modules/staff_panel.go` (marker on row) | component (pure render) | transform | `renderStaffRow` lines 154-172, `buildStaffPanel` 449-464 | exact |
+| `fuku/modules/staff_action_decide.go` / `staff_action_run.go` (`LockdownBan` flag) | utility | transform | `staffTargetState` 104-125, `decideStaffBan` 207-224 | exact |
+| `fuku/modules/greetings.go` `joinRequestHandler` (D-25 accept alert) | handler | request-response | itself, lines 903-955 | exact |
+| `fuku/utils/chat_status/` exported anon-proof prompt | utility | request-response | `checkAnonAdmin` `chat_status.go:63-79` | exact |
 | `main.go` (start + shutdown registration) | config | lifecycle | `main.go:206-220`, `main.go:433` | exact |
-| `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` (AutoMigrate lists) | test config | - | lines 360-363 / 79-80 | exact |
-| `alita/modules/lockdown_fake_test.go` or extension of `staffActionFake` | test fake | request-response | `staff_action_fake_test.go` | exact |
-| `alita/modules/lockdown_*_test.go` (integration tests) | test | request-response | `staff_action_fake_test.go` `newStaffActionEnv` 465-514 | exact |
+| `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go` (AutoMigrate lists) | test config | - | lines 360-363 / 79-80 | exact |
+| `fuku/modules/lockdown_fake_test.go` or extension of `staffActionFake` | test fake | request-response | `staff_action_fake_test.go` | exact |
+| `fuku/modules/lockdown_*_test.go` (integration tests) | test | request-response | `staff_action_fake_test.go` `newStaffActionEnv` 465-514 | exact |
 | `locales/*.yml` (7) and `locales/config.yml` alt_names | config | - | existing `staff_*` keys | exact |
 | `AGENTS.md` (group -7, Redis keys, fresh-read rule) | doc | - | existing Handlers / Data sections | exact |
 | `Makefile` `test-postgres-integrity` `-run` list | config | - | `Makefile:43` | exact |
@@ -57,9 +57,9 @@ CREATE INDEX IF NOT EXISTS idx_staff_actions_staff_chat_id_id ON staff_actions(s
 
 ---
 
-### `alita/db/models/lockdown.go` (model)
+### `fuku/db/models/lockdown.go` (model)
 
-**Analog:** `alita/db/models/staff_action.go`
+**Analog:** `fuku/db/models/staff_action.go`
 
 **Constants + struct + TableName pattern** (lines 7-16, 23-56):
 ```go
@@ -79,14 +79,14 @@ func (StaffAction) TableName() string { return "staff_actions" }
 ```
 - Nullable timestamps are `*time.Time` (use for `LockedAt`, `LiftStartedAt`, `LiftedAt`).
 - Child models declare **no relation** (see `StaffActionGroup`, lines 58-93). Same for `LockdownJoiner`.
-- Partial unique tag form (RESEARCH Pattern 2, repo precedent `alita/db/models/channels.go:10`): `uniqueIndex:uk_chat_lockdowns_active,where:state = 'active'`.
+- Partial unique tag form (RESEARCH Pattern 2, repo precedent `fuku/db/models/channels.go:10`): `uniqueIndex:uk_chat_lockdowns_active,where:state = 'active'`.
 - `TableName()` must return the migration's table names (`chat_lockdowns`, `chat_lockdown_joiners`).
 
 ---
 
-### `alita/db/lockdown/repository.go` (repository, fresh reads, conditional state moves)
+### `fuku/db/lockdown/repository.go` (repository, fresh reads, conditional state moves)
 
-**Analog:** `alita/db/staff/actions.go`
+**Analog:** `fuku/db/staff/actions.go`
 
 **File header and imports** (lines 1-19): states "always read fresh ... never cached, so no cache key is read here and none needs invalidation"; writes use `db.DB` with no request context.
 ```go
@@ -97,9 +97,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
-	"github.com/divkix/Alita_Robot/alita/db"
-	"github.com/divkix/Alita_Robot/alita/db/models"
-	alitaerrors "github.com/divkix/Alita_Robot/alita/utils/errors"
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
 )
 ```
 **Fresh read returning (nil, nil) on absence** (lines 159-170):
@@ -112,7 +112,7 @@ func GetActionFresh(id uint) (*models.StaffAction, error) {
 	}
 	if err != nil {
 		log.Errorf("[Staff] GetActionFresh: %v", err)
-		return nil, alitaerrors.Wrapf(err, "get staff action %d", id)
+		return nil, fukuerrors.Wrapf(err, "get staff action %d", id)
 	}
 	return &row, nil
 }
@@ -123,7 +123,7 @@ now := time.Now().UTC().Truncate(time.Microsecond)
 result := db.DB.Model(&models.StaffAction{}).
 	Where("id = ? AND undo_started_at IS NULL", actionID).
 	Updates(map[string]any{"undo_by": by, "undo_started_at": now, "updated_at": now})
-if result.Error != nil { ...log + alitaerrors.Wrapf... }
+if result.Error != nil { ...log + fukuerrors.Wrapf... }
 if result.RowsAffected != 1 { return time.Time{}, false, nil }
 ```
 Rules from this analog: updates go through `Updates(map[string]any{...})` so zero values are written; truncate to microseconds; an expected no-match is `(false, nil)`, never an error.
@@ -133,9 +133,9 @@ Rules from this analog: updates go through `Updates(map[string]any{...})` so zer
 
 ---
 
-### `alita/db/lockdown/testmain_test.go` (test)
+### `fuku/db/lockdown/testmain_test.go` (test)
 
-**Analog:** `alita/db/staff/testmain_test.go` (lines 1-15)
+**Analog:** `fuku/db/staff/testmain_test.go` (lines 1-15)
 ```go
 //go:build testtools
 
@@ -145,13 +145,13 @@ func TestMain(m *testing.M) {
 	os.Exit(testdb.Run(m, &models.StaffGroup{}, ..., &models.StaffAction{}, &models.StaffActionGroup{}))
 }
 ```
-Use `testdb.Run(m, &models.ChatLockdown{}, &models.LockdownJoiner{})`. Add the models to the other two AutoMigrate lists: `alita/db/testmain_test.go:79-80` and `alita/modules/test_harness_test.go:362-363` (both list `&models.StaffAction{}, &models.StaffActionGroup{}` today). Add the PG test name to the `-run` list at `Makefile:43` area (`test-postgres-integrity`; also confirm `./alita/db/lockdown` joins the package list there).
+Use `testdb.Run(m, &models.ChatLockdown{}, &models.LockdownJoiner{})`. Add the models to the other two AutoMigrate lists: `fuku/db/testmain_test.go:79-80` and `fuku/modules/test_harness_test.go:362-363` (both list `&models.StaffAction{}, &models.StaffActionGroup{}` today). Add the PG test name to the `-run` list at `Makefile:43` area (`test-postgres-integrity`; also confirm `./fuku/db/lockdown` joins the package list there).
 
 ---
 
-### `alita/modules/lockdown.go` (module + commands)
+### `fuku/modules/lockdown.go` (module + commands)
 
-**Analogs:** `alita/modules/staff.go` (registration), `alita/modules/bans.go:1104-1138` (anon registration), `alita/modules/moderation.go:337-360` (adapters).
+**Analogs:** `fuku/modules/staff.go` (registration), `fuku/modules/bans.go:1104-1138` (anon registration), `fuku/modules/moderation.go:337-360` (adapters).
 
 **Descriptor + registration** (`staff.go:27-38`, `395-408`):
 ```go
@@ -189,7 +189,7 @@ Use the same token trick for reason and names; HTML-escape at render; cap the re
 
 ---
 
-### `alita/modules/chat_permissions.go` and `resolveUnmutePermissions` callers (D-23)
+### `fuku/modules/chat_permissions.go` and `resolveUnmutePermissions` callers (D-23)
 
 **Analog:** itself, lines 47-53:
 ```go
@@ -214,7 +214,7 @@ Update this and `mute.go:228`, `bans.go:817`, `captcha.go:1396` to take `(perms,
 
 ---
 
-### `alita/modules/lockdown_perms.go` (raw permission helpers)
+### `fuku/modules/lockdown_perms.go` (raw permission helpers)
 
 **Analog (partial):** `staff_action_run.go` `fetchLiveMember` (572-591) and the `paced` wrapper (623-629).
 ```go
@@ -229,9 +229,9 @@ Copy the per-call timeout + paced-closure shape, but send `bot.RequestWithContex
 
 ---
 
-### `alita/modules/lockdown_guard.go` (group -7 guard, pure decision)
+### `fuku/modules/lockdown_guard.go` (group -7 guard, pure decision)
 
-**Analog:** `alita/modules/staff_watchers.go`
+**Analog:** `fuku/modules/staff_watchers.go`
 
 **Module struct with handler group, watcher contract** (lines 18-25):
 ```go
@@ -253,9 +253,9 @@ Join filter (copy from `greetings.go:1105-1109`): `wasMember, isMember := chat_s
 
 ---
 
-### `alita/modules/lockdown_worker.go` (background worker, pacer, lifecycle)
+### `fuku/modules/lockdown_worker.go` (background worker, pacer, lifecycle)
 
-**Analog:** `alita/modules/staff_sweeper.go`
+**Analog:** `fuku/modules/staff_sweeper.go`
 
 **Lifecycle** (lines 79-123): package-level `mu`, `cancel`, `WaitGroup`; start is idempotent; stop cancels then waits without holding the mutex.
 ```go
@@ -279,12 +279,12 @@ func StartStaffSweeper(b *gotgbot.Bot) {
 **Pacer analog:** `staff_action_run.go:169-184`
 ```go
 var staffActionPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
-	NextKey: "alita:staff:pace:next", BlockKey: "alita:staff:pace:block",
+	NextKey: "fuku:staff:pace:next", BlockKey: "fuku:staff:pace:block",
 	Interval: 100 * time.Millisecond, MaxRetries: 3, MaxWait: 60 * time.Second,
 })
 func staffPaced(ctx context.Context, call func(context.Context) error) error { return staffActionPacer.Do(ctx, call) }
 ```
-Create a separate `lockdownPacer` with keys `alita:lockdown:pace:next` / `alita:lockdown:pace:block` as a package var. A test helper like `withFastStaffPacer` (`staff_action_fake_test.go:451-463`, `RetryAfterUnit: 5 * time.Millisecond`) installs a fast one.
+Create a separate `lockdownPacer` with keys `fuku:lockdown:pace:next` / `fuku:lockdown:pace:block` as a package var. A test helper like `withFastStaffPacer` (`staff_action_fake_test.go:451-463`, `RetryAfterUnit: 5 * time.Millisecond`) installs a fast one.
 
 **Shutdown registration** (`main.go:206-220`, DB-close is registered first at 160-163 so LIFO runs these before it):
 ```go
@@ -298,7 +298,7 @@ Add `StopLockdownWorker()` the same way after the DB-close handler, and `modules
 
 ---
 
-### `alita/modules/staff_panel.go` (D-17 marker)
+### `fuku/modules/staff_panel.go` (D-17 marker)
 
 **Analog:** itself.
 **Pure row render** (lines 154-172): builds title, `<code>` ID, status line from `tr.GetString("staff_panel_row_status", ...)`, then optional reason line.
@@ -326,13 +326,13 @@ Append `LockdownBan bool` as the LAST field (keeps any unkeyed literals compilin
 
 ---
 
-### `alita/modules/greetings.go` `joinRequestHandler` (D-25)
+### `fuku/modules/greetings.go` `joinRequestHandler` (D-25)
 
 **Analog:** itself, lines 903-955. After the existing `decodeCallbackData(query.Data, "join_request")` and admin checks, when `response == "accept"` do one fresh active-lockdown read and answer an alert (no approve). Reuse `chat_status.NewPermissionResponder(b).Respond(...)` / `answerInvalidCallback` style for the alert; do not touch `ban`/`decline`.
 
 ---
 
-### `alita/utils/chat_status/` exported anon-proof prompt
+### `fuku/utils/chat_status/` exported anon-proof prompt
 
 **Analog:** `chat_status.go:63-79` `checkAnonAdmin`:
 ```go
@@ -346,7 +346,7 @@ Add one exported function that does the last two statements unconditionally (RES
 
 ### Test fakes and env
 
-**Analog:** `alita/modules/staff_action_fake_test.go`
+**Analog:** `fuku/modules/staff_action_fake_test.go`
 - `staffActionFake` (lines 53-80, 296-414): records every call; per-method scripted errors (`script`, `popScripted`); `banChatMember`/`unbanChatMember`/`restrictChatMember` mutate member records; `getChat` currently marshals typed `chatPerms` (383-395). Extend with `setChatPermissions` (store raw JSON; honour `use_independent_chat_permissions` via `staffParamBool`), `getChat` returning raw stored permissions, `declineChatJoinRequest`, `deleteMessage`, and kicked `getChatMember` echoing `until_date` (`staffFakeMemberJSON`).
 - Env builder (lines 465-514): `withMiniredis(t)`, `withStaffLocale(t)`, `withFastStaffPacer(t)`, `newModuleTestBot(...)`, `bot.BotClient = fake`, `ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})`, then `LoadX(dispatcher)`. Clone as `lockdownEnv` loading Lockdown + Greetings + Captcha + AntiRaid.
 - Cleanup via `staffCleanup(t, ids...)` style helper for lockdown rows. Assertions on observable calls (`callsTo`, `writes`, `memberLookups`).
@@ -360,13 +360,13 @@ Add one exported function that does the last two statements unconditionally (RES
 **Source:** `staff_watchers.go:33` and `staff_sweeper.go:101`: `defer error_handling.RecoverFromPanic("<name>", "<Module>")`. **Apply to:** guard handlers, worker goroutine, each worker cycle, any fire-and-forget.
 
 ### Conditional write = exactly once
-**Source:** `alita/db/staff/actions.go:280-298`. **Apply to:** start, confirm lock, begin lift, joiner claims, final `lifting -> lifted` tally post.
+**Source:** `fuku/db/staff/actions.go:280-298`. **Apply to:** start, confirm lock, begin lift, joiner claims, final `lifting -> lifted` tally post.
 
 ### Fresh reads, no cache
-**Source:** `alita/db/staff/actions.go:1-8`. **Apply to:** all lockdown reads; state it in AGENTS.md so nobody adds a cache without `skipLocal` and `DeleteCache`.
+**Source:** `fuku/db/staff/actions.go:1-8`. **Apply to:** all lockdown reads; state it in AGENTS.md so nobody adds a cache without `skipLocal` and `DeleteCache`.
 
 ### Error wrapping and logging
-`alitaerrors.Wrapf(err, "...")` plus `log.Errorf("[Lockdown] fn: %v", err)`; never discard a DB error on a state-changing path.
+`fukuerrors.Wrapf(err, "...")` plus `log.Errorf("[Lockdown] fn: %v", err)`; never discard a DB error on a state-changing path.
 
 ### Fleet-wide pacing
 **Source:** `staff_action_run.go:169-184`. Separate pacer keys for lockdown; never a per-replica limiter.
@@ -385,6 +385,6 @@ Add every new key to all 7 files in `locales/` (copy names from `locales/en.yml`
 
 ## Metadata
 
-**Analog search scope:** `alita/db/staff`, `alita/db/models`, `alita/modules` (staff*, greetings, antiraid, bans, moderation, chat_permissions, fake and harness tests), `alita/utils/chat_status`, `migrations`, `main.go`, `Makefile`.
+**Analog search scope:** `fuku/db/staff`, `fuku/db/models`, `fuku/modules` (staff*, greetings, antiraid, bans, moderation, chat_permissions, fake and harness tests), `fuku/utils/chat_status`, `migrations`, `main.go`, `Makefile`.
 **Files read:** about 20. Tracked check: `git ls-files` confirmed tracked status for the six core analog files probed (`staff_action_fake_test.go`, `staff_sweeper.go`, `db/staff/actions.go`, the staff actions migration, `telegram_pacer.go`, `main.go`); the rest are ordinary source under tracked directories, none under `.gsd/capabilities`.
 **Pattern extraction date:** 2026-10-06

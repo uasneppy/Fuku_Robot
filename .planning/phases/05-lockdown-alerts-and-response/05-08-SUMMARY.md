@@ -22,15 +22,15 @@ tech-stack:
 key-files:
   created:
     - migrations/20261011140000_add_lockdown_ban_runs.sql
-    - alita/modules/lockdown_response.go
-    - alita/modules/lockdown_response_test.go
+    - fuku/modules/lockdown_response.go
+    - fuku/modules/lockdown_response_test.go
   modified:
-    - alita/db/models/lockdown.go
-    - alita/db/lockdown/joiners.go
-    - alita/db/lockdown/burst.go
-    - alita/db/lockdown/burst_test.go
-    - alita/db/lockdown/testmain_test.go
-    - alita/modules/lockdown_status.go
+    - fuku/db/models/lockdown.go
+    - fuku/db/lockdown/joiners.go
+    - fuku/db/lockdown/burst.go
+    - fuku/db/lockdown/burst_test.go
+    - fuku/db/lockdown/testmain_test.go
+    - fuku/modules/lockdown_status.go
     - AGENTS.md
 key-decisions:
   - "A joiner row in a state outside the claim list and not exempt/acting/unbanning (unbanned, unban_failed) is banned without a claim: the lift has finished with it, so there is nothing to interlock with."
@@ -57,9 +57,9 @@ Note: `commits: 6` counts the three test commits and three implementation commit
 
 ## What was built
 
-- **`decideLockdownResponseBan(member, banUntil)`** (`alita/modules/lockdown_response.go`): pure table. Creator or administrator: skip `admin`. Kicked: ban only when `isLockdownBan` (the lockdown's own 330-day ban, which the new ban upgrades), otherwise skip `already_banned` (this includes a kicked pre-lockdown account with no joiner row, `banUntil` 0). Member, restricted and left: ban.
+- **`decideLockdownResponseBan(member, banUntil)`** (`fuku/modules/lockdown_response.go`): pure table. Creator or administrator: skip `admin`. Kicked: ban only when `isLockdownBan` (the lockdown's own 330-day ban, which the new ban upgrades), otherwise skip `already_banned` (this includes a kicked pre-lockdown account with no joiner row, `banUntil` 0). Member, restricted and left: ban.
 - **`lockdownResponseBanOne(ctx, b, ld, row, approved)`**: the only place that calls `banChatMember` for this feature, with empty `BanChatMemberOpts` (no end date, no message removal). Order: approved map, the bot's own ID, a fresh read of the joiner row; an `exempt` joiner is skipped `let_in` with no claim and no Telegram call (also when the row turned exempt after queueing); `acting`/`unbanning` or a lost claim puts the account back in the queue with no attempt; otherwise the joiner row is claimed to `acting`, then one `lockdownPaced` unit reads the live status, decides and bans. A ban moves the burst row to `banned` (reason `request` for a declined join request) and the joiner row to `kept` with detail `response_ban`. A skip, a rate limit or a failure restores the joiner row to the state and detail it came from; a rate limit or shutdown requeues without an attempt, any other failure counts one and the third is final (`failed`, with the escaped Telegram detail).
-- **Repository** (`alita/db/lockdown`): `GetJoinerOfUserFresh`, `ClaimBurst`, `MoveBurst` (Task 1); `CountBanCandidatesFresh`, `StartBanRun`, `ListQueuedBurstFresh`, `ListRunningBanRunsFresh`, `SetBanRunCard`, `FinishBanRun`, `TallyBanRun`, `ReleaseStaleBurstClaims` (Task 3). `StartBanRun` runs in one transaction: insert the run (`ON CONFLICT DO NOTHING`; a refused insert writes nothing), copy joiner rows into the burst (`INSERT ... SELECT ... ON CONFLICT DO NOTHING`), mark unhandled rows of exempt joiners skipped `let_in`, queue the rest except `exclude`; nothing queued finishes the run at once.
+- **Repository** (`fuku/db/lockdown`): `GetJoinerOfUserFresh`, `ClaimBurst`, `MoveBurst` (Task 1); `CountBanCandidatesFresh`, `StartBanRun`, `ListQueuedBurstFresh`, `ListRunningBanRunsFresh`, `SetBanRunCard`, `FinishBanRun`, `TallyBanRun`, `ReleaseStaleBurstClaims` (Task 3). `StartBanRun` runs in one transaction: insert the run (`ON CONFLICT DO NOTHING`; a refused insert writes nothing), copy joiner rows into the burst (`INSERT ... SELECT ... ON CONFLICT DO NOTHING`), mark unhandled rows of exempt joiners skipped `let_in`, queue the rest except `exclude`; nothing queued finishes the run at once.
 - **Migration `20261011140000_add_lockdown_ban_runs.sql`**: `chat_lockdown_ban_runs` with state and destination CHECKs and `uk_chat_lockdown_ban_runs_running`. Idempotent, no transaction statements, no `CONCURRENTLY`. Model `ChatLockdownBanRun`, `BanRunState*`, `JoinerDetailResponseBan`, `BurstReasonLetIn`; the model is in the lockdown package's AutoMigrate list.
 - **`lockdownRemovedSoFar`** (`lockdown_status.go`): banned plus kept rows with detail `response_ban`; `/lockdownstatus` uses it. The lift already counts a kept row in its `lockdown_lift_tally_kept` line and never unbans it, so no worker change was needed.
 - **AGENTS.md**: a Subsystem-traps bullet for the response ban (decision table, empty options, claim-before-call, let_in, accepted Pitfall 3 limit, status count) and a Data bullet for `chat_lockdown_ban_runs`.
@@ -84,18 +84,18 @@ None.
 - Task 2 followed the same shape as plans 05-05..05-07: the race and lift cases already passed against the Task 1 implementation (the claim-first design satisfied them), so the only failing RED test was the status count, and the single `fix(05-08)` commit adds `lockdownRemovedSoFar`.
 - Task 1 and Task 3 RED commits do not compile (the symbols under test do not exist yet), which is their failing state.
 - `BurstReasonLetIn` was added to the models package (not in the plan's artifact list) so the repository and the module share one `let_in` value.
-- The ban run's model was not added to `alita/modules/test_harness_test.go`: nothing in the module tests uses ban runs yet, and plan 05-09 runs in parallel. Plan 05-10 must add `&models.ChatLockdownBanRun{}` there when its worker loop is tested.
+- The ban run's model was not added to `fuku/modules/test_harness_test.go`: nothing in the module tests uses ban runs yet, and plan 05-09 runs in parallel. Plan 05-10 must add `&models.ChatLockdownBanRun{}` there when its worker loop is tested.
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestDecideLockdownResponseBan$|^TestLockdownResponseBanOne$' -v ./alita/modules`: pass (10 table rows, 9 subtests).
-- `go test -tags testtools -race -count=1 -run '^TestLockdownBanSurvivesLift$|^TestLockdownBanRaces$|^TestLockdownStatusCountsResponseBans$' -v ./alita/modules`: pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|StaffBan' ./alita/modules`: pass three times (about 52 s). One earlier run, made right after the Task 2 change while the machine was busy, printed FAIL with only the usual "lockdown table unreachable" log line in the tail; I did not capture the failing test name and two reruns of the identical command passed, so I treat it as a one-off under load.
-- `go test -tags testtools -race -count=1 -run '^TestBanRunStart$|^TestReleaseStaleBurstClaims$|^TestBurstClaims$' -v ./alita/db/lockdown` and the whole `./alita/db/lockdown`, `./alita/db/migrations`, `./alita/db/models` packages: pass.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown ./alita/db/models`: clean. `gofmt -l` on every touched Go file prints nothing. `go.mod` and `go.sum` unchanged.
-- Acceptance greps pass: `JoinerDetailResponseBan = "response_ban"` present; `grep -c 'UntilDate\|RevokeMessages' alita/modules/lockdown_response.go` prints 0; `lockdownBanSkipLetIn` present; last migration is `20261011140000_add_lockdown_ban_runs.sql` with no `BEGIN/COMMIT/ROLLBACK/CONCURRENTLY`; `models.ChatLockdownBanRun{}` once in `alita/db/lockdown/testmain_test.go`; AGENTS.md names `response_ban`, `Pitfall 3` and `chat_lockdown_ban_runs`.
+- `go test -tags testtools -race -count=1 -run '^TestDecideLockdownResponseBan$|^TestLockdownResponseBanOne$' -v ./fuku/modules`: pass (10 table rows, 9 subtests).
+- `go test -tags testtools -race -count=1 -run '^TestLockdownBanSurvivesLift$|^TestLockdownBanRaces$|^TestLockdownStatusCountsResponseBans$' -v ./fuku/modules`: pass.
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|StaffBan' ./fuku/modules`: pass three times (about 52 s). One earlier run, made right after the Task 2 change while the machine was busy, printed FAIL with only the usual "lockdown table unreachable" log line in the tail; I did not capture the failing test name and two reruns of the identical command passed, so I treat it as a one-off under load.
+- `go test -tags testtools -race -count=1 -run '^TestBanRunStart$|^TestReleaseStaleBurstClaims$|^TestBurstClaims$' -v ./fuku/db/lockdown` and the whole `./fuku/db/lockdown`, `./fuku/db/migrations`, `./fuku/db/models` packages: pass.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown ./fuku/db/models`: clean. `gofmt -l` on every touched Go file prints nothing. `go.mod` and `go.sum` unchanged.
+- Acceptance greps pass: `JoinerDetailResponseBan = "response_ban"` present; `grep -c 'UntilDate\|RevokeMessages' fuku/modules/lockdown_response.go` prints 0; `lockdownBanSkipLetIn` present; last migration is `20261011140000_add_lockdown_ban_runs.sql` with no `BEGIN/COMMIT/ROLLBACK/CONCURRENTLY`; `models.ChatLockdownBanRun{}` once in `fuku/db/lockdown/testmain_test.go`; AGENTS.md names `response_ban`, `Pitfall 3` and `chat_lockdown_ban_runs`.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
-- Not run: the whole `./alita/modules` package under `-race`, any PostgreSQL check (including the human-check of applying the migration after the earlier Phase 5 migrations and confirming the partial unique index refuses a second running row; the `INSERT ... SELECT ... ON CONFLICT` and the partial index were exercised on SQLite only), and a real Telegram call.
+- Not run: the whole `./fuku/modules` package under `-race`, any PostgreSQL check (including the human-check of applying the migration after the earlier Phase 5 migrations and confirming the partial unique index refuses a second running row; the `INSERT ... SELECT ... ON CONFLICT` and the partial index were exercised on SQLite only), and a real Telegram call.
 
 ## Threat surface
 
@@ -107,4 +107,4 @@ None. `lockdownResponseBanOne` and the run repository have no caller yet on purp
 
 ## Self-Check: PASSED
 
-`migrations/20261011140000_add_lockdown_ban_runs.sql`, `alita/modules/lockdown_response.go` and `alita/modules/lockdown_response_test.go` exist; commits 7f0ee46, 50a63cd, 4b21368, 5ebba31, db02821 and 8561fb8 are on the branch.
+`migrations/20261011140000_add_lockdown_ban_runs.sql`, `fuku/modules/lockdown_response.go` and `fuku/modules/lockdown_response_test.go` exist; commits 7f0ee46, 50a63cd, 4b21368, 5ebba31, db02821 and 8561fb8 are on the branch.

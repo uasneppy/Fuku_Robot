@@ -112,8 +112,8 @@ No new libraries. Everything below is already in `go.mod` (CLAUDE.md "Technology
 |---------|---------|---------|--------------|
 | `github.com/PaulSonOfLars/gotgbot/v2` | v2.0.0-rc.36.0.20260919140833-240296efadb4 (module cache dir name) | Bot API client, dispatcher, `RequestWithContext` for raw JSON calls | Already the stack; raw `Request` is the only lossless permission path |
 | `gorm.io/gorm` + postgres / sqlite drivers | v1.31.2 / v1.6.3 / v1.6.0 | Models, conditional writes, partial unique index via tags | Precedent: `channels.go` partial unique index tag; staff conditional `Updates` |
-| `alita/utils/ratelimit` `TelegramPacer` | in-repo | Fleet-wide pacing (Redis slot + shared 429 block, local fallback) | `NewTelegramPacer` is already generic: distinct `NextKey`/`BlockKey` give an independent budget |
-| `alita/utils/chat_status` (`FetchBotMember`, `CheckOwner`) | in-repo | Live bot rights / live creator checks | Tri-state results; fail closed on Unknown |
+| `fuku/utils/ratelimit` `TelegramPacer` | in-repo | Fleet-wide pacing (Redis slot + shared 429 block, local fallback) | `NewTelegramPacer` is already generic: distinct `NextKey`/`BlockKey` give an independent budget |
+| `fuku/utils/chat_status` (`FetchBotMember`, `CheckOwner`) | in-repo | Live bot rights / live creator checks | Tri-state results; fail closed on Unknown |
 | `github.com/alicebob/miniredis/v2` | v2.39.0 | Tests: Redis pacer / flush | Existing test fixture |
 
 ### Supporting
@@ -187,23 +187,23 @@ No external packages are installed or added by this phase, so the legitimacy gat
    /unlockdown         -> checks -> restore snapshot -> CAS active->lifting -> notice -> worker unbans
    /lockdownstatus     -> read-only
  PostgreSQL: chat_lockdowns (one active per chat, partial unique index) + chat_lockdown_joiners
- Redis (optional): alita:lockdown:pace:next / :block only
+ Redis (optional): fuku:lockdown:pace:next / :block only
 ```
 
 ### Recommended Project Structure
 ```
 migrations/20261006120000_add_chat_lockdowns.sql        # tables + partial unique index (timestamp > 20261005120000)
-alita/db/models/lockdown.go                             # ChatLockdown, LockdownJoiner (+ TableName())
-alita/db/lockdown/repository.go                         # Start, GetActiveFresh, ListActiveByChatsFresh, ConfirmLocked, BeginLift, joiner state moves
-alita/db/lockdown/testmain_test.go                      # testdb.Run(m, &models.ChatLockdown{}, &models.LockdownJoiner{})
-alita/modules/lockdown.go                               # LoadLockdown, commands, descriptors, anon registration, init() priority 238
-alita/modules/lockdown_perms.go                         # raw getChat/setChatPermissions helpers, canonical compare, locked-set constant
-alita/modules/lockdown_guard.go                         # decideLockdownJoin (pure) + three handlers + goodbye suppression
-alita/modules/lockdown_worker.go                        # Start/StopLockdownWorker, pacer var, ban / unban / decline / recovery
-alita/modules/chat_permissions.go                       # resolveUnmutePermissions now lockdown-aware, returns (perms, error)
-alita/modules/staff_panel.go                            # staffLinkRow.LockedSince + marker line
-alita/modules/staff_action_decide.go / staff_action_run.go  # LockdownBan fix for D-05
-alita/utils/chat_status/                                 # exported anonymous-admin proof prompt
+fuku/db/models/lockdown.go                             # ChatLockdown, LockdownJoiner (+ TableName())
+fuku/db/lockdown/repository.go                         # Start, GetActiveFresh, ListActiveByChatsFresh, ConfirmLocked, BeginLift, joiner state moves
+fuku/db/lockdown/testmain_test.go                      # testdb.Run(m, &models.ChatLockdown{}, &models.LockdownJoiner{})
+fuku/modules/lockdown.go                               # LoadLockdown, commands, descriptors, anon registration, init() priority 238
+fuku/modules/lockdown_perms.go                         # raw getChat/setChatPermissions helpers, canonical compare, locked-set constant
+fuku/modules/lockdown_guard.go                         # decideLockdownJoin (pure) + three handlers + goodbye suppression
+fuku/modules/lockdown_worker.go                        # Start/StopLockdownWorker, pacer var, ban / unban / decline / recovery
+fuku/modules/chat_permissions.go                       # resolveUnmutePermissions now lockdown-aware, returns (perms, error)
+fuku/modules/staff_panel.go                            # staffLinkRow.LockedSince + marker line
+fuku/modules/staff_action_decide.go / staff_action_run.go  # LockdownBan fix for D-05
+fuku/utils/chat_status/                                 # exported anonymous-admin proof prompt
 locales/*.yml (7) + locales/config.yml (alt_names Lockdown: [lockdown, unlockdown, lockdownstatus])
 AGENTS.md                                               # group -7, Redis keys, fresh-read rule, resolveUnmutePermissions note
 ```
@@ -263,9 +263,9 @@ type ChatLockdown struct {
 	LiftedBy, LiftedByName, LiftStartedAt, LiftedAt, ManualChange (bool), CreatedAt, UpdatedAt ...
 }
 ```
-- The tag form is proven in this repo: `uniqueIndex:idx_channels_username,expression:LOWER(username),where:username <> ''` `[VERIFIED: alita/db/models/channels.go:10]`. The same partial unique index must be written by hand in the migration (`CREATE UNIQUE INDEX ... ON chat_lockdowns (chat_id) WHERE state = 'active'`), as `20260730010000_enforce_channel_username_ownership.sql` does for channels.
+- The tag form is proven in this repo: `uniqueIndex:idx_channels_username,expression:LOWER(username),where:username <> ''` `[VERIFIED: fuku/db/models/channels.go:10]`. The same partial unique index must be written by hand in the migration (`CREATE UNIQUE INDEX ... ON chat_lockdowns (chat_id) WHERE state = 'active'`), as `20260730010000_enforce_channel_username_ownership.sql` does for channels.
 - Start: `db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&row)`; `RowsAffected == 1` means this caller started it; `0` means someone else did, so read the existing row fresh and reply with it (D-14). `ON CONFLICT DO NOTHING` without a target is PostgreSQL and SQLite upsert syntax `[ASSUMED]` (see A9); a Wave 0 test on SQLite and a PostgreSQL test in the `test-postgres-integrity` list close it.
-- Timestamps: truncate to microseconds before storing (`time.Now().UTC().Truncate(time.Microsecond)`), as `ClaimUndo` does `[VERIFIED: alita/db/staff/actions.go:280-285]`.
+- Timestamps: truncate to microseconds before storing (`time.Now().UTC().Truncate(time.Microsecond)`), as `ClaimUndo` does `[VERIFIED: fuku/db/staff/actions.go:280-285]`.
 - Updates through `Updates(map[string]any{...})`, never `UpdateRecord` (it skips zero values, AGENTS.md "Data").
 - No FK on chat IDs (staff precedent). The joiner table keeps a SQL-only FK to `chat_lockdowns(id) ON DELETE CASCADE`; the Go models declare no relation.
 - A chat can have one `active` row and any number of `lifting`/`lifted` rows, so a new lockdown may start while the old lift is still unbanning. The `until_date` marker keeps the two apart (see Pitfall 2).
@@ -301,7 +301,7 @@ statusDesc    = helpers.CommandDescriptor{Name: "lockdownstatus", RequiredChecks
 - `/unlockdown`: authority, fresh active row (none -> "no active lockdown"), fresh raw `getChat` and canonical compare to `locked_permissions` -> `manualChange` (a failed read here does not block the lift), restore call (failure -> keep active, tell the admin why, nobody unbanned, D-21), then `BeginLift`: `UPDATE chat_lockdowns SET state='lifting', lifted_by=?, lift_started_at=? WHERE id=? AND state='active'`; `RowsAffected == 1` is the one lifter, `0` is "already lifted". A DB error after a confirmed restore says "permissions restored but the record could not be updated, run /unlockdown again" (the restore is idempotent). Then reply, wake the worker.
 - `/lockdownstatus`: read-only. Not locked, locked (since, by, reason, removed count, optional manual-change warning, unconfirmed-lock warning), or lifting (unbanned so far). Never writes.
 - `/lockdown` in a Staff Group is allowed once D-11 and D-20 pass; the staff interceptors only table `/ban /mute /kick /unban /unmute` and variants `[VERIFIED: AGENTS.md StaffActions paragraph]`, so there is no conflict.
-- User-controlled text (reason, names): splice after translation through a token, as `staffGroupsToken` does, because "the translator runs a printf-style pass over the interpolated text" `[VERIFIED: alita/modules/staff.go comment above staffGroupsToken]`.
+- User-controlled text (reason, names): splice after translation through a token, as `staffGroupsToken` does, because "the translator runs a printf-style pass over the interpolated text" `[VERIFIED: fuku/modules/staff.go comment above staffGroupsToken]`.
 
 ### Pattern 5: Own-ban marker (D-05) and the lift
 - `lockdownBanUntil = now + 330*24h` as unix seconds, stored on the joiner row before the call. Bot API: a ban shorter than 30 s or longer than 366 days is permanent, so the value must sit strictly inside that window `[VERIFIED: gotgbot BanChatMemberOpts doc, gen_methods.go:419-422]`; `ChatMemberBanned.UntilDate` is reported by `getChatMember` `[VERIFIED: gen_types.go:2362-2367]`.
@@ -311,7 +311,7 @@ statusDesc    = helpers.CommandDescriptor{Name: "lockdownstatus", RequiredChecks
 - Tolerance: compare exactly; if the UAT fixture shows Telegram does not echo the value verbatim (A2), switch to a +/-2 s tolerance in the same pure function.
 
 ### Pattern 6: Worker, pacing, restart safety
-- **Pacer:** a new package var `lockdownPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{NextKey: "alita:lockdown:pace:next", BlockKey: "alita:lockdown:pace:block", Interval: 100*time.Millisecond, MaxRetries: 3, MaxWait: 60*time.Second})`, a variable so tests install a fast one (same shape as `staffActionPacer`, `staff_action_run.go:172-178`). A separate budget is deliberate: staff runs are untouched, and two 10/s pacers stay well under Telegram's global bulk limit `[ASSUMED]`. **Do not generalise `staffPaced`**: it is a one-line wrapper over `TelegramPacer.Do`, and the pacer type is already generic. A call whose slot is more than `MaxWait` away fails at once with `ratelimit.ErrRateLimited` and takes no slot `[VERIFIED: telegram_pacer.go:132-139, 164-186]`; the worker returns that row to `pending` with `attempts+1` and retries on a later tick. Without Redis the pacer falls back to a per-replica interval, so only pacing degrades (the state is in PostgreSQL).
+- **Pacer:** a new package var `lockdownPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{NextKey: "fuku:lockdown:pace:next", BlockKey: "fuku:lockdown:pace:block", Interval: 100*time.Millisecond, MaxRetries: 3, MaxWait: 60*time.Second})`, a variable so tests install a fast one (same shape as `staffActionPacer`, `staff_action_run.go:172-178`). A separate budget is deliberate: staff runs are untouched, and two 10/s pacers stay well under Telegram's global bulk limit `[ASSUMED]`. **Do not generalise `staffPaced`**: it is a one-line wrapper over `TelegramPacer.Do`, and the pacer type is already generic. A call whose slot is more than `MaxWait` away fails at once with `ratelimit.ErrRateLimited` and takes no slot `[VERIFIED: telegram_pacer.go:132-139, 164-186]`; the worker returns that row to `pending` with `attempts+1` and retries on a later tick. Without Redis the pacer falls back to a per-replica interval, so only pacing degrades (the state is in PostgreSQL).
 - **Claims:** per-row conditional updates (`WHERE id=? AND (state='pending' OR (state='banning' AND claimed_at < now-2min))`), exactly-once under several replicas and crash-resumable, no `SKIP LOCKED` (not available on SQLite).
 - **Restart / lift resume:** the loop selects work from the DB each tick, so a restart changes nothing: `pending`, stale `banning`, `banned` rows of `lifting` lockdowns, stale `unbanning`. It also re-applies the lock for rows with `locked_at IS NULL` older than 30 s (idempotent `setChatPermissions`, then `ConfirmLocked`), matching ARCHITECTURE.md's "startup recovery for applied=false".
 - **Ban/lift race:** after a successful ban the worker re-reads the lockdown row; if it is no longer `active`, it unbans that user immediately (the ban is its own, `until_date` known). The lift's final-row transition `lifting -> lifted` happens only when no row is `pending|banning|banned|unbanning`. A 30 s grace after `lift_started_at` before declaring "done" covers a ban call that was in flight at the CAS.
@@ -320,7 +320,7 @@ statusDesc    = helpers.CommandDescriptor{Name: "lockdownstatus", RequiredChecks
 - **Wake signal:** a buffered channel of 1 written non-blockingly by the guard; other replicas pick work up at the next tick.
 
 ### Pattern 7: `resolveUnmutePermissions` becomes lockdown-aware (D-23)
-Current function `[VERIFIED: alita/modules/chat_permissions.go:47-53]`:
+Current function `[VERIFIED: fuku/modules/chat_permissions.go:47-53]`:
 ```go
 func resolveUnmutePermissions(chatInfo *gotgbot.ChatFullInfo) gotgbot.ChatPermissions {
 	if chatInfo != nil && chatInfo.Permissions != nil {
@@ -352,7 +352,7 @@ It has exactly four callers `[VERIFIED: grep + Read]`: `mute.go:228` (`/unmute`)
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Fleet-wide Telegram pacing + 429 handling | A new limiter | `ratelimit.NewTelegramPacer` with `alita:lockdown:pace:*` keys | Redis slot reservation, shared `retry_after` block, local fallback, tested |
+| Fleet-wide Telegram pacing + 429 handling | A new limiter | `ratelimit.NewTelegramPacer` with `fuku:lockdown:pace:*` keys | Redis slot reservation, shared `retry_after` block, local fallback, tested |
 | Creator/admin-with-right test | New status switch | `staffIssuerSkipReason(member) == ""` over a live `getChatMember` | Same rule as staff actions (creator, or administrator + `CanRestrictMembers`) |
 | Live bot rights probe | Custom `getChatMember(bot)` | `chat_status.FetchBotMember` (tri-state Found/Missing/Unknown) | Fail-closed contract exists |
 | Telegram error text in replies | Own escaper | `telegramErrorDetail(err)` (HTML-escaped, 120 runes) | `staff_action_run.go:769` |
@@ -442,7 +442,7 @@ func canonicalPermissions(raw string) (map[string]bool, error) {
 
 ### Conditional lift claim
 ```go
-// Source pattern: alita/db/staff/actions.go ClaimUndo (RowsAffected == 1 means this caller won).
+// Source pattern: fuku/db/staff/actions.go ClaimUndo (RowsAffected == 1 means this caller won).
 res := db.DB.Model(&models.ChatLockdown{}).
 	Where("id = ? AND state = ?", id, "active").
 	Updates(map[string]any{"state": "lifting", "lifted_by": by, "lifted_by_name": name,
@@ -462,7 +462,7 @@ func decideLockdownJoin(in lockdownJoinInput) lockdownJoinVerdict // ban | exemp
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| Redis-only antiraid state with expiry (`alita:antiraid:state:*`) | PostgreSQL state machine, never expires | This phase | Survives Redis flush; `/antiraid` keeps working until Phase 6 |
+| Redis-only antiraid state with expiry (`fuku:antiraid:state:*`) | PostgreSQL state machine, never expires | This phase | Survives Redis flush; `/antiraid` keeps working until Phase 6 |
 | Temp-ban (`RaidActionTime`) for raiders | Ban with a marker `until_date`, unban at lift | This phase | No auto-rejoin during the lockdown; lift is selective |
 | Typed `ChatPermissions` for chat defaults | Raw JSON + `use_independent_chat_permissions=true` | This phase | Lossless restore |
 
@@ -523,48 +523,48 @@ Note: the first `-race` test build in this sandbox took about 2.5 minutes cold; 
 |----------|-------|
 | Framework | Go `testing` + testify (assertions only), real fixtures: `internal/testdb.Run` (SQLite), miniredis, hand-written `gotgbot.BotClient` fakes (`staffActionFake`) |
 | Config file | none; build tag `testtools` mandatory; `CGO_ENABLED=1` |
-| Quick run command | `go test -tags testtools -race -count=1 -run 'Lockdown' ./alita/db/lockdown ./alita/modules` |
+| Quick run command | `go test -tags testtools -race -count=1 -run 'Lockdown' ./fuku/db/lockdown ./fuku/modules` |
 | Full suite command | `make test` |
 
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| LOCK-01 | chat_member join banned + recorded, EndGroups, no welcome/captcha | integration (real dispatcher + fake) | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardBansChatMemberJoin$' ./alita/modules` | no, Wave 0 |
-| LOCK-01 | service-message join, join delivered twice acts once | integration | `... -run '^TestLockdownGuardDedupesTwoPaths$' ./alita/modules` | no, Wave 0 |
-| LOCK-01 | join request declined, never auto-approved | integration | `... -run '^TestLockdownGuardDeclinesJoinRequest$' ./alita/modules` | no, Wave 0 |
-| LOCK-01 | exempt admin-added human continues; bot always banned; self-join banned | unit (decision table) | `... -run '^TestDecideLockdownJoin$' ./alita/modules` | no, Wave 0 |
-| LOCK-01 | no goodbye for lockdown-banned joiner | integration | `... -run '^TestLockdownSuppressesGoodbye$' ./alita/modules` | no, Wave 0 |
-| LOCK-01 | rejoin possible after lift | integration | `... -run '^TestLockdownLiftUnbansJoiners$' ./alita/modules` | no, Wave 0 |
-| LOCK-02 | lock call sends all-false set with independent flag; no per-user restrict | integration | `... -run '^TestLockdownLockSendsLockedSet$' ./alita/modules` | no, Wave 0 |
-| LOCK-03 | notice states approved users are muted; no approved-user calls | integration | `... -run '^TestLockdownNoticeAndNoPerUserCalls$' ./alita/modules` | no, Wave 0 |
-| LOCK-04 | other chat unaffected (guard + permissions) | integration | `... -run '^TestLockdownAffectsOnlyItsChat$' ./alita/modules` | no, Wave 0 |
-| LOCK-05 | enforcement with Redis flushed / absent; state in DB only | integration (miniredis flush) | `... -run '^TestLockdownSurvivesRedisFlush$' ./alita/modules` | no, Wave 0 |
-| LOCK-05 | restart mid-lift: worker resumes remaining unbans | integration | `... -run '^TestLockdownLiftResumesAfterRestart$' ./alita/modules` | no, Wave 0 |
-| LOCK-05 | one active lockdown per chat (SQLite) | repository | `go test -tags testtools -race -count=1 -run '^TestStartLockdownOneActivePerChat$' ./alita/db/lockdown` | no, Wave 0 |
+| LOCK-01 | chat_member join banned + recorded, EndGroups, no welcome/captcha | integration (real dispatcher + fake) | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardBansChatMemberJoin$' ./fuku/modules` | no, Wave 0 |
+| LOCK-01 | service-message join, join delivered twice acts once | integration | `... -run '^TestLockdownGuardDedupesTwoPaths$' ./fuku/modules` | no, Wave 0 |
+| LOCK-01 | join request declined, never auto-approved | integration | `... -run '^TestLockdownGuardDeclinesJoinRequest$' ./fuku/modules` | no, Wave 0 |
+| LOCK-01 | exempt admin-added human continues; bot always banned; self-join banned | unit (decision table) | `... -run '^TestDecideLockdownJoin$' ./fuku/modules` | no, Wave 0 |
+| LOCK-01 | no goodbye for lockdown-banned joiner | integration | `... -run '^TestLockdownSuppressesGoodbye$' ./fuku/modules` | no, Wave 0 |
+| LOCK-01 | rejoin possible after lift | integration | `... -run '^TestLockdownLiftUnbansJoiners$' ./fuku/modules` | no, Wave 0 |
+| LOCK-02 | lock call sends all-false set with independent flag; no per-user restrict | integration | `... -run '^TestLockdownLockSendsLockedSet$' ./fuku/modules` | no, Wave 0 |
+| LOCK-03 | notice states approved users are muted; no approved-user calls | integration | `... -run '^TestLockdownNoticeAndNoPerUserCalls$' ./fuku/modules` | no, Wave 0 |
+| LOCK-04 | other chat unaffected (guard + permissions) | integration | `... -run '^TestLockdownAffectsOnlyItsChat$' ./fuku/modules` | no, Wave 0 |
+| LOCK-05 | enforcement with Redis flushed / absent; state in DB only | integration (miniredis flush) | `... -run '^TestLockdownSurvivesRedisFlush$' ./fuku/modules` | no, Wave 0 |
+| LOCK-05 | restart mid-lift: worker resumes remaining unbans | integration | `... -run '^TestLockdownLiftResumesAfterRestart$' ./fuku/modules` | no, Wave 0 |
+| LOCK-05 | one active lockdown per chat (SQLite) | repository | `go test -tags testtools -race -count=1 -run '^TestStartLockdownOneActivePerChat$' ./fuku/db/lockdown` | no, Wave 0 |
 | LOCK-05 | same on PostgreSQL | repository (PG) | add to `test-postgres-integrity` `-run` list in `Makefile` | no, Wave 0 |
-| LOCK-06 | non-admin / admin without restrict refused; cache not used | integration | `... -run '^TestLockdownCommandsRefuseNonAuthority$' ./alita/modules` | no, Wave 0 |
-| LOCK-06 | anonymous admin gets the proof button even in AnonAdmin mode; tapper named | integration | `... -run '^TestLockdownAnonymousAdminProof$' ./alita/modules` | no, Wave 0 |
-| LOCK-06 | double `/unlockdown` lifts once | integration (concurrent) | `... -run '^TestUnlockdownLiftsOnce$' ./alita/modules` | no, Wave 0 |
-| LOCK-07 | exact restore of snapshot including pointer fields | integration | `... -run '^TestLockdownLiftRestoresExactSnapshot$' ./alita/modules` | no, Wave 0 |
-| LOCK-07 | hand edit replaced and reported; restore failure leaves locked, nobody unbanned | integration | `... -run '^TestLockdownLift(ManualChange\|RestoreFailure)$' ./alita/modules` | no, Wave 0 |
-| LOCK-07 | deliberate ban survives lift (replaced `until_date`, left, member) | unit + integration | `... -run '^Test(IsLockdownBan\|LockdownLiftKeepsDeliberateBan)$' ./alita/modules` | no, Wave 0 |
-| LOCK-08 | unmute during lockdown uses snapshot for all four callers | integration | `... -run '^TestUnmuteDuringLockdownUsesSnapshot$' ./alita/modules` | no, Wave 0 (extend `chat_permissions_test.go` too) |
-| LOCK-09 | `/lockdown` starts, second `/lockdown` replies with existing, `/lockdownstatus` content | integration | `... -run '^TestLockdownCommand(Starts\|ReportsExisting)$\|^TestLockdownStatusCommand$' ./alita/modules` | no, Wave 0 |
-| LOCK-09 | refusals: bot lacks rights / permissions unreadable / basic group, nothing recorded | integration | `... -run '^TestLockdownRefusals$' ./alita/modules` | no, Wave 0 |
-| SETUP-08 (deferred part) | `/staff` row shows the marker; bot-missing locked group shown | unit (pure render) | `... -run '^TestRenderStaffRowLockdownMarker$' ./alita/modules` | no, Wave 0 |
-| D-05 / Pitfall 4 | staff timed `/ban` on a lockdown joiner re-issues the ban | unit (decision table) | `... -run '^TestDecideStaffBanLockdownJoiner$' ./alita/modules` | no, Wave 0 |
-| platform | migration chain, checksums | existing | `go test -tags testtools -race -count=1 -run '^TestRepositoryMigrationChain$' ./alita/db/migrations` | yes |
+| LOCK-06 | non-admin / admin without restrict refused; cache not used | integration | `... -run '^TestLockdownCommandsRefuseNonAuthority$' ./fuku/modules` | no, Wave 0 |
+| LOCK-06 | anonymous admin gets the proof button even in AnonAdmin mode; tapper named | integration | `... -run '^TestLockdownAnonymousAdminProof$' ./fuku/modules` | no, Wave 0 |
+| LOCK-06 | double `/unlockdown` lifts once | integration (concurrent) | `... -run '^TestUnlockdownLiftsOnce$' ./fuku/modules` | no, Wave 0 |
+| LOCK-07 | exact restore of snapshot including pointer fields | integration | `... -run '^TestLockdownLiftRestoresExactSnapshot$' ./fuku/modules` | no, Wave 0 |
+| LOCK-07 | hand edit replaced and reported; restore failure leaves locked, nobody unbanned | integration | `... -run '^TestLockdownLift(ManualChange\|RestoreFailure)$' ./fuku/modules` | no, Wave 0 |
+| LOCK-07 | deliberate ban survives lift (replaced `until_date`, left, member) | unit + integration | `... -run '^Test(IsLockdownBan\|LockdownLiftKeepsDeliberateBan)$' ./fuku/modules` | no, Wave 0 |
+| LOCK-08 | unmute during lockdown uses snapshot for all four callers | integration | `... -run '^TestUnmuteDuringLockdownUsesSnapshot$' ./fuku/modules` | no, Wave 0 (extend `chat_permissions_test.go` too) |
+| LOCK-09 | `/lockdown` starts, second `/lockdown` replies with existing, `/lockdownstatus` content | integration | `... -run '^TestLockdownCommand(Starts\|ReportsExisting)$\|^TestLockdownStatusCommand$' ./fuku/modules` | no, Wave 0 |
+| LOCK-09 | refusals: bot lacks rights / permissions unreadable / basic group, nothing recorded | integration | `... -run '^TestLockdownRefusals$' ./fuku/modules` | no, Wave 0 |
+| SETUP-08 (deferred part) | `/staff` row shows the marker; bot-missing locked group shown | unit (pure render) | `... -run '^TestRenderStaffRowLockdownMarker$' ./fuku/modules` | no, Wave 0 |
+| D-05 / Pitfall 4 | staff timed `/ban` on a lockdown joiner re-issues the ban | unit (decision table) | `... -run '^TestDecideStaffBanLockdownJoiner$' ./fuku/modules` | no, Wave 0 |
+| platform | migration chain, checksums | existing | `go test -tags testtools -race -count=1 -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations` | yes |
 | platform | all 7 locales carry new keys | script | `make check-translations` | yes |
 | platform | docs drift | script | `make check-docs` (after `make generate-docs`) | yes |
 
 ### Sampling Rate
 - **Per task commit:** the quick run command above (use `-run` with the touched test names for the 1-2 s warm loop).
-- **Per wave merge:** `go test -tags testtools -race -count=1 ./alita/db/... ./alita/modules/...` and `make check-translations`.
+- **Per wave merge:** `go test -tags testtools -race -count=1 ./fuku/db/... ./fuku/modules/...` and `make check-translations`.
 - **Phase gate:** `make test`, `make lint`, `make check-docs` green, plus the PostgreSQL test run locally, before `/gsd-verify-work`.
 
 ### Wave 0 Gaps
-- [ ] `alita/db/lockdown/testmain_test.go` and repository tests (SQLite harness via `testdb.Run`, tables `&models.ChatLockdown{}`, `&models.LockdownJoiner{}`).
-- [ ] Add both models to the `AutoMigrate` list in `alita/modules/test_harness_test.go` and `alita/db/testmain_test.go` (staff models sit at `alita/db/testmain_test.go:79-80`).
+- [ ] `fuku/db/lockdown/testmain_test.go` and repository tests (SQLite harness via `testdb.Run`, tables `&models.ChatLockdown{}`, `&models.LockdownJoiner{}`).
+- [ ] Add both models to the `AutoMigrate` list in `fuku/modules/test_harness_test.go` and `fuku/db/testmain_test.go` (staff models sit at `fuku/db/testmain_test.go:79-80`).
 - [ ] Extend `staffActionFake` (or add a sibling `lockdownFake` embedding it): `setChatPermissions` (store raw permissions, honour `use_independent_chat_permissions`), `getChat` returning the stored raw permissions JSON (today it marshals `chatPerms` typed values, `staff_action_fake_test.go:383-395`), `declineChatJoinRequest`, `deleteMessage`, `getChatMember` for a kicked member echoing `until_date`, scripted errors per method (already supported by `scripted`).
 - [ ] Test helper `lockdownEnv` (dispatcher with Lockdown + Greetings + Captcha + AntiRaid + Staff loaded, miniredis, installed fast `lockdownPacer`, deterministic clock hooks for the worker tick).
 - [ ] Lockdown cases in `chat_permissions_test.go` (the existing parallel pure cases stay on `Id == 0`).
@@ -579,7 +579,7 @@ Note: the first `-race` test build in this sandbox took about 2.5 minutes cold; 
 | ASVS Category | Applies | Standard Control |
 |---------------|---------|-----------------|
 | V2 Authentication | no | Telegram identity; no credentials added |
-| V3 Session Management | no | Callback/anon-proof state is existing (`alita:anonAdmin:*`, 5-minute cache) |
+| V3 Session Management | no | Callback/anon-proof state is existing (`fuku:anonAdmin:*`, 5-minute cache) |
 | V4 Access Control | yes | Live `getChatMember` per command and per performer; never admin cache, never `tgAdminList`; anonymous admins prove identity; lockdown and unlock are per-chat, keyed by `chat_id` taken from the update's chat |
 | V5 Input Validation | yes | Reason capped (300 runes) and HTML-escaped; names spliced after translation; no callback data in this phase |
 | V6 Cryptography | no | none |
@@ -619,8 +619,8 @@ Note: the first `-race` test build in this sandbox took about 2.5 minutes cold; 
 
 ### Primary (HIGH confidence)
 - gotgbot v2 module source, `v2@v2.0.0-rc.36.0.20260919140833-240296efadb4`: `gen_types.go` (ChatPermissions 2719-2752, ChatMemberUpdated 2644-2661, ChatMemberBanned 2362-2367, ChatMemberRestricted 2545+, ChatFullInfo 1723-1725, ChatJoinRequest 1987-2002), `gen_methods.go` (SetChatPermissions 7181-7220, BanChatMemberOpts 419-422, UnbanChatMember 8302-8304, RestrictChatMember 4641-4643, DeclineChatJoinRequest 1057-1059, GetChat 2822-2838), `request.go` (getFieldContents 268-325), `ext/dispatcher.go` (iterateOverHandlerGroups 270-320), `ext/handlers/message.go` (AllowBot).
-- Repository files read this session: `alita/modules/chat_permissions.go`, `antiraid.go`, `greetings.go`, `membership.go`, `mute.go`, `bans.go`, `captcha.go`, `bot_updates.go`, `moderation.go`, `staff_action_run.go`, `staff_action_decide.go`, `staff_panel.go`, `staff_watchers.go`, `staff_sweeper.go`, `anonymous_admin_router.go`, `users.go`, `federations.go`; `alita/utils/ratelimit/telegram_pacer.go`; `alita/utils/chat_status/{chat_status,access,owner}.go`; `alita/utils/helpers/command_pipeline.go`; `alita/db/cache/{loader,local}.go`; `alita/db/staff/{repository,actions}.go`; `alita/db/models/{staff,staff_action,channels}.go`; `main.go`; `alita/utils/shutdown/graceful.go`; `migrations/20261005120000_add_staff_actions.sql`, `20260730010000_enforce_channel_username_ownership.sql`; `.planning/research/{ARCHITECTURE,PITFALLS}.md` sections named in CONTEXT; `.planning/{REQUIREMENTS,STATE,config}`, `AGENTS.md`.
-- Observed in this session: `go test -tags testtools -race -count=1 -run '^TestResolveUnmutePermissions' ./alita/modules` passed (cold build 2m26s).
+- Repository files read this session: `fuku/modules/chat_permissions.go`, `antiraid.go`, `greetings.go`, `membership.go`, `mute.go`, `bans.go`, `captcha.go`, `bot_updates.go`, `moderation.go`, `staff_action_run.go`, `staff_action_decide.go`, `staff_panel.go`, `staff_watchers.go`, `staff_sweeper.go`, `anonymous_admin_router.go`, `users.go`, `federations.go`; `fuku/utils/ratelimit/telegram_pacer.go`; `fuku/utils/chat_status/{chat_status,access,owner}.go`; `fuku/utils/helpers/command_pipeline.go`; `fuku/db/cache/{loader,local}.go`; `fuku/db/staff/{repository,actions}.go`; `fuku/db/models/{staff,staff_action,channels}.go`; `main.go`; `fuku/utils/shutdown/graceful.go`; `migrations/20261005120000_add_staff_actions.sql`, `20260730010000_enforce_channel_username_ownership.sql`; `.planning/research/{ARCHITECTURE,PITFALLS}.md` sections named in CONTEXT; `.planning/{REQUIREMENTS,STATE,config}`, `AGENTS.md`.
+- Observed in this session: `go test -tags testtools -race -count=1 -run '^TestResolveUnmutePermissions' ./fuku/modules` passed (cold build 2m26s).
 
 ### Secondary (MEDIUM confidence)
 - WebSearch result pages (aiogram, python-telegram-bot docs) restating `via_join_request`; they do not state who `from` is on an approval.

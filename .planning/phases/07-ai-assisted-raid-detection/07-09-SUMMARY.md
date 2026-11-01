@@ -30,14 +30,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_ai_breaker.go
-    - alita/modules/raid_ai_budget_test.go
+    - fuku/modules/raid_ai_breaker.go
+    - fuku/modules/raid_ai_budget_test.go
   modified:
-    - alita/modules/raid_ai_image.go
-    - alita/modules/raid_ai.go
-    - alita/modules/raid_ai_breaker_test.go
-    - alita/modules/raid_ai_media_test.go
-    - alita/modules/raid_ai_text_test.go
+    - fuku/modules/raid_ai_image.go
+    - fuku/modules/raid_ai.go
+    - fuku/modules/raid_ai_breaker_test.go
+    - fuku/modules/raid_ai_media_test.go
+    - fuku/modules/raid_ai_text_test.go
     - AGENTS.md
 
 key-decisions:
@@ -60,7 +60,7 @@ status: complete
 
 ## Accomplishments
 
-- Before any download or Gemini call an image job passes the album gate (`alita:raid:{<chat>}:ag:<media_group_id>`, SET NX EX 120), the fire-latch skip (EXISTS on the chat's fire key), the verdict cache (`alita:raid:aiv:<file_unique_id>`, 1 h, verdicts only), the breakers, and the hourly budgets (`alita:raid:{<chat>}:ab:<yyyymmddhh>` and `alita:raid:aibudget:<yyyymmddhh>`, INCR with a 2 h expiry).
+- Before any download or Gemini call an image job passes the album gate (`fuku:raid:{<chat>}:ag:<media_group_id>`, SET NX EX 120), the fire-latch skip (EXISTS on the chat's fire key), the verdict cache (`fuku:raid:aiv:<file_unique_id>`, 1 h, verdicts only), the breakers, and the hourly budgets (`fuku:raid:{<chat>}:ab:<yyyymmddhh>` and `fuku:raid:aibudget:<yyyymmddhh>`, INCR with a 2 h expiry).
 - Each refusal is no verdict and is counted: `RaidAIStats.Capped` (budget) and `RaidAIStats.Cached` (cache hit, album drop, latch skip); a paused check is `Shed`. A cached verdict is judged against the same bar and recorded like a fresh one but is not `Checked`.
 - `raid_ai_breaker.go`: five Gemini failures pause one group's image checks for 5 minutes; a rejected key pauses every group for 5 minutes; a 429 with a retry delay over 2 s pauses every group for that delay (at most 5 minutes). One warning per pause, no notice anywhere. Download and getFile failures never count.
 - AGENTS.md documents the key families, the guard order, the counters and the breakers in the same commits as the code.
@@ -76,11 +76,11 @@ status: complete
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestRaidAIBreaker|TestRaidAIBudget|TestRaidAIMedia|TestRaidAISecretsNeverLogged)$' ./alita/modules`: pass.
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown' ./alita/modules`: pass (about 154 s).
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/utils/gemini`, `gofmt -l alita`: clean. `git diff --exit-code go.mod go.sum`: unchanged (`golang.org/x/sync/singleflight` was already a dependency).
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestRaidAIBreaker|TestRaidAIBudget|TestRaidAIMedia|TestRaidAISecretsNeverLogged)$' ./fuku/modules`: pass.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown' ./fuku/modules`: pass (about 154 s).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/utils/gemini`, `gofmt -l fuku`: clean. `git diff --exit-code go.mod go.sum`: unchanged (`golang.org/x/sync/singleflight` was already a dependency).
 - `make lint` was NOT run: golangci-lint is built with Go 1.25 against the module's Go 1.26. `go vet` and `gofmt` stand in for it.
-- Acceptance greps: `raidAIChatHourlyBudget` 2, `raidAIGlobalHourlyBudget` 2, `alita:raid:aiv:` 1, `alita:raid:aibudget:` 1 in `raid_ai_image.go`; both key families in AGENTS.md; `func raidAIGeminiPaused(` 1, `KeyRejected()` 1, `raidAIGeminiPaused(` in `raid_ai_image.go` 1; AGENTS.md matches provider-wide/pauses all chats 3 times.
+- Acceptance greps: `raidAIChatHourlyBudget` 2, `raidAIGlobalHourlyBudget` 2, `fuku:raid:aiv:` 1, `fuku:raid:aibudget:` 1 in `raid_ai_image.go`; both key families in AGENTS.md; `func raidAIGeminiPaused(` 1, `KeyRejected()` 1, `raidAIGeminiPaused(` in `raid_ai_image.go` 1; AGENTS.md matches provider-wide/pauses all chats 3 times.
 - The full `make test` and the PostgreSQL-only tests were not run here (the orchestrator runs `make test` after the wave; PostgreSQL is never started in this environment). Nothing in this plan touches PostgreSQL.
 
 ## Deviations from Plan
@@ -91,20 +91,20 @@ status: complete
 - **Found during:** Task 1 design
 - **Issue:** The verdict cache alone leaves a window: four workers can pick up three posts of the same sticker before the first verdict is stored, so a flood of one image would still make one Gemini call per worker. That breaks the must-have "the same image is judged once an hour" under exactly the threat T-07-33 names.
 - **Fix:** `raidAIImageFlight`, a `singleflight.Group` keyed by `file_unique_id`, around the verdict step (cache, breaker, budget, download, call). Followers reuse the answer and count as Cached.
-- **Files modified:** alita/modules/raid_ai_image.go, AGENTS.md, test `the same image at the same moment is judged once`
+- **Files modified:** fuku/modules/raid_ai_image.go, AGENTS.md, test `the same image at the same moment is judged once`
 - **Commit:** 8e57936
 
 **2. [Rule 1 - Bug in tests] Two 07-08 media tests posted the same image twice**
 - **Found during:** Task 1 verify (`a deprecated model warns once`, `the raid image path never acts`)
 - **Issue:** Both sent `photoSizes()` (one `file_unique_id`) twice and expected two Gemini requests. That is the case the new cache exists for.
 - **Fix:** they send two different images (`photoNamed`). The assertions are unchanged.
-- **Files modified:** alita/modules/raid_ai_media_test.go
+- **Files modified:** fuku/modules/raid_ai_media_test.go
 - **Commit:** 8e57936
 
 **3. [Rule 3 - Blocking] Breaker state leaked between tests**
 - **Found during:** Task 2 verify: `TestRaidAISecretsNeverLogged` failed when run after the breaker tests (a rejected-key pause outlived its test).
 - **Fix:** `newRaidAIImageEnv` calls `resetRaidAIGeminiBreakers(t)`, which clears the breakers and the provider pause now and at cleanup.
-- **Files modified:** alita/modules/raid_ai_media_test.go
+- **Files modified:** fuku/modules/raid_ai_media_test.go
 - **Commit:** f230ab4
 
 **4. [Process] RED commits carry compile scaffolding**

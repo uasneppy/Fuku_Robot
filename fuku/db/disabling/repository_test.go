@@ -1,0 +1,223 @@
+package disabling
+
+import (
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+)
+
+func skipIfNoDb(t *testing.T) {
+	if db.DB == nil {
+		t.Fatal("test database was not initialized")
+	}
+}
+
+func TestDisableCommand(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano()
+	cmd := "start"
+
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ? AND command = ?", chatID, cmd).Delete(&models.DisableSettings{})
+	})
+
+	if err := DisableCMD(chatID, cmd); err != nil {
+		t.Fatalf("DisableCMD() error = %v", err)
+	}
+
+	cmds := GetChatDisabledCMDs(chatID)
+	if !slices.Contains(cmds, cmd) {
+		t.Fatalf("expected command %q in disabled list, got %v", cmd, cmds)
+	}
+}
+
+func TestEnableCommand(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano() + 1000
+	cmd := "help"
+
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ? AND command = ?", chatID, cmd).Delete(&models.DisableSettings{})
+	})
+
+	if err := DisableCMD(chatID, cmd); err != nil {
+		t.Fatalf("DisableCMD() error = %v", err)
+	}
+
+	if err := EnableCMD(chatID, cmd); err != nil {
+		t.Fatalf("EnableCMD() error = %v", err)
+	}
+
+	cmds := GetChatDisabledCMDs(chatID)
+	if slices.Contains(cmds, cmd) {
+		t.Fatalf("command %q should have been enabled, but still found in disabled list", cmd)
+	}
+}
+
+func TestIsCommandDisabled(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano() + 2000
+	cmd := "ban"
+
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ? AND command = ?", chatID, cmd).Delete(&models.DisableSettings{})
+	})
+
+	if IsCommandDisabled(chatID, cmd) {
+		t.Fatal("expected IsCommandDisabled=false before disabling")
+	}
+
+	if err := DisableCMD(chatID, cmd); err != nil {
+		t.Fatalf("DisableCMD() error = %v", err)
+	}
+
+	if !IsCommandDisabled(chatID, cmd) {
+		t.Fatal("expected IsCommandDisabled=true after disabling")
+	}
+}
+
+func TestGetDisabledCommands(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano() + 3000
+	cmds := []string{"cmd1", "cmd2", "cmd3"}
+
+	t.Cleanup(func() {
+		for _, c := range cmds {
+			db.DB.Where("chat_id = ? AND command = ?", chatID, c).Delete(&models.DisableSettings{})
+		}
+	})
+
+	for _, c := range cmds {
+		if err := DisableCMD(chatID, c); err != nil {
+			t.Fatalf("DisableCMD(%q) error = %v", c, err)
+		}
+	}
+
+	got := GetChatDisabledCMDs(chatID)
+	if len(got) != len(cmds) {
+		t.Fatalf("expected %d disabled commands, got %d: %v", len(cmds), len(got), got)
+	}
+
+	gotSet := make(map[string]bool, len(got))
+	for _, g := range got {
+		gotSet[g] = true
+	}
+	for _, c := range cmds {
+		if !gotSet[c] {
+			t.Fatalf("command %q not found in disabled list %v", c, got)
+		}
+	}
+}
+
+func TestToggleDeleteEnabled_ZeroValueBoolean(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano() + 4000
+
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ?", chatID).Delete(&models.DisableChatSettings{})
+	})
+
+	if err := ToggleDel(chatID, true); err != nil {
+		t.Fatalf("ToggleDel(true) error = %v", err)
+	}
+	if !ShouldDel(chatID) {
+		t.Fatal("expected ShouldDel=true after ToggleDel(true)")
+	}
+
+	if err := ToggleDel(chatID, false); err != nil {
+		t.Fatalf("ToggleDel(false) error = %v", err)
+	}
+	if ShouldDel(chatID) {
+		t.Fatal("expected ShouldDel=false after ToggleDel(false)")
+	}
+}
+
+func TestDisableNonExistentCommand(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano() + 5000
+	cmd := "nonexistent_cmd_xyz"
+
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ? AND command = ?", chatID, cmd).Delete(&models.DisableSettings{})
+	})
+
+	if err := DisableCMD(chatID, cmd); err != nil {
+		t.Fatalf("DisableCMD() on nonexistent command error = %v", err)
+	}
+
+	if !IsCommandDisabled(chatID, cmd) {
+		t.Fatal("expected IsCommandDisabled=true after DisableCMD")
+	}
+}
+
+func TestLoadDisableStats(t *testing.T) {
+	skipIfNoDb(t)
+
+	disabledCmds, disableEnabledChats := LoadDisableStats()
+	if disabledCmds < 0 {
+		t.Fatalf("LoadDisableStats() disabledCmds=%d, want >= 0", disabledCmds)
+	}
+	if disableEnabledChats < 0 {
+		t.Fatalf("LoadDisableStats() disableEnabledChats=%d, want >= 0", disableEnabledChats)
+	}
+}
+
+func TestGetDisableSettings_Defaults(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano() + 6000
+
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ?", chatID).Delete(&models.DisableChatSettings{})
+	})
+
+	if ShouldDel(chatID) {
+		t.Fatal("expected ShouldDel=false for new chat")
+	}
+}
+
+func TestDisableSameCommandTwice(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano() + 8000
+	cmd := "start"
+
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ? AND command = ?", chatID, cmd).Delete(&models.DisableSettings{})
+	})
+
+	// Disable "start" twice -- DisableCMD uses ON CONFLICT DO NOTHING, so the
+	// second call is a no-op (no duplicate row, no error). The important
+	// invariant is that IsCommandDisabled returns true and exactly one row
+	// exists in the list.
+	if err := DisableCMD(chatID, cmd); err != nil {
+		t.Fatalf("DisableCMD() first call error = %v", err)
+	}
+	if err := DisableCMD(chatID, cmd); err != nil {
+		t.Fatalf("DisableCMD() second call error = %v", err)
+	}
+
+	if !IsCommandDisabled(chatID, cmd) {
+		t.Fatalf("IsCommandDisabled() = false after two DisableCMD calls, want true")
+	}
+
+	cmds := GetChatDisabledCMDs(chatID)
+	var count int
+	for _, c := range cmds {
+		if c == cmd {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("DisableCMD() twice: command %q appears %d times, want 1; list: %v", cmd, count, cmds)
+	}
+}

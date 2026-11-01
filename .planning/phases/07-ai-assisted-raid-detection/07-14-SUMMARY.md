@@ -30,13 +30,13 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_ai_pool_test.go
+    - fuku/modules/raid_ai_pool_test.go
   modified:
-    - alita/modules/raid_ai.go
-    - alita/modules/raid_ai_count.go
-    - alita/modules/shutdown_drains.go
+    - fuku/modules/raid_ai.go
+    - fuku/modules/raid_ai_count.go
+    - fuku/modules/shutdown_drains.go
     - main.go
-    - alita/modules/raid_ai_burst_test.go
+    - fuku/modules/raid_ai_burst_test.go
     - AGENTS.md
 
 key-decisions:
@@ -56,7 +56,7 @@ coverage:
     requirement: RAID-05
     verification:
       - kind: unit
-        ref: "alita/modules/raid_ai_pool_test.go#TestRaidAIPool/a_lockdown_start_runs_off_the_worker and the_/aispam_worker_is_not_held_either"
+        ref: "fuku/modules/raid_ai_pool_test.go#TestRaidAIPool/a_lockdown_start_runs_off_the_worker and the_/aispam_worker_is_not_held_either"
         status: pass
     human_judgment: false
   - id: D2
@@ -64,7 +64,7 @@ coverage:
     requirement: RAID-05
     verification:
       - kind: unit
-        ref: "alita/modules/raid_ai_pool_test.go#TestRaidAIPool/bounded_and_shed and a_panicking_job_is_recovered"
+        ref: "fuku/modules/raid_ai_pool_test.go#TestRaidAIPool/bounded_and_shed and a_panicking_job_is_recovered"
         status: pass
     human_judgment: false
   - id: D3
@@ -72,7 +72,7 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: unit
-        ref: "alita/modules/raid_ai_pool_test.go#TestRaidAIPool/the_drain_cancels_and_returns and the_drain_waits_for_a_lockdown_start"
+        ref: "fuku/modules/raid_ai_pool_test.go#TestRaidAIPool/the_drain_cancels_and_returns and the_drain_waits_for_a_lockdown_start"
         status: pass
     human_judgment: false
   - id: D4
@@ -122,10 +122,10 @@ None that change behaviour. Two sequencing notes:
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestRaidAIPool$' -v ./alita/modules`: all six subtests PASS, including `bounded_and_shed`.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestRaidAIPool$' -v ./fuku/modules`: all six subtests PASS, including `bounded_and_shed`.
 - Task 1 focused set (`TestRaidAIPool|TestRaidAIBurstFires|TestRaidAIAlert|TestRaidAIBurstSettings|TestRaidAISpamSharesVerdict|TestRaidAICandidateText`): PASS.
-- Plan-level `-run 'AISpam|Raid|Lockdown|Unlockdown|Shutdown' ./alita/modules` with `-race`: ok (145 s).
-- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./alita/modules .`: clean. `gofmt -l alita/modules main.go`: prints nothing. `git diff --exit-code go.mod go.sum`: unchanged.
+- Plan-level `-run 'AISpam|Raid|Lockdown|Unlockdown|Shutdown' ./fuku/modules` with `-race`: ok (145 s).
+- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./fuku/modules .`: clean. `gofmt -l fuku/modules main.go`: prints nothing. `git diff --exit-code go.mod go.sum`: unchanged.
 - `main.go` changed: binary built to the scratchpad and `--version` run from `/tmp` printed `v2.23.14`.
 - Acceptance greps: `func raidAIFireAsync(` 1, `raidAIFireAsync(` 2, `RecoverFromPanic` in `raid_ai_count.go` 1, `raidAIFires` in AGENTS.md 1+, `func StopRaidAI(` 1, `func raidAIContext(` 1, `func RegisterRaidAIDrain(` 1, `raidAIStopWait+shutdownDrainGrace` 1, `StopRaidAI` in AGENTS.md 3, main.go line order 221 < 226 < 230.
 - `make lint` was not run: golangci-lint is built with Go 1.25 against the module's Go 1.26. `go vet` and `gofmt` stand in for it.
@@ -146,5 +146,5 @@ None. The plan's threats are mitigated as registered: T-07-24 (drain cancels fir
 
 ## Self-Check: PASSED
 
-- Files exist: `alita/modules/raid_ai_pool_test.go`, `alita/modules/raid_ai.go`, `alita/modules/raid_ai_count.go`, `alita/modules/shutdown_drains.go`, `main.go`.
+- Files exist: `fuku/modules/raid_ai_pool_test.go`, `fuku/modules/raid_ai.go`, `fuku/modules/raid_ai_count.go`, `fuku/modules/shutdown_drains.go`, `main.go`.
 - Commits `1575625`, `d336df7`, `2809f30`, `d2ea39c` exist on the branch.

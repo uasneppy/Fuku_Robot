@@ -21,14 +21,14 @@ status: all_fixed
 - Skipped: 0
 
 Verification ran in the main checkout (no worktree, as instructed). `CGO_ENABLED=0 go build ./...` and
-`go vet -tags testtools ./...` are clean. `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/modules ./alita/db/... .`
+`go vet -tags testtools ./...` are clean. `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/... .`
 passes. `make check-translations` and `make check-docs` are clean. `make lint` and `make test` were not run (as instructed).
 
 ## Fixed Issues
 
 ### WR-01: Any slash-prefixed text is exempt from flood counting
 
-**Files modified:** `alita/modules/raid_flood.go`, `alita/modules/lockdown.go`, `alita/modules/raid_flood_test.go`, `AGENTS.md`,
+**Files modified:** `fuku/modules/raid_flood.go`, `fuku/modules/lockdown.go`, `fuku/modules/raid_flood_test.go`, `AGENTS.md`,
 `.planning/phases/06-automatic-raid-detection/06-WR01-wip.patch` (deleted, not applied)
 **Commit:** 9b150e7
 **Applied fix:** Uses gotgbot's dispatch order, no reflect, no unsafe, no second list of command names. A handled command
@@ -37,7 +37,7 @@ group `-4` watcher now counts everything except a slash-prefixed text, and a new
 handler; `raidFloodLateGroup`) counts the slash-prefixed texts that reach it. Both call one function,
 `raidFloodCountUpdate(b, ctx, late)`, so classification, exemptions, Lua script and `raidFire` are a single code path.
 `raidFloodItemKey` now returns `(key, slash, ok)`. Regression tests added: 30 `"/x spam"` items lock; 30
-`/lockdownstatus` items do not (and count nothing); `/lockdownstatus@AlitaTestBot` does not count; `/start@otherbot` and
+`/lockdownstatus` items do not (and count nothing); `/lockdownstatus@FukuTestBot` does not count; `/start@otherbot` and
 `/////` count; 15 plain texts at `-4` plus 15 slash texts late add up to one total of 30; an admin's slash texts never
 count late. AGENTS.md handler-group list and flood bullet state the rule and the late group.
 
@@ -49,7 +49,7 @@ All other lockdown tests pass unchanged.
 **Audit of EndGroups on every path (reported as asked):**
 - `WrapCommand` returns `ext.EndGroups` on a failed `BuildCommandContext` and on every failed `RequiredChecks`
   (including refusals); on success it returns whatever the handler returns.
-- A static scan (go/ast) of all ~200 functions in `alita/modules` with a command signature found no direct `return nil`.
+- A static scan (go/ast) of all ~200 functions in `fuku/modules` with a command signature found no direct `return nil`.
   Many return `err` after a failed Telegram call or DB write. `main.go`'s `dispatcherErrorHandler` maps every non-EndGroups
   error to `DispatcherActionNoop`, which moves on to the next group. So a handled command that fails with an error, and a
   handler that panics (recovered, returns nil), still reaches group 12 and its text is counted late. This only raises
@@ -60,7 +60,7 @@ All other lockdown tests pass unchanged.
 
 ### WR-02: The once-a-day "can't lock" warning gate is burned before anything is delivered
 
-**Files modified:** `alita/modules/raid_trigger.go`, `alita/modules/raid_notice_test.go`, `AGENTS.md`
+**Files modified:** `fuku/modules/raid_trigger.go`, `fuku/modules/raid_notice_test.go`, `AGENTS.md`
 **Commit:** 0dbcb7e
 **Applied fix:** `raidWarnCannotLock` resolves the Staff Group link and the log destination first and returns without
 touching the gate when there is none. Then it takes `SET NX`, sends the copies and counts deliveries; with none
@@ -70,9 +70,9 @@ sends failing releases the gate and the next trigger warns both; one delivered c
 
 ### WR-03: The public notice and warning posts block the join guard and the message pipeline
 
-**Files modified:** `alita/modules/raid_trigger.go`, `alita/modules/shutdown_drains.go`, `main.go`,
-`alita/modules/raid_post_async_test.go` (new), `alita/modules/shutdown_drains_test.go`, `alita/modules/lockdown_fake_test.go`,
-`alita/modules/lockdown_alert_test.go`, `alita/modules/staff_action_fake_test.go`, `alita/modules/test_harness_test.go`, `AGENTS.md`
+**Files modified:** `fuku/modules/raid_trigger.go`, `fuku/modules/shutdown_drains.go`, `main.go`,
+`fuku/modules/raid_post_async_test.go` (new), `fuku/modules/shutdown_drains_test.go`, `fuku/modules/lockdown_fake_test.go`,
+`fuku/modules/lockdown_alert_test.go`, `fuku/modules/staff_action_fake_test.go`, `fuku/modules/test_harness_test.go`, `AGENTS.md`
 **Commit:** b05412b
 **Applied fix:** The lock stays synchronous. `raidPostNotice` and `raidWarnCannotLock` now run through `raidPostAsync`, a
 goroutine that starts with `defer error_handling.RecoverFromPanic(...)` and is counted in `raidPosts`; each send keeps
@@ -86,9 +86,9 @@ and the 30th flood message returns while the notice send is blocked, that the wa
 `StopRaidPosts` times out while a send is held and reports done after, that a panicking post is recovered and counted
 done, and that a real `shutdown.Manager` run delivers the notice before the DB-close probe.
 
-### IN-01: Dead production code left in `alita/db/antiraid`
+### IN-01: Dead production code left in `fuku/db/antiraid`
 
-**Files modified:** `alita/db/antiraid/*` (package deleted), `alita/db/backup/backup_test.go`, `alita/db/cache/ttl.go`, `AGENTS.md`
+**Files modified:** `fuku/db/antiraid/*` (package deleted), `fuku/db/backup/backup_test.go`, `fuku/db/cache/ttl.go`, `AGENTS.md`
 **Commit:** 929c2d2
 **Applied fix:** No production code called anything in the package (grep confirmed; the backup module reads and resets
 `antiraid_settings` through `models.AntiRaidSettings` directly), so the whole package and its tests were removed,
@@ -97,7 +97,7 @@ its row with `db.DB.Create` and reads it back directly. The table and model stay
 
 ### IN-02: The settings cache module name is a literal in three places
 
-**Files modified:** `alita/db/raiddetection/repository.go`, `alita/db/cache/local_test.go`
+**Files modified:** `fuku/db/raiddetection/repository.go`, `fuku/db/cache/local_test.go`
 **Commit:** 2a8b610
 **Applied fix:** `upsertSettings` uses `cacheModule`. Added `TestSkipLocalRaidDetectionSettingsKey` (`skipLocal` is true for
 `CacheKey("raid_detection", 1)` and a real chat ID). The `skipLocal` prefix in `cache/local.go` stays a literal, because
@@ -115,14 +115,14 @@ stay under it (about 4052 and 4065 with the header).
 
 ### IN-04: The settings and Redis preamble is duplicated in the two join counters
 
-**Files modified:** `alita/modules/raid_join.go`
+**Files modified:** `fuku/modules/raid_join.go`
 **Commit:** 40a383c
 **Applied fix:** Extracted `raidJoinSettings(chat)` (supergroup, Redis, bounded settings read, any trigger on) and call it
 from both counters; nil checks and their order are unchanged. Existing join-surge tests cover it.
 
 ### IN-05: `/autolockdown` reads settings with an unbounded `context.Background()`
 
-**Files modified:** `alita/modules/autolockdown.go`, `alita/modules/raid_join.go` (comment), `alita/modules/autolockdown_test.go`
+**Files modified:** `fuku/modules/autolockdown.go`, `fuku/modules/raid_join.go` (comment), `fuku/modules/autolockdown_test.go`
 **Commit:** 40a383c (same commit as IN-04, as a closely related pair)
 **Applied fix:** Both reads go through `autolockdownReadSettings`, which uses `context.WithTimeout(..., raidSettingsTimeout)`
 and the existing `raidSettingsLookup` seam. A test checks that the view and the readback after a save each get a

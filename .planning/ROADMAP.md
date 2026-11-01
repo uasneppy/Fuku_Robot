@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fuku Robot turns the Alita Robot fork into a GroupHelp-style bot for the owner's own communities, in the owner's priority order. First comes the Staff Group. Owners link their groups to one staff room (Phase 1). Staff then act on a bad actor in every linked group at once, behind a Confirm tap and live per-group admin checks (Phase 2), and every action becomes logged and reversible (Phase 3). Raid protection comes next: a durable lockdown that only an admin can lift (Phase 4), alerts with one-tap responses (Phase 5), rule-based auto-triggers that replace the old `/antiraid` (Phase 6), and AI that helps the rules without ever deciding alone (Phase 7). Then a Cloudflare Turnstile captcha served as a Telegram Mini App (Phase 8). Last, an inline settings menu brings it all together (Phase 9). Every phase ships an end-to-end slice the owner can try in real groups.
+Fuku Robot turns the Fuku Robot fork into a GroupHelp-style bot for the owner's own communities, in the owner's priority order. First comes the Staff Group. Owners link their groups to one staff room (Phase 1). Staff then act on a bad actor in every linked group at once, behind a Confirm tap and live per-group admin checks (Phase 2), and every action becomes logged and reversible (Phase 3). Raid protection comes next: a durable lockdown that only an admin can lift (Phase 4), alerts with one-tap responses (Phase 5), rule-based auto-triggers that replace the old `/antiraid` (Phase 6), and AI that helps the rules without ever deciding alone (Phase 7). Then a Cloudflare Turnstile captcha served as a Telegram Mini App (Phase 8). Last, an inline settings menu brings it all together (Phase 9). Every phase ships an end-to-end slice the owner can try in real groups.
 
 ## Cross-Cutting Constraints
 
@@ -329,7 +329,7 @@ Plans:
 Plans:
 **Wave 1**
 - [x] 07-01-PLAN.md: Tracer. Five /aispam spam verdicts from three accounts lock the group as `ai_burst` through `raidFire`; every trigger-kind surface names the AI trigger; the alert lists the accounts behind the verdicts
-- [x] 07-02-PLAN.md: The stdlib-only Gemini client (`alita/utils/gemini`): verified request, strict verdict, key-free errors, one retry within 2 s, leaf-package test
+- [x] 07-02-PLAN.md: The stdlib-only Gemini client (`fuku/utils/gemini`): verified request, strict verdict, key-free errors, one retry within 2 s, leaf-package test
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 07-03-PLAN.md: `GEMINI_API_KEY` and `GEMINI_MODEL` loaded, validated and registered with `logredact`; Google-key shape scrubbed; env docs with the paid-tier note

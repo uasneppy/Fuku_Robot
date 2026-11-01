@@ -33,14 +33,14 @@ key-files:
   created:
     - migrations/20261029120000_add_raid_detection_ai.sql
   modified:
-    - alita/db/models/raid_detection.go
-    - alita/db/raiddetection/repository.go
-    - alita/db/raiddetection/repository_test.go
-    - alita/db/raiddetection/stats_test.go
-    - alita/db/devs/repository_test.go
-    - alita/modules/raid_join_surge_test.go
-    - alita/modules/raid_ai_count.go
-    - alita/modules/raid_ai_burst_test.go
+    - fuku/db/models/raid_detection.go
+    - fuku/db/raiddetection/repository.go
+    - fuku/db/raiddetection/repository_test.go
+    - fuku/db/raiddetection/stats_test.go
+    - fuku/db/devs/repository_test.go
+    - fuku/modules/raid_join_surge_test.go
+    - fuku/modules/raid_ai_count.go
+    - fuku/modules/raid_ai_burst_test.go
     - AGENTS.md
 
 key-decisions:
@@ -57,7 +57,7 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/db/raiddetection/repository_test.go#TestRaidDetectionSettings"
+        ref: "fuku/db/raiddetection/repository_test.go#TestRaidDetectionSettings"
         status: pass
     human_judgment: false
   - id: D2
@@ -65,7 +65,7 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/db/raiddetection/repository_test.go#TestRaidDetectionStaleCacheDefaults"
+        ref: "fuku/db/raiddetection/repository_test.go#TestRaidDetectionStaleCacheDefaults"
         status: pass
     human_judgment: false
   - id: D3
@@ -73,7 +73,7 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAIBurstSettings"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAIBurstSettings"
         status: pass
     human_judgment: false
   - id: D4
@@ -100,7 +100,7 @@ status: complete
 
 ## Accomplishments
 
-- Migration `20261029120000_add_raid_detection_ai.sql` adds `ai_enabled BOOLEAN NOT NULL DEFAULT TRUE` and `ai_threshold INTEGER NOT NULL DEFAULT 5` with the named inline CHECK `chk_chat_raid_detection_ai`. It is the only file added to `migrations/`; `alita/db/migrations/runner.go` and `scripts/migrate_psql.sh` are unchanged.
+- Migration `20261029120000_add_raid_detection_ai.sql` adds `ai_enabled BOOLEAN NOT NULL DEFAULT TRUE` and `ai_threshold INTEGER NOT NULL DEFAULT 5` with the named inline CHECK `chk_chat_raid_detection_ai`. It is the only file added to `migrations/`; `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` are unchanged.
 - `raiddetection` gains `DefaultAIThreshold`, AI fields in `Defaults`, and `SetAIEnabled` / `SetAIThreshold` (column-targeted upserts through `upsertSettings`, so `cache.DeleteCache` follows every write; a threshold outside 3..500 returns `ErrThresholdOutOfRange` before any write; a threshold also turns the trigger on).
 - `GetSettings` now wraps the cache-or-load result and turns `AIThreshold == 0` into `(true, 5)`, so a deploy over the previous build's cache never reads the AI trigger as off (research Pitfall 1, T-07-14).
 - `raidAIRecordVerdict` reads the chat's settings through `raidSettingsLookup` under `raidSettingsTimeout` and judges `raidAICounts` with the chat's own `AIThreshold`; an off switch or an unreadable read counts nothing and writes nothing to Redis. `raidAIDefaultThreshold` is gone.
@@ -115,11 +115,11 @@ status: complete
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^(TestRaidDetectionSettings|TestRaidDetectionStaleCacheDefaults|TestLoadRaidDetectionStats)$' -v ./alita/db/raiddetection`: PASS (including `--- PASS: TestRaidDetectionStaleCacheDefaults`).
-- `go test -tags testtools -race -count=1 ./alita/db/devs ./alita/db/migrations`: ok.
-- `go test -tags testtools -race -count=1 -run '^(TestRaidAIBurstSettings|TestRaidAIBurstFires|TestRaidAIAlert)$' -v ./alita/modules`: PASS.
-- `go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown' ./alita/modules`: ok (130 s), also run after Task 1 with `Raid|AutoLockdown|Lockdown`: ok.
-- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./alita/db/... ./alita/modules`: clean. `gofmt -l alita/db alita/modules`: nothing.
+- `go test -tags testtools -race -count=1 -run '^(TestRaidDetectionSettings|TestRaidDetectionStaleCacheDefaults|TestLoadRaidDetectionStats)$' -v ./fuku/db/raiddetection`: PASS (including `--- PASS: TestRaidDetectionStaleCacheDefaults`).
+- `go test -tags testtools -race -count=1 ./fuku/db/devs ./fuku/db/migrations`: ok.
+- `go test -tags testtools -race -count=1 -run '^(TestRaidAIBurstSettings|TestRaidAIBurstFires|TestRaidAIAlert)$' -v ./fuku/modules`: PASS.
+- `go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown' ./fuku/modules`: ok (130 s), also run after Task 1 with `Raid|AutoLockdown|Lockdown`: ok.
+- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./fuku/db/... ./fuku/modules`: clean. `gofmt -l fuku/db fuku/modules`: nothing.
 - Acceptance criteria re-run for both tasks: migration is the last file by sort, 0 transaction statements, 2 `ADD COLUMN IF NOT EXISTS`, 1 `chk_chat_raid_detection_ai`, appliers unchanged, the migrations commit is a single `A` line, `func SetAIThreshold(` x1, `DefaultAIThreshold` x4, `20261029120000` in AGENTS.md, `raidSettingsLookup` and `AIThreshold` present and `raidAIDefaultThreshold` x0 in `raid_ai_count.go`.
 - `make lint` could not run (golangci-lint is built with Go 1.25, module is Go 1.26); `go vet -tags testtools` and `gofmt -l` stood in. The orchestrator runs the full `make test`.
 
@@ -137,7 +137,7 @@ None. T-07-14, T-07-15 and T-07-16 are mitigated as planned (stale-cache normali
 
 ## Pending Human Verification
 
-- PostgreSQL half not run here (PostgreSQL must not be started in this environment): the migration chain applying `20261029120000` and `make test-postgres-integrity`'s `TestRaidDetectionSettings` with its "a row written directly with ai_threshold 2 is refused by the database" subtest running against the real migration CHECK. On SQLite this subtest passes against the CHECK GORM builds from the model tag. `TestRaidDetectionCarryOver` (`./alita/db/migrations`) is also CI-only.
+- PostgreSQL half not run here (PostgreSQL must not be started in this environment): the migration chain applying `20261029120000` and `make test-postgres-integrity`'s `TestRaidDetectionSettings` with its "a row written directly with ai_threshold 2 is refused by the database" subtest running against the real migration CHECK. On SQLite this subtest passes against the CHECK GORM builds from the model tag. `TestRaidDetectionCarryOver` (`./fuku/db/migrations`) is also CI-only.
 - Live check: with a real bot, a group's stored `ai_threshold` change takes effect on the next `/aispam` delete verdict (the command that edits it is plan 07-07).
 
 ## Self-Check: PASSED

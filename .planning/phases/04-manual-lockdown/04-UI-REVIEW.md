@@ -134,11 +134,11 @@ Telegram has no colors, so status is carried by emoji and wording only.
 
 - `/home/user/Fuku_Robot/locales/en.yml` (lockdown keys at lines 1137, 1372, 2717, 2836–2884)
 - `/home/user/Fuku_Robot/locales/es.yml`, `fr.yml`, `hi.yml`, `id.yml`, `pt.yml`, `ru.yml` (key-count parity only: 41 keys each, same as en)
-- `/home/user/Fuku_Robot/alita/modules/lockdown.go` (start, refusal, lift and already-active replies; `lockdownText`; `telegramErrorDetail` use)
-- `/home/user/Fuku_Robot/alita/modules/lockdown_status.go` (status view)
-- `/home/user/Fuku_Robot/alita/modules/lockdown_worker.go` (lift tally, `CancelPending` at lift, failure list)
-- `/home/user/Fuku_Robot/alita/modules/greetings.go` (Accept alert, ~line 972)
-- `/home/user/Fuku_Robot/alita/modules/staff_action_run.go` (`telegramErrorDetail`)
+- `/home/user/Fuku_Robot/fuku/modules/lockdown.go` (start, refusal, lift and already-active replies; `lockdownText`; `telegramErrorDetail` use)
+- `/home/user/Fuku_Robot/fuku/modules/lockdown_status.go` (status view)
+- `/home/user/Fuku_Robot/fuku/modules/lockdown_worker.go` (lift tally, `CancelPending` at lift, failure list)
+- `/home/user/Fuku_Robot/fuku/modules/greetings.go` (Accept alert, ~line 972)
+- `/home/user/Fuku_Robot/fuku/modules/staff_action_run.go` (`telegramErrorDetail`)
 - `/home/user/Fuku_Robot/.planning/phases/04-manual-lockdown/04-01-SUMMARY.md` through `04-08-SUMMARY.md` (deviations scanned; no UI deviations recorded)
 - `/home/user/Fuku_Robot/.planning/phases/04-manual-lockdown/04-UAT.md` (UAT result: the permissions round trip passed on a real supergroup; no message-copy checks were in scope)
 - `/home/user/Fuku_Robot/.planning/phases/03-staff-audit-and-undo/03-UI-REVIEW.md` (tone and marker baseline)
@@ -153,7 +153,7 @@ Telegram has no colors, so status is carried by emoji and wording only.
 
 - An approve card is posted only for a request that arrived **before** the lockdown, because during a lockdown the guard (group -7) ends every `chat_join_request` update, so `pendingJoins` posts no card.
 - A request from before the lockdown has no joiner row, so the worker never declines it.
-- `lockdown.CancelPending` (`alita/db/lockdown/joiners.go:160`) only sets the state of joiner rows recorded **during** the lockdown to cancelled in the database. It makes no Telegram call, so the pre-lockdown request is still pending in Telegram after the lift.
+- `lockdown.CancelPending` (`fuku/db/lockdown/joiners.go:160`) only sets the state of joiner rows recorded **during** the lockdown to cancelled in the database. It makes no Telegram call, so the pre-lockdown request is still pending in Telegram after the lift.
 - "Approve it after /unlockdown, or from Telegram's own request list" is therefore accurate. Both routes were confirmed live in 04-UAT tests 5 and 8.
 - The help text's "people can ask again after the lift" refers to requests that arrived during the lockdown, which are declined. It does not contradict the alert.
 

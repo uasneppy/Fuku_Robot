@@ -12,7 +12,7 @@ provides:
   - "DB-driven lockdown worker (StartLockdownWorker / StopLockdownWorker) that bans recorded joiners through a fleet-wide pacer with a 330-day marker end date"
   - "Lift side: cancel pending joiners, unban only the lockdown's own bans (live kicked + ban_until within 2 s), keep every other status, post one tally naming anyone it could not unban"
   - "Joiner repository: JoinRecord, RecordJoin, ClaimJoiner, MoveJoiner, ListPendingFresh, DeletePendingJoin, CancelPending, ListJoinersInState, ListLiftingFresh"
-  - "5 locale keys in all 7 locale files and AGENTS.md rules (group -7, alita:lockdown:* keys, worker drain, guard and lift rules)"
+  - "5 locale keys in all 7 locale files and AGENTS.md rules (group -7, fuku:lockdown:* keys, worker drain, guard and lift rules)"
 affects: [04-04 (join service message, rejoin and cross-path rules in recordLockdownJoin), 04-05 (join requests: decline verdict), 04-06 (stale acting/unbanning claims), 04-08, phase 5 alert sample]
 
 actuals:
@@ -31,19 +31,19 @@ tech-stack:
 
 key-files:
   created:
-    - alita/db/lockdown/joiners.go
-    - alita/db/lockdown/joiners_test.go
-    - alita/db/lockdown/joiners_lift_test.go
-    - alita/modules/lockdown_guard.go
-    - alita/modules/lockdown_marker.go
-    - alita/modules/lockdown_worker.go
-    - alita/modules/lockdown_guard_test.go
-    - alita/modules/lockdown_guard_policy_test.go
-    - alita/modules/lockdown_lift_joiners_test.go
+    - fuku/db/lockdown/joiners.go
+    - fuku/db/lockdown/joiners_test.go
+    - fuku/db/lockdown/joiners_lift_test.go
+    - fuku/modules/lockdown_guard.go
+    - fuku/modules/lockdown_marker.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/modules/lockdown_guard_test.go
+    - fuku/modules/lockdown_guard_policy_test.go
+    - fuku/modules/lockdown_lift_joiners_test.go
   modified:
-    - alita/db/lockdown/repository.go
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_fake_test.go
+    - fuku/db/lockdown/repository.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_fake_test.go
     - main.go
     - locales/en.yml
     - locales/es.yml
@@ -80,7 +80,7 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_guard_test.go#TestLockdownGuardBansChatMemberJoin"
+        ref: "fuku/modules/lockdown_guard_test.go#TestLockdownGuardBansChatMemberJoin"
         status: pass
     human_judgment: true
     rationale: "Live join delivery and the effect of ext.EndGroups on real chat_member updates (D-03) are UAT items; the fake dispatcher proves the handler order, not Telegram's delivery"
@@ -89,13 +89,13 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_guard_test.go#TestLockdownWorkerStartStop"
+        ref: "fuku/modules/lockdown_guard_test.go#TestLockdownWorkerStartStop"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_guard_test.go#TestLockdownGuardBansAfterManualReopen"
+        ref: "fuku/modules/lockdown_guard_test.go#TestLockdownGuardBansAfterManualReopen"
         status: pass
       - kind: unit
-        ref: "alita/db/lockdown/joiners_test.go#TestJoinerClaims"
+        ref: "fuku/db/lockdown/joiners_test.go#TestJoinerClaims"
         status: pass
     human_judgment: false
   - id: D3
@@ -103,16 +103,16 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_guard_test.go#TestLockdownGuardIgnoresUnlockedChats"
+        ref: "fuku/modules/lockdown_guard_test.go#TestLockdownGuardIgnoresUnlockedChats"
         status: pass
       - kind: unit
-        ref: "alita/modules/lockdown_guard_policy_test.go#TestDecideLockdownJoin"
+        ref: "fuku/modules/lockdown_guard_policy_test.go#TestDecideLockdownJoin"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_guard_policy_test.go#TestLockdownGuardFailsOpenWhenTheRecordCannotBeWritten"
+        ref: "fuku/modules/lockdown_guard_policy_test.go#TestLockdownGuardFailsOpenWhenTheRecordCannotBeWritten"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_guard_policy_test.go#TestLockdownGuardWithdrawsAJoinerWhenTheLiftStarted"
+        ref: "fuku/modules/lockdown_guard_policy_test.go#TestLockdownGuardWithdrawsAJoinerWhenTheLiftStarted"
         status: pass
     human_judgment: false
   - id: D4
@@ -120,19 +120,19 @@ coverage:
     requirement: "LOCK-07"
     verification:
       - kind: unit
-        ref: "alita/modules/lockdown_lift_joiners_test.go#TestIsLockdownBan"
+        ref: "fuku/modules/lockdown_lift_joiners_test.go#TestIsLockdownBan"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_lift_joiners_test.go#TestLockdownLiftUnbansJoiners"
+        ref: "fuku/modules/lockdown_lift_joiners_test.go#TestLockdownLiftUnbansJoiners"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_lift_joiners_test.go#TestLockdownLiftKeepsDeliberateBan"
+        ref: "fuku/modules/lockdown_lift_joiners_test.go#TestLockdownLiftKeepsDeliberateBan"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_lift_joiners_test.go#TestLockdownLiftCancelsPending"
+        ref: "fuku/modules/lockdown_lift_joiners_test.go#TestLockdownLiftCancelsPending"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_lift_joiners_test.go#TestLockdownLiftNoJoiners"
+        ref: "fuku/modules/lockdown_lift_joiners_test.go#TestLockdownLiftNoJoiners"
         status: pass
     human_judgment: true
     rationale: "Research A2: getChatMember is assumed to report until_date as sent; the 2 s tolerance covers rounding, but a real answer must be saved as a fixture (UAT item below)"
@@ -141,10 +141,10 @@ coverage:
     requirement: "LOCK-01"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_lift_joiners_test.go#TestLockdownLiftUnbanFailureListed"
+        ref: "fuku/modules/lockdown_lift_joiners_test.go#TestLockdownLiftUnbanFailureListed"
         status: pass
       - kind: integration
-        ref: "alita/db/lockdown/joiners_lift_test.go#TestCancelPendingAndListJoinersInState"
+        ref: "fuku/db/lockdown/joiners_lift_test.go#TestCancelPendingAndListJoinersInState"
         status: pass
     human_judgment: false
   - id: D6
@@ -176,7 +176,7 @@ coverage:
 ## Accomplishments
 
 - Anyone who joins a confirmed locked group through a `chat_member` update is recorded (`pending`, `member` path, invite link, raw name and username, performer, `ban_until` = now + 330 days) before any ban, and update handling ends: no welcome, no captcha challenge, no captcha attempt, no restriction. The control in `TestLockdownGuardBansChatMemberJoin` proves a join before the lockdown does get a welcome or challenge.
-- The worker (`StartLockdownWorker`, started in `postInit`; `StopLockdownWorker` registered after the DB-close handler so LIFO stops it first) bans each pending joiner once, through the `alita:lockdown:pace:*` pacer, with `until_date` = the row's `ban_until`. It claims rows with conditional updates, so any replica can run it and a restart only resumes.
+- The worker (`StartLockdownWorker`, started in `postInit`; `StopLockdownWorker` registered after the DB-close handler so LIFO stops it first) bans each pending joiner once, through the `fuku:lockdown:pace:*` pacer, with `until_date` = the row's `ban_until`. It claims rows with conditional updates, so any replica can run it and a restart only resumes.
 - After `/unlockdown` restored the permissions the worker cancels pending joiners, then per banned row asks `getChatMember` and unbans (`only_if_banned=true`) only when the live member is kicked with that row's `ban_until` within 2 s. Permanent bans, `/tban` of another length and members already unbanned by hand are marked `kept` and never touched.
 - One tally message in the chat's language, posted once by the replica whose `FinishLift` won: unbanned count, kept count, and each joiner it could not unban by name and ID in recording order, cut at 25 lines (and a 3000-rune bound) with "and N more".
 - `/unlockdown` now says "Unbanning N removed joiners now" when banned joiners exist and wakes the worker; a lockdown with no joiners still lifts by `/unlockdown` alone with no tally.
@@ -204,14 +204,14 @@ See `key-decisions` above. Additions beyond the plan's own recorded decisions: p
 - **Found during:** Task 1 (designing MoveJoiner)
 - **Issue:** `attempts` is one column. A joiner whose ban needed two retries would have only one unban try left at the lift before being declared `unban_failed`.
 - **Fix:** `MoveJoiner` from `acting` to `banned` (only a ban that took effect makes that move) sets `attempts = 0`. Covered in `TestJoinerClaims` ("a ban that took effect starts the unban with no attempts").
-- **Files modified:** alita/db/lockdown/joiners.go, alita/db/lockdown/joiners_test.go
+- **Files modified:** fuku/db/lockdown/joiners.go, fuku/db/lockdown/joiners_test.go
 - **Committed in:** 2d7957c, 4fc6bec
 
 **2. [Rule 2 - Missing Critical] Tally could exceed Telegram's 4096-character limit**
 - **Found during:** Task 2
 - **Issue:** 25 failure lines of up to 64-rune names plus 120-rune escaped reasons can pass 4096 characters, so the tally itself would fail to send, losing the list of people who stayed banned.
 - **Fix:** `lockdownFailureLines` also stops at `lockdownTallyMaxRunes` (3000) and counts what it left out in the "and N more" line.
-- **Files modified:** alita/modules/lockdown_worker.go
+- **Files modified:** fuku/modules/lockdown_worker.go
 - **Committed in:** 4e2a591
 
 **3. [Rule 1 - Bug] English text of `lockdown_lift_tally_kept` said "stay banned"**
@@ -252,12 +252,12 @@ None beyond the plan's `<threat_model>`: T-04-10 (guard makes no Telegram write,
 ## Verification Run
 
 - Plan tests: `TestLockdownGuardBansChatMemberJoin`, `TestLockdownGuardBansAfterManualReopen`, `TestLockdownGuardIgnoresUnlockedChats`, `TestLockdownWorkerStartStop`, `TestRecordJoinOncePerUser`, `TestJoinerClaims`, `TestIsLockdownBan`, `TestLockdownLiftUnbansJoiners`, `TestLockdownLiftKeepsDeliberateBan`, `TestLockdownLiftNoJoiners`, `TestLockdownLiftCancelsPending`, `TestLockdownLiftUnbanFailureListed`: all pass with `-tags testtools -race -count=1`; the guard, lift and worker tests also pass with `-count=8`.
-- `go test -tags testtools -race -count=1 ./alita/db/... ./alita/modules/... ./alita/utils/...`: all ok.
+- `go test -tags testtools -race -count=1 ./fuku/db/... ./fuku/modules/... ./fuku/utils/...`: all ok.
 - `make test`: exit 0 (69.7% coverage). The known flaky `TestStaffActionNonStaffUnchanged/tmute_as_a_reply` did not fail.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown .`, `make check-translations` (all 7 present), `make check-docs` (no drift), `gofmt -l` on the touched files (clean), `git diff go.mod go.sum` (unchanged): all pass.
-- All `<acceptance_criteria>` of both tasks were re-run and pass (greps for `handlerGroup: -7`, `loadLockdownGuard(dispatcher)`, no `claimRecentJoinProcessing`/`IsUserAdmin`/`BanChatMember` outside comments in the guard, `alita:lockdown:pace:block`, `StartLockdownWorker`/`StopLockdownWorker` wiring with the stop after `return closeDBConnections()`, the AGENTS.md rules, `OnlyIfBanned: true`, the unban only inside `lockdownUnbanOne` which calls `isLockdownBan`, equal `^lockdown_lift` counts of 9 in every locale, `lockdownBanUntilTolerance int64 = 2`, test commit before feat commit).
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown .`, `make check-translations` (all 7 present), `make check-docs` (no drift), `gofmt -l` on the touched files (clean), `git diff go.mod go.sum` (unchanged): all pass.
+- All `<acceptance_criteria>` of both tasks were re-run and pass (greps for `handlerGroup: -7`, `loadLockdownGuard(dispatcher)`, no `claimRecentJoinProcessing`/`IsUserAdmin`/`BanChatMember` outside comments in the guard, `fuku:lockdown:pace:block`, `StartLockdownWorker`/`StopLockdownWorker` wiring with the stop after `return closeDBConnections()`, the AGENTS.md rules, `OnlyIfBanned: true`, the unban only inside `lockdownUnbanOne` which calls `isLockdownBan`, equal `^lockdown_lift` counts of 9 in every locale, `lockdownBanUntilTolerance int64 = 2`, test commit before feat commit).
 - `make lint`: not run, the installed golangci-lint 2.5.0 is built with go1.25 and refuses the go1.26.0 module (environment limitation, as noted in the run rules).
-- PostgreSQL: not run. No throwaway cluster was set up; all repository and conditional-update tests ran on SQLite. Command left for the orchestrator or CI: `DATABASE_URL=<postgres url> ALITA_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/db/lockdown` (with the migration chain applied first).
+- PostgreSQL: not run. No throwaway cluster was set up; all repository and conditional-update tests ran on SQLite. Command left for the orchestrator or CI: `DATABASE_URL=<postgres url> FUKU_TEST_DATABASE=true CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/db/lockdown` (with the migration chain applied first).
 
 ## End-of-Phase UAT Items (live Telegram, not run)
 

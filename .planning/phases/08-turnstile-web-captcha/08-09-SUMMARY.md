@@ -23,9 +23,9 @@ tech-stack:
     - "Refuse-before-write: a mode that would only fall back is never stored"
 key-files:
   created:
-    - alita/modules/captcha_mode_turnstile_test.go
+    - fuku/modules/captcha_mode_turnstile_test.go
   modified:
-    - alita/modules/captcha.go
+    - fuku/modules/captcha.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -54,16 +54,16 @@ coverage:
   - deliverable: "/captchamode turnstile stores the mode only when the bot can run it, else a plain refusal with nothing written"
     verification:
       - kind: test
-        ref: "alita/modules/captcha_mode_turnstile_test.go#TestCaptchaModeTurnstile"
+        ref: "fuku/modules/captcha_mode_turnstile_test.go#TestCaptchaModeTurnstile"
         status: pass
       - kind: test
-        ref: "alita/modules/captcha_mode_turnstile_test.go#TestCaptchaModeTurnstileRefusals"
+        ref: "fuku/modules/captcha_mode_turnstile_test.go#TestCaptchaModeTurnstileRefusals"
         status: pass
     human_judgment: false
   - deliverable: "Mode-listing texts name math, text and turnstile in all 7 locales and on the commands page"
     verification:
       - kind: test
-        ref: "alita/modules/captcha_mode_turnstile_test.go#TestCaptchaModeListsTurnstileInEveryLanguage"
+        ref: "fuku/modules/captcha_mode_turnstile_test.go#TestCaptchaModeListsTurnstileInEveryLanguage"
         status: pass
       - kind: command
         ref: "make check-translations && make check-docs"
@@ -104,7 +104,7 @@ coverage:
 - `TestCaptchaModeTurnstile`: admin 777000 gets `captcha_mode_set_formatted` with `turnstile` and the description marker, the stored mode is `turnstile`, a following join gets a Mini App token, and math and text still store.
 - `TestCaptchaModeTurnstileRefusals` (subtests): not configured, no Redis (the runtime's own miniredis closed), bot plain member, bot administrator without Restrict members, rights unknown (getChatMember error), ordering (not configured wins over no rights), non-admin (ext.EndGroups, none of the refusal texts). Each shows exactly one reply and the stored mode still `math`.
 - `TestCaptchaModeListsTurnstileInEveryLanguage`: the four keys name the modes in all 7 files; the no-argument and bogus-mode replies use the right keys.
-- Run: `go test -tags testtools -race -run 'Captcha|Help|Locale|Translat' ./alita/modules ./alita/i18n` pass; `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules`, `gofmt -l alita/modules` all clean. The full `./alita/modules` package and `make test` were not run (the orchestrator runs them between waves); `make lint` cannot run in this sandbox (golangci-lint built with go1.25 against module go1.26.0), so `gofmt` and `go vet` stood in.
+- Run: `go test -tags testtools -race -run 'Captcha|Help|Locale|Translat' ./fuku/modules ./fuku/i18n` pass; `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules`, `gofmt -l fuku/modules` all clean. The full `./fuku/modules` package and `make test` were not run (the orchestrator runs them between waves); `make lint` cannot run in this sandbox (golangci-lint built with go1.25 against module go1.26.0), so `gofmt` and `go vet` stood in.
 
 ## Deviations from Plan
 
@@ -114,7 +114,7 @@ coverage:
 - **Found during:** Task 1
 - **Issue:** I first wrote `captchaweb.ModeTurnstile`; the package has no such constant (`captcha.go` and the repository use the literal).
 - **Fix:** used the literal `"turnstile"` like the rest of `captcha.go`.
-- **Files modified:** alita/modules/captcha.go
+- **Files modified:** fuku/modules/captcha.go
 - **Commit:** e156323
 
 **2. [Test shape] Bot rights simulated with a wrapper client**
@@ -150,6 +150,6 @@ The command is wired. It depends on `captchaWebCurrent` being installed at start
 
 ## Self-Check: PASSED
 
-- alita/modules/captcha_mode_turnstile_test.go: FOUND
+- fuku/modules/captcha_mode_turnstile_test.go: FOUND
 - Commits 677c913, e156323, 0dffe6f, 007cd1c: FOUND
 - Acceptance criteria of both tasks re-run and passing.

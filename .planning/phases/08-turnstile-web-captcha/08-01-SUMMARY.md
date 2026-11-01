@@ -8,8 +8,8 @@ requires:
   - phase: 07-ai-assisted-raid-detection
     provides: "Redis operational-key conventions, the raid Lua script idiom, the stdlib-leaf client shape (gemini)"
 provides:
-  - "alita/utils/captchaweb: challenge store (alita:captcha:ch:<token>), initData validator, siteverify client, verify handler behind a Backend interface, testtools fixtures"
-  - "alita/modules/captcha_web.go: CaptchaWebConfig, ConfigureCaptchaWeb, captchaWebAvailable (memoised PING), captchaWebBackend"
+  - "fuku/utils/captchaweb: challenge store (fuku:captcha:ch:<token>), initData validator, siteverify client, verify handler behind a Backend interface, testtools fixtures"
+  - "fuku/modules/captcha_web.go: CaptchaWebConfig, ConfigureCaptchaWeb, captchaWebAvailable (memoised PING), captchaWebBackend"
   - "captcha.go: claimCaptchaPass and finishCaptchaPass shared by the button callback and the web verify; the turnstile branch of SendCaptcha; the ts1: refusal in both callbacks"
   - "captcha_mode CHECK tag accepts turnstile (SQLite harness); locale keys captcha_web_welcome and captcha_web_button in 7 languages"
 affects: [08-02, 08-03, 08-04, 08-05, 08-06, 08-07, 08-08, 08-09, 08-10]
@@ -31,16 +31,16 @@ tech-stack:
 
 key-files:
   created:
-    - alita/utils/captchaweb/challenge.go
-    - alita/utils/captchaweb/initdata.go
-    - alita/utils/captchaweb/siteverify.go
-    - alita/utils/captchaweb/verify.go
-    - alita/utils/captchaweb/fixtures_testtools.go
-    - alita/modules/captcha_web.go
-    - alita/modules/captcha_web_test.go
+    - fuku/utils/captchaweb/challenge.go
+    - fuku/utils/captchaweb/initdata.go
+    - fuku/utils/captchaweb/siteverify.go
+    - fuku/utils/captchaweb/verify.go
+    - fuku/utils/captchaweb/fixtures_testtools.go
+    - fuku/modules/captcha_web.go
+    - fuku/modules/captcha_web_test.go
   modified:
-    - alita/modules/captcha.go
-    - alita/db/models/captcha.go
+    - fuku/modules/captcha.go
+    - fuku/db/models/captcha.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -69,7 +69,7 @@ coverage:
     requirement: CAPT-02
     verification:
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/join_posts_a_Mini_App_button"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/join_posts_a_Mini_App_button"
         status: pass
     human_judgment: false
   - id: D2
@@ -77,13 +77,13 @@ coverage:
     requirement: CAPT-05
     verification:
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/the_target_passes"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/the_target_passes"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/held_messages_are_summarised"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/held_messages_are_summarised"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaPassSharedByCallbackAndWeb"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaPassSharedByCallbackAndWeb"
         status: pass
     human_judgment: false
   - id: D3
@@ -91,16 +91,16 @@ coverage:
     requirement: CAPT-03
     verification:
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/another_member_cannot_pass_or_burn_it"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/another_member_cannot_pass_or_burn_it"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/a_token_Cloudflare_rejects_never_unmutes"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/a_token_Cloudflare_rejects_never_unmutes"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/a_malformed_body_is_invalid"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/a_malformed_body_is_invalid"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/stale_initData_is_invalid"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebTracerJoinVerifyUnmute/stale_initData_is_invalid"
         status: pass
     human_judgment: false
   - id: D4
@@ -108,7 +108,7 @@ coverage:
     requirement: CAPT-03
     verification:
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebAttemptRefusesCallbacks"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebAttemptRefusesCallbacks"
         status: pass
     human_judgment: false
   - id: D5
@@ -116,16 +116,16 @@ coverage:
     requirement: CAPT-04
     verification:
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestSendCaptchaTurnstileFallsBackToMath"
+        ref: "fuku/modules/captcha_web_test.go#TestSendCaptchaTurnstileFallsBackToMath"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestSendCaptchaTurnstileRollsBackOnFailure"
+        ref: "fuku/modules/captcha_web_test.go#TestSendCaptchaTurnstileRollsBackOnFailure"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestCaptchaWebRejoinInvalidatesOldChallenge"
+        ref: "fuku/modules/captcha_web_test.go#TestCaptchaWebRejoinInvalidatesOldChallenge"
         status: pass
       - kind: integration
-        ref: "alita/modules/captcha_web_test.go#TestRunOrphanedCaptchaRecoveryResumesTurnstileAttempt"
+        ref: "fuku/modules/captcha_web_test.go#TestRunOrphanedCaptchaRecoveryResumesTurnstileAttempt"
         status: pass
     human_judgment: false
 
@@ -164,16 +164,16 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/utils/captchaweb/challenge.go` - token, reserved answer, cData, Mini App link, Record, Store.Issue, Store.ConsumeIfUser (user-compared Lua)
-- `alita/utils/captchaweb/initdata.go` - ValidateInitData (HMAC with `WebAppData`, signature field included, 5-minute window, `user.id > 0`)
-- `alita/utils/captchaweb/siteverify.go` - Client.Verify with Outcome/Reason/Verdict; no redirect, 64 KiB cap, 5 s timeout, nothing wrapped or logged
-- `alita/utils/captchaweb/verify.go` - Handler, Options, Backend, Answer/Result, PassResult, Verify route logic
-- `alita/utils/captchaweb/fixtures_testtools.go` - signer, fake Cloudflare handlers (testtools tag only)
-- `alita/modules/captcha_web.go` - runtime, availability probe, backend (Attempt, Pass)
-- `alita/modules/captcha.go` - turnstile branch, shared pass functions, callback guards
-- `alita/modules/captcha_web_test.go` - env helpers and the seven named tests
-- `alita/db/models/captcha.go` - `chk_captcha_mode` tag includes `turnstile`
-- `locales/*.yml` (7), `AGENTS.md` - two keys each; Data bullet for `alita:captcha:ch:<token>` and the "Turnstile captcha" trap bullet
+- `fuku/utils/captchaweb/challenge.go` - token, reserved answer, cData, Mini App link, Record, Store.Issue, Store.ConsumeIfUser (user-compared Lua)
+- `fuku/utils/captchaweb/initdata.go` - ValidateInitData (HMAC with `WebAppData`, signature field included, 5-minute window, `user.id > 0`)
+- `fuku/utils/captchaweb/siteverify.go` - Client.Verify with Outcome/Reason/Verdict; no redirect, 64 KiB cap, 5 s timeout, nothing wrapped or logged
+- `fuku/utils/captchaweb/verify.go` - Handler, Options, Backend, Answer/Result, PassResult, Verify route logic
+- `fuku/utils/captchaweb/fixtures_testtools.go` - signer, fake Cloudflare handlers (testtools tag only)
+- `fuku/modules/captcha_web.go` - runtime, availability probe, backend (Attempt, Pass)
+- `fuku/modules/captcha.go` - turnstile branch, shared pass functions, callback guards
+- `fuku/modules/captcha_web_test.go` - env helpers and the seven named tests
+- `fuku/db/models/captcha.go` - `chk_captcha_mode` tag includes `turnstile`
+- `locales/*.yml` (7), `AGENTS.md` - two keys each; Data bullet for `fuku:captcha:ch:<token>` and the "Turnstile captcha" trap bullet
 
 ## Decisions Made
 
@@ -187,7 +187,7 @@ See `key-decisions` above. Redis key layout, the consume script, the verify JSON
 - **Found during:** Task 3 (`TestRunOrphanedCaptchaRecoveryResumesTurnstileAttempt`)
 - **Issue:** The plan says an expired attempt is expired "with the group's failure action (banChatMember then unbanChatMember for kick)". In this codebase `kickMember` is a single `UnbanChatMember` with `OnlyIfBanned: false`; the existing recovery test also expects one unban and no ban for a kick.
 - **Fix:** The test asserts no `banChatMember`, exactly one `unbanChatMember` for the expired member with `only_if_banned` false, the expired challenge message deleted and the live one kept. No production change.
-- **Files modified:** `alita/modules/captcha_web_test.go`
+- **Files modified:** `fuku/modules/captcha_web_test.go`
 - **Verification:** the test passes
 - **Committed in:** `6f35bcd`
 
@@ -215,7 +215,7 @@ See `key-decisions` above. Redis key layout, the consume script, the verify JSON
 
 ## Issues Encountered
 
-- `make lint` cannot run in this sandbox (golangci-lint is built with an older Go than the module). `gofmt -l` over `alita/modules alita/utils/captchaweb alita/db/models` prints nothing and `go vet -tags testtools ./alita/modules ./alita/utils/captchaweb ./alita/db/models` is clean.
+- `make lint` cannot run in this sandbox (golangci-lint is built with an older Go than the module). `gofmt -l` over `fuku/modules fuku/utils/captchaweb fuku/db/models` prints nothing and `go vet -tags testtools ./fuku/modules ./fuku/utils/captchaweb ./fuku/db/models` is clean.
 - The sandbox refuses compound git commands, so `git add` and `git commit` were run as separate plain commands.
 
 ## Known Limitations (accepted, owned by later plans)
@@ -223,7 +223,7 @@ See `key-decisions` above. Redis key layout, the consume script, the verify JSON
 - **No re-arm yet.** The verify handler consumes the challenge before it asks Cloudflare; every non-pass Cloudflare answer, and a backend error after the consume, answers `retry` with the challenge gone, so that member cannot try again and times out like any unverified member. Plan 08-06 adds the re-arm, failed-solve handling and immediate expiry. Nothing is reachable in production before plan 08-10 mounts the routes.
 - `/captchamode turnstile` is not accepted yet (`SetCaptchaMode` is unchanged; the tests set the stored mode directly) and there is no PostgreSQL migration for `chk_captcha_mode` yet; both are plan 08-04. The SQLite CHECK comes from the model tag.
 - No rate windows, content-type check or readiness gate on the verify route (plan 08-08); `initData` has no published known-answer vectors yet (plan 08-03).
-- No unit tests inside `alita/utils/captchaweb` itself (the leaf package is exercised through the module tests, as the plan specifies); the strict initData parser, siteverify classification and limiter tests belong to plans 08-03, 08-06 and 08-08.
+- No unit tests inside `fuku/utils/captchaweb` itself (the leaf package is exercised through the module tests, as the plan specifies); the strict initData parser, siteverify classification and limiter tests belong to plans 08-03, 08-06 and 08-08.
 
 ## Known Stubs
 
@@ -237,11 +237,11 @@ None - no external service configuration required. No live Cloudflare or Telegra
 
 | Check | Result |
 |-------|--------|
-| `go test -tags testtools -race -count=1 -run '^TestCaptchaWebTracerJoinVerifyUnmute$' -v ./alita/modules` | PASS (7 subtests) |
+| `go test -tags testtools -race -count=1 -run '^TestCaptchaWebTracerJoinVerifyUnmute$' -v ./fuku/modules` | PASS (7 subtests) |
 | `... -run '^(TestCaptchaWebAttemptRefusesCallbacks\|TestCaptchaPassSharedByCallbackAndWeb)$'` | PASS |
 | `... -run '^(TestSendCaptchaTurnstileFallsBackToMath\|TestSendCaptchaTurnstileRollsBackOnFailure\|TestCaptchaWebRejoinInvalidatesOldChallenge\|TestRunOrphanedCaptchaRecoveryResumesTurnstileAttempt)$'` | PASS |
 | Existing callback regression net (`TestCaptchaVerifyCallback*`, `TestCaptchaRefreshCallback*`, `TestCaptchaVerifyRejectsButtonFromPreviousRefresh`, `TestCaptchaCallbacksPropagateGotgbotRequestErrors`) | PASS, unchanged |
-| `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/captcha ./alita/utils/captchaweb ./alita/i18n ./alita/db/models` (whole packages) | ok (modules 308 s) |
+| `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/captcha ./fuku/utils/captchaweb ./fuku/i18n ./fuku/db/models` (whole packages) | ok (modules 308 s) |
 | `CGO_ENABLED=0 go build ./...` | ok |
 | `go vet -tags testtools` on the three touched packages | clean |
 | `gofmt -l` on the touched directories | empty |
@@ -260,7 +260,7 @@ None beyond the plan's threat model (T-08-01 to T-08-06 are mitigated by the tes
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/utils/captchaweb/{challenge,initdata,siteverify,verify,fixtures_testtools}.go`, `alita/modules/captcha_web.go`, `alita/modules/captcha_web_test.go`.
+- Created files exist: `fuku/utils/captchaweb/{challenge,initdata,siteverify,verify,fixtures_testtools}.go`, `fuku/modules/captcha_web.go`, `fuku/modules/captcha_web_test.go`.
 - Commits found: `8d1b52d`, `feef68c`, `d06aaa4`, `744ed93`, `6f35bcd`, `66c026e`.
 
 ---

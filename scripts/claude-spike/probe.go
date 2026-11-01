@@ -15,7 +15,7 @@ import (
 	"image/png"
 	"net/http"
 
-	"github.com/divkix/Alita_Robot/alita/utils/claude"
+	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
 )
 
 // maxQuoteRunes bounds the part of a server message the probe prints.

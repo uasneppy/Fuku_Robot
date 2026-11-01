@@ -21,8 +21,8 @@ plan_head_after: c0bf8d3d2b0618363b1e0722be5bd3595ea38404
 
 key-files:
   created:
-    - alita/modules/settings_lockdown.go
-    - alita/modules/settings_lockdown_test.go
+    - fuku/modules/settings_lockdown.go
+    - fuku/modules/settings_lockdown_test.go
   modified: []
 
 key-decisions:
@@ -62,7 +62,7 @@ No other deviations; the plan's symbols all existed as described.
 
 ## Verification
 
-- `CGO_ENABLED=0 go build ./...` passes; `gofmt -l alita/` prints nothing; `go vet -tags testtools ./alita/modules/` passes.
+- `CGO_ENABLED=0 go build ./...` passes; `gofmt -l fuku/` prints nothing; `go vet -tags testtools ./fuku/modules/` passes.
 - `make lint` was not run (golangci-lint is built with go1.25 against a go1.26.0 module in this sandbox); gofmt and go vet stand in for it.
 - The nine new tests plus `TestAutoLockdown*`, `TestAutolockdownAI`, `TestApplyAutoLockdown` and every `TestSettings*` test pass with `-race`.
 - No locale key was added (plan 09-05 added them all), so `make check-translations` is unaffected.
@@ -81,4 +81,4 @@ None. The plan's threats T-09-34 to T-09-37 are covered by `TestSettingsAuthorit
 
 ## Self-Check: PASSED
 
-Files `alita/modules/settings_lockdown.go` and `alita/modules/settings_lockdown_test.go` exist; commits `b943928` and `c0bf8d3` exist.
+Files `fuku/modules/settings_lockdown.go` and `fuku/modules/settings_lockdown_test.go` exist; commits `b943928` and `c0bf8d3` exist.

@@ -11,7 +11,7 @@ requires:
 provides:
   - "Expiry timer: an unconfirmed card is edited to Expired with its buttons removed shortly after 5 minutes (scheduleStaffActionExpiry, expireStaffActionCard, staffActionExpirySlack)"
   - "Links signature: the card stores a sha256 signature of the sorted linked group IDs and Confirm aborts when the set changed, even at the same count (staffLinksSignature, card field LinksSig / hash field links_sig)"
-  - "Per-target fan-out lock alita:staff:lock:target:<id> (SET NX, 30 min TTL, compare-and-delete release) so two staff actions on one person never run at once"
+  - "Per-target fan-out lock fuku:staff:lock:target:<id> (SET NX, 30 min TTL, compare-and-delete release) so two staff actions on one person never run at once"
   - "/staff help documents the staff actions in all 7 locales; generated docs page regenerated; AGENTS.md records the new key and rules"
 affects: [02-06, 02-07, phase-03-audit-undo]
 
@@ -36,11 +36,11 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_action_lifecycle_test.go
+    - fuku/modules/staff_action_lifecycle_test.go
   modified:
-    - alita/modules/staff_action.go
-    - alita/modules/staff_action_card.go
-    - alita/modules/staff_action_run.go
+    - fuku/modules/staff_action.go
+    - fuku/modules/staff_action_card.go
+    - fuku/modules/staff_action_run.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -68,13 +68,13 @@ coverage:
     requirement: "STAFF-03"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionCardExpiresByTimer"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionCardExpiresByTimer"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionCardExpiryBoundary"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionCardExpiryBoundary"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionTimerSkipsCancelledCard"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionTimerSkipsCancelledCard"
         status: pass
     human_judgment: false
   - id: D2
@@ -82,10 +82,10 @@ coverage:
     requirement: "PLAT-01"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionConfirmExactlyOnce"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionConfirmExactlyOnce"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionConfirmAcrossReplicas"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionConfirmAcrossReplicas"
         status: pass
     human_judgment: false
   - id: D3
@@ -93,7 +93,7 @@ coverage:
     requirement: "STAFF-04"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionLinksChangedAborts"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionLinksChangedAborts"
         status: pass
     human_judgment: false
   - id: D4
@@ -101,23 +101,23 @@ coverage:
     requirement: "STAFF-03"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLock"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLock"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockReleased"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockReleased"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockForeignRelease"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionTargetLockForeignRelease"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_lifecycle_test.go#TestStaffActionOwnCardDoubleTap"
+        ref: "fuku/modules/staff_action_lifecycle_test.go#TestStaffActionOwnCardDoubleTap"
         status: pass
     human_judgment: false
   - id: D5
     description: "/staff help text documents the staff actions in all 7 locales, with a regenerated docs page and no drift"
     verification:
       - kind: other
-        ref: "make generate-docs && make check-docs && make check-translations; go test -tags testtools -run '^TestStaffLocaleKeys$' ./alita/i18n"
+        ref: "make generate-docs && make check-docs && make check-translations; go test -tags testtools -run '^TestStaffLocaleKeys$' ./fuku/i18n"
         status: pass
     human_judgment: true
     rationale: "Parity, placeholders and docs drift are machine-checked, but whether the non-English help text reads naturally to native speakers is a judgment call"
@@ -164,18 +164,18 @@ status: complete
 
 Both tasks are `tdd="true"`; each has a `test(02-05)` commit before its `feat(02-05)` commit. RED commits carry no-op production stubs so the tests compile and the failure is on a planned assertion, not a build error.
 
-- **Task 1 RED (`27b5c46`):** `go test -tags testtools -race -count=1 -run '^TestStaffAction(CardExpiresByTimer|CardExpiryBoundary|ConfirmExactlyOnce|ConfirmAcrossReplicas|TimerSkipsCancelledCard)$' ./alita/modules` exited 1 with one failure: `TestStaffActionCardExpiresByTimer`: "message 5001 was edited 0 times within 5s, want 1". The other four passed at once (unexpected GREEN) because the Redis compare-and-set from plan 02-01 already gave those guarantees; they are regression guards for the new timer and lock code. No `check tdd-red-evidence` run (the `gsd_run` resolver is not available here); the evidence is recorded above.
-- **Task 1 GREEN (`cb468ef`):** the same command passed; `go test -tags testtools -race -count=1 -run '^TestStaff' ./alita/modules` passed (72 s).
+- **Task 1 RED (`27b5c46`):** `go test -tags testtools -race -count=1 -run '^TestStaffAction(CardExpiresByTimer|CardExpiryBoundary|ConfirmExactlyOnce|ConfirmAcrossReplicas|TimerSkipsCancelledCard)$' ./fuku/modules` exited 1 with one failure: `TestStaffActionCardExpiresByTimer`: "message 5001 was edited 0 times within 5s, want 1". The other four passed at once (unexpected GREEN) because the Redis compare-and-set from plan 02-01 already gave those guarantees; they are regression guards for the new timer and lock code. No `check tdd-red-evidence` run (the `gsd_run` resolver is not available here); the evidence is recorded above.
+- **Task 1 GREEN (`cb468ef`):** the same command passed; `go test -tags testtools -race -count=1 -run '^TestStaff' ./fuku/modules` passed (72 s).
 - **Task 2 RED (`f6e8679`):** exit 1 with failures `TestStaffActionLinksChangedAborts` (both the added-group and swapped-group cases: the card showed a normal summary with ban lines instead of the abort text), `TestStaffActionTargetLock` ("answer = \"\" (alert false), want the target-busy alert"), `TestStaffActionTargetLockReleased/after_a_Confirm_aborted_by_changed_links` ("card state = done, want aborted") and `TestStaffActionTargetLockForeignRelease` ("target lock holder = \"\", want holder"). `TestStaffActionOwnCardDoubleTap` passed at once (the second tap on a running card already read "handled"); it guards the lock code against turning that into target-busy.
-- **Task 2 GREEN (`1733458`):** all ten new tests passed; `-count=5` of the concurrency-sensitive ones also passed; full `go test -tags testtools -race -count=1 ./alita/modules ./alita/i18n` passed (117 s).
+- **Task 2 GREEN (`1733458`):** all ten new tests passed; `-count=5` of the concurrency-sensitive ones also passed; full `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/i18n` passed (117 s).
 - **REFACTOR:** none.
 
 ## Files Created/Modified
 
-- `alita/modules/staff_action_card.go` - expiry timer and expiry edit, `staffLinksSignature`, target lock helpers and release script, `takeStaffTargetLock`, links-changed abort and lock handling in `staffActionConfirm`, `LinksSig` card field
-- `alita/modules/staff_action.go` - schedules the expiry right after the card is sent; stores the links signature on the card
-- `alita/modules/staff_action_run.go` - the run goroutine releases the target lock in a deferred call
-- `alita/modules/staff_action_lifecycle_test.go` - ten tests plus the two-replica and gated-ban test helpers
+- `fuku/modules/staff_action_card.go` - expiry timer and expiry edit, `staffLinksSignature`, target lock helpers and release script, `takeStaffTargetLock`, links-changed abort and lock handling in `staffActionConfirm`, `LinksSig` card field
+- `fuku/modules/staff_action.go` - schedules the expiry right after the card is sent; stores the links signature on the card
+- `fuku/modules/staff_action_run.go` - the run goroutine releases the target lock in a deferred call
+- `fuku/modules/staff_action_lifecycle_test.go` - ten tests plus the two-replica and gated-ban test helpers
 - `locales/*.yml` (7) - `staff_act_abort_links_changed`, `staff_act_target_busy`, extended `staff_help_msg`
 - `docs/src/content/docs/commands/staff/index.md` - regenerated
 - `AGENTS.md` - lock key, expiry and signature rules
@@ -192,7 +192,7 @@ See `key-decisions` above. The notable one: the busy-lock path distinguishes "he
 - **Found during:** Task 2 design, against the Task 1 `TestStaffActionConfirmExactlyOnce` contract ("exactly one tap of the pair gets the staff_act_card_handled toast")
 - **Issue:** the plan's flow acquires the lock for any pending card and answers target-busy when it is held. Two simultaneous taps on one pending card would both load state pending; the loser would find the lock held by its own card and answer target-busy, contradicting the exactly-once test and the "own card gets already handled" truth. Letting the loser continue to the compare-and-set instead would let it win the claim if the first tap had not yet claimed, then have the first tap's failed claim release the lock under it.
 - **Fix:** on a busy lock Confirm reads the holder; a holder equal to the tapping card's token answers "already handled" and stops, any other holder answers target-busy. The acquirer alone proceeds to the compare-and-set.
-- **Files modified:** `alita/modules/staff_action_card.go`
+- **Files modified:** `fuku/modules/staff_action_card.go`
 - **Verification:** `TestStaffActionConfirmExactlyOnce` (20 rounds), `TestStaffActionOwnCardDoubleTap`, `TestStaffActionTargetLock`
 - **Commit:** `1733458`
 
@@ -200,7 +200,7 @@ See `key-decisions` above. The notable one: the busy-lock path distinguishes "he
 - **Found during:** Task 2
 - **Issue:** the plan says "every confirm-time abort releases it"; with about ten abort returns in `staffActionConfirm` a per-return call is easy to miss. A lock taken for an already-expired card would also make a busy target mask the "expired" answer.
 - **Fix:** one `defer` releases the lock unless the run started (the run goroutine then owns the release); the lock is only requested for a card that is pending and before its `expires_at`.
-- **Files modified:** `alita/modules/staff_action_card.go`
+- **Files modified:** `fuku/modules/staff_action_card.go`
 - **Verification:** `TestStaffActionTargetLockReleased` (completed run, links-changed abort, expired late tap)
 - **Commit:** `1733458`
 
@@ -213,7 +213,7 @@ See `key-decisions` above. The notable one: the busy-lock path distinguishes "he
 
 **4. [Test design] Cross-replica and cancelled-card tests call `expireStaffActionCard` directly**
 - **Issue:** the plan describes replica A's timer firing later with a short lifetime. A short lifetime makes the test race the confirm on replica B. The tests instead create the card with the default lifetime and invoke the timer's function directly after the other path finished; the real scheduled timer is covered by `TestStaffActionCardExpiresByTimer`.
-- **Files modified:** `alita/modules/staff_action_lifecycle_test.go`
+- **Files modified:** `fuku/modules/staff_action_lifecycle_test.go`
 - **Commit:** `f6e8679` (test file first appears in `27b5c46`)
 
 **Total deviations:** 2 auto-fixed (1 bug, 1 missing-critical), 2 plan-wording or test-design adjustments. **Impact:** none on scope; all plan truths hold.
@@ -228,13 +228,13 @@ None. The no-op `staffLinksSignature`, `acquireStaffTargetLock` and `releaseStaf
 
 ## Threat Flags
 
-None. The plan's threat register (T-02-19 to T-02-23) is covered by the tests above; no new network endpoint, auth path or schema change was added. The only new surface is the Redis key family `alita:staff:lock:target:<id>`, which the plan already names.
+None. The plan's threat register (T-02-19 to T-02-23) is covered by the tests above; no new network endpoint, auth path or schema change was added. The only new surface is the Redis key family `fuku:staff:lock:target:<id>`, which the plan already names.
 
 ## Verification Notes
 
-- `make lint` cannot run in this sandbox (golangci-lint here is built with go1.25 against module go1.26.0), so `gofmt -l alita` and `go vet -tags testtools ./alita/...` were run instead. `gofmt` lists only `alita/modules/greetings_command_test.go`, which is already not gofmt-clean on the base commit and was left alone; `go vet` is clean.
+- `make lint` cannot run in this sandbox (golangci-lint here is built with go1.25 against module go1.26.0), so `gofmt -l fuku` and `go vet -tags testtools ./fuku/...` were run instead. `gofmt` lists only `fuku/modules/greetings_command_test.go`, which is already not gofmt-clean on the base commit and was left alone; `go vet` is clean.
 - `CGO_ENABLED=0 go build ./...`, `make generate-docs`, `make check-docs` (no drift), `make check-translations` (all present) and `TestStaffLocaleKeys` pass.
-- Plan acceptance greps all match: `scheduleStaffActionExpiry` and its `RecoverFromPanic("staffActionExpiry", "StaffActions")` in `staff_action_card.go`, the call in `staff_action.go`, `"alita:staff:lock:target:"` in `staff_action_card.go`, `releaseStaffTargetLock(` in `staff_action_run.go`, `tban` in the docs page, the lock key in `AGENTS.md`.
+- Plan acceptance greps all match: `scheduleStaffActionExpiry` and its `RecoverFromPanic("staffActionExpiry", "StaffActions")` in `staff_action_card.go`, the call in `staff_action.go`, `"fuku:staff:lock:target:"` in `staff_action_card.go`, `releaseStaffTargetLock(` in `staff_action_run.go`, `tban` in the docs page, the lock key in `AGENTS.md`.
 - A restart loses the in-process expiry timer; the lazy check on any later tap and the hash TTL cover it (accepted in the plan).
 
 ## Next Phase Readiness
@@ -243,6 +243,6 @@ Ready for 02-06 (shared pacer, continuation messages, shutdown drain). Notes for
 
 ## Self-Check: PASSED
 
-- Created and modified files exist on disk: `alita/modules/staff_action_lifecycle_test.go`, `alita/modules/staff_action_card.go`, `alita/modules/staff_action.go`, `alita/modules/staff_action_run.go`, `docs/src/content/docs/commands/staff/index.md`.
+- Created and modified files exist on disk: `fuku/modules/staff_action_lifecycle_test.go`, `fuku/modules/staff_action_card.go`, `fuku/modules/staff_action.go`, `fuku/modules/staff_action_run.go`, `docs/src/content/docs/commands/staff/index.md`.
 - Commits exist: `27b5c46`, `cb468ef`, `f6e8679`, `1733458`; `git rev-list --count e90a938..HEAD` is 4 before this SUMMARY.
 - All task acceptance criteria and the plan-level verification commands re-ran green after the final code commit.

@@ -25,17 +25,17 @@ covered_files:
   - ".planning/phases/02-staff-actions-across-groups/02-10-PLAN.md"
   - ".planning/phases/02-staff-actions-across-groups/02-10-SUMMARY.md"
   - "AGENTS.md"
-  - "alita/db/user/repository.go"
-  - "alita/modules/staff.go"
-  - "alita/modules/staff_action.go"
-  - "alita/modules/staff_action_card.go"
-  - "alita/modules/staff_action_decide.go"
-  - "alita/modules/staff_action_parse.go"
-  - "alita/modules/staff_action_run.go"
-  - "alita/modules/staff_action_summary.go"
-  - "alita/modules/staff_recheck.go"
-  - "alita/utils/extraction/extraction.go"
-  - "alita/utils/ratelimit/telegram_pacer.go"
+  - "fuku/db/user/repository.go"
+  - "fuku/modules/staff.go"
+  - "fuku/modules/staff_action.go"
+  - "fuku/modules/staff_action_card.go"
+  - "fuku/modules/staff_action_decide.go"
+  - "fuku/modules/staff_action_parse.go"
+  - "fuku/modules/staff_action_run.go"
+  - "fuku/modules/staff_action_summary.go"
+  - "fuku/modules/staff_recheck.go"
+  - "fuku/utils/extraction/extraction.go"
+  - "fuku/utils/ratelimit/telegram_pacer.go"
   - "main.go"
 
 covered_digest: "v2:sha256:f8521d971fe49c83810b3676588425a2cf74755d4bbb610cfba8511f334335b7"
@@ -55,10 +55,10 @@ advisory: []
 warnings:
   - id: WR-03
     summary: "retry_after exactly at the 60 s MaxWait cap: only the first of several concurrent paced calls waits, the others are refused and reported as 'rate limited' (confirmed empirically). Not a blocker for SC4, see Gap-Closure Assessment."
-    files: ["alita/utils/ratelimit/telegram_pacer.go:92 (Lua threshold), :172 (wait), :156 (Do)"]
+    files: ["fuku/utils/ratelimit/telegram_pacer.go:92 (Lua threshold), :172 (wait), :156 (Do)"]
   - id: TEST-FLAKE-1
     summary: "TestStaffActionNonStaffUnchanged (tmute/tban subtests) compares wall-clock until_date between two runs and fails when they straddle a second boundary. Observed failing in 1 of 5 verifier runs of the staff test set (until=1791203047 vs ...048). Pre-existing since plan 02-04; production behaviour unaffected."
-    files: ["alita/modules/staff_action_dispatch_test.go:101-127"]
+    files: ["fuku/modules/staff_action_dispatch_test.go:101-127"]
 human_verification:
   - test: "Live run on a real bot with several linked groups (research flag A3, end-to-end run)"
     expected: "/ban @user 1d spam from the Staff Group shows the card; only the issuer's Confirm starts it; the card turns into a summary that fills in; groups where the issuer is not an admin with restrict rights, where the target is an admin, or where the bot lacks rights show skipped or failed with the reason; the Staff Group itself is never touched"
@@ -119,10 +119,10 @@ All five ROADMAP success criteria are now backed by code I read and by tests I r
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `alita/utils/ratelimit/telegram_pacer.go` | MaxWait refusal in script and local fallback, retry_after clamp | VERIFIED | `ARGV[3]`, `reserveLocal` refusal, `pacerMaxRetryAfterSeconds`; leaf package (no `alita/modules` import); wired through `staffPaced` |
-| `alita/modules/staff_action_summary.go` | per-message delivery budget, hold-aware final delivery, clamp helpers | VERIFIED | `staffActionDeliverPartTimeout`, `newStaffDeliverContext`, `deliverStaffActionFinal(..., notBefore)`; wired from the coordinator |
-| `alita/modules/staff_action_run.go` | coordinator with progress hold and lock renewal | VERIFIED | `editHoldUntil`, `lockRenew` ticker |
-| `alita/modules/staff_action_card.go` | renewal script and function | VERIFIED | `renewStaffTargetLockScript`, `renewStaffTargetLock`, `staffTargetLockRenewEvery` |
+| `fuku/utils/ratelimit/telegram_pacer.go` | MaxWait refusal in script and local fallback, retry_after clamp | VERIFIED | `ARGV[3]`, `reserveLocal` refusal, `pacerMaxRetryAfterSeconds`; leaf package (no `fuku/modules` import); wired through `staffPaced` |
+| `fuku/modules/staff_action_summary.go` | per-message delivery budget, hold-aware final delivery, clamp helpers | VERIFIED | `staffActionDeliverPartTimeout`, `newStaffDeliverContext`, `deliverStaffActionFinal(..., notBefore)`; wired from the coordinator |
+| `fuku/modules/staff_action_run.go` | coordinator with progress hold and lock renewal | VERIFIED | `editHoldUntil`, `lockRenew` ticker |
+| `fuku/modules/staff_action_card.go` | renewal script and function | VERIFIED | `renewStaffTargetLockScript`, `renewStaffTargetLock`, `staffTargetLockRenewEvery` |
 | New tests (progress, flood, lifecycle, fake, pacer) | exercise each closure | VERIFIED | all named tests present in `go test -list` and passing |
 | `AGENTS.md` | lock renewal, MaxWait refusal, delivery budget rules | VERIFIED | lines 77, 81-82, 146-149 match the code |
 | Earlier phase artifacts (`staff_action.go`, `_card`, `_decide`, `_parse`, `staff.go`, `main.go` drain, 7 locales, `FindUsersByUsername`) | as in the first verification | VERIFIED (regression) | untouched by plans 08-10; tests green |
@@ -151,10 +151,10 @@ All five ROADMAP success criteria are now backed by code I read and by tests I r
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
 | Build | `CGO_ENABLED=0 go build ./...` | clean | PASS |
-| Vet | `go vet -tags testtools ./alita/modules ./alita/utils/ratelimit` | clean | PASS |
-| Format | `gofmt -l alita main.go` | only `greetings_command_test.go` (not this phase) | PASS |
-| Pacer, extraction, user lookup, staff DB | `go test -tags testtools -race -count=1 ./alita/utils/ratelimit ./alita/utils/extraction ./alita/db/user ./alita/db/staff` | all ok | PASS |
-| Staff module tests, full set | `go test -tags testtools -race -count=1 -run 'Staff\|staff' ./alita/modules` x 6 full runs | 4 ok, 2 FAIL (see run record below) | PASS with flake |
+| Vet | `go vet -tags testtools ./fuku/modules ./fuku/utils/ratelimit` | clean | PASS |
+| Format | `gofmt -l fuku main.go` | only `greetings_command_test.go` (not this phase) | PASS |
+| Pacer, extraction, user lookup, staff DB | `go test -tags testtools -race -count=1 ./fuku/utils/ratelimit ./fuku/utils/extraction ./fuku/db/user ./fuku/db/staff` | all ok | PASS |
+| Staff module tests, full set | `go test -tags testtools -race -count=1 -run 'Staff\|staff' ./fuku/modules` x 6 full runs | 4 ok, 2 FAIL (see run record below) | PASS with flake |
 | New gap-closure tests, stress | `-count=15 -race -run 'ProgressBacksOffAfter429\|FinalEditWaitsForHold\|BlockAboveMaxWaitFailsFast\|TargetLockRenewedDuringRun\|FinalEditLongRetryAfter\|FinalPartsOwnBudget'` | ok (76 s) | PASS |
 | Generated docs, translations | `make check-docs`, `make check-translations` | no drift, all present | PASS |
 | WR-03 reproduction (throwaway test, removed) | 4 callers, retry_after == MaxWait | 1-2 refused in 5/5 runs | WARNING confirmed |

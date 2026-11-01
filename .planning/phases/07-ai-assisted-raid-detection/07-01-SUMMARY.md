@@ -11,10 +11,10 @@ requires:
     provides: lockdown alert, burst rows, Ban N recent joiners
 provides:
   - "models.LockdownTriggerAIBurst (ai_burst) and models.LockdownTriggerKinds()"
-  - "Redis AI verdict counter (alita:raid:{chat}:av and :aa) and the AI burst rule (raidAICounts)"
+  - "Redis AI verdict counter (fuku:raid:{chat}:av and :aa) and the AI burst rule (raidAICounts)"
   - "raidAIRecordVerdict, fed by every /aispam delete verdict (D-03, D-19)"
   - "ai_burst on every trigger-kind surface (alert, status, reminder, notice, cannot-lock warning, /lockdown while locked)"
-  - "AI spammer snapshot (alita:raid:{chat}:aispammers) feeding the alert sample and Ban N recent joiners"
+  - "AI spammer snapshot (fuku:raid:{chat}:aispammers) feeding the alert sample and Ban N recent joiners"
 affects: [07-02, 07-03, 07-04, 07-05, 07-06, 07-07, 07-14]
 
 actuals:
@@ -33,14 +33,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_ai_count.go
-    - alita/modules/raid_ai_burst_test.go
+    - fuku/modules/raid_ai_count.go
+    - fuku/modules/raid_ai_burst_test.go
   modified:
-    - alita/db/models/lockdown.go
-    - alita/modules/aispam.go
-    - alita/modules/raid_trigger.go
-    - alita/modules/lockdown_alert.go
-    - alita/modules/lockdown_status.go
+    - fuku/db/models/lockdown.go
+    - fuku/modules/aispam.go
+    - fuku/modules/raid_trigger.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/lockdown_status.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -65,7 +65,7 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAIBurstFires/five_verdicts_from_three_accounts_lock"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAIBurstFires/five_verdicts_from_three_accounts_lock"
         status: pass
     human_judgment: false
   - id: D2
@@ -73,10 +73,10 @@ coverage:
     requirement: RAID-05
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAIBurstFires"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAIBurstFires"
         status: pass
       - kind: unit
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAIVerdictScript"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAIVerdictScript"
         status: pass
     human_judgment: false
   - id: D3
@@ -84,13 +84,13 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestLockdownTriggerKindsAllSurfaces"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestLockdownTriggerKindsAllSurfaces"
         status: pass
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAIAlert"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAIAlert"
         status: pass
       - kind: unit
-        ref: "alita/i18n TestLockdownLocaleKeys"
+        ref: "fuku/i18n TestLockdownLocaleKeys"
         status: pass
     human_judgment: false
   - id: D4
@@ -98,10 +98,10 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAIAlert/spammers_listed"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAIAlert/spammers_listed"
         status: pass
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAIAlert/ban_the_spammers"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAIAlert/ban_the_spammers"
         status: pass
     human_judgment: false
   - id: D5
@@ -129,10 +129,10 @@ status: complete
 
 ## Accomplishments
 
-- `alita/modules/raid_ai_count.go`: a Redis verdict counter (`alita:raid:{chat}:av` and `:aa`, one Lua script, `ZADD NX`, fixed 120 s window, 3-account floor, cap, 5 minute TTL) and the rule `raidAICounts`. `processAISpam` reports each delete verdict through `raidAIRecordVerdict`; a keep verdict never counts, and the `/aispam` deletion and its single TypeSafe call per message are unchanged.
+- `fuku/modules/raid_ai_count.go`: a Redis verdict counter (`fuku:raid:{chat}:av` and `:aa`, one Lua script, `ZADD NX`, fixed 120 s window, 3-account floor, cap, 5 minute TTL) and the rule `raidAICounts`. `processAISpam` reports each delete verdict through `raidAIRecordVerdict`; a keep verdict never counts, and the `/aispam` deletion and its single TypeSafe call per message are unchanged.
 - `ai_burst` is a new trigger kind (no migration: the column is 16 characters with no CHECK). `raidFire`, the latch, the active check and the quiet period are unchanged, so exactly one lockdown and one alert still come from `uk_chat_lockdowns_active`, `lockdown.Start` and `BeginAlert`.
 - Every site that switches on the kind learned `ai_burst`: `lockdownTriggerSentence`, `raidPostNotice`, `lockdownStartedAutomatically`, `lockdownAlertTriggerLine`, `lockdownRenderSample`. `TestLockdownTriggerKindsAllSurfaces` renders each kind in `models.LockdownTriggerKinds()` on all of them.
-- The accounts behind the counted verdicts are snapshotted (`alita:raid:{chat}:aispammers`) by `raidFire` before the start and merged into the alert's burst rows, so the sample lists them (an established member included, timed by its verdict) and Ban N recent joiners can ban them.
+- The accounts behind the counted verdicts are snapshotted (`fuku:raid:{chat}:aispammers`) by `raidFire` before the start and merged into the alert's burst rows, so the sample lists them (an established member included, timed by its verdict) and Ban N recent joiners can ban them.
 - Four locale keys in all 7 files; AGENTS.md rules for the keys, "AI never decides alone", the surfaces and the rolling-deploy caveat.
 
 ## Task Commits
@@ -152,13 +152,13 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/modules/raid_ai_count.go` - verdict counter script, `raidAICounts`, `raidAIItemKey`, `raidAIRecordVerdict`, spammer snapshot script and `raidAISpammersLookup` seam
-- `alita/modules/raid_ai_burst_test.go` - `TestRaidAIVerdictScript`, `TestRaidAIBurstFires`, `TestLockdownTriggerKindsAllSurfaces`, `TestRaidAIAlert`; helpers `newAIBurstEnv`, `enableAI`, `spamFrom`, `textsFrom`, `settleAI`, `aiBurstLockdown`, `aiRequests`, `staffChatOf`, `aiSpammers`, `aiRaidFrom`
-- `alita/modules/aispam.go` - `aispamTask.chat`/`itemKey`, `aispamBar`, `aispamIsDelete`, the delete-verdict report
-- `alita/modules/raid_trigger.go` - `ai_burst` in `lockdownTriggerSentence`, `raidPostNotice` and `raidFire`'s snapshot step
-- `alita/modules/lockdown_alert.go` - `ai_burst` in the trigger line, counts line and burst snapshot; `lockdownMergeSnapshot` with two wrappers
-- `alita/modules/lockdown_status.go` - `lockdownStartedAutomatically` knows `ai_burst`
-- `alita/db/models/lockdown.go` - `LockdownTriggerAIBurst`, `LockdownTriggerKinds()`
+- `fuku/modules/raid_ai_count.go` - verdict counter script, `raidAICounts`, `raidAIItemKey`, `raidAIRecordVerdict`, spammer snapshot script and `raidAISpammersLookup` seam
+- `fuku/modules/raid_ai_burst_test.go` - `TestRaidAIVerdictScript`, `TestRaidAIBurstFires`, `TestLockdownTriggerKindsAllSurfaces`, `TestRaidAIAlert`; helpers `newAIBurstEnv`, `enableAI`, `spamFrom`, `textsFrom`, `settleAI`, `aiBurstLockdown`, `aiRequests`, `staffChatOf`, `aiSpammers`, `aiRaidFrom`
+- `fuku/modules/aispam.go` - `aispamTask.chat`/`itemKey`, `aispamBar`, `aispamIsDelete`, the delete-verdict report
+- `fuku/modules/raid_trigger.go` - `ai_burst` in `lockdownTriggerSentence`, `raidPostNotice` and `raidFire`'s snapshot step
+- `fuku/modules/lockdown_alert.go` - `ai_burst` in the trigger line, counts line and burst snapshot; `lockdownMergeSnapshot` with two wrappers
+- `fuku/modules/lockdown_status.go` - `lockdownStartedAutomatically` knows `ai_burst`
+- `fuku/db/models/lockdown.go` - `LockdownTriggerAIBurst`, `LockdownTriggerKinds()`
 - `locales/*.yml` - `lockdown_trigger_ai_burst`, `lockdown_alert_trigger_ai_burst`, `lockdown_alert_counts_ai`, `lockdown_auto_started_ai_burst`
 - `AGENTS.md` - the rules above
 
@@ -175,8 +175,8 @@ status: complete
 **1. [Rule 3 - Blocking] Added `models.LockdownTriggerKinds()`**
 - **Found during:** Task 2
 - **Issue:** The plan asks for a table test that "fails for a kind added later without these cases", but Go cannot enumerate constants, so the table could not detect a new kind.
-- **Fix:** A small function in `alita/db/models/lockdown.go` (a file the plan already lists) lists every kind; the test fails for any kind in it without a case. Committed separately as `55a8a1a`.
-- **Files modified:** alita/db/models/lockdown.go
+- **Fix:** A small function in `fuku/db/models/lockdown.go` (a file the plan already lists) lists every kind; the test fails for any kind in it without a case. Committed separately as `55a8a1a`.
+- **Files modified:** fuku/db/models/lockdown.go
 - **Verification:** `TestLockdownTriggerKindsAllSurfaces` passes; removing a case would fail it.
 - **Committed in:** 55a8a1a
 
@@ -192,13 +192,13 @@ status: complete
 
 ## Issues Encountered
 
-None. `make lint` cannot run here (golangci-lint is built with Go 1.25 against a Go 1.26 module), so `go vet -tags testtools ./alita/modules ./alita/db/models` and `gofmt -l alita` (both clean) stand in for it.
+None. `make lint` cannot run here (golangci-lint is built with Go 1.25 against a Go 1.26 module), so `go vet -tags testtools ./fuku/modules ./fuku/db/models` and `gofmt -l fuku` (both clean) stand in for it.
 
 ## Verification Run
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown|Unlockdown' ./alita/modules` - ok (about 137 s)
-- `go test -tags testtools ./alita/i18n ./alita/db/models` - ok (includes `TestLockdownLocaleKeys`)
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/models`, `gofmt -l alita` - clean
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown|Unlockdown' ./fuku/modules` - ok (about 137 s)
+- `go test -tags testtools ./fuku/i18n ./fuku/db/models` - ok (includes `TestLockdownLocaleKeys`)
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/models`, `gofmt -l fuku` - clean
 - `make check-translations` - all translations present; `make check-docs` - no drift
 - `git diff --exit-code go.mod go.sum` - clean (no dependency change)
 - The full `make test` was not run here; the orchestrator runs it after the wave. No PostgreSQL was started and this plan adds no PostgreSQL-only guarantee.
@@ -221,4 +221,4 @@ Nothing in this plan could be checked against live services here:
 
 ## Self-Check: PASSED
 
-Created files exist (`alita/modules/raid_ai_count.go`, `alita/modules/raid_ai_burst_test.go`); commits `e92a3d3`, `f7e8ad4`, `55a8a1a`, `1c5d7bd`, `f93c147`, `c9be95f`, `64f57c3` are in `git log`; the acceptance greps of the three tasks pass.
+Created files exist (`fuku/modules/raid_ai_count.go`, `fuku/modules/raid_ai_burst_test.go`); commits `e92a3d3`, `f7e8ad4`, `55a8a1a`, `1c5d7bd`, `f93c147`, `c9be95f`, `64f57c3` are in `git log`; the acceptance greps of the three tasks pass.

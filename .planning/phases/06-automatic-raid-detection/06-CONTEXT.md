@@ -31,7 +31,7 @@ Out of scope:
   - Users an admin added or approved never count (RAID-07, and the same performer rule as the Phase 4 guard). Neither do approved users or the bot itself.
   - Join requests do not count, because they don't let anyone in.
 - **D-03:** Carry-over (LOCK-15): a group's non-zero `antiraid_settings.auto_antiraid_threshold` becomes its join-surge threshold. A group where it was 0 (off) gets the new default, on at 15, because the owner chose triggers on by default.
-- **D-04:** Counting is shared across replicas through Redis, read from the existing 10-minute join tracker (`alita:lockdown:recent:<chat>`, Phase 5) or a key beside it.
+- **D-04:** Counting is shared across replicas through Redis, read from the existing 10-minute join tracker (`fuku:lockdown:recent:<chat>`, Phase 5) or a key beside it.
   - Without Redis the trigger is inert and logs once; manual `/lockdown` still works.
   - A count is never a ban decision. It only starts a lockdown.
 
@@ -97,19 +97,19 @@ Out of scope:
 
 ### Reusable Assets
 - **Lockdown machinery.**
-  - `alita/modules/lockdown.go`: the `lockdown` command does the snapshot (`getChat`), the lock (`setChatPermissions`), `lockdown.Start` and the settle path.
-  - `alita/modules/lockdown_guard.go`: the group -7 join handlers.
-  - `alita/modules/lockdown_worker.go`: the worker.
-  - `alita/modules/lockdown_alert*.go`: the alert, which already shows `trigger_kind` and counts.
-- **One active lockdown per chat:** `uk_chat_lockdowns_active` plus `lockdown.Start` (`alita/db/lockdown/repository.go`) already give LOCK-10 across replicas.
-- **The 10-minute join tracker:** `alita/modules/lockdown_recent.go`, `alita:lockdown:recent:<chat>`, a sorted set scored by join time and deduplicated by user ID at read.
-- **Old antiraid:** `alita/modules/antiraid.go` (962 lines) holds the commands, `onJoin` at group -5, the expiry poller and the Redis keys `alita:antiraid:state` and `alita:antiraid:joins`. `alita/db/antiraid` holds the settings repository, and `models.AntiRaidSettings` has `AutoAntiRaidThreshold` (joins per minute, 0 = off).
+  - `fuku/modules/lockdown.go`: the `lockdown` command does the snapshot (`getChat`), the lock (`setChatPermissions`), `lockdown.Start` and the settle path.
+  - `fuku/modules/lockdown_guard.go`: the group -7 join handlers.
+  - `fuku/modules/lockdown_worker.go`: the worker.
+  - `fuku/modules/lockdown_alert*.go`: the alert, which already shows `trigger_kind` and counts.
+- **One active lockdown per chat:** `uk_chat_lockdowns_active` plus `lockdown.Start` (`fuku/db/lockdown/repository.go`) already give LOCK-10 across replicas.
+- **The 10-minute join tracker:** `fuku/modules/lockdown_recent.go`, `fuku:lockdown:recent:<chat>`, a sorted set scored by join time and deduplicated by user ID at read.
+- **Old antiraid:** `fuku/modules/antiraid.go` (962 lines) holds the commands, `onJoin` at group -5, the expiry poller and the Redis keys `fuku:antiraid:state` and `fuku:antiraid:joins`. `fuku/db/antiraid` holds the settings repository, and `models.AntiRaidSettings` has `AutoAntiRaidThreshold` (joins per minute, 0 = off).
 - **Authority:** `requireLockdownAuthority` (live `getChatMember`), `chat_status.IsUserAdmin` (cached), `approvals.IsUserApproved` (cached).
 - **Log destination:** `actionlog.Destination` and `staff.GetLinkOfGroupFresh`.
 
 ### Established Patterns
 - Watchers return `ext.ContinueGroups`; commands use `helpers.WrapCommand`; anonymous admin re-entry uses `RegisterAnonymousAdminHandler`.
-- Operational Redis keys sit outside `alita:cache:`. Best-effort Redis writes on the join path stay under 250 ms and their results are ignored.
+- Operational Redis keys sit outside `fuku:cache:`. Best-effort Redis writes on the join path stay under 250 ms and their results are ignored.
 - Exactly-once side effects come from conditional database writes; only the winner posts.
 - Migrations are append-only and timestamped; every new model goes into the test-harness AutoMigrate lists.
 

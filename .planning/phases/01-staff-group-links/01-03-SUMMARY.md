@@ -30,10 +30,10 @@ tech-stack:
 
 key-files:
   created:
-    - alita/db/staff/rekey.go
-    - alita/db/staff/rekey_test.go
-    - alita/modules/staff_watchers.go
-    - alita/modules/staff_migrate_test.go
+    - fuku/db/staff/rekey.go
+    - fuku/db/staff/rekey_test.go
+    - fuku/modules/staff_watchers.go
+    - fuku/modules/staff_migrate_test.go
   modified:
     - AGENTS.md
 
@@ -53,13 +53,13 @@ coverage:
     requirement: "SETUP-07"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./alita/modules#TestStaffMigrateTracer"
+        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./fuku/modules#TestStaffMigrateTracer"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./alita/modules#TestStaffMigrateEitherOrder"
+        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./fuku/modules#TestStaffMigrateEitherOrder"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./alita/modules#TestStaffMigrateUnrelatedChat"
+        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./fuku/modules#TestStaffMigrateUnrelatedChat"
         status: pass
     human_judgment: false
   - id: D2
@@ -67,7 +67,7 @@ coverage:
     requirement: "SETUP-07"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -count=1 -run '^TestRekeyChat' ./alita/db/staff"
+        ref: "go test -tags testtools -race -count=1 -run '^TestRekeyChat' ./fuku/db/staff"
         status: pass
     human_judgment: false
   - id: D3
@@ -75,7 +75,7 @@ coverage:
     requirement: "SETUP-07"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./alita/modules#TestStaffMigrateFromTelegramError"
+        ref: "go test -tags testtools -race -count=1 -run '^TestStaffMigrate' ./fuku/modules#TestStaffMigrateFromTelegramError"
         status: pass
     human_judgment: false
   - id: D4
@@ -141,7 +141,7 @@ Plans 01-07 and 01-08 can add the ownership and bot-health watchers to `staffWat
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/db/staff/rekey.go`, `alita/db/staff/rekey_test.go`, `alita/modules/staff_watchers.go`, `alita/modules/staff_migrate_test.go`.
+- Created files exist: `fuku/db/staff/rekey.go`, `fuku/db/staff/rekey_test.go`, `fuku/modules/staff_watchers.go`, `fuku/modules/staff_migrate_test.go`.
 - Commits `711cbb8`, `8d606cf`, `f74833d` are on the branch.
 - Task 1 and Task 2 acceptance criteria re-run and passing (greps match, no bare `return nil`, 10 `TestStaffMigrate` passes, 8 `TestRekeyChat` passes).
 - Plan-level verification passing: `make test`, golangci-lint and dupl (0 issues), `make check-docs`, `go.mod` and `go.sum` unchanged.

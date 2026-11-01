@@ -36,10 +36,10 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - alita/config/config.go
-    - alita/config/config_pure_test.go
-    - alita/utils/logredact/logredact.go
-    - alita/utils/logredact/logredact_test.go
+    - fuku/config/config.go
+    - fuku/config/config_pure_test.go
+    - fuku/utils/logredact/logredact.go
+    - fuku/utils/logredact/logredact_test.go
     - sample.env
     - docs/src/content/docs/api-reference/environment.md
 
@@ -75,10 +75,10 @@ Both tasks followed RED then GREEN. RED for Task 1 was a compile failure (the fi
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestGeminiConfig|TestLoadConfig|TestSetDefaults)$' -v ./alita/config`: PASS, including `--- PASS: TestGeminiConfig`.
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestScrubGoogleAPIKeyShape|TestScrubStructuralPatterns|TestScrubDoesNotCorruptOrdinaryProse)$' -v ./alita/utils/logredact`: PASS.
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/config ./alita/utils/logredact`: PASS.
-- `CGO_ENABLED=0 go build ./...`: clean. `go vet -tags testtools ./alita/config ./alita/utils/logredact`: clean. `gofmt -l alita/config alita/utils/logredact`: nothing.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestGeminiConfig|TestLoadConfig|TestSetDefaults)$' -v ./fuku/config`: PASS, including `--- PASS: TestGeminiConfig`.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^(TestScrubGoogleAPIKeyShape|TestScrubStructuralPatterns|TestScrubDoesNotCorruptOrdinaryProse)$' -v ./fuku/utils/logredact`: PASS.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/config ./fuku/utils/logredact`: PASS.
+- `CGO_ENABLED=0 go build ./...`: clean. `go vet -tags testtools ./fuku/config ./fuku/utils/logredact`: clean. `gofmt -l fuku/config fuku/utils/logredact`: nothing.
 - `make check-docs`: no drift. `git diff --exit-code go.mod go.sum`: unchanged.
 - `make lint` was not run: golangci-lint is built with Go 1.25 and cannot lint the Go 1.26 module here, so `go vet -tags testtools` and `gofmt -l` stand in for it.
 - Acceptance greps: `os.Getenv("GEMINI_API_KEY")` 1, `os.Getenv("GEMINI_MODEL")` 1, `func registerSecrets(` 1, `gemini.ValidModel` 1, `AIza` in logredact.go present, `GEMINI_API_KEY` in environment.md 3, MANUALLY MAINTAINED marker kept, "paid" present.

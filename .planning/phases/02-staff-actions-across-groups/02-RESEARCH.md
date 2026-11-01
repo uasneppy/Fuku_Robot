@@ -1,7 +1,7 @@
 # Phase 2: Staff Actions Across Groups - Research
 
 **Researched:** 2026-10-05
-**Domain:** Telegram Bot API moderation fan-out (Go, gotgbot v2, GORM/PostgreSQL, Redis) inside an existing Alita-derived bot
+**Domain:** Telegram Bot API moderation fan-out (Go, gotgbot v2, GORM/PostgreSQL, Redis) inside an existing Fuku-derived bot
 **Confidence:** HIGH on codebase integration and on the `restrictChatMember` research flag; MEDIUM on Telegram rate-limit numbers (official FAQ page not directly fetchable from this sandbox)
 
 <user_constraints>
@@ -68,7 +68,7 @@ None: the discussion stayed within phase scope. Log-channel posting (STAFF-09), 
 | STAFF-08 | One summary message updated as groups finish; no group silently dropped | Pre-filled result slice, panic-safe workers, final sweep marks unset slots failed; batched edits; fallback new message; overflow continuation (Patterns 5-6) |
 | STAFF-12 | Fan-out within rate limits, waits and retries on Telegram's say-so, failed not dropped | Redis slot-reservation pacer + shared `retry_after` block key + bounded retry wrapper (Pattern 3) |
 | STAFF-13 | Existing commands unchanged outside Staff Groups | Interceptor returns `ext.ContinueGroups` with zero side effects when the chat is not a Staff Group; regression tests through a real dispatcher |
-| PLAT-01 | Works with several replicas; shared pacing | All shared state (card, pacer, target lock) in Redis outside the `alita:cache:` prefix; Redis required for staff actions |
+| PLAT-01 | Works with several replicas; shared pacing | All shared state (card, pacer, target lock) in Redis outside the `fuku:cache:` prefix; Redis required for staff actions |
 </phase_requirements>
 
 ## Summary
@@ -146,7 +146,7 @@ Open wording conflict for the planner: CONTEXT D-11 says a `kicked` target "coun
 
 - Documented guidance: avoid more than ~1 message/second in one chat (short bursts allowed, then 429), no more than 20 messages/minute in a group, and ~30 messages/second for bulk broadcast without paid broadcasts [CITED: core.telegram.org/bots/faq, via WebSearch summary 2026-10-05; the page itself is blocked by the sandbox egress proxy]. These numbers concern sending messages; there is no published number for `banChatMember`/`restrictChatMember`/`getChatMember`, but any API request may answer 429, so the contract (honor `retry_after`) applies to all of them [CITED: same summary].
 - Server side: a 429 from Telegram becomes HTTP 429 with `parameters.retry_after` (`query->set_retry_after_error(retry_after_time)` in `fail_query_with_error`; a 429 with an unparsable message becomes a 500) [VERIFIED: Client.cpp lines ~74-80 of the error mapper].
-- gotgbot: `ResponseParameters.RetryAfter int64` with comment "In case of exceeding flood control, the number of seconds left to wait before the request can be repeated" [VERIFIED: gotgbot gen_types.go:10683-10684]. A non-OK response becomes `*gotgbot.TelegramError{Method, Params, Code, Description, ResponseParams}` [VERIFIED: gotgbot request.go:61-72, 161-170]. **gotgbot does not retry**; the repo has no `RetryAfter` handling outside an unrelated AI-spam HTTP client (`grep -rn "RetryAfter"` over `alita`, `main.go`). Detect with `errors.As(err, &tgErr)`, `tgErr.Code == 429`, `tgErr.ResponseParams != nil && tgErr.ResponseParams.RetryAfter > 0`.
+- gotgbot: `ResponseParameters.RetryAfter int64` with comment "In case of exceeding flood control, the number of seconds left to wait before the request can be repeated" [VERIFIED: gotgbot gen_types.go:10683-10684]. A non-OK response becomes `*gotgbot.TelegramError{Method, Params, Code, Description, ResponseParams}` [VERIFIED: gotgbot request.go:61-72, 161-170]. **gotgbot does not retry**; the repo has no `RetryAfter` handling outside an unrelated AI-spam HTTP client (`grep -rn "RetryAfter"` over `fuku`, `main.go`). Detect with `errors.As(err, &tgErr)`, `tgErr.Code == 429`, `tgErr.ResponseParams != nil && tgErr.ResponseParams.RetryAfter > 0`.
 - The bot's HTTP client has a 30 s per-request timeout (`constants.LongTimeout = 30 * time.Second`, `main.go` `http.Client{Timeout: constants.LongTimeout}`), and `CheckOwner`/`FetchBotMember` apply an 8 s `liveCheckTimeout` [VERIFIED: owner.go:39]. A retry loop must carry its own `context` deadline.
 - Multi-replica pacing (PLAT-01): per-replica limiters multiply the budget by the replica count and cannot share a `retry_after`. Use Redis: (a) a slot-reservation Lua script that hands each caller a wait time so that fleet-wide calls are at least `interval` apart, and (b) a shared block key set from every observed `retry_after`, which every replica's next reservation respects. Probed against miniredis 2.39 with `TIME` and `PTTL` inside the script (see Code Examples): four back-to-back reservations returned waits 0, 100, 199, 299 ms, and an active 5 s block made the next reservation return 5000 ms [VERIFIED: probe run 2026-10-05 in this session].
 - Cost model for sizing: per linked group about 4 Bot API calls (`getChatAdministrators` via `recheckLink`, `getChatMember` issuer, `getChatMember` target, the action), plus one `getChat` only for unmute, plus one `FetchBotMember` only when a call fails. At 10 calls/s fleet-wide, 30 groups take about 12 s. Recommended starting values (planner may tune): interval 100 ms, 4 concurrent groups, up to 3 retries per call, single wait capped at 60 s (a longer `retry_after` fails the group as "rate limited, gave up after retries" and still sets the shared block).
@@ -286,7 +286,7 @@ Telegram update (Staff Group message "/ban @x 2d spam")
 
 ### Recommended Project Structure
 ```
-alita/modules/
+fuku/modules/
 ├── staff_action.go            # module registration (priority 65), interceptors, gate, anon/refusal paths
 ├── staff_action_parse.go      # pure: args -> target ref, duration, reason; caps; hints as typed errors
 ├── staff_action_card.go       # Redis card hash, token, Lua CAS state machine, expiry timer
@@ -294,10 +294,10 @@ alita/modules/
 ├── staff_action_run.go        # coordinator, per-group worker, error classification, shutdown drain
 ├── staff_action_summary.go    # pure renderer + batching editor + fallback delivery
 ├── staff_action_*_test.go     # //go:build testtools
-alita/utils/ratelimit/
+fuku/utils/ratelimit/
 └── telegram_pacer.go          # Redis slot reservation + block key + Do(retry) wrapper (+ local fallback)
-alita/db/user/repository.go    # + FindUsersByUsername (case-insensitive, all matches, last activity)
-alita/utils/extraction/        # + exported pure ParseDurationToken (no replies)
+fuku/db/user/repository.go    # + FindUsersByUsername (case-insensitive, all matches, last activity)
+fuku/utils/extraction/        # + exported pure ParseDurationToken (no replies)
 locales/*.yml                  # staff_act_* keys, all 7 files
 ```
 
@@ -306,7 +306,7 @@ locales/*.yml                  # staff_act_* keys, all 7 files
 **When to use:** the 13 command names above.
 **Example:**
 ```go
-// Source: derived from gotgbot ext/dispatcher.go iterateOverHandlerGroups and alita/modules/registry.go
+// Source: derived from gotgbot ext/dispatcher.go iterateOverHandlerGroups and fuku/modules/registry.go
 func staffEntry(act staffActionKind) func(*gotgbot.Bot, *ext.Context) error {
 	return func(b *gotgbot.Bot, ctx *ext.Context) error {
 		chat := ctx.EffectiveChat
@@ -320,9 +320,9 @@ func staffEntry(act staffActionKind) func(*gotgbot.Bot, *ext.Context) error {
 ```
 
 ### Pattern 2: Redis card with an atomic state machine
-**What:** hash `alita:staff:act:<token>` with fields `state` (`pending|running|done|cancelled|expired`), `issuer`, `staff_chat`, `action`, `target`, `target_name` (display only), `duration_s` (0 = permanent), `reason`, `group_count`, `expires_at`. A Lua script transitions `state` only from `pending`, and checks issuer and expiry inside the script, so two taps, or two replicas, can never both start a fan-out. Return codes distinguish: ok, wrong state (already handled), not issuer, expired.
+**What:** hash `fuku:staff:act:<token>` with fields `state` (`pending|running|done|cancelled|expired`), `issuer`, `staff_chat`, `action`, `target`, `target_name` (display only), `duration_s` (0 = permanent), `reason`, `group_count`, `expires_at`. A Lua script transitions `state` only from `pending`, and checks issuer and expiry inside the script, so two taps, or two replicas, can never both start a fan-out. Return codes distinguish: ok, wrong state (already handled), not issuer, expired.
 **Why a hash and not `GETDEL`:** after Confirm the key must still say "running", and a late tap must be answered "already handled" without editing the message (an edit would overwrite the live summary).
-**TTL:** `pending` cards live a little longer than `expires_at` (for example 5 min plus 1 min) so a late tap can still answer "expired"; terminal states shrink the TTL (for example 1 h). Keys sit outside `alita:cache:` so `CLEAR_CACHE_ON_STARTUP` keeps pending cards across a restart (AGENTS.md data rule).
+**TTL:** `pending` cards live a little longer than `expires_at` (for example 5 min plus 1 min) so a late tap can still answer "expired"; terminal states shrink the TTL (for example 1 h). Keys sit outside `fuku:cache:` so `CLEAR_CACHE_ON_STARTUP` keeps pending cards across a restart (AGENTS.md data rule).
 **Expiry edit (D-07):** lazily on any tap after `expires_at`, plus a best-effort `time.AfterFunc(5m)` timer on the creating replica that does the same CAS `pending -> expired` and then edits the card (precedent: `replySelfDeleting`, `staff_notify.go:32-46`, with `RecoverFromPanic`). The CAS guarantees one edit across replicas; a restart that loses the timer is covered by the lazy path.
 **Unique token:** `crypto/rand` 8 bytes, hex (16 chars). Treat a token collision on `HSETNX`-style create as retry.
 
@@ -422,7 +422,7 @@ Not a rename/refactor/migration phase: omitted. (No stored data is renamed; the 
 
 ### Pitfall 11: Race between target lookup and action
 **What goes wrong:** between `getChatMember(target)` and `restrictChatMember`, another actor (a local admin, another staff action) bans the target; the restrict then replaces the ban.
-**How to avoid / mitigate:** a per-target Redis lock `alita:staff:lock:target:<id>` held for the fan-out (SET NX with a safety TTL, compare-and-delete on release) refuses a second concurrent staff action on the same target ("another staff action on this target is running"). This also settles the second Discretion item without relying only on convergence. A local admin racing within milliseconds remains a tiny accepted window (document it).
+**How to avoid / mitigate:** a per-target Redis lock `fuku:staff:lock:target:<id>` held for the fan-out (SET NX with a safety TTL, compare-and-delete on release) refuses a second concurrent staff action on the same target ("another staff action on this target is running"). This also settles the second Discretion item without relying only on convergence. A local admin racing within milliseconds remains a tiny accepted window (document it).
 
 ### Pitfall 12: Basic groups and non-supergroups
 `restrictChatMember` and `unbanChatMember` fail with `method is available only in supergroups` (server messages above). Phase 1 refuses linking basic groups (`staff_link_refuse_not_supergroup`), but a link can outlive a downgrade or odd state; classify these errors, do not retry.
@@ -448,7 +448,7 @@ if blk > 0 then slot = math.max(slot, now + blk) end
 redis.call('SET', KEYS[1], slot + tonumber(ARGV[1]), 'PX', ARGV[2])
 return slot - now
 `)
-// KEYS[1] "alita:staff:pace:next", KEYS[2] "alita:staff:pace:block"; ARGV[1] interval ms, ARGV[2] key TTL ms.
+// KEYS[1] "fuku:staff:pace:next", KEYS[2] "fuku:staff:pace:block"; ARGV[1] interval ms, ARGV[2] key TTL ms.
 // Setting the block from a 429: SET block 1 PX <retry_after*1000> only when it would extend the current PTTL.
 ```
 
@@ -509,7 +509,7 @@ func endsLater(newUntil, curUntil int64) bool { // 0 means permanent
 
 ### Issuer-bound confirm button
 ```go
-// Source: alita/modules/staff.go (staffCallbackNamespace = "staff"; encodeCallbackData in callback_codec.go)
+// Source: fuku/modules/staff.go (staffCallbackNamespace = "staff"; encodeCallbackData in callback_codec.go)
 const (
 	staffActActionConfirm = "xc" // new; existing: uy un ul uc ux rf pg
 	staffActActionCancel  = "xn"
@@ -520,7 +520,7 @@ confirm := encodeCallbackData(staffCallbackNamespace, map[string]string{"a": sta
 
 ### Username lookup (new repository function)
 ```go
-// Source: pattern of alita/db/user/repository.go GetUserIdByUserName (Read this session); own design
+// Source: pattern of fuku/db/user/repository.go GetUserIdByUserName (Read this session); own design
 func FindUsersByUsername(username string, limit int) ([]models.User, error) {
 	var rows []models.User
 	err := db.DB.Where("LOWER(username) = LOWER(?)", username).
@@ -596,7 +596,7 @@ func FindUsersByUsername(username string, limit int) ([]models.User, error) {
 **Missing dependencies with no fallback:** none.
 **Missing dependencies with fallback:** live Telegram (no bot token in the sandbox): all Telegram behavior is exercised through the hand-written fake `BotClient`; live UAT stays deferred as in Phase 1.
 
-A single existing test ran in the sandbox: `CGO_ENABLED=1 go test -tags testtools -count=1 -run TestStaffSweepTracer ./alita/modules` returned `ok` in 13.5 s wall (first compile). `01-SKELETON.md` records that `make test` and `make lint` fail in the sandbox for toolchain reasons, so use targeted `go test -tags testtools -race -count=1 -run ...` here.
+A single existing test ran in the sandbox: `CGO_ENABLED=1 go test -tags testtools -count=1 -run TestStaffSweepTracer ./fuku/modules` returned `ok` in 13.5 s wall (first compile). `01-SKELETON.md` records that `make test` and `make lint` fail in the sandbox for toolchain reasons, so use targeted `go test -tags testtools -race -count=1 -run ...` here.
 
 ## Validation Architecture
 
@@ -605,15 +605,15 @@ A single existing test ran in the sandbox: `CGO_ENABLED=1 go test -tags testtool
 |----------|-------|
 | Framework | Go `testing` + `testify` assertions; real fixtures (SQLite via `internal/testdb.Run`, miniredis, hand-written `gotgbot.BotClient` fakes) |
 | Config file | none; every test file starts with `//go:build testtools` |
-| Quick run command | `go test -tags testtools -race -count=1 -run '^TestStaffAction' ./alita/modules` |
-| Full suite command | `make test` (CI/local with toolchain); sandbox: per-package `go test -tags testtools -race -count=1 ./alita/modules ./alita/utils/ratelimit ./alita/utils/extraction ./alita/db/user ./alita/i18n` |
+| Quick run command | `go test -tags testtools -race -count=1 -run '^TestStaffAction' ./fuku/modules` |
+| Full suite command | `make test` (CI/local with toolchain); sandbox: per-package `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/utils/ratelimit ./fuku/utils/extraction ./fuku/db/user ./fuku/i18n` |
 
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| STAFF-01 | Each of the 7 commands in a Staff Group reaches the staff flow; numeric ID, `@username`, `text_mention` | unit + dispatcher | `go test -tags testtools -race -count=1 -run 'TestStaffActionParse\|TestStaffActionDispatch' ./alita/modules` | Wave 0 |
-| STAFF-01 | Timed grammar (`m h d w`), over-limit -> permanent, `/tban`/`/tmute` require duration | unit | `go test -tags testtools -count=1 ./alita/utils/extraction` | Wave 0 |
-| STAFF-01 | Unknown `@username` refused; multi-match lists all; case-insensitive | repo + unit | `go test -tags testtools -count=1 -run TestFindUsersByUsername ./alita/db/user` | Wave 0 |
+| STAFF-01 | Each of the 7 commands in a Staff Group reaches the staff flow; numeric ID, `@username`, `text_mention` | unit + dispatcher | `go test -tags testtools -race -count=1 -run 'TestStaffActionParse\|TestStaffActionDispatch' ./fuku/modules` | Wave 0 |
+| STAFF-01 | Timed grammar (`m h d w`), over-limit -> permanent, `/tban`/`/tmute` require duration | unit | `go test -tags testtools -count=1 ./fuku/utils/extraction` | Wave 0 |
+| STAFF-01 | Unknown `@username` refused; multi-match lists all; case-insensitive | repo + unit | `go test -tags testtools -count=1 -run TestFindUsersByUsername ./fuku/db/user` | Wave 0 |
 | STAFF-02 | Reason kept, capped, HTML-escaped on card and summary | unit | `-run TestStaffActionReason` | Wave 0 |
 | STAFF-03 | Card shows name, ID, action, duration, reason, count; nothing applied before Confirm; non-issuer tap refused; expiry; cancel | unit + miniredis | `-run 'TestStaffActionCard'` | Wave 0 |
 | STAFF-04 | Never acts on the Staff Group; one call set per linked group | unit | `-run TestStaffActionFanOut` | Wave 0 |
@@ -621,11 +621,11 @@ A single existing test ran in the sandbox: `CGO_ENABLED=1 go test -tags testtool
 | STAFF-06 | Anonymous admin in a Staff Group: reply "post as yourself", no card, no anon-proof keyboard, no Telegram write | dispatcher | `-run TestStaffActionAnonymous` | Wave 0 |
 | STAFF-07 | Target admin/creator/bot/service ID skipped with reason | unit | `-run TestStaffActionTargetProtection` | Wave 0 |
 | STAFF-08 | Every group ends done/skipped/failed; panic-injected worker still reported; edit failure falls back to new message; collapse and overflow | unit | `-run 'TestStaffActionSummary\|TestStaffActionNoSilentDrop'` | Wave 0 |
-| STAFF-12 | 429 with `retry_after` retried then succeeds; permanent 429 -> "rate limited, gave up after retries"; shared block honoured by a second pacer instance | unit + miniredis | `go test -tags testtools -race -count=1 ./alita/utils/ratelimit` | Wave 0 |
+| STAFF-12 | 429 with `retry_after` retried then succeeds; permanent 429 -> "rate limited, gave up after retries"; shared block honoured by a second pacer instance | unit + miniredis | `go test -tags testtools -race -count=1 ./fuku/utils/ratelimit` | Wave 0 |
 | STAFF-13 | The five commands behave identically in a non-staff group (same Telegram calls) with Bans, Mutes and StaffActions all loaded | dispatcher | `-run TestStaffActionNonStaffUnchanged` | Wave 0 |
 | PLAT-01 | Two pacer instances on one miniredis keep fleet spacing; card CAS exactly-once across two handlers | miniredis | `-run 'TestStaffActionPacerFleet\|TestStaffActionConfirmOnce'` | Wave 0 |
 | Research flag | Decision table: restrict never sent to `kicked`/`left`; `unban(false)` only for kick on members; unban always `only_if_banned=true`; stateful fake proves no ban is lifted | table-driven | `-run TestStaffActionDecisionTable` | Wave 0 |
-| PLAT-03 | New `staff_act_*` keys exist in all 7 locales with equal placeholders | unit | `go test -tags testtools -count=1 -run TestStaffLocaleKeys ./alita/i18n` | exists (covers `staff_` prefix automatically) |
+| PLAT-03 | New `staff_act_*` keys exist in all 7 locales with equal placeholders | unit | `go test -tags testtools -count=1 -run TestStaffLocaleKeys ./fuku/i18n` | exists (covers `staff_` prefix automatically) |
 
 ### Sampling Rate
 - **Per task commit:** the quick run command for the touched package.
@@ -633,10 +633,10 @@ A single existing test ran in the sandbox: `CGO_ENABLED=1 go test -tags testtool
 - **Phase gate:** `make test`, `make lint`, `make check-translations`, `make check-docs` (and `make generate-docs` if `staff_help_msg` changes) green before `/gsd-verify-work`.
 
 ### Wave 0 Gaps
-- [ ] Extend or add a stateful fake (new file, e.g. `alita/modules/staff_action_fake_test.go`): per-`(chat,user)` member records with `status`, `until_date`, `is_member`, `can_send_messages`, administrator `can_restrict_members`; apply `banChatMember`/`restrictChatMember`/`unbanChatMember` as status transitions that mirror the server semantics in Q1 (replacement, `only_if_banned`); per-call scripted error sequences (429 N times then OK; always 429); `editMessageText` failure and `not modified` injection; `getChat` returning group default permissions; call-order recording.
+- [ ] Extend or add a stateful fake (new file, e.g. `fuku/modules/staff_action_fake_test.go`): per-`(chat,user)` member records with `status`, `until_date`, `is_member`, `can_send_messages`, administrator `can_restrict_members`; apply `banChatMember`/`restrictChatMember`/`unbanChatMember` as status transitions that mirror the server semantics in Q1 (replacement, `only_if_banned`); per-call scripted error sequences (429 N times then OK; always 429); `editMessageText` failure and `not modified` injection; `getChat` returning group default permissions; call-order recording.
 - [ ] miniredis helper for staff-action tests (`cache.SetRedisClientForTest` exists).
 - [ ] `extraction.ParseDurationToken` plus tests.
-- [ ] `user.FindUsersByUsername` plus tests in `alita/db/user`.
+- [ ] `user.FindUsersByUsername` plus tests in `fuku/db/user`.
 - [ ] A real-dispatcher harness test loading `LoadBans`, `LoadMutes` and `LoadStaffActions` in registry order.
 - [ ] Framework install: none.
 
@@ -677,9 +677,9 @@ Extracted from `./.claude/CLAUDE.md` and the imported `AGENTS.md` (binding):
 - Stay on Go 1.26.0, gotgbot v2, GORM/PostgreSQL (SQLite in tests), Redis; no new stack. Production builds `CGO_ENABLED=0`, tests need `CGO_ENABLED=1`.
 - Commands go through `helpers.WrapCommand`; **this phase needs a documented exception** for the pass-through interceptor (justified in Q4) and AGENTS.md must be updated in the same commit.
 - Handler groups: staff watchers sit at `-3`; group-0 order is set by module priority; watchers return `ext.ContinueGroups`, commands `ext.EndGroups`; a group-0 handler returning `nil` silently kills later group-0 handlers.
-- Callbacks only through `alita/utils/callbackcodec` (64-byte cap); `encodeCallbackData` returns `""` on overflow (dead button); put user text in Redis behind a short token.
+- Callbacks only through `fuku/utils/callbackcodec` (64-byte cap); `encodeCallbackData` returns `""` on overflow (dead button); put user text in Redis behind a short token.
 - Permissions: `chat_status` predicates return bools and never reply; `IsUserAdmin` returns false for channel and non-positive IDs; never pass a chat ID as a user ID; `*ForUpdate` predicates are memoised per update, so watchers only.
-- Data: every write `cache.DeleteCache`s the keys it affects; operational Redis keys (`alita:staff:*`) sit outside the `alita:cache:` prefix; `UpdateRecord` skips zero values. Phase 2 adds no DB write, so no cache invalidation is needed beyond what `recheckLink`'s removal already does.
+- Data: every write `cache.DeleteCache`s the keys it affects; operational Redis keys (`fuku:staff:*`) sit outside the `fuku:cache:` prefix; `UpdateRecord` skips zero values. Phase 2 adds no DB write, so no cache invalidation is needed beyond what `recheckLink`'s removal already does.
 - Migrations append-only, timestamped, one transaction per file; none required here.
 - i18n: every key in all 7 locale files; use literal `tr.GetString("staff_act_...")` calls so `make check-translations` sees them; copy key names from `locales/en.yml`; a missing key returns `""`, so guard empty button labels (an empty label makes Telegram reject the whole message).
 - Go rules: never discard a DB error on a state-changing path; every fire-and-forget goroutine starts with `defer error_handling.RecoverFromPanic(...)`; async writers join a drained WaitGroup; shutdown drains register after DB-close; register new secrets with `logredact.RegisterSecret` (none introduced here).
@@ -709,7 +709,7 @@ Then widen in dependency order (each independently valuable and testable): (a) f
 ### Primary (HIGH confidence)
 - Bot API server implementation, `tdlib/telegram-bot-api` `telegram-bot-api/Client.cpp` on `master`, fetched 2026-10-05 via raw.githubusercontent.com: `process_restrict_chat_member_query`, `is_chat_member`, `process_unban_chat_member_query`, `process_ban_chat_member_query`, `fail_query_with_error` (429 -> `retry_after`, `USER_ADMIN_INVALID`, `MESSAGE_NOT_MODIFIED` mappings), `check_user_no_fail`.
 - gotgbot v2 source in the module cache (`@v2.0.0-rc.36.0.20260919140833-240296efadb4`): `request.go` (`TelegramError`), `gen_types.go` (`ResponseParameters`, `ChatMemberBanned/Restricted/Left`, `MergedChatMember`), `gen_methods.go` (method descriptions with the official text), `gen_consts.go` (status constants), `ext/dispatcher.go` and `ext/handler_mapping.go` (group iteration), `ext/handlers/command.go`.
-- Repository files read this session: `AGENTS.md`, `.claude/CLAUDE.md`, `02-CONTEXT.md`, `REQUIREMENTS.md`, `STATE.md`, `alita/modules/bans.go`, `mute.go`, `moderation.go`, `moderation_input.go`, `staff.go`, `staff_watchers.go`, `staff_recheck.go`, `staff_notify.go`, `staff_sweeper.go`, `staff_panel.go`, `staff_unlink.go`, `bot_updates.go`, `anonymous_admin_router.go`, `registry.go`, `alita/utils/helpers/command_pipeline.go`, `telegram_helpers.go`, `alita/utils/chat_status/owner.go`, `chat_status.go`, `alita/utils/extraction/extraction.go`, `alita/utils/callbackcodec/callbackcodec.go`, `alita/db/user/repository.go`, `alita/db/staff/repository.go`, `alita/modules/staff_helpers_test.go`, `alita/i18n/staff_locale_test.go`, `main.go`.
+- Repository files read this session: `AGENTS.md`, `.claude/CLAUDE.md`, `02-CONTEXT.md`, `REQUIREMENTS.md`, `STATE.md`, `fuku/modules/bans.go`, `mute.go`, `moderation.go`, `moderation_input.go`, `staff.go`, `staff_watchers.go`, `staff_recheck.go`, `staff_notify.go`, `staff_sweeper.go`, `staff_panel.go`, `staff_unlink.go`, `bot_updates.go`, `anonymous_admin_router.go`, `registry.go`, `fuku/utils/helpers/command_pipeline.go`, `telegram_helpers.go`, `fuku/utils/chat_status/owner.go`, `chat_status.go`, `fuku/utils/extraction/extraction.go`, `fuku/utils/callbackcodec/callbackcodec.go`, `fuku/db/user/repository.go`, `fuku/db/staff/repository.go`, `fuku/modules/staff_helpers_test.go`, `fuku/i18n/staff_locale_test.go`, `main.go`.
 - Probe: slot-reservation Lua script run against miniredis v2.39.0 in this session.
 
 ### Secondary (MEDIUM confidence)

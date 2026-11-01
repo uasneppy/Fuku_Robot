@@ -31,16 +31,16 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/lockdown_staff_test.go
-    - alita/i18n/lockdown_locale_test.go
+    - fuku/modules/lockdown_staff_test.go
+    - fuku/i18n/lockdown_locale_test.go
   modified:
-    - alita/db/lockdown/repository.go
-    - alita/db/lockdown/repository_test.go
-    - alita/modules/staff_panel.go
-    - alita/modules/staff_panel_render_test.go
-    - alita/modules/staff_action_decide.go
-    - alita/modules/staff_action_decide_test.go
-    - alita/modules/staff_action_run.go
+    - fuku/db/lockdown/repository.go
+    - fuku/db/lockdown/repository_test.go
+    - fuku/modules/staff_panel.go
+    - fuku/modules/staff_panel_render_test.go
+    - fuku/modules/staff_action_decide.go
+    - fuku/modules/staff_action_decide_test.go
+    - fuku/modules/staff_action_run.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -104,12 +104,12 @@ status: complete
 
 ## Files Created/Modified
 
-- `alita/db/lockdown/repository.go` - `ListActiveByChatsFresh`
-- `alita/modules/staff_panel.go` - `LockedSince`, the lockdown line in `renderStaffRow`, `markLockedRows` called from `buildStaffPanel`
-- `alita/modules/staff_action_decide.go` - `staffTargetState.LockdownBan` and its branch in `decideStaffBan`
-- `alita/modules/staff_action_run.go` - `staffLockdownBanLookup` seam and its use in `runStaffActionInGroup`
-- `alita/modules/lockdown_staff_test.go` - panel integration test, survive-the-lift test, failed-lookup test (new)
-- `alita/i18n/lockdown_locale_test.go` - locale parity test (new)
+- `fuku/db/lockdown/repository.go` - `ListActiveByChatsFresh`
+- `fuku/modules/staff_panel.go` - `LockedSince`, the lockdown line in `renderStaffRow`, `markLockedRows` called from `buildStaffPanel`
+- `fuku/modules/staff_action_decide.go` - `staffTargetState.LockdownBan` and its branch in `decideStaffBan`
+- `fuku/modules/staff_action_run.go` - `staffLockdownBanLookup` seam and its use in `runStaffActionInGroup`
+- `fuku/modules/lockdown_staff_test.go` - panel integration test, survive-the-lift test, failed-lookup test (new)
+- `fuku/i18n/lockdown_locale_test.go` - locale parity test (new)
 - `locales/*.yml` - `staff_panel_row_lockdown` and the extended `staff_help_msg` in all 7 files
 - `docs/src/content/docs/commands/staff/index.md` - regenerated
 - `AGENTS.md` - final pass
@@ -124,7 +124,7 @@ Followed the plan's recorded decisions (marker = `locked_at` in UTC; one batch q
 
 **1. [Rule 1 - Bug] AGENTS.md contradicted the shipped code in four places**
 - **Found during:** Task 3 (final AGENTS.md pass)
-- **Issue:** (a) antiraid's step-aside was described as "while a lockdown is active", but the code requires a confirmed one (`LockedAt != nil`); (b) the join guard bullet did not say it acts only on a confirmed lockdown, which every guard path does; (c) `decideLockdownJoin` was described as exempting only a live creator or administrator, but it also exempts an anonymous admin; (d) the Testing bullet said the same three harness lists carry the lockdown models, but the staff package's `testmain_test.go` does not, while `alita/db/lockdown/testmain_test.go` does.
+- **Issue:** (a) antiraid's step-aside was described as "while a lockdown is active", but the code requires a confirmed one (`LockedAt != nil`); (b) the join guard bullet did not say it acts only on a confirmed lockdown, which every guard path does; (c) `decideLockdownJoin` was described as exempting only a live creator or administrator, but it also exempts an anonymous admin; (d) the Testing bullet said the same three harness lists carry the lockdown models, but the staff package's `testmain_test.go` does not, while `fuku/db/lockdown/testmain_test.go` does.
 - **Fix:** Corrected each statement; added the panel marker bullet; cross-referenced the staff exception from the lift bullet.
 - **Files modified:** AGENTS.md
 - **Commit:** `dc84b22`
@@ -148,26 +148,26 @@ None.
 | `make check-translations` | PASS ("All translations are present!") |
 | `make generate-docs` then `make check-docs` | PASS, no drift, `git status --porcelain docs/` empty |
 | `CGO_ENABLED=0 go build ./...` | PASS |
-| `go vet -tags testtools ./alita/modules ./alita/db/lockdown ./alita/i18n` | PASS, no output |
+| `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown ./fuku/i18n` | PASS, no output |
 | `git diff --exit-code go.mod go.sum` | PASS, unchanged |
 | `gofmt -l` on touched files | clean (see note below) |
 | `make lint` | NOT RUN: `Error: can't load config: the Go language version (go1.25) used to build golangci-lint is lower than the targeted Go version (1.26.0)` (installed golangci-lint 2.5.0 was built with go1.25) |
 | PostgreSQL 16 migration chain + `TestStartLockdownOneActivePerChat` | NOT RUN: the harness refused `su postgres` ("this command runs su in a plain command ... Refusing to run it"). The `TestStartLockdownOneActivePerChat` SQLite run is part of the green `make test`. |
 
-Note: `gofmt -l alita/ main.go` lists `alita/modules/greetings_command_test.go`. That file is not in this plan's diff (pre-existing), so it was left alone.
+Note: `gofmt -l fuku/ main.go` lists `fuku/modules/greetings_command_test.go`. That file is not in this plan's diff (pre-existing), so it was left alone.
 
 ### Acceptance criteria re-run
 
 - Task 1: `LockedSince time.Time` present at `staff_panel.go:56`; `lockdown.ListActiveByChatsFresh(` present at `staff_panel.go:472`; the `renderStaffRow` body contains 0 occurrences of `StartedBy`; `staff_panel_row_lockdown:` appears once in each of es, fr, hi, id, pt, ru; `git log` shows the `test(04-08)` commit before the `feat(04-08)` commit.
 - Task 2: `LockdownBan bool` and `var staffLockdownBanLookup = lockdown.HasJoinerBanFresh` present; `LockdownBan` appears in AGENTS.md; gofmt clean on the four files.
-- Task 3: `make test` exit 0; `make check-docs` exit 0 with no docs drift; `` `-7` lockdown join guard `` and `alita:lockdown:*` each present in AGENTS.md; `go.mod`/`go.sum` unchanged. `make lint` exit 0 could not be met (environment, see above).
+- Task 3: `make test` exit 0; `make check-docs` exit 0 with no docs drift; `` `-7` lockdown join guard `` and `fuku:lockdown:*` each present in AGENTS.md; `go.mod`/`go.sum` unchanged. `make lint` exit 0 could not be met (environment, see above).
 
 ## Items for the orchestrator
 
 **Unrun commands (phase gate, need a shell where `su postgres` is allowed):**
 
 ```
-PGBIN=/usr/lib/postgresql/16/bin; D=$(mktemp -d); chown postgres "$D"; su postgres -c "$PGBIN/initdb -D $D/data -A trust >/dev/null && $PGBIN/pg_ctl -D $D/data -o '-p 55432 -k $D -c listen_addresses=' -l $D/log start -w >/dev/null && $PGBIN/createdb -h $D -p 55432 chain" && DSN="host=$D port=55432 user=postgres dbname=chain sslmode=disable" && ALITA_TEST_MIGRATION_CHAIN=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./alita/db/migrations && ALITA_TEST_DATABASE=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestStartLockdownOneActivePerChat$' ./alita/db/lockdown; R=$?; su postgres -c "$PGBIN/pg_ctl -D $D/data stop -m fast" >/dev/null 2>&1; rm -rf "$D"; exit $R
+PGBIN=/usr/lib/postgresql/16/bin; D=$(mktemp -d); chown postgres "$D"; su postgres -c "$PGBIN/initdb -D $D/data -A trust >/dev/null && $PGBIN/pg_ctl -D $D/data -o '-p 55432 -k $D -c listen_addresses=' -l $D/log start -w >/dev/null && $PGBIN/createdb -h $D -p 55432 chain" && DSN="host=$D port=55432 user=postgres dbname=chain sslmode=disable" && FUKU_TEST_MIGRATION_CHAIN=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations && FUKU_TEST_DATABASE=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestStartLockdownOneActivePerChat$' ./fuku/db/lockdown; R=$?; su postgres -c "$PGBIN/pg_ctl -D $D/data stop -m fast" >/dev/null 2>&1; rm -rf "$D"; exit $R
 ```
 
 Expected: a `--- PASS: TestRepositoryMigrationChain` line, a `lockdown repository backend: postgres` line, and no `--- SKIP`.
@@ -194,5 +194,5 @@ Phase 4 plan 08 is the last plan of the phase. Ready for the orchestrator's merg
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/modules/lockdown_staff_test.go`, `alita/i18n/lockdown_locale_test.go`.
+- Created files exist: `fuku/modules/lockdown_staff_test.go`, `fuku/i18n/lockdown_locale_test.go`.
 - Commits exist: `cb8d741`, `0083d06`, `634a6c8`, `ccafe9b`, `dc84b22` (`git rev-list --count 608d321..HEAD` = 5, measured from the persisted ledger).

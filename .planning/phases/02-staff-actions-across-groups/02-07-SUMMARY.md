@@ -34,12 +34,12 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_action_summary_test.go
-    - alita/modules/staff_action_progress_test.go
+    - fuku/modules/staff_action_summary_test.go
+    - fuku/modules/staff_action_progress_test.go
   modified:
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_action_decide.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_action_decide.go
     - main.go
     - AGENTS.md
     - locales/en.yml
@@ -98,13 +98,13 @@ Both tasks have a `test(02-07)` commit before their `feat(02-07)` commit. RED co
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffActionSummary' ./alita/modules`: pass
+- `go test -tags testtools -race -count=1 -run '^TestStaffActionSummary' ./fuku/modules`: pass
 - The six progress tests plus `TestStopStaffActionsFinalizes`: pass, and pass 4 times in a row with `-count=4`
-- `go test -tags testtools -race -count=1 ./alita/modules` (full package, about 121 s): pass on the last run (see Deferred Issues for a pre-existing flaky race seen on one earlier run)
-- `./alita/utils/extraction`, `./alita/db/user`, `./alita/i18n` (including `TestStaffLocaleKeys`): pass
+- `go test -tags testtools -race -count=1 ./fuku/modules` (full package, about 121 s): pass on the last run (see Deferred Issues for a pre-existing flaky race seen on one earlier run)
+- `./fuku/utils/extraction`, `./fuku/db/user`, `./fuku/i18n` (including `TestStaffLocaleKeys`): pass
 - `make check-translations`, `make check-docs`: pass
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/... .`: clean
-- `gofmt -l alita main.go`: only `alita/modules/greetings_command_test.go`, which is not gofmt-clean on the base commit (pre-existing, left alone)
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/... .`: clean
+- `gofmt -l fuku main.go`: only `fuku/modules/greetings_command_test.go`, which is not gofmt-clean on the base commit (pre-existing, left alone)
 - `--version` smoke check: built the binary to the scratchpad and ran it from `/tmp`, printed `v2.23.14`
 - `make lint` was NOT run: golangci-lint in this sandbox is built with go1.25 against module go1.26.0. `gofmt` and `go vet` stood in for it.
 - `make test` (full suite with coverage and skip gate) was not run; the targeted package runs above were.
@@ -117,7 +117,7 @@ Both tasks have a `test(02-07)` commit before their `feat(02-07)` commit. RED co
 - **Found during:** Task 2
 - **Issue:** The plan gives the signature without a context, but also requires delivery under a fresh 15 s timeout context. Without a context parameter that timeout has nothing to bound.
 - **Fix:** `deliverStaffActionFinal(ctx, b, chatID, msgID, text, continuation)`. The ctx only bounds the waits between retries; on expiry the summary falls back to a new message.
-- **Files modified:** alita/modules/staff_action_summary.go, alita/modules/staff_action_run.go
+- **Files modified:** fuku/modules/staff_action_summary.go, fuku/modules/staff_action_run.go
 - **Commit:** 047e34b
 
 **2. [Rule 2 - Missing critical functionality] Continuation and fallback messages wait out a 429**
@@ -147,8 +147,8 @@ The plan's `<human-check>` needs a real bot, real groups and real Telegram clien
 
 Both are pre-existing and out of scope; neither touches this plan's code.
 
-- `alita/modules` `TestLogUsersPersistsSenderChatAndReplyUsers` showed a data race once in three full-package `-race` runs (the test reassigns `userUpdateCache`, `chatUpdateCache` and `channelUpdateCache` while the one-minute `usersThrottleSweepLoop` goroutine in `users.go` reads them). It passes alone and passed on the next full run with identical code.
-- `alita/utils/ratelimit` `TestTelegramPacerFleetSpacing` failed once with a gap of 34.9 ms against a 35 ms bound (timing flake, package not touched).
+- `fuku/modules` `TestLogUsersPersistsSenderChatAndReplyUsers` showed a data race once in three full-package `-race` runs (the test reassigns `userUpdateCache`, `chatUpdateCache` and `channelUpdateCache` while the one-minute `usersThrottleSweepLoop` goroutine in `users.go` reads them). It passes alone and passed on the next full run with identical code.
+- `fuku/utils/ratelimit` `TestTelegramPacerFleetSpacing` failed once with a gap of 34.9 ms against a 35 ms bound (timing flake, package not touched).
 
 ## Known Stubs
 
@@ -160,6 +160,6 @@ None. No new network endpoint, auth path, file access or schema surface. T-02-28
 
 ## Self-Check: PASSED
 
-- FOUND: alita/modules/staff_action_summary_test.go, alita/modules/staff_action_progress_test.go
+- FOUND: fuku/modules/staff_action_summary_test.go, fuku/modules/staff_action_progress_test.go
 - FOUND commits: e0cdc73, 34640ef, 67d676b, 047e34b
 - Acceptance greps: `func renderStaffActionSummaryFinal`, `utf16.Encode`, `staffReasonFailInterrupted`, `func StopStaffActions()`, `modules.StopStaffActions()` after `return closeDBConnections()` in main.go, `RecoverFromPanic("staffActionFanOut", "StaffActions")`, `StopStaffActions` in AGENTS.md all match.

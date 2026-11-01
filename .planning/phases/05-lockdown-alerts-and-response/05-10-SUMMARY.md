@@ -19,17 +19,17 @@ tech-stack:
     - "the card's chat and message are stored with the run in the same insert, so a worker that picks the run up at once already knows where to report"
 key-files:
   created:
-    - alita/modules/lockdown_ban_test.go
+    - fuku/modules/lockdown_ban_test.go
   modified:
-    - alita/db/approvals/repository.go
-    - alita/db/approvals/repository_test.go
-    - alita/modules/lockdown_response.go
-    - alita/modules/lockdown_alert.go
-    - alita/modules/lockdown_alert_callbacks.go
-    - alita/modules/lockdown_worker.go
-    - alita/modules/lockdown_alert_lift_test.go
-    - alita/modules/lockdown_fake_test.go
-    - alita/modules/test_harness_test.go
+    - fuku/db/approvals/repository.go
+    - fuku/db/approvals/repository_test.go
+    - fuku/modules/lockdown_response.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/lockdown_alert_callbacks.go
+    - fuku/modules/lockdown_worker.go
+    - fuku/modules/lockdown_alert_lift_test.go
+    - fuku/modules/lockdown_fake_test.go
+    - fuku/modules/test_harness_test.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -63,7 +63,7 @@ Note: `commits: 3` counts the RED test commit, the implementation commit and the
 
 ## What was built
 
-- **`approvals.ListApprovedIDsFresh(chatID)`** (`alita/db/approvals/repository.go`): a direct `db.DB` pluck of the chat's approved user IDs into a set, error wrapped and returned, never touching the cache (so no `DeleteCache` applies).
+- **`approvals.ListApprovedIDsFresh(chatID)`** (`fuku/db/approvals/repository.go`): a direct `db.DB` pluck of the chat's approved user IDs into a set, error wrapped and returned, never touching the cache (so no `DeleteCache` applies).
 - **Alert keyboard** (`lockdown_alert.go`): `lockdownAlertKeyboard(b, tr, slot, ld)` now builds the Lift row and a second row with the Ban button (`a=bn&r=<copy>`). The label carries N from `CountBanCandidatesFresh` (approved users and the bot excluded, exempt joiners excluded by the query) or the generic `lockdown_alert_btn_ban_any` when N is 0 or the approvals/count cannot be read. A button that does not encode is left out and logged.
 - **Ask and Confirm** (`lockdown_alert_callbacks.go`): `lockdownBanAsk` requires `lockdownButtonAuthority` (live, restrict right), reads the approved users fresh (error: `lockdown_ban_check_failed`, no card), counts (0: `lockdown_ban_nothing`) and posts the card as a reply to the pressed message with Confirm `a=bc&r&u&e` and the shared Cancel. `lockdownBanConfirm` checks asker, expiry, lockdown still active, authority again and the approvals again, then `lockdown.StartBanRun` with the presser, the copy's `Dest` as `card_dest`, the pressed card's chat and message, and approved users plus the bot as `exclude`. Refused start: `lockdown_ban_busy`; queued 0: `lockdown_ban_nothing`; error: `lockdown_ban_start_failed`; otherwise the card is edited to `lockdown_ban_running` with the queued count and the worker is woken.
 - **Worker step** (`lockdown_response.go`, `lockdown_worker.go`): `runLockdownCycle` runs `lockdownProcessBanRuns` after `lockdownBanPending`. Per running run of an active lockdown: approved users fresh (error: log at warn, skip the run this cycle), `ListQueuedBurstFresh` in batches of `lockdownWorkerBatch`, `ClaimBurst` then `lockdownResponseBanOne`, then `FinishBanRun(done)`; the winner calls `lockdownBanRunResult`, one paced edit of the card with banned, skipped and failed in the card's translator (staff card: Staff Group language; log card: the locked group's). `lockdownReleaseStale` also calls `ReleaseStaleBurstClaims` with the same cut-off.
@@ -85,7 +85,7 @@ Note: `commits: 3` counts the RED test commit, the implementation commit and the
 **1. [Rule 1 - Bug] The existing `TestLockdownAlertLift` pinned a one-button alert keyboard**
 - **Found during:** Task 1 (the plan requires a second row)
 - **Fix:** the assertion now expects the Lift row and a second row with the Ban button.
-- **Files modified:** `alita/modules/lockdown_alert_lift_test.go`
+- **Files modified:** `fuku/modules/lockdown_alert_lift_test.go`
 - **Commit:** 093cb4c
 
 **2. [Rule 2 - Missing critical functionality] Extra locale key `lockdown_ban_start_failed`**
@@ -108,11 +108,11 @@ Note: `commits: 3` counts the RED test commit, the implementation commit and the
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownBanRecentJoiners$|^TestLockdownBanCount$' -v ./alita/modules`: pass (2 + 6 subtests).
-- `go test -tags testtools -race -count=1 -run '^TestListApprovedIDsFresh$' -v ./alita/db/approvals`: pass; whole `./alita/db/approvals` and `./alita/db/lockdown`: pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules ./alita/db/lockdown`: pass (57 s).
-- Full `go test -tags testtools -race -count=1 ./alita/modules`: pass (201 s). The intermittent FAIL seen once by the 05-08 executor did not reproduce in any of five runs of the lockdown suite here.
-- `go test -tags testtools -count=1 ./alita/i18n` (including `TestLockdownLocaleKeys`), `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/approvals`: clean. `gofmt -l` on every touched Go file prints nothing (the pre-existing `greetings_command_test.go` formatting is untouched and out of scope). `git diff --exit-code go.mod go.sum` exits 0.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownBanRecentJoiners$|^TestLockdownBanCount$' -v ./fuku/modules`: pass (2 + 6 subtests).
+- `go test -tags testtools -race -count=1 -run '^TestListApprovedIDsFresh$' -v ./fuku/db/approvals`: pass; whole `./fuku/db/approvals` and `./fuku/db/lockdown`: pass.
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules ./fuku/db/lockdown`: pass (57 s).
+- Full `go test -tags testtools -race -count=1 ./fuku/modules`: pass (201 s). The intermittent FAIL seen once by the 05-08 executor did not reproduce in any of five runs of the lockdown suite here.
+- `go test -tags testtools -count=1 ./fuku/i18n` (including `TestLockdownLocaleKeys`), `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/approvals`: clean. `gofmt -l` on every touched Go file prints nothing (the pre-existing `greetings_command_test.go` formatting is untouched and out of scope). `git diff --exit-code go.mod go.sum` exits 0.
 - Acceptance greps pass: `responded := lockdownProcessBanRuns(ctx, b)`, `lockdown.ReleaseStaleBurstClaims(`, `models.ChatLockdownBanRun{}` once in the harness, `lockdown.StartBanRun(` in the callbacks, the `banned for good and can't rejoin` wording in `lockdown_ban_ask`, `ListApprovedIDsFresh` in AGENTS.md.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
 - Not run: any PostgreSQL check (SQLite only; the `NOT IN ?` exclusion list is bound as one parameter per approved user, fine for realistic approval lists but not exercised against a group with tens of thousands of approvals), and a real Telegram call.
@@ -132,4 +132,4 @@ None.
 
 ## Self-Check: PASSED
 
-`alita/modules/lockdown_ban_test.go` exists; commits 672c6f4, 093cb4c and edbc7b8 are on the branch.
+`fuku/modules/lockdown_ban_test.go` exists; commits 672c6f4, 093cb4c and edbc7b8 are on the branch.

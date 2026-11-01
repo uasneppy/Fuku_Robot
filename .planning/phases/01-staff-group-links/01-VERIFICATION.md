@@ -26,47 +26,47 @@ covered_files:
   - ".planning/phases/01-staff-group-links/01-10-SUMMARY.md"
   - "AGENTS.md"
   - "Makefile"
-  - "alita/db/cache/local.go"
-  - "alita/db/cache/local_test.go"
-  - "alita/db/models/staff.go"
-  - "alita/db/staff/exclusivity_postgres_test.go"
-  - "alita/db/staff/rekey.go"
-  - "alita/db/staff/rekey_test.go"
-  - "alita/db/staff/repository.go"
-  - "alita/db/staff/repository_test.go"
-  - "alita/db/staff/testmain_test.go"
-  - "alita/db/testmain_test.go"
-  - "alita/i18n/staff_locale_test.go"
-  - "alita/modules/deeplink_router.go"
-  - "alita/modules/help.go"
-  - "alita/modules/staff.go"
-  - "alita/modules/staff_health_test.go"
-  - "alita/modules/staff_helpers_test.go"
-  - "alita/modules/staff_link.go"
-  - "alita/modules/staff_link_refusals_test.go"
-  - "alita/modules/staff_link_test.go"
-  - "alita/modules/staff_migrate_test.go"
-  - "alita/modules/staff_notify.go"
-  - "alita/modules/staff_ownership_test.go"
-  - "alita/modules/staff_panel.go"
-  - "alita/modules/staff_panel_render_test.go"
-  - "alita/modules/staff_panel_test.go"
-  - "alita/modules/staff_picker_test.go"
-  - "alita/modules/staff_recheck.go"
-  - "alita/modules/staff_setstaff_test.go"
-  - "alita/modules/staff_sweeper.go"
-  - "alita/modules/staff_sweeper_test.go"
-  - "alita/modules/staff_test.go"
-  - "alita/modules/staff_unlink.go"
-  - "alita/modules/staff_unlink_button_test.go"
-  - "alita/modules/staff_unlink_test.go"
-  - "alita/modules/staff_unset_test.go"
-  - "alita/modules/staff_watchers.go"
-  - "alita/modules/test_harness_test.go"
-  - "alita/utils/chat_status/owner.go"
-  - "alita/utils/chat_status/owner_test.go"
-  - "alita/utils/helpers/command_pipeline.go"
-  - "alita/utils/helpers/command_pipeline_test.go"
+  - "fuku/db/cache/local.go"
+  - "fuku/db/cache/local_test.go"
+  - "fuku/db/models/staff.go"
+  - "fuku/db/staff/exclusivity_postgres_test.go"
+  - "fuku/db/staff/rekey.go"
+  - "fuku/db/staff/rekey_test.go"
+  - "fuku/db/staff/repository.go"
+  - "fuku/db/staff/repository_test.go"
+  - "fuku/db/staff/testmain_test.go"
+  - "fuku/db/testmain_test.go"
+  - "fuku/i18n/staff_locale_test.go"
+  - "fuku/modules/deeplink_router.go"
+  - "fuku/modules/help.go"
+  - "fuku/modules/staff.go"
+  - "fuku/modules/staff_health_test.go"
+  - "fuku/modules/staff_helpers_test.go"
+  - "fuku/modules/staff_link.go"
+  - "fuku/modules/staff_link_refusals_test.go"
+  - "fuku/modules/staff_link_test.go"
+  - "fuku/modules/staff_migrate_test.go"
+  - "fuku/modules/staff_notify.go"
+  - "fuku/modules/staff_ownership_test.go"
+  - "fuku/modules/staff_panel.go"
+  - "fuku/modules/staff_panel_render_test.go"
+  - "fuku/modules/staff_panel_test.go"
+  - "fuku/modules/staff_picker_test.go"
+  - "fuku/modules/staff_recheck.go"
+  - "fuku/modules/staff_setstaff_test.go"
+  - "fuku/modules/staff_sweeper.go"
+  - "fuku/modules/staff_sweeper_test.go"
+  - "fuku/modules/staff_test.go"
+  - "fuku/modules/staff_unlink.go"
+  - "fuku/modules/staff_unlink_button_test.go"
+  - "fuku/modules/staff_unlink_test.go"
+  - "fuku/modules/staff_unset_test.go"
+  - "fuku/modules/staff_watchers.go"
+  - "fuku/modules/test_harness_test.go"
+  - "fuku/utils/chat_status/owner.go"
+  - "fuku/utils/chat_status/owner_test.go"
+  - "fuku/utils/helpers/command_pipeline.go"
+  - "fuku/utils/helpers/command_pipeline_test.go"
   - "docs/src/content/docs/commands/staff/index.md"
   - "locales/config.yml"
   - "locales/en.yml"
@@ -116,7 +116,7 @@ human_verification:
   - test: "Real basic-group to supergroup upgrade (plan 01-03 coverage item D4). Upgrade a Staff Group, and separately a linked group, from a basic group to a supergroup (or otherwise change its chat ID)."
     expected: "/staff keeps working under the new ID and the links follow. (Dispatcher wiring of the migrate watcher was checked by the verifier with a throwaway test, see Behavioral Spot-Checks; only the live Telegram upgrade remains.)"
     why_human: "Live Telegram upgrade behaviour. Note a basic-group Staff Group is practically unreachable because the bot leaves basic groups, so the supergroup chat-ID change case matters most."
-  - test: "PostgreSQL migration and trigger on the deploy path (plan 01-01 D5, plan 01-04). Deploy with AUTO_MIGRATE=true against a real PostgreSQL and run ALITA_TEST_DATABASE=true make test-postgres-integrity in CI."
+  - test: "PostgreSQL migration and trigger on the deploy path (plan 01-01 D5, plan 01-04). Deploy with AUTO_MIGRATE=true against a real PostgreSQL and run FUKU_TEST_DATABASE=true make test-postgres-integrity in CI."
     expected: "Both migrations apply once, checksums recorded; TestStaffExclusivityTrigger passes (5 subtests including the 20-round concurrency race) and is not skipped."
     why_human: "No PostgreSQL server in the verification sandbox. Plan 01-04's summary reports a pass on PostgreSQL 16; the verifier could not reproduce it. All other tests run on SQLite."
   - test: "Concurrent /unsetstaff Confirm on two replicas (plan 01-02 coverage items D9, D10, verification: backstop). Press Confirm twice at the same time against two running replicas."
@@ -141,7 +141,7 @@ All five roadmap success criteria are met in the code, with passing tests and a 
 |---|-----------------------------------|--------|----------|
 | 1 | A group's owner can make it the Staff Group. A channel or unusable group is refused with a reason. Only the Staff Group's owner can remove the status, and removal unlinks all its groups. | VERIFIED | `staff.go` `setStaff`: rejects channels (`staff_refuse_not_group`), `requireLiveCreator` (live `chat_status.CheckOwner`, fail-closed on `OwnerUnknown`), `requireBotAdministrator` (D-08), then `staff.CreateStaffGroup` maps `ErrRoleConflict` to `staff_refuse_group_is_linked`. Anonymous senders are stopped by `helpers.RejectAnonymousSender()`. `unsetStaff` and `staffUnsetConfirm` re-check the live creator at the Confirm press (the recorded owner is never the authority) and call `staff.DeleteStaffGroupWithLinks`, one transaction that claims the staff row first, then deletes its links, then invalidates cache keys for the Staff Group and every removed link. Tests pass: `TestSetStaff*` (anonymous, channel, bot not admin, unknown, linked group, idempotent, refusal order), `TestUnsetStaff*` (confirm removes status and links, non-creator alert, failing owner check changes nothing, double confirm once, recorded owner not creator refused). |
 | 2 | A user who owns both a group and the Staff Group can link and unlink it. Anyone who doesn't own both (checked live) is refused with a reason, as is an already-linked group. | VERIFIED | `staff_link.go` `runLinkGroup`: anonymous refusal, then `resolveLinkStaffGroup` (live creator of the Staff Group, uniform refusal for strangers), then `checkLinkTarget` (supergroup only, not a Staff Group, live creator of the target), then `staff.CreateLink`. The unique `group_chat_id` index plus `ON CONFLICT DO NOTHING` gives `ErrAlreadyLinked` (`staff_link_refuse_already_linked`). Both `/linkstaff [id]` and the picker's `/start@bot stf_<id>` use this one flow, and the payload never grants authority. Unlink: `staff_unlink.go` `checkUnlinkAuthority` requires the live creator of the Staff Group and then of the linked group, at the command and at both the Ask and Confirm button presses. Only the caller whose DELETE removed the row posts the notice, and only to the Staff Group. Tests pass: `TestLinkStaff*`, `TestStaffPicker*`, `TestStaffPickerAndTypedCommandMakeTheSameLink`, `TestUnlinkStaff*`, `TestStaffUnlinkButton*` (stranger, only creator of both, owner changed between presses, wrong chat, double confirm, check failure). |
-| 3 | When ownership of either group passes to someone else, the link disappears without anyone running a command. | VERIFIED (real-Telegram delivery is a human item) | `staff_watchers.go` registers four group -3 watchers returning `ext.ContinueGroups`: migrate, `chat_owner_changed`/`chat_owner_left`, creator `chat_member` transition, and `my_chat_member`. Each is only a hint; `recheckLink` and `recheckStaffGroup` ask Telegram live. Only `OwnerMismatch` calls `staff.DeleteLinkIfOwner` (single conditional DELETE with RETURNING, so exactly one caller posts the one Staff Group notice). `OwnerUnknown` never deletes. `staff_sweeper.go` is the fallback that needs no update delivery: it rechecks every Staff Group and link hourly (first run 1-5 min after start) behind `SETNX alita:staff:sweep:lock`, started in `main.go` `postInit` and stopped by a shutdown handler registered after the DB-close handler. `config.AppConfig.AllowedUpdates` includes `chat_member` and `my_chat_member`. Tests pass: `TestStaffOwnership*` (payload is only a hint, staff-group-owner change, owner left, unknown keeps link, concurrent rechecks post once, chat_member transition), `TestStaffSweep*` (lock, errors never delete, rekey, orphans, lifecycle, panic recovery). Verifier dispatcher check: a `chat_owner_changed` update pushed through a real `ext.Dispatcher` with the staff modules loaded removed the link and posted the notice. |
+| 3 | When ownership of either group passes to someone else, the link disappears without anyone running a command. | VERIFIED (real-Telegram delivery is a human item) | `staff_watchers.go` registers four group -3 watchers returning `ext.ContinueGroups`: migrate, `chat_owner_changed`/`chat_owner_left`, creator `chat_member` transition, and `my_chat_member`. Each is only a hint; `recheckLink` and `recheckStaffGroup` ask Telegram live. Only `OwnerMismatch` calls `staff.DeleteLinkIfOwner` (single conditional DELETE with RETURNING, so exactly one caller posts the one Staff Group notice). `OwnerUnknown` never deletes. `staff_sweeper.go` is the fallback that needs no update delivery: it rechecks every Staff Group and link hourly (first run 1-5 min after start) behind `SETNX fuku:staff:sweep:lock`, started in `main.go` `postInit` and stopped by a shutdown handler registered after the DB-close handler. `config.AppConfig.AllowedUpdates` includes `chat_member` and `my_chat_member`. Tests pass: `TestStaffOwnership*` (payload is only a hint, staff-group-owner change, owner left, unknown keeps link, concurrent rechecks post once, chat_member transition), `TestStaffSweep*` (lock, errors never delete, rekey, orphans, lifecycle, panic recovery). Verifier dispatcher check: a `chat_owner_changed` update pushed through a real `ext.Dispatcher` with the staff modules loaded removed the link and posted the notice. |
 | 4 | A link and the Staff Group status keep working after a group upgrades to a supergroup and gets a new chat ID. | VERIFIED | `db/staff/rekey.go` `RekeyChat` updates `staff_groups.chat_id` and both link columns in one transaction, is idempotent for the two migrate messages in either order, and invalidates old and new cache keys. It is called from the migrate watcher (`MigrateToChatId` and `MigrateFromChatId`), from `recheckStaffGroup` and from the sweeper via `rekeyFromTelegramError` (400 `migrate_to_chat_id`). Tests pass: `TestRekeyChat*`, `TestStaffMigrate*` (either order, unrelated chat, from Telegram error). Verifier dispatcher check: a migrate message through a real dispatcher re-keyed the Staff Group and its link, and `/staff` then replied under the new ID. |
 | 5 | `/staff` in the Staff Group shows the help text and each linked group's status (linked, bot is admin, bot can restrict, owner still matches). All its text exists in all 7 languages. | VERIFIED | `staff_panel.go`: `staffPanel` is silent outside a Staff Group. `buildStaffPanel` loads links fresh, then for each link (4 in flight, 45 s cap) runs `recheckLink` (owner) and `FetchBotMember` + `applyLinkHealth` (bot admin, can restrict), and renders the help text, chat ID, one row per group with icons, a reason line, a legend and the check time. It pages at 8 groups and caps text at 3800 UTF-16 units, with Refresh and Prev/Next in place. Locale check: 63 `staff_*` keys in each of en, es, fr, hi, id, pt, ru; zero missing, placeholders identical, only `staff_panel_page` is identical to English in fr (a legitimate cognate). Every `GetString("staff_...")` literal in Go resolves to a defined key and no defined key is unused. `make check-translations` and `make check-docs` pass. Tests pass: `TestStaffPanel*` (live statuses, refresh in place, non-member refused, call budget, concurrency limit, fits in every locale, paging), `TestStaffLocaleKeys`. The in-lockdown status is correctly absent (Phase 4). |
 
@@ -153,19 +153,19 @@ All five roadmap success criteria are met in the code, with passing tests and a 
 |----------|----------|--------|---------|
 | `migrations/20261004120000_add_staff_groups_and_links.sql` | Tables, UNIQUE chat IDs, health CHECK, self-link CHECK | VERIFIED | Timestamp greater than every earlier file, idempotent, no top-level transaction control. |
 | `migrations/20261004130000_add_staff_role_exclusivity_trigger.sql` | D-10 role exclusivity with advisory lock | VERIFIED (read) | Fires before insert/update on both tables; locks both chat IDs in ascending order. Not executed here (no PostgreSQL); see human items. |
-| `alita/db/models/staff.go` | `StaffGroup`, `StaffGroupLink` with `TableName()` | VERIFIED | Table names match the migration; health constants match the CHECK list. |
-| `alita/db/staff/repository.go`, `rekey.go` | Cached gates plus `*Fresh` authority reads; every write invalidates | VERIFIED | Each write calls `invalidateStaffKeys` after commit; `staff_group` and `staff_link_of` keys are on the `skipLocal` list in `alita/db/cache/local.go`. |
-| `alita/utils/chat_status/owner.go` | Tri-state live `CheckOwner` and `FetchBotMember` | VERIFIED | Any API error is `Unknown`, never `Mismatch`; 8 s timeout; no cache. |
-| `alita/modules/staff*.go` (setstaff, unsetstaff, linkstaff, unlinkstaff, panel, watchers, recheck, sweeper, notify) | Commands, callbacks, watchers, sweeper | VERIFIED | Substantive, wired through `RegisterLegacyModule("Staff", 236)` and `("StaffWatchers", 237)`; no stubs. |
-| `alita/modules/deeplink_router.go`, `help.go` | Group `/start` payload route | VERIFIED | `HandleGroupDeepLink` called from the group branch of `/start`; `stf_` registered; non-matching payloads fall back to the normal reply. |
+| `fuku/db/models/staff.go` | `StaffGroup`, `StaffGroupLink` with `TableName()` | VERIFIED | Table names match the migration; health constants match the CHECK list. |
+| `fuku/db/staff/repository.go`, `rekey.go` | Cached gates plus `*Fresh` authority reads; every write invalidates | VERIFIED | Each write calls `invalidateStaffKeys` after commit; `staff_group` and `staff_link_of` keys are on the `skipLocal` list in `fuku/db/cache/local.go`. |
+| `fuku/utils/chat_status/owner.go` | Tri-state live `CheckOwner` and `FetchBotMember` | VERIFIED | Any API error is `Unknown`, never `Mismatch`; 8 s timeout; no cache. |
+| `fuku/modules/staff*.go` (setstaff, unsetstaff, linkstaff, unlinkstaff, panel, watchers, recheck, sweeper, notify) | Commands, callbacks, watchers, sweeper | VERIFIED | Substantive, wired through `RegisterLegacyModule("Staff", 236)` and `("StaffWatchers", 237)`; no stubs. |
+| `fuku/modules/deeplink_router.go`, `help.go` | Group `/start` payload route | VERIFIED | `HandleGroupDeepLink` called from the group branch of `/start`; `stf_` registered; non-matching payloads fall back to the normal reply. |
 | `locales/*.yml` | 63 keys x 7 locales | VERIFIED | See Truth 5. |
-| `AGENTS.md` | Group -3, `alita:staff:*` keys, staff rules | VERIFIED | Present and matches the code. |
+| `AGENTS.md` | Group -3, `fuku:staff:*` keys, staff rules | VERIFIED | Present and matches the code. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `main.go` `postInit` | `StartStaffSweeper` | direct call after `alita.LoadModules` | WIRED | Line 425; a shutdown handler calls `StopStaffSweeper` and is registered after the DB-close handler (LIFO, so it runs first). |
+| `main.go` `postInit` | `StartStaffSweeper` | direct call after `fuku.LoadModules` | WIRED | Line 425; a shutdown handler calls `StopStaffSweeper` and is registered after the DB-close handler (LIFO, so it runs first). |
 | Dispatcher | Staff commands and watchers | `LoadAllModules` over the registry | WIRED | Verifier throwaway test loaded `LoadStaff` and `LoadStaffWatchers` into a real dispatcher and drove migrate, owner-changed and `/staff` updates (then deleted the test file). |
 | `/start@bot stf_<id>` in a group | `runLinkGroup` | `HandleGroupDeepLink` to `staffPickerDeepLink` | WIRED | Same flow as `/linkstaff`. |
 | Watchers, panel, sweeper | `recheckLink` / `recheckStaffGroup` / `applyLinkHealth` | single authority path | WIRED | Only `DeleteLinkIfOwner` removes on Mismatch; only `SetLinkHealth` changes health. |
@@ -185,8 +185,8 @@ All five roadmap success criteria are met in the code, with passing tests and a 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
 | Build | `CGO_ENABLED=0 go build ./...` | exit 0 | PASS |
-| Repo, owner, i18n, cache, helpers tests | `go test -tags testtools -race -count=1 ./alita/db/staff ./alita/utils/chat_status ./alita/i18n ./alita/db/cache ./alita/utils/helpers` | all `ok` | PASS |
-| Staff module tests under race | `go test -tags testtools -race -count=1 -run 'Staff\|Unset\|Setstaff\|SetStaff\|LinkStaff\|UnlinkStaff\|StartGroupPayload' ./alita/modules` | `ok` (33.8 s) | PASS |
+| Repo, owner, i18n, cache, helpers tests | `go test -tags testtools -race -count=1 ./fuku/db/staff ./fuku/utils/chat_status ./fuku/i18n ./fuku/db/cache ./fuku/utils/helpers` | all `ok` | PASS |
+| Staff module tests under race | `go test -tags testtools -race -count=1 -run 'Staff\|Unset\|Setstaff\|SetStaff\|LinkStaff\|UnlinkStaff\|StartGroupPayload' ./fuku/modules` | `ok` (33.8 s) | PASS |
 | Locale parity | `make check-translations` | "All translations are present" | PASS |
 | Generated docs drift | `make check-docs` | "No drift detected" | PASS |
 | Real-dispatcher wiring (throwaway test, deleted after run) | dispatched chat_owner_changed, migrate and `/staff` updates | link removed + notice sent; Staff Group and link re-keyed; `/staff` replied | PASS |

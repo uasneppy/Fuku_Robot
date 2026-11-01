@@ -27,14 +27,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/config/captcha_web_test.go
+    - fuku/config/captcha_web_test.go
   modified:
-    - alita/config/config.go
+    - fuku/config/config.go
     - sample.env
     - docs/src/content/docs/api-reference/environment.md
 
 key-decisions:
-  - "Validation uses the standard library only (net/url, net/netip, regexp, strings), so alita/config does not import anything that reaches alita/db"
+  - "Validation uses the standard library only (net/url, net/netip, regexp, strings), so fuku/config does not import anything that reaches fuku/db"
   - "A proxy list set without the four required values is a startup error"
   - "The secret minimum length is the redactor's byte floor (6), checked with len()"
   - "A base URL containing ? or # anywhere is refused before parsing, so a bare trailing ? or # cannot slip through"
@@ -47,7 +47,7 @@ coverage:
     requirement: PLAT-04
     verification:
       - kind: unit
-        ref: "alita/config/captcha_web_test.go#TestCaptchaWebConfig"
+        ref: "fuku/config/captcha_web_test.go#TestCaptchaWebConfig"
         status: pass
     human_judgment: false
   - id: D2
@@ -55,7 +55,7 @@ coverage:
     requirement: PLAT-04
     verification:
       - kind: unit
-        ref: "alita/config/captcha_web_test.go#TestCaptchaWebConfig/the_secret_is_registered"
+        ref: "fuku/config/captcha_web_test.go#TestCaptchaWebConfig/the_secret_is_registered"
         status: pass
     human_judgment: false
   - id: D3
@@ -86,7 +86,7 @@ status: complete
 
 ## Accomplishments
 
-- `alita/config/config.go`: five new `Config` fields, read with `os.Getenv` plus `strings.TrimSpace`; `CaptchaWebConfigured()`; `validateCaptchaWeb` called as the last step of `ValidateConfig`; `registerSecrets` passes `cfg.TurnstileSecretKey`.
+- `fuku/config/config.go`: five new `Config` fields, read with `os.Getenv` plus `strings.TrimSpace`; `CaptchaWebConfigured()`; `validateCaptchaWeb` called as the last step of `ValidateConfig`; `registerSecrets` passes `cfg.TurnstileSecretKey`.
 - Validation rules: none of the four set is fine; some but not all is `web captcha settings are incomplete: missing <names>` in a fixed order; a proxy list alone is an error; base URL must be https with a host, no user info, query or fragment, and a path that is empty or `/`; short name `^[A-Za-z0-9_]{1,64}$`; secret at least 6 bytes; every proxy entry an IP address or CIDR prefix. Every error names the variable and the rule only.
 - `TestCaptchaWebConfig` (new, 20 subtests): none set, all four (with and without `/`), all 14 proper subsets, proxies alone, nine bad base URLs, four bad short names, short secret (5 fails, 6 passes), bad and good proxy lists, loading from the environment with padded values, a partial environment stopping `LoadConfig`, and the secret's registration (site key left unscrubbed).
 - `sample.env` and the frozen `environment.md` document all five variables; the new reference section sits after the AI spam section and the flat listing has the five lines in alphabetical order.
@@ -99,9 +99,9 @@ status: complete
 
 ## Verification
 
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestCaptchaWebConfig$' -v ./alita/config`: `--- PASS: TestCaptchaWebConfig` with all subtests passing.
-- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./alita/config`: ok.
-- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./alita/config`: clean. `gofmt -l alita/config`: nothing.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 -run '^TestCaptchaWebConfig$' -v ./fuku/config`: `--- PASS: TestCaptchaWebConfig` with all subtests passing.
+- `CGO_ENABLED=1 go test -tags testtools -race -count=1 ./fuku/config`: ok.
+- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./fuku/config`: clean. `gofmt -l fuku/config`: nothing.
 - `make lint` was not run: golangci-lint is built with go1.25 and cannot lint the go1.26.0 module in this sandbox; `go vet` and `gofmt -l` stand in.
 - `make check-docs`: no drift. (`make check-translations` not run: no locale keys were touched.)
 - Task 1 acceptance greps: each `os.Getenv("<VAR>")` count is 1 for all five variables; `cfg.TurnstileSecretKey` count 3; `func (c *Config) CaptchaWebConfigured() bool` count 1; `captchaweb` import count 0; `go.mod` and `go.sum` unchanged.
@@ -151,5 +151,5 @@ Plan 08-08 can parse `Config.CaptchaWebTrustedProxies` with `net/netip` (the str
 
 ## Self-Check: PASSED
 
-- `alita/config/captcha_web_test.go`: FOUND
+- `fuku/config/captcha_web_test.go`: FOUND
 - Commits `9416f43`, `d0cdf1c`, `e9f62e5`: FOUND

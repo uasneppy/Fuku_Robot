@@ -9,7 +9,7 @@ requires:
     provides: "recheckStaffGroup, recheckLink, applyLinkHealth, staffHealthFromBot, rekeyFromTelegramError, chat_status.FetchBotMember, staff.*Fresh repository reads (plans 01-07 and 01-08)"
 provides:
   - "Hourly background recheck of every Staff Group and link, with a 1-5 minute jittered first run after startup"
-  - "Redis lock alita:staff:sweep:lock so one replica runs each cycle; unguarded and still correct without Redis"
+  - "Redis lock fuku:staff:sweep:lock so one replica runs each cycle; unguarded and still correct without Redis"
   - "staff.ListStaffGroupsFresh and staff.DeleteOrphanLinks"
   - "StartStaffSweeper / StopStaffSweeper wired into postInit and the shutdown manager"
 affects: [02-staff-moderation-fanout, staff-panel]
@@ -28,11 +28,11 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_sweeper.go
-    - alita/modules/staff_sweeper_test.go
+    - fuku/modules/staff_sweeper.go
+    - fuku/modules/staff_sweeper_test.go
   modified:
-    - alita/db/staff/repository.go
-    - alita/db/staff/repository_test.go
+    - fuku/db/staff/repository.go
+    - fuku/db/staff/repository_test.go
     - main.go
     - main_test.go
     - AGENTS.md
@@ -44,7 +44,7 @@ key-decisions:
   - "Orphan cleanup runs after taking the lock, so only the lock holder deletes"
 
 patterns-established:
-  - "Sweep test helpers use a sweep prefix so parallel plan 01-09 panel tests compile alongside in package alita/modules"
+  - "Sweep test helpers use a sweep prefix so parallel plan 01-09 panel tests compile alongside in package fuku/modules"
 
 requirements-completed: [SETUP-06, SETUP-07]
 
@@ -54,7 +54,7 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepTracer"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepTracer"
         status: pass
     human_judgment: false
   - id: D2
@@ -62,16 +62,16 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepLockOneRunner"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepLockOneRunner"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepSkipsWhenLockHeld"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepSkipsWhenLockHeld"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepRunsWithoutRedis"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepRunsWithoutRedis"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepRunsOnRedisError"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepRunsOnRedisError"
         status: pass
     human_judgment: false
   - id: D3
@@ -79,16 +79,16 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepErrorsNeverDelete"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepErrorsNeverDelete"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepRekeysOnMigrateError"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepRekeysOnMigrateError"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepDeletesOrphanLinks"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepDeletesOrphanLinks"
         status: pass
       - kind: unit
-        ref: "alita/db/staff/repository_test.go#TestStaffRepoDeleteOrphanLinks"
+        ref: "fuku/db/staff/repository_test.go#TestStaffRepoDeleteOrphanLinks"
         status: pass
     human_judgment: false
   - id: D4
@@ -96,16 +96,16 @@ coverage:
     requirement: SETUP-07
     verification:
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepStopsOnCancel"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepStopsOnCancel"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepLifecycleStartStop"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepLifecycleStartStop"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepLifecycleStartTwiceRunsOneLoop"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepLifecycleStartTwiceRunsOneLoop"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_sweeper_test.go#TestStaffSweepCyclePanicDoesNotKillLoop"
+        ref: "fuku/modules/staff_sweeper_test.go#TestStaffSweepCyclePanicDoesNotKillLoop"
         status: pass
       - kind: unit
         ref: "main_test.go#TestPostInitSetsCommandsAndStartupMessage"
@@ -141,10 +141,10 @@ plan_head_after: 69fdf26ba678d49dd491f461e516d692954a5090
 ## Accomplishments
 
 - `runStaffSweep` reuses `recheckStaffGroup` and `applyLinkHealth`, so a stale link disappears with the D-13 notice, and a bot-health change posts one heads-up, with no command run. A repeat sweep sends nothing.
-- Only one replica runs a given cycle: `SETNX alita:staff:sweep:lock` with a TTL one minute below the interval. Without Redis, or on a Redis error, the sweep runs unguarded and stays correct because each write is one conditional statement.
+- Only one replica runs a given cycle: `SETNX fuku:staff:sweep:lock` with a TTL one minute below the interval. Without Redis, or on a Redis error, the sweep runs unguarded and stays correct because each write is one conditional statement.
 - Telegram errors never delete a link or a Staff Group (only a successful answer showing a different or missing creator does); a 400 carrying `migrate_to_chat_id` re-keys the chat via `rekeyFromTelegramError`; orphan links (Staff Group row gone) are deleted silently by `staff.DeleteOrphanLinks` with their cache keys invalidated.
 - Calls are paced at 250ms, the sweep stops promptly on cancel, and a panic in one cycle is recovered so the loop keeps going.
-- `StartStaffSweeper` is called from `postInit`; its stop handler is registered after the DB-close handler, so LIFO shutdown stops it before the database closes. AGENTS.md documents the `alita:staff:*` key family and the sweeper rule.
+- `StartStaffSweeper` is called from `postInit`; its stop handler is registered after the DB-close handler, so LIFO shutdown stops it before the database closes. AGENTS.md documents the `fuku:staff:*` key family and the sweeper rule.
 
 ## Task Commits
 
@@ -158,13 +158,13 @@ plan_head_after: 69fdf26ba678d49dd491f461e516d692954a5090
 
 ## Files Created/Modified
 
-- `alita/modules/staff_sweeper.go` - sweep cycle, Redis lock, pacing, lifecycle (Start/Stop), first-delay jitter
-- `alita/modules/staff_sweeper_test.go` - 12 sweep tests, all helpers `sweep`-prefixed
-- `alita/db/staff/repository.go` - `ListStaffGroupsFresh`, `DeleteOrphanLinks`
-- `alita/db/staff/repository_test.go` - tests for both
+- `fuku/modules/staff_sweeper.go` - sweep cycle, Redis lock, pacing, lifecycle (Start/Stop), first-delay jitter
+- `fuku/modules/staff_sweeper_test.go` - 12 sweep tests, all helpers `sweep`-prefixed
+- `fuku/db/staff/repository.go` - `ListStaffGroupsFresh`, `DeleteOrphanLinks`
+- `fuku/db/staff/repository_test.go` - tests for both
 - `main.go` - `modules.StartStaffSweeper(b)` in `postInit`; shutdown handler for `StopStaffSweeper`
 - `main_test.go` - `modules.StopStaffSweeper()` in the postInit test cleanup
-- `AGENTS.md` - `alita:staff:*` in the operational key list, sweeper bullet in "Subsystem traps"
+- `AGENTS.md` - `fuku:staff:*` in the operational key list, sweeper bullet in "Subsystem traps"
 
 ## Decisions Made
 
@@ -202,19 +202,19 @@ None - no external service configuration required.
 
 ## Threat Flags
 
-None. The only new surface is the Redis key `alita:staff:sweep:lock`, covered by the plan's T-01-33; no new endpoints, auth paths or schema.
+None. The only new surface is the Redis key `fuku:staff:sweep:lock`, covered by the plan's T-01-33; no new endpoints, auth paths or schema.
 
 ## Next Phase Readiness
 
 - Phase 2's pre-action check can rely on the same `recheckLink`/`recheckStaffGroup` the sweep uses.
 - Verification run: `go test -tags testtools -race -count=1 -timeout 10m ./...` passes, `go vet -tags testtools ./...` clean, `make check-translations` and `make check-docs` clean, `go.mod`/`go.sum` unchanged.
-- Parallel plan 01-09 touches disjoint files; this plan's test helpers carry a `sweep` prefix to avoid clashes in package `alita/modules`.
+- Parallel plan 01-09 touches disjoint files; this plan's test helpers carry a `sweep` prefix to avoid clashes in package `fuku/modules`.
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/modules/staff_sweeper.go`, `alita/modules/staff_sweeper_test.go`, this SUMMARY.
+- Created files exist: `fuku/modules/staff_sweeper.go`, `fuku/modules/staff_sweeper_test.go`, this SUMMARY.
 - Commits found in `git log`: `0d342c6`, `28df6b3`, `604e024`, `76b5eea`, `69fdf26`.
-- Acceptance criteria re-run: `runStaffSweep` and `ListStaffGroupsFresh` signatures match; no `IsUserAdmin|LoadAdminCache|RequireUserOwner` in the sweeper; `staffSweepLockKey` and `SetNX(` present; `modules.StartStaffSweeper(b)` and `modules.StopStaffSweeper()` in `main.go`; `alita:staff:` in `AGENTS.md`; `RecoverFromPanic` appears twice in the sweeper; 9 `TestStaffSweep` tests plus 3 lifecycle tests pass.
+- Acceptance criteria re-run: `runStaffSweep` and `ListStaffGroupsFresh` signatures match; no `IsUserAdmin|LoadAdminCache|RequireUserOwner` in the sweeper; `staffSweepLockKey` and `SetNX(` present; `modules.StartStaffSweeper(b)` and `modules.StopStaffSweeper()` in `main.go`; `fuku:staff:` in `AGENTS.md`; `RecoverFromPanic` appears twice in the sweeper; 9 `TestStaffSweep` tests plus 3 lifecycle tests pass.
 
 ---
 *Phase: 01-staff-group-links*

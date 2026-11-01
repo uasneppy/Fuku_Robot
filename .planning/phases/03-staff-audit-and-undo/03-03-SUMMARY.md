@@ -33,11 +33,11 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_log.go
-    - alita/modules/staff_log_test.go
+    - fuku/modules/staff_log.go
+    - fuku/modules/staff_log_test.go
   modified:
-    - alita/modules/staff_action_run.go
-    - alita/utils/actionlog/actionlog.go
+    - fuku/modules/staff_action_run.go
+    - fuku/utils/actionlog/actionlog.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -65,10 +65,10 @@ coverage:
     requirement: "STAFF-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogPosts"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogPosts"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogNoneWhenNothingApplied"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogNoneWhenNothingApplied"
         status: pass
     human_judgment: false
   - id: D2
@@ -76,10 +76,10 @@ coverage:
     requirement: "STAFF-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogPosts"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogPosts"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogCategoryOff"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogCategoryOff"
         status: pass
     human_judgment: false
   - id: D3
@@ -87,13 +87,13 @@ coverage:
     requirement: "STAFF-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogFailureKeepsDone"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogFailureKeepsDone"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogPaced"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogPaced"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogRateLimitedKeepsDone"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogRateLimitedKeepsDone"
         status: pass
     human_judgment: false
   - id: D4
@@ -101,7 +101,7 @@ coverage:
     requirement: "STAFF-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogReasonCapped"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogReasonCapped"
         status: pass
     human_judgment: false
   - id: D5
@@ -109,10 +109,10 @@ coverage:
     requirement: "STAFF-09"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogSharedChannel"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogSharedChannel"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestStaffActionLogPosts"
+        ref: "fuku/modules/staff_log_test.go#TestStaffActionLogPosts"
         status: pass
     human_judgment: false
   - id: D6
@@ -120,13 +120,13 @@ coverage:
     requirement: "STAFF-09"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -count=1 -run '^TestStaffAction|^TestStopStaffActions' ./alita/modules"
+        ref: "go test -tags testtools -race -count=1 -run '^TestStaffAction|^TestStopStaffActions' ./fuku/modules"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestActionLogDestination"
+        ref: "fuku/modules/staff_log_test.go#TestActionLogDestination"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_log_test.go#TestActionLogAdminUnchanged"
+        ref: "fuku/modules/staff_log_test.go#TestActionLogAdminUnchanged"
         status: pass
     human_judgment: false
 
@@ -182,23 +182,23 @@ status: complete
 - **Found during:** Task 2 (mutation check of an unexpected GREEN)
 - **Issue:** `TestStaffActionLogReasonCapped` computed its expectation from `staffLogReasonMaxRunes`, so changing the cap would not fail it.
 - **Fix:** It asserts 300 runes plus the ellipsis as literals. Mutation to 250 now fails it.
-- **Files modified:** `alita/modules/staff_log_test.go`
+- **Files modified:** `fuku/modules/staff_log_test.go`
 - **Commit:** `223d168`
 
 **Total deviations:** 1 auto-fixed (test strength). **Impact:** none on scope.
 
 ## Issues Encountered
 
-- `make lint` is unavailable (golangci-lint built with go1.25 refuses the go1.26.0 module); `gofmt`, `go vet -tags testtools` on `./alita/modules` and `./alita/utils/actionlog`, and `CGO_ENABLED=0 go build ./...` are clean.
+- `make lint` is unavailable (golangci-lint built with go1.25 refuses the go1.26.0 module); `gofmt`, `go vet -tags testtools` on `./fuku/modules` and `./fuku/utils/actionlog`, and `CGO_ENABLED=0 go build ./...` are clean.
 - Commit trailers: the dispatcher's project notes named one model in the trailer and the session attribution reminder named another; the attribution reminder (`Claude Sonnet 5.5`) was used since it matches the model that did the work.
 - `runStaffFanOut` keeps the `b *gotgbot.Bot` parameter the plan specifies although the engine no longer uses it there; it is harmless and keeps the plan's signature.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 -run '^TestStaffActionLog|^TestActionLog' -v ./alita/modules` - all 10 pass
-- `go test -tags testtools -race -count=1 -run '^TestStaffAction|^TestStopStaffActions' ./alita/modules` - ok
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/utils/actionlog` - ok (modules 115 s; actionlog has no test files)
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n` - ok
+- `go test -tags testtools -race -count=1 -run '^TestStaffActionLog|^TestActionLog' -v ./fuku/modules` - all 10 pass
+- `go test -tags testtools -race -count=1 -run '^TestStaffAction|^TestStopStaffActions' ./fuku/modules` - ok
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/utils/actionlog` - ok (modules 115 s; actionlog has no test files)
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n` - ok
 - `make check-translations` - all present; `make check-docs` - no drift
 - Task 1 and Task 2 acceptance criteria (greps, `gofmt -l`, `git diff --exit-code go.mod go.sum`) - all pass
 
@@ -221,7 +221,7 @@ None.
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/modules/staff_log.go`, `alita/modules/staff_log_test.go`.
+- Created files exist: `fuku/modules/staff_log.go`, `fuku/modules/staff_log_test.go`.
 - Commits `4d5a68a`, `8663acf`, `223d168` and `28aaea7` exist; `test(03-03)` precedes `feat(03-03)` for Task 1.
 
 ---

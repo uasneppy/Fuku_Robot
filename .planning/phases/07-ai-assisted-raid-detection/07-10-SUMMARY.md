@@ -24,17 +24,17 @@ plan_head_after: 3e36a9199d07d313bc5ca33b48db8a46bb64dd92
 tech-stack:
   added: []
   patterns:
-    - "In-memory counters are appended in alita/modules because alita/db/devs cannot import alita/modules"
+    - "In-memory counters are appended in fuku/modules because fuku/db/devs cannot import fuku/modules"
 
 key-files:
   created:
-    - alita/modules/raid_ai_stats_test.go
+    - fuku/modules/raid_ai_stats_test.go
   modified:
-    - alita/db/raiddetection/stats.go
-    - alita/db/raiddetection/stats_test.go
-    - alita/db/devs/repository.go
-    - alita/db/devs/repository_test.go
-    - alita/modules/devs.go
+    - fuku/db/raiddetection/stats.go
+    - fuku/db/raiddetection/stats_test.go
+    - fuku/db/devs/repository.go
+    - fuku/db/devs/repository_test.go
+    - fuku/modules/devs.go
 
 key-decisions:
   - "LoadRaidDetectionStats returns (configured, joinOff, floodOff, aiOff); the new line is '<b>AI spam off:</b> N chats' after Flood off, not a locale key (the /stats text is developer-only and not localized)"
@@ -48,10 +48,10 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: unit
-        ref: "alita/db/raiddetection/stats_test.go#TestLoadRaidDetectionStats"
+        ref: "fuku/db/raiddetection/stats_test.go#TestLoadRaidDetectionStats"
         status: pass
       - kind: unit
-        ref: "alita/db/devs/repository_test.go#TestLoadAllStats_IncludesModuleCounts"
+        ref: "fuku/db/devs/repository_test.go#TestLoadAllStats_IncludesModuleCounts"
         status: pass
     human_judgment: false
   - id: D2
@@ -59,10 +59,10 @@ coverage:
     requirement: RAID-04
     verification:
       - kind: unit
-        ref: "alita/modules/raid_ai_stats_test.go#TestRaidAIStats"
+        ref: "fuku/modules/raid_ai_stats_test.go#TestRaidAIStats"
         status: pass
       - kind: unit
-        ref: "alita/modules/raid_ai_stats_test.go#TestRaidAIStatsDevsOnly"
+        ref: "fuku/modules/raid_ai_stats_test.go#TestRaidAIStatsDevsOnly"
         status: pass
     human_judgment: false
 
@@ -85,7 +85,7 @@ status: complete
 ## Accomplishments
 
 - `raiddetection.LoadRaidDetectionStats` returns a fourth count, `aiOff` (`ai_enabled = false`), and `devs.LoadAllStats` prints "AI spam off: N chats" right after "Flood off".
-- `raidAIStatsSection` in `alita/modules/devs.go` prints one raid-path line (checked, spam, kept, shed, failed, blocked, capped, cached) and one `/aispam` line (checked, deleted, kept, shed, failed). `getStats` sends `devs.LoadAllStats() + raidAIStatsSection()`. `GetAISpamStats` has its first consumer.
+- `raidAIStatsSection` in `fuku/modules/devs.go` prints one raid-path line (checked, spam, kept, shed, failed, blocked, capped, cached) and one `/aispam` line (checked, deleted, kept, shed, failed). `getStats` sends `devs.LoadAllStats() + raidAIStatsSection()`. `GetAISpamStats` has its first consumer.
 - `TestRaidAIStats` drives the real dispatcher in one group of new members: a spam text, a kept text, a text whose TypeSafe call returns 500, an image judged spam, the same image from another member (verdict cache), a blocked image and an image over the lowered hourly budget, then one `/aispam` delete verdict. The owner's `/stats` edit then carries "checked 3, spam 3, kept 1, shed 0, failed 1, blocked 1, capped 1, cached 1" and "checked 1, deleted 1, kept 0, shed 0, failed 0", and none of the message text, file IDs or keys. `TestRaidAIStatsDevsOnly` shows a non-developer's `/stats` sends and edits nothing.
 
 ## Task Commits
@@ -97,10 +97,10 @@ status: complete
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 ./alita/db/raiddetection ./alita/db/devs`: ok.
-- `go test -tags testtools -race -count=1 -run 'Dev|Raid|AISpam' ./alita/modules`: ok (73 s).
+- `go test -tags testtools -race -count=1 ./fuku/db/raiddetection ./fuku/db/devs`: ok.
+- `go test -tags testtools -race -count=1 -run 'Dev|Raid|AISpam' ./fuku/modules`: ok (73 s).
 - `TestRaidAIStats` and `TestDevStatsPropagatesSendAndEditErrors` pass with `-v`.
-- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./alita/...`: clean.
+- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./fuku/...`: clean.
 - `gofmt -l` on the touched files: clean. `make lint` was not run (golangci-lint is built with Go 1.25, the module is Go 1.26), so `go vet` and `gofmt` stand in for it, as the plan allows.
 - Acceptance greps: `"ai_enabled = ?", false` 1, `AI spam off` 1 in repository.go, `func raidAIStatsSection(` 1, `GetRaidAIStats()` 1, `GetAISpamStats()` 1, `this replica` 1.
 - No string was added to a locale file, so `make check-translations` was not needed. No PostgreSQL was started; the count is a plain row count and ran on SQLite.
@@ -127,5 +127,5 @@ Ready for the wave's remaining plans. 07-11 (docs) can describe the new `/stats`
 
 ## Self-Check: PASSED
 
-- Created file exists: `alita/modules/raid_ai_stats_test.go`.
+- Created file exists: `fuku/modules/raid_ai_stats_test.go`.
 - The four task commits (`83315e4`, `f605c41`, `741b108`, `3e36a91`) are on the branch.

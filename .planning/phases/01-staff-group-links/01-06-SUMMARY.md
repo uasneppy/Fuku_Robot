@@ -39,14 +39,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_unlink.go
-    - alita/modules/staff_unlink_test.go
-    - alita/modules/staff_unlink_button_test.go
+    - fuku/modules/staff_unlink.go
+    - fuku/modules/staff_unlink_test.go
+    - fuku/modules/staff_unlink_button_test.go
   modified:
-    - alita/modules/staff.go
-    - alita/modules/staff_panel.go
-    - alita/db/staff/repository.go
-    - alita/db/staff/repository_test.go
+    - fuku/modules/staff.go
+    - fuku/modules/staff_panel.go
+    - fuku/db/staff/repository.go
+    - fuku/db/staff/repository_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -76,7 +76,7 @@ coverage:
     requirement: "SETUP-05"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnlinkStaffTracer$' ./alita/modules#TestUnlinkStaffTracer"
+        ref: "go test -tags testtools -race -run '^TestUnlinkStaffTracer$' ./fuku/modules#TestUnlinkStaffTracer"
         status: pass
     human_judgment: false
   - id: D2
@@ -84,10 +84,10 @@ coverage:
     requirement: "SETUP-05"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnlinkStaffRefusals$' ./alita/modules#TestUnlinkStaffRefusals"
+        ref: "go test -tags testtools -race -run '^TestUnlinkStaffRefusals$' ./fuku/modules#TestUnlinkStaffRefusals"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnlinkStaffStrangerNeverPostsInStaffGroup$' ./alita/modules#TestUnlinkStaffStrangerNeverPostsInStaffGroup"
+        ref: "go test -tags testtools -race -run '^TestUnlinkStaffStrangerNeverPostsInStaffGroup$' ./fuku/modules#TestUnlinkStaffStrangerNeverPostsInStaffGroup"
         status: pass
     human_judgment: false
   - id: D3
@@ -95,7 +95,7 @@ coverage:
     requirement: "SETUP-05"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffUnlinkButtonRendered$|^TestStaffUnlinkButtonConfirmFlow$|^TestStaffUnlinkButtonCancel$|^TestStaffUnlinkButtonOnlyNamedLinkGoes$' ./alita/modules"
+        ref: "go test -tags testtools -race -run '^TestStaffUnlinkButtonRendered$|^TestStaffUnlinkButtonConfirmFlow$|^TestStaffUnlinkButtonCancel$|^TestStaffUnlinkButtonOnlyNamedLinkGoes$' ./fuku/modules"
         status: pass
     human_judgment: false
   - id: D4
@@ -103,7 +103,7 @@ coverage:
     requirement: "SETUP-05"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffUnlinkButtonStranger$|^TestStaffUnlinkButtonOnlyCreatorOfBothGroups$|^TestStaffUnlinkButtonCheckFailure$|^TestStaffUnlinkButtonOwnerChangedBetweenPresses$' ./alita/modules"
+        ref: "go test -tags testtools -race -run '^TestStaffUnlinkButtonStranger$|^TestStaffUnlinkButtonOnlyCreatorOfBothGroups$|^TestStaffUnlinkButtonCheckFailure$|^TestStaffUnlinkButtonOwnerChangedBetweenPresses$' ./fuku/modules"
         status: pass
     human_judgment: false
   - id: D5
@@ -111,7 +111,7 @@ coverage:
     requirement: "SETUP-05"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffUnlinkButtonWrongChat$|^TestStaffUnlinkButtonExpired$|^TestStaffUnlinkButtonBadLinkID$|^TestStaffUnlinkButtonConfirmTwiceRemovesOnce$' ./alita/modules"
+        ref: "go test -tags testtools -race -run '^TestStaffUnlinkButtonWrongChat$|^TestStaffUnlinkButtonExpired$|^TestStaffUnlinkButtonBadLinkID$|^TestStaffUnlinkButtonConfirmTwiceRemovesOnce$' ./fuku/modules"
         status: pass
     human_judgment: false
   - id: D6
@@ -119,10 +119,10 @@ coverage:
     requirement: "SETUP-05"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffRepoDeleteLink|^TestStaffRepoGetLinkByIDFresh' ./alita/db/staff"
+        ref: "go test -tags testtools -race -run '^TestStaffRepoDeleteLink|^TestStaffRepoGetLinkByIDFresh' ./fuku/db/staff"
         status: pass
       - kind: integration
-        ref: "ALITA_TEST_DATABASE=true go test -tags testtools -race -p 1 ./alita/db/staff (fresh database with the migration chain applied)"
+        ref: "FUKU_TEST_DATABASE=true go test -tags testtools -race -p 1 ./fuku/db/staff (fresh database with the migration chain applied)"
         status: pass
     human_judgment: false
   - id: D7
@@ -130,7 +130,7 @@ coverage:
     requirement: "PLAT-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./alita/i18n#TestStaffLocaleKeys"
+        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./fuku/i18n#TestStaffLocaleKeys"
         status: pass
       - kind: other
         ref: "make check-translations && make check-docs"
@@ -164,7 +164,7 @@ status: complete
 - Tracer slice end to end: `GetLinkByIDFresh` and `DeleteLink`, `runUnlinkGroup`, `/unlinkstaff`, the Staff Group notice, 7-locale strings, help text, alt name and regenerated docs. The tracer verify (`TestUnlinkStaff*`, `make check-translations`, `make check-docs`, `TestStaffLocaleKeys`) passed before expansion (tracer verified end to end, expanding).
 - Unlink buttons: `renderStaffPanel` adds one button per link under the Add group row. `ul` swaps the panel for a prompt, `uc` deletes the link, re-renders in place and posts the notice, `ux` restores the panel. Each press loads the link by row ID, requires the message chat to be the link's Staff Group, then runs a live creator-of-both check, so ownership that moved between Unlink and Confirm is caught.
 - Harmless stale or forged presses: a wrong-chat press is denied before any Telegram call; a deleted link, a lost race and malformed IDs are answered "expired" and the panel is refreshed; the "unlinked by" notice is posted by the one caller whose delete hit a row.
-- Plan-level verification: `make test` exit 0 (run twice), `go vet -tags testtools ./...` clean, golangci-lint v2.13.1 `--new-from-rev` 0 issues and the dupl pass 0 issues, `make check-translations` and `make check-docs` pass, `go build ./...` clean, `go.mod` and `go.sum` unchanged, `gofmt -l` empty on the changed files. On a throwaway PostgreSQL 16 database: `TestRepositoryMigrationChain`, `ALITA_TEST_DATABASE=true go test ./alita/db/staff` and `make test-postgres-integrity` pass (database dropped afterwards; `alita_test` untouched).
+- Plan-level verification: `make test` exit 0 (run twice), `go vet -tags testtools ./...` clean, golangci-lint v2.13.1 `--new-from-rev` 0 issues and the dupl pass 0 issues, `make check-translations` and `make check-docs` pass, `go build ./...` clean, `go.mod` and `go.sum` unchanged, `gofmt -l` empty on the changed files. On a throwaway PostgreSQL 16 database: `TestRepositoryMigrationChain`, `FUKU_TEST_DATABASE=true go test ./fuku/db/staff` and `make test-postgres-integrity` pass (database dropped afterwards; `fuku_test` untouched).
 
 ## Task Commits
 
@@ -193,28 +193,28 @@ See `key-decisions` above. In short: Cancel is authority-gated; DeleteLink is de
 - **Found during:** Task 1 (mapping `staffUnlinkCheckFailed` to text)
 - **Issue:** The plan reuses `staff_link_check_failed_group` for both an unverifiable group check and a failed delete. That text begins "Not linked: ...", which in the unlink flow would tell the Staff Group the opposite of what happened.
 - **Fix:** Added `staff_unlink_check_failed_group` ("Not unlinked: I could not verify who created {group} ... Nothing was changed") in all 7 locales and used it for both cases.
-- **Files modified:** alita/modules/staff_unlink.go, locales/*.yml
+- **Files modified:** fuku/modules/staff_unlink.go, locales/*.yml
 - **Commit:** 6aaee7f
 
 **2. [Rule 1 - Bug] Plan's `html.EscapeString(issuer.FirstName)` would double-escape the mention**
 - **Found during:** Task 1
 - **Issue:** `formatting.MentionHtml` already HTML-escapes the name, so passing a pre-escaped name would show `&amp;lt;` for a name containing `<`.
 - **Fix:** Pass the raw first name; `TestUnlinkStaffTracer` uses the name `Sender <i>` and asserts it appears escaped exactly once. Both the title and the mention are spliced in after translation because the translator runs a printf-style pass.
-- **Files modified:** alita/modules/staff_unlink.go
+- **Files modified:** fuku/modules/staff_unlink.go
 - **Commit:** 6aaee7f
 
 **3. [Rule 2 - Missing critical] Cancel is authority-gated**
 - **Found during:** Task 2 design
 - **Issue:** The plan's behaviour list tests only Unlink and Confirm for strangers. An ungated Cancel would let any Staff Group member dismiss the creator's confirm prompt and trigger a panel edit.
 - **Fix:** `staffUnlinkCancel` runs the same load-link, same-chat and live creator-of-both checks as the other two. `TestStaffUnlinkButtonStranger` covers all three actions; the wrong-chat and expired tests cover all three too.
-- **Files modified:** alita/modules/staff_unlink.go
+- **Files modified:** fuku/modules/staff_unlink.go
 - **Commit:** 39d61c3
 
 **4. [Rule 2 - Missing critical] Refusals after Staff Group proof fall back in place when the Staff Group post fails**
 - **Found during:** Task 1
 - **Issue:** The plan sends those refusals to the Staff Group only; if the post fails the verified creator would get no answer at all.
 - **Fix:** Same rule as 01-05: fall back to a self-deleting reply in the issuing group (refusals only; the success notice never falls back, only logged). Covered by a subtest.
-- **Files modified:** alita/modules/staff_unlink.go
+- **Files modified:** fuku/modules/staff_unlink.go
 - **Commit:** 6aaee7f
 
 **5. [Rule 2 - Missing critical] Extra tests beyond the plan's list**
@@ -250,7 +250,7 @@ One residual to note for the verifier, not a new surface: in a linked group `/un
 ## Issues Encountered
 
 - The human check (real Telegram client, coverage item D8) was not run; the fake client cannot show what members of a linked group see.
-- `gofmt -l` still reports `alita/modules/greetings_command_test.go`, a pre-existing file outside this plan; not touched.
+- `gofmt -l` still reports `fuku/modules/greetings_command_test.go`, a pre-existing file outside this plan; not touched.
 - The module tests were not run against PostgreSQL (pre-existing: the modules test setup calls AutoMigrate, which fails on a migration-chain schema); the repository tests, which are what touch PostgreSQL behaviour here, ran against the chain database.
 - `.planning/WINDOWS.md` does not exist, so no broken-windows entries were appended; there are no stubs or skipped tests to record.
 

@@ -38,16 +38,16 @@ key-files:
     - locales/pt.yml
     - locales/ru.yml
     - locales/config.yml
-    - alita/i18n/lockdown_locale_test.go
+    - fuku/i18n/lockdown_locale_test.go
     - docs/src/content/docs/commands/lockdown/index.md
     - docs/src/content/docs/api-reference/commands.md
     - docs/src/content/docs/commands/index.mdx
     - Makefile
     - AGENTS.md
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_guard.go
-    - alita/modules/raid_flood.go
-    - alita/modules/staff_sweeper.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_guard.go
+    - fuku/modules/raid_flood.go
+    - fuku/modules/staff_sweeper.go
 
 key-decisions:
   - "/autolockdown is the fourth command bullet of lockdown_help_msg and the trigger description is a plain paragraph, so the balanced-tags test now wants four bullets"
@@ -74,7 +74,7 @@ status: complete
 ## Accomplishments
 
 - Task 1 (commit 9b9a651): `lockdown_help_msg` gained the `/autolockdown [joins|flood] [N|on|off]` bullet and a paragraph on the automatic triggers in en, es, fr, hi, id, pt and ru. The paragraph states the defaults (15 joins in 60 s; 30 items in 30 s, at least 60% from at least 3 members who joined in the last 24 h), who never counts, the notice, the 10-minute quiet period after a lift, the once-a-day cannot-lock warning and that the settings are not in backups. It claims nothing the code does not do (the flood is not deleted; a lockdown never lifts on its own). `autolockdown` joined the Lockdown aliases in `locales/config.yml`, `TestLockdownStringsHaveBalancedTags` expects four bullets, and the lockdown docs page was regenerated.
-- Task 2 (commit 4a11f3d): `Makefile` `test-postgres-integrity` lists `TestRaidDetectionSettings` and `TestRaidDetectionCarryOver` with `./alita/db/raiddetection ./alita/db/migrations`. AGENTS.md was checked identifier by identifier against the code (about 45 names, keys, TTLs and constants verified present and matching) and amended where it was incomplete: the `-7`/`-4` handler entries, the `/autoantiraid` alias authority, the flooders cross-reference in the tracker bullet, the dev `/stats` loader, the harness lists (`alita/db/raiddetection/testmain_test.go`, `alita/db/devs/testmain_test.go`) and the two Phase 6 PostgreSQL guarantees. Stale comments naming the removed group -5 handler or the antiraid poller now name the lockdown guard and `StopLockdownWorker`.
+- Task 2 (commit 4a11f3d): `Makefile` `test-postgres-integrity` lists `TestRaidDetectionSettings` and `TestRaidDetectionCarryOver` with `./fuku/db/raiddetection ./fuku/db/migrations`. AGENTS.md was checked identifier by identifier against the code (about 45 names, keys, TTLs and constants verified present and matching) and amended where it was incomplete: the `-7`/`-4` handler entries, the `/autoantiraid` alias authority, the flooders cross-reference in the tracker bullet, the dev `/stats` loader, the harness lists (`fuku/db/raiddetection/testmain_test.go`, `fuku/db/devs/testmain_test.go`) and the two Phase 6 PostgreSQL guarantees. Stale comments naming the removed group -5 handler or the antiraid poller now name the lockdown guard and `StopLockdownWorker`.
 
 ## Task Commits
 
@@ -92,12 +92,12 @@ status: complete
 | `make check-docs` | no drift detected (run after the hand-edited docs changes) |
 | `CGO_ENABLED=0 go build ./...` | ok |
 | `go vet -tags testtools ./...` | no diagnostics |
-| `gofmt -l alita main.go` | prints nothing |
+| `gofmt -l fuku main.go` | prints nothing |
 | `git diff --exit-code go.mod go.sum` | clean |
 | `make lint` | not run: golangci-lint cannot lint Go 1.26 in this environment; vet and gofmt stand in |
 | migration chain and `make test-postgres-integrity` | not run: there is no PostgreSQL server here and none may be started. Left for CI (ci.yml runs "Verify repository migration chain" before `make test-postgres-integrity`) and UAT |
 
-Acceptance greps all pass: `TestRaidDetectionCarryOver` 1, `TestRaidDetectionSettings` 1, both package paths in the Makefile, and `chat_raid_detection`, `alita:raid:`, `/autolockdown`, `/autoantiraid`, `startLockdownRow`, `raidLiftQuiet` and `raid flood counter` each found in AGENTS.md; `autolockdown` appears 2 times in the generated lockdown page; `bullets != 4` appears once.
+Acceptance greps all pass: `TestRaidDetectionCarryOver` 1, `TestRaidDetectionSettings` 1, both package paths in the Makefile, and `chat_raid_detection`, `fuku:raid:`, `/autolockdown`, `/autoantiraid`, `startLockdownRow`, `raidLiftQuiet` and `raid flood counter` each found in AGENTS.md; `autolockdown` appears 2 times in the generated lockdown page; `bullets != 4` appears once.
 
 ## Decisions Made
 
@@ -120,7 +120,7 @@ Acceptance greps all pass: `TestRaidDetectionCarryOver` 1, `TestRaidDetectionSet
 - **Found during:** Task 2 (06-10 summary follow-up)
 - **Issue:** `lockdown.go` near line 555 and `raid_flood.go` line 37 also described the removed antiraid (-5) handler as part of the handler order.
 - **Fix:** comments only; the three plan-named comments and these two now describe the real order (-7 guard, -6 fed-ban, -4 flood counter).
-- **Files modified:** `alita/modules/lockdown.go`, `alita/modules/raid_flood.go`
+- **Files modified:** `fuku/modules/lockdown.go`, `fuku/modules/raid_flood.go`
 - **Committed in:** 4a11f3d
 
 ---
@@ -130,7 +130,7 @@ Acceptance greps all pass: `TestRaidDetectionCarryOver` 1, `TestRaidDetectionSet
 
 ## Issues Encountered
 
-- `gofmt -l alita main.go` printed nothing, so the pre-existing formatting drift the notes mention in `alita/modules/greetings_command_test.go` was not reproducible on this base; the file was left untouched either way.
+- `gofmt -l fuku main.go` printed nothing, so the pre-existing formatting drift the notes mention in `fuku/modules/greetings_command_test.go` was not reproducible on this base; the file was left untouched either way.
 - The first AGENTS.md edit attempt used the shared-checkout path and was refused by the harness; it was redone against the worktree path with no effect on the main checkout.
 
 ## User Setup Required
@@ -156,7 +156,7 @@ None. Help text, docs, Makefile list and comments only. T-06-37 and T-06-38 miti
 
 ## Next Phase Readiness
 
-Phase 6 plans are all complete; ready for phase verification. Phase 7 can build its AI trigger on the rules in AGENTS.md (`raidFire`, `startLockdownRow`, `chat_raid_detection`, the `alita:raid:*` keys).
+Phase 6 plans are all complete; ready for phase verification. Phase 7 can build its AI trigger on the rules in AGENTS.md (`raidFire`, `startLockdownRow`, `chat_raid_detection`, the `fuku:raid:*` keys).
 
 ## Self-Check: PASSED
 

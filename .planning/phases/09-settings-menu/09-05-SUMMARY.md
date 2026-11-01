@@ -16,7 +16,7 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - alita/i18n/settings_locale_test.go
+    - fuku/i18n/settings_locale_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -58,8 +58,8 @@ actuals:
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -v -run '^(TestSettingsLocaleKeys|TestSettingsLabelLengths|TestSettingsReusedKeyPlaceholders|TestLockdownLocaleKeys)$' ./alita/i18n`: all 7 language subtests of each pass.
-- Whole `./alita/i18n` package passes; `make check-translations` and `make check-docs` pass; `go vet -tags testtools ./alita/i18n/` and `gofmt -l alita/i18n` are clean.
+- `go test -tags testtools -race -count=1 -v -run '^(TestSettingsLocaleKeys|TestSettingsLabelLengths|TestSettingsReusedKeyPlaceholders|TestLockdownLocaleKeys)$' ./fuku/i18n`: all 7 language subtests of each pass.
+- Whole `./fuku/i18n` package passes; `make check-translations` and `make check-docs` pass; `go vet -tags testtools ./fuku/i18n/` and `gofmt -l fuku/i18n` are clean.
 - `grep -c "^settings_"` prints 79 for every locale file; `settings_lockdown_reason` count is 0.
 - `make lint` was not run (golangci-lint in this sandbox is built with go1.25 against go1.26.0); vet and gofmt stood in for it, as the project notes direct.
 

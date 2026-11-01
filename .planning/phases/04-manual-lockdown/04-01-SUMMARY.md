@@ -9,7 +9,7 @@ requires:
     provides: "live getChatMember authority (staffIssuerSkipReason), telegramErrorDetail, staffFullName, the staffActionFake test fixture, the fresh-read audit-record pattern"
 provides:
   - "Migration 20261006120000: chat_lockdowns, chat_lockdown_joiners and the uk_chat_lockdowns_active partial unique index"
-  - "alita/db/lockdown repository: Start, GetActiveFresh, GetFresh, ConfirmLocked, DeleteUnconfirmed, BeginLift, FinishLift"
+  - "fuku/db/lockdown repository: Start, GetActiveFresh, GetFresh, ConfirmLocked, DeleteUnconfirmed, BeginLift, FinishLift"
   - "Raw getChat / setChatPermissions helpers and the 16-key locked set (lockdown_perms.go)"
   - "/lockdown [reason] and /unlockdown with a live getChatMember authority check"
   - "lockdownFake, newLockdownEnv and lockdownCleanup test fixtures"
@@ -30,20 +30,20 @@ tech-stack:
 key-files:
   created:
     - migrations/20261006120000_add_chat_lockdowns.sql
-    - alita/db/models/lockdown.go
-    - alita/db/lockdown/repository.go
-    - alita/db/lockdown/repository_test.go
-    - alita/db/lockdown/testmain_test.go
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_perms.go
-    - alita/modules/lockdown_perms_test.go
-    - alita/modules/lockdown_fake_test.go
-    - alita/modules/lockdown_test.go
-    - alita/modules/lockdown_refusals_test.go
+    - fuku/db/models/lockdown.go
+    - fuku/db/lockdown/repository.go
+    - fuku/db/lockdown/repository_test.go
+    - fuku/db/lockdown/testmain_test.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_perms.go
+    - fuku/modules/lockdown_perms_test.go
+    - fuku/modules/lockdown_fake_test.go
+    - fuku/modules/lockdown_test.go
+    - fuku/modules/lockdown_refusals_test.go
     - docs/src/content/docs/commands/lockdown/index.md
   modified:
-    - alita/db/testmain_test.go
-    - alita/modules/test_harness_test.go
+    - fuku/db/testmain_test.go
+    - fuku/modules/test_harness_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -77,10 +77,10 @@ coverage:
     requirement: "LOCK-02"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_test.go#TestLockdownCommandStarts"
+        ref: "fuku/modules/lockdown_test.go#TestLockdownCommandStarts"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_test.go#TestLockdownLockSendsLockedSet"
+        ref: "fuku/modules/lockdown_test.go#TestLockdownLockSendsLockedSet"
         status: pass
     human_judgment: true
     rationale: "The fake proves what the bot sends; whether a real supergroup ends up muted needs the live check in 04-VERIFICATION (tracer human-check, not run here)"
@@ -89,7 +89,7 @@ coverage:
     requirement: "LOCK-07"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_test.go#TestLockdownLiftRestoresExactSnapshot"
+        ref: "fuku/modules/lockdown_test.go#TestLockdownLiftRestoresExactSnapshot"
         status: pass
     human_judgment: true
     rationale: "Exactness against a real getChat answer (research A1: does Telegram write every key, false included) can only be shown with a captured live fixture"
@@ -98,7 +98,7 @@ coverage:
     requirement: "LOCK-03"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_refusals_test.go#TestLockdownNoticeAndNoPerUserCalls"
+        ref: "fuku/modules/lockdown_refusals_test.go#TestLockdownNoticeAndNoPerUserCalls"
         status: pass
     human_judgment: false
   - id: D4
@@ -106,7 +106,7 @@ coverage:
     requirement: "LOCK-06"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_refusals_test.go#TestLockdownCommandsRefuseNonAuthority"
+        ref: "fuku/modules/lockdown_refusals_test.go#TestLockdownCommandsRefuseNonAuthority"
         status: pass
     human_judgment: false
   - id: D5
@@ -114,10 +114,10 @@ coverage:
     requirement: "LOCK-09"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_refusals_test.go#TestLockdownRefusals"
+        ref: "fuku/modules/lockdown_refusals_test.go#TestLockdownRefusals"
         status: pass
       - kind: integration
-        ref: "alita/modules/lockdown_refusals_test.go#TestLockdownCommandReportsExisting"
+        ref: "fuku/modules/lockdown_refusals_test.go#TestLockdownCommandReportsExisting"
         status: pass
     human_judgment: false
   - id: D6
@@ -125,10 +125,10 @@ coverage:
     requirement: "LOCK-09"
     verification:
       - kind: unit
-        ref: "alita/db/lockdown/repository_test.go#TestStartLockdownOneActivePerChat (SQLite)"
+        ref: "fuku/db/lockdown/repository_test.go#TestStartLockdownOneActivePerChat (SQLite)"
         status: pass
       - kind: integration
-        ref: "alita/db/lockdown/repository_test.go#TestStartLockdownOneActivePerChat (PostgreSQL 16) and alita/db/migrations#TestRepositoryMigrationChain"
+        ref: "fuku/db/lockdown/repository_test.go#TestStartLockdownOneActivePerChat (PostgreSQL 16) and fuku/db/migrations#TestRepositoryMigrationChain"
         status: unknown
     human_judgment: true
     rationale: "The PostgreSQL run was blocked in this worktree (see Issues Encountered); the orchestrator must run it"
@@ -171,7 +171,7 @@ status: complete
 
 ## Files Created/Modified
 
-See the frontmatter `key-files`. The behaviour lives in `alita/modules/lockdown.go` (commands, authority check, notice composition), `alita/modules/lockdown_perms.go` (raw JSON helpers) and `alita/db/lockdown/repository.go` (state machine).
+See the frontmatter `key-files`. The behaviour lives in `fuku/modules/lockdown.go` (commands, authority check, notice composition), `fuku/modules/lockdown_perms.go` (raw JSON helpers) and `fuku/db/lockdown/repository.go` (state machine).
 
 ## Decisions Made
 
@@ -188,7 +188,7 @@ See the frontmatter `key-files`. The behaviour lives in `alita/modules/lockdown.
 - **Found during:** Task 1 and the final review
 - **Issue:** The plan's key list has no text for "a database read or write failed, or Telegram refused the restore", and `ctx.Args()[1:]` panics on a message with no words.
 - **Fix:** Added the locale key `lockdown_state_failed` (all 7 files), used when the state cannot be read or written and when a restore call fails. Added `lockdownCommandArgs`, `lockdownHasPermissions` (a permissions member must be a JSON object) and the `lockdownDetailToken` splice for Telegram's error text.
-- **Files modified:** `alita/modules/lockdown.go`, `locales/*.yml`
+- **Files modified:** `fuku/modules/lockdown.go`, `locales/*.yml`
 - **Commits:** `25a0ed2`, `c55f14f`, `7ca9bd1`
 
 **2. [Process] Tracer human-check not run as a blocking checkpoint**
@@ -209,7 +209,7 @@ Task 2's RED commit contains five test groups; only `TestLockdownRefusals` faile
 ## Issues Encountered
 
 - **PostgreSQL 16 tests were not run.** The plan's last verify command starts a throwaway cluster with `su postgres -c ...`. The execution harness refused `su` and `runuser` in this worktree-isolated agent, and no PostgreSQL server is running. I did not use the sandbox override. Not run: `TestRepositoryMigrationChain` and `TestStartLockdownOneActivePerChat` on PostgreSQL. The migration SQL was reviewed by hand against `runner.go`'s statement splitter and the plan's schema, and the SQLite run of the same test passes, but the partial unique index, `ON CONFLICT DO NOTHING` without a target (research A9) and the migration checksum have not been exercised on PostgreSQL. Run from the main checkout:
-  `PGBIN=/usr/lib/postgresql/16/bin; D=$(mktemp -d); chown postgres "$D"; su postgres -c "$PGBIN/initdb -D $D/data -A trust >/dev/null && $PGBIN/pg_ctl -D $D/data -o '-p 55432 -k $D -c listen_addresses=' -l $D/log start -w >/dev/null && $PGBIN/createdb -h $D -p 55432 chain" && DSN="host=$D port=55432 user=postgres dbname=chain sslmode=disable" && ALITA_TEST_MIGRATION_CHAIN=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./alita/db/migrations && ALITA_TEST_DATABASE=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestStartLockdownOneActivePerChat$' ./alita/db/lockdown; R=$?; su postgres -c "$PGBIN/pg_ctl -D $D/data stop -m fast" >/dev/null 2>&1; rm -rf "$D"; exit $R`
+  `PGBIN=/usr/lib/postgresql/16/bin; D=$(mktemp -d); chown postgres "$D"; su postgres -c "$PGBIN/initdb -D $D/data -A trust >/dev/null && $PGBIN/pg_ctl -D $D/data -o '-p 55432 -k $D -c listen_addresses=' -l $D/log start -w >/dev/null && $PGBIN/createdb -h $D -p 55432 chain" && DSN="host=$D port=55432 user=postgres dbname=chain sslmode=disable" && FUKU_TEST_MIGRATION_CHAIN=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations && FUKU_TEST_DATABASE=true DATABASE_URL="$DSN" go test -tags testtools -v -count=1 -run '^TestStartLockdownOneActivePerChat$' ./fuku/db/lockdown; R=$?; su postgres -c "$PGBIN/pg_ctl -D $D/data stop -m fast" >/dev/null 2>&1; rm -rf "$D"; exit $R`
   Expect `--- PASS: TestRepositoryMigrationChain` and `lockdown repository backend: postgres`.
 - `make lint` could not run (golangci-lint 2.5.0 was built with go1.25 and refuses the go1.26.0 module). `gofmt -l` on every touched Go file prints nothing and `go vet -tags testtools` is clean.
 - `gsd_run` is not available in this agent, so the broken-windows ledger (`.planning/WINDOWS.md`) was not appended and STATE/ROADMAP/REQUIREMENTS were not touched (the orchestrator owns them). Requirement IDs LOCK-02, LOCK-03, LOCK-06, LOCK-07 and LOCK-09 are shared with later plans, so none should read complete from this plan alone.
@@ -221,7 +221,7 @@ Task 2's RED commit contains five test groups; only `TestLockdownRefusals` faile
 | `TestLockdownCommandStarts`, `TestLockdownLockSendsLockedSet`, `TestLockdownLiftRestoresExactSnapshot` (`-race -count=1`) | pass |
 | `TestLockdownCommandsRefuseNonAuthority`, `TestLockdownRefusals`, `TestLockdownCommandReportsExisting`, `TestLockdownNoticeAndNoPerUserCalls`, `TestCanonicalPermissions` | pass |
 | `TestStartLockdownOneActivePerChat`, `TestLockdownRepositoryTransitions` on SQLite | pass |
-| `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/lockdown ./alita/db` | pass |
+| `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/lockdown ./fuku/db` | pass |
 | `make test` (whole repository, run before the final one-line fix) | exit 0, no `--- FAIL`; PostgreSQL-only tests skipped as the result checker allows |
 | Lockdown tests re-run after the final fix | pass |
 | `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools` on touched packages | clean |

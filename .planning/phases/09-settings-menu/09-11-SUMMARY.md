@@ -30,10 +30,10 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/settings_staff.go
-    - alita/modules/settings_card.go
-    - alita/modules/settings_staff_test.go
-    - alita/modules/settings_staff_privacy_test.go
+    - fuku/modules/settings_staff.go
+    - fuku/modules/settings_card.go
+    - fuku/modules/settings_staff_test.go
+    - fuku/modules/settings_staff_privacy_test.go
   modified:
     - AGENTS.md
 
@@ -50,7 +50,7 @@ coverage:
     requirement: "MENU-05"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsStaffPageVariants"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsStaffPageVariants"
         status: pass
     human_judgment: false
   - id: D2
@@ -58,7 +58,7 @@ coverage:
     requirement: "MENU-05"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsStaffReadOnly"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsStaffReadOnly"
         status: pass
     human_judgment: false
   - id: D3
@@ -66,10 +66,10 @@ coverage:
     requirement: "MENU-03"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsStaffLink"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsStaffLink"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsStaffPick"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsStaffPick"
         status: pass
     human_judgment: false
   - id: D4
@@ -77,10 +77,10 @@ coverage:
     requirement: "MENU-04"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsStaffUnlink"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsStaffUnlink"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsCardExpiry"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsCardExpiry"
         status: pass
     human_judgment: false
   - id: D5
@@ -88,7 +88,7 @@ coverage:
     requirement: "MENU-05"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_staff_privacy_test.go#TestSettingsStaffPrivacy"
+        ref: "fuku/modules/settings_staff_privacy_test.go#TestSettingsStaffPrivacy"
         status: pass
     human_judgment: false
   - id: D6
@@ -96,10 +96,10 @@ coverage:
     requirement: "MENU-03"
     verification:
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsAuthorityParityStaff"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsAuthorityParityStaff"
         status: pass
       - kind: unit
-        ref: "alita/modules/settings_staff_test.go#TestSettingsStaffCallbackBytes"
+        ref: "fuku/modules/settings_staff_test.go#TestSettingsStaffCallbackBytes"
         status: pass
     human_judgment: false
   - id: D7
@@ -138,9 +138,9 @@ status: complete
 ## Verification
 
 - `CGO_ENABLED=0 go build ./...`: ok.
-- `go test -tags testtools -race -count=1 -v` on `./alita/modules` for `TestSettingsStaffPageVariants`, `TestSettingsStaffReadOnly`, `TestSettingsCardExpiry`, `TestSettingsStaffLink`, `TestSettingsStaffPick`, `TestSettingsStaffUnlink`, `TestSettingsStaffPrivacy`, `TestSettingsAuthorityParityStaff`, `TestSettingsStaffCallbackBytes` plus the pinning tests `TestLinkStaffTracer`, `TestUnlinkStaffTracer`, `TestStaffUnlinkButtonConfirmTwiceRemovesOnce` and every `TestSettings*` test of plans 09-01 and 09-07: all PASS (each named test printed its `--- PASS` line).
+- `go test -tags testtools -race -count=1 -v` on `./fuku/modules` for `TestSettingsStaffPageVariants`, `TestSettingsStaffReadOnly`, `TestSettingsCardExpiry`, `TestSettingsStaffLink`, `TestSettingsStaffPick`, `TestSettingsStaffUnlink`, `TestSettingsStaffPrivacy`, `TestSettingsAuthorityParityStaff`, `TestSettingsStaffCallbackBytes` plus the pinning tests `TestLinkStaffTracer`, `TestUnlinkStaffTracer`, `TestStaffUnlinkButtonConfirmTwiceRemovesOnce` and every `TestSettings*` test of plans 09-01 and 09-07: all PASS (each named test printed its `--- PASS` line).
 - Mutation checks: answering after the build made the answer-order test fail; making `settingsStaffViewFor` always Full made `TestSettingsStaffPrivacy` fail in every language. Both were restored.
-- `go vet -tags testtools ./alita/modules/` exits 0 and `gofmt -l alita/` prints nothing. `make lint` was not run: golangci-lint in the sandbox is built with go1.25 and cannot lint this go1.26.0 module, so `gofmt` and `go vet` stood in. `make check-translations` and `make check-docs`: clean. The whole `make test` was left to the orchestrator.
+- `go vet -tags testtools ./fuku/modules/` exits 0 and `gofmt -l fuku/` prints nothing. `make lint` was not run: golangci-lint in the sandbox is built with go1.25 and cannot lint this go1.26.0 module, so `gofmt` and `go vet` stood in. `make check-translations` and `make check-docs`: clean. The whole `make test` was left to the orchestrator.
 - Acceptance greps: the four render functions, `renderStaffRowStatus(`, `buildStaffPanelRows(`, `staffPanelTextFor(`, the six command functions (`listVerifiedOwnStaffGroups(`, `linkToStaffGroup(`, `announceStaffLink(`, `resolveNamedStaffGroup(`, `checkUnlinkAuthority(`, `runUnlinkGroup(`) in `settings_staff.go`; the three card symbols in `settings_card.go`; `settingsStaffViewFor` and `staff_groups row ID` in AGENTS.md.
 
 ## Deviations from Plan
@@ -149,13 +149,13 @@ status: complete
 - **Found during:** Task 1
 - **Issue:** AGENTS.md says a page that cannot read its data answers `settings_cannot_open_alert` and edits to `settings_cannot_open`. Answering empty before the database read would make the alert a no-op (`settingsPress.answer` answers once).
 - **Fix:** `settingsStaffBuild` reads the database first (no Telegram call), then answers empty, then makes the live checks. D-31's point, that the answer precedes the live checks, holds and is tested (`answer at call < first getChatAdministrators/bot getChatMember`).
-- **Files:** `alita/modules/settings_staff.go`. **Commit:** `2b90d38`.
+- **Files:** `fuku/modules/settings_staff.go`. **Commit:** `2b90d38`.
 
 **2. [Rule 1 - Plan test cannot hold] "Yes is refused when ownership moved and the link stays"**
 - **Found during:** Task 2
 - **Issue:** after the refusal the page is redrawn with the live owner recheck (`buildStaffPanelRows`), and if the Staff Group's creator really changed, `recheckLink` correctly removes the link of a maker who no longer owns it (and tells the Staff Group), exactly as `/staff` does. So "the link stays" cannot be asserted for a mismatch.
 - **Fix:** the test asserts the refusal text (`staff_unlink_refuse_not_owner`) and that Yes itself posted no `staff_notice_unlinked_by`; a separate test shows that an owner check that cannot be answered at Yes (error, not mismatch) refuses with `staff_check_failed` and the link stays.
-- **Files:** `alita/modules/settings_staff_test.go`. **Commit:** `a3789a7` (test in `72f5abd`/`a3789a7`).
+- **Files:** `fuku/modules/settings_staff_test.go`. **Commit:** `a3789a7` (test in `72f5abd`/`a3789a7`).
 
 **3. [Process] Panel Refresh button**: the read-only panel's Refresh is `{a: pg, v: <page>}` so it keeps the page, instead of `{a: op, p: s}` (which would return to page 1). The linked page's Refresh is `{a: op, p: s}` as planned.
 
@@ -184,6 +184,6 @@ On a real bot with a Staff Group and a supergroup you created: send `/settings`,
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/modules/settings_staff.go`, `settings_card.go`, `settings_staff_test.go`, `settings_staff_privacy_test.go` (checked on disk).
+- Created files exist: `fuku/modules/settings_staff.go`, `settings_card.go`, `settings_staff_test.go`, `settings_staff_privacy_test.go` (checked on disk).
 - Commits present: `f159cb0`, `2b90d38`, `72f5abd`, `a3789a7`, `37ab548`, `a63b150` (`git log` on this branch).
 - All three tasks' `<verify>` commands and acceptance criteria re-run and green (see Verification).

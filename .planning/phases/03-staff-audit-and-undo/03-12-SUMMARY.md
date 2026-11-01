@@ -34,14 +34,14 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - alita/db/staff/actions.go
-    - alita/db/staff/actions_test.go
-    - alita/modules/staff_undo.go
-    - alita/modules/staff_history.go
-    - alita/modules/staff_history_test.go
-    - alita/modules/staff_history_undo_test.go
-    - alita/modules/staff_undo_claim_test.go
-    - alita/modules/staff_undo_test.go
+    - fuku/db/staff/actions.go
+    - fuku/db/staff/actions_test.go
+    - fuku/modules/staff_undo.go
+    - fuku/modules/staff_history.go
+    - fuku/modules/staff_history_test.go
+    - fuku/modules/staff_history_undo_test.go
+    - fuku/modules/staff_undo_claim_test.go
+    - fuku/modules/staff_undo_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -64,13 +64,13 @@ coverage:
     requirement: STAFF-10
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryUndoStates"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryUndoStates"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailUndoOutcome"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailUndoOutcome"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryUndoNothingLine"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryUndoNothingLine"
         status: pass
     human_judgment: false
   - id: D2
@@ -78,7 +78,7 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_test.go#TestStaffHistoryDetailUndoOutcome"
+        ref: "fuku/modules/staff_history_test.go#TestStaffHistoryDetailUndoOutcome"
         status: pass
     human_judgment: false
   - id: D3
@@ -86,7 +86,7 @@ coverage:
     requirement: SETUP-09
     verification:
       - kind: unit
-        ref: "alita/db/staff/actions_test.go#TestStaffActionTally"
+        ref: "fuku/db/staff/actions_test.go#TestStaffActionTally"
         status: pass
     human_judgment: false
   - id: D4
@@ -94,10 +94,10 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_undo_claim_test.go#TestStaffUndoClaimedTexts"
+        ref: "fuku/modules/staff_undo_claim_test.go#TestStaffUndoClaimedTexts"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_undo_claim_test.go#TestStaffUndoNothingChanged"
+        ref: "fuku/modules/staff_undo_claim_test.go#TestStaffUndoNothingChanged"
         status: pass
     human_judgment: false
   - id: D5
@@ -155,7 +155,7 @@ After Task 1 the tracer's three automated verify commands were re-run and passed
 - `make check-docs`: no drift detected.
 - `go vet -tags testtools ./...`: clean.
 - `CGO_ENABLED=0 go build ./...`: ok.
-- `gofmt -l alita main.go`: only the pre-existing `alita/modules/greetings_command_test.go`.
+- `gofmt -l fuku main.go`: only the pre-existing `fuku/modules/greetings_command_test.go`.
 - `git diff --exit-code go.mod go.sum`: no change.
 - `go test -tags testtools -race -count=15` of `TestStaffUndoOnce` and `TestStaffUndoOnceAcrossReplicas`: ok (the claimed-text change could have raced them).
 - `make lint`: could not run in this sandbox. Exact error: `can't load config: the Go language version (go1.25) used to build golangci-lint is lower than the targeted Go version (1.26.0)`. gofmt and go vet were relied on, as the plan allows.

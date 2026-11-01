@@ -33,12 +33,12 @@ tech-stack:
 key-files:
   created:
     - migrations/20261018120000_add_lockdown_trigger_columns.sql
-    - alita/modules/lockdown_start.go
-    - alita/modules/lockdown_start_test.go
+    - fuku/modules/lockdown_start.go
+    - fuku/modules/lockdown_start_test.go
   modified:
-    - alita/db/models/lockdown.go
-    - alita/modules/lockdown.go
-    - alita/modules/lockdown_alert.go
+    - fuku/db/models/lockdown.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/lockdown_alert.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -76,7 +76,7 @@ status: complete
 
 ## Accomplishments
 
-- `/lockdown` starts through `startLockdownRow` (bot rights read live, raw permissions snapshot, insert behind the one-active-lockdown index, lock call, confirmation, worker wake). Every outcome maps to the reply it sent before; the existing `Lockdown|Unlockdown` suites in `alita/modules` and `alita/db/lockdown` pass unchanged under `-race`.
+- `/lockdown` starts through `startLockdownRow` (bot rights read live, raw permissions snapshot, insert behind the one-active-lockdown index, lock call, confirmation, worker wake). Every outcome maps to the reply it sent before; the existing `Lockdown|Unlockdown` suites in `fuku/modules` and `fuku/db/lockdown` pass unchanged under `-race`.
 - Two simultaneous starts of one chat give exactly one `Started` and one `AlreadyActive`, one row and one `setChatPermissions` call (LOCK-10).
 - Migration 20261018120000 adds `trigger_count`, `trigger_window`, `trigger_percent` (all `INTEGER NOT NULL DEFAULT 0`) and `idx_chat_lockdowns_chat_lift` for the post-lift quiet period; the model, the new `join_surge` and `flood` kinds and AGENTS.md carry them.
 - `lockdownAlertTriggerLine` renders the join-surge line (count, window, time) and the flood line (count, window, percent, time) from the row's columns, falling back to the manual line for any other kind (RAID-01). Two locale keys in all 7 files.
@@ -113,7 +113,7 @@ Both tasks have a failing-test commit before the implementation commit.
 - **Found during:** Task 1 (RED)
 - **Issue:** Go will not build a test package that names `startLockdownRow`, the outcome constants, `LockdownTriggerJoinSurge` or the new row fields, so a test-only commit could not reach a meaningful RED (a compile error is an invalid RED).
 - **Fix:** The RED commit `e9dac9d` also holds the trigger constants and model columns, the migration (so the model never exists without its schema in any commit) and a `startLockdownRow` stub that returns a zero result. The GREEN commit replaces the stub with the real implementation.
-- **Files modified:** `alita/db/models/lockdown.go`, `migrations/20261018120000_add_lockdown_trigger_columns.sql`, `alita/modules/lockdown_start.go`
+- **Files modified:** `fuku/db/models/lockdown.go`, `migrations/20261018120000_add_lockdown_trigger_columns.sql`, `fuku/modules/lockdown_start.go`
 - **Committed in:** `e9dac9d`
 
 ---
@@ -123,8 +123,8 @@ Both tasks have a failing-test commit before the implementation commit.
 
 ## Issues Encountered
 
-- `make lint` cannot run here (golangci-lint is built with go1.25 and the module needs go1.26). `gofmt -l alita/modules alita/db` printed nothing and `go vet -tags testtools ./alita/modules ./alita/db/models ./alita/db/lockdown ./alita/i18n` was clean in its place.
-- No PostgreSQL server exists in this sandbox and none was started. The migration is idempotent plain DDL (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, no transaction statements, no concurrent build); `go test ./alita/db/migrations` passes, and the PostgreSQL proof is CI's migration chain. The concurrency test ran on SQLite under `-race`; the PostgreSQL guarantee behind it (`uk_chat_lockdowns_active`) is already in `make test-postgres-integrity` via `TestStartLockdownOneActivePerChat`.
+- `make lint` cannot run here (golangci-lint is built with go1.25 and the module needs go1.26). `gofmt -l fuku/modules fuku/db` printed nothing and `go vet -tags testtools ./fuku/modules ./fuku/db/models ./fuku/db/lockdown ./fuku/i18n` was clean in its place.
+- No PostgreSQL server exists in this sandbox and none was started. The migration is idempotent plain DDL (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, no transaction statements, no concurrent build); `go test ./fuku/db/migrations` passes, and the PostgreSQL proof is CI's migration chain. The concurrency test ran on SQLite under `-race`; the PostgreSQL guarantee behind it (`uk_chat_lockdowns_active`) is already in `make test-postgres-integrity` via `TestStartLockdownOneActivePerChat`.
 
 ## Verification Run
 
@@ -132,10 +132,10 @@ Both tasks have a failing-test commit before the implementation commit.
 |-------|--------|
 | `go test -tags testtools -race -run '^TestLockdownStartRow$'` | pass, 10 subtests |
 | `go test -tags testtools -race -run '^TestLockdownAlertTriggerLine$'` | pass, 3 subtests |
-| `go test -tags testtools -race -run 'Lockdown\|Unlockdown' ./alita/modules ./alita/db/lockdown` | pass (re-run after the last commit) |
-| `go test -tags testtools -race -run 'LockdownAlert' ./alita/modules` | pass |
-| `go test -tags testtools -run '^TestLockdownLocaleKeys$\|^TestLockdownStringsHaveBalancedTags$' ./alita/i18n` | pass |
-| `go test -tags testtools ./alita/db/migrations` | pass |
+| `go test -tags testtools -race -run 'Lockdown\|Unlockdown' ./fuku/modules ./fuku/db/lockdown` | pass (re-run after the last commit) |
+| `go test -tags testtools -race -run 'LockdownAlert' ./fuku/modules` | pass |
+| `go test -tags testtools -run '^TestLockdownLocaleKeys$\|^TestLockdownStringsHaveBalancedTags$' ./fuku/i18n` | pass |
+| `go test -tags testtools ./fuku/db/migrations` | pass |
 | `CGO_ENABLED=0 go build ./...`, `go vet`, `gofmt -l` | clean |
 | `make check-translations`, `make check-docs` | pass, no drift |
 | `go.mod` and `go.sum` | unchanged |
@@ -166,4 +166,4 @@ The join-surge and flood triggers (later plans) can call `startLockdownRow` with
 
 ## Self-Check: PASSED
 
-Created files exist (`migrations/20261018120000_add_lockdown_trigger_columns.sql`, `alita/modules/lockdown_start.go`, `alita/modules/lockdown_start_test.go`); commits `e9dac9d`, `a5f7e91`, `3b2a61e` and `c66e15b` are in `git log`.
+Created files exist (`migrations/20261018120000_add_lockdown_trigger_columns.sql`, `fuku/modules/lockdown_start.go`, `fuku/modules/lockdown_start_test.go`); commits `e9dac9d`, `a5f7e91`, `3b2a61e` and `c66e15b` are in `git log`.

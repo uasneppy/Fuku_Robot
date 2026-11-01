@@ -21,8 +21,8 @@ created: "2026-10-06"
 |----------|-------|
 | **Framework** | go test + testify assertions; real fixtures (SQLite via `internal/testdb.Run`, miniredis, hand-written `gotgbot.BotClient` fakes extending `staffActionFake`) |
 | **Config file** | none; every test file starts with `//go:build testtools`; `CGO_ENABLED=1` |
-| **Quick run command** | `go test -tags testtools -race -count=1 -run 'Lockdown' ./alita/db/lockdown ./alita/modules` |
-| **Full suite command** | `make test` (sandbox: `go test -tags testtools -race -count=1 ./alita/db/... ./alita/modules/...`) |
+| **Quick run command** | `go test -tags testtools -race -count=1 -run 'Lockdown' ./fuku/db/lockdown ./fuku/modules` |
+| **Full suite command** | `make test` (sandbox: `go test -tags testtools -race -count=1 ./fuku/db/... ./fuku/modules/...`) |
 | **Estimated runtime** | `make test` ~180 s; first cold `-race` build ~150 s; each narrow `-run` ~1-2 s once compiled |
 
 ---
@@ -30,7 +30,7 @@ created: "2026-10-06"
 ## Sampling Rate
 
 - **After every task commit:** Run the narrow `-run` for the touched tests (see the map below)
-- **After every plan wave:** Run `go test -tags testtools -race -count=1 ./alita/db/... ./alita/modules/...` and `make check-translations`
+- **After every plan wave:** Run `go test -tags testtools -race -count=1 ./fuku/db/... ./fuku/modules/...` and `make check-translations`
 - **Before `/gsd-verify-work`:** `make test`, `make lint`, `make check-translations`, `make generate-docs && make check-docs` must be green, plus the PostgreSQL integrity run locally
 - **Max feedback latency:** 60 seconds
 
@@ -42,31 +42,31 @@ Seeded from 04-RESEARCH.md "Validation Architecture". Task IDs are bound to the 
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 04-03-T1 | 04-03 | 3 | LOCK-01 | T-04-10, T-04-11 | A `chat_member` joiner is recorded, then banned; EndGroups stops welcome and captcha | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardBansChatMemberJoin$' ./alita/modules` | ✅ | ✅ green |
-| 04-04-T1 | 04-04 | 4 | LOCK-01 | T-04-15 | A join delivered on two paths is acted on once | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardDedupesTwoPaths$' ./alita/modules` | ✅ | ✅ green |
-| 04-05-T1 | 04-05 | 5 | LOCK-01 | T-04-17 | A join request is declined, never auto-approved; the Accept button refuses (D-25) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardDeclinesJoinRequest$' ./alita/modules` | ✅ | ✅ green |
-| 04-04-T2 | 04-04 | 4 | LOCK-01 | T-04-14, T-04-16 | Only a human added by a live admin is exempt; bots and self-joins are banned (D-07, D-08, D-24) | unit | `go test -tags testtools -race -count=1 -run '^TestDecideLockdownJoin$' ./alita/modules` | ✅ | ✅ green |
-| 04-04-T2 | 04-04 | 4 | LOCK-01 | T-04-15 | No goodbye for a lockdown-banned joiner | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownSuppressesGoodbye$' ./alita/modules` | ✅ | ✅ green |
-| 04-03-T2 | 04-03 | 3 | LOCK-01 | T-04-12 | Joiners are unbanned at the lift and can rejoin | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLiftUnbansJoiners$' ./alita/modules` | ✅ | ✅ green |
-| 04-01-T1 | 04-01 | 1 | LOCK-02 | T-04-03 | Lock sends the all-false set with independent permissions; no per-user restrict | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLockSendsLockedSet$' ./alita/modules` | ✅ | ✅ green |
-| 04-01-T2 | 04-01 | 1 | LOCK-03 | T-04-05 | Notice says approved users are muted too; no approved-user calls (D-01, D-02) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownNoticeAndNoPerUserCalls$' ./alita/modules` | ✅ | ✅ green |
-| 04-05-T2 | 04-05 | 5 | LOCK-04 | T-04-18 | Another chat is unaffected (guard and permissions) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownAffectsOnlyItsChat$' ./alita/modules` | ✅ | ✅ green |
-| 04-06-T2 | 04-06 | 6 | LOCK-05 | T-04-21 | Enforcement holds with Redis flushed or absent; state lives in PostgreSQL | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownSurvivesRedisFlush$' ./alita/modules` | ✅ | ✅ green |
-| 04-06-T1 | 04-06 | 6 | LOCK-05 | T-04-20 | A restart mid-lift resumes the remaining unbans | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLiftResumesAfterRestart$' ./alita/modules` | ✅ | ✅ green |
-| 04-01-T2 | 04-01 | 1 | LOCK-05 | T-04-03 | One active lockdown per chat (SQLite) | repository | `go test -tags testtools -race -count=1 -run '^TestStartLockdownOneActivePerChat$' ./alita/db/lockdown` | ✅ | ✅ green |
+| 04-03-T1 | 04-03 | 3 | LOCK-01 | T-04-10, T-04-11 | A `chat_member` joiner is recorded, then banned; EndGroups stops welcome and captcha | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardBansChatMemberJoin$' ./fuku/modules` | ✅ | ✅ green |
+| 04-04-T1 | 04-04 | 4 | LOCK-01 | T-04-15 | A join delivered on two paths is acted on once | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardDedupesTwoPaths$' ./fuku/modules` | ✅ | ✅ green |
+| 04-05-T1 | 04-05 | 5 | LOCK-01 | T-04-17 | A join request is declined, never auto-approved; the Accept button refuses (D-25) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownGuardDeclinesJoinRequest$' ./fuku/modules` | ✅ | ✅ green |
+| 04-04-T2 | 04-04 | 4 | LOCK-01 | T-04-14, T-04-16 | Only a human added by a live admin is exempt; bots and self-joins are banned (D-07, D-08, D-24) | unit | `go test -tags testtools -race -count=1 -run '^TestDecideLockdownJoin$' ./fuku/modules` | ✅ | ✅ green |
+| 04-04-T2 | 04-04 | 4 | LOCK-01 | T-04-15 | No goodbye for a lockdown-banned joiner | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownSuppressesGoodbye$' ./fuku/modules` | ✅ | ✅ green |
+| 04-03-T2 | 04-03 | 3 | LOCK-01 | T-04-12 | Joiners are unbanned at the lift and can rejoin | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLiftUnbansJoiners$' ./fuku/modules` | ✅ | ✅ green |
+| 04-01-T1 | 04-01 | 1 | LOCK-02 | T-04-03 | Lock sends the all-false set with independent permissions; no per-user restrict | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLockSendsLockedSet$' ./fuku/modules` | ✅ | ✅ green |
+| 04-01-T2 | 04-01 | 1 | LOCK-03 | T-04-05 | Notice says approved users are muted too; no approved-user calls (D-01, D-02) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownNoticeAndNoPerUserCalls$' ./fuku/modules` | ✅ | ✅ green |
+| 04-05-T2 | 04-05 | 5 | LOCK-04 | T-04-18 | Another chat is unaffected (guard and permissions) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownAffectsOnlyItsChat$' ./fuku/modules` | ✅ | ✅ green |
+| 04-06-T2 | 04-06 | 6 | LOCK-05 | T-04-21 | Enforcement holds with Redis flushed or absent; state lives in PostgreSQL | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownSurvivesRedisFlush$' ./fuku/modules` | ✅ | ✅ green |
+| 04-06-T1 | 04-06 | 6 | LOCK-05 | T-04-20 | A restart mid-lift resumes the remaining unbans | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLiftResumesAfterRestart$' ./fuku/modules` | ✅ | ✅ green |
+| 04-01-T2 | 04-01 | 1 | LOCK-05 | T-04-03 | One active lockdown per chat (SQLite) | repository | `go test -tags testtools -race -count=1 -run '^TestStartLockdownOneActivePerChat$' ./fuku/db/lockdown` | ✅ | ✅ green |
 | 04-01-T2, 04-08-T3 | 04-01 | 1 | LOCK-05 | T-04-03 | One active lockdown per chat (PostgreSQL partial unique index) | repository (PG) | `make test-postgres-integrity` (test added to its `-run` list) | ✅ | ✅ green |
-| 04-01-T2 | 04-01 | 1 | LOCK-06 | T-04-01, T-04-02 | Non-admins and admins without restrict are refused; the admin cache is never used | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownCommandsRefuseNonAuthority$' ./alita/modules` | ✅ | ✅ green |
-| 04-02-T3 | 04-02 | 2 | LOCK-06 | T-04-06 | Anonymous admins always get the proof button, even in AnonAdmin mode; the tapper is checked live and named (D-12) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownAnonymousAdminProof$' ./alita/modules` | ✅ | ✅ green |
-| 04-02-T2 | 04-02 | 2 | LOCK-06 | T-04-07 | A double `/unlockdown` lifts once | integration (concurrent) | `go test -tags testtools -race -count=1 -run '^TestUnlockdownLiftsOnce$' ./alita/modules` | ✅ | ✅ green |
-| 04-01-T1 | 04-01 | 1 | LOCK-07 | T-04-03 | The lift restores the exact snapshot, pointer fields included | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLiftRestoresExactSnapshot$' ./alita/modules` | ✅ | ✅ green |
-| 04-02-T2 | 04-02 | 2 | LOCK-07 | T-04-08 | A hand edit is replaced and reported; a failed restore leaves the group locked and unbans nobody (D-18, D-21) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLift(ManualChange\|RestoreFailure)$' ./alita/modules` | ✅ | ✅ green |
-| 04-03-T2 | 04-03 | 3 | LOCK-07 | T-04-12 | A deliberate ban survives the lift (D-05) | unit + integration | `go test -tags testtools -race -count=1 -run '^Test(IsLockdownBan\|LockdownLiftKeepsDeliberateBan)$' ./alita/modules` | ✅ | ✅ green |
-| 04-07-T1, 04-07-T2 | 04-07 | 7 | LOCK-08 | T-04-23, T-04-24 | Unmute during a lockdown uses the snapshot for all four callers (D-23) | integration | `go test -tags testtools -race -count=1 -run '^TestUnmuteDuringLockdownUsesSnapshot$' ./alita/modules` | ✅ | ✅ green |
-| 04-01-T1, 04-01-T2, 04-02-T1 | 04-01, 04-02 | 1, 2 | LOCK-09 | T-04-04, T-04-09 | `/lockdown` starts one; a second reports the existing one; `/lockdownstatus` content | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownCommand(Starts\|ReportsExisting)$\|^TestLockdownStatusCommand$' ./alita/modules` | ✅ | ✅ green |
-| 04-01-T2 | 04-01 | 1 | LOCK-09 | T-04-05 | Refusals (bot lacks rights, permissions unreadable, basic group) record nothing (D-20) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownRefusals$' ./alita/modules` | ✅ | ✅ green |
-| 04-08-T1 | 04-08 | 8 | SETUP-08 | T-04-25 | `/staff` row shows the lockdown marker, also when the bot is missing (D-17, D-22) | unit | `go test -tags testtools -race -count=1 -run '^TestRenderStaffRowLockdownMarker$' ./alita/modules` | ✅ | ✅ green |
-| 04-08-T2 | 04-08 | 8 | LOCK-07 (D-05) | T-04-26 | A staff timed `/ban` on a lockdown joiner re-issues the ban, so the lift keeps it | unit | `go test -tags testtools -race -count=1 -run '^TestDecideStaffBanLockdownJoiner$' ./alita/modules` | ✅ | ✅ green |
-| 04-01-T2, 04-08-T3 | 04-01, 04-08 | 1, 8 | platform | — | Migration chain and checksums | existing | `go test -tags testtools -race -count=1 -run '^TestRepositoryMigrationChain$' ./alita/db/migrations` | ✅ | ✅ green |
+| 04-01-T2 | 04-01 | 1 | LOCK-06 | T-04-01, T-04-02 | Non-admins and admins without restrict are refused; the admin cache is never used | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownCommandsRefuseNonAuthority$' ./fuku/modules` | ✅ | ✅ green |
+| 04-02-T3 | 04-02 | 2 | LOCK-06 | T-04-06 | Anonymous admins always get the proof button, even in AnonAdmin mode; the tapper is checked live and named (D-12) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownAnonymousAdminProof$' ./fuku/modules` | ✅ | ✅ green |
+| 04-02-T2 | 04-02 | 2 | LOCK-06 | T-04-07 | A double `/unlockdown` lifts once | integration (concurrent) | `go test -tags testtools -race -count=1 -run '^TestUnlockdownLiftsOnce$' ./fuku/modules` | ✅ | ✅ green |
+| 04-01-T1 | 04-01 | 1 | LOCK-07 | T-04-03 | The lift restores the exact snapshot, pointer fields included | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLiftRestoresExactSnapshot$' ./fuku/modules` | ✅ | ✅ green |
+| 04-02-T2 | 04-02 | 2 | LOCK-07 | T-04-08 | A hand edit is replaced and reported; a failed restore leaves the group locked and unbans nobody (D-18, D-21) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownLift(ManualChange\|RestoreFailure)$' ./fuku/modules` | ✅ | ✅ green |
+| 04-03-T2 | 04-03 | 3 | LOCK-07 | T-04-12 | A deliberate ban survives the lift (D-05) | unit + integration | `go test -tags testtools -race -count=1 -run '^Test(IsLockdownBan\|LockdownLiftKeepsDeliberateBan)$' ./fuku/modules` | ✅ | ✅ green |
+| 04-07-T1, 04-07-T2 | 04-07 | 7 | LOCK-08 | T-04-23, T-04-24 | Unmute during a lockdown uses the snapshot for all four callers (D-23) | integration | `go test -tags testtools -race -count=1 -run '^TestUnmuteDuringLockdownUsesSnapshot$' ./fuku/modules` | ✅ | ✅ green |
+| 04-01-T1, 04-01-T2, 04-02-T1 | 04-01, 04-02 | 1, 2 | LOCK-09 | T-04-04, T-04-09 | `/lockdown` starts one; a second reports the existing one; `/lockdownstatus` content | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownCommand(Starts\|ReportsExisting)$\|^TestLockdownStatusCommand$' ./fuku/modules` | ✅ | ✅ green |
+| 04-01-T2 | 04-01 | 1 | LOCK-09 | T-04-05 | Refusals (bot lacks rights, permissions unreadable, basic group) record nothing (D-20) | integration | `go test -tags testtools -race -count=1 -run '^TestLockdownRefusals$' ./fuku/modules` | ✅ | ✅ green |
+| 04-08-T1 | 04-08 | 8 | SETUP-08 | T-04-25 | `/staff` row shows the lockdown marker, also when the bot is missing (D-17, D-22) | unit | `go test -tags testtools -race -count=1 -run '^TestRenderStaffRowLockdownMarker$' ./fuku/modules` | ✅ | ✅ green |
+| 04-08-T2 | 04-08 | 8 | LOCK-07 (D-05) | T-04-26 | A staff timed `/ban` on a lockdown joiner re-issues the ban, so the lift keeps it | unit | `go test -tags testtools -race -count=1 -run '^TestDecideStaffBanLockdownJoiner$' ./fuku/modules` | ✅ | ✅ green |
+| 04-01-T2, 04-08-T3 | 04-01, 04-08 | 1, 8 | platform | — | Migration chain and checksums | existing | `go test -tags testtools -race -count=1 -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations` | ✅ | ✅ green |
 | every plan; 04-08-T3 | 04-01..04-08 | 1-8 | platform | — | All 7 locales carry the new keys | script | `make check-translations` | ✅ | ✅ green |
 | 04-01-T2, 04-02, 04-05-T1, 04-08-T1, 04-08-T3 | 04-01..04-08 | 1-8 | platform | — | Generated docs match | script | `make generate-docs && make check-docs` | ✅ | ✅ green |
 
@@ -76,8 +76,8 @@ Seeded from 04-RESEARCH.md "Validation Architecture". Task IDs are bound to the 
 
 ## Wave 0 Requirements
 
-- [x] `alita/db/lockdown/testmain_test.go` and repository tests (SQLite via `testdb.Run`, the two new lockdown models)
-- [x] Both new models in the `AutoMigrate` lists of `alita/modules/test_harness_test.go` and `alita/db/testmain_test.go`
+- [x] `fuku/db/lockdown/testmain_test.go` and repository tests (SQLite via `testdb.Run`, the two new lockdown models)
+- [x] Both new models in the `AutoMigrate` lists of `fuku/modules/test_harness_test.go` and `fuku/db/testmain_test.go`
 - [x] Extend `staffActionFake` (or a sibling `lockdownFake` embedding it): `setChatPermissions` storing raw permissions, `getChat` returning the stored raw permissions JSON, `declineChatJoinRequest`, `deleteMessage`, `getChatMember` for a kicked member echoing `until_date`, scripted errors per method
 - [x] Test helper `lockdownEnv`: dispatcher with Lockdown, Greetings, Captcha, AntiRaid and Staff loaded, miniredis, a fast lockdown pacer, deterministic worker ticks
 - [x] Lockdown cases in `chat_permissions_test.go` (the existing parallel pure cases stay on `Id == 0`)
@@ -118,6 +118,6 @@ All five manual-only checks passed in 04-UAT.md (tests 2-7, 2026-10-08), togethe
 | Resolved | 0 |
 | Escalated | 0 |
 
-All 26 mapped tests in `alita/modules` and `alita/db/lockdown` pass under `-race`, the migration chain test passes,
+All 26 mapped tests in `fuku/modules` and `fuku/db/lockdown` pass under `-race`, the migration chain test passes,
 `make check-translations` and `make check-docs` are clean, and the PostgreSQL row (`TestStartLockdownOneActivePerChat` on
 PostgreSQL 16) passed in UAT test 1.

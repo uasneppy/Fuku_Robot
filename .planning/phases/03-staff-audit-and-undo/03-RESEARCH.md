@@ -47,7 +47,7 @@
 - How unlinked or renamed groups show in history and detail: probably the stored title at action time, marked as no longer linked. Undo should skip groups that are no longer linked, with a reason.
 - Undo on actions that ran before Phase 3 shipped: they have no record, so there is no button.
 - Whether pressing Undo while the original run is still going is impossible because the button appears only on the final summary, or is refused.
-- How undo interacts with the per-target fan-out lock (`alita:staff:lock:target:<id>`). It should take the same lock, so an undo and a new action on the same person never race.
+- How undo interacts with the per-target fan-out lock (`fuku:staff:lock:target:<id>`). It should take the same lock, so an undo and a new action on the same person never race.
 - The exact locale wording for every new string, in all 7 locale files.
 - The reason length cap for log posts (Pitfall A suggests about 300 characters) and how history lines truncate long names and reasons.
 
@@ -79,13 +79,13 @@ Read this session: `/home/user/Fuku_Robot/.claude/CLAUDE.md` (includes `AGENTS.m
 - Migrations are append-only, timestamped greater than every existing file, one transaction per file, no top-level `BEGIN`/`COMMIT`, no `CREATE INDEX CONCURRENTLY`. Never edit an applied file.
 - Every write `cache.DeleteCache`s the keys it affects. The audit tables are authority/accountability reads and are **never cached**, so there is nothing to delete. State that in the repository file comment so a reviewer does not look for it.
 - Commands go through `helpers.WrapCommand`. Phase 3 adds **no new command**: only callbacks under the existing `staff` namespace and a button on the `/staff` panel.
-- Callback data only through `alita/utils/callbackcodec` (`encodeCallbackData`, `<ns>|v1|<url-encoded>`, 64-byte cap). `encodeCallbackData` returns `""` on overflow: never ship a button without checking.
+- Callback data only through `fuku/utils/callbackcodec` (`encodeCallbackData`, `<ns>|v1|<url-encoded>`, 64-byte cap). `encodeCallbackData` returns `""` on overflow: never ship a button without checking.
 - Locale keys go in all 7 files (`en es fr hi id pt ru`); copy key names from `locales/en.yml`; every `tr.GetString` call must use a literal key so `make check-translations` sees it.
 - Fire-and-forget goroutines start with `defer error_handling.RecoverFromPanic(...)`.
 - `decideStaffAction` is the only place staff calls are chosen; every staff fan-out Telegram call goes through `staffPaced`; per-group authority is only the live `getChatMember`.
 - Tests: real fixtures only (`internal/testdb.Run`, miniredis, hand-written `gotgbot.BotClient` fakes), `-tags testtools`, `make test`. No mock libraries; assert observable behaviour.
 - Conventional Commits; update `AGENTS.md` in the same commit as any change that invalidates a rule in it (list below in "AGENTS.md edits").
-- Staff tables are never part of backup, export, import or reset. Verified: no code enumerates tables by name outside migrations (grep for `information_schema|pg_tables|GetTables|sqlite_master` in non-test Go finds only `alita/db/migrations/runner.go:852`), so new tables are excluded by default.
+- Staff tables are never part of backup, export, import or reset. Verified: no code enumerates tables by name outside migrations (grep for `information_schema|pg_tables|GetTables|sqlite_master` in non-test Go finds only `fuku/db/migrations/runner.go:852`), so new tables are excluded by default.
 - Ignore `/home/user/Fuku_Robot/.claude/worktrees/agent-aae3302fd6b0eafae/`: a stale worktree copy of Phase 1 code, not part of the build.
 
 ## Summary
@@ -104,8 +104,8 @@ Record linkage has two traps. `RekeyChat` re-keys `staff_chat_id` on actions (so
 |------------|-------------|----------------|-----------|
 | Audit record (action, per-group outcome, prior state, undo) | Database / Storage (PostgreSQL via GORM) | API / Backend (module writes it) | Must survive restarts and Redis loss; Redis card lives 1 h, undo has no time limit (D-05). |
 | One-undo-per-action claim | Database / Storage (conditional UPDATE) | — | The Redis card hash expires; the claim must outlive it. Same pattern as `SetLinkHealth` / `DeleteLinkIfOwner`. |
-| Undo confirm card (pending state, issuer-only Confirm) | Redis (existing `alita:staff:act:<token>` hash + Lua CAS) | API / Backend | Short-lived interaction state shared by replicas. |
-| Per-target mutual exclusion | Redis (existing `alita:staff:lock:target:<id>`) | — | Undo and new actions on one person must not race. |
+| Undo confirm card (pending state, issuer-only Confirm) | Redis (existing `fuku:staff:act:<token>` hash + Lua CAS) | API / Backend | Short-lived interaction state shared by replicas. |
+| Per-target mutual exclusion | Redis (existing `fuku:staff:lock:target:<id>`) | — | Undo and new actions on one person must not race. |
 | Pre-action state capture | API / Backend (worker reads live `getChatMember`, writes DB) | Database | The only moment the prior state is knowable. |
 | Restore / reverse decision | API / Backend (pure `decideStaffUndo`) | — | Single decision table, no I/O, exhaustively testable. |
 | Fleet-wide pacing of every call incl. log posts | Redis (`staffActionPacer`) | API / Backend | Existing shared budget; per-replica limiters are forbidden by AGENTS.md. |
@@ -124,7 +124,7 @@ No new libraries. Everything below is already in `go.mod` and was read this sess
 | `github.com/PaulSonOfLars/gotgbot/v2` | v2.0.0-rc.36 | `RestrictChatMemberOpts.UseIndependentChatPermissions`, `ReplyParameters`, `EditMessageTextOpts.ReplyMarkup` | Telegram client. [VERIFIED: CLAUDE.md; vendored source below] |
 | `github.com/redis/go-redis/v9` | v9.22.0 | Undo card and lock reuse (existing Lua scripts) | Existing card model. [VERIFIED: CLAUDE.md] |
 | `github.com/alicebob/miniredis/v2` | v2.39.0 | Test Redis | Existing fixture. [VERIFIED: CLAUDE.md] |
-| `alita/utils/callbackcodec` | in-repo | 64-byte callback data | Mandated by AGENTS.md. |
+| `fuku/utils/callbackcodec` | in-repo | 64-byte callback data | Mandated by AGENTS.md. |
 
 ### Supporting
 | Library | Purpose | When to Use |
@@ -137,7 +137,7 @@ No new libraries. Everything below is already in `go.mod` and was read this sess
 |------------|-----------|----------|
 | TEXT JSON of `ChatPermissions` | A bitmask BIGINT | A bitmask freezes bit positions forever (one-way door) and drops unknown future permissions; JSON is self-describing and SQLite/PostgreSQL portable. Do not use JSONB: AutoMigrate on SQLite and the migration splitter add risk for no query benefit. |
 | Two tables + undo columns | A third `staff_action_undos` table | The UNIQUE(action_id) insert would be a neat claim, but a third table and model buys nothing: D-09 allows exactly one undo per action, so the columns fit on the parent. |
-| New Redis key family for undo cards | Reuse `alita:staff:act:<token>` | Reuse keeps the Lua scripts and the expiry/lazy-check paths. Use `action="undo"` plus new callback action codes so a replica still running the old code answers "expired" and can never run a ban from an undo card (see Pitfall 9). |
+| New Redis key family for undo cards | Reuse `fuku:staff:act:<token>` | Reuse keeps the Lua scripts and the expiry/lazy-check paths. Use `action="undo"` plus new callback action codes so a replica still running the old code answers "expired" and can never run a ban from an undo card (see Pitfall 9). |
 
 **Installation:** none.
 
@@ -154,7 +154,7 @@ Every discrete value used in the code skeletons below appears here. Anything not
 
 | Fact | Source | Verbatim |
 |------|--------|----------|
-| Kinds | `alita/modules/staff_action_decide.go:8-19` | `staffKindBan staffActionKind = "ban"`, `staffKindMute ... = "mute"`, `staffKindKick ... = "kick"`, `staffKindUnban ... = "unban"`, `staffKindUnmute ... = "unmute"` |
+| Kinds | `fuku/modules/staff_action_decide.go:8-19` | `staffKindBan staffActionKind = "ban"`, `staffKindMute ... = "mute"`, `staffKindKick ... = "kick"`, `staffKindUnban ... = "unban"`, `staffKindUnmute ... = "unmute"` |
 | Outcomes | `staff_action_decide.go:24-33` | `staffOutcomePending staffOutcome = iota`, `staffOutcomeDone`, `staffOutcomeSkipped`, `staffOutcomeFailed` |
 | Reason codes | `staff_action_decide.go:40-66` | `staffReasonBanned = "banned"`, `staffReasonBannedNotInGroup = "banned_not_in_group"`, `staffReasonMuted = "muted"`, `staffReasonKicked = "kicked"`, `staffReasonUnbanned = "unbanned"`, `staffReasonUnmuted = "unmuted"`, `staffReasonSkipIssuerNotAdmin = "skip_issuer_not_admin"`, `staffReasonSkipIssuerNoRight = "skip_issuer_no_right"`, `staffReasonSkipTargetAdmin = "skip_target_admin"`, `staffReasonSkipTargetBot = "skip_target_bot"`, `staffReasonSkipTargetService = "skip_target_service"`, `staffReasonSkipNotInGroup = "skip_not_in_group"`, `staffReasonSkipLinkRemoved = "skip_link_removed"`, `staffReasonFailLookup = "fail_lookup"`, `staffReasonFailInternal = "fail_internal"`, `staffReasonFailInterrupted = "fail_interrupted"` |
 | `staffReasonOutcome` default | `staff_action_decide.go:85` | `return staffOutcomeFailed` (an unlisted reason reads as **failed**) |
@@ -162,17 +162,17 @@ Every discrete value used in the code skeletons below appears here. Anything not
 | Calls | `staff_action_decide.go:116-130` | `staffCallNone staffAPICall = iota`, `staffCallBan`, `staffCallMute`, `staffCallKick`, `staffCallUnban`, `staffCallUnmute` |
 | Verdict | `staff_action_decide.go:134-137` | `type staffVerdict struct { Call staffAPICall; Reason staffReason }` |
 | Unkeyed verdict literals in tests | `staff_action_decide_test.go:42` | `staffVerdict{staffCallNone, staffReasonSkipTargetAdmin}` (adding a field breaks compilation) |
-| Callback namespace and codes | `alita/modules/staff.go:42,45-55` | `staffCallbackNamespace = "staff"`; `staffActUnsetConfirm = "uy"`, `"un"`, `staffActUnlinkAsk = "ul"`, `staffActUnlinkConfirm = "uc"`, `staffActUnlinkCancel = "ux"`, `staffActRefresh = "rf"`, `staffActPage = "pg"`, `staffActRunConfirm = "xc"`, `staffActRunCancel = "xn"` |
-| Card key / lock key | `staff_action_card.go:32,83` | `staffActionCardPrefix = "alita:staff:act:"`, `staffTargetLockPrefix = "alita:staff:lock:target:"` |
+| Callback namespace and codes | `fuku/modules/staff.go:42,45-55` | `staffCallbackNamespace = "staff"`; `staffActUnsetConfirm = "uy"`, `"un"`, `staffActUnlinkAsk = "ul"`, `staffActUnlinkConfirm = "uc"`, `staffActUnlinkCancel = "ux"`, `staffActRefresh = "rf"`, `staffActPage = "pg"`, `staffActRunConfirm = "xc"`, `staffActRunCancel = "xn"` |
+| Card key / lock key | `staff_action_card.go:32,83` | `staffActionCardPrefix = "fuku:staff:act:"`, `staffTargetLockPrefix = "fuku:staff:lock:target:"` |
 | Card states | `staff_action_card.go:217-224` | `staffCardPending = "pending"`, `"running"`, `"done"`, `"cancelled"`, `"expired"`, `"aborted"` |
 | Card TTLs | `staff_action_card.go:211-213` | `staffActionCardGrace = time.Minute`, `staffActionCardDoneTTL = time.Hour` |
 | Lock TTL / renew | `staff_action_card.go:86,91` | `staffTargetLockTTL = 30 * time.Minute`, `staffTargetLockRenewEvery = 10 * time.Minute` |
-| Pacer | `staff_action_run.go:162-174` | `NextKey: "alita:staff:pace:next"`, `BlockKey: "alita:staff:pace:block"`, `Interval: 100 * time.Millisecond`, `MaxRetries: 3`, `MaxWait: 60 * time.Second`; `func staffPaced(ctx context.Context, call func(context.Context) error) error` |
+| Pacer | `staff_action_run.go:162-174` | `NextKey: "fuku:staff:pace:next"`, `BlockKey: "fuku:staff:pace:block"`, `Interval: 100 * time.Millisecond`, `MaxRetries: 3`, `MaxWait: 60 * time.Second`; `func staffPaced(ctx context.Context, call func(context.Context) error) error` |
 | Per-call timeout | `staff_action_run.go:33` | `staffActionCallTimeout = 8 * time.Second` |
 | Workers | `staff_action_run.go:157` | `const staffActionWorkers = 4` |
 | WaitGroup | `staff_action_run.go:35` | `staffActionRunsWG sync.WaitGroup` |
-| Panel caps | `alita/modules/staff_panel.go:26,27,33,37` | `maxStaffDisplayTitleRunes = 64`, `maxStaffButtonTitleRunes  = 20`, `staffPanelPageSize = 8`, `staffPanelMaxUTF16 = 3800` |
-| Reason cap (Phase 2) | `alita/modules/staff_action_parse.go:18` | `const staffReasonMaxRunes = 200` (the card already caps the reason at 200 runes plus `…`) |
+| Panel caps | `fuku/modules/staff_panel.go:26,27,33,37` | `maxStaffDisplayTitleRunes = 64`, `maxStaffButtonTitleRunes  = 20`, `staffPanelPageSize = 8`, `staffPanelMaxUTF16 = 3800` |
+| Reason cap (Phase 2) | `fuku/modules/staff_action_parse.go:18` | `const staffReasonMaxRunes = 200` (the card already caps the reason at 200 runes plus `…`) |
 | Telegram until rule | `extraction.go:39-40` | `minTemporaryDurationSeconds int64 = 30`, `maxTemporaryDurationSeconds int64 = 366 * 24 * 60 * 60` |
 | Telegram until rule (vendored docs) | gotgbot `gen_methods.go:420,4635` | "If user is banned for more than 366 days or less than 30 seconds from the current time they are considered to be banned forever." and, for restrict, "...restricted forever." |
 | Independent permissions flag | gotgbot `gen_methods.go:4632-4634` | `UseIndependentChatPermissions bool`: "Pass True if chat permissions are set independently. Otherwise, the can_send_other_messages and can_add_web_page_previews permissions will imply the can_send_messages, ..." |
@@ -180,12 +180,12 @@ Every discrete value used in the code skeletons below appears here. Anything not
 | Edit markup type | gotgbot `gen_methods.go:2352` | `EditMessageTextOpts.ReplyMarkup InlineKeyboardMarkup` (value; zero value removes the keyboard) |
 | `ChatPermissions` fields | gotgbot `gen_types.go:2719-2752` | `CanSendMessages, CanSendAudios, CanSendDocuments, CanSendPhotos, CanSendVideos, CanSendVideoNotes, CanSendVoiceNotes, CanSendPolls, CanSendOtherMessages, CanAddWebPagePreviews bool`; `CanReactToMessages *bool`, `CanEditTag *bool`, `CanChangeInfo, CanInviteUsers, CanPinMessages bool`, `CanManageTopics *bool` |
 | `MergedChatMember` carries all of them | gotgbot `gen_types.go:2091-2117` | `UntilDate int64`, `IsMember bool`, `CanSendMessages ... CanReactToMessages bool`, `CanEditTag bool` |
-| Table names | `alita/db/models/staff.go` | `TableName() ... return "staff_groups"` and `"staff_group_links"` |
+| Table names | `fuku/db/models/staff.go` | `TableName() ... return "staff_groups"` and `"staff_group_links"` |
 | Latest migration | `ls migrations` | `20261004130000_add_staff_role_exclusivity_trigger.sql` |
-| `RekeyChat` updates | `alita/db/staff/rekey.go:35-42` | `{&models.StaffGroup{}, "chat_id"}, {&models.StaffGroupLink{}, "staff_chat_id"}, {&models.StaffGroupLink{}, "group_chat_id"}` with `Updates(map[string]any{u.column: newChatID, "updated_at": now})` (so every re-keyed model needs an `updated_at` column) |
+| `RekeyChat` updates | `fuku/db/staff/rekey.go:35-42` | `{&models.StaffGroup{}, "chat_id"}, {&models.StaffGroupLink{}, "staff_chat_id"}, {&models.StaffGroupLink{}, "group_chat_id"}` with `Updates(map[string]any{u.column: newChatID, "updated_at": now})` (so every re-keyed model needs an `updated_at` column) |
 | Panel render test hard-fails on unknown actions | `staff_panel_render_test.go:87` | `t.Errorf("button %q carries unexpected action %q", ...)` |
-| Harness model lists | `alita/modules/test_harness_test.go:361`, `alita/db/testmain_test.go:78`, `alita/db/staff/testmain_test.go:14` | each lists `&models.StaffGroupLink{}` / `testdb.Run(m, &models.StaffGroup{}, &models.StaffGroupLink{})` |
-| Admin category | `alita/db/logchannels/repository.go:21-28` | `CategoryAdmin     = "admin"` |
+| Harness model lists | `fuku/modules/test_harness_test.go:361`, `fuku/db/testmain_test.go:78`, `fuku/db/staff/testmain_test.go:14` | each lists `&models.StaffGroupLink{}` / `testdb.Run(m, &models.StaffGroup{}, &models.StaffGroupLink{})` |
+| Admin category | `fuku/db/logchannels/repository.go:21-28` | `CategoryAdmin     = "admin"` |
 | Phase 2 delivery fallback | `staff_action_summary.go:509-533` | `deliverStaffActionFinal(b, chatID, msgID, text, continuation, notBefore)` edits the card, else `sendStaffSummaryPart`, then each continuation; `editStaffActionMessage` sends no `ReplyMarkup` |
 
 ## Architecture Patterns
@@ -236,19 +236,19 @@ Every discrete value used in the code skeletons below appears here. Anything not
 ### Recommended Project Structure
 ```
 migrations/20261005120000_add_staff_actions.sql      # new (timestamp > 20261004130000)
-alita/db/models/staff_action.go                      # StaffAction, StaffActionGroup, outcome constants
-alita/db/staff/actions.go                            # repository (same package: RekeyChat needs it)
-alita/db/staff/rekey.go                              # + staff_actions.staff_chat_id
-alita/modules/staff_action_decide.go                 # + prior/left-behind types, decideStaffUndo, new reasons
-alita/modules/staff_action_record.go                 # new: prior capture, record writes, card<->record mapping
-alita/modules/staff_action_run.go                    # generalized run + shared gate helper
-alita/modules/staff_action_summary.go                # header param, markup-capable edit/send, undo lines
-alita/modules/staff_undo.go                          # new: ask / confirm / cancel glue / undo chain / original-edit
-alita/modules/staff_history.go                       # new: recent-actions list, detail, paging
-alita/modules/staff_log.go                           # new: log post composition + paced send
-alita/utils/actionlog/actionlog.go                   # + Destination seam (Log keeps its behaviour)
-alita/modules/staff.go                               # + callback actions
-alita/modules/staff_panel.go                         # + "Recent actions" button
+fuku/db/models/staff_action.go                      # StaffAction, StaffActionGroup, outcome constants
+fuku/db/staff/actions.go                            # repository (same package: RekeyChat needs it)
+fuku/db/staff/rekey.go                              # + staff_actions.staff_chat_id
+fuku/modules/staff_action_decide.go                 # + prior/left-behind types, decideStaffUndo, new reasons
+fuku/modules/staff_action_record.go                 # new: prior capture, record writes, card<->record mapping
+fuku/modules/staff_action_run.go                    # generalized run + shared gate helper
+fuku/modules/staff_action_summary.go                # header param, markup-capable edit/send, undo lines
+fuku/modules/staff_undo.go                          # new: ask / confirm / cancel glue / undo chain / original-edit
+fuku/modules/staff_history.go                       # new: recent-actions list, detail, paging
+fuku/modules/staff_log.go                           # new: log post composition + paced send
+fuku/utils/actionlog/actionlog.go                   # + Destination seam (Log keeps its behaviour)
+fuku/modules/staff.go                               # + callback actions
+fuku/modules/staff_panel.go                         # + "Recent actions" button
 locales/*.yml (7)                                    # new keys + staff_help_msg line
 ```
 
@@ -475,7 +475,7 @@ err := staffPaced(ctx, func(ctx context.Context) error {
 })
 ```
 
-  `helpers.SendMessageWithErrorHandling` also swallows permission errors and marks a chat restricted; if that behaviour is wanted, call it **inside** the paced closure. Its `errors.Wrapf` wrapper has `Unwrap` (`alita/utils/errors/errors.go:21`), so the pacer still sees a wrapped 429.
+  `helpers.SendMessageWithErrorHandling` also swallows permission errors and marks a chat restricted; if that behaviour is wanted, call it **inside** the paced closure. Its `errors.Wrapf` wrapper has `Unwrap` (`fuku/utils/errors/errors.go:21`), so the pacer still sees a wrapped 429.
 - **Language:** the post is read by the linked group's own admins: use `staffChatTranslator(link.GroupChatID)` (same helper Phase 2 uses for the Staff Group, `staff_notify.go:24`).
 - **Body (D-11):** hashtag (not localized; `#STAFF_BAN`, `#STAFF_MUTE`, `#STAFF_KICK`, `#STAFF_UNBAN`, `#STAFF_UNMUTE`, `#STAFF_UNDO`), `Admin: ` + `formatting.MentionHtml(issuerID, issuerName)`, `User: ` + the existing `staffTargetDisplay` shape (`<b>name</b> (<code>id</code>)`), duration via `staffDurationLabel` (ban and mute only), the reason, and the localized "via Staff Group" marker. Build by concatenation with user text spliced in after translation (the translator runs a printf-style pass; see `staffGroupsToken` comments). The Staff Group's title and ID must not appear anywhere in it: **assert that in a test** by scanning the sent text for the Staff Group's chat ID string and title.
 - **Reason (Pitfall A):** cap **before** escaping so an entity is never cut: `html.EscapeString(capRunes(reason, 300))`. Phase 2 already caps the stored reason at 200 runes (`staffReasonMaxRunes`), so 300 is a defensive second cap for rows read back from the database. An empty reason uses the existing `staff_act_no_reason` text.
@@ -547,8 +547,8 @@ Not a rename/refactor/migration phase. The only state-shape change is additive: 
 **How to avoid:** store immutable `summary_chat_id`; `RekeyChat` updates `staff_actions.staff_chat_id` only; edit and reply only when `summary_chat_id == the staff chat of this callback`, otherwise treat the target as gone and send a plain message (D-08 already specifies that fallback). Test: re-key then undo.
 
 ### Pitfall 6: `RekeyChat` now touches a new table
-**What goes wrong:** adding `{&models.StaffAction{}, "staff_chat_id"}` to `RekeyChat` makes every existing re-key test (`alita/db/staff/rekey_test.go`, `alita/modules/staff_migrate_test.go`) fail with "no such table" in any harness that did not `AutoMigrate` the new models.
-**How to avoid:** add `&models.StaffAction{}, &models.StaffActionGroup{}` to all three lists in the same task as the `rekey.go` change: `alita/db/staff/testmain_test.go:14`, `alita/modules/test_harness_test.go:361`, `alita/db/testmain_test.go:78` (AGENTS.md "Adding a module" step 4). The group rows are **not** re-keyed (`group_chat_id` names the chat the restriction lives in; a migrated linked group no longer matches any link, so undo skips it with `skip_link_removed`).
+**What goes wrong:** adding `{&models.StaffAction{}, "staff_chat_id"}` to `RekeyChat` makes every existing re-key test (`fuku/db/staff/rekey_test.go`, `fuku/modules/staff_migrate_test.go`) fail with "no such table" in any harness that did not `AutoMigrate` the new models.
+**How to avoid:** add `&models.StaffAction{}, &models.StaffActionGroup{}` to all three lists in the same task as the `rekey.go` change: `fuku/db/staff/testmain_test.go:14`, `fuku/modules/test_harness_test.go:361`, `fuku/db/testmain_test.go:78` (AGENTS.md "Adding a module" step 4). The group rows are **not** re-keyed (`group_chat_id` names the chat the restriction lives in; a migrated linked group no longer matches any link, so undo skips it with `skip_link_removed`).
 
 ### Pitfall 7: Unlisted reasons read as failures and blank lines
 `staffReasonOutcome` defaults to failed and `staffReasonText` returns `""` for unknown codes. Every new reason (`undone_*`, `skip_not_applied`, `skip_changed_since`, `skip_restriction_ended`, `skip_no_prior_state`) needs both switch arms and a locale key in all 7 files. Add a test that iterates a list of **all** reason constants and asserts a non-empty text for every non-done-plain reason.
@@ -557,7 +557,7 @@ Not a rename/refactor/migration phase. The only state-shape change is additive: 
 Phase 2 tests use unkeyed `staffVerdict{staffCallNone, staffReasonSkipTargetAdmin}` (`staff_action_decide_test.go:42` and ~45 more rows). Use the embedding wrapper `staffUndoVerdict` (Pattern 3).
 
 ### Pitfall 9: Rolling deploy across replicas
-Replicas share Redis and the DB. A replica on old code that loads an undo card (same `alita:staff:act:` hash) and sees `action="ban"` would run a real ban. Mitigations built into the design: undo cards use `action="undo"` (old code's `decideStaffAction` default returns `staffReasonFailLookup`, so every group fails harmlessly) **and** new callback action codes (old code answers `staff_cb_expired`). The new tables only matter to new code. Note it in the plan; the deploy manifests already run `AUTO_MIGRATE=true`.
+Replicas share Redis and the DB. A replica on old code that loads an undo card (same `fuku:staff:act:` hash) and sees `action="ban"` would run a real ban. Mitigations built into the design: undo cards use `action="undo"` (old code's `decideStaffAction` default returns `staffReasonFailLookup`, so every group fails harmlessly) **and** new callback action codes (old code answers `staff_cb_expired`). The new tables only matter to new code. Note it in the plan; the deploy manifests already run `AUTO_MIGRATE=true`.
 
 ### Pitfall 10: The final-edit fallback moves the summary
 `deliverStaffActionFinal` falls back to a **new** message when the card edit fails. The Undo button must sit on whichever message holds the first final text, and `summary_msg_id` must follow it (`SetSummaryMessage`). Otherwise D-08's "edit the original" targets a message that has no button and "↩ Undone" is never shown on the live one.
@@ -670,50 +670,50 @@ Run an action to completion, then read through the repository on a fresh query (
 |----------|-------|
 | Framework | `go test` with stdlib `testing` plus testify assertions; real fixtures: SQLite via `internal/testdb.Run`, miniredis, hand-written `gotgbot.BotClient` fakes (`staffActionFake`, `staffBotClient`) |
 | Config file | none; every test file begins `//go:build testtools` |
-| Quick run command | `go test -tags testtools -race -count=1 -run '^TestStaff(Undo\|History\|Audit\|ActionRecord\|ActionLog)' ./alita/modules ./alita/db/staff` |
-| Full suite command | `make test` (measured Phase 2: about 180 s; `alita/modules` about 120 s) |
+| Quick run command | `go test -tags testtools -race -count=1 -run '^TestStaff(Undo\|History\|Audit\|ActionRecord\|ActionLog)' ./fuku/modules ./fuku/db/staff` |
+| Full suite command | `make test` (measured Phase 2: about 180 s; `fuku/modules` about 120 s) |
 | Other gates | `make lint`, `make check-translations`, `make generate-docs && make check-docs` |
 
 ### Phase Requirements → Test Map
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|--------------|
-| STAFF-10 | Parent + pending rows created at Confirm; each column round-trips (issuer, target, action, duration, reason, time, until_date) | repo (SQLite) | `go test -tags testtools -race -count=1 -run '^TestStaffActionRecord(Create\|RoundTrip)' ./alita/db/staff` | ❌ Wave 0 (`alita/db/staff/actions_test.go`) |
-| STAFF-10 | Prior state written before the call; per-group outcomes written; finalize flush; survives a "restart" (fresh read) | module + SQLite | `go test -tags testtools -race -count=1 -run '^TestStaffActionRecordsPriorState$\|^TestStaffActionRecordPerGroup$\|^TestStaffActionRecordFinalize$' ./alita/modules` | ❌ Wave 0 |
-| STAFF-10 | Mid-run shutdown leaves a truthful record (`fail_interrupted`, `finished_at` set) | module | `go test -tags testtools -race -count=1 -run '^TestStopStaffActionsRecordsInterrupted$' ./alita/modules` | ❌ Wave 0 |
-| STAFF-10 | Audit write failure at Confirm aborts the card with no Telegram write; prior-write failure fails the group closed | module | `go test -tags testtools -race -count=1 -run '^TestStaffActionRecordFailureFailsClosed$' ./alita/modules` | ❌ Wave 0 |
-| STAFF-10 | `RekeyChat` moves `staff_actions.staff_chat_id`, leaves `summary_chat_id` and group rows | repo | `go test -tags testtools -race -count=1 -run '^TestRekeyChat' ./alita/db/staff` | ✅ extend `rekey_test.go` |
-| STAFF-09 | Post only to ✅ groups, admin category only, via the pacer (429 retried), failure never changes ✅, no Staff Group title or ID in the text, reason escaped and capped | module | `go test -tags testtools -race -count=1 -run '^TestStaffActionLog' ./alita/modules` | ❌ Wave 0 (`staff_log_test.go`) |
-| STAFF-09 | `actionlog.Log` unchanged for existing callers after the `Destination` split | unit | `go test -tags testtools -race -count=1 ./alita/utils/actionlog` | check (existing tests, if any) |
-| STAFF-11 | Decision matrix, every row of the table in Pattern 3 | table (pure) | `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecisionTable$' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | Invariants: kicked target only when live == left-behind; no call to admins; unban only to kicked; restore `Until` outside the margin | property (pure) | `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecisionInvariants$' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | Restore-prior end to end for ban, mute, unban, unmute over member / left / restricted (partial permissions) / kicked-shorter priors, with the stateful fake | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndoRestores' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | Only ✅ groups touched; skipped/failed originals never acted on; changed-since skipped; no-longer-linked skipped | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(OnlyApplied\|ChangedSince\|LinkRemoved)$' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | Presser rights live per group (creator, admin with restrict, admin without, member, ex-admin); outsider refused; service ID refused | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(PresserRights\|Outsider)$' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | Confirm card: presser-only, expiry, cancel; same target lock (`target busy` against a running action) | module + miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Card\|TargetLock)' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | One undo per action across two replicas (exactly one claim, other answers "already undone by") | module, concurrent | `go test -tags testtools -race -count=1 -run '^TestStaffUndoOnce' ./alita/modules` | ❌ Wave 0 (use `otherReplica()`) |
-| STAFF-11 | Result is a new reply message; original edited without keyboard plus the undone line; foreign `summary_chat_id` (after re-key) gets a plain message; edit failure does not stop the undo | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Reply\|OriginalEdit\|AfterRekey)' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | No Undo button for kick, no ✅ groups, undone, or unfinished records; button present on the final edit and on the fallback message | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndoButton' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | Undo logs (`#STAFF_UNDO`) per succeeded group, same rules | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndoLog' ./alita/modules` | ❌ Wave 0 |
-| STAFF-11 | Shutdown during an undo finalizes it (`fail_interrupted`, `undo_finished_at`) | module | `go test -tags testtools -race -count=1 -run '^TestStopStaffActionsUndo' ./alita/modules` | ❌ Wave 0 |
-| SETUP-09 | History list: newest first, 10 per page, offset paging, only this Staff Group, line contents, tally, undone tag | module | `go test -tags testtools -race -count=1 -run '^TestStaffHistoryList' ./alita/modules` | ❌ Wave 0 |
-| SETUP-09 | Detail view: per-group lines, undo outcome, "no longer linked" marker, Undo button rules | module | `go test -tags testtools -race -count=1 -run '^TestStaffHistoryDetail' ./alita/modules` | ❌ Wave 0 |
-| SETUP-09 | Members only; non-member and wrong-chat refused; Back returns to the panel | module | `go test -tags testtools -race -count=1 -run '^TestStaffHistoryAccess' ./alita/modules` | ❌ Wave 0 |
-| SETUP-09 | Length cap on adversarial names and reasons; every callback datum 1..64 bytes with the largest IDs | pure | `go test -tags testtools -race -count=1 -run '^TestStaffHistory(LengthCap\|CallbackBudget)' ./alita/modules` | ❌ Wave 0 |
-| SETUP-09 | Panel renders the new button; existing render tests still pass | pure | `go test -tags testtools -race -count=1 -run '^TestStaffPanelRender' ./alita/modules` | ✅ update `panelSplitKeyboard` |
-| All | Locale parity and every reason has text | unit | `make check-translations` and `go test -tags testtools -race -count=1 -run '^TestStaffReasonText' ./alita/modules` | ✅ / ❌ |
-| All | Phase 2 regression net after the run/summary generalization | module | `go test -tags testtools -race -count=1 -run '^TestStaffAction\|^TestStopStaffActions' ./alita/modules` | ✅ |
-| All | New migration applies on PostgreSQL and its checksum is recorded | integration (CI-style) | `ALITA_TEST_MIGRATION_CHAIN=true DATABASE_URL=<empty pg> go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./alita/db/migrations` | ✅ (needs a PG server) |
+| STAFF-10 | Parent + pending rows created at Confirm; each column round-trips (issuer, target, action, duration, reason, time, until_date) | repo (SQLite) | `go test -tags testtools -race -count=1 -run '^TestStaffActionRecord(Create\|RoundTrip)' ./fuku/db/staff` | ❌ Wave 0 (`fuku/db/staff/actions_test.go`) |
+| STAFF-10 | Prior state written before the call; per-group outcomes written; finalize flush; survives a "restart" (fresh read) | module + SQLite | `go test -tags testtools -race -count=1 -run '^TestStaffActionRecordsPriorState$\|^TestStaffActionRecordPerGroup$\|^TestStaffActionRecordFinalize$' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-10 | Mid-run shutdown leaves a truthful record (`fail_interrupted`, `finished_at` set) | module | `go test -tags testtools -race -count=1 -run '^TestStopStaffActionsRecordsInterrupted$' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-10 | Audit write failure at Confirm aborts the card with no Telegram write; prior-write failure fails the group closed | module | `go test -tags testtools -race -count=1 -run '^TestStaffActionRecordFailureFailsClosed$' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-10 | `RekeyChat` moves `staff_actions.staff_chat_id`, leaves `summary_chat_id` and group rows | repo | `go test -tags testtools -race -count=1 -run '^TestRekeyChat' ./fuku/db/staff` | ✅ extend `rekey_test.go` |
+| STAFF-09 | Post only to ✅ groups, admin category only, via the pacer (429 retried), failure never changes ✅, no Staff Group title or ID in the text, reason escaped and capped | module | `go test -tags testtools -race -count=1 -run '^TestStaffActionLog' ./fuku/modules` | ❌ Wave 0 (`staff_log_test.go`) |
+| STAFF-09 | `actionlog.Log` unchanged for existing callers after the `Destination` split | unit | `go test -tags testtools -race -count=1 ./fuku/utils/actionlog` | check (existing tests, if any) |
+| STAFF-11 | Decision matrix, every row of the table in Pattern 3 | table (pure) | `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecisionTable$' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | Invariants: kicked target only when live == left-behind; no call to admins; unban only to kicked; restore `Until` outside the margin | property (pure) | `go test -tags testtools -race -count=1 -run '^TestStaffUndoDecisionInvariants$' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | Restore-prior end to end for ban, mute, unban, unmute over member / left / restricted (partial permissions) / kicked-shorter priors, with the stateful fake | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndoRestores' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | Only ✅ groups touched; skipped/failed originals never acted on; changed-since skipped; no-longer-linked skipped | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(OnlyApplied\|ChangedSince\|LinkRemoved)$' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | Presser rights live per group (creator, admin with restrict, admin without, member, ex-admin); outsider refused; service ID refused | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(PresserRights\|Outsider)$' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | Confirm card: presser-only, expiry, cancel; same target lock (`target busy` against a running action) | module + miniredis | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Card\|TargetLock)' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | One undo per action across two replicas (exactly one claim, other answers "already undone by") | module, concurrent | `go test -tags testtools -race -count=1 -run '^TestStaffUndoOnce' ./fuku/modules` | ❌ Wave 0 (use `otherReplica()`) |
+| STAFF-11 | Result is a new reply message; original edited without keyboard plus the undone line; foreign `summary_chat_id` (after re-key) gets a plain message; edit failure does not stop the undo | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndo(Reply\|OriginalEdit\|AfterRekey)' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | No Undo button for kick, no ✅ groups, undone, or unfinished records; button present on the final edit and on the fallback message | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndoButton' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | Undo logs (`#STAFF_UNDO`) per succeeded group, same rules | module | `go test -tags testtools -race -count=1 -run '^TestStaffUndoLog' ./fuku/modules` | ❌ Wave 0 |
+| STAFF-11 | Shutdown during an undo finalizes it (`fail_interrupted`, `undo_finished_at`) | module | `go test -tags testtools -race -count=1 -run '^TestStopStaffActionsUndo' ./fuku/modules` | ❌ Wave 0 |
+| SETUP-09 | History list: newest first, 10 per page, offset paging, only this Staff Group, line contents, tally, undone tag | module | `go test -tags testtools -race -count=1 -run '^TestStaffHistoryList' ./fuku/modules` | ❌ Wave 0 |
+| SETUP-09 | Detail view: per-group lines, undo outcome, "no longer linked" marker, Undo button rules | module | `go test -tags testtools -race -count=1 -run '^TestStaffHistoryDetail' ./fuku/modules` | ❌ Wave 0 |
+| SETUP-09 | Members only; non-member and wrong-chat refused; Back returns to the panel | module | `go test -tags testtools -race -count=1 -run '^TestStaffHistoryAccess' ./fuku/modules` | ❌ Wave 0 |
+| SETUP-09 | Length cap on adversarial names and reasons; every callback datum 1..64 bytes with the largest IDs | pure | `go test -tags testtools -race -count=1 -run '^TestStaffHistory(LengthCap\|CallbackBudget)' ./fuku/modules` | ❌ Wave 0 |
+| SETUP-09 | Panel renders the new button; existing render tests still pass | pure | `go test -tags testtools -race -count=1 -run '^TestStaffPanelRender' ./fuku/modules` | ✅ update `panelSplitKeyboard` |
+| All | Locale parity and every reason has text | unit | `make check-translations` and `go test -tags testtools -race -count=1 -run '^TestStaffReasonText' ./fuku/modules` | ✅ / ❌ |
+| All | Phase 2 regression net after the run/summary generalization | module | `go test -tags testtools -race -count=1 -run '^TestStaffAction\|^TestStopStaffActions' ./fuku/modules` | ✅ |
+| All | New migration applies on PostgreSQL and its checksum is recorded | integration (CI-style) | `FUKU_TEST_MIGRATION_CHAIN=true DATABASE_URL=<empty pg> go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations` | ✅ (needs a PG server) |
 | STAFF-11 | Claim concurrency on real PostgreSQL | integration | add the claim test name to the `-run` list of `make test-postgres-integrity` (`Makefile:41`) | ❌ Wave 0 (optional) |
 
 ### Sampling Rate
-- **Per task commit:** the narrow `-run` for the touched area (each command above is under 60 s once the package is compiled; the first compile of `alita/modules` takes about 77 s).
-- **Per wave merge:** `go test -tags testtools -race -count=1 ./alita/modules ./alita/db/staff ./alita/utils/actionlog ./alita/utils/ratelimit`.
+- **Per task commit:** the narrow `-run` for the touched area (each command above is under 60 s once the package is compiled; the first compile of `fuku/modules` takes about 77 s).
+- **Per wave merge:** `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/db/staff ./fuku/utils/actionlog ./fuku/utils/ratelimit`.
 - **Phase gate:** `make test`, `make lint`, `make check-translations`, `make generate-docs && make check-docs` green before `/gsd-verify-work`.
 
 ### Wave 0 Gaps
-- [ ] `alita/db/staff/actions_test.go`: repository tests (create, prior, result, finalize, claim concurrency, list/paging/tally, rekey).
-- [ ] Extend the three `AutoMigrate` lists with `&models.StaffAction{}, &models.StaffActionGroup{}` (`alita/db/staff/testmain_test.go`, `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go`).
+- [ ] `fuku/db/staff/actions_test.go`: repository tests (create, prior, result, finalize, claim concurrency, list/paging/tally, rekey).
+- [ ] Extend the three `AutoMigrate` lists with `&models.StaffAction{}, &models.StaffActionGroup{}` (`fuku/db/staff/testmain_test.go`, `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go`).
 - [ ] Extend `staffActionFake` (`staff_action_fake_test.go`): full permission set on `staffFakeMember`, emitted in `getChatMember` JSON and stored by `restrictChatMember`; honour `use_independent_chat_permissions`; keep struct-valued `permissions` params.
 - [ ] `staffCleanup` (`staff_helpers_test.go:263`): delete audit rows for the test's chat IDs.
 - [ ] Test helpers on `staffActionEnv`: `undoCard()` (find the undo confirm token like `card()` does for `staffActRunConfirm`), `setLogChannel(group, channelID)` using `logchannels.Set` (the `LogChannel` model is already migrated in the modules harness, `test_harness_test.go`), `recordOf(token)`.
@@ -746,7 +746,7 @@ Run an action to completion, then read through the repository on a fresh query (
 | Undo overrules a later group-admin decision | Tampering | `decideStaffUndo` compares live state to the left-behind state; any difference is `skip_changed_since` |
 | Undo lifts a ban it did not place | Tampering | Restore only when live equals left-behind; `staffCallUnban` only to a kicked target; invariant test |
 | Double undo across replicas or a stale client | Tampering / Repudiation | DB conditional UPDATE claim, `RowsAffected == 1` |
-| Concurrent undo and new action on one person | Tampering | Same `alita:staff:lock:target:<id>` lock, token-based CAS release |
+| Concurrent undo and new action on one person | Tampering | Same `fuku:staff:lock:target:<id>` lock, token-based CAS release |
 | Forged callback naming another Staff Group's record | Information disclosure / EoP | Record loaded fresh and rejected unless `staff_chat_id` equals the message's chat; record IDs are guessable, so this check is mandatory |
 | Reason injects HTML or overflows a log message | Tampering / DoS | Cap runes then escape; staff names via `MentionHtml`/`staffDisplayTitle` |
 | Staff Group identity leaks to linked groups' admins | Information disclosure | Post body built without the Staff Group title or ID; asserted by test |
@@ -757,7 +757,7 @@ Run an action to completion, then read through the repository on a fresh query (
 
 ### AGENTS.md edits required in the same commits
 - **Startup and shutdown / `StopStaffActions` bullet:** undo runs join the same drain; the final audit flush runs inside the 30 s.
-- **Data:** `alita:staff:act:<token>` also holds undo cards (`action=undo`, `undo_of`, `undo_kind`); the audit tables are never cached, never in backup/export/import/reset; no `DeleteCache` is needed for them.
+- **Data:** `fuku:staff:act:<token>` also holds undo cards (`action=undo`, `undo_of`, `undo_kind`); the audit tables are never cached, never in backup/export/import/reset; no `DeleteCache` is needed for them.
 - **StaffActions bullets:** `decideStaffUndo` sits beside `decideStaffAction`; the restore exception (a restrict or ban to a kicked or left target only when live equals left-behind); prior state is written before each write; `executeStaffUndoCall` switches only on its verdict.
 - **Callbacks:** the new action codes and that history paging uses an offset cursor.
 - **Subsystem traps:** `RekeyChat` re-keys `staff_actions.staff_chat_id` only; `summary_chat_id` and group rows are not re-keyed; `summary_msg_id` is only valid with `summary_chat_id`.
@@ -768,13 +768,13 @@ Run an action to completion, then read through the repository on a fresh query (
 ### Primary (HIGH confidence): read this session
 - `/home/user/Fuku_Robot/.planning/phases/03-staff-audit-and-undo/03-CONTEXT.md`, `.planning/REQUIREMENTS.md`, `.planning/STATE.md`, `.planning/ROADMAP.md`, `.planning/config.json`
 - `/home/user/Fuku_Robot/.claude/CLAUDE.md` and `AGENTS.md`
-- `alita/modules/staff_action_decide.go`, `staff_action_run.go`, `staff_action_card.go`, `staff_action_summary.go`, `staff_action.go`, `staff.go`, `staff_panel.go`, `staff_notify.go`, `staff_recheck.go`, `staff_unlink.go` (panel rerender), `staff_action_parse.go` (reason cap)
-- `alita/db/staff/repository.go`, `rekey.go`, `testmain_test.go`; `alita/db/models/staff.go`; `alita/db/logchannels/repository.go`; `alita/utils/actionlog/actionlog.go`; `alita/utils/ratelimit/telegram_pacer.go`; `alita/utils/callbackcodec/callbackcodec.go`; `alita/modules/callback_codec.go`; `alita/utils/errors/errors.go`; `alita/utils/extraction/extraction.go`; `alita/utils/helpers/telegram_helpers.go`
-- `migrations/20261004120000_add_staff_groups_and_links.sql`, `20261004130000_add_staff_role_exclusivity_trigger.sql`; `alita/db/migrations/runner.go` (statement splitting, constraint rewriting, checksum)
-- Tests and harness: `staff_action_fake_test.go`, `staff_helpers_test.go`, `staff_action_decide_test.go`, `staff_action_progress_test.go`, `staff_action_lifecycle_test.go`, `staff_panel_render_test.go`, `test_harness_test.go`, `alita/db/testmain_test.go`, `internal/testdb/database.go`
+- `fuku/modules/staff_action_decide.go`, `staff_action_run.go`, `staff_action_card.go`, `staff_action_summary.go`, `staff_action.go`, `staff.go`, `staff_panel.go`, `staff_notify.go`, `staff_recheck.go`, `staff_unlink.go` (panel rerender), `staff_action_parse.go` (reason cap)
+- `fuku/db/staff/repository.go`, `rekey.go`, `testmain_test.go`; `fuku/db/models/staff.go`; `fuku/db/logchannels/repository.go`; `fuku/utils/actionlog/actionlog.go`; `fuku/utils/ratelimit/telegram_pacer.go`; `fuku/utils/callbackcodec/callbackcodec.go`; `fuku/modules/callback_codec.go`; `fuku/utils/errors/errors.go`; `fuku/utils/extraction/extraction.go`; `fuku/utils/helpers/telegram_helpers.go`
+- `migrations/20261004120000_add_staff_groups_and_links.sql`, `20261004130000_add_staff_role_exclusivity_trigger.sql`; `fuku/db/migrations/runner.go` (statement splitting, constraint rewriting, checksum)
+- Tests and harness: `staff_action_fake_test.go`, `staff_helpers_test.go`, `staff_action_decide_test.go`, `staff_action_progress_test.go`, `staff_action_lifecycle_test.go`, `staff_panel_render_test.go`, `test_harness_test.go`, `fuku/db/testmain_test.go`, `internal/testdb/database.go`
 - gotgbot v2.0.0-rc.36 vendored source: `gen_methods.go` (`BanChatMemberOpts`, `RestrictChatMemberOpts`, `UnbanChatMemberOpts`, `EditMessageTextOpts`, `SendMessageOpts`), `gen_types.go` (`MergedChatMember`, `ChatPermissions`, `ReplyParameters`)
 - `.planning/research/PITFALLS.md` (Pitfalls 1, 19, A, D), `FEATURES.md`; `.planning/phases/02-staff-actions-across-groups/02-SECURITY.md`, `02-REVIEW-DISPOSITION.md`, `02-VALIDATION.md`, `02-UAT.md`
-- Baseline run: `go test -tags testtools -race -count=1 -run '^TestStaffActionDecision|^TestStaffActionEndsLater$' ./alita/modules` → `ok`
+- Baseline run: `go test -tags testtools -race -count=1 -run '^TestStaffActionDecision|^TestStaffActionEndsLater$' ./fuku/modules` → `ok`
 
 ### Secondary (MEDIUM confidence)
 - None used.

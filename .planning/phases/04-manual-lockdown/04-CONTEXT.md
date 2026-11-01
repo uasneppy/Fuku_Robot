@@ -112,27 +112,27 @@ Not in this phase:
 ## Existing Code Insights
 
 ### Reusable Assets
-- `alita/modules/chat_permissions.go`:
+- `fuku/modules/chat_permissions.go`:
   - `resolveUnmutePermissions` is the D-23 choke point. Its callers are `mute.go:228`, `bans.go:817`, `captcha.go:1396` (`unmuteCaptchaUser`) and `staff_action_run.go:667` (staff unmute).
   - `MutedPermissions` and `defaultUnmutePermissions` are hand-rolled structs. Don't use them for the snapshot (Pitfall 8).
-- `alita/modules/greetings.go` handlers, all in group 0:
+- `fuku/modules/greetings.go` handlers, all in group 0:
   - `newMember`: the `chat_member` join.
   - `leftMember`: goodbye messages.
-  - `cleanService`: service messages, which calls `ProcessJoins` in `alita/modules/membership.go`.
+  - `cleanService`: service messages, which calls `ProcessJoins` in `fuku/modules/membership.go`.
   - `pendingJoins`: join requests and auto-approve.
 
   `claimRecentJoinProcessing` here must not gate the lockdown ban (D-03).
-- `alita/modules/antiraid.go`:
+- `fuku/modules/antiraid.go`:
   - `onJoin` sits at group `-5`, on `NewChatMembers` only.
   - It has its own `antiraid` callback namespace. A new namespace must not start with `antiraid`, because prefix routing would swallow it.
   - `trackJoinScript` is for Phase 6.
-- `alita/modules/captcha.go`: `SendCaptcha` and `unmuteCaptchaUser`. D-09 leaves pending attempts in place.
-- `alita/db/approvals/repository.go`: `IsUserApproved`, `GetApprovedUsersContext`. Not needed for locking: D-02 rules out per-user exceptions, and the D-15 notice always says approved users are muted too.
-- `alita/modules/anonymous_admin_router.go` (`RegisterAnonymousAdminHandler`) and `alita/modules/moderation.go:349` (`anonPipelineHandler`): for D-12.
-- `alita/modules/staff_panel.go`: `renderStaffRow`, `staffRowStatuses` and `buildStaffPanelRows`, where the D-17 marker goes.
-- `alita/modules/staff_action_run.go:182` `staffPaced`: the fleet-wide Redis pacer pattern for bans, unbans and declines.
-- `alita/db/cache/local.go` `skipLocal`: the freshness-critical key list.
-- `alita/config/config.go:339`: `AllowedUpdates` already includes `chat_member`, `my_chat_member` and `chat_join_request`.
+- `fuku/modules/captcha.go`: `SendCaptcha` and `unmuteCaptchaUser`. D-09 leaves pending attempts in place.
+- `fuku/db/approvals/repository.go`: `IsUserApproved`, `GetApprovedUsersContext`. Not needed for locking: D-02 rules out per-user exceptions, and the D-15 notice always says approved users are muted too.
+- `fuku/modules/anonymous_admin_router.go` (`RegisterAnonymousAdminHandler`) and `fuku/modules/moderation.go:349` (`anonPipelineHandler`): for D-12.
+- `fuku/modules/staff_panel.go`: `renderStaffRow`, `staffRowStatuses` and `buildStaffPanelRows`, where the D-17 marker goes.
+- `fuku/modules/staff_action_run.go:182` `staffPaced`: the fleet-wide Redis pacer pattern for bans, unbans and declines.
+- `fuku/db/cache/local.go` `skipLocal`: the freshness-critical key list.
+- `fuku/config/config.go:339`: `AllowedUpdates` already includes `chat_member`, `my_chat_member` and `chat_join_request`.
 
 ### Established Patterns
 - Authority comes from the live `getChatMember` answer, never the admin cache (Phases 2 and 3).

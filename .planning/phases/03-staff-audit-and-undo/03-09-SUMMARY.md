@@ -29,10 +29,10 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_history_undo_test.go
+    - fuku/modules/staff_history_undo_test.go
   modified:
-    - alita/modules/staff_history.go
-    - alita/modules/staff_history_test.go
+    - fuku/modules/staff_history.go
+    - fuku/modules/staff_history_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -55,10 +55,10 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_undo_test.go#TestStaffHistoryDetailUndo"
+        ref: "fuku/modules/staff_history_undo_test.go#TestStaffHistoryDetailUndo"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_history_undo_test.go#TestStaffHistoryDetailUndoRules"
+        ref: "fuku/modules/staff_history_undo_test.go#TestStaffHistoryDetailUndoRules"
         status: pass
     human_judgment: false
   - id: D2
@@ -66,7 +66,7 @@ coverage:
     requirement: STAFF-11
     verification:
       - kind: unit
-        ref: "alita/modules/staff_history_undo_test.go#TestStaffHistoryDetailUndo"
+        ref: "fuku/modules/staff_history_undo_test.go#TestStaffHistoryDetailUndo"
         status: pass
     human_judgment: false
   - id: D3
@@ -135,7 +135,7 @@ RED (`test(03-09)`, `6125223`) precedes GREEN (`feat(03-09)`, `06b4e61`). The RE
 | `make check-docs` | pass, no drift |
 | `go vet -tags testtools ./...` | pass, no output |
 | `CGO_ENABLED=0 go build ./...` | pass |
-| `gofmt -l alita main.go` | only the pre-existing `alita/modules/greetings_command_test.go` |
+| `gofmt -l fuku main.go` | only the pre-existing `fuku/modules/greetings_command_test.go` |
 | `git diff --exit-code go.mod go.sum` | unchanged |
 | `make lint` | cannot run here: `Error: can't load config: the Go language version (go1.25) used to build golangci-lint is lower than the targeted Go version (1.26.0)`. Relied on gofmt and go vet as plans 02-06 and 02-07 did |
 | Migration chain on PostgreSQL 16 (`TestRepositoryMigrationChain`) | **delegated to the orchestrator post-merge**: the worktree guard refuses `su`/`runuser`, so the throwaway cluster cannot be started from here. Not run by this agent; not claimed as passed |
@@ -148,8 +148,8 @@ RED (`test(03-09)`, `6125223`) precedes GREEN (`feat(03-09)`, `06b4e61`). The RE
 - **Found during:** Task 1 GREEN
 - **Issue:** `TestStaffHistoryDetail` and `TestStaffHistoryDetailUnlinked` (plan 03-05) use `historyKeyboardOf`, which treats any action other than dt, rc and refresh as an error and expected the detail keyboard to be a single Back button. A finished ban now legitimately carries an Undo button.
 - **Fix:** `historyKeyboardOf` classifies `a=ya` into a new `undo` field; `TestStaffHistoryDetail` now expects the Undo and the Back button (total 2).
-- **Files modified:** `alita/modules/staff_history_test.go`
-- **Verification:** `go test -tags testtools -race -count=1 -run '^TestStaffHistory|^TestStaffUndo' ./alita/modules` passes
+- **Files modified:** `fuku/modules/staff_history_test.go`
+- **Verification:** `go test -tags testtools -race -count=1 -run '^TestStaffHistory|^TestStaffUndo' ./fuku/modules` passes
 - **Committed in:** `06b4e61`
 
 ---
@@ -183,7 +183,7 @@ Phase 3 plans are all executed. Remaining before the phase can close: the orches
 
 ## Self-Check: PASSED
 
-- `alita/modules/staff_history_undo_test.go` exists; commits `6125223`, `06b4e61`, `c86008c`, `20e57d1` exist in the branch history.
+- `fuku/modules/staff_history_undo_test.go` exists; commits `6125223`, `06b4e61`, `c86008c`, `20e57d1` exist in the branch history.
 - Acceptance criteria: grep for `staffActionUndoable(a, groups)` and `staffUndoKeyboard(tr, a.ID)` in `staff_history.go` match; `↩` present in `staff_help_msg` of all 7 locales; docs contain "Recent actions"; AGENTS.md contains `executeStaffUndoCall` and `ClaimUndo`; go.mod and go.sum unchanged.
 
 ---
@@ -193,5 +193,5 @@ Phase 3 plans are all executed. Remaining before the phase can close: the orches
 ## Orchestrator post-merge gate (main checkout, after merging this plan)
 
 - `TestRepositoryMigrationChain` on a throwaway PostgreSQL 16 cluster (this plan's exact Task 2 command): **PASS** (`--- PASS: TestRepositoryMigrationChain`, exit 0). This closes the step delegated above.
-- `make test-postgres-integrity` and `go test -tags testtools -race ./alita/db/staff` with `ALITA_TEST_DATABASE=true` on PostgreSQL 16: pass.
-- `CGO_ENABLED=0 go build ./...`, `make test`, `make check-translations`, `make check-docs` and `go vet -tags testtools ./...` on the merged tree: pass. `gofmt -l alita main.go` lists only the pre-existing `alita/modules/greetings_command_test.go`.
+- `make test-postgres-integrity` and `go test -tags testtools -race ./fuku/db/staff` with `FUKU_TEST_DATABASE=true` on PostgreSQL 16: pass.
+- `CGO_ENABLED=0 go build ./...`, `make test`, `make check-translations`, `make check-docs` and `go vet -tags testtools ./...` on the merged tree: pass. `gofmt -l fuku main.go` lists only the pre-existing `fuku/modules/greetings_command_test.go`.

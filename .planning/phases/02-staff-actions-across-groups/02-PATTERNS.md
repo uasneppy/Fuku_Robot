@@ -8,29 +8,29 @@
 
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |---|---|---|---|---|
-| `alita/modules/staff_action.go` (module reg, priority 65, interceptors, gate, anon/refusal) | handler/module | request-response | `alita/modules/staff.go` (LoadStaff, init) + `alita/modules/staff_watchers.go` (raw handlers, ContinueGroups) | role-match (deliberately NOT `WrapCommand`) |
-| `alita/modules/staff_action_parse.go` (pure arg parser) | utility | transform | `alita/utils/extraction/extraction.go` `parseTemporaryDuration` + `alita/modules/moderation_input.go` `extractEntityText` | partial |
-| `alita/modules/staff_action_card.go` (Redis card + Lua CAS, token, callbacks) | service/store | event-driven (callback) | `alita/modules/antiraid.go` lines 51-75 (`redis.NewScript`) + `staff_unlink.go` (issuer-bound confirm/cancel, `loadUnlinkTarget`) | role-match |
-| `alita/modules/staff.go` (MODIFY: add `xc`/`xn` consts + switch cases in `staffCallback`) | controller | event-driven | itself, lines 44-53 and 247-266 | exact |
-| `alita/modules/staff_action_decide.go` (pure decision table) | utility | transform | no code analog; use RESEARCH Q1 table | none |
-| `alita/modules/staff_action_run.go` (coordinator, per-group worker, error classification, drain) | service | batch / fan-out | `staff_panel.go` `buildStaffPanelRows` (errgroup, panic-safe slots) + `staff_recheck.go` `recheckLink` + `staff_sweeper.go` (Start/Stop, WaitGroup) | role-match |
-| `alita/modules/staff_action_summary.go` (renderer, batched editor, fallback) | utility/service | transform + streaming edit | `staff_panel.go` (`renderStaffPanel`, `staffPanelMaxUTF16`, `staffDisplayTitle`, `isMessageNotModified`) + `staff_notify.go` `sendStaffNotice` | role-match |
-| `alita/utils/ratelimit/telegram_pacer.go` | utility | request-response (Redis) | `alita/utils/ratelimit/backup_ratelimit.go` + `antiraid.go` scripts | partial |
-| `alita/db/user/repository.go` (MODIFY: `FindUsersByUsername`) | repository | CRUD read | `GetUserIdByUserName` lines 118-129 same file | exact |
-| `alita/utils/extraction/extraction.go` (MODIFY: export `ParseDurationToken`) | utility | transform | `parseTemporaryDuration` lines 328-377 | exact |
-| `alita/modules/main.go` (MODIFY `/home/user/Fuku_Robot/main.go`: shutdown drain for fan-out) | config | lifecycle | `main.go` lines 205-212 (`StopStaffSweeper`) | exact |
-| `locales/{en,es,fr,hi,id,pt,ru}.yml` (`staff_act_*` keys) | config | n/a | existing `staff_*` keys, checked by `alita/i18n/staff_locale_test.go` | exact |
+| `fuku/modules/staff_action.go` (module reg, priority 65, interceptors, gate, anon/refusal) | handler/module | request-response | `fuku/modules/staff.go` (LoadStaff, init) + `fuku/modules/staff_watchers.go` (raw handlers, ContinueGroups) | role-match (deliberately NOT `WrapCommand`) |
+| `fuku/modules/staff_action_parse.go` (pure arg parser) | utility | transform | `fuku/utils/extraction/extraction.go` `parseTemporaryDuration` + `fuku/modules/moderation_input.go` `extractEntityText` | partial |
+| `fuku/modules/staff_action_card.go` (Redis card + Lua CAS, token, callbacks) | service/store | event-driven (callback) | `fuku/modules/antiraid.go` lines 51-75 (`redis.NewScript`) + `staff_unlink.go` (issuer-bound confirm/cancel, `loadUnlinkTarget`) | role-match |
+| `fuku/modules/staff.go` (MODIFY: add `xc`/`xn` consts + switch cases in `staffCallback`) | controller | event-driven | itself, lines 44-53 and 247-266 | exact |
+| `fuku/modules/staff_action_decide.go` (pure decision table) | utility | transform | no code analog; use RESEARCH Q1 table | none |
+| `fuku/modules/staff_action_run.go` (coordinator, per-group worker, error classification, drain) | service | batch / fan-out | `staff_panel.go` `buildStaffPanelRows` (errgroup, panic-safe slots) + `staff_recheck.go` `recheckLink` + `staff_sweeper.go` (Start/Stop, WaitGroup) | role-match |
+| `fuku/modules/staff_action_summary.go` (renderer, batched editor, fallback) | utility/service | transform + streaming edit | `staff_panel.go` (`renderStaffPanel`, `staffPanelMaxUTF16`, `staffDisplayTitle`, `isMessageNotModified`) + `staff_notify.go` `sendStaffNotice` | role-match |
+| `fuku/utils/ratelimit/telegram_pacer.go` | utility | request-response (Redis) | `fuku/utils/ratelimit/backup_ratelimit.go` + `antiraid.go` scripts | partial |
+| `fuku/db/user/repository.go` (MODIFY: `FindUsersByUsername`) | repository | CRUD read | `GetUserIdByUserName` lines 118-129 same file | exact |
+| `fuku/utils/extraction/extraction.go` (MODIFY: export `ParseDurationToken`) | utility | transform | `parseTemporaryDuration` lines 328-377 | exact |
+| `fuku/modules/main.go` (MODIFY `/home/user/Fuku_Robot/main.go`: shutdown drain for fan-out) | config | lifecycle | `main.go` lines 205-212 (`StopStaffSweeper`) | exact |
+| `locales/{en,es,fr,hi,id,pt,ru}.yml` (`staff_act_*` keys) | config | n/a | existing `staff_*` keys, checked by `fuku/i18n/staff_locale_test.go` | exact |
 | `AGENTS.md` (MODIFY: document WrapCommand exception, staff action keys) | doc | n/a | existing Staff bullets | exact |
-| `alita/modules/staff_action_fake_test.go` (stateful fake) | test | n/a | `alita/modules/staff_helpers_test.go` `staffBotClient` | exact (extend) |
-| `alita/modules/staff_action_*_test.go` | test | n/a | `staff_unlink_test.go`, `staff_panel_test.go`, `antiraid_miniredis_test.go` `withMiniredis` | role-match |
-| `alita/utils/ratelimit/telegram_pacer_test.go` | test | n/a | `backup_ratelimit_test.go` | role-match |
-| `alita/db/user/repository_test.go` (MODIFY) | test | n/a | itself | exact |
+| `fuku/modules/staff_action_fake_test.go` (stateful fake) | test | n/a | `fuku/modules/staff_helpers_test.go` `staffBotClient` | exact (extend) |
+| `fuku/modules/staff_action_*_test.go` | test | n/a | `staff_unlink_test.go`, `staff_panel_test.go`, `antiraid_miniredis_test.go` `withMiniredis` | role-match |
+| `fuku/utils/ratelimit/telegram_pacer_test.go` | test | n/a | `backup_ratelimit_test.go` | role-match |
+| `fuku/db/user/repository_test.go` (MODIFY) | test | n/a | itself | exact |
 
 ## Pattern Assignments
 
-### `alita/modules/staff_action.go` (handler, request-response)
+### `fuku/modules/staff_action.go` (handler, request-response)
 
-**Analog:** `alita/modules/staff.go` (registration), `alita/modules/staff_watchers.go` (raw handlers). Deviation from AGENTS.md "commands go through WrapCommand" is intentional (RESEARCH Q4): WrapCommand calls `BuildCommandContext` first, which replies on sender-less updates, so it would double-reply in non-staff chats. Document in AGENTS.md.
+**Analog:** `fuku/modules/staff.go` (registration), `fuku/modules/staff_watchers.go` (raw handlers). Deviation from AGENTS.md "commands go through WrapCommand" is intentional (RESEARCH Q4): WrapCommand calls `BuildCommandContext` first, which replies on sender-less updates, so it would double-reply in non-staff chats. Document in AGENTS.md.
 
 **Registration pattern** (`staff.go` 363-377):
 ```go
@@ -74,7 +74,7 @@ if _, err := c.Msg.Reply(c.Bot, text, formatting.Shtml()); err != nil {
 
 ---
 
-### `alita/modules/staff.go` MODIFY (callback dispatch)
+### `fuku/modules/staff.go` MODIFY (callback dispatch)
 
 **Constants** (lines 44-53): add `staffActActConfirm = "xc"`, `staffActActCancel = "xn"` to the existing block. **Switch** (lines 247-266): add two cases before `default`, delegating to methods in `staff_action_card.go`:
 ```go
@@ -86,7 +86,7 @@ Every branch must answer the callback exactly once (`answerStaffCallback`, lines
 
 ---
 
-### `alita/modules/staff_action_card.go` (store + callbacks, event-driven)
+### `fuku/modules/staff_action_card.go` (store + callbacks, event-driven)
 
 **Analog 1 (Lua):** `antiraid.go` 51-75:
 ```go
@@ -98,7 +98,7 @@ deleteRaidStateScript = redis.NewScript(`
 	return 0
 `)
 ```
-Copy the `redis.NewScript` package-var style for the `pending -> running|cancelled|expired` CAS (issuer and expiry compared inside the script). Keys: `alita:staff:act:<token>` (outside `alita:cache:`). Redis client via `cache.GetRedisClient()` and `cache.Context`.
+Copy the `redis.NewScript` package-var style for the `pending -> running|cancelled|expired` CAS (issuer and expiry compared inside the script). Keys: `fuku:staff:act:<token>` (outside `fuku:cache:`). Redis client via `cache.GetRedisClient()` and `cache.Context`.
 
 **Analog 2 (issuer-bound callback, chat check)** `staff_unlink.go` 281-312: load state from the token alone, then compare `query.Message.GetChat().Id` with the stored staff chat:
 ```go
@@ -136,7 +136,7 @@ Use the same shape for the 5-minute `pending -> expired` CAS plus edit; a lazy p
 
 ---
 
-### `alita/modules/staff_action_run.go` (service, fan-out batch)
+### `fuku/modules/staff_action_run.go` (service, fan-out batch)
 
 **Analog:** `staff_panel.go` `buildStaffPanelRows` (401-441). Copy errgroup + panic-safe slots:
 ```go
@@ -172,11 +172,11 @@ shutdownManager.RegisterHandler(func() error {
 ```
 Every goroutine starts with `defer error_handling.RecoverFromPanic("<fn>", "StaffActions")` (`error_handling.go:16`).
 
-**Target lock:** `client.SetNX(cache.Context, key, owner, ttl)` as in `staff_sweeper.go` 171 (`alita:staff:lock:target:<id>`), with compare-and-delete Lua on release (same shape as `deleteRaidStateScript`).
+**Target lock:** `client.SetNX(cache.Context, key, owner, ttl)` as in `staff_sweeper.go` 171 (`fuku:staff:lock:target:<id>`), with compare-and-delete Lua on release (same shape as `deleteRaidStateScript`).
 
 ---
 
-### `alita/modules/staff_action_summary.go` (renderer + editor)
+### `fuku/modules/staff_action_summary.go` (renderer + editor)
 
 **Analog:** `staff_panel.go`.
 - Length cap and UTF-16 fit (lines 34-37, 257): `fits := func(text string) bool { return len(utf16.Encode([]rune(text))) <= staffPanelMaxUTF16 }`; reuse `staffPanelMaxUTF16 = 3800`.
@@ -193,7 +193,7 @@ Edit call shape (`staff.go` 279-282): `query.Message.EditText(b, &gotgbot.EditMe
 
 ---
 
-### `alita/utils/ratelimit/telegram_pacer.go` (utility, Redis)
+### `fuku/utils/ratelimit/telegram_pacer.go` (utility, Redis)
 
 **Analog:** `backup_ratelimit.go` (package, Redis acquisition, imports):
 ```go
@@ -201,17 +201,17 @@ import (
 	"context"
 	...
 	log "github.com/sirupsen/logrus"
-	"github.com/divkix/Alita_Robot/alita/utils/cache"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 ...
 if client := cache.GetRedisClient(); client != nil {
 	acquired, err := client.SetNX(cache.Context, cacheKey, time.Now().Unix(), cooldown).Result()
 ```
-Script from RESEARCH Code Examples (reserve-slot Lua with `TIME`/`PTTL`) declared as `redis.NewScript` package var (antiraid style). `retryAfter(err)` uses `errors.As(err, &tgErr *gotgbot.TelegramError)`, `Code == 429`, `ResponseParams.RetryAfter`. Keys `alita:staff:pace:next`, `alita:staff:pace:block`. On Redis error mid-run fall back to a local interval and log at warn. Error type `ErrRateLimited` maps to the "rate limited, gave up after retries" line. Note `ratelimit` imports `alita/utils/cache`; keep it free of `alita/modules` imports.
+Script from RESEARCH Code Examples (reserve-slot Lua with `TIME`/`PTTL`) declared as `redis.NewScript` package var (antiraid style). `retryAfter(err)` uses `errors.As(err, &tgErr *gotgbot.TelegramError)`, `Code == 429`, `ResponseParams.RetryAfter`. Keys `fuku:staff:pace:next`, `fuku:staff:pace:block`. On Redis error mid-run fall back to a local interval and log at warn. Error type `ErrRateLimited` maps to the "rate limited, gave up after retries" line. Note `ratelimit` imports `fuku/utils/cache`; keep it free of `fuku/modules` imports.
 
 ---
 
-### `alita/db/user/repository.go` MODIFY (repository, CRUD read)
+### `fuku/db/user/repository.go` MODIFY (repository, CRUD read)
 
 **Analog** lines 118-129 (same file):
 ```go
@@ -227,7 +227,7 @@ New `FindUsersByUsername(username string, limit int) ([]models.User, error)`: `W
 
 ---
 
-### `alita/utils/extraction/extraction.go` MODIFY (utility, transform)
+### `fuku/utils/extraction/extraction.go` MODIFY (utility, transform)
 
 **Analog** `parseTemporaryDuration` (328-377): grammar `m/h/d/w`, `TemporaryUntilDate(now, secs)` window 30 s..366 d (lines 38-50). Add exported pure `ParseDurationToken(token string, now int64) (until int64, label string, ok bool, overLimit bool)` (no replies; reuses the same switch). Staff parser maps `errTimeLimitExceeded` to permanent with label "permanent (longer than 366 days)" (Pitfall 10). Do not change `ExtractTime` behavior (STAFF-13). Refactor `parseTemporaryDuration` to call shared code only if existing tests stay green.
 
@@ -249,16 +249,16 @@ New `FindUsersByUsername(username string, limit int) ([]models.User, error)`: `W
 
 **Dispatcher harness for STAFF-13:** load `LoadBans`, `LoadMutes`, `LoadStaffActions` in registry order (`registry.go` sorts by priority), send the same `/ban` update to a normal and a Staff Group; precedent in `bans_command_test.go` / `mutes_command_test.go`.
 
-**i18n:** `alita/i18n/staff_locale_test.go` already covers all `staff_`-prefixed keys across the 7 locales (`en es fr hi id pt ru`; `config.yml` is not a language). Name new keys `staff_act_*` and use literal `tr.GetString("staff_act_...")` so `make check-translations` sees them.
+**i18n:** `fuku/i18n/staff_locale_test.go` already covers all `staff_`-prefixed keys across the 7 locales (`en es fr hi id pt ru`; `config.yml` is not a language). Name new keys `staff_act_*` and use literal `tr.GetString("staff_act_...")` so `make check-translations` sees them.
 
 ## Shared Patterns
 
 ### Fail-closed live authority
-**Source:** `alita/utils/chat_status/owner.go` 94-120 (tri-state `CheckOwner`), 61-92 (`FetchBotMember`).
+**Source:** `fuku/utils/chat_status/owner.go` 94-120 (tri-state `CheckOwner`), 61-92 (`FetchBotMember`).
 **Apply to:** every per-group check in `staff_action_run.go`. Unknown answer = failed/skipped line, never an action; only `OwnerMismatch` deletes a link.
 
 ### Callback encode/decode
-**Source:** `alita/modules/callback_codec.go` (`encodeCallbackData` returns `""` on overflow), `staff.go` 236-246 (`decodeCallbackData`, `callbackQueryFromContext`, `answerInvalidCallback`).
+**Source:** `fuku/modules/callback_codec.go` (`encodeCallbackData` returns `""` on overflow), `staff.go` 236-246 (`decodeCallbackData`, `callbackQueryFromContext`, `answerInvalidCallback`).
 **Apply to:** card buttons. Never `strings.Split`; never user text in callback data.
 
 ### Panic recovery on goroutines
@@ -270,7 +270,7 @@ New `FindUsersByUsername(username string, limit int) ([]models.User, error)`: `W
 **Apply to:** card, summary, hints.
 
 ### Operational Redis keys
-Keys under `alita:staff:*` (outside `alita:cache:`, per AGENTS.md): `alita:staff:act:<token>`, `alita:staff:pace:*`, `alita:staff:lock:target:<id>`. No DB writes in this phase, so no `cache.DeleteCache` is required beyond what `recheckLink` already does.
+Keys under `fuku:staff:*` (outside `fuku:cache:`, per AGENTS.md): `fuku:staff:act:<token>`, `fuku:staff:pace:*`, `fuku:staff:lock:target:<id>`. No DB writes in this phase, so no `cache.DeleteCache` is required beyond what `recheckLink` already does.
 
 ### Logging
 `log.Warnf("[Staff] ...: %v", err)` / `log.Errorf("[Staff] ...")`; never log `ext.EndGroups` as an error.
@@ -279,11 +279,11 @@ Keys under `alita:staff:*` (outside `alita:cache:`, per AGENTS.md): `alita:staff
 
 | File | Role | Data Flow | Reason |
 |---|---|---|---|
-| `alita/modules/staff_action_decide.go` | utility | transform | Pure status-first decision table is new; use RESEARCH Q1 table and the invariants (restrict only to `member`/`restricted`; `unban(false)` only for kick; unban always `OnlyIfBanned: true`) |
+| `fuku/modules/staff_action_decide.go` | utility | transform | Pure status-first decision table is new; use RESEARCH Q1 table and the invariants (restrict only to `member`/`restricted`; `unban(false)` only for kick; unban always `OnlyIfBanned: true`) |
 | Slot-reservation Lua in `telegram_pacer.go` | utility | request-response | Only backup limiter exists (SETNX cooldown); use RESEARCH Code Examples script (miniredis-probed). `antiraid.go` supplies only the `redis.NewScript` style |
 
 ## Metadata
 
-**Analog search scope:** `alita/modules`, `alita/utils/{chat_status,extraction,helpers,ratelimit,cache,error_handling}`, `alita/db/{user,staff,models}`, `main.go`, `locales`.
+**Analog search scope:** `fuku/modules`, `fuku/utils/{chat_status,extraction,helpers,ratelimit,cache,error_handling}`, `fuku/db/{user,staff,models}`, `main.go`, `locales`.
 **Files scanned:** ~25 read (targeted ranges), all cited paths confirmed in `git ls-files`.
 **Pattern extraction date:** 2026-10-05

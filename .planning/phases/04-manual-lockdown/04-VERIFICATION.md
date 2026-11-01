@@ -22,55 +22,55 @@ covered_files:
   - ".planning/phases/04-manual-lockdown/04-08-SUMMARY.md"
   - "AGENTS.md"
   - "Makefile"
-  - "alita/db/lockdown/joiners.go"
-  - "alita/db/lockdown/joiners_lift_test.go"
-  - "alita/db/lockdown/joiners_test.go"
-  - "alita/db/lockdown/repository.go"
-  - "alita/db/lockdown/repository_test.go"
-  - "alita/db/lockdown/testmain_test.go"
-  - "alita/db/models/lockdown.go"
-  - "alita/db/testmain_test.go"
-  - "alita/i18n/lockdown_locale_test.go"
-  - "alita/modules/antiraid.go"
-  - "alita/modules/bans.go"
-  - "alita/modules/captcha.go"
-  - "alita/modules/chat_permissions.go"
-  - "alita/modules/chat_permissions_test.go"
-  - "alita/modules/greetings.go"
-  - "alita/modules/lockdown.go"
-  - "alita/modules/lockdown_anon_test.go"
-  - "alita/modules/lockdown_ban_live_test.go"
-  - "alita/modules/lockdown_decide_test.go"
-  - "alita/modules/lockdown_durability_test.go"
-  - "alita/modules/lockdown_expired_test.go"
-  - "alita/modules/lockdown_fake_test.go"
-  - "alita/modules/lockdown_guard.go"
-  - "alita/modules/lockdown_guard_policy_test.go"
-  - "alita/modules/lockdown_guard_test.go"
-  - "alita/modules/lockdown_isolation_test.go"
-  - "alita/modules/lockdown_lift_joiners_test.go"
-  - "alita/modules/lockdown_lift_test.go"
-  - "alita/modules/lockdown_lock_unknown_test.go"
-  - "alita/modules/lockdown_marker.go"
-  - "alita/modules/lockdown_paths_test.go"
-  - "alita/modules/lockdown_perms.go"
-  - "alita/modules/lockdown_perms_test.go"
-  - "alita/modules/lockdown_refusals_test.go"
-  - "alita/modules/lockdown_requests_test.go"
-  - "alita/modules/lockdown_staff_test.go"
-  - "alita/modules/lockdown_status.go"
-  - "alita/modules/lockdown_status_test.go"
-  - "alita/modules/lockdown_test.go"
-  - "alita/modules/lockdown_unmute_test.go"
-  - "alita/modules/lockdown_worker.go"
-  - "alita/modules/mute.go"
-  - "alita/modules/staff_action_decide.go"
-  - "alita/modules/staff_action_decide_test.go"
-  - "alita/modules/staff_action_run.go"
-  - "alita/modules/staff_panel.go"
-  - "alita/modules/staff_panel_render_test.go"
-  - "alita/modules/test_harness_test.go"
-  - "alita/utils/chat_status/chat_status.go"
+  - "fuku/db/lockdown/joiners.go"
+  - "fuku/db/lockdown/joiners_lift_test.go"
+  - "fuku/db/lockdown/joiners_test.go"
+  - "fuku/db/lockdown/repository.go"
+  - "fuku/db/lockdown/repository_test.go"
+  - "fuku/db/lockdown/testmain_test.go"
+  - "fuku/db/models/lockdown.go"
+  - "fuku/db/testmain_test.go"
+  - "fuku/i18n/lockdown_locale_test.go"
+  - "fuku/modules/antiraid.go"
+  - "fuku/modules/bans.go"
+  - "fuku/modules/captcha.go"
+  - "fuku/modules/chat_permissions.go"
+  - "fuku/modules/chat_permissions_test.go"
+  - "fuku/modules/greetings.go"
+  - "fuku/modules/lockdown.go"
+  - "fuku/modules/lockdown_anon_test.go"
+  - "fuku/modules/lockdown_ban_live_test.go"
+  - "fuku/modules/lockdown_decide_test.go"
+  - "fuku/modules/lockdown_durability_test.go"
+  - "fuku/modules/lockdown_expired_test.go"
+  - "fuku/modules/lockdown_fake_test.go"
+  - "fuku/modules/lockdown_guard.go"
+  - "fuku/modules/lockdown_guard_policy_test.go"
+  - "fuku/modules/lockdown_guard_test.go"
+  - "fuku/modules/lockdown_isolation_test.go"
+  - "fuku/modules/lockdown_lift_joiners_test.go"
+  - "fuku/modules/lockdown_lift_test.go"
+  - "fuku/modules/lockdown_lock_unknown_test.go"
+  - "fuku/modules/lockdown_marker.go"
+  - "fuku/modules/lockdown_paths_test.go"
+  - "fuku/modules/lockdown_perms.go"
+  - "fuku/modules/lockdown_perms_test.go"
+  - "fuku/modules/lockdown_refusals_test.go"
+  - "fuku/modules/lockdown_requests_test.go"
+  - "fuku/modules/lockdown_staff_test.go"
+  - "fuku/modules/lockdown_status.go"
+  - "fuku/modules/lockdown_status_test.go"
+  - "fuku/modules/lockdown_test.go"
+  - "fuku/modules/lockdown_unmute_test.go"
+  - "fuku/modules/lockdown_worker.go"
+  - "fuku/modules/mute.go"
+  - "fuku/modules/staff_action_decide.go"
+  - "fuku/modules/staff_action_decide_test.go"
+  - "fuku/modules/staff_action_run.go"
+  - "fuku/modules/staff_panel.go"
+  - "fuku/modules/staff_panel_render_test.go"
+  - "fuku/modules/test_harness_test.go"
+  - "fuku/utils/chat_status/chat_status.go"
   - "docs/src/content/docs/commands/lockdown/index.md"
   - "docs/src/content/docs/commands/staff/index.md"
   - "locales/config.yml"
@@ -165,7 +165,7 @@ ROADMAP success criteria are SC1 to SC5 (the contract). Truths 6 to 12 are plan-
 | SC1 | `/lockdown` mutes everyone except admins, anyone who joins is removed at once, removed users can rejoin after the lift, other linked groups are unaffected | VERIFIED | `lockdown.go:375` sends the all-false 16-key set via `setLockdownPermissions` with `use_independent_chat_permissions: true` (`lockdown_perms.go:65-69`), only after the snapshot row exists (`lockdown.Start` at `:363`). Guard at handler group `-7` (`lockdown_guard.go:557-574`) records a joiner row then `ext.EndGroups`; the worker bans with `until_date = ban_until` (`lockdown_worker.go:373-414`) and at the lift unbans only the lockdown's own ban with `OnlyIfBanned` (`:526-565`). Every query is keyed by `chat_id` or `lockdown_id`. Tests: `TestLockdownLockSendsLockedSet`, `TestLockdownGuardBansChatMemberJoin`, `TestLockdownLiftUnbansJoiners`, `TestLockdownRejoinAfterUnban`, `TestLockdownAffectsOnlyItsChat`, all PASS under `-race` |
 | SC2 | Approved users: spike answered "can't", so approved users are muted too and the notice says so (D-01, D-02) | VERIFIED | `lockdown.go:397-407` always appends `lockdown_note_approved_muted` ("Approved users are muted too."); the lock makes no per-user call. `TestLockdownNoticeAndNoPerUserCalls` PASS (zero `restrictChatMember` calls with an approved user present). Prohibition "never tell the group approved users can talk" holds: no such string exists in `locales/en.yml` |
 | SC3 | An admin can see whether the group is locked, since when and why; `/staff` marks the group; a second `/lockdown` reports the existing one | VERIFIED | `lockdown_status.go` (`/lockdownstatus`, live authority, read-only); `lockdownAlreadyActiveText` at `lockdown.go:264` used at `:329` and `:372`; `staff_panel.go:176-184` + `markLockedRows` `:464-480` called from `buildStaffPanel`. Tests: `TestLockdownStatusCommand`, `TestLockdownCommandReportsExisting` (one `setChatPermissions` call, one row), `TestRenderStaffRowLockdownMarker`, `TestStaffPanelShowsLockedGroup`, all PASS. Live panel rendering is a human item |
-| SC4 | A lockdown never lifts on its own; survives restarts and a Redis flush; every replica enforces it; only an admin of the group can lift it, others refused | VERIFIED | State is PostgreSQL only: no cache or Redis read in `alita/db/lockdown/*.go`, `lockdown_guard.go`, `lockdown.go`, `lockdown_status.go` (grepped). The only callers of `BeginLift` are `lockdownBeginLift` in `unlockdown` (`lockdown.go:492`); `DeleteUnconfirmed` only ever touches unconfirmed rows. `StartLockdownWorker` runs on every replica (`main.go:442`), rows are claimed by conditional updates, stale claims released after 2 min (`joiners.go:300`), `StopLockdownWorker` registered after DB-close (`main.go:160` vs `:224`). Tests: `TestLockdownNeverLiftsOnItsOwn` (400-day-old lockdown, 20 cycles, still active), `TestLockdownSurvivesRedisFlush` (flushed and no-Redis), `TestLockdownLiftResumesAfterRestart`, `TestLockdownCommandsRefuseNonAuthority`, all PASS. Real multi-replica and restart drills are human items |
+| SC4 | A lockdown never lifts on its own; survives restarts and a Redis flush; every replica enforces it; only an admin of the group can lift it, others refused | VERIFIED | State is PostgreSQL only: no cache or Redis read in `fuku/db/lockdown/*.go`, `lockdown_guard.go`, `lockdown.go`, `lockdown_status.go` (grepped). The only callers of `BeginLift` are `lockdownBeginLift` in `unlockdown` (`lockdown.go:492`); `DeleteUnconfirmed` only ever touches unconfirmed rows. `StartLockdownWorker` runs on every replica (`main.go:442`), rows are claimed by conditional updates, stale claims released after 2 min (`joiners.go:300`), `StopLockdownWorker` registered after DB-close (`main.go:160` vs `:224`). Tests: `TestLockdownNeverLiftsOnItsOwn` (400-day-old lockdown, 20 cycles, still active), `TestLockdownSurvivesRedisFlush` (flushed and no-Redis), `TestLockdownLiftResumesAfterRestart`, `TestLockdownCommandsRefuseNonAuthority`, all PASS. Real multi-replica and restart drills are human items |
 | SC5 | Lifting restores the permissions exactly as before; anyone unmuted during the lockdown (`/unmute`, captcha) can still talk after the lift | VERIFIED | Snapshot is the raw `permissions` member of `getChat` (`lockdown_perms.go:35-55`, stored at `lockdown.go:360`) and replayed byte for byte (`:485`); restore happens before the lift is recorded and a failed restore leaves the lockdown active and unbans nobody (`:485-498`). `resolveUnmutePermissions` (`chat_permissions.go:66`) returns the stored snapshot during an active lockdown and errors on a failed lookup; all four callers (`mute.go:228`, `bans.go:817`, `captcha.go:1396`, `staff_action_run.go:688`) go through it, and the staff-mute undo reaches it via `executeStaffCall`. Tests: `TestLockdownLiftRestoresExactSnapshot`, `TestLockdownLiftRestoreFailure`, `TestLockdownLiftRecordFailure`, `TestUnmuteDuringLockdownUsesSnapshot` (all four callers), `TestUnmuteLockdownLookupFails`, all PASS. Fidelity against a real `getChat` answer is a human item (A1) |
 | 6 | Only a live creator or administrator with `can_restrict_members` can lock or lift; admin cache, service IDs and AnonAdmin mode never authorise; a failed lookup refuses; anonymous admins always get the proof button and the tapper is the one recorded (LOCK-06, D-11, D-12) | VERIFIED | `requireLockdownAuthority` (`lockdown.go:127-166`): live `getChatMember` only, no admin-cache symbol anywhere in the file. `TestLockdownCommandsRefuseNonAuthority` includes "cache says admin, live says member" and "lookup fails"; `TestLockdownAnonymousAdminProof` PASS |
 | 7 | Refusals record nothing: basic group, bot lacks `can_restrict_members`, bot rights unreadable, `getChat` fails or has no permissions, 4xx refusal of the lock (D-20) | VERIFIED | Order in `lockdown.go:306-351` writes nothing before `lockdown.Start`; 4xx refusal deletes the unconfirmed row (`:386`). `TestLockdownRefusals` (all subtests) PASS |
@@ -188,17 +188,17 @@ None. The Phase 5 (alert, Lift button, Revoke link) and Phase 6 (LOCK-10, LOCK-1
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
 | `migrations/20261006120000_add_chat_lockdowns.sql` | Two tables, partial unique index, CHECKs, no top-level transaction | VERIFIED | 86 lines; sorts last in `migrations/`; idempotent statements; no `BEGIN`/`COMMIT` |
-| `alita/db/models/lockdown.go` | `ChatLockdown`, `LockdownJoiner`, state constants, `TableName()` | VERIFIED | 123 lines; also carries `JoinerDetailBanExpired` (WR-02) |
-| `alita/db/lockdown/repository.go` | `Start`, `GetActiveFresh`, `ConfirmLocked`, `BeginLift`, `FinishLift`, ... | VERIFIED | 294 lines; every state move is one conditional update; no cache symbol |
-| `alita/db/lockdown/joiners.go` | `RecordJoin`, `ClaimJoiner`, `MoveJoiner`, `ReleaseStaleClaims`, `HasJoinerBanFresh`, ... | VERIFIED | 375 lines; substantive, wired from guard, worker and staff |
-| `alita/modules/lockdown_perms.go` | Raw `getChat` / `setChatPermissions`, locked set, `canonicalPermissions` | VERIFIED | Never uses `gotgbot.ChatPermissions` (comment mentions only) |
-| `alita/modules/lockdown.go` | `/lockdown`, `/unlockdown`, authority, anonymous-admin registration | VERIFIED | `RegisterLegacyModule("Lockdown", 238, ...)` and three `RegisterAnonymousAdminHandler` calls present; commands via `helpers.WrapCommand`, not Disableable |
-| `alita/modules/lockdown_guard.go` | Group `-7` guard for all three join paths and the kicked update | VERIFIED | 574 lines; handlers registered at `lockdownModule.handlerGroup` (-7) |
-| `alita/modules/lockdown_worker.go` | Paced worker, bans, declines, lift unbans, tally, settle | VERIFIED | 687 lines; started in `main.go:442`, drained in `main.go:224` after DB-close |
-| `alita/modules/lockdown_marker.go` | `isLockdownBan`, `lockdownBanUntil`, `lockdownBanExpired` | VERIFIED | 49 lines |
-| `alita/modules/lockdown_status.go` | `/lockdownstatus` | VERIFIED | 129 lines; read-only |
-| `alita/modules/chat_permissions.go` | Lockdown-aware `resolveUnmutePermissions` returning `(perms, error)` | VERIFIED | Single choke point, 4 callers |
-| `alita/modules/staff_panel.go` | `/staff` lockdown marker | VERIFIED | `LockedSince`, `markLockedRows`, one batch query |
+| `fuku/db/models/lockdown.go` | `ChatLockdown`, `LockdownJoiner`, state constants, `TableName()` | VERIFIED | 123 lines; also carries `JoinerDetailBanExpired` (WR-02) |
+| `fuku/db/lockdown/repository.go` | `Start`, `GetActiveFresh`, `ConfirmLocked`, `BeginLift`, `FinishLift`, ... | VERIFIED | 294 lines; every state move is one conditional update; no cache symbol |
+| `fuku/db/lockdown/joiners.go` | `RecordJoin`, `ClaimJoiner`, `MoveJoiner`, `ReleaseStaleClaims`, `HasJoinerBanFresh`, ... | VERIFIED | 375 lines; substantive, wired from guard, worker and staff |
+| `fuku/modules/lockdown_perms.go` | Raw `getChat` / `setChatPermissions`, locked set, `canonicalPermissions` | VERIFIED | Never uses `gotgbot.ChatPermissions` (comment mentions only) |
+| `fuku/modules/lockdown.go` | `/lockdown`, `/unlockdown`, authority, anonymous-admin registration | VERIFIED | `RegisterLegacyModule("Lockdown", 238, ...)` and three `RegisterAnonymousAdminHandler` calls present; commands via `helpers.WrapCommand`, not Disableable |
+| `fuku/modules/lockdown_guard.go` | Group `-7` guard for all three join paths and the kicked update | VERIFIED | 574 lines; handlers registered at `lockdownModule.handlerGroup` (-7) |
+| `fuku/modules/lockdown_worker.go` | Paced worker, bans, declines, lift unbans, tally, settle | VERIFIED | 687 lines; started in `main.go:442`, drained in `main.go:224` after DB-close |
+| `fuku/modules/lockdown_marker.go` | `isLockdownBan`, `lockdownBanUntil`, `lockdownBanExpired` | VERIFIED | 49 lines |
+| `fuku/modules/lockdown_status.go` | `/lockdownstatus` | VERIFIED | 129 lines; read-only |
+| `fuku/modules/chat_permissions.go` | Lockdown-aware `resolveUnmutePermissions` returning `(perms, error)` | VERIFIED | Single choke point, 4 callers |
+| `fuku/modules/staff_panel.go` | `/staff` lockdown marker | VERIFIED | `LockedSince`, `markLockedRows`, one batch query |
 | `locales/*.yml` (7 files) | 38 `lockdown_*` keys each plus panel and mute keys | VERIFIED | `grep -c '^lockdown_'` = 38 in all seven; `make check-translations` PASS; `TestLockdownLocaleKeys` PASS |
 | `docs/src/content/docs/commands/lockdown/index.md` | Generated page | VERIFIED | `make check-docs`: no drift |
 | `Makefile` `test-postgres-integrity` | Lockdown test and package added | VERIFIED | Present; the target itself was not run (needs PostgreSQL) |
@@ -233,9 +233,9 @@ None. The Phase 5 (alert, Lift button, Revoke link) and Phase 6 (LOCK-10, LOCK-1
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Lockdown, joiner, unmute, staff and permission tests | `go test -tags testtools -race -count=1 -run 'Lockdown\|Joiner\|Unmute\|StaffPanel\|DecideStaffBan\|CanonicalPermissions\|IsLockdownBan' -v ./alita/modules ./alita/db/lockdown` | `ok` for both packages, 296 PASS lines, 0 FAIL, 0 SKIP | PASS |
-| One-lifter concurrency and locale parity | `go test -tags testtools -race -count=5 -run '^TestUnlockdownLiftsOnce$' ./alita/modules`; `-run '^TestStaffPanelShowsLockedGroup$\|^TestUnlockdown\|^TestLockdownLocaleKeys$' ./alita/modules ./alita/i18n` | 5 of 5 PASS; all PASS | PASS |
-| Build and vet | `CGO_ENABLED=0 go build ./...`; `go vet -tags testtools ./alita/modules ./alita/db/lockdown ./alita/db/models` | clean | PASS |
+| Lockdown, joiner, unmute, staff and permission tests | `go test -tags testtools -race -count=1 -run 'Lockdown\|Joiner\|Unmute\|StaffPanel\|DecideStaffBan\|CanonicalPermissions\|IsLockdownBan' -v ./fuku/modules ./fuku/db/lockdown` | `ok` for both packages, 296 PASS lines, 0 FAIL, 0 SKIP | PASS |
+| One-lifter concurrency and locale parity | `go test -tags testtools -race -count=5 -run '^TestUnlockdownLiftsOnce$' ./fuku/modules`; `-run '^TestStaffPanelShowsLockedGroup$\|^TestUnlockdown\|^TestLockdownLocaleKeys$' ./fuku/modules ./fuku/i18n` | 5 of 5 PASS; all PASS | PASS |
+| Build and vet | `CGO_ENABLED=0 go build ./...`; `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown ./fuku/db/models` | clean | PASS |
 | Translations and docs | `make check-translations`; `make check-docs` (writes only to a temp dir) | all translations present; no drift | PASS |
 | Dependencies unchanged | `git diff --exit-code go.mod go.sum` | unchanged | PASS |
 | Full suite | not re-run (single-run rule). Orchestrator reported `make test` exit 0 on this head, 61 packages ok | taken from the orchestrator | NOT RE-RUN |
@@ -252,7 +252,7 @@ Step 7c: SKIPPED. No `scripts/*/tests/probe-*.sh` exists for this phase and no p
 | `lockdown_guard_test.go`, `lockdown_paths_test.go`, `lockdown_requests_test.go`, `lockdown_lift_joiners_test.go`, `lockdown_ban_live_test.go`, `lockdown_durability_test.go`, `lockdown_isolation_test.go` | LOCK-01, 04, 05, 07 | all active | 0 | No | Behavioral | OK; end dates in the fake are test-set (see coincidental-reliance advisory) |
 | `lockdown_unmute_test.go`, `chat_permissions_test.go` | LOCK-08 | all active | 0 | No | Behavioral over all four callers | OK |
 | `lockdown_staff_test.go`, `staff_panel_render_test.go`, `staff_action_decide_test.go` | SETUP-08, D-05 | all active | 0 | No | Behavioral / value | OK |
-| `alita/db/lockdown/*_test.go` | LOCK-05 | all active | 0 on SQLite | No | Behavioral | PostgreSQL leg not run |
+| `fuku/db/lockdown/*_test.go` | LOCK-05 | all active | 0 on SQLite | No | Behavioral | PostgreSQL leg not run |
 
 **Disabled tests on requirements:** 0. **Circular patterns detected:** 0. **Insufficient assertions:** 0. I also read the CR-01 and WR-01 regression tests in full: they assert call counts, row states, stored permission bytes and the post-lift member status, not literals.
 
@@ -286,10 +286,10 @@ Out of scope and correctly unclaimed: LOCK-10, LOCK-15 (Phase 6), LOCK-11..14 (P
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
 | (all phase Go, SQL and migration files) | - | `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` | none found | No debt markers; no stubs: empty-return and `[]`/`{}` initialisers are real accumulators, not rendered placeholders |
-| `AGENTS.md` (Data bullet) vs `alita/modules/chat_permissions.go:73-77` | - | Rule says `pre_permissions` is "never passed through the typed `gotgbot.ChatPermissions`" but `resolveUnmutePermissions` unmarshals it into that type (open review finding IN-02) | Info | Doc and code disagree; the code is defensible (per-user restriction, same as before the phase) |
-| `alita/modules/lockdown_guard.go:60-90` | - | `lockdownNeedsPerformerLookup` restates `decideLockdownJoin`'s conditions; the `lockdownJoinDecline` verdict is unreachable from production (IN-01) | Info | Drift risk only; a drift fails closed (ban) |
-| `alita/modules/lockdown_guard.go:19-21` | - | Fourth copy of the Group Anonymous Bot ID (IN-03) | Info | Drift risk only |
-| `alita/modules/lockdown_guard.go:266-278`, `lockdown_worker.go:342-345` | - | A fed-banned joiner of a locked group is handled only by the lockdown (fed-ban at `-6` never sees them), and a "request already gone" is counted as declined (IN-04) | Info | Behaviour follows D-03/D-10; the fed-ban interaction is not documented in AGENTS.md or the docs page |
+| `AGENTS.md` (Data bullet) vs `fuku/modules/chat_permissions.go:73-77` | - | Rule says `pre_permissions` is "never passed through the typed `gotgbot.ChatPermissions`" but `resolveUnmutePermissions` unmarshals it into that type (open review finding IN-02) | Info | Doc and code disagree; the code is defensible (per-user restriction, same as before the phase) |
+| `fuku/modules/lockdown_guard.go:60-90` | - | `lockdownNeedsPerformerLookup` restates `decideLockdownJoin`'s conditions; the `lockdownJoinDecline` verdict is unreachable from production (IN-01) | Info | Drift risk only; a drift fails closed (ban) |
+| `fuku/modules/lockdown_guard.go:19-21` | - | Fourth copy of the Group Anonymous Bot ID (IN-03) | Info | Drift risk only |
+| `fuku/modules/lockdown_guard.go:266-278`, `lockdown_worker.go:342-345` | - | A fed-banned joiner of a locked group is handled only by the lockdown (fed-ban at `-6` never sees them), and a "request already gone" is counted as declined (IN-04) | Info | Behaviour follows D-03/D-10; the fed-ban interaction is not documented in AGENTS.md or the docs page |
 
 No blockers. No warnings in the code.
 

@@ -11,22 +11,22 @@ All analog paths below were checked as git-tracked source (no `.gsd` mirror path
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |---|---|---|---|---|
 | `migrations/20261011120000_add_lockdown_alerts.sql` | migration | CRUD | `migrations/20261006120000_add_chat_lockdowns.sql` | exact |
-| `alita/db/models/lockdown_alert.go` | model | CRUD | `alita/db/models/lockdown.go` | exact |
-| `alita/db/lockdown/alerts.go` | repository | CRUD, conditional claim | `alita/db/lockdown/repository.go` (ConfirmLocked/BeginLift) + `joiners.go` (RecordJoin/ClaimJoiner) | exact |
-| `alita/db/lockdown/burst.go` | repository | CRUD, batch | `alita/db/lockdown/joiners.go` | exact |
-| `alita/modules/lockdown_alert.go` | service/worker | event-driven (DB-driven worker) | `alita/modules/lockdown_worker.go` + `staff_log.go` | role-match |
-| `alita/modules/lockdown_alert_callbacks.go` | controller (callback) | request-response | `alita/modules/staff.go` `staffCallback` + `lockdown.go` `requireLockdownAuthority` | role-match |
-| `alita/modules/lockdown_response.go` | service/worker | batch, event-driven | `lockdown_worker.go` `lockdownBanOne` + `decideLockdownJoin` | exact |
-| `alita/modules/lockdown_recent.go` | utility (Redis tracker) | streaming (write per join) | `alita/modules/antiraid.go` `trackJoin` | partial |
-| `alita/modules/lockdown.go` (modify) | controller | request-response | itself, `unlockdown` lines 424-516 | exact |
-| `alita/modules/lockdown_worker.go` (modify) | worker | event-driven | itself, `runLockdownCycle` 262-272 | exact |
-| `alita/modules/lockdown_guard.go` (modify) | middleware/watcher | event-driven | itself, `lockdownOnJoinMember` 100-160 | exact |
-| `alita/modules/lockdown_status.go` (modify) | controller | request-response | itself, lines 75-76 | exact |
+| `fuku/db/models/lockdown_alert.go` | model | CRUD | `fuku/db/models/lockdown.go` | exact |
+| `fuku/db/lockdown/alerts.go` | repository | CRUD, conditional claim | `fuku/db/lockdown/repository.go` (ConfirmLocked/BeginLift) + `joiners.go` (RecordJoin/ClaimJoiner) | exact |
+| `fuku/db/lockdown/burst.go` | repository | CRUD, batch | `fuku/db/lockdown/joiners.go` | exact |
+| `fuku/modules/lockdown_alert.go` | service/worker | event-driven (DB-driven worker) | `fuku/modules/lockdown_worker.go` + `staff_log.go` | role-match |
+| `fuku/modules/lockdown_alert_callbacks.go` | controller (callback) | request-response | `fuku/modules/staff.go` `staffCallback` + `lockdown.go` `requireLockdownAuthority` | role-match |
+| `fuku/modules/lockdown_response.go` | service/worker | batch, event-driven | `lockdown_worker.go` `lockdownBanOne` + `decideLockdownJoin` | exact |
+| `fuku/modules/lockdown_recent.go` | utility (Redis tracker) | streaming (write per join) | `fuku/modules/antiraid.go` `trackJoin` | partial |
+| `fuku/modules/lockdown.go` (modify) | controller | request-response | itself, `unlockdown` lines 424-516 | exact |
+| `fuku/modules/lockdown_worker.go` (modify) | worker | event-driven | itself, `runLockdownCycle` 262-272 | exact |
+| `fuku/modules/lockdown_guard.go` (modify) | middleware/watcher | event-driven | itself, `lockdownOnJoinMember` 100-160 | exact |
+| `fuku/modules/lockdown_status.go` (modify) | controller | request-response | itself, lines 75-76 | exact |
 | `locales/{en,es,fr,hi,id,pt,ru}.yml` | config | transform | existing `lockdown_*` keys | exact |
-| `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go`, `alita/db/lockdown/testmain_test.go` (modify) | test | CRUD | themselves (AutoMigrate lists) | exact |
-| `alita/modules/lockdown_fake_test.go` (modify) | test | request-response | itself (`lockdownFake`, `lockdownEnv`, `pressJoinRequest`, `ageJoiner`, `lockdownCleanup`) | exact |
-| `alita/modules/lockdown_alert_*_test.go` (new) | test | request-response | `lockdown_lift_test.go`, `lockdown_requests_test.go`, `lockdown_staff_test.go` | role-match |
-| `alita/db/lockdown/alerts_test.go`, `burst_test.go` (new) | test | CRUD | `alita/db/lockdown/joiners_test.go` | exact |
+| `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go`, `fuku/db/lockdown/testmain_test.go` (modify) | test | CRUD | themselves (AutoMigrate lists) | exact |
+| `fuku/modules/lockdown_fake_test.go` (modify) | test | request-response | itself (`lockdownFake`, `lockdownEnv`, `pressJoinRequest`, `ageJoiner`, `lockdownCleanup`) | exact |
+| `fuku/modules/lockdown_alert_*_test.go` (new) | test | request-response | `lockdown_lift_test.go`, `lockdown_requests_test.go`, `lockdown_staff_test.go` | role-match |
+| `fuku/db/lockdown/alerts_test.go`, `burst_test.go` (new) | test | CRUD | `fuku/db/lockdown/joiners_test.go` | exact |
 | `AGENTS.md` (modify) | docs | n/a | existing Lockdown bullets | exact |
 
 ## Pattern Assignments
@@ -57,9 +57,9 @@ Use for: `chat_lockdown_alerts` (`UNIQUE (lockdown_id, kind, seq, dest)`), `chat
 
 ---
 
-### `alita/db/models/lockdown_alert.go` (model)
+### `fuku/db/models/lockdown_alert.go` (model)
 
-**Analog:** `alita/db/models/lockdown.go`
+**Analog:** `fuku/db/models/lockdown.go`
 
 **Model pattern** (lines 39-70, 62-63, 79-86): gorm tags carry column, size, index and `check:` mirroring SQL; `TableName()` returns the migration table; state constants in a `const (...)` block with doc comments; parent link is SQL-only (no Go relation); `ChatLockdown` gains the new columns as `*time.Time` for nullable stamps.
 ```go
@@ -72,9 +72,9 @@ Add `ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun` the same way 
 
 ---
 
-### `alita/db/lockdown/alerts.go` (repository, conditional claims)
+### `fuku/db/lockdown/alerts.go` (repository, conditional claims)
 
-**Analog:** `alita/db/lockdown/repository.go` and `joiners.go`
+**Analog:** `fuku/db/lockdown/repository.go` and `joiners.go`
 
 **Package doc + imports** (repository.go lines 1-24): header comment says rows are read fresh, never cached, so no `DeleteCache` applies; writes use `db.DB` with no request context.
 ```go
@@ -87,9 +87,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/divkix/Alita_Robot/alita/db"
-	"github.com/divkix/Alita_Robot/alita/db/models"
-	alitaerrors "github.com/divkix/Alita_Robot/alita/utils/errors"
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
 )
 ```
 
@@ -102,7 +102,7 @@ func ConfirmLocked(id uint) (bool, error) {
 		Updates(map[string]any{"locked_at": stamp, "updated_at": stamp})
 	if result.Error != nil {
 		log.Errorf("[Lockdown] ConfirmLocked: %v", result.Error)
-		return false, alitaerrors.Wrapf(result.Error, "confirm lock of lockdown %d", id)
+		return false, fukuerrors.Wrapf(result.Error, "confirm lock of lockdown %d", id)
 	}
 	return result.RowsAffected == 1, nil
 }
@@ -119,9 +119,9 @@ func ConfirmLocked(id uint) (bool, error) {
 
 ---
 
-### `alita/db/lockdown/burst.go` (repository, batch)
+### `fuku/db/lockdown/burst.go` (repository, batch)
 
-**Analog:** `alita/db/lockdown/joiners.go`
+**Analog:** `fuku/db/lockdown/joiners.go`
 
 Use `ListJoinersInState` (line 188) for the list shape and `CountJoinersWithDetail` (174) for counts. Candidate query for "Ban N" is `INSERT ... SELECT FROM chat_lockdown_joiners ... ON CONFLICT DO NOTHING` into the burst table for states `pending, acting, banned, ban_failed, declined` (D-21), never `exempt/cancelled/unbanned`. Top-link query: `SELECT invite_link, COUNT(*) ... GROUP BY invite_link ORDER BY 2 DESC LIMIT 2` through `db.DB.Model(...).Select(...).Scan(&rows)` as in `ListActiveByChatsFresh` (repository.go 95-118):
 ```go
@@ -137,9 +137,9 @@ err := db.DB.Model(&models.ChatLockdown{}).
 
 ---
 
-### `alita/modules/lockdown_alert.go` (worker steps: post, remind, close)
+### `fuku/modules/lockdown_alert.go` (worker steps: post, remind, close)
 
-**Analogs:** `alita/modules/lockdown_worker.go` (loop/claim/classify) and `alita/modules/staff_log.go` (destination + translator)
+**Analogs:** `fuku/modules/lockdown_worker.go` (loop/claim/classify) and `fuku/modules/staff_log.go` (destination + translator)
 
 **Imports** (lockdown_worker.go 3-20): stdlib, then gotgbot + logrus, then internal `lockdown`, `models`, `i18n`, `error_handling`, `formatting`, `ratelimit`.
 
@@ -206,9 +206,9 @@ Add `lockdownPlanAlerts`, post slots, reminders, close copies, ban runs; each st
 
 ---
 
-### `alita/modules/lockdown_alert_callbacks.go` (callbacks, `lockdown|v1`)
+### `fuku/modules/lockdown_alert_callbacks.go` (callbacks, `lockdown|v1`)
 
-**Analog:** `alita/modules/staff.go` lines 249-316 (dispatch), `lockdown.go` 101-164 (authority)
+**Analog:** `fuku/modules/staff.go` lines 249-316 (dispatch), `lockdown.go` 101-164 (authority)
 
 **Dispatcher shape** (staff.go 252-298): `callbackQueryFromContext`, `decodeCallbackData(query.Data, ns)`, `answerInvalidCallback` on bad data, switch on `decoded.Fields["a"]`, default answers "expired". Answer every press exactly once with `answerStaffCallback(b, query, text, alert)`; edit cards with `editStaffCallbackMessage`.
 ```go
@@ -235,7 +235,7 @@ For Revoke: creator or administrator with `member.CanInviteUsers`. Refuse `staff
 
 ---
 
-### `alita/modules/lockdown.go` (modify: shared lift function + alert hook)
+### `fuku/modules/lockdown.go` (modify: shared lift function + alert hook)
 
 **Analog:** itself.
 
@@ -253,7 +253,7 @@ The command replies from the outcome enum; the button Confirm calls the same fun
 
 ---
 
-### `alita/modules/lockdown_response.go` ("Ban N recent joiners")
+### `fuku/modules/lockdown_response.go` ("Ban N recent joiners")
 
 **Analog:** `lockdown_worker.go` `lockdownBanOne` (364-414) and `decideLockdownJoin` / `isLockdownBan` (`lockdown_marker.go` 21)
 
@@ -270,20 +270,20 @@ Pure decision table `decideLockdownResponseBan(m, banUntil) (ban bool, skip stri
 
 ---
 
-### `alita/modules/lockdown_recent.go` (Redis tracker, D-17)
+### `fuku/modules/lockdown_recent.go` (Redis tracker, D-17)
 
-**Analog (partial):** `alita/modules/antiraid.go` lines 124-139 `trackJoin`
+**Analog (partial):** `fuku/modules/antiraid.go` lines 124-139 `trackJoin`
 
 ```go
 if !cache.IsRedisAvailable() { return 0, fmt.Errorf("cache not initialized") }
 rdb := cache.GetRedisClient()
 member := fmt.Sprintf("%d:%d:%d", userID, now, time.Now().UnixNano())
 ```
-Copy only the availability guard and client access. Differences: key `alita:lockdown:recent:<chat>` (outside `alita:cache:`), one pipelined `ZADD` + `ZREMRANGEBYSCORE` + `ZREMRANGEBYRANK 0 -501` + `EXPIRE 700`, member is compact JSON keyed by user ID so both join paths dedupe, short (about 250 ms) timeout instead of `cache.ContextWithTimeout()` (5 s, `utils/cache/cache.go` 32). Silent no-op without Redis. Called from `lockdownOnJoinMember`/`lockdownOnJoinMessage` before the "no lockdown" early return (lockdown_guard.go ~128-130, 196-198); keep `defer error_handling.RecoverFromPanic(...)` and never change the returned `ext.ContinueGroups` behaviour.
+Copy only the availability guard and client access. Differences: key `fuku:lockdown:recent:<chat>` (outside `fuku:cache:`), one pipelined `ZADD` + `ZREMRANGEBYSCORE` + `ZREMRANGEBYRANK 0 -501` + `EXPIRE 700`, member is compact JSON keyed by user ID so both join paths dedupe, short (about 250 ms) timeout instead of `cache.ContextWithTimeout()` (5 s, `utils/cache/cache.go` 32). Silent no-op without Redis. Called from `lockdownOnJoinMember`/`lockdownOnJoinMessage` before the "no lockdown" early return (lockdown_guard.go ~128-130, 196-198); keep `defer error_handling.RecoverFromPanic(...)` and never change the returned `ext.ContinueGroups` behaviour.
 
 ---
 
-### `alita/modules/lockdown_status.go` (modify)
+### `fuku/modules/lockdown_status.go` (modify)
 
 Lines 75-76 use `tally[models.JoinerStateBanned]` only. Change to `banned + kept rows with detail response_ban` (via `lockdown.CountJoinersWithDetail`, joiners.go 174), and use the same helper in reminders.
 
@@ -292,21 +292,21 @@ Lines 75-76 use `tally[models.JoinerStateBanned]` only. Change to `banned + kept
 ### Locale files and tests
 
 - Locales: copy key names from `locales/en.yml` `lockdown_*` keys (e.g. `lockdown_started_by`, `lockdown_lifted`, `lockdown_already_lifted`, `lockdown_lift_in_progress`, `lockdown_lift_tally_kept`); add every new key to all 7 files; `make check-translations`, and `make generate-docs` if `lockdown_help_msg` changes.
-- Test harness: add the three new models to the `AutoMigrate` lists in `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go`, `alita/db/lockdown/testmain_test.go`; extend `lockdownCleanup` (lockdown_fake_test.go 223-232), deleting children first:
+- Test harness: add the three new models to the `AutoMigrate` lists in `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go`, `fuku/db/lockdown/testmain_test.go`; extend `lockdownCleanup` (lockdown_fake_test.go 223-232), deleting children first:
 ```go
 db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.LockdownJoiner{})
 db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatLockdown{})
 ```
 - Fake: extend `lockdownFake` (embeds `*staffActionFake`) with `editMessageReplyMarkup`, `revokeChatInviteLink`, an `onBan` hook, per-user `getChatMember`. Press helper modelled on `pressJoinRequest` (lockdown_fake_test.go ~462-483); `lastAnswer()` and `ageJoiner()` (~486-510) are the patterns for `ageAlert`. Tests assert through `withStaffLocale` markers, not literals; no mock libraries; always `-tags testtools`.
-- DB repo tests: copy `alita/db/lockdown/joiners_test.go` helpers (`newJoinRecord`, `mustRecord`, `seedClaimedJoiner`, `TestReleaseStaleClaims`).
+- DB repo tests: copy `fuku/db/lockdown/joiners_test.go` helpers (`newJoinRecord`, `mustRecord`, `seedClaimedJoiner`, `TestReleaseStaleClaims`).
 
 ## Shared Patterns
 
 ### Live authority, never cache
-**Source:** `alita/modules/lockdown.go` 101-164. Apply to all three button handlers and the ban-run executor. `lockdownLiveMember` + `staffIssuerSkipReason`; a failed lookup refuses.
+**Source:** `fuku/modules/lockdown.go` 101-164. Apply to all three button handlers and the ban-run executor. `lockdownLiveMember` + `staffIssuerSkipReason`; a failed lookup refuses.
 
 ### Conditional update, `RowsAffected == 1` wins
-**Source:** `alita/db/lockdown/repository.go` 193-203, 255-272; `joiners.go` 85-126. Apply to the alert gate, slot claims, reminder slots, close claims, link revoke record, ban run state.
+**Source:** `fuku/db/lockdown/repository.go` 193-203, 255-272; `joiners.go` 85-126. Apply to the alert gate, slot claims, reminder slots, close claims, link revoke record, ban run state.
 
 ### Paced Telegram calls and outcome classification
 **Source:** `lockdown_worker.go` 40-46 and 287-296 (`lockdownClassify`). Apply to every worker send/edit/ban. A rate-limited or shutdown result puts the row back without costing an attempt.
@@ -324,7 +324,7 @@ defer error_handling.RecoverFromPanic("lockdownCycle", "Lockdown")
 **Source:** `repository.go` header 1-8. New tables are never cached, so no `DeleteCache`; never in backup/export/import/reset.
 
 ### Callback encoding
-**Source:** `alita/modules/callback_codec.go` 15-25, `alita/utils/callbackcodec`. Only IDs/tokens in data; handle `""` as dead button.
+**Source:** `fuku/modules/callback_codec.go` 15-25, `fuku/utils/callbackcodec`. Only IDs/tokens in data; handle `""` as dead button.
 
 ## No Analog Found
 
@@ -335,6 +335,6 @@ defer error_handling.RecoverFromPanic("lockdownCycle", "Lockdown")
 
 ## Metadata
 
-**Analog search scope:** `alita/modules/lockdown*.go`, `staff*.go`, `antiraid.go`, `alita/db/lockdown`, `alita/db/models`, `alita/db/staff`, `alita/utils/actionlog`, `migrations/`
+**Analog search scope:** `fuku/modules/lockdown*.go`, `staff*.go`, `antiraid.go`, `fuku/db/lockdown`, `fuku/db/models`, `fuku/db/staff`, `fuku/utils/actionlog`, `migrations/`
 **Files scanned:** about 25 read or grepped
 **Pattern extraction date:** 2026-10-11

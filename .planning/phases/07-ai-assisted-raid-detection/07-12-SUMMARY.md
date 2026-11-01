@@ -50,13 +50,13 @@ coverage:
     requirement: "RAID-05"
     verification:
       - kind: unit
-        ref: "alita/i18n/lockdown_locale_test.go#TestLockdownHelpFitsOneMessage"
+        ref: "fuku/i18n/lockdown_locale_test.go#TestLockdownHelpFitsOneMessage"
         status: pass
       - kind: unit
-        ref: "alita/i18n/lockdown_locale_test.go#TestLockdownLocaleKeys"
+        ref: "fuku/i18n/lockdown_locale_test.go#TestLockdownLocaleKeys"
         status: pass
       - kind: unit
-        ref: "alita/i18n/lockdown_locale_test.go#TestLockdownStringsHaveBalancedTags"
+        ref: "fuku/i18n/lockdown_locale_test.go#TestLockdownStringsHaveBalancedTags"
         status: pass
     human_judgment: true
     rationale: "Six translations need a native-speaker read; the facts were kept but the wording was compressed to fit one Telegram message"
@@ -96,7 +96,7 @@ status: complete
 - `lockdown_help_msg` (en, es, fr, hi, id, pt, ru): the `/autolockdown` bullet is `[joins|flood|ai] [N|on|off]` and a new "AI trigger" paragraph follows the automatic-trigger paragraph. English is 273 characters.
 - To fit one message, existing sentences were reworded (no behaviour, exception, number or command dropped): the authority sentences of the Lift and Ban paragraphs now say "same rights as /unlockdown", the two opening sentences of the button paragraph became one, the defaults sentence, the 330-day sentence pair and the Revoke paragraph's last sentence were shortened. The reminder sentence and a few "restrict members" repeats were shortened further in es, pt, id.
 - `make generate-docs` regenerated `docs/src/content/docs/commands/lockdown/index.md`; `make check-docs` reports no drift.
-- AGENTS.md: the rest of Phase 7 (handler group 2, `StopRaidAI`, every `alita:raid:*` AI key, settings columns, `ai_burst`, the leaf Gemini package, the token-safe download, budgets, breakers, "AI never decides alone") was verified against the source and was already correct. Added: the developer `/stats` AI lines (`AI spam off`, `raidAIStatsSection`), the exact condition of the not-set-up notice, the `GEMINI_API_KEY` and `GEMINI_MODEL` defaults, the pointer to the help text and its length test, and the testing rule that no test calls a real AI provider.
+- AGENTS.md: the rest of Phase 7 (handler group 2, `StopRaidAI`, every `fuku:raid:*` AI key, settings columns, `ai_burst`, the leaf Gemini package, the token-safe download, budgets, breakers, "AI never decides alone") was verified against the source and was already correct. Added: the developer `/stats` AI lines (`AI spam off`, `raidAIStatsSection`), the exact condition of the not-set-up notice, the `GEMINI_API_KEY` and `GEMINI_MODEL` defaults, the pointer to the help text and its length test, and the testing rule that no test calls a real AI provider.
 
 ## Help length, final (UTF-16 units of help header plus lockdown_help_msg, limit 4096)
 
@@ -141,7 +141,7 @@ Every locale is at 4076 units or fewer (headroom 20 or more).
 
 - `TestLockdownHelpFitsOneMessage`, `TestLockdownLocaleKeys`, `TestLockdownStringsHaveBalancedTags`, `TestLockdownWarningLines`: pass
 - `make check-translations`: all translations present; `make check-docs`: no drift
-- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./...`: clean; `gofmt -l alita scripts main.go`: nothing; `go.mod` and `go.sum` unchanged
+- `CGO_ENABLED=0 go build ./...` and `go vet -tags testtools ./...`: clean; `gofmt -l fuku scripts main.go`: nothing; `go.mod` and `go.sum` unchanged
 - `make lint` could not run here (golangci-lint is built with Go 1.25, the module is Go 1.26); `gofmt` and `go vet` stand in for it. The full `make test` is left to the orchestrator after the wave.
 - No PostgreSQL was started.
 

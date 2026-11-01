@@ -11,24 +11,24 @@ All analog paths below were checked as git-tracked source. Locale files are `en 
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |-------------------|------|-----------|----------------|---------------|
 | `migrations/2026100xxxxxxx_add_staff_groups_and_links.sql` | migration | CRUD | `migrations/20260826000000_add_federations_and_log_channels.sql` | exact |
-| `alita/db/models/staff.go` | model | CRUD | `alita/db/models/antiflood.go` (check tags), federation models | exact |
-| `alita/db/staff/repository.go` | repository | CRUD + tx | `alita/db/federations/repository.go` | exact |
-| `alita/db/staff/testmain_test.go` | test | CRUD | `alita/db/federations/testmain_test.go` (or `internal/testdb.Run`) | exact |
-| `alita/db/staff/repository_test.go` | test | CRUD | `alita/db/federations/repository_test.go` | exact |
-| `alita/db/cache/local.go` (modify `skipLocal`) | config | cache | itself (`captchaPendingPrefix`) | exact |
-| `alita/modules/staff.go` | module/controller | request-response | `alita/modules/federations.go` (joinFed/leaveFed, fedCallback, Load) + `admin.go` (WrapCommand) | role-match |
-| `alita/modules/staff_panel.go` | component | transform + request-response | `federations.go` `fedCallback` (edit-in-place) | partial |
-| `alita/modules/staff_ownership.go` | watcher + worker | event-driven, batch | `alita/modules/bot_updates.go` (watchers), `antiraid.go` (poller lifecycle) | role-match |
-| `alita/modules/deeplink_router.go` (modify) | utility | request-response | itself | exact |
-| `alita/modules/help.go` `start` (modify) | controller | request-response | itself (lines ~360-381) | exact |
-| `alita/utils/chat_status/owner.go` | utility | request-response | `chat_status/access.go` `RequireUserOwner` | role-match |
-| `alita/utils/helpers/command_pipeline.go` (add `RejectAnonymousSender`) | middleware | request-response | existing `CheckFunc` constructors in same file | role-match |
-| `alita/modules/staff_*_test.go` | test | request-response | `alita/modules/admin_test.go` + `test_harness_test.go` | exact |
-| `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` (modify AutoMigrate) | test config | - | themselves | exact |
+| `fuku/db/models/staff.go` | model | CRUD | `fuku/db/models/antiflood.go` (check tags), federation models | exact |
+| `fuku/db/staff/repository.go` | repository | CRUD + tx | `fuku/db/federations/repository.go` | exact |
+| `fuku/db/staff/testmain_test.go` | test | CRUD | `fuku/db/federations/testmain_test.go` (or `internal/testdb.Run`) | exact |
+| `fuku/db/staff/repository_test.go` | test | CRUD | `fuku/db/federations/repository_test.go` | exact |
+| `fuku/db/cache/local.go` (modify `skipLocal`) | config | cache | itself (`captchaPendingPrefix`) | exact |
+| `fuku/modules/staff.go` | module/controller | request-response | `fuku/modules/federations.go` (joinFed/leaveFed, fedCallback, Load) + `admin.go` (WrapCommand) | role-match |
+| `fuku/modules/staff_panel.go` | component | transform + request-response | `federations.go` `fedCallback` (edit-in-place) | partial |
+| `fuku/modules/staff_ownership.go` | watcher + worker | event-driven, batch | `fuku/modules/bot_updates.go` (watchers), `antiraid.go` (poller lifecycle) | role-match |
+| `fuku/modules/deeplink_router.go` (modify) | utility | request-response | itself | exact |
+| `fuku/modules/help.go` `start` (modify) | controller | request-response | itself (lines ~360-381) | exact |
+| `fuku/utils/chat_status/owner.go` | utility | request-response | `chat_status/access.go` `RequireUserOwner` | role-match |
+| `fuku/utils/helpers/command_pipeline.go` (add `RejectAnonymousSender`) | middleware | request-response | existing `CheckFunc` constructors in same file | role-match |
+| `fuku/modules/staff_*_test.go` | test | request-response | `fuku/modules/admin_test.go` + `test_harness_test.go` | exact |
+| `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go` (modify AutoMigrate) | test config | - | themselves | exact |
 | `main.go` (start sweeper in `postInit`, shutdown handler) | config | lifecycle | `main.go` lines 190-206, 410-417 | exact |
 | `locales/{en,es,fr,hi,id,pt,ru}.yml` | config | i18n | existing `feds_*` keys | exact |
 | `locales/config.yml` | config | help alt names | existing entries | exact |
-| `AGENTS.md` (group `-3`, `alita:staff:*`) | docs | - | its Handlers/Data sections | exact |
+| `AGENTS.md` (group `-3`, `fuku:staff:*`) | docs | - | its Handlers/Data sections | exact |
 | Chat-migration handler (in `staff_ownership.go`) | watcher | event-driven | `bot_updates.go` | no true analog |
 | Hourly sweeper w/ Redis lock | worker | batch | `antiraid.go` poller + `federations.go:1024` SetNX | role-match |
 
@@ -50,11 +50,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_federation_chats_chat_id ON federation_cha
 CREATE INDEX IF NOT EXISTS idx_federation_chats_fed_id ON federation_chats (fed_id);
 ```
 
-Rules: no top-level BEGIN/COMMIT, no CONCURRENTLY, no FK on chat IDs (federation_chats precedent). Add CHECKs and `UNIQUE(group_chat_id)` per RESEARCH "Data model". For the D-10 PG triggers use dollar-quoted `DO $$`/`CREATE FUNCTION`; precedent `migrations/20260919120000_add_ai_spam_settings.sql`. Runner splits statements via `splitSQLStatements` (`alita/db/migrations/runner.go`). Keep `scripts/migrate_psql.sh` in agreement if the runner changes (it should not).
+Rules: no top-level BEGIN/COMMIT, no CONCURRENTLY, no FK on chat IDs (federation_chats precedent). Add CHECKs and `UNIQUE(group_chat_id)` per RESEARCH "Data model". For the D-10 PG triggers use dollar-quoted `DO $$`/`CREATE FUNCTION`; precedent `migrations/20260919120000_add_ai_spam_settings.sql`. Runner splits statements via `splitSQLStatements` (`fuku/db/migrations/runner.go`). Keep `scripts/migrate_psql.sh` in agreement if the runner changes (it should not).
 
-### `alita/db/models/staff.go` (model)
+### `fuku/db/models/staff.go` (model)
 
-**Analog:** `alita/db/models/antiflood.go` (lines 1-17).
+**Analog:** `fuku/db/models/antiflood.go` (lines 1-17).
 
 ```go
 type AntifloodSettings struct {
@@ -70,9 +70,9 @@ func (AntifloodSettings) TableName() string { return "antiflood_settings" }
 
 Use `check:chk_staff_link_distinct,group_chat_id <> staff_chat_id` and the health IN-list check. `TableName()` must match the migration.
 
-### `alita/db/staff/repository.go` (repository, CRUD + tx)
+### `fuku/db/staff/repository.go` (repository, CRUD + tx)
 
-**Analog:** `alita/db/federations/repository.go`.
+**Analog:** `fuku/db/federations/repository.go`.
 
 **Imports** (lines 1-20):
 ```go
@@ -85,9 +85,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/divkix/Alita_Robot/alita/db"
-	"github.com/divkix/Alita_Robot/alita/db/cache"
-	"github.com/divkix/Alita_Robot/alita/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 ```
 
@@ -114,13 +114,13 @@ if result.ChatID == 0 { return nil }
 ```
 Use this for "is this chat a Staff Group" only. Authority reads (`...Fresh`) call `db.DB` directly and bypass the cache.
 
-**Write pattern** (JoinFed, lines 245-267, and `RenameFederation` lines 98-119): `db.CreateRecord`, log `[Staff] Fn: %v`, return the error, then invalidate. Use `db.UpdateRecordWithZeroValues(..., map[string]any{...})` for health/owner (never `Updates(struct)`). For the race-free link insert, use `db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(...)` and check `RowsAffected` (precedent `alita/db/chats/repository.go:38`, `warns/repository.go:37`). Winner-decides deletes: `db.DB.Where("id = ? AND owner_user_id = ?", ...).Delete(...)` and test `RowsAffected == 1`.
+**Write pattern** (JoinFed, lines 245-267, and `RenameFederation` lines 98-119): `db.CreateRecord`, log `[Staff] Fn: %v`, return the error, then invalidate. Use `db.UpdateRecordWithZeroValues(..., map[string]any{...})` for health/owner (never `Updates(struct)`). For the race-free link insert, use `db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(...)` and check `RowsAffected` (precedent `fuku/db/chats/repository.go:38`, `warns/repository.go:37`). Winner-decides deletes: `db.DB.Where("id = ? AND owner_user_id = ?", ...).Delete(...)` and test `RowsAffected == 1`.
 
-### `alita/db/staff/testmain_test.go` and `repository_test.go` (test)
+### `fuku/db/staff/testmain_test.go` and `repository_test.go` (test)
 
-**Analog:** `alita/db/federations/testmain_test.go` (manual temp SQLite + AutoMigrate list including `&models.User{}`, `&models.Chat{}`). `internal/testdb.Run(m, tables...)` (`internal/testdb/database.go:17`) is the shorter form and prepends User and Chat; prefer it as RESEARCH says. Tests follow `federations/repository_test.go`: `ownerID := time.Now().UnixNano()`, `t.Cleanup` deleting rows, real DB, no mocks. The D-10 triggers are PG-only, so gate that test on `ALITA_TEST_DATABASE`; the CHECK and UNIQUE constraints run in SQLite.
+**Analog:** `fuku/db/federations/testmain_test.go` (manual temp SQLite + AutoMigrate list including `&models.User{}`, `&models.Chat{}`). `internal/testdb.Run(m, tables...)` (`internal/testdb/database.go:17`) is the shorter form and prepends User and Chat; prefer it as RESEARCH says. Tests follow `federations/repository_test.go`: `ownerID := time.Now().UnixNano()`, `t.Cleanup` deleting rows, real DB, no mocks. The D-10 triggers are PG-only, so gate that test on `FUKU_TEST_DATABASE`; the CHECK and UNIQUE constraints run in SQLite.
 
-### `alita/db/cache/local.go` (modify)
+### `fuku/db/cache/local.go` (modify)
 
 **Analog:** itself (lines 44-56).
 ```go
@@ -131,9 +131,9 @@ func skipLocal(key string) bool {
 ```
 Add `staff_group:`, `staff_links:`, `staff_link_of:` prefixes built the same way, joined with `||`.
 
-### `alita/modules/staff.go` (module, request-response)
+### `fuku/modules/staff.go` (module, request-response)
 
-**Analogs:** `alita/modules/federations.go` for the owner-check and refusal flow and callbacks; `alita/modules/admin.go` for `WrapCommand` registration (federations still uses raw `handlers.NewCommand`, which AGENTS.md says not to copy).
+**Analogs:** `fuku/modules/federations.go` for the owner-check and refusal flow and callbacks; `fuku/modules/admin.go` for `WrapCommand` registration (federations still uses raw `handlers.NewCommand`, which AGENTS.md says not to copy).
 
 **Descriptor + registration** (`admin.go:699-708, 800`):
 ```go
@@ -169,11 +169,11 @@ action := decoded.Fields["a"]
 _, _ = query.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: trS(tr, "feds_callback_denied"), ShowAlert: true})
 _, _, _ = query.Message.EditText(b, &gotgbot.EditMessageTextOpts{Text: text, ParseMode: formatting.HTML})
 ```
-Encode with `encodeCallbackData("staff", map[string]string{"a": "ul", "l": "<linkID>"})` (`alita/modules/callback_codec.go:15`); it returns `""` on overflow. Register `callbackquery.Prefix("staff|")`. Always `query.Answer`.
+Encode with `encodeCallbackData("staff", map[string]string{"a": "ul", "l": "<linkID>"})` (`fuku/modules/callback_codec.go:15`); it returns `""` on overflow. Register `callbackquery.Prefix("staff|")`. Always `query.Answer`.
 
 **Module registration** (`federations.go:1282`): `RegisterLegacyModule("Staff", 236, LoadStaff)`; Load starts with `SetModuleEnabled(...)`.
 
-### `alita/modules/deeplink_router.go` and `help.go` `start` (modify)
+### `fuku/modules/deeplink_router.go` and `help.go` `start` (modify)
 
 **Analog:** `deeplink_router.go` lines 13-47: `deepLinkRegistry` map, `RegisterDeepLinkHandler`, longest-prefix match in `HandleDeepLink`. Add a parallel `groupDeepLinkRegistry` and `RegisterGroupDeepLinkHandler(prefix, handler)` plus `HandleGroupDeepLink`, same longest-prefix loop, returning false when nothing matches.
 
@@ -186,7 +186,7 @@ Encode with `encodeCallbackData("staff", map[string]string{"a": "ul", "l": "<lin
 ```
 Insert before this: if `len(args) == 2` and a group handler matches, call it and return its result; otherwise keep the reply. `TestStartCommandRepliesInPrivateAndGroup` pins the no-payload group behaviour and must still pass. The payload is `stf_<digits>` parsed with `strconv.ParseInt`.
 
-### `alita/modules/staff_ownership.go` (watchers + sweeper)
+### `fuku/modules/staff_ownership.go` (watchers + sweeper)
 
 **Watcher registration analog:** `bot_updates.go:LoadBotUpdates` (lines ~225-250):
 ```go
@@ -207,11 +207,11 @@ go func(ctx context.Context) {
 }(antiRaidCtx)
 // Stop: cancel(); WG.Wait() without holding the mutex
 ```
-The ticker loop is at `antiraid.go:257-270`. The staff version takes `*gotgbot.Bot`, so it is started from `postInit` like `modules.StartCaptchaLifecycle(b)` (`main.go:415`). Redis lock precedent: `client.SetNX(cache.Context, "alita:fed_export:"+fedID, "1", fedExportCooldown)` (`federations.go:1024`). Run unguarded when `cache.IsRedisAvailable()` is false, because Pattern 3 makes the work idempotent. Pace links with `select { case <-ctx.Done(): ...; case <-time.After(250ms): }`.
+The ticker loop is at `antiraid.go:257-270`. The staff version takes `*gotgbot.Bot`, so it is started from `postInit` like `modules.StartCaptchaLifecycle(b)` (`main.go:415`). Redis lock precedent: `client.SetNX(cache.Context, "fuku:fed_export:"+fedID, "1", fedExportCooldown)` (`federations.go:1024`). Run unguarded when `cache.IsRedisAvailable()` is false, because Pattern 3 makes the work idempotent. Pace links with `select { case <-ctx.Done(): ...; case <-time.After(250ms): }`.
 
 **Chat migration:** no codebase analog (nothing handles `migrate_to_chat_id` today). Use RESEARCH Pattern 8 and the gotgbot `message.Migrate` filter.
 
-### `alita/utils/chat_status/owner.go` (utility)
+### `fuku/utils/chat_status/owner.go` (utility)
 
 **Analog:** `access.go:182-193` (`RequireUserOwner`).
 ```go
@@ -224,11 +224,11 @@ func RequireUserOwner(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, user
 ```
 It returns a bare bool, so an API error looks like "not owner". New `FetchOwnerID(b, chatID) (int64, error)` calls `b.GetChatAdministratorsWithContext` and returns the user with `GetStatus() == "creator"`. Callers get match / mismatch / unknown, and only mismatch may delete. Add a bot-status helper using `b.GetChatMember(chatID, b.Id, nil)` with `MergeChatMember()`.
 
-### `alita/utils/helpers/command_pipeline.go` (add `RejectAnonymousSender`)
+### `fuku/utils/helpers/command_pipeline.go` (add `RejectAnonymousSender`)
 
 **Analog:** the `CheckFunc` type and `WrapCommand` (lines 43-68): `RequiredChecks` run in order and return `ext.EndGroups` on the first false. Copy an existing constructor in the same file (e.g. `RequireGroup()`) for shape. The check tests `ctx.EffectiveSender.IsAnonymousAdmin()` and User.Id in `{1087968824, 777000}`, and sends the "post as yourself" reply through the pipeline's responder.
 
-### Tests in `alita/modules/`
+### Tests in `fuku/modules/`
 
 **Analog:** `admin_test.go:61-85` with `test_harness_test.go` (`newModuleBotClient`, `client.responses["getChatAdministrators"] = ...`, `newModuleTestBot`, `newModuleMessageContext`, `uniqueModuleChatID`, `client.callsFor("sendMessage")`).
 ```go
@@ -239,7 +239,7 @@ ctx := newModuleMessageContext(bot, chat, user, "/adminlist")
 cmdCtx, _ := helpers.BuildCommandContext(bot, ctx)
 if err := mod.handler(cmdCtx); err != ext.EndGroups { ... }
 ```
-Add `getChatMember` and `getChatAdministrators` canned responses, plus error responses for the "unknown leaves link intact" test. Sweeper lock test uses `withMiniredis(t)` (`antiraid_miniredis_test.go:22`). Add `&models.StaffGroup{}, &models.StaffGroupLink{}` to the AutoMigrate list (`test_harness_test.go` near line 323-360 and `alita/db/testmain_test.go`).
+Add `getChatMember` and `getChatAdministrators` canned responses, plus error responses for the "unknown leaves link intact" test. Sweeper lock test uses `withMiniredis(t)` (`antiraid_miniredis_test.go:22`). Add `&models.StaffGroup{}, &models.StaffGroupLink{}` to the AutoMigrate list (`test_harness_test.go` near line 323-360 and `fuku/db/testmain_test.go`).
 
 ### `main.go` (modify)
 
@@ -256,7 +256,7 @@ and `postInit` (line ~413): `if err := modules.StartCaptchaLifecycle(b); err != 
 ## Shared Patterns
 
 ### Cache invalidation on every write
-**Source:** `alita/db/federations/repository.go:21-60`. **Apply to:** every function in `alita/db/staff/repository.go`. Invalidate after commit, both old and new IDs on re-key.
+**Source:** `fuku/db/federations/repository.go:21-60`. **Apply to:** every function in `fuku/db/staff/repository.go`. Invalidate after commit, both old and new IDs on re-key.
 
 ### Live authority, fail closed
 **Source:** new `chat_status` tri-state helper (basis `access.go:182-193`). **Apply to:** `linkGroup`, `recheckLink`, panel callbacks, `/setstaff`, `/unsetstaff`. Only a successful response with a different creator is a mismatch.
@@ -283,7 +283,7 @@ and `postInit` (line ~413): `if err := modules.StartCaptchaLifecycle(b); err != 
 
 ## Metadata
 
-**Analog search scope:** `alita/db/*`, `alita/modules`, `alita/utils/chat_status`, `alita/utils/helpers`, `migrations`, `main.go`, `internal/testdb`
+**Analog search scope:** `fuku/db/*`, `fuku/modules`, `fuku/utils/chat_status`, `fuku/utils/helpers`, `migrations`, `main.go`, `internal/testdb`
 **Files scanned:** about 25 (targeted reads)
 **Pattern extraction date:** 2026-10-04
 **Not read:** RESEARCH.md lines 389-662 (Pitfalls 10+, assumptions log, validation) were truncated in my read, so the planner should read them directly.

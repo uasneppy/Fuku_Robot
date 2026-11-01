@@ -34,7 +34,7 @@ Pass looks like: the Mini App opens as a sheet and shows the page ("Checking..."
 
 If not: if the button does nothing or Telegram says the app was not found, the short name or the BotFather URL is wrong (`/myapps` in BotFather). If the sheet opens but shows "Open this in Telegram" the page got no signed data (see check 8 and the guide's troubleshooting). If the link is cut, the token is too long for this client.
 
-Change: BotFather's short name or URL first; then `TELEGRAM_MINI_APP_SHORT_NAME`. A link that is cut on a client is a code change in `MiniAppLink` and the token length in `alita/utils/captchaweb/challenge.go`.
+Change: BotFather's short name or URL first; then `TELEGRAM_MINI_APP_SHORT_NAME`. A link that is cut on a client is a code change in `MiniAppLink` and the token length in `fuku/utils/captchaweb/challenge.go`.
 
 ### 2. Is `start_param` signed in the data Telegram sends? (A2)
 
@@ -46,7 +46,7 @@ Pass looks like: either source works, and the member passes. Record which one yo
 
 If not: if both are empty on a client, the page shows "This link is not valid" immediately.
 
-Change: nothing if either source works. If a client delivers neither, report the client and version; the read order is in the page script (`readChallenge` in `alita/utils/captchaweb/page/captcha.html`).
+Change: nothing if either source works. If a client delivers neither, report the client and version; the read order is in the page script (`readChallenge` in `fuku/utils/captchaweb/page/captcha.html`).
 
 ### 3. Another member's tap is rejected and changes nothing
 
@@ -70,7 +70,7 @@ Pass looks like: the widget appears within a few seconds, you solve it (often ju
 
 If not: if the widget never appears, the page shows Try again after about 10 seconds. A WebView that blocks the script or the iframe is the likely cause; look for CSP violations in the console (check 6). If the widget appears and shows an error code, see the guide's troubleshooting (codes 110100, 110110, 110200, 400020, 400021, 400070 mean the key or the hostname list).
 
-Change: if a platform cannot run the widget at all, there is no constant to change; record the platform and version. If the console shows a blocked request, add only that source to the policy in `CSPFor` (`alita/utils/captchaweb/page.go`).
+Change: if a platform cannot run the widget at all, there is no constant to change; record the platform and version. If the console shows a blocked request, add only that source to the policy in `CSPFor` (`fuku/utils/captchaweb/page.go`).
 
 ### 5. Real `siteverify` reports your hostname
 
@@ -80,7 +80,7 @@ Steps: pass check 4 once with your real keys, then read the bot log.
 
 Pass looks like: no `siteverify configuration fault` line and the member passed. The server only passes when Cloudflare's answer echoes your host (the host of `CAPTCHA_WEB_BASE_URL`), the action `captcha_join` and the challenge's own data.
 
-Also confirm the key pair belongs to one widget: in the Cloudflare dashboard open the Turnstile widget, and check that `TURNSTILE_SITE_KEY` is that widget's site key and `TURNSTILE_SECRET_KEY` is that same widget's secret key (the dashboard shows both on one page), and that neither is a Cloudflare dummy test key. A pair from two widgets does not log a configuration fault: Cloudflare calls every token "invalid" and the member's solve counts as a failure. The breaker catches this after 5 failed solves in a row (the log then shows `suspected key mismatch` once a minute, and failed solves are held as Try again), but the first 5 members would already have been handled as failures, so check the pair before real members join. The Redis key `alita:captcha:streak` holds the current count of failed solves in a row; it should be absent or at most 1 after your tests.
+Also confirm the key pair belongs to one widget: in the Cloudflare dashboard open the Turnstile widget, and check that `TURNSTILE_SITE_KEY` is that widget's site key and `TURNSTILE_SECRET_KEY` is that same widget's secret key (the dashboard shows both on one page), and that neither is a Cloudflare dummy test key. A pair from two widgets does not log a configuration fault: Cloudflare calls every token "invalid" and the member's solve counts as a failure. The breaker catches this after 5 failed solves in a row (the log then shows `suspected key mismatch` once a minute, and failed solves are held as Try again), but the first 5 members would already have been handled as failures, so check the pair before real members join. The Redis key `fuku:captcha:streak` holds the current count of failed solves in a row; it should be absent or at most 1 after your tests.
 
 If not: a `hostname mismatch` fault means the BotFather URL host, `CAPTCHA_WEB_BASE_URL`'s host and the Turnstile hostname list are not the same public host. An `invalid-input-secret` or `missing-input-secret` fault means the secret does not belong to the site key. An action mismatch means a stale cached page: reload and retry. Members are not punished for these faults; they get Try again.
 
@@ -96,7 +96,7 @@ Pass looks like: the page shows normally and the console holds no Content-Securi
 
 If not: a blank sheet only in the Web client means the web client's host is not in `frame-ancestors`. The console names the refused ancestor. A violation naming a `script-src`, `frame-src`, `connect-src` or `img-src` source means the widget or Telegram's script needs one more source.
 
-Change: in `CSPFor` (`alita/utils/captchaweb/page.go`) the `frame-ancestors` list holds `https://web.telegram.org`, `https://webk.telegram.org` and `https://webz.telegram.org`; add only the host the console names. For another blocked source add only that source to the one directive that blocked it (`script-src` holds `https://telegram.org` and `https://challenges.cloudflare.com`; `frame-src` holds `https://challenges.cloudflare.com`; `connect-src` is `'self'`). Do not loosen `default-src` and do not add `unsafe-inline`.
+Change: in `CSPFor` (`fuku/utils/captchaweb/page.go`) the `frame-ancestors` list holds `https://web.telegram.org`, `https://webk.telegram.org` and `https://webz.telegram.org`; add only the host the console names. For another blocked source add only that source to the one directive that blocked it (`script-src` holds `https://telegram.org` and `https://challenges.cloudflare.com`; `frame-src` holds `https://challenges.cloudflare.com`; `connect-src` is `'self'`). Do not loosen `default-src` and do not add `unsafe-inline`.
 
 ### 7. `Referrer-Policy: no-referrer` is accepted by the widget (A6)
 
@@ -108,7 +108,7 @@ Pass looks like: the widget works with the policy as served.
 
 If not: the widget may need the referrer to detect the host. If everything else (check 5) is right and the widget still reports an unauthorized domain, the policy is the next suspect.
 
-Change: the `Referrer-Policy` header set in `Page.ServeHTTP` (`alita/utils/captchaweb/page.go`): relax `no-referrer` to `strict-origin`. Record that you did.
+Change: the `Referrer-Policy` header set in `Page.ServeHTTP` (`fuku/utils/captchaweb/page.go`): relax `no-referrer` to `strict-origin`. Record that you did.
 
 ### 8. `crypto.subtle` is available (Pitfall 22)
 
@@ -132,7 +132,7 @@ Pass looks like: the sheet opens smaller (compact) and the page is still readabl
 
 If not: if compact mode cuts the widget or the buttons, do not use it.
 
-Change: nothing if you do not want compact mode. To make the bot send it, add the parameter in `MiniAppLink` (`alita/utils/captchaweb/challenge.go`); then the 22-character check in check 1 must be re-read with the longer link.
+Change: nothing if you do not want compact mode. To make the bot send it, add the parameter in `MiniAppLink` (`fuku/utils/captchaweb/challenge.go`); then the 22-character check in check 1 must be re-read with the longer link.
 
 ### 10. Themes, safe areas and the 320 px sheet
 
@@ -144,7 +144,7 @@ Pass looks like: text, the hint text and the buttons stay readable (the page che
 
 If not: record the client, the theme and a screenshot. Unreadable text points at the contrast fallback; content hidden under a bar points at the safe-area padding.
 
-Change: the colour fallbacks and the safe-area padding are in the page's style block (`alita/utils/captchaweb/page/captcha.html`); the contrast threshold is `MIN_CONTRAST` and the widget size switch is `COMPACT_BELOW_PX` in its script.
+Change: the colour fallbacks and the safe-area padding are in the page's style block (`fuku/utils/captchaweb/page/captcha.html`); the contrast threshold is `MIN_CONTRAST` and the widget size switch is `COMPACT_BELOW_PX` in its script.
 
 ### 11. Whole-check latency against the 12 s client timeout
 
@@ -156,7 +156,7 @@ Pass looks like: the verifying screen lasts a few seconds at most. The page give
 
 If not: if a pass often takes more than about 6 s, find the slow part in the bot log timestamps (Cloudflare, Redis or Telegram). If a request times out on the page but the member was unmuted, record it: the server keeps the decided answer for 10 minutes, so pressing Try again and submitting again from the same member gets the same answer without a second Cloudflare call.
 
-Change: `VERIFY_TIMEOUT_MS` in the page script (`alita/utils/captchaweb/page/captcha.html`); raise it only if latency is real and the proxy allows it. Also check the proxy's read timeout for `POST /captcha/verify`.
+Change: `VERIFY_TIMEOUT_MS` in the page script (`fuku/utils/captchaweb/page/captcha.html`); raise it only if latency is real and the proxy allows it. Also check the proxy's read timeout for `POST /captcha/verify`.
 
 ### 12. A failed solve, a time-out and a re-join behave as the guide says
 
@@ -180,7 +180,7 @@ Pass looks like: the bot starts, and the name BotFather accepted is also accepte
 
 If not: if BotFather accepts a name the bot refuses at startup (the error names the variable, never a value), the bot's rule is too strict.
 
-Change: loosen the short-name pattern in `alita/config/config.go`, then rerun the config test.
+Change: loosen the short-name pattern in `fuku/config/config.go`, then rerun the config test.
 
 ### 14. Signed data older than 5 minutes (IN-06)
 
@@ -192,7 +192,7 @@ Pass looks like: the server accepts signed Telegram data only for 5 minutes afte
 
 If not: if the late solve passes, the age limit is not enforced (a bug). If reopening the button does not recover, the stale answer consumed the challenge (a bug: only a verified, well-formed request may use it up).
 
-Change: nothing in code from this check alone. It is an open product question whether the stale case should get its own answer or copy (see the fix report's "open" note); record the evidence here. `InitDataMaxAge` is in `alita/utils/captchaweb/initdata.go`.
+Change: nothing in code from this check alone. It is an open product question whether the stale case should get its own answer or copy (see the fix report's "open" note); record the evidence here. `InitDataMaxAge` is in `fuku/utils/captchaweb/initdata.go`.
 
 ## What to read in the output
 
@@ -217,14 +217,14 @@ There is no tool output, only three places to look:
 
 | What | Where |
 |---|---|
-| `frame-ancestors`, `connect-src` and the other CSP sources | `CSPFor` in `alita/utils/captchaweb/page.go` |
-| `Referrer-Policy` header | `Page.ServeHTTP` in `alita/utils/captchaweb/page.go` |
-| Widget options (`appearance`, `retry`, `refresh-*`, `size`, `theme`) | `renderWidget` in `alita/utils/captchaweb/page/captcha.html` |
-| Compact-sheet link parameter (`mode=compact`) | `MiniAppLink` in `alita/utils/captchaweb/challenge.go` |
-| Client timeout (12 s) | `VERIFY_TIMEOUT_MS` in `alita/utils/captchaweb/page/captcha.html` |
-| Contrast and compact widget thresholds | `MIN_CONTRAST` and `COMPACT_BELOW_PX` in `alita/utils/captchaweb/page/captcha.html` |
-| `initData` age limit (5 minutes) | `InitDataMaxAge` in `alita/utils/captchaweb/initdata.go` |
-| Short-name pattern | `alita/config/config.go` |
+| `frame-ancestors`, `connect-src` and the other CSP sources | `CSPFor` in `fuku/utils/captchaweb/page.go` |
+| `Referrer-Policy` header | `Page.ServeHTTP` in `fuku/utils/captchaweb/page.go` |
+| Widget options (`appearance`, `retry`, `refresh-*`, `size`, `theme`) | `renderWidget` in `fuku/utils/captchaweb/page/captcha.html` |
+| Compact-sheet link parameter (`mode=compact`) | `MiniAppLink` in `fuku/utils/captchaweb/challenge.go` |
+| Client timeout (12 s) | `VERIFY_TIMEOUT_MS` in `fuku/utils/captchaweb/page/captcha.html` |
+| Contrast and compact widget thresholds | `MIN_CONTRAST` and `COMPACT_BELOW_PX` in `fuku/utils/captchaweb/page/captcha.html` |
+| `initData` age limit (5 minutes) | `InitDataMaxAge` in `fuku/utils/captchaweb/initdata.go` |
+| Short-name pattern | `fuku/config/config.go` |
 | Hostnames, keys, proxy list | the four settings, `CAPTCHA_WEB_TRUSTED_PROXIES`, the proxy, BotFather and the Cloudflare dashboard (no code change) |
 
 After any code change run `make test` and `make lint`, and when the page changes run `node --test scripts/captcha-page/*.test.mjs`.

@@ -80,7 +80,7 @@ All three are Phase 3. In Phase 2 the reason appears only on the card and in the
 - `.planning/STATE.md` § Decisions: the Phase 1 rule that a pre-action owner recheck reuses `staff.*Fresh` + `chat_status.CheckOwner`, and that only `OwnerMismatch` removes a link.
 
 ### Repo rules
-- `AGENTS.md`: handler groups, `WrapCommand`, `callbackcodec` with its 64-byte cap and `""` on overflow, `cache.DeleteCache` on writes, the `alita:staff:*` operational keys, 7 locales, the Staff links trap bullets, real-fixture tests only.
+- `AGENTS.md`: handler groups, `WrapCommand`, `callbackcodec` with its 64-byte cap and `""` on overflow, `cache.DeleteCache` on writes, the `fuku:staff:*` operational keys, 7 locales, the Staff links trap bullets, real-fixture tests only.
 
 ### Research (written before the roadmap)
 - `.planning/research/PITFALLS.md`:
@@ -104,24 +104,24 @@ All three are Phase 3. In Phase 2 the reason appears only on the card and in the
 ## Existing Code Insights
 
 ### Reusable Assets
-- `alita/db/staff/repository.go`:
+- `fuku/db/staff/repository.go`:
   - `GetStaffGroupFresh` and `ListLinksByStaffFresh` (ordered `id ASC`) are the authority reads for "is this a Staff Group" and for the fan-out list.
   - `GetLinkOfGroup` is cached and is a gate only.
   - `DeleteLinkIfOwner` and the conditional-write helpers remove a link whose owner no longer matches.
-- `alita/modules/staff_recheck.go` (`recheckLink`, `applyLinkHealth`) and `alita/utils/chat_status/owner.go` (`CheckOwner` tri-state, `FetchBotMember`): the per-group owner recheck. ROADMAP criterion 2 says a mismatched link is removed and reported, not acted on.
-- `alita/modules/staff.go`: the `staff` callbackcodec namespace and its action constants (`uy`, `un`, `ul`, `uc`, `ux`, `rf`, `pg`). New confirm, cancel and expiry actions go under it. Card state (target, action, duration, reason) belongs in Redis behind a short token, not in callback data.
-- `alita/modules/staff_notify.go`: posting into the Staff Group.
-- `alita/utils/extraction/extraction.go`:
+- `fuku/modules/staff_recheck.go` (`recheckLink`, `applyLinkHealth`) and `fuku/utils/chat_status/owner.go` (`CheckOwner` tri-state, `FetchBotMember`): the per-group owner recheck. ROADMAP criterion 2 says a mismatched link is removed and reported, not acted on.
+- `fuku/modules/staff.go`: the `staff` callbackcodec namespace and its action constants (`uy`, `un`, `ul`, `uc`, `ux`, `rf`, `pg`). New confirm, cancel and expiry actions go under it. Card state (target, action, duration, reason) belongs in Redis behind a short token, not in callback data.
+- `fuku/modules/staff_notify.go`: posting into the Staff Group.
+- `fuku/utils/extraction/extraction.go`:
   - `parseTemporaryDuration` and `ExtractTime` hold the `m`/`h`/`d`/`w` duration grammar.
   - `TemporaryUntilDate` applies the 30 s to 366 d window.
   - `GetUserId` resolves `@username`.
-- `alita/db/user/repository.go` `GetUserIdByUserName`: exact-case `username = ?`, and returns one row. D-04 needs a case-insensitive lookup that returns every match, with last-seen data.
-- `alita/modules/mute.go` `resolveUnmutePermissions`: the group's normal permissions that unmute restores (D-14).
-- `alita/modules/federations.go` `applyActiveFban`: the closest existing fan-out. Use it as a model, not for reuse, because it has no pacing and no per-group accounting.
+- `fuku/db/user/repository.go` `GetUserIdByUserName`: exact-case `username = ?`, and returns one row. D-04 needs a case-insensitive lookup that returns every match, with last-seen data.
+- `fuku/modules/mute.go` `resolveUnmutePermissions`: the group's normal permissions that unmute restores (D-14).
+- `fuku/modules/federations.go` `applyActiveFban`: the closest existing fan-out. Use it as a model, not for reuse, because it has no pacing and no per-group accounting.
 
 ### Established Patterns
 - Commands go through `helpers.WrapCommand` with `CommandDescriptor`. `bans.go` (lines 1073-1083) and `mute.go` (lines 275-279) declare the existing descriptors. Staff behaviour has to branch inside these commands, or run ahead of them, without changing per-group behaviour anywhere else (STAFF-13).
-- `alita/modules/moderation.go` (`moderationCommand.run`, `extractFromArgs`, `extractFromReply`, `validateTarget`) is the shared per-group moderation pipeline that staff fan-out runs alongside.
+- `fuku/modules/moderation.go` (`moderationCommand.run`, `extractFromArgs`, `extractFromReply`, `validateTarget`) is the shared per-group moderation pipeline that staff fan-out runs alongside.
 - Every Staff Group authority decision uses fresh reads and conditional writes. Exactly-once notices come from RowsAffected == 1, as in Phase 1.
 
 ### Integration Points and Traps
@@ -136,7 +136,7 @@ All three are Phase 3. In Phase 2 the reason appears only on the card and in the
   - `administrator` and `creator`, which are protected.
   D-10 to D-14 are decided from it.
 - **Anonymous senders** in the Staff Group get "post as yourself" (STAFF-06). `helpers.RejectAnonymousSender()` already does this for `/setstaff`.
-- **Pacing:** `alita/utils/ratelimit` holds only the backup limiter. Shared fan-out pacing and `retry_after` handling are new. PLAT-01 requires them to live in Redis so that several replicas share one budget.
+- **Pacing:** `fuku/utils/ratelimit` holds only the backup limiter. Shared fan-out pacing and `retry_after` handling are new. PLAT-01 requires them to live in Redis so that several replicas share one budget.
 - **Callbacks:** use `callbackcodec` only. Never put user text in callback data.
 
 </code_context>

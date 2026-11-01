@@ -2,7 +2,7 @@
 
 **Domain:** Telegram group-management bot (Go / gotgbot v2): Staff Group fan-out moderation, AI-assisted raid lockdown, Turnstile Mini App captcha, inline settings menu
 **Researched:** 2026-10-04
-**Mode:** Ecosystem, subsequent milestone. The existing stack (Go 1.26.0, gotgbot v2, GORM/PostgreSQL, Redis, `alita/utils/httpserver`) is fixed and not re-researched. This file covers only what must be ADDED.
+**Mode:** Ecosystem, subsequent milestone. The existing stack (Go 1.26.0, gotgbot v2, GORM/PostgreSQL, Redis, `fuku/utils/httpserver`) is fixed and not re-researched. This file covers only what must be ADDED.
 **Overall confidence:** MEDIUM. Library versions were verified against proxy.golang.org and module source. The Telegram and Cloudflare behaviour claims come from search-result summaries, because `core.telegram.org` and `developers.cloudflare.com` were blocked by the session's egress policy. Each phase must re-confirm the items marked "verify in phase" against primary docs.
 
 ## Headline Recommendation
@@ -31,10 +31,10 @@ The additions are small. **Add only two third-party Go modules**: `golang.org/x/
 
 | Module | Reuse for |
 |--------|-----------|
-| `github.com/redis/go-redis/v9` v9.22.0 | Captcha nonce store. Consume with `GETDEL` for single use. Also the lockdown counters and alert-token store (callback data is capped at 64 bytes). Operational keys sit outside `alita:cache:` per AGENTS.md. |
+| `github.com/redis/go-redis/v9` v9.22.0 | Captcha nonce store. Consume with `GETDEL` for single use. Also the lockdown counters and alert-token store (callback data is capped at 64 bytes). Operational keys sit outside `fuku:cache:` per AGENTS.md. |
 | `github.com/google/uuid` v1.6.0 | Turnstile `idempotency_key`, nonces |
-| `alita/utils/callbackcodec` | All settings-menu and lockdown-alert buttons |
-| `alita/utils/logredact` | `RegisterSecret` for `TURNSTILE_SECRET_KEY`, `ANTHROPIC_API_KEY` |
+| `fuku/utils/callbackcodec` | All settings-menu and lockdown-alert buttons |
+| `fuku/utils/logredact` | `RegisterSecret` for `TURNSTILE_SECRET_KEY`, `ANTHROPIC_API_KEY` |
 | gotgbot `TelegramError.ResponseParams.RetryAfter` | 429 handling. gotgbot (rc.36 plus the repo's Sep-2026 pseudo-version) exposes it. It has **no built-in retry or limiter**, so the bot must wrap it. |
 
 ### Supporting Libraries
@@ -69,7 +69,7 @@ The additions are small. **Add only two third-party Go modules**: `golang.org/x/
 - The limiter is per-process. AGENTS.md notes antiflood counters are per-replica. If deployed with more than one replica, fan-out limits are per-replica too. If multi-replica is real, use a Redis token bucket. The repo already has the Redis `SetNX` pattern in `ratelimit/backup_ratelimit.go`. For a single-owner bot, in-process is sufficient.
 - Timed actions: `until_date` under 30 s or over 366 days from now is treated as **permanent** by Telegram. Validate durations in the command parser and reject or clamp them. gotgbot's `BanChatMemberOpts.UntilDate` / `RestrictChatMemberOpts.UntilDate` doc comments state this.
 - Admin gating needs `getChatMember(chat, issuer)` per linked group, which is one extra call per group per action. Add it to the same limiter budget. Cache admin status through the existing admin cache where it is fresh enough. **Never skip the check** (PROJECT.md constraint).
-- Use `getChatMember` status `creator` for the owner check that gates linking. React to `chat_member` updates to auto-unlink on ownership change. `chat_member` is **already in `AllowedUpdates`** (`alita/config/config.go`), and the bot must be an admin in the chat to receive it. Verify the owner-transfer path in phase.
+- Use `getChatMember` status `creator` for the owner check that gates linking. React to `chat_member` updates to auto-unlink on ownership change. `chat_member` is **already in `AllowedUpdates`** (`fuku/config/config.go`), and the bot must be an admin in the chat to receive it. Verify the owner-transfer path in phase.
 
 ### 2. Raid lockdown: Bot API mechanics (MEDIUM, one LOW risk)
 
@@ -106,7 +106,7 @@ The additions are small. **Add only two third-party Go modules**: `golang.org/x/
 **Launch mechanism, the most important finding.** The `web_app` inline-keyboard button is **private chats only** (gotgbot's own doc comment on `InlineKeyboardButton.WebApp` says "Available only in private chats between a user and the bot"). A group welcome message therefore cannot carry a `web_app` button. Use a **Direct Link Mini App**: an inline `url` button pointing at `https://t.me/<bot_username>/<app_short_name>?startapp=<nonce>`. This opens in any chat. `startapp` is delivered to the app as `start_param` inside signed `initData`. The Mini App must be registered with BotFather `/newapp` first. The `startapp` value is limited to `A-Za-z0-9_-` and 512 chars, so use a 128-bit random nonce (base64url or hex). **Verify the exact limits in phase.**
 
 **Flow:**
-1. User joins and is restricted (existing captcha flow). Bot creates a nonce, stores it in Redis (`alita:captcha:miniapp:<nonce>` mapping to `{chat, user}`, TTL equal to the captcha timeout) and sends the `url` button.
+1. User joins and is restricted (existing captcha flow). Bot creates a nonce, stores it in Redis (`fuku:captcha:miniapp:<nonce>` mapping to `{chat, user}`, TTL equal to the captcha timeout) and sends the `url` button.
 2. Mini App page loads. JS reads `Telegram.WebApp.initData` and renders Turnstile explicitly (`action: "join"`, `cdata: <nonce>`).
 3. On the widget callback, JS `POST`s `{initData, turnstileToken}` to `/captcha/verify` (same origin).
 4. Server, in this order:
@@ -115,7 +115,7 @@ The additions are small. **Add only two third-party Go modules**: `golang.org/x/
    - Read `start_param` and `GETDEL` the nonce.
    - **Require `user.id` from the signed initData to equal the stored pending user.** Without this, anyone with the link could verify on someone else's behalf.
    - Call `siteverify`.
-   - On `success` with matching `hostname`, `action` and `cdata`, run the existing "captcha passed" path: unrestrict, replay pending messages, `cache.DeleteCache("alita:cache:captcha_pending:<chat>")` per AGENTS.md.
+   - On `success` with matching `hostname`, `action` and `cdata`, run the existing "captcha passed" path: unrestrict, replay pending messages, `cache.DeleteCache("fuku:cache:captcha_pending:<chat>")` per AGENTS.md.
 5. Failure paths keep the existing "one attempt per `(user, chat)`" semantics (a deliberate PROJECT.md decision, to reconcile with "can rejoin to try again").
 
 **`siteverify` specifics (verify in phase against Cloudflare docs):**
@@ -239,7 +239,7 @@ New environment variables (all new secrets registered via `logredact.RegisterSec
   - `chat_member` updates require the bot to be admin and an explicit `allowed_updates` entry (grammY / aiogram docs), and the repo already includes it.
   - Jev is text-only, `jev-1.13.0`, 64K tokens (several secondary write-ups, consistent).
   - OpenAI moderation image coverage is limited to violence, self-harm and sexual (OpenAI moderation guide).
-- Repo files read: `alita/modules/aispam.go`, `aispam_jev.go`, `alita/utils/httpserver/server.go`, `alita/config/config.go` (AllowedUpdates), `alita/utils/ratelimit/backup_ratelimit.go`, `alita/modules/federations.go` (`applyActiveFban`: sequential, unthrottled, errors only logged at debug, which is not enough for Staff Group).
+- Repo files read: `fuku/modules/aispam.go`, `aispam_jev.go`, `fuku/utils/httpserver/server.go`, `fuku/config/config.go` (AllowedUpdates), `fuku/utils/ratelimit/backup_ratelimit.go`, `fuku/modules/federations.go` (`applyActiveFban`: sequential, unthrottled, errors only logged at debug, which is not enough for Staff Group).
 
 **Not verified (open):** restricted-member vs. chat-default permission semantics; exact `startapp` charset/length and `frame-ancestors` origins; whether Turnstile renders reliably in every Telegram client WebView (iOS/Android/Desktop/Web). Plan a manual device pass in the captcha phase.
 

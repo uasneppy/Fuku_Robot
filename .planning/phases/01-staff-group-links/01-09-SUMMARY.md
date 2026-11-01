@@ -28,14 +28,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_panel_test.go
-    - alita/modules/staff_panel_render_test.go
+    - fuku/modules/staff_panel_test.go
+    - fuku/modules/staff_panel_render_test.go
   modified:
-    - alita/modules/staff_panel.go
-    - alita/modules/staff.go
-    - alita/modules/staff_unlink.go
-    - alita/modules/staff_unlink_button_test.go
-    - alita/modules/staff_migrate_test.go
+    - fuku/modules/staff_panel.go
+    - fuku/modules/staff.go
+    - fuku/modules/staff_unlink.go
+    - fuku/modules/staff_unlink_button_test.go
+    - fuku/modules/staff_migrate_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -63,10 +63,10 @@ coverage:
     requirement: SETUP-08
     verification:
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelLiveStatuses"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelLiveStatuses"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelLiveStableOrder"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelLiveStableOrder"
         status: pass
     human_judgment: false
   - id: D2
@@ -74,10 +74,10 @@ coverage:
     requirement: SETUP-06
     verification:
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelLiveStatuses"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelLiveStatuses"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelRefreshInPlace"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelRefreshInPlace"
         status: pass
     human_judgment: false
   - id: D3
@@ -85,13 +85,13 @@ coverage:
     requirement: SETUP-08
     verification:
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelRefreshInPlace"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelRefreshInPlace"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelRefreshNonMember"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelRefreshNonMember"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelRefreshOutsideStaffGroup"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelRefreshOutsideStaffGroup"
         status: pass
     human_judgment: false
   - id: D4
@@ -99,10 +99,10 @@ coverage:
     requirement: PLAT-03
     verification:
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelCallBudget"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelCallBudget"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_test.go#TestStaffPanelConcurrencyLimit"
+        ref: "fuku/modules/staff_panel_test.go#TestStaffPanelConcurrencyLimit"
         status: pass
     human_judgment: false
   - id: D5
@@ -110,10 +110,10 @@ coverage:
     requirement: SETUP-08
     verification:
       - kind: unit
-        ref: "alita/modules/staff_panel_render_test.go#TestStaffPanelRenderPaging"
+        ref: "fuku/modules/staff_panel_render_test.go#TestStaffPanelRenderPaging"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_render_test.go#TestStaffPanelPageCallback"
+        ref: "fuku/modules/staff_panel_render_test.go#TestStaffPanelPageCallback"
         status: pass
     human_judgment: false
   - id: D6
@@ -121,16 +121,16 @@ coverage:
     requirement: SETUP-08
     verification:
       - kind: unit
-        ref: "alita/modules/staff_panel_render_test.go#TestStaffPanelRenderFitsInEveryLocale"
+        ref: "fuku/modules/staff_panel_render_test.go#TestStaffPanelRenderFitsInEveryLocale"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_render_test.go#TestStaffPanelRenderDropsRowsWithANoteWhenTooLong"
+        ref: "fuku/modules/staff_panel_render_test.go#TestStaffPanelRenderDropsRowsWithANoteWhenTooLong"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_render_test.go#TestStaffPanelRenderEscapesAndTruncatesTitles"
+        ref: "fuku/modules/staff_panel_render_test.go#TestStaffPanelRenderEscapesAndTruncatesTitles"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_panel_render_test.go#TestStaffPanelRenderEmpty"
+        ref: "fuku/modules/staff_panel_render_test.go#TestStaffPanelRenderEmpty"
         status: pass
     human_judgment: false
   - id: D7
@@ -176,7 +176,7 @@ commits: 3
 
 ## Tracer gate
 
-Task 1 is `type="tracer"` with an automated-only verify. The run is interactive with `human_verify_mode=end-of-phase`, so after the Task 1 commit the verify (`go test -tags testtools -race -count=1 -run '^TestStaffPanel' ./alita/modules`) was re-run end to end, passed, and execution continued to Task 2 with no checkpoint.
+Task 1 is `type="tracer"` with an automated-only verify. The run is interactive with `human_verify_mode=end-of-phase`, so after the Task 1 commit the verify (`go test -tags testtools -race -count=1 -run '^TestStaffPanel' ./fuku/modules`) was re-run end to end, passed, and execution continued to Task 2 with no checkpoint.
 
 ## TDD Gate Compliance (Task 2)
 
@@ -188,12 +188,12 @@ Task 1 is `type="tracer"` with an automated-only verify. The run is interactive 
 
 ## Files Created/Modified
 
-- `alita/modules/staff_panel.go` - live builder, final renderer (paging, cap, statuses), Refresh/Page handlers, `isMessageNotModified`
-- `alita/modules/staff.go` - `staffActRefresh` (`rf`) and `staffActPage` (`pg`) constants and dispatch; `/staff` uses the live builder
-- `alita/modules/staff_unlink.go` - unlink re-render uses the live builder; `editStaffMessage` uses the case-insensitive not-modified check
-- `alita/modules/staff_panel_test.go` - live status, refresh, non-member, outside-Staff-Group, call budget, concurrency limit, stable order, cancelled context
-- `alita/modules/staff_panel_render_test.go` - paging, empty, escaping and truncation, stable order, 7-locale fit, row dropping, page callback
-- `alita/modules/staff_unlink_button_test.go`, `alita/modules/staff_migrate_test.go` - adjusted for the new behavior (see Deviations)
+- `fuku/modules/staff_panel.go` - live builder, final renderer (paging, cap, statuses), Refresh/Page handlers, `isMessageNotModified`
+- `fuku/modules/staff.go` - `staffActRefresh` (`rf`) and `staffActPage` (`pg`) constants and dispatch; `/staff` uses the live builder
+- `fuku/modules/staff_unlink.go` - unlink re-render uses the live builder; `editStaffMessage` uses the case-insensitive not-modified check
+- `fuku/modules/staff_panel_test.go` - live status, refresh, non-member, outside-Staff-Group, call budget, concurrency limit, stable order, cancelled context
+- `fuku/modules/staff_panel_render_test.go` - paging, empty, escaping and truncation, stable order, 7-locale fit, row dropping, page callback
+- `fuku/modules/staff_unlink_button_test.go`, `fuku/modules/staff_migrate_test.go` - adjusted for the new behavior (see Deviations)
 - `locales/*.yml` (7) - 14 new keys: `staff_panel_row_status`, `staff_panel_reason_bot_missing`, `staff_panel_reason_bot_not_admin`, `staff_panel_reason_bot_cannot_restrict`, `staff_panel_reason_owner_unknown`, `staff_panel_legend`, `staff_panel_updated`, `staff_panel_refresh_button`, `staff_cb_members_only`, `staff_panel_prev`, `staff_panel_next`, `staff_panel_page`, `staff_panel_help_hint`, `staff_panel_truncated`
 
 ## Decisions Made
@@ -210,8 +210,8 @@ Task 1 is `type="tracer"` with an automated-only verify. The run is interactive 
 - **Found during:** Task 1 (full staff regression run)
 - **Issue:** `TestStaffUnlinkButtonRendered` counted every callback button as an Unlink button, and the Refresh button is now one too. `TestStaffMigrateTracer` ran `/staff` against links whose chats had no scripted creator, so the live panel (correctly) unlinked them and the reply was not the panel.
 - **Fix:** The first test now counts only `a=ul` buttons and passes the new render arguments. The second scripts the links' maker as creator of the re-keyed chats, as a real migrated group would have.
-- **Files modified:** `alita/modules/staff_unlink_button_test.go`, `alita/modules/staff_migrate_test.go`
-- **Verification:** `go test -tags testtools -race -count=1 -run '^TestStaff|^TestLinkStaff|^TestUnlinkStaff|^TestSetStaff|^TestUnsetStaff' ./alita/modules` passes
+- **Files modified:** `fuku/modules/staff_unlink_button_test.go`, `fuku/modules/staff_migrate_test.go`
+- **Verification:** `go test -tags testtools -race -count=1 -run '^TestStaff|^TestLinkStaff|^TestUnlinkStaff|^TestSetStaff|^TestUnsetStaff' ./fuku/modules` passes
 - **Committed in:** `b7033c2`
 
 **2. [Rule 3 - Blocking] `buildStaffPanel` signature changed**
@@ -227,8 +227,8 @@ Task 1 is `type="tracer"` with an automated-only verify. The run is interactive 
 
 ## Issues Encountered
 
-- I ran `git checkout -- alita/modules/staff_panel.go` to undo a mutation experiment while the file was still uncommitted, which reverted all of Task 1's work in that file. I rewrote the file from the content I had just written and re-ran the whole suite before committing; nothing was lost, but later mutation checks used `sed` to restore the line instead.
-- `gofmt -l` reports `alita/modules/greetings_command_test.go`. It was already unformatted before this plan and is out of scope.
+- I ran `git checkout -- fuku/modules/staff_panel.go` to undo a mutation experiment while the file was still uncommitted, which reverted all of Task 1's work in that file. I rewrote the file from the content I had just written and re-ran the whole suite before committing; nothing was lost, but later mutation checks used `sed` to restore the line instead.
+- `gofmt -l` reports `fuku/modules/greetings_command_test.go`. It was already unformatted before this plan and is out of scope.
 
 ## Known Stubs
 
@@ -242,8 +242,8 @@ None. The new surface (Refresh and Page callbacks, one live fan-out per panel) i
 
 - `go test -tags testtools -race -count=1 -timeout 10m ./...` passes
 - `go vet -tags testtools ./...` clean; `gofmt -l` clean on every file touched by this plan
-- `go test -tags testtools -race -count=1 -run '^TestStaffPanel' ./alita/modules` passes (17 test functions); `-run '^TestStaffPanelRender'` prints 9 PASS lines (parents and subtests)
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n`, `make check-translations` and `make check-docs` pass
+- `go test -tags testtools -race -count=1 -run '^TestStaffPanel' ./fuku/modules` passes (17 test functions); `-run '^TestStaffPanelRender'` prints 9 PASS lines (parents and subtests)
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n`, `make check-translations` and `make check-docs` pass
 - `git diff --exit-code go.mod go.sum` clean (errgroup comes from the existing golang.org/x/sync v0.23.0)
 - Acceptance greps: `SetLimit(4)`, `staffActRefresh` in `staff.go`, "message is not modified" in `staff_panel.go`, `staffPanelPageSize = 8`, `staffPanelMaxUTF16 = 3800` all match; no non-literal `GetString(` key and no `IsUserAdmin|LoadAdminCache|RequireUserOwner` in `staff_panel.go`
 

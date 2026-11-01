@@ -33,16 +33,16 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_unset_test.go
-    - alita/modules/staff_setstaff_test.go
+    - fuku/modules/staff_unset_test.go
+    - fuku/modules/staff_setstaff_test.go
   modified:
-    - alita/modules/staff.go
-    - alita/db/staff/repository.go
-    - alita/db/staff/repository_test.go
-    - alita/utils/helpers/command_pipeline.go
-    - alita/utils/helpers/command_pipeline_test.go
-    - alita/utils/chat_status/owner.go
-    - alita/utils/chat_status/owner_test.go
+    - fuku/modules/staff.go
+    - fuku/db/staff/repository.go
+    - fuku/db/staff/repository_test.go
+    - fuku/utils/helpers/command_pipeline.go
+    - fuku/utils/helpers/command_pipeline_test.go
+    - fuku/utils/chat_status/owner.go
+    - fuku/utils/chat_status/owner_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -71,10 +71,10 @@ coverage:
     requirement: "SETUP-02"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnsetStaffConfirmRemovesStatusAndLinks$' ./alita/modules#TestUnsetStaffConfirmRemovesStatusAndLinks"
+        ref: "go test -tags testtools -race -run '^TestUnsetStaffConfirmRemovesStatusAndLinks$' ./fuku/modules#TestUnsetStaffConfirmRemovesStatusAndLinks"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffRepoDeleteStaffGroupWithLinks' ./alita/db/staff#TestStaffRepoDeleteStaffGroupWithLinksOnlyTarget"
+        ref: "go test -tags testtools -race -run '^TestStaffRepoDeleteStaffGroupWithLinks' ./fuku/db/staff#TestStaffRepoDeleteStaffGroupWithLinksOnlyTarget"
         status: pass
     human_judgment: false
   - id: D2
@@ -82,10 +82,10 @@ coverage:
     requirement: "SETUP-02"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnsetStaff' ./alita/modules#TestUnsetStaffRecordedOwnerWhoIsNoLongerCreatorIsRefused"
+        ref: "go test -tags testtools -race -run '^TestUnsetStaff' ./fuku/modules#TestUnsetStaffRecordedOwnerWhoIsNoLongerCreatorIsRefused"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnsetStaff' ./alita/modules#TestUnsetStaffConfirmByNonCreatorGetsAlert"
+        ref: "go test -tags testtools -race -run '^TestUnsetStaff' ./fuku/modules#TestUnsetStaffConfirmByNonCreatorGetsAlert"
         status: pass
     human_judgment: false
   - id: D3
@@ -93,10 +93,10 @@ coverage:
     requirement: "SETUP-02"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnsetStaffDoubleConfirmRemovesOnce$' ./alita/modules#TestUnsetStaffDoubleConfirmRemovesOnce"
+        ref: "go test -tags testtools -race -run '^TestUnsetStaffDoubleConfirmRemovesOnce$' ./fuku/modules#TestUnsetStaffDoubleConfirmRemovesOnce"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffRepoDeleteStaffGroupWithLinksSecondCallIsNoop$' ./alita/db/staff#TestStaffRepoDeleteStaffGroupWithLinksSecondCallIsNoop"
+        ref: "go test -tags testtools -race -run '^TestStaffRepoDeleteStaffGroupWithLinksSecondCallIsNoop$' ./fuku/db/staff#TestStaffRepoDeleteStaffGroupWithLinksSecondCallIsNoop"
         status: pass
     human_judgment: false
   - id: D4
@@ -104,13 +104,13 @@ coverage:
     requirement: "SETUP-01"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestRejectAnonymousSender' ./alita/utils/helpers#TestRejectAnonymousSenderBlocksAnonymousAdmin"
+        ref: "go test -tags testtools -race -run '^TestRejectAnonymousSender' ./fuku/utils/helpers#TestRejectAnonymousSenderBlocksAnonymousAdmin"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestSetStaffRejectsAnonymousAdmin$' ./alita/modules#TestSetStaffRejectsAnonymousAdmin"
+        ref: "go test -tags testtools -race -run '^TestSetStaffRejectsAnonymousAdmin$' ./fuku/modules#TestSetStaffRejectsAnonymousAdmin"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestUnsetStaffRejectsAnonymousAdmin$' ./alita/modules#TestUnsetStaffRejectsAnonymousAdmin"
+        ref: "go test -tags testtools -race -run '^TestUnsetStaffRejectsAnonymousAdmin$' ./fuku/modules#TestUnsetStaffRejectsAnonymousAdmin"
         status: pass
     human_judgment: false
   - id: D5
@@ -124,13 +124,13 @@ coverage:
     requirement: "SETUP-01"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestSetStaff' ./alita/modules#TestSetStaffRefusalOrder"
+        ref: "go test -tags testtools -race -run '^TestSetStaff' ./fuku/modules#TestSetStaffRefusalOrder"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestSetStaff' ./alita/modules#TestSetStaffRejectsBotNotAdmin"
+        ref: "go test -tags testtools -race -run '^TestSetStaff' ./fuku/modules#TestSetStaffRejectsBotNotAdmin"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestSetStaff' ./alita/modules#TestSetStaffAlreadyStaffIsIdempotent"
+        ref: "go test -tags testtools -race -run '^TestSetStaff' ./fuku/modules#TestSetStaffAlreadyStaffIsIdempotent"
         status: pass
     human_judgment: false
   - id: D7
@@ -138,10 +138,10 @@ coverage:
     requirement: "SETUP-01"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffRepoCreateStaffGroupRoleConflict$' ./alita/db/staff#TestStaffRepoCreateStaffGroupRoleConflict"
+        ref: "go test -tags testtools -race -run '^TestStaffRepoCreateStaffGroupRoleConflict$' ./fuku/db/staff#TestStaffRepoCreateStaffGroupRoleConflict"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestFetchBotMember' ./alita/utils/chat_status#TestFetchBotMemberUnknown"
+        ref: "go test -tags testtools -race -run '^TestFetchBotMember' ./fuku/utils/chat_status#TestFetchBotMemberUnknown"
         status: pass
     human_judgment: false
   - id: D8
@@ -149,7 +149,7 @@ coverage:
     requirement: "PLAT-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./alita/i18n#TestStaffLocaleKeys"
+        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./fuku/i18n#TestStaffLocaleKeys"
         status: pass
       - kind: other
         ref: "make check-translations && make check-docs"
@@ -220,21 +220,21 @@ See `key-decisions` above. In short: claim-then-act delete order, a stricter `Fe
 - **Found during:** Task 1
 - **Issue:** The i18n interpolation runs a printf-style pass (`%s`, `%d`, ...) over the text after substituting `{groups}`. A linked group titled `100%d` (titles are user-controlled) would be consumed as a format verb and corrupt the notice, or be swapped for the count.
 - **Fix:** `staff_unset_done` is translated with a sentinel token for `{groups}` and the escaped group list is spliced in afterwards. `TestUnsetStaffConfirmRemovesStatusAndLinks` uses the titles `Alpha <b>` and `100%d` and asserts both survive.
-- **Files modified:** alita/modules/staff.go, alita/modules/staff_unset_test.go
+- **Files modified:** fuku/modules/staff.go, fuku/modules/staff_unset_test.go
 - **Commit:** e90ffff
 
 **2. [Rule 2 - Missing critical] Typo'd i18n keys would have been invisible to make check-translations**
 - **Found during:** Task 1 acceptance check
 - **Issue:** My first draft used a `trS(tr, "key")` helper. `make check-translations` only sees literal `GetString("...")` calls, so a mistyped key would have shipped as an empty reply (AGENTS.md anti-pattern, and plan requirement "use only literal GetString calls").
 - **Fix:** Replaced every `trS` use in staff.go with literal `tr.GetString("staff_...")` calls before the first commit.
-- **Files modified:** alita/modules/staff.go
+- **Files modified:** fuku/modules/staff.go
 - **Commit:** e90ffff
 
 **3. [Rule 2 - Missing critical] Race-safe delete order**
 - **Found during:** Task 1
 - **Issue:** The plan listed select links, delete links, delete the staff row. With two racing confirms, both could read the links before either commits, and the loser would still hold a non-empty list.
 - **Fix:** `DeleteStaffGroupWithLinks` deletes the staff row first (claiming it), and only on `RowsAffected == 1` selects and deletes the links. The loser gets `(nil, false, nil)`. Same transaction, same outcome for a single caller.
-- **Files modified:** alita/db/staff/repository.go
+- **Files modified:** fuku/db/staff/repository.go
 - **Commit:** e90ffff
 
 **4. [Rule 2 - Missing critical] Extra tests beyond the plan's list**
@@ -263,7 +263,7 @@ None beyond the plan's threat model. T-01-05 (anonymous senders, tested for both
 
 ## Issues Encountered
 
-- `gofmt -l` still reports `alita/modules/greetings_command_test.go`, a pre-existing file outside this plan's scope; not touched.
+- `gofmt -l` still reports `fuku/modules/greetings_command_test.go`, a pre-existing file outside this plan's scope; not touched.
 - The Task 3 human check (real anonymous-admin message from a Telegram client) was not run; recorded as coverage item D5 for the verifier.
 - Postgres-gated tests were not run (plan 01-04 was using the database); this plan's tests all run on SQLite.
 

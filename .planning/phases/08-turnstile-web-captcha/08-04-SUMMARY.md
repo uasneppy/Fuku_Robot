@@ -32,11 +32,11 @@ tech-stack:
 key-files:
   created:
     - migrations/20261030120000_allow_turnstile_captcha_mode.sql
-    - alita/db/migrations/captcha_mode_test.go
+    - fuku/db/migrations/captcha_mode_test.go
   modified:
-    - alita/db/captcha/repository.go
-    - alita/db/captcha/repository_test.go
-    - alita/db/constraints_test.go
+    - fuku/db/captcha/repository.go
+    - fuku/db/captcha/repository_test.go
+    - fuku/db/constraints_test.go
     - Makefile
     - AGENTS.md
 
@@ -57,7 +57,7 @@ A group's Turnstile choice can now be stored on PostgreSQL and SQLite: an append
 
 - **Migration `20261030120000_allow_turnstile_captcha_mode.sql`** (D-05, D-29), three statements in this order: `DROP CONSTRAINT IF EXISTS chk_captcha_mode`; a `DO $$` block that drops every other CHECK on `captcha_settings` whose definition mentions `captcha_mode` (the unnamed inline check of 20250807103246, which PostgreSQL named `captcha_settings_captcha_mode_check`); then `ADD CONSTRAINT chk_captcha_mode CHECK (captcha_mode IN ('math', 'text', 'turnstile')) NOT VALID`. No transaction control. Neither `runner.go` nor `scripts/migrate_psql.sh` changed.
 - **`TestCaptchaModeMigrationStatements`** (runs in `make test`, no database): the file through `cleanSupabaseSQL` and `splitSQLStatements` gives exactly three non-transaction statements in order; the DO block is not wrapped by the duplicate_object rewrite and the ADD is.
-- **`TestCaptchaModeTurnstileConstraint`** (PostgreSQL only, skips without `ALITA_TEST_DATABASE=true` and `DATABASE_URL`): in one rolled-back transaction, exactly one CHECK mentioning captcha_mode named `chk_captcha_mode`, the migration statements run twice, `turnstile`/`math`/`text` insert, `bogus` fails with SQLSTATE 23514 behind a savepoint. Added to the `test-postgres-integrity` `-run` alternation in the Makefile (the package was already listed).
+- **`TestCaptchaModeTurnstileConstraint`** (PostgreSQL only, skips without `FUKU_TEST_DATABASE=true` and `DATABASE_URL`): in one rolled-back transaction, exactly one CHECK mentioning captcha_mode named `chk_captcha_mode`, the migration statements run twice, `turnstile`/`math`/`text` insert, `bogus` fails with SQLSTATE 23514 behind a savepoint. Added to the `test-postgres-integrity` `-run` alternation in the Makefile (the package was already listed).
 - **`captcha.SetCaptchaMode`** accepts `turnstile`; the `cache.DeleteCache` of `captcha_settings` after the write is unchanged. `TestSetCaptchaModeAcceptsTurnstile` primes the cache with the default, stores turnstile, reads it straight back, checks that `bogus` returns `ErrInvalidCaptchaMode` and leaves turnstile stored, and that math and text still work. `TestCaptchaSettingsConstraint_ValidModes` now also creates a turnstile row.
 - **AGENTS.md**: a Data bullet for the widened check and why the drops come first, and the Testing paragraph for `make test-postgres-integrity` lists the Phase 8 guarantee.
 
@@ -65,11 +65,11 @@ A group's Turnstile choice can now be stored on PostgreSQL and SQLite: an append
 
 | Check | Result |
 |-------|--------|
-| `go test -tags testtools -count=1 -run '^(TestCaptchaModeMigrationStatements\|TestCaptchaModeTurnstileConstraint)$' -v ./alita/db/migrations` | PASS for the statements test; the PostgreSQL test SKIPs locally, as required |
-| `go test -tags testtools -race -count=1 -run '^TestSetCaptchaModeAcceptsTurnstile$' -v ./alita/db/captcha` | PASS |
-| `go test -tags testtools -race -count=1 -run '^TestCaptchaSettingsConstraint_ValidModes$' -v ./alita/db` | PASS |
-| `go test -tags testtools -race -count=1 ./alita/db/captcha ./alita/db/migrations` | ok |
-| `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/db/captcha ./alita/db/migrations ./alita/db`, `gofmt -l alita/db` | clean |
+| `go test -tags testtools -count=1 -run '^(TestCaptchaModeMigrationStatements\|TestCaptchaModeTurnstileConstraint)$' -v ./fuku/db/migrations` | PASS for the statements test; the PostgreSQL test SKIPs locally, as required |
+| `go test -tags testtools -race -count=1 -run '^TestSetCaptchaModeAcceptsTurnstile$' -v ./fuku/db/captcha` | PASS |
+| `go test -tags testtools -race -count=1 -run '^TestCaptchaSettingsConstraint_ValidModes$' -v ./fuku/db` | PASS |
+| `go test -tags testtools -race -count=1 ./fuku/db/captcha ./fuku/db/migrations` | ok |
+| `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/db/captcha ./fuku/db/migrations ./fuku/db`, `gofmt -l fuku/db` | clean |
 | `make check-docs` | no drift |
 | Task 1 and Task 2 acceptance greps | all pass |
 
@@ -97,5 +97,5 @@ None. No new endpoint, auth path or file access; the trust-boundary changes are 
 
 ## Self-Check: PASSED
 
-- FOUND: migrations/20261030120000_allow_turnstile_captcha_mode.sql, alita/db/migrations/captcha_mode_test.go
+- FOUND: migrations/20261030120000_allow_turnstile_captcha_mode.sql, fuku/db/migrations/captcha_mode_test.go
 - FOUND commits: 4c76b34, b700c1a, f8f72c1, 7cef49a

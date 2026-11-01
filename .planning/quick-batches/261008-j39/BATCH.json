@@ -12,9 +12,9 @@
       "status": "complete",
       "depends_on": [],
       "planned_files": [
-        "alita/modules/bot_updates.go",
-        "alita/modules/bot_updates_test.go",
-        "alita/modules/anon_admin_reentry_test.go",
+        "fuku/modules/bot_updates.go",
+        "fuku/modules/bot_updates_test.go",
+        "fuku/modules/anon_admin_reentry_test.go",
         "AGENTS.md",
         ".planning/phases/04-manual-lockdown/deferred-items.md"
       ],
@@ -30,15 +30,15 @@
     {
       "quick_id": "261008-j3b",
       "client_id": null,
-      "description": "Close the shutdown timing gap: the shutdown manager gives each handler only 10 s (alita/utils/shutdown/graceful.go), while StopStaffActions waits up to 30 s (staffActionStopWait), so a slow staff action or undo run can be cut off before FinalizeAction/FinalizeUndo and summary delivery while the DB closes under it. Give the staff drain (and the lockdown worker drain) the time AGENTS.md promises, within the 60 s overall shutdown budget, with a test. See .planning/debug/resolved/undo-claim-spent-and-undone-label.md and the STATE.md concern.",
+      "description": "Close the shutdown timing gap: the shutdown manager gives each handler only 10 s (fuku/utils/shutdown/graceful.go), while StopStaffActions waits up to 30 s (staffActionStopWait), so a slow staff action or undo run can be cut off before FinalizeAction/FinalizeUndo and summary delivery while the DB closes under it. Give the staff drain (and the lockdown worker drain) the time AGENTS.md promises, within the 60 s overall shutdown budget, with a test. See .planning/debug/resolved/undo-claim-spent-and-undone-label.md and the STATE.md concern.",
       "status": "complete",
       "depends_on": [],
       "planned_files": [
-        "alita/utils/shutdown/graceful.go",
-        "alita/utils/shutdown/graceful_testtools.go",
-        "alita/utils/shutdown/graceful_test.go",
-        "alita/modules/shutdown_drains.go",
-        "alita/modules/shutdown_drains_test.go",
+        "fuku/utils/shutdown/graceful.go",
+        "fuku/utils/shutdown/graceful_testtools.go",
+        "fuku/utils/shutdown/graceful_test.go",
+        "fuku/modules/shutdown_drains.go",
+        "fuku/modules/shutdown_drains_test.go",
         "main.go",
         "docker-compose.yml",
         "AGENTS.md"
@@ -59,7 +59,7 @@
       "status": "complete",
       "depends_on": [],
       "planned_files": [
-        "alita/modules/staff_action_dispatch_test.go"
+        "fuku/modules/staff_action_dispatch_test.go"
       ],
       "directory": null,
       "worktree": null,
@@ -84,12 +84,12 @@
         "locales/id.yml",
         "locales/pt.yml",
         "locales/ru.yml",
-        "alita/modules/lockdown.go",
-        "alita/modules/lockdown_lift_test.go",
-        "alita/modules/lockdown_refusals_test.go",
-        "alita/modules/lockdown_lock_unknown_test.go",
-        "alita/modules/lockdown_durability_test.go",
-        "alita/i18n/lockdown_locale_test.go",
+        "fuku/modules/lockdown.go",
+        "fuku/modules/lockdown_lift_test.go",
+        "fuku/modules/lockdown_refusals_test.go",
+        "fuku/modules/lockdown_lock_unknown_test.go",
+        "fuku/modules/lockdown_durability_test.go",
+        "fuku/i18n/lockdown_locale_test.go",
         "docs/src/content/docs/commands/lockdown/index.md"
       ],
       "directory": null,

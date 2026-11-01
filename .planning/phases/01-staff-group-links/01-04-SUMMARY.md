@@ -9,9 +9,9 @@ requires:
     provides: "staff_groups and staff_group_links tables, uniqueStaffChatID and cleanupStaffRows test helpers"
 provides:
   - "staff_role_exclusivity_guard() plpgsql function and triggers trg_staff_groups_role_exclusivity / trg_staff_group_links_role_exclusivity (migration 20261004130000)"
-  - "Advisory-lock key format alita:staff_role:<chat_id>"
+  - "Advisory-lock key format fuku:staff_role:<chat_id>"
   - "TestStaffExclusivityTrigger (PostgreSQL-gated, 5 subtests including a 20-round concurrency race)"
-  - "Makefile test-postgres-integrity and check_test_results postgresSkip wiring for alita/db/staff"
+  - "Makefile test-postgres-integrity and check_test_results postgresSkip wiring for fuku/db/staff"
 affects: [01-02, 01-03, 01-05, 01-10]
 
 actuals:
@@ -26,12 +26,12 @@ tech-stack:
   added: []
   patterns:
     - "BEFORE trigger takes pg_advisory_xact_lock per chat (ascending order for two-chat writes), then checks the other table; READ COMMITTED gives the check a fresh snapshot after the lock wait"
-    - "PostgreSQL-only test skips on SQLite and is whitelisted in scripts/check_test_results only while ALITA_TEST_DATABASE is not true"
+    - "PostgreSQL-only test skips on SQLite and is whitelisted in scripts/check_test_results only while FUKU_TEST_DATABASE is not true"
 
 key-files:
   created:
     - migrations/20261004130000_add_staff_role_exclusivity_trigger.sql
-    - alita/db/staff/exclusivity_postgres_test.go
+    - fuku/db/staff/exclusivity_postgres_test.go
   modified:
     - Makefile
     - scripts/check_test_results/main.go
@@ -39,7 +39,7 @@ key-files:
 
 key-decisions:
   - "Owner chose pg-trigger for D-10 (Task 1 checkpoint:decision, blocking-human): enforce cross-table role exclusivity in PostgreSQL with a trigger and per-chat advisory lock, not app-level checks only"
-  - "A trigger rejection reaches the repository as a generic DB error (fail closed); the precise reason comes from the app-level check on retry, so alita/db/staff/repository.go is untouched"
+  - "A trigger rejection reaches the repository as a generic DB error (fail closed); the precise reason comes from the app-level check on retry, so fuku/db/staff/repository.go is untouched"
 
 patterns-established:
   - "Concurrency tests for DB guards widen the race window with pg_sleep inside the open transaction and were mutation-checked by removing the lock"
@@ -52,7 +52,7 @@ coverage:
     requirement: "SETUP-04"
     verification:
       - kind: integration
-        ref: "ALITA_TEST_DATABASE=true make test-postgres-integrity#TestStaffExclusivityTrigger"
+        ref: "FUKU_TEST_DATABASE=true make test-postgres-integrity#TestStaffExclusivityTrigger"
         status: pass
     human_judgment: false
   - id: D2
@@ -60,7 +60,7 @@ coverage:
     requirement: "SETUP-04"
     verification:
       - kind: integration
-        ref: "ALITA_TEST_DATABASE=true make test-postgres-integrity#TestStaffExclusivityTrigger/ConcurrentSetStaffAndLinkNeverBothCommit"
+        ref: "FUKU_TEST_DATABASE=true make test-postgres-integrity#TestStaffExclusivityTrigger/ConcurrentSetStaffAndLinkNeverBothCommit"
         status: pass
     human_judgment: false
   - id: D3
@@ -68,18 +68,18 @@ coverage:
     requirement: "SETUP-04"
     verification:
       - kind: integration
-        ref: "ALITA_TEST_DATABASE=true make test-postgres-integrity#TestStaffExclusivityTrigger/LegitimateRowsAccepted"
+        ref: "FUKU_TEST_DATABASE=true make test-postgres-integrity#TestStaffExclusivityTrigger/LegitimateRowsAccepted"
         status: pass
     human_judgment: false
   - id: D4
-    description: "make test accepts the trigger test's SQLite skip only when ALITA_TEST_DATABASE is not true; make test-postgres-integrity runs it"
+    description: "make test accepts the trigger test's SQLite skip only when FUKU_TEST_DATABASE is not true; make test-postgres-integrity runs it"
     requirement: "SETUP-04"
     verification:
       - kind: unit
         ref: "go test -count=1 ./scripts/check_test_results#TestCheckResultsAcceptsStaffTriggerSkipOnlyWithoutPostgres"
         status: pass
       - kind: other
-        ref: "make test (ALITA_TEST_DATABASE unset) exit 0, zero 'unexpected test skip' lines"
+        ref: "make test (FUKU_TEST_DATABASE unset) exit 0, zero 'unexpected test skip' lines"
         status: pass
     human_judgment: false
 
@@ -109,9 +109,9 @@ Task 1 was a `checkpoint:decision` with `gate="blocking-human"`. The orchestrato
 
 ## Accomplishments
 
-- Migration `20261004130000_add_staff_role_exclusivity_trigger.sql`: `staff_role_exclusivity_guard()` plus one BEFORE trigger on each table. On `staff_groups` it locks `alita:staff_role:<chat_id>` and rejects a chat that is a link's `group_chat_id`. On `staff_group_links` it locks both chat IDs lowest first, rejects a `group_chat_id` that is a Staff Group, and rejects a `staff_chat_id` that is itself some other link's `group_chat_id`. All use `ERRCODE = 'check_violation'` and a message starting `staff role conflict`.
+- Migration `20261004130000_add_staff_role_exclusivity_trigger.sql`: `staff_role_exclusivity_guard()` plus one BEFORE trigger on each table. On `staff_groups` it locks `fuku:staff_role:<chat_id>` and rejects a chat that is a link's `group_chat_id`. On `staff_group_links` it locks both chat IDs lowest first, rejects a `group_chat_id` that is a Staff Group, and rejects a `staff_chat_id` that is itself some other link's `group_chat_id`. All use `ERRCODE = 'check_violation'` and a message starting `staff role conflict`.
 - `TestStaffExclusivityTrigger` with five subtests (three rejections, legitimate rows plus a Staff Group re-key in one transaction, and a 20-round concurrent race on separate transactions that hold their insert open with `pg_sleep(0.05)`).
-- `make test-postgres-integrity` now runs the test on `./alita/db/staff`; `scripts/check_test_results` accepts its SQLite skip only while `ALITA_TEST_DATABASE != "true"` and still rejects any other staff-package skip.
+- `make test-postgres-integrity` now runs the test on `./fuku/db/staff`; `scripts/check_test_results` accepts its SQLite skip only while `FUKU_TEST_DATABASE != "true"` and still rejects any other staff-package skip.
 - Verified for real on PostgreSQL 16 using CI's two commands against a fresh database (migration chain applied the new file; the integrity target then ran every listed test, all green with `-race`).
 - **Mutation check:** replacing the function with a copy that has the advisory-lock lines removed makes the concurrency subtest fail in round 0 with both rows committed (`errs = [<nil> <nil>]`). The lock, not the plain check, is what closes the race.
 
@@ -125,13 +125,13 @@ Task 1 was a `checkpoint:decision` with `gate="blocking-human"`. The orchestrato
 
 | Check | Result |
 |-------|--------|
-| `go test -tags testtools -count=1 -run '^TestStaffExclusivityTrigger$' -v ./alita/db/staff` (SQLite) | `--- SKIP: TestStaffExclusivityTrigger` |
+| `go test -tags testtools -count=1 -run '^TestStaffExclusivityTrigger$' -v ./fuku/db/staff` (SQLite) | `--- SKIP: TestStaffExclusivityTrigger` |
 | `go test -count=1 ./scripts/check_test_results` | ok |
 | `grep -c TestStaffExclusivityTrigger Makefile` | 1 |
 | `grep -c "CREATE TRIGGER trg_staff_"` / `pg_advisory_xact_lock` in the migration | 2 / 3 |
-| `ALITA_TEST_MIGRATION_CHAIN=true go test ... TestRepositoryMigrationChain` on a fresh PostgreSQL database | PASS, new migration recorded, both triggers present |
-| `ALITA_TEST_DATABASE=true make test-postgres-integrity` (same database) | all PASS, including 5 trigger subtests |
-| `make test` with `ALITA_TEST_DATABASE` unset | exit 0, no "unexpected test skip" |
+| `FUKU_TEST_MIGRATION_CHAIN=true go test ... TestRepositoryMigrationChain` on a fresh PostgreSQL database | PASS, new migration recorded, both triggers present |
+| `FUKU_TEST_DATABASE=true make test-postgres-integrity` (same database) | all PASS, including 5 trigger subtests |
+| `make test` with `FUKU_TEST_DATABASE` unset | exit 0, no "unexpected test skip" |
 | `go build ./...`, `gofmt -l` on changed Go files | clean |
 | golangci-lint v2.13.1 `--new-from-rev=78fe65c` (default and dupl passes) | 0 issues each |
 | `go.mod` / `go.sum` vs base | unchanged |
@@ -140,7 +140,7 @@ Task 1 was a `checkpoint:decision` with `gate="blocking-human"`. The orchestrato
 
 None - plan executed exactly as written. Two environment notes, not deviations:
 
-- `TestRepositoryMigrationChain` refuses a non-empty schema, so it was run against a throwaway database (`alita_chain04`, since dropped) rather than the orchestrator's populated `alita_test`. The integrity step then used that same database, mirroring CI's single database. `alita_test` was not modified.
+- `TestRepositoryMigrationChain` refuses a non-empty schema, so it was run against a throwaway database (`fuku_chain04`, since dropped) rather than the orchestrator's populated `fuku_test`. The integrity step then used that same database, mirroring CI's single database. `fuku_test` was not modified.
 - The TDD cycle ran RED (`test`) then GREEN (`feat`) with no REFACTOR commit; `workflow.tdd_mode` was off and the plan type is `execute`, so no gate enforcement applied.
 
 ## Known Stubs
@@ -158,6 +158,6 @@ None beyond the plan's threat model. T-01-11 (concurrent set-staff and link) is 
 
 ## Self-Check: PASSED
 
-- Created files exist: migration, `alita/db/staff/exclusivity_postgres_test.go`.
+- Created files exist: migration, `fuku/db/staff/exclusivity_postgres_test.go`.
 - Commits `c48f895` and `8d14295` are on the branch (`git rev-list --count 78fe65c..HEAD` is 2 before this SUMMARY commit).
 - All task acceptance criteria and plan-level verification re-run and passing.

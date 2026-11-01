@@ -360,7 +360,7 @@ Items users of these bots treat as table stakes that PROJECT.md does not mention
 - Telegram Mini App initData validation (HMAC with "WebAppData" key, `auth_date` freshness): https://docs.telegram-mini-apps.com/platform/init-data (search snippet, HIGH-MEDIUM).
 - `web_app` inline buttons are private-chat only; `?startapp=` direct links: python-telegram-bot and aiogram `InlineKeyboardButton` docs plus Telegram bug tracker snippets (HIGH-MEDIUM). Primary page https://core.telegram.org/bots/webapps was blocked.
 - Cloudflare Turnstile server-side validation (300 s validity, single use, `timeout-or-duplicate`, siteverify endpoint): https://developers.cloudflare.com/turnstile/get-started/server-side-validation/ (search snippet, HIGH-MEDIUM). The `idempotency_key` parameter was not confirmed; do not rely on it.
-- Codebase facts: `/home/user/Fuku_Robot/.planning/PROJECT.md`, `/home/user/Fuku_Robot/.planning/codebase/ARCHITECTURE.md`, `alita/db/models/captcha.go`, `alita/modules/antiraid.go`, `alita/modules/connections.go`.
+- Codebase facts: `/home/user/Fuku_Robot/.planning/PROJECT.md`, `/home/user/Fuku_Robot/.planning/codebase/ARCHITECTURE.md`, `fuku/db/models/captcha.go`, `fuku/modules/antiraid.go`, `fuku/modules/connections.go`.
 
 ---
 *Feature research for: Telegram group-management bot (Staff Group, lockdown, Mini App captcha, settings menu)*

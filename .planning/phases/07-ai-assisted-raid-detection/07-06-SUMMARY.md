@@ -15,7 +15,7 @@ provides:
   - "raidAIProcessText: raid-only text check that reports a spam verdict to the burst counter and never acts"
   - "aispamWillJudge: one TypeSafe call per message whichever path judges it"
   - "raidAIConfigured / raidAITextConfigured / raidAIImageConfigured and GetRaidAIStats"
-  - "Redis key alita:raid:{<chat>}:ar:<user> (hashes of a new member's recent texts, never raw text)"
+  - "Redis key fuku:raid:{<chat>}:ar:<user> (hashes of a new member's recent texts, never raw text)"
 affects: [07-07, 07-08, 07-10, 07-14]
 
 actuals:
@@ -34,15 +34,15 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/raid_ai.go
-    - alita/modules/raid_ai_text_test.go
-    - alita/modules/raid_ai_breaker_test.go
+    - fuku/modules/raid_ai.go
+    - fuku/modules/raid_ai_text_test.go
+    - fuku/modules/raid_ai_breaker_test.go
   modified:
-    - alita/modules/lockdown.go
-    - alita/modules/raid_ai_burst_test.go
-    - alita/modules/test_harness_test.go
-    - alita/modules/staff_action_fake_test.go
-    - alita/modules/lockdown_alert_test.go
+    - fuku/modules/lockdown.go
+    - fuku/modules/raid_ai_burst_test.go
+    - fuku/modules/test_harness_test.go
+    - fuku/modules/staff_action_fake_test.go
+    - fuku/modules/lockdown_alert_test.go
     - AGENTS.md
 
 key-decisions:
@@ -64,7 +64,7 @@ coverage:
     requirement: RAID-04
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_text_test.go#TestRaidAICandidateText"
+        ref: "fuku/modules/raid_ai_text_test.go#TestRaidAICandidateText"
         status: pass
     human_judgment: false
   - id: D2
@@ -72,7 +72,7 @@ coverage:
     requirement: RAID-04
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_text_test.go#TestRaidAICandidateText"
+        ref: "fuku/modules/raid_ai_text_test.go#TestRaidAICandidateText"
         status: pass
     human_judgment: false
   - id: D3
@@ -80,7 +80,7 @@ coverage:
     requirement: RAID-04
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_burst_test.go#TestRaidAISpamSharesVerdict"
+        ref: "fuku/modules/raid_ai_burst_test.go#TestRaidAISpamSharesVerdict"
         status: pass
     human_judgment: false
   - id: D4
@@ -88,7 +88,7 @@ coverage:
     requirement: RAID-05
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_text_test.go#TestRaidAICandidateText"
+        ref: "fuku/modules/raid_ai_text_test.go#TestRaidAICandidateText"
         status: pass
     human_judgment: false
   - id: D5
@@ -96,7 +96,7 @@ coverage:
     requirement: RAID-05
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_breaker_test.go#TestRaidAIBreaker"
+        ref: "fuku/modules/raid_ai_breaker_test.go#TestRaidAIBreaker"
         status: pass
     human_judgment: false
   - id: D6
@@ -104,15 +104,15 @@ coverage:
     requirement: RAID-03
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_text_test.go#TestRaidAINoRedis"
+        ref: "fuku/modules/raid_ai_text_test.go#TestRaidAINoRedis"
         status: pass
     human_judgment: false
   - id: D7
-    description: "No raw message text is stored: the repeat list holds only 16-character hex hashes and no alita:aispam: key is written"
+    description: "No raw message text is stored: the repeat list holds only 16-character hex hashes and no fuku:aispam: key is written"
     requirement: RAID-04
     verification:
       - kind: integration
-        ref: "alita/modules/raid_ai_text_test.go#TestRaidAICandidateText"
+        ref: "fuku/modules/raid_ai_text_test.go#TestRaidAICandidateText"
         status: pass
     human_judgment: false
   - id: D8
@@ -139,8 +139,8 @@ status: complete
 
 ## Accomplishments
 
-- `alita/modules/raid_ai.go` holds the whole text path. `raidAIWatcher` (group 2, registered in `LoadLockdown`) applies the candidate rules cheapest first: supergroup, `raidFloodSenderCounts`, a non-empty `Text` (captions are left to the image path), `raidAITextConfigured`, `raidRedis`, the chat's `AIEnabled`, `aispamWillJudge`, the candidate script and rule, then `aispamCarvedOut` (pending captcha, cached admin, approved), then the enqueue. It returns `ext.ContinueGroups` on every path and has no `return nil`.
-- `raidAICandidateScript` (KEYS: the `:joined` set and `alita:raid:{<chat>}:ar:<user>`) returns `{new, repeated}` and records an 8-byte SHA-256 hex of the normalised text only for a member who joined within 24 h; the list keeps 5 hashes for 1 h, a text under 10 runes has no hash. The rule is new AND (link domains OR forward OR repeated).
+- `fuku/modules/raid_ai.go` holds the whole text path. `raidAIWatcher` (group 2, registered in `LoadLockdown`) applies the candidate rules cheapest first: supergroup, `raidFloodSenderCounts`, a non-empty `Text` (captions are left to the image path), `raidAITextConfigured`, `raidRedis`, the chat's `AIEnabled`, `aispamWillJudge`, the candidate script and rule, then `aispamCarvedOut` (pending captcha, cached admin, approved), then the enqueue. It returns `ext.ContinueGroups` on every path and has no `return nil`.
+- `raidAICandidateScript` (KEYS: the `:joined` set and `fuku:raid:{<chat>}:ar:<user>`) returns `{new, repeated}` and records an 8-byte SHA-256 hex of the normalised text only for a member who joined within 24 h; the list keeps 5 hashes for 1 h, a text under 10 runes has no hash. The rule is new AND (link domains OR forward OR repeated).
 - The raid AI pool has a 128-job queue and 4 workers started once, each wrapped in `RecoverFromPanic` (worker and job), a `raidPostTracker` in-flight counter taken before `raidAIDraining` is read, `raidAIEnqueue` shedding a job when the queue is full, and `raidAIProcess` as the test seam. `GetRaidAIStats` reports checked, spam, kept, shed and failed.
 - `raidAIProcessText` refuses a paused chat (counted shed, no request), builds `aispamTask.state(nil, 1)` so no sender history is read or written, records failures on `/aispam`'s breaker while ignoring its tripped return (no notice from the raid path), resets it on success, decides spam with `aispamIsDelete` and reports through `raidAIRecordVerdict`. It logs only chat, user and message IDs.
 - `aispamWillJudge` (TypeSafe configured, `aispam.IsAISpamEnabled`, breaker not paused) makes the raid path stand aside wherever `/aispam` will judge the text, so a message makes at most one TypeSafe call and `/aispam`'s own delete verdict feeds the counter.
@@ -156,10 +156,10 @@ status: complete
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^(TestRaidAISpamSharesVerdict|TestRaidAINoRedis|TestRaidAIBreaker|TestRaidAICandidateText)$' -v ./alita/modules`: all four PASS (RED run before `aispamWillJudge` failed exactly the two `/aispam on` cases with 2 requests instead of 1).
-- `go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown|Unlockdown' ./alita/modules`: ok (about 135 s), after Task 1 and after Task 2.
-- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./alita/modules`: clean. `gofmt -l alita`: only the pre-existing `greetings_command_test.go`. `git diff --exit-code go.mod go.sum`: unchanged.
-- Acceptance criteria re-run for both tasks: `raidAIGroup = 2` x1, queue 128 x1, workers 4 x1, `RecoverFromPanic` x3, registration x1, `return ext.ContinueGroups` x1, `return nil` in the watcher x0, `alita:raid:{<chat>}:ar:<user>` and `raid AI candidate watcher` in AGENTS.md, `func aispamWillJudge(` x1, both new test functions x1, `aispamWillJudge` in AGENTS.md.
+- `go test -tags testtools -race -count=1 -run '^(TestRaidAISpamSharesVerdict|TestRaidAINoRedis|TestRaidAIBreaker|TestRaidAICandidateText)$' -v ./fuku/modules`: all four PASS (RED run before `aispamWillJudge` failed exactly the two `/aispam on` cases with 2 requests instead of 1).
+- `go test -tags testtools -race -count=1 -run 'AISpam|Raid|Lockdown|Unlockdown' ./fuku/modules`: ok (about 135 s), after Task 1 and after Task 2.
+- `CGO_ENABLED=0 go build ./...`: ok. `go vet -tags testtools ./fuku/modules`: clean. `gofmt -l fuku`: only the pre-existing `greetings_command_test.go`. `git diff --exit-code go.mod go.sum`: unchanged.
+- Acceptance criteria re-run for both tasks: `raidAIGroup = 2` x1, queue 128 x1, workers 4 x1, `RecoverFromPanic` x3, registration x1, `return ext.ContinueGroups` x1, `return nil` in the watcher x0, `fuku:raid:{<chat>}:ar:<user>` and `raid AI candidate watcher` in AGENTS.md, `func aispamWillJudge(` x1, both new test functions x1, `aispamWillJudge` in AGENTS.md.
 - `make lint` could not run (golangci-lint is built with Go 1.25, the module is Go 1.26); `go vet -tags testtools` and `gofmt -l` stood in. The orchestrator runs the full `make test`.
 
 ## Deviations from Plan
@@ -182,5 +182,5 @@ None. T-07-20 (only 16-hex hashes of new members' texts, 5 each, 1 h, no `/aispa
 
 ## Self-Check: PASSED
 
-- Created files present: alita/modules/raid_ai.go, alita/modules/raid_ai_text_test.go, alita/modules/raid_ai_breaker_test.go.
+- Created files present: fuku/modules/raid_ai.go, fuku/modules/raid_ai_text_test.go, fuku/modules/raid_ai_breaker_test.go.
 - Commits 13a9424, ade1f8b, b5a0e20, b5a09ae present in `git log`.

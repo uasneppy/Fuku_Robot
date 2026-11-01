@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Fuku Robot is a fork of Alita Robot, a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. The first step is a **Staff Group**: one Telegram group of trusted admins that manages all my other groups. Any of us can ban, mute or kick someone in every linked group with one command. After that come smarter raid protection, a web-based captcha, and a button settings menu.
+Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. The first step is a **Staff Group**: one Telegram group of trusted admins that manages all my other groups. Any of us can ban, mute or kick someone in every linked group with one command. After that come smarter raid protection, a web-based captcha, and a button settings menu.
 
 ## Core Value
 
@@ -12,7 +12,7 @@ My trusted staff can protect every one of my communities from one place. We act 
 
 ### Validated
 
-<!-- Inferred from the existing Alita Robot codebase (.planning/codebase/). Shipped and relied upon. -->
+<!-- Inferred from the existing Fuku Robot codebase (.planning/codebase/). Shipped and relied upon. -->
 
 - ✓ Per-group moderation: ban, mute, kick, warn, including timed variants, plus purges — existing
 - ✓ Admin tooling: admin list cache, approvals (approved users skip antiflood, locks, blacklists and captcha), disabling commands, anonymous-admin handling — existing
@@ -83,11 +83,11 @@ All nine phases of the first milestone are shipped. No active requirements remai
 
 ## Context
 
-- **Fork of Alita Robot.** The Go module path is still `github.com/divkix/Alita_Robot`. `AGENTS.md` at the repo root is the authoritative rulebook for this codebase, covering migrations, cache invalidation, handler groups, commands, locales and tests. Every phase must follow it.
+- **Fork of Fuku Robot.** The Go module path is still `github.com/uasneppy/fuku_robot`. `AGENTS.md` at the repo root is the authoritative rulebook for this codebase, covering migrations, cache invalidation, handler groups, commands, locales and tests. Every phase must follow it.
 - **The codebase map** is in `.planning/codebase/`. It was written by fast mapper agents; its `CONCERNS.md` items are leads to verify, not confirmed bugs.
 - **Raid protection replaces the behaviour of the existing `antiraid`.** Today it temp-bans joiners, expires on its own, and relies on Redis alone. The new lockdown mutes, kicks joiners, never expires, and is lifted only by an admin. Existing `antiflood` counters live in-process per replica, and `aispam` already calls the TypeSafe API. Both are building blocks.
 - **The existing captcha** uses `base64Captcha` and allows one attempt per user per chat. Group `-10` stores a pending user's messages for replay. The Turnstile captcha has to fit that flow or replace it cleanly.
-- **Federations are the closest existing pattern.** `applyActiveFban` in `alita/modules/federations.go` already fans out bans across many chats. It is a model for Staff Group fan-out, not something to reuse directly.
+- **Federations are the closest existing pattern.** `applyActiveFban` in `fuku/modules/federations.go` already fans out bans across many chats. It is a model for Staff Group fan-out, not something to reuse directly.
 - **`@username` lookup has a limit.** The Bot API can't resolve an arbitrary `@username`; the bot only knows users it has seen, through the users tracker in handler group `-1`. A raw user ID always works.
 - **Anonymous admins can't be identified.** Someone posting as an anonymous admin in the Staff Group can't pass the per-group admin check, so their actions can't be authorised.
 - **Hosting the captcha page.** The bot already runs an HTTP server for webhook, health and metrics, which can host the Mini App page. The owner will host whatever is most secure.

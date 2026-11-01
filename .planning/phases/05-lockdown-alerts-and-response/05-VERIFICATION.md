@@ -32,14 +32,14 @@ covered_files:
   - .planning/phases/05-lockdown-alerts-and-response/05-13-SUMMARY.md
   - .planning/phases/05-lockdown-alerts-and-response/05-14-PLAN.md
   - .planning/phases/05-lockdown-alerts-and-response/05-14-SUMMARY.md
-  - alita/db/lockdown/alerts.go
-  - alita/db/lockdown/burst.go
-  - alita/db/lockdown/links.go
-  - alita/modules/lockdown_alert.go
-  - alita/modules/lockdown_alert_callbacks.go
-  - alita/modules/lockdown_recent.go
-  - alita/modules/lockdown_response.go
-  - alita/modules/lockdown_worker.go
+  - fuku/db/lockdown/alerts.go
+  - fuku/db/lockdown/burst.go
+  - fuku/db/lockdown/links.go
+  - fuku/modules/lockdown_alert.go
+  - fuku/modules/lockdown_alert_callbacks.go
+  - fuku/modules/lockdown_recent.go
+  - fuku/modules/lockdown_response.go
+  - fuku/modules/lockdown_worker.go
 covered_digest: "v2:sha256:1bc11562b8cb006093f725315c0cfa29fb3419178f80fa4b03b0c3adfa994de5"
 behavior_unverified: 0
 overrides_applied: 0
@@ -79,7 +79,7 @@ Every roadmap success criterion is implemented, wired into the worker and the di
 | 1 | One alert per lockdown to the Staff Group (if linked) and the log channel, showing trigger, counts and a sample of the burst, including removed accounts | VERIFIED | `lockdownPlanAlerts` -> `lockdown.BeginAlert` (one conditional update on `alert_started_at IS NULL`, creates one copy row per destination and the pre-lockdown burst rows in the same transaction). `lockdownAlertDestinations` gives a Staff Group slot from a fresh link and a log slot via `actionlog.Destination(..., CategoryAdmin)`; the locked group is never a destination. `lockdownRenderAlert` renders group, trigger, reason, counts (`BurstSampleFresh`: pre rows plus lockdown joiner rows in any state, so removed ones are listed) and up to 10 accounts, with names escaped and spliced in after the translator. The worker runs plan then post each cycle. Tests passed: `TestLockdownAlertDestinations`, `TestLockdownAlertSample`, `TestLockdownAlertPostsOnce`, `TestLockdownAlertDelivery`, `TestLockdownAlertGate`, `TestBeginAlert` (SQLite). |
 | 2 | Lift works only for a live admin of the locked group, from the Staff Group or the log channel; others refused with no change; a lifted lockdown says so and does nothing | VERIFIED | `lockdownAlertCallback` is registered with `callbackquery.Prefix("lockdown|")` and `SetAllowChannel(true)`. It refuses service identities first, requires the copy row to belong to the pressed chat, and takes the locked chat from the lockdown row. `lockdownButtonAuthority` uses a live `getChatMember` (creator or admin with `can_restrict_members`), so neither the admin cache nor Staff Group membership authorizes. Ask and Confirm both re-check. Confirm runs `liftLockdownRow`, the same function as `/unlockdown` (restore first, then conditional `BeginLift`). A non-active lockdown goes to `lockdownStalePress` ("Already lifted by X at T", closes that copy, no action). Tests passed: `TestLockdownAlertLiftAuthority` (staff non-admin, no restrict right, lookup failure, service IDs, forged chat, creator, demoted before Confirm), `TestLockdownAlertStaleButtons`, `TestLockdownAlertLiftFromLogChannel`, `TestLockdownAlertLift`, `TestLockdownAlertLiftOutcomes`, `TestLockdownAlertClosedAtLift`. |
 | 3 | Admin presses "Ban N recent joiners"; admins and approved users excluded; told banned/skipped/failed | VERIFIED | Ask and Confirm check live admin authority. Approved users come from `approvals.ListApprovedIDsFresh` (a failed read refuses the Ask, starts no run, and makes a running run wait). `StartBanRun` inserts the run under the `uk_chat_lockdown_ban_runs_running` partial unique index and queues unhandled burst rows (bot and approved users excluded; exempt/let-in rows marked skipped). `lockdownResponseBanOne` is the single ban path: skips approved, bot, exempt, claims the joiner row, then in one paced unit reads the live status, applies `decideLockdownResponseBan` (live creator or admin skipped; a kicked account under someone else's ban is left alone), re-reads the lockdown for activeness, and calls `banChatMember` with empty options (no end date). `lockdownReportBanRuns` edits the card with banned/skipped (per reason)/failed counts and posts one `#LOCKDOWN_BAN` to the log channel. Tests passed: `TestLockdownBanRecentJoiners`, `TestLockdownBanAuthority`, `TestLockdownBanResult`, `TestLockdownBanRun`, `TestLockdownBanRaces`, `TestLockdownResponseBanOne`, `TestDecideLockdownResponseBan`, `TestLockdownBanSurvivesLift`, `TestLockdownBanReportResumes`, `TestLockdownBanCount`. |
-| 4 | Alert shows the invite link when Telegram reports it; only an admin of that group can revoke it | VERIFIED | `lockdown.TopInviteLinksFresh` feeds `lockdownRenderLinkLine` (link in code tags, HTML-escaped and spliced after the translator, "+N other links", and a foreign-link line for a link cut short). The Revoke button shows only while `lockdownLinkRevocable(slot.Link)` and `LinkRevokedAt == nil`. `lockdownRevokeAsk` and `lockdownRevokeConfirm` use `lockdownInviteAuthority` (live `getChatMember`, creator or admin with `can_invite_users`); the link revoked is always `slot.Link` from the pressed copy, never callback data. The revoke is recorded (`RecordLinkRevoked`, one winner, marks live copies `edit_pending`) only after Telegram confirmed it. Tests passed: `TestLockdownAlertInviteLink`, `TestLockdownRevokeLink`, `TestLockdownRevokeLinkRefusals`, `TestAlertSync` and `TestRecordLinkRevoked` (the last two in `alita/db/lockdown`, SQLite run). |
+| 4 | Alert shows the invite link when Telegram reports it; only an admin of that group can revoke it | VERIFIED | `lockdown.TopInviteLinksFresh` feeds `lockdownRenderLinkLine` (link in code tags, HTML-escaped and spliced after the translator, "+N other links", and a foreign-link line for a link cut short). The Revoke button shows only while `lockdownLinkRevocable(slot.Link)` and `LinkRevokedAt == nil`. `lockdownRevokeAsk` and `lockdownRevokeConfirm` use `lockdownInviteAuthority` (live `getChatMember`, creator or admin with `can_invite_users`); the link revoked is always `slot.Link` from the pressed copy, never callback data. The revoke is recorded (`RecordLinkRevoked`, one winner, marks live copies `edit_pending`) only after Telegram confirmed it. Tests passed: `TestLockdownAlertInviteLink`, `TestLockdownRevokeLink`, `TestLockdownRevokeLinkRefusals`, `TestAlertSync` and `TestRecordLinkRevoked` (the last two in `fuku/db/lockdown`, SQLite run). |
 | 5 | While locked, the alert is re-posted periodically as a reminder; reminders stop at the lift | VERIFIED | `lockdownPlanReminders` (`ListRemindableFresh`: active, confirmed, alert decided) plans only the current `seq = floor((now - alert_started_at) / 1h)` through `PlanReminderSlots` (`ON CONFLICT DO NOTHING` on the slot key, and only while the lockdown is active). `lockdownPostAlertSlot` refuses to post for a non-active lockdown and supersedes a stale `seq`. A posted reminder takes the buttons off older reminders (`SupersedeReminders`). Pending copies are listed only for active lockdowns; the lift's close step edits every copy to "Lifted by". Tests passed: `TestLockdownReminders` (first, second, no catch-up, concurrent, stops at the lift, stale pending), `TestLockdownReminderContent`, `TestLockdownReminderDestinations`. |
 
 **Score:** 5/5 truths verified (0 present-but-behavior-unverified; live-Telegram and PostgreSQL items are listed under Human Verification).
@@ -88,13 +88,13 @@ Every roadmap success criterion is implemented, wired into the worker and the di
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `alita/modules/lockdown_alert.go` (987 lines) | alert planning, posting, reminders, sync, close | VERIFIED | Substantive and wired into `runLockdownCycle` (plan, reminders, post, sync, close). |
-| `alita/modules/lockdown_alert_callbacks.go` (739 lines) | `lockdown|` button handlers | VERIFIED | Registered in `LoadLockdown` with `SetAllowChannel(true)`. |
-| `alita/modules/lockdown_response.go` (701 lines) | ban policy, run processing, result report | VERIFIED | Run processing and report steps are in `runLockdownCycle`. |
-| `alita/modules/lockdown_recent.go` | best-effort 10-minute join tracker | VERIFIED | Called by both group `-7` join handlers (`lockdown_guard.go` lines 123 and 194). |
-| `alita/db/lockdown/alerts.go`, `burst.go`, `links.go` | conditional-update repositories | VERIFIED | Fresh reads, conditional updates, errors wrapped. No `DeleteCache` is needed because the rows are never cached (matches AGENTS.md). |
+| `fuku/modules/lockdown_alert.go` (987 lines) | alert planning, posting, reminders, sync, close | VERIFIED | Substantive and wired into `runLockdownCycle` (plan, reminders, post, sync, close). |
+| `fuku/modules/lockdown_alert_callbacks.go` (739 lines) | `lockdown|` button handlers | VERIFIED | Registered in `LoadLockdown` with `SetAllowChannel(true)`. |
+| `fuku/modules/lockdown_response.go` (701 lines) | ban policy, run processing, result report | VERIFIED | Run processing and report steps are in `runLockdownCycle`. |
+| `fuku/modules/lockdown_recent.go` | best-effort 10-minute join tracker | VERIFIED | Called by both group `-7` join handlers (`lockdown_guard.go` lines 123 and 194). |
+| `fuku/db/lockdown/alerts.go`, `burst.go`, `links.go` | conditional-update repositories | VERIFIED | Fresh reads, conditional updates, errors wrapped. No `DeleteCache` is needed because the rows are never cached (matches AGENTS.md). |
 | `migrations/20261011120000..20261011160000_*.sql` (5 files) | alerts, burst, ban runs, link revoke, report columns | VERIFIED | Timestamps greater than all earlier files, no `BEGIN`/`COMMIT`/`CONCURRENTLY`, unique/partial unique indexes present, runner globs `*.sql`. |
-| `alita/db/models/lockdown.go` models | `ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun` | VERIFIED | In the AutoMigrate lists of `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go`. |
+| `fuku/db/models/lockdown.go` models | `ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun` | VERIFIED | In the AutoMigrate lists of `fuku/modules/test_harness_test.go` and `fuku/db/lockdown/testmain_test.go`. |
 | Locale keys (7 files) | `lockdown_alert_*`, `lockdown_ban_*`, `lockdown_reminder_*`, `lockdown_revoke_*` | VERIFIED | 56 matching keys in each of en/es/fr/hi/id/pt/ru; `make check-translations` passes. |
 
 ### Key Link Verification
@@ -123,11 +123,11 @@ Every roadmap success criterion is implemented, wired into the worker and the di
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Alert, lift, ban, revoke, reminder, close tests (about 35 top-level tests) | `go test -tags testtools -race -count=1 -run '^(...)$' ./alita/modules` (two runs) | `ok` | PASS |
-| Conditional-update repositories | `go test -tags testtools -race -count=1 ./alita/db/lockdown ./alita/db/approvals` | `ok` | PASS |
-| Callback data fits 64 bytes | `go test -tags testtools ./alita/utils/callbackcodec` and `TestLockdownCallbackData` | `ok` | PASS |
+| Alert, lift, ban, revoke, reminder, close tests (about 35 top-level tests) | `go test -tags testtools -race -count=1 -run '^(...)$' ./fuku/modules` (two runs) | `ok` | PASS |
+| Conditional-update repositories | `go test -tags testtools -race -count=1 ./fuku/db/lockdown ./fuku/db/approvals` | `ok` | PASS |
+| Callback data fits 64 bytes | `go test -tags testtools ./fuku/utils/callbackcodec` and `TestLockdownCallbackData` | `ok` | PASS |
 | Production build | `CGO_ENABLED=0 go build ./...` | success | PASS |
-| `go vet -tags testtools ./alita/modules ./alita/db/lockdown` | | no output | PASS |
+| `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown` | | no output | PASS |
 | `make check-translations`, `make check-docs` | | all present, no drift | PASS |
 
 The full `make test` was not re-run, as instructed (it passed 61/61 on HEAD per the orchestrator). Step 7c: no probe scripts are declared by this phase.

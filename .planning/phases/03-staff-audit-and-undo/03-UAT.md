@@ -21,12 +21,12 @@ expected: Each linked group's log channel has a #STAFF_BAN or #STAFF_UNBAN post 
 result: pass
 
 ### 3. DECISION: undo of an unmute and D-04 (code review WR-04)
-expected: Owner chooses (a) accept the documented broad "left behind" predicate for unmute (member, left, or restricted-but-able-to-send), or (b) open a gap-closure plan that stores what the unmute applied and requires equality. Today staffUndoLeftBehind (alita/modules/staff_action_decide.go:375-381) lets an undo of an unmute re-apply the old mute over a later partial restriction by another admin, or over a target who was kicked and rejoined.
+expected: Owner chooses (a) accept the documented broad "left behind" predicate for unmute (member, left, or restricted-but-able-to-send), or (b) open a gap-closure plan that stores what the unmute applied and requires equality. Today staffUndoLeftBehind (fuku/modules/staff_action_decide.go:375-381) lets an undo of an unmute re-apply the old mute over a later partial restriction by another admin, or over a target who was kicked and rejoined.
 result: pass
 decision: "a — accept the documented broad left-behind predicate for an unmute undo (WR-04 accepted, no gap plan)"
 
 ### 4. DECISION: undo claim spent before any group is attempted (WR-01) and history says "undone" regardless of effect (WR-02)
-expected: Owner chooses whether D-09 ("one undo per action") covers the zero-effect case (a Staff Group member who is an admin in no linked group presses Undo and Confirm, every group is skipped, and nobody can undo that action any more), or whether the claim should be released when no group reached a Telegram write, and whether the history line should say "undone" only when at least one group's undo succeeded (alita/modules/staff_undo.go:399-428, alita/modules/staff_history.go:69-80).
+expected: Owner chooses whether D-09 ("one undo per action") covers the zero-effect case (a Staff Group member who is an admin in no linked group presses Undo and Confirm, every group is skipped, and nobody can undo that action any more), or whether the claim should be released when no group reached a Telegram write, and whether the history line should say "undone" only when at least one group's undo succeeded (fuku/modules/staff_undo.go:399-428, fuku/modules/staff_history.go:69-80).
 result: pass
 resolved_by: "03-10, 03-11, 03-12 (gap G-03-4)"
 reverified_by: "test 6, live re-run after gap closure, passed 2026-10-06"
@@ -73,15 +73,15 @@ blocked: 0
   test: 4
   root_cause: "The undo flow treats 'an undo was claimed' as 'the action was undone'. staffUndoConfirm takes the D-09 latch (staff.ClaimUndo sets undo_started_at) and edits the original summary to 'Undone by X' before any group runs; Finish only calls FinalizeUndo and never looks at per-group results, no code ever releases the claim, and the run never records whether a group reached its Telegram write. Every 'undone' label (staffHistoryState, the detail header, editStaffUndoneOriginal, staffUndoAlreadyText) keys off the claim alone, and ActionTally counts no undo outcomes. The detail view's dead-run conversion applies only to the action's own run, so an unfinished undo's empty undo_outcome rows render as pending forever. The claim is also taken without checking staffActionsContext().Err() and before staffActionRunsWG.Add, so a Confirm racing shutdown claims and then fails every group without a call."
   artifacts:
-    - path: "alita/modules/staff_undo.go"
+    - path: "fuku/modules/staff_undo.go"
       issue: "Claim and 'Undone' edit at Confirm before any group (394-416); Finish makes no claim or label decision (540-559); runStaffUndoInGroup (570-615) never records reaching executeStaffUndoCall; staffActionUndoable, Ask and Confirm refuse forever once claimed; staffUndoAlreadyText says undone regardless"
-    - path: "alita/db/staff/actions.go"
+    - path: "fuku/db/staff/actions.go"
       issue: "ClaimUndo (270-285) has no matching release; ActionTally/TallyActionGroups (172-228) do not count undo_outcome"
-    - path: "alita/modules/staff_history.go"
+    - path: "fuku/modules/staff_history.go"
       issue: "staffHistoryState (69-80) keys only on UndoStartedAt; renderStaffHistoryDetail dead-run conversion (338-349) is tied to the action, and the undo header (360-378) says 'Undone by' unconditionally"
-    - path: "alita/modules/staff_action_record.go"
+    - path: "fuku/modules/staff_action_record.go"
       issue: "staffUndoResultsFromRecord (208-226) maps an empty undo_outcome to pending with no staleness check"
-    - path: "alita/modules/staff_action_run.go"
+    - path: "fuku/modules/staff_action_run.go"
       issue: "startStaffRun adds to staffActionRunsWG only after Confirm has claimed; staffGroupPrechecks returns fail_interrupted with no call on a cancelled context"
   missing:
     - "Record per group that the run reached its Telegram write (set right before executeStaffUndoCall, whatever it returns; a panic-swept group counts as reached)"

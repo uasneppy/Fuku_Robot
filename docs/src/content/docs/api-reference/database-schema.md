@@ -6,7 +6,7 @@ description: Complete reference of the PostgreSQL database schema
 
 # Database Schema
 
-This page documents the complete PostgreSQL database schema for Alita Robot.
+This page documents the complete PostgreSQL database schema for Fuku Robot.
 
 ## Overview
 
@@ -14,7 +14,7 @@ This page documents the complete PostgreSQL database schema for Alita Robot.
 - **Migration Metadata**: `schema_migrations`
 - **Database Type**: PostgreSQL
 - **ORM**: GORM
-- **Migration Tool**: Custom SQL migration runner (`alita/db/migrations/runner.go`)
+- **Migration Tool**: Custom SQL migration runner (`fuku/db/migrations/runner.go`)
 - **Migrations**: Timestamped forward SQL files using `YYYYMMDDHHMMSS_description.sql` naming
 
 ## Design Patterns

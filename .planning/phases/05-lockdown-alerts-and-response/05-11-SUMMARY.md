@@ -20,13 +20,13 @@ tech-stack:
     - "show the running text on the card before the run row exists, so the only later writer of the card is the worker"
 key-files:
   created:
-    - alita/modules/lockdown_ban_run_test.go
+    - fuku/modules/lockdown_ban_run_test.go
     - .planning/phases/05-lockdown-alerts-and-response/deferred-items.md
   modified:
-    - alita/db/lockdown/burst.go
-    - alita/db/lockdown/burst_test.go
-    - alita/modules/lockdown_response.go
-    - alita/modules/lockdown_alert_callbacks.go
+    - fuku/db/lockdown/burst.go
+    - fuku/db/lockdown/burst_test.go
+    - fuku/modules/lockdown_response.go
+    - fuku/modules/lockdown_alert_callbacks.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -61,7 +61,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## What was built
 
-- **`lockdown.UnqueueBanRun(runID)`** (`alita/db/lockdown/burst.go`): queued rows of the run go back to unhandled (empty state, no run, no claim). Banned, skipped, failed and acting rows stay with the run. `FinishBanRun(stopped)` already did not need an empty queue.
+- **`lockdown.UnqueueBanRun(runID)`** (`fuku/db/lockdown/burst.go`): queued rows of the run go back to unhandled (empty state, no run, no claim). Banned, skipped, failed and acting rows stay with the run. `FinishBanRun(stopped)` already did not need an empty queue.
 - **Stop at the lift** (`lockdown_response.go`): `lockdownProcessBanRun` now stops a run whose lockdown is missing or not active (`lockdownStopBanRun`: `UnqueueBanRun`, then `FinishBanRun(stopped)`, and the winner edits the card with the stopped line and posts the log). The lockdown is read again before every account (`lockdown.GetFresh`), so a lift that starts inside a batch stops the run at the next account. A failed lockdown read makes the run wait.
 - **Report** (`lockdownBanResultText`, `lockdownBanFailedLines`): `lockdown_ban_result`, `lockdown_ban_result_requests` when banned rows with reason `request` exist, one line per skip reason present, `lockdown_ban_failed_line` plus up to 10 accounts and `lockdown_lift_tally_more` for the rest, `lockdown_ban_stopped` when stopped. The group label and the failed list are spliced in after translation through tokens; the list is bounded by `lockdownTallyMaxRunes`.
 - **Log post** (`lockdownBanLogPost`): `actionlog.Destination(chat, CategoryAdmin)`, header plus `#LOCKDOWN_BAN · Admin: <mention of the presser> · <lockdown_ban_log>` in the locked group's language, one paced send. Not sent for a run that handled no account, when there is no log channel or the category is off, or when the context is cancelled. A failed post is logged at warn and changes nothing. No staff audit row is written (no `StaffAction` outside comments in the file).
@@ -86,7 +86,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 - **Found during:** Task 1 (this plan touches the result and card edit path)
 - **Issue:** Confirm edited the card to the running text after `StartBanRun`; a worker tick in between could finish a run whose accounts all skip without a Telegram call and edit the result, which the running text then replaced.
 - **Fix:** Confirm now counts the candidates (`CountBanCandidatesFresh`), edits the card to the running text, and only then calls `StartBanRun`. The worker cannot start before the run row exists, so the worker's result is always the last write. A refusal (busy, nothing left, start failed) overwrites the running text. With a count of 0 the card is not edited first, so a second admin's Confirm while a run is queued still reads "already running" (the first version of this change broke `TestLockdownBanCount/already running`; the count-0 case fixed it).
-- **Files modified:** `alita/modules/lockdown_alert_callbacks.go`
+- **Files modified:** `fuku/modules/lockdown_alert_callbacks.go`
 - **Commit:** 201c19d
 
 **2. [Rule 2 - Missing critical functionality] Per-account lockdown re-read, beyond the plan's "a run whose lockdown is not active is stopped"**
@@ -103,12 +103,12 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownBanRun$|^TestLockdownBanAuthority$' -v ./alita/modules`: pass (4 + 5 subtests).
-- `go test -tags testtools -race -count=1 -run '^TestLockdownBanResult$' -v ./alita/modules`: pass (6 subtests).
-- `go test -tags testtools -race -count=1 -run '^TestUnqueueBanRun$|^TestBanRunStart$|^TestBurstClaims$' -v ./alita/db/lockdown` and the whole `./alita/db/lockdown`: pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|StaffLog' ./alita/modules ./alita/db/lockdown`: pass (57 s) on the first run of the final code in the Task 1 tree; on the Task 2 tree one run failed in `TestLockdownResponseBanOne` (see Deferred Issues) and every other run passed.
-- Full `go test -tags testtools -race -count=1 ./alita/modules`: pass (204 s) on the final code.
-- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown`: clean. `gofmt -l` on every touched Go file prints nothing (the pre-existing `greetings_command_test.go` formatting is untouched and out of scope). `git diff --exit-code go.mod go.sum` exits 0.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownBanRun$|^TestLockdownBanAuthority$' -v ./fuku/modules`: pass (4 + 5 subtests).
+- `go test -tags testtools -race -count=1 -run '^TestLockdownBanResult$' -v ./fuku/modules`: pass (6 subtests).
+- `go test -tags testtools -race -count=1 -run '^TestUnqueueBanRun$|^TestBanRunStart$|^TestBurstClaims$' -v ./fuku/db/lockdown` and the whole `./fuku/db/lockdown`: pass.
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown|StaffLog' ./fuku/modules ./fuku/db/lockdown`: pass (57 s) on the first run of the final code in the Task 1 tree; on the Task 2 tree one run failed in `TestLockdownResponseBanOne` (see Deferred Issues) and every other run passed.
+- Full `go test -tags testtools -race -count=1 ./fuku/modules`: pass (204 s) on the final code.
+- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown`: clean. `gofmt -l` on every touched Go file prints nothing (the pre-existing `greetings_command_test.go` formatting is untouched and out of scope). `git diff --exit-code go.mod go.sum` exits 0.
 - Acceptance greps pass: `func UnqueueBanRun(`, `lockdown.UnqueueBanRun(`, `"#LOCKDOWN_BAN`, 0 non-comment `StaffAction` lines in `lockdown_response.go`, `#LOCKDOWN_BAN` in AGENTS.md, `lockdown_ban_stopped` and `lockdown_ban_skip_let_in` once in each of the 7 locale files.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
 - Not run: any PostgreSQL check (SQLite only) and a real Telegram call.
@@ -133,4 +133,4 @@ None.
 
 ## Self-Check: PASSED
 
-`alita/modules/lockdown_ban_run_test.go` and `deferred-items.md` exist; commits 7e435cf, 201c19d, 90a5265 and e192b7d are on the branch.
+`fuku/modules/lockdown_ban_run_test.go` and `deferred-items.md` exist; commits 7e435cf, 201c19d, 90a5265 and e192b7d are on the branch.

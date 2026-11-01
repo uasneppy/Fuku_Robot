@@ -1,6 +1,6 @@
 # Project Research Summary
 
-**Project:** Fuku Robot (Alita fork) — Telegram group-management bot milestone  
+**Project:** Fuku Robot (Fuku fork) — Telegram group-management bot milestone  
 **Domain:** Go/gotgbot v2 Telegram bot; cross-group moderation, raid protection, captcha, settings  
 **Researched:** 2026-10-04  
 **Overall Confidence:** MEDIUM-HIGH (codebase HIGH, platforms MEDIUM due to egress blocks)
@@ -29,8 +29,8 @@ Execution order is strict: **Phase 1 (Staff Group) builds reusable infrastructur
 **Existing modules reused:**
 - `redis/go-redis/v9` v9.22.0 (nonce store with `GETDEL` for single-use, lockdown counters, alert tokens)
 - `google/uuid` v1.6.0 (nonces and idempotency keys)
-- `alita/utils/callbackcodec` (all buttons, 64-byte cap)
-- `alita/utils/logredact` (register `TURNSTILE_SECRET_KEY` and `ANTHROPIC_API_KEY`)
+- `fuku/utils/callbackcodec` (all buttons, 64-byte cap)
+- `fuku/utils/logredact` (register `TURNSTILE_SECRET_KEY` and `ANTHROPIC_API_KEY`)
 
 **Confidence:** STACK overall is MEDIUM-HIGH. Library versions verified via `proxy.golang.org`. Telegram and Cloudflare behavior claims come from web search (egress blocks prevented primary doc access); each phase must re-confirm items marked "verify in phase".
 
@@ -203,7 +203,7 @@ The system adds 7 major components across 2 new database tables (staff + lockdow
 ## Sources
 
 **Primary (HIGH):**
-- Repository source (2026-10-04): AGENTS.md, `alita/modules/`, `alita/db/`, architecture verified in code.
+- Repository source (2026-10-04): AGENTS.md, `fuku/modules/`, `fuku/db/`, architecture verified in code.
 - gotgbot v2 rc.36 vendored source: Command dispatch, TelegramError, permissions.
 
 **Secondary (MEDIUM):**

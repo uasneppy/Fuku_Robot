@@ -5,17 +5,17 @@ depth: standard
 files_reviewed: 20
 files_reviewed_list:
   - AGENTS.md
-  - alita/db/staff/actions.go
-  - alita/db/staff/actions_test.go
-  - alita/modules/staff_action_run.go
-  - alita/modules/staff_history.go
-  - alita/modules/staff_history_test.go
-  - alita/modules/staff_history_undo_test.go
-  - alita/modules/staff_undo.go
-  - alita/modules/staff_undo_claim_test.go
-  - alita/modules/staff_undo_lifecycle_test.go
-  - alita/modules/staff_undo_shutdown_test.go
-  - alita/modules/staff_undo_test.go
+  - fuku/db/staff/actions.go
+  - fuku/db/staff/actions_test.go
+  - fuku/modules/staff_action_run.go
+  - fuku/modules/staff_history.go
+  - fuku/modules/staff_history_test.go
+  - fuku/modules/staff_history_undo_test.go
+  - fuku/modules/staff_undo.go
+  - fuku/modules/staff_undo_claim_test.go
+  - fuku/modules/staff_undo_lifecycle_test.go
+  - fuku/modules/staff_undo_shutdown_test.go
+  - fuku/modules/staff_undo_test.go
   - docs/src/content/docs/commands/staff/index.md
   - locales/en.yml
   - locales/es.yml
@@ -69,7 +69,7 @@ Re-review of the changes since `d45631a` (`ReleaseUndo` and the `Reached` marker
 - **The end-of-run original edit.** It runs from `Delivered` on its own `newStaffDeliverContext` budget, not the cancelled run context. It is skipped when the claim was released.
 - **`TallyActionGroups`.** The extra `undo_outcome` grouping only splits rows, and the per-outcome counts stay additive.
 - **Locales.** `make check-translations` passes, and `make check-docs` shows no drift. I checked placeholders by script: `{name}` and `{time}` match in all 7 files for every new key. Every key used in Go exists in all 7 locales. `staff_history_undone_by` has no remaining reference.
-- **Build and tests.** `go vet -tags testtools ./alita/...` is clean. `go test -tags testtools -race -run 'Undo|History|Release|Tally|Claim'` over `alita/db/staff` and `alita/modules` passes.
+- **Build and tests.** `go vet -tags testtools ./fuku/...` is clean. `go test -tags testtools -race -run 'Undo|History|Release|Tally|Claim'` over `fuku/db/staff` and `fuku/modules` passes.
 - **Test quality.** The new tests use the real SQLite harness, miniredis and the hand-written Telegram fake, and they assert persisted rows, edits and writes. The only sleeps are 5 ms polling loops with a deadline.
 
 No security or data-loss defects. The remaining issues are a still-too-broad "reached" notion, an over-claiming label, one rare record-corrupting retry path and one carried silent failure.
@@ -78,7 +78,7 @@ No security or data-loss defects. The remaining issues are a still-too-broad "re
 
 ### WR-01: `Reached` is set for outcomes that provably made no write, so the claim is still burned for them
 
-**File:** `alita/modules/staff_undo.go:762-777`, `alita/modules/staff_undo.go:667-682`; `alita/utils/ratelimit/telegram_pacer.go:138-173`
+**File:** `fuku/modules/staff_undo.go:762-777`, `fuku/modules/staff_undo.go:667-682`; `fuku/utils/ratelimit/telegram_pacer.go:138-173`
 **Issue:** `runStaffUndoInGroup` marks the group `Reached` as soon as `executeStaffUndoCall` returns, whatever it returned. Three results mean Telegram did not change the group, yet they keep the claim:
 - `ratelimit.ErrRateLimited` from a pacer refusal ("next slot is X away, over the cap"), which the pacer documents as "no Telegram request is made".
 - `ErrRateLimited` after 429s. A 429 is rejected, not applied.
@@ -103,7 +103,7 @@ Also keep `Reached` true for a timeout, which may have been applied. Add a test 
 
 ### WR-02: "Undo changed nothing" is shown for groups whose outcome is unknown or probably applied
 
-**File:** `alita/modules/staff_undo.go:702-714` (marker choice), `alita/modules/staff_undo.go:118-131` (`staffUndoNothing`), `alita/modules/staff_undo_claim_test.go:162-193`
+**File:** `fuku/modules/staff_undo.go:702-714` (marker choice), `fuku/modules/staff_undo.go:118-131` (`staffUndoNothing`), `fuku/modules/staff_undo_claim_test.go:162-193`
 **Issue:**
 - `staffUndoStateOf` and the `Delivered` hook equate `undone == 0` with "changed nothing". The groups behind it can include `fail_internal` (a worker that panicked in or after the write), `fail_interrupted` (cancelled mid-call), and `fail_telegram` after a timeout, where the request may have been applied.
 - `TestStaffUndoPanicKeepsClaim` asserts exactly this. Its own comment says "the run never learns whether the write happened", yet it requires the permanent original summary to read "Undo by X changed nothing" with no Undo button, and the history to say "undo changed nothing / cannot be undone again".
@@ -113,7 +113,7 @@ Also keep `Reached` true for a timeout, which may have been applied. Add a test 
 
 ### WR-03: A retry after an ambiguous `ReleaseUndo` error can run `FinalizeUndo` on an already released record
 
-**File:** `alita/modules/staff_undo.go:667-682`, `alita/db/staff/actions.go:308-345`
+**File:** `fuku/modules/staff_undo.go:667-682`, `fuku/db/staff/actions.go:308-345`
 **Issue:** `Finish` calls `ReleaseUndo` up to twice. If the first call's transaction committed but returned an error (a lost connection after COMMIT), the second call finds no matching claim and returns `(false, nil)`. The `default` branch logs "no longer matched; keeping it" and falls through to `FinalizeUndo`. That function writes the groups' undo results and sets `undo_finished_at` on a record whose `undo_started_at` is now NULL. Afterwards:
 - `staffActionUndoable` is true (no claim) and the record has a stale `undo_finished_at`.
 - The next claim reads as finished at once, so `staffUndoStateOf` says "undone" or "changed nothing" while the new run is going.
@@ -125,7 +125,7 @@ It is rare, but the code comments call this path fail-closed, and it is not.
 
 ### WR-04: A history page press is answered before the data is read, so a database error is a silent no-op (carried forward; was WR-03)
 
-**File:** `alita/modules/staff_history.go:307-325`
+**File:** `fuku/modules/staff_history.go:307-325`
 **Issue:** Unchanged by this phase's fixes. `staffHistoryList` calls `answerStaffCallback(b, query, "", false)` at line 307, then reads `ListActionsFresh` and `TallyActionGroups`. On error it only logs and returns `ext.EndGroups`. The user gets an empty toast and the message does not change. `staffHistoryDetail` reads first and answers after, so the two handlers disagree.
 **Fix:** Read both first and answer once per path:
 ```go
@@ -144,43 +144,43 @@ answerStaffCallback(b, query, "", false)
 
 ### IN-01: The original summary is marked "see the reply" even when the undo's own summary was never delivered
 
-**File:** `alita/modules/staff_undo.go:702-715`
+**File:** `fuku/modules/staff_undo.go:702-715`
 **Issue:** `Delivered` ignores its `landedMsgID`. When delivery failed entirely (`landed == 0`), the original is still edited to "Undone by X, see the reply" with its Undo button removed, and there is no reply. The record is unaffected.
 **Fix:** Take `landed` and skip the edit when it is 0, or use marker text that does not point to a reply.
 
 ### IN-02: The "left behind" predicate for an unmute accepts any non-muted state (carried forward; was WR-04, accepted by the owner at UAT)
 
-**File:** `alita/modules/staff_action_decide.go:375-381`
+**File:** `fuku/modules/staff_action_decide.go:375-381`
 **Issue:** Unchanged and out of this round's file set. Undo can overwrite another admin's newer partial restriction on an unmuted target.
 **Fix:** Recorded as accepted; if it is ever reopened, persist the applied permission set and compare it.
 
 ### IN-03: `ClaimUndo` is not bound to the Staff Group in SQL (carried forward; was IN-02)
 
-**File:** `alita/db/staff/actions.go:280-298`
+**File:** `fuku/db/staff/actions.go:280-298`
 **Issue:** `WHERE id = ? AND undo_started_at IS NULL` does not bind `staff_chat_id`. The callers check it, so this is defense in depth only. `ReleaseUndo` is bound by `undo_by` and the claim time.
 **Fix:** Add a `staffChatID` parameter and `AND staff_chat_id = ?`.
 
 ### IN-04: `RekeyChat` bumps `updated_at`, which now also flips dead undos back to "running" (carried forward; was IN-03)
 
-**File:** `alita/db/staff/rekey.go:53`
+**File:** `fuku/db/staff/rekey.go:53`
 **Issue:** `staffUndoStateOf` and `staffHistoryState` use `updated_at` as the heartbeat. The re-key writes `updated_at = now` on every record of the old chat, so for 30 minutes after a Staff Group migration every crashed action or undo reads "running" instead of "interrupted". The new undo states make the effect wider.
 **Fix:** Use `UpdateColumn` on `staff_chat_id` alone (no `updated_at`) for `staff_actions`.
 
 ### IN-05: The history timestamp format is English-only in every locale (carried forward)
 
-**File:** `alita/modules/staff_history.go:136`, `alita/modules/staff_history.go:372`, `alita/modules/staff_history.go:389`
+**File:** `fuku/modules/staff_history.go:136`, `fuku/modules/staff_history.go:372`, `fuku/modules/staff_history.go:389`
 **Issue:** `Format("2 Jan 15:04")` prints English month abbreviations in all 7 locales.
 **Fix:** Use a numeric format such as `2006-01-02 15:04`.
 
 ### IN-06: The Prev offset ignores a page that was shrunk to fit the length cap (carried forward)
 
-**File:** `alita/modules/staff_history.go:197`
+**File:** `fuku/modules/staff_history.go:197`
 **Issue:** Pages start at arbitrary offsets after a shrink, and Prev always steps back 10, so entries can appear on two pages. No entry is hidden.
 **Fix:** Carry the previous page's start in the callback, or document the overlap.
 
 ### IN-07: `staffCallRestore` is defined by arithmetic outside the iota block (carried forward; was IN-01)
 
-**File:** `alita/modules/staff_action_decide.go:300`
+**File:** `fuku/modules/staff_action_decide.go:300`
 **Issue:** `staffCallUnmute + 1` would collide with any call later added to the iota block.
 **Fix:** Move it into the iota block and comment that only `decideStaffUndo` returns it.
 

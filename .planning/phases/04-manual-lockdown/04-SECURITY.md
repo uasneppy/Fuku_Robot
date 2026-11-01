@@ -109,7 +109,7 @@ Related owner decisions (not register threats): D-24 accepts the residual race w
 
 Evidence at L1 depth:
 - Every test a mitigation names exists and passed under `-race` on the phase head: the 26 tests of the `04-VALIDATION.md` map, plus `TestLockdownWorkerStartStop`, `TestLockdownAdminAddedJoinerExempt`, `TestLockdownAcceptButtonRefuses`, `TestLockdownJoinRequestFailsClosed`, `TestLockdownStopDuringCall`, `TestLockdownSettlesUnconfirmedLock`, `TestUnmuteLockdownLookupFails`, `TestStaffPanelShowsLockedGroup`, `TestStaffBanOnLockdownJoinerSurvivesLift` and `TestStaffBanLockdownLookupFails`.
-- The mitigation that names no test was checked in code. T-04-13: `lockdownPacer` in `alita/modules/lockdown_worker.go` is a fleet-wide `ratelimit.NewTelegramPacer` with `MaxWait` 60 s, and `lockdownBanPending` returns rate-limited rows without counting an attempt. T-04-04's escaping is `html.EscapeString` and `formatting.MentionHtml` in `alita/modules/lockdown.go`.
+- The mitigation that names no test was checked in code. T-04-13: `lockdownPacer` in `fuku/modules/lockdown_worker.go` is a fleet-wide `ratelimit.NewTelegramPacer` with `MaxWait` 60 s, and `lockdownBanPending` returns rate-limited rows without counting an attempt. T-04-04's escaping is `html.EscapeString` and `formatting.MentionHtml` in `fuku/modules/lockdown.go`.
 - No SUMMARY of plans 04-01 to 04-08 raised a threat flag.
 - The live UAT (04-UAT, 13/13) passed against a real bot. That covers the authority and anonymous-admin checks (test 12), the ban marker round trip (test 6), Redis loss and restarts (test 11), cross-group isolation (test 9) and the staff ban over a lockdown ban (test 10). The PostgreSQL partial unique index was proven on PostgreSQL 16 (test 1).
 

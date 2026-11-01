@@ -23,7 +23,7 @@ Out of scope:
 ## Implementation Decisions
 
 ### What is sent to AI and what counts as a spam verdict (RAID-04, RAID-05)
-- **D-01:** "Borderline" means: the item comes from a **new member** (joined this group in the last 24 h, the `alita:raid:{<chat>}:joined` set the flood counter uses) and a cheap rule also finds it suspicious. For text the rule is a link, a forward, or text the same sender repeated. A photo, GIF or sticker from a new member is always a candidate. Messages from established members are never sent to any AI.
+- **D-01:** "Borderline" means: the item comes from a **new member** (joined this group in the last 24 h, the `fuku:raid:{<chat>}:joined` set the flood counter uses) and a cheap rule also finds it suspicious. For text the rule is a link, a forward, or text the same sender repeated. A photo, GIF or sticker from a new member is always a candidate. Messages from established members are never sent to any AI.
 - **D-02:** Never sent: admins, approved users, anonymous or channel senders (`sender_chat`), automatic forwards, Telegram service IDs, the bot, members with a pending captcha. Supergroups only, like the other detectors. Checks run cheapest first and the candidate test happens before any AI call.
 - **D-03:** The existing `/aispam` stays unchanged: per-chat opt-in, deletes at 0.8 (English) or 0.9. Its delete verdicts also feed the burst counter. For a text `/aispam` already judged, the raid path reuses that verdict, so there is no second TypeSafe call. The raid path itself never deletes, restricts or bans.
 - **D-04:** A **spam verdict** is: text, a TypeSafe delete probability at the `/aispam` bars (0.8 English, 0.9 other); image, a Gemini `spam_probability` of at least 0.85, a code constant to tune after the owner's spike. Anything slow, failed, unreadable or not configured is "no verdict" and counts for nothing.
@@ -56,7 +56,7 @@ Out of scope:
 
 ### Claude's Discretion
 - The rule for "repeated text" (exact match against the sender's recent texts, reusing `observeAISpamSender`'s history) and the exact link and forward tests.
-- Redis key names (`alita:raid:{<chat>}:ai...`), TTLs, caps and the snapshot key for the spammers.
+- Redis key names (`fuku:raid:{<chat>}:ai...`), TTLs, caps and the snapshot key for the spammers.
 - Whether the Gemini and TypeSafe checks share one queue type or two, how the breaker is shared, and the worker counts.
 - Exact wording of the not-set-up notice, the alert line and the docs note, in all 7 locales.
 
@@ -66,8 +66,8 @@ Out of scope:
 ## Existing Code Insights
 
 ### Reusable Assets
-- **TypeSafe Jev client:** `alita/modules/aispam_jev.go` (swappable endpoint and HTTP client, timeout, one retry, verdict with `DeleteProbability`, `Language`) and `alita/modules/aispam.go` (bounded queue and workers, `aispamEnqueue`, per-chat breaker, `observeAISpamSender` history, `DrainAISpamChecks`). `aispam.IsAISpamEnabled` is opt-in, missing row = off.
-- **Raid machinery (Phase 6):** `raid_flood.go` (`raidFloodCountUpdate`, the `:joined` 24 h set, the flood scripts and flooders snapshot), `raid_trigger.go` (`raidFire`, `raidTrigger`, `lockdownTriggerSentence`, `raidPostAsync`), `raid_counters.go` (`raidKey`, Redis helpers), `autolockdown.go` (grammar, live authority), `alita/db/raiddetection` (settings, `skipLocal`), `chat_lockdowns.trigger_*` columns.
+- **TypeSafe Jev client:** `fuku/modules/aispam_jev.go` (swappable endpoint and HTTP client, timeout, one retry, verdict with `DeleteProbability`, `Language`) and `fuku/modules/aispam.go` (bounded queue and workers, `aispamEnqueue`, per-chat breaker, `observeAISpamSender` history, `DrainAISpamChecks`). `aispam.IsAISpamEnabled` is opt-in, missing row = off.
+- **Raid machinery (Phase 6):** `raid_flood.go` (`raidFloodCountUpdate`, the `:joined` 24 h set, the flood scripts and flooders snapshot), `raid_trigger.go` (`raidFire`, `raidTrigger`, `lockdownTriggerSentence`, `raidPostAsync`), `raid_counters.go` (`raidKey`, Redis helpers), `autolockdown.go` (grammar, live authority), `fuku/db/raiddetection` (settings, `skipLocal`), `chat_lockdowns.trigger_*` columns.
 - **Alert and burst:** `lockdownBurstSnapshot` and `lockdownMergeFlooders` already merge the flooder snapshot with the 10-minute tracker; the AI spammer snapshot follows the same pattern.
 - **Secrets and shutdown:** `logredact.RegisterSecret`, `DrainAISpamChecks` and the shutdown manager's LIFO drains.
 

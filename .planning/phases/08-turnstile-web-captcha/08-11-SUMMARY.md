@@ -106,7 +106,7 @@ status: complete
 ## Decisions Made
 
 - Proxy examples use explicit allow rules with a 404 fallback so a forgotten path is closed by default.
-- The guide's blank-sheet entry names `CSPFor` (`alita/utils/captchaweb/page.go`) rather than the planning file, since the guide is public documentation.
+- The guide's blank-sheet entry names `CSPFor` (`fuku/utils/captchaweb/page.go`) rather than the planning file, since the guide is public documentation.
 - Check 12 tells the owner a failed solve cannot be provoked by hand and to mark it not reproduced instead of faking it.
 
 ## Deviations from Plan

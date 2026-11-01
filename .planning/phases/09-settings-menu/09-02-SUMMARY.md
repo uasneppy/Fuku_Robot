@@ -14,10 +14,10 @@ tech-stack:
   patterns: [behaviour-preserving seam extraction, live-verified candidate list that fails closed on unknown]
 key-files:
   created:
-    - alita/modules/staff_seams_test.go
+    - fuku/modules/staff_seams_test.go
   modified:
-    - alita/modules/staff_panel.go
-    - alita/modules/staff_link.go
+    - fuku/modules/staff_panel.go
+    - fuku/modules/staff_link.go
 key-decisions:
   - "listVerifiedOwnStaffGroups returns []models.StaffGroup by value; resolveOwnStaffGroup takes the address of the single match, so its refusal order is unchanged."
   - "The empty-candidates case is not split from the no-match case: both gave staffRefusalNoStaffGroup, so merging them keeps the refusal text identical."
@@ -60,15 +60,15 @@ The Staff Group row renderer and the link flow are now reusable pieces the setti
 - `CGO_ENABLED=0 go build ./...`: ok.
 - Task 1 command: all 12 named tests ran and passed (10 pre-existing unedited, plus `TestStaffRowSplitMatchesRow` and `TestStaffPanelTextLimit`).
 - Task 2 command: all 20 named tests ran and passed (17 pre-existing unedited, plus `TestListVerifiedOwnStaffGroups`, `TestLinkToStaffGroup`, `TestAnnounceStaffLink`).
-- Wider check: `go test -run 'Staff|LinkStaff|UnlinkStaff' ./alita/modules` passed (148 s).
-- `go vet -tags testtools ./alita/modules/` exits 0; `gofmt -l alita/` is empty.
+- Wider check: `go test -run 'Staff|LinkStaff|UnlinkStaff' ./fuku/modules` passed (148 s).
+- `go vet -tags testtools ./fuku/modules/` exits 0; `gofmt -l fuku/` is empty.
 - `make lint` was not run: golangci-lint is built with go1.25 and the module is go1.26.0 in this sandbox, so `gofmt` and `go vet` stood in for it. The whole `make test` was left to the orchestrator. No locale key was added, so `make check-translations` was not needed.
 
 ## Deviations from Plan
 
 **1. [Rule 3 - Blocking] The plan's `<automated>` commands start with `cd /home/user/Fuku_Robot`.** That is the main checkout, not this worktree, so run as written they would test the wrong tree (worktree-path-safety step 0c). I did not run them as written. I ran the identical `go test` commands from the worktree root instead, and the results above are from the worktree's code. This is a plan defect for the orchestrator to fix in `09-02-PLAN.md` if the plan is reused; I did not edit the plan.
 
-**2. [Process] Tests split across two RED commits.** I wrote all five tests at once, then committed the Task 1 tests first and the Task 2 tests second so each task has its own RED commit as the plan prescribes. The RED commits do not compile for `./alita/modules` under `-tags testtools` until the matching implementation commit lands, which is the intent of a RED commit.
+**2. [Process] Tests split across two RED commits.** I wrote all five tests at once, then committed the Task 1 tests first and the Task 2 tests second so each task has its own RED commit as the plan prescribes. The RED commits do not compile for `./fuku/modules` under `-tags testtools` until the matching implementation commit lands, which is the intent of a RED commit.
 
 **3. [Commit trailer]** Commits end with the attribution trailer lines the harness supplied, not the ones printed in the plan text, as the orchestrator instructed.
 
@@ -89,5 +89,5 @@ None. This plan changes no behaviour a user can see; the live checks for the set
 
 ## Self-Check: PASSED
 
-- alita/modules/staff_seams_test.go, staff_panel.go and staff_link.go exist and hold `renderStaffRowStatus`, `listVerifiedOwnStaffGroups`, `linkToStaffGroup`, `announceStaffLink`.
+- fuku/modules/staff_seams_test.go, staff_panel.go and staff_link.go exist and hold `renderStaffRowStatus`, `listVerifiedOwnStaffGroups`, `linkToStaffGroup`, `announceStaffLink`.
 - Commits bed1a57, 5146a06, 889e336 and 75af581 are in `git log`.

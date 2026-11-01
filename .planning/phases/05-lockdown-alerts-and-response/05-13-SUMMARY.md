@@ -19,12 +19,12 @@ tech-stack:
     - "a refresh clears its edit mark only while buttons_live still has the value the edit was made with"
 key-files:
   created:
-    - alita/modules/lockdown_reminder_test.go
+    - fuku/modules/lockdown_reminder_test.go
   modified:
-    - alita/db/lockdown/alerts.go
-    - alita/db/lockdown/alerts_test.go
-    - alita/modules/lockdown_alert.go
-    - alita/modules/lockdown_worker.go
+    - fuku/db/lockdown/alerts.go
+    - fuku/db/lockdown/alerts_test.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/lockdown_worker.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -99,7 +99,7 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 - **Found during:** Task 1 (the orchestrator's 05-12 note, applied to the reminder design)
 - **Issue:** `RecordAlertSynced` cleared `edit_pending` unconditionally, so the previous reminder could keep its buttons.
 - **Fix:** `RecordAlertSynced(id, buttonsLive)` conditional clear plus a re-read after the claim; existing tests updated, one test added.
-- **Files modified:** `alita/db/lockdown/alerts.go`, `alita/modules/lockdown_alert.go`, `alita/db/lockdown/alerts_test.go`
+- **Files modified:** `fuku/db/lockdown/alerts.go`, `fuku/modules/lockdown_alert.go`, `fuku/db/lockdown/alerts_test.go`
 - **Commit:** 0d32147
 
 **2. [Rule 1 - Bug] A reminder posted after a revoke would have shown its footer twice**
@@ -116,14 +116,14 @@ Note: `commits: 4` counts the two RED test commits and the two implementation co
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownReminders$' -v ./alita/modules`: pass.
-- `go test -tags testtools -race -count=1 -run '^TestLockdownReminderContent$|^TestLockdownReminderDestinations$|^TestLockdownReminders$' -v ./alita/modules`: pass.
-- `go test -tags testtools -race -count=1 -run '^TestReminderSlots$|^TestAlertSync|^TestAlertClose$' -v ./alita/db/lockdown`: pass.
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules ./alita/db/lockdown`: pass (modules 68 s), including `TestLockdownNeverLiftsOnItsOwn` and `TestLockdownStopDuringCall`. Run twice (after each task), no failure.
-- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown`: clean. `gofmt -l` on the touched files prints nothing (`greetings_command_test.go` is listed by `gofmt -l alita/modules` but is not touched by this plan). `git diff --exit-code go.mod go.sum` exits 0.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownReminders$' -v ./fuku/modules`: pass.
+- `go test -tags testtools -race -count=1 -run '^TestLockdownReminderContent$|^TestLockdownReminderDestinations$|^TestLockdownReminders$' -v ./fuku/modules`: pass.
+- `go test -tags testtools -race -count=1 -run '^TestReminderSlots$|^TestAlertSync|^TestAlertClose$' -v ./fuku/db/lockdown`: pass.
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules ./fuku/db/lockdown`: pass (modules 68 s), including `TestLockdownNeverLiftsOnItsOwn` and `TestLockdownStopDuringCall`. Run twice (after each task), no failure.
+- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown`: clean. `gofmt -l` on the touched files prints nothing (`greetings_command_test.go` is listed by `gofmt -l fuku/modules` but is not touched by this plan). `git diff --exit-code go.mod go.sum` exits 0.
 - Acceptance greps pass: `lockdownReminderEvery = time.Hour`, `reminded := lockdownPlanReminders(ctx, b)` before the poster call, `lockdown_reminder_title` and `lockdown_reminder_counts` once in each of the 7 locale files, `lockdownReminderEvery` in AGENTS.md, `func lockdownRenderReminder(`, `lockdownRemovedSoFar(`.
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
-- The full `./alita/modules` package under -race was not re-run end to end; the Lockdown and Unlockdown subset (all lockdown code and tests) was.
+- The full `./fuku/modules` package under -race was not re-run end to end; the Lockdown and Unlockdown subset (all lockdown code and tests) was.
 - Not run: PostgreSQL (SQLite only here) and a real Telegram edit that drops a keyboard.
 
 ## Observations
@@ -147,4 +147,4 @@ None.
 
 ## Self-Check: PASSED
 
-`alita/modules/lockdown_reminder_test.go` exists; commits c529ae3, 0d32147, 2cfbdac and 0610a60 are on the branch.
+`fuku/modules/lockdown_reminder_test.go` exists; commits c529ae3, 0d32147, 2cfbdac and 0610a60 are on the branch.

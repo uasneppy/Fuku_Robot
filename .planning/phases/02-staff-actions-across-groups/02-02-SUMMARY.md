@@ -32,14 +32,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/staff_action_decide_test.go
-    - alita/modules/staff_action_actions_test.go
+    - fuku/modules/staff_action_decide_test.go
+    - fuku/modules/staff_action_actions_test.go
   modified:
-    - alita/modules/staff_action_decide.go
-    - alita/modules/staff_action.go
-    - alita/modules/staff_action_run.go
-    - alita/modules/staff_action_summary.go
-    - alita/modules/staff_action_dispatch_test.go
+    - fuku/modules/staff_action_decide.go
+    - fuku/modules/staff_action.go
+    - fuku/modules/staff_action_run.go
+    - fuku/modules/staff_action_summary.go
+    - fuku/modules/staff_action_dispatch_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -65,7 +65,7 @@ coverage:
     requirement: "STAFF-01"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_actions_test.go#TestStaffActionFiveActions"
+        ref: "fuku/modules/staff_action_actions_test.go#TestStaffActionFiveActions"
         status: pass
     human_judgment: false
   - id: D2
@@ -73,10 +73,10 @@ coverage:
     requirement: "STAFF-05"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_actions_test.go#TestStaffActionFiveActions"
+        ref: "fuku/modules/staff_action_actions_test.go#TestStaffActionFiveActions"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_actions_test.go#TestStaffActionUnmuteNonMember"
+        ref: "fuku/modules/staff_action_actions_test.go#TestStaffActionUnmuteNonMember"
         status: pass
     human_judgment: false
   - id: D3
@@ -84,19 +84,19 @@ coverage:
     requirement: "STAFF-07"
     verification:
       - kind: unit
-        ref: "alita/modules/staff_action_decide_test.go#TestStaffActionDecisionInvariants"
+        ref: "fuku/modules/staff_action_decide_test.go#TestStaffActionDecisionInvariants"
         status: pass
       - kind: unit
-        ref: "alita/modules/staff_action_decide_test.go#TestStaffActionDecisionTable"
+        ref: "fuku/modules/staff_action_decide_test.go#TestStaffActionDecisionTable"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_actions_test.go#TestStaffActionNeverLiftsBan"
+        ref: "fuku/modules/staff_action_actions_test.go#TestStaffActionNeverLiftsBan"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_actions_test.go#TestStaffActionMuteNeverShortens"
+        ref: "fuku/modules/staff_action_actions_test.go#TestStaffActionMuteNeverShortens"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_actions_test.go#TestStaffActionBanOverMute"
+        ref: "fuku/modules/staff_action_actions_test.go#TestStaffActionBanOverMute"
         status: pass
     human_judgment: false
   - id: D4
@@ -104,13 +104,13 @@ coverage:
     requirement: "STAFF-13"
     verification:
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionNonStaffUnchanged"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
+        ref: "fuku/modules/staff_action_dispatch_test.go#TestStaffActionAnonymous"
         status: pass
       - kind: integration
-        ref: "alita/modules/staff_action_actions_test.go#TestStaffActionHeaderDuration"
+        ref: "fuku/modules/staff_action_actions_test.go#TestStaffActionHeaderDuration"
         status: pass
     human_judgment: false
   - id: D5
@@ -153,7 +153,7 @@ status: complete
 
 Both tasks are `tdd="true"` and both have a RED commit before the GREEN commit.
 
-- **Task 1 RED (`22c5c57`):** `go test -tags testtools -race -count=1 -run '^TestStaffActionDecision|^TestStaffActionEndsLater$' ./alita/modules` exited 1. `TestStaffActionDecisionTable` failed on 29 sub-tests (every mute, kick, unban and unmute row; the rows for ban and for creator/admin already passed), each with the assertion `decideStaffAction(...) = {Call:0 Reason:fail_lookup}, want ...`. `TestStaffActionDecisionInvariants` and `TestStaffActionEndsLater` passed, which is expected: the invariants hold vacuously while the new kinds return no call, and `staffEndsLater` did not change. The new kind, call and reason constants had to be declared in the RED commit so the test compiles; `decideStaffAction` did not use them yet. GREEN is `b6e3e6e`: the same command and `TestStaffActionTracer` pass.
+- **Task 1 RED (`22c5c57`):** `go test -tags testtools -race -count=1 -run '^TestStaffActionDecision|^TestStaffActionEndsLater$' ./fuku/modules` exited 1. `TestStaffActionDecisionTable` failed on 29 sub-tests (every mute, kick, unban and unmute row; the rows for ban and for creator/admin already passed), each with the assertion `decideStaffAction(...) = {Call:0 Reason:fail_lookup}, want ...`. `TestStaffActionDecisionInvariants` and `TestStaffActionEndsLater` passed, which is expected: the invariants hold vacuously while the new kinds return no call, and `staffEndsLater` did not change. The new kind, call and reason constants had to be declared in the RED commit so the test compiles; `decideStaffAction` did not use them yet. GREEN is `b6e3e6e`: the same command and `TestStaffActionTracer` pass.
 - **Task 2 RED (`7957a85`):** the target set `TestStaffAction(FiveActions|NeverLiftsBan|BanOverMute|MuteNeverShortens|KickClearsMute|UnmuteNonMember|HeaderDuration|NonStaffUnchanged|Anonymous)` exited 1. Failures were all on the planned behaviour: "no confirm card was sent to the Staff Group" for every mute, kick, unban and unmute scenario (the commands were not registered), "messages to the Staff Group = [], want exactly one with staff_post_as_yourself" for the anonymous cases of the four new commands, and "staff commands = 1, want ... five". `TestStaffActionBanOverMute` and `TestStaffActionNonStaffUnchanged` passed at once: ban was already wired, and the non-staff comparison is a regression guard that must hold both before and after. GREEN is `0200f2c`, after which the whole set passes.
 - **Mutation check (reverted, not committed):** making `decideStaffMute` return a mute for a kicked target failed `TestStaffActionDecisionInvariants` ("restrict sent to a target who is neither member nor restricted") and `TestStaffActionNeverLiftsBan` ("line for Group A = ✅ Group A, want skipped").
 - **REFACTOR:** none.
@@ -161,13 +161,13 @@ Both tasks are `tdd="true"` and both have a RED commit before the GREEN commit.
 
 ## Files Created/Modified
 
-- `alita/modules/staff_action_decide.go` - four new kinds, calls and reasons, `staffDo`/`staffSkip`, the per-kind helpers
-- `alita/modules/staff_action_decide_test.go` - table, exhaustive invariants, `staffEndsLater` cases
-- `alita/modules/staff_action.go` - four rows in `staffActionCommands`
-- `alita/modules/staff_action_run.go` - four new Telegram calls in `executeStaffCall`
-- `alita/modules/staff_action_summary.go` - icons, names, `staffActionHasDuration`, new reason texts
-- `alita/modules/staff_action_actions_test.go` - end-to-end tests on the stateful fake
-- `alita/modules/staff_action_dispatch_test.go` - non-staff and anonymous suites widened to all five commands
+- `fuku/modules/staff_action_decide.go` - four new kinds, calls and reasons, `staffDo`/`staffSkip`, the per-kind helpers
+- `fuku/modules/staff_action_decide_test.go` - table, exhaustive invariants, `staffEndsLater` cases
+- `fuku/modules/staff_action.go` - four rows in `staffActionCommands`
+- `fuku/modules/staff_action_run.go` - four new Telegram calls in `executeStaffCall`
+- `fuku/modules/staff_action_summary.go` - icons, names, `staffActionHasDuration`, new reason texts
+- `fuku/modules/staff_action_actions_test.go` - end-to-end tests on the stateful fake
+- `fuku/modules/staff_action_dispatch_test.go` - non-staff and anonymous suites widened to all five commands
 - `locales/*.yml` (7) - 8 keys each
 - `AGENTS.md` - never-lift-a-ban rule
 
@@ -185,8 +185,8 @@ The plan lists `staff_action_actions_test.go` and the decision test as the only 
 
 ## Deferred Issues
 
-- `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit. Pre-existing and unrelated, left alone.
-- `make lint` cannot run in this sandbox (installed golangci-lint is built with go1.25, module targets 1.26.0). `gofmt -l` on all changed Go files (clean), `go vet -tags testtools ./alita/...`, `CGO_ENABLED=0 go build ./...`, `make check-translations` and `make check-docs` all pass.
+- `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit. Pre-existing and unrelated, left alone.
+- `make lint` cannot run in this sandbox (installed golangci-lint is built with go1.25, module targets 1.26.0). `gofmt -l` on all changed Go files (clean), `go vet -tags testtools ./fuku/...`, `CGO_ENABLED=0 go build ./...`, `make check-translations` and `make check-docs` all pass.
 - Human check (research flag A3), outstanding: in a throwaway supergroup linked to a test Staff Group, ban a test account with the per-group `/ban`, then from the Staff Group run `/mute <id>` and Confirm, then `/unmute <id>` and Confirm, then try to rejoin. Expected: both summaries show the group as "skipped: not in group" and the account is still banned.
 
 ## Issues Encountered
@@ -207,10 +207,10 @@ None - no external service configuration required.
 
 ## Verification Run
 
-- `go test -tags testtools -race -count=1 ./alita/modules ./alita/i18n` - pass
-- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./alita/i18n` - pass
+- `go test -tags testtools -race -count=1 ./fuku/modules ./fuku/i18n` - pass
+- `go test -tags testtools -count=1 -run '^TestStaffLocaleKeys$' ./fuku/i18n` - pass
 - `CGO_ENABLED=0 go build ./...` - pass
-- `go vet -tags testtools ./alita/...` - pass
+- `go vet -tags testtools ./fuku/...` - pass
 - `make check-translations`, `make check-docs` - pass
 - Acceptance greps: `OnlyIfBanned: true` and `resolveUnmutePermissions(` in `staff_action_run.go`, `Name: "unmute"` in `staff_action.go`, `only_if_banned` in `AGENTS.md`, `staffKindUnmute` and `func decideStaffUnmute` in `staff_action_decide.go` - all match
 - go.mod and go.sum untouched

@@ -21,15 +21,15 @@ tech-stack:
 key-files:
   created:
     - migrations/20261011130000_add_lockdown_burst.sql
-    - alita/db/lockdown/burst.go
-    - alita/db/lockdown/burst_test.go
-    - alita/modules/lockdown_alert_sample_test.go
+    - fuku/db/lockdown/burst.go
+    - fuku/db/lockdown/burst_test.go
+    - fuku/modules/lockdown_alert_sample_test.go
   modified:
-    - alita/db/models/lockdown.go
-    - alita/db/lockdown/alerts.go
-    - alita/db/lockdown/testmain_test.go
-    - alita/modules/lockdown_alert.go
-    - alita/modules/test_harness_test.go
+    - fuku/db/models/lockdown.go
+    - fuku/db/lockdown/alerts.go
+    - fuku/db/lockdown/testmain_test.go
+    - fuku/modules/lockdown_alert.go
+    - fuku/modules/test_harness_test.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -64,7 +64,7 @@ Note: `commits: 3` counts the two test commits and the one implementation commit
 ## What was built
 
 - **Migration `20261011130000_add_lockdown_burst.sql`**: `chat_lockdown_burst`, one row per account of a burst, with `uk_chat_lockdown_burst_user` on `(lockdown_id, user_id)`, source and state CHECK constraints, a SQL-only foreign key to `chat_lockdowns` with `ON DELETE CASCADE` and `idx_chat_lockdown_burst_lockdown_state`. Every statement is idempotent; no transaction statements, no `CONCURRENTLY`. The response columns are created now for plans 05-08 and 05-10.
-- **Model (`models/lockdown.go`)**: `ChatLockdownBurst` (`TableName` `chat_lockdown_burst`) and the `BurstSource*` / `BurstState*` constants with GoDoc. Added to the AutoMigrate lists of `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go`.
+- **Model (`models/lockdown.go`)**: `ChatLockdownBurst` (`TableName` `chat_lockdown_burst`) and the `BurstSource*` / `BurstState*` constants with GoDoc. Added to the AutoMigrate lists of `fuku/modules/test_harness_test.go` and `fuku/db/lockdown/testmain_test.go`.
 - **`BeginAlert` (`alerts.go`)**: `AlertPlan.Burst`; the winner inserts the burst rows in the same transaction with `ON CONFLICT DO NOTHING`, setting the lockdown ID itself. The loser inserts nothing; an empty burst inserts nothing.
 - **`burst.go`**: `BurstSampleFresh(lockdownID, limit)` returns pre rows (by `joined_at`, then ID) followed by the lockdown's joiner rows whose user has no pre row (by ID), cut to `limit`, plus the counts of the whole burst. A limit of 0 returns the counts alone.
 - **`lockdown_alert.go`**: `lockdownBurstSnapshot` reads `lockdownRecentLookup(chat, locked_at - lockdownRecentWindow, locked_at)` in the plan step, skips the bot's own ID, and treats an error as empty (warn log). `lockdownRenderSample` / `lockdownRenderSampleAccount` render the counts line, title, up to `lockdownAlertSampleMax` (10) lines and the "and N more" line; names are capped (64 runes), usernames capped (32) and HTML-escaped, the ID is in code tags, a bot gets the localized mark. The account lines are spliced in through `lockdownSampleToken`, never through the translator. `lockdownRenderAlert` reads the sample fresh at post time; a read error leaves it out and the alert still posts.
@@ -91,13 +91,13 @@ None.
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertSample$' -v ./alita/modules`: pass (7 subtests).
-- `go test -tags testtools -race -count=1 -run '^TestBurstSample$|^TestBeginAlert$' -v ./alita/db/lockdown`: pass (`TestBeginAlertBurst` also passes).
-- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./alita/modules ./alita/db/lockdown`: pass (49 s).
-- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./alita/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./alita/modules ./alita/db/lockdown ./alita/db/models`, `go test -tags testtools ./alita/db/migrations`: clean.
-- Acceptance greps pass: last migration is `20261011130000_add_lockdown_burst.sql`; no `BEGIN/COMMIT/ROLLBACK/CONCURRENTLY`; `models.ChatLockdownBurst{}` once in each AutoMigrate list; `lockdownRecentLookup(` and `lockdownAlertSampleMax = 10` present; `go.mod` and `go.sum` unchanged. `gofmt -l` on the touched files prints nothing (it lists `alita/modules/greetings_command_test.go`, which this plan did not touch).
+- `go test -tags testtools -race -count=1 -run '^TestLockdownAlertSample$' -v ./fuku/modules`: pass (7 subtests).
+- `go test -tags testtools -race -count=1 -run '^TestBurstSample$|^TestBeginAlert$' -v ./fuku/db/lockdown`: pass (`TestBeginAlertBurst` also passes).
+- `go test -tags testtools -race -count=1 -run 'Lockdown|Unlockdown' ./fuku/modules ./fuku/db/lockdown`: pass (49 s).
+- `go test -tags testtools -count=1 -run '^TestLockdownLocaleKeys$' ./fuku/i18n`, `make check-translations`, `make check-docs`, `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools ./fuku/modules ./fuku/db/lockdown ./fuku/db/models`, `go test -tags testtools ./fuku/db/migrations`: clean.
+- Acceptance greps pass: last migration is `20261011130000_add_lockdown_burst.sql`; no `BEGIN/COMMIT/ROLLBACK/CONCURRENTLY`; `models.ChatLockdownBurst{}` once in each AutoMigrate list; `lockdownRecentLookup(` and `lockdownAlertSampleMax = 10` present; `go.mod` and `go.sum` unchanged. `gofmt -l` on the touched files prints nothing (it lists `fuku/modules/greetings_command_test.go`, which this plan did not touch).
 - `golangci-lint` was not run: the installed build targets Go 1.25 and cannot lint Go 1.26 code (go vet and gofmt used instead).
-- Not run: the whole `./alita/modules` package under `-race`, any PostgreSQL check (including the human-check of applying the migration on PostgreSQL 16 after `20261011120000`; the SQL was checked only by reading and by the SQLite AutoMigrate of the same model), and a real Telegram post.
+- Not run: the whole `./fuku/modules` package under `-race`, any PostgreSQL check (including the human-check of applying the migration on PostgreSQL 16 after `20261011120000`; the SQL was checked only by reading and by the SQLite AutoMigrate of the same model), and a real Telegram post.
 
 ## Threat surface
 
@@ -109,4 +109,4 @@ None. The response columns of `chat_lockdown_burst` (state, reason, detail, run_
 
 ## Self-Check: PASSED
 
-`migrations/20261011130000_add_lockdown_burst.sql`, `alita/db/lockdown/burst.go`, `alita/db/lockdown/burst_test.go` and `alita/modules/lockdown_alert_sample_test.go` exist; commits 300cc45, e6e457b and 69b11e3 are on the branch.
+`migrations/20261011130000_add_lockdown_burst.sql`, `fuku/db/lockdown/burst.go`, `fuku/db/lockdown/burst_test.go` and `fuku/modules/lockdown_alert_sample_test.go` exist; commits 300cc45, e6e457b and 69b11e3 are on the branch.

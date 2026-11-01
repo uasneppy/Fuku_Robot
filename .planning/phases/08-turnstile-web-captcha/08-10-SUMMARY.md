@@ -27,16 +27,16 @@ tech-stack:
     - "Count once: writeAnswer counts, writeBody replays, writeLimited counts a refusal as its own event"
 key-files:
   created:
-    - alita/utils/captchaweb/stats.go
-    - alita/modules/captcha_web_wiring_test.go
+    - fuku/utils/captchaweb/stats.go
+    - fuku/modules/captcha_web_wiring_test.go
   modified:
     - main.go
-    - alita/utils/httpserver/server.go
-    - alita/utils/httpserver/server_test.go
-    - alita/modules/captcha_web.go
-    - alita/modules/captcha.go
-    - alita/modules/devs.go
-    - alita/utils/captchaweb/verify.go
+    - fuku/utils/httpserver/server.go
+    - fuku/utils/httpserver/server_test.go
+    - fuku/modules/captcha_web.go
+    - fuku/modules/captcha.go
+    - fuku/modules/devs.go
+    - fuku/utils/captchaweb/verify.go
     - AGENTS.md
 key-decisions:
   - "Without Redis main installs no runtime and mounts no route (one warning), instead of the plan's runtime-without-Redis, because newCaptchaWebRuntime rejects a nil Redis client"
@@ -57,22 +57,22 @@ coverage:
   - deliverable: "With the four settings set the page, verify and health routes are served on the bot's port through Server.Handle, the verify route closed until MarkCaptchaWebReady, and unset means no route"
     verification:
       - kind: test
-        ref: "alita/utils/httpserver/server_test.go#TestCaptchaWebRoutesRegistration"
+        ref: "fuku/utils/httpserver/server_test.go#TestCaptchaWebRoutesRegistration"
         status: pass
       - kind: test
-        ref: "alita/modules/captcha_web_wiring_test.go#TestCaptchaWebWiring"
+        ref: "fuku/modules/captcha_web_wiring_test.go#TestCaptchaWebWiring"
         status: pass
     human_judgment: false
   - deliverable: "Startup warns when METRICS_AUTH_TOKEN or CAPTCHA_WEB_TRUSTED_PROXIES is empty"
     verification:
       - kind: test
-        ref: "alita/modules/captcha_web_wiring_test.go#TestCaptchaWebStartupWarnings"
+        ref: "fuku/modules/captcha_web_wiring_test.go#TestCaptchaWebStartupWarnings"
         status: pass
     human_judgment: false
   - deliverable: "Developer /stats shows eight per-replica web captcha counters, each counted once, numbers only"
     verification:
       - kind: test
-        ref: "alita/modules/captcha_web_wiring_test.go#TestCaptchaWebStatsSection"
+        ref: "fuku/modules/captcha_web_wiring_test.go#TestCaptchaWebStatsSection"
         status: pass
     human_judgment: false
   - deliverable: "The production main.go path (registerCaptchaWeb with real locales, polling and webhook ordering) on a real bot, hostname and Cloudflare keys"
@@ -109,14 +109,14 @@ coverage:
 
 ## Verification
 
-- `go test -tags testtools -race -count=1 -run '^TestCaptchaWebRoutesRegistration$' -v ./alita/utils/httpserver`: PASS (seven subtests).
-- `-run '^(TestCaptchaWebWiring|TestCaptchaWebStartupWarnings)$' -v ./alita/modules`: PASS (the wiring test drives a join, the page, a 503 verify and health before ready, then a pass and unmute through a real `ServeMux`).
-- `-run '^TestCaptchaWebStatsSection$' -v ./alita/modules`: PASS (eight subtests, deltas of `StatsSnapshot`).
-- `-run 'Captcha|Stats|Devs' ./alita/modules ./alita/utils/captchaweb ./alita/utils/httpserver`: PASS. Whole `./alita/utils/httpserver`, `./alita/utils/captchaweb` and `./alita/i18n`: PASS.
-- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools . ./alita/...`, `gofmt -l main.go alita`: clean. `go.mod`/`go.sum` unchanged.
+- `go test -tags testtools -race -count=1 -run '^TestCaptchaWebRoutesRegistration$' -v ./fuku/utils/httpserver`: PASS (seven subtests).
+- `-run '^(TestCaptchaWebWiring|TestCaptchaWebStartupWarnings)$' -v ./fuku/modules`: PASS (the wiring test drives a join, the page, a 503 verify and health before ready, then a pass and unmute through a real `ServeMux`).
+- `-run '^TestCaptchaWebStatsSection$' -v ./fuku/modules`: PASS (eight subtests, deltas of `StatsSnapshot`).
+- `-run 'Captcha|Stats|Devs' ./fuku/modules ./fuku/utils/captchaweb ./fuku/utils/httpserver`: PASS. Whole `./fuku/utils/httpserver`, `./fuku/utils/captchaweb` and `./fuku/i18n`: PASS.
+- `CGO_ENABLED=0 go build ./...`, `go vet -tags testtools . ./fuku/...`, `gofmt -l main.go fuku`: clean. `go.mod`/`go.sum` unchanged.
 - `make check-translations`: pass. `node --test scripts/captcha-page/*.test.mjs`: 24 pass.
 - `--version` smoke: binary built to the scratchpad and run from `/tmp`, printed `v2.23.14`.
-- Not run: `make lint` (golangci-lint is built with go1.25 against module go1.26.0 in this sandbox; `go vet` and `gofmt` stood in), the whole `./alita/modules` package and `make test` (the orchestrator runs them between waves), `make check-docs` (no en.yml or docs change).
+- Not run: `make lint` (golangci-lint is built with go1.25 against module go1.26.0 in this sandbox; `go vet` and `gofmt` stood in), the whole `./fuku/modules` package and `make test` (the orchestrator runs them between waves), `make check-docs` (no en.yml or docs change).
 - Acceptance greps: Handle 1, `MarkCaptchaWebReady()` 1, `CaptchaWebConfigured()` 1, `CaptchaWebRoutes()` 1, AGENTS.md `MarkCaptchaWebReady` 1 and `node --test scripts/captcha-page/` 1, `AddHandlerToGroup` in captcha_web.go 0, `StatsSnapshot` 1, `captchaWebStatsSection()` in devs.go 1, `CountIssued()` 1, `CountExpired()` 1.
 
 ## Deviations from Plan
@@ -132,9 +132,9 @@ coverage:
 
 **2. [Rule 2 - Counting rule] Replays and refusals must not be double counted**
 - **Found during:** Task 2
-- **Issue:** "Counted once per event" is not met if `writeAnswer` counts every write: a remembered pass replayed from `alita:captcha:done:<token>` would add a second Passed, and a 429 would add both Limited and Retry.
+- **Issue:** "Counted once per event" is not met if `writeAnswer` counts every write: a remembered pass replayed from `fuku:captcha:done:<token>` would add a second Passed, and a 429 would add both Limited and Retry.
 - **Fix:** `writeAnswer` counts then calls `writeBody`; the replay path uses `writeBody` and a refusal uses `writeLimited`. An `expired` answer is not counted in `writeAnswer` because `CountExpired` counts the expiry where the attempt is claimed.
-- **Files modified:** alita/utils/captchaweb/verify.go
+- **Files modified:** fuku/utils/captchaweb/verify.go
 - **Commit:** 41507b4
 
 **3. [Test scope] One extra assertion in the wiring test file**
@@ -163,4 +163,4 @@ None: the routes and the shared port are in the plan's threat model (T-08-41 to 
 
 ## Self-Check: PASSED
 
-Created files exist (`alita/utils/captchaweb/stats.go`, `alita/modules/captcha_web_wiring_test.go`), the four commits are on the branch (`6e1f5bd`, `a9d571e`, `119d70e`, `41507b4`), and every acceptance command above printed the expected value.
+Created files exist (`fuku/utils/captchaweb/stats.go`, `fuku/modules/captcha_web_wiring_test.go`), the four commits are on the branch (`6e1f5bd`, `a9d571e`, `119d70e`, `41507b4`), and every acceptance command above printed the expected value.

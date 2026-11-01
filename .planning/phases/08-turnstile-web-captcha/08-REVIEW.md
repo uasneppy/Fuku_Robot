@@ -4,42 +4,42 @@ reviewed: 2026-10-30T02:35:00Z
 depth: deep
 files_reviewed: 38
 files_reviewed_list:
-  - alita/utils/captchaweb/challenge.go
-  - alita/utils/captchaweb/initdata.go
-  - alita/utils/captchaweb/siteverify.go
-  - alita/utils/captchaweb/verify.go
-  - alita/utils/captchaweb/limiter.go
-  - alita/utils/captchaweb/clientip.go
-  - alita/utils/captchaweb/page.go
-  - alita/utils/captchaweb/page/captcha.html
-  - alita/utils/captchaweb/stats.go
-  - alita/utils/captchaweb/fixtures_testtools.go
-  - alita/utils/captchaweb/clientip_test.go
-  - alita/utils/captchaweb/initdata_test.go
-  - alita/utils/captchaweb/leaf_test.go
-  - alita/utils/captchaweb/limiter_test.go
-  - alita/utils/captchaweb/page_test.go
-  - alita/utils/captchaweb/siteverify_test.go
-  - alita/utils/captchaweb/verify_limits_test.go
-  - alita/utils/captchaweb/verify_outcomes_test.go
+  - fuku/utils/captchaweb/challenge.go
+  - fuku/utils/captchaweb/initdata.go
+  - fuku/utils/captchaweb/siteverify.go
+  - fuku/utils/captchaweb/verify.go
+  - fuku/utils/captchaweb/limiter.go
+  - fuku/utils/captchaweb/clientip.go
+  - fuku/utils/captchaweb/page.go
+  - fuku/utils/captchaweb/page/captcha.html
+  - fuku/utils/captchaweb/stats.go
+  - fuku/utils/captchaweb/fixtures_testtools.go
+  - fuku/utils/captchaweb/clientip_test.go
+  - fuku/utils/captchaweb/initdata_test.go
+  - fuku/utils/captchaweb/leaf_test.go
+  - fuku/utils/captchaweb/limiter_test.go
+  - fuku/utils/captchaweb/page_test.go
+  - fuku/utils/captchaweb/siteverify_test.go
+  - fuku/utils/captchaweb/verify_limits_test.go
+  - fuku/utils/captchaweb/verify_outcomes_test.go
   - scripts/captcha-page/captcha-page.test.mjs
-  - alita/modules/captcha_web.go
-  - alita/modules/captcha.go
-  - alita/modules/devs.go
-  - alita/modules/captcha_web_test.go
-  - alita/modules/captcha_web_outcomes_test.go
-  - alita/modules/captcha_web_wiring_test.go
-  - alita/modules/captcha_mode_turnstile_test.go
-  - alita/utils/httpserver/server.go
+  - fuku/modules/captcha_web.go
+  - fuku/modules/captcha.go
+  - fuku/modules/devs.go
+  - fuku/modules/captcha_web_test.go
+  - fuku/modules/captcha_web_outcomes_test.go
+  - fuku/modules/captcha_web_wiring_test.go
+  - fuku/modules/captcha_mode_turnstile_test.go
+  - fuku/utils/httpserver/server.go
   - main.go
-  - alita/config/config.go
-  - alita/config/captcha_web_test.go
-  - alita/i18n/table.go
-  - alita/i18n/captcha_web_locale_test.go
-  - alita/db/captcha/repository.go
-  - alita/db/models/captcha.go
+  - fuku/config/config.go
+  - fuku/config/captcha_web_test.go
+  - fuku/i18n/table.go
+  - fuku/i18n/captcha_web_locale_test.go
+  - fuku/db/captcha/repository.go
+  - fuku/db/models/captcha.go
   - migrations/20261030120000_allow_turnstile_captcha_mode.sql
-  - alita/db/migrations/captcha_mode_test.go
+  - fuku/db/migrations/captcha_mode_test.go
   - Makefile
   - sample.env
 findings:
@@ -61,7 +61,7 @@ status: issues_found
 
 The Turnstile web captcha was reviewed across the `captchaweb` package, the module-side
 `Backend`, the callback guards, the HTTP wiring, the config, the migration and the tests.
-`go test -tags testtools ./alita/utils/captchaweb`, the captcha-related module tests under
+`go test -tags testtools ./fuku/utils/captchaweb`, the captcha-related module tests under
 `-race`, and `node --test scripts/captcha-page/captcha-page.test.mjs` all pass in this checkout.
 The migration test that needs PostgreSQL was not run (PostgreSQL was not started).
 
@@ -92,7 +92,7 @@ No blocker was found. The warnings are failure-path defects and one operator-err
 
 ### WR-01: A lost claim is answered "expired" and the challenge is burnt even when the attempt row is still live
 
-**File:** `alita/utils/captchaweb/verify.go:575-576, 596-599`, `alita/modules/captcha_web.go:308-311, 382-383`, `alita/modules/captcha.go:1351-1373`
+**File:** `fuku/utils/captchaweb/verify.go:575-576, 596-599`, `fuku/modules/captcha_web.go:308-311, 382-383`, `fuku/modules/captcha.go:1351-1373`
 
 **Issue:** `pass()` maps `PassLost` to `c.expire()` and `fail()` maps `claimed == false` to `c.expire()`.
 Both assume that "no claim" means "the row is gone". That is not what the Backend reports.
@@ -130,7 +130,7 @@ return claimed, nil
 
 ### WR-02: After `PassUnmuteFailed` the member passed, but the page ends in a terminal "invalid" screen
 
-**File:** `alita/utils/captchaweb/verify.go:577-583`, `alita/modules/captcha_web.go:312-316`
+**File:** `fuku/utils/captchaweb/verify.go:577-583`, `fuku/modules/captcha_web.go:312-316`
 
 **Issue:** When the claim wins but the unmute fails, the attempt row is already deleted. The Backend deletes
 the challenge message and leaves a durable `captcha_muted_users` retry, so the member will be unmuted. The
@@ -148,7 +148,7 @@ stay `retry` if the intent is to reflect the failed unmute.
 
 ### WR-03: A Redis error or parse failure after the Lua delete loses the challenge without a re-arm
 
-**File:** `alita/utils/captchaweb/challenge.go:255-286`, `alita/utils/captchaweb/verify.go:390-396`
+**File:** `fuku/utils/captchaweb/challenge.go:255-286`, `fuku/utils/captchaweb/verify.go:390-396`
 
 **Issue:** `consumeScript` deletes the key atomically in Redis. `ConsumeIfUser` then reads the reply under a
 250 ms context derived from `r.Context()`. Two failure modes leave the key deleted while the caller gets an
@@ -170,7 +170,7 @@ not abandon it mid-flight.
 
 ### WR-04: A sitekey/secret mismatch (or the Cloudflare test keys) makes every honest solve a "failed" outcome and kicks the joiner
 
-**File:** `alita/utils/captchaweb/siteverify.go:203-247`, `alita/utils/captchaweb/verify.go:545-549`
+**File:** `fuku/utils/captchaweb/siteverify.go:203-247`, `fuku/utils/captchaweb/verify.go:545-549`
 
 **Issue:** D-28 treats `invalid-input-response` as proof that the member's token is bad. In practice it is
 also what Cloudflare returns when the token was minted by a widget whose secret is not the one configured. Two
@@ -185,7 +185,7 @@ guard.
 
 **Fix:** Add a cheap circuit breaker so a bad configuration cannot mass-kick:
 
-- Keep a Redis counter `alita:captcha:cf:fail` over a rolling 10 minutes. When there are N (say 5)
+- Keep a Redis counter `fuku:captcha:cf:fail` over a rolling 10 minutes. When there are N (say 5)
   consecutive `OutcomeFailed` with reason `invalid_token` or `duplicate` and zero `OutcomePass`, treat further
   failures as `OutcomeRetry` with `ReasonSecret`. That makes `ConfigError()` log the fault.
 - Alternatively, run one canary `Verify` at startup with an obviously fake token. A secret that Cloudflare
@@ -194,7 +194,7 @@ guard.
 
 ### WR-05: `Backend.Fail` ignores approved users and a disabled captcha, which the timer path honours
 
-**File:** `alita/modules/captcha_web.go:370-384`, `alita/modules/captcha.go:1319-1347`
+**File:** `fuku/modules/captcha_web.go:370-384`, `fuku/modules/captcha.go:1319-1347`
 
 **Issue:** `expireCaptchaAttempt` (the timer and cleanup path) first checks `chat_status.IsApproved` and
 `settings.Enabled`. For an approved user, or a group that disabled the captcha, it deletes the message and
@@ -209,7 +209,7 @@ Return `claimed=true` with an `Action` of `""` for the released case, so the pag
 
 ### WR-06: The in-flight slot is taken before the per-address window and before the unauthenticated body is read
 
-**File:** `alita/utils/captchaweb/verify.go:346-361`, `alita/utils/httpserver/server.go:407`
+**File:** `fuku/utils/captchaweb/verify.go:346-361`, `fuku/utils/httpserver/server.go:407`
 
 **Issue:** Each request takes one of 64 `inflight` slots, then the per-address window is counted, and only then
 is the body read. The server's 10 s `ReadTimeout` is the only bound on a slow upload. An unauthenticated
@@ -226,7 +226,7 @@ counted whether or not the slot is free.
 
 ### WR-07: `Backend.Fail` and `Expire` discard whether the failure action actually applied, so the page reports a removal that did not happen
 
-**File:** `alita/modules/captcha_web.go:382`, `alita/modules/captcha.go:1396-1405, 1336-1347`
+**File:** `fuku/modules/captcha_web.go:382`, `fuku/modules/captcha.go:1396-1405, 1336-1347`
 
 **Issue:** `handleCaptchaTimeout` returns `(claimed, applied)`. When the action fails (Telegram error, missing
 right), it unmutes the member and returns `(true, false)`. `Fail` keeps only `claimed`, and `expireCaptchaAttempt`
@@ -244,7 +244,7 @@ applied, or at least store the `Done` marker with an empty action so the page sh
 
 ### IN-01: The handlers' own method checks are dead code, and the documented 405 headers are not what the mux sends
 
-**File:** `alita/utils/captchaweb/verify.go:335-339`, `alita/utils/captchaweb/page.go:143-148`, `AGENTS.md` (verify route paragraph)
+**File:** `fuku/utils/captchaweb/verify.go:335-339`, `fuku/utils/captchaweb/page.go:143-148`, `AGENTS.md` (verify route paragraph)
 
 **Issue:** The routes are mounted as `"POST /captcha/verify"` and `"GET /captcha"`, so Go's mux answers a wrong
 method itself with a plain-text 405. That response has no `Cache-Control: no-store`, no `X-Content-Type-Options`
@@ -259,7 +259,7 @@ or delete the dead branches and correct the AGENTS.md sentence. Add a test throu
 
 ### IN-02: `ClientIP` returns a shared private address as a bucket when it comes from `X-Forwarded-For`
 
-**File:** `alita/utils/captchaweb/clientip.go:99-108`
+**File:** `fuku/utils/captchaweb/clientip.go:99-108`
 
 **Issue:** For an untrusted `RemoteAddr`, `sharedAddress` makes the result `bucket=false`. For the entry taken
 from `X-Forwarded-For` the same check is skipped (`return entry, true`). If that entry is a private, loopback
@@ -271,7 +271,7 @@ but the result silently becomes a self-inflicted limit.
 
 ### IN-03: `CAPTCHA_WEB_TRUSTED_PROXIES` is validated differently in `config` and in `captchaweb`, and setting it alone aborts startup
 
-**File:** `alita/config/config.go:263, 306-327`, `alita/utils/captchaweb/clientip.go:14-37`
+**File:** `fuku/config/config.go:263, 306-327`, `fuku/utils/captchaweb/clientip.go:14-37`
 
 **Issue:** `validCaptchaWebProxies` rejects an empty entry (`"10.0.0.1,,10.0.0.2"` or a trailing comma).
 `ParseTrustedProxies` documents "empty entries are skipped". Two parsers for one setting can drift, and the
@@ -284,7 +284,7 @@ inputs. Consider logging a warning instead of failing when the proxy list is set
 
 ### IN-04: The availability memo is three independent atomics
 
-**File:** `alita/modules/captcha_web.go:76-86, 195-212`
+**File:** `fuku/modules/captcha_web.go:76-86, 195-212`
 
 **Issue:** `captchaWebProbeRT`, `captchaWebProbeAt` and `captchaWebProbeOK` are loaded and stored separately.
 Concurrent callers can observe a new `RT` with an old `At` or `OK`, so one call can serve the previous
@@ -296,7 +296,7 @@ probe in parallel when the memo expires.
 
 ### IN-05: The page's JavaScript logic is tested only outside `make test`, and the language list is duplicated in three places
 
-**File:** `scripts/captcha-page/captcha-page.test.mjs`, `alita/utils/captchaweb/page.go:52`, `alita/utils/captchaweb/page/captcha.html:236`
+**File:** `scripts/captcha-page/captcha-page.test.mjs`, `fuku/utils/captchaweb/page.go:52`, `fuku/utils/captchaweb/page/captcha.html:236`
 
 **Issue:** The 24 Node tests cover the answer-to-state mapping, `cdata`, the submit latch and the contrast
 guard. `make test` and CI do not run them (`AGENTS.md`: "run by the executor"), so a regression in
@@ -310,7 +310,7 @@ of `captcha.html` and compares it with `PageLanguages`.
 
 ### IN-06: Stale initData and the CSP are unverified edge cases that the deferred spike has to cover
 
-**File:** `alita/utils/captchaweb/initdata.go:17, 93`, `alita/utils/captchaweb/page.go:127-137`, `alita/utils/captchaweb/page/captcha.html`
+**File:** `fuku/utils/captchaweb/initdata.go:17, 93`, `fuku/utils/captchaweb/page.go:127-137`, `fuku/utils/captchaweb/page/captcha.html`
 
 **Issue:**
 

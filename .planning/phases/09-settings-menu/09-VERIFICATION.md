@@ -53,9 +53,9 @@ human_verification:
 
 | Artifact | Status | Details |
 |---|---|---|
-| `alita/modules/settings.go`, `settings_menu.go`, `settings_pages.go`, `settings_card.go` | VERIFIED | Registered in `init()` (priority 239), `RegisterAnonymousAdminHandler("settings")`, `RegisterDeepLinkHandler("settings_")`, callback `callbackquery.Prefix("settings|")` with no `SetAllowChannel`; `registerSettingsPage` panics on duplicate key/code |
+| `fuku/modules/settings.go`, `settings_menu.go`, `settings_pages.go`, `settings_card.go` | VERIFIED | Registered in `init()` (priority 239), `RegisterAnonymousAdminHandler("settings")`, `RegisterDeepLinkHandler("settings_")`, callback `callbackquery.Prefix("settings|")` with no `SetAllowChannel`; `registerSettingsPage` panics on duplicate key/code |
 | `settings_staff.go`, `settings_lockdown.go`, `settings_captcha.go`, `settings_antiflood.go` | VERIFIED | Each page self-registers from its own `init`; every control declares a `settingsRight`; unknown right fails closed |
-| Locales | VERIFIED | 83 `settings_*` keys in each of en/es/fr/hi/id/pt/ru; `make check-translations` clean; `alita/i18n` settings limits tests PASS |
+| Locales | VERIFIED | 83 `settings_*` keys in each of en/es/fr/hi/id/pt/ru; `make check-translations` clean; `fuku/i18n` settings limits tests PASS |
 | Callback answering | VERIFIED | `answer()` is the only path (no `query.Answer` in settings files); deferred `press.answer("")` after `RecoverFromPanic` guarantees exactly one answer even on panic; tests count answers |
 
 ### Behavioral Spot-Checks and Commands Run
@@ -63,7 +63,7 @@ human_verification:
 | Check | Result |
 |---|---|
 | `CGO_ENABLED=0 go build ./...` | PASS |
-| `go test -tags testtools -race -count=1 -run '^(TestSettings\|TestLoadSettings)' ./alita/modules ./alita/i18n` | PASS (modules 74.5 s, i18n 5.1 s), no `t.Skip` in settings tests |
+| `go test -tags testtools -race -count=1 -run '^(TestSettings\|TestLoadSettings)' ./fuku/modules ./fuku/i18n` | PASS (modules 74.5 s, i18n 5.1 s), no `t.Skip` in settings tests |
 | `make check-translations` | PASS, all 7 locales complete |
 | `make check-docs` | PASS, no drift |
 | Whole `make test` | not re-run (orchestrator: 64 packages ok) |

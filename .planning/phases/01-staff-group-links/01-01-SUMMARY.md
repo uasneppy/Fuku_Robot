@@ -34,23 +34,23 @@ tech-stack:
 key-files:
   created:
     - migrations/20261004120000_add_staff_groups_and_links.sql
-    - alita/db/models/staff.go
-    - alita/db/staff/repository.go
-    - alita/db/staff/testmain_test.go
-    - alita/db/staff/repository_test.go
-    - alita/utils/chat_status/owner.go
-    - alita/utils/chat_status/owner_test.go
-    - alita/modules/staff.go
-    - alita/modules/staff_panel.go
-    - alita/modules/staff_helpers_test.go
-    - alita/modules/staff_test.go
-    - alita/i18n/staff_locale_test.go
+    - fuku/db/models/staff.go
+    - fuku/db/staff/repository.go
+    - fuku/db/staff/testmain_test.go
+    - fuku/db/staff/repository_test.go
+    - fuku/utils/chat_status/owner.go
+    - fuku/utils/chat_status/owner_test.go
+    - fuku/modules/staff.go
+    - fuku/modules/staff_panel.go
+    - fuku/modules/staff_helpers_test.go
+    - fuku/modules/staff_test.go
+    - fuku/i18n/staff_locale_test.go
     - docs/src/content/docs/commands/staff/index.md
   modified:
-    - alita/db/cache/local.go
-    - alita/db/cache/local_test.go
-    - alita/db/testmain_test.go
-    - alita/modules/test_harness_test.go
+    - fuku/db/cache/local.go
+    - fuku/db/cache/local_test.go
+    - fuku/db/testmain_test.go
+    - fuku/modules/test_harness_test.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -78,7 +78,7 @@ coverage:
     requirement: "SETUP-01"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffTracerSetStaffThenStaffShowsPanel$' ./alita/modules#TestStaffTracerSetStaffThenStaffShowsPanel"
+        ref: "go test -tags testtools -race -run '^TestStaffTracerSetStaffThenStaffShowsPanel$' ./fuku/modules#TestStaffTracerSetStaffThenStaffShowsPanel"
         status: pass
     human_judgment: false
   - id: D2
@@ -86,10 +86,10 @@ coverage:
     requirement: "SETUP-08"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffTracerSetStaffRefusesNonOwnerAndUnknown$' ./alita/modules#TestStaffTracerSetStaffRefusesNonOwnerAndUnknown"
+        ref: "go test -tags testtools -race -run '^TestStaffTracerSetStaffRefusesNonOwnerAndUnknown$' ./fuku/modules#TestStaffTracerSetStaffRefusesNonOwnerAndUnknown"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestCheckOwner' ./alita/utils/chat_status#TestCheckOwnerUnknownOnError"
+        ref: "go test -tags testtools -race -run '^TestCheckOwner' ./fuku/utils/chat_status#TestCheckOwnerUnknownOnError"
         status: pass
     human_judgment: false
   - id: D3
@@ -97,10 +97,10 @@ coverage:
     requirement: "SETUP-08"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestStaffConstraints|^TestStaffRepo|^TestStaffTablesStayOutOfBackup' ./alita/db/staff"
+        ref: "go test -tags testtools -race -run '^TestStaffConstraints|^TestStaffRepo|^TestStaffTablesStayOutOfBackup' ./fuku/db/staff"
         status: pass
       - kind: unit
-        ref: "go test -tags testtools -race -run '^TestSkipLocalMatchesFreshnessCriticalKeys$' ./alita/db/cache"
+        ref: "go test -tags testtools -race -run '^TestSkipLocalMatchesFreshnessCriticalKeys$' ./fuku/db/cache"
         status: pass
     human_judgment: false
   - id: D4
@@ -108,7 +108,7 @@ coverage:
     requirement: "PLAT-03"
     verification:
       - kind: unit
-        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./alita/i18n"
+        ref: "go test -tags testtools -run '^TestStaffLocaleKeys$' ./fuku/i18n"
         status: pass
       - kind: other
         ref: "make check-translations && make check-docs"
@@ -164,8 +164,8 @@ status: complete
 
 **2. [Rule 2 - Missing critical] Test for the backup prohibition**
 - **Found during:** Task 2
-- **Issue:** The plan's prohibition P5 is marked `verification: test`, but the plan only listed `git diff --exit-code -- alita/db/backup/`, which is a check at commit time and not a regression guard.
-- **Fix:** Added `TestStaffTablesStayOutOfBackup` in `alita/db/staff/repository_test.go` (uses `backup.IsValidModule` and `AllExportableModules`, so it asserts behaviour, not source text).
+- **Issue:** The plan's prohibition P5 is marked `verification: test`, but the plan only listed `git diff --exit-code -- fuku/db/backup/`, which is a check at commit time and not a regression guard.
+- **Fix:** Added `TestStaffTablesStayOutOfBackup` in `fuku/db/staff/repository_test.go` (uses `backup.IsValidModule` and `AllExportableModules`, so it asserts behaviour, not source text).
 - **Commit:** 296388f
 
 ### TDD note
@@ -184,7 +184,7 @@ None beyond the plan's threat model. T-01-01 (live `CheckOwner` before any write
 
 ## Issues Encountered
 
-- `gofmt -l` reports `alita/modules/greetings_command_test.go`, a pre-existing file outside this plan's scope; not touched.
+- `gofmt -l` reports `fuku/modules/greetings_command_test.go`, a pre-existing file outside this plan's scope; not touched.
 - Could not start PostgreSQL in the sandbox to run the migration for real (see coverage D5). `make test` and `make lint` were not run (toolchain limits noted in the plan); the equivalent `go test -tags testtools -race` and `go vet -tags testtools` were.
 
 ## Next Phase Readiness

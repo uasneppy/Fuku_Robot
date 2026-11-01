@@ -4,44 +4,44 @@
 **Files analyzed:** 36 (new or modified)
 **Analogs found:** 33 / 36 (3 partial: the pool's image download, the album gate, the spike tool)
 
-All analog paths below were verified as git-tracked source in `/home/user/Fuku_Robot` (`git ls-files` non-empty); none is a gitignored mirror. Line numbers are from the files as read on 2026-10-29. Module path is `github.com/divkix/Alita_Robot`.
+All analog paths below were verified as git-tracked source in `/home/user/Fuku_Robot` (`git ls-files` non-empty); none is a gitignored mirror. Line numbers are from the files as read on 2026-10-29. Module path is `github.com/uasneppy/fuku_robot`.
 
 ## File Classification
 
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |-------------------|------|-----------|----------------|---------------|
-| `alita/utils/gemini/{client,request,response,errors}.go` (new, stdlib only) | utility (REST client) | request-response | `alita/modules/aispam_jev.go` | exact (style), different package |
-| `alita/utils/gemini/*_test.go` (new) | test | request-response | `alita/modules/aispam_jev_test.go` | exact |
-| `alita/modules/raid_ai.go` (watcher, candidate rules, pool, drain, stats) | middleware (watcher) + service (pool) | event-driven + streaming (queue) | `raid_flood.go` `raidFloodCountUpdate` (watcher) + `aispam.go` 378-531 (pool/breaker/drain) | exact + exact |
-| `alita/modules/raid_ai_media.go` (media select, token-safe download) | utility | file-I/O | `alita/modules/backup.go` `downloadBackupFile` (+ `backupDownloadHTTPClient`) | role-match |
-| `alita/modules/raid_ai_count.go` (verdict script, candidate script, spammer snapshot, lookup seam) | service | event-driven (Redis Lua) | `raid_flood.go` 92-119, 322-405 | exact |
-| `alita/modules/raid_ai_breaker.go` (per-chat + provider breaker) | service | request-response | `aispam.go` 465-531 | exact |
-| `alita/modules/aispam.go` (modify: `aispamIsDelete`, report delete verdict) | module | event-driven | itself, lines 287-291, 313 | exact |
-| `alita/modules/raid_trigger.go` (modify: sentence, notice, snapshot call in `raidFire`) | service | event-driven | itself, 267-277, 331-346, 359-373 | exact |
-| `alita/modules/lockdown_alert.go` (modify: trigger line, counts key, burst snapshot, generalise merge) | service | batch | itself, 209-221, 251-305, 474-478, 543-568 | exact |
-| `alita/modules/lockdown_status.go` (modify: `lockdownStartedAutomatically`) | service | request-response | itself, 107-112 | exact |
-| `alita/db/models/lockdown.go` (modify: `LockdownTriggerAIBurst`) | model | CRUD | itself, constants near `LockdownTriggerFlood` | exact |
-| `alita/modules/autolockdown.go` (modify: `ai` word) | controller | request-response | itself, 21-25, 85-92, 133-147, 161-168 | exact |
-| `alita/modules/autolockdown_test.go`, `raid_*_test.go` (modify/new tests) | test | request-response | `autolockdown_test.go`, `raid_flood_test.go`, `raid_trigger_test.go`, `raid_status_test.go`, `raid_notice_test.go` | exact |
-| `alita/db/raiddetection/repository.go` (modify: defaults, normalisation, 2 setters) | repository | CRUD (cached read, column upsert) | itself, 37-68, 78-145 | exact |
-| `alita/db/raiddetection/stats.go` (modify: `aiOff`) + `alita/db/devs/repository.go` | repository | CRUD (read) | `stats.go` `LoadRaidDetectionStats`, `devs/repository.go:185` | exact |
-| `alita/db/models/raid_detection.go` (modify: `AIEnabled`, `AIThreshold`) | model | CRUD | itself, lines 13-22 | exact |
+| `fuku/utils/gemini/{client,request,response,errors}.go` (new, stdlib only) | utility (REST client) | request-response | `fuku/modules/aispam_jev.go` | exact (style), different package |
+| `fuku/utils/gemini/*_test.go` (new) | test | request-response | `fuku/modules/aispam_jev_test.go` | exact |
+| `fuku/modules/raid_ai.go` (watcher, candidate rules, pool, drain, stats) | middleware (watcher) + service (pool) | event-driven + streaming (queue) | `raid_flood.go` `raidFloodCountUpdate` (watcher) + `aispam.go` 378-531 (pool/breaker/drain) | exact + exact |
+| `fuku/modules/raid_ai_media.go` (media select, token-safe download) | utility | file-I/O | `fuku/modules/backup.go` `downloadBackupFile` (+ `backupDownloadHTTPClient`) | role-match |
+| `fuku/modules/raid_ai_count.go` (verdict script, candidate script, spammer snapshot, lookup seam) | service | event-driven (Redis Lua) | `raid_flood.go` 92-119, 322-405 | exact |
+| `fuku/modules/raid_ai_breaker.go` (per-chat + provider breaker) | service | request-response | `aispam.go` 465-531 | exact |
+| `fuku/modules/aispam.go` (modify: `aispamIsDelete`, report delete verdict) | module | event-driven | itself, lines 287-291, 313 | exact |
+| `fuku/modules/raid_trigger.go` (modify: sentence, notice, snapshot call in `raidFire`) | service | event-driven | itself, 267-277, 331-346, 359-373 | exact |
+| `fuku/modules/lockdown_alert.go` (modify: trigger line, counts key, burst snapshot, generalise merge) | service | batch | itself, 209-221, 251-305, 474-478, 543-568 | exact |
+| `fuku/modules/lockdown_status.go` (modify: `lockdownStartedAutomatically`) | service | request-response | itself, 107-112 | exact |
+| `fuku/db/models/lockdown.go` (modify: `LockdownTriggerAIBurst`) | model | CRUD | itself, constants near `LockdownTriggerFlood` | exact |
+| `fuku/modules/autolockdown.go` (modify: `ai` word) | controller | request-response | itself, 21-25, 85-92, 133-147, 161-168 | exact |
+| `fuku/modules/autolockdown_test.go`, `raid_*_test.go` (modify/new tests) | test | request-response | `autolockdown_test.go`, `raid_flood_test.go`, `raid_trigger_test.go`, `raid_status_test.go`, `raid_notice_test.go` | exact |
+| `fuku/db/raiddetection/repository.go` (modify: defaults, normalisation, 2 setters) | repository | CRUD (cached read, column upsert) | itself, 37-68, 78-145 | exact |
+| `fuku/db/raiddetection/stats.go` (modify: `aiOff`) + `fuku/db/devs/repository.go` | repository | CRUD (read) | `stats.go` `LoadRaidDetectionStats`, `devs/repository.go:185` | exact |
+| `fuku/db/models/raid_detection.go` (modify: `AIEnabled`, `AIThreshold`) | model | CRUD | itself, lines 13-22 | exact |
 | `migrations/2026102x..._add_raid_detection_ai.sql` (new) | migration | batch (DDL) | `migrations/20261018120000_add_lockdown_trigger_columns.sql` + `20261018130000_add_chat_raid_detection.sql` | exact |
-| `alita/config/config.go` (modify: `GeminiAPIKey`, `GeminiModel`, `RegisterSecret`) | config | transform | `TypeSafeAPIKey` at config.go:195, 330, 486-493 | exact |
-| `main.go` (modify: drain registration) + `alita/modules/shutdown_drains.go` (new `RegisterRaidAIDrain`) | config / lifecycle | event-driven | `RegisterRaidPostsDrain` (shutdown_drains.go:39-50, main.go ~221) | exact |
-| `alita/modules/devs.go` (modify: AI stats section) | controller | request-response | `GetAISpamStats` (aispam.go:80-92) + `getStats` (devs.go:~388) | role-match (no consumer yet) |
+| `fuku/config/config.go` (modify: `GeminiAPIKey`, `GeminiModel`, `RegisterSecret`) | config | transform | `TypeSafeAPIKey` at config.go:195, 330, 486-493 | exact |
+| `main.go` (modify: drain registration) + `fuku/modules/shutdown_drains.go` (new `RegisterRaidAIDrain`) | config / lifecycle | event-driven | `RegisterRaidPostsDrain` (shutdown_drains.go:39-50, main.go ~221) | exact |
+| `fuku/modules/devs.go` (modify: AI stats section) | controller | request-response | `GetAISpamStats` (aispam.go:80-92) + `getStats` (devs.go:~388) | role-match (no consumer yet) |
 | `locales/{en,es,fr,hi,id,pt,ru}.yml` (modify, 7 files) | config | transform | `lockdown_trigger_flood`, `lockdown_alert_trigger_flood`, `lockdown_alert_counts_flood`, `lockdown_auto_started_flood`, `lockdown_auto_flood_on` in `locales/en.yml` | exact |
 | `docs/.../api-reference/{environment,database-schema,commands}.md`, `commands/aispam/index.md`, `sample.env`, generated `commands/lockdown/index.md` | docs/config | - | `TYPESAFE_API_KEY` entries (environment.md:59, 572; sample.env:107-112) | exact |
 | `AGENTS.md` (modify) | docs | - | existing Handlers / Data / Startup bullets | exact |
-| `alita/modules/test_harness_test.go` fakes + new `httptest` fakes | test | request-response | `moduleBotClient` (test_harness_test.go:42-152), `lockdownFake`, `withAISpamJevServer`, `TestDownloadBackupFileDownloadsGetFilePath` | exact |
+| `fuku/modules/test_harness_test.go` fakes + new `httptest` fakes | test | request-response | `moduleBotClient` (test_harness_test.go:42-152), `lockdownFake`, `withAISpamJevServer`, `TestDownloadBackupFileDownloadsGetFilePath` | exact |
 | `scripts/gemini-spike/main.go` (+ pure-function tests) (new) | utility (CLI tool) | batch | `scripts/check_test_results/main.go` (stdlib-only `package main`) | partial |
 | `07-SPIKE.md` (new, docs) | docs | - | none (RESEARCH Pattern 10 is the spec) | none |
 
 ## Pattern Assignments
 
-### `alita/utils/gemini/` (utility, request-response)
+### `fuku/utils/gemini/` (utility, request-response)
 
-**Analog:** `alita/modules/aispam_jev.go` (copy the shape, not the package: the new package must import only the stdlib, never `alita/config`, `alita/db` or `alita/modules`, which would drag in the pre-`main` Postgres `init()`).
+**Analog:** `fuku/modules/aispam_jev.go` (copy the shape, not the package: the new package must import only the stdlib, never `fuku/config`, `fuku/db` or `fuku/modules`, which would drag in the pre-`main` Postgres `init()`).
 
 **Constants and swappable endpoint/client** (aispam_jev.go:20-48). Copy the style; the Gemini endpoint is `<base>/v1beta/models/<url.PathEscape(model)>:generateContent`, key in `x-goog-api-key`, never in the URL:
 ```go
@@ -90,13 +90,13 @@ if math.IsNaN(probability) || math.IsInf(probability, 0) || probability < 0 || p
 ```
 Also copy `aispamParseRetryAfter` (267-285) and `aispamSleepContext` (287-298) into the leaf package (they are unexported in `modules`; do not export them across the boundary, the leaf package cannot import `modules`).
 
-**Import-isolation test:** add a test in `alita/utils/gemini` asserting its imports exclude `alita/config` and `alita/db` (RESEARCH Pitfall 4).
+**Import-isolation test:** add a test in `fuku/utils/gemini` asserting its imports exclude `fuku/config` and `fuku/db` (RESEARCH Pitfall 4).
 
 ---
 
-### `alita/utils/gemini/*_test.go` (test, request-response)
+### `fuku/utils/gemini/*_test.go` (test, request-response)
 
-**Analog:** `alita/modules/aispam_jev_test.go`
+**Analog:** `fuku/modules/aispam_jev_test.go`
 
 **httptest server helper** (lines 16-32): swap endpoint and `server.Client()`, restore in `t.Cleanup`. In the leaf package pass `server.URL` into the `Client` instead of mutating globals.
 ```go
@@ -111,9 +111,9 @@ func withAISpamJevServer(t *testing.T, handler http.HandlerFunc) *httptest.Serve
 
 ---
 
-### `alita/modules/raid_ai.go` (middleware watcher + pool, event-driven)
+### `fuku/modules/raid_ai.go` (middleware watcher + pool, event-driven)
 
-**Watcher analog:** `alita/modules/raid_flood.go` `raidFloodCountUpdate` (lines 270-320) and its two thin wrappers (247-259).
+**Watcher analog:** `fuku/modules/raid_flood.go` `raidFloodCountUpdate` (lines 270-320) and its two thin wrappers (247-259).
 
 **Wrapper + recover pattern** (247-250):
 ```go
@@ -147,7 +147,7 @@ return chat_status.IsUserAdminForUpdate(b, ctx, chatID, userID) || chat_status.I
 ```
 **Link/forward tests:** `aispamLinkDomains(msg, text)` (aispam.go:~705) and `msg.ForwardOrigin != nil` (aispam.go:184). **"Will /aispam judge it" predicate** = the gates at aispam.go:155 and 166: `config.AppConfig.EnableAISpam && config.AppConfig.TypeSafeAPIKey != "" && aispam.IsAISpamEnabled(chat.Id) && !aispamBreakerPaused(chat.Id)`.
 
-**Pool analog:** `alita/modules/aispam.go` 378-463. Copy the structure but give the raid pool its own vars, and replace `sync.WaitGroup` with `raidPostTracker` (raid_trigger.go:72-119; its doc explains why a bounded drain can't use a WaitGroup).
+**Pool analog:** `fuku/modules/aispam.go` 378-463. Copy the structure but give the raid pool its own vars, and replace `sync.WaitGroup` with `raidPostTracker` (raid_trigger.go:72-119; its doc explains why a bounded drain can't use a WaitGroup).
 ```go
 aispamWorkersOnce.Do(func() {
 	aispamQueue = make(chan aispamTask, aispamQueueCapacity)       // raid pool: cap 128, 4 workers
@@ -177,13 +177,13 @@ default: aispamInFlight.Done(); aispamShed.Add(1); log.WithFields(...).Debug("[A
 
 **Drain:** `StopRaidAI()` copies `StopRaidPosts` (raid_trigger.go:141-149): set draining, `select` on `idleChan()` vs `time.After(raidAIStopWait)` (3 s), log a Warn on timeout, then cancel the pool context so in-flight HTTP aborts. Make the wait a `var` so tests shorten it (raid_trigger.go:65).
 
-**Cost guards (Pitfall 10, D-20):** `INCR` budget keys with `raidKey(chat, "ab:"+hour)` and a global `alita:raid:aibudget:<yyyymmddhh>`, `EXPIRE` 2 h; verdict cache `alita:raid:aiv:<file_unique_id>`. Redis calls follow the `raidRedisTimeout` + `cache.Context` shape used throughout (raid_flood.go:225-226).
+**Cost guards (Pitfall 10, D-20):** `INCR` budget keys with `raidKey(chat, "ab:"+hour)` and a global `fuku:raid:aibudget:<yyyymmddhh>`, `EXPIRE` 2 h; verdict cache `fuku:raid:aiv:<file_unique_id>`. Redis calls follow the `raidRedisTimeout` + `cache.Context` shape used throughout (raid_flood.go:225-226).
 
 ---
 
-### `alita/modules/raid_ai_count.go` (service, Lua counters)
+### `fuku/modules/raid_ai_count.go` (service, Lua counters)
 
-**Analog:** `alita/modules/raid_flood.go`.
+**Analog:** `fuku/modules/raid_flood.go`.
 
 **Counter script** (lines 92-119): `redis.NewScript`, `ZADD`, trim by `now - window`, per-key cap loop, `PEXPIRE`, returns sizes. The verdict script (RESEARCH Pattern 3) is this shape with `ZADD ... NX` on the items set and the account `ZADD` only when `added == 1`:
 ```lua
@@ -224,9 +224,9 @@ Difference (RESEARCH Pitfall 13): keep an established member who has no `:joined
 
 ---
 
-### `alita/modules/raid_ai_media.go` (utility, file-I/O)
+### `fuku/modules/raid_ai_media.go` (utility, file-I/O)
 
-**Analog (partial):** `alita/modules/backup.go` `downloadBackupFile`, with package vars `backupDownloadBaseURL` / `backupDownloadHTTPClient` (backup.go:54-55) and constant `maxBackupFileSize` (line ~58). It uses `getFile` then an HTTP GET against a swappable base URL. Do NOT copy its error handling: the Phase 7 download must rebuild errors from `url.Error.Err` so the Telegram token never appears (RESEARCH "Telegram download without leaking the token"; gotgbot only sanitises its own method calls). Differences: dedicated client with `CheckRedirect` returning `http.ErrUseLastResponse`, 10 s timeout, `io.LimitReader(resp.Body, 5<<20+1)`, MIME sniff with `http.DetectContentType`, allow only jpeg/png/webp, reject empty or `/`-prefixed `FilePath`.
+**Analog (partial):** `fuku/modules/backup.go` `downloadBackupFile`, with package vars `backupDownloadBaseURL` / `backupDownloadHTTPClient` (backup.go:54-55) and constant `maxBackupFileSize` (line ~58). It uses `getFile` then an HTTP GET against a swappable base URL. Do NOT copy its error handling: the Phase 7 download must rebuild errors from `url.Error.Err` so the Telegram token never appears (RESEARCH "Telegram download without leaking the token"; gotgbot only sanitises its own method calls). Differences: dedicated client with `CheckRedirect` returning `http.ErrUseLastResponse`, 10 s timeout, `io.LimitReader(resp.Body, 5<<20+1)`, MIME sniff with `http.DetectContentType`, allow only jpeg/png/webp, reject empty or `/`-prefixed `FilePath`.
 
 **Media selection table** is RESEARCH Pattern 8 (largest photo size nearest 1024 px; static sticker as WebP; animated/video sticker, animation, video -> `Thumbnail`). The item key and album handling reuse `raidFloodItemKey` (raid_flood.go:154-157: `g:<media_group_id>` else `m:<message_id>`).
 
@@ -234,9 +234,9 @@ Difference (RESEARCH Pitfall 13): keep an established member who has no `:joined
 
 ---
 
-### `alita/modules/raid_ai_breaker.go` (service, request-response)
+### `fuku/modules/raid_ai_breaker.go` (service, request-response)
 
-**Analog:** `alita/modules/aispam.go` 465-531, a per-chat breaker with a mutex-guarded map, bounded size, cooldown var, and a "trips exactly once" return:
+**Analog:** `fuku/modules/aispam.go` 465-531, a per-chat breaker with a mutex-guarded map, bounded size, cooldown var, and a "trips exactly once" return:
 ```go
 var aispamBreakers = struct {
 	mu sync.Mutex
@@ -257,7 +257,7 @@ Copy into a Gemini-only map (own cap, own cooldown var for tests). Post NO chat 
 
 ---
 
-### `alita/modules/aispam.go` (modify)
+### `fuku/modules/aispam.go` (modify)
 
 **Analog:** itself. Extract the bar selection at lines 287-291 so both paths share it:
 ```go
@@ -267,7 +267,7 @@ deleting := verdict.DeleteProbability >= threshold
 ```
 -> `aispamIsDelete(verdict) bool` (0.8 English, 0.9 otherwise). Report a delete verdict after line 313 (`aispamDeleted.Add(1)`) by calling the new `raidAIRecordVerdict(...)` (a Redis script plus an async fire), which needs a `chat gotgbot.Chat` field added to `aispamTask` (struct at 112-125). Keep `processAISpam` otherwise unchanged (D-03). Raid-only text jobs must NOT call `observeAISpamSender` (aispam.go:578-615 stores raw text) and must build a state without history (`task.state(nil, 1)`, see `state()` at 127).
 
-**Existing tests to extend:** `alita/modules/aispam_test.go` (not read in detail; planner should grep for the `processAISpam` tests and add one asserting a delete verdict reaches the counter and a keep verdict does not, D-19).
+**Existing tests to extend:** `fuku/modules/aispam_test.go` (not read in detail; planner should grep for the `processAISpam` tests and add one asserting a delete verdict reaches the counter and a keep verdict does not, D-19).
 
 ---
 
@@ -277,7 +277,7 @@ All currently fall through to "manual" for an unknown kind. Add `ai_burst` to ea
 
 | Site | File:lines | Current code | Needed |
 |------|-----------|--------------|--------|
-| constant | `alita/db/models/lockdown.go` near `LockdownTriggerFlood = "flood"` (line ~29) | `LockdownTriggerManual`, `JoinSurge`, `Flood` | `LockdownTriggerAIBurst = "ai_burst"` (column `size:16`, no CHECK, so no migration) |
+| constant | `fuku/db/models/lockdown.go` near `LockdownTriggerFlood = "flood"` (line ~29) | `LockdownTriggerManual`, `JoinSurge`, `Flood` | `LockdownTriggerAIBurst = "ai_burst"` (column `size:16`, no CHECK, so no migration) |
 | `lockdownTriggerSentence` | `raid_trigger.go:331-346` | `switch kind { case JoinSurge: ... case Flood: ... } return ""` | `case AIBurst` -> `lockdownText(tr, "lockdown_trigger_ai_burst", i18n.TranslationParams{"count": strconv.Itoa(count), "window": strconv.Itoa(window)})` (covers `raidWarnCannotLock` at 457 too) |
 | `raidPostNotice` | `raid_trigger.go:359-373` | `default: return` (no notice for an unknown kind) | `case AIBurst` -> `lockdown_auto_started_ai_burst` with `count`, `window` |
 | `lockdownStartedAutomatically` | `lockdown_status.go:107-112` | `ld.TriggerKind == JoinSurge \|\| ld.TriggerKind == Flood` | add `\|\| == AIBurst` |
@@ -305,7 +305,7 @@ if err != nil {
 
 ---
 
-### `alita/modules/autolockdown.go` (controller, request-response)
+### `fuku/modules/autolockdown.go` (controller, request-response)
 
 **Analog:** itself. Exact edit points:
 - Constants (22-25): add `autoTriggerAI = "ai"`.
@@ -324,7 +324,7 @@ default: return autoLockdownChange{}, errAutoLockdownUsage
 
 ---
 
-### `alita/db/raiddetection/repository.go` (repository, cached read + column upsert)
+### `fuku/db/raiddetection/repository.go` (repository, cached read + column upsert)
 
 **Analog:** itself. Edits:
 - Constants (21-32): add `DefaultAIThreshold = 5` (reuse `MinThreshold`/`MaxThreshold`).
@@ -341,13 +341,13 @@ func SetFloodThreshold(chatID int64, threshold int) error {
 }
 ```
 - **Stale-cache normalisation** (RESEARCH Pattern 7, the high-value trap): `GetSettings` (52-68) returns `cache.GetFromCacheOrLoad(...)` directly. Wrap it: take the result, and `if row.AIThreshold == 0 { row.AIEnabled = true; row.AIThreshold = DefaultAIThreshold }` on the value returned from the cache-or-load call, not only inside the loader (an entry cached by the pre-Phase-7 build decodes with zero AI fields). Note the loader at 58-66 returns a pointer; copy before mutating if the cache can hand back a shared pointer.
-- `skipLocal` (`alita/db/cache/local.go`) already lists `raid_detection:*`; no change.
+- `skipLocal` (`fuku/db/cache/local.go`) already lists `raid_detection:*`; no change.
 
-**Tests:** `alita/db/raiddetection/repository_test.go` / `testmain_test.go` (`TestRaidDetectionSettings` is the Postgres-integrity guarantee). Add: column-targeted upsert never clobbers the other triggers (AI setter after a flood setter), range error before any write, and `TestRaidDetectionStaleCacheDefaults` (write an old-shape value through the cache, read it back normalised). The model is already in the harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/devs/testmain_test.go`, `alita/db/raiddetection/testmain_test.go`); new columns come from the struct.
+**Tests:** `fuku/db/raiddetection/repository_test.go` / `testmain_test.go` (`TestRaidDetectionSettings` is the Postgres-integrity guarantee). Add: column-targeted upsert never clobbers the other triggers (AI setter after a flood setter), range error before any write, and `TestRaidDetectionStaleCacheDefaults` (write an old-shape value through the cache, read it back normalised). The model is already in the harness `AutoMigrate` lists (`fuku/modules/test_harness_test.go`, `fuku/db/devs/testmain_test.go`, `fuku/db/raiddetection/testmain_test.go`); new columns come from the struct.
 
 ---
 
-### `alita/db/models/raid_detection.go` (model)
+### `fuku/db/models/raid_detection.go` (model)
 
 **Analog:** itself, lines 13-22. Add after the flood fields, same tag style, still no `default:` tags on booleans:
 ```go
@@ -366,11 +366,11 @@ FloodThreshold int  `gorm:"column:flood_threshold;not null;check:chk_chat_raid_d
 -- transaction and records its sha256 in schema_migrations.
 ALTER TABLE chat_lockdowns ADD COLUMN IF NOT EXISTS trigger_count INTEGER NOT NULL DEFAULT 0;
 ```
-Target (RESEARCH Pattern 7): `ALTER TABLE chat_raid_detection ADD COLUMN IF NOT EXISTS ai_enabled BOOLEAN NOT NULL DEFAULT TRUE;` and `ADD COLUMN IF NOT EXISTS ai_threshold INTEGER NOT NULL DEFAULT 5 CONSTRAINT chk_chat_raid_detection_ai CHECK (ai_threshold BETWEEN 3 AND 500);`. No top-level BEGIN/COMMIT, no `CONCURRENTLY`. `runner.go` and `scripts/migrate_psql.sh` are generic; the migration name appears only in `alita/db/migrations/raid_carry_over_test.go:17` (that test executes migration `20261018130000` with an explicit column list, so extra defaulted columns must not break it; the planner should confirm in CI via `make test-postgres-integrity`, which cannot be run locally here since PostgreSQL must not be started).
+Target (RESEARCH Pattern 7): `ALTER TABLE chat_raid_detection ADD COLUMN IF NOT EXISTS ai_enabled BOOLEAN NOT NULL DEFAULT TRUE;` and `ADD COLUMN IF NOT EXISTS ai_threshold INTEGER NOT NULL DEFAULT 5 CONSTRAINT chk_chat_raid_detection_ai CHECK (ai_threshold BETWEEN 3 AND 500);`. No top-level BEGIN/COMMIT, no `CONCURRENTLY`. `runner.go` and `scripts/migrate_psql.sh` are generic; the migration name appears only in `fuku/db/migrations/raid_carry_over_test.go:17` (that test executes migration `20261018130000` with an explicit column list, so extra defaulted columns must not break it; the planner should confirm in CI via `make test-postgres-integrity`, which cannot be run locally here since PostgreSQL must not be started).
 
 ---
 
-### `alita/db/raiddetection/stats.go` + `alita/db/devs/repository.go` (read) and `alita/modules/devs.go`
+### `fuku/db/raiddetection/stats.go` + `fuku/db/devs/repository.go` (read) and `fuku/modules/devs.go`
 
 **Analog:** `LoadRaidDetectionStats` (stats.go:12-17):
 ```go
@@ -381,11 +381,11 @@ func LoadRaidDetectionStats() (configured, joinOff, floodOff int64) {
 	return
 }
 ```
-Add `aiOff` with `"ai_enabled = ?", false`; the only caller is `alita/db/devs/repository.go:185` (`raidCustom, raidJoinOff, raidFloodOff := raiddetection.LoadRaidDetectionStats()`), plus `stats_test.go:12-32` (update the four-value destructuring and add an AI-off row to the fixture). `alita/db/devs` cannot import `alita/modules`, so the in-memory counters of the AI pool are appended in `alita/modules/devs.go` (`stats := devs.LoadAllStats()` at ~line 388) as an extra section built from `GetAISpamStats` / the new `GetRaidAIStats`. Note `GetAISpamStats` currently has no consumer anywhere, so there is no existing section to copy: format the new section in the same HTML style `LoadAllStats` uses and say the counters are per replica.
+Add `aiOff` with `"ai_enabled = ?", false`; the only caller is `fuku/db/devs/repository.go:185` (`raidCustom, raidJoinOff, raidFloodOff := raiddetection.LoadRaidDetectionStats()`), plus `stats_test.go:12-32` (update the four-value destructuring and add an AI-off row to the fixture). `fuku/db/devs` cannot import `fuku/modules`, so the in-memory counters of the AI pool are appended in `fuku/modules/devs.go` (`stats := devs.LoadAllStats()` at ~line 388) as an extra section built from `GetAISpamStats` / the new `GetRaidAIStats`. Note `GetAISpamStats` currently has no consumer anywhere, so there is no existing section to copy: format the new section in the same HTML style `LoadAllStats` uses and say the counters are per replica.
 
 ---
 
-### `alita/config/config.go` and `logredact` registration
+### `fuku/config/config.go` and `logredact` registration
 
 **Analog:** `TypeSafeAPIKey`.
 - Struct field (config.go:192-195): comment + `EnableAISpam bool` / `TypeSafeAPIKey string`. Add `GeminiAPIKey string` and `GeminiModel string`.
@@ -401,7 +401,7 @@ Optional backstop: one structural pattern for `AIza[0-9A-Za-z_-]{35}` in `logred
 
 ---
 
-### `main.go` + `alita/modules/shutdown_drains.go` (drain registration)
+### `main.go` + `fuku/modules/shutdown_drains.go` (drain registration)
 
 **Analog:** `RegisterRaidPostsDrain` (shutdown_drains.go:39-50) and its call in main.go (~lines 217-221, comment "Also after the DB-close handler ...").
 ```go
@@ -443,16 +443,16 @@ New: `lockdown_trigger_ai_burst`, `lockdown_alert_trigger_ai_burst`, `lockdown_a
 
 ### `scripts/gemini-spike/main.go` (utility CLI, batch)
 
-**Analog (partial):** `scripts/check_test_results/main.go`: a stdlib-only `package main` inside the main module with a pure `checkResults(input io.Reader, output io.Writer) error` function and a `main_test.go` next to it (`scripts/check_test_results/main_test.go`). Copy that split: pure functions (CSV, stats, cost, bar sweep) unit-tested with fixed inputs; `main()` does flags and I/O. The other tracked tool, `scripts/validate_orphaned_data.go`, imports `github.com/divkix/Alita_Robot/alita/db` (line 10) and so is exactly what the spike must NOT copy. `scripts/check_translations/` has its own `go.mod`; do not do that here, the spike imports `alita/utils/gemini` from the main module.
+**Analog (partial):** `scripts/check_test_results/main.go`: a stdlib-only `package main` inside the main module with a pure `checkResults(input io.Reader, output io.Writer) error` function and a `main_test.go` next to it (`scripts/check_test_results/main_test.go`). Copy that split: pure functions (CSV, stats, cost, bar sweep) unit-tested with fixed inputs; `main()` does flags and I/O. The other tracked tool, `scripts/validate_orphaned_data.go`, imports `github.com/uasneppy/fuku_robot/fuku/db` (line 10) and so is exactly what the spike must NOT copy. `scripts/check_translations/` has its own `go.mod`; do not do that here, the spike imports `fuku/utils/gemini` from the main module.
 
-Constraints that apply because `make test` runs `go test ... ./...` (Makefile:37): the spike package compiles and its tests run in CI, so its tests must be pure and network-free, and it must import only the stdlib and `alita/utils/gemini`. Without `GEMINI_API_KEY` it prints usage and exits non-zero having made no request (D-17).
+Constraints that apply because `make test` runs `go test ... ./...` (Makefile:37): the spike package compiles and its tests run in CI, so its tests must be pure and network-free, and it must import only the stdlib and `fuku/utils/gemini`. Without `GEMINI_API_KEY` it prints usage and exits non-zero having made no request (D-17).
 
 ---
 
 ## Shared Patterns
 
 ### Best-effort Redis call under 250 ms
-**Source:** `alita/modules/raid_flood.go:225-226`, `raid_counters.go:38,57-59`
+**Source:** `fuku/modules/raid_flood.go:225-226`, `raid_counters.go:38,57-59`
 **Apply to:** every new Redis access (candidate script, verdict script, snapshot, budgets, album gate, verdict cache)
 ```go
 ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
@@ -477,7 +477,7 @@ Keys via `raidKey(chatID, part)` (chat ID is the `{hash tag}`); time via `raidNo
 **Apply to:** the AI trigger calls `raidFire(b, chat, raidTrigger{Kind: models.LockdownTriggerAIBurst, Count: items, Window: 120, Percent: 0})` and nothing else; never add a second start path or a Redis exactly-once.
 
 ### Caching writes
-**Source:** `alita/db/raiddetection/repository.go:90-107` (`upsertSettings` ends with `cache.DeleteCache(cache.CacheKey(cacheModule, row.ChatID))`)
+**Source:** `fuku/db/raiddetection/repository.go:90-107` (`upsertSettings` ends with `cache.DeleteCache(cache.CacheKey(cacheModule, row.ChatID))`)
 **Apply to:** `SetAIEnabled`, `SetAIThreshold`. Never use `UpdateRecord` for these (skips zero values).
 
 ### i18n
@@ -493,11 +493,11 @@ Keys via `raidKey(chatID, part)` (chat ID is the `{hash tag}`); time via `raidNo
 |------|------|-----------|--------|
 | `07-SPIKE.md` | docs | - | No existing spike document; use RESEARCH Pattern 10 as the spec. |
 | Gemini provider-wide pause (inside `raid_ai_breaker.go`) | service | request-response | `/aispam` has only per-chat breakers; the provider-wide pause (bad key, long 429 `retryDelay`) is new. Use a mutex-guarded `pausedTill time.Time` in the style of `aispamBreaker`. |
-| Album gate (`SET NX alita:raid:{<chat>}:ag:<media_group_id> EX 120`) | service | event-driven | Closest is `raidFire`'s latch (`client.SetNX(latchCtx, raidKey(...), "1", raidFireLatch)` at raid_trigger.go:228) and `raidWarnCannotLock`'s gate (435-444); copy the `SetNX` + Redis-error-means-skip shape. |
+| Album gate (`SET NX fuku:raid:{<chat>}:ag:<media_group_id> EX 120`) | service | event-driven | Closest is `raidFire`'s latch (`client.SetNX(latchCtx, raidKey(...), "1", raidFireLatch)` at raid_trigger.go:228) and `raidWarnCannotLock`'s gate (435-444); copy the `SetNX` + Redis-error-means-skip shape. |
 
 ## Metadata
 
-**Analog search scope:** `alita/modules/` (aispam*, raid_*, lockdown_alert/status, autolockdown, shutdown_drains, devs, backup, test harness and tests), `alita/db/raiddetection`, `alita/db/models`, `alita/config`, `alita/utils/logredact`, `migrations/`, `scripts/`, `locales/en.yml`, `main.go`, `Makefile`
+**Analog search scope:** `fuku/modules/` (aispam*, raid_*, lockdown_alert/status, autolockdown, shutdown_drains, devs, backup, test harness and tests), `fuku/db/raiddetection`, `fuku/db/models`, `fuku/config`, `fuku/utils/logredact`, `migrations/`, `scripts/`, `locales/en.yml`, `main.go`, `Makefile`
 **Files read in full or in targeted ranges:** about 30
 **Pattern extraction date:** 2026-10-29
 **Constraints honoured:** read-only; nothing started PostgreSQL; this file is the only write.

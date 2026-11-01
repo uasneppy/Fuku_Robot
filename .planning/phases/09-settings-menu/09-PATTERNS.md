@@ -2,7 +2,7 @@
 
 **Mapped:** 2026-10-30
 **Files analyzed:** about 30 (new and modified)
-**Analogs found:** all, mostly exact. All analog paths below are git-tracked under `alita/` (checked for the callback, panel and deep-link files).
+**Analogs found:** all, mostly exact. All analog paths below are git-tracked under `fuku/` (checked for the callback, panel and deep-link files).
 
 All paths are relative to `/home/user/Fuku_Robot/`. Line numbers are as read on 2026-10-30.
 
@@ -10,7 +10,7 @@ All paths are relative to `/home/user/Fuku_Robot/`. Line numbers are as read on 
 
 | New/Modified File | Role | Data Flow | Closest Analog | Match |
 |---|---|---|---|---|
-| NEW `alita/modules/settings.go` (module, `/settings` cmd, `settings\|` callback entry, deep link) | module/handler | request-response + event | `alita/modules/lockdown.go` + `lockdown_alert_callbacks.go` | exact |
+| NEW `fuku/modules/settings.go` (module, `/settings` cmd, `settings\|` callback entry, deep link) | module/handler | request-response + event | `fuku/modules/lockdown.go` + `lockdown_alert_callbacks.go` | exact |
 | NEW `settings_codec.go` (fields, action codes, parse helpers) | utility | transform | `lockdown_alert_callbacks.go:111-146` (parsers), `lockdown_alert.go:57` (namespace const) | exact |
 | NEW `settings_render.go` (pure render from snapshot, page registry table) | render | transform | `staff_panel.go` `renderStaffPanel` / `composeStaffPanelText` | exact |
 | NEW `settings_staff.go` | page | CRUD + live checks | `staff_panel.go`, `staff_link.go`, `staff_unlink.go` | exact |
@@ -19,10 +19,10 @@ All paths are relative to `/home/user/Fuku_Robot/`. Line numbers are as read on 
 | NEW `settings_apply.go` (apply fns, typed results) | service | CRUD | `autolockdown.go:136` `writeAutoLockdown` + `parseAutoLockdownArgs` | role-match |
 | EDIT `captcha.go`, `antiflood.go`, `autolockdown.go` | handler refactor | CRUD | themselves | n/a |
 | EDIT `staff_link.go`, `staff_panel.go`, `lockdown.go`, `lockdown_alert_callbacks.go` | seam splits | n/a | themselves | n/a |
-| EDIT `alita/utils/chat_status/owner.go:47` | utility | transform | export `isBotMissingError` -> `IsBotMissingError` | exact |
-| NEW `alita/modules/settings_env_test.go` + `settings_*_test.go` | test | fixtures | `lockdown_fake_test.go` (`lockdownEnv`), `lockdown_alert_test.go`, `staff_action_fake_test.go` | exact |
-| EDIT `alita/db/antiflood/repository_test.go` | test | CRUD | same file (SQLite open at lines 17-30) | exact |
-| NEW `alita/i18n/settings_locale_test.go` | test | transform | `alita/i18n/captcha_web_locale_test.go`, `lockdown_locale_test.go` | exact |
+| EDIT `fuku/utils/chat_status/owner.go:47` | utility | transform | export `isBotMissingError` -> `IsBotMissingError` | exact |
+| NEW `fuku/modules/settings_env_test.go` + `settings_*_test.go` | test | fixtures | `lockdown_fake_test.go` (`lockdownEnv`), `lockdown_alert_test.go`, `staff_action_fake_test.go` | exact |
+| EDIT `fuku/db/antiflood/repository_test.go` | test | CRUD | same file (SQLite open at lines 17-30) | exact |
+| NEW `fuku/i18n/settings_locale_test.go` | test | transform | `fuku/i18n/captcha_web_locale_test.go`, `lockdown_locale_test.go` | exact |
 | EDIT `locales/{en,es,fr,hi,id,pt,ru}.yml` | config | n/a | `captcha_web_*` keys (e.g. `en.yml:1041`) | exact |
 | EDIT `locales/config.yml` (`alt_names.Settings`) | config | n/a | `config.yml:33-34` (`Staff:`, `Lockdown:` rows) | exact |
 | Docs `docs/src/content/docs/commands/settings/*` via `make generate-docs` | docs | generated | `docs/.../commands/lockdown/` | exact |
@@ -135,19 +135,19 @@ Time apply (`captcha.go:683-727`): `strconv.ParseInt(args[0],10,64)`, range 1 to
 
 ### `settings_antiflood.go` and the `antiflood.go` refactor
 
-`setFlood` (`antiflood.go:421-473`): authority `chat_status.IsUserConnected(b, ctx, true, true)` (user admin and bot admin, refusal `connections_is_user_connected_bot_not_admin`); `off/no/false/0` gives `SetFloodContext(ctx, chat.Id, 0)` and `<module>_setflood_disabled`; integers outside 3..100 give `_errors_set_in_limit`; non-ints `_errors_invalid_int`; save errors give `common_settings_save_failed`; success `_setflood_success` formatted with `fmt.Sprintf(temp, num)`. Note keys are built as `strings.ToLower(m.moduleName)+"_..."`, so the apply result should carry the key name, not the module name. Others: `flood` (475), `setFloodMode` (514), `setFloodDeleter` (557). Page reads must use `GetAntifloodSettingsCachedContext` (D-30), same cache entry as the command; the apply functions read back the uncached row (D-27). Add a characterization test for the first-write side effect in `alita/db/antiflood/repository_test.go` (see the SQLite open with `gorm.Open(sqlite.Open(":memory:"))` + `utilsCache.SetupTestMemoryMarshaler(t)` pattern at lines 17-30).
+`setFlood` (`antiflood.go:421-473`): authority `chat_status.IsUserConnected(b, ctx, true, true)` (user admin and bot admin, refusal `connections_is_user_connected_bot_not_admin`); `off/no/false/0` gives `SetFloodContext(ctx, chat.Id, 0)` and `<module>_setflood_disabled`; integers outside 3..100 give `_errors_set_in_limit`; non-ints `_errors_invalid_int`; save errors give `common_settings_save_failed`; success `_setflood_success` formatted with `fmt.Sprintf(temp, num)`. Note keys are built as `strings.ToLower(m.moduleName)+"_..."`, so the apply result should carry the key name, not the module name. Others: `flood` (475), `setFloodMode` (514), `setFloodDeleter` (557). Page reads must use `GetAntifloodSettingsCachedContext` (D-30), same cache entry as the command; the apply functions read back the uncached row (D-27). Add a characterization test for the first-write side effect in `fuku/db/antiflood/repository_test.go` (see the SQLite open with `gorm.Open(sqlite.Open(":memory:"))` + `utilsCache.SetupTestMemoryMarshaler(t)` pattern at lines 17-30).
 
 ### `settings_codec.go` (callback fields and byte table)
 
-Namespace constant analog `lockdown_alert.go:57` (`lockdownCallbackNamespace = "lockdown"`). Action codes are 2-letter constants (`lockdownActLiftAsk` etc.; AGENTS.md lists `a=lk`, `bn`, `rk`, `lc`, `x`). Parsers to mirror: `lockdownParseCopyID`, `lockdownParseAsker`, `lockdownParseCardFields` (`lockdown_alert_callbacks.go:111-146`): `strconv.ParseInt(...,10,64)`, positive-only. For `c` (negative chat ID) write a separate parser with the same strict bounds as `parseStaffChatIDArg`. Format is `<ns>|v1|<url-encoded>` via `alita/utils/callbackcodec` (`Encode` at `callbackcodec/...:28`); never `strings.Split`. Add a table test that encodes the largest field set of every button (14-char chat ID, 19-digit values) and asserts `<= 64` bytes and non-empty.
+Namespace constant analog `lockdown_alert.go:57` (`lockdownCallbackNamespace = "lockdown"`). Action codes are 2-letter constants (`lockdownActLiftAsk` etc.; AGENTS.md lists `a=lk`, `bn`, `rk`, `lc`, `x`). Parsers to mirror: `lockdownParseCopyID`, `lockdownParseAsker`, `lockdownParseCardFields` (`lockdown_alert_callbacks.go:111-146`): `strconv.ParseInt(...,10,64)`, positive-only. For `c` (negative chat ID) write a separate parser with the same strict bounds as `parseStaffChatIDArg`. Format is `<ns>|v1|<url-encoded>` via `fuku/utils/callbackcodec` (`Encode` at `callbackcodec/...:28`); never `strings.Split`. Add a table test that encodes the largest field set of every button (14-char chat ID, 19-digit values) and asserts `<= 64` bytes and non-empty.
 
 ### Tests (`settings_env_test.go`, `settings_*_test.go`)
 
-Header pattern: `//go:build testtools`, `package modules`. Fixture: `lockdownEnv` (`lockdown_fake_test.go:273-286`: `t, fake *lockdownFake, bot, dispatcher, chat, admin, redis *miniredis.Miniredis`) with the hand-written `lockdownFake` BotClient (`RequestWithContext` at 173; helpers `setMemberRaw`, `lockdownAdminJSON(userID, canRestrict, canInvite)`, `lockdownBotAdminJSON`, `setChatType`, `setOnGetMember`). Build a `settingsEnv` that wraps or copies this; do not create a mock library. Cleanups: `lockdownCleanup(t, chatIDs...)` (290), `staffCleanup(t, ...)`, `raidCleanup`. Staff fixtures: `newLockdownStaffGroup(env)`, `linkLockdownStaffGroup(env)`, `linkLockdownGroupTo` (`lockdown_alert_test.go:21-60`). Press/refusal helpers to copy: `pressedLookups`, `snapshotAlert`, `wantRefused`, `lastCardEdit` (`lockdown_alert_auth_test.go:30-248`). The harness `AutoMigrate` lists are in `alita/modules/test_harness_test.go` (D-31 says no change needed). Assert observable behaviour only (rows, replies, cache), not literals.
+Header pattern: `//go:build testtools`, `package modules`. Fixture: `lockdownEnv` (`lockdown_fake_test.go:273-286`: `t, fake *lockdownFake, bot, dispatcher, chat, admin, redis *miniredis.Miniredis`) with the hand-written `lockdownFake` BotClient (`RequestWithContext` at 173; helpers `setMemberRaw`, `lockdownAdminJSON(userID, canRestrict, canInvite)`, `lockdownBotAdminJSON`, `setChatType`, `setOnGetMember`). Build a `settingsEnv` that wraps or copies this; do not create a mock library. Cleanups: `lockdownCleanup(t, chatIDs...)` (290), `staffCleanup(t, ...)`, `raidCleanup`. Staff fixtures: `newLockdownStaffGroup(env)`, `linkLockdownStaffGroup(env)`, `linkLockdownGroupTo` (`lockdown_alert_test.go:21-60`). Press/refusal helpers to copy: `pressedLookups`, `snapshotAlert`, `wantRefused`, `lastCardEdit` (`lockdown_alert_auth_test.go:30-248`). The harness `AutoMigrate` lists are in `fuku/modules/test_harness_test.go` (D-31 says no change needed). Assert observable behaviour only (rows, replies, cache), not literals.
 
 Parity tests (D-19): drive the command through the dispatcher, then a menu press, and compare the stored rows and the `GetCaptchaSettings` / `GetAntifloodSettingsCachedContext` values; call `cache.ResetLocalForTest()` after direct writes.
 
-### `alita/i18n/settings_locale_test.go`
+### `fuku/i18n/settings_locale_test.go`
 
 Analog `captcha_web_locale_test.go:1-45`: a `map[string]captchaWebLimit{max, other}` table of per-key rune ceilings ("fails when it does not cover exactly" the key set), checks present, not empty, no markup, in all 7 locales. Also copy from `lockdown_locale_test.go`: `TestLockdownLocaleKeys` (45), `TestLockdownStringsHaveBalancedTags` (132), `TestLockdownRepliesCarryNoTelegramDetail` (174). Add a `TestSettingsHelpFitsOneMessage`-style test for `settings_help_msg` (analog `TestLockdownHelpFitsOneMessage`). `make check-translations` finds keys missing across locales.
 
@@ -186,6 +186,6 @@ Any async post after a press starts with `defer error_handling.RecoverFromPanic(
 
 ## Metadata
 
-**Analog search scope:** `alita/modules/`, `alita/utils/chat_status`, `alita/i18n`, `alita/db/antiflood`, `locales/`, `docs/`, `.planning/phases/08-*`
+**Analog search scope:** `fuku/modules/`, `fuku/utils/chat_status`, `fuku/i18n`, `fuku/db/antiflood`, `locales/`, `docs/`, `.planning/phases/08-*`
 **Not fully read (read before planning):** `staff_unlink.go`, `captchaCommand`, `captchaModeCommand`, `captchaActionCommand`, `setFloodMode`, `setFloodDeleter`, `flood`, `lockdownStatus`, `help.go` registry entries (`help_system.go`)
 **Pattern extraction date:** 2026-10-30

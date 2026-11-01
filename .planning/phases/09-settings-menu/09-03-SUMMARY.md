@@ -27,10 +27,10 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/antiflood_apply_test.go
+    - fuku/modules/antiflood_apply_test.go
   modified:
-    - alita/modules/antiflood.go
-    - alita/db/antiflood/repository_test.go
+    - fuku/modules/antiflood.go
+    - fuku/db/antiflood/repository_test.go
 
 key-decisions:
   - "The repository and the model are untouched (D-27); the first-write side effect is reported by a read-back, not fixed"
@@ -48,10 +48,10 @@ coverage:
     requirement: "MENU-07"
     verification:
       - kind: unit
-        ref: "alita/db/antiflood/repository_test.go#TestSetFloodModeOnFreshChatStoredLimit"
+        ref: "fuku/db/antiflood/repository_test.go#TestSetFloodModeOnFreshChatStoredLimit"
         status: pass
       - kind: unit
-        ref: "alita/db/antiflood/repository_test.go#TestSetFloodMsgDelOnFreshChatStoredLimit"
+        ref: "fuku/db/antiflood/repository_test.go#TestSetFloodMsgDelOnFreshChatStoredLimit"
         status: pass
     human_judgment: false
   - id: D2
@@ -59,13 +59,13 @@ coverage:
     requirement: "MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/antiflood_apply_test.go#TestApplyFloodLimit"
+        ref: "fuku/modules/antiflood_apply_test.go#TestApplyFloodLimit"
         status: pass
       - kind: unit
-        ref: "alita/modules/antiflood_apply_test.go#TestApplyFloodMode"
+        ref: "fuku/modules/antiflood_apply_test.go#TestApplyFloodMode"
         status: pass
       - kind: unit
-        ref: "alita/modules/antiflood_apply_test.go#TestApplyFloodDelete"
+        ref: "fuku/modules/antiflood_apply_test.go#TestApplyFloodDelete"
         status: pass
     human_judgment: false
   - id: D3
@@ -73,13 +73,13 @@ coverage:
     requirement: "MENU-08"
     verification:
       - kind: unit
-        ref: "alita/modules/antiflood_apply_test.go#TestAntifloodCommandsUseApply"
+        ref: "fuku/modules/antiflood_apply_test.go#TestAntifloodCommandsUseApply"
         status: pass
       - kind: unit
-        ref: "alita/modules/antiflood_command_test.go#TestAntifloodCommandsUpdateSettingsAndDisplay"
+        ref: "fuku/modules/antiflood_command_test.go#TestAntifloodCommandsUpdateSettingsAndDisplay"
         status: pass
       - kind: unit
-        ref: "alita/modules/antiflood_command_test.go#TestAntifloodCommandsHandleDisabledAndValidationBranches"
+        ref: "fuku/modules/antiflood_command_test.go#TestAntifloodCommandsHandleDisabledAndValidationBranches"
         status: pass
     human_judgment: false
 
@@ -114,10 +114,10 @@ status: complete
 ## Verification
 
 - `CGO_ENABLED=0 go build ./...`: pass
-- Task 1 verify (six named tests in `./alita/db/antiflood`): all six `--- PASS`
-- Task 2 verify (six named tests in `./alita/modules`, run with `-v`): all six `--- PASS`, sub-tests included
-- `go test -run 'Antiflood|Flood' ./alita/modules`: ok (every pre-existing antiflood watcher and command test)
-- `go vet -tags testtools ./alita/modules/ ./alita/db/antiflood/`: clean; `gofmt -l` on the touched files: empty; `make check-docs`: no drift
+- Task 1 verify (six named tests in `./fuku/db/antiflood`): all six `--- PASS`
+- Task 2 verify (six named tests in `./fuku/modules`, run with `-v`): all six `--- PASS`, sub-tests included
+- `go test -run 'Antiflood|Flood' ./fuku/modules`: ok (every pre-existing antiflood watcher and command test)
+- `go vet -tags testtools ./fuku/modules/ ./fuku/db/antiflood/`: clean; `gofmt -l` on the touched files: empty; `make check-docs`: no drift
 - `make lint` was not run: golangci-lint is built with go1.25 against the go1.26.0 module in this sandbox, so `gofmt` and `go vet` stand in for it.
 - Acceptance greps: three `func applyFlood*(` definitions; 6 lines mention the three functions; `IsUserConnected(b, ctx, true, true)` count 3; `git diff` of `repository.go`, `optimized.go` and `models/antiflood.go` is empty.
 
@@ -133,7 +133,7 @@ status: complete
 - **Found during:** Task 2 GREEN run
 - **Issue:** in the module test binary the locale manager is not initialised, so `tr.GetString` returned an error and an empty string; asserting reply keys against `""` would have pinned nothing.
 - **Fix:** `TestAntifloodCommandsUseApply` installs `withStaffLocale(t)` (every en.yml string replaced by a marker of its own key), so the reply text proves which key was used. Test-only.
-- **Files modified:** `alita/modules/antiflood_apply_test.go`
+- **Files modified:** `fuku/modules/antiflood_apply_test.go`
 - **Commit:** `3cc562a` (the test file edit landed with the GREEN commit; the RED commit had the same test without the locale line)
 
 **3. Plan trailer vs harness trailer.** Commits end with the harness-provided `Co-Authored-By` and `Claude-Session` lines as the orchestrator instructed, not the model name printed in the plan text.
@@ -148,7 +148,7 @@ None.
 
 - **First-write side effect (carry into STATE.md):** the repository's first write for a chat with no antiflood row (mode or delete switch) stores `flood_limit` 5, turning antiflood on. This is pinned, not fixed (D-27). A fix (insert with limit 0 on first write) would change `/setfloodmode` and `/delflood` too and is a separate follow-up. Plan 09-09's page must show the `Stored` row from the apply result and may want to say that picking an action on an unconfigured chat enables the default limit. Also note the Mute press on an unconfigured chat is a true no-op.
 - **AGENTS.md:** not edited here by design; the fresh-row note is written with the docs in plan 09-13.
-- **Pre-existing, not touched:** `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit.
+- **Pre-existing, not touched:** `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit.
 
 ## Known Stubs
 
@@ -168,4 +168,4 @@ Ready for the remaining Wave 1 plans; plan 09-09 consumes `applyFloodLimit`, `ap
 
 ## Self-Check: PASSED
 
-- `alita/modules/antiflood_apply_test.go` exists; `fef0c15`, `593942e` and `3cc562a` are in `git log` on this branch; the working tree was clean after the last code commit.
+- `fuku/modules/antiflood_apply_test.go` exists; `fef0c15`, `593942e` and `3cc562a` are in `git log` on this branch; the working tree was clean after the last code commit.

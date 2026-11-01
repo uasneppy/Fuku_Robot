@@ -47,13 +47,13 @@ There are no blockers. The areas checked hold up:
   - Writes are column-targeted upserts with no GORM `default:` on the booleans, each followed by `DeleteCache`.
   - The settings key is in `skipLocal`.
 - **Migrations.** They are append-only plain DDL. The carry-over is idempotent through `ON CONFLICT DO NOTHING`.
-- **Retirement.** No temp-ban path remains. The sweep only touches `alita:antiraid:*`, using SCAN and UNLINK in batches, in a goroutine with panic recovery and a 30 s bound. The shutdown handler was removed cleanly.
+- **Retirement.** No temp-ban path remains. The sweep only touches `fuku:antiraid:*`, using SCAN and UNLINK in batches, in a goroutine with panic recovery and a 30 s bound. The shutdown handler was removed cleanly.
 
 ## Warnings
 
 ### WR-01: Any slash-prefixed text is exempt from flood counting, so a raider can evade the flood trigger
 
-**File:** `alita/modules/raid_flood.go:129` (`raidFloodItemKey`), `:145-157` (`raidFloodIsCommand`)
+**File:** `fuku/modules/raid_flood.go:129` (`raidFloodItemKey`), `:145-157` (`raidFloodIsCommand`)
 
 **Issue:** A text is treated as a command, and so not counted, in either of two cases:
 - its first entity is a `bot_command` at offset 0;
@@ -65,9 +65,9 @@ Telegram turns any `/word` into a command entity. A flood of `"/x buy crypto ...
 
 ### WR-02: The once-a-day "can't lock" warning gate is used up before anything is delivered and is never given back
 
-**File:** `alita/modules/raid_trigger.go:323-365` (`raidWarnCannotLock`)
+**File:** `fuku/modules/raid_trigger.go:323-365` (`raidWarnCannotLock`)
 
-**Issue:** `SET NX alita:raid:{chat}:warn EX 86400` is taken before the destinations are resolved and before any send. Two cases burn the gate:
+**Issue:** `SET NX fuku:raid:{chat}:warn EX 86400` is taken before the destinations are resolved and before any send. Two cases burn the gate:
 - a group with neither destination;
 - a group where both posts fail.
 
@@ -77,7 +77,7 @@ The warning is then lost for 23 hours, and it is the only signal that a raid wen
 
 ### WR-03: The public notice and warning posts block the join guard and the message pipeline for up to 30 s per post
 
-**File:** `alita/modules/raid_trigger.go:207-212`, called from `raid_join.go:215`, `:267` and `raid_flood.go:276`
+**File:** `fuku/modules/raid_trigger.go:207-212`, called from `raid_join.go:215`, `:267` and `raid_flood.go:276`
 
 **Issue:** `raidPostNotice` and `raidWarnCannotLock` run inside the synchronous `raidFire`. Each post runs under `raidPostTimeout` (30 s) and waits on `lockdownPaced`. This has two effects:
 - The joiner who tips the threshold is not recorded by the guard until the send returns. On the warning path, which makes two sends, that can be about 60 s.
@@ -87,9 +87,9 @@ The warning is then lost for 23 hours, and it is the only signal that a raid wen
 
 ## Info
 
-### IN-01: Dead production code left in `alita/db/antiraid`
+### IN-01: Dead production code left in `fuku/db/antiraid`
 
-**File:** `alita/db/antiraid/repository.go:47-91`, `optimized.go:41-45`
+**File:** `fuku/db/antiraid/repository.go:47-91`, `optimized.go:41-45`
 
 **Issue:** After the retirement, the setters, `LoadAntiRaidStats` and the cached getters are called only from tests.
 
@@ -97,7 +97,7 @@ The warning is then lost for 23 hours, and it is the only signal that a raid wen
 
 ### IN-02: The settings cache module name is a literal in three places
 
-**File:** `alita/db/raiddetection/repository.go:105`, `alita/db/cache/local.go:47`
+**File:** `fuku/db/raiddetection/repository.go:105`, `fuku/db/cache/local.go:47`
 
 **Fix:** Use `cacheModule` in `upsertSettings`. Add a test that `skipLocal` is true for `cache.CacheKey("raid_detection", 1)`.
 
@@ -109,13 +109,13 @@ The warning is then lost for 23 hours, and it is the only signal that a raid wen
 
 ### IN-04: The settings and Redis preamble is duplicated in the two join counters
 
-**File:** `alita/modules/raid_join.go:188-201`, `:230-243`
+**File:** `fuku/modules/raid_join.go:188-201`, `:230-243`
 
 **Fix:** Extract one helper, for example `raidJoinSettings(chat)`, and call it from both counters.
 
 ### IN-05: `/autolockdown` reads settings with an unbounded `context.Background()`
 
-**File:** `alita/modules/autolockdown.go:210`, `:230`
+**File:** `fuku/modules/autolockdown.go:210`, `:230`
 
 **Fix:** Use `context.WithTimeout(..., raidSettingsTimeout)`.
 

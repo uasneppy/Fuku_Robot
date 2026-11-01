@@ -27,14 +27,14 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/lockdown_unmute_test.go
+    - fuku/modules/lockdown_unmute_test.go
   modified:
-    - alita/modules/chat_permissions.go
-    - alita/modules/chat_permissions_test.go
-    - alita/modules/mute.go
-    - alita/modules/bans.go
-    - alita/modules/captcha.go
-    - alita/modules/staff_action_run.go
+    - fuku/modules/chat_permissions.go
+    - fuku/modules/chat_permissions_test.go
+    - fuku/modules/mute.go
+    - fuku/modules/bans.go
+    - fuku/modules/captcha.go
+    - fuku/modules/staff_action_run.go
     - locales/en.yml
     - locales/es.yml
     - locales/fr.yml
@@ -61,7 +61,7 @@ coverage:
     requirement: "LOCK-08"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_unmute_test.go#TestUnmuteDuringLockdownUsesSnapshot/unmute_command"
+        ref: "fuku/modules/lockdown_unmute_test.go#TestUnmuteDuringLockdownUsesSnapshot/unmute_command"
         status: pass
     human_judgment: false
   - id: D2
@@ -69,7 +69,7 @@ coverage:
     requirement: "LOCK-08"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_unmute_test.go#TestUnmuteDuringLockdownUsesSnapshot"
+        ref: "fuku/modules/lockdown_unmute_test.go#TestUnmuteDuringLockdownUsesSnapshot"
         status: pass
     human_judgment: false
   - id: D3
@@ -77,10 +77,10 @@ coverage:
     requirement: "LOCK-08"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_unmute_test.go#TestUnmuteDuringLockdownUsesSnapshot/no_lockdown"
+        ref: "fuku/modules/lockdown_unmute_test.go#TestUnmuteDuringLockdownUsesSnapshot/no_lockdown"
         status: pass
       - kind: unit
-        ref: "alita/modules/chat_permissions_test.go#TestResolveUnmutePermissions"
+        ref: "fuku/modules/chat_permissions_test.go#TestResolveUnmutePermissions"
         status: pass
     human_judgment: false
   - id: D4
@@ -88,7 +88,7 @@ coverage:
     requirement: "LOCK-08"
     verification:
       - kind: integration
-        ref: "alita/modules/lockdown_unmute_test.go#TestUnmuteLockdownLookupFails"
+        ref: "fuku/modules/lockdown_unmute_test.go#TestUnmuteLockdownLookupFails"
         status: pass
     human_judgment: false
   - id: D5
@@ -96,7 +96,7 @@ coverage:
     requirement: "LOCK-08"
     verification:
       - kind: unit
-        ref: "alita/modules/lockdown_unmute_test.go#TestResolveUnmutePermissionsLockdown"
+        ref: "fuku/modules/lockdown_unmute_test.go#TestResolveUnmutePermissionsLockdown"
         status: pass
     human_judgment: false
   - id: D6
@@ -145,13 +145,13 @@ plan_head_after: b30175a822fcec116e70b193c37bf998126ed947
 
 ## Files Created/Modified
 
-- `alita/modules/chat_permissions.go` - `lockdownSnapshotLookup` seam and the lockdown-aware `resolveUnmutePermissions`
-- `alita/modules/mute.go` - `/unmute` takes the error; the reply appends the lockdown note
-- `alita/modules/bans.go` - unrestrict button's Unmute takes the error before `RestrictMember`
-- `alita/modules/captcha.go` - `unmuteCaptchaUser` returns the error
-- `alita/modules/staff_action_run.go` - staff unmute resolves between its paced `getChat` and restrict, fails the group on an error
-- `alita/modules/chat_permissions_test.go` - calls adapted to the two-value form
-- `alita/modules/lockdown_unmute_test.go` - `TestUnmuteDuringLockdownUsesSnapshot` (5 subtests), `TestUnmuteLockdownLookupFails` (4), `TestResolveUnmutePermissionsLockdown` (7)
+- `fuku/modules/chat_permissions.go` - `lockdownSnapshotLookup` seam and the lockdown-aware `resolveUnmutePermissions`
+- `fuku/modules/mute.go` - `/unmute` takes the error; the reply appends the lockdown note
+- `fuku/modules/bans.go` - unrestrict button's Unmute takes the error before `RestrictMember`
+- `fuku/modules/captcha.go` - `unmuteCaptchaUser` returns the error
+- `fuku/modules/staff_action_run.go` - staff unmute resolves between its paced `getChat` and restrict, fails the group on an error
+- `fuku/modules/chat_permissions_test.go` - calls adapted to the two-value form
+- `fuku/modules/lockdown_unmute_test.go` - `TestUnmuteDuringLockdownUsesSnapshot` (5 subtests), `TestUnmuteLockdownLookupFails` (4), `TestResolveUnmutePermissionsLockdown` (7)
 - `locales/{en,es,fr,hi,id,pt,ru}.yml` - `mutes_unmute_lockdown_note`
 - `AGENTS.md` - the `resolveUnmutePermissions` rule
 
@@ -171,16 +171,16 @@ Task 1: RED (`a567a31`, test) precedes GREEN (`ac54625`, fix). The RED failed on
 
 ## Issues Encountered
 
-- **`make lint` not run:** the installed golangci-lint 2.5.0 was built with go1.25 and refuses the go1.26.0 module (known environment limit; no other linter installed). `gofmt -l` is clean on every touched file and `go vet -tags testtools ./alita/modules` passes. Recorded as an unrun verify for the orchestrator.
-- **Pre-existing, out of scope:** `gofmt -l alita/modules` also lists `alita/modules/greetings_command_test.go`, which this plan did not touch.
+- **`make lint` not run:** the installed golangci-lint 2.5.0 was built with go1.25 and refuses the go1.26.0 module (known environment limit; no other linter installed). `gofmt -l` is clean on every touched file and `go vet -tags testtools ./fuku/modules` passes. Recorded as an unrun verify for the orchestrator.
+- **Pre-existing, out of scope:** `gofmt -l fuku/modules` also lists `fuku/modules/greetings_command_test.go`, which this plan did not touch.
 - The first RED attempt failed for a setup reason (the pipeline's admin check reads `getChatAdministrators`, and the fake only knows a creator set with `setCreator`); fixed in the test helper before the RED commit so the RED reason is the assertion on the permission set.
 
 ## Verification Results
 
-- `go test -tags testtools -race -count=1 -run '^TestUnmuteDuringLockdownUsesSnapshot$|^TestUnmuteLockdownLookupFails$|^TestResolveUnmutePermissionsLockdown$|^TestResolveUnmutePermissions$|^TestDefaultUnmutePermissions$' -v ./alita/modules` - all PASS
-- `go test -tags testtools -race -count=1 -run 'Unmute|Mute|Unrestrict|Captcha|^TestStaffAction|^TestStaffUndo' ./alita/modules` - ok (62 s)
-- `make test` - exit 0, 61 packages ok, `alita/modules` 138 s, coverage 70.1%
-- `CGO_ENABLED=0 go build ./...` ok; `go vet -tags testtools ./alita/modules` ok; `make check-translations` all present; `make check-docs` no drift; `git diff --exit-code go.mod go.sum` clean
+- `go test -tags testtools -race -count=1 -run '^TestUnmuteDuringLockdownUsesSnapshot$|^TestUnmuteLockdownLookupFails$|^TestResolveUnmutePermissionsLockdown$|^TestResolveUnmutePermissions$|^TestDefaultUnmutePermissions$' -v ./fuku/modules` - all PASS
+- `go test -tags testtools -race -count=1 -run 'Unmute|Mute|Unrestrict|Captcha|^TestStaffAction|^TestStaffUndo' ./fuku/modules` - ok (62 s)
+- `make test` - exit 0, 61 packages ok, `fuku/modules` 138 s, coverage 70.1%
+- `CGO_ENABLED=0 go build ./...` ok; `go vet -tags testtools ./fuku/modules` ok; `make check-translations` all present; `make check-docs` no drift; `git diff --exit-code go.mod go.sum` clean
 - Acceptance greps: signature line present; 4 non-test callers, all `, err`; `mutes_unmute_lockdown_note` in mute.go and once in each of the 7 locale files; AGENTS.md mentions `resolveUnmutePermissions`; `git log` shows the `test(04-07)` commit before the `fix(04-07)` commit; `t.Run("` count in the new test file is 16 (>= 6)
 - Not run: `make lint` (see above); no PostgreSQL run was needed or attempted (tests ran on SQLite)
 
@@ -202,7 +202,7 @@ Plan 04-08 can rely on every unmute path being lockdown-safe. The only open item
 
 ## Self-Check: PASSED
 
-- Files exist: `alita/modules/lockdown_unmute_test.go`, `alita/modules/chat_permissions.go` (and the 14 modified files)
+- Files exist: `fuku/modules/lockdown_unmute_test.go`, `fuku/modules/chat_permissions.go` (and the 14 modified files)
 - Commits exist: `a567a31`, `ac54625`, `b30175a`
 
 ---

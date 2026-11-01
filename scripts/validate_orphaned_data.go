@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/divkix/Alita_Robot/alita/db"
+	"github.com/uasneppy/fuku_robot/fuku/db"
 	"gorm.io/gorm"
 )
 

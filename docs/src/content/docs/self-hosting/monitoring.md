@@ -1,11 +1,11 @@
 ---
 title: Monitoring and Observability
-description: Monitor Alita Robot health, metrics, and errors.
+description: Monitor Fuku Robot health, metrics, and errors.
 ---
 
 # Monitoring and Observability
 
-Alita Robot provides comprehensive monitoring capabilities including health checks, Prometheus metrics, and resource monitoring.
+Fuku Robot provides comprehensive monitoring capabilities including health checks, Prometheus metrics, and resource monitoring.
 
 ## Health Endpoint
 
@@ -68,7 +68,7 @@ Both checks must pass for `healthy` status.
 curl http://localhost:8080/health
 
 # Docker health check (built-in)
-/app/alita_robot --health
+/app/fuku_robot --health
 
 # Kubernetes liveness probe
 livenessProbe:
@@ -95,16 +95,16 @@ Besides the Go runtime metrics, the bot exports:
 
 | Metric | Type | Labels | Meaning |
 |--------|------|--------|---------|
-| `alita_updates_processed_total` | counter | none | Telegram updates processed |
-| `alita_update_duration_seconds` | histogram | none | Time to process one update |
-| `alita_redis_commands_total` | counter | `command` | Redis commands sent (`get`, `set`, `del`, ...) |
-| `alita_db_queries_total` | counter | `operation` | Database statements (`query`, `create`, `update`, `delete`, `row`, `raw`) |
+| `fuku_updates_processed_total` | counter | none | Telegram updates processed |
+| `fuku_update_duration_seconds` | histogram | none | Time to process one update |
+| `fuku_redis_commands_total` | counter | `command` | Redis commands sent (`get`, `set`, `del`, ...) |
+| `fuku_db_queries_total` | counter | `operation` | Database statements (`query`, `create`, `update`, `delete`, `row`, `raw`) |
 
 Per-update cost:
 
 ```promql
-sum(rate(alita_redis_commands_total[5m])) / rate(alita_updates_processed_total[5m])
-sum(rate(alita_db_queries_total[5m])) / rate(alita_updates_processed_total[5m])
+sum(rate(fuku_redis_commands_total[5m])) / rate(fuku_updates_processed_total[5m])
+sum(rate(fuku_db_queries_total[5m])) / rate(fuku_updates_processed_total[5m])
 ```
 
 ### Prometheus Scrape Configuration
@@ -113,9 +113,9 @@ Add to your `prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: 'alita-robot'
+  - job_name: 'fuku-robot'
     static_configs:
-      - targets: ['alita:8080']
+      - targets: ['fuku:8080']
     scrape_interval: 15s
     scrape_timeout: 10s
     metrics_path: /metrics
@@ -133,7 +133,7 @@ services:
     ports:
       - "9090:9090"
     depends_on:
-      - alita
+      - fuku
 
 volumes:
   prometheus_data:
@@ -162,7 +162,7 @@ volumes:
 
 ## Resource Monitoring
 
-Alita Robot includes automatic resource monitoring to prevent resource exhaustion.
+Fuku Robot includes automatic resource monitoring to prevent resource exhaustion.
 
 ### Configuration
 
@@ -333,7 +333,7 @@ Structured log entries include:
   "msg": "Handler error occurred: user blocked bot",
   "update_id": 123456789,
   "error_type": "*gotgbot.TelegramError",
-  "file": "alita/modules/admin.go",
+  "file": "fuku/modules/admin.go",
   "line": 45,
   "function": "handleAdminCommand",
   "time": "2024-03-15T10:30:00Z"
@@ -353,7 +353,7 @@ Structured log entries include:
 ## Alerting
 
 :::tip
-At minimum, set up alerts for `AlitaUnhealthy` and monitor the `/health` endpoint with an external HTTP check (e.g., blackbox exporter) to catch critical outages early.
+At minimum, set up alerts for `FukuUnhealthy` and monitor the `/health` endpoint with an external HTTP check (e.g., blackbox exporter) to catch critical outages early.
 :::
 
 ### Prometheus Alerting Rules
@@ -362,15 +362,15 @@ Create `alerts.yml`:
 
 ```yaml
 groups:
-  - name: alita-alerts
+  - name: fuku-alerts
     rules:
-      - alert: AlitaUnhealthy
-        expr: up{job="alita-robot"} == 0
+      - alert: FukuUnhealthy
+        expr: up{job="fuku-robot"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Alita Robot is down"
+          summary: "Fuku Robot is down"
 
       - alert: HighMemoryUsage
         expr: process_resident_memory_bytes > 500000000

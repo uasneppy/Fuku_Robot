@@ -34,15 +34,15 @@ tech-stack:
 
 key-files:
   created:
-    - alita/modules/autolockdown.go
-    - alita/modules/autolockdown_test.go
-    - alita/db/raiddetection/repository_test.go
-    - alita/db/raiddetection/testmain_test.go
+    - fuku/modules/autolockdown.go
+    - fuku/modules/autolockdown_test.go
+    - fuku/db/raiddetection/repository_test.go
+    - fuku/db/raiddetection/testmain_test.go
   modified:
-    - alita/modules/lockdown.go
-    - alita/db/raiddetection/repository.go
-    - alita/db/cache/local.go
-    - alita/db/cache/local_test.go
+    - fuku/modules/lockdown.go
+    - fuku/db/raiddetection/repository.go
+    - fuku/db/cache/local.go
+    - fuku/db/cache/local_test.go
     - AGENTS.md
     - locales/en.yml
     - locales/es.yml
@@ -115,7 +115,7 @@ None - plan executed exactly as written. The only choices beyond its wording wer
 
 ## Issues Encountered
 
-- `make lint` cannot run here (golangci-lint is built with an older Go than the module needs). `gofmt -l` on the touched files and `go vet -tags testtools ./alita/modules ./alita/db/raiddetection ./alita/db/cache` stand in and are clean. `alita/modules/greetings_command_test.go` is not gofmt-clean on the base commit and was left alone.
+- `make lint` cannot run here (golangci-lint is built with an older Go than the module needs). `gofmt -l` on the touched files and `go vet -tags testtools ./fuku/modules ./fuku/db/raiddetection ./fuku/db/cache` stand in and are clean. `fuku/modules/greetings_command_test.go` is not gofmt-clean on the base commit and was left alone.
 - No PostgreSQL server exists in this sandbox and none was started. The upsert's `ON CONFLICT (chat_id)` was exercised on SQLite through the model's unique index; the PostgreSQL proof of `TestRaidDetectionSettings` is plan 06-13 (the integrity list).
 - Some long shell commands were refused by the worktree guard and re-run as separate, plain commands or through the edit tools; nothing was lost.
 - The full `make test` was not run (the orchestrator owns it).
@@ -124,10 +124,10 @@ None - plan executed exactly as written. The only choices beyond its wording wer
 
 | Check | Result |
 |-------|--------|
-| `go test -tags testtools -race -run '^TestAutoLockdownAuthority$\|^TestAutoLockdownArgs$\|^TestAutoLockdownBasicGroup$\|^TestAutoLockdownBadInput$\|^TestAutoLockdownSaveFails$\|^TestAutoLockdown$' ./alita/modules` | pass (all subtests) |
-| `go test -tags testtools -race -run 'Lockdown\|Unlockdown\|Raid\|Anon' ./alita/modules` | pass (121 s) |
-| `go test -tags testtools -race ./alita/db/raiddetection ./alita/db/cache` | pass |
-| `go test -tags testtools -run 'TestLockdownLocaleKeys\|TestLockdownStringsHaveBalancedTags\|TestLockdownRepliesCarryNoTelegramDetail' ./alita/i18n` | pass |
+| `go test -tags testtools -race -run '^TestAutoLockdownAuthority$\|^TestAutoLockdownArgs$\|^TestAutoLockdownBasicGroup$\|^TestAutoLockdownBadInput$\|^TestAutoLockdownSaveFails$\|^TestAutoLockdown$' ./fuku/modules` | pass (all subtests) |
+| `go test -tags testtools -race -run 'Lockdown\|Unlockdown\|Raid\|Anon' ./fuku/modules` | pass (121 s) |
+| `go test -tags testtools -race ./fuku/db/raiddetection ./fuku/db/cache` | pass |
+| `go test -tags testtools -run 'TestLockdownLocaleKeys\|TestLockdownStringsHaveBalancedTags\|TestLockdownRepliesCarryNoTelegramDetail' ./fuku/i18n` | pass |
 | `make check-translations`, `make check-docs` | clean (no drift) |
 | `CGO_ENABLED=0 go build ./...`, `go vet`, `gofmt -l` | clean |
 | `git diff --exit-code go.mod go.sum` | clean |
@@ -157,6 +157,6 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-- Created files exist: `alita/modules/autolockdown.go`, `alita/modules/autolockdown_test.go`, `alita/db/raiddetection/repository_test.go`, `alita/db/raiddetection/testmain_test.go`.
+- Created files exist: `fuku/modules/autolockdown.go`, `fuku/modules/autolockdown_test.go`, `fuku/db/raiddetection/repository_test.go`, `fuku/db/raiddetection/testmain_test.go`.
 - Commits `7e7ad5c`, `a242911` and `254b884` are in `git log`; `git rev-list --count 946dd04..HEAD` was 3 before this file.
 - `STATE.md` and `ROADMAP.md` are untouched.

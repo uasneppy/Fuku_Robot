@@ -61,7 +61,7 @@ Out of scope:
 - **D-26 (security):** The challenge token is public (it is in the button URL), so the consume step first compares the verified `initData` user with the challenge's user and changes nothing for another user: a plain compare-and-delete would let any member burn the target's challenge. The per-token rate window is keyed by (token, user).
 - **D-27:** `start_param` may not be inside the signed `initData`, so the page also reads `tgWebAppStartParam` from its URL; the server derives the token from whichever the page sends and binds `cData` to it (D-19). The widget's JS option is `cData` (camelCase), not `cdata`; the UI contract is corrected accordingly.
 - **D-28:** The retry classification follows the research: only `invalid-input-response`, `timeout-or-duplicate` and a `cdata` mismatch count as a failed solve and run the failure action. Transport errors, 5xx, `internal-error`, `bad-request`, secret errors and hostname or action mismatches answer `retry` and re-arm the token (D-21), so members are never kicked for the owner's mistakes.
-- **D-29:** The migration drops `chk_captcha_mode` with `DROP CONSTRAINT IF EXISTS` first and re-adds it `NOT VALID` with `turnstile` included, because both migration appliers swallow `duplicate_object` on `ADD CONSTRAINT`. The code lives in a new package `alita/utils/captchaweb` (a `Backend` interface, no `alita/db` import) with the implementation in `alita/modules/captcha_web.go`; no new Go dependency.
+- **D-29:** The migration drops `chk_captcha_mode` with `DROP CONSTRAINT IF EXISTS` first and re-adds it `NOT VALID` with `turnstile` included, because both migration appliers swallow `duplicate_object` on `ADD CONSTRAINT`. The code lives in a new package `fuku/utils/captchaweb` (a `Backend` interface, no `fuku/db` import) with the implementation in `fuku/modules/captcha_web.go`; no new Go dependency.
 - **D-30:** In polling mode the HTTP server starts before `postInit`, so the verify route is gated on a readiness flag and answers `retry` until the bot is ready. `make check-translations` cannot see the dynamic `captcha_web_*` page keys, so a locale-parity test covers them.
 - **D-31 (owner question defaulted to the researcher's recommendation):** The captcha routes share the HTTP port with `/metrics`, `/db_metrics`, `/health`, pprof and `/webhook`. The bot does not enforce a path allow-list; the deployment guide tells the owner to forward only `/captcha` and `/captcha/*` through the proxy, and the bot prints one startup warning when the web captcha is enabled and `METRICS_AUTH_TOKEN` is empty. A middleware or a separate port can follow if the proxy is ever not fully controlled.
 
@@ -71,7 +71,7 @@ Out of scope:
 - How the migration widens the CHECK (drop and re-add inside one transaction) and how model, repository and tests change with it.
 - Wording of the challenge message, button label, page strings, the refusal reasons of `/captchamode turnstile`, and all 7 locales.
 - How the shared pass path and the timeout path are factored out of `captcha.go`, and which tests move with them.
-- Where the page and API code live (a new package under `alita/utils/` or inside `httpserver`), keeping `alita/db` init-order rules.
+- Where the page and API code live (a new package under `fuku/utils/` or inside `httpserver`), keeping `fuku/db` init-order rules.
 
 </decisions>
 
@@ -79,14 +79,14 @@ Out of scope:
 ## Existing Code Insights
 
 ### Reusable Assets
-- **The existing captcha:** `alita/modules/captcha.go` (2099 lines): `SendCaptcha` (mute, attempt row, message), `captchaVerifyCallback` (the pass and fail path), `handleCaptchaTimeout`, `expireCaptchaAttempt`, `executeCaptchaFailureAction`, `unmuteCaptchaUser`, pending-message replay, `StartCaptchaLifecycle` workers, and `/captchamode`, `/captchatime`, `/captchaaction`, `/captchamaxattempts`.
-- **Data:** `alita/db/captcha/repository.go` (settings, attempts, stored messages, the `captcha_pending` flag that must be invalidated after an attempt insert) and `alita/db/models/captcha.go` (`CaptchaSettings.CaptchaMode` with `chk_captcha_mode IN ('math','text')`, `CaptchaAttempts` unique on (user, chat), `ExpiresAt`).
-- **HTTP server:** `alita/utils/httpserver/server.go` (a mux with `/health`, `/metrics`, `/db_metrics`, pprof and the webhook path; webhook and polling modes; shutdown manager).
+- **The existing captcha:** `fuku/modules/captcha.go` (2099 lines): `SendCaptcha` (mute, attempt row, message), `captchaVerifyCallback` (the pass and fail path), `handleCaptchaTimeout`, `expireCaptchaAttempt`, `executeCaptchaFailureAction`, `unmuteCaptchaUser`, pending-message replay, `StartCaptchaLifecycle` workers, and `/captchamode`, `/captchatime`, `/captchaaction`, `/captchamaxattempts`.
+- **Data:** `fuku/db/captcha/repository.go` (settings, attempts, stored messages, the `captcha_pending` flag that must be invalidated after an attempt insert) and `fuku/db/models/captcha.go` (`CaptchaSettings.CaptchaMode` with `chk_captcha_mode IN ('math','text')`, `CaptchaAttempts` unique on (user, chat), `ExpiresAt`).
+- **HTTP server:** `fuku/utils/httpserver/server.go` (a mux with `/health`, `/metrics`, `/db_metrics`, pprof and the webhook path; webhook and polling modes; shutdown manager).
 - **Phase 7 patterns:** swappable endpoints and `httptest` fakes for outside services, config plus `registerSecrets`, `logredact`, the developer `/stats` counters, Redis scripts with `{chat}` tags, `RegisterXxxDrain` shutdown drains.
 - **Locales:** 7 locale files, `make check-translations`, and the docs generator.
 
 ### Established Patterns
-- Operational Redis keys sit outside `alita:cache:`; best-effort Redis work stays under a short timeout; exactly-once effects come from conditional database writes, and Redis only sheds load or holds short-lived tokens.
+- Operational Redis keys sit outside `fuku:cache:`; best-effort Redis work stays under a short timeout; exactly-once effects come from conditional database writes, and Redis only sheds load or holds short-lived tokens.
 - Captcha allows one attempt per (user, chat); group `-10` stores the pending user's messages for replay; any code that inserts into `captcha_attempts` must `DeleteCache` the pending flag after commit.
 - Migrations are append-only and timestamped; model changes go into every test harness `AutoMigrate` list.
 

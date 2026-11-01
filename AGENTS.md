@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Alita Robot: Telegram group-management bot. Go module `github.com/divkix/Alita_Robot`; PostgreSQL (GORM) + Redis.
+Fuku Robot: Telegram group-management bot. Go module `github.com/uasneppy/fuku_robot`; PostgreSQL (GORM) + Redis.
 Update this file in the same commit as any change that invalidates a rule below.
 
 ## Commands
@@ -11,15 +11,15 @@ make lint                 # golangci-lint v2
 make check-translations   # missing locale keys
 make check-docs           # generated-docs drift; fix with `make generate-docs`
 make bump-version TAG=vX.Y.Z   # the only way to change version strings
-go test -tags testtools -race -count=1 -run '^TestName$' ./alita/db/warns   # one test
+go test -tags testtools -race -count=1 -run '^TestName$' ./fuku/db/warns   # one test
 CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2 + Docker
 ```
 
 ## Startup and shutdown
 
-- `alita/config` `init()` → `alita/db` `init()` connects to Postgres **before `main()`** and runs migrations when
-  `AUTO_MIGRATE=true`. Never add DB access to an `init()` that can run before `alita/db`'s.
-- `--version`, `--health`, and `*.test` binaries (unless `ALITA_TEST_DATABASE=true`) skip DB init. Guard new pre-`main`
+- `fuku/config` `init()` → `fuku/db` `init()` connects to Postgres **before `main()`** and runs migrations when
+  `AUTO_MIGRATE=true`. Never add DB access to an `init()` that can run before `fuku/db`'s.
+- `--version`, `--health`, and `*.test` binaries (unless `FUKU_TEST_DATABASE=true`) skip DB init. Guard new pre-`main`
   side effects with `isCliModeActive`.
 - Shutdown runs LIFO within 60 s. Register new drains *after* DB-close so they run before it. Each handler gets 10 s
   (`defaultHandlerTimeout`) unless registered with `RegisterHandlerWithTimeout`; a drain whose own wait is longer is
@@ -130,7 +130,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Callbacks
 
-- Encode/decode only through `alita/utils/callbackcodec` (`<ns>|v1|<url-encoded>`, 64-byte cap). Never `strings.Split`.
+- Encode/decode only through `fuku/utils/callbackcodec` (`<ns>|v1|<url-encoded>`, 64-byte cap). Never `strings.Split`.
 - `encodeCallbackData` returns `""` on overflow, which ships a dead button. Put user text in Redis behind a short token.
 - The staff namespace's history list is `a=rc&o=<offset>` (the `/staff` panel's Recent actions, and its Prev and Next).
   Paging uses an offset cursor, not a page number, so a page shrunk to the 3800-unit cap hides no entry: Next starts
@@ -270,7 +270,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Permissions
 
-- `alita/utils/chat_status` predicates return bools and never reply; use `PermissionResponder` to message.
+- `fuku/utils/chat_status` predicates return bools and never reply; use `PermissionResponder` to message.
   `helpers.CheckFunc` replies and is valid only inside `WrapCommand`.
 - `IsUserAdmin` returns false for channel and non-positive IDs. Never pass a chat ID as a user ID.
 - `*ForUpdate` predicates are memoised per update. Watchers only, never after a state change in the same update.
@@ -325,16 +325,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Data
 
-- Repositories live in `alita/db/<domain>/`. Read via `cache.GetFromCacheOrLoad` with `cache.CacheKey` keys.
+- Repositories live in `fuku/db/<domain>/`. Read via `cache.GetFromCacheOrLoad` with `cache.CacheKey` keys.
   **Every write must `cache.DeleteCache` the keys it affects.**
 - `GetFromCacheOrLoad` has an in-process layer (`CACHE_LOCAL_TTL`, default 10 s) in front of Redis. `DeleteCache`
-  evicts it on this replica only; list freshness-critical keys in `skipLocal` (`alita/db/cache/local.go`). Tests that
+  evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
-- Two packages are named `cache`; the loader and generation guards are in `alita/db/cache`, not `alita/utils/cache`.
-- Operational Redis keys (`alita:anonAdmin:*`, `alita:staff:*`, `alita:lockdown:*`, `alita:raid:*`) sit outside the
-  `alita:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `alita:antiraid:*` is retired: nothing reads or
+- Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
+- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`) sit outside the
+  `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
-- `alita:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
+- `fuku:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
   signature of the sorted linked group IDs (`links_sig`) changed since the card was shown. The same hash also holds
@@ -344,18 +344,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   clears the groups' undo columns) when no group of the run reached its Telegram write (`staffGroupResult.Reached`, set
   once `executeStaffUndoCall` returned, whatever it returned, and for every group `sweepPending` swept after a panic,
   which may have reached its write before it was lost), and kept once any group did.
-- `alita:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
+- `fuku:staff:lock:target:<id>` is the per-target fan-out lock: `SET NX` with the card token as value and a 30-minute
   TTL, taken at Confirm, renewed every 10 minutes (`staffTargetLockRenewEvery`) by the run's coordinator through a
   compare-and-set on that token while the fan-out runs (a vanished key is re-taken, another card's lock is never
   touched), and released by compare-and-delete with that token when the run ends or the Confirm aborts. An undo's
   Confirm takes the same lock, so an undo and a staff action on one person never run at once; the loser is answered
   "target busy" and its card stays pending.
-- `alita:staff:pace:next` and `alita:staff:pace:block` are the fleet-wide Telegram pacing for staff fan-outs: a slot
+- `fuku:staff:pace:next` and `fuku:staff:pace:block` are the fleet-wide Telegram pacing for staff fan-outs: a slot
   reservation plus a shared `retry_after` block. The block keeps Telegram's full `retry_after`; a call whose slot is
   more than `MaxWait` (60 s) away fails at once as rate limited, with no Telegram request and without taking the slot.
   Every staff fan-out Telegram call goes through `staffPaced`, and per-replica limiters must not be used for shared
   budgets.
-- `alita:lockdown:recent:<chat>` is the best-effort 10-minute join tracker (`lockdown_recent.go`): a sorted set scored by
+- `fuku:lockdown:recent:<chat>` is the best-effort 10-minute join tracker (`lockdown_recent.go`): a sorted set scored by
   join time in unix milliseconds, written by both group `-7` join handlers (`lockdownOnJoinMember`,
   `lockdownOnJoinMessage`) for every supergroup join before they read the lockdown, whether or not one is active. Join
   requests and the bot's own join are not tracked. A member is compact JSON (`i` id, `n` name, `u` username, `b` bot,
@@ -364,15 +364,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   time wins, a non-empty link, name or username fills in). One pipelined round trip under 250 ms
   (`lockdownRecentTimeout`) adds, trims to 10 minutes, keeps the newest 500 (`lockdownRecentCap`) and sets a 700 s TTL.
   It is empty without Redis and is never a ban decision. The joins of the 10 minutes before the lock are saved with the
-  lockdown's alert (`chat_lockdown_burst`); a flood lockdown also saves its flooders there (`alita:raid:{<chat>}:flooders`
+  lockdown's alert (`chat_lockdown_burst`); a flood lockdown also saves its flooders there (`fuku:raid:{<chat>}:flooders`
   below). The raid join counter does not use it.
-- `alita:raid:{<chat>}:joined` is the join counter of automatic raid detection (`raid_counters.go`): a sorted set whose
+- `fuku:raid:{<chat>}:joined` is the join counter of automatic raid detection (`raid_counters.go`): a sorted set whose
   member is the user ID and whose score is that account's latest join in unix milliseconds, so the `chat_member` update
   and the service message of one join are one member and a re-join refreshes the account. One Lua script
   (`raidJoinScript`, the chat ID is a hash tag) adds the joins, trims what is older than 24 h, keeps the newest 5000
   (`raidJoinedCap`), sets a 25 h TTL and returns how many different accounts joined in the last 60 s. It is best effort
   and Redis only: without Redis automatic detection is inert on that replica (one info log per process) and `/lockdown`
-  still works. `alita:raid:{<chat>}:fire` is a `SET NX EX 60` latch that only sheds load while a trigger starts a
+  still works. `fuku:raid:{<chat>}:fire` is a `SET NX EX 60` latch that only sheds load while a trigger starts a
   lockdown; exactly one lockdown is still `uk_chat_lockdowns_active` plus `lockdown.Start`, and one alert still
   `lockdown.BeginAlert`, however many triggers and replicas fire at once. After the latch `raidFire` reads the chat's
   active lockdown fresh and stays silent, with no Telegram call, while one exists, and for 10 minutes (`raidLiftQuiet`)
@@ -381,14 +381,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   after a started, already-active or unknown-lock outcome, 10 s (`raidRetryLatch`) after a failed bot-rights check,
   unreadable permissions or failed state write, and 10 minutes (`raidCantLockLatch`) when the group is not a
   supergroup, the bot cannot restrict members or Telegram refused the lock. Do not reuse
-  `alita:lockdown:recent:<chat>` for counting: its JSON members count one join twice.
-- `alita:raid:{<chat>}:fi`, `:fn` and `:fa` are the message flood counter of automatic raid detection
+  `fuku:lockdown:recent:<chat>` for counting: its JSON members count one join twice.
+- `fuku:raid:{<chat>}:fi`, `:fn` and `:fa` are the message flood counter of automatic raid detection
   (`raid_flood.go`): three sorted sets scored in unix ms, the window's item keys (`m:<message id>`, or `g:<media group
   id>` so an album is one item), the item keys sent by new members and those members' user IDs. One Lua script
   (`raidFloodScript`) adds the item, trims all three to 30 s, caps the first two at 2000 (`raidFloodCap`), sets
   `PEXPIRE` 2 minutes on each and returns their sizes; a member is new when `:joined` scores them within 24 h
   (`ZSCORE`). It is Redis only, like the join counter.
-- `alita:raid:{<chat>}:av` and `:aa` are the AI spam verdict counter of automatic raid detection (`raid_ai_count.go`):
+- `fuku:raid:{<chat>}:av` and `:aa` are the AI spam verdict counter of automatic raid detection (`raid_ai_count.go`):
   two sorted sets scored in unix ms, the verdict items (`m:<message id>`, or `g:<media group id>` so an album is one
   item) and the accounts behind them (user ID, scored by that account's latest newly counted verdict). One Lua script
   (`raidAIVerdictScript`) adds the item with `ZADD NX`, so a second report of one message or album is a no-op, and
@@ -397,7 +397,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   for tests, never set below 500 except to prove the cap), sets `PEXPIRE` 5 minutes and returns the two sizes. It is
   Redis only, like the other raid counters: without Redis the trigger is inert on that replica. Message text is never
   stored.
-- `alita:raid:{<chat>}:ar:<user>` is the repeat test of the raid AI candidate watcher (`raid_ai.go`): a list of hashes of
+- `fuku:raid:{<chat>}:ar:<user>` is the repeat test of the raid AI candidate watcher (`raid_ai.go`): a list of hashes of
   a new member's recent texts, each the first 8 bytes of the SHA-256 of the normalised text (lower-cased, whitespace
   collapsed) as 16 hex characters, only for a text of at least 10 runes (`raidAIRepeatMinRunes`), newest 5
   (`raidAIRepeatHistory`), 1 h TTL (`raidAIRepeatTTL`). One Lua script (`raidAICandidateScript`) answers whether the
@@ -405,23 +405,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   hash for a new member only, so an established member leaves no key. Raw message text is never stored, here or by
   the raid path anywhere else. It is Redis only, like the other raid counters.
 - The image checks' cost guards (`raid_ai_image.go`, D-20) keep five Redis key families, all outside the cache prefix.
-  `alita:raid:{<chat>}:ag:<media_group_id>` is the album gate, `SET NX EX 120` (`raidAIAlbumGateTTL`): the first photo of
+  `fuku:raid:{<chat>}:ag:<media_group_id>` is the album gate, `SET NX EX 120` (`raidAIAlbumGateTTL`): the first photo of
   an album is judged and the others are dropped, except that a first photo refused for a reason of that moment before any
   provider call (a paused breaker, a budget refusal, a Redis error, the fire latch) gives the gate back with `DEL`
   (`raidAIAlbumRelease`), so the next photo of the album can still be judged; a photo that reached the provider keeps it.
-  `alita:raid:{<chat>}:ab:<yyyymmddhh>` and `alita:raid:aibudget:<yyyymmddhh>`
+  `fuku:raid:{<chat>}:ab:<yyyymmddhh>` and `fuku:raid:aibudget:<yyyymmddhh>`
   are the hourly budgets, 150 provider calls per group (`raidAIChatHourlyBudget`) and 500 in all
   (`raidAIGlobalHourlyBudget`), counted by `INCR` plus a 2 h expiry (`raidAIBudgetTTL`) in one transaction, the UTC hour
-  from `raidNow`. In front of both sits the per-account budget `alita:raid:{<chat>}:abu:<user>:<yyyymmddhh>`, 20 calls
+  from `raidNow`. In front of both sits the per-account budget `fuku:raid:{<chat>}:abu:<user>:<yyyymmddhh>`, 20 calls
   per account per group per hour (`raidAIUserHourlyBudget`), counted the same way and reserved first: an account that
   is over it is `Capped` and spends neither shared unit, so one fresh account posting distinct photos can neither empty
-  its group's 150 nor the fleet's 500 (WR-01). A cached verdict is answered before any budget and spends none. `alita:raid:aiv:<file_unique_id>` is the verdict cache: the probability as a decimal string, `SET EX
+  its group's 150 nor the fleet's 500 (WR-01). A cached verdict is answered before any budget and spends none. `fuku:raid:aiv:<file_unique_id>` is the verdict cache: the probability as a decimal string, `SET EX
   3600` (`raidAIVerdictCacheTTL`), written only after a verdict (never for a failure or a block). The budget is reserved
   before the download, so a failed call still spends its unit; a group over its own budget never spends the fleet's. The
   two budgets are package variables only so a test can make them small. A Redis error on any of these keys is no verdict:
   the image is not sent, never an unbounded call. The all-groups key has no `{chat}` hash tag, so it is only ever used in
   single-key commands, never in a multi-key script.
-- `alita:raid:{<chat>}:flooders` is the flood alert's snapshot (`raid_flood.go`, D-17). When a flood trigger fires,
+- `fuku:raid:{<chat>}:flooders` is the flood alert's snapshot (`raid_flood.go`, D-17). When a flood trigger fires,
   `raidFire` calls `raidSnapshotFlooders` after the latch, the active check and the quiet period and before
   `startLockdownRow`: one Lua script (`raidFloodersScript`) replaces the key with the newest accounts of `:fa` (at most
   `raidFloodersMax` = 500) whose `:joined` score is within 24 h, scored by that join time, with a 15-minute TTL
@@ -434,7 +434,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   sample and in "Ban N recent joiners" (through the unchanged Phase 5 ban run and its exclusions), and a Redis flush
   after the alert changes nothing. A flood alert's counts line is `lockdown_alert_counts_flood`
   (`lockdownRenderSample` takes the trigger kind); the join-surge and manual alerts keep `lockdown_alert_counts`.
-- `alita:raid:{<chat>}:aispammers` is the AI burst alert's snapshot (`raid_ai_count.go`), the twin of `:flooders`. When an
+- `fuku:raid:{<chat>}:aispammers` is the AI burst alert's snapshot (`raid_ai_count.go`), the twin of `:flooders`. When an
   AI trigger fires, `raidFire` calls `raidSnapshotAISpammers` at the same point (after the latch, the active check and
   the quiet period, before `startLockdownRow`): one Lua script (`raidAISpammersScript`) replaces the key with the newest
   accounts of `:aa` (at most `raidFloodersMax` = 500) whose `:joined` score is within 24 h, scored by that join time,
@@ -463,7 +463,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   log channel (`actionlog.Destination` under the admin category, the group's language, starting with the usual header),
   each only when it exists. The destinations are resolved before the gate is touched: with neither, nothing is
   attempted and the gate stays free, so a Staff Group linked later is still warned. One `SET NX EX 86400` on
-  `alita:raid:{<chat>}:warn` then gates both copies, so a group is warned at most once a day across replicas, and a
+  `fuku:raid:{<chat>}:warn` then gates both copies, so a group is warned at most once a day across replicas, and a
   Redis error or a lost `SetNX` sends nothing. The gate records a warning that reached somebody: when no copy was
   delivered it is given back with `DEL` (`raidReleaseWarnGate`, best effort), and when at least one was delivered it
   stays. The other outcomes
@@ -498,11 +498,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   in-memory numbers only (no text, file ID, chat, user or key): the raid AI pool's counters (`RaidAIStats`: checked,
   spam, kept, shed, failed, blocked, capped, cached) and `/aispam`'s (checked, deleted, kept, shed, failed). They belong
   to the process that answers, start at zero on every restart and are not fleet totals.
-- `alita:lockdown:pace:next` and `alita:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
+- `fuku:lockdown:pace:next` and `fuku:lockdown:pace:block` are the fleet-wide Telegram pacing of lockdown bans,
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
   once as rate limited and the joiner row goes back without counting an attempt.
-- `alita:captcha:ch:<token>` is the Turnstile captcha's challenge handle (`alita/utils/captchaweb`, `challenge.go`): a hash
+- `fuku:captcha:ch:<token>` is the Turnstile captcha's challenge handle (`fuku/utils/captchaweb`, `challenge.go`): a hash
   of decimal strings `u` (user ID), `a` (attempt ID), `c` (chat ID) and `x` (the attempt's expiry in unix ms), living the
   attempt's time left plus 5 minutes (`ChallengeGrace`). The token is 16 random bytes in base64url (22 characters) and is
   public, because it is the `startapp` value of the group's URL button: the barrier is the signed `initData` `user.id`,
@@ -518,12 +518,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   750 ms deadline, so a client that disconnects never abandons it, and the release and the delete run on a context of
   their own. If Redis is unreachable for the release too, the claim stays until the challenge expires and the member
   times out as for any other Redis fault (accepted, WR-03). It is Redis
-  only and sits outside the `alita:cache:` prefix beside the existing `alita:captcha:refresh:cooldown:*`, so
+  only and sits outside the `fuku:cache:` prefix beside the existing `fuku:captcha:refresh:cooldown:*`, so
   `CLEAR_CACHE_ON_STARTUP` keeps it; a Redis flush loses the open challenges and those members time out as usual. A retry
   puts the same key back with `Store.Rearm` (one Lua script, bounded by `RedisTimeout`): the time it had left when it was
   consumed minus the time since, written only when the key is absent and time remains, so a re-arm never stretches a
   challenge past its attempt and never overwrites another one.
-- `alita:captcha:rl:ip:<ip>`, `alita:captcha:rl:u:<user>` and `alita:captcha:rl:t:<token>:<user>` are the abuse windows of
+- `fuku:captcha:rl:ip:<ip>`, `fuku:captcha:rl:u:<user>` and `fuku:captcha:rl:t:<token>:<user>` are the abuse windows of
   the Turnstile verify route (`captchaweb/limiter.go`, `Limiter.Allow`): fixed windows of 60 s counted by one Lua script
   (`INCR`, `PEXPIRE` on the first increment, a key that lost its expiry gets one again), with budgets of 60 per client
   address (an IPv6 client counts by its /64), 20 per verified user and 8 per token and verified user
@@ -534,7 +534,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   another member who hammers a target's public token spends only their own budgets and the target still passes (D-26).
   The address window is counted before the body is read, the other two right after `initData` is verified, all before the
   in-flight slot is taken.
-- `alita:captcha:streak` is the Turnstile key mismatch breaker (`captchaweb/breaker.go`, `Store.RecordFailedSolve` and
+- `fuku:captcha:streak` is the Turnstile key mismatch breaker (`captchaweb/breaker.go`, `Store.RecordFailedSolve` and
   `Store.ClearFailedSolves`, WR-04): one fleet-wide counter of failed solves (`OutcomeFailed`, any reason) since the last
   confirmed pass, incremented by one Lua script that also renews a 10 minute expiry (`StreakTTL`), so a streak that goes
   on stays tripped and a quiet one ends. Cloudflare answers `invalid-input-response` for a token minted by a widget that
@@ -547,14 +547,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   minute per replica, and counted as an error. Every verdict that confirms a pass runs `ClearFailedSolves` (`DEL`). It is
   Redis only and outside the cache prefix; a Redis error fails open (the failure is enforced as D-28 says, nobody is
   blocked, a pass still goes through). A single bad token is a streak of one and never trips it.
-- `alita:captcha:done:<token>` is the Turnstile verify route's decided-answer marker (`challenge.go`, `Store.MarkDone` and
+- `fuku:captcha:done:<token>` is the Turnstile verify route's decided-answer marker (`challenge.go`, `Store.MarkDone` and
   `Store.Done`): a string `<user>:<result>[:<action>]` (result `passed`, `failed`, `expired` or `invalid`, the neutral answer of
   a failure action that could not be applied; action `kick`, `ban` or `mute` and empty for passed and invalid), 10 minutes (`DoneTTL`), written with `SET NX` after every decided answer and before the
   response is written, so a response lost on the way can be asked for again. When the challenge key is gone, a verify from
   the same verified user with a marker gets the same answer with no backend call and no Cloudflare request, another
   verified user gets `not_for_you`, and no marker means `invalid`. A retry answer writes none (its token is re-armed
   instead), and a marker write error is logged by outcome name and never changes the answer. Parallel verifies of one
-  token act once because only the Lua consume of `alita:captcha:ch:<token>` succeeds for one of them. It is Redis only and
+  token act once because only the Lua consume of `fuku:captcha:ch:<token>` succeeds for one of them. It is Redis only and
   outside the cache prefix.
 - The developer `/stats` also gets the web captcha's counters: `getStats` appends `captchaWebStatsSection` after
   `raidAIStatsSection` (issued, passed, failed, expired, invalid, retry, limited, errors). They are in-memory numbers of the
@@ -562,7 +562,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   section holds no token, initData, ID or Cloudflare text. Each event is counted once: `writeAnswer` counts a decided
   answer by its result (`invalid` and `not_for_you` as invalid; an `expired` answer is not counted, because the expiry is
   counted where the attempt was claimed), `writeLimited` counts a 429 or an in-flight 503 as limited and not as retry, a
-  remembered answer replayed from `alita:captcha:done:<token>` counts nothing, `captchaweb.CountIssued` runs in
+  remembered answer replayed from `fuku:captcha:done:<token>` counts nothing, `captchaweb.CountIssued` runs in
   `SendCaptcha` once a Turnstile challenge message was sent and its ID stored, and `captchaweb.CountExpired` runs in
   `expireCaptchaAttempt` when `handleCaptchaTimeout` claimed an attempt whose answer is reserved (the timer, the cleanup
   tick and a late check all go through it). Errors are configuration faults (`Verdict.ConfigError`), backend and Redis
@@ -661,16 +661,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `migrations/*.sql` is the schema source of truth. Never edit an applied file; the SHA-256 checksum aborts startup.
 - Name new files with a timestamp greater than every existing one; order is plain filename sort.
 - Each file runs in one transaction: no top-level `BEGIN`/`COMMIT`/`ROLLBACK`, no `CREATE INDEX CONCURRENTLY`.
-- Change `alita/db/migrations/runner.go` and `scripts/migrate_psql.sh` together; both appliers must agree.
+- Change `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` together; both appliers must agree.
 
 ## Adding a module
 
 1. Add a migration in `migrations/` (rules above).
-2. Add the model in `alita/db/models/` with `TableName()` returning the migration's table name.
-3. Add the repository in `alita/db/<domain>/`: reads through `cache.GetFromCacheOrLoad`, `cache.DeleteCache` on writes.
+2. Add the model in `fuku/db/models/` with `TableName()` returning the migration's table name.
+3. Add the repository in `fuku/db/<domain>/`: reads through `cache.GetFromCacheOrLoad`, `cache.DeleteCache` on writes.
 4. Add the model to the `AutoMigrate` list in the affected `testmain_test.go` or `internal/testdb.Run` call. Do the same
    whenever you change an existing model.
-5. Add `alita/modules/<name>.go` with `LoadXxx`, registered in `init()` via `RegisterLegacyModule`.
+5. Add `fuku/modules/<name>.go` with `LoadXxx`, registered in `init()` via `RegisterLegacyModule`.
 6. Register commands with `helpers.WrapCommand`; add `RegisterAnonymousAdminHandler` for admin commands.
 7. Add locale keys to all 7 files in `locales/`.
 8. Run `make generate-docs`, `make check-translations`, `make test`, `make lint`.
@@ -682,7 +682,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/delflood` stores `flood_limit` 5, the model's `default:5`, because the repository's `FirstOrCreate` insert leaves
   the limit at its Go zero value; an admin who only picks an action or turns message deleting on therefore also turns
   antiflood on at 5 messages. `TestSetFloodModeOnFreshChatStoredLimit` and `TestSetFloodMsgDelOnFreshChatStoredLimit`
-  (`alita/db/antiflood`) pin it, and a Mute press on an unconfigured chat writes no row at all (the cached default is
+  (`fuku/db/antiflood`) pin it, and a Mute press on an unconfigured chat writes no row at all (the cached default is
   already mute). The menu's action and delete presses call the same `applyFlood*` functions, so it keeps this on
   purpose and draws the stored row from their database read-back, never a guess. Because a tap in a menu is easier to
   hit by accident than a typed command, the menu's action and delete presses also show the notice
@@ -690,14 +690,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   read-back is not (`settingsFloodTurnedOn`, D-34); a limit press never shows it, and the commands' replies are unchanged. A repository fix (insert with limit 0
   on the first write) would change `/setfloodmode` and `/delflood` too, so it is a separate follow-up and must update
   those two tests and this bullet.
-- Antiflood counters are in-process (per replica). The raid detection counters (`alita:raid:*`) are Redis-only: without
+- Antiflood counters are in-process (per replica). The raid detection counters (`fuku:raid:*`) are Redis-only: without
   Redis the automatic triggers do nothing, and `/lockdown` still works.
 - Fed-ban lookups cache per `(fed, user)` with a negative sentinel; every ban/unban write must invalidate it.
 - A join arrives as both `ChatMemberUpdated` and a service message; dedupe through `claimRecentJoinProcessing`
   (the lockdown guard, which runs first, dedupes by its joiner row instead and never gates a ban on Redis).
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
-- `alita:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
+- `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
   must `DeleteCache` it after commit.
 - Turnstile captcha: a Turnstile attempt is an ordinary `captcha_attempts` row whose answer is the reserved `ts1:` plus
   32 hex characters (`captchaweb.NewReservedAnswer`); there is no second table or kind column, so the one attempt per
@@ -709,8 +709,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `context.WithoutCancel` with its own 20 s deadline, so a client that disconnects never abandons an unmute. The page
   decides nothing: a pass needs signed `initData` whose `user.id` is the challenge's user and a `siteverify` success
   that echoes the expected hostname, `captcha_join` and the `cdata` (`hex(sha256("cd1:" + token))`). The package
-  `alita/utils/captchaweb` imports the standard library, go-redis and logrus only; its `Backend` implementation is
-  `alita/modules/captcha_web.go` (`captchaWebBackend`), and `ConfigureCaptchaWeb` installs the runtime. Callback data is
+  `fuku/utils/captchaweb` imports the standard library, go-redis and logrus only; its `Backend` implementation is
+  `fuku/modules/captcha_web.go` (`captchaWebBackend`), and `ConfigureCaptchaWeb` installs the runtime. Callback data is
   not authenticated by Telegram, so both `captcha_verify` and `captcha_refresh` refuse an attempt whose answer starts with
   `ts1:` with `captcha_attempt_not_valid` and change nothing (no count, no image, no row change): a hand-built callback
   can never pass or convert a Turnstile attempt. Rolling-deploy caveat (accepted, like the others here): a replica on
@@ -801,12 +801,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stays pure; an unconfirmed lockdown, a lift in progress and a lifted one show nothing, a failed query shows the panel
   unmarked, and the row never carries the reason or who started it (they stay in the group's own `/lockdownstatus`).
 - The staff sweeper (`StartStaffSweeper`/`StopStaffSweeper`) rechecks every Staff Group link hourly (first run 1-5 min
-  after start) behind `SETNX alita:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
+  after start) behind `SETNX fuku:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
   conditional. Staff tables are never part of backup/export/import/reset.
 - The lockdown join guard (handler group `-7`, `lockdownOnJoinMember`) reads the lockdown fresh from PostgreSQL, records
   the joiner row first and only then ends the update with `ext.EndGroups`, so no welcome, captcha challenge or captcha
   attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
-  every join path lets the joiner through. Its write to the `alita:lockdown:recent:<chat>` tracker comes first, is best
+  every join path lets the joiner through. Its write to the `fuku:lockdown:recent:<chat>` tracker comes first, is best
   effort and its result is ignored. It never gates a ban on Redis, never uses the cached admin predicates (a
   performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or
   administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
@@ -957,7 +957,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and no `temperature`, `top_p` or `top_k` is sent, because the default model answers 400 to them.
   Nothing on this path deletes, restricts, bans or posts, and every call derives from `raidAIContext()`.
 - Before any provider call an image job passes, cheapest and most decisive first (`raidAIProcessImage`): the album gate, the
-  fire-latch skip (`EXISTS alita:raid:{<chat>}:fire`: a lockdown was just attempted, so more checks are wasted), the verdict
+  fire-latch skip (`EXISTS fuku:raid:{<chat>}:fire`: a lockdown was just attempted, so more checks are wasted), the verdict
   cache by `file_unique_id`, then the hourly budgets, then the download and the call. Each refusal is no verdict and is
   counted: `RaidAIStats.Capped` for a budget refusal, `RaidAIStats.Cached` for a verdict served from the cache, a photo
   dropped by the album gate or a check skipped for the latch (a Redis error counts as `Shed`). A cached verdict costs no
@@ -1000,12 +1000,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `joins` in front, alone it shows the triggers, and it has exactly `/autolockdown`'s checks
   (`requireAutoLockdownAuthority`, a live `getChatMember`) and anonymous-admin re-entry, so it is stricter than the old
   command, which any cached admin could use. There is no join handler at group `-5` and no expiry poller: nobody is
-  temp-banned by the raid mode, whatever an old `alita:antiraid:*` key says. The keys are removed by
+  temp-banned by the raid mode, whatever an old `fuku:antiraid:*` key says. The keys are removed by
   `sweepRetiredAntiRaidKeys` (`SCAN` with `COUNT 100` and `UNLINK`, started once per process from `LoadAntiRaid` in a
   recover-protected goroutine, bounded to 30 s, a no-op without Redis). During a rolling deploy an old replica can still
   temp-ban until it stops and can leave new keys, which the next start's sweep clears. The `antiraid_settings` table and
   its model stay (migrations are append-only, and the legacy backup module reads and resets the table directly); the
-  `alita/db/antiraid` repository is gone, since nothing but tests called it, and no command reads the timing columns
+  `fuku/db/antiraid` repository is gone, since nothing but tests called it, and no command reads the timing columns
   any more.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
   only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
@@ -1245,8 +1245,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
   follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
   (`raidAIDownload` is the pattern).
-- `alita/utils/claude` imports the standard library only, so `scripts/claude-spike` can use it without the pre-main
-  database connection of `alita/config` and `alita/db`. The Anthropic key travels only in the `x-api-key` header, never
+- `fuku/utils/claude` imports the standard library only, so `scripts/claude-spike` can use it without the pre-main
+  database connection of `fuku/config` and `fuku/db`. The Anthropic key travels only in the `x-api-key` header, never
   in a URL, and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is
   ever sent, because the default model rejects them with a 400. `claude.Options` and `GetModel` exist for the spike tool
   only; its zero value is the production request, and the bot never sets it.
@@ -1261,7 +1261,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Production builds use `CGO_ENABLED=0`; tests need `CGO_ENABLED=1` (go-sqlite3). Do not unify them.
 - Go 1.26.0 with no `toolchain` directive. Keep dependencies on the latest upstream versions that pass required
   checks. Any intentional pin must document its compatibility reason and recheck trigger.
-- Version strings are shape-locked (`BotVersion:` with two spaces in `alita/config/config.go`, `version =` in
+- Version strings are shape-locked (`BotVersion:` with two spaces in `fuku/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
 - Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text and images; inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
@@ -1274,7 +1274,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Testing
 
 - Always pass `-tags testtools`; without it, test files and the helpers in production packages that carry that build tag drop out silently.
-- Postgres tests need both `DATABASE_URL` and `ALITA_TEST_DATABASE=true`; otherwise they run on SQLite.
+- Postgres tests need both `DATABASE_URL` and `FUKU_TEST_DATABASE=true`; otherwise they run on SQLite.
 - Use real fixtures: `internal/testdb.Run` (SQLite), miniredis, hand-written `gotgbot.BotClient` fakes. No mock libraries.
 - No test calls a real AI provider (TypeSafe or Anthropic): the Claude client, the raid AI image path and the
   `scripts/claude-spike` tool are tested against `httptest` servers or a fake transport, with no `t.Skip`, so they run
@@ -1287,19 +1287,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Node 22). CI runs it in the `test` job (`actions/setup-node` with Node 22, before `make test`); it is not part of
   `make test`, so run it yourself when the page changes. `TestPageLanguagesMatchScript` compares the page's `LANGS` array
   with `captchaweb.PageLanguages`, so the two language lists cannot drift. The page
-  (`alita/utils/captchaweb/page/captcha.html`) is served with a per-response nonce CSP (`captchaweb.CSPFor`) and must
+  (`fuku/utils/captchaweb/page/captcha.html`) is served with a per-response nonce CSP (`captchaweb.CSPFor`) and must
   keep no inline `style` attribute and no inline event handler, because the CSP would block them. `make
   check-translations` cannot see the `captcha_web_` keys the page reads from `captchaweb.PageKeys`;
-  `TestCaptchaWebLocaleKeys` (`alita/i18n`) guards them in all 7 locales (present, not empty, length and no markup), and
+  `TestCaptchaWebLocaleKeys` (`fuku/i18n`) guards them in all 7 locales (present, not empty, length and no markup), and
   `TestStringTable` guards the table `main` builds from them.
-- The harness `AutoMigrate` lists (`alita/modules/test_harness_test.go`, `alita/db/staff/testmain_test.go`,
-  `alita/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown
-  models are in `alita/modules/test_harness_test.go`, `alita/db/testmain_test.go` and
-  `alita/db/lockdown/testmain_test.go` (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
+- The harness `AutoMigrate` lists (`fuku/modules/test_harness_test.go`, `fuku/db/staff/testmain_test.go`,
+  `fuku/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown
+  models are in `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go` and
+  `fuku/db/lockdown/testmain_test.go` (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
   The Phase 5 models (`ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun`) are in
-  `alita/modules/test_harness_test.go` and `alita/db/lockdown/testmain_test.go` only; the `alita/db` package's own
-  tests never touch them. The Phase 6 model `ChatRaidDetection` is in `alita/modules/test_harness_test.go`,
-  `alita/db/raiddetection/testmain_test.go` and `alita/db/devs/testmain_test.go` (the developer `/stats` reads it), and
+  `fuku/modules/test_harness_test.go` and `fuku/db/lockdown/testmain_test.go` only; the `fuku/db` package's own
+  tests never touch them. The Phase 6 model `ChatRaidDetection` is in `fuku/modules/test_harness_test.go`,
+  `fuku/db/raiddetection/testmain_test.go` and `fuku/db/devs/testmain_test.go` (the developer `/stats` reads it), and
   `raidCleanup` in the modules tests deletes its rows and their cached copies. A fixture that creates
   `ChatRaidDetection` rows directly must set `AIThreshold` (3..500): the `CHECK` applies on SQLite too, because GORM
   builds it from the model tag (`seedRaidSettings` fills the AI defaults when it is left at 0).
@@ -1311,24 +1311,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`FinishBanRun`'s `NOT EXISTS` guard and its single finish), `TestAlertSync` and
   `TestAlertSyncKeepsAMarkSetDuringTheEdit` (`RecordAlertSynced`'s parameterised `CASE`), `TestAlertClose`
   (`ClaimAlertClose`'s `CASE` over the old row) and `TestBanRunReport` (one report claim wins, steps settled
-  separately). The Phase 6 guarantees are `TestRaidDetectionSettings` (`./alita/db/raiddetection`: the `CHECK` 3..500, the AI
+  separately). The Phase 6 guarantees are `TestRaidDetectionSettings` (`./fuku/db/raiddetection`: the `CHECK` 3..500, the AI
   column's `chk_chat_raid_detection_ai` included, and the column-targeted upserts that never clobber each other) and `TestRaidDetectionCarryOver`
-  (`./alita/db/migrations`: the clamped carry-over of `antiraid_settings.auto_antiraid_threshold`, which executes
+  (`./fuku/db/migrations`: the clamped carry-over of `antiraid_settings.auto_antiraid_threshold`, which executes
   migration 20261018130000 against the schema the migration-chain step already built, so it must run after that step).
-  The Phase 8 guarantee is `TestCaptchaModeTurnstileConstraint` (`./alita/db/migrations`: the widened check accepts
+  The Phase 8 guarantee is `TestCaptchaModeTurnstileConstraint` (`./fuku/db/migrations`: the widened check accepts
   `turnstile`, `math` and `text` and refuses the rest with `check_violation`, exactly one `captcha_mode` check is left
   on `captcha_settings`, and the migration's statements run twice without error; `TestCaptchaModeMigrationStatements`
   is its database-free half and runs in `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
-- The settings menu tests share one toolkit, `alita/modules/settings_env_test.go` (`newSettingsEnv`, `newSettingsEnvWith`
+- The settings menu tests share one toolkit, `fuku/modules/settings_env_test.go` (`newSettingsEnv`, `newSettingsEnvWith`
   with `RealLocale`, `openMenu`, `press`, `pressRaw`, `pressPrivate`, `pressNoMessage`, `sendIn`, `sendPrivate`, `edits`,
   `lastEdit`, `answerCount`, `settingsButtonByMarker`, `settingsButtonFields`): page tests call it by name and do not edit
   it. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
-  has no locale manager of its own. `alita/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
+  has no locale manager of its own. `fuku/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
-- Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./alita/modules ./alita/i18n`.
+- Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./fuku/modules ./fuku/i18n`.
   Page tests add page-prefixed helpers in their own files (`settings_<page>_test.go`). Every setting the menu changes
   has a parity test (`TestSettingsParity*`: the menu press and the command leave the same stored row and the same
   cache), a drift test (`TestSettingsDrift*`: the page reads what the command reads) and an authority-parity test
