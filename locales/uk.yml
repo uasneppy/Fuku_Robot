@@ -59,11 +59,9 @@ admin_title_is_admin: |
 admin_title_is_bot_itself: Если бы только я мог сделать это с собой ;_;
 admin_title_is_owner: Этот человек создал этот чат, и как я должен установить для него заголовок администратора?
 admin_title_success_set: Успешно установлен заголовок администратора %s на <b>%s</b>
-admin_title_truncated: |2-
-  Примечание: Заголовок администратора сокращён до 16 символов из %d
+admin_title_truncated: "\nПримечание: Заголовок администратора сокращён до 16 символов из %d"
 admin_cache_cleared: Успешно очищен кэш администраторов.
-admin_no_visible_admins: |2-
-  Нет видимых администраторов (все являются ботами или анонимными).
+admin_no_visible_admins: "\nНет видимых администраторов (все являются ботами или анонимными)."
 admin_anon_admin_db_error: Не удалось обновить настройку анонимного администратора. Пожалуйста, попробуйте снова.
 approvals_help_msg: "<b>\U0001F464 Одобрения</b>\n\nПредоставьте доверенным участникам иммунитет от автоматических мер анти-спама, не делая их администраторами.\n\n<b>Команды администратора:</b>\n\n× /approve <code><reply/username/mention/userid></code> <code>[причина]</code>\n× /unapprove <code><reply/username/mention/userid></code>\n× /approval <code><reply/username/mention/userid></code>\n× /approved: Список всех одобренных пользователей\n× /unapproveall: Удалить все одобрения (только создатель)\n\nОдобренные пользователи освобождаются от: antiflood, черных списков, блокировок и CAPTCHA.\n"
 approvals_user_approved: '%s одобрен %s.%s'
@@ -85,8 +83,7 @@ approvals_unapproveall_cancel: Удаление всех одобрений от
 approvals_approve_error: Не удалось одобрить пользователя. Пожалуйста, попробуйте снова.
 approvals_unapprove_error: Не удалось удалить пользователя из списка одобренных.
 approvals_unapproveall_error: 'Не удалось удалить всех одобренных пользователей: {error}'
-approvals_reason: |2-
-  Причина: %s
+approvals_reason: "\nПричина: %s"
 approvals_list_header: |
   Одобренные пользователи:
 approvals_list_item: ' - %s'
@@ -747,8 +744,7 @@ rules_help_msg: |
     × /resetrulesbutton: Сбросить текст кнопки правил на стандартный.
 
     × /resetrulesbtn: То же, что и выше."
-bot_updates_creators_plug: |2-
-  Подписывайтесь на @DivideProjects для большего количества полезных ботов от моих создателей.
+bot_updates_creators_plug: "\nПодписывайтесь на @DivideProjects для большего количества полезных ботов от моих создателей."
 utils_string_handling_extract_time_invalid_time_amount: Указано неверное количество времени.
 utils_string_handling_extract_time_invalid_time_type: |
   "Указан неверный тип времени.
@@ -906,12 +902,8 @@ common_status_enabled: Включено
 common_status_disabled: Отключено
 common_status_on: Вкл
 common_status_off: Выкл
-admin_adminlist_note_cached: |2-
-
-  Примечание: Эти значения кэшированы и могут быть не актуальны
-admin_adminlist_note_fresh: |2-
-
-  Примечание: Это актуальные значения
+admin_adminlist_note_cached: "\n\nПримечание: Эти значения кэшированы и могут быть не актуальны"
+admin_adminlist_note_fresh: "\n\nПримечание: Это актуальные значения"
 admin_invitelink_public: 'Вот ссылка для приглашения этого чата: %s'
 admin_invitelink_private: 'Вот ссылка для приглашения этого чата: %s'
 bans_dkick_no_reply: Ответьте на сообщение пользователя, чтобы удалить его и выгнать его!
@@ -940,8 +932,7 @@ mutes_tmute_message: |-
 mutes_mute_message: |-
   Тсс...
   Заглушен %s.
-mutes_reason_suffix: |2-
-  <b>Причина: </b>%s
+mutes_reason_suffix: "\n<b>Причина: </b>%s"
 mutes_unmute_button: Размутить (только для администраторов)
 mutes_mute_admin_error: Зачем мне заглушать администратора? Это звучит как довольно глупая идея.
 mutes_mute_admin_polite_error: Я не думаю, что вы хотите, чтобы я заглушил администратора.
@@ -961,9 +952,7 @@ warns_limit_banned: Это %d/%d предупреждений; Поэтому %s
 warns_remove_button: ❌ Удалить предупреждение
 warns_rules_button: "Правила \U0001F4DD"
 warns_user_warning: У пользователя %s %d/%d предупреждений; будьте осторожны!
-warns_warning_reason: |2-
-  <b>Причина</b>:
-  %s
+warns_warning_reason: "\n<b>Причина</b>:\n%s"
 warns_settings_display: |-
   Группа имеет следующие настройки:
   <b>Лимит предупреждений:</b> <code>%d</code>
@@ -1263,8 +1252,7 @@ notes_check_button: Нажмите на кнопку ниже, чтобы пол
 notes_click_me_btn: Нажми меня!
 notes_current_in_chat: |
   Это текущие заметки в этом чате:
-notes_get_instruction: |2-
-  Вы можете получить заметку с помощью <code>#notename</code> или <code>/get notename</code>
+notes_get_instruction: "\nВы можете получить заметку с помощью <code>#notename</code> или <code>/get notename</code>"
 notes_clear_all_confirm: Вы уверены, что хотите удалить все заметки из этого чата?
 notes_creator_only: Только создатель чата может использовать эту команду.
 notes_overwrite_cancelled: Отменена перезапись заметки ❌
@@ -1278,9 +1266,7 @@ notes_get_insufficient_args: Недостаточно аргументов.
 notes_does_not_exist: Заметка не существует!
 notes_parsing_error_support: Произошла ошибка при разборе заметки, пожалуйста, сообщите об этом в чат поддержки.
 notes_admin_only_access: Эта заметка доступна только администраторам!
-notes_private_conflict_warning: |2-
-
-  <b>Примечание:</b> Эта заметка будет отправлена в стандартную настройку групповых заметок, потому что в ней есть оба <code>{private}</code> и <code>{noprivate}</code>.
+notes_private_conflict_warning: "\n\n<b>Примечание:</b> Эта заметка будет отправлена в стандартную настройку групповых заметок, потому что в ней есть оба <code>{private}</code> и <code>{noprivate}</code>."
 filters_limit_exceeded: |
   Превышен лимит фильтров, группа может иметь максимум 150 фильтров!
   Это ограничение связано с тем, что бот работает бесплатно без каких-либо пожертвований от пользователей.
@@ -1528,9 +1514,7 @@ reports_status_enabled_group: |-
   Отчёты в данный момент включены в этом чате.
   Пользователи могут использовать команду /report или упомянуть @admin, чтобы отметить всех администраторов.
 reports_status_disabled_group: Отчёты в данный момент отключены в этом чате.
-reports_change_settings_hint: |2-
-
-  Чтобы изменить эту настройку, попробуйте эту команду снова с одним из следующих аргументов: yes/no/on/off
+reports_change_settings_hint: "\n\nЧтобы изменить эту настройку, попробуйте эту команду снова с одним из следующих аргументов: yes/no/on/off"
 reports_success_kick: ✅ Успешно выгнан
 reports_success_ban: ✅ Успешно забанен
 reports_success_delete: ✅ Успешно удалено

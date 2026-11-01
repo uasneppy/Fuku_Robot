@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -99,7 +100,13 @@ func WriteLocale(path string, entries []Entry) error {
 
 func scalarNode(s string) *yaml.Node {
 	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
-	if bytes.ContainsRune([]byte(s), '\n') {
+	switch {
+	case strings.HasPrefix(s, "\n"):
+		// yaml.v3 drops the first line break of a literal block, so "\n\nx" would
+		// come back as "\nx". The bot appends these texts to another message, and
+		// the break is the separator, so only a quoted scalar is safe for them.
+		n.Style = yaml.DoubleQuotedStyle
+	case strings.Contains(s, "\n"):
 		// Literal blocks keep long help texts readable in git diffs; the emitter
 		// falls back to a quoted scalar by itself when a block cannot represent s.
 		n.Style = yaml.LiteralStyle

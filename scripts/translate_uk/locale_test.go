@@ -44,6 +44,9 @@ func TestWriteLocaleRoundTripsAwkwardScalars(t *testing.T) {
 		"yes", "null", "123", "~", "true", "a: b", "#x", " leading", "trailing ", "",
 		"🇺🇦", "multi\nline", "multi\nline with trailing newline\n", "- dash", "'quoted'", `"double"`,
 		"100% of {first}", "<b>%s</b>", "tab\tinside", "ends with colon:",
+		// The bot appends these to another message, so the leading newlines are the
+		// whole point of the key (eleven real keys start this way).
+		"\nx", "\n\nПримітка", "\n", "\n\n", "\n  indented after a newline", "\nmulti\nline\n",
 	}
 	entries := []Entry{{Key: "misc_runs", Parts: []string{"one", "yes"}, List: true}}
 	for i, v := range awkward {
@@ -182,5 +185,35 @@ func TestLoadLocaleRejectsDuplicateKeys(t *testing.T) {
 	_, err := LoadLocale(path)
 	if err == nil || !strings.Contains(err.Error(), "same") {
 		t.Fatalf("want an error naming the duplicate key, got %v", err)
+	}
+}
+
+// The writer's one hard requirement is parse(write(x)) == x. Every value of the real
+// locale files goes through it, so the next emitter edge case fails here and not in
+// front of the owner as a silently changed message.
+func TestWriteLocaleRoundTripsEveryRealValue(t *testing.T) {
+	for _, name := range []string{"en", "ru"} {
+		t.Run(name, func(t *testing.T) {
+			entries, err := LoadLocale("../../locales/" + name + ".yml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(t.TempDir(), "out.yml")
+			if err := WriteLocale(path, entries); err != nil {
+				t.Fatal(err)
+			}
+			back, err := LoadLocale(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(back) != len(entries) {
+				t.Fatalf("wrote %d keys, read back %d", len(entries), len(back))
+			}
+			for i := range entries {
+				if !reflect.DeepEqual(entries[i], back[i]) {
+					t.Errorf("%s changed by a write:\n  before %q\n  after  %q", entries[i].Key, entries[i].Parts, back[i].Parts)
+				}
+			}
+		})
 	}
 }
