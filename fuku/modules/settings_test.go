@@ -277,7 +277,7 @@ func TestSettingsTracer(t *testing.T) {
 		env.pressRaw(env.chat, env.admin, msgID, stepper[2].CallbackData)
 
 		env.send(env.admin, "/captcha")
-		want, err := i18n.MustNewTranslator("en").GetString("captcha_settings_timeout", i18n.TranslationParams{"d": 3})
+		want, err := i18n.MustNewTranslator("uk").GetString("captcha_settings_timeout", i18n.TranslationParams{"d": 3})
 		if err != nil || want == "" {
 			t.Fatalf("real captcha_settings_timeout text: %q, %v", want, err)
 		}

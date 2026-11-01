@@ -473,7 +473,7 @@ func TestSettingsCaptchaTurnstile(t *testing.T) {
 // given values, in the real English locale.
 func settingsCaptchaSettingsLines(t *testing.T, status, mode, action string) []string {
 	t.Helper()
-	tr := i18n.MustNewTranslator("en")
+	tr := i18n.MustNewTranslator("uk")
 	var lines []string
 	for _, line := range []struct{ key, value string }{
 		{"captcha_settings_status", status},
