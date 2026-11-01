@@ -32,8 +32,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 2
 	}
-	_ = addr // used by the editor, wired in with the server
-
 	modes := 0
 	for _, on := range []bool{*doInit, *doSync, *doCheck} {
 		if on {
@@ -88,6 +86,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintln(stderr, "the editor is not built yet; use -init, -sync or -check")
-	return 2
+	if err := serve(*addr, p, stdout); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	return 0
 }
