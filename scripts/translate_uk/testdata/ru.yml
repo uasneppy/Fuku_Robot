@@ -1,0 +1,10 @@
+admin_ok: "Готово <b>%s</b>"
+misc_runs:
+  - Убегает.
+  - Нет.
+help_configuration_step-1: "Шаг первый"
+multi_line: |
+  Первая строка
+  Вторая строка
+plain_yes: "да"
+pseudo: "Используйте <code>/ban <userhandle></code>, 100% от {first}"
