@@ -1,244 +1,144 @@
 # Requirements: Fuku Robot
 
-**Defined:** 2026-10-04
+**Defined:** 2026-11-02 (milestone v1.1 PM Settings Hub & Member Screening)
 **Core Value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
 
-## v1 Requirements
+v1.0 requirements (SETUP, STAFF, LOCK, RAID, CAPT, MENU-01..08, PLAT-01..04) are archived in `milestones/v1.0-REQUIREMENTS.md`. IDs below continue that numbering where a category already exists.
+
+## v1.1 Requirements
 
 Requirements for this milestone. Each maps to one roadmap phase.
 
-### Staff Group setup and links
+### PM settings hub and owner gate
 
-- [x] **SETUP-01**: A group's owner can designate that Telegram group as a Staff Group. Channels and basic groups that can't be used are refused with a reason.
-- [x] **SETUP-02**: Only the owner of a Staff Group can remove its Staff Group status, which unlinks all its groups.
-- [x] **SETUP-03**: A user who owns both a group and a Staff Group can link that group to the Staff Group.
-- [x] **SETUP-04**: Linking is refused if the user doesn't own both groups (checked live), or if the group is already linked to a Staff Group.
-- [x] **SETUP-05**: The owner of both groups can unlink a group.
-- [x] **SETUP-06**: A link is removed automatically as soon as the same person no longer owns both groups. Ownership is re-checked before every staff action, and ownership-change updates are also watched.
-- [x] **SETUP-07**: Links, and Staff Group status, keep working after a group upgrades to a supergroup and its chat ID changes.
-- [x] **SETUP-08**: In the Staff Group, `/staff` opens a panel with the Staff Group help text and every linked group with its status:
-  - linked
-  - bot is admin
-  - bot can restrict members
-  - owner still matches
-  - currently in lockdown
-- [x] **SETUP-09**: The `/staff` panel lists recent staff actions: who, what, target, when, reason, and per-group outcome.
+- [ ] **MENU-09**: `/settings` in the bot's private chat lists the groups the user may manage (paged), and picking one opens that group's main menu.
+- [ ] **MENU-10**: The list is built from the bot's own record of each group's owner and admins, refreshed whenever the bot loads a group's admin list or sees a promotion or demotion, and cleared when the bot leaves. Every pick is checked live. An empty or incomplete list tells the user to run `/admincache` or `/settings` in the missing group.
+- [ ] **MENU-11**: By default only a group's live owner can open and change its settings: in the PM list, through in-group `/settings`, through the `/start settings_<chat id>` deep link and on every button press.
+- [ ] **MENU-12**: The owner can switch "Admins can change settings" on or off from the menu. Only the live owner sees and can press it. While it is on, live administrators get the full menu as in v1.0.
+- [ ] **MENU-13**: While admin access is off, a regular admin does not see the group in their PM list, and in-group `/settings` and the deep link refuse them with a short reply that never names the Staff Group. In-group setting commands (`/setrules`, `/setwelcome`, `/captchamode` and the rest) keep working for admins exactly as before.
+- [ ] **MENU-14**: A change to admin access applies on every replica at once. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
+- [ ] **MENU-15**: The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
 
-### Staff actions
+### Message editor (Rules, Welcome, Goodbye)
 
-- [x] **STAFF-01**: Any member of the Staff Group can run `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` there, with optional timed variants for ban and mute, against an `@username` or a numeric user ID.
-- [x] **STAFF-02**: A staff member can add an optional reason to any staff action.
-- [x] **STAFF-03**: Before anything is applied, the bot shows a confirmation with:
-  - the resolved target (name and ID)
-  - the action
-  - the duration
-  - the reason
-  - the number of linked groups
+- [ ] **EDIT-01**: From the menu an admin opens Rules, Welcome or Goodbye and sees which parts are set (text, media, URL buttons) with a button to set or remove each part.
+- [ ] **EDIT-02**: After pressing a part's button, the bot waits for the user's next private message and stores it as that part. A Cancel button or `/cancel` leaves the message unchanged, the wait ends by itself after 10 minutes, and it works whichever replica receives the message.
+- [ ] **EDIT-03**: Text keeps its formatting and the existing placeholders (`{first}`, `{mention}` and the rest). Text that is too long to send (4096 characters, or 1024 as a caption) is refused with the reason, and the wait stays open.
+- [ ] **EDIT-04**: Media accepts one item of a kind the welcome already supports (photo, video, GIF, document, sticker, audio, voice). From an album only one item is kept, and the user is told so.
+- [ ] **EDIT-05**: URL buttons use the bot's existing button syntax. A bad syntax or URL is refused with the reason, and the wait stays open.
+- [ ] **EDIT-06**: Each part has a Preview, and "Full preview" sends the whole message exactly as members will see it, through the same send path the group uses.
+- [ ] **EDIT-07**: "Media under text" shows a photo, video or GIF below its text instead of above it.
+- [ ] **EDIT-08**: Rules gain media and URL buttons, and `/rules` (in the group and as private rules) shows them.
+- [ ] **EDIT-09**: Welcome has "Greet once": a member is greeted only the first time they ever join that group, also when the join reaches several replicas.
+- [ ] **EDIT-10**: Welcome and Goodbye have their on/off switch and "Delete last welcome/goodbye" in the menu, stored exactly as `/welcome`, `/goodbye`, `/cleanwelcome` and `/cleangoodbye` store them.
+- [ ] **EDIT-11**: A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, and a message that Telegram would refuse to send is refused before saving.
 
-  Nothing happens until the issuer taps Confirm. Only the issuer can confirm or cancel.
-- [x] **STAFF-04**: A confirmed action is applied to every linked group and never to the Staff Group itself.
-- [x] **STAFF-05**: Before acting in each linked group, the bot checks live that the issuer is an admin there with the right to restrict members. It acts where they are and skips the groups where they aren't.
-- [x] **STAFF-06**: Posts from anonymous admins in the Staff Group are refused with "post as yourself", because they can't be authorised per group.
-- [x] **STAFF-07**: The bot never acts against a target who is an admin or the owner of a given group, or against the bot itself. Such groups are skipped with that reason. Staff Group membership alone does not protect anyone.
-- [x] **STAFF-08**: The issuer sees one summary message, updated as groups complete. Each group is marked done, skipped (with reason) or failed (with reason, e.g. the bot lacks rights or is rate limited). No group is silently dropped.
-- [x] **STAFF-09**: Each applied action and its reason are posted to the log channel of every group where it was applied.
-- [x] **STAFF-10**: Every staff action is recorded with:
-  - the issuer
-  - the target
-  - the action
-  - the duration
-  - the reason
-  - the time
-  - the per-group outcomes
-- [x] **STAFF-11**: The summary has an "Undo everywhere" button. A Staff Group member who is an admin with restrict rights in a group can reverse the action there. The same per-group checks and the same summary apply.
-- [x] **STAFF-12**: The fan-out stays within Telegram's rate limits, waits and retries when Telegram says to, and reports a group as failed instead of dropping it.
-- [x] **STAFF-13**: The `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` commands keep their existing per-group behaviour everywhere except inside a Staff Group.
+### Member requirements and name blocks
 
-### Lockdown
+- [ ] **MREQ-01**: A Member requirements page lets the owner (or admins, when allowed) give each rule its own punishment: off, warn, kick, ban or mute. The rules are: must have a last name, must have a username, must have a profile photo, must be subscribed to the linked channel, no AI-flagged spam name, no Russian name, no Arabic name and no Chinese name. All rules are off by default.
+- [ ] **MREQ-02**: With "Check on join" on, a new member is checked right after passing the captcha (or on joining, when the group has no captcha). Every member is checked when they send a message.
+- [ ] **MREQ-03**: With "Delete messages" on, a message from a member who breaks a rule is deleted.
+- [ ] **MREQ-04**: A violation is punished once: further messages from the same member do not add warns, notices or punishments until the member fixes it or rejoins. This holds across replicas.
+- [ ] **MREQ-05**: Each violation posts one notice in the group naming the member and the rule broken. A warn counts toward the group's warn limit like any other warn.
+- [ ] **MREQ-06**: A member muted by a rule gets an "I fixed it" button that only they can use. The bot re-checks them live: if the problem is fixed, they are unmuted (respecting an active lockdown) and get the welcome that was held back; if not, they are told what is still missing.
+- [ ] **MREQ-07**: "I fixed it" only ever lifts a mute that a requirement rule placed. It never lifts a mute from an admin, a staff action, the captcha, antiflood or a lockdown.
+- [ ] **MREQ-08**: A kicked member can rejoin and is checked again. A banned member stays banned until an admin unbans them.
+- [ ] **MREQ-09**: Admins, approved users, bots, Telegram service accounts and messages sent as a channel or by an anonymous admin are never checked.
+- [ ] **MREQ-10**: A check that cannot be answered (a Telegram error, a lookup that times out, the bot not being an admin of the linked channel) never punishes anyone. The page shows when a rule cannot work in that group (no linked channel, the bot not admin there, AI not configured).
+- [ ] **MREQ-11**: The profile-photo rule treats a photo the bot cannot see as missing, and the page says so.
+- [ ] **MREQ-12**: The channel rule is offered only in a group linked to a channel, and checks that the member is subscribed to that channel.
+- [ ] **MREQ-13**: The Russian, Arabic and Chinese name rules check the member's first and last name: Russian-only letters (ы, ъ, э, ё), Arabic script and Chinese characters. The page says these are letter-based and can also catch related languages. Invisible or whitespace-only characters do not count as a last name.
+- [ ] **MREQ-14**: The AI spam-name rule sends only a member's names (first name, last name, username) to Claude Haiku, on join and when the names change, never message text. An established member's names are first recorded without a call. Verdicts are cached and hourly budgets cap the cost. `ENABLE_AISPAM=false` or a missing Anthropic key turns the rule off. No verdict means no punishment.
+- [ ] **MREQ-15**: Requirement notices are deleted automatically when the group's "automatic punishments" deletion timer is set.
 
-- [x] **LOCK-01**: While a group is in lockdown, anyone who joins is removed immediately. They can rejoin after the lockdown lifts, and they're listed on the alert.
-- [x] **LOCK-02**: While a group is in lockdown, everyone except its admins is muted.
-- [x] **LOCK-03**: Approved users stay able to talk during a lockdown. If the Telegram test shows this isn't possible, the owner decides the fallback before lockdown is built.
-- [x] **LOCK-04**: A lockdown affects only the group it was triggered in.
-- [x] **LOCK-05**: A lockdown never lifts on its own. It survives bot restarts and Redis being cleared.
-- [x] **LOCK-06**: Only an admin of the locked group can lift it, either with the alert's "Lift lockdown" button (wherever the alert was posted) or with `/unlockdown` in that group.
-- [x] **LOCK-07**: Lifting a lockdown restores the group's permissions exactly as they were before it was locked.
-- [x] **LOCK-08**: Unmuting someone during a lockdown, including by passing the captcha or `/unmute`, doesn't leave them muted after the lockdown lifts.
-- [x] **LOCK-09**: An admin can start a lockdown manually with `/lockdown` and see the current lockdown status (active or not, since when, why).
-- [x] **LOCK-10**: A group can have at most one active lockdown. Several triggers firing at once create a single lockdown and a single alert.
-- [x] **LOCK-11**: Each lockdown posts one alert to the group's Staff Group (if linked) and to its log channel. The alert shows:
-  - the trigger and the counts behind it
-  - a sample of the accounts that joined during the burst
-  - a "Lift lockdown" button
-  - a "Ban N recent joiners" button
-- [x] **LOCK-12**: An admin of the locked group can press "Ban N recent joiners" to ban the accounts that joined during the burst. Admins and approved users are excluded, and the result is reported.
-- [x] **LOCK-13**: The alert shows which invite link the burst used, where Telegram reports it. It has a "Revoke link" button that only admins of that group can use.
-- [x] **LOCK-14**: While a group stays locked, the alert is re-posted periodically as a reminder until someone lifts it.
-- [x] **LOCK-15**: The old `/antiraid` mode is retired. Its commands point to `/lockdown`, the existing auto-threshold setting carries over to join-surge detection, and the temp-ban timings are dropped.
+### Message deletion
 
-### Raid detection
+- [ ] **DEL-01**: A Service messages page sets each Telegram service-message type (member joined, member left, new photo, new title, pinned message, forum topics, boosts, video chats, auto-delete timer changes and the other types Telegram sends) to keep, delete immediately, or delete after N seconds. Joined and left share storage with the existing `/cleanservice` setting.
+- [ ] **DEL-02**: A Bot messages page sets each kind of the bot's own message (welcome, goodbye, rules, automatic punishments, manual punishment replies to `/ban`, `/mute`, `/kick`, `/warn` and the like) to keep or delete after N minutes.
+- [ ] **DEL-03**: With "Delete commands" on, every member's command in the group (admins' included) is deleted after the bot has answered it.
+- [ ] **DEL-04**: With "Delete edited messages" on, a member's message edited after a grace period (1 minute by default, adjustable on the page) is deleted. Admins and approved users are exempt.
+- [ ] **DEL-05**: With "Self-destruct" on, every member message is deleted N minutes after it was sent. Admins, approved users and pinned messages are exempt.
+- [ ] **DEL-06**: Scheduled deletions survive restarts and run once across replicas. Delays are capped below Telegram's 48-hour limit, and a deletion too old for Telegram is dropped quietly.
+- [ ] **DEL-07**: Deletion never touches Staff Group summaries and cards, lockdown alerts, captcha challenges, log-channel posts or anything in a Staff Group.
+- [ ] **DEL-08**: When the bot lacks the right to delete messages, every deletion page says so instead of failing silently.
 
-- [x] **RAID-01**: A burst of joins within a short window automatically triggers a lockdown.
-- [x] **RAID-02**: A burst of messages, photos, GIFs or stickers, mostly from recently joined members, automatically triggers a lockdown.
-- [x] **RAID-03**: A burst of AI spam verdicts within a short window automatically triggers a lockdown.
-- [x] **RAID-04**: Borderline text is classified with the existing TypeSafe AI check. Borderline photos, GIFs and stickers are classified with Claude Haiku 5.5 through the Anthropic API (`claude-haiku-5-5`, owner-provided key; switched from Gemini in quick task 261030-rig).
-- [x] **RAID-05**: Rules, not AI, decide when to lock. AI verdicts only feed the counters in RAID-03.
-- [x] **RAID-06**: Automatic triggers are on by default in every group, with conservative thresholds. An admin can turn each one off or tune its threshold.
-- [x] **RAID-07**: Admins and approved users never count toward detection.
+### Remaining settings pages
 
-### Captcha
-
-- [x] **CAPT-01**: An admin can set a group's captcha mode to Turnstile. Math and text modes stay available as fallbacks.
-- [x] **CAPT-02**: In Turnstile mode, a new member is muted on join and gets a challenge message with a button that opens the bot's captcha page as a Telegram Mini App.
-- [x] **CAPT-03**: Only the new member the challenge was issued to can pass it. A challenge can't be reused or passed by anyone else.
-- [x] **CAPT-04**: Passing is decided only on the bot's server: Telegram's signed user data and Cloudflare's Turnstile verification. The page never reports a pass on its own.
-- [x] **CAPT-05**: A member who passes is unmuted. Their pending messages are replayed, the greeting runs, and the challenge is cleaned up, exactly as with the existing captcha.
-- [x] **CAPT-06**: A failed Turnstile check counts as failing the captcha (one solve only). The member is kicked and can rejoin to try again.
-- [x] **CAPT-07**: A member who doesn't pass within the group's time limit is kicked and can rejoin to try again.
-- [x] **CAPT-08**: The captcha page is shown in the user's language, using the bot's 7 languages.
-
-### Settings menu
-
-- [x] **MENU-01**: `/settings` in a group asks the admin whether to open the menu in the group or in their private chat with the bot.
-- [x] **MENU-02**: A menu opened in the group can only be used by the admin who opened it. A menu opened in private manages the group it was opened from.
-- [x] **MENU-03**: Every button press re-checks live that the presser is still an admin of the group being configured.
-- [x] **MENU-04**: The menu edits one message in place, with Back and Close buttons.
-- [x] **MENU-05**: The menu has a Staff Group page showing the `/staff` panel information. Linking and unlinking stay limited to the owner of both groups.
-- [x] **MENU-06**: The menu has a Lockdown page showing the current state, a Lift button, and on/off switches and thresholds for each automatic trigger.
-- [x] **MENU-07**: The menu has a Captcha page (mode, time limit) and an Antiflood page.
-- [x] **MENU-08**: A setting changed in the menu is identical to the same setting changed by command.
+- [ ] **PAGE-01**: A Warnings page sets the warn limit and the action at the limit, stored exactly as the warn commands store them.
+- [ ] **PAGE-02**: Simple switches get a page: reports on/off, the AI spam filter (`/aispam`) on/off, and auto-approve join requests on/off.
+- [ ] **PAGE-03**: A Language page sets the group's language, and the menu redraws in the new language.
+- [ ] **PAGE-04**: A Log channel page shows the group's log channel and turns each log category on or off. Linking a new channel stays a command.
+- [ ] **PAGE-05**: An Anonymous admins page sets the anonymous-admin mode with the same rights `/anonadmin` needs.
+- [ ] **PAGE-06**: A Locks page turns each lock type on or off, paged.
+- [ ] **PAGE-07**: A Blacklist page lists the group's blacklisted words (paged), deletes one, adds one by typing it in PM, and sets the blacklist action.
+- [ ] **PAGE-08**: A Filters page lists filters (paged), deletes one, and adds one by typing the keyword and then the reply in PM.
+- [ ] **PAGE-09**: A Notes page lists notes (paged), deletes one, and adds one by typing the name and then the content in PM.
+- [ ] **PAGE-10**: Every setting changed on these pages is stored, cached and refused exactly as by its command, as v1.0 required for the first menu pages (MENU-08).
 
 ### Platform
 
-- [x] **PLAT-01**: Everything works with several bot replicas running at once. Fan-out pacing, detection counters, captcha challenges and lockdown state are shared, not per process.
-- [x] **PLAT-02**: New secrets (Turnstile secret key, Anthropic API key) never appear in logs.
-- [x] **PLAT-03**: Every new message and button label exists in all 7 languages.
-- [x] **PLAT-04**: The deployment steps for the captcha page are documented: public HTTPS hostname, BotFather Mini App registration, Turnstile keys.
+- [ ] **PLAT-05**: Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` reflects the 8-locale set.
+- [ ] **PLAT-06**: New background work (deletion queue, name checks, requirement lookups) shares Telegram rate budgets across replicas, recovers from crashes, and is drained within the existing shutdown budget.
 
-## v2 Requirements
+## Future Requirements
 
 Deferred. Tracked but not in this roadmap.
 
-### Staff Group
+### Settings menu
+
+- **MENU2-01**: Settings changes posted to the group's log channel (carried over from v1.0)
+- **MENU2-03**: Pages for approved users, disabled commands, pins and federations
+- **MENU2-04**: Search inside long blacklist, filter and note lists
+
+### Editor
+
+- **EDIT2-01**: Forum topic picker for the welcome message
+- **EDIT2-02**: Custom notice text per requirement rule
+
+### Deletion
+
+- **DEL2-01**: Deleting the bot's replies to members' commands ("own commands")
+- **DEL2-02**: Global silence, mass deletion and delete-all tools
+
+### Carried over from v1.0
 
 - **STAFF2-01**: Silent mode, deleting the staff command message after acting
 - **STAFF2-02**: Re-applying active staff bans to a newly linked group
-
-### Raid
-
 - **RAID2-01**: Alert-only mode for automatic triggers, for tuning thresholds without locking
-- **RAID2-02**: Suspicious-account scoring (new account, no photo, no username, look-alike names) to sharpen "Ban recent joiners"
+- **RAID2-02**: Suspicious-account scoring to sharpen "Ban recent joiners"
 - **RAID2-03**: External reputation lookup on join (e.g. CAS)
-
-### Captcha
-
-- **CAPT2-01**: Captcha metrics (pass rate, solve time, timeouts) on the metrics endpoint
+- **CAPT2-01**: Captcha metrics on the metrics endpoint
 - **CAPT2-02**: Join-request captcha that verifies people before they're admitted
-
-### Settings menu
-
-- **MENU2-01**: Settings changes posted to the group's log channel
-- **MENU2-02**: Free-text editing flows (welcome text, rules) inside the menu
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
 | Public, multi-tenant bot | Runs for the owner's own communities only |
-| A Telegram channel as the Staff Group | Must be a group so staff can talk and run commands |
-| Merging with or changing federations | Separate feature; `/fban` stays as it is |
-| Choosing a subset of groups for one staff action | Every action hits all linked groups, by design |
-| One group linked to several Staff Groups | One Staff Group per group keeps authority unambiguous |
-| Linking by group admins or by two different owners | Only a person who owns both groups can link them |
-| Protecting Staff Group members from staff actions | Owner's decision: only each group's admins and owner (and the bot) are protected |
-| Applying staff actions to the Staff Group itself | It's a control room, not a target |
-| Reply-to-forward targeting or report buttons in the Staff Group | `@username` or ID is enough for v1 |
-| Deleting the target's messages across groups | Not needed for v1 |
-| Staff changing settings or promoting/demoting in linked groups | Authority creep; staff commands stay restrict-type only |
-| Auto-lifting lockdowns | An admin decides when it's safe |
-| Locking every linked group when one is raided | One attacked group shouldn't silence the rest |
-| Sending every message to AI | Too slow and costly; AI only assists rule-based detection |
-| Gemini for text | Owner's decision: TypeSafe stays for text, a vision model for images only (Gemini at first, Claude Haiku 5.5 since quick task 261030-rig) |
-| Google reCAPTCHA | Turnstile was chosen as more private |
-| Retrying inside the captcha page | Owner's decision: one solve only |
 | A web admin dashboard | Settings stay in Telegram; smaller attack surface |
+| Read-only menu for regular admins without admin access | Owner's call: the group is hidden from them instead |
+| Restricting in-group setting commands to the owner | Owner's call: only the menu is gated; commands stay open to admins |
+| Lifting a ban or kick through "I fixed it" | A banned member cannot see the group's button; a kicked one rejoins and is re-checked |
+| "Must add members" requirement | Not requested |
+| Sending message text to an AI | Too slow and costly; the AI name check sends names only |
+| Re-checking every existing member when a rule is switched on | Members are checked when they next send a message, which spreads the load |
+| A draft-and-publish step in the editor | Each part is saved when it is sent; preview covers the review |
+| Deleting admins' edited messages or self-destructing their messages | Owner's call: only commands are deleted for admins |
+| Google reCAPTCHA, retrying inside the captcha page | Unchanged from v1.0 |
+| Auto-lifting lockdowns | An admin decides when it's safe |
 
 ## Traceability
 
-Which phases cover which requirements. Each v1 requirement maps to exactly one phase.
+Which phases cover which requirements. Each v1.1 requirement maps to exactly one phase. Filled in by the roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SETUP-01 | Phase 1 | Complete |
-| SETUP-02 | Phase 1 | Complete |
-| SETUP-03 | Phase 1 | Complete |
-| SETUP-04 | Phase 1 | Complete |
-| SETUP-05 | Phase 1 | Complete |
-| SETUP-06 | Phase 1 | Complete |
-| SETUP-07 | Phase 1 | Complete |
-| SETUP-08 | Phase 1 | Complete |
-| SETUP-09 | Phase 3 | Complete |
-| STAFF-01 | Phase 2 | Complete |
-| STAFF-02 | Phase 2 | Complete |
-| STAFF-03 | Phase 2 | Complete |
-| STAFF-04 | Phase 2 | Complete |
-| STAFF-05 | Phase 2 | Complete |
-| STAFF-06 | Phase 2 | Complete |
-| STAFF-07 | Phase 2 | Complete |
-| STAFF-08 | Phase 2 | Complete |
-| STAFF-09 | Phase 3 | Complete |
-| STAFF-10 | Phase 3 | Complete |
-| STAFF-11 | Phase 3 | Complete |
-| STAFF-12 | Phase 2 | Complete |
-| STAFF-13 | Phase 2 | Complete |
-| LOCK-01 | Phase 4 | Complete |
-| LOCK-02 | Phase 4 | Complete |
-| LOCK-03 | Phase 4 | Complete |
-| LOCK-04 | Phase 4 | Complete |
-| LOCK-05 | Phase 4 | Complete |
-| LOCK-06 | Phase 4 | Complete |
-| LOCK-07 | Phase 4 | Complete |
-| LOCK-08 | Phase 4 | Complete |
-| LOCK-09 | Phase 4 | Complete |
-| LOCK-10 | Phase 6 | Complete |
-| LOCK-11 | Phase 5 | Complete |
-| LOCK-12 | Phase 5 | Complete |
-| LOCK-13 | Phase 5 | Complete |
-| LOCK-14 | Phase 5 | Complete |
-| LOCK-15 | Phase 6 | Complete |
-| RAID-01 | Phase 6 | Complete |
-| RAID-02 | Phase 6 | Complete |
-| RAID-03 | Phase 7 | Complete |
-| RAID-04 | Phase 7 | Complete |
-| RAID-05 | Phase 7 | Complete |
-| RAID-06 | Phase 6 | Complete |
-| RAID-07 | Phase 6 | Complete |
-| CAPT-01 | Phase 8 | Complete |
-| CAPT-02 | Phase 8 | Complete |
-| CAPT-03 | Phase 8 | Complete |
-| CAPT-04 | Phase 8 | Complete |
-| CAPT-05 | Phase 8 | Complete |
-| CAPT-06 | Phase 8 | Complete |
-| CAPT-07 | Phase 8 | Complete |
-| CAPT-08 | Phase 8 | Complete |
-| MENU-01 | Phase 9 | Complete |
-| MENU-02 | Phase 9 | Complete |
-| MENU-03 | Phase 9 | Complete |
-| MENU-04 | Phase 9 | Complete |
-| MENU-05 | Phase 9 | Complete |
-| MENU-06 | Phase 9 | Complete |
-| MENU-07 | Phase 9 | Complete |
-| MENU-08 | Phase 9 | Complete |
-| PLAT-01 | Phase 2 | Complete |
-| PLAT-02 | Phase 7 | Complete |
-| PLAT-03 | Phase 1 | Complete |
-| PLAT-04 | Phase 8 | Complete |
 
 **Coverage:**
-- v1 requirements: 64 total
-- Mapped to phases: 64
-- Unmapped: 0 ✓
+- v1.1 requirements: 53 total
+- Mapped to phases: 0
+- Unmapped: 53 ⚠️
 
 ---
-*Requirements defined: 2026-10-04*
-*Last updated: 2026-10-04 after roadmap creation (traceability filled)*
+*Requirements defined: 2026-11-02*
+*Last updated: 2026-11-02 at the start of milestone v1.1*
