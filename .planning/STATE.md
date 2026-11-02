@@ -1,38 +1,34 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 9
-current_phase_name: Settings Menu
-status: completed
-stopped_at: Phase 9 complete — all phases complete
-last_updated: "2026-10-30T20:36:05.259Z"
-last_activity: 2026-10-30
-last_activity_desc: Phase 9 complete
-state_head: d2b368f8b88c33f6827d54f003f58d781f56aec6
+milestone: v1.1
+milestone_name: PM Settings Hub & Member Screening
+status: planning
+last_updated: "2026-11-02T20:39:13.042Z"
+last_activity: 2026-11-02
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 106
-  completed_plans: 106
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-30)
+See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** All phases complete — follow-ups and deferred live checks only
+**Current focus:** Milestone v1.1 PM Settings Hub & Member Screening — defining requirements
 
 ## Current Position
 
-Phase: 9 of 9 (Settings Menu) — complete
-Plan: 14 of 14
-Status: All phases complete
-Last activity: 2026-10-30 — Completed quick task 261030-rig: Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-11-02 — Milestone v1.1 started
 
-Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -166,3 +162,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 Last session: 2026-10-30T13:30:00.000Z
 Stopped at: Phase 9 complete — all phases complete
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

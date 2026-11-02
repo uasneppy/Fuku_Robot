@@ -2,11 +2,23 @@
 
 ## What This Is
 
-Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. The first step is a **Staff Group**: one Telegram group of trusted admins that manages all my other groups. Any of us can ban, mute or kick someone in every linked group with one command. After that come smarter raid protection, a web-based captcha, and a button settings menu.
+Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. v1.0 shipped a **Staff Group** (one Telegram group of trusted admins that bans, mutes or kicks someone in every linked group with one command), durable raid lockdowns with automatic triggers, a Turnstile web captcha and a first button settings menu. v1.1 moves every group setting into the bot's private chat behind buttons, owner-gated, and adds member screening and message deletion.
 
 ## Core Value
 
 My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
+
+## Current Milestone: v1.1 PM Settings Hub & Member Screening
+
+**Goal:** Configure everything for a group from the bot's private chat with buttons, like GroupHelp, and screen members automatically on join and on every message.
+
+**Target features (in priority order):**
+- **PM settings hub:** `/settings` in the bot's private chat lists the groups the user can manage; picking one opens that group's main menu.
+- **Owner gate:** by default only a group's owner sees and changes its settings (PM list, in-group `/settings`, deep link). An owner-only toggle lets regular admins in. In-group setting commands are unchanged.
+- **Message editor for Rules, Welcome and Goodbye:** text, one media, URL buttons, preview, "media under text"; Welcome also gets "greet once" and "delete last welcome". Rules gain media and buttons.
+- **Member requirements:** last name, username, profile photo, and subscription to the linked channel (comment groups), plus name blocks (AI spam names through Claude Haiku, Russian, Arabic and Chinese names). Each rule has its own punishment (off, warn, kick, ban, mute), "check on join" and "delete their messages" toggles, a notice in the group, and an "I fixed it" button that re-checks a muted member before unmuting.
+- **Message deletion:** Telegram service messages per type (immediately or after N seconds), the bot's own messages after N minutes (welcome, goodbye, rules, automatic and manual punishments), members' commands, edited messages, and self-destruct of every member message after N minutes.
+- **Remaining pages:** warnings, reports, language, log channel and its categories, anonymous-admin mode, locks, and lists (blacklists, filters, notes: browse, delete, add by typing in PM).
 
 ## Requirements
 
@@ -65,7 +77,16 @@ My trusted staff can protect every one of my communities from one place. We act 
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
-All nine phases of the first milestone are shipped. No active requirements remain; follow-ups and deferred live checks are in STATE.md.
+Milestone v1.1 (scoped REQ-IDs live in REQUIREMENTS.md):
+
+- [ ] `/settings` in the bot's PM lists every group where the user may manage settings and opens that group's main menu
+- [ ] Only a group's owner sees and changes its settings by default; an owner-only toggle lets regular admins in (in-group setting commands unchanged)
+- [ ] Rules, Welcome and Goodbye are edited from PM: text, one media, URL buttons, preview, media under text; greet once and delete last welcome
+- [ ] Member requirements (last name, username, profile photo, linked-channel subscription) and name blocks (AI spam names, Russian, Arabic, Chinese) with a per-rule punishment, checked on join and on every message, with an "I fixed it" re-check for muted members
+- [ ] Message deletion: service messages per type with a delay, scheduled deletion of the bot's own messages, members' commands, edited messages, self-destruct
+- [ ] Menu pages for warnings, reports, language, log channel, anonymous-admin mode, locks, blacklists, filters and notes
+
+v1.0 follow-ups and deferred live checks remain in STATE.md.
 
 ### Out of Scope
 
@@ -79,7 +100,11 @@ All nine phases of the first milestone are shipped. No active requirements remai
 - Deleting the target's messages across groups — not needed for v1.
 - Google reCAPTCHA — Turnstile was chosen as the more private, less intrusive option.
 - Auto-lifting lockdowns — an admin must decide when it's safe.
-- Sending every message to an AI model — too slow and costly; AI only assists rule-based detection.
+- Sending every message to an AI model — too slow and costly; AI only assists rule-based detection. (v1.1's spam-name check sends only a name, on join or when it changes.)
+- Forum topic picker for the welcome message — not chosen for v1.1.
+- "Must add members" requirement (GroupHelp's Обов'язок додати) — not requested.
+- GroupHelp's global silence, mass deletion and delete-all-messages tools — not requested; v1.1 deletion covers service messages, bot messages, commands, edits and self-destruct only.
+- Lifting a ban or kick through the "I fixed it" button — only a mute gets the button; a kicked member rejoins and is checked again, a banned one waits for an admin.
 
 ## Context
 
@@ -91,6 +116,10 @@ All nine phases of the first milestone are shipped. No active requirements remai
 - **`@username` lookup has a limit.** The Bot API can't resolve an arbitrary `@username`; the bot only knows users it has seen, through the users tracker in handler group `-1`. A raw user ID always works.
 - **Anonymous admins can't be identified.** Someone posting as an anonymous admin in the Staff Group can't pass the per-group admin check, so their actions can't be authorised.
 - **Hosting the captcha page.** The bot already runs an HTTP server for webhook, health and metrics, which can host the Mini App page. The owner will host whatever is most secure.
+- **v1.1 starting point (settings).** Phase 9's menu (`settings|v1`, `settings_menu.go`, `settings_pages.go`) is stateless and lets any live creator or administrator in; v1.1 narrows that to the owner unless the owner allows admins. Pages register through `registerSettingsPage`, and each setting has one apply function beside its command, so new pages must call those, never write a second path. The `connections` module already manages one group from PM by command; `/admincache` refreshes the admin list the PM group list will be built from.
+- **v1.1 starting point (greetings and rules).** Welcome and goodbye already store text, one file, a type and URL buttons, with `cleanwelcome`/`cleangoodbye` (delete the previous one) and `cleanservice` (delete join and leave service messages at once). Rules store text, a button label and a private flag only, so media and URL buttons need a migration. Free-text editing inside the menu was deferred in v1.0 (MENU2-02) and now needs a short-lived "waiting for your message" state shared across replicas.
+- **v1.1 Telegram limits.** The Bot API cannot list the groups a user administers, so the PM list comes from the bot's own admin cache and every pick is checked live. A user who hides their profile photo from everyone looks photo-less to the bot. Checking a channel subscription needs the bot to be an admin of that channel. Bots cannot delete messages older than 48 hours, so deletion delays cap below that and scheduled deletions must survive restarts. "Russian name" can only be told from Ukrainian by Russian-only letters (ы, ъ, э, ё).
+- **Reference screenshots.** The owner's GroupHelp screenshots (PM group list, main menu, Rules and Welcome editors, member requirements, message deletion, scheduled deletion) are the UX reference for v1.1; Fuku keeps its own pages and labels.
 
 ## Constraints
 
@@ -176,6 +205,10 @@ All nine phases of the first milestone are shipped. No active requirements remai
 | Two-tap cards (Lift, Unlink) carry the object they were drawn for and an expiry, with no timer and no Redis key | A stale Yes can never lift a newer lockdown or unlink a newer link | ✓ Good — Phase 9 (D-33, from review WR-01) |
 | A group menu, and a private menu of an admin who is not the group's creator, never show the Staff Group's title or ID | Phase 1's rule that nothing about a link reaches the linked group's members, since a private menu is shown to every live admin | ✓ Good — Phase 9 (D-21 refined by D-32, from review WR-02) |
 | The antiflood first-write side effect (a first action or delete press stores limit 5 and turns antiflood on) is kept in the repository and announced in the menu | Fixing the repository would change `/setfloodmode` and `/delflood` too | ⚠️ Revisit — Phase 9 (D-27, D-34); the repository fix is a separate follow-up |
+| v1.1: settings are owner-only by default; an owner-only toggle lets regular admins in, and a regular admin without it does not see the group in `/settings` at all; in-group setting commands stay open to admins | Owner's call: the owner decides who configures the bot, and hiding beats a read-only view | — Pending |
+| v1.1: every command-only setting gets a menu page (doc order: hub and gate, editor, member requirements, deletion, then the remaining pages) | Owner wants GroupHelp-style configuration without typing commands in groups | — Pending |
+| v1.1: spam nicknames are judged by Claude Haiku (the raid image checks' Anthropic key), names only, on join or when a name changes | A name-specific instruction beats a message classifier; no key means the check is off | — Pending |
+| v1.1: only a mute gets the "I fixed it" button; kick lets the member rejoin and be checked again; ban waits for an admin; warn only warns | A banned member cannot see the group's button | — Pending |
 
 ## Evolution
 
@@ -195,4 +228,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-30 after Phase 9 (all phases of the first milestone shipped)*
+*Last updated: 2026-11-02 at the start of milestone v1.1 (PM Settings Hub & Member Screening)*
