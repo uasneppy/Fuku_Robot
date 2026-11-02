@@ -133,12 +133,67 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| MENU-09 | Phase 10 | Pending |
+| MENU-10 | Phase 10 | Pending |
+| MENU-11 | Phase 10 | Pending |
+| MENU-12 | Phase 10 | Pending |
+| MENU-13 | Phase 10 | Pending |
+| MENU-14 | Phase 10 | Pending |
+| MENU-15 | Phase 10 | Pending |
+| EDIT-01 | Phase 11 | Pending |
+| EDIT-02 | Phase 11 | Pending |
+| EDIT-03 | Phase 11 | Pending |
+| EDIT-04 | Phase 11 | Pending |
+| EDIT-05 | Phase 11 | Pending |
+| EDIT-06 | Phase 11 | Pending |
+| EDIT-07 | Phase 12 | Pending |
+| EDIT-08 | Phase 12 | Pending |
+| EDIT-09 | Phase 12 | Pending |
+| EDIT-10 | Phase 11 | Pending |
+| EDIT-11 | Phase 11 | Pending |
+| MREQ-01 | Phase 13 | Pending |
+| MREQ-02 | Phase 13 | Pending |
+| MREQ-03 | Phase 13 | Pending |
+| MREQ-04 | Phase 13 | Pending |
+| MREQ-05 | Phase 13 | Pending |
+| MREQ-06 | Phase 13 | Pending |
+| MREQ-07 | Phase 13 | Pending |
+| MREQ-08 | Phase 13 | Pending |
+| MREQ-09 | Phase 13 | Pending |
+| MREQ-10 | Phase 14 | Pending |
+| MREQ-11 | Phase 14 | Pending |
+| MREQ-12 | Phase 14 | Pending |
+| MREQ-13 | Phase 13 | Pending |
+| MREQ-14 | Phase 15 | Pending |
+| MREQ-15 | Phase 16 | Pending |
+| DEL-01 | Phase 16 | Pending |
+| DEL-02 | Phase 16 | Pending |
+| DEL-03 | Phase 17 | Pending |
+| DEL-04 | Phase 17 | Pending |
+| DEL-05 | Phase 17 | Pending |
+| DEL-06 | Phase 16 | Pending |
+| DEL-07 | Phase 16 | Pending |
+| DEL-08 | Phase 16 | Pending |
+| PAGE-01 | Phase 18 | Pending |
+| PAGE-02 | Phase 18 | Pending |
+| PAGE-03 | Phase 18 | Pending |
+| PAGE-04 | Phase 18 | Pending |
+| PAGE-05 | Phase 18 | Pending |
+| PAGE-06 | Phase 18 | Pending |
+| PAGE-07 | Phase 19 | Pending |
+| PAGE-08 | Phase 19 | Pending |
+| PAGE-09 | Phase 19 | Pending |
+| PAGE-10 | Phase 18 | Pending |
+| PLAT-05 | Phase 10 | Pending |
+| PLAT-06 | Phase 14 | Pending |
+
+PLAT-05 and PLAT-06 are cross-cutting: they are mapped to the first phase where they matter and bind every later phase (see Cross-Cutting Constraints in `ROADMAP.md`).
 
 **Coverage:**
 - v1.1 requirements: 53 total
-- Mapped to phases: 0
-- Unmapped: 53 ⚠️
+- Mapped to phases: 53
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-11-02*
-*Last updated: 2026-11-02 at the start of milestone v1.1*
+*Last updated: 2026-11-02 after the v1.1 roadmap (Phases 10-19) was created*
