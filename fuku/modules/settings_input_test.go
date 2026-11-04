@@ -373,22 +373,22 @@ func TestSettingsInputRead(t *testing.T) {
 		t.Fatalf("read with nothing = %+v, %q, %v, want nil, empty, nil", wait, marker, err)
 	}
 
-	seeded := settingsInputSeed(t, user.Id, -100, "r", "b")
+	seeded := settingsInputSeed(t, user.Id, -100, "g", "b")
 	wait, marker, err = settingsInputRead(ctx, user.Id)
 	if err != nil || wait == nil {
 		t.Fatalf("read = %+v, %v, want the wait", wait, err)
 	}
-	if wait.GroupID != -100 || wait.Page != "r" || wait.Part != "b" || wait.PromptMsgID != 7 || wait.Nonce != seeded.Nonce || wait.ExpiresAt.IsZero() {
+	if wait.GroupID != -100 || wait.Page != "g" || wait.Part != "b" || wait.PromptMsgID != 7 || wait.Nonce != seeded.Nonce || wait.ExpiresAt.IsZero() {
 		t.Errorf("read wait = %+v, want the seeded one", wait)
 	}
-	if marker != "-100|r|b" {
-		t.Errorf("read marker = %q, want -100|r|b", marker)
+	if marker != "-100|g|b" {
+		t.Errorf("read marker = %q, want -100|g|b", marker)
 	}
 
 	// An expired wait leaves only the marker.
 	env.redis.FastForward(settingsInputTTL + time.Minute)
 	wait, marker, err = settingsInputRead(ctx, user.Id)
-	if err != nil || wait != nil || marker != "-100|r|b" {
+	if err != nil || wait != nil || marker != "-100|g|b" {
 		t.Errorf("read after the expiry = %+v, %q, %v, want no wait and the marker", wait, marker, err)
 	}
 
@@ -472,7 +472,7 @@ func TestSettingsInputAlbumAndMarker(t *testing.T) {
 		if !ok || groupID != -100 || page != "w" || part != "x" {
 			t.Errorf("parse of -100|w|x = %d, %q, %q, %v", groupID, page, part, ok)
 		}
-		for _, bad := range []string{"x", "", "-100|q|x", "abc|w|x", "-100|w|z", "100|w|x", "-100|w", "-100|w|x|y"} {
+		for _, bad := range []string{"x", "", "-100|q|x", "abc|w|x", "-100|w|z", "100|w|x", "-100|w", "-100|w|x|y", "-100|r|m"} {
 			if _, _, _, ok := settingsInputParseMarker(bad); ok {
 				t.Errorf("parse of %q accepted it", bad)
 			}

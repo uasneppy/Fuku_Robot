@@ -12,6 +12,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
@@ -199,25 +200,10 @@ func settingsInputNonceValid(n string) bool {
 	return true
 }
 
-// settingsInputValidPage reports whether page is a page key the editor can wait for.
-func settingsInputValidPage(page string) bool {
-	switch page {
-	case "w", "g", "r":
-		return true
-	}
-	return false
-}
-
-// settingsInputValidPart reports whether part is a part of page the editor can wait for.
+// settingsInputValidPart reports whether part is a part of page the editor registers.
 func settingsInputValidPart(page, part string) bool {
-	if !settingsInputValidPage(page) {
-		return false
-	}
-	switch part {
-	case "x", "m", "b":
-		return true
-	}
-	return false
+	def, ok := settingsEditPageByKey(page)
+	return ok && settingsEditPartByCode(def, part) != nil
 }
 
 // settingsInputMarkerValue is the marker's value for a wait: "c|p|t".
@@ -534,8 +520,10 @@ func (m moduleStruct) settingsCancel(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
-// LoadSettingsInput registers /cancel. LoadSettings calls it, so every environment that
-// loads the settings module also gets the wait's command.
+// LoadSettingsInput registers /cancel and the typed-reply door (handler group 1). LoadSettings
+// calls it, so every environment that loads the settings module also gets the wait's command and
+// the door that reads the reply.
 func LoadSettingsInput(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, settingsCancelDesc, pipelineHandler(settingsModule.settingsCancel))
+	dispatcher.AddHandlerToGroup(handlers.NewMessage(settingsInputIsPrivate, settingsModule.settingsInput), settingsInputGroup)
 }
