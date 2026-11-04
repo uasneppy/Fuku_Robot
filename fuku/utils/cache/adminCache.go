@@ -28,8 +28,8 @@ const (
 	// AdminListBotNotAdmin means the bot's own status is member, left, kicked or anything but
 	// administrator or creator.
 	AdminListBotNotAdmin
-	// AdminListBotGone means the bot's own lookup was refused with a Telegram client error
-	// (4xx other than 429): the bot cannot see the chat.
+	// AdminListBotGone means the bot's own lookup was refused with Bot API error code 400 or
+	// 403 (IsBotGoneError): the bot cannot see the chat. Any other error reports nothing.
 	AdminListBotGone
 )
 
@@ -71,15 +71,21 @@ func notifyAdminList(ev AdminListEvent) {
 	(*fn)(ev)
 }
 
-// isBotLookupClientError reports whether err is a Telegram answer in the 4xx range other than
-// 429: the bot's own getChatMember was refused, so it cannot see the chat. A 429, a 5xx and a
-// transport error say nothing about the chat.
-func isBotLookupClientError(err error) bool {
+// IsBotGoneError reports whether err, the error of the bot's own getChatMember, is definitive
+// evidence that the bot cannot see the chat: a Telegram answer with Bot API error code 400 or
+// 403, also when wrapped. Those are the codes Telegram uses for "chat not found", "bot was
+// kicked", "bot is not a member" and "bot was blocked". Every other answer says nothing about
+// this chat and must leave a stored roster alone: a 401 (a revoked or rotated token), a 404, a
+// 409, a 429 (a rate limit, whose retry_after the caller keeps), a 5xx, a transport error and a
+// timeout. It is the one classifier of the roster-changing decision; the settings doors keep
+// their own, broader rule (isTelegramClientError in fuku/modules) because they only choose
+// what to answer.
+func IsBotGoneError(err error) bool {
 	var tgErr *gotgbot.TelegramError
 	if !errors.As(err, &tgErr) || tgErr == nil {
 		return false
 	}
-	return tgErr.Code >= 400 && tgErr.Code <= 499 && tgErr.Code != 429
+	return tgErr.Code == 400 || tgErr.Code == 403
 }
 
 func adminCacheKey(chatId int64) string {
@@ -146,7 +152,7 @@ func loadAdminCacheFromTelegram(b *gotgbot.Bot, chatId int64) AdminCache {
 			"botId":  b.Id,
 			"error":  botErr,
 		}).Warning("LoadAdminCache: Could not verify bot admin status")
-		if isBotLookupClientError(botErr) && generation == adminCacheGeneration.Load() {
+		if IsBotGoneError(botErr) && generation == adminCacheGeneration.Load() {
 			notifyAdminList(AdminListEvent{ChatID: chatId, Kind: AdminListBotGone})
 		}
 		return storeWithTTL(AdminCache{

@@ -69,14 +69,15 @@ const (
 // refreshChatAdminIndex refreshes one chat's rows with at most two Telegram calls, for the
 // sweep and the group /settings repair path. It changes rows only on definitive facts: replaced
 // for an administrator bot and a non-empty list, cleared for a bot that is not an administrator
-// or whose own lookup was refused with a Telegram client error (4xx except 429), unchanged for
-// every other error, a timeout, a 429 or an empty list. The error of a failed Telegram call is
+// or whose own lookup was refused with Bot API error code 400 or 403 (cache.IsBotGoneError),
+// unchanged for every other error (a 401, 404, 409, 5xx or transport error), a timeout, a 429
+// or an empty list. The error of a failed Telegram call is
 // returned whatever the outcome, with a 429's retry_after intact. It never touches the admin
 // cache and never sleeps: the caller owns pacing and retries (research R-06).
 func refreshChatAdminIndex(ctx context.Context, b *gotgbot.Bot, chatID int64) (adminIndexRefreshOutcome, error) {
 	botMember, err := b.GetChatMemberWithContext(ctx, chatID, b.Id, nil)
 	if err != nil {
-		if isTelegramClientError(err) {
+		if cache.IsBotGoneError(err) {
 			if clearErr := adminindex.ClearChat(ctx, chatID); clearErr != nil {
 				return adminIndexUnchanged, fmt.Errorf("clear roster of chat %d after %w: %w", chatID, err, clearErr)
 			}

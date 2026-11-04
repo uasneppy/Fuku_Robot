@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -95,19 +96,30 @@ func TestAdminListObserver(t *testing.T) {
 		}
 	})
 
-	t.Run("a refused bot lookup is a gone event", func(t *testing.T) {
-		withMemoryMarshaler(t)
-		events := observedAdminEvents(t)
-		refused := &gotgbot.TelegramError{Method: "getChatMember", Code: 403, Description: "Forbidden: bot was kicked"}
-		LoadAdminCache(adminObserverBot("administrator", observerAdminList, map[string]error{"getChatMember": refused}), -100903)
-		seen := events()
-		if len(seen) != 1 || seen[0].Kind != AdminListBotGone || seen[0].ChatID != -100903 {
-			t.Fatalf("events = %+v, want one gone event", seen)
+	t.Run("a bot lookup refused with 400 or 403 is a gone event", func(t *testing.T) {
+		for name, refused := range map[string]error{
+			"403": &gotgbot.TelegramError{Method: "getChatMember", Code: 403, Description: "Forbidden: bot was kicked"},
+			"400": &gotgbot.TelegramError{Method: "getChatMember", Code: 400, Description: "Bad Request: chat not found"},
+			"wrapped 403": fmt.Errorf("lookup: %w",
+				&gotgbot.TelegramError{Method: "getChatMember", Code: 403, Description: "Forbidden: bot was blocked"}),
+		} {
+			t.Run(name, func(t *testing.T) {
+				withMemoryMarshaler(t)
+				events := observedAdminEvents(t)
+				LoadAdminCache(adminObserverBot("administrator", observerAdminList, map[string]error{"getChatMember": refused}), -100903)
+				seen := events()
+				if len(seen) != 1 || seen[0].Kind != AdminListBotGone || seen[0].ChatID != -100903 {
+					t.Fatalf("events = %+v, want one gone event", seen)
+				}
+			})
 		}
 	})
 
-	t.Run("no event for a server error, a rate limit or a transport error on the bot lookup", func(t *testing.T) {
+	t.Run("no event for a 401, 404, 409, server error, rate limit or transport error on the bot lookup", func(t *testing.T) {
 		for name, failure := range map[string]error{
+			"401":       &gotgbot.TelegramError{Method: "getChatMember", Code: 401, Description: "Unauthorized"},
+			"404":       &gotgbot.TelegramError{Method: "getChatMember", Code: 404, Description: "Not Found"},
+			"409":       &gotgbot.TelegramError{Method: "getChatMember", Code: 409, Description: "Conflict"},
 			"500":       &gotgbot.TelegramError{Method: "getChatMember", Code: 500, Description: "Internal"},
 			"429":       &gotgbot.TelegramError{Method: "getChatMember", Code: 429, Description: "Too Many Requests"},
 			"transport": errors.New("connection reset"),

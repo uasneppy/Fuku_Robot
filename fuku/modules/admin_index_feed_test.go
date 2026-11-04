@@ -274,6 +274,40 @@ func TestAdminIndexKeepsRowsOnFailure(t *testing.T) {
 	cache.InvalidateAdminCache(env.chat.Id)
 	cache.LoadAdminCache(env.bot, env.chat.Id)
 	wantAdminIndexRoster(t, env.chat.Id, want)
+
+	// A 4xx that is not about the chat (a revoked or rotated token, a missing method, a
+	// polling conflict) is no evidence that the bot is gone: the rows stay.
+	for _, code := range []int{401, 404, 409} {
+		env.fake.setFailure("getChatMember", env.chat.Id,
+			&gotgbot.TelegramError{Method: "getChatMember", Code: code, Description: "not about this chat"})
+		cache.InvalidateAdminCache(env.chat.Id)
+		cache.LoadAdminCache(env.bot, env.chat.Id)
+		wantAdminIndexRoster(t, env.chat.Id, want)
+	}
+}
+
+// TestAdminIndexBotLookupRefused pins the two Bot API codes that count as the bot being gone:
+// 400 and 403 on the bot's own lookup clear the rows during an admin list load.
+func TestAdminIndexBotLookupRefused(t *testing.T) {
+	for name, refused := range map[string]*gotgbot.TelegramError{
+		"400 chat not found": {Method: "getChatMember", Code: 400, Description: "Bad Request: chat not found"},
+		"403 bot was kicked": {Method: "getChatMember", Code: 403, Description: "Forbidden: bot was kicked"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			env := newSettingsEnv(t)
+			withAdminIndexObserver(t)
+			env.newOwner(env.chat)
+			cache.LoadAdminCache(env.bot, env.chat.Id)
+			if len(adminIndexRoster(t, env.chat.Id)) != 2 {
+				t.Fatal("the first load did not store the roster")
+			}
+
+			env.fake.setFailure("getChatMember", env.chat.Id, refused)
+			cache.InvalidateAdminCache(env.chat.Id)
+			cache.LoadAdminCache(env.bot, env.chat.Id)
+			wantAdminIndexRoster(t, env.chat.Id, map[int64]string{})
+		})
+	}
 }
 
 // botStatusUpdate delivers a my_chat_member update in the env's chat through the real
@@ -460,18 +494,24 @@ func TestAdminIndexRefresh(t *testing.T) {
 		wantAdminIndexRoster(t, env.chat.Id, map[int64]string{})
 	})
 
-	t.Run("a refused bot lookup clears the rows and returns the error", func(t *testing.T) {
-		env := newSettingsEnv(t)
-		seedAdminIndexRoster(t, env.chat.Id, adminindex.Entry{UserID: 55, Role: models.AdminIndexRoleCreator})
-		env.fake.setFailure("getChatMember", env.chat.Id,
-			&gotgbot.TelegramError{Method: "getChatMember", Code: 403, Description: "Forbidden: bot was kicked"})
-		bot, _ := env.probeBot()
+	t.Run("a bot lookup refused with 400 or 403 clears the rows and returns the error", func(t *testing.T) {
+		for name, refused := range map[string]*gotgbot.TelegramError{
+			"403": {Method: "getChatMember", Code: 403, Description: "Forbidden: bot was kicked"},
+			"400": {Method: "getChatMember", Code: 400, Description: "Bad Request: chat not found"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				env := newSettingsEnv(t)
+				seedAdminIndexRoster(t, env.chat.Id, adminindex.Entry{UserID: 55, Role: models.AdminIndexRoleCreator})
+				env.fake.setFailure("getChatMember", env.chat.Id, refused)
+				bot, _ := env.probeBot()
 
-		outcome, err := refreshChatAdminIndex(context.Background(), bot, env.chat.Id)
-		if err == nil || outcome != adminIndexCleared {
-			t.Fatalf("refreshChatAdminIndex() = (%v, %v), want cleared with the error", outcome, err)
+				outcome, err := refreshChatAdminIndex(context.Background(), bot, env.chat.Id)
+				if err == nil || outcome != adminIndexCleared {
+					t.Fatalf("refreshChatAdminIndex() = (%v, %v), want cleared with the error", outcome, err)
+				}
+				wantAdminIndexRoster(t, env.chat.Id, map[int64]string{})
+			})
 		}
-		wantAdminIndexRoster(t, env.chat.Id, map[int64]string{})
 	})
 
 	t.Run("an ambiguous answer leaves the rows", func(t *testing.T) {
@@ -480,6 +520,18 @@ func TestAdminIndexRefresh(t *testing.T) {
 			"bot lookup 500": func(env *settingsEnv, _ *adminIndexProbe) {
 				env.fake.setFailure("getChatMember", env.chat.Id,
 					&gotgbot.TelegramError{Method: "getChatMember", Code: 500, Description: "Internal Server Error"})
+			},
+			"bot lookup 401": func(env *settingsEnv, _ *adminIndexProbe) {
+				env.fake.setFailure("getChatMember", env.chat.Id,
+					&gotgbot.TelegramError{Method: "getChatMember", Code: 401, Description: "Unauthorized"})
+			},
+			"bot lookup 404": func(env *settingsEnv, _ *adminIndexProbe) {
+				env.fake.setFailure("getChatMember", env.chat.Id,
+					&gotgbot.TelegramError{Method: "getChatMember", Code: 404, Description: "Not Found"})
+			},
+			"bot lookup 409": func(env *settingsEnv, _ *adminIndexProbe) {
+				env.fake.setFailure("getChatMember", env.chat.Id,
+					&gotgbot.TelegramError{Method: "getChatMember", Code: 409, Description: "Conflict"})
 			},
 			"bot lookup 429": func(env *settingsEnv, _ *adminIndexProbe) {
 				env.fake.setFailure("getChatMember", env.chat.Id, &gotgbot.TelegramError{

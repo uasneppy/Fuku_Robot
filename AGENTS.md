@@ -951,7 +951,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   fact, each guarded by the load's generation, so a load overtaken by an invalidation reports nothing: a successful
   non-empty list replaces the chat's rows with its creator and human administrators (a bot is never stored, and a creator
   that `settingsCreatorGone` recognises is not stored, so that group reads as having no live owner), and a bot that is not
-  an administrator (`BotNotAdmin`) or whose own lookup was refused with a 4xx other than 429 (`BotGone`) clears them. The
+  an administrator (`BotNotAdmin`) or whose own lookup was refused with Bot API error code 400 or 403 (`BotGone`,
+  `cache.IsBotGoneError`: "chat not found", "bot was kicked", "bot is not a member", "bot was blocked") clears them; a
+  401 (a revoked or rotated token), 404, 409, 429, 5xx, a transport error and a timeout leave them, so one fleet-wide
+  fault cannot empty the table. This is a narrower rule than `isTelegramClientError`, which the settings doors keep
+  for choosing an answer and which never changes a row. The
   retry-failure and the empty-list paths report nothing. The write runs synchronously under the chat's admin-cache
   singleflight with a 3 s bound (`adminIndexWriteTimeout`) and a failed write is only logged. `adminCacheAutoUpdate`
   clears a group's rows when a `my_chat_member` update takes the bot to left or kicked. `/admincache` refreshes the rows on
@@ -964,7 +968,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`adminindex.ListCandidateChatIDsFresh`), inactive chats included, because the activity monitor marks quiet groups
   inactive. Every Telegram request waits a 250 ms pace and runs under 5 s (4 calls a second per runner, about 8 minutes for
   1000 groups). Definitive facts only: an error, a timeout, a 429 or an empty list leaves a chat's rows as they were, and
-  only a bot that is not an administrator, or cannot see the chat, clears them. A 429 waits `min(retry_after, 30 s)` and
+  only a bot that is not an administrator, or whose own lookup answered 400 or 403 (`cache.IsBotGoneError`), clears them;
+  a 401 or any other error code leaves them. A 429 waits `min(retry_after, 30 s)` and
   retries that chat once; a second 429 ends the cycle with the remaining chats untouched. A panic in a cycle is recovered
   and the next cycle runs, Start twice runs one loop and Stop is idempotent. The roster is a hint for the private list and
   never authority.
