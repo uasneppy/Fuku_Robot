@@ -94,7 +94,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
-  `-1` users tracker · `0` commands/help/greetings · `2` raid AI candidate watcher (hands a new member's suspicious
+  `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
+  `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
   after every other group).
@@ -117,7 +118,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
-- The Settings module (priority 239, `settings.go`) adds no handler group. `/settings` goes through `helpers.WrapCommand`
+- The Settings module (priority 239, `settings.go`) adds one handler group, `1`, for the typed-reply door below; its other entry points are `/settings`, the callbacks and the deep link. `/settings` goes through `helpers.WrapCommand`
   with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
   once, because the private list needs no group; in a group a live creator or administrator from
   `lockdownAuthorityMember`, the body of `requireLockdownAuthority(false)`, never the admin cache, then the owner gate
@@ -132,10 +133,33 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `SetAllowChannel`, because a menu is never a channel message.
   `LoadSettings` ends by calling `LoadSettingsInput` (`settings_input.go`), which registers `/cancel` through
   `helpers.WrapCommand` (its one check, `settingsInputPrivateOnly`, passes only in the bot's private chat and never
-  replies, so `/cancel` in a group is silent and makes no write or Telegram call; it is not `Disableable`) and, from the
-  typed-reply plan on, the door that reads the owner's next private message. `/cancel` deletes the sender's own wait and
+  replies, so `/cancel` in a group is silent and makes no write or Telegram call; it is not `Disableable`) and the
+  typed-reply door (below). `/cancel` deletes the sender's own wait and
   marker (the keys are built from the sender's ID alone) and answers `settings_edit_cancelled`, or
   `settings_edit_cancel_nothing` when there was none, when a write holds the wait, and without Redis.
+  The typed-reply door (`settings_input_door.go`, `settingsModule.settingsInput`, registered by `LoadSettingsInput` with
+  `handlers.NewMessage(settingsInputIsPrivate, ...)` at group `settingsInputGroup` = 1, after the group-0 commands and
+  before every group that could end a private update) reads the owner's next private message after Set. A candidate is a
+  new private message whose sender is the chat itself (not the bot, not a Telegram service identity), with no
+  `rich_message` and no command (`settingsInputLooksLikeCommand`: a `bot_command` entity at offset 0 or a slash followed
+  by a non-space, in the text or the caption); anything else, and a sender with neither a wait nor a marker, returns
+  `ext.ContinueGroups` with no reply, no write and no Telegram call, so ordinary private chat is untouched. The order is
+  fixed, each step refusing before the next: `settingsInputRead` (an error or no Redis is not the door's); no wait but a
+  marker is one plain `settings_edit_wait_ended_note` naming the part (the marker taken with `GETDEL`, so two deliveries
+  answer once; nothing is saved); the live `getChatMember` of the sender, the owner gate (`settingsGate`), the right of
+  the part (`settingsRightRefusalFor`, and `chat_status.IsBotAdmin` on Rules), a live `getChat` of the group, the
+  stored state, `settingsEditCheck`, `settingsInputClaim`, the part's apply function, `settingsInputFinish`. A lost
+  authority ends the wait and answers one plain reply (a non-admin status or a Telegram 4xx other than 429 at
+  `getChatMember` or `getChat`, and a chat that is not a group or supergroup: `settings_edit_refuse_access_lost`; the gate
+  refusing an administrator: `settings_gate_owner_only`; a lost right: `settings_no_change_info` or
+  `chat_status_bot_not_admin`), and an answer that cannot be established (a 429, a 5xx, a transport error, a timeout,
+  an undecided gate, an unreadable page) answers `settings_check_failed` and keeps the wait. A message the check refuses
+  is a reply with the reason, a blank line, `settings_edit_still_waiting` and one Cancel button, and the wait is neither
+  claimed nor extended; a write that fails after the claim releases the claim and answers the same way with
+  `common_settings_save_failed`. A save sends the page as a new message in the private chat (with
+  `settings_edit_saved_text`, `_media` or `_buttons`, plus `settings_edit_caption_ignored` when a caption was not used)
+  and edits the prompt to `settings_edit_prompt_closed`, best effort. No log line of the door carries the message text,
+  a caption, a button name, a link or a file ID. The typed reply is the sixth door of `TestSettingsGateAllDoors`.
   After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
   record through `refreshChatAdminIndex` (at most two Telegram calls, a 10 s context, the error only logged), the
   second repair path after `/admincache` (D-07, MENU-10). It runs after the reply, so a slow or failed refresh never
@@ -460,7 +484,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The settings owner gate (`settings_gate.go`): `settingsGate` is the one decision every settings door calls after its own
   live `getChatMember` of the person, today in-group `/settings` with its anonymous re-entry (`requireSettingsAccess`),
   the `/start settings_<chat id>` deep link (`settingsStartDeepLink`, on the member record of its own check and before its
-  `getChat`), every button press (step 4b) and the pick of the private list (the same step 4b); the other doors call it as
+  `getChat`), every button press (step 4b), the pick of the private list (the same step 4b) and the typed reply of the
+  message editor (`settingsInput`, on the member record of its own live check); the other doors call it as
   they arrive, and `TestSettingsGateAllDoors`
   proves that every door decides the same over the four worlds (owner with the switch off, switch on, no owner, owner
   state unknown), each later door adding a column to it. The order is fixed: a live creator is in with no

@@ -836,7 +836,8 @@ type settingsGateCase struct {
 	ownerPerson bool
 }
 
-// settingsGateDoor is one way into the settings. The pick of the private list is the fifth door.
+// settingsGateDoor is one way into the settings. The pick of the private list is the fifth door
+// and the typed reply of the message editor the sixth.
 type settingsGateDoor struct {
 	name   string
 	decide func(t *testing.T, c settingsGateCase) string
@@ -854,7 +855,8 @@ func settingsGateClassify(texts []string) string {
 		case strings.Contains(text, staffMarker("settings_check_failed")):
 			return "check_failed"
 		case strings.Contains(text, staffMarker("settings_choose")),
-			strings.Contains(text, staffMarker("settings_header_main")):
+			strings.Contains(text, staffMarker("settings_header_main")),
+			strings.Contains(text, staffMarker("settings_edit_saved_text")):
 			decision = "in"
 		}
 	}
@@ -956,6 +958,29 @@ func settingsGateDoorPick(t *testing.T, c settingsGateCase) string {
 	return "none"
 }
 
+// settingsGateDoorTypedReply is the typed-reply door: the person presses Set text of the Welcome
+// page in a private menu while the world still lets them in (the administrator before apply, the
+// owner after it, as the press door opens its menu), then sends a private text. A let-in reply is
+// saved and answered with the saved page; a refused one gets the gate's own words.
+func settingsGateDoorTypedReply(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	if !c.ownerPerson {
+		// The administrator may change the greetings: can_change_info on the live record.
+		listEditAdmin(c.env, c.env.chat, c.env.admin, true)
+		settingsEditSetWait(c.env, c.env.admin, settingsPageWelcome, settingsEditPartText)
+	}
+	c.apply()
+	person := c.person()
+	if c.ownerPerson {
+		settingsEditSetWait(c.env, person, settingsPageWelcome, settingsEditPartText)
+	}
+	before := len(c.env.fake.sentTo(person.Id))
+
+	sendPrivateMessage(c.env, person, gotgbot.Message{Text: "a typed welcome"})
+
+	return settingsGateClassify(settingsGateNewTexts(c.env, person.Id, before))
+}
+
 func TestSettingsGateAllDoors(t *testing.T) {
 	fixtures := []settingsGateFixture{
 		{
@@ -1001,6 +1026,7 @@ func TestSettingsGateAllDoors(t *testing.T) {
 		{name: "deep link", decide: settingsGateDoorDeepLink},
 		{name: "press", decide: settingsGateDoorPress},
 		{name: "pick", decide: settingsGateDoorPick},
+		{name: "typed reply", decide: settingsGateDoorTypedReply},
 	}
 
 	for _, fixture := range fixtures {
