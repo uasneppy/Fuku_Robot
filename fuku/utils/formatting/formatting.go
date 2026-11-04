@@ -325,3 +325,13 @@ func GetFullName(firstName, lastName string) string {
 	}
 	return firstName
 }
+
+// FillPlaceholders is a stub until the GREEN step.
+func FillPlaceholders(oldMsg string, user *gotgbot.User, chatTitle, memberCount string) string {
+	return ""
+}
+
+// VisibleLength is a stub until the GREEN step.
+func VisibleLength(html string) int {
+	return -1
+}
