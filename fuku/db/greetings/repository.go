@@ -1,6 +1,7 @@
 package greetings
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -119,6 +120,63 @@ func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) 
 	}
 
 	return greetingSrc
+}
+
+// LoadSettingsContext reads a chat's greetings row with the caller's context and
+// creates nothing. With no row it returns, without writing, the settings
+// GetGreetingSettings would end up with: Welcome on, Delete last off, the default
+// texts and Goodbye on for a chat the chats table knows (the database default of
+// goodbye_enabled is true, which the first write stores) or off for a chat it does
+// not know. Any other read error is returned, never turned into defaults, so a
+// settings page must use this instead of GetGreetingSettings, which creates rows
+// and hides errors.
+func LoadSettingsContext(ctx context.Context, chatID int64) (*models.GreetingSettings, error) {
+	settings := &models.GreetingSettings{}
+	err := db.DB.WithContext(ctx).Where("chat_id = ?", chatID).First(settings).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		var known int64
+		if cerr := db.DB.WithContext(ctx).Model(&models.Chat{}).
+			Where("chat_id = ?", chatID).Count(&known).Error; cerr != nil {
+			return nil, fukuerrors.Wrapf(cerr, "check chat %d for greeting settings", chatID)
+		}
+		return defaultGreetingSettingsView(chatID, known > 0), nil
+	}
+	if err != nil {
+		return nil, fukuerrors.Wrapf(err, "load greeting settings for chat %d", chatID)
+	}
+
+	if settings.WelcomeSettings == nil {
+		settings.WelcomeSettings = defaultGreetingSettingsView(chatID, false).WelcomeSettings
+	} else if settings.WelcomeSettings.WelcomeText == "" {
+		settings.WelcomeSettings.WelcomeText = db.DefaultWelcome
+	}
+	if settings.GoodbyeSettings == nil {
+		settings.GoodbyeSettings = defaultGreetingSettingsView(chatID, false).GoodbyeSettings
+	} else if settings.GoodbyeSettings.GoodbyeText == "" {
+		settings.GoodbyeSettings.GoodbyeText = db.DefaultGoodbye
+	}
+	return settings, nil
+}
+
+// defaultGreetingSettingsView is the in-memory settings of a chat with no greetings
+// row. goodbyeOn is true for a chat in the chats table, whose first write stores the
+// column default of goodbye_enabled.
+func defaultGreetingSettingsView(chatID int64, goodbyeOn bool) *models.GreetingSettings {
+	return &models.GreetingSettings{
+		ChatID: chatID,
+		WelcomeSettings: &models.WelcomeSettings{
+			ShouldWelcome: true,
+			WelcomeText:   db.DefaultWelcome,
+			WelcomeType:   db.TEXT,
+			Button:        models.ButtonArray{},
+		},
+		GoodbyeSettings: &models.GoodbyeSettings{
+			ShouldGoodbye: goodbyeOn,
+			GoodbyeText:   db.DefaultGoodbye,
+			GoodbyeType:   db.TEXT,
+			Button:        models.ButtonArray{},
+		},
+	}
 }
 
 func GetGreetingSettings(chatID int64) *models.GreetingSettings {
