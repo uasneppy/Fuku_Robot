@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-11-04T12:40:55.774Z"
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-11-04T12:43:51.976Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: e37e532d36a4aa898d1cdcc0c4235e9e32eb4439
+state_head: bdaeb91caea954227ff9589b0d4b9cbe0661ebd7
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 10 (PM Settings Hub and Owner Gate) — EXECUTING
-Plan: 3 of 11
+Plan: 4 of 11
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 10 execution started
 
@@ -77,6 +77,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 03 P09 | 20min | 2 tasks | 11 files |
 | Phase 10 P01 | 6 min | 2 tasks | 10 files |
 | Phase 10 P02 | 8 min | 2 tasks | 10 files |
+| Phase 10 P03 | 6 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,7 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-01: adminindex.ReplaceChat is upsert + NOT IN prune under a per-chat pg_advisory_xact_lock, never delete-then-insert
 - [Phase 10]: Phase 10 plan 02: no new hub or refusal string carries a placeholder beyond icon, page and state, so none can name a group title, user or the Staff Group.
 - [Phase 10]: The three alert keys are held to 160 code points and tag-free in all 8 languages so a translation still fits Telegram 200.
+- [Phase 10]: 10-03: locale-set drift guarded by TestLocalesAreTheEight (set comparison of locales dir vs staffLocales, exactly 8); project docs outside AGENTS.md state 8 locales
 
 ### Pending Todos
 
@@ -181,8 +183,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T12:40:55.717Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-11-04T12:43:51.919Z
+Stopped at: Completed 10-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
