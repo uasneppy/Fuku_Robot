@@ -159,6 +159,12 @@ func settingsEditCheckGreetingText(in settingsEditCheckInput) settingsEditVerdic
 	if longest > limit {
 		return settingsEditTooLong(longest, limit)
 	}
+	// The {rules} button this text adds at a join is counted against the stored buttons, as the
+	// buttons part counts it against the stored text, so neither part can make a join's welcome
+	// a keyboard Telegram refuses.
+	if total, widest := settingsEditButtonRows(in.State.Buttons, stored); total > settingsEditMaxButtons || widest > settingsEditMaxRowButtons {
+		return settingsEditRefusal("settings_edit_refuse_buttons_limit", nil)
+	}
 	return settingsEditVerdict{OK: true, Text: stored}
 }
 

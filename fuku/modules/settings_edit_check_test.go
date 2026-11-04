@@ -551,6 +551,48 @@ func TestSettingsEditButtonRefusals(t *testing.T) {
 	})
 }
 
+// settingsEditStoredButtons is n stored buttons, the last `lastRow` of them in one row (the first
+// of those starts the row) and every one before them in a row of its own.
+func settingsEditStoredButtons(n, lastRow int) []db.Button {
+	buttons := make([]db.Button, n)
+	for i := range buttons {
+		buttons[i] = db.Button{Name: fmt.Sprintf("b%d", i), Url: "https://e.com", SameLine: i >= n-lastRow+1}
+	}
+	return buttons
+}
+
+// TestSettingsEditTextRulesButtonLimit holds the text part to the same keyboard limits as the
+// buttons part: the {rules} button the stored text adds counts against the stored buttons.
+func TestSettingsEditTextRulesButtonLimit(t *testing.T) {
+	cases := []struct {
+		name    string
+		text    string
+		buttons []db.Button
+		ok      bool
+	}{
+		{"8 in the last row and {rules:same}", "Welcome {first}! {rules:same}", settingsEditStoredButtons(8, 8), false},
+		{"7 in the last row and {rules:same}", "Welcome {first}! {rules:same}", settingsEditStoredButtons(7, 7), true},
+		{"8 in the last row and {rules} on its own row", "Welcome {rules}", settingsEditStoredButtons(8, 8), true},
+		{"100 buttons and {rules}", "Welcome {rules}", settingsEditStoredButtons(100, 1), false},
+		{"100 buttons and {rules:up}", "Welcome {rules:up}", settingsEditStoredButtons(100, 1), false},
+		{"99 buttons and {rules}", "Welcome {rules}", settingsEditStoredButtons(99, 1), true},
+		{"100 buttons and no token", "Welcome {first}", settingsEditStoredButtons(100, 1), true},
+		{"8 in the last row and no token", "Welcome {first}", settingsEditStoredButtons(8, 8), true},
+		{"no buttons and {rules:same}", "Welcome {rules:same}", nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := settingsEditGreetingCheck(t, tc.text, settingsEditState{Buttons: tc.buttons})
+			if got.OK != tc.ok {
+				t.Fatalf("OK = %v (key %q), want %v", got.OK, got.RefusalKey, tc.ok)
+			}
+			if !tc.ok && (got.RefusalKey != "settings_edit_refuse_buttons_limit" || got.RefusalText != "" || len(got.RefusalParams) != 0) {
+				t.Fatalf("refusal = %q %v, want settings_edit_refuse_buttons_limit with no parameters", got.RefusalKey, got.RefusalParams)
+			}
+		})
+	}
+}
+
 func TestSettingsEditCheckMalformedEntities(t *testing.T) {
 	broken := func() *gotgbot.Message {
 		return settingsEditTypedMessage("hi", gotgbot.MessageEntity{Type: "bold", Offset: 50, Length: 4})
