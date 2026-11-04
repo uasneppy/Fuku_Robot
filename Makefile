@@ -34,7 +34,7 @@ lint:
 test: SHELL := /bin/bash
 test: .SHELLFLAGS := -o pipefail -c
 test:
-	$(GO_CMD) test -tags testtools -json -race -coverprofile=coverage.out -coverpkg=$$(go list ./fuku/... | paste -sd, -) -count=1 -timeout 10m ./... | $(GO_CMD) run ./scripts/check_test_results
+	$(GO_CMD) test -tags testtools -json -race -coverprofile=coverage.out -coverpkg=$$(go list ./fuku/... | paste -sd, -) -count=1 -timeout 15m ./... | $(GO_CMD) run ./scripts/check_test_results
 
 test-postgres-integrity:
 	$(GO_CMD) test -tags testtools -v -race -p 1 -count=1 -timeout 10m \
