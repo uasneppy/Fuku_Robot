@@ -198,7 +198,13 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+| verification | Phase 10 live Telegram checks and owner review (`phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md`, `10-VERIFICATION.md` status `human_needed`): list and pick, Access ON card and OFF, gated admin refusals, anonymous owner proof tap, deleted-owner group (A1), two replicas, D-01/D-20 wording, native-speaker read of the 19 new strings | deferred by the owner's choice in the autonomous run; code verified 5/5, security 0 open | 2026-11-04 | v1.1 |
+
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 10 | verification_deferred_human | /gsd-verify-work 10 |
 
 ## Session Continuity
 
