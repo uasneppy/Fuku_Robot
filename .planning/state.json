@@ -1,58 +1,63 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.1",
+  "milestone": "v1.1 — PM Settings Hub & Member Screening",
   "phases": [
     {
-      "number": "1",
-      "name": "Staff Group Links",
-      "status": "complete"
+      "number": "10",
+      "name": "PM Settings Hub and Owner Gate",
+      "status": "pending"
     },
     {
-      "number": "2",
-      "name": "Staff Actions Across Groups",
-      "status": "complete"
+      "number": "11",
+      "name": "Message Editor",
+      "status": "pending"
     },
     {
-      "number": "3",
-      "name": "Staff Audit and Undo",
-      "status": "complete"
+      "number": "12",
+      "name": "Rules Media, Media Under Text and Greet Once",
+      "status": "pending"
     },
     {
-      "number": "4",
-      "name": "Manual Lockdown",
-      "status": "complete"
+      "number": "13",
+      "name": "Member Requirements",
+      "status": "pending"
     },
     {
-      "number": "5",
-      "name": "Lockdown Alerts and Response",
-      "status": "complete"
+      "number": "14",
+      "name": "Profile Photo and Channel Rules",
+      "status": "pending"
     },
     {
-      "number": "6",
-      "name": "Automatic Raid Detection",
-      "status": "complete"
+      "number": "15",
+      "name": "AI Spam-Name Check",
+      "status": "pending"
     },
     {
-      "number": "7",
-      "name": "AI-Assisted Raid Detection",
-      "status": "complete"
+      "number": "16",
+      "name": "Scheduled Deletion of Service and Bot Messages",
+      "status": "pending"
     },
     {
-      "number": "8",
-      "name": "Turnstile Web Captcha",
-      "status": "complete"
+      "number": "17",
+      "name": "Command, Edit and Self-Destruct Deletion",
+      "status": "pending"
     },
     {
-      "number": "9",
-      "name": "Settings Menu",
-      "status": "complete"
+      "number": "18",
+      "name": "Remaining Settings Pages",
+      "status": "pending"
+    },
+    {
+      "number": "19",
+      "name": "Blacklist, Filter and Note Pages",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd-discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "command": "/gsd-progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 10 · 0% · executing"
   },
-  "updated_at": "2026-11-02T20:39:13.057Z"
+  "updated_at": "2026-11-04T12:27:14.071Z"
 }
