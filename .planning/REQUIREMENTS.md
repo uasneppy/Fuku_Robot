@@ -21,7 +21,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Message editor (Rules, Welcome, Goodbye)
 
-- [ ] **EDIT-01**: From the menu an admin opens Rules, Welcome or Goodbye and sees which parts are set (text, media, URL buttons) with a button to set or remove each part.
+- [x] **EDIT-01**: From the menu an admin opens Rules, Welcome or Goodbye and sees which parts are set (text, media, URL buttons) with a button to set or remove each part.
 - [ ] **EDIT-02**: After pressing a part's button, the bot waits for the user's next private message and stores it as that part. A Cancel button or `/cancel` leaves the message unchanged, the wait ends by itself after 10 minutes, and it works whichever replica receives the message.
 - [ ] **EDIT-03**: Text keeps its formatting and the existing placeholders (`{first}`, `{mention}` and the rest). Text that is too long to send (4096 characters, or 1024 as a caption) is refused with the reason, and the wait stays open.
 - [ ] **EDIT-04**: Media accepts one item of a kind the welcome already supports (photo, video, GIF, document, sticker, audio, voice). From an album only one item is kept, and the user is told so.
@@ -140,7 +140,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | MENU-13 | Phase 10 | Complete |
 | MENU-14 | Phase 10 | Complete |
 | MENU-15 | Phase 10 | Complete |
-| EDIT-01 | Phase 11 | Pending |
+| EDIT-01 | Phase 11 | Complete |
 | EDIT-02 | Phase 11 | Pending |
 | EDIT-03 | Phase 11 | Pending |
 | EDIT-04 | Phase 11 | Pending |

@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 11-08-PLAN.md
-last_updated: "2026-11-04T17:38:47.055Z"
+stopped_at: Completed 11-09-PLAN.md
+last_updated: "2026-11-04T17:58:19.672Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 9847e16120dd818db76089926b1da44c5fce7610
+state_head: 6927d4369a65fc7e2dd9fe16bb9e01ea1ca2c4c5
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 19
+  completed_plans: 20
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 9 of 14
+Plan: 10 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -94,6 +94,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P06 | 20min | 2 tasks | 3 files |
 | Phase 11 P07 | 35min | 3 tasks | 4 files |
 | Phase 11 P08 | 55min | 3 tasks | 7 files |
+| Phase 11 P09 | 75min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,7 @@ Recent decisions affecting current work:
 - [Phase 11]: [11-07] /cancel while a claim is held answers settings_edit_cancel_nothing and leaves the wait to the write in flight
 - [Phase 11]: 11-08: the three editor pages share one definition table; Welcome and Goodbye differ only by a Kind switch, so no twin code
 - [Phase 11]: 11-08: control d uses settingsRightChangeInfo and control e settingsRightAdmin, as /cleanwelcome and /welcome on|off check
+- [Phase 11]: 11-09: the text prompt's caption limit follows stored media (a file ID of a known kind), not the raw type column
 
 ### Pending Todos
 
@@ -224,8 +226,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T17:38:40.265Z
-Stopped at: Completed 11-08-PLAN.md
+Last session: 2026-11-04T17:58:19.482Z
+Stopped at: Completed 11-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
