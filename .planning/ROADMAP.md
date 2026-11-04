@@ -98,7 +98,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Only the live owner sees and can press "Admins can change settings". While it is on, live administrators get the full menu as in v1.0. A change takes effect on every replica at the next press. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
   4. The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
   5. Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` describes the 8-locale set.
-**Plans:** 10/11 plans executed in 8 waves
+**Plans:** 11/11 plans executed in 8 waves
 
 Plans:
 **Wave 1**
@@ -126,7 +126,7 @@ Plans:
 - [x] 10-09-PLAN.md — the private group list and the pick (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 10-10-PLAN.md — the two-column Main grid with the status block and the Groups button, the owner's live checks and the phase gate (wave 8)
+- [x] 10-10-PLAN.md — the two-column Main grid with the status block and the Groups button, the owner's live checks and the phase gate (wave 8)
 
 **UI hint**: yes
 
@@ -277,7 +277,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 10. PM Settings Hub and Owner Gate | 10/11 | In Progress | - |
+| 10. PM Settings Hub and Owner Gate | 11/11 | In Progress | - |
 | 11. Message Editor | 0/TBD | Not started | - |
 | 12. Rules Media, Media Under Text and Greet Once | 0/TBD | Not started | - |
 | 13. Member Requirements | 0/TBD | Not started | - |

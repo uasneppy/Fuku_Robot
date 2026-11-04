@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Completed 10-09-PLAN.md
-last_updated: "2026-11-04T14:15:45.927Z"
+stopped_at: Completed 10-10-PLAN.md
+last_updated: "2026-11-04T14:51:13.155Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: c5c1cf78b90fd3af1492d2fb82dd79e588c474b0
+state_head: 74e78b289859888bc10f65ad64a0cb29fa7aeb33
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 10 (PM Settings Hub and Owner Gate) — EXECUTING
-Plan: 10 of 11
+Plan: 11 of 11
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 10 execution started
 
@@ -85,6 +85,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 10 P11 | 15 min | 2 tasks | 5 files |
 | Phase 10 P08 | 27 min | 3 tasks | 7 files |
 | Phase 10 P09 | 55 min | 2 tasks | 9 files |
+| Phase 10 P10 | 35min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,7 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-08: group /settings refreshes the group's roster record after the choice message (second repair path, 10 s, error only logged)
 - [Phase 10]: 10-09: a private chat passes requireSettingsAccess at once and settingsDesc.RequiredChecks is requireSettingsAccess() alone; the pick overrides settings_not_admin and the cannot-open edit with settings_pick_unavailable for every non-admin status and Telegram 4xx except 429 (R3)
 - [Phase 10]: 10-09: list rows sort by the lower-cased collapsed title, or by the chat ID text for a titleless group, so the order matches what the reader sees
+- [Phase 10]: 10-10: a private Main ends with Groups (shub a=lp&v=1) and Close, a group Main with Close alone; the owner-only Access page gets its own full-width row after the two-column grid and each page's state moved from the button label into a status block in the body
 
 ### Pending Todos
 
@@ -200,8 +202,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T14:15:45.852Z
-Stopped at: Completed 10-09-PLAN.md
+Last session: 2026-11-04T14:51:13.105Z
+Stopped at: Completed 10-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

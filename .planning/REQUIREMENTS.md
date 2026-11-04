@@ -17,7 +17,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **MENU-12**: The owner can switch "Admins can change settings" on or off from the menu. Only the live owner sees and can press it. While it is on, live administrators get the full menu as in v1.0.
 - [x] **MENU-13**: While admin access is off, a regular admin does not see the group in their PM list, and in-group `/settings` and the deep link refuse them with a short reply that never names the Staff Group. In-group setting commands (`/setrules`, `/setwelcome`, `/captchamode` and the rest) keep working for admins exactly as before.
 - [x] **MENU-14**: A change to admin access applies on every replica at once. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
-- [ ] **MENU-15**: The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
+- [x] **MENU-15**: The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
 
 ### Message editor (Rules, Welcome, Goodbye)
 
@@ -77,7 +77,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### Platform
 
-- [ ] **PLAT-05**: Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` reflects the 8-locale set.
+- [x] **PLAT-05**: Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` reflects the 8-locale set.
 - [ ] **PLAT-06**: New background work (deletion queue, name checks, requirement lookups) shares Telegram rate budgets across replicas, recovers from crashes, and is drained within the existing shutdown budget.
 
 ## Future Requirements
@@ -139,7 +139,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | MENU-12 | Phase 10 | Complete |
 | MENU-13 | Phase 10 | Complete |
 | MENU-14 | Phase 10 | Complete |
-| MENU-15 | Phase 10 | Pending |
+| MENU-15 | Phase 10 | Complete |
 | EDIT-01 | Phase 11 | Pending |
 | EDIT-02 | Phase 11 | Pending |
 | EDIT-03 | Phase 11 | Pending |
@@ -184,7 +184,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | PAGE-08 | Phase 19 | Pending |
 | PAGE-09 | Phase 19 | Pending |
 | PAGE-10 | Phase 18 | Pending |
-| PLAT-05 | Phase 10 | Pending |
+| PLAT-05 | Phase 10 | Complete |
 | PLAT-06 | Phase 14 | Pending |
 
 PLAT-05 and PLAT-06 are cross-cutting: they are mapped to the first phase where they matter and bind every later phase (see Cross-Cutting Constraints in `ROADMAP.md`).
