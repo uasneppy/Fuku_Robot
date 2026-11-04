@@ -138,10 +138,63 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_help_msg": {1100, 1540},
 
 	// The message editor (plan 11-01). The ceilings are the UI-SPEC "New locale keys" columns.
-	"settings_page_welcome":      {12, 18},
-	"settings_page_goodbye":      {12, 18},
-	"settings_page_rules":        {12, 18},
-	"settings_btn_edit_set_text": {18, 20},
+	"settings_page_welcome":              {12, 18},
+	"settings_page_goodbye":              {12, 18},
+	"settings_page_rules":                {12, 18},
+	"settings_btn_edit_set_text":         {18, 20},
+	"settings_state_set":                 {10, 14},
+	"settings_state_not_set":             {12, 18},
+	"settings_state_default":             {12, 18},
+	"settings_edit_line_text":            {40, 56},
+	"settings_edit_line_media":           {40, 56},
+	"settings_edit_line_buttons":         {40, 56},
+	"settings_edit_state_text_len":       {30, 42},
+	"settings_edit_state_buttons_n":      {30, 42},
+	"settings_edit_media_photo":          {14, 20},
+	"settings_edit_media_video":          {14, 20},
+	"settings_edit_media_file":           {16, 24},
+	"settings_edit_media_sticker":        {14, 20},
+	"settings_edit_media_audio":          {14, 20},
+	"settings_edit_media_voice":          {14, 20},
+	"settings_edit_media_video_note":     {16, 24},
+	"settings_edit_note_no_caption":      {90, 126},
+	"settings_edit_hint_greeting":        {170, 240},
+	"settings_edit_hint_rules":           {140, 196},
+	"settings_edit_clean_hint_welcome":   {150, 210},
+	"settings_edit_clean_hint_goodbye":   {150, 210},
+	"settings_btn_edit_welcome_toggle":   {20, 28},
+	"settings_btn_edit_goodbye_toggle":   {20, 28},
+	"settings_btn_edit_clean_welcome":    {28, 40},
+	"settings_btn_edit_clean_goodbye":    {28, 40},
+	"settings_btn_edit_set_media":        {18, 20},
+	"settings_btn_edit_set_buttons":      {18, 20},
+	"settings_btn_edit_remove_text":      {18, 20},
+	"settings_btn_edit_remove_media":     {18, 20},
+	"settings_btn_edit_remove_buttons":   {18, 20},
+	"settings_btn_edit_preview_text":     {18, 20},
+	"settings_btn_edit_preview_media":    {18, 20},
+	"settings_btn_edit_preview_buttons":  {18, 20},
+	"settings_btn_edit_full_preview":     {18, 20},
+	"settings_btn_edit_cancel":           {12, 20},
+	"settings_edit_wait_text":            {420, 590},
+	"settings_edit_wait_text_rules":      {240, 340},
+	"settings_edit_wait_media":           {230, 320},
+	"settings_edit_wait_buttons":         {340, 480},
+	"settings_edit_wait_footer":          {110, 154},
+	"settings_edit_replaced_note":        {80, 112},
+	"settings_edit_removed_text_default": {70, 98},
+	"settings_edit_removed_text_rules":   {50, 70},
+	"settings_edit_removed_media":        {40, 56},
+	"settings_edit_removed_buttons":      {40, 56},
+	"settings_edit_nothing_to_remove":    {60, 84},
+	"settings_edit_cancelled":            {50, 70},
+	"settings_edit_cancel_nothing":       {50, 70},
+	"settings_edit_group_note":           {110, 154},
+	"settings_edit_prompt_closed":        {40, 56},
+	"settings_edit_unavailable":          {120, 160},
+	"settings_edit_prompt_stale":         {120, 160},
+	"settings_edit_wait_expired":         {120, 160},
+	"settings_no_change_info":            {120, 160},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -157,6 +210,10 @@ var settingsAlertKeys = []string{
 	"settings_gate_owner_only",
 	"settings_access_owner_only",
 	"settings_pick_unavailable",
+	"settings_edit_unavailable",
+	"settings_edit_prompt_stale",
+	"settings_edit_wait_expired",
+	"settings_no_change_info",
 }
 
 // settingsAlertMaxRunes is the length Telegram allows an alert.
@@ -300,6 +357,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 		groupsButton   = 18
 		choiceMaxOther = 15
 		choiceMaxEn    = 13
+		// editorSwitchMax is the full-width ceiling of the editor's switch buttons.
+		editorSwitchMax = 40
 	)
 	type gridPage struct {
 		icon string
@@ -318,6 +377,20 @@ func TestSettingsLabelLengths(t *testing.T) {
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
 		"settings_opt_kick", "settings_opt_ban", "settings_opt_mute",
+	}
+	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
+	// written, icon included.
+	editorButtons := []string{
+		"settings_btn_edit_set_text", "settings_btn_edit_set_media", "settings_btn_edit_set_buttons",
+		"settings_btn_edit_remove_text", "settings_btn_edit_remove_media", "settings_btn_edit_remove_buttons",
+		"settings_btn_edit_preview_text", "settings_btn_edit_preview_media", "settings_btn_edit_preview_buttons",
+		"settings_btn_edit_full_preview", "settings_btn_edit_cancel",
+	}
+	// The editor's four full-width switches (rows 24 to 27): at most 40 rendered with the
+	// longer state of the language.
+	editorSwitches := []string{
+		"settings_btn_edit_welcome_toggle", "settings_btn_edit_goodbye_toggle",
+		"settings_btn_edit_clean_welcome", "settings_btn_edit_clean_goodbye",
 	}
 
 	for _, lang := range staffLocales {
@@ -349,6 +422,26 @@ func TestSettingsLabelLengths(t *testing.T) {
 			groups := settingsLocaleString(t, lang, data, "settings_btn_groups")
 			if runes := utf8.RuneCountInString(groups); runes > groupsButton {
 				t.Errorf("%s: Groups button %q has %d characters, ceiling %d", lang, groups, runes, groupsButton)
+			}
+
+			for _, key := range editorButtons {
+				label := settingsLocaleString(t, lang, data, key)
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: editor button %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
+				}
+			}
+
+			for _, key := range editorSwitches {
+				template := settingsLocaleString(t, lang, data, key)
+				for _, state := range []struct{ icon, key string }{
+					{"✅ ", "common_status_on"},
+					{"❌ ", "common_status_off"},
+				} {
+					rendered := strings.ReplaceAll(template, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
+					if runes := utf8.RuneCountInString(rendered); runes > editorSwitchMax {
+						t.Errorf("%s: editor switch %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorSwitchMax)
+					}
+				}
 			}
 
 			for _, key := range options {
@@ -409,6 +502,12 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 				}
 				text, _ := value.(string)
 				for _, name := range staffPlaceholders(text) {
+					// The editor's text prompt lists the literal {id} placeholder of a welcome
+					// text as copyable code; it is never filled in (TestSettingsEditLocaleTokens
+					// holds it byte-identical), so it cannot name anyone.
+					if name == "id" && key == settingsEditWaitTextKey {
+						continue
+					}
 					if name == "staff" || name == "id" {
 						t.Errorf("%s: %s holds {%s}, only settings_staff_linked_to may", lang, key, name)
 					}
@@ -468,5 +567,93 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 	sort.Strings(failures)
 	for _, failure := range failures {
 		t.Error(failure)
+	}
+}
+
+// settingsEditWaitTextKey is the Welcome and Goodbye text prompt, the one settings_ string
+// that carries the literal {id} placeholder.
+const settingsEditWaitTextKey = "settings_edit_wait_text"
+
+// settingsEditLiteralTokens are the welcome-text placeholders and the button syntax the
+// editor's prompts show as copyable code. They are never translated, in any language, and
+// the translator leaves unknown {name} tokens alone, so each must reach the owner unchanged.
+var settingsEditLiteralTokens = []string{
+	"<code>{first}</code>", "<code>{last}</code>", "<code>{fullname}</code>", "<code>{username}</code>",
+	"<code>{mention}</code>", "<code>{id}</code>", "<code>{count}</code>", "<code>{chatname}</code>",
+	"<code>{rules}</code>",
+}
+
+const (
+	settingsEditButtonExample1 = "<code>[Rules](buttonurl://https://example.com/rules)</code>"
+	settingsEditButtonExample2 = "<code>[Chat](buttonurl://https://t.me/example:same)</code>"
+)
+
+// TestSettingsEditLocaleTokens holds the literal tokens of the editor's prompts byte-identical
+// in every language, and the real parameters ({max}, {time}, {state}) where the English has
+// them. A translated placeholder would ship a prompt that tells the owner to type a token the
+// bot never replaces.
+func TestSettingsEditLocaleTokens(t *testing.T) {
+	type tokenKey struct {
+		key    string
+		tokens []string
+	}
+	literal := []tokenKey{
+		{"settings_edit_wait_text", settingsEditLiteralTokens},
+		{"settings_edit_wait_text_rules", []string{"<code>{first}</code>"}},
+		{"settings_edit_wait_buttons", []string{
+			settingsEditButtonExample1, settingsEditButtonExample2, "<code>:same</code>",
+		}},
+		{"settings_edit_hint_rules", []string{"<code>/rules</code>"}},
+	}
+
+	parameters := []tokenKey{
+		{"settings_edit_wait_text", []string{"{max}"}},
+		{"settings_edit_wait_text_rules", []string{"{max}"}},
+		{"settings_edit_wait_footer", []string{"{time}"}},
+		{"settings_edit_state_text_len", []string{"{n}"}},
+		{"settings_edit_state_buttons_n", []string{"{n}"}},
+		{"settings_edit_line_text", []string{"{state}"}},
+		{"settings_edit_line_media", []string{"{state}"}},
+		{"settings_edit_line_buttons", []string{"{state}"}},
+		{"settings_btn_edit_welcome_toggle", []string{"{state}"}},
+		{"settings_btn_edit_goodbye_toggle", []string{"{state}"}},
+		{"settings_btn_edit_clean_welcome", []string{"{state}"}},
+		{"settings_btn_edit_clean_goodbye", []string{"{state}"}},
+	}
+
+	english := loadStaffLocale(t, "en")
+	for _, group := range [][]tokenKey{literal, parameters} {
+		for _, entry := range group {
+			text := settingsLocaleString(t, "en", english, entry.key)
+			for _, token := range entry.tokens {
+				if !strings.Contains(text, token) {
+					t.Fatalf("en: %s does not carry %q, the test table is out of date", entry.key, token)
+				}
+			}
+		}
+	}
+
+	for _, lang := range staffLocales {
+		t.Run(lang, func(t *testing.T) {
+			data := loadStaffLocale(t, lang)
+			for _, group := range [][]tokenKey{literal, parameters} {
+				for _, entry := range group {
+					text := settingsLocaleString(t, lang, data, entry.key)
+					for _, token := range entry.tokens {
+						if got, want := strings.Count(text, token), strings.Count(settingsLocaleString(t, "en", english, entry.key), token); got != want {
+							t.Errorf("%s: %s carries %q %d times, en.yml %d", lang, entry.key, token, got, want)
+						}
+					}
+				}
+			}
+
+			// The prompts for the Welcome and Goodbye text name every placeholder once.
+			text := settingsLocaleString(t, lang, data, settingsEditWaitTextKey)
+			for _, token := range settingsEditLiteralTokens {
+				if strings.Count(text, token) != 1 {
+					t.Errorf("%s: %s must carry %q exactly once", lang, settingsEditWaitTextKey, token)
+				}
+			}
+		})
 	}
 }
