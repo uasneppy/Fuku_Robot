@@ -806,7 +806,19 @@ Preview messages (not callback answers)
 | 77 | `settings_edit_preview_header` | 👁 Preview, filled in with your name and the group's title. | 90 | 126 |
 | 78 | `settings_edit_preview_header_rules` | 👁 Preview of the rules message. | 50 | 70 |
 | 79 | `settings_edit_preview_buttons_body` | 👁 These are the buttons. | 40 | 56 |
-The table ends at 79 new keys; `settings_help_msg` below is changed, not new.
+
+Wait ended (D-12, research Q9)
+
+A plain reply to the owner's message when a wait that had ended is still answered once. `{part}` is filled by one of the three part words, never by the stored text, a group or a user.
+
+| # | Key | English | Max EN | Max other |
+|---|-----|---------|--------|-----------|
+| 80 | `settings_edit_wait_ended_note` | The wait for the {part} ended and nothing changed. Press Set on the page again. | 120 | 168 |
+| 81 | `settings_edit_part_text` | text | 14 | 20 |
+| 82 | `settings_edit_part_media` | media | 14 | 20 |
+| 83 | `settings_edit_part_buttons` | buttons | 14 | 20 |
+
+The table ends at 83 new keys; `settings_help_msg` below is changed, not new.
 
 Placeholders: `{state}` a state word (`settings_state_*`, a media kind word `settings_edit_media_*`, or
 `settings_edit_state_*`; for the switches the icon plus `common_status_on` / `common_status_off`, "✅ On" / "❌ Off"),
@@ -890,7 +902,7 @@ uk 1.10, ru 1.08, id 1.08, hi 1.01, with short labels reaching 1.4 to 1.8. For t
   10-digit user ID, and `Omitted` is 0.
 - The literal tokens listed above are present and byte-identical in the prompt keys of all 8 locales, and
   `{max}`, `{time}`, `{n}`, `{state}` appear where the English has them.
-- `fuku/i18n/settings_locale_test.go` has a limits row for each of the 79 new keys and for `settings_help_msg`.
+- `fuku/i18n/settings_locale_test.go` has a limits row for each of the 83 new keys and for `settings_help_msg`.
 - Required behaviour tests beyond those: (1) a reply handled by a second handler instance sharing one miniredis sees
   the wait set by the first (EDIT-02, cross-replica); (2) two simultaneous deliveries, and an album of three items,
   write once; (3) a refusal never consumes the wait; (4) Set on another part replaces the first and the old prompt's
@@ -1023,7 +1035,7 @@ change by recording a decision.
   (Callbacks, Permissions), in the same commit.
 - **Fire-and-forget.** The best-effort edit of the old prompt and any album memory write that runs off the update path
   start with `defer error_handling.RecoverFromPanic(...)`.
-- **Locales.** `make check-translations` first; add the 79 keys to all 8 files and the 79 rows to the limits test; change
+- **Locales.** `make check-translations` first; add the 83 keys to all 8 files and the 83 rows to the limits test; change
   `settings_help_msg` in all 8. `TestSettingsStaffPrivacy` gains the new screens; the worst-case callback test gains the
   new buttons.
 - **Tests.** The behaviour tests listed under "Rendered-size and content checks"; the Redis-dependent ones use
