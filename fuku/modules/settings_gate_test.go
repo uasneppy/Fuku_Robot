@@ -800,3 +800,202 @@ func TestSettingsAuthorityParityOwnerGate(t *testing.T) {
 		}
 	})
 }
+
+// settingsGateFixture is one world the owner gate judges: how the group looks after setup and
+// what every door must decide for the person. The decisions are "in", "owner_only" and
+// "check_failed".
+type settingsGateFixture struct {
+	name string
+	// owner makes the person the group's owner (setup creates them); otherwise it is the
+	// default administrator.
+	owner bool
+	want  string
+	setup func(env *settingsEnv)
+}
+
+// settingsGateCase is what a door driver gets: a fresh environment, the fixture's setup and
+// the person. A door calls apply exactly once, at the point where the world changes; the
+// press door opens its menu first, because a menu opened while the switch was on is gated
+// again on every press (D-10).
+type settingsGateCase struct {
+	env         *settingsEnv
+	apply       func()
+	person      func() gotgbot.User
+	ownerPerson bool
+}
+
+// settingsGateDoor is one way into the settings. Plan 10-09 appends the pick door.
+type settingsGateDoor struct {
+	name   string
+	decide func(t *testing.T, c settingsGateCase) string
+}
+
+// settingsGateClassify reduces the texts a door answered with to its decision.
+func settingsGateClassify(texts []string) string {
+	decision := "none"
+	for _, text := range texts {
+		switch {
+		case strings.Contains(text, staffMarker("settings_refuse_owner_only")),
+			strings.Contains(text, staffMarker("settings_start_owner_only")),
+			strings.Contains(text, staffMarker("settings_gate_owner_only")):
+			return "owner_only"
+		case strings.Contains(text, staffMarker("settings_check_failed")):
+			return "check_failed"
+		case strings.Contains(text, staffMarker("settings_choose")),
+			strings.Contains(text, staffMarker("settings_header_main")):
+			decision = "in"
+		}
+	}
+	return decision
+}
+
+// settingsGateNewTexts returns the texts of the messages the bot sent to chatID after the
+// first `before` ones.
+func settingsGateNewTexts(env *settingsEnv, chatID int64, before int) []string {
+	sent := env.fake.sentTo(chatID)
+	var texts []string
+	for i := before; i < len(sent); i++ {
+		texts = append(texts, fmt.Sprint(sent[i].Params["text"]))
+	}
+	return texts
+}
+
+func settingsGateDoorGroupCommand(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	c.apply()
+	person := c.person()
+	before := len(c.env.fake.sentTo(c.env.chat.Id))
+	c.env.send(person, "/settings")
+	return settingsGateClassify(settingsGateNewTexts(c.env, c.env.chat.Id, before))
+}
+
+func settingsGateDoorAnonymous(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	c.apply()
+	person := c.person()
+	c.env.sendAnonymous("/settings")
+	c.env.wantProofPrompt()
+	before := len(c.env.fake.sentTo(c.env.chat.Id))
+	c.env.tapProof(person)
+	return settingsGateClassify(settingsGateNewTexts(c.env, c.env.chat.Id, before))
+}
+
+func settingsGateDoorDeepLink(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	c.apply()
+	person := c.person()
+	before := len(c.env.fake.sentTo(person.Id))
+	c.env.sendPrivate(person, fmt.Sprintf("/start settings_%d", c.env.chat.Id))
+	return settingsGateClassify(settingsGateNewTexts(c.env, person.Id, before))
+}
+
+func settingsGateDoorPress(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	var msgID int64
+	if !c.ownerPerson {
+		// The administrator opens the menu while the switch is on, before the world changes.
+		msgID = c.env.openMenu(c.env.admin)
+	}
+	c.apply()
+	person := c.person()
+	if c.ownerPerson {
+		msgID = c.env.openMenu(person)
+	}
+	edits := len(c.env.edits(c.env.chat.Id, msgID))
+	answers := c.env.answerCount()
+
+	c.env.press(person, msgID, c.env.groupFields(person, "a", "bk"))
+
+	if got := c.env.answerCount() - answers; got != 1 {
+		t.Fatalf("the press was answered %d times, want once", got)
+	}
+	answer, alert := c.env.lastAnswer()
+	if alert {
+		return settingsGateClassify([]string{answer})
+	}
+	if len(c.env.edits(c.env.chat.Id, msgID)) > edits {
+		return "in"
+	}
+	return "none"
+}
+
+func TestSettingsGateAllDoors(t *testing.T) {
+	fixtures := []settingsGateFixture{
+		{
+			name: "owner exists, switch off: the administrator", want: "owner_only",
+			setup: func(env *settingsEnv) {
+				env.newOwner(env.chat)
+				env.setAdminsAllowed(env.chat.Id, false)
+			},
+		},
+		{
+			name: "owner exists, switch off: the owner", owner: true, want: "in",
+			setup: func(env *settingsEnv) {
+				env.setAdminsAllowed(env.chat.Id, false)
+			},
+		},
+		{
+			name: "switch on", want: "in",
+			setup: func(env *settingsEnv) {
+				env.newOwner(env.chat)
+				env.setAdminsAllowed(env.chat.Id, true)
+			},
+		},
+		{
+			name: "no owner", want: "in",
+			setup: func(env *settingsEnv) {
+				env.fake.clearCreator(env.chat.Id)
+				env.listAdmin(env.chat.Id, env.admin.Id)
+				env.setAdminsAllowed(env.chat.Id, false)
+			},
+		},
+		{
+			name: "owner state unknown", want: "check_failed",
+			setup: func(env *settingsEnv) {
+				env.newOwner(env.chat)
+				env.setAdminsAllowed(env.chat.Id, false)
+				env.fake.setFailure("getChatAdministrators", env.chat.Id, staffFakeError(500, "Internal Server Error"))
+			},
+		},
+	}
+	doors := []settingsGateDoor{
+		{name: "group /settings", decide: settingsGateDoorGroupCommand},
+		{name: "anonymous re-entry", decide: settingsGateDoorAnonymous},
+		{name: "deep link", decide: settingsGateDoorDeepLink},
+		{name: "press", decide: settingsGateDoorPress},
+	}
+
+	for _, fixture := range fixtures {
+		t.Run(fixture.name, func(t *testing.T) {
+			decisions := make(map[string]string, len(doors))
+			for _, door := range doors {
+				resetSettingsOwnerMemo(t)
+				env := newSettingsEnv(t)
+				var owner gotgbot.User
+				c := settingsGateCase{
+					env:         env,
+					ownerPerson: fixture.owner,
+					apply: func() {
+						if fixture.owner {
+							owner = env.newOwner(env.chat)
+						}
+						fixture.setup(env)
+					},
+					person: func() gotgbot.User {
+						if fixture.owner {
+							return owner
+						}
+						return env.admin
+					},
+				}
+				decisions[door.name] = door.decide(t, c)
+			}
+			for _, door := range doors {
+				if decisions[door.name] != fixture.want {
+					t.Errorf("fixture %q: door %q decided %q, want %q (all doors: %v)",
+						fixture.name, door.name, decisions[door.name], fixture.want, decisions)
+				}
+			}
+		})
+	}
+}

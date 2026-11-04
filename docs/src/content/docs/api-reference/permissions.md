@@ -431,6 +431,22 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
 
+### Who can open the menu
+
+By default only the group's owner (its creator) can open the settings menu, whichever way they come in: the `/settings`
+command in the group, the Open in private button and the buttons of a menu that is already open. An administrator who is
+not the owner is told that only the owner can open it, and an open menu stops answering such an administrator at their
+next press.
+
+- The owner can let the group's administrators in from the menu's Access page, and take that back at any time. The
+  switch is off until the owner turns it on.
+- A group with no live owner (the owner's account was deleted) lets its administrators in, because nobody is left who
+  could grant it.
+- If the bot cannot tell whether the switch is on or whether the group has an owner, it refuses and says the check
+  failed. It never lets someone in on a guess.
+- The setting commands themselves (`/setrules`, `/setwelcome`, `/captchamode`, `/setflood` and the rest) are not
+  affected. They work for administrators exactly as before.
+
 ## Special Telegram IDs
 
 | ID | Description |

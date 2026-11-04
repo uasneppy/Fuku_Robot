@@ -344,8 +344,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `captcha_web_refuse_no_rights`). Math and text are unchanged and need none of these checks. The refusal texts name no
   setting, variable, secret or URL.
 - The settings owner gate (`settings_gate.go`): `settingsGate` is the one decision every settings door calls after its own
-  live `getChatMember` of the person, today in-group `/settings` with its anonymous re-entry (`requireSettingsAccess`) and
-  every button press (step 4b); the other doors call it as they arrive. The order is fixed: a live creator is in with no
+  live `getChatMember` of the person, today in-group `/settings` with its anonymous re-entry (`requireSettingsAccess`),
+  the `/start settings_<chat id>` deep link (`settingsStartDeepLink`, on the member record of its own check and before its
+  `getChat`) and every button press (step 4b); the other doors call it as they arrive, and `TestSettingsGateAllDoors`
+  proves that every door decides the same over the four worlds (owner with the switch off, switch on, no owner, owner
+  state unknown), each later door adding a column to it. The order is fixed: a live creator is in with no
   read; any status other than administrator is undecided; for an administrator the switch is read fresh
   (`menuaccess.AdminsAllowedFresh`, a missing row is off, an error is undecided) and true is in, never consulting the
   memo below, so a flip to on is seen at the very next press; with the switch off the owner state decides. The owner-state
