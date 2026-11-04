@@ -86,22 +86,64 @@ func (m moduleStruct) settingsInput(b *gotgbot.Bot, ctx *ext.Context) (ret error
 	if !settingsInputCandidate(msg) {
 		return ext.ContinueGroups
 	}
-	wait, _, err := settingsInputRead(context.Background(), msg.From.Id)
+	wait, marker, err := settingsInputRead(context.Background(), msg.From.Id)
 	if err != nil {
 		if !errors.Is(err, errSettingsInputUnavailable) {
 			log.Warnf("[Settings] reading the typed-reply wait of user %d failed: %v", msg.From.Id, err)
 		}
 		return ext.ContinueGroups
 	}
-	if wait == nil {
+	if wait == nil && marker == "" {
 		return ext.ContinueGroups
+	}
+	r := &settingsInputReply{b: b, ctx: ctx, msg: msg, user: msg.From, tr: ctxTr(ctx), wait: wait}
+	if wait == nil {
+		if !r.waitEnded() {
+			return ext.ContinueGroups
+		}
+		return ext.EndGroups
 	}
 	// From here the message is consumed: a panic below must not hand it on, so the result a
 	// recovered panic leaves behind is EndGroups.
 	ret = ext.EndGroups
-	r := &settingsInputReply{b: b, ctx: ctx, msg: msg, user: msg.From, tr: ctxTr(ctx), wait: wait}
 	r.run()
 	return ext.EndGroups
+}
+
+// settingsInputPartWordKey is the locale key of the word for a part, as the wait-ended note names
+// it.
+func settingsInputPartWordKey(part string) string {
+	switch part {
+	case settingsEditPartMedia:
+		return "settings_edit_part_media"
+	case settingsEditPartButtons:
+		return "settings_edit_part_buttons"
+	}
+	return "settings_edit_part_text"
+}
+
+// waitEnded answers a reply that came after the wait ended: the marker is taken with GETDEL, so
+// two deliveries answer once, and a taken marker that reads as a wait is told with one plain reply
+// naming the part. Nothing is saved. It reports whether the message was answered; a marker
+// someone else took first, or one that does not parse, leaves the message an ordinary one.
+func (r *settingsInputReply) waitEnded() bool {
+	taken, ok, err := settingsInputTakeMarker(context.Background(), r.user.Id)
+	if err != nil {
+		if !errors.Is(err, errSettingsInputUnavailable) {
+			log.Warnf("[Settings] taking the wait marker of user %d failed: %v", r.user.Id, err)
+		}
+		return false
+	}
+	if !ok {
+		return false
+	}
+	_, _, part, valid := settingsInputParseMarker(taken)
+	if !valid {
+		return false
+	}
+	r.plain(r.text("settings_edit_wait_ended_note", i18n.TranslationParams{"part": r.text(settingsInputPartWordKey(part))}))
+	log.Debugf("[Settings] user %d replied after the wait for the %s part ended", r.user.Id, part)
+	return true
 }
 
 // run judges the reply: authority first (as a press), then the check, the claim and the write.
@@ -152,6 +194,7 @@ func (r *settingsInputReply) run() {
 		if err := settingsInputRelease(context.Background(), r.user.Id, claim); err != nil {
 			log.Warnf("[Settings] giving the wait of user %d back failed: %v", r.user.Id, err)
 		}
+		r.refuse(r.text("common_settings_save_failed"))
 		return
 	}
 	if err := settingsInputFinish(context.Background(), r.user.Id, claim); err != nil {
