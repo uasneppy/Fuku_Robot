@@ -39,7 +39,7 @@ const (
 // is checked and gated like anyone else.
 var settingsDesc = helpers.CommandDescriptor{
 	Name:           "settings",
-	RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireSettingsAccess()},
+	RequiredChecks: []helpers.CheckFunc{requireSettingsAccess()},
 }
 
 // settingsPrivateURL is the Open in private link: a deep link into the bot's /start with
@@ -80,13 +80,38 @@ func settingsChoiceScreen(tr *i18n.Translator, botUsername string, chat *gotgbot
 	return k.screen(text)
 }
 
-// settings replies to /settings with the two-button choice message.
+// settingsPrivateList sends the private group list, page 1, as a new message in the user's
+// language. It is built from the sender's own ID with a database read and makes no Telegram
+// call but the send. A failed read is one plain reply, never a half-drawn list.
+func settingsPrivateList(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, sender *gotgbot.User) error {
+	tr := ctxTr(ctx)
+	screen, err := settingsHubScreen(context.Background(), tr, sender.Id, 1)
+	if err != nil {
+		log.Errorf("[Settings] group list of user %d: %v", sender.Id, err)
+		if _, sendErr := b.SendMessage(chat.Id, settingsText(tr, "settings_check_failed"), nil); sendErr != nil {
+			log.Warnf("[Settings] list failure notice to chat %d: %v", chat.Id, sendErr)
+		}
+		return ext.EndGroups
+	}
+	opts := formatting.Shtml()
+	opts.ReplyMarkup = screen.Keyboard
+	if _, err := b.SendMessage(chat.Id, screen.Text, opts); err != nil {
+		log.Errorf("[Settings] group list to chat %d: %v", chat.Id, err)
+	}
+	return ext.EndGroups
+}
+
+// settings replies to /settings: in a group the two-button choice message, in the bot's private
+// chat the list of the sender's groups.
 func (m moduleStruct) settings(b *gotgbot.Bot, ctx *ext.Context) error {
 	chat := ctx.EffectiveChat
 	msg := ctx.EffectiveMessage
 	sender := chat_status.GetEffectiveUser(ctx)
 	if chat == nil || msg == nil || sender == nil {
 		return ext.EndGroups
+	}
+	if chat.Type == "private" {
+		return settingsPrivateList(b, ctx, chat, sender)
 	}
 	screen := settingsChoiceScreen(ctxTr(ctx), getBotUsername(b), chat, sender.Id)
 	opts := formatting.Shtml()
@@ -208,6 +233,8 @@ func LoadSettings(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, settingsDesc, pipelineHandler(settingsModule.settings))
 	// No SetAllowChannel: a menu is never a channel message.
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("settings|"), settingsModule.settingsCallback))
+	// The private group list's own buttons (paging, Close); a list is never a channel message.
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("shub|"), settingsModule.settingsHubCallback))
 }
 
 func init() {

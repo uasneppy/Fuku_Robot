@@ -509,12 +509,15 @@ func TestSettingsCommand(t *testing.T) {
 		}
 	})
 
-	t.Run("a private chat is refused", func(t *testing.T) {
+	t.Run("a private chat gets the group list instead of the choice message", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		env.sendPrivate(env.admin, "/settings")
 		sent := env.fake.sentTo(env.admin.Id)
-		if len(sent) != 1 || !strings.Contains(fmt.Sprint(sent[0].Params["text"]), staffMarker("chat_status_group_only_error")) {
-			t.Fatalf("private /settings got %+v, want the group-only refusal", sent)
+		if len(sent) != 1 || !strings.Contains(fmt.Sprint(sent[0].Params["text"]), staffMarker("settings_list_empty")) {
+			t.Fatalf("private /settings got %+v, want the empty group list", sent)
+		}
+		if strings.Contains(fmt.Sprint(sent[0].Params["text"]), staffMarker("chat_status_group_only_error")) {
+			t.Errorf("private /settings still got the group-only refusal")
 		}
 		if len(env.replies()) != 0 {
 			t.Errorf("private /settings sent something to the group")

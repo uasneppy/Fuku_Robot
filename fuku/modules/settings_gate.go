@@ -254,13 +254,17 @@ func isTelegramClientError(err error) bool {
 	return tgErr.Code >= 400 && tgErr.Code <= 499 && tgErr.Code != 429
 }
 
-// requireSettingsAccess is the in-group /settings check, run after requireLockdownGroup. It
-// takes the sender's live member record from lockdownAuthorityMember (a creator or an
-// administrator; the anonymous proof and every plain-member refusal are that function's) and
-// hands it to settingsGate. A refused administrator gets a plain public reply to the command
+// requireSettingsAccess is the /settings check. A private chat passes at once: the private
+// list needs no group, builds itself from the sender's own record and authorizes nothing,
+// because every pick from it is checked live. In a group it takes the sender's live member
+// record from lockdownAuthorityMember (a creator or an administrator; the anonymous proof and
+// every plain-member refusal are that function's) and hands it to settingsGate. A refused administrator gets a plain public reply to the command
 // with no keyboard that names neither the switch nor any Staff Group (D-13).
 func requireSettingsAccess() helpers.CheckFunc {
 	return func(c *helpers.CommandContext) bool {
+		if c.Chat != nil && c.Chat.Type == "private" {
+			return true
+		}
 		member, ok := lockdownAuthorityMember(c, false)
 		if !ok {
 			return false

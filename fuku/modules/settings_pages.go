@@ -376,7 +376,7 @@ var (
 // settingsCoreActions are the action codes the dispatcher itself owns.
 var settingsCoreActions = []string{
 	settingsActOpenHere, settingsActOpen, settingsActBack, settingsActClose,
-	settingsActToggle, settingsActSet, settingsActCancel,
+	settingsActToggle, settingsActSet, settingsActCancel, settingsActPick,
 }
 
 // registerSettingsPage adds a page to the registry. It panics at init on an empty or

@@ -38,6 +38,9 @@ const (
 	settingsActSet = "st"
 	// settingsActCancel cancels a confirm card and redraws page p.
 	settingsActCancel = "no"
+	// settingsActPick is a tap on a row of the private group list: it turns the list message
+	// into that group's Main page (fields a and c only, private only).
+	settingsActPick = "pk"
 )
 
 // settingsReadTimeout bounds one database read of a page.
@@ -222,6 +225,10 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 		allowed["p"] = true
 		required = append(required, "p")
 	case settingsActBack, settingsActClose:
+	case settingsActPick:
+		if owner != "c" {
+			return false
+		}
 	case settingsActToggle, settingsActSet:
 		for _, key := range []string{"p", "t", "v"} {
 			allowed[key] = true
@@ -393,7 +400,7 @@ func (m moduleStruct) settingsCallback(b *gotgbot.Bot, ctx *ext.Context) error {
 // dispatch runs the verified press.
 func (p *settingsPress) dispatch() {
 	switch p.action {
-	case settingsActOpenHere, settingsActBack:
+	case settingsActOpenHere, settingsActBack, settingsActPick:
 		p.edit(settingsMainScreen(p, ""))
 	case settingsActOpen, settingsActCancel:
 		pg, ok := settingsPageByKey(p.fields["p"])
