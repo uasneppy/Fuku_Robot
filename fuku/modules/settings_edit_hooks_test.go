@@ -3,8 +3,11 @@
 package modules
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
 // TestSettingsPageActionValidate drives a test page whose action refuses every part code but
@@ -101,6 +104,187 @@ func TestSettingsPageActionValidate(t *testing.T) {
 			if ran[plainCode] != before+1 {
 				t.Errorf("fields %v did not run the action", kv)
 			}
+		}
+	})
+}
+
+// settingsHooksMember is a member record of the given status for the pure right tests.
+func settingsHooksMember(status string, canRestrict, canChangeInfo bool) gotgbot.MergedChatMember {
+	return gotgbot.MergedChatMember{
+		Status:             status,
+		CanRestrictMembers: canRestrict,
+		CanChangeInfo:      canChangeInfo,
+	}
+}
+
+// settingsHooksChangeInfoJSON is a getChatMember answer for userID as an administrator whose
+// only difference is can_change_info.
+func settingsHooksChangeInfoJSON(userID int64, canChangeInfo bool) string {
+	return fmt.Sprintf(
+		`{"status":"administrator","user":{"id":%d,"is_bot":false,"first_name":"Admin%d"},"can_be_edited":false,`+
+			`"is_anonymous":false,"can_manage_chat":true,"can_delete_messages":false,"can_manage_video_chats":false,`+
+			`"can_restrict_members":false,"can_promote_members":false,"can_change_info":%t,"can_invite_users":false}`,
+		userID, userID, canChangeInfo)
+}
+
+// settingsHooksCreatorJSON is a getChatMember answer for userID as the creator.
+func settingsHooksCreatorJSON(userID int64) string {
+	return fmt.Sprintf(
+		`{"status":"creator","user":{"id":%d,"is_bot":false,"first_name":"Owner%d"},"is_anonymous":false}`,
+		userID, userID)
+}
+
+// TestSettingsRightRefusalForParity pins the member-record part of every right: the three
+// rights that existed before answer exactly what they answered, the two bot rights have no
+// member part, and settingsRightRefusal agrees with the pure function wherever it needs no bot.
+func TestSettingsRightRefusalForParity(t *testing.T) {
+	const (
+		notAdmin   = "settings_not_admin"
+		noRestrict = "settings_no_restrict"
+		ownerOnly  = "settings_access_owner_only"
+	)
+	type verdict struct {
+		key   string
+		alert bool
+	}
+	creator := settingsHooksMember(gotgbot.ChatMemberStatusCreator, false, false)
+	adminRestrict := settingsHooksMember(gotgbot.ChatMemberStatusAdministrator, true, false)
+	adminPlain := settingsHooksMember(gotgbot.ChatMemberStatusAdministrator, false, false)
+	plainMember := settingsHooksMember(gotgbot.ChatMemberStatusMember, false, false)
+	restricted := settingsHooksMember(gotgbot.ChatMemberStatusRestricted, true, true)
+	left := settingsHooksMember(gotgbot.ChatMemberStatusLeft, true, true)
+	kicked := settingsHooksMember(gotgbot.ChatMemberStatusKicked, true, true)
+
+	cases := []struct {
+		name   string
+		right  settingsRight
+		member gotgbot.MergedChatMember
+		want   verdict
+	}{
+		{"admin: creator", settingsRightAdmin, creator, verdict{}},
+		{"admin: administrator", settingsRightAdmin, adminPlain, verdict{}},
+		{"restrict: creator", settingsRightRestrict, creator, verdict{}},
+		{"restrict: administrator with the right", settingsRightRestrict, adminRestrict, verdict{}},
+		{"restrict: administrator without it", settingsRightRestrict, adminPlain, verdict{noRestrict, true}},
+		{"restrict: member", settingsRightRestrict, plainMember, verdict{notAdmin, true}},
+		{"restrict: restricted", settingsRightRestrict, restricted, verdict{notAdmin, true}},
+		{"restrict: left", settingsRightRestrict, left, verdict{notAdmin, true}},
+		{"restrict: kicked", settingsRightRestrict, kicked, verdict{notAdmin, true}},
+		{"owner: creator", settingsRightOwner, creator, verdict{}},
+		{"owner: administrator", settingsRightOwner, adminRestrict, verdict{ownerOnly, true}},
+		{"owner: member", settingsRightOwner, plainMember, verdict{ownerOnly, true}},
+		{"bot admin right has no member part", settingsRightAdminBotAdmin, plainMember, verdict{}},
+		{"flood bot right has no member part", settingsRightAdminFloodBot, plainMember, verdict{}},
+		{"an unknown right fails closed", settingsRight(99), creator, verdict{notAdmin, true}},
+	}
+
+	env := newSettingsEnv(t)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			key, alert := settingsRightRefusalFor(tc.member, tc.right)
+			if (verdict{key, alert}) != tc.want {
+				t.Errorf("settingsRightRefusalFor = (%q, %v), want (%q, %v)", key, alert, tc.want.key, tc.want.alert)
+			}
+			// The press judges the member part through the same function. The bot rights and
+			// the unknown one are left out: the former need a bot lookup of their own.
+			if tc.right == settingsRightAdminBotAdmin || tc.right == settingsRightAdminFloodBot || tc.right == settingsRight(99) {
+				return
+			}
+			press := &settingsPress{b: env.bot, group: &env.chat, member: tc.member}
+			if pk, pa := settingsRightRefusal(press, tc.right); (verdict{pk, pa}) != tc.want {
+				t.Errorf("settingsRightRefusal = (%q, %v), want (%q, %v)", pk, pa, tc.want.key, tc.want.alert)
+			}
+		})
+	}
+
+	t.Run("the zero right is still the plain administrator right", func(t *testing.T) {
+		if settingsRight(0) != settingsRightAdmin {
+			t.Error("the zero settingsRight is not settingsRightAdmin")
+		}
+	})
+}
+
+// TestSettingsRightChangeInfo covers the new right: the pure judgement of every status, and a
+// press of a test page action that declares it, judged on the presser's own live record.
+func TestSettingsRightChangeInfo(t *testing.T) {
+	t.Run("the pure judgement", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			member    gotgbot.MergedChatMember
+			wantKey   string
+			wantAlert bool
+		}{
+			{"creator", settingsHooksMember(gotgbot.ChatMemberStatusCreator, false, false), "", false},
+			{"administrator with can_change_info", settingsHooksMember(gotgbot.ChatMemberStatusAdministrator, false, true), "", false},
+			{"administrator without it", settingsHooksMember(gotgbot.ChatMemberStatusAdministrator, true, false), "settings_no_change_info", true},
+			{"member", settingsHooksMember(gotgbot.ChatMemberStatusMember, true, true), "settings_not_admin", true},
+			{"restricted", settingsHooksMember(gotgbot.ChatMemberStatusRestricted, true, true), "settings_not_admin", true},
+			{"left", settingsHooksMember(gotgbot.ChatMemberStatusLeft, true, true), "settings_not_admin", true},
+			{"kicked", settingsHooksMember(gotgbot.ChatMemberStatusKicked, true, true), "settings_not_admin", true},
+		} {
+			key, alert := settingsRightRefusalFor(tc.member, settingsRightChangeInfo)
+			if key != tc.wantKey || alert != tc.wantAlert {
+				t.Errorf("%s: got (%q, %v), want (%q, %v)", tc.name, key, alert, tc.wantKey, tc.wantAlert)
+			}
+		}
+	})
+
+	const code, pageKey = "zr", "zr"
+	ran := 0
+	registerSettingsPage(settingsPage{
+		Key:      pageKey,
+		Order:    9999,
+		TitleKey: "settings_page_captcha",
+		Actions: map[string]settingsPageAction{
+			code: {Right: settingsRightChangeInfo, Run: func(*settingsPress) *settingsScreen {
+				ran++
+				return nil
+			}},
+		},
+	})
+	t.Cleanup(func() {
+		delete(settingsPages, pageKey)
+		delete(settingsActions, code)
+	})
+
+	env := newSettingsEnv(t)
+	msgID := env.openMenu(env.admin)
+
+	t.Run("an administrator without can_change_info is refused with the alert and nothing runs", func(t *testing.T) {
+		env.fake.setMemberRaw(env.chat.Id, env.admin.Id, settingsHooksChangeInfoJSON(env.admin.Id, false))
+		before, answers, edits := ran, env.answerCount(), len(env.edits(env.chat.Id, msgID))
+
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", code))
+
+		if got := env.answerCount() - answers; got != 1 {
+			t.Fatalf("answered %d times, want once", got)
+		}
+		if text, alert := env.lastAnswer(); !alert || !strings.Contains(text, staffMarker("settings_no_change_info")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_no_change_info", text, alert)
+		}
+		if ran != before {
+			t.Error("the action ran for an administrator without can_change_info")
+		}
+		if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+			t.Errorf("the refused press edited the menu %d times, want none", got-edits)
+		}
+	})
+
+	t.Run("an administrator with can_change_info runs it", func(t *testing.T) {
+		env.fake.setMemberRaw(env.chat.Id, env.admin.Id, settingsHooksChangeInfoJSON(env.admin.Id, true))
+		before := ran
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", code))
+		if ran != before+1 {
+			t.Errorf("the action ran %d times, want once", ran-before)
+		}
+	})
+
+	t.Run("the creator runs it", func(t *testing.T) {
+		env.fake.setMemberRaw(env.chat.Id, env.admin.Id, settingsHooksCreatorJSON(env.admin.Id))
+		before := ran
+		env.press(env.admin, msgID, env.groupFields(env.admin, "a", code))
+		if ran != before+1 {
+			t.Errorf("the action ran %d times, want once", ran-before)
 		}
 	})
 }

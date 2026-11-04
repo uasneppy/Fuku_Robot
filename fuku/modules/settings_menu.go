@@ -64,7 +64,14 @@ const (
 	// settingsRightOwner needs the live creator of the group (the Access page). It is judged on
 	// the member record step 4 fetched, with no extra call.
 	settingsRightOwner
+	// settingsRightChangeInfo is a RED-phase stub.
+	settingsRightChangeInfo
 )
+
+// settingsRightRefusalFor is a RED-phase stub.
+func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRight) (key string, alert bool) {
+	return "", false
+}
 
 // settingsRightRefusal returns the locale key of the refusal when the press lacks the
 // right, and whether it is an alert (the page is not edited) or a notice line on the
