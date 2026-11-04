@@ -1,14 +1,34 @@
 package modules
 
 import (
+	"fmt"
+	"html"
 	"strings"
 
 	tgmd2html "github.com/PaulSonOfLars/gotg_md2html"
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/content"
+	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 )
+
+const (
+	// settingsEditFillCount is the member count the dry run fills {count} with: the widest a count
+	// can be (nine digits).
+	settingsEditFillCount = "999999999"
+
+	// settingsEditTextLimit and settingsEditCaptionLimit are Telegram's limits, in UTF-16 units, of
+	// a message text and of a caption.
+	settingsEditTextLimit    = 4096
+	settingsEditCaptionLimit = 1024
+)
+
+// settingsEditRulesLanguages are the languages the Rules dry run takes the /rules heading in: the
+// group's language can change later, so the longest of them is held to the limit.
+var settingsEditRulesLanguages = []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"}
 
 // This file is the pure check of a message the owner typed for one part of a Welcome, Goodbye
 // or Rules message. It converts the message exactly as the commands convert theirs, and it
@@ -76,22 +96,86 @@ func settingsEditCheck(in settingsEditCheckInput) settingsEditVerdict {
 }
 
 // settingsEditCheckGreetingText converts a Welcome or Goodbye text as /setwelcome and
-// /setgoodbye do (the buttons parser over the message's markdown, trimmed as preFixes trims).
+// /setgoodbye do (the buttons parser over the message's markdown, trimmed as preFixes trims)
+// and refuses what those commands refuse, then what a join would fail to send.
 func settingsEditCheckGreetingText(in settingsEditCheckInput) settingsEditVerdict {
 	if in.Msg.Text == "" {
 		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
 	}
+	var buttons []tgmd2html.ButtonV2
 	stored, ok := settingsEditConvert(func() string {
-		text, _ := tgmd2html.MD2HTMLButtonsV2(in.Msg.OriginalMDV2())
+		text, btns := tgmd2html.MD2HTMLButtonsV2(in.Msg.OriginalMDV2())
+		buttons = btns
 		return text
 	})
 	if !ok {
 		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
 	}
-	return settingsEditVerdict{OK: true, Text: strings.Trim(stored, "\n\t\r ")}
+	if len(buttons) > 0 {
+		return settingsEditRefusal("settings_edit_refuse_text_buttons", nil)
+	}
+	dataType, limit := db.TEXT, settingsEditTextLimit
+	if settingsEditPartIsSet(in.State, settingsEditPartMedia) {
+		dataType, limit = in.State.MediaType, settingsEditCaptionLimit
+	}
+	// The commands count the stored HTML before they trim it, so the same count is made here.
+	if refusal := content.TextLengthRefusal(stored, dataType, in.Language); refusal != "" {
+		return settingsEditVerdict{RefusalText: refusal}
+	}
+	stored = strings.Trim(stored, "\n\t\r ")
+
+	longest, minimalBlank := settingsEditFilledLongest(in, stored)
+	if stored == "" || (dataType == db.TEXT && minimalBlank) {
+		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
+	}
+	if longest > limit {
+		return settingsEditTooLong(longest, limit)
+	}
+	return settingsEditVerdict{OK: true, Text: stored}
 }
 
-// settingsEditCheckRulesText converts a Rules text as /setrules does.
+// settingsEditTooLong is the refusal of a message that is too long once its placeholders or its
+// heading are filled in.
+func settingsEditTooLong(n, limit int) settingsEditVerdict {
+	return settingsEditRefusal("settings_edit_refuse_too_long_filled", i18n.TranslationParams{"n": n, "max": limit})
+}
+
+// settingsEditWorstUser is the member whose names make a filled message longest: 64 letter first
+// and last names, no username (so {username} and {mention} show the first name) and a 13 digit ID.
+func settingsEditWorstUser() *gotgbot.User {
+	return &gotgbot.User{
+		Id:        9999999999999,
+		FirstName: strings.Repeat("W", 64),
+		LastName:  strings.Repeat("L", 64),
+	}
+}
+
+// settingsEditMinimalUser is the member whose names make a filled message shortest: a first name
+// of one letter and nothing else, so {last} is empty.
+func settingsEditMinimalUser() *gotgbot.User {
+	return &gotgbot.User{Id: 1, FirstName: "A"}
+}
+
+// settingsEditFilledLongest fills stored for the owner, the worst-case member and the minimal
+// member, the way a real join fills it, and returns the longest visible length (UTF-16 units)
+// and whether the minimal member's text is blank.
+func settingsEditFilledLongest(in settingsEditCheckInput, stored string) (longest int, minimalBlank bool) {
+	owner := in.Owner
+	minimal := settingsEditMinimalUser()
+	for _, user := range []*gotgbot.User{&owner, settingsEditWorstUser(), minimal} {
+		filled := formatting.FillPlaceholders(stored, user, in.GroupTitle, settingsEditFillCount)
+		if n := formatting.VisibleLength(filled); n > longest {
+			longest = n
+		}
+		if user == minimal {
+			minimalBlank = strings.TrimSpace(tgmd2html.StripHTMLV2(filled)) == ""
+		}
+	}
+	return longest, minimalBlank
+}
+
+// settingsEditCheckRulesText converts a Rules text as /setrules does and holds the /rules
+// message built from it to Telegram's limit. Placeholders are not filled in rules.
 func settingsEditCheckRulesText(in settingsEditCheckInput) settingsEditVerdict {
 	if in.Msg.Text == "" {
 		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
@@ -99,8 +183,36 @@ func settingsEditCheckRulesText(in settingsEditCheckInput) settingsEditVerdict {
 	stored, ok := settingsEditConvert(func() string {
 		return tgmd2html.MD2HTMLV2(in.Msg.OriginalMDV2())
 	})
-	if !ok {
+	if !ok || strings.TrimSpace(tgmd2html.StripHTMLV2(stored)) == "" {
 		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
 	}
+	normalized := normalizeRulesForHTML(stored)
+	longest := 0
+	for _, heading := range settingsEditRulesHeadings(in.GroupTitle) {
+		if n := formatting.VisibleLength(heading + normalized); n > longest {
+			longest = n
+		}
+	}
+	if longest > settingsEditTextLimit {
+		return settingsEditTooLong(longest, settingsEditTextLimit)
+	}
 	return settingsEditVerdict{OK: true, Text: stored}
+}
+
+// settingsEditRulesHeadings returns, for every language and both ways the bot words the rules
+// ("rules_for_chat_header" as buildRulesText composes it, and the "rules_for_chat" template), what
+// comes before the rules text, ending in the blank line. The title is escaped as /rules escapes it.
+func settingsEditRulesHeadings(title string) []string {
+	escaped := html.EscapeString(title)
+	var headings []string
+	for _, lang := range settingsEditRulesLanguages {
+		tr := i18n.MustNewTranslator(lang)
+		if header, _ := tr.GetString("rules_for_chat_header"); header != "" {
+			headings = append(headings, fmt.Sprintf(header, escaped)+"\n\n")
+		}
+		if template, _ := tr.GetString("rules_for_chat"); template != "" {
+			headings = append(headings, fmt.Sprintf(template, escaped, ""))
+		}
+	}
+	return headings
 }
