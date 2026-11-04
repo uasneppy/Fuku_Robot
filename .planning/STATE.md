@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Completed 10-04-PLAN.md
-last_updated: "2026-11-04T12:52:38.560Z"
+stopped_at: Completed 10-05-PLAN.md
+last_updated: "2026-11-04T13:05:59.244Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: 6f319c9680caca6fcfb3b663c3da03b99dc765bf
+state_head: c05fcb8e9d0a20361b24d91a416b197f5b8e9ce7
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 10 (PM Settings Hub and Owner Gate) — EXECUTING
-Plan: 5 of 11
+Plan: 6 of 11
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 10 execution started
 
@@ -79,6 +79,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 10 P02 | 8 min | 2 tasks | 10 files |
 | Phase 10 P03 | 6 min | 2 tasks | 10 files |
 | Phase 10 P04 | 15 min | 2 tasks | 6 files |
+| Phase 10 P05 | 40 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,8 @@ Recent decisions affecting current work:
 - [Phase 10]: The three alert keys are held to 160 code points and tag-free in all 8 languages so a translation still fits Telegram 200.
 - [Phase 10]: 10-03: locale-set drift guarded by TestLocalesAreTheEight (set comparison of locales dir vs staffLocales, exactly 8); project docs outside AGENTS.md state 8 locales
 - [Phase 10]: 10-04: clearCreator already existed in staff_ownership_test.go and is reused; the default settings env seeds admins_allowed true so gate tests must set the switch explicitly
+- [Phase 10]: Plan 10-05: settingsGate verdict and owner-state enums put the refusing value (undecided, unknown) at iota zero, so an uninitialised value fails closed
+- [Phase 10]: Plan 10-05: only an 'owner exists' owner-state answer is memoised (under 30 s, per chat, per replica); late getChatAdministrators answers are discarded inside the singleflight
 
 ### Pending Todos
 
@@ -185,8 +188,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T12:52:38.504Z
-Stopped at: Completed 10-04-PLAN.md
+Last session: 2026-11-04T13:05:59.190Z
+Stopped at: Completed 10-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
