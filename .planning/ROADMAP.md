@@ -143,7 +143,7 @@ Plans:
   3. Each part has a Preview, and Full preview sends the whole message exactly as members will see it, through the same send path the group uses. A message Telegram would refuse is refused before it is saved.
   4. A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, so the next real join, leave or `/rules` in the group shows it, and those commands still work as before.
   5. The Welcome and Goodbye pages switch each message on or off and turn "Delete last welcome/goodbye" on or off, stored exactly as `/welcome`, `/goodbye`, `/cleanwelcome` and `/cleangoodbye` store them.
-**Plans:** 5/14 plans executed in 7 waves
+**Plans:** 6/14 plans executed in 7 waves
 
 Plans:
 **Wave 1**
@@ -154,7 +154,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 11-04-PLAN.md — the remaining 26 editor strings (refusals, previews, saved, wait ended) in all 8 locales (wave 2)
 - [x] 11-05-PLAN.md — one apply function per greeting and rules setting and the shared message builders, used by the commands (wave 2)
-- [ ] 11-06-PLAN.md — the page-action Validate hook and the change-info right in the settings pipeline (wave 2)
+- [x] 11-06-PLAN.md — the page-action Validate hook and the change-info right in the settings pipeline (wave 2)
 - [ ] 11-07-PLAN.md — the Redis wait store and /cancel (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -308,7 +308,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 10. PM Settings Hub and Owner Gate | 11/11 | In Progress | - |
-| 11. Message Editor | 5/14 | In Progress | - |
+| 11. Message Editor | 6/14 | In Progress | - |
 | 12. Rules Media, Media Under Text and Greet Once | 0/TBD | Not started | - |
 | 13. Member Requirements | 0/TBD | Not started | - |
 | 14. Profile Photo and Channel Rules | 0/TBD | Not started | - |
