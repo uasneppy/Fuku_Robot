@@ -5,11 +5,11 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 11-11-PLAN.md
-last_updated: "2026-11-04T19:07:58.019Z"
+stopped_at: Completed 11-12-PLAN.md
+last_updated: "2026-11-04T19:26:06.885Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 89ddd0e03395ba4f9b70d87812ac683064e75e30
+state_head: a28d8b63ac2efb1e8076d10a349738977357c938
 progress:
   total_phases: 10
   completed_phases: 0
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 12 of 14
+Plan: 13 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -97,6 +97,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P09 | 75min | 3 tasks | 6 files |
 | Phase 11 P10 | 25min | 3 tasks | 2 files |
 | Phase 11 P11 | 75min | 3 tasks | 6 files |
+| Phase 11 P12 | 50min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -163,6 +164,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-08: control d uses settingsRightChangeInfo and control e settingsRightAdmin, as /cleanwelcome and /welcome on|off check
 - [Phase 11]: 11-09: the text prompt's caption limit follows stored media (a file ID of a known kind), not the raw type column
 - [Phase 11]: 11-11: the typed-reply door guards panics with RecoverFromPanic as the deferred func and a named result set to EndGroups once the message is consumed
+- [Phase 11]: 11-12: a preview is built by renderGreeting and sent by media.SendGreeting to query.From.Id only; Preview of one part and Full preview share settingsEditRunPreview, and a Welcome or Goodbye text is always previewable (the default text is a message too) while every other part only while set
 
 ### Pending Todos
 
@@ -229,8 +231,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T19:07:57.879Z
-Stopped at: Completed 11-11-PLAN.md
+Last session: 2026-11-04T19:25:55.273Z
+Stopped at: Completed 11-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
