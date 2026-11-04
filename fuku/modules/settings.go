@@ -235,6 +235,7 @@ func LoadSettings(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("settings|"), settingsModule.settingsCallback))
 	// The private group list's own buttons (paging, Close); a list is never a channel message.
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("shub|"), settingsModule.settingsHubCallback))
+	LoadSettingsInput(dispatcher)
 }
 
 func init() {
