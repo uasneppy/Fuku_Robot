@@ -4,6 +4,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
@@ -392,9 +395,9 @@ func TestSettingsEditGroupMenuRefusal(t *testing.T) {
 	env := newSettingsEditEnv(t)
 	owner := env.newOwner(env.chat)
 	for _, tc := range []struct{ page, code string }{
-		{settingsPageWelcome, "ws"}, {settingsPageWelcome, "wc"},
-		{settingsPageGoodbye, "gs"}, {settingsPageGoodbye, "gc"},
-		{settingsPageRules, "rs"}, {settingsPageRules, "rc"},
+		{settingsPageWelcome, "ws"}, {settingsPageWelcome, "wr"}, {settingsPageWelcome, "wc"},
+		{settingsPageGoodbye, "gs"}, {settingsPageGoodbye, "gr"}, {settingsPageGoodbye, "gc"},
+		{settingsPageRules, "rs"}, {settingsPageRules, "rr"}, {settingsPageRules, "rc"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			msgID := openEditPage(env, owner, tc.page)
@@ -463,4 +466,380 @@ func TestSettingsEditCallbackFields(t *testing.T) {
 			}
 		})
 	}
+}
+
+// settingsEditSeedGreetings stores a welcome with a custom text, a photo and two buttons, and a
+// goodbye with the same, for chatID.
+func settingsEditSeedGreetings(t *testing.T, chatID int64) {
+	t.Helper()
+	buttons := []models.Button{{Name: "One", Url: "https://one.example"}, {Name: "Two", Url: "https://two.example"}}
+	if err := greetings.SetWelcomeText(chatID, "a custom welcome", "welcome-photo", buttons, db.PHOTO); err != nil {
+		t.Fatalf("SetWelcomeText: %v", err)
+	}
+	if err := greetings.SetGoodbyeText(chatID, "a custom goodbye", "goodbye-video", buttons, db.VIDEO); err != nil {
+		t.Fatalf("SetGoodbyeText: %v", err)
+	}
+}
+
+// settingsEditRemoveParts returns the Remove buttons of a drawing as the t values they carry.
+func settingsEditRemoveParts(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, code string) []string {
+	t.Helper()
+	var parts []string
+	for _, button := range settingsAllButtons(keyboard) {
+		if button.Url != "" {
+			continue
+		}
+		if fields := settingsButtonFields(t, button); fields["a"] == code {
+			parts = append(parts, fields["t"])
+		}
+	}
+	return parts
+}
+
+func TestSettingsEditRemove(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	settingsEditSeedGreetings(t, env.chat.Id)
+	menuID := settingsEditPrivateMenu(env, owner, settingsPageWelcome)
+
+	_, keyboard := env.lastEdit(owner.Id, menuID)
+	if got := strings.Join(settingsEditRemoveParts(t, keyboard, "wr"), ","); got != "x,m,b" {
+		t.Fatalf("Remove buttons on a fully set page = %q, want x,m,b", got)
+	}
+
+	// Remove text: the default text is back, media and buttons are untouched.
+	answers := env.answerCount()
+	settingsEditPressButton(env, owner, menuID, "settings_btn_edit_remove_text")
+	if got := env.answerCount() - answers; got != 1 {
+		t.Errorf("Remove was answered %d times, want once", got)
+	}
+	row, _ := settingsEditStored(t, env.chat.Id)
+	if w := row.WelcomeSettings; w.WelcomeText != db.DefaultWelcome || w.FileID != "welcome-photo" || len(w.Button) != 2 {
+		t.Errorf("after Remove text the welcome is %+v, want the default text with the media and buttons kept", w)
+	}
+	text, keyboard := env.lastEdit(owner.Id, menuID)
+	if !strings.Contains(text, settingsNoticeOKIcon+staffMarker("settings_edit_removed_text_default")) {
+		t.Errorf("the page %q lacks the removed-text notice", text)
+	}
+	if got := strings.Join(settingsEditRemoveParts(t, keyboard, "wr"), ","); got != "m,b" {
+		t.Errorf("Remove buttons after Remove text = %q, want m,b", got)
+	}
+
+	// Remove media: no file, type text.
+	settingsEditPressButton(env, owner, menuID, "settings_btn_edit_remove_media")
+	row, _ = settingsEditStored(t, env.chat.Id)
+	if w := row.WelcomeSettings; w.FileID != "" || w.WelcomeType != db.TEXT || len(w.Button) != 2 {
+		t.Errorf("after Remove media the welcome is %+v, want no file, type text and the buttons kept", w)
+	}
+	text, _ = env.lastEdit(owner.Id, menuID)
+	if !strings.Contains(text, settingsNoticeOKIcon+staffMarker("settings_edit_removed_media")) {
+		t.Errorf("the page %q lacks the removed-media notice", text)
+	}
+
+	// Remove buttons: an empty list.
+	settingsEditPressButton(env, owner, menuID, "settings_btn_edit_remove_buttons")
+	row, _ = settingsEditStored(t, env.chat.Id)
+	if w := row.WelcomeSettings; len(w.Button) != 0 {
+		t.Errorf("after Remove buttons the welcome keeps %+v", w.Button)
+	}
+	text, keyboard = env.lastEdit(owner.Id, menuID)
+	if !strings.Contains(text, settingsNoticeOKIcon+staffMarker("settings_edit_removed_buttons")) {
+		t.Errorf("the page %q lacks the removed-buttons notice", text)
+	}
+	if got := settingsEditRemoveParts(t, keyboard, "wr"); len(got) != 0 {
+		t.Errorf("Remove buttons left on an empty page: %v", got)
+	}
+	if row.GoodbyeSettings.GoodbyeText != "a custom goodbye" || row.GoodbyeSettings.FileID != "goodbye-video" {
+		t.Errorf("a Welcome Remove changed the goodbye: %+v", row.GoodbyeSettings)
+	}
+
+	t.Run("goodbye", func(t *testing.T) {
+		settingsEditSwitchPage(env, owner, menuID, settingsPageGoodbye)
+		settingsEditPressButton(env, owner, menuID, "settings_btn_edit_remove_text")
+		row, _ := settingsEditStored(t, env.chat.Id)
+		if g := row.GoodbyeSettings; g.GoodbyeText != db.DefaultGoodbye || g.FileID != "goodbye-video" {
+			t.Errorf("after Remove text the goodbye is %+v", g)
+		}
+	})
+
+	t.Run("rules", func(t *testing.T) {
+		if err := rules.SetChatRules(env.chat.Id, "the rules"); err != nil {
+			t.Fatalf("SetChatRules: %v", err)
+		}
+		settingsEditSwitchPage(env, owner, menuID, settingsPageRules)
+		settingsEditPressButton(env, owner, menuID, "settings_btn_edit_remove_text")
+		if row, ok := settingsEditRulesStored(t, env.chat.Id); !ok || row.Rules != "" {
+			t.Errorf("after Remove the rules are %+v (found %v), want empty", row, ok)
+		}
+		text, keyboard := env.lastEdit(owner.Id, menuID)
+		if !strings.Contains(text, settingsNoticeOKIcon+staffMarker("settings_edit_removed_text_rules")) {
+			t.Errorf("the page %q lacks the removed-rules notice", text)
+		}
+		if got := settingsEditRemoveParts(t, keyboard, "rr"); len(got) != 0 {
+			t.Errorf("Remove left on empty rules: %v", got)
+		}
+	})
+}
+
+func TestSettingsEditRemoveStaleAndFailed(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	menuID := settingsEditPrivateMenu(env, owner, settingsPageWelcome)
+
+	// A stale Remove of a part that is not set writes nothing.
+	for _, part := range []string{"x", "m", "b"} {
+		env.pressPrivate(owner, menuID, env.privateFields(env.chat.Id, "a", "wr", "t", part))
+		text, _ := env.lastEdit(owner.Id, menuID)
+		if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("settings_edit_nothing_to_remove")) {
+			t.Errorf("a stale Remove of %s drew %q, want the nothing-to-remove notice", part, text)
+		}
+		if _, ok := settingsEditStored(t, env.chat.Id); ok {
+			t.Errorf("a stale Remove of %s wrote a greetings row", part)
+		}
+	}
+	settingsEditSwitchPage(env, owner, menuID, settingsPageRules)
+	env.pressPrivate(owner, menuID, env.privateFields(env.chat.Id, "a", "rr", "t", "x"))
+	if text, _ := env.lastEdit(owner.Id, menuID); !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("settings_edit_nothing_to_remove")) {
+		t.Errorf("a stale Remove of empty rules drew %q", text)
+	}
+	if row, ok := settingsEditRulesStored(t, env.chat.Id); ok && row.Rules != "" {
+		t.Errorf("a stale Remove wrote rules %q", row.Rules)
+	}
+
+	// A failing write redraws the old state with the save-failed notice.
+	settingsEditSeedGreetings(t, env.chat.Id)
+	if err := rules.SetChatRules(env.chat.Id, "the rules"); err != nil {
+		t.Fatalf("SetChatRules: %v", err)
+	}
+	previousText, previousRules := greetingWrites.WelcomeTextOnly, rulesWrites.SetChatRules
+	greetingWrites.WelcomeTextOnly = func(int64, string) error { return errors.New("write refused") }
+	rulesWrites.SetChatRules = func(int64, string) error { return errors.New("write refused") }
+	defer func() { greetingWrites.WelcomeTextOnly, rulesWrites.SetChatRules = previousText, previousRules }()
+
+	env.pressPrivate(owner, menuID, env.privateFields(env.chat.Id, "a", "rr", "t", "x"))
+	text, keyboard := env.lastEdit(owner.Id, menuID)
+	if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("common_settings_save_failed")) {
+		t.Errorf("a failed Remove of rules drew %q, want the save-failed notice", text)
+	}
+	if got := settingsEditRemoveParts(t, keyboard, "rr"); len(got) != 1 {
+		t.Errorf("the old Rules state lost its Remove button: %v", got)
+	}
+	settingsEditSwitchPage(env, owner, menuID, settingsPageWelcome)
+	env.pressPrivate(owner, menuID, env.privateFields(env.chat.Id, "a", "wr", "t", "x"))
+	text, keyboard = env.lastEdit(owner.Id, menuID)
+	if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("common_settings_save_failed")) {
+		t.Errorf("a failed Remove of the text drew %q, want the save-failed notice", text)
+	}
+	if got := settingsEditRemoveParts(t, keyboard, "wr"); len(got) != 3 {
+		t.Errorf("the old Welcome state lost its Remove buttons: %v", got)
+	}
+	if row, _ := settingsEditStored(t, env.chat.Id); row.WelcomeSettings.WelcomeText != "a custom welcome" {
+		t.Errorf("a failed write changed the stored text to %q", row.WelcomeSettings.WelcomeText)
+	}
+	if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "the rules" {
+		t.Errorf("a failed write changed the stored rules to %q", row.Rules)
+	}
+}
+
+func TestSettingsEditRemoveParity(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	for _, page := range []struct {
+		name, key, command string
+		isWelcome          bool
+	}{
+		{"welcome", settingsPageWelcome, "/resetwelcome", true},
+		{"goodbye", settingsPageGoodbye, "/resetgoodbye", false},
+	} {
+		t.Run(page.name, func(t *testing.T) {
+			menuChat, commandChat := env.addChat(), env.addChat()
+			editCleanup(t, menuChat.Id, commandChat.Id)
+			menuOwner, commandOwner := env.newOwner(menuChat), env.newOwner(commandChat)
+			settingsEditSeedGreetings(t, menuChat.Id)
+			settingsEditSeedGreetings(t, commandChat.Id)
+
+			env.sendPrivate(menuOwner, fmt.Sprintf("/start settings_%d", menuChat.Id))
+			sent := env.fake.sentTo(menuOwner.Id)
+			menuID := sent[len(sent)-1].MessageID
+			env.pressPrivate(menuOwner, menuID, map[string]string{"a": "op", "p": page.key, "c": strconv.FormatInt(menuChat.Id, 10)})
+			for _, part := range []string{"x", "m", "b"} {
+				code := page.key + "r"
+				env.pressPrivate(menuOwner, menuID, map[string]string{"a": code, "t": part, "c": strconv.FormatInt(menuChat.Id, 10)})
+			}
+			env.sendIn(commandChat, commandOwner, page.command)
+
+			requireSameGreetingRow(t, loadGreetingRow(t, commandChat.Id), loadGreetingRow(t, menuChat.Id))
+			menuStored, _ := settingsEditStored(t, menuChat.Id)
+			if page.isWelcome {
+				if menuStored.WelcomeSettings.WelcomeText != db.DefaultWelcome || menuStored.WelcomeSettings.FileID != "" {
+					t.Errorf("the three Remove presses left %+v, want the default welcome", menuStored.WelcomeSettings)
+				}
+				if menuStored.GoodbyeSettings.GoodbyeText != "a custom goodbye" {
+					t.Errorf("the Welcome presses changed the goodbye: %+v", menuStored.GoodbyeSettings)
+				}
+			} else if menuStored.GoodbyeSettings.GoodbyeText != db.DefaultGoodbye || menuStored.GoodbyeSettings.FileID != "" {
+				t.Errorf("the three Remove presses left %+v, want the default goodbye", menuStored.GoodbyeSettings)
+			}
+		})
+	}
+
+	t.Run("rules", func(t *testing.T) {
+		menuChat, commandChat := env.addChat(), env.addChat()
+		editCleanup(t, menuChat.Id, commandChat.Id)
+		menuOwner, commandOwner := env.newOwner(menuChat), env.newOwner(commandChat)
+		for _, id := range []int64{menuChat.Id, commandChat.Id} {
+			if err := rules.SetChatRules(id, "the rules text"); err != nil {
+				t.Fatalf("SetChatRules: %v", err)
+			}
+		}
+		env.pressPrivate(menuOwner, 8181, map[string]string{"a": "rr", "t": "x", "c": strconv.FormatInt(menuChat.Id, 10)})
+		env.sendIn(commandChat, commandOwner, "/clearrules")
+
+		menuRow, menuOK := settingsEditRulesStored(t, menuChat.Id)
+		commandRow, commandOK := settingsEditRulesStored(t, commandChat.Id)
+		if !menuOK || !commandOK || menuRow.Rules != commandRow.Rules || menuRow.Rules != "" {
+			t.Errorf("rules differ: menu %+v (%v), command %+v (%v), want both empty", menuRow, menuOK, commandRow, commandOK)
+		}
+		menuCached, err := rules.LoadRulesContext(context.Background(), menuChat.Id)
+		commandCached, err2 := rules.LoadRulesContext(context.Background(), commandChat.Id)
+		if err != nil || err2 != nil || menuCached != commandCached {
+			t.Errorf("rules reads differ: menu %q (%v), command %q (%v)", menuCached, err, commandCached, err2)
+		}
+	})
+}
+
+func TestSettingsAuthorityParityEdit(t *testing.T) {
+	nextAdmin := int64(7_000_000)
+	newAdmin := func(env *settingsEnv, chat gotgbot.Chat, canChangeInfo bool) gotgbot.User {
+		nextAdmin++
+		admin := gotgbot.User{Id: uniqueLinkOwnerID() + nextAdmin, FirstName: "Plain"}
+		listEditAdmin(env, chat, admin, canChangeInfo)
+		return admin
+	}
+	press := func(env *settingsEnv, chat gotgbot.Chat, user gotgbot.User, kv ...string) {
+		env.pressPrivate(user, 9191, env.privateFields(chat.Id, kv...))
+	}
+
+	t.Run("an administrator without can_change_info", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		menuChat, commandChat := env.addChat(), env.addChat()
+		editCleanup(t, menuChat.Id, commandChat.Id)
+		menuAdmin, commandAdmin := newAdmin(env, menuChat, false), newAdmin(env, commandChat, false)
+		settingsEditSeedGreetings(t, menuChat.Id)
+		settingsEditSeedGreetings(t, commandChat.Id)
+
+		for _, code := range []struct{ set, remove string }{{"ws", "wr"}, {"gs", "gr"}} {
+			for _, action := range []string{code.set, code.remove} {
+				answers := env.answerCount()
+				press(env, menuChat, menuAdmin, "a", action, "t", "x")
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("%s was answered %d times, want once", action, got)
+				}
+				answer, alert := env.lastAnswer()
+				if !alert || !strings.Contains(answer, staffMarker("settings_no_change_info")) {
+					t.Errorf("%s answered %q (alert %v), want the alert settings_no_change_info", action, answer, alert)
+				}
+			}
+		}
+		if keys := settingsEditInputKeys(env); len(keys) != 0 {
+			t.Errorf("a refused Set created %v", keys)
+		}
+		if row, _ := settingsEditStored(t, menuChat.Id); row.WelcomeSettings.WelcomeText != "a custom welcome" || row.GoodbyeSettings.GoodbyeText != "a custom goodbye" {
+			t.Errorf("a refused Remove changed the row: %+v", row)
+		}
+
+		env.sendIn(commandChat, commandAdmin, "/setwelcome something new")
+		env.sendIn(commandChat, commandAdmin, "/resetwelcome")
+		if !settingsAntifloodSentHas(env, commandChat.Id, staffMarker("chat_status_change_info_cmd_error")) {
+			t.Error("/setwelcome and /resetwelcome were not refused for an administrator without can_change_info")
+		}
+		if row, _ := settingsEditStored(t, commandChat.Id); row.WelcomeSettings.WelcomeText != "a custom welcome" {
+			t.Errorf("a refused command changed the welcome to %q", row.WelcomeSettings.WelcomeText)
+		}
+
+		// Cancel needs only the admin check: the answer is the stale prompt, never a rights refusal.
+		press(env, menuChat, menuAdmin, "a", "wc", "t", "x")
+		if answer, alert := env.lastAnswer(); !alert || strings.Contains(answer, staffMarker("settings_no_change_info")) {
+			t.Errorf("Cancel answered %q (alert %v), want it allowed for any administrator", answer, alert)
+		}
+	})
+
+	t.Run("an administrator with can_change_info", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		menuChat, commandChat := env.addChat(), env.addChat()
+		editCleanup(t, menuChat.Id, commandChat.Id)
+		menuAdmin, commandAdmin := newAdmin(env, menuChat, true), newAdmin(env, commandChat, true)
+		settingsEditSeedGreetings(t, menuChat.Id)
+		settingsEditSeedGreetings(t, commandChat.Id)
+
+		press(env, menuChat, menuAdmin, "a", "ws", "t", "x")
+		if !env.redis.Exists(settingsInputKey(menuAdmin.Id)) {
+			t.Error("Set was refused for an administrator with can_change_info")
+		}
+		press(env, menuChat, menuAdmin, "a", "wr", "t", "x")
+		env.sendIn(commandChat, commandAdmin, "/setwelcome something new")
+		if row, _ := settingsEditStored(t, commandChat.Id); row.WelcomeSettings.WelcomeText == "a custom welcome" {
+			t.Error("/setwelcome was refused for an administrator with can_change_info")
+		}
+		if row, _ := settingsEditStored(t, menuChat.Id); row.WelcomeSettings.WelcomeText != db.DefaultWelcome {
+			t.Errorf("Remove text was refused: the welcome is %q", row.WelcomeSettings.WelcomeText)
+		}
+	})
+
+	t.Run("rules need the bot as an administrator", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		env.fake.setBotRole(env.chat.Id, staffRoleMember)
+		owner := env.newOwner(env.chat)
+		if err := rules.SetChatRules(env.chat.Id, "the rules"); err != nil {
+			t.Fatalf("SetChatRules: %v", err)
+		}
+		for _, action := range []string{"rs", "rr"} {
+			answers, edits := env.answerCount(), len(env.edits(owner.Id, 9191))
+			press(env, env.chat, owner, "a", action, "t", "x")
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("%s was answered %d times, want once", action, got)
+			}
+			if got := len(env.edits(owner.Id, 9191)) - edits; got != 1 {
+				t.Errorf("%s edited the message %d times, want the one redraw with the notice", action, got)
+			}
+			text, _ := env.lastEdit(owner.Id, 9191)
+			if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("chat_status_bot_not_admin")) {
+				t.Errorf("%s with the bot not an administrator drew %q, want the notice chat_status_bot_not_admin", action, text)
+			}
+		}
+		if keys := settingsEditInputKeys(env); len(keys) != 0 {
+			t.Errorf("a refused Rules Set created %v", keys)
+		}
+		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "the rules" {
+			t.Errorf("a refused Rules Remove changed the rules to %q", row.Rules)
+		}
+		env.sendIn(env.chat, owner, "/setrules new rules")
+		if !settingsAntifloodSentHas(env, env.chat.Id, staffMarker("connections_is_user_connected_bot_not_admin")) &&
+			!settingsAntifloodSentHas(env, env.chat.Id, staffMarker("chat_status_bot_not_admin")) {
+			t.Error("/setrules was not refused with the bot not an administrator")
+		}
+		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "the rules" {
+			t.Errorf("a refused /setrules changed the rules to %q", row.Rules)
+		}
+		// Cancel needs no bot right.
+		press(env, env.chat, owner, "a", "rc", "t", "x")
+		if answer, _ := env.lastAnswer(); strings.Contains(answer, staffMarker("chat_status_bot_not_admin")) {
+			t.Errorf("Cancel was refused for the bot's role: %q", answer)
+		}
+	})
+
+	t.Run("rules with the bot as an administrator", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		if err := rules.SetChatRules(env.chat.Id, "the rules"); err != nil {
+			t.Fatalf("SetChatRules: %v", err)
+		}
+		press(env, env.chat, owner, "a", "rs", "t", "x")
+		if !env.redis.Exists(settingsInputKey(owner.Id)) {
+			t.Error("Rules Set was refused with the bot an administrator")
+		}
+		press(env, env.chat, owner, "a", "rr", "t", "x")
+		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "" {
+			t.Errorf("Rules Remove left %q", row.Rules)
+		}
+	})
 }

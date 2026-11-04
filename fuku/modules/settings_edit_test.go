@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -277,6 +278,50 @@ func TestSettingsEditPages(t *testing.T) {
 					t.Errorf("%s page without a bot username has a URL button %q", def.Key, button.Url)
 				}
 			}
+		}
+	})
+
+	t.Run("part rows: Set alone while a part is not set, Set and Remove while it is", func(t *testing.T) {
+		rowOf := func(screen settingsScreen, i int) []string {
+			var labels []string
+			for _, button := range screen.Keyboard.InlineKeyboard[i] {
+				labels = append(labels, button.Text)
+			}
+			return labels
+		}
+		view := settingsEditView(tr, true)
+		for _, def := range []settingsEditPageDef{welcome, settingsEditDef(t, settingsPageGoodbye)} {
+			none := renderSettingsEditor(view, def, settingsEditState{Kind: def.Kind, TextIsDefault: true, Enabled: true}, settingsEditScreenOpts{})
+			for i, key := range []string{"settings_btn_edit_set_text", "settings_btn_edit_set_media", "settings_btn_edit_set_buttons"} {
+				if got := rowOf(none, i); len(got) != 1 || !strings.Contains(got[0], staffMarker(key)) {
+					t.Errorf("%s row %d with nothing set = %v, want [%s]", def.Key, i, got, key)
+				}
+			}
+			all := renderSettingsEditor(view, def, settingsEditState{
+				Kind: def.Kind, Text: "custom", MediaType: db.PHOTO, FileID: "f",
+				Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true,
+			}, settingsEditScreenOpts{})
+			for i, keys := range [][2]string{
+				{"settings_btn_edit_set_text", "settings_btn_edit_remove_text"},
+				{"settings_btn_edit_set_media", "settings_btn_edit_remove_media"},
+				{"settings_btn_edit_set_buttons", "settings_btn_edit_remove_buttons"},
+			} {
+				got := rowOf(all, i)
+				if len(got) != 2 || !strings.Contains(got[0], staffMarker(keys[0])) || !strings.Contains(got[1], staffMarker(keys[1])) {
+					t.Errorf("%s row %d with everything set = %v, want [%s, %s]", def.Key, i, got, keys[0], keys[1])
+				}
+			}
+		}
+		empty := renderSettingsEditor(view, rulesDef, settingsEditState{Kind: settingsEditRules}, settingsEditScreenOpts{})
+		if got := rowOf(empty, 0); len(got) != 1 || !strings.Contains(got[0], staffMarker("settings_btn_edit_set_text")) {
+			t.Errorf("empty Rules row 0 = %v, want Set text alone", got)
+		}
+		set := renderSettingsEditor(view, rulesDef, settingsEditState{Kind: settingsEditRules, Text: "r"}, settingsEditScreenOpts{})
+		if got := rowOf(set, 0); len(got) != 2 || !strings.Contains(got[1], staffMarker("settings_btn_edit_remove_text")) {
+			t.Errorf("Rules row 0 with text = %v, want Set and Remove", got)
+		}
+		if settingsEditHasButton(set.Keyboard.InlineKeyboard, "settings_btn_edit_set_media") {
+			t.Error("the Rules page has a media row")
 		}
 	})
 
@@ -752,6 +797,26 @@ func TestSettingsEditCallbackBytes(t *testing.T) {
 				}
 			}
 		}
+		for _, def := range settingsEditPages {
+			for _, part := range def.Parts {
+				for _, replaced := range []bool{false, true} {
+					label := fmt.Sprintf("prompt %s %s private=%v replaced=%v", def.Key, part.Code, private, replaced)
+					screen := renderSettingsEditPrompt(view, def, part.Code, time.Now(), settingsEditTextMax, replaced)
+					if screen.Omitted != 0 {
+						t.Errorf("%s omitted %d buttons for overflow", label, screen.Omitted)
+					}
+					buttons := settingsAllButtons(screen.Keyboard.InlineKeyboard)
+					if len(buttons) != 1 {
+						t.Errorf("%s has %d buttons, want only Cancel", label, len(buttons))
+					}
+					for _, button := range buttons {
+						if n := len(button.CallbackData); n < 1 || n > 64 {
+							t.Errorf("%s button %q has %d bytes of callback data, want 1..64", label, button.Text, n)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -789,6 +854,23 @@ func TestSettingsEditPagesFitEveryLocale(t *testing.T) {
 							}
 							if screen.Omitted != 0 {
 								t.Errorf("%s %s omitted %d buttons", label, stateName, screen.Omitted)
+							}
+						}
+						for _, part := range def.Parts {
+							for _, replaced := range []bool{false, true} {
+								label := fmt.Sprintf("%s prompt %s %s %s private=%v replaced=%v", code, def.Key, part.Code, titleName, private, replaced)
+								screen := renderSettingsEditPrompt(view, def, part.Code, time.Now(), settingsEditTextMax, replaced)
+								if units := panelUTF16Len(screen.Text); units > 3800 || units == 0 {
+									t.Errorf("%s is %d UTF-16 units, want 1..3800", label, units)
+								}
+								for _, placeholder := range []string{"{max}", "{time}", "{n}", "%!"} {
+									if strings.Contains(screen.Text, placeholder) {
+										t.Errorf("%s keeps the unfilled %s: %q", label, placeholder, screen.Text)
+									}
+								}
+								if screen.Omitted != 0 || len(settingsAllButtons(screen.Keyboard.InlineKeyboard)) != 1 {
+									t.Errorf("%s has %d omitted buttons and %d buttons, want none omitted and Cancel only", label, screen.Omitted, len(settingsAllButtons(screen.Keyboard.InlineKeyboard)))
+								}
 							}
 						}
 					}
