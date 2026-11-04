@@ -51,15 +51,21 @@ type settingsEditCheckInput struct {
 }
 
 // settingsEditVerdict is the answer of the check. When OK is true the fields of the judged part
-// carry what to store: Text the stored HTML of a text part. When OK is false RefusalKey and
+// carry what to store: Text the stored HTML of a text part, FileID and DataType the media of a
+// media part (CaptionIgnored when the media message carried a caption, which is not used) and
+// Buttons the buttons of a buttons part. When OK is false RefusalKey and
 // RefusalParams name the locale line to show, except that RefusalText is the finished text of a
 // refusal the commands already send (the over-long text), which wins when it is not empty.
 type settingsEditVerdict struct {
-	OK            bool
-	Text          string
-	RefusalKey    string
-	RefusalParams i18n.TranslationParams
-	RefusalText   string
+	OK             bool
+	Text           string
+	FileID         string
+	DataType       int
+	Buttons        []db.Button
+	CaptionIgnored bool
+	RefusalKey     string
+	RefusalParams  i18n.TranslationParams
+	RefusalText    string
 }
 
 // settingsEditRefusal is the verdict that refuses with a locale key and its parameters.

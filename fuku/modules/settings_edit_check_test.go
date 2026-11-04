@@ -5,6 +5,7 @@ package modules
 import (
 	"fmt"
 	"html"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -340,4 +341,238 @@ func TestSettingsEditCheckRules(t *testing.T) {
 			t.Fatalf("verdict OK=%v key=%q, want settings_edit_refuse_need_text", got.OK, got.RefusalKey)
 		}
 	})
+}
+
+// settingsEditPartCheck runs the check of part of the Welcome page for msg with state st.
+func settingsEditPartCheck(t *testing.T, part string, msg *gotgbot.Message, st settingsEditState) settingsEditVerdict {
+	t.Helper()
+	def := settingsEditCheckEnv(t, settingsPageWelcome)
+	st.Kind = def.Kind
+	return settingsEditCheck(settingsEditCheckInput{
+		Def: def, Part: part, Msg: msg, State: st,
+		Owner: gotgbot.User{Id: 1, FirstName: "Al"}, GroupTitle: "Group", Language: "en",
+	})
+}
+
+func TestSettingsEditMediaKinds(t *testing.T) {
+	accepted := map[string]*gotgbot.Message{
+		"photo":    {Photo: []gotgbot.PhotoSize{{FileId: "small"}, {FileId: "large"}}},
+		"video":    {Video: &gotgbot.Video{FileId: "video-1"}},
+		"gif":      {Animation: &gotgbot.Animation{FileId: "gif-1"}, Document: &gotgbot.Document{FileId: "gif-1"}},
+		"document": {Document: &gotgbot.Document{FileId: "doc-1"}},
+		"sticker":  {Sticker: &gotgbot.Sticker{FileId: "sticker-1"}},
+		"audio":    {Audio: &gotgbot.Audio{FileId: "audio-1"}},
+		"voice":    {Voice: &gotgbot.Voice{FileId: "voice-1"}},
+	}
+	for name, msg := range accepted {
+		t.Run("accepts "+name, func(t *testing.T) {
+			got := settingsEditPartCheck(t, settingsEditPartMedia, msg, settingsEditState{})
+			if !got.OK {
+				t.Fatalf("a %s was refused: %q", name, got.RefusalKey)
+			}
+			wantID, wantType := content.ExtractMedia(msg)
+			if got.FileID != wantID || got.DataType != wantType || got.FileID == "" {
+				t.Fatalf("stored (%q, %d), want what the commands store (%q, %d)", got.FileID, got.DataType, wantID, wantType)
+			}
+		})
+	}
+
+	t.Run("a GIF is stored as a document", func(t *testing.T) {
+		got := settingsEditPartCheck(t, settingsEditPartMedia, accepted["gif"], settingsEditState{})
+		if got.DataType != db.DOCUMENT {
+			t.Fatalf("a GIF is stored as type %d, want the document type %d", got.DataType, db.DOCUMENT)
+		}
+	})
+
+	refused := map[string]*gotgbot.Message{
+		"video note": {VideoNote: &gotgbot.VideoNote{FileId: "note-1"}},
+		"contact":    {Contact: &gotgbot.Contact{PhoneNumber: "1"}},
+		"location":   {Location: &gotgbot.Location{}},
+		"venue":      {Venue: &gotgbot.Venue{Title: "v"}},
+		"poll":       {Poll: &gotgbot.Poll{Id: "p"}},
+		"dice":       {Dice: &gotgbot.Dice{Emoji: "x", Value: 1}},
+		"story":      {Story: &gotgbot.Story{}},
+		"plain text": {Text: "just words"},
+		"nothing":    {},
+	}
+	for name, msg := range refused {
+		t.Run("refuses "+name, func(t *testing.T) {
+			got := settingsEditPartCheck(t, settingsEditPartMedia, msg, settingsEditState{})
+			if got.OK || got.RefusalKey != "settings_edit_refuse_need_media" {
+				t.Fatalf("a %s gave OK=%v key=%q, want settings_edit_refuse_need_media", name, got.OK, got.RefusalKey)
+			}
+		})
+	}
+
+	t.Run("a caption on the media is not used and the verdict says so", func(t *testing.T) {
+		msg := &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "p"}}, Caption: "hello"}
+		got := settingsEditPartCheck(t, settingsEditPartMedia, msg, settingsEditState{})
+		if !got.OK || !got.CaptionIgnored {
+			t.Fatalf("OK=%v CaptionIgnored=%v, want both true", got.OK, got.CaptionIgnored)
+		}
+		if bare := settingsEditPartCheck(t, settingsEditPartMedia, accepted["photo"], settingsEditState{}); bare.CaptionIgnored {
+			t.Fatal("CaptionIgnored is true for a photo with no caption")
+		}
+	})
+}
+
+func TestSettingsEditMediaTextLong(t *testing.T) {
+	photo := &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "p"}}}
+
+	t.Run("a stored text over 1024 cannot be a caption", func(t *testing.T) {
+		got := settingsEditPartCheck(t, settingsEditPartMedia, photo, settingsEditState{Text: strings.Repeat("a", 1025)})
+		if got.OK || got.RefusalKey != "settings_edit_refuse_media_text_long" {
+			t.Fatalf("OK=%v key=%q, want settings_edit_refuse_media_text_long", got.OK, got.RefusalKey)
+		}
+		if n, max := settingsEditParam(t, got, "n"), settingsEditParam(t, got, "max"); n != 1025 || max != 1024 {
+			t.Fatalf("n = %d, max = %d, want 1025 and 1024", n, max)
+		}
+	})
+
+	t.Run("a stored text whose worst-case fill is over 1024 cannot be a caption", func(t *testing.T) {
+		text := strings.Repeat("a", 700) + strings.Repeat("{fullname}", 10)
+		got := settingsEditPartCheck(t, settingsEditPartMedia, photo, settingsEditState{Text: text})
+		if got.OK || got.RefusalKey != "settings_edit_refuse_media_text_long" {
+			t.Fatalf("OK=%v key=%q, want settings_edit_refuse_media_text_long", got.OK, got.RefusalKey)
+		}
+		if n := settingsEditParam(t, got, "n"); n != 700+10*129 {
+			t.Fatalf("n = %d, want %d", n, 700+10*129)
+		}
+	})
+
+	t.Run("a stored text of 1024 is accepted", func(t *testing.T) {
+		got := settingsEditPartCheck(t, settingsEditPartMedia, photo, settingsEditState{Text: strings.Repeat("a", 1024)})
+		if !got.OK {
+			t.Fatalf("a 1024 character text was refused: %q", got.RefusalKey)
+		}
+	})
+}
+
+// settingsEditButtonLines builds count button lines, the first n of them joined to their row.
+func settingsEditButtonLines(count int, sameFrom int) string {
+	lines := make([]string, count)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("[b%d](buttonurl://https://e.com/%d", i, i)
+		if i >= sameFrom {
+			lines[i] += ":same"
+		}
+		lines[i] += ")"
+	}
+	return strings.Join(lines, "\n")
+}
+
+func settingsEditButtonsCheck(t *testing.T, text string, st settingsEditState) settingsEditVerdict {
+	t.Helper()
+	return settingsEditPartCheck(t, settingsEditPartButtons, settingsEditTypedMessage(text), st)
+}
+
+func TestSettingsEditCheckButtonsParity(t *testing.T) {
+	cases := map[string]string{
+		"two buttons the second on the same row": "[Rules](buttonurl://https://example.com)\n[Chat](buttonurl://https://t.me/x:same)",
+		"an empty name gets the default label":   "[](buttonurl://https://example.com)\n[Chat](buttonurl://https://t.me/x)",
+	}
+	for name, text := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := settingsEditButtonsCheck(t, text, settingsEditState{})
+			if !got.OK {
+				t.Fatalf("valid button lines were refused: %q", got.RefusalKey)
+			}
+			want := content.ExtractWelcome(&gotgbot.Message{Text: "/setwelcome " + text}, "welcome", "en").Buttons
+			if len(want) == 0 || !reflect.DeepEqual(got.Buttons, want) {
+				t.Fatalf("buttons = %+v, want what the commands store: %+v", got.Buttons, want)
+			}
+		})
+	}
+
+	t.Run("the default label is Greeting", func(t *testing.T) {
+		got := settingsEditButtonsCheck(t, "[](buttonurl://https://example.com)", settingsEditState{})
+		if !got.OK || len(got.Buttons) != 1 || got.Buttons[0].Name != "Greeting" {
+			t.Fatalf("OK=%v buttons=%+v, want one button named Greeting", got.OK, got.Buttons)
+		}
+	})
+}
+
+func TestSettingsEditButtonRefusals(t *testing.T) {
+	refuse := func(t *testing.T, got settingsEditVerdict, key string) {
+		t.Helper()
+		if got.OK || got.RefusalKey != key {
+			t.Fatalf("OK=%v key=%q, want %s", got.OK, got.RefusalKey, key)
+		}
+	}
+
+	t.Run("no readable button is a syntax refusal", func(t *testing.T) {
+		refuse(t, settingsEditButtonsCheck(t, "no buttons here", settingsEditState{}), "settings_edit_refuse_buttons_syntax")
+	})
+
+	t.Run("a link that is not http or https names the button's number only", func(t *testing.T) {
+		got := settingsEditButtonsCheck(t, "[a](buttonurl://https://e.com)\n[b](buttonurl://javascript:alert(1))", settingsEditState{})
+		refuse(t, got, "settings_edit_refuse_button_url")
+		if n := settingsEditParam(t, got, "n"); n != 2 {
+			t.Fatalf("n = %d, want 2", n)
+		}
+		if len(got.RefusalParams) != 1 {
+			t.Fatalf("the refusal carries %v, want only the button's number", got.RefusalParams)
+		}
+	})
+
+	t.Run("a photo is not a buttons message", func(t *testing.T) {
+		msg := &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "p"}}}
+		refuse(t, settingsEditPartCheck(t, settingsEditPartButtons, msg, settingsEditState{}), "settings_edit_refuse_need_text")
+	})
+
+	t.Run("100 buttons are accepted and 101 are not", func(t *testing.T) {
+		if got := settingsEditButtonsCheck(t, settingsEditButtonLines(100, 1000), settingsEditState{}); !got.OK {
+			t.Fatalf("100 buttons were refused: %q", got.RefusalKey)
+		}
+		refuse(t, settingsEditButtonsCheck(t, settingsEditButtonLines(101, 1000), settingsEditState{}), "settings_edit_refuse_buttons_limit")
+	})
+
+	t.Run("8 in a row are accepted and 9 are not", func(t *testing.T) {
+		if got := settingsEditButtonsCheck(t, settingsEditButtonLines(8, 1), settingsEditState{}); !got.OK {
+			t.Fatalf("8 buttons in a row were refused: %q", got.RefusalKey)
+		}
+		refuse(t, settingsEditButtonsCheck(t, settingsEditButtonLines(9, 1), settingsEditState{}), "settings_edit_refuse_buttons_limit")
+	})
+
+	t.Run("a {rules} token in the text counts one more button", func(t *testing.T) {
+		withToken := settingsEditState{Text: "Welcome {rules}"}
+		if got := settingsEditButtonsCheck(t, settingsEditButtonLines(99, 1000), withToken); !got.OK {
+			t.Fatalf("99 buttons with {rules} were refused: %q", got.RefusalKey)
+		}
+		refuse(t, settingsEditButtonsCheck(t, settingsEditButtonLines(100, 1000), withToken), "settings_edit_refuse_buttons_limit")
+	})
+
+	t.Run("{rules:same} widens the last row", func(t *testing.T) {
+		withSame := settingsEditState{Text: "Welcome {rules:same}"}
+		refuse(t, settingsEditButtonsCheck(t, settingsEditButtonLines(8, 1), withSame), "settings_edit_refuse_buttons_limit")
+		if got := settingsEditButtonsCheck(t, settingsEditButtonLines(7, 1), withSame); !got.OK {
+			t.Fatalf("7 buttons in a row with {rules:same} were refused: %q", got.RefusalKey)
+		}
+	})
+}
+
+func TestSettingsEditCheckMalformedEntities(t *testing.T) {
+	broken := func() *gotgbot.Message {
+		return settingsEditTypedMessage("hi", gotgbot.MessageEntity{Type: "bold", Offset: 50, Length: 4})
+	}
+	cases := []struct {
+		page, part string
+	}{
+		{settingsPageWelcome, settingsEditPartText},
+		{settingsPageGoodbye, settingsEditPartText},
+		{settingsPageRules, settingsEditPartText},
+		{settingsPageWelcome, settingsEditPartButtons},
+	}
+	for _, tc := range cases {
+		t.Run(tc.page+"/"+tc.part, func(t *testing.T) {
+			def := settingsEditCheckEnv(t, tc.page)
+			got := settingsEditCheck(settingsEditCheckInput{
+				Def: def, Part: tc.part, Msg: broken(), State: settingsEditState{Kind: def.Kind},
+				Owner: gotgbot.User{Id: 1, FirstName: "Al"}, GroupTitle: "Group", Language: "en",
+			})
+			if got.OK || got.RefusalKey != "settings_edit_refuse_need_text" {
+				t.Fatalf("OK=%v key=%q, want settings_edit_refuse_need_text", got.OK, got.RefusalKey)
+			}
+		})
+	}
 }
