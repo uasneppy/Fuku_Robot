@@ -661,3 +661,139 @@ func TestSettingsAuthorityParityGreetings(t *testing.T) {
 		}
 	})
 }
+
+func TestSettingsEditRegistry(t *testing.T) {
+	want := []struct {
+		key, icon, titleKey string
+		order               int
+	}{
+		{"w", "🎉", "settings_page_welcome", 50},
+		{"g", "👋", "settings_page_goodbye", 60},
+		{"r", "📜", "settings_page_rules", 70},
+	}
+	for _, w := range want {
+		pg, ok := settingsPageByKey(w.key)
+		if !ok {
+			t.Errorf("page %q is not registered", w.key)
+			continue
+		}
+		if pg.Order != w.order || pg.Icon != w.icon || pg.TitleKey != w.titleKey || pg.OwnerOnly {
+			t.Errorf("page %q = order %d icon %q title %q owner-only %v, want %d %q %q false",
+				w.key, pg.Order, pg.Icon, pg.TitleKey, pg.OwnerOnly, w.order, w.icon, w.titleKey)
+		}
+		if (w.key != "r") != (len(pg.Controls) == 2) {
+			t.Errorf("page %q declares %d controls", w.key, len(pg.Controls))
+		}
+	}
+	for _, key := range []string{"w", "g"} {
+		pg, _ := settingsPageByKey(key)
+		if got := pg.Controls[settingsEditControlEnabled].Right; got != settingsRightAdmin {
+			t.Errorf("page %q control e declares right %d, want settingsRightAdmin", key, got)
+		}
+		if got := pg.Controls[settingsEditControlClean].Right; got != settingsRightChangeInfo {
+			t.Errorf("page %q control d declares right %d, want settingsRightChangeInfo", key, got)
+		}
+	}
+
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	msgID := env.openMenu(owner)
+	text, keyboard := env.lastEdit(env.chat.Id, msgID)
+	if got, wantShape := settingsMainShape(t, keyboard), "s|l / c|f / w|g / r / a / close"; got != wantShape {
+		t.Errorf("the owner's group Main = %q, want %q", got, wantShape)
+	}
+	for _, key := range []string{"settings_page_welcome", "settings_page_goodbye", "settings_page_rules"} {
+		if line, found := settingsMainStateLine(text, key); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main status line for %s = %q (found %v), want a state", key, line, found)
+		}
+	}
+	// The status block lists the new pages before the Access line.
+	if iw, ia := strings.Index(text, staffMarker("settings_page_rules")), strings.Index(text, staffMarker("settings_page_access")); iw < 0 || ia < iw {
+		t.Errorf("the Rules line is not before the Access line in %q", text)
+	}
+}
+
+// settingsEditCallbackStates are the states the byte and fit tests draw every page in.
+func settingsEditCallbackStates(def settingsEditPageDef) map[string]settingsEditState {
+	return map[string]settingsEditState{
+		"default": {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true},
+		"all set": {
+			Kind: def.Kind, Text: strings.Repeat("x", 3000), MediaType: db.VIDEO_NOTE, FileID: "f",
+			Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true,
+		},
+		"off":     {Kind: def.Kind, Text: "t", MediaType: db.PHOTO, FileID: "f"},
+		"sticker": {Kind: def.Kind, Text: "t", MediaType: db.STICKER, FileID: "f", Clean: true},
+	}
+}
+
+func TestSettingsEditCallbackBytes(t *testing.T) {
+	tr := i18n.MustNewTranslator("en")
+	for _, private := range []bool{true, false} {
+		view := settingsEditView(tr, private)
+		for _, def := range settingsEditPages {
+			for name, st := range settingsEditCallbackStates(def) {
+				label := fmt.Sprintf("%s private=%v %s", def.Key, private, name)
+				screen := renderSettingsEditor(view, def, st, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
+				if screen.Omitted != 0 {
+					t.Errorf("%s omitted %d buttons for overflow, want none", label, screen.Omitted)
+				}
+				var callbacks int
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					if button.Url != "" {
+						continue
+					}
+					callbacks++
+					if n := len(button.CallbackData); n < 1 || n > 64 {
+						t.Errorf("%s button %q has %d bytes of callback data, want 1..64", label, button.Text, n)
+					}
+				}
+				if callbacks == 0 {
+					t.Errorf("%s has no callback buttons", label)
+				}
+			}
+		}
+	}
+}
+
+func TestSettingsEditPagesFitEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	titles := map[string]string{
+		"ampersands": strings.Repeat("&", 64),
+		"astral":     strings.Repeat("😀", 64),
+		"multibyte":  strings.Repeat("Ж", 64),
+	}
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			notice := settingsNoticeWarn(settingsText(tr, "common_settings_save_failed"))
+			for titleName, title := range titles {
+				for _, private := range []bool{false, true} {
+					view := settingsEditView(tr, private)
+					view.GroupTitle, view.OpenerName = title, title
+					for _, def := range settingsEditPages {
+						for stateName, st := range settingsEditCallbackStates(def) {
+							label := fmt.Sprintf("%s %s %s private=%v", code, def.Key, titleName, private)
+							screen := renderSettingsEditor(view, def, st, settingsEditScreenOpts{Notice: notice, BotUsername: "FukuTestBot"})
+							if units := panelUTF16Len(screen.Text); units > 3800 || units == 0 {
+								t.Errorf("%s %s is %d UTF-16 units, want 1..3800", label, stateName, units)
+							}
+							for _, placeholder := range []string{"{n}", "{state}", "{page}", "%!"} {
+								if strings.Contains(screen.Text, placeholder) {
+									t.Errorf("%s %s keeps the unfilled %s: %q", label, stateName, placeholder, screen.Text)
+								}
+							}
+							for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+								if strings.TrimSpace(button.Text) == "" {
+									t.Errorf("%s %s has a button with an empty label", label, stateName)
+								}
+							}
+							if screen.Omitted != 0 {
+								t.Errorf("%s %s omitted %d buttons", label, stateName, screen.Omitted)
+							}
+						}
+					}
+				}
+			}
+		})
+	}
+}

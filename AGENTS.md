@@ -228,14 +228,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   again) shows `lockdown_revoke_already` instead.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
   Close, `tg` toggle, `st` set, `no` cancel a card back to page `p`; a page declares its own codes through
   `registerSettingsPage`, which panics at init on a duplicate page key or action code. Exactly one of `c` and `u` is
   present: `c` is accepted only on a message in a private chat and `u` only on one in a non-private chat, and each action
-  takes an allow-listed field set (an unknown key is refused), all checked before any I/O. Steppers and toggles send the
+  takes an allow-listed field set (an unknown key is refused), all checked before any I/O. A page action may also declare `Validate`, a strict check of its own fields that runs in that same
+  step 1, after the allow-list and before any I/O, and whose false answer is `common_callback_invalid_request`; a nil
+  `Validate` keeps the fields allowed and not required. Steppers and toggles send the
   absolute target value (`v`), never a delta, so a double tap is harmless. Every press runs one pipeline, each step
   refusing before the next (`settingsPress.verify`): (1) decode and structure, refused with the alert
   `common_callback_invalid_request` (a missing message is `common_callback_message_unavailable`); (2) a Telegram service
@@ -366,6 +368,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   through the same fresh `settingsAccessLookup` seam, there is no cache key to invalidate, an unreadable switch is the
   cannot-open edit on the page and the unknown mark on Main, and a flip is announced nowhere (no group, Staff Group or
   log channel message, D-11).
+- The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
+  registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
+  parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
+  have parts `x` text, `m` media and `b` buttons, Rules has `x` only, so a later part is a table row and not new renderer
+  code. A line is a state word and never the stored content: text is Default or Set with its visible length
+  (`formatting.VisibleLength`), media Not set or its kind word (a GIF is stored as a document and reads File or GIF),
+  buttons Not set or Set with the total; the stored text, a button name and a link are never echoed, and a sticker or a
+  video note adds `settings_edit_note_no_caption`. `renderSettingsEditor` is pure and built in row blocks (switches, Open
+  in private, navigation), so a later plan adds a block without touching the others. Welcome and Goodbye carry control `e`,
+  the on/off switch (`settingsRightAdmin`, as `/welcome on|off`), and control `d`, Delete last (`settingsRightChangeInfo`,
+  as `/cleanwelcome` and `/cleangoodbye`). Each press sends the absolute target `v` ("0" or "1", anything else is an
+  invalid request), calls `applyWelcomeEnabled`, `applyGoodbyeEnabled`, `applyCleanWelcome` or `applyCleanGoodbye`, and
+  redraws from the row the function read back, with no notice; a failed write redraws the freshly loaded page with
+  `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
+  existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
+  row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
+  with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r`, then Access for the owner) with
+  `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
+  for Rules.
 
 ## Permissions
 
@@ -453,6 +474,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   nothing. A control the presser lacks the right for is still drawn and its press refused.
   `settingsRightOwner` needs the creator from the press's own member record (no extra call) and refuses with the alert
   `settings_access_owner_only`; only the Access page's control and action declare it.
+  `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
+  extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
+  `/cleangoodbye` refuse through `CanUserChangeInfo`). `settingsRightRefusalFor` is the one pure judgement of a right's
+  member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
 
 ## Data
 
@@ -1432,6 +1457,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every reachable screen in all 8 languages (the private list empty and populated, the Main status block, the Access page
   and its card included), runs a group menu end to end and runs a private menu of an admin who is not the creator end to
   end.
+- The editor pages and their Main lines read through `greetings.LoadSettingsContext` and `rules.LoadRulesContext`
+  (the `settingsEditGreetingsRead` and `settingsEditRulesRead` seams), which create nothing and return their errors, and
+  never through `GetGreetingSettings` or `GetChatRulesInfo`, which create rows and hide a failed read: opening Main or a
+  page leaves no greetings, rules or chats row behind, and a failed read is the cannot-open edit on the page and the
+  unknown mark on Main, never a default. A chat with no greetings row reads as Welcome On, Goodbye On (the database
+  default of `goodbye_enabled`, which the first write stores for a chat the bot knows) and Delete last Off, which is what
+  the bot then does, and the pages show exactly that (`TestSettingsEditDefaultsMatchRuntime`).
 
 ## Go rules
 
@@ -1537,7 +1569,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The settings menu tests share one toolkit, `fuku/modules/settings_env_test.go` (`newSettingsEnv`, `newSettingsEnvWith`
   with `RealLocale`, `openMenu`, `press`, `pressRaw`, `pressPrivate`, `pressNoMessage`, `sendIn`, `sendPrivate`, `edits`,
   `lastEdit`, `answerCount`, `settingsButtonByMarker`, `settingsButtonFields`): page tests call it by name and do not edit
-  it. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
+  it. The message editor adds `fuku/modules/settings_edit_env_test.go` on top of it (`newSettingsEditEnv`, `editCleanup`,
+  `settingsEditAdminJSON`, `listEditAdmin`, `settingsEditStored`, `settingsEditRulesStored`, `openEditPage`,
+  `openEditPagePrivate`) and its families `TestSettingsEdit*`, `TestSettingsParityGreeting*`, `TestSettingsDriftGreetings`
+  and `TestSettingsAuthorityParityGreetings` (`settings_edit_test.go`). `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
   has no locale manager of its own. `fuku/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
 - Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./fuku/modules ./fuku/i18n`.

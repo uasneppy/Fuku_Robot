@@ -101,6 +101,9 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 						{Key: "l", Icon: "🔒", Title: settingsText(tr, "settings_page_lockdown"), State: settingsText(tr, "settings_state_lock_none"), Known: true},
 						{Key: "c", Icon: "🧩", Title: settingsText(tr, "settings_page_captcha"), State: settingsStateWord(tr, true), Known: true},
 						{Key: "f", Icon: "🌊", Title: settingsText(tr, "settings_page_antiflood"), State: "", Known: false},
+						{Key: "w", Icon: "🎉", Title: settingsText(tr, "settings_page_welcome"), State: settingsText(tr, "common_status_on"), Known: true},
+						{Key: "g", Icon: "👋", Title: settingsText(tr, "settings_page_goodbye"), State: settingsText(tr, "common_status_off"), Known: true},
+						{Key: "r", Icon: "📜", Title: settingsText(tr, "settings_page_rules"), State: settingsText(tr, "settings_state_not_set"), Known: true},
 						{Key: "a", Icon: "🔑", Title: settingsText(tr, "settings_page_access"), State: settingsText(tr, "settings_state_access_off"), Known: true, OwnerOnly: true},
 					}
 				}
@@ -128,6 +131,24 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					"linked":                         renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), ""),
 					"not linked":                     renderSettingsStaffNotLinked(groupView, ""),
 					"linked, no group":               renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, nil, &row), ""),
+				}
+				// The message editor pages, in every state, for a group menu and for the private
+				// menu of an admin who is not the creator.
+				for _, def := range settingsEditPages {
+					states := map[string]settingsEditState{
+						"default":    {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true},
+						"all set":    {Kind: def.Kind, Text: "custom <b>text</b>", MediaType: db.PHOTO, FileID: "f", Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true},
+						"sticker":    {Kind: def.Kind, Text: "custom", MediaType: db.STICKER, FileID: "f"},
+						"video note": {Kind: def.Kind, MediaType: db.VIDEO_NOTE, FileID: "f", TextIsDefault: true},
+					}
+					for stateName, st := range states {
+						for viewName, view := range map[string]settingsView{"group": groupView, "private admin": privateAdminView} {
+							for i, notice := range notices {
+								key := fmt.Sprintf("editor %s %s %s notice %d", def.Key, stateName, viewName, i)
+								screens[key] = renderSettingsEditor(view, def, st, settingsEditScreenOpts{Notice: notice, BotUsername: "FukuTestBot"})
+							}
+						}
+					}
 				}
 				for i, notice := range notices {
 					name := fmt.Sprintf("notice %d", i)
@@ -173,6 +194,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 	// admin gets the masked line, on every screen the Staff Group page can draw.
 	t.Run("a private run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
 		env := newSettingsEnv(t)
+		editCleanup(t, env.chat.Id)
 		staffChat := settingsStaffTestOwnedStaffGroup(env, settingsStaffPrivacyTitle)
 		linkLockdownGroupTo(env.lockdownEnv, staffChat)
 
@@ -188,6 +210,10 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		private("a", "ua")
 		private("a", "op", "p", "s")
 		private("a", "lk")
+		for _, page := range []string{"w", "g", "r"} {
+			private("a", "op", "p", page)
+		}
+		private("a", "tg", "p", "w", "t", "e", "v", "0")
 
 		var seen []string
 		for _, edit := range env.edits(moderator.Id, menuMsgID) {

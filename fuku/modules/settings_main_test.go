@@ -288,6 +288,8 @@ func settingsMainWorstState(tr *i18n.Translator) string {
 		settingsText(tr, "settings_state_off_plain"),
 		settingsText(tr, "settings_state_access_on"),
 		settingsText(tr, "settings_state_access_off"),
+		settingsText(tr, "settings_state_set"),
+		settingsText(tr, "settings_state_not_set"),
 		settingsStateWord(tr, true),
 		settingsStateWord(tr, false),
 	}
