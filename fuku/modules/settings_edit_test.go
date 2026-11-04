@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -144,6 +146,59 @@ func settingsEditDef(t *testing.T, key string) settingsEditPageDef {
 func settingsEditHasButton(keyboard [][]gotgbot.InlineKeyboardButton, labelKey string) bool {
 	_, ok := settingsButtonByMarker(keyboard, labelKey)
 	return ok
+}
+
+// settingsEditLabelName is the short name settingsEditRowNames gives a button whose label starts
+// with the marker of the locale key: the key without its settings_btn_edit_ or settings_btn_
+// prefix.
+func settingsEditLabelName(key string) string {
+	for _, prefix := range []string{"settings_btn_edit_", "settings_btn_"} {
+		if name, ok := strings.CutPrefix(key, prefix); ok {
+			return name
+		}
+	}
+	return key
+}
+
+// settingsEditLabelMarker finds the first locale marker in a button label.
+var settingsEditLabelMarker = regexp.MustCompile(`@@([a-z0-9-]+)@@`)
+
+// settingsEditRowNames draws a screen's keyboard as one string per row: the short names of the
+// row's buttons joined by " | ", in order. A button's name comes from the first locale marker of
+// its label, so a toggle's state word is not part of it.
+func settingsEditRowNames(screen settingsScreen) []string {
+	var rows []string
+	for _, row := range screen.Keyboard.InlineKeyboard {
+		var names []string
+		for _, button := range row {
+			match := settingsEditLabelMarker.FindStringSubmatch(button.Text)
+			if match == nil {
+				names = append(names, button.Text)
+				continue
+			}
+			names = append(names, settingsEditLabelName(strings.ReplaceAll(match[1], "-", "_")))
+		}
+		rows = append(rows, strings.Join(names, " | "))
+	}
+	return rows
+}
+
+// settingsEditCountPreviews counts the preview buttons of a page: one Preview per part and one
+// Full preview, found by their action codes.
+func settingsEditCountPreviews(t *testing.T, screen settingsScreen, def settingsEditPageDef) (previews, full int) {
+	t.Helper()
+	for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+		if button.Url != "" {
+			continue
+		}
+		switch settingsButtonFields(t, button)["a"] {
+		case def.PreviewCode:
+			previews++
+		case def.FullCode:
+			full++
+		}
+	}
+	return previews, full
 }
 
 func TestSettingsEditPages(t *testing.T) {
@@ -322,6 +377,88 @@ func TestSettingsEditPages(t *testing.T) {
 		}
 		if settingsEditHasButton(set.Keyboard.InlineKeyboard, "settings_btn_edit_set_media") {
 			t.Error("the Rules page has a media row")
+		}
+	})
+
+	t.Run("the mock states draw exactly the contract's rows", func(t *testing.T) {
+		buttons := models.ButtonArray{{Name: "B", Url: "https://example.com"}}
+		for _, def := range []settingsEditPageDef{welcome, settingsEditDef(t, settingsPageGoodbye)} {
+			toggle := settingsEditLabelName(def.ToggleLabelKey)
+			clean := settingsEditLabelName(def.CleanLabelKey)
+			states := []struct {
+				name  string
+				state settingsEditState
+				rows  []string
+			}{
+				{
+					"nothing set", settingsEditState{Kind: def.Kind, TextIsDefault: true, Enabled: true},
+					[]string{
+						"set_text", "set_media", "set_buttons", "preview_text | full_preview", toggle, clean, "back | close",
+					},
+				},
+				{
+					"text and media set", settingsEditState{Kind: def.Kind, Text: "custom", MediaType: db.PHOTO, FileID: "f", Enabled: true},
+					[]string{
+						"set_text | remove_text", "set_media | remove_media", "set_buttons",
+						"preview_text | preview_media", "full_preview", toggle, clean, "back | close",
+					},
+				},
+				{
+					"everything set", settingsEditState{Kind: def.Kind, Text: "custom", MediaType: db.STICKER, FileID: "f", Buttons: buttons, Enabled: true},
+					[]string{
+						"set_text | remove_text", "set_media | remove_media", "set_buttons | remove_buttons",
+						"preview_text | preview_media", "preview_buttons | full_preview", toggle, clean, "back | close",
+					},
+				},
+				{
+					"only buttons set", settingsEditState{Kind: def.Kind, TextIsDefault: true, Buttons: buttons, Enabled: true},
+					[]string{
+						"set_text", "set_media", "set_buttons | remove_buttons",
+						"preview_text | preview_buttons", "full_preview", toggle, clean, "back | close",
+					},
+				},
+			}
+			for _, tc := range states {
+				t.Run(def.Key+" "+tc.name, func(t *testing.T) {
+					private := renderSettingsEditor(settingsEditView(tr, true), def, tc.state, settingsEditScreenOpts{})
+					if got := settingsEditRowNames(private); !slices.Equal(got, tc.rows) {
+						t.Errorf("private rows = %q, want %q", got, tc.rows)
+					}
+					if len(tc.rows) > 8 {
+						t.Errorf("the mock has %d rows, want at most 8 in a private menu", len(tc.rows))
+					}
+					group := renderSettingsEditor(settingsEditView(tr, false), def, tc.state, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
+					wantGroup := slices.Concat(tc.rows[:len(tc.rows)-1], []string{"open_private", "back | close"})
+					if got := settingsEditRowNames(group); !slices.Equal(got, wantGroup) {
+						t.Errorf("group rows = %q, want %q", got, wantGroup)
+					}
+					if len(wantGroup) > 9 {
+						t.Errorf("the group page has %d rows, want at most 9", len(wantGroup))
+					}
+				})
+			}
+		}
+
+		rulesStates := []struct {
+			name  string
+			state settingsEditState
+			rows  []string
+		}{
+			{"rules set", settingsEditState{Kind: settingsEditRules, Text: "the rules"}, []string{"set_text | remove_text", "preview_text | full_preview", "back | close"}},
+			{"rules not set", settingsEditState{Kind: settingsEditRules}, []string{"set_text", "full_preview", "back | close"}},
+		}
+		for _, tc := range rulesStates {
+			t.Run(tc.name, func(t *testing.T) {
+				private := renderSettingsEditor(settingsEditView(tr, true), rulesDef, tc.state, settingsEditScreenOpts{})
+				if got := settingsEditRowNames(private); !slices.Equal(got, tc.rows) {
+					t.Errorf("private rows = %q, want %q", got, tc.rows)
+				}
+				group := renderSettingsEditor(settingsEditView(tr, false), rulesDef, tc.state, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
+				wantGroup := slices.Concat(tc.rows[:len(tc.rows)-1], []string{"open_private", "back | close"})
+				if got := settingsEditRowNames(group); !slices.Equal(got, wantGroup) {
+					t.Errorf("group rows = %q, want %q", got, wantGroup)
+				}
+			})
 		}
 	})
 
@@ -795,6 +932,18 @@ func TestSettingsEditCallbackBytes(t *testing.T) {
 				if callbacks == 0 {
 					t.Errorf("%s has no callback buttons", label)
 				}
+				wantRows := 8
+				if !private {
+					wantRows = 9
+				}
+				if rows := len(screen.Keyboard.InlineKeyboard); rows > wantRows {
+					t.Errorf("%s has %d rows, want at most %d", label, rows, wantRows)
+				}
+				if name == "all set" {
+					if previews, full := settingsEditCountPreviews(t, screen, def); previews != len(def.Parts) || full != 1 {
+						t.Errorf("%s draws %d Preview buttons and %d Full preview, want %d and 1", label, previews, full, len(def.Parts))
+					}
+				}
 			}
 		}
 		for _, def := range settingsEditPages {
@@ -854,6 +1003,11 @@ func TestSettingsEditPagesFitEveryLocale(t *testing.T) {
 							}
 							if screen.Omitted != 0 {
 								t.Errorf("%s %s omitted %d buttons", label, stateName, screen.Omitted)
+							}
+							if stateName == "all set" {
+								if previews, full := settingsEditCountPreviews(t, screen, def); previews != len(def.Parts) || full != 1 {
+									t.Errorf("%s %s draws %d Preview buttons and %d Full preview, want %d and 1", label, stateName, previews, full, len(def.Parts))
+								}
 							}
 						}
 						for _, part := range def.Parts {
