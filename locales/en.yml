@@ -3159,6 +3159,8 @@ settings_edit_prompt_closed: "This request is closed."
 settings_edit_unavailable: "The editor is not available right now. Nothing changed. Try again later."
 settings_edit_prompt_stale: "This request is no longer waiting. Start again from the page."
 settings_edit_wait_expired: "The 10 minutes are over, so I stopped waiting. Nothing changed."
+settings_edit_saved_text: "Text saved."
+settings_edit_still_waiting: "I'm still waiting. Send it again, or tap Cancel."
 settings_no_change_info: "This needs the right to change group info, which you don't have here. Nothing changed."
 settings_help_msg: |
   Manage this group from one button menu.

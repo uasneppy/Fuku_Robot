@@ -194,6 +194,8 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_edit_unavailable":          {120, 160},
 	"settings_edit_prompt_stale":         {120, 160},
 	"settings_edit_wait_expired":         {120, 160},
+	"settings_edit_saved_text":           {40, 56},
+	"settings_edit_still_waiting":        {70, 98},
 	"settings_no_change_info":            {120, 160},
 }
 

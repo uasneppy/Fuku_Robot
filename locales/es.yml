@@ -3131,6 +3131,8 @@ settings_edit_prompt_closed: "Esta solicitud está cerrada."
 settings_edit_unavailable: "El editor no está disponible ahora. No cambió nada. Inténtalo más tarde."
 settings_edit_prompt_stale: "Esta solicitud ya no está en espera. Empieza de nuevo desde la página."
 settings_edit_wait_expired: "Pasaron los 10 minutos, así que dejé de esperar. No cambió nada."
+settings_edit_saved_text: "Texto guardado."
+settings_edit_still_waiting: "Sigo esperando. Envíalo de nuevo o pulsa Cancelar."
 settings_no_change_info: "Esto requiere el permiso de cambiar la información del grupo, que no tienes aquí. No cambió nada."
 settings_help_msg: |
   Gestiona este grupo desde un único menú de botones.

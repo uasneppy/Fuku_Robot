@@ -3121,6 +3121,8 @@ settings_edit_prompt_closed: "Permintaan ini sudah ditutup."
 settings_edit_unavailable: "Editor tidak tersedia saat ini. Tidak ada yang berubah. Coba lagi nanti."
 settings_edit_prompt_stale: "Permintaan ini tidak lagi menunggu. Mulai lagi dari halaman."
 settings_edit_wait_expired: "10 menit sudah lewat, jadi saya berhenti menunggu. Tidak ada yang berubah."
+settings_edit_saved_text: "Teks disimpan."
+settings_edit_still_waiting: "Saya masih menunggu. Kirim lagi, atau ketuk Batal."
 settings_no_change_info: "Ini memerlukan hak untuk mengubah info grup, yang tidak Anda miliki di sini. Tidak ada yang berubah."
 settings_help_msg: |
   Kelola grup ini dari satu menu tombol.

@@ -3047,6 +3047,8 @@ settings_edit_prompt_closed: "Cette demande est close."
 settings_edit_unavailable: "L'éditeur n'est pas disponible pour le moment. Rien n'a changé. Réessayez plus tard."
 settings_edit_prompt_stale: "Cette demande n'est plus en attente. Recommencez depuis la page."
 settings_edit_wait_expired: "Les 10 minutes sont écoulées, j'ai donc cessé d'attendre. Rien n'a changé."
+settings_edit_saved_text: "Texte enregistré."
+settings_edit_still_waiting: "J'attends toujours. Renvoyez-le, ou touchez Annuler."
 settings_no_change_info: "Il faut le droit de modifier les infos du groupe, que vous n'avez pas ici. Rien n'a changé."
 settings_help_msg: |
   Gérez ce groupe depuis un seul menu à boutons.
