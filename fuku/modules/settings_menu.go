@@ -64,13 +64,51 @@ const (
 	// settingsRightOwner needs the live creator of the group (the Access page). It is judged on
 	// the member record step 4 fetched, with no extra call.
 	settingsRightOwner
-	// settingsRightChangeInfo is a RED-phase stub.
+	// settingsRightChangeInfo needs the creator or an administrator with can_change_info. It is
+	// judged on the member record step 4 fetched, with no extra call, and mirrors what
+	// /setwelcome, /resetwelcome, /setgoodbye, /resetgoodbye, /cleanwelcome and /cleangoodbye
+	// check through CanUserChangeInfo. It is appended after settingsRightOwner so the zero
+	// value stays settingsRightAdmin.
 	settingsRightChangeInfo
 )
 
-// settingsRightRefusalFor is a RED-phase stub.
+// settingsRightRefusalFor judges the member-record part of a right: the one pure decision a
+// button press and a typed reply share, so they cannot judge a right differently. It returns
+// the locale key of the refusal and whether it is an alert, or "" when the member holds the
+// right. The two bot rights have no member part (the live admin check of step 4 is theirs), so
+// they answer no refusal here and settingsRightRefusal keeps their bot checks. An unknown
+// right fails closed.
 func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRight) (key string, alert bool) {
-	return "", false
+	switch right {
+	case settingsRightAdmin, settingsRightAdminBotAdmin, settingsRightAdminFloodBot:
+		return "", false
+	case settingsRightRestrict:
+		switch staffIssuerSkipReason(member) {
+		case "":
+			return "", false
+		case staffReasonSkipIssuerNoRight:
+			return "settings_no_restrict", true
+		}
+		return "settings_not_admin", true
+	case settingsRightOwner:
+		if member.Status == gotgbot.ChatMemberStatusCreator {
+			return "", false
+		}
+		return "settings_access_owner_only", true
+	case settingsRightChangeInfo:
+		switch member.Status {
+		case gotgbot.ChatMemberStatusCreator:
+			return "", false
+		case gotgbot.ChatMemberStatusAdministrator:
+			if member.CanChangeInfo {
+				return "", false
+			}
+			return "settings_no_change_info", true
+		}
+		return "settings_not_admin", true
+	}
+	// An unknown right fails closed.
+	return "settings_not_admin", true
 }
 
 // settingsRightRefusal returns the locale key of the refusal when the press lacks the
@@ -79,35 +117,20 @@ func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRigh
 // cached predicates, never a live bot lookup, so the menu refuses exactly what the command
 // refuses.
 func settingsRightRefusal(p *settingsPress, right settingsRight) (key string, alert bool) {
+	if key, alert := settingsRightRefusalFor(p.member, right); key != "" {
+		return key, alert
+	}
 	switch right {
-	case settingsRightAdmin:
-		return "", false
 	case settingsRightAdminBotAdmin:
 		if !chat_status.IsBotAdmin(p.b, nil, p.group) {
 			return "chat_status_bot_not_admin", false
 		}
-		return "", false
 	case settingsRightAdminFloodBot:
 		if !chat_status.IsUserAdmin(p.b, p.group.Id, p.b.Id) {
 			return "connections_is_user_connected_bot_not_admin", false
 		}
-		return "", false
-	case settingsRightRestrict:
-		switch staffIssuerSkipReason(p.member) {
-		case "":
-			return "", false
-		case staffReasonSkipIssuerNoRight:
-			return "settings_no_restrict", true
-		}
-		return "settings_not_admin", true
-	case settingsRightOwner:
-		if p.member.Status == gotgbot.ChatMemberStatusCreator {
-			return "", false
-		}
-		return "settings_access_owner_only", true
 	}
-	// An unknown right fails closed.
-	return "settings_not_admin", true
+	return "", false
 }
 
 // settingsPress is one verified press of a settings button.
