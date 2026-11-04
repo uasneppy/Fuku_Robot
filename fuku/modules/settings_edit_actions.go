@@ -8,7 +8,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
@@ -52,12 +51,12 @@ func settingsEditPartByCode(def settingsEditPageDef, code string) *settingsEditP
 }
 
 // settingsEditPromptMax is the number the text prompt shows after "Up to": 3800 on Rules, else
-// 1024 while the group has media (the text is its caption) and 4096 without.
+// 1024 while the group has stored media (the text is its caption) and 4096 without.
 func settingsEditPromptMax(def settingsEditPageDef, st settingsEditState) int {
 	switch {
 	case def.Kind == settingsEditRules:
 		return settingsEditRulesPromptMax
-	case st.MediaType != db.TEXT:
+	case settingsEditPartIsSet(st, settingsEditPartMedia):
 		return settingsEditCaptionMax
 	}
 	return settingsEditTextMax
