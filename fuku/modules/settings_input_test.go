@@ -7,10 +7,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
@@ -143,21 +147,30 @@ func TestSettingsEditCancelCommand(t *testing.T) {
 	}
 }
 
+// TestSettingsEditCancelCommandIsSilentInAGroup: /cancel sent in a group is not the bot's command.
+// It makes no reply and no write, touches no wait, and the update goes on to the later handler
+// groups exactly as an unknown slash word does (so it makes the Telegram calls those groups make,
+// never more and never fewer).
 func TestSettingsEditCancelCommandIsSilentInAGroup(t *testing.T) {
 	env := newSettingsEnv(t)
 	if _, err := settingsInputSet(context.Background(), env.admin.Id, settingsInputTestWait(t, -100)); err != nil {
 		t.Fatalf("settingsInputSet() error = %v", err)
 	}
+	// Warm the caches the later groups fill, then measure an unknown slash word as the baseline.
+	env.send(env.admin, "/zzzunknown now")
 	callsBefore := env.callCount()
-	sentBefore := len(env.fake.sentTo(env.chat.Id))
+	env.send(env.admin, "/zzzunknown now")
+	baseline := env.callCount() - callsBefore
 
+	callsBefore = env.callCount()
+	sentBefore := len(env.fake.sentTo(env.chat.Id))
 	env.send(env.admin, "/cancel")
 
 	if got := len(env.fake.sentTo(env.chat.Id)); got != sentBefore {
 		t.Errorf("/cancel in a group sent %d message(s), want none", got-sentBefore)
 	}
-	if got := env.callCount(); got != callsBefore {
-		t.Errorf("/cancel in a group made %d Telegram call(s), want none", got-callsBefore)
+	if got := env.callCount() - callsBefore; got != baseline {
+		t.Errorf("/cancel in a group made %d Telegram call(s), want the %d an unknown slash word makes", got, baseline)
 	}
 	if !env.redis.Exists(settingsInputKey(env.admin.Id)) {
 		t.Error("/cancel in a group deleted the sender's wait")
@@ -571,3 +584,40 @@ func TestSettingsInputWithoutRedis(t *testing.T) {
 
 // strconv64 formats an ID for a key prefix.
 func strconv64(id int64) string { return strconv.FormatInt(id, 10) }
+
+// TestSettingsCancelInGroupPassesOn: /cancel belongs to the bot's private chat. Sent in a group
+// it must not end the update, or a member could post "/cancel <spam link>" past every later
+// handler group. It reaches a group 7 handler and is counted by the late raid flood watcher like
+// any slash word no command took, and the bot answers and writes nothing.
+func TestSettingsCancelInGroupPassesOn(t *testing.T) {
+	env := newFloodEnv(t)
+	LoadSettingsInput(env.dispatcher)
+	var reached atomic.Int32
+	env.dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, func(_ *gotgbot.Bot, ctx *ext.Context) error {
+		if strings.HasPrefix(ctx.EffectiveMessage.GetText(), "/cancel") {
+			reached.Add(1)
+		}
+		return ext.ContinueGroups
+	}), 7)
+	recent := env.newMembers(3, 2*time.Hour)
+	sentBefore := len(env.fake.callsFor("sendMessage"))
+
+	for _, member := range recent {
+		env.sendItem(member, "cancel")
+	}
+
+	if got := reached.Load(); got != 3 {
+		t.Errorf("the group 7 handler saw %d of 3 group /cancel messages, want all of them", got)
+	}
+	if items, newItems, accounts := floodSizes(t, env.chat.Id); items != 3 || newItems != 3 || accounts != 3 {
+		t.Errorf("3 group /cancel texts left %d items, %d new, %d accounts, want 3, 3, 3 (counted late like an unknown slash word)", items, newItems, accounts)
+	}
+	if after := len(env.fake.callsFor("sendMessage")); after != sentBefore {
+		t.Errorf("the bot sent %d messages for /cancel in a group, want none", after-sentBefore)
+	}
+	for _, key := range env.redis.Keys() {
+		if strings.HasPrefix(key, "fuku:settings:") {
+			t.Errorf("/cancel in a group wrote %q", key)
+		}
+	}
+}

@@ -523,11 +523,44 @@ func settingsInputParseMarker(v string) (int64, string, string, bool) {
 }
 
 // settingsInputPrivateOnly is the check of /cancel: it passes in the bot's private chat and
-// never replies, so /cancel in a group is silent.
+// never replies, so /cancel in a group is silent. settingsCancelPassOn already takes a /cancel of
+// any other chat before the pipeline runs and lets the update go on; this check is the safety net.
 func settingsInputPrivateOnly() helpers.CheckFunc {
 	return func(c *helpers.CommandContext) bool {
 		return c.Chat != nil && c.Chat.Type == "private"
 	}
+}
+
+// settingsCancelPassOn is the handler that keeps /cancel out of every group: a /cancel sent
+// anywhere but the bot's private chat is not the bot's command, so it must reach every later handler
+// group (aispam, antiflood, locks, blacklists, filters, the log channel and the late raid flood
+// counter) like any other text. helpers.WrapCommand ends the update when a check fails, which
+// would let a member post "/cancel <spam>" past all of them, so this handler is registered before
+// the pipeline's and takes a /cancel of a non-private chat first: it matches exactly what the
+// pipeline's command handler matches (it asks that handler), makes no reply, no write and no
+// Telegram call, and returns nil. In this gotgbot, nil leaves the handler's group and moves on
+// to the next one, which is what is wanted: ext.ContinueGroups would only try the next handler
+// of group 0, which is the pipeline's /cancel handler that ends the update. The rest of group 0
+// is skipped for such a message, as for any matched command. It is a documented exception
+// beside the StaffActions interceptors; /cancel in the private chat is untouched.
+type settingsCancelPassOn struct {
+	command handlers.Command
+}
+
+// CheckUpdate implements ext.Handler: a /cancel command of a chat that is not private.
+func (h settingsCancelPassOn) CheckUpdate(b *gotgbot.Bot, ctx *ext.Context) bool {
+	msg := ctx.EffectiveMessage
+	return msg != nil && msg.Chat.Type != "private" && h.command.CheckUpdate(b, ctx)
+}
+
+// HandleUpdate implements ext.Handler: nil moves the update on to the next handler group.
+func (h settingsCancelPassOn) HandleUpdate(_ *gotgbot.Bot, _ *ext.Context) error {
+	return nil
+}
+
+// Name implements ext.Handler.
+func (h settingsCancelPassOn) Name() string {
+	return "command_cancel_outside_private"
 }
 
 // settingsCancelDesc is /cancel. It is not Disableable: it is only ever sent to the bot's
@@ -565,6 +598,8 @@ func (m moduleStruct) settingsCancel(b *gotgbot.Bot, ctx *ext.Context) error {
 // calls it, so every environment that loads the settings module also gets the wait's command and
 // the door that reads the reply.
 func LoadSettingsInput(dispatcher *ext.Dispatcher) {
+	// The pass-on handler comes first in group 0, so it is tried before the pipeline's /cancel.
+	dispatcher.AddHandler(settingsCancelPassOn{command: handlers.NewCommand(settingsCancelDesc.Name, nil)})
 	helpers.WrapCommand(dispatcher, settingsCancelDesc, pipelineHandler(settingsModule.settingsCancel))
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(settingsInputIsPrivate, settingsModule.settingsInput), settingsInputGroup)
 }

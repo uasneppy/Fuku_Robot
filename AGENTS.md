@@ -133,8 +133,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `SetAllowChannel`, because a menu is never a channel message.
   `LoadSettings` ends by calling `LoadSettingsInput` (`settings_input.go`), which registers `/cancel` through
   `helpers.WrapCommand` (its one check, `settingsInputPrivateOnly`, passes only in the bot's private chat and never
-  replies, so `/cancel` in a group is silent and makes no write or Telegram call; it is not `Disableable`) and the
-  typed-reply door (below). `/cancel` deletes the sender's own wait and
+  replies; it is not `Disableable`) and the typed-reply door (below). A `/cancel` sent anywhere but the bot's private
+  chat is not the bot's command and is never ended: `settingsCancelPassOn`, a raw handler registered at group 0 just
+  before the pipeline's `/cancel` (a second documented exception to the `WrapCommand` rule, beside the StaffActions
+  interceptors; it matches through `handlers.NewCommand`'s own `CheckUpdate`), takes it first, replies and writes nothing,
+  makes no Telegram call and returns `nil`. In this gotgbot `nil` leaves the group and moves on to group 1 and later, while
+  `ext.ContinueGroups` would only try the next handler of group 0, which is the pipeline's `/cancel` that ends the update
+  (so a member's `/cancel <spam link>` would skip aispam, antiflood, locks, blacklists, filters, the log channel and the
+  late raid flood counter, which now see it like any other text, and group 12 counts it as an unknown slash word). `/cancel` deletes the sender's own wait and
   marker (the keys are built from the sender's ID alone) and answers `settings_edit_cancelled`, or
   `settings_edit_cancel_nothing` when there was none, when a write holds the wait, and without Redis.
   The typed-reply door (`settings_input_door.go`, `settingsModule.settingsInput`, registered by `LoadSettingsInput` with
