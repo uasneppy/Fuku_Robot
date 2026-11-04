@@ -150,12 +150,14 @@ CURRENT state (`Admins can change settings: ❌ Off`) and pressing it flips it.
 
 ## Interaction Contract
 
-### The four doors and the gate (MENU-11, MENU-13, D-13, D-16, D-17)
+### The four doors and the gate (MENU-11, MENU-13, D-13, D-15, D-16, D-17)
 
 Every way in re-checks the person live with `getChatMember` against the group it affects (never the admin cache or
 Redis), and the owner gate sits on top of that check. The gate's answer for a person whose live status is
-`administrator` is: in when "Admins can change settings" is on or the group has no live owner (D-15), out otherwise,
-and out when the switch cannot be read. A live `creator` is always in.
+`administrator` is decided by the owner-state read of step 4b below: in when "Admins can change settings" is on, or when
+the group has no live owner (D-15); out when an owner exists and the switch is off; and out whenever either fact cannot
+be established (R6, R7). A live `creator` is always in, on the member record the live check already fetched, with no
+extra call.
 
 | Door | Order of checks | A gated admin gets | Everyone else |
 |------|-----------------|--------------------|---------------|
@@ -163,17 +165,43 @@ and out when the switch cannot be read. A live `creator` is always in.
 | Anonymous admin in a group | the existing `PromptAnonAdminProof` first; after the proof tap the tapper is the sender and is checked live, then gated as above (D-17) | the same `settings_refuse_owner_only` | the proof tap of a non-admin gets the existing refusal |
 | `/start settings_<chat id>` in private | strict payload parse, live check, then the gate, then one `getChat` | a plain reply `settings_start_owner_only`, no keyboard, no menu | bad payload `settings_start_invalid`; not an admin, or bot missing or group gone at the live check, `settings_start_not_admin` (the same words, unchanged, so the reply never tells anyone whether the bot is in a chat); lookup error `settings_check_failed` |
 | A button press (any menu, any page, Close included) | the Phase 9 steps 1 to 4, then the gate, then the control's right | an alert `settings_gate_owner_only`; the menu is left exactly as it is (D-10) | not an admin `settings_not_admin`; lookup error `settings_check_failed` |
-| Pick from the private list (new `pk`) | as a press, with the pick rules below | the same alert `settings_gate_owner_only`, and the list stays | the pick rules below |
+| Pick from the private list (`pk`) | the press pipeline with the pick overrides below (`settings_pick_unavailable` replaces `settings_not_admin` and the cannot-open edit) | the same alert `settings_gate_owner_only`, and the list stays | the pick rules below |
+
+**The gate cannot decide.** On every door above, when the gate cannot establish the facts it needs (the switch cannot be
+read, or the owner-state read of step 4b failed, timed out or returned an unusable answer) the person is refused with the
+existing `settings_check_failed` and nothing else runs: a plain reply at the three message doors (group `/settings`,
+anonymous re-entry, deep link), an alert at a press, an alert at a pick with the list left as drawn. It is never answered
+with the gated-admin text (that would claim an owner exists) and never lets the person in (R6, R7). No new locale key.
 
 Press pipeline, extended. Phase 9 steps 1 to 5 stand; the gate is step 4b:
 
 1. Decode and structure, no I/O (adds action `pk` with exactly `a` and `c`, and the list namespace).
 2. Service identity: `lockdown_alert_post_as_yourself`.
 3. Group menu only: `query.From.Id` equals `u`, else `settings_not_your_menu`.
-4. One live `getChatMember` of the presser in the group: creator or administrator, else `settings_not_admin`; a failed lookup `settings_check_failed`.
-4b. **Owner gate (new).** Creator: in. Administrator: in while the switch is on or the group has no live owner; otherwise the alert `settings_gate_owner_only` and nothing else runs. A switch that cannot be read refuses with `settings_check_failed`. The gate reads the switch fresh on every replica (D-12; the read policy is phase research's call, the contract is "the next press sees the change").
+4. One live `getChatMember` of the presser in the group: creator or administrator, else `settings_not_admin`; a failed lookup `settings_check_failed`. (The `pk` action overrides both refusals, see the pick rules.)
+4b. **Owner gate (new), the same function on every door.** It runs only after step 4 proved the presser is a creator or an administrator of that group (R1), and decides in this order:
+    1. Creator: **in**, no further read, no extra call (the member record step 4 fetched is the proof).
+    2. Administrator: read the switch (one database read, fresh: D-12; the read policy is plan-phase research's call, the contract is "the next press on any replica sees the change"). Unreadable: refuse with `settings_check_failed`. Switch **on**: **in**, no Telegram call.
+    3. Administrator and switch **off**: the owner-state read below. Creator entry found who is not the presser: refuse with `settings_gate_owner_only` (alert) or the door's own gated text. Result usable and no creator entry: **in** (D-15, no live owner). Error, timeout or unusable result: refuse with `settings_check_failed`.
 5. The control's right. New `settingsRightOwner` (live status creator, from the member record step 4 already fetched, no extra call): refusal alert `settings_access_owner_only`.
 6. to 7. Apply, answer once, edit in place: unchanged.
+
+#### The owner-state read (how "no live owner" is known; D-15, R6, R7)
+
+A non-creator administrator's own member record does not show whether a creator exists, so the gate needs one extra
+fact, and it pays for it only on the rare path.
+
+| Property | Contract |
+|----------|----------|
+| Read | one live `getChatAdministrators` of the group, then a scan of the result for an entry whose status is `creator` |
+| When it runs | only when the presser is a non-creator administrator AND the switch is off. A creator never makes it; an administrator in a group whose switch is on never makes it; a non-admin never reaches the gate. So only admins who are already being gated pay the call |
+| Cost and bound | one Telegram call, bounded by a 3 s timeout (code constant, `settingsOwnerLookupTimeout`) that also bounds the press. Concurrent presses for one chat on one replica share one call in flight (a singleflight keyed by chat ID), so a burst of taps from several admins is one call, not many |
+| Positive memo | an answer "an owner exists" (a creator entry that is not the presser) may be remembered per chat for at most 30 s in process memory (`settingsOwnerMemoTTL`), so an admin hammering a menu in a group that has an owner costs at most about two calls a minute per chat per replica. A memo can only keep an admin OUT, so a stale positive fails closed (an owner who just vanished keeps admins out for at most 30 s) |
+| Never memoised | "no owner" (that answer lets a person in, so it is always read live), an error, a timeout and an unusable result. A group with no live owner therefore costs one call per gated press; that is the rare path of a rare path (switch off, no creator, an admin pressing) and the singleflight plus the 3 s timeout bound it. It is accepted |
+| Creator is the presser | cannot happen on this path (a creator is step 4b.1); if the scan finds a creator entry whose user ID equals the presser's, the state is unusable and refuses |
+| Unusable result | a result that does not contain the presser's own entry as an administrator (the presser was just proven an admin by step 4, so a list without them is stale or truncated) is unusable: refuse with `settings_check_failed`. An empty list is the same |
+| Failure direction | unknown owner state ALWAYS refuses with `settings_check_failed`, never lets the admin in and never answers the gated-admin text (R6, R7) |
+| Mechanism status | `getChatAdministrators` plus a creator scan is the mechanism this contract assumes. 10-CONTEXT.md lists "how a missing creator is recognised live without an extra Telegram call on every press" as an open item for plan-phase research, so the **outcomes** here (what is read, which way it fails, the refusal key, who pays) are binding and the **mechanism** may be refined there, provided the same outcomes hold |
 
 Rules that hold for every refusal this phase adds (the checker's privacy dimension):
 
@@ -181,24 +209,47 @@ Rules that hold for every refusal this phase adds (the checker's privacy dimensi
 |---|------|
 | R1 | A gate refusal is produced only after the presser's live status is proven to be creator or administrator of that group, so it tells no non-admin anything. It is never shown for a failed or unproven check. |
 | R2 | No refusal, alert, notice, list text or hint contains a group title, a chat ID or the words "Staff Group", in any of the 8 languages. The refusals name no setting, switch or page (the in-menu alert says "the owner", never "Access"). |
-| R3 | Where the presser is not proven an admin of the group named in the request (deep link, forged `c` in a pick), the answer is the same text whether the bot is in that chat or not. |
+| R3 | Where the presser is not proven an admin of the group named in the request (deep link, forged `c` in a pick), the answer is the same text and has the same effect whether the bot is in that chat or not, the chat is gone, or it is not a group. For the pick door this is spelled out in "The pick rules": every non-admin outcome and every bot-missing error at every step answers `settings_pick_unavailable`, the list stays, nothing is edited. |
 | R4 | The public group reply (`settings_refuse_owner_only`) never mentions the switch, the Access page or what an owner could do. |
 | R5 | The empty-list text is one text for every user. It never changes with what the bot knows about the person. |
 | R6 | When anything is unclear (unreadable switch, unknown right) the gate refuses. |
+| R7 | An unknown owner state (the owner-state read failed, timed out or was unusable) refuses with `settings_check_failed`. It never lets the admin in (that would be fail-open) and never answers the gated-admin text (that would claim an owner exists). |
 
 ### The pick rules (private list, new action `pk`)
 
 A pick is `settings|v1|a=pk&c=<group id>`: it goes through the whole press pipeline, so the live admin check, the
 gate and the one `getChat` all run before anything is shown. On success the list message is **edited in place into
 that group's Main page** (private menu, the opener's language, Groups button in the Back slot). The list message is
-never deleted and never replaced by `settings_cannot_open`:
+never deleted and never replaced by `settings_cannot_open`.
 
-| Outcome at a pick | Shown | The list |
-|-------------------|-------|----------|
-| allowed | the group's Main page replaces the list message | gone (it became the menu) |
-| not an admin any more, bot not in the group, group gone, not a group or supergroup | alert `settings_pick_unavailable` (one neutral text for all four: R3) | stays as drawn |
-| admin but gated (a row from before the switch was turned off) | alert `settings_gate_owner_only` | stays as drawn |
-| lookup failed | alert `settings_check_failed` | stays as drawn |
+`c` is attacker-controlled (callback data is not authenticated), so a pick must not let anyone learn whether the bot is
+in a chat. The pick therefore **overrides two Phase 9 mappings**: a non-admin presser gets `settings_pick_unavailable`
+(not `settings_not_admin`), and a bot-missing error gets `settings_pick_unavailable` (not the cannot-open edit). Order of
+a `pk` press and what each step answers:
+
+| Step | Condition | Answer | The list |
+|------|-----------|--------|----------|
+| 1 | `a` or `c` missing, extra key, `c` not a negative number | `common_callback_invalid_request` (before any I/O, no Telegram data involved) | stays as drawn |
+| 2 | service identity | `lockdown_alert_post_as_yourself` | stays |
+| 4 | the live `getChatMember` returns a status other than creator or administrator (member, restricted, left, kicked) | `settings_pick_unavailable` | stays |
+| 4 | the live `getChatMember` returns an error that `chat_status.IsBotMissingError` recognises ("bot was kicked", "bot is not a member", "chat not found") | `settings_pick_unavailable` | stays |
+| 4 | the live `getChatMember` returns any OTHER error | `settings_check_failed` | stays |
+| 4b | the presser is a proven creator or administrator and the gate refuses (switch off with a live owner) | `settings_gate_owner_only` | stays |
+| 4b | the presser is a proven administrator and the gate cannot decide (R7) | `settings_check_failed` | stays |
+| after 4b | the one `getChat` returns a bot-missing error, or a chat whose type is not `group` or `supergroup` | `settings_pick_unavailable` | stays |
+| after 4b | the one `getChat` returns any OTHER error | `settings_check_failed` | stays |
+| all pass | the gate lets the presser in and `getChat` shows a group or supergroup | the group's Main page replaces the list message | gone (it became the menu) |
+
+Restated as the two rules the checker and the tests rely on:
+
+- **Every bot-missing error at step 4 of a `pk` press returns `settings_pick_unavailable`, as does every non-admin
+  status.** Only errors that are NOT bot-missing return `settings_check_failed`. So a forged `c` naming a chat the
+  bot is not in, a chat that is gone, or a chat the bot is in where the presser is a plain member all produce the
+  SAME alert text and the SAME effect: the alert, the list left exactly as drawn, no edit, no write, one answer.
+- **A pick of a chat where the presser is a proven admin but the gate refuses (a row from before the switch was turned
+  off) returns `settings_gate_owner_only`** and the list stays. That text is reachable only after step 4 proved the
+  presser an admin of that chat (R1), so it discloses nothing to a non-admin; the bot's presence in that chat is
+  already known to a person who administers it.
 
 The rows are a hint (D-06): this is where a stale row is refused. The callback data is not authenticated by Telegram,
 so `c` is treated as untrusted exactly as Phase 9 treats it; the pick adds no new trust.
@@ -220,7 +271,7 @@ owner). Which rows exist is the repository's decision; this contract fixes how t
 | Page size | 8 rows per page (D-04) |
 | Paging | one row after the groups. Page 1 of several: `[ Next ➡️ ]`. A middle page: `[ ⬅️ Prev \| Next ➡️ ]`. The last page: `[ ⬅️ Prev ]`. One page only: no paging row and no `Page` line. Buttons that would be dead are not drawn. The `Page {page}/{pages}` line sits above the keyboard (reused `staff_panel_page`) |
 | Page value | the data carries the 1-based page number, at most 3 digits; a value past the last page is clamped to the last page; a value that is not a whole number of 1 to 3 digits is an invalid request (alert `common_callback_invalid_request`) |
-| Navigation | `[ ✖️ Close ]` alone. The list is the top level, so it has no Back. Close deletes the message and, when the delete fails, edits it to `settings_closed` with no keyboard |
+| Navigation | `[ ✖️ Close ]` alone, with no Back. **Deliberate, accepted reinterpretation of D-20 and roadmap criterion 4 ("every page has Back"):** the list is the top level of the hub and has no parent page to go back to, so Close is its only navigation button; every page below it (Main, Staff Group, Lockdown, Captcha, Antiflood, Access) has a way back, and Main's way back is `⬅️ Groups`. A Back-equivalent on the list would have nowhere to go. Close deletes the message and, when the delete fails, edits it to `settings_closed` with no keyboard |
 | Who can press | any press in the private chat; the list is rebuilt from the presser's own user ID (`query.From.Id`), never from the data, so a forwarded or replayed list button shows the presser their own groups, not the original user's |
 | Returning | a private Main page's `[ ⬅️ Groups ]` redraws the list at page 1. The page the user came from is not remembered (accepted: the menu keeps no state) |
 
@@ -228,7 +279,8 @@ owner). Which rows exist is the repository's decision; this contract fixes how t
 
 Back always redraws the Main page; Cancel on a card returns to the page that asked. Close deletes the menu message.
 On the Main page of a private menu the Back position holds `⬅️ Groups` (back to the list); on a group menu's Main
-page Close stands alone. Every other page keeps `[ ⬅️ Back | ✖️ Close ]`, Access included. A gated admin's Close is
+page Close stands alone. Every other page keeps `[ ⬅️ Back | ✖️ Close ]`, Access included. The private group list is the
+top level and carries `[ ✖️ Close ]` alone by design (see the list's Navigation row). A gated admin's Close is
 refused like any other press (step 4b): they can delete the message with Telegram's own delete.
 
 ### The Access switch (MENU-12, MENU-14, D-08 to D-11)
@@ -240,12 +292,14 @@ refused like any other press (step 4b): they can delete the message with Telegra
 | OFF to ON | two taps (D-09): the toggle press draws the confirm card, Yes writes. The toggle press itself never writes ON |
 | ON to OFF | one tap, writes at once (it only narrows access) |
 | Card | the shared `settings_card.go` card: Yes carries the expiry minute `e` (unix minutes, five minutes ahead), expiry is lazy, no timer, no Redis key. An expired Yes redraws the Access page with `settings_card_expired` and writes nothing. Yes runs the whole press pipeline again, so the creator is re-checked live at Yes (and a presser who is no longer the creator gets `settings_access_owner_only` or `settings_not_admin`, nothing written) |
+| Card buttons | the shared `settings_btn_yes` ("✅ Yes") and `settings_btn_no` ("❌ No") keys, kept as Phase 9 uses them. They are bare words on purpose: on a two-tap card the question text directly above them (`settings_access_confirm`) carries all the specificity ("Let the admins of this group change its settings?"), so Yes and No answer that question and a separate Access-specific label pair adds two keys for no gain |
 | Asker | in a group menu only the opener can press anything (step 3), in a private menu only the person the private chat belongs to; so the asker needs no `u` of its own on the card |
+| Wording audience | a group menu's text is readable by every member of the group, so no Access string addresses "you" or claims who can see the page: the Access strings speak of "the owner" and "admins" only, and are true read by anyone, in a group menu and in a private one |
 | After a write | the Access page is redrawn from the apply function's returned value (not a re-read), showing the new state. No notice line on either flip, nothing is announced to the group, the Staff Group or the log channel (D-11) |
 | Write failure | notice `⚠️ ` plus the existing `common_settings_save_failed` on the redrawn page, the stored state unchanged |
 | Read failure | the Access page cannot read its row: the generic cannot-open edit (`settings_cannot_open_alert` plus `settings_cannot_open`), as Phase 9 D-11 |
 | An open menu after OFF | the next press of an admin menu answers `settings_gate_owner_only` as an alert and edits nothing (D-10). The owner's menu is unaffected |
-| No live owner | nobody is a creator, so nobody sees Access, and administrators are let in regardless (D-15, still a live `getChatMember` check on every press) |
+| No live owner | nobody is a creator, so nobody sees Access, and administrators are let in regardless (D-15, still a live `getChatMember` check on every press). How the gate knows there is no owner is the owner-state read in step 4b; if that read fails the admin is refused (R7), not let in |
 
 One setting, one code path (D-19): the Access write is one apply function that holds the validation, the refusals,
 the write and its `cache.DeleteCache`, and returns a typed result; the toggle, the Yes and any future command read
@@ -299,7 +353,8 @@ Page 2/2
 ```
 
 One page (eight groups or fewer): the same message with no `Page` line and no paging row. One group: the same, one
-button (D-03: no shortcut straight into its menu).
+button (D-03: no shortcut straight into its menu). The list is the top level: Close is its only navigation button, no
+Back (see the list's Navigation row).
 
 Empty list (no recorded groups, or an admin whose groups are all gated). One neutral text for everyone (D-14, R5);
 the body is `settings_list_empty`, a blank line, then `settings_list_hint` (the same hint the populated list carries):
@@ -353,6 +408,9 @@ as `icon name` (the state is in the status block). Later pages add themselves to
 
 ### Access (MENU-12, D-08, D-09)
 
+The Access text is true to every reader (a group menu's text is readable by all members), so it never says "you" or who
+can see the page.
+
 State off (the default):
 
 ```
@@ -360,7 +418,7 @@ State off (the default):
 Fuku Test Group  -1001234567890
 
 Admins can change settings: ❌ Off
-Only you, the group's owner, can open this menu. Admins can still use the setting commands in the group.
+Only the group's owner can open this menu. Admins can still use the setting commands in the group.
 
 [ Admins can change settings: ❌ Off ]
 [ ⬅️ Back | ✖️ Close ]
@@ -373,7 +431,7 @@ State on:
 Fuku Test Group  -1001234567890
 
 Admins can change settings: ✅ On
-Admins of this group can open this menu and change its settings. Only you can see this Access page.
+Admins of this group can open this menu and change its settings.
 
 [ Admins can change settings: ✅ On ]
 [ ⬅️ Back | ✖️ Close ]
@@ -385,7 +443,7 @@ The ON card (pressing the off toggle). It replaces the page body in the same mes
 ⚙️ Settings · Access
 Fuku Test Group  -1001234567890
 
-Let the admins of this group change its settings? Every admin of this group, now or later, will be able to open this menu and change its settings. Only you will see this Access page. You can turn this off again at any time.
+Let the admins of this group change its settings? Every admin of this group, now or later, will be able to open this menu and change its settings. The owner can turn this off again at any time.
 
 [ ✅ Yes | ❌ No ]
 [ ⬅️ Back | ✖️ Close ]
@@ -393,6 +451,7 @@ Let the admins of this group change its settings? Every admin of this group, now
 
 - Toggle press: `a=tg&p=a&t=s&v=1` (from off) draws the card above and writes nothing. `a=tg&p=a&t=s&v=0` (from on) writes OFF and redraws the page.
 - Yes: page action `ay` with `e`. No: the shared cancel `a=no&p=a`, back to the Access page.
+- Yes and No are the shared `settings_btn_yes` / `settings_btn_no` keys; the question above them carries the specificity (see the Access switch table, "Card buttons").
 - The page is not a "live state" page, so it has no Updated line.
 - The Access page never mentions the Staff Group, in a private menu or a group menu.
 
@@ -410,7 +469,7 @@ New action codes (none clashes with `oh op bk cl tg st no ls ly ua uy lk pg`):
 | Code | Meaning | Fields | Namespace |
 |------|---------|--------|-----------|
 | `pk` | pick a group from the private list; the list message becomes that group's Main page | `a`, `c` (private only) | `settings\|v1` |
-| `ay` | Access Yes: write ON | `a`, owner field, `e` | `settings\|v1` (a page action of the Access page, key `a`) |
+| `ay` | Access Yes: write ON | `a`, the owner field (`c` in a private menu, `u` in a group menu, exactly one as the namespace requires), `e` | `settings\|v1` (a page action of the Access page, key `a`) |
 | `lp` | list page `v` (Prev, Next, and the Groups button with `v=1`) | `a`, `v` | the list namespace |
 | `cx` | close the list | `a` | the list namespace |
 
@@ -427,12 +486,12 @@ namespace prefix of at most 12 bytes (`shub|v1|` is 8).
 | Pick a group | `settings\|v1\|a=pk&c=-1001234567890` | 33 | not used |
 | Main grid button, Access open, Refresh | `settings\|v1\|a=op&c=-1001234567890&p=a` | 37 | 33 |
 | Access toggle (ask ON or write OFF) | `settings\|v1\|a=tg&c=-1001234567890&p=a&t=s&v=1` | 45 | 41 |
-| Access Yes | `settings\|v1\|a=ay&c=-1001234567890&e=29800000` | 44 | 40 |
+| Access Yes (`a`, `c` or `u`, `e`) | `settings\|v1\|a=ay&c=-1001234567890&e=29800000` | 44 | 40 |
 | Cancel the card | `settings\|v1\|a=no&c=-1001234567890&p=a` | 37 | 33 |
 | Back, Close (existing) | `settings\|v1\|a=bk&c=-1001234567890` | 33 | 29 |
-| List Prev, Next | `shub\|v1\|a=lp&v=999` | 20 | not used |
-| Groups button (from Main) | `shub\|v1\|a=lp&v=1` | 18 | not used |
-| Close the list | `shub\|v1\|a=cx` | 14 | not used |
+| List Prev, Next | `shub\|v1\|a=lp&v=999` | 18 | not used |
+| Groups button (from Main) | `shub\|v1\|a=lp&v=1` | 16 | not used |
+| Close the list | `shub\|v1\|a=cx` | 12 | not used |
 
 Largest new button: 45 bytes (the private Access toggle), 19 bytes of headroom; the largest button of the whole menu
 stays the Phase 9 private Turnstile choice at 53. A page value is capped at 3 digits, which is 7,992 groups; if a user
@@ -457,11 +516,11 @@ empty value; keys are written literally (no key built by concatenation); `make c
 
 | Element | Copy |
 |---------|------|
-| Primary CTA | Private list: each group's own title is the button (the pick). Access page: the toggle `settings_btn_access_toggle` "Admins can change settings: {state}"; on the card, `settings_btn_yes` "✅ Yes" |
+| Primary CTA | Private list: each group's own title is the button (the pick). Access page: the toggle `settings_btn_access_toggle` "Admins can change settings: {state}"; on the card, the shared `settings_btn_yes` "✅ Yes" (its question `settings_access_confirm` carries the specificity) |
 | Empty state heading | `settings_header` + `settings_page_groups` ("⚙️ Settings · Groups") |
 | Empty state body | `settings_list_empty` "There are no groups to show here. / Only a group's owner can change its settings, unless the owner lets admins in." followed by `settings_list_hint` (the next step: make the bot an admin there, then `/admincache` or `/settings` in that group) |
-| Error state | Group unavailable at a pick: alert `settings_pick_unavailable`. Lookup failed: alert `settings_check_failed`. Access page unreadable: `settings_cannot_open_alert` plus `settings_cannot_open`. Access write failed: `⚠️ common_settings_save_failed` |
-| Destructive confirmation | Not destructive. The one two-tap action is turning admin access ON, because it widens access: `settings_access_confirm` with `settings_btn_yes` / `settings_btn_no`, expiring after 5 minutes (`settings_card_expired`). Turning it OFF narrows access and is one tap (D-09) |
+| Error state | Group unavailable at a pick (non-admin, bot missing, gone, not a group): alert `settings_pick_unavailable`. Lookup failed, or the gate cannot decide: alert `settings_check_failed`. Access page unreadable: `settings_cannot_open_alert` plus `settings_cannot_open`. Access write failed: `⚠️ common_settings_save_failed` |
+| Destructive confirmation | Not destructive. The one two-tap action is turning admin access ON, because it widens access: `settings_access_confirm` with the shared `settings_btn_yes` / `settings_btn_no`, expiring after 5 minutes (`settings_card_expired`). Turning it OFF narrows access and is one tap (D-09) |
 
 ### New locale keys (19)
 
@@ -481,10 +540,10 @@ keeps a limits table that must cover exactly the `settings_` keys: this phase ad
 | `settings_list_hint` | `If a group you own is missing, make sure I am an admin there, then send <code>/admincache</code> in that group, or send <code>/settings</code> there and tap Open in private.` | 200 | 280 |
 | `settings_list_empty` | `There are no groups to show here.\nOnly a group's owner can change its settings, unless the owner lets admins in.` | 140 | 200 |
 | `settings_access_status` | Admins can change settings: {state} | 50 | 70 |
-| `settings_access_on_desc` | Admins of this group can open this menu and change its settings. Only you can see this Access page. | 130 | 182 |
-| `settings_access_off_desc` | Only you, the group's owner, can open this menu. Admins can still use the setting commands in the group. | 130 | 182 |
-| `settings_btn_access_toggle` | Admins can change settings: {state} | 36 | 48 |
-| `settings_access_confirm` | Let the admins of this group change its settings? Every admin of this group, now or later, will be able to open this menu and change its settings. Only you will see this Access page. You can turn this off again at any time. | 260 | 360 |
+| `settings_access_on_desc` | Admins of this group can open this menu and change its settings. | 100 | 140 |
+| `settings_access_off_desc` | Only the group's owner can open this menu. Admins can still use the setting commands in the group. | 130 | 182 |
+| `settings_btn_access_toggle` | Admins can change settings: {state} | 36 | 40 |
+| `settings_access_confirm` | Let the admins of this group change its settings? Every admin of this group, now or later, will be able to open this menu and change its settings. The owner can turn this off again at any time. | 240 | 336 |
 | `settings_gate_owner_only` [alert] | Only this group's owner can use these settings now. Nothing changed. | 120 | 160 |
 | `settings_access_owner_only` [alert] | Only the group's owner can change who may use these settings. Nothing changed. | 120 | 160 |
 | `settings_pick_unavailable` [alert] | I can't open that group's settings right now. Send /settings again to get a fresh list. | 120 | 160 |
@@ -495,12 +554,17 @@ Placeholders: `{icon}` the page's icon (code constant), `{page}` a `settings_pag
 `settings_state_*` (Main status block) or the icon plus `common_status_on` / `common_status_off` ("✅ On" / "❌ Off", the
 Access toggle and status line). `settings_state_access_on` / `_off` are the `MainState` of the Access page and are shown
 only to the live owner. No new key carries a group title, a user name or the Staff Group: group titles appear only in the
-Main and Access group line (existing code path) and on list buttons (code, not a key).
+Main and Access group line (existing code path) and on list buttons (code, not a key). No Access string says "you" or
+claims who can see the Access page (the group-menu wording rule in the Access switch table).
+
+The `settings_btn_access_toggle` ceiling is 40 for the template with `{state}` counted as written (7 characters); the
+RENDERED button with the longest state word of the language must also be at most 40 code points, and the rendered test
+is the binding one.
 
 Rendered-size checks the planner turns into tests (replacing the Phase 9 "Main button at most 34" test, which no longer
 applies because state left the button):
 - a grid button (`{icon} {page name}`) is at most 20 code points in every language; a full-width Access button likewise at most 20;
-- the Access toggle button rendered with its state is at most 40 code points in every language (the template ceiling of 48 is the translator's outer bound, 40 is what a phone shows);
+- the Access toggle button rendered with its state is at most 40 code points in every language, and the string table ceiling for `settings_btn_access_toggle` is the same 40 (the two agree: 40 is what a phone shows);
 - `⬅️ Groups` rendered at most 18 code points; Prev/Next are the existing `staff_panel_*` buttons;
 - every [alert] key at most 200 characters (held to 160 here) in all 8 languages;
 - every rendered screen at most 3800 UTF-16 units in all 8 languages with a 64-rune group title of multibyte characters, 8 list rows of 32 runes each, and the hint;
@@ -522,17 +586,18 @@ page has no Back, so the Russian and Ukrainian "Назад" for Prev cannot be c
 ### Refusal texts (every door, in one table)
 
 None names the Staff Group, a group, a chat ID or the switch, and none reveals whether the bot is in a chat to someone
-who is not proven an admin of it (rules R1 to R6).
+who is not proven an admin of it (rules R1 to R7).
 
 | Where | Key | English | Shown when | Why it is safe |
 |-------|-----|---------|------------|----------------|
-| Group reply to `/settings` (public) | `settings_refuse_owner_only` | Only the group's owner can open the settings menu. | a live administrator who is not the owner while the switch is off | the sender is proven an admin; no switch, Access or Staff Group mentioned (R4) |
+| Group reply to `/settings` (public) | `settings_refuse_owner_only` | Only the group's owner can open the settings menu. | a live administrator who is not the owner while the switch is off and an owner exists | the sender is proven an admin; no switch, Access or Staff Group mentioned (R4) |
 | Deep link refusal (private reply) | `settings_start_owner_only` | Only the owner of that group can open its settings. | the same person through `/start settings_<id>` | reached only after the live admin check passed (R1); names no group |
 | In-menu alert, any press | `settings_gate_owner_only` | Only this group's owner can use these settings now. Nothing changed. | a gated admin's next press on an open menu, or a pick of a stale row (D-10) | step 4b runs after step 4 proved the presser is an admin |
 | Access control by a non-owner | `settings_access_owner_only` | Only the group's owner can change who may use these settings. Nothing changed. | an allowed admin's forged press of an Access control, or a Yes after the creator changed | says "the owner" and "who may use", never the page or switch name |
-| Pick of an unusable group | `settings_pick_unavailable` | I can't open that group's settings right now. Send /settings again to get a fresh list. | a pick whose group is no longer usable: not an admin any more, bot not in it, group gone, not a group | one text for all four, so a forged `c` learns nothing about the bot's membership (R3) |
+| Pick of an unusable group | `settings_pick_unavailable` | I can't open that group's settings right now. Send /settings again to get a fresh list. | a pick whose group is no longer usable for the presser: not an admin of it (any non-admin status), the bot not in it (any bot-missing error), the group gone, not a group or supergroup | one text for every one of those, so a forged `c` learns nothing about the bot's membership (R3); it replaces `settings_not_admin` and the cannot-open edit at a pick only |
+| Gate cannot decide (any door) | `settings_check_failed` | (Phase 9 wording) | the switch is unreadable, or the owner-state read failed, timed out or was unusable | reached only for a proven admin; says nothing about whether an owner exists (R7) |
 | Empty list | `settings_list_empty` + `settings_list_hint` | There are no groups to show here. Only a group's owner can change its settings, unless the owner lets admins in. If a group you own is missing, ... | no recorded groups for the user | identical for everyone (R5) |
-| Existing, unchanged | `settings_start_not_admin`, `settings_start_invalid`, `settings_not_admin`, `settings_check_failed`, `settings_not_your_menu`, `lockdown_alert_post_as_yourself` | (Phase 9 wording) | their Phase 9 conditions | already reviewed in Phase 9 |
+| Existing, unchanged | `settings_start_not_admin`, `settings_start_invalid`, `settings_not_admin`, `settings_check_failed`, `settings_not_your_menu`, `lockdown_alert_post_as_yourself` | (Phase 9 wording) | their Phase 9 conditions (`settings_not_admin` is not used at a pick) | already reviewed in Phase 9 |
 
 Group menu privacy: the gate refusals above are only ever produced for an admin who typed or pressed them, and none
 carries a group or Staff Group name, so a group menu's text and alerts stay free of the Staff Group (D-21, D-32).
@@ -561,14 +626,15 @@ single string reached 1.81 (uk), 1.70 (es), 1.67 (hi), 1.56 (fr, pt), 1.50 (id),
 
 | Language | What to expect | Strings to watch |
 |----------|----------------|------------------|
-| es, fr, pt | about 10 to 15 percent longer; fr and pt add articles and prepositions | `settings_btn_access_toggle` (state words "Activado" / "Désactivé" / "Desligado" are long), `settings_access_confirm`, `settings_list_hint` |
-| ru, uk | about 8 to 10 percent longer on sentences, but single words are long (Антифлуд, налаштування); the state words are short ("Вкл", "Увімк.") | the grid names (icon plus name at most 20), `settings_btn_access_toggle` (uk "Адміни можуть змінювати налаштування" alone is 36 characters, so translate it shorter, for example "Адміни змінюють налаштування: ✅ Увімк.") |
+| es, fr, pt | about 10 to 15 percent longer; fr and pt add articles and prepositions | `settings_btn_access_toggle` (state words "Activado" / "Désactivé" / "Desligado" are long; shorten the label part so the rendered button stays at most 40), `settings_access_confirm`, `settings_list_hint` |
+| ru, uk | about 8 to 10 percent longer on sentences, but single words are long (Антифлуд, налаштування); the state words are short ("Вкл", "Увімк.") | the grid names (icon plus name at most 20), `settings_btn_access_toggle`: the literal rendering of the English ("Адміни можуть змінювати налаштування" is 36 characters before `: ` and the state, so about 47 with them) is over the 40 ceiling, so translate it shorter, for example "Адміни змінюють налаштування: ✅ Увімк." (38 characters rendered) |
 | hi | the code-point count is close to English, but combining marks (matras) make the visible width about 20 percent wider than the count suggests; the existing hi locale mixes Devanagari with Latin transliteration | every label: check on a phone that a grid name and the toggle are not ellipsized |
 | id | about 8 percent longer, with longer single words | `settings_state_access_on` |
 
 Rule of thumb for the ceilings above: labels and short states "Other" is 1.5 times EN (the measured worst), sentences
 1.4 times EN. For a button, the rendered limits (20 half-width, 40 full-width) are the real ones and override the
-ratio. Keep every alert at most 160 characters so a long translation still fits Telegram's 200.
+ratio, which is why `settings_btn_access_toggle` is held to 40 (not 1.5 times 36). Keep every alert at most 160
+characters so a long translation still fits Telegram's 200.
 
 ---
 
@@ -580,7 +646,8 @@ ratio. Keep every alert at most 160 characters so a long translation still fits 
 | One column of Main buttons | Two columns, an odd last page alone, Access always its own last full-width row for the live owner |
 | Main nav row is `[ ✖️ Close ]` | A private menu: `[ ⬅️ Groups \| ✖️ Close ]`; a group menu: `[ ✖️ Close ]` |
 | Every page's group line is line 2 | The private group list has no group line (it manages no group) |
-| Press pipeline steps 1 to 5 | Step 4b (the owner gate) is added; step 5 gains `settingsRightOwner` |
+| Press pipeline steps 1 to 5 | Step 4b (the owner gate, with its owner-state read) is added; step 5 gains `settingsRightOwner` |
+| Step 4 refusals: non-admin is `settings_not_admin`; a bot-missing error is the cannot-open edit | Unchanged for every action except `pk`, where a non-admin status and a bot-missing error both answer `settings_pick_unavailable` and edit nothing (R3) |
 | Authority-parity tests: the menu refuses what the command refuses | A documented carve-out (D-19): the menu is now stricter than the commands for a non-owner admin while the switch is off. For every control, "the menu allows" implies "the command allows" and an owner or an allowed admin is refused exactly where the command refuses; the commands are not tightened. The Access controls have no command, so they get a drift test and an owner-authority test instead of a parity test |
 | `<code>` only for chat IDs | Also for a command the reader must send in another chat (`settings_list_hint`) |
 | 7 locales | 8 locales (en, es, fr, hi, id, pt, ru, uk); `AGENTS.md`, `CLAUDE.md` lists and the locale tests say 8 (PLAT-05) |
@@ -589,7 +656,7 @@ ratio. Keep every alert at most 160 characters so a long translation still fits 
 
 ## UI Considerations
 
-Applicable state considerations resolved: 17 covered, 3 backstop, 4 unresolved.
+Applicable state considerations resolved: 18 covered, 3 backstop, 4 unresolved.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -598,16 +665,17 @@ Applicable state considerations resolved: 17 covered, 3 backstop, 4 unresolved.
 | overflow | more than 8 groups, more than 999 pages | ✅ covered | paging at 8 with an offset page number clamped to the last page; 3-digit page cap is documented as the limit |
 | long-text | group titles on list buttons, title in the group line, hi/ru/uk/pt labels | ✅ covered | button label cut at 32 runes plus `…`, line titles at 64 runes escaped; grid names at most 20 and the toggle at most 40 rendered, per-key ceilings, never truncated in code; 3800-unit test in 8 locales |
 | error | list or Access read fails, pick lookup fails, Access write fails, edit fails | ✅ covered | Access: cannot-open edit and alert; pick: alert only and the list stays; write: `common_settings_save_failed` notice with the old state; a failed or rate-limited edit is logged once and never undoes a write; every press answered exactly once |
+| gate read fails | switch unreadable, owner-state read fails, times out or is unusable | ✅ covered | unknown refuses with `settings_check_failed` on every door (R6, R7); never lets the admin in, never answers the gated-admin text; 3 s bound, singleflight, positive-only memo |
 | partial | a Main page whose `MainState` read fails | ✅ covered | the status line keeps its place with `❔` as the state |
-| loading | list page, Main status block, Access page | ✅ covered | the list and Access are database-only reads with no Telegram call; Main's states are database reads (Phase 9), so no spinner state exists; the callback is answered once and the message edited in place |
+| loading | list page, Main status block, Access page | ✅ covered | the list and Access are database-only reads with no Telegram call; Main's states are database reads (Phase 9), so no spinner state exists; the callback is answered once and the message edited in place. The gate's only Telegram call (owner-state read) runs before the answer and is bounded at 3 s |
 | permissions | live owner, allowed admin, gated admin, non-admin, demoted opener, service identity, anonymous admin | ✅ covered | "The four doors and the gate" table: each door's refusal, step 4b, `settingsRightOwner`, proof tap then live check of the tapper |
 | stale | list drawn before a demotion, an ownership change or a switch flip; a menu left open after OFF; an old ON card | ✅ covered | every pick and press is live-checked (the rows are only a hint); a stale pick answers an alert and the list stays; an open menu is refused on its next press; the lazy 5-minute card expiry |
 | double-submit | repeated tap on the toggle, Yes pressed twice, Next pressed twice | ✅ covered | the toggle sends an absolute value (`v`), so a repeat is idempotent; the OFF write and the ON write are idempotent; "message is not modified" is success |
-| cross-replica | a flip on replica A, the next press on replica B | ✅ covered | the gate reads the switch fresh (or a `skipLocal` key) and the redraw after a write comes from the apply result; planner adds the two-instance test (D-12) |
-| privacy | a refusal that reveals a group or the bot's presence; the Staff Group in any new text | ✅ covered | rules R1 to R6, the pick's single neutral alert, the identical empty-list text, no new key names a group or the Staff Group, and `TestSettingsStaffPrivacy` is extended to render the list, Main and Access screens |
+| cross-replica | a flip on replica A, the next press on replica B | ✅ covered | the gate reads the switch fresh (or a `skipLocal` key) and the redraw after a write comes from the apply result; the owner-state read is live on every replica, its only memo being a 30 s per-replica positive one that can only keep an admin out; planner adds the two-instance test (D-12) |
+| privacy | a refusal that reveals a group or the bot's presence; the Staff Group in any new text | ✅ covered | rules R1 to R7, the pick's single neutral alert for every non-admin and bot-missing outcome, the identical empty-list text, no new key names a group or the Staff Group, and `TestSettingsStaffPrivacy` is extended to render the list, Main and Access screens |
 | unavailable | a group where the bot lost its admin rights or left | ✅ covered | the row is hidden when the record is cleared (D-02, D-06); a stale row answers `settings_pick_unavailable` at the pick |
-| no owner | a group whose creator account is gone | ✅ covered | admins are let in, still live-checked; nobody sees Access (D-15) |
-| language | private menu versus group menu | ✅ covered | the list and a private menu speak the opener's language, a group menu the group's (D-18) |
+| no owner | a group whose creator account is gone | ✅ covered | admins are let in, still live-checked, when the owner-state read shows no creator entry; if the read fails they are refused (R7); nobody sees Access (D-15) |
+| language | private menu versus group menu | ✅ covered | the list and a private menu speak the opener's language, a group menu the group's (D-18); Access strings are true to any reader of a group menu |
 | populated | the typical list (2 to 8 groups) and the owner's Main grid | ✅ covered | the mock pages above |
 | anonymous owner | an owner posting as the group | ✅ covered | proof tap first, then the tapper's live status decides, then the gate (D-17) |
 | real client behaviour | half-width cell truncation of the grid names and the toggle in hi, ru, uk; `<code>` tap-to-copy of `/admincache`; Close of an old private message | 🧪 backstop | the rendered-length tests bound the labels; real-device truncation and the code tap are on the owner's device checklist |
@@ -646,15 +714,15 @@ No UI library, icon set, font or CSS framework is used. The registry vetting gat
 | D-09 (two taps on, one tap off) | Access switch rules, the ON card, the toggle and `ay` |
 | D-10 (open admin menu refused on next press) | step 4b alert `settings_gate_owner_only`, menu left as is |
 | D-11 (nothing announces a flip) | Access rules: no notice, no group or log post |
-| D-12 (every replica at the next press) | step 4b reads fresh; cross-replica row in UI Considerations |
+| D-12 (every replica at the next press) | step 4b reads the switch fresh; cross-replica row in UI Considerations |
 | D-13 (plain public refusal, no Staff Group) | `settings_refuse_owner_only`, R4 |
 | D-14 (neutral empty list) | empty-list mock and `settings_list_empty`, R5 |
-| D-15 (no live owner) | the gate's "no live owner" clause, Access "No live owner" row |
+| D-15 (no live owner) | step 4b.3 and the owner-state read (the read, its cost, its failure direction R7), Access "No live owner" row |
 | D-16 (gate on top of the live check) | the doors table and the pipeline (steps 4 then 4b) |
 | D-17 (anonymous owner) | the doors table, the anonymous row |
 | D-18 (language, Staff Group privacy) | the list door and the privacy rows; no new key names the Staff Group |
 | D-19 (one apply function, parity carve-out) | Access switch closing paragraph, "Changes to Phase 9 rules" |
-| D-20 (two-column grid with Close, Back everywhere, 8 locales) | Main grid, Close and Back, the 8-locale statements |
+| D-20 (two-column grid with Close, Back everywhere, 8 locales) | Main grid, Close and Back, the 8-locale statements. The one deliberate exception is the list page, which is the top level and has Close only (see the list's Navigation row) |
 
 ---
 
@@ -664,17 +732,34 @@ No UI library, icon set, font or CSS framework is used. The registry vetting gat
   main entry that can be hidden per press; the Access page is registered from its own file like any page (`registerSettingsPage`
   with page key `a`, control `s`, page action `ay`). The renderer change is `renderSettingsMain` (two columns, the status
   block, the Groups button, the Access row), which D-20 and CONTEXT list as changed code.
-- Add `pk` to `settingsCheckFields` (exactly `a` and `c`, private message only) and to `dispatch`; it must not call
-  `cannotOpen()` for the unusable cases, it answers `settings_pick_unavailable` and keeps the list.
+- Add `pk` to `settingsCheckFields` (exactly `a` and `c`, private message only) and to `dispatch`. At a pick the step-4
+  non-admin status and every `IsBotMissingError` (at `getChatMember` and at `getChat`) answer `settings_pick_unavailable`
+  and keep the list; it must not call `cannotOpen()` and must not use `settings_not_admin` for those cases.
+- The gate is one function (the step 4b decision) shared by all five doors; the owner-state read (`getChatAdministrators`
+  scan, 3 s timeout, per-chat singleflight, 30 s positive-only memo) lives behind a test seam. The binding part is the
+  outcomes in "The owner-state read"; plan-phase research may replace the mechanism if the same outcomes hold.
 - Extend the worst-case callback test, the page-fits-every-locale test (list page, empty list, Access, ON card, Main with
-  the Access row, 8 locales) and `TestSettingsStaffPrivacy`; add a two-instance freshness test for the switch (D-12), a test
-  that the pick answers the same alert text for a user who is not an admin and for a chat the bot is not in (R3), and
-  parity or drift tests for the Access write.
+  the Access row, 8 locales) and `TestSettingsStaffPrivacy`; add a two-instance freshness test for the switch (D-12),
+  and parity or drift tests for the Access write.
+- **Required tests (contract level):**
+  - Pick, same answer (R3): the alert text and the effect (list message not edited, nothing written, callback answered
+    once) are identical for a presser who is a non-admin member in a chat the bot is in, a presser in a chat the bot is
+    not in (bot-missing error at `getChatMember`), a chat that is gone, and a chat that is not a group or supergroup. All
+    four answer `settings_pick_unavailable`. A non-bot-missing error answers `settings_check_failed`, and an admin
+    presser whose gate refuses answers `settings_gate_owner_only`; in every case the list stays.
+  - Gate, owner-state read: creator makes no `getChatAdministrators` call; an admin with the switch on makes none; an
+    admin with the switch off and a creator entry for another user is refused with the gated text; an admin with the switch
+    off and no creator entry is let in; an error, a timeout, an empty list, and a list without the presser's own entry each
+    refuse with `settings_check_failed` (never in, never the gated text); an unreadable switch refuses with
+    `settings_check_failed`; two simultaneous presses in one chat make one call; a positive answer is remembered for
+    at most 30 s and a "no owner" answer, an error and a timeout are never remembered.
+  - Every door (group `/settings`, anonymous re-entry, deep link, press, pick) gives the same decision for the same
+    member record and the same owner state.
 - Run `make check-translations` first: `locales/uk.yml` is shorter than `en.yml` overall, but it already carries all 83
   Phase 9 `settings_` keys; this phase adds 19 keys and changes `settings_help_msg` in all 8 files. Whether to fill older
   uk gaps is the owner's call (STATE).
-- Update `AGENTS.md` in the same commit: the locale count (8), the new callback codes and namespace, the gate step 4b, the
-  Access table's read policy and backup status, the sweeper and its drain.
+- Update `AGENTS.md` in the same commit: the locale count (8), the new callback codes and namespace, the gate step 4b and
+  the owner-state read, the pick's neutral answers, the Access table's read policy and backup status, the sweeper and its drain.
 
 ---
 
