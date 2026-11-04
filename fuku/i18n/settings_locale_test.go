@@ -134,8 +134,8 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_refuse_owner_only": {70, 98},
 	"settings_start_owner_only":  {70, 98},
 
-	// The /help entry (plan 09-13).
-	"settings_help_msg": {900, 1260},
+	// The /help entry (plan 09-13, widened by plan 10-02).
+	"settings_help_msg": {1100, 1540},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -278,21 +278,33 @@ func settingsLocaleString(t *testing.T, lang string, data map[string]any, key st
 	return text
 }
 
-// TestSettingsLabelLengths holds the composite buttons to the UI-SPEC sizing checks: a
-// main-page button (icon, page name, separator and its longest state) is at most 34
-// characters in English and 44 in the other languages, and a choice-row button (a check
-// mark and the option) at most 13 and 15.
+// TestSettingsLabelLengths holds the composite buttons to the UI-SPEC sizing checks, in
+// code points. A two-column grid button (the page's icon, a space and its name) is at most
+// 20; the Access toggle rendered with its state (a check or cross icon and the language's
+// On or Off word, the longer of the two) is at most 40; the Groups button is at most 18; and a
+// choice-row button (a check mark and the option) is at most 13 in English and 15 in the
+// others. The Phase 9 ceiling for state inside the Main button no longer applies: state
+// moved to the status block of the Main page (UI-SPEC "Changes to Phase 9 rules"). The icons
+// are the code constants of the modules, written literally here because fuku/i18n cannot
+// import fuku/modules.
 func TestSettingsLabelLengths(t *testing.T) {
-	type mainPage struct {
-		icon   string
-		page   string
-		states []string
+	const (
+		gridMax        = 20
+		accessToggle   = 40
+		groupsButton   = 18
+		choiceMaxOther = 15
+		choiceMaxEn    = 13
+	)
+	type gridPage struct {
+		icon string
+		page string
 	}
-	pages := []mainPage{
-		{"👥", "settings_page_staff", []string{"settings_state_linked", "settings_state_not_linked", "settings_state_staff_n"}},
-		{"🔒", "settings_page_lockdown", []string{"settings_state_lock_none", "settings_state_lock_active", "settings_state_lock_lifting"}},
-		{"🧩", "settings_page_captcha", []string{"common_status_on", "common_status_off"}},
-		{"🌊", "settings_page_antiflood", []string{"settings_state_limit", "settings_state_off_plain"}},
+	pages := []gridPage{
+		{"👥", "settings_page_staff"},
+		{"🔒", "settings_page_lockdown"},
+		{"🧩", "settings_page_captcha"},
+		{"🌊", "settings_page_antiflood"},
+		{"🔑", "settings_page_access"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
@@ -302,29 +314,32 @@ func TestSettingsLabelLengths(t *testing.T) {
 	for _, lang := range staffLocales {
 		t.Run(lang, func(t *testing.T) {
 			data := loadStaffLocale(t, lang)
-			mainMax, choiceMax := 44, 15
+			choiceMax := choiceMaxOther
 			if lang == "en" {
-				mainMax, choiceMax = 34, 13
+				choiceMax = choiceMaxEn
 			}
 
 			for _, page := range pages {
-				name := settingsLocaleString(t, lang, data, page.page)
-				for _, stateKey := range page.states {
-					state := settingsLocaleString(t, lang, data, stateKey)
-					state = strings.ReplaceAll(state, "{count}", "100")
-					state = strings.ReplaceAll(state, "{n}", "100")
-					if strings.HasPrefix(stateKey, "common_status_") {
-						icon := "❌ "
-						if stateKey == "common_status_on" {
-							icon = "✅ "
-						}
-						state = icon + state
-					}
-					label := page.icon + " " + name + " · " + state
-					if runes := utf8.RuneCountInString(label); runes > mainMax {
-						t.Errorf("%s: main-page label %q has %d characters, ceiling %d", lang, label, runes, mainMax)
-					}
+				label := page.icon + " " + settingsLocaleString(t, lang, data, page.page)
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: grid label %q has %d characters, ceiling %d", lang, label, runes, gridMax)
 				}
+			}
+
+			toggle := settingsLocaleString(t, lang, data, "settings_btn_access_toggle")
+			for _, state := range []struct{ icon, key string }{
+				{"✅ ", "common_status_on"},
+				{"❌ ", "common_status_off"},
+			} {
+				rendered := strings.ReplaceAll(toggle, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
+				if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
+					t.Errorf("%s: Access toggle %q has %d characters, ceiling %d", lang, rendered, runes, accessToggle)
+				}
+			}
+
+			groups := settingsLocaleString(t, lang, data, "settings_btn_groups")
+			if runes := utf8.RuneCountInString(groups); runes > groupsButton {
+				t.Errorf("%s: Groups button %q has %d characters, ceiling %d", lang, groups, runes, groupsButton)
 			}
 
 			for _, key := range options {
@@ -402,7 +417,7 @@ var settingsHelpCommands = []string{
 }
 
 // TestSettingsHelpFitsOneMessage holds the /help entry of the settings menu to the UI-SPEC
-// ceiling (900 runes in English, 1260 in the others), to the b tag only, to naming every
+// ceiling (1100 runes in English, 1540 in the others), to the b tag only, to naming every
 // command it stands for, and, with the module help header, to one Telegram message.
 func TestSettingsHelpFitsOneMessage(t *testing.T) {
 	var failures []string
@@ -415,9 +430,9 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 			continue
 		}
 
-		ceiling := 1260
+		ceiling := 1540
 		if lang == "en" {
-			ceiling = 900
+			ceiling = 1100
 		}
 		if runes := utf8.RuneCountInString(help); runes > ceiling {
 			failures = append(failures, fmt.Sprintf("%s: settings_help_msg has %d characters, ceiling %d", lang, runes, ceiling))

@@ -3041,8 +3041,8 @@ settings_help_msg: |
   Gerencie este grupo a partir de um único menu de botões.
 
   <b>Comandos de admin</b>:
-  × /settings: Abre o menu de configurações, aqui no grupo ou no privado.
+  × /settings: Abre o menu de configurações. No grupo, abre aqui ou no privado; em um chat privado comigo, lista os grupos que você pode gerenciar.
 
   O menu cobre o vínculo com o Grupo de Staff, o bloqueio (estado, levantamento e gatilhos automáticos), o captcha e o antiflood. Cada mudança feita nele equivale ao comando correspondente: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode e /delflood.
 
-  Um menu aberto no grupo responde apenas ao admin que o abriu. Cada toque confere se você ainda é admin do grupo, e cada mudança exige o mesmo direito do seu comando.
+  Só o dono do grupo pode abrir o menu, a menos que o dono deixe os admins entrarem. Os comandos de configuração funcionam para os admins como antes. Um menu aberto no grupo responde apenas a quem o abriu. Cada toque confere se você ainda tem permissão, e cada mudança exige pelo menos o direito que o seu comando exige.

@@ -3069,8 +3069,8 @@ settings_help_msg: |
   Kelola grup ini dari satu menu tombol.
 
   <b>Perintah admin</b>:
-  × /settings: Buka menu pengaturan, di grup ini atau secara pribadi.
+  × /settings: Buka menu pengaturan. Di grup, menu terbuka di sini atau secara pribadi; di chat pribadi dengan saya, menu menampilkan grup yang bisa Anda kelola.
 
   Menu ini mencakup tautan Grup Staf, lockdown (status, pencabutan, dan pemicu otomatis), captcha, dan antiflood. Setiap perubahan di dalamnya sama dengan perintah yang sesuai: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, dan /delflood.
 
-  Menu yang dibuka di grup hanya menjawab admin yang membukanya. Setiap penekanan memeriksa bahwa Anda masih admin grup, dan setiap perubahan butuh hak yang sama dengan perintahnya.
+  Hanya pemilik grup yang bisa membuka menu, kecuali pemilik mengizinkan admin. Perintah pengaturan sendiri tetap berfungsi untuk admin seperti sebelumnya. Menu yang dibuka di grup hanya menjawab orang yang membukanya. Setiap penekanan memeriksa bahwa Anda masih diizinkan, dan setiap perubahan butuh minimal hak yang dibutuhkan perintahnya.
