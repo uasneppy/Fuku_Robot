@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 11-07-PLAN.md
-last_updated: "2026-11-04T17:22:03.223Z"
+stopped_at: Completed 11-08-PLAN.md
+last_updated: "2026-11-04T17:38:47.055Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: c7227a181acc504a5b2568adb46bdcac45eaf6b2
+state_head: 9847e16120dd818db76089926b1da44c5fce7610
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 18
+  completed_plans: 19
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 8 of 14
+Plan: 9 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -93,6 +93,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P05 | 25min | 3 tasks | 4 files |
 | Phase 11 P06 | 20min | 2 tasks | 3 files |
 | Phase 11 P07 | 35min | 3 tasks | 4 files |
+| Phase 11 P08 | 55min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -155,6 +156,8 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-04: uk and hi name 'the start button' instead of quoting Telegram's localized Start label
 - [Phase 11]: [11-07] The Cancel script has a fifth outcome: no wait but a marker means the wait expired, and the marker is deleted once the person has been told
 - [Phase 11]: [11-07] /cancel while a claim is held answers settings_edit_cancel_nothing and leaves the wait to the write in flight
+- [Phase 11]: 11-08: the three editor pages share one definition table; Welcome and Goodbye differ only by a Kind switch, so no twin code
+- [Phase 11]: 11-08: control d uses settingsRightChangeInfo and control e settingsRightAdmin, as /cleanwelcome and /welcome on|off check
 
 ### Pending Todos
 
@@ -221,8 +224,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T17:21:57.045Z
-Stopped at: Completed 11-07-PLAN.md
+Last session: 2026-11-04T17:38:40.265Z
+Stopped at: Completed 11-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
