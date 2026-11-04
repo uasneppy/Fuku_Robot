@@ -58,6 +58,9 @@ const (
 	settingsRightAdminFloodBot
 	// settingsRightRestrict needs the creator or an administrator with can_restrict_members.
 	settingsRightRestrict
+	// settingsRightOwner needs the live creator of the group (the Access page). It is judged on
+	// the member record step 4 fetched, with no extra call.
+	settingsRightOwner
 )
 
 // settingsRightRefusal returns the locale key of the refusal when the press lacks the
@@ -87,6 +90,11 @@ func settingsRightRefusal(p *settingsPress, right settingsRight) (key string, al
 			return "settings_no_restrict", true
 		}
 		return "settings_not_admin", true
+	case settingsRightOwner:
+		if p.member.Status == gotgbot.ChatMemberStatusCreator {
+			return "", false
+		}
+		return "settings_access_owner_only", true
 	}
 	// An unknown right fails closed.
 	return "settings_not_admin", true
@@ -174,6 +182,7 @@ func (p *settingsPress) view() settingsView {
 		OpenerName: staffFullName(&p.query.From),
 		Now:        time.Now(),
 		Creator:    p.isGroupCreator(),
+		Owner:      p.member.Status == gotgbot.ChatMemberStatusCreator,
 	}
 }
 
@@ -186,7 +195,7 @@ func (p *settingsPress) isGroupCreator() bool {
 
 // settingsMainScreen draws the Main page for a press.
 func settingsMainScreen(p *settingsPress, notice string) settingsScreen {
-	return renderSettingsMain(p.view(), settingsMainEntries(p.b, p.tr, p.group), notice)
+	return renderSettingsMain(p.view(), settingsMainEntries(p.b, p.tr, p.group, p.member.Status == gotgbot.ChatMemberStatusCreator), notice)
 }
 
 // settingsCheckFields reports whether the fields of a callback are exactly those the action
@@ -404,6 +413,12 @@ func (p *settingsPress) dispatch() {
 
 // openPage draws a page, or the cannot-open edit when its data cannot be read.
 func (p *settingsPress) openPage(pg settingsPage, notice string) {
+	// An owner-only page is never opened for anyone but the live creator, whatever route
+	// reached it (open, cancel, a forged Refresh): the alert edits nothing.
+	if pg.OwnerOnly && p.member.Status != gotgbot.ChatMemberStatusCreator {
+		p.answer(settingsText(p.tr, "settings_access_owner_only"), true)
+		return
+	}
 	screen, err := pg.Open(p, notice)
 	if err != nil {
 		log.Warnf("[Settings] page %q of chat %d could not be read: %v", pg.Key, p.group.Id, err)

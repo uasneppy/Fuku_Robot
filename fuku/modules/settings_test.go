@@ -159,7 +159,13 @@ func TestSettingsTracer(t *testing.T) {
 			t.Errorf("Main page %q carries the opener's name unescaped", text)
 		}
 
-		pages := settingsPagesInOrder()
+		// The administrator is not the creator, so the owner-only Access page is not drawn.
+		var pages []settingsPage
+		for _, page := range settingsPagesInOrder() {
+			if !page.OwnerOnly {
+				pages = append(pages, page)
+			}
+		}
 		if len(keyboard) != len(pages)+1 {
 			t.Fatalf("Main keyboard has %d rows, want one per page (%d) and the Close row", len(keyboard), len(pages))
 		}

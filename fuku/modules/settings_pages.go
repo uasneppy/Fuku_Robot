@@ -54,6 +54,11 @@ type settingsView struct {
 	// press, the creator of the group being configured. Only that person sees the Staff
 	// Group's title and chat ID on the Staff Group page (D-32); a group menu is never Creator.
 	Creator bool
+	// Owner is true when the presser's live member record is the creator of the group being
+	// configured, in a group menu and in a private one. It is distinct from Creator, which stays
+	// "a private menu of the creator" and gates only the Staff Group title (D-32): Owner decides
+	// whether the owner-only pages (Access) are drawn at all.
+	Owner bool
 }
 
 // settingsScreen is one drawn message: its HTML text and keyboard. Omitted counts buttons
@@ -334,6 +339,10 @@ type settingsPage struct {
 	Controls map[string]settingsControl
 	// Actions are the page-specific action codes, by a.
 	Actions map[string]settingsPageAction
+	// OwnerOnly marks a page drawn and opened only for the live creator of the group: Main
+	// leaves it out for anyone else without reading its state, and openPage refuses it with
+	// settings_access_owner_only. Plan 10-10 anchors such a page after the grid.
+	OwnerOnly bool
 }
 
 // settingsControl is one toggle or setting of a page.
@@ -421,11 +430,15 @@ type settingsMainEntry struct {
 }
 
 // settingsMainEntries asks every registered page for its Main state, in page order. It
-// makes the database reads of the pages; the renderer stays pure.
-func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Chat) []settingsMainEntry {
+// makes the database reads of the pages; the renderer stays pure. An OwnerOnly page is skipped
+// entirely, without a MainState call, unless viewerIsOwner holds (D-08).
+func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Chat, viewerIsOwner bool) []settingsMainEntry {
 	pages := settingsPagesInOrder()
 	entries := make([]settingsMainEntry, 0, len(pages))
 	for _, pg := range pages {
+		if pg.OwnerOnly && !viewerIsOwner {
+			continue
+		}
 		entry := settingsMainEntry{Key: pg.Key, Icon: pg.Icon, Title: settingsText(tr, pg.TitleKey)}
 		if pg.MainState != nil {
 			entry.State, entry.Known = pg.MainState(b, tr, group)
