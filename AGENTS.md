@@ -61,6 +61,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   waits at most 1 s for `raidAIJobs` and `raidAIFires` to go idle, logging one warning when the wait runs out. Queued
   jobs are dropped as no verdict. A lockdown start still running after the wait is cut off with the process and leaves at
   worst an unconfirmed row that the lockdown worker settles.
+- `StopAdminIndexSweeper` is a plain shutdown handler (`RegisterHandler`, the 10 s default, no drain registration)
+  that `main.go` registers right after the staff sweeper's stop, so LIFO runs it after `StopStaffActions` (it never takes
+  from that drain's 31 s) and before the database close. It cancels the loop and waits for it. It returns at once because
+  every Telegram call of a sweep derives from the sweep context (`adminIndexPacedClient` paces and bounds each request
+  from it), and the one roster write in flight is bounded by that same context. A cycle cut off by the cancel releases
+  its lock by compare-and-delete on its own owner token (`releaseAdminIndexSweepLock`), so a restarted replica's first
+  cycle is not skipped for an hour; a finished cycle, and one ended by a second 429, keeps the lock until its TTL.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 - The Turnstile web captcha is configured in `main` (`registerCaptchaWeb`) when `config.AppConfig.CaptchaWebConfigured()`
   holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
@@ -391,6 +398,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
+- `fuku:settings:sweep:lock` (new family `fuku:settings:*`, also outside the `fuku:cache:` prefix, so
+  `CLEAR_CACHE_ON_STARTUP` keeps it) is the admin index sweep's per-cycle lock (`admin_index_sweeper.go`): `SET NX` with a
+  per-process owner (`adminIndexSweepOwner`, a UUID) and a TTL of the interval minus one minute, so one replica runs each
+  hourly cycle. Without Redis, or on a Redis error, a cycle runs unguarded and stays correct, because every roster write is
+  a replace of the whole roster or a clear. Only a cycle cut off by a cancel gives it back, by compare-and-delete.
 - `fuku:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
@@ -877,6 +889,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The staff sweeper (`StartStaffSweeper`/`StopStaffSweeper`) rechecks every Staff Group link hourly (first run 1-5 min
   after start) behind `SETNX fuku:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
   conditional. Staff tables are never part of backup/export/import/reset.
+- The settings roster (`chat_admin_index`, keep it current without anyone acting). The feed: `cache.SetAdminListObserver`
+  is a hook in the admin cache loader (`fuku/utils/cache` imports nothing from `fuku/db`), installed by the `AdminIndex`
+  module (priority 31, `LoadAdminIndex`, no handler and no database access at load). It reports one event per definitive
+  fact, each guarded by the load's generation, so a load overtaken by an invalidation reports nothing: a successful
+  non-empty list replaces the chat's rows with its creator and human administrators (a bot is never stored, and a creator
+  that `settingsCreatorGone` recognises is not stored, so that group reads as having no live owner), and a bot that is not
+  an administrator (`BotNotAdmin`) or whose own lookup was refused with a 4xx other than 429 (`BotGone`) clears them. The
+  retry-failure and the empty-list paths report nothing. The write runs synchronously under the chat's admin-cache
+  singleflight with a 3 s bound (`adminIndexWriteTimeout`) and a failed write is only logged. `adminCacheAutoUpdate`
+  clears a group's rows when a `my_chat_member` update takes the bot to left or kicked. `/admincache` refreshes the rows on
+  its main path, and with a non-admin bot it loads nothing and leaves them. `refreshChatAdminIndex` is the one-group
+  refresh (at most two Telegram calls, never sleeps, never touches the admin cache) shared by the sweep and the group
+  `/settings` repair path: it changes rows only on definitive facts, and returns the Telegram error whatever the outcome.
+  The sweep (`StartAdminIndexSweeper`/`StopAdminIndexSweeper`, `admin_index_sweeper.go`, started in `postInit` right after
+  `StartStaffSweeper`): the first cycle 30 to 90 s after start is the backfill, so the private list works right after a
+  deploy, then one cycle every hour, one code path for both. The candidates are every negative chat ID in `chats`
+  (`adminindex.ListCandidateChatIDsFresh`), inactive chats included, because the activity monitor marks quiet groups
+  inactive. Every Telegram request waits a 250 ms pace and runs under 5 s (4 calls a second per runner, about 8 minutes for
+  1000 groups). Definitive facts only: an error, a timeout, a 429 or an empty list leaves a chat's rows as they were, and
+  only a bot that is not an administrator, or cannot see the chat, clears them. A 429 waits `min(retry_after, 30 s)` and
+  retries that chat once; a second 429 ends the cycle with the remaining chats untouched. A panic in a cycle is recovered
+  and the next cycle runs, Start twice runs one loop and Stop is idempotent. The roster is a hint for the private list and
+  never authority.
 - The lockdown join guard (handler group `-7`, `lockdownOnJoinMember`) reads the lockdown fresh from PostgreSQL, records
   the joiner row first and only then ends the update with `ext.EndGroups`, so no welcome, captcha challenge or captcha
   attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
