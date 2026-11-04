@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
+	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
@@ -833,5 +834,62 @@ func TestSettingsEditDoorLogsNoText(t *testing.T) {
 				t.Errorf("a log line carries %q: %s", secret, line)
 			}
 		}
+	}
+}
+
+// settingsEditPressOnSavedPage presses the button labelled labelKey of the newest message the bot
+// sent to owner's private chat (the saved page), so another Set can follow a save.
+func settingsEditPressOnSavedPage(env *settingsEnv, owner gotgbot.User, labelKey string) {
+	env.t.Helper()
+	sent := env.fake.sentTo(owner.Id)
+	page := sent[len(sent)-1]
+	button, ok := settingsButtonByMarker(staffKeyboardOf(page.Params["reply_markup"]), labelKey)
+	if !ok {
+		env.t.Fatalf("the newest page has no %s button", labelKey)
+	}
+	env.pressRaw(settingsPrivateChat(owner), owner, page.MessageID, button.CallbackData)
+}
+
+func TestSettingsEditDoorStoresEveryPart(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	settingsEditSeedGreetings(t, env.chat.Id)
+	settingsEditSetWait(env, owner, settingsPageWelcome, settingsEditPartMedia)
+
+	// Media: a photo replaces the stored media and nothing else.
+	before := settingsEditSentCount(env, owner)
+	sendPrivateMessage(env, owner, gotgbot.Message{
+		Photo: []gotgbot.PhotoSize{{FileId: "new-photo-id", FileUniqueId: "new-photo-unique", Width: 1, Height: 1}},
+	})
+	settingsEditWantReply(t, env, owner, before, "settings_edit_saved_media")
+	row, _ := settingsEditStored(t, env.chat.Id)
+	if row.WelcomeSettings.FileID != "new-photo-id" || row.WelcomeSettings.WelcomeType != db.PHOTO ||
+		row.WelcomeSettings.WelcomeText != "a custom welcome" || len(row.WelcomeSettings.Button) != 2 {
+		t.Errorf("after the media reply the welcome is %+v, want the new photo with the text and buttons kept", row.WelcomeSettings)
+	}
+	settingsEditWaitGone(t, env, owner)
+
+	// Buttons: the bot's own syntax replaces the stored buttons and nothing else.
+	settingsEditPressOnSavedPage(env, owner, "settings_btn_edit_set_buttons")
+	before = settingsEditSentCount(env, owner)
+	sendPrivateMessage(env, owner, gotgbot.Message{Text: "[Rules](buttonurl://https://example.com/rules)"})
+	settingsEditWantReply(t, env, owner, before, "settings_edit_saved_buttons")
+	row, _ = settingsEditStored(t, env.chat.Id)
+	if len(row.WelcomeSettings.Button) != 1 || row.WelcomeSettings.Button[0].Name != "Rules" ||
+		row.WelcomeSettings.Button[0].Url != "https://example.com/rules" ||
+		row.WelcomeSettings.FileID != "new-photo-id" || row.WelcomeSettings.WelcomeText != "a custom welcome" {
+		t.Errorf("after the buttons reply the welcome is %+v, want one Rules button with the media and text kept", row.WelcomeSettings)
+	}
+	settingsEditWaitGone(t, env, owner)
+
+	// Text with stored media is a caption: 1025 characters are refused with the reason and the
+	// wait stays open.
+	settingsEditPressOnSavedPage(env, owner, "settings_btn_edit_set_text")
+	before = settingsEditSentCount(env, owner)
+	sendPrivateMessage(env, owner, gotgbot.Message{Text: strings.Repeat("x", 1025)})
+	settingsEditWantReply(t, env, owner, before, "content_caption_too_long", "settings_edit_still_waiting")
+	settingsEditWaitKept(t, env, owner)
+	if row, _ = settingsEditStored(t, env.chat.Id); row.WelcomeSettings.WelcomeText != "a custom welcome" {
+		t.Errorf("a refused caption changed the text to %q", row.WelcomeSettings.WelcomeText)
 	}
 }
