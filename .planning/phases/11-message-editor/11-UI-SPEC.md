@@ -1,7 +1,8 @@
 ---
 phase: "11"
 slug: "message-editor"
-status: draft
+status: approved
+reviewed_at: "2026-11-04"
 shadcn_initialized: false
 preset: none
 created: "2026-11-04"
@@ -1041,4 +1042,4 @@ change by recording a decision.
 - [ ] Dimension 6 Registry Safety: PASS
 - [ ] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
 
-**Approval:** pending
+**Approval:** approved 2026-11-04 (UI checker: no BLOCK; recommendations 1 and 2 adopted in 11-CONTEXT.md D-12 and D-13)
