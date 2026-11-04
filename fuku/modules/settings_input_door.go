@@ -366,15 +366,22 @@ func (r *settingsInputReply) view() settingsView {
 	}
 }
 
-// refuse answers a reply the check refused: the reason, a blank line, the still-waiting line and
-// one Cancel button, as a reply to the message. The wait is untouched, its time not extended.
-func (r *settingsInputReply) refuse(reason string) {
-	k := newSettingsKeyboard(r.view())
-	if cancel, ok := k.button(r.text("settings_btn_edit_cancel"), map[string]string{"a": r.def.CancelCode, "t": r.wait.Part}); ok {
+// renderSettingsInputRefusal draws the reply to a message the check refused: the reason, a blank
+// line, the still-waiting line and one Cancel button. It is pure, so a test can render exactly
+// what the door sends.
+func renderSettingsInputRefusal(v settingsView, def settingsEditPageDef, part, reason string) settingsScreen {
+	k := newSettingsKeyboard(v)
+	if cancel, ok := k.button(settingsText(v.Tr, "settings_btn_edit_cancel"), map[string]string{"a": def.CancelCode, "t": part}); ok {
 		k.row(cancel)
 	}
-	keyboard := k.screen("").Keyboard
-	r.send(reason+"\n\n"+r.text("settings_edit_still_waiting"), &keyboard, true)
+	return k.screen(reason + "\n\n" + settingsText(v.Tr, "settings_edit_still_waiting"))
+}
+
+// refuse answers a reply the check refused, as a reply to the message. The wait is untouched, its
+// time not extended.
+func (r *settingsInputReply) refuse(reason string) {
+	screen := renderSettingsInputRefusal(r.view(), r.def, r.wait.Part, reason)
+	r.send(screen.Text, &screen.Keyboard, true)
 }
 
 // apply writes the checked message through the apply function of the part's command and
@@ -412,17 +419,25 @@ func settingsInputSavedKey(part string) string {
 	return "settings_edit_saved_text"
 }
 
+// settingsInputSavedNotice is the notice of the saved page: the confirmation of the part, the
+// caption note when a caption was not used and the album note when the saved message was cut from
+// an album.
+func settingsInputSavedNotice(tr *i18n.Translator, part string, captionIgnored, album bool) string {
+	notice := settingsNoticeOK(settingsText(tr, settingsInputSavedKey(part)))
+	if captionIgnored {
+		notice += "\n" + settingsText(tr, "settings_edit_caption_ignored")
+	}
+	if album {
+		notice += "\n" + settingsText(tr, "settings_edit_album_cut")
+	}
+	return notice
+}
+
 // saved sends the saved page as a new message in the private chat: the page as it now stands,
-// with the confirmation (and the caption note) as its notice. When the page cannot be read the
-// confirmation alone is sent.
+// with the confirmation (and the caption and album notes) as its notice. When the page cannot be
+// read the confirmation alone is sent.
 func (r *settingsInputReply) saved(verdict settingsEditVerdict) {
-	notice := settingsNoticeOK(r.text(settingsInputSavedKey(r.wait.Part)))
-	if verdict.CaptionIgnored {
-		notice += "\n" + r.text("settings_edit_caption_ignored")
-	}
-	if settingsInputIsAlbum(r.msg) {
-		notice += "\n" + r.text("settings_edit_album_cut")
-	}
+	notice := settingsInputSavedNotice(r.tr, r.wait.Part, verdict.CaptionIgnored, settingsInputIsAlbum(r.msg))
 	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 	defer cancel()
 	state, err := settingsEditLoad(ctx, r.def, r.wait.GroupID)

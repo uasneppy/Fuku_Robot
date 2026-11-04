@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -150,6 +151,17 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 						}
 					}
 				}
+				// Every other screen of the message editor: the prompts, the typed-reply refusals,
+				// the ended and wait-ended replies, the saved page, the cancel and group notes and
+				// the preview headers, as the code sends them.
+				welcome, _ := settingsEditPageByKey(settingsPageWelcome)
+				screens["editor prompt, private admin"] = renderSettingsEditPrompt(
+					privateAdminView, welcome, settingsEditPartText, time.Now(), settingsEditTextMax, true)
+				for viewName, view := range map[string]settingsView{"group": groupView, "private admin": privateAdminView} {
+					for name, screen := range settingsEditScreens(tr, view) {
+						screens["editor screen "+viewName+" "+name] = screen
+					}
+				}
 				for i, notice := range notices {
 					name := fmt.Sprintf("notice %d", i)
 					screens["linked, "+name] = renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), notice)
@@ -248,6 +260,74 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		for _, want := range []string{staffMarker("settings_staff_linked_to"), strconv.FormatInt(staffChat.Id, 10)} {
 			if !strings.Contains(text, want) {
 				t.Errorf("the creator's private page %q lacks %q", text, want)
+			}
+		}
+	})
+
+	// The whole private editor flow of an administrator who is not the creator: Set, a refused
+	// message, a saved text and both kinds of preview. Everything the bot produced for them (every
+	// message, edit and answer) must name neither the Staff Group's title nor its chat ID.
+	t.Run("a private editor run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		staffChat := settingsStaffTestOwnedStaffGroup(env, settingsStaffPrivacyTitle)
+		linkLockdownGroupTo(env.lockdownEnv, staffChat)
+		moderator := gotgbot.User{Id: env.admin.Id + 43, FirstName: "Moderator"}
+		listEditAdmin(env, env.chat, moderator, true)
+
+		settingsEditSetWait(env, moderator, settingsPageWelcome, settingsEditPartText)
+		sendPrivateMedia(env, moderator, "photo")
+		sendPrivateMessage(env, moderator, gotgbot.Message{Text: "Hello {first}, welcome to {chatname}"})
+		settingsEditWaitGone(t, env, moderator)
+
+		saved := env.fake.sentTo(moderator.Id)
+		page := saved[len(saved)-1]
+		for _, marker := range []string{"settings_edit_saved_text", "settings_btn_edit_preview_text", "settings_btn_edit_full_preview"} {
+			if !containsMarker(fmt.Sprint(page.Params["text"]), marker) {
+				if _, ok := settingsButtonByMarker(staffKeyboardOf(page.Params["reply_markup"]), marker); !ok {
+					t.Fatalf("the saved page %+v has no %s", page.Params, marker)
+				}
+			}
+		}
+		for _, label := range []string{"settings_btn_edit_preview_text", "settings_btn_edit_full_preview"} {
+			button, ok := settingsButtonByMarker(staffKeyboardOf(page.Params["reply_markup"]), label)
+			if !ok {
+				t.Fatalf("the saved page has no %s button: %+v", label, page.Params["reply_markup"])
+			}
+			env.pressRaw(settingsPrivateChat(moderator), moderator, page.MessageID, button.CallbackData)
+		}
+
+		var seen []string
+		collect := func(params map[string]any) {
+			seen = append(seen, fmt.Sprint(params["text"]))
+			for _, button := range settingsAllButtons(staffKeyboardOf(params["reply_markup"])) {
+				seen = append(seen, button.Text, button.CallbackData, button.Url)
+			}
+		}
+		for _, sent := range env.fake.sentTo(moderator.Id) {
+			collect(sent.Params)
+		}
+		edits := callsToChat(env.fake.staffBotClient, "editMessageText", moderator.Id)
+		for _, edit := range edits {
+			collect(edit.Params)
+		}
+		for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+			seen = append(seen, fmt.Sprint(answer.Params["text"]))
+		}
+		everything := strings.Join(seen, "\n")
+		if len(env.fake.sentTo(moderator.Id)) < 5 || len(edits) < 2 {
+			t.Fatalf("the run sent %d messages and made %d edits, want a refusal, the saved page and two previews", len(env.fake.sentTo(moderator.Id)), len(edits))
+		}
+		for _, wanted := range []string{"settings_edit_refuse_need_text", "settings_edit_still_waiting", "settings_edit_saved_text", "settings_edit_preview_header"} {
+			if !containsMarker(everything, wanted) {
+				t.Errorf("the run never produced %s: %q", wanted, everything)
+			}
+		}
+		for _, leak := range []string{
+			"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+			strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"),
+		} {
+			if strings.Contains(everything, leak) {
+				t.Errorf("the typed editor run of an admin who is not the creator received %q: %q", leak, everything)
 			}
 		}
 	})
