@@ -19,6 +19,7 @@ This page documents every registered message watcher with its exact handler grou
 | -1 | BotUpdates | `botJoinedGroup` | MyChatMember (bot joined) | `EndGroups` | Early interceptor for bot group joins; leaves non-supergroups |
 | -1 | Users | `logUsers` | `message.All` | `ContinueGroups` | Logs user activity; never blocks propagation |
 | 0 | All modules | Commands, callbacks | Various | varies | Default group; standard command handlers |
+| 1 | Settings | `settingsInput` | private messages only | `ContinueGroups` for anyone with no wait and no marker; `EndGroups` once consumed | The settings editor's typed-reply door: takes the owner's next private message after Set as the welcome, goodbye or rules part. Commands (group 0) are judged first, and a command is never taken as content |
 | 2 | Lockdown | `raidAIWatcher` | `message.All` | `ContinueGroups` (always) | The raid AI candidate watcher. Hands a new member's suspicious text, photo, GIF, sticker or video to the raid AI pool; never sends anything to AI itself, never deletes, never waits |
 | 3 | AISpam | `checkAISpam` | `message.All` | `ContinueGroups` (always) | Opt-in AI spam filter; enqueues a check and never blocks propagation |
 | 4 | Antiflood | `checkFlood` | `message.All` | `EndGroups` on flood, `ContinueGroups` otherwise | Flood control; skips anon admins and media groups |

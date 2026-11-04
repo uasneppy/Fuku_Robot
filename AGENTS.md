@@ -1486,7 +1486,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `antiflood` keys are not in `skipLocal`, so another replica can show an old value for up to `CACHE_LOCAL_TTL`, exactly
   as the commands can; the replica that took the press is consistent. A group menu's text is readable by every member of
   the group, and a menu or choice message stays until used or closed (no auto-close timer). The "Only {name} can use this
-  menu." line carries an escaped name, not a mention, so it pings nobody.
+  menu." line carries an escaped name, not a mention, so it pings nobody. The message editor follows the same rule: the
+  switches, Remove and every typed part call the greetings and rules apply functions that sit beside the commands, so
+  the menu, the typed reply and `/setwelcome`, `/resetwelcome`, `/setrules` and the rest write one way. The join, the
+  leave, `/welcome`, `/rules` and the previews all build their message through `renderGreeting` and `buildRulesText`,
+  never a second builder, and a preview never writes and never sends to the group.
 - A menu opened in the group never shows the Staff Group's title or chat ID (D-21): not in any text, button label, notice,
   alert or callback data, in any of the 8 languages, on any page, picker, card or refusal. Nor does a private menu, except
   to the live creator of the group being configured (D-32): a private menu is shown to every live admin of the group, who
@@ -1520,6 +1524,30 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unknown mark on Main, never a default. A chat with no greetings row reads as Welcome On, Goodbye On (the database
   default of `goodbye_enabled`, which the first write stores for a chat the bot knows) and Delete last Off, which is what
   the bot then does, and the pages show exactly that (`TestSettingsEditDefaultsMatchRuntime`).
+- Message editor (Phase 11), the pieces in one place; each has its own bullet: the pages, Set, Cancel and Remove are
+  under Callbacks (`settings|v1`, codes `w g r`, parts `x m b`, controls `e d`), the wait and its keys under Data
+  (`fuku:settings:input:*`), the typed-reply door at handler group 1 and `/cancel` under Handlers, the check
+  (`settingsEditCheck`, pure) and the right of each part under Permissions. A part is written only by the apply function
+  of its command, whether the owner pressed a button or typed the message, and a typed reply is judged like a press:
+  live `getChatMember`, owner gate, right, live `getChat`, then the check, the claim and the write. Previews
+  (`settings_edit_preview.go`) are the actions `wv` `wf` (Welcome), `gv` `gf` (Goodbye) and `rv` `rf` (Rules): `v` previews
+  the part named by `t` (only a part that is set, plus a Welcome or Goodbye text, which always has the default), `f` is the
+  whole message with no `t`, and both need only the admin check every press makes. A preview is the header line
+  (`settings_edit_preview_header`, or `_rules`) and then the content, built by `renderGreeting` (the join's own builder,
+  filled in with the presser's name and the group's title) or `buildRulesText` and sent by `media.SendGreeting`, always to
+  the presser's own private chat (`query.From.Id`), never to the group and never through the senders that keep the
+  clean-old bookkeeping, so it writes no `last_msg_id`, deletes no message and touches no row. A menu opened in the
+  private chat answers the press empty; one opened in the group answers the toast `settings_edit_preview_sent`; a Telegram
+  403 (classified by code, `settingsEditIsForbidden`) is the alert `settings_edit_preview_need_start` and any other
+  failure `settings_edit_preview_failed`, with Telegram's wording in the log only; a stale Preview of an empty part is
+  `settings_edit_nothing_to_preview` and sends nothing. The reads are uncached and have no side effect (see the bullet
+  above), so a page, a preview and a typed save never create a row or fill a cache entry the commands would not. No
+  editor screen names the Staff Group (D-21, D-32) and every prompt, refusal, saved page and wait-ended reply fits 3800
+  UTF-16 units and 64-byte buttons in all 8 languages (`TestSettingsStaffPrivacy`, `TestSettingsEditScreensFitEveryLocale`;
+  the door's refusal and the saved notice come from the pure `renderSettingsInputRefusal` and
+  `settingsInputSavedNotice`, so a test renders exactly what is sent). Known and accepted: the `/rules` text is escaped
+  twice for a rules text with `'`, `&` or `<` and no formatting (a pre-existing behaviour the editor keeps for parity), and
+  a first Set on a group with no greetings row also turns the goodbye on (the database default; the page shows it).
 
 ## Go rules
 
@@ -1630,7 +1658,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `openEditPagePrivate`) and its families `TestSettingsEdit*`, `TestSettingsParityGreeting*`, `TestSettingsDriftGreetings`
   and `TestSettingsAuthorityParityGreetings` (`settings_edit_test.go`), plus `TestSettingsEditSet*`,
   `TestSettingsEditCancel*`, `TestSettingsEditRemove*` and `TestSettingsAuthorityParityEdit` (`settings_edit_actions_test.go`:
-  the wait, Remove, their parity with the commands and the rights). `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
+  the wait, Remove, their parity with the commands and the rights). The typed-reply door adds `TestSettingsEditTyped*`,
+  `TestSettingsEditDoor*` and `TestSettingsEditAlbum*` (`settings_input_door_test.go`, `settings_input_media_test.go`:
+  the door's order, the album gate, the media and buttons parts and `TestSettingsEditWholeMessageParity`), the previews
+  `TestSettingsEditPreview*` and `TestSettingsEditFullPreview` (`settings_edit_preview_test.go`), the pure check
+  `TestSettingsEditCheck*` (`settings_edit_check_test.go`) and the store `settings_input_test.go`. The test files are
+  `settings_edit_*_test.go` and `settings_input*_test.go`; the typed reply is the sixth door of `TestSettingsGateAllDoors`.
+  `TestSettingsEditScreensFitEveryLocale` (`settings_edit_screens_test.go`, whose `settingsEditScreens` builds every
+  non-page editor screen and is also what `TestSettingsStaffPrivacy` renders) holds them to 3800 UTF-16 units and 64-byte
+  buttons with a 64-rune title. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
   has no locale manager of its own. `fuku/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
 - Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./fuku/modules ./fuku/i18n`.

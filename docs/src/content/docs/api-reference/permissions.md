@@ -430,6 +430,17 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Antiflood limit, action and delete switch | Admin, and the bot an admin | `/setflood`, `/setfloodmode`, `/delflood` |
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
+| Welcome and Goodbye: Set text, media or buttons, Remove, Delete last | Creator, or an admin who can change info | `/setwelcome`, `/setgoodbye`, `/resetwelcome`, `/resetgoodbye`, `/cleanwelcome`, `/cleangoodbye` |
+| Rules: Set and Remove | Admin, and the bot an admin | `/setrules`, `/clearrules` |
+| Welcome and Goodbye on/off switch, every Preview and Full preview, Cancel | Admin | `/welcome`, `/goodbye` |
+
+### Typing a message into the editor
+
+After Set the bot waits ten minutes for your next private message. That message is judged like a button press: a live
+check that you are still the creator or an administrator of the group, the owner gate above, the right of the part from
+the table, and a live look at the group. If you lost access in between, the wait ends and the bot says so; if the bot
+cannot tell, it says the check failed and keeps waiting. Nothing is saved on a guess. `/cancel` in the bot's private chat
+ends the wait.
 
 ### Who can open the menu
 

@@ -60,6 +60,7 @@ versions, and legacy unversioned dot-notation payloads are rejected.
 | Purges | `deleteMsg` | deleteButtonHandler |
 | Reactions | `reactions_help` | reactionsHelpHandler |
 | Reports | `report` | markResolvedButtonHandler |
+| Settings | `settings` | settingsCallback |
 | Warns | `rmAllChatWarns` | warnsButtonHandler |
 | Warns | `rmWarn` | rmWarnButton |
 
@@ -230,6 +231,30 @@ Displays help information for reaction commands.
 
 - **Handler**: `markResolvedButtonHandler`
 - **Source**: `reports.go`
+
+### Settings
+
+#### `settings`
+
+- **Handler**: `settingsCallback`
+- **Source**: `settings_menu.go`, `settings_pages.go`, `settings_edit.go`, `settings_edit_actions.go`, `settings_edit_preview.go`
+
+The settings menu's buttons. Fields: `a` the action, `c` the group's chat ID (a menu opened in private) or `u` the opener's
+user ID (a menu opened in the group), never both; `p` the page; `t` the control or the part; `v` the absolute target
+value. A press with an unknown field is refused before any lookup.
+
+The message editor's pages and codes:
+
+| Page (`p`) | Part codes (`t`) | Controls (`t`) | Set | Remove | Cancel | Preview | Full preview |
+|------------|------------------|----------------|-----|--------|--------|---------|--------------|
+| `w` Welcome | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last | `ws` | `wr` | `wc` | `wv` | `wf` |
+| `g` Goodbye | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last | `gs` | `gr` | `gc` | `gv` | `gf` |
+| `r` Rules | `x` text | | `rs` | `rr` | `rc` | `rv` | `rf` |
+
+Set, Remove, Cancel and Preview carry exactly one field, `t`, a part code of the page (a missing, unknown or extra field is
+an invalid request); Full preview carries none. Set works only from a private menu and waits for the owner's next private
+message; in a menu opened in the group Set, Remove and Cancel write nothing and point to the private chat. A preview is
+always sent to the presser's own private chat.
 
 ### Warns
 

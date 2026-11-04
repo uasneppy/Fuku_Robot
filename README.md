@@ -379,6 +379,8 @@ Admins only.
 | `/cleanservice <on/off>` | Delete "X joined the group" service messages |
 | `/autoapprove <on/off>` | Approve join requests automatically |
 
+You can also set the welcome, the goodbye and the rules from `/settings` in the bot's private chat: pick the page, tap Set and send the text, media or buttons as a normal message. `/cancel` ends the wait.
+
 </details>
 
 <details>
