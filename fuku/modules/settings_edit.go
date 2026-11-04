@@ -108,7 +108,7 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_welcome", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_welcome",
 		ToggleLabelKey: "settings_btn_edit_welcome_toggle", CleanLabelKey: "settings_btn_edit_clean_welcome",
-		SetCode: "ws", CancelCode: "wc", EditRight: settingsRightChangeInfo,
+		SetCode: "ws", RemoveCode: "wr", CancelCode: "wc", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
@@ -116,13 +116,13 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_goodbye", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_goodbye",
 		ToggleLabelKey: "settings_btn_edit_goodbye_toggle", CleanLabelKey: "settings_btn_edit_clean_goodbye",
-		SetCode: "gs", CancelCode: "gc", EditRight: settingsRightChangeInfo,
+		SetCode: "gs", RemoveCode: "gr", CancelCode: "gc", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
 		Key: settingsPageRules, Kind: settingsEditRules, Order: 70, Icon: "📜",
 		TitleKey: "settings_page_rules", HintKey: "settings_edit_hint_rules",
-		SetCode: "rs", CancelCode: "rc", EditRight: settingsRightAdminBotAdmin,
+		SetCode: "rs", RemoveCode: "rr", CancelCode: "rc", EditRight: settingsRightAdminBotAdmin,
 		Parts: []settingsEditPart{settingsEditRulesTextPart},
 	},
 }
@@ -301,7 +301,7 @@ func settingsEditBody(v settingsView, def settingsEditPageDef, st settingsEditSt
 }
 
 // settingsEditPartRows is the block of the part rows, one per part in the parts table's order:
-// [Set]. The buttons are drawn in a group
+// [Set] while the part is not set, [Set | Remove] while it is. The buttons are drawn in a group
 // menu too, so the page looks the same in both places; there their press is the group note.
 func settingsEditPartRows(k *settingsKeyboard, def settingsEditPageDef, st settingsEditState) {
 	tr := k.view.Tr
@@ -309,6 +309,11 @@ func settingsEditPartRows(k *settingsKeyboard, def settingsEditPageDef, st setti
 		var row []gotgbot.InlineKeyboardButton
 		if set, ok := k.button(settingsText(tr, part.SetLabelKey), map[string]string{"a": def.SetCode, "t": part.Code}); ok {
 			row = append(row, set)
+		}
+		if settingsEditPartIsSet(st, part.Code) {
+			if remove, ok := k.button(settingsText(tr, part.RemoveLabelKey), map[string]string{"a": def.RemoveCode, "t": part.Code}); ok {
+				row = append(row, remove)
+			}
 		}
 		k.row(row...)
 	}

@@ -375,8 +375,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   code. A line is a state word and never the stored content: text is Default or Set with its visible length
   (`formatting.VisibleLength`), media Not set or its kind word (a GIF is stored as a document and reads File or GIF),
   buttons Not set or Set with the total; the stored text, a button name and a link are never echoed, and a sticker or a
-  video note adds `settings_edit_note_no_caption`. `renderSettingsEditor` is pure and built in row blocks (switches, Open
-  in private, navigation), so a later plan adds a block without touching the others. Welcome and Goodbye carry control `e`,
+  video note adds `settings_edit_note_no_caption`. `renderSettingsEditor` is pure and built in row blocks (part rows,
+  switches, Open in private, navigation), so a later plan adds a block without touching the others. Welcome and Goodbye carry control `e`,
   the on/off switch (`settingsRightAdmin`, as `/welcome on|off`), and control `d`, Delete last (`settingsRightChangeInfo`,
   as `/cleanwelcome` and `/cleangoodbye`). Each press sends the absolute target `v` ("0" or "1", anything else is an
   invalid request), calls `applyWelcomeEnabled`, `applyGoodbyeEnabled`, `applyCleanWelcome` or `applyCleanGoodbye`, and
@@ -387,6 +387,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r`, then Access for the owner) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules.
+  Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
+  `[Set | Remove]` while it is (a Welcome or Goodbye text counts as set only while it differs from the default), in the
+  order of the state lines, and a group menu draws them too. The actions are Welcome `ws` `wr` `wc` (Set, Remove,
+  Cancel), Goodbye `gs` `gr` `gc` and Rules `rs` `rr` `rc`, each with the one field `t` (a part code of that page),
+  checked by `Validate` (`settingsEditValidatePart`) before any I/O, so a missing, unknown or extra field is an invalid
+  request with no `getChatMember`. Set and Remove need the right of the matching commands (`EditRight`): Welcome and
+  Goodbye `settingsRightChangeInfo`, Rules `settingsRightAdminBotAdmin`; Cancel needs only `settingsRightAdmin`. Set
+  writes the wait (`settingsInputSet`, the press's own group, page, part, message ID and a fresh nonce, ten minutes) only
+  from a private menu and edits the message into the waiting prompt (`renderSettingsEditPrompt`: the part's prompt body,
+  the limit after "Up to" from `settingsEditPromptMax`, 4096, 1024 while the group has stored media or 3800 on Rules, the
+  end time in UTC, one Cancel button and no Back or Close); a wait it replaced for another group, page or part adds
+  `settings_edit_replaced_note`, the same part only refreshes the ten minutes. With no Redis, or when the write fails, Set
+  answers the alert `settings_edit_unavailable` and edits nothing, while Remove and the switches still work. In a menu
+  opened in the group, Set, Remove and Cancel write nothing and await nothing: the page is redrawn with the notice
+  `settings_edit_group_note` and its Open in private row, so no group menu ever creates a wait (D-01). Cancel
+  (`settingsInputCancel`) compares group, page and part with the wait before deleting anything: a deleted wait edits the
+  message into the page with the cancelled notice, a prompt whose wait was replaced, used or is being saved answers
+  `settings_edit_prompt_stale` and leaves the live wait alone, one after the ten minutes answers
+  `settings_edit_wait_expired`, and each of those edits the message into the page. Remove is one tap with no card, through
+  the commands' apply functions (`applyGreetingRemoveText`, `applyGreetingRemoveMedia`, `applyGreetingRemoveButtons`,
+  `applyRulesClear`), so the three Remove presses of a Welcome or Goodbye page together store what `/resetwelcome` or
+  `/resetgoodbye` store and Rules Remove what `/clearrules` stores; it redraws from the read-back with a notice that says
+  what was removed (the long text cannot be undone in the menu), a stale Remove of an empty part redraws with
+  `settings_edit_nothing_to_remove` and writes nothing, and a failed write redraws the freshly loaded page with
+  `common_settings_save_failed`.
 
 ## Permissions
 
@@ -1572,7 +1597,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   it. The message editor adds `fuku/modules/settings_edit_env_test.go` on top of it (`newSettingsEditEnv`, `editCleanup`,
   `settingsEditAdminJSON`, `listEditAdmin`, `settingsEditStored`, `settingsEditRulesStored`, `openEditPage`,
   `openEditPagePrivate`) and its families `TestSettingsEdit*`, `TestSettingsParityGreeting*`, `TestSettingsDriftGreetings`
-  and `TestSettingsAuthorityParityGreetings` (`settings_edit_test.go`). `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
+  and `TestSettingsAuthorityParityGreetings` (`settings_edit_test.go`), plus `TestSettingsEditSet*`,
+  `TestSettingsEditCancel*`, `TestSettingsEditRemove*` and `TestSettingsAuthorityParityEdit` (`settings_edit_actions_test.go`:
+  the wait, Remove, their parity with the commands and the rights). `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
   has no locale manager of its own. `fuku/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
 - Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./fuku/modules ./fuku/i18n`.

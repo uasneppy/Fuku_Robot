@@ -12,9 +12,10 @@ import (
 )
 
 // This file is the editor pages' actions: Set (writes the wait for the owner's next private
-// message and turns the menu message into the waiting prompt) and Cancel (ends that wait). They
-// work only from a private menu; in a menu opened in the group they write nothing and await
-// nothing, and the page is redrawn with the note that points to the private chat (D-01).
+// message and turns the menu message into the waiting prompt), Cancel (ends that wait) and
+// Remove (takes a part out at once, through the commands' apply functions). They work only from
+// a private menu; in a menu opened in the group they write nothing and await nothing, and the
+// page is redrawn with the note that points to the private chat (D-01).
 
 const (
 	// settingsEditRulesPromptMax is the length the Rules prompt shows. The dry run is exact and
@@ -185,13 +186,85 @@ func settingsEditCancel(def settingsEditPageDef) func(*settingsPress) *settingsS
 	})
 }
 
-// settingsEditActions are the page's Set, Remove and Cancel actions. Set needs the
+// settingsEditApplyRemove removes one part through the apply function of the command it
+// mirrors. It returns the outcome and the state read back, nil when the caller has to reload
+// (the write stored but its read-back failed, or the write failed).
+func settingsEditApplyRemove(
+	ctx context.Context, def settingsEditPageDef, part string, chatID int64,
+) (greetingApplyOutcome, *settingsEditState) {
+	if def.Kind == settingsEditRules {
+		res := applyRulesClear(ctx, chatID)
+		if res.Outcome == greetingSaveFailed {
+			return res.Outcome, nil
+		}
+		return res.Outcome, &settingsEditState{Kind: def.Kind}
+	}
+	isWelcome := def.Kind == settingsEditWelcome
+	var res greetingApplyResult
+	switch part {
+	case settingsEditPartText:
+		res = applyGreetingRemoveText(ctx, chatID, isWelcome)
+	case settingsEditPartMedia:
+		res = applyGreetingRemoveMedia(ctx, chatID, isWelcome)
+	case settingsEditPartButtons:
+		res = applyGreetingRemoveButtons(ctx, chatID, isWelcome)
+	default:
+		return greetingSaveFailed, nil
+	}
+	if res.Outcome == greetingSaveFailed || res.Settings == nil {
+		return res.Outcome, nil
+	}
+	st, err := settingsEditStateOf(def, res.Settings)
+	if err != nil {
+		return res.Outcome, nil
+	}
+	return res.Outcome, &st
+}
+
+// settingsEditRemove serves Remove: one tap, no confirmation card. A part that is not set (a
+// stale button) redraws with settings_edit_nothing_to_remove and writes nothing; a failed write
+// redraws the freshly loaded page with common_settings_save_failed; a stored one redraws from
+// the read-back with the part's removed notice.
+func settingsEditRemove(def settingsEditPageDef) func(*settingsPress) *settingsScreen {
+	return settingsEditPrivateOnly(def, func(p *settingsPress, part string) *settingsScreen {
+		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+		defer cancel()
+		st, err := settingsEditLoad(ctx, def, p.group.Id)
+		if err != nil {
+			log.Warnf("[Settings] %s page of chat %d could not be read for Remove: %v", def.Key, p.group.Id, err)
+			p.cannotOpen()
+			return nil
+		}
+		if !settingsEditPartIsSet(st, part) {
+			return settingsEditRedraw(p, def, settingsNoticeWarn(settingsText(p.tr, "settings_edit_nothing_to_remove")))
+		}
+		notice := ""
+		outcome, stored := settingsEditApplyRemove(ctx, def, part, p.group.Id)
+		switch {
+		case outcome == greetingSaveFailed:
+			log.Errorf("[Settings] Remove %s of chat %d failed", part, p.group.Id)
+			notice = settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed"))
+		default:
+			notice = settingsNoticeOK(settingsText(p.tr, settingsEditPartByCode(def, part).RemovedKey))
+		}
+		if stored == nil {
+			return settingsEditRedraw(p, def, notice)
+		}
+		screen := renderSettingsEditor(p.view(), def, *stored, settingsEditScreenOpts{
+			Notice: notice, BotUsername: getBotUsername(p.b),
+		})
+		return &screen
+	})
+}
+
+// settingsEditActions are the page's Set, Remove and Cancel actions. Set and Remove need the
 // right of the matching commands, Cancel only the admin check every press makes; all three have
 // t checked before any I/O.
 func settingsEditActions(def settingsEditPageDef) map[string]settingsPageAction {
 	validate := settingsEditValidatePart(def.Key)
 	return map[string]settingsPageAction{
 		def.SetCode:    {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditSet(def)},
+		def.RemoveCode: {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditRemove(def)},
 		def.CancelCode: {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: validate, Run: settingsEditCancel(def)},
 	}
 }
