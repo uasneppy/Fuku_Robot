@@ -206,6 +206,16 @@ func main() {
 		modules.StopStaffSweeper()
 		return nil
 	})
+	// Registered right after the staff sweeper's stop, so LIFO runs it after the staff
+	// actions drain below (it never takes from that drain's 31 s) and before the database
+	// closes. It returns at once: every Telegram call of a sweep derives from the sweep
+	// context, which the stop cancels, and the one roster write in flight is bounded by the
+	// database context it was started with.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping admin index sweeper...")
+		modules.StopAdminIndexSweeper()
+		return nil
+	})
 	// Also registered after the DB-close handler, so LIFO cancels the staff fan-outs
 	// and lets them deliver their final summaries before the database closes: their
 	// workers still write links through recheckLink while they wind down. It gets the
@@ -481,6 +491,7 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 		log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 	}
 	modules.StartStaffSweeper(b)
+	modules.StartAdminIndexSweeper(b)
 	modules.StartLockdownWorker(b)
 	log.Infof("[Modules] Loaded modules: %s", fuku.ListModules())
 
