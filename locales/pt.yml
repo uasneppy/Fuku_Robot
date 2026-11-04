@@ -3114,6 +3114,7 @@ settings_edit_preview_header: "👁 Prévia, preenchida com seu nome e o título
 settings_edit_preview_header_rules: "👁 Prévia da mensagem de regras."
 settings_edit_preview_buttons_body: "👁 Estes são os botões."
 settings_edit_wait_ended_note: "A espera ({part}) terminou e nada mudou. Toque em Definir de novo na página."
+settings_edit_wait_stopped: "Parei de esperar, então nada foi salvo."
 settings_edit_part_text: "texto"
 settings_edit_part_media: "mídia"
 settings_edit_part_buttons: "botões"

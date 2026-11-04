@@ -2889,6 +2889,7 @@ settings_edit_preview_header: "👁 Предпросмотр с вашим им�
 settings_edit_preview_header_rules: "👁 Предпросмотр сообщения с правилами."
 settings_edit_preview_buttons_body: "👁 Вот кнопки."
 settings_edit_wait_ended_note: "Ожидание ({part}) закончилось, ничего не изменилось. Снова нажмите «Задать» на странице."
+settings_edit_wait_stopped: "Я перестал ждать, поэтому ничего не сохранено."
 settings_edit_part_text: "текст"
 settings_edit_part_media: "медиа"
 settings_edit_part_buttons: "кнопки"

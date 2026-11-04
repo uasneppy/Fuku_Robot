@@ -155,7 +155,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   authority ends the wait and answers one plain reply (a non-admin status or a Telegram 4xx other than 429 at
   `getChatMember` or `getChat`, and a chat that is not a group or supergroup: `settings_edit_refuse_access_lost`; the gate
   refusing an administrator: `settings_gate_owner_only`; a lost right: `settings_no_change_info` or
-  `chat_status_bot_not_admin`), and an answer that cannot be established (a 429, a 5xx, a transport error, a timeout,
+  `chat_status_bot_not_admin`; every reason except `settings_edit_refuse_access_lost`, whose text says it, is followed by
+  a blank line and `settings_edit_wait_stopped`, so the person knows the next message is not read). The Rules bot check
+  proceeds only when `chat_status.IsBotAdmin` is true, as the command does; because that predicate returns a bare bool,
+  a false is classified by one live `getChatMember` of the bot (`botAdmin`): a definite non-administrator status or a
+  Telegram 4xx other than 429 ends the wait with `chat_status_bot_not_admin`, while a 429, a 5xx, a transport error, a
+  timeout, or a live answer that says the bot is an administrator keeps it with `settings_check_failed`. An answer that cannot be established (a 429, a 5xx, a transport error, a timeout,
   an undecided gate, an unreadable page) answers `settings_check_failed` and keeps the wait. A message the check refuses
   is a reply with the reason, a blank line, `settings_edit_still_waiting` and one Cancel button, and the wait is neither
   claimed nor extended (its message ID is noted on the wait by `settingsInputNoteRefusal`, so that Cancel button ends this
@@ -1538,7 +1543,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Message editor (Phase 11), the pieces in one place; each has its own bullet: the pages, Set, Cancel and Remove are
   under Callbacks (`settings|v1`, codes `w g r`, parts `x m b`, controls `e d`), the wait and its keys under Data
   (`fuku:settings:input:*`), the typed-reply door at handler group 1 and `/cancel` under Handlers, the check
-  (`settingsEditCheck`, pure) and the right of each part under Permissions. A part is written only by the apply function
+  (`settingsEditCheck`, pure; the text and the buttons part hold one keyboard limit between them, at most 100 buttons and 8
+  in a row, with the `{rules}` button that a stored text adds counted against the stored buttons whichever part is being
+  set) and the right of each part under Permissions. A part is written only by the apply function
   of its command, whether the owner pressed a button or typed the message, and a typed reply is judged like a press:
   live `getChatMember`, owner gate, right, live `getChat`, then the check, the claim and the write. Previews
   (`settings_edit_preview.go`) are the actions `wv` `wf` (Welcome), `gv` `gf` (Goodbye) and `rv` `rf` (Rules): `v` previews

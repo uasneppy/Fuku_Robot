@@ -2829,6 +2829,7 @@ settings_edit_preview_header: "👁 प्रीव्यू, आपके न�
 settings_edit_preview_header_rules: "👁 नियम संदेश का प्रीव्यू।"
 settings_edit_preview_buttons_body: "👁 ये बटन हैं।"
 settings_edit_wait_ended_note: "{part} का इंतज़ार ख़त्म हो गया और कुछ नहीं बदला। पेज पर फिर से सेट दबाएँ।"
+settings_edit_wait_stopped: "मैंने इंतज़ार बंद कर दिया है, इसलिए कुछ सहेजा नहीं गया।"
 settings_edit_part_text: "टेक्स्ट"
 settings_edit_part_media: "मीडिया"
 settings_edit_part_buttons: "बटन"

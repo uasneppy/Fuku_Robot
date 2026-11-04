@@ -372,15 +372,25 @@ func (r *settingsInputReply) keep(key string) {
 	r.plain(r.text(key))
 }
 
+// settingsInputEndKeysSayStopped are the end reasons whose own text already says the bot stopped
+// waiting; every other reason is followed by settings_edit_wait_stopped, so the person knows the
+// next message will not be read.
+var settingsInputEndKeysSayStopped = map[string]bool{"settings_edit_refuse_access_lost": true}
+
 // end deletes the wait and its marker (only this wait: a newer wait for another group, page or
-// part is left alone) and answers key. The person has been told, so the marker goes too.
+// part is left alone) and answers key, then a blank line and the line that says the wait ended
+// unless the reason already does. The person has been told, so the marker goes too.
 func (r *settingsInputReply) end(key string) {
 	outcome, err := settingsInputCancel(context.Background(), r.user.Id, r.wait.GroupID, r.wait.Page, r.wait.Part, r.wait.PromptMsgID)
 	if err != nil && !errors.Is(err, errSettingsInputUnavailable) {
 		log.Warnf("[Settings] ending the wait of user %d failed: %v", r.user.Id, err)
 	}
 	log.Debugf("[Settings] the wait of user %d ended with outcome %d", r.user.Id, int(outcome))
-	r.plain(r.text(key))
+	text := r.text(key)
+	if !settingsInputEndKeysSayStopped[key] {
+		text += "\n\n" + r.text("settings_edit_wait_stopped")
+	}
+	r.plain(text)
 }
 
 // view is the private menu of the group being configured, as a press builds it.

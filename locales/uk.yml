@@ -2522,6 +2522,7 @@ settings_edit_preview_header: "👁 Перегляд із вашим ім'ям �
 settings_edit_preview_header_rules: "👁 Перегляд повідомлення з правилами."
 settings_edit_preview_buttons_body: "👁 Ось кнопки."
 settings_edit_wait_ended_note: "Очікування ({part}) завершилося, нічого не змінено. Знову натисніть «Задати» на сторінці."
+settings_edit_wait_stopped: "Я припинив чекати, тож нічого не збережено."
 settings_edit_part_text: "текст"
 settings_edit_part_media: "медіа"
 settings_edit_part_buttons: "кнопки"

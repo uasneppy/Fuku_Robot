@@ -592,6 +592,18 @@ func TestSettingsEditDoorAuthority(t *testing.T) {
 			sendPrivateMessage(env, person, gotgbot.Message{Text: "a new text"})
 
 			settingsEditWantReply(t, env, person, before, w.want)
+			// A refusal that ends the wait says so after its reason (access_lost already does);
+			// one that keeps the wait never claims it stopped.
+			text := settingsEditTextsSince(env, person, before)[0]
+			stopped := staffMarker("settings_edit_wait_stopped")
+			switch {
+			case w.kept || w.want == "settings_edit_refuse_access_lost":
+				if strings.Contains(text, stopped) {
+					t.Errorf("the reply %q carries the wait-stopped line", text)
+				}
+			case !strings.HasSuffix(text, staffMarker(w.want)+"\n\n"+stopped):
+				t.Errorf("the reply %q is not the reason, a blank line and the wait-stopped line", text)
+			}
 			if w.kept {
 				settingsEditWaitKept(t, env, person)
 				if !env.redis.Exists(settingsInputDoneKey(person.Id)) {

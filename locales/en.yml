@@ -3180,6 +3180,7 @@ settings_edit_preview_header: "👁 Preview, filled in with your name and the gr
 settings_edit_preview_header_rules: "👁 Preview of the rules message."
 settings_edit_preview_buttons_body: "👁 These are the buttons."
 settings_edit_wait_ended_note: "The wait for the {part} ended and nothing changed. Press Set on the page again."
+settings_edit_wait_stopped: "I stopped waiting, so nothing was saved."
 settings_edit_part_text: "text"
 settings_edit_part_media: "media"
 settings_edit_part_buttons: "buttons"

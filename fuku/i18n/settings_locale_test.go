@@ -187,6 +187,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_edit_removed_media":          {40, 56},
 	"settings_edit_removed_buttons":        {40, 56},
 	"settings_edit_nothing_to_remove":      {60, 84},
+	"settings_edit_wait_stopped":           {60, 84},
 	"settings_edit_cancelled":              {50, 70},
 	"settings_edit_cancel_nothing":         {50, 70},
 	"settings_edit_group_note":             {110, 154},
