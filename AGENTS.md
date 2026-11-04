@@ -203,7 +203,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   again) shows `lockdown_revoke_already` instead.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -276,6 +276,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   menu is then announced through `lockdownAnnounceLift`; a lift from a menu opened in the group only wakes the worker,
   because the redrawn menu already says it in that same chat and a second public message would say it twice. The page
   never starts a lockdown.
+- The Access page (`settings_access.go`, page `a`, `OwnerOnly`) is the owner switch "Admins can change settings". It
+  declares control `s` and the page action `ay` (Yes, with `e`), both with `settingsRightOwner`. An `OwnerOnly` page is
+  drawn and opened only for the live creator: `settingsMainEntries` skips it without calling its `MainState` unless the
+  viewer is the owner, and `openPage` refuses it for anyone else with the alert `settings_access_owner_only`, editing
+  nothing, so a forged `op`, `no` or Refresh naming page `a` is refused too. `settingsView.Owner` (the press's own live
+  member record is the creator, in a group menu and in a private one, and in the deep link) is distinct from `Creator`
+  (a private menu of the creator, which gates only the Staff Group title, D-32). The toggle with `v=1` (`tg` and `st`
+  alike) draws the shared two-tap card (`settings_access_confirm`) and writes nothing; Yes runs `settingsCardExpired`
+  (an expired minute redraws the page with `settings_card_expired`, a bad `e` is an invalid request) and writes ON
+  after the whole press pipeline, so a Yes by someone who is no longer the live creator is refused; `v=0` writes OFF at
+  once, and any other `v` is an invalid request. Both writes go through `applyAdminsAllowed`, which refuses a status
+  other than creator (`accessRefusedNotOwner`, behind the right), writes through the `settingsAccessWrite` seam
+  (`menuaccess.SetAdminsAllowed`) and returns the value to draw: the requested one after a write, the unchanged one
+  after a failure, which redraws the page with `common_settings_save_failed`. The page and the gate read the switch
+  through the same fresh `settingsAccessLookup` seam, there is no cache key to invalidate, an unreadable switch is the
+  cannot-open edit on the page and the unknown mark on Main, and a flip is announced nowhere (no group, Staff Group or
+  log channel message, D-11).
 
 ## Permissions
 
@@ -352,6 +369,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is live, so it is stricter than the commands' cached one; the bot check uses the commands' own predicate, never a live
   `FetchBotMember`. A notice refusal answers empty and redraws the page with the warning line; an alert refusal edits
   nothing. A control the presser lacks the right for is still drawn and its press refused.
+  `settingsRightOwner` needs the creator from the press's own member record (no extra call) and refuses with the alert
+  `settings_access_owner_only`; only the Access page's control and action declare it.
 
 ## Data
 
@@ -1399,7 +1418,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   guards D-21 and D-32 (a group menu, and a private menu of an admin who is not the creator, never name the Staff Group), `TestSettingsHelpFitsOneMessage` holds `settings_help_msg`
   to one Telegram message in every language, and `TestLoadSettingsRegistersHelp` guards the `/help` entry. No settings
   guarantee rests on PostgreSQL (no migration, no partial index, no `CHECK`), so nothing of the menu joins
-  `make test-postgres-integrity`.
+  `make test-postgres-integrity`. The Access controls have no command, so they carry `TestSettingsDriftAccess` and
+  `TestSettingsOwnerAuthorityAccess` instead of a parity test, and `TestSettingsAccessAcrossReplicas` proves the fresh
+  read across two replicas (a flip on one is seen by the very next press on the other, a memoised owner never hides a
+  flip to ON, D-12).
 
 ## Commits
 
