@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/adminindex"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
@@ -94,6 +96,20 @@ func adminCacheAutoUpdate(b *gotgbot.Bot, ctx *ext.Context) error {
 	chat := ctx.EffectiveChat
 	if chat == nil {
 		return ext.ContinueGroups
+	}
+
+	// The bot leaving or being kicked is a definitive fact: the group stops being listed in the
+	// private settings list (D-06). The reload below still runs and cannot bring the rows back,
+	// because it sees the bot as not an administrator or not in the chat.
+	if mcm := ctx.MyChatMember; mcm != nil && mcm.NewChatMember != nil {
+		switch mcm.NewChatMember.MergeChatMember().Status {
+		case gotgbot.ChatMemberStatusLeft, gotgbot.ChatMemberStatusKicked:
+			clearCtx, cancel := context.WithTimeout(context.Background(), adminIndexWriteTimeout)
+			if err := adminindex.ClearChat(clearCtx, chat.Id); err != nil {
+				log.Warnf("[BotUpdates] clear admin roster of chat %d: %v", chat.Id, err)
+			}
+			cancel()
+		}
 	}
 
 	// Always invalidate and reload on admin status updates to avoid stale

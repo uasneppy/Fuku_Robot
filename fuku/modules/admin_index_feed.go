@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -49,6 +50,64 @@ func adminIndexObserve(ev cache.AdminListEvent) {
 	if err != nil {
 		log.Warnf("[AdminIndex] roster write for chat %d: %v", ev.ChatID, err)
 	}
+}
+
+// adminIndexRefreshOutcome is what refreshChatAdminIndex did to a chat's rows.
+type adminIndexRefreshOutcome int
+
+const (
+	// adminIndexUnchanged means the answer was not definitive and the rows are as they were.
+	// It is the zero value, so an uninitialised outcome never claims a change.
+	adminIndexUnchanged adminIndexRefreshOutcome = iota
+	// adminIndexReplaced means the rows now hold the chat's creator and human administrators.
+	adminIndexReplaced
+	// adminIndexCleared means the bot is not an administrator of the chat, or cannot see it,
+	// and the rows were removed.
+	adminIndexCleared
+)
+
+// refreshChatAdminIndex refreshes one chat's rows with at most two Telegram calls, for the
+// sweep and the group /settings repair path. It changes rows only on definitive facts: replaced
+// for an administrator bot and a non-empty list, cleared for a bot that is not an administrator
+// or whose own lookup was refused with a Telegram client error (4xx except 429), unchanged for
+// every other error, a timeout, a 429 or an empty list. The error of a failed Telegram call is
+// returned whatever the outcome, with a 429's retry_after intact. It never touches the admin
+// cache and never sleeps: the caller owns pacing and retries (research R-06).
+func refreshChatAdminIndex(ctx context.Context, b *gotgbot.Bot, chatID int64) (adminIndexRefreshOutcome, error) {
+	botMember, err := b.GetChatMemberWithContext(ctx, chatID, b.Id, nil)
+	if err != nil {
+		if isTelegramClientError(err) {
+			if clearErr := adminindex.ClearChat(ctx, chatID); clearErr != nil {
+				return adminIndexUnchanged, fmt.Errorf("clear roster of chat %d after %w: %w", chatID, err, clearErr)
+			}
+			return adminIndexCleared, err
+		}
+		return adminIndexUnchanged, err
+	}
+
+	status := botMember.GetStatus()
+	if status != gotgbot.ChatMemberStatusAdministrator && status != gotgbot.ChatMemberStatusCreator {
+		if err := adminindex.ClearChat(ctx, chatID); err != nil {
+			return adminIndexUnchanged, err
+		}
+		return adminIndexCleared, nil
+	}
+
+	listed, err := b.GetChatAdministratorsWithContext(ctx, chatID, nil)
+	if err != nil {
+		return adminIndexUnchanged, err
+	}
+	if len(listed) == 0 {
+		return adminIndexUnchanged, nil
+	}
+	merged := make([]gotgbot.MergedChatMember, 0, len(listed))
+	for _, member := range listed {
+		merged = append(merged, member.MergeChatMember())
+	}
+	if err := adminindex.ReplaceChat(ctx, chatID, adminIndexEntries(merged)); err != nil {
+		return adminIndexUnchanged, err
+	}
+	return adminIndexReplaced, nil
 }
 
 // adminIndexEntries keeps the creator and the human administrators of a listed chat. A bot is
