@@ -146,7 +146,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` with no reply, no write and no Telegram call, so ordinary private chat is untouched. The order is
   fixed, each step refusing before the next: `settingsInputRead` (an error or no Redis is not the door's); no wait but a
   marker is one plain `settings_edit_wait_ended_note` naming the part (the marker taken with `GETDEL`, so two deliveries
-  answer once; nothing is saved); the live `getChatMember` of the sender, the owner gate (`settingsGate`), the right of
+  answer once; nothing is saved); with a live wait, a message whose `media_group_id` is 1 to 20 digits passes the album gate
+  (`fuku:settings:inputalbum:<user>:<media_group_id>`, `SET NX EX 30`, first wins) before the live checks and the claim, so an
+  album is checked and saved once, the items that lost the gate get no reply and no Telegram call, a refused album gets one
+  refusal and a late one the one wait-ended reply, and a Redis error ends the update with no write; the live `getChatMember` of the sender, the owner gate (`settingsGate`), the right of
   the part (`settingsRightRefusalFor`, and `chat_status.IsBotAdmin` on Rules), a live `getChat` of the group, the
   stored state, `settingsEditCheck`, `settingsInputClaim`, the part's apply function, `settingsInputFinish`. A lost
   authority ends the wait and answers one plain reply (a non-admin status or a Telegram 4xx other than 429 at
@@ -157,9 +160,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is a reply with the reason, a blank line, `settings_edit_still_waiting` and one Cancel button, and the wait is neither
   claimed nor extended; a write that fails after the claim releases the claim and answers the same way with
   `common_settings_save_failed`. A save sends the page as a new message in the private chat (with
-  `settings_edit_saved_text`, `_media` or `_buttons`, plus `settings_edit_caption_ignored` when a caption was not used)
+  `settings_edit_saved_text`, `_media` or `_buttons`, plus `settings_edit_caption_ignored` when a caption was not used and
+  `settings_edit_album_cut` when the saved message came from an album)
   and edits the prompt to `settings_edit_prompt_closed`, best effort. No log line of the door carries the message text,
-  a caption, a button name, a link or a file ID. The typed reply is the sixth door of `TestSettingsGateAllDoors`.
+  a caption, a button name, a link or a file ID. The media part stores what `/setwelcome` or `/setgoodbye` by reply stores (a GIF as a document, the caption not used, the text
+  and buttons kept) and the buttons part what they store for the same lines, replacing the set, but the editor refuses a link
+  that is not http or https instead of dropping it (EDIT-05). The typed reply is the sixth door of `TestSettingsGateAllDoors`.
   After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
   record through `refreshChatAdminIndex` (at most two Telegram calls, a 10 s context, the error only logged), the
   second repair path after `/admincache` (D-07, MENU-10). It runs after the reply, so a slow or failed refresh never

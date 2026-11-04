@@ -106,8 +106,34 @@ func (m moduleStruct) settingsInput(b *gotgbot.Bot, ctx *ext.Context) (ret error
 	// From here the message is consumed: a panic below must not hand it on, so the result a
 	// recovered panic leaves behind is EndGroups.
 	ret = ext.EndGroups
+	if !r.albumFirst() {
+		return ext.EndGroups
+	}
 	r.run()
 	return ext.EndGroups
+}
+
+// settingsInputIsAlbum reports whether the message belongs to an album: a media group ID of 1 to
+// 20 ASCII digits. Anything else is a single item and never forms an album key.
+func settingsInputIsAlbum(msg *gotgbot.Message) bool {
+	return settingsInputAlbumIDRe.MatchString(msg.MediaGroupId)
+}
+
+// albumFirst is the album gate (D-13). Telegram delivers the items of an album as separate
+// updates, so with a live wait only the first item to take the album memory (SET NX, 30 s) goes
+// on to the live checks and the claim: the others get no reply and no Telegram call, which also
+// keeps a refused album to one refusal. A message that is no album, and a first item, go on; a
+// Redis error ends the update with a log line and no second write.
+func (r *settingsInputReply) albumFirst() bool {
+	if !settingsInputIsAlbum(r.msg) {
+		return true
+	}
+	first, err := settingsInputAlbumFirst(context.Background(), r.user.Id, r.msg.MediaGroupId)
+	if err != nil {
+		log.Warnf("[Settings] the album memory of user %d could not be written: %v", r.user.Id, err)
+		return false
+	}
+	return first
 }
 
 // settingsInputPartWordKey is the locale key of the word for a part, as the wait-ended note names
@@ -393,6 +419,9 @@ func (r *settingsInputReply) saved(verdict settingsEditVerdict) {
 	notice := settingsNoticeOK(r.text(settingsInputSavedKey(r.wait.Part)))
 	if verdict.CaptionIgnored {
 		notice += "\n" + r.text("settings_edit_caption_ignored")
+	}
+	if settingsInputIsAlbum(r.msg) {
+		notice += "\n" + r.text("settings_edit_album_cut")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 	defer cancel()
