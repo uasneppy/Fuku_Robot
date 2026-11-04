@@ -455,14 +455,17 @@ Not a rename/refactor phase. New persistent state only: two new tables (no data 
 
 **Needs user confirmation before it becomes locked:** A1 (it implements D-15 for the only realistic "no live owner" case).
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **How does Telegram's Bot API represent a deleted-account owner in `getChatAdministrators`?**
    - What we know: Telegram forum threads say a "Deleted Account" owner can persist; the Bot API docs available through gotgbot say nothing.
    - What's unclear: the exact `first_name` and whether the entry is present.
    - Recommendation: ship the heuristic behind `settingsCreatorGone` with a human-verify task (owner checks against a real group, or accepts fail-closed), test both shapes.
+   - **RESOLVED:** answered by assumption A1 with a fail-closed gate. `settingsCreatorGone` (first name "Deleted Account", no last name, no username) lives in the owner gate, plan 10-05, which tests both shapes (a gone creator lets live admins in, D-15; any other unusable answer refuses with `settings_check_failed`); the roster feeder, plan 10-07, does not store such a creator. Per the orchestrator there is no blocking human-verify task: the owner's live confirmation is a non-blocking check in `10-SPIKE.md`, written by plan 10-10. If the real entry differs, admins of such a group are refused, never wrongly let in.
 2. **Should a gone creator's group appear in an admin's private list?** With the feeder skipping gone-creator rows it appears (hint only); the pick still goes through the gate. Recommendation: yes, consistent with D-15.
+   - **RESOLVED:** yes. The feeder (plan 10-07) skips the gone creator's row, so `ListForUserFresh`'s "no creator row" rule (plan 10-01) lists the group for its recorded admins; the list (plan 10-09) shows it, and the pick still runs the live check and the gate (plans 10-05, 10-09), which let the admin in only because no live owner exists.
 3. **Pace for very large installs.** 2 calls per group at 4 calls/s per replica. Recommendation: keep; add a per-cycle cap only if the owner reports slow cycles.
+   - **RESOLVED:** keep the fixed pace. The sweep (plan 10-08) paces 250 ms before each Telegram call (2 calls per group, about 8 minutes for 1000 groups), one runner per cycle through the `fuku:settings:sweep:lock` SETNX lock, with the 429 backoff; no per-cycle cap is added unless the owner reports slow cycles.
 
 ## Environment Availability
 
