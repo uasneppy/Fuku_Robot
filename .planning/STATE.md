@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Phase 10 UI-SPEC approved
-last_updated: "2026-11-04T12:27:14.047Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-11-04T12:35:23.056Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: 080619796feff07840bb70af98a1546c980e01d7
+state_head: 4219fd69a6cfea342cc509440f6718f5443a2dd6
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 10 (PM Settings Hub and Owner Gate) — EXECUTING
-Plan: 1 of 11
-Status: Executing Phase 10
+Plan: 2 of 11
+Status: Ready to execute
 Last activity: 2026-11-04 — Phase 10 execution started
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 03 P07 | 11min | 2 tasks | 11 files |
 | Phase 03 P08 | 13min | 2 tasks | 13 files |
 | Phase 03 P09 | 20min | 2 tasks | 11 files |
+| Phase 10 P01 | 6 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,8 @@ Recent decisions affecting current work:
 - [Phase 8]: The page decides nothing: a pass needs signed `initData` (HMAC, 5 min, user must match) and a `siteverify` success echoing hostname, action `captcha_join` and `cdata`. Only provable failures kick (D-28); Cloudflare, network and setup faults retry with the token re-armed; five failed solves in a row with no pass are held back as a suspected key mismatch (`fuku:captcha:streak`). The verify route has Redis rate windows, a readiness gate, a decided-answer replay marker and shares the bot's port: the owner's proxy must forward only `/captcha*`.
 - [Phase 9]: The settings menu (`settings|v1`) is stateless: no migration, model, Redis key, shutdown drain or handler group. Every press runs one pipeline (decode and allow-list, service identity, opener, live `getChatMember` of the presser in the configured group, the control's `settingsRight`), is answered exactly once and edits the one message. Every setting has one apply function beside its command, so menu and command cannot drift (parity, drift and authority-parity tests per setting). A page is one `registerSettingsPage` call from its own file.
 - [Phase 9]: Lift and Unlink cards carry the object they were drawn for (`r`, `l`) and a lazy expiry, so a stale Yes cannot hit a newer lockdown or link (D-33). A group menu, and a private menu of an admin who is not the group's creator, never name the Staff Group (D-21, D-32); `settingsStaffViewFor` is the one place that decides. A Lift from a group menu only wakes the worker (its redrawn menu is the notice); from a private menu it also posts the public notice (D-26).
+- [Phase 10]: 10-01: owner switch (chat_settings_access) is read fresh on every decision, never cached; AdminsAllowed has no GORM default tag
+- [Phase 10]: 10-01: adminindex.ReplaceChat is upsert + NOT IN prune under a per-chat pg_advisory_xact_lock, never delete-then-insert
 
 ### Pending Todos
 
@@ -175,9 +178,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T10:39:53.484Z
-Stopped at: Phase 10 UI-SPEC approved
-Resume file: .planning/phases/10-pm-settings-hub-and-owner-gate/10-UI-SPEC.md
+Last session: 2026-11-04T12:35:22.990Z
+Stopped at: Completed 10-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
