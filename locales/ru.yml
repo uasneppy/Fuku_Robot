@@ -2812,6 +2812,10 @@ settings_access_owner_only: "Только владелец группы може
 settings_pick_unavailable: "Сейчас я не могу открыть настройки этой группы. Отправьте /settings ещё раз, чтобы получить свежий список."
 settings_refuse_owner_only: "Меню настроек может открыть только владелец группы."
 settings_start_owner_only: "Настройки этой группы может открыть только её владелец."
+settings_page_welcome: "Приветствие"
+settings_page_goodbye: "Прощание"
+settings_page_rules: "Правила"
+settings_btn_edit_set_text: "✏️ Задать текст"
 settings_help_msg: |
   Управляйте этой группой из одного меню с кнопками.
 

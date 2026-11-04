@@ -2752,6 +2752,10 @@ settings_access_owner_only: "ये सेटिंग्स कौन इस्
 settings_pick_unavailable: "मैं अभी उस ग्रुप की सेटिंग्स नहीं खोल सकता। नई सूची के लिए /settings फिर से भेजें।"
 settings_refuse_owner_only: "सेटिंग्स मेन्यू केवल ग्रुप का ओनर खोल सकता है।"
 settings_start_owner_only: "उस ग्रुप की सेटिंग्स केवल उसका ओनर खोल सकता है।"
+settings_page_welcome: "स्वागत"
+settings_page_goodbye: "विदाई"
+settings_page_rules: "नियम"
+settings_btn_edit_set_text: "✏️ टेक्स्ट सेट करें"
 settings_help_msg: |
   इस ग्रुप को एक बटन मेन्यू से मैनेज करें।
 

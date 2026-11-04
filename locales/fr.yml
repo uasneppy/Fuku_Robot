@@ -2991,6 +2991,10 @@ settings_access_owner_only: "Seul le propriétaire du groupe peut changer qui pe
 settings_pick_unavailable: "Je ne peux pas ouvrir les paramètres de ce groupe pour le moment. Envoyez /settings à nouveau pour obtenir une liste à jour."
 settings_refuse_owner_only: "Seul le propriétaire du groupe peut ouvrir le menu des paramètres."
 settings_start_owner_only: "Seul le propriétaire de ce groupe peut ouvrir ses paramètres."
+settings_page_welcome: "Bienvenue"
+settings_page_goodbye: "Au revoir"
+settings_page_rules: "Règles"
+settings_btn_edit_set_text: "✏️ Définir texte"
 settings_help_msg: |
   Gérez ce groupe depuis un seul menu à boutons.
 

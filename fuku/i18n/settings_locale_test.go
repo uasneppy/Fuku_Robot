@@ -136,6 +136,12 @@ var settingsLocaleLimits = map[string]settingsLimit{
 
 	// The /help entry (plan 09-13, widened by plan 10-02).
 	"settings_help_msg": {1100, 1540},
+
+	// The message editor (plan 11-01). The ceilings are the UI-SPEC "New locale keys" columns.
+	"settings_page_welcome":      {12, 18},
+	"settings_page_goodbye":      {12, 18},
+	"settings_page_rules":        {12, 18},
+	"settings_btn_edit_set_text": {18, 20},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -305,6 +311,9 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🧩", "settings_page_captcha"},
 		{"🌊", "settings_page_antiflood"},
 		{"🔑", "settings_page_access"},
+		{"🎉", "settings_page_welcome"},
+		{"👋", "settings_page_goodbye"},
+		{"📜", "settings_page_rules"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",

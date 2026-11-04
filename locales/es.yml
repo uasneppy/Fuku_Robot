@@ -3075,6 +3075,10 @@ settings_access_owner_only: "Solo el dueño del grupo puede cambiar quién puede
 settings_pick_unavailable: "No puedo abrir los ajustes de ese grupo ahora. Envía /settings de nuevo para obtener una lista actualizada."
 settings_refuse_owner_only: "Solo el dueño del grupo puede abrir el menú de ajustes."
 settings_start_owner_only: "Solo el dueño de ese grupo puede abrir sus ajustes."
+settings_page_welcome: "Bienvenida"
+settings_page_goodbye: "Despedida"
+settings_page_rules: "Reglas"
+settings_btn_edit_set_text: "✏️ Definir texto"
 settings_help_msg: |
   Gestiona este grupo desde un único menú de botones.
 

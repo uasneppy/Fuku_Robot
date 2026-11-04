@@ -3103,6 +3103,10 @@ settings_access_owner_only: "Only the group's owner can change who may use these
 settings_pick_unavailable: "I can't open that group's settings right now. Send /settings again to get a fresh list."
 settings_refuse_owner_only: "Only the group's owner can open the settings menu."
 settings_start_owner_only: "Only the owner of that group can open its settings."
+settings_page_welcome: "Welcome"
+settings_page_goodbye: "Goodbye"
+settings_page_rules: "Rules"
+settings_btn_edit_set_text: "✏️ Set text"
 settings_help_msg: |
   Manage this group from one button menu.
 

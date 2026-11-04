@@ -3065,6 +3065,10 @@ settings_access_owner_only: "Hanya pemilik grup yang bisa mengubah siapa yang bo
 settings_pick_unavailable: "Saya tidak bisa membuka pengaturan grup itu sekarang. Kirim /settings lagi untuk daftar terbaru."
 settings_refuse_owner_only: "Hanya pemilik grup yang bisa membuka menu pengaturan."
 settings_start_owner_only: "Hanya pemilik grup itu yang bisa membuka pengaturannya."
+settings_page_welcome: "Sambutan"
+settings_page_goodbye: "Perpisahan"
+settings_page_rules: "Aturan"
+settings_btn_edit_set_text: "✏️ Atur teks"
 settings_help_msg: |
   Kelola grup ini dari satu menu tombol.
 

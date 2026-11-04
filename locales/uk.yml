@@ -2445,6 +2445,10 @@ settings_access_owner_only: "Лише власник групи може змі�
 settings_pick_unavailable: "Зараз я не можу відкрити налаштування цієї групи. Надішліть /settings ще раз, щоб отримати свіжий список."
 settings_refuse_owner_only: "Меню налаштувань може відкрити лише власник групи."
 settings_start_owner_only: "Налаштування цієї групи може відкрити лише її власник."
+settings_page_welcome: "Привітання"
+settings_page_goodbye: "Прощання"
+settings_page_rules: "Правила"
+settings_btn_edit_set_text: "✏️ Задати текст"
 settings_help_msg: |
   Керуйте цією групою з одного меню кнопок.
 
