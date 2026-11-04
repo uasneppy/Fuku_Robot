@@ -298,7 +298,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   kill switch for the whole raid AI path: `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
   watcher enqueues nothing, and a job already queued is dropped by `raidAIProcessJob` / `raidAIProcessImage` without
   a `getFile` or any provider call. The `/lockdown` help says what the AI trigger sends to
-  TypeSafe and to Anthropic Claude (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
+  TypeSafe and to Anthropic Claude (`lockdown_help_msg`, all 8 locales, D-15), and its length is held by
   `TestLockdownHelpFitsOneMessage`.
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
   arguments then pick view or change for the tapper. The command is not `Disableable`. `/autoantiraid` is its alias for
@@ -651,6 +651,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   conditional update (`link_revoked_at IS NULL`), so one confirm wins, and in the same transaction it marks every posted,
   open copy with live buttons `edit_pending`. The columns are read fresh, never cached, and never part of
   backup/export/import/reset.
+- `chat_settings_access` (migration 20261104120000) is the owner switch "Admins can change settings", one row per chat; a
+  chat without a row means owner only. It is read only through `menuaccess.AdminsAllowedFresh`, a fresh query that is never
+  cached (so no `DeleteCache` applies, and a cache added later needs `skipLocal` and a `DeleteCache` on every write), and an
+  unreadable switch is an error the caller refuses on, never a guessed value. `menuaccess.SetAdminsAllowed` is one
+  column-targeted `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of the switch, `updated_by` and `updated_at`, so a Go `false`
+  is written (the model has no `default:` tag on the boolean). It is never part of backup, export, import or reset, so
+  restoring a backup can never widen who may change a group's settings.
+- `chat_admin_index` (same migration) is the bot's record of each group's creator and human administrators: one row per chat
+  and user, `role` under the `chk_chat_admin_index_role` CHECK (`creator` or `administrator`), unique on `(chat_id, user_id)`
+  and an index on `user_id`. It is a hint for the private settings list and never authority: every pick from the list is
+  checked against a live `getChatMember`. `adminindex.ReplaceChat` takes a per-chat `pg_advisory_xact_lock` as the first
+  statement of its transaction on PostgreSQL, then upserts every entry and prunes every other user of the chat, never delete
+  then insert (two replaces of one chat would race into a unique violation, and two replaces with disjoint rosters would
+  commit the union); `ClearChat` goes through the same locked transaction as an empty roster. `ListForUserFresh` lists a
+  chat when the user has a creator row, and also when the user has an administrator row and either the chat's switch is on
+  or the chat has no creator row at all; it does not filter on `chats.is_inactive`, because the activity monitor marks quiet
+  groups inactive. It is read fresh, never cached, and never part of backup, export, import or reset.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -672,7 +689,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
    whenever you change an existing model.
 5. Add `fuku/modules/<name>.go` with `LoadXxx`, registered in `init()` via `RegisterLegacyModule`.
 6. Register commands with `helpers.WrapCommand`; add `RegisterAnonymousAdminHandler` for admin commands.
-7. Add locale keys to all 7 files in `locales/`.
+7. Add locale keys to all 8 files in `locales/` (en, es, fr, hi, id, pt, ru, uk).
 8. Run `make generate-docs`, `make check-translations`, `make test`, `make lint`.
 
 ## Subsystem traps
@@ -1210,7 +1227,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the group, and a menu or choice message stays until used or closed (no auto-close timer). The "Only {name} can use this
   menu." line carries an escaped name, not a mention, so it pings nobody.
 - A menu opened in the group never shows the Staff Group's title or chat ID (D-21): not in any text, button label, notice,
-  alert or callback data, in any of the 7 languages, on any page, picker, card or refusal. Nor does a private menu, except
+  alert or callback data, in any of the 8 languages, on any page, picker, card or refusal. Nor does a private menu, except
   to the live creator of the group being configured (D-32): a private menu is shown to every live admin of the group, who
   need not be staff, so only the person who can link the group (the press's own live `getChatMember` record has status
   creator, `settingsView.Creator`, no extra Telegram call) sees `settings_staff_linked_to`; any other admin gets the same
@@ -1232,7 +1249,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the owner check removed draws as "Not linked" with no notice. Inside a Staff Group the page is the `/staff` panel
   read-only (`renderSettingsStaffPanel`, 8 groups a page, inside 3800 UTF-16 units with the settings header and the
   `settings_staff_readonly` line) with no Link, Unlink, Add group or Recent actions. `TestSettingsStaffPrivacy` renders
-  every reachable screen in all 7 languages, runs a group menu end to end and runs a private menu of an admin who is not
+  every reachable screen in all 8 languages, runs a group menu end to end and runs a private menu of an admin who is not
   the creator end to end.
 
 ## Go rules
@@ -1290,8 +1307,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`fuku/utils/captchaweb/page/captcha.html`) is served with a per-response nonce CSP (`captchaweb.CSPFor`) and must
   keep no inline `style` attribute and no inline event handler, because the CSP would block them. `make
   check-translations` cannot see the `captcha_web_` keys the page reads from `captchaweb.PageKeys`;
-  `TestCaptchaWebLocaleKeys` (`fuku/i18n`) guards them in all 7 locales (present, not empty, length and no markup), and
+  `TestCaptchaWebLocaleKeys` (`fuku/i18n`) guards them in all 8 locales (present, not empty, length and no markup), and
   `TestStringTable` guards the table `main` builds from them.
+- The settings hub tables (`ChatSettingsAccess`, `ChatAdminIndex`) are in the AutoMigrate list of
+  `fuku/modules/test_harness_test.go` and in the testmains of `fuku/db/menuaccess` and `fuku/db/adminindex`, and
+  `settingsCleanup` deletes their rows of its chats. The default settings environment (`newSettingsEnvWith` and
+  `settingsEnv.addChat`) seeds `admins_allowed` true for its chats through the real `menuaccess` repository, because it
+  is an administrator the owner let in; the seed keeps every Phase 9 press test valid once the owner gate exists
+  (`TestSettingsEnvSeedsAdminAccess` pins it). A gate test never relies on it: it sets the switch it depends on with
+  `settingsEnv.setAdminsAllowed`. The other fixtures are `newOwner` (a live creator who is also the fake's creator entry,
+  with the default admin listed), `listAdmin` and the fake's `listAdministrator` (an administrator appears in
+  `getChatAdministrators` only when a test opts in), `setDeletedCreator` (the creator entry reads "Deleted Account" with no
+  last name and no username), `clearCreator` (no creator entry and no live creator) and `otherReplica` (a second dispatcher
+  and bot fake over the same database and miniredis, with update IDs from 50000 so they never meet the base environment's).
 - The harness `AutoMigrate` lists (`fuku/modules/test_harness_test.go`, `fuku/db/staff/testmain_test.go`,
   `fuku/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown
   models are in `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go` and
@@ -1319,6 +1347,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `turnstile`, `math` and `text` and refuses the rest with `check_violation`, exactly one `captcha_mode` check is left
   on `captcha_settings`, and the migration's statements run twice without error; `TestCaptchaModeMigrationStatements`
   is its database-free half and runs in `make test`).
+  The Phase 10 guarantees are `TestAdminIndexReplaceConcurrent` (`./fuku/db/adminindex`: concurrent replaces of one chat
+  leave one roster, with the role CHECK and the unique key intact) and `TestMenuAccessUpsert` (`./fuku/db/menuaccess`: a
+  Go `false` is written, one row per chat).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
@@ -1333,7 +1364,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   has a parity test (`TestSettingsParity*`: the menu press and the command leave the same stored row and the same
   cache), a drift test (`TestSettingsDrift*`: the page reads what the command reads) and an authority-parity test
   (`TestSettingsAuthorityParity*`: the menu refuses what the command refuses, with the right the control declares),
-  and every page has a worst-case callback test (`TestSettings*CallbackBytes`, 64 bytes) and a length test in all 7
+  and every page has a worst-case callback test (`TestSettings*CallbackBytes`, 64 bytes) and a length test in all 8
   languages (`TestSettings*PageFitsEveryLocale`); a new setting in the menu adds all of them. `TestSettingsStaffPrivacy`
   guards D-21 and D-32 (a group menu, and a private menu of an admin who is not the creator, never name the Staff Group), `TestSettingsHelpFitsOneMessage` holds `settings_help_msg`
   to one Telegram message in every language, and `TestLoadSettingsRegistersHelp` guards the `/help` entry. No settings
