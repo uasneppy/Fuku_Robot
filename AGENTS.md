@@ -1560,18 +1560,32 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`settings_edit_preview_header`, or `_rules`) and then the content, built by `renderGreeting` (the join's own builder,
   filled in with the presser's name and the group's title) or `buildRulesText` and sent by `media.SendGreeting`, always to
   the presser's own private chat (`query.From.Id`), never to the group and never through the senders that keep the
-  clean-old bookkeeping, so it writes no `last_msg_id`, deletes no message and touches no row. A menu opened in the
+  clean-old bookkeeping, so it writes no `last_msg_id`, deletes no message and writes no greeting or rules text. One side effect
+  is the join path's own: a Full preview, or a text preview, of a Welcome or Goodbye whose text contains `{rules}` reads the
+  rules through the join path's reader (`renderGreeting`, then `rules.GetChatRulesInfo`), which creates an empty rules row
+  (and a chats row) for a group that has none, exactly as a real join does; nothing else is written. The Rules Full preview's
+  heading is built in the presser's language (`buildRulesText` with the presser's translator), not the group's as `/rules`
+  has it, so it is not word for word what members see. A menu opened in the
   private chat answers the press empty; one opened in the group answers the toast `settings_edit_preview_sent`; a Telegram
   403 (classified by code, `settingsEditIsForbidden`) is the alert `settings_edit_preview_need_start` and any other
   failure `settings_edit_preview_failed`, with Telegram's wording in the log only; a stale Preview of an empty part is
-  `settings_edit_nothing_to_preview` and sends nothing. The reads are uncached and have no side effect (see the bullet
-  above), so a page, a preview and a typed save never create a row or fill a cache entry the commands would not. No
+  `settings_edit_nothing_to_preview` and sends nothing. The page reads are uncached and have no side effect (see the bullet
+  above), so a page and a typed save never create a row or fill a cache entry the commands would not; a preview does so
+  only through the `{rules}` read described above, which is the join path's. No
   editor screen names the Staff Group (D-21, D-32) and every prompt, refusal, saved page and wait-ended reply fits 3800
   UTF-16 units and 64-byte buttons in all 8 languages (`TestSettingsStaffPrivacy`, `TestSettingsEditScreensFitEveryLocale`;
   the door's refusal and the saved notice come from the pure `renderSettingsInputRefusal` and
   `settingsInputSavedNotice`, so a test renders exactly what is sent). Known and accepted: the `/rules` text is escaped
   twice for a rules text with `'`, `&` or `<` and no formatting (a pre-existing behaviour the editor keeps for parity), and
   a first Set on a group with no greetings row also turns the goodbye on (the database default; the page shows it).
+  Also known and accepted, like the other rolling-deploy caveats here: during a rolling deploy a typed reply that lands on
+  a replica still on the previous code (no group-1 door and no `/cancel`) passes through with no answer, and the wait stays
+  until it expires. A text over the limit that the Telegram client splits into several consecutive messages is handled
+  message by message, so whichever part claims the wait first is stored and the other parts are dropped without a reply;
+  the owner sees the saved page with its length, and there is no ordering signal for plain texts to do better. A claim
+  that is never finished or released (a crash, or a Redis timeout on finish) stays until the wait's 10 minutes end,
+  during which the sender's non-command private messages get no reply and Cancel and `/cancel` answer that nothing can be
+  cancelled; pressing Set again replaces the wait and its claim.
 
 ## Go rules
 

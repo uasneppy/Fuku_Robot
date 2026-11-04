@@ -15,8 +15,14 @@ import (
 // This file is the editor pages' previews. A preview is built by the group's own builder
 // (renderGreeting, the one the join path uses) and sent by the group's own send function
 // (media.SendGreeting), but only ever to the presser's own private chat, filled in with the
-// presser's name and the group's title. It writes nothing: it never calls the senders that keep
-// the clean-old bookkeeping, never touches last_msg_id and never deletes a message (D-10).
+// presser's name and the group's title. It writes no greeting or bookkeeping: it never calls the
+// senders that keep the clean-old bookkeeping, never touches last_msg_id and never deletes a
+// message (D-10). One side effect remains, and it is the join path's own: a Full preview, or a
+// text preview, of a greeting that contains {rules} reads the rules through the join path's
+// reader (renderGreeting, then rules.GetChatRulesInfo), which creates an empty rules row (and a
+// chats row) for a group that has none, exactly as a real join does, and nothing else is written.
+// The Rules Full preview's heading is built in the presser's language (buildRulesText with the
+// presser's translator), whereas /rules uses the group's language.
 
 // settingsEditIsForbidden reports whether err is a Telegram 403, also when wrapped: the answer
 // to a send to a user who never started the bot. It is classified by code, never by wording.
