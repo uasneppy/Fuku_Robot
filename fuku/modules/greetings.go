@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
@@ -139,6 +141,105 @@ func clearRecentJoinProcessing(chatID, userID int64) {
 	recentJoinProcessing.Delete(key)
 }
 
+// greetingApplyOutcome says whether a greeting write was stored.
+type greetingApplyOutcome int
+
+const (
+	// greetingApplied means the write was stored.
+	greetingApplied greetingApplyOutcome = iota
+	// greetingSaveFailed means the write failed and nothing was changed.
+	greetingSaveFailed
+)
+
+// greetingApplyResult is what every greeting apply function returns: the outcome, the
+// stored settings read back with greetings.LoadSettingsContext (nil when the write failed
+// or the read-back did, in which case the caller reloads) and the repository error.
+type greetingApplyResult struct {
+	Outcome  greetingApplyOutcome
+	Settings *models.GreetingSettings
+	Err      error
+}
+
+// greetingWrites holds the greetings repository writes the apply functions call. It is a
+// variable only so a test can make a write fail.
+var greetingWrites = struct {
+	WelcomeToggle      func(chatID int64, on bool) error
+	GoodbyeToggle      func(chatID int64, on bool) error
+	CleanWelcome       func(chatID int64, on bool) error
+	CleanGoodbye       func(chatID int64, on bool) error
+	WelcomeTextOnly    func(chatID int64, text string) error
+	WelcomeMediaOnly   func(chatID int64, fileID string, dataType int) error
+	WelcomeButtonsOnly func(chatID int64, buttons []db.Button) error
+	GoodbyeTextOnly    func(chatID int64, text string) error
+	GoodbyeMediaOnly   func(chatID int64, fileID string, dataType int) error
+	GoodbyeButtons     func(chatID int64, buttons []db.Button) error
+	WelcomeText        func(chatID int64, text, fileID string, buttons []db.Button, dataType int) error
+	GoodbyeText        func(chatID int64, text, fileID string, buttons []db.Button, dataType int) error
+}{
+	WelcomeToggle:      greetings.SetWelcomeToggle,
+	GoodbyeToggle:      greetings.SetGoodbyeToggle,
+	CleanWelcome:       greetings.SetCleanWelcomeSetting,
+	CleanGoodbye:       greetings.SetCleanGoodbyeSetting,
+	WelcomeTextOnly:    greetings.SetWelcomeTextOnly,
+	WelcomeMediaOnly:   greetings.SetWelcomeMediaOnly,
+	WelcomeButtonsOnly: greetings.SetWelcomeButtonsOnly,
+	GoodbyeTextOnly:    greetings.SetGoodbyeTextOnly,
+	GoodbyeMediaOnly:   greetings.SetGoodbyeMediaOnly,
+	GoodbyeButtons:     greetings.SetGoodbyeButtonsOnly,
+	WelcomeText:        greetings.SetWelcomeText,
+	GoodbyeText:        greetings.SetGoodbyeText,
+}
+
+// greetingApplyTimeout bounds the read-back an apply function makes after its write.
+const greetingApplyTimeout = 5 * time.Second
+
+// finishGreetingApply turns the error of one greeting write into the apply result: a
+// failure is logged with the chat ID and returned as greetingSaveFailed, a success reads
+// the stored row back. A failed read-back is only logged, because the write succeeded.
+func finishGreetingApply(ctx context.Context, chatID int64, what string, writeErr error) greetingApplyResult {
+	if writeErr != nil {
+		log.Errorf("[Greetings] %s failed for chat %d: %v", what, chatID, writeErr)
+		return greetingApplyResult{Outcome: greetingSaveFailed, Err: writeErr}
+	}
+	result := greetingApplyResult{Outcome: greetingApplied}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
+	defer cancel()
+	settings, err := greetings.LoadSettingsContext(readCtx, chatID)
+	if err != nil {
+		log.Warnf("[Greetings] read back settings of chat %d after %s: %v", chatID, what, err)
+		return result
+	}
+	result.Settings = settings
+	return result
+}
+
+// applyWelcomeEnabled stores the welcome switch. The value is absolute, so a repeated
+// call stores the same row. It is the one write path of /welcome on|off and the menu.
+func applyWelcomeEnabled(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "SetWelcomeToggle", greetingWrites.WelcomeToggle(chatID, on))
+}
+
+// applyGoodbyeEnabled stores the goodbye switch, the one write path of /goodbye on|off
+// and the menu.
+func applyGoodbyeEnabled(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "SetGoodbyeToggle", greetingWrites.GoodbyeToggle(chatID, on))
+}
+
+// applyCleanWelcome stores the "delete the last welcome" switch.
+func applyCleanWelcome(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "SetCleanWelcomeSetting", greetingWrites.CleanWelcome(chatID, on))
+}
+
+// applyCleanGoodbye stores the "delete the last goodbye" switch.
+func applyCleanGoodbye(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "SetCleanGoodbyeSetting", greetingWrites.CleanGoodbye(chatID, on))
+}
+
+// greetingApplyContext is the context the commands give an apply function.
+func greetingApplyContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), greetingApplyTimeout)
+}
+
 //nolint:dupl // displayGreeting has symmetric welcome/goodbye logic by design
 func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config greetingConfig) error {
 	msg := ctx.EffectiveMessage
@@ -240,43 +341,27 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 		}
 		var err error
 		switch strings.ToLower(args[0]) {
-		case "on", "yes":
+		case "on", "yes", "off", "no":
+			on := strings.ToLower(args[0]) == "on" || strings.ToLower(args[0]) == "yes"
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+			applyCtx, cancel := greetingApplyContext()
+			var res greetingApplyResult
 			if config.gType == greetingWelcome {
-				if dbErr := greetings.SetWelcomeToggle(chat.Id, true); dbErr != nil {
-					log.Errorf("[Greetings] SetWelcomeToggle failed for chat %d: %v", chat.Id, dbErr)
-					errText, _ := tr.GetString("common_settings_save_failed")
-					_, _ = msg.Reply(bot, errText, formatting.Shtml())
-					return ext.EndGroups
-				}
+				res = applyWelcomeEnabled(applyCtx, chat.Id, on)
 			} else {
-				if dbErr := greetings.SetGoodbyeToggle(chat.Id, true); dbErr != nil {
-					log.Errorf("[Greetings] SetGoodbyeToggle failed for chat %d: %v", chat.Id, dbErr)
-					errText, _ := tr.GetString("common_settings_save_failed")
-					_, _ = msg.Reply(bot, errText, formatting.Shtml())
-					return ext.EndGroups
-				}
+				res = applyGoodbyeEnabled(applyCtx, chat.Id, on)
 			}
-			text, _ := tr.GetString(config.enabledKey)
-			_, err = msg.Reply(bot, text, formatting.Shtml())
-		case "off", "no":
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			if config.gType == greetingWelcome {
-				if dbErr := greetings.SetWelcomeToggle(chat.Id, false); dbErr != nil {
-					log.Errorf("[Greetings] SetWelcomeToggle failed for chat %d: %v", chat.Id, dbErr)
-					errText, _ := tr.GetString("common_settings_save_failed")
-					_, _ = msg.Reply(bot, errText, formatting.Shtml())
-					return ext.EndGroups
-				}
-			} else {
-				if dbErr := greetings.SetGoodbyeToggle(chat.Id, false); dbErr != nil {
-					log.Errorf("[Greetings] SetGoodbyeToggle failed for chat %d: %v", chat.Id, dbErr)
-					errText, _ := tr.GetString("common_settings_save_failed")
-					_, _ = msg.Reply(bot, errText, formatting.Shtml())
-					return ext.EndGroups
-				}
+			cancel()
+			if res.Outcome == greetingSaveFailed {
+				errText, _ := tr.GetString("common_settings_save_failed")
+				_, _ = msg.Reply(bot, errText, formatting.Shtml())
+				return ext.EndGroups
 			}
-			text, _ := tr.GetString(config.disabledKey)
+			key := config.disabledKey
+			if on {
+				key = config.enabledKey
+			}
+			text, _ := tr.GetString(key)
 			_, err = msg.Reply(bot, text, formatting.Shtml())
 		default:
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -472,7 +557,11 @@ var cleanWelcomeToggleConfig = greetingToggleConfig{
 		}
 		return greetSettings.WelcomeSettings.CleanWelcome
 	},
-	setPref:              greetings.SetCleanWelcomeSetting,
+	setPref: func(chatID int64, val bool) error {
+		ctx, cancel := greetingApplyContext()
+		defer cancel()
+		return applyCleanWelcome(ctx, chatID, val).Err
+	},
 	saveErrLog:           "SetCleanWelcomeSetting",
 	connectBotAdmin:      false,
 	showEnabled:          "greetings_clean_welcome_not",
@@ -492,7 +581,11 @@ var cleanGoodbyeToggleConfig = greetingToggleConfig{
 		}
 		return greetSettings.GoodbyeSettings.CleanGoodbye
 	},
-	setPref:              greetings.SetCleanGoodbyeSetting,
+	setPref: func(chatID int64, val bool) error {
+		ctx, cancel := greetingApplyContext()
+		defer cancel()
+		return applyCleanGoodbye(ctx, chatID, val).Err
+	},
 	saveErrLog:           "SetCleanGoodbyeSetting",
 	connectBotAdmin:      false,
 	showEnabled:          "greetings_clean_goodbye_not",
