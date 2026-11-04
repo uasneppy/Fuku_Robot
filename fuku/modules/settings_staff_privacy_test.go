@@ -12,6 +12,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/adminindex"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -43,7 +44,7 @@ func settingsStaffPrivacyScreenText(screen settingsScreen) string {
 }
 
 func TestSettingsStaffPrivacy(t *testing.T) {
-	t.Run("pure renders in seven languages", func(t *testing.T) {
+	t.Run("pure renders in every language", func(t *testing.T) {
 		withRealLocales(t)
 
 		staffGroup := models.StaffGroup{ID: 7, ChatID: settingsStaffPrivacyChatID, OwnerUserID: 55, Title: settingsStaffPrivacyTitle}
@@ -92,6 +93,18 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					notices = append(notices, settingsNoticeWarn(staffUnlinkRefusalText(tr, r, groupView.GroupTitle)))
 				}
 
+				// Main as every page reports it: the status block holds each page's state and
+				// never the Staff Group.
+				mainEntries := func(staffState string) []settingsMainEntry {
+					return []settingsMainEntry{
+						{Key: "s", Icon: "👥", Title: settingsText(tr, "settings_page_staff"), State: staffState, Known: true},
+						{Key: "l", Icon: "🔒", Title: settingsText(tr, "settings_page_lockdown"), State: settingsText(tr, "settings_state_lock_none"), Known: true},
+						{Key: "c", Icon: "🧩", Title: settingsText(tr, "settings_page_captcha"), State: settingsStateWord(tr, true), Known: true},
+						{Key: "f", Icon: "🌊", Title: settingsText(tr, "settings_page_antiflood"), State: "", Known: false},
+						{Key: "a", Icon: "🔑", Title: settingsText(tr, "settings_page_access"), State: settingsText(tr, "settings_state_access_off"), Known: true, OwnerOnly: true},
+					}
+				}
+
 				// Every screen a group menu can reach on the Staff Group page.
 				screens := map[string]settingsScreen{
 					"unlink card": renderSettingsStaffUnlinkCard(groupView, link),
@@ -99,17 +112,22 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					"private admin linked":           renderSettingsStaffLinked(privateAdminView, settingsStaffViewFor(privateAdminView, false, &staffGroup, &row), ""),
 					"private admin linked, no group": renderSettingsStaffLinked(privateAdminView, settingsStaffViewFor(privateAdminView, false, nil, &row), ""),
 					"private admin not linked":       renderSettingsStaffNotLinked(privateAdminView, ""),
-					"main": renderSettingsMain(groupView, []settingsMainEntry{
-						{Key: "s", Icon: "👥", Title: settingsText(tr, "settings_page_staff"),
-							State: settingsText(tr, "settings_state_linked"), Known: true},
-						{Key: "s", Icon: "👥", Title: settingsText(tr, "settings_page_staff"),
-							State: settingsText(tr, "settings_state_not_linked"), Known: true},
-					}, ""),
-					"picker of one":    renderSettingsStaffPicker(groupView, pickable[:1], ""),
-					"picker of three":  renderSettingsStaffPicker(groupView, pickable, ""),
-					"linked":           renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), ""),
-					"not linked":       renderSettingsStaffNotLinked(groupView, ""),
-					"linked, no group": renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, nil, &row), ""),
+					"main":                           renderSettingsMain(groupView, mainEntries(settingsText(tr, "settings_state_linked")), ""),
+					"main, not linked":               renderSettingsMain(groupView, mainEntries(settingsText(tr, "settings_state_not_linked")), ""),
+					"private admin main":             renderSettingsMain(privateAdminView, mainEntries(settingsText(tr, "settings_state_linked")), ""),
+					"private creator main":           renderSettingsMain(privateView, mainEntries(settingsText(tr, "settings_state_linked")), ""),
+					"list empty":                     renderSettingsHubList(tr, nil, 1),
+					"list populated":                 renderSettingsHubList(tr, []adminindex.ListedGroup{{ChatID: link.GroupChatID, Title: "Test Group"}, {ChatID: link.GroupChatID - 1, Title: "Other"}}, 1),
+					"access page on":                 renderSettingsAccessPage(groupView, true, ""),
+					"access page off":                renderSettingsAccessPage(groupView, false, ""),
+					"access card":                    renderSettingsAccessCard(groupView),
+					"private access on":              renderSettingsAccessPage(privateAdminView, true, ""),
+					"private card":                   renderSettingsAccessCard(privateAdminView),
+					"picker of one":                  renderSettingsStaffPicker(groupView, pickable[:1], ""),
+					"picker of three":                renderSettingsStaffPicker(groupView, pickable, ""),
+					"linked":                         renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), ""),
+					"not linked":                     renderSettingsStaffNotLinked(groupView, ""),
+					"linked, no group":               renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, nil, &row), ""),
 				}
 				for i, notice := range notices {
 					name := fmt.Sprintf("notice %d", i)

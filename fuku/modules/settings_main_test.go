@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -271,4 +272,158 @@ func TestSettingsMainGrid(t *testing.T) {
 			t.Errorf("the admin's Main has an Access line: %q", adminText)
 		}
 	})
+}
+
+// settingsMainWorstState is the longest state text a page can show on Main in the translator's
+// language, so the fit test holds every page to the worst case.
+func settingsMainWorstState(tr *i18n.Translator) string {
+	candidates := []string{
+		settingsText(tr, "settings_state_linked"),
+		settingsText(tr, "settings_state_not_linked"),
+		settingsText(tr, "settings_state_staff_n", i18n.TranslationParams{"count": 99999}),
+		settingsText(tr, "settings_state_lock_none"),
+		settingsText(tr, "settings_state_lock_active"),
+		settingsText(tr, "settings_state_lock_lifting"),
+		settingsText(tr, "settings_state_limit", i18n.TranslationParams{"n": 99999}),
+		settingsText(tr, "settings_state_off_plain"),
+		settingsText(tr, "settings_state_access_on"),
+		settingsText(tr, "settings_state_access_off"),
+		settingsStateWord(tr, true),
+		settingsStateWord(tr, false),
+	}
+	worst := ""
+	for _, c := range candidates {
+		if utf8.RuneCountInString(c) > utf8.RuneCountInString(worst) {
+			worst = c
+		}
+	}
+	return worst
+}
+
+func TestSettingsMainPageFitsEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	titles := map[string]string{
+		"ampersands": strings.Repeat("&", 64),
+		"astral":     strings.Repeat("😀", 64),
+		"multibyte":  strings.Repeat("Ж", 64),
+	}
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			state := settingsMainWorstState(tr)
+			var entries []settingsMainEntry
+			for _, pg := range settingsPagesInOrder() {
+				entries = append(entries, settingsMainEntry{
+					Key: pg.Key, Icon: pg.Icon, Title: settingsText(tr, pg.TitleKey),
+					State: state, Known: true, OwnerOnly: pg.OwnerOnly,
+				})
+			}
+			if len(entries) < 5 {
+				t.Fatalf("only %d pages are registered, want the four ordinary ones and Access", len(entries))
+			}
+			for name, title := range titles {
+				for _, private := range []bool{false, true} {
+					view := settingsView{
+						Tr: tr, Private: private, OwnerKey: "u", OwnerValue: "9999999999",
+						GroupID: -1001234567890, GroupTitle: title, OpenerName: title,
+					}
+					if private {
+						view.OwnerKey, view.OwnerValue = "c", "-1001234567890"
+					}
+					label := fmt.Sprintf("%s %s private=%v", code, name, private)
+					screen := renderSettingsMain(view, entries, settingsNoticeWarn(settingsText(tr, "settings_check_failed")))
+					if screen.Omitted != 0 {
+						t.Errorf("%s omitted %d buttons", label, screen.Omitted)
+					}
+					if got := panelUTF16Len(screen.Text); got > 3800 || got == 0 {
+						t.Errorf("%s is %d UTF-16 units, want 1..3800", label, got)
+					}
+					for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+						runes := utf8.RuneCountInString(button.Text)
+						switch {
+						case strings.TrimSpace(button.Text) == "":
+							t.Errorf("%s has a button with an empty label (data %q)", label, button.CallbackData)
+						case strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|"):
+							if runes > 18 {
+								t.Errorf("%s Groups button %q is %d code points, want at most 18", label, button.Text, runes)
+							}
+						case runes > 20:
+							t.Errorf("%s button %q is %d code points, want at most 20", label, button.Text, runes)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSettingsHubGroupsButton(t *testing.T) {
+	env := newSettingsEnv(t)
+	owner := env.newOwner(env.chat)
+	settingsHubSeedGroup(t, env.chat, "Hub Group", settingsHubCreator(owner))
+
+	env.sendPrivate(owner, "/settings")
+	list := settingsPrivateOnlySent(t, env, owner)
+	picked := settingsHubPickedChats(t, staffKeyboardOf(list.Params["reply_markup"]))
+	if len(picked) != 1 {
+		t.Fatalf("the list offers %v, want the one seeded group", picked)
+	}
+	var pickData string
+	for _, button := range settingsAllButtons(staffKeyboardOf(list.Params["reply_markup"])) {
+		if decoded, ok := decodeCallbackData(button.CallbackData, settingsCallbackNamespace); ok && decoded.Fields["a"] == settingsActPick {
+			pickData = button.CallbackData
+		}
+	}
+	env.pressRaw(settingsPrivateChat(owner), owner, list.MessageID, pickData)
+
+	mainText, mainKeyboard := env.lastEdit(owner.Id, list.MessageID)
+	if !strings.Contains(mainText, staffMarker("settings_header_main")) {
+		t.Fatalf("the pick drew %q, want the group's Main page", mainText)
+	}
+	last := mainKeyboard[len(mainKeyboard)-1]
+	if len(last) != 2 || !strings.HasPrefix(last[0].CallbackData, settingsHubNamespace+"|") ||
+		!strings.Contains(last[0].Text, staffMarker("settings_btn_groups")) || !strings.Contains(last[1].Text, staffMarker("settings_btn_close")) {
+		t.Fatalf("the private Main ends with %+v, want Groups and Close", last)
+	}
+	groups := last[0]
+	if n := len(groups.CallbackData); n > 16 {
+		t.Errorf("the Groups data %q is %d bytes, want at most 16", groups.CallbackData, n)
+	}
+	decoded, ok := decodeCallbackData(groups.CallbackData, settingsHubNamespace)
+	if !ok || decoded.Fields["a"] != settingsHubActPage || decoded.Fields["v"] != "1" || len(decoded.Fields) != 2 {
+		t.Errorf("the Groups data %q decodes to %v, want a=lp and v=1 only", groups.CallbackData, decoded.Fields)
+	}
+
+	answers := env.answerCount()
+	edits := len(env.edits(owner.Id, list.MessageID))
+	env.pressRaw(settingsPrivateChat(owner), owner, list.MessageID, groups.CallbackData)
+
+	if got := env.answerCount() - answers; got != 1 {
+		t.Errorf("Groups was answered %d times, want once", got)
+	}
+	if got := len(env.edits(owner.Id, list.MessageID)) - edits; got != 1 {
+		t.Errorf("Groups made %d edits, want one", got)
+	}
+	text, keyboard := env.lastEdit(owner.Id, list.MessageID)
+	if !strings.Contains(text, staffMarker("settings_page_groups")) || !strings.Contains(text, staffMarker("settings_list_intro")) {
+		t.Errorf("Groups drew %q, want the list", text)
+	}
+	if got := settingsHubPickedChats(t, keyboard); len(got) != 1 || got[0] != fmt.Sprint(env.chat.Id) {
+		t.Errorf("the redrawn list offers %v, want chat %d", got, env.chat.Id)
+	}
+	if sent := env.fake.sentTo(owner.Id); len(sent) != 1 {
+		t.Errorf("Groups sent a new message: %d messages in the private chat, want 1", len(sent))
+	}
+	if got := len(callsToChat(env.fake.staffBotClient, "deleteMessage", owner.Id)); got != 0 {
+		t.Errorf("Groups deleted a message %d times, want never", got)
+	}
+
+	// A group menu never carries the Groups button.
+	msgID := env.openMenu(owner)
+	_, groupKeyboard := env.lastEdit(env.chat.Id, msgID)
+	for _, button := range settingsAllButtons(groupKeyboard) {
+		if strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|") {
+			t.Errorf("a group menu's Main carries the hub button %q", button.CallbackData)
+		}
+	}
 }
