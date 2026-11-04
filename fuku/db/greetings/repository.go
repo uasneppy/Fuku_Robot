@@ -255,6 +255,14 @@ func SetWelcomeText(chatID int64, welcometxt, fileId string, buttons []models.Bu
 	return nil
 }
 
+// RED-phase stubs: replaced by the real column-targeted writers in the next commit.
+func SetWelcomeTextOnly(chatID int64, text string) error                  { return nil }
+func SetWelcomeMediaOnly(chatID int64, fileID string, dataType int) error { return nil }
+func SetWelcomeButtonsOnly(chatID int64, buttons []models.Button) error   { return nil }
+func SetGoodbyeTextOnly(chatID int64, text string) error                  { return nil }
+func SetGoodbyeMediaOnly(chatID int64, fileID string, dataType int) error { return nil }
+func SetGoodbyeButtonsOnly(chatID int64, buttons []models.Button) error   { return nil }
+
 func SetWelcomeToggle(chatID int64, pref bool) error {
 	updates := map[string]any{
 		"welcome_enabled": pref,
