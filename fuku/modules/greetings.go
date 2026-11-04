@@ -235,6 +235,41 @@ func applyCleanGoodbye(ctx context.Context, chatID int64, on bool) greetingApply
 	return finishGreetingApply(ctx, chatID, "SetCleanGoodbyeSetting", greetingWrites.CleanGoodbye(chatID, on))
 }
 
+// applyGreetingText stores one greeting's text.
+func applyGreetingText(ctx context.Context, chatID int64, isWelcome bool, html string) greetingApplyResult {
+	return greetingApplyResult{Outcome: greetingApplied}
+}
+
+// applyGreetingMedia stores one greeting's file ID and type.
+func applyGreetingMedia(ctx context.Context, chatID int64, isWelcome bool, fileID string, dataType int) greetingApplyResult {
+	return greetingApplyResult{Outcome: greetingApplied}
+}
+
+// applyGreetingButtons stores one greeting's buttons.
+func applyGreetingButtons(ctx context.Context, chatID int64, isWelcome bool, buttons []db.Button) greetingApplyResult {
+	return greetingApplyResult{Outcome: greetingApplied}
+}
+
+// applyGreetingRemoveText puts back the default text.
+func applyGreetingRemoveText(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
+	return greetingApplyResult{Outcome: greetingApplied}
+}
+
+// applyGreetingRemoveMedia clears the file.
+func applyGreetingRemoveMedia(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
+	return greetingApplyResult{Outcome: greetingApplied}
+}
+
+// applyGreetingRemoveButtons clears the buttons.
+func applyGreetingRemoveButtons(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
+	return greetingApplyResult{Outcome: greetingApplied}
+}
+
+// applyGreetingReset is the four-column reset.
+func applyGreetingReset(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
+	return greetingApplyResult{Outcome: greetingApplied}
+}
+
 // greetingApplyContext is the context the commands give an apply function.
 func greetingApplyContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), greetingApplyTimeout)

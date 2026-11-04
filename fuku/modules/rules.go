@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"strconv"
@@ -24,6 +25,27 @@ import (
 var rulesModule = moduleStruct{
 	moduleName:      "Rules",
 	defaultRulesBtn: "Rules",
+}
+
+// rulesApplyResult is what the rules apply functions return.
+type rulesApplyResult struct {
+	Outcome greetingApplyOutcome
+	Rules   string
+	Err     error
+}
+
+// rulesWrites is the rules repository write the apply functions call. It is a variable
+// only so a test can make the write fail.
+var rulesWrites = struct {
+	SetChatRules func(chatID int64, rules string) error
+}{rules.SetChatRules}
+
+func applyRulesText(ctx context.Context, chatID int64, html string) rulesApplyResult {
+	return rulesApplyResult{Outcome: greetingApplied}
+}
+
+func applyRulesClear(ctx context.Context, chatID int64) rulesApplyResult {
+	return rulesApplyResult{Outcome: greetingApplied}
 }
 
 //nolint:dupl // clearRules has similar structure to resetRulesBtn

@@ -105,3 +105,124 @@ func TestGreetingApplyWriteFailure(t *testing.T) {
 	require.Len(t, calls, 1)
 	assert.Equal(t, "save failed", calls[0].Params["text"], "the command still answers the save-failed text")
 }
+
+func TestGreetingApplyPartWrites(t *testing.T) {
+	button := models.Button{Name: "Site", Url: "https://example.com"}
+	for _, isWelcome := range []bool{true, false} {
+		name := "goodbye"
+		if isWelcome {
+			name = "welcome"
+		}
+		t.Run(name, func(t *testing.T) {
+			chatID := uniqueModuleChatID()
+			require.NoError(t, greetings.SetWelcomeText(chatID, "W", "wf", nil, 2))
+			require.NoError(t, greetings.SetGoodbyeText(chatID, "G", "gf", nil, 2))
+			before := loadGreetingRow(t, chatID)
+
+			text := applyGreetingText(context.Background(), chatID, isWelcome, "<b>x</b>")
+			require.Equal(t, greetingApplied, text.Outcome)
+			require.NoError(t, text.Err)
+			afterText := loadGreetingRow(t, chatID)
+			sideText, otherText := partOf(afterText, isWelcome), partOf(afterText, !isWelcome)
+			assert.Equal(t, "<b>x</b>", sideText.text)
+			assert.Equal(t, partOf(before, isWelcome).fileID, sideText.fileID, "text write leaves the file")
+			assert.Equal(t, partOf(before, !isWelcome), otherText, "text write leaves the other side")
+
+			media := applyGreetingMedia(context.Background(), chatID, isWelcome, "f1", 3)
+			require.Equal(t, greetingApplied, media.Outcome)
+			afterMedia := partOf(loadGreetingRow(t, chatID), isWelcome)
+			assert.Equal(t, "f1", afterMedia.fileID)
+			assert.Equal(t, 3, afterMedia.dataType)
+			assert.Equal(t, "<b>x</b>", afterMedia.text, "media write leaves the text")
+
+			btns := applyGreetingButtons(context.Background(), chatID, isWelcome, []models.Button{button})
+			require.Equal(t, greetingApplied, btns.Outcome)
+			afterBtns := partOf(loadGreetingRow(t, chatID), isWelcome)
+			assert.Equal(t, []models.Button{button}, afterBtns.buttons)
+			assert.Equal(t, "f1", afterBtns.fileID, "buttons write leaves the file")
+			assert.Equal(t, partOf(before, !isWelcome), partOf(loadGreetingRow(t, chatID), !isWelcome))
+		})
+	}
+}
+
+type greetingPart struct {
+	text     string
+	fileID   string
+	dataType int
+	buttons  []models.Button
+	enabled  bool
+	clean    bool
+}
+
+func partOf(s *models.GreetingSettings, welcome bool) greetingPart {
+	if welcome {
+		w := s.WelcomeSettings
+		return greetingPart{w.WelcomeText, w.FileID, w.WelcomeType, normalizeButtons(w.Button), w.ShouldWelcome, w.CleanWelcome}
+	}
+	g := s.GoodbyeSettings
+	return greetingPart{g.GoodbyeText, g.FileID, g.GoodbyeType, normalizeButtons(g.Button), g.ShouldGoodbye, g.CleanGoodbye}
+}
+
+func normalizeButtons(b models.ButtonArray) []models.Button {
+	if len(b) == 0 {
+		return nil
+	}
+	return []models.Button(b)
+}
+
+// TestGreetingRemovesEqualReset: the three Remove applies together leave the row one
+// /resetwelcome (or /resetgoodbye) leaves on a twin chat.
+func TestGreetingRemovesEqualReset(t *testing.T) {
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	button := models.Button{Name: "Site", Url: "https://example.com"}
+	for _, isWelcome := range []bool{true, false} {
+		name, command := "goodbye", "/resetgoodbye"
+		run := greetingsModule.resetGoodbye
+		if isWelcome {
+			name, command, run = "welcome", "/resetwelcome", greetingsModule.resetWelcome
+		}
+		t.Run(name, func(t *testing.T) {
+			client := newModuleBotClient()
+			bot := newModuleTestBot(client)
+			chatA := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "A"}
+			chatB := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "B"}
+			for _, id := range []int64{chatA.Id, chatB.Id} {
+				require.NoError(t, greetings.SetWelcomeText(id, "custom W", "wf", []models.Button{button}, 3))
+				require.NoError(t, greetings.SetGoodbyeText(id, "custom G", "gf", []models.Button{button}, 3))
+			}
+
+			ctx := context.Background()
+			for _, res := range []greetingApplyResult{
+				applyGreetingRemoveButtons(ctx, chatA.Id, isWelcome),
+				applyGreetingRemoveText(ctx, chatA.Id, isWelcome),
+				applyGreetingRemoveMedia(ctx, chatA.Id, isWelcome),
+			} {
+				require.Equal(t, greetingApplied, res.Outcome)
+				require.NoError(t, res.Err)
+			}
+			require.Equal(t, ext.EndGroups, run(bot, newGreetingMessageContext(bot, chatB, admin, command)))
+
+			requireSameGreetingRow(t, loadGreetingRow(t, chatB.Id), loadGreetingRow(t, chatA.Id))
+			part := partOf(loadGreetingRow(t, chatA.Id), isWelcome)
+			assert.Empty(t, part.fileID)
+			assert.Empty(t, part.buttons)
+			assert.Equal(t, 1, part.dataType)
+		})
+	}
+}
+
+// TestGreetingApplyResetEqualsCommand: applyGreetingReset stores what the reset commands store.
+func TestGreetingApplyResetEqualsCommand(t *testing.T) {
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chatA := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "A"}
+	chatB := uniqueModuleChatID()
+	for _, id := range []int64{chatA.Id, chatB} {
+		require.NoError(t, greetings.SetWelcomeText(id, "custom", "wf", []models.Button{{Name: "n", Url: "https://e.x"}}, 3))
+	}
+	require.Equal(t, ext.EndGroups, greetingsModule.resetWelcome(bot, newGreetingMessageContext(bot, chatA, admin, "/resetwelcome")))
+	res := applyGreetingReset(context.Background(), chatB, true)
+	require.Equal(t, greetingApplied, res.Outcome)
+	requireSameGreetingRow(t, loadGreetingRow(t, chatA.Id), loadGreetingRow(t, chatB))
+}
