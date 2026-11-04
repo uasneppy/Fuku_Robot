@@ -28,6 +28,8 @@ const (
 	// settingsStartPrefix starts the /start payload of the private entry:
 	// settings_<chat id>.
 	settingsStartPrefix = "settings_"
+	// settingsRepairTimeout bounds the roster refresh that follows a group /settings.
+	settingsRepairTimeout = 10 * time.Second
 )
 
 // settingsDesc is deliberately not Disableable. Its authority is a live getChatMember of
@@ -92,7 +94,21 @@ func (m moduleStruct) settings(b *gotgbot.Bot, ctx *ext.Context) error {
 	if _, err := msg.Reply(b, screen.Text, opts); err != nil {
 		log.Errorf("[Settings] choice message in chat %d: %v", chat.Id, err)
 	}
+	settingsRepairAdminIndex(b, chat.Id)
 	return ext.EndGroups
+}
+
+// settingsRepairAdminIndex refreshes the group's roster record after /settings, the second
+// repair path after /admincache (D-07, MENU-10). It runs after the choice message, so a slow or
+// failed refresh never delays or changes what the sender sees, and only a sender the checks
+// let in reaches it. It makes at most two Telegram calls under settingsRepairTimeout and only
+// logs an error: the refresh changes rows on definitive facts alone.
+func settingsRepairAdminIndex(b *gotgbot.Bot, chatID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsRepairTimeout)
+	defer cancel()
+	if _, err := refreshChatAdminIndex(ctx, b, chatID); err != nil {
+		log.Debugf("[Settings] roster refresh of chat %d: %v", chatID, err)
+	}
 }
 
 // settingsStartDeepLink opens the Main page in the user's private chat for the group named

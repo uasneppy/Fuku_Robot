@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -535,5 +536,84 @@ func TestAdminIndexRefresh(t *testing.T) {
 		if !errors.As(err, &tgErr) || tgErr.ResponseParams == nil || tgErr.ResponseParams.RetryAfter != 17 {
 			t.Fatalf("err = %v, want the 429 with retry_after 17", err)
 		}
+	})
+}
+
+func TestAdminIndexSettingsCommandRefresh(t *testing.T) {
+	t.Run("the owner's /settings repairs the group's rows after the choice message", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsEnv(t)
+		owner := env.newOwner(env.chat)
+		seedAdminIndexRoster(t, env.chat.Id, adminindex.Entry{UserID: 55, Role: models.AdminIndexRoleAdministrator})
+
+		env.send(owner, "/settings")
+
+		if _, button := env.newestChoice(); button.CallbackData == "" {
+			t.Fatal("the owner got no choice message")
+		}
+		wantAdminIndexRoster(t, env.chat.Id, map[int64]string{
+			owner.Id:     models.AdminIndexRoleCreator,
+			env.admin.Id: models.AdminIndexRoleAdministrator,
+		})
+	})
+
+	t.Run("a failing administrator list changes no row and the reply is the same", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsEnv(t)
+		owner := env.newOwner(env.chat)
+
+		env.send(owner, "/settings")
+		baseline := env.replies()
+		if len(baseline) != 1 {
+			t.Fatalf("baseline replies = %d, want 1", len(baseline))
+		}
+
+		seedAdminIndexRoster(t, env.chat.Id, adminindex.Entry{UserID: 55, Role: models.AdminIndexRoleCreator})
+		env.fake.setFailure("getChatAdministrators", env.chat.Id,
+			&gotgbot.TelegramError{Method: "getChatAdministrators", Code: 500, Description: "Internal Server Error"})
+		env.send(owner, "/settings")
+
+		replies := env.replies()
+		if len(replies) != 2 {
+			t.Fatalf("replies = %d, want the choice message sent again despite the failed refresh", len(replies))
+		}
+		first, second := baseline[0].Params, replies[1].Params
+		if first["text"] != second["text"] || !reflect.DeepEqual(
+			staffKeyboardOf(first["reply_markup"]), staffKeyboardOf(second["reply_markup"])) {
+			t.Fatalf("the choice message changed: %v vs %v", first, second)
+		}
+		wantAdminIndexRoster(t, env.chat.Id, map[int64]string{55: models.AdminIndexRoleCreator})
+	})
+
+	t.Run("a gated administrator triggers no refresh and changes no row", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsEnv(t)
+		env.newOwner(env.chat)
+		env.setAdminsAllowed(env.chat.Id, false)
+		seedAdminIndexRoster(t, env.chat.Id, adminindex.Entry{UserID: 55, Role: models.AdminIndexRoleCreator})
+
+		env.send(env.admin, "/settings")
+
+		env.wantReplyHas(staffMarker("settings_refuse_owner_only"))
+		// The gate's own owner-state read is the only list call; the repair path adds none.
+		if got := settingsAdminListCalls(env, env.chat.Id); got > 1 {
+			t.Errorf("getChatAdministrators was called %d times, want at most the gate's one", got)
+		}
+		wantAdminIndexRoster(t, env.chat.Id, map[int64]string{55: models.AdminIndexRoleCreator})
+	})
+
+	t.Run("a plain member triggers no refresh", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsEnv(t)
+		env.newOwner(env.chat)
+		member := gotgbot.User{Id: env.admin.Id + 4242, FirstName: "Member"}
+		seedAdminIndexRoster(t, env.chat.Id, adminindex.Entry{UserID: 55, Role: models.AdminIndexRoleCreator})
+
+		env.send(member, "/settings")
+
+		if got := settingsAdminListCalls(env, env.chat.Id); got != 0 {
+			t.Errorf("getChatAdministrators was called %d times for a plain member, want 0", got)
+		}
+		wantAdminIndexRoster(t, env.chat.Id, map[int64]string{55: models.AdminIndexRoleCreator})
 	})
 }

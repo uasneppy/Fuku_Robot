@@ -127,6 +127,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   live and gated like anyone else (`anonPipelineHandler` re-runs `RequiredChecks`, so an anonymous owner gets the choice
   message and an anonymous gated administrator `settings_refuse_owner_only`). The `settings|` callback is registered with `callbackquery.Prefix("settings|")` and no
   `SetAllowChannel`, because a menu is never a channel message.
+  After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
+  record through `refreshChatAdminIndex` (at most two Telegram calls, a 10 s context, the error only logged), the
+  second repair path after `/admincache` (D-07, MENU-10). It runs after the reply, so a slow or failed refresh never
+  delays or changes what the sender sees, and a gated or refused sender, who never reaches the handler, never triggers it.
 - The settings menu's private entry is `RegisterDeepLinkHandler("settings_", settingsStartDeepLink)`, the Open in private
   button's `/start settings_<chat id>`; `help.go`'s `start` is not edited and the router picks the longest prefix. The
   payload is parsed strictly (`parseStaffChatIDArg`: an optional minus, digits, at most 20 characters, a negative

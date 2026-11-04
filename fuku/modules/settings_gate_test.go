@@ -63,6 +63,10 @@ func TestSettingsInGroupRefusal(t *testing.T) {
 		env := newSettingsEnv(t)
 		owner := env.newOwner(env.chat)
 		env.setAdminsAllowed(env.chat.Id, false)
+		// The bot is a plain member here, so the roster repair that follows a group /settings
+		// stops after its bot lookup and makes no administrator list call: any list call this
+		// test counts is the gate's own.
+		env.fake.setBotRole(env.chat.Id, staffRoleMember)
 
 		env.send(owner, "/settings")
 
@@ -110,6 +114,10 @@ func TestSettingsInGroupRefusal(t *testing.T) {
 		env := newSettingsEnv(t)
 		env.newOwner(env.chat)
 		env.setAdminsAllowed(env.chat.Id, true)
+		// The bot is a plain member here, so the roster repair that follows a group /settings
+		// stops after its bot lookup and makes no administrator list call: any list call this
+		// test counts is the gate's own.
+		env.fake.setBotRole(env.chat.Id, staffRoleMember)
 
 		env.send(env.admin, "/settings")
 
@@ -398,6 +406,10 @@ func TestSettingsGatePress(t *testing.T) {
 		env := newSettingsEnv(t)
 		owner := env.newOwner(env.chat)
 		env.setAdminsAllowed(env.chat.Id, false)
+		// The bot is a plain member here, so the roster repair that follows a group /settings
+		// stops after its bot lookup and makes no administrator list call: any list call this
+		// test counts is the gate's own.
+		env.fake.setBotRole(env.chat.Id, staffRoleMember)
 		ownerMenu := env.openMenu(owner)
 		env.press(owner, ownerMenu, env.groupFields(owner, "a", "bk"))
 		if text, _ := env.lastEdit(env.chat.Id, ownerMenu); !strings.Contains(text, staffMarker("settings_header_main")) {
