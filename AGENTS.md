@@ -123,13 +123,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The settings menu's private entry is `RegisterDeepLinkHandler("settings_", settingsStartDeepLink)`, the Open in private
   button's `/start settings_<chat id>`; `help.go`'s `start` is not edited and the router picks the longest prefix. The
   payload is parsed strictly (`parseStaffChatIDArg`: an optional minus, digits, at most 20 characters, a negative
-  result; anything else is `settings_start_invalid` with no Telegram call) and never authorizes anything: a live
-  `getChatMember` of the user in that group must show the creator or an administrator (`settings_start_not_admin`
-  otherwise, `settings_check_failed` for a lookup error), then one `getChat` of the group, and only a group or supergroup
-  is opened. A bot that is missing from the group or a group that is gone at the `getChatMember` step
-  (`chat_status.IsBotMissingError`) is answered `settings_start_not_admin`, the words a plain member gets, because the
-  payload is attacker-controlled text and a different answer would tell anyone whether the bot is in chat X; once the
-  admin check has passed, a group that is gone at `getChat` or any other chat type is `settings_cannot_open`. Every refusal is a plain reply with no keyboard. The Main page is sent to the
+  result; anything else is `settings_start_invalid` with no Telegram call) and never authorizes anything. The order is
+  fixed and each step refuses before the next runs: the strict parse; a live `getChatMember` of the user in that group,
+  which must show the creator or an administrator (a Telegram 4xx other than 429, and any non-admin status, answer
+  `settings_start_not_admin`; a 429, a 5xx, a transport error or a timeout answers `settings_check_failed`); then the
+  owner gate, `settingsGate` on the member record that check returned (`settings_start_owner_only` for an administrator
+  it refuses, `settings_check_failed` when it cannot decide, so a gated administrator costs no `getChat`); then one
+  `getChat` of the group (a 4xx other than 429, or a chat that is not a group or supergroup, answers
+  `settings_start_not_admin`; anything else that fails `settings_check_failed`). Errors are classified by
+  `isTelegramClientError`, never by wording, and the deep link no longer answers `settings_cannot_open`: a plain member,
+  a chat the bot is not in, a gone chat, a channel and any unrecognised 4xx wording get the same words, because the
+  payload is attacker-controlled text and a different answer would tell anyone whether the bot is in chat X
+  (`TestSettingsStartDeepLinkSameAnswer`). Every refusal is a plain reply with no keyboard. The Main page is sent to the
   private chat in the user's language, its buttons carrying `c` (the group's chat ID) and no opener field. A `/start`
   with extra words (`settings_ -100`) has an unexpected argument count, so `start` ignores it and the handler never runs.
 

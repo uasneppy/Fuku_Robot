@@ -97,10 +97,20 @@ func (m moduleStruct) settings(b *gotgbot.Bot, ctx *ext.Context) error {
 
 // settingsStartDeepLink opens the Main page in the user's private chat for the group named
 // by a /start settings_<chat id> payload. The payload is attacker-controlled text and
-// authorizes nothing: it must parse strictly (parseStaffChatIDArg: an optional minus,
-// digits, at most 20 characters, a negative result), and a live getChatMember of the user
-// in that group must show a creator or an administrator before any menu is sent. Every
-// refusal is a plain reply with no keyboard.
+// authorizes nothing, so the order is fixed and each step refuses before the next runs:
+//
+//  1. the payload must parse strictly (parseStaffChatIDArg: an optional minus, digits, at
+//     most 20 characters, a negative result), with no Telegram call otherwise;
+//  2. a live getChatMember of the user in that group must show a creator or an administrator;
+//  3. settingsGate, on the member record that check returned, decides whether the owner gate
+//     lets this administrator in (D-16), so a gated administrator costs no getChat;
+//  4. one getChat of the group, and only a group or supergroup is opened.
+//
+// Telegram errors are classified by class, never by wording (UI-SPEC R3): a 4xx other than
+// 429 at either lookup, and a chat that is not a group or supergroup, answer
+// settings_start_not_admin, the words a plain member gets, so a forged payload learns nothing
+// about whether the bot is in a chat; a 429, a 5xx, a transport error or a timeout answers
+// settings_check_failed. Every refusal is a plain reply with no keyboard.
 func settingsStartDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) error {
 	if ctx == nil || ctx.EffectiveChat == nil || ctx.EffectiveMessage == nil || user == nil {
 		return ext.EndGroups
@@ -119,7 +129,7 @@ func settingsStartDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User,
 
 	member, err := lockdownLiveMember(b, chatID, user.Id)
 	if err != nil {
-		if chat_status.IsBotMissingError(err) {
+		if isTelegramClientError(err) {
 			// The same words as a plain member gets: any user can send any chat ID, so a
 			// different answer would tell them whether the bot is in that chat.
 			return refuse("settings_start_not_admin")
@@ -131,19 +141,27 @@ func settingsStartDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User,
 		return refuse("settings_start_not_admin")
 	}
 
+	switch settingsGate(b, chatID, *user, member) {
+	case settingsGateIn:
+	case settingsGateOwnerOnly:
+		return refuse("settings_start_owner_only")
+	default:
+		return refuse("settings_check_failed")
+	}
+
 	lookupCtx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 	defer cancel()
 	full, err := b.GetChatWithContext(lookupCtx, chatID, nil)
 	if err != nil || full == nil {
-		if err != nil && chat_status.IsBotMissingError(err) {
-			return refuse("settings_cannot_open")
+		if err != nil && isTelegramClientError(err) {
+			return refuse("settings_start_not_admin")
 		}
 		log.Warnf("[Settings] getChat of chat %d for the private entry failed: %v", chatID, err)
 		return refuse("settings_check_failed")
 	}
 	group := full.ToChat()
 	if group.Type != "group" && group.Type != "supergroup" {
-		return refuse("settings_cannot_open")
+		return refuse("settings_start_not_admin")
 	}
 
 	view := settingsView{
