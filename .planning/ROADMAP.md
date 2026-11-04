@@ -98,7 +98,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Only the live owner sees and can press "Admins can change settings". While it is on, live administrators get the full menu as in v1.0. A change takes effect on every replica at the next press. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
   4. The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
   5. Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` describes the 8-locale set.
-**Plans:** 6/11 plans executed in 8 waves
+**Plans:** 7/11 plans executed in 8 waves
 
 Plans:
 **Wave 1**
@@ -114,7 +114,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 10-06-PLAN.md — the owner-only Access page: two taps on, one tap off, every replica at the next press (wave 4)
-- [ ] 10-07-PLAN.md — the roster feed from admin-list loads, promotions, demotions and the bot leaving (wave 4)
+- [x] 10-07-PLAN.md — the roster feed from admin-list loads, promotions, demotions and the bot leaving (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 10-11-PLAN.md — the owner gate and the 4xx class rule on the deep link, every door deciding the same, and the permissions reference (wave 5)
@@ -277,7 +277,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 10. PM Settings Hub and Owner Gate | 6/11 | In Progress | - |
+| 10. PM Settings Hub and Owner Gate | 7/11 | In Progress | - |
 | 11. Message Editor | 0/TBD | Not started | - |
 | 12. Rules Media, Media Under Text and Greet Once | 0/TBD | Not started | - |
 | 13. Member Requirements | 0/TBD | Not started | - |
