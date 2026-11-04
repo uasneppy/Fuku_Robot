@@ -836,7 +836,7 @@ type settingsGateCase struct {
 	ownerPerson bool
 }
 
-// settingsGateDoor is one way into the settings. Plan 10-09 appends the pick door.
+// settingsGateDoor is one way into the settings. The pick of the private list is the fifth door.
 type settingsGateDoor struct {
 	name   string
 	decide func(t *testing.T, c settingsGateCase) string
@@ -931,6 +931,31 @@ func settingsGateDoorPress(t *testing.T, c settingsGateCase) string {
 	return "none"
 }
 
+// settingsGateDoorPick presses a row of the private group list for the env's group as the
+// person. A pick that is refused answers an alert; one that is let in edits the list message
+// into the group's Main page.
+func settingsGateDoorPick(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	const listMsg = 6301
+	c.apply()
+	person := c.person()
+	edits := len(c.env.edits(person.Id, listMsg))
+	answers := c.env.answerCount()
+
+	c.env.pressPrivate(person, listMsg, c.env.privateFields(c.env.chat.Id, "a", settingsActPick))
+
+	if got := c.env.answerCount() - answers; got != 1 {
+		t.Fatalf("the pick was answered %d times, want once", got)
+	}
+	if answer, alert := c.env.lastAnswer(); alert {
+		return settingsGateClassify([]string{answer})
+	}
+	if len(c.env.edits(person.Id, listMsg)) > edits {
+		return "in"
+	}
+	return "none"
+}
+
 func TestSettingsGateAllDoors(t *testing.T) {
 	fixtures := []settingsGateFixture{
 		{
@@ -975,6 +1000,7 @@ func TestSettingsGateAllDoors(t *testing.T) {
 		{name: "anonymous re-entry", decide: settingsGateDoorAnonymous},
 		{name: "deep link", decide: settingsGateDoorDeepLink},
 		{name: "press", decide: settingsGateDoorPress},
+		{name: "pick", decide: settingsGateDoorPick},
 	}
 
 	for _, fixture := range fixtures {
