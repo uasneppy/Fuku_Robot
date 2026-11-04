@@ -12,7 +12,10 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
 )
 
 // loadGreetingRow reads a chat's stored greetings row without creating anything.
@@ -225,4 +228,43 @@ func TestGreetingApplyResetEqualsCommand(t *testing.T) {
 	res := applyGreetingReset(context.Background(), chatB, true)
 	require.Equal(t, greetingApplied, res.Outcome)
 	requireSameGreetingRow(t, loadGreetingRow(t, chatA.Id), loadGreetingRow(t, chatB))
+}
+
+// TestRenderGreetingMatchesJoin: renderGreeting returns the FormattingReplacer text and the
+// keyboard of its buttons, and the join path sends exactly that.
+func TestRenderGreetingMatchesJoin(t *testing.T) {
+	buttons := []models.Button{
+		{Name: "Rules", Url: "buttonurl://rules"},
+		{Name: "Site", Url: "https://example.com", SameLine: true},
+	}
+	for _, withRules := range []bool{false, true} {
+		name := "no rules"
+		if withRules {
+			name = "rules set"
+		}
+		t.Run(name, func(t *testing.T) {
+			client := newModuleBotClient()
+			bot := newModuleTestBot(client)
+			chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Greeting Chat"}
+			user := gotgbot.User{Id: 4242, FirstName: "Newbie"}
+			if withRules {
+				require.NoError(t, rules.SetChatRules(chat.Id, "Be kind"))
+			}
+			const text = "Hi {first} in {chatname}, read {rules}"
+
+			wantText, wantButtons := formatting.FormattingReplacer(bot, &chat, &user, text, buttons)
+			wantKb := &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(wantButtons)}
+			gotText, gotKb := renderGreeting(bot, &chat, &user, text, buttons)
+			assert.NotEmpty(t, gotText)
+			assert.Equal(t, wantText, gotText)
+			assert.Equal(t, wantKb, gotKb)
+
+			require.NoError(t, greetings.SetWelcomeText(chat.Id, text, "", buttons, 1))
+			ctx := newGreetingMessageContext(bot, chat, user, "")
+			require.NoError(t, SendWelcomeMessage(bot, ctx, user.Id, user.FirstName))
+			calls := client.callsFor("sendMessage")
+			require.Len(t, calls, 1)
+			assert.Equal(t, wantText, calls[0].Params["text"], "the join path sends the rendered text")
+		})
+	}
 }

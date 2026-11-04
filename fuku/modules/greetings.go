@@ -289,6 +289,11 @@ func applyGreetingReset(ctx context.Context, chatID int64, isWelcome bool) greet
 	return finishGreetingApply(ctx, chatID, "SetGoodbyeText", greetingWrites.GoodbyeText(chatID, db.DefaultGoodbye, "", nil, db.TEXT))
 }
 
+// renderGreeting is the one builder of a member-facing greeting.
+func renderGreeting(b *gotgbot.Bot, group *gotgbot.Chat, user *gotgbot.User, text string, buttons []db.Button) (string, *gotgbot.InlineKeyboardMarkup) {
+	return "", nil
+}
+
 // greetingApplyContext is the context the commands give an apply function.
 func greetingApplyContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), greetingApplyTimeout)

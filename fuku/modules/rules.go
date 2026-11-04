@@ -27,6 +27,11 @@ var rulesModule = moduleStruct{
 	defaultRulesBtn: "Rules",
 }
 
+// buildRulesText is the one builder of the /rules text.
+func buildRulesText(tr *i18n.Translator, title, rawRules string) string {
+	return ""
+}
+
 // rulesApplyResult is what the rules apply functions return.
 type rulesApplyResult struct {
 	Outcome greetingApplyOutcome

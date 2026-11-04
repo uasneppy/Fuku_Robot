@@ -75,3 +75,34 @@ func TestRulesApplyWriteFailure(t *testing.T) {
 	require.Len(t, calls, 1)
 	assert.Equal(t, "save failed", calls[0].Params["text"])
 }
+
+// TestBuildRulesTextMatchesSendRules: buildRulesText is the heading with the escaped title,
+// a blank line and the normalized rules, or the no-rules line, and /rules sends exactly it.
+func TestBuildRulesTextMatchesSendRules(t *testing.T) {
+	restoreI18n, err := i18n.OverrideManagerForTest("rules_for_chat_header: \"Rules for %s\"\nrules_no_rules_set: no rules yet\n")
+	require.NoError(t, err)
+	t.Cleanup(restoreI18n)
+	tr := i18n.MustNewTranslator("en")
+
+	t.Run("heading and rules", func(t *testing.T) {
+		got := buildRulesText(tr, "A & B", "<b>Be kind</b>")
+		assert.Equal(t, "Rules for A &amp; B\n\n"+normalizeRulesForHTML("<b>Be kind</b>"), got)
+	})
+	t.Run("no rules", func(t *testing.T) {
+		assert.Equal(t, "no rules yet", buildRulesText(tr, "A & B", ""))
+	})
+	for _, stored := range []string{"<b>Be kind</b>", ""} {
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "A & B"}
+		user := gotgbot.User{Id: 42, FirstName: "Member"}
+		if stored != "" {
+			require.NoError(t, rules.SetChatRules(chat.Id, stored))
+		}
+		ctx := newModuleMessageContext(bot, chat, user, "/rules")
+		require.Equal(t, ext.EndGroups, rulesModule.sendRules(bot, ctx))
+		calls := client.callsFor("sendMessage")
+		require.Len(t, calls, 1)
+		assert.Equal(t, buildRulesText(tr, chat.Title, stored), calls[0].Params["text"])
+	}
+}
