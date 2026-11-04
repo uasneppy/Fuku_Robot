@@ -101,17 +101,33 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 11 plans in 8 waves
 
 Plans:
+**Wave 1**
 - [ ] 10-01-PLAN.md — the switch and roster tables and their repositories, concurrent replaces serialized per chat (wave 1)
 - [ ] 10-02-PLAN.md — the 19 new strings and the new /help text in all 8 locales, the sizing tests and the regenerated docs (wave 1)
 - [ ] 10-03-PLAN.md — the locale-set guard test and the 8-locale wording of the project documents (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 10-04-PLAN.md — the settings test harness, the PostgreSQL integrity list and the AGENTS.md rules for the new tables and the 8 locales (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 10-05-PLAN.md — the owner gate on in-group /settings (with the anonymous re-entry) and every press (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 10-06-PLAN.md — the owner-only Access page: two taps on, one tap off, every replica at the next press (wave 4)
 - [ ] 10-07-PLAN.md — the roster feed from admin-list loads, promotions, demotions and the bot leaving (wave 4)
-- [ ] 10-08-PLAN.md — the startup backfill, the hourly sweep and the group /settings repair path (wave 6)
-- [ ] 10-09-PLAN.md — the private group list and the pick (wave 7)
-- [ ] 10-10-PLAN.md — the two-column Main grid with the status block and the Groups button, the owner's live checks and the phase gate (wave 8)
+
+**Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 10-11-PLAN.md — the owner gate and the 4xx class rule on the deep link, every door deciding the same, and the permissions reference (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 10-08-PLAN.md — the startup backfill, the hourly sweep and the group /settings repair path (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 10-09-PLAN.md — the private group list and the pick (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 10-10-PLAN.md — the two-column Main grid with the status block and the Groups button, the owner's live checks and the phase gate (wave 8)
+
 **UI hint**: yes
 
 ### Phase 11: Message Editor
