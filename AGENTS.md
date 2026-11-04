@@ -111,9 +111,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Handler methods use value receivers on `moduleStruct`.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 - The Settings module (priority 239, `settings.go`) adds no handler group. `/settings` goes through `helpers.WrapCommand`
-  with `requireLockdownGroup()` and `requireLockdownAuthority(false)` (a live creator or administrator, never the admin
-  cache), is not `Disableable`, and re-enters for anonymous admins through `RegisterAnonymousAdminHandler("settings", ...)`:
-  the tapper becomes the opener. The `settings|` callback is registered with `callbackquery.Prefix("settings|")` and no
+  with `requireLockdownGroup()` and `requireSettingsAccess()` (`settings_gate.go`: a live creator or administrator from
+  `lockdownAuthorityMember`, the body of `requireLockdownAuthority(false)`, never the admin cache, then the owner gate
+  below). An administrator the gate refuses gets the plain public reply `settings_refuse_owner_only` to the command with
+  no keyboard, and an undecided gate `settings_check_failed` (D-13); a plain member still gets the lockdown check's
+  `chat_status_user_admin_cmd_error` and never an owner-only text. The command is not `Disableable`, and it re-enters for
+  anonymous admins through `RegisterAnonymousAdminHandler("settings", ...)`: the tapper becomes the opener, is checked
+  live and gated like anyone else (`anonPipelineHandler` re-runs `RequiredChecks`, so an anonymous owner gets the choice
+  message and an anonymous gated administrator `settings_refuse_owner_only`). The `settings|` callback is registered with `callbackquery.Prefix("settings|")` and no
   `SetAllowChannel`, because a menu is never a channel message.
 - The settings menu's private entry is `RegisterDeepLinkHandler("settings_", settingsStartDeepLink)`, the Open in private
   button's `/start settings_<chat id>`; `help.go`'s `start` is not edited and the router picks the longest prefix. The
@@ -212,8 +217,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   identity (`staffServiceUserIDs`) gets `lockdown_alert_post_as_yourself` before any lookup; (3) in a group menu
   `query.From.Id` must equal `u`, else `settings_not_your_menu`, with no lookup; (4) one live `getChatMember` of the presser
   in the group being configured (the message's chat for a group menu, `c` for a private one, after one `getChat` of `c`),
-  creator or administrator, else `settings_not_admin`, and a failed lookup `settings_check_failed`; then (5) the right of
-  the control. The callback is answered exactly once, only through `settingsPress.answer` (which calls
+  creator or administrator, else `settings_not_admin`, and a failed lookup `settings_check_failed`; then (4b) the owner gate
+  `settingsGate(b, groupID, query.From, member)` on that same record, before the private `getChat`: an administrator
+  the gate refuses is answered the alert `settings_gate_owner_only` and an undecided gate `settings_check_failed`, each
+  editing and writing nothing (D-10: a menu opened earlier is gated again on every press, Close included, so an
+  administrator the owner has since shut out loses it at the next press, and deletes the stale message with Telegram's
+  own delete); then (5) the right of the control. The callback is answered exactly once, only through `settingsPress.answer` (which calls
   `answerStaffCallback`; no settings file calls `query.Answer`; `settingsCallback` defers an empty answer after its
   recover, so a page that panics is recovered and still answers once), and the menu message is edited in place; Telegram's
   "message is not modified" is success, and a failed or rate-limited edit is logged once, never retried and never undoes
@@ -312,6 +321,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `can_restrict_members` by a live `chat_status.FetchBotMember` (never the admin cache; an unknown answer refuses,
   `captcha_web_refuse_no_rights`). Math and text are unchanged and need none of these checks. The refusal texts name no
   setting, variable, secret or URL.
+- The settings owner gate (`settings_gate.go`): `settingsGate` is the one decision every settings door calls after its own
+  live `getChatMember` of the person, today in-group `/settings` with its anonymous re-entry (`requireSettingsAccess`) and
+  every button press (step 4b); the other doors call it as they arrive. The order is fixed: a live creator is in with no
+  read; any status other than administrator is undecided; for an administrator the switch is read fresh
+  (`menuaccess.AdminsAllowedFresh`, a missing row is off, an error is undecided) and true is in, never consulting the
+  memo below, so a flip to on is seen at the very next press; with the switch off the owner state decides. The owner-state
+  read (`settingsOwnerState`) is one `getChatAdministrators` call bounded to 3 s (`settingsOwnerLookupTimeout`), shared per
+  chat by a singleflight, and an answer that arrives after the deadline is discarded. It is evaluated per presser: a
+  creator entry that is not a deleted account means an owner exists and keeps the administrator out; no creator entry, or
+  only deleted accounts, means no owner and lets the administrator in (D-15); an error, a timeout, an empty list, a list
+  without the presser's own administrator entry and a creator entry that is the presser are unknown and refuse. Only
+  "an owner exists" is remembered, per chat on this replica, for less than 30 s (`settingsOwnerMemoTTL`; a memo exactly that
+  old is expired), because it can only keep an administrator out; nothing else is memoised. `settingsCreatorGone`
+  (planner assumption A1) is `isDeletedAccount` of the first name plus no last name and no username, the one test for a
+  gone creator: a creator named "Deleted Account" who keeps a username or a last name is a live owner. Unknown always
+  refuses with `settings_check_failed`, never with the owner-only text, and no refusal names the Staff Group, a group
+  title, a chat ID or the switch. `isTelegramClientError` (a Telegram 4xx other than 429, also wrapped) is the one
+  client-error classifier of the settings doors. The in-group setting commands (`/captchamode`, `/setflood`,
+  `/autolockdown` and the rest) are not gated and keep their own checks (MENU-13); the authority-parity tests carry the
+  documented carve-out (`TestSettingsAuthorityParityOwnerGate`): for a non-owner administrator with the switch off the
+  menu is stricter than the commands, and where the menu allows a control the command allows it too.
 - Each settings menu control declares one `settingsRight`, and the menu refuses what the matching command refuses.
   `settingsRightAdmin` needs only the live admin check every press already makes (`/captchamode`, `/captchatime`,
   `/captchaaction`). `settingsRightAdminBotAdmin` also needs `chat_status.IsBotAdmin` and refuses with the notice

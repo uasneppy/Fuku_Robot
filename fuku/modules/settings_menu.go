@@ -18,8 +18,9 @@ import (
 // The settings| callbacks carry no authority. Every press runs one pipeline, each step
 // refusing before the next runs (settingsPress.verify): decode and structure with no I/O, a
 // Telegram service identity, the opener of a group menu, one live getChatMember of the
-// presser in the group being configured, and then the right of the control. The menu keeps
-// no state of its own: no Redis key, so a press works on any replica with Redis down.
+// presser in the group being configured, the owner gate (settingsGate, step 4b), and then
+// the right of the control. The menu keeps no state of its own: no Redis key, so a press
+// works on any replica with Redis down.
 
 // The core action codes. A page declares its own codes through registerSettingsPage.
 const (
@@ -244,10 +245,11 @@ func newSettingsPress(b *gotgbot.Bot, ctx *ext.Context, query *gotgbot.CallbackQ
 	return &settingsPress{b: b, ctx: ctx, query: query, tr: ctxTr(ctx)}
 }
 
-// verify runs steps 1 to 4 of the press pipeline in that order and returns p, or nil after
+// verify runs steps 1 to 4b of the press pipeline in that order and returns p, or nil after
 // answering the refusal. A refusal of steps 1 to 3 makes no Telegram call; step 4 is the live
-// getChatMember of the presser in the group being configured. Nothing is read or written for
-// a press that does not pass.
+// getChatMember of the presser in the group being configured and step 4b the owner gate on
+// that record (settings_gate_owner_only, or settings_check_failed when it cannot be decided).
+// Nothing is read or written for a press that does not pass.
 func (p *settingsPress) verify() *settingsPress {
 	b, query := p.b, p.query
 	refuse := func(key string) *settingsPress {
@@ -316,6 +318,18 @@ func (p *settingsPress) verify() *settingsPress {
 		return refuse("settings_not_admin")
 	}
 	p.member = member
+
+	// 4b. The owner gate: by default only the group's owner, or an administrator the owner let
+	// in, may use a menu. A menu opened earlier is gated again on every press, Close included,
+	// so an administrator the owner has since shut out is refused here and edits nothing (D-10).
+	// An unknown answer refuses, and never as the owner-only text.
+	switch settingsGate(b, groupID, query.From, member) {
+	case settingsGateIn:
+	case settingsGateOwnerOnly:
+		return refuse("settings_gate_owner_only")
+	default:
+		return refuse("settings_check_failed")
+	}
 
 	if !p.private {
 		p.group = &messageChat
