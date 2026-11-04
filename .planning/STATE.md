@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 11-10-PLAN.md
-last_updated: "2026-11-04T18:42:22.688Z"
+stopped_at: Completed 11-11-PLAN.md
+last_updated: "2026-11-04T19:07:58.019Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 9cbd7152da338dfc574dcdd472e68b7a25a1f1af
+state_head: 89ddd0e03395ba4f9b70d87812ac683064e75e30
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 21
+  completed_plans: 22
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 11 of 14
+Plan: 12 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -96,6 +96,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P08 | 55min | 3 tasks | 7 files |
 | Phase 11 P09 | 75min | 3 tasks | 6 files |
 | Phase 11 P10 | 25min | 3 tasks | 2 files |
+| Phase 11 P11 | 75min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-08: the three editor pages share one definition table; Welcome and Goodbye differ only by a Kind switch, so no twin code
 - [Phase 11]: 11-08: control d uses settingsRightChangeInfo and control e settingsRightAdmin, as /cleanwelcome and /welcome on|off check
 - [Phase 11]: 11-09: the text prompt's caption limit follows stored media (a file ID of a known kind), not the raw type column
+- [Phase 11]: 11-11: the typed-reply door guards panics with RecoverFromPanic as the deferred func and a named result set to EndGroups once the message is consumed
 
 ### Pending Todos
 
@@ -227,8 +229,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T18:42:22.539Z
-Stopped at: Completed 11-10-PLAN.md
+Last session: 2026-11-04T19:07:57.879Z
+Stopped at: Completed 11-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
