@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 10-10-PLAN.md
-last_updated: "2026-11-04T16:35:41.238Z"
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-11-04T16:41:22.594Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 771a5237f09513a5d67a340bd6e25238e2868b26
+state_head: 289d58996d81e67a553e49c79f0752728466a643
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 1 of 14
-Status: Executing Phase 11
+Plan: 2 of 14
+Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
@@ -86,6 +86,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 10 P08 | 27 min | 3 tasks | 7 files |
 | Phase 10 P09 | 55 min | 2 tasks | 9 files |
 | Phase 10 P10 | 35min | 3 tasks | 12 files |
+| Phase 11 P01 | 14 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,7 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-09: a private chat passes requireSettingsAccess at once and settingsDesc.RequiredChecks is requireSettingsAccess() alone; the pick overrides settings_not_admin and the cannot-open edit with settings_pick_unavailable for every non-admin status and Telegram 4xx except 429 (R3)
 - [Phase 10]: 10-09: list rows sort by the lower-cased collapsed title, or by the chat ID text for a titleless group, so the order matches what the reader sees
 - [Phase 10]: 10-10: a private Main ends with Groups (shub a=lp&v=1) and Close, a group Main with Close alone; the owner-only Access page gets its own full-width row after the two-column grid and each page's state moved from the button label into a status block in the body
+- [Phase 11]: 11-01: the literal {id} of settings_edit_wait_text is exempt from the settings_ {id} placeholder ban (only that key, only {id}); {staff} stays forbidden
 
 ### Pending Todos
 
@@ -208,8 +210,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T14:51:13.105Z
-Stopped at: Completed 10-10-PLAN.md
+Last session: 2026-11-04T16:41:22.510Z
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
