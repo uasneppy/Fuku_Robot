@@ -143,7 +143,37 @@ Plans:
   3. Each part has a Preview, and Full preview sends the whole message exactly as members will see it, through the same send path the group uses. A message Telegram would refuse is refused before it is saved.
   4. A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, so the next real join, leave or `/rules` in the group shows it, and those commands still work as before.
   5. The Welcome and Goodbye pages switch each message on or off and turn "Delete last welcome/goodbye" on or off, stored exactly as `/welcome`, `/goodbye`, `/cleanwelcome` and `/cleangoodbye` store them.
-**Plans:** TBD
+**Plans:** 14 plans in 7 waves
+
+Plans:
+**Wave 1**
+- [ ] 11-01-PLAN.md — the first 57 editor strings and the new settings /help in all 8 locales, with their guards (wave 1)
+- [ ] 11-02-PLAN.md — the commands' length, link, media and placeholder rules as shared helpers (wave 1)
+- [ ] 11-03-PLAN.md — side-effect-free greetings and rules reads and one-part greeting writes (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 11-04-PLAN.md — the remaining 26 editor strings (refusals, previews, saved, wait ended) in all 8 locales (wave 2)
+- [ ] 11-05-PLAN.md — one apply function per greeting and rules setting and the shared message builders, used by the commands (wave 2)
+- [ ] 11-06-PLAN.md — the page-action Validate hook and the change-info right in the settings pipeline (wave 2)
+- [ ] 11-07-PLAN.md — the Redis wait store and /cancel (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 11-08-PLAN.md — the Welcome, Goodbye and Rules pages with their switches and Delete last (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 11-09-PLAN.md — Set, Cancel and Remove on every part, and the group-menu refusal (wave 4)
+- [ ] 11-10-PLAN.md — the pure check and dry run of a typed part (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 11-11-PLAN.md — the typed-reply door at handler group 1, text parts end to end, the sixth gate door (wave 5)
+- [ ] 11-12-PLAN.md — Preview and Full preview through the group's send path (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 11-13-PLAN.md — media, albums and buttons through the door, and whole-message parity with the commands (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 11-14-PLAN.md — privacy and size checks of every editor screen, the rulebook and docs, the owner's live checks and the phase gate (wave 7)
+
 **UI hint**: yes
 
 ### Phase 12: Rules Media, Media Under Text and Greet Once
@@ -278,7 +308,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 10. PM Settings Hub and Owner Gate | 11/11 | In Progress | - |
-| 11. Message Editor | 0/TBD | Not started | - |
+| 11. Message Editor | 0/14 | Planned | - |
 | 12. Rules Media, Media Under Text and Greet Once | 0/TBD | Not started | - |
 | 13. Member Requirements | 0/TBD | Not started | - |
 | 14. Profile Photo and Channel Rules | 0/TBD | Not started | - |
