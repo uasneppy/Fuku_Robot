@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Completed 10-11-PLAN.md
-last_updated: "2026-11-04T13:43:44.500Z"
+stopped_at: Completed 10-08-PLAN.md
+last_updated: "2026-11-04T13:58:44.508Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: 2fc7375b2d1b7d6ba9319a8c6557422adeccc2b1
+state_head: e1f56d016cc45160794c3b0de86e652a6f411f30
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 10 (PM Settings Hub and Owner Gate) — EXECUTING
-Plan: 8 of 11
+Plan: 9 of 11
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 10 execution started
 
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 10 P06 | 25min | 2 tasks | 7 files |
 | Phase 10 P07 | 25 min | 2 tasks | 5 files |
 | Phase 10 P11 | 15 min | 2 tasks | 5 files |
+| Phase 10 P08 | 27 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,8 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-06: settingsRightOwner is appended after settingsRightRestrict so the zero settingsRight stays Admin; OwnerOnly pages are hidden from Main without a MainState read and refused in openPage
 - [Phase 10]: 10-07: the admin roster is fed by an observer hook in loadAdminCacheFromTelegram (cache never imports the database layer), run synchronously under the chat's singleflight with a 3 s write bound; only definitive facts (fresh non-empty list, non-admin bot, 4xx bot lookup) change rows
 - [Phase 10]: 10-11: the settings deep link no longer answers settings_cannot_open; Telegram errors at getChatMember and getChat are classified by isTelegramClientError, and settingsGate runs on the deep link's own member record before getChat
+- [Phase 10]: 10-08: the sweep paces and bounds every Telegram request through a BotClient wrapper (adminIndexPacedClient) from the sweep context; its lock is released by compare-and-delete only when a cancel cut the cycle off
+- [Phase 10]: 10-08: group /settings refreshes the group's roster record after the choice message (second repair path, 10 s, error only logged)
 
 ### Pending Todos
 
@@ -194,8 +197,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T13:43:44.442Z
-Stopped at: Completed 10-11-PLAN.md
+Last session: 2026-11-04T13:58:44.454Z
+Stopped at: Completed 10-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
