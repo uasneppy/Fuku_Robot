@@ -118,9 +118,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Handler methods use value receivers on `moduleStruct`.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 - The Settings module (priority 239, `settings.go`) adds no handler group. `/settings` goes through `helpers.WrapCommand`
-  with `requireLockdownGroup()` and `requireSettingsAccess()` (`settings_gate.go`: a live creator or administrator from
+  with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
+  once, because the private list needs no group; in a group a live creator or administrator from
   `lockdownAuthorityMember`, the body of `requireLockdownAuthority(false)`, never the admin cache, then the owner gate
-  below). An administrator the gate refuses gets the plain public reply `settings_refuse_owner_only` to the command with
+  below). In the bot's private chat `/settings` sends the group list (`settingsPrivateList`) as a new message in the
+  user's language, built only from the sender's own ID with a database read (`settingsHubLookup`, default
+  `adminindex.ListForUserFresh`) and no Telegram call; a failed read is one plain `settings_check_failed` reply. An administrator the gate refuses gets the plain public reply `settings_refuse_owner_only` to the command with
   no keyboard, and an undecided gate `settings_check_failed` (D-13); a plain member still gets the lockdown check's
   `chat_status_user_admin_cmd_error` and never an owner-only text. The command is not `Disableable`, and it re-enters for
   anonymous admins through `RegisterAnonymousAdminHandler("settings", ...)`: the tapper becomes the opener, is checked
@@ -253,6 +256,40 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the `settings_check_failed` alert with no edit. A `c` whose `getChat` answer is not a `group` or `supergroup` (callback data
   is not authenticated, so it can name a channel or a private chat the presser administers) is the same cannot-open edit
   with its alert and no write, as the deep link refuses it. A group menu's pipeline is unchanged.
+- The private group list and the pick (`settings_hub.go`, MENU-09, MENU-13). The list is a message in the bot's private
+  chat: the header with the Groups page name, `settings_list_intro`, `settings_list_hint` (it names `/admincache` and
+  `/settings` in the group, the two repair paths), a `Page N/M` line only when there is more than one page, one
+  full-width button per group, a paging row and Close. Zero groups is the one neutral text `settings_list_empty` plus the
+  hint with Close only, byte-identical for a stranger, a gated administrator and an owner with no recorded group; one
+  group is still a one-button list (D-03). Rows are the plain title (a button label is plain text that Telegram never
+  parses, so it is not HTML-escaped; line breaks and runs of spaces collapse to one space, trimmed, cut at 32 code
+  points with an ellipsis appended, the chat ID when the title is empty), sorted by the lower-cased collapsed title in
+  code point order, ties by chat ID ascending, 8 a page (`settingsHubSort`, `settingsHubLabel`); a user with more than
+  999 pages (7,992 groups) sees the last page as the limit. A gated administrator's group is not listed
+  (`adminindex.ListForUserFresh`: a creator row, or an administrator row with the switch on or no creator row at all). The
+  message text names no group. The list's own buttons are the `shub|v1` namespace (registered with
+  `callbackquery.Prefix("shub|")` and no `SetAllowChannel`, no handler group): `lp` with exactly `a` and `v` (a whole
+  number of 1 to 3 digits; 0 and anything else is `common_callback_invalid_request`, a number past the last page shows the
+  last page) and `cx` with exactly `a` (Close, deleting the message or editing it to `settings_closed` when the delete
+  fails). `settingsHubCallback` accepts a press only on a message in a private chat, refuses a Telegram service identity
+  (`staffServiceUserIDs`) with `lockdown_alert_post_as_yourself` before any read, rebuilds the list from `query.From.Id`
+  and never from the callback data, so a replayed or forwarded list button shows the presser their own groups, and
+  answers the query exactly once (a failed read is the alert `settings_check_failed` with no edit). The roster is a hint,
+  never authority. Every button's data is at most 64 bytes (a pick for `-1001234567890` is 33, a paging button 18, Close
+  12) and carries no title, name or Staff Group.
+- The pick is the core action `pk` of `settings|v1` (`settingsActPick`, exactly `a` and `c`, private only, no page may
+  register it). It runs the whole press pipeline, so the live `getChatMember`, the owner gate (step 4b) and the one
+  `getChat` all run before anything is shown, and on success edits the list message in place into that group's Main page
+  (the list message is never deleted and never turned into the cannot-open edit). Because `c` is attacker-controlled,
+  the pick overrides two mappings of the other actions (`settingsPress.verify`): every non-admin status and every
+  Telegram client error (`isTelegramClientError`, any 4xx other than 429, by class and never by wording) at the member
+  lookup or at `getChat`, and a chat that is not a group or supergroup, answer the alert `settings_pick_unavailable`
+  with the list left exactly as drawn, nothing written and one answer, whether or not the bot is in that chat
+  (`TestSettingsPickSameAnswer`); a 429, a 5xx, a transport error or a timeout answers `settings_check_failed`; a proven
+  administrator the gate refuses gets `settings_gate_owner_only`, and an undecided gate `settings_check_failed`. The pick
+  is the fifth door of `TestSettingsGateAllDoors`. Every other private action keeps the step-4 mapping above, so a forged
+  `c` on `op` or `tg` can still meet the cannot-open edit (known note: the class rule is scoped to the pick and the deep
+  link, research Pitfall 7).
 - The Staff Group page (`settings_staff.go`, page `s`) declares four actions: `lk` Link (with an optional `s`), `ua` Unlink
   ask, `uy` Unlink Yes (with `e` and `l`) and `pg` (with `v`, the page of the read-only panel, parsed by `settingsParseNumber`
   and clamped; a value that is not a number is an invalid request). `s` is the staff_groups row ID, never a chat ID:
@@ -357,7 +394,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The settings owner gate (`settings_gate.go`): `settingsGate` is the one decision every settings door calls after its own
   live `getChatMember` of the person, today in-group `/settings` with its anonymous re-entry (`requireSettingsAccess`),
   the `/start settings_<chat id>` deep link (`settingsStartDeepLink`, on the member record of its own check and before its
-  `getChat`) and every button press (step 4b); the other doors call it as they arrive, and `TestSettingsGateAllDoors`
+  `getChat`), every button press (step 4b) and the pick of the private list (the same step 4b); the other doors call it as
+  they arrive, and `TestSettingsGateAllDoors`
   proves that every door decides the same over the four worlds (owner with the switch off, switch on, no owner, owner
   state unknown), each later door adding a column to it. The order is fixed: a live creator is in with no
   read; any status other than administrator is undecided; for an administrator the switch is read fresh

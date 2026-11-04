@@ -229,6 +229,19 @@ func (m moduleStruct) settingsHubCallback(b *gotgbot.Bot, ctx *ext.Context) erro
 			return refuse("common_callback_invalid_request")
 		}
 		press.closeMenu()
+	case settingsHubActPage:
+		page, valid := settingsParseNumber(decoded.Fields["v"], settingsHubPageDigits)
+		if len(decoded.Fields) != 2 || !valid || page == 0 {
+			return refuse("common_callback_invalid_request")
+		}
+		// The list is the presser's own: whoever's button this was, the groups come from the
+		// ID of the person who pressed it.
+		screen, err := settingsHubScreen(context.Background(), press.tr, query.From.Id, page)
+		if err != nil {
+			log.Warnf("[Settings] group list of user %d could not be read: %v", query.From.Id, err)
+			return refuse("settings_check_failed")
+		}
+		press.edit(screen)
 	default:
 		return refuse("common_callback_invalid_request")
 	}

@@ -266,6 +266,13 @@ func newSettingsPress(b *gotgbot.Bot, ctx *ext.Context, query *gotgbot.CallbackQ
 // getChatMember of the presser in the group being configured and step 4b the owner gate on
 // that record (settings_gate_owner_only, or settings_check_failed when it cannot be decided).
 // Nothing is read or written for a press that does not pass.
+//
+// A pick (settingsActPick) overrides two mappings of the other actions, because its c is
+// attacker-controlled and must not tell anyone whether the bot is in a chat: every non-admin
+// status and every Telegram client error (a 4xx other than 429, by class and never by wording)
+// at the member lookup or at getChat, and a chat that is not a group or supergroup, answer
+// settings_pick_unavailable and leave the list as drawn; a 429, a 5xx, a transport error or a
+// timeout answers settings_check_failed. A pick is never the cannot-open edit.
 func (p *settingsPress) verify() *settingsPress {
 	b, query := p.b, p.query
 	refuse := func(key string) *settingsPress {
@@ -322,6 +329,14 @@ func (p *settingsPress) verify() *settingsPress {
 	member, err := lockdownLiveMember(b, groupID, query.From.Id)
 	if err != nil {
 		log.Warnf("[Settings] live check of user %d in chat %d failed: %v", query.From.Id, groupID, err)
+		if p.action == settingsActPick {
+			// c is attacker-controlled: a client error (any 4xx, whatever its wording) is one
+			// answer whether or not the bot is in that chat, so a forged pick learns nothing.
+			if isTelegramClientError(err) {
+				return refuse("settings_pick_unavailable")
+			}
+			return refuse("settings_check_failed")
+		}
 		if p.private && chat_status.IsBotMissingError(err) {
 			// The bot left the group, or the group is gone: this private menu can never
 			// work again, so it closes itself instead of failing on every press (D-11).
@@ -331,6 +346,9 @@ func (p *settingsPress) verify() *settingsPress {
 		return refuse("settings_check_failed")
 	}
 	if member.Status != gotgbot.ChatMemberStatusCreator && member.Status != gotgbot.ChatMemberStatusAdministrator {
+		if p.action == settingsActPick {
+			return refuse("settings_pick_unavailable")
+		}
 		return refuse("settings_not_admin")
 	}
 	p.member = member
@@ -356,6 +374,12 @@ func (p *settingsPress) verify() *settingsPress {
 	full, err := b.GetChatWithContext(lookupCtx, groupID, nil)
 	if err != nil || full == nil {
 		log.Warnf("[Settings] getChat of chat %d for a private menu failed: %v", groupID, err)
+		if p.action == settingsActPick {
+			if err != nil && isTelegramClientError(err) {
+				return refuse("settings_pick_unavailable")
+			}
+			return refuse("settings_check_failed")
+		}
 		if err != nil && chat_status.IsBotMissingError(err) {
 			p.cannotOpen()
 			return nil
@@ -366,6 +390,9 @@ func (p *settingsPress) verify() *settingsPress {
 	// Callback data is not authenticated by Telegram, so c can name any chat the presser
 	// administers. Only a group or supergroup is configured here, as the deep link does.
 	if group.Type != "group" && group.Type != "supergroup" {
+		if p.action == settingsActPick {
+			return refuse("settings_pick_unavailable")
+		}
 		p.cannotOpen()
 		return nil
 	}
