@@ -143,7 +143,7 @@ Plans:
   3. Each part has a Preview, and Full preview sends the whole message exactly as members will see it, through the same send path the group uses. A message Telegram would refuse is refused before it is saved.
   4. A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, so the next real join, leave or `/rules` in the group shows it, and those commands still work as before.
   5. The Welcome and Goodbye pages switch each message on or off and turn "Delete last welcome/goodbye" on or off, stored exactly as `/welcome`, `/goodbye`, `/cleanwelcome` and `/cleangoodbye` store them.
-**Plans:** 9/14 plans executed in 7 waves
+**Plans:** 10/14 plans executed in 7 waves
 
 Plans:
 **Wave 1**
@@ -162,7 +162,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 11-09-PLAN.md — Set, Cancel and Remove on every part, and the group-menu refusal (wave 4)
-- [ ] 11-10-PLAN.md — the pure check and dry run of a typed part (wave 4)
+- [x] 11-10-PLAN.md — the pure check and dry run of a typed part (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 11-11-PLAN.md — the typed-reply door at handler group 1, text parts end to end, the sixth gate door (wave 5)
@@ -308,7 +308,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 10. PM Settings Hub and Owner Gate | 11/11 | In Progress | - |
-| 11. Message Editor | 9/14 | In Progress | - |
+| 11. Message Editor | 10/14 | In Progress | - |
 | 12. Rules Media, Media Under Text and Greet Once | 0/TBD | Not started | - |
 | 13. Member Requirements | 0/TBD | Not started | - |
 | 14. Profile Photo and Channel Rules | 0/TBD | Not started | - |
