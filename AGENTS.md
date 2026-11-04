@@ -256,6 +256,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the `settings_check_failed` alert with no edit. A `c` whose `getChat` answer is not a `group` or `supergroup` (callback data
   is not authenticated, so it can name a channel or a private chat the presser administers) is the same cannot-open edit
   with its alert and no write, as the deep link refuses it. A group menu's pipeline is unchanged.
+- The Main page (`renderSettingsMain` in `settings_pages.go`, MENU-15) is a two-column grid with a status block. Each
+  registered page is an "icon name" button (`a=op`, `p=<key>`, never a state in the label), two per row filled left to
+  right in page order (`Order`, then `Key`), and an odd last one stays alone on a full-width row. An `OwnerOnly` page
+  (`settingsMainEntry.OwnerOnly`, copied from the page) is never paired into the grid: for the live owner it gets its own
+  full-width row after the last grid row, so the owner's grid and an administrator's differ by that row only, and an
+  administrator's Main has neither the row nor the line. Each page's state is one `settings_main_state_line` (icon, page
+  name and the page's `MainState`, or the unknown mark `settingsUnknownState` when it could not be read) in a status
+  block of the body, in the grid's order with the owner-only line last, after the hint (and the owner line in a group
+  menu) and one blank line; with no visible page there is no status block and no blank line, only the hint and the
+  navigation row. The states are spliced as the pages return them and never name the Staff Group. The navigation row is
+  `settingsKeyboard.navRow`: a private Main ends with Groups (`settingsHubGroupsButton`, the `shub|v1` press `a=lp&v=1`,
+  at most 16 bytes, which `settingsHubCallback` answers by redrawing the list at page 1 in the same message; the page the
+  user came from is not remembered) and Close, a group Main with Close alone, and every other page, Access included, with
+  Back and Close. A page added by a later phase joins the grid by its `Order` with no edit to the renderer.
 - The private group list and the pick (`settings_hub.go`, MENU-09, MENU-13). The list is a message in the bot's private
   chat: the header with the Groups page name, `settings_list_intro`, `settings_list_hint` (it names `/admincache` and
   `/settings` in the group, the two repair paths), a `Page N/M` line only when there is more than one page, one
@@ -1383,8 +1397,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the owner check removed draws as "Not linked" with no notice. Inside a Staff Group the page is the `/staff` panel
   read-only (`renderSettingsStaffPanel`, 8 groups a page, inside 3800 UTF-16 units with the settings header and the
   `settings_staff_readonly` line) with no Link, Unlink, Add group or Recent actions. `TestSettingsStaffPrivacy` renders
-  every reachable screen in all 8 languages, runs a group menu end to end and runs a private menu of an admin who is not
-  the creator end to end.
+  every reachable screen in all 8 languages (the private list empty and populated, the Main status block, the Access page
+  and its card included), runs a group menu end to end and runs a private menu of an admin who is not the creator end to
+  end.
 
 ## Go rules
 
@@ -1503,7 +1518,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   guards D-21 and D-32 (a group menu, and a private menu of an admin who is not the creator, never name the Staff Group), `TestSettingsHelpFitsOneMessage` holds `settings_help_msg`
   to one Telegram message in every language, and `TestLoadSettingsRegistersHelp` guards the `/help` entry. No settings
   guarantee rests on PostgreSQL (no migration, no partial index, no `CHECK`), so nothing of the menu joins
-  `make test-postgres-integrity`. The Access controls have no command, so they carry `TestSettingsDriftAccess` and
+  `make test-postgres-integrity`. The hub, the owner gate and the Main grid have their own families:
+  `TestSettingsHub*` (list, paging, pick, Groups), `TestSettingsAccess*`, `TestSettingsGate*`, `TestSettingsOwnerState*`,
+  `TestSettingsMain*` (`TestSettingsMainGrid`, `TestSettingsMainPageFitsEveryLocale`: 3800 UTF-16 units and the button
+  limits with a 64-rune title in every language) and `TestAdminIndex*`; `TestSettingsLabelLengths`
+  (`fuku/i18n/settings_locale_test.go`) holds the two-column limits (a grid button at most 20 code points, the Groups
+  button 18) in code points. The Access controls have no command, so they carry `TestSettingsDriftAccess` and
   `TestSettingsOwnerAuthorityAccess` instead of a parity test, and `TestSettingsAccessAcrossReplicas` proves the fresh
   read across two replicas (a flip on one is seen by the very next press on the other, a memoised owner never hides a
   flip to ON, D-12).
