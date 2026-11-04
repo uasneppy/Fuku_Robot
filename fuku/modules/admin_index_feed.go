@@ -113,7 +113,8 @@ func refreshChatAdminIndex(ctx context.Context, b *gotgbot.Bot, chatID int64) (a
 
 // adminIndexEntries keeps the creator and the human administrators of a listed chat. A bot is
 // never stored, and neither is a creator that settingsCreatorGone recognises as a deleted
-// account, so the private list treats that group as having no live owner (D-15).
+// account, so the private list treats that group as having no live owner (D-15). That test is
+// by display name alone and has an accepted limitation, described on settingsCreatorGone.
 func adminIndexEntries(members []gotgbot.MergedChatMember) []adminindex.Entry {
 	entries := make([]adminindex.Entry, 0, len(members))
 	for _, member := range members {

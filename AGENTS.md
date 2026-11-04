@@ -423,7 +423,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   "an owner exists" is remembered, per chat on this replica, for less than 30 s (`settingsOwnerMemoTTL`; a memo exactly that
   old is expired), because it can only keep an administrator out; nothing else is memoised. `settingsCreatorGone`
   (planner assumption A1) is `isDeletedAccount` of the first name plus no last name and no username, the one test for a
-  gone creator: a creator named "Deleted Account" who keeps a username or a last name is a live owner. Unknown always
+  gone creator. Accepted limitation: it decides from the display name alone, because Telegram gives no second signal,
+  so a creator with a username or a last name is always a live owner, but a live owner whose first name is exactly
+  "Deleted Account" with neither looks gone, and with the switch off every administrator is then let in. The failure
+  direction is that administrators are allowed in, never that the owner is locked out (a live creator is in before the
+  owner state is read), and the owner fixes it by adding a username or a last name. The owner's live check A1 in
+  `.planning/phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md` confirms what the API returns for a deleted owner. Unknown always
   refuses with `settings_check_failed`, never with the owner-only text, and no refusal names the Staff Group, a group
   title, a chat ID or the switch. `isTelegramClientError` (a Telegram 4xx other than 429, also wrapped) is the one
   client-error classifier of the settings doors. The in-group setting commands (`/captchamode`, `/setflood`,

@@ -233,11 +233,18 @@ func settingsEvaluateOwner(list []gotgbot.MergedChatMember, presserID int64) set
 // settingsCreatorGone reports whether a creator entry of getChatAdministrators is a deleted
 // account, so the group has no live owner. Assumption A1: Telegram lists a deleted owner as
 // first name "Deleted Account" with no last name and no username. It reuses isDeletedAccount
-// for the name, the one definition of a deleted account's name in this repository, and is
-// stricter than it: isDeletedAccount only decides a display, but the gate lets administrators
-// in on this answer, and a deleted account has neither a last name nor a username, so a live
-// owner who merely names themselves that way keeps one of the two and still counts as the
-// owner. It is used only by the owner-state read and the roster feeder.
+// for the name, the one definition of a deleted account's name in this repository, and adds
+// the two empty fields, so an owner who has a username or a last name is never taken for gone.
+//
+// Known limitation (accepted): detection is by display name alone, because Telegram gives no
+// second signal in this list. A live owner whose first name is exactly "Deleted Account" (or
+// empty) and who has neither a last name nor a username is indistinguishable from a deleted
+// one and looks gone. The failure direction is that administrators are let in while the Access
+// switch is off (settingsOwnerNone is settingsGateIn); it never locks the owner out, because a
+// live creator is in before this function is consulted (settingsGate). The owner can fix it by
+// adding a username or a last name. Check A1 in 10-SPIKE.md is the live confirmation of what the
+// API returns for a real deleted owner. It is used only by the owner-state read and the roster
+// feeder.
 func settingsCreatorGone(u gotgbot.User) bool {
 	return isDeletedAccount(u.FirstName) && u.LastName == "" && u.Username == ""
 }
