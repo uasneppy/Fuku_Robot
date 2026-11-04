@@ -288,6 +288,35 @@ func settingsInputCancelAny(ctx context.Context, userID int64) (settingsInputCan
 	return settingsInputCancelNone, nil
 }
 
+// The functions below are placeholders for the RED step of the TDD cycle: they compile and
+// answer nothing, so the tests fail on their assertions.
+
+func settingsInputRead(ctx context.Context, userID int64) (*settingsInputWait, string, error) {
+	return nil, "", nil
+}
+
+func settingsInputTakeMarker(ctx context.Context, userID int64) (string, bool, error) {
+	return "", false, nil
+}
+
+func settingsInputClaim(ctx context.Context, userID int64, nonce string) (string, bool, error) {
+	return "", false, nil
+}
+
+func settingsInputFinish(ctx context.Context, userID int64, claim string) error { return nil }
+
+func settingsInputRelease(ctx context.Context, userID int64, claim string) error { return nil }
+
+func settingsInputCancel(ctx context.Context, userID, groupID int64, page, part string) (settingsInputCancelOutcome, error) {
+	return settingsInputCancelNone, nil
+}
+
+func settingsInputAlbumFirst(ctx context.Context, userID int64, mediaGroupID string) (bool, error) {
+	return false, nil
+}
+
+func settingsInputParseMarker(v string) (int64, string, string, bool) { return 0, "", "", false }
+
 // settingsInputPrivateOnly is the check of /cancel: it passes in the bot's private chat and
 // never replies, so /cancel in a group is silent.
 func settingsInputPrivateOnly() helpers.CheckFunc {
