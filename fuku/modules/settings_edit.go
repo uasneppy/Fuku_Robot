@@ -49,10 +49,13 @@ const (
 	settingsEditRules
 )
 
-// settingsEditPart is one row of the parts table: the part's code (its t value) and the locale
-// key of the line that shows its state.
+// settingsEditPart is one row of the parts table: the part's code (its t value), the locale key
+// of the line that shows its state, the keys of its Set and Remove labels, the notice a Remove
+// shows and the body of its waiting prompt.
 type settingsEditPart struct {
-	Code, LineKey string
+	Code, LineKey                           string
+	SetLabelKey, RemoveLabelKey, RemovedKey string
+	WaitKey                                 string
 }
 
 // settingsEditPageDef is everything that differs between the three pages. The renderer and
@@ -68,13 +71,34 @@ type settingsEditPageDef struct {
 	// ToggleLabelKey and CleanLabelKey are the labels of the on/off switch and of Delete last
 	// (empty on Rules, which has neither).
 	ToggleLabelKey, CleanLabelKey string
-	Parts                         []settingsEditPart
+	// SetCode, RemoveCode and CancelCode are the page's action codes for Set, Remove and Cancel.
+	SetCode, RemoveCode, CancelCode string
+	// EditRight is the right Set and Remove need, the one the matching commands need.
+	EditRight settingsRight
+	Parts     []settingsEditPart
 }
 
 var (
-	settingsEditTextPart    = settingsEditPart{Code: settingsEditPartText, LineKey: "settings_edit_line_text"}
-	settingsEditMediaPart   = settingsEditPart{Code: settingsEditPartMedia, LineKey: "settings_edit_line_media"}
-	settingsEditButtonsPart = settingsEditPart{Code: settingsEditPartButtons, LineKey: "settings_edit_line_buttons"}
+	settingsEditTextPart = settingsEditPart{
+		Code: settingsEditPartText, LineKey: "settings_edit_line_text",
+		SetLabelKey: "settings_btn_edit_set_text", RemoveLabelKey: "settings_btn_edit_remove_text",
+		RemovedKey: "settings_edit_removed_text_default", WaitKey: "settings_edit_wait_text",
+	}
+	settingsEditRulesTextPart = settingsEditPart{
+		Code: settingsEditPartText, LineKey: "settings_edit_line_text",
+		SetLabelKey: "settings_btn_edit_set_text", RemoveLabelKey: "settings_btn_edit_remove_text",
+		RemovedKey: "settings_edit_removed_text_rules", WaitKey: "settings_edit_wait_text_rules",
+	}
+	settingsEditMediaPart = settingsEditPart{
+		Code: settingsEditPartMedia, LineKey: "settings_edit_line_media",
+		SetLabelKey: "settings_btn_edit_set_media", RemoveLabelKey: "settings_btn_edit_remove_media",
+		RemovedKey: "settings_edit_removed_media", WaitKey: "settings_edit_wait_media",
+	}
+	settingsEditButtonsPart = settingsEditPart{
+		Code: settingsEditPartButtons, LineKey: "settings_edit_line_buttons",
+		SetLabelKey: "settings_btn_edit_set_buttons", RemoveLabelKey: "settings_btn_edit_remove_buttons",
+		RemovedKey: "settings_edit_removed_buttons", WaitKey: "settings_edit_wait_buttons",
+	}
 )
 
 // settingsEditPages are the three definitions in page order.
@@ -84,6 +108,7 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_welcome", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_welcome",
 		ToggleLabelKey: "settings_btn_edit_welcome_toggle", CleanLabelKey: "settings_btn_edit_clean_welcome",
+		SetCode: "ws", CancelCode: "wc", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
@@ -91,12 +116,14 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_goodbye", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_goodbye",
 		ToggleLabelKey: "settings_btn_edit_goodbye_toggle", CleanLabelKey: "settings_btn_edit_clean_goodbye",
+		SetCode: "gs", CancelCode: "gc", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
 		Key: settingsPageRules, Kind: settingsEditRules, Order: 70, Icon: "📜",
 		TitleKey: "settings_page_rules", HintKey: "settings_edit_hint_rules",
-		Parts: []settingsEditPart{settingsEditTextPart},
+		SetCode: "rs", CancelCode: "rc", EditRight: settingsRightAdminBotAdmin,
+		Parts: []settingsEditPart{settingsEditRulesTextPart},
 	},
 }
 
@@ -273,6 +300,20 @@ func settingsEditBody(v settingsView, def settingsEditPageDef, st settingsEditSt
 	return body
 }
 
+// settingsEditPartRows is the block of the part rows, one per part in the parts table's order:
+// [Set]. The buttons are drawn in a group
+// menu too, so the page looks the same in both places; there their press is the group note.
+func settingsEditPartRows(k *settingsKeyboard, def settingsEditPageDef, st settingsEditState) {
+	tr := k.view.Tr
+	for _, part := range def.Parts {
+		var row []gotgbot.InlineKeyboardButton
+		if set, ok := k.button(settingsText(tr, part.SetLabelKey), map[string]string{"a": def.SetCode, "t": part.Code}); ok {
+			row = append(row, set)
+		}
+		k.row(row...)
+	}
+}
+
 // settingsEditSwitchRows is the block of the on/off switch and Delete last. Each button sends
 // the absolute target value, so a double tap writes the same value.
 func settingsEditSwitchRows(k *settingsKeyboard, def settingsEditPageDef, st settingsEditState) {
@@ -306,11 +347,12 @@ func settingsEditOpenPrivateRow(k *settingsKeyboard, opts settingsEditScreenOpts
 }
 
 // renderSettingsEditor draws an editor page. It is pure. The keyboard is built in row blocks
-// (switches, Open in private, navigation) so a later plan adds a block without touching the
-// others.
+// (part rows, switches, Open in private, navigation) so a later plan adds a block without
+// touching the others.
 func renderSettingsEditor(v settingsView, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts) settingsScreen {
 	body := settingsEditBody(v, def, st)
 	k := newSettingsKeyboard(v)
+	settingsEditPartRows(k, def, st)
 	settingsEditSwitchRows(k, def, st)
 	settingsEditOpenPrivateRow(k, opts)
 	k.navRow(false)
@@ -432,6 +474,7 @@ func init() {
 			TitleKey:  def.TitleKey,
 			MainState: settingsEditMainState(def),
 			Open:      settingsEditOpen(def),
+			Actions:   settingsEditActions(def),
 		}
 		if def.isGreeting() {
 			pg.Controls = map[string]settingsControl{
