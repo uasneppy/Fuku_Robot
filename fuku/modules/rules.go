@@ -27,9 +27,17 @@ var rulesModule = moduleStruct{
 	defaultRulesBtn: "Rules",
 }
 
-// buildRulesText is the one builder of the /rules text.
+// buildRulesText is the one builder of the /rules text: the heading with the escaped
+// group title, a blank line and the stored rules made safe for HTML, or the no-rules
+// line when nothing is stored. /rules and the menu's preview send what it returns.
 func buildRulesText(tr *i18n.Translator, title, rawRules string) string {
-	return ""
+	normalized := normalizeRulesForHTML(rawRules)
+	if normalized == "" {
+		text, _ := tr.GetString("rules_no_rules_set")
+		return text
+	}
+	header, _ := tr.GetString("rules_for_chat_header")
+	return fmt.Sprintf(header, html.EscapeString(title)) + "\n\n" + normalized
 }
 
 // rulesApplyResult is what the rules apply functions return.
@@ -183,15 +191,8 @@ func (m moduleStruct) sendRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 	if rulesBtn == "" {
 		rulesBtn = m.defaultRulesBtn
 	}
-	normalizedRules := normalizeRulesForHTML(rules.Rules)
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	if normalizedRules != "" {
-		temp, _ := tr.GetString("rules_for_chat_header")
-		Text += fmt.Sprintf(temp, html.EscapeString(chat.Title)) + "\n\n"
-		Text += normalizedRules
-	} else {
-		Text, _ = tr.GetString("rules_no_rules_set")
-	}
+	Text = buildRulesText(tr, chat.Title, rules.Rules)
 
 	if chat_status.RequireGroup(bot, ctx, nil) && rules.Private {
 		Text, _ = tr.GetString("rules_click_for_rules")

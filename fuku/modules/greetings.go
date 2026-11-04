@@ -289,9 +289,13 @@ func applyGreetingReset(ctx context.Context, chatID int64, isWelcome bool) greet
 	return finishGreetingApply(ctx, chatID, "SetGoodbyeText", greetingWrites.GoodbyeText(chatID, db.DefaultGoodbye, "", nil, db.TEXT))
 }
 
-// renderGreeting is the one builder of a member-facing greeting.
+// renderGreeting is the one builder of a member-facing greeting: the join path, the leave
+// path and /welcome's formatted display send what it returns, and a preview can call it.
+// It replaces the placeholders of the text and the buttons and builds the keyboard. It
+// makes no write and sends nothing, so the clean-old bookkeeping stays with the senders.
 func renderGreeting(b *gotgbot.Bot, group *gotgbot.Chat, user *gotgbot.User, text string, buttons []db.Button) (string, *gotgbot.InlineKeyboardMarkup) {
-	return "", nil
+	res, btns := formatting.FormattingReplacer(b, group, user, text, buttons)
+	return res, &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(btns)}
 }
 
 // greetingApplyContext is the context the commands give an apply function.
@@ -383,10 +387,8 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 				return err
 			}
 		} else {
-			greetingText, buttons = formatting.FormattingReplacer(bot, chat, user, greetingText, buttons)
-			keyb := keyboard.BuildKeyboard(buttons)
-			keyboard := gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyb}
-			_, err := media.SendGreeting(bot, ctx.EffectiveChat.Id, greetingText, fileID, greetingDataType, &keyboard, ctx.EffectiveMessage.MessageThreadId)
+			greetingText, kb := renderGreeting(bot, chat, user, greetingText, buttons)
+			_, err := media.SendGreeting(bot, ctx.EffectiveChat.Id, greetingText, fileID, greetingDataType, kb, ctx.EffectiveMessage.MessageThreadId)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -784,11 +786,7 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 		}
 
 		buttons := greetings.GetWelcomeButtons(chat.Id)
-		res, buttons := formatting.FormattingReplacer(bot, chat, user,
-			greetPrefs.WelcomeSettings.WelcomeText,
-			buttons,
-		)
-		kb := &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(buttons)}
+		res, kb := renderGreeting(bot, chat, user, greetPrefs.WelcomeSettings.WelcomeText, buttons)
 
 		var threadID int64
 		if ctx.EffectiveMessage != nil {
@@ -863,8 +861,7 @@ func (moduleStruct) leftMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 	if greetPrefs.GoodbyeSettings.ShouldGoodbye {
 		buttons := greetings.GetGoodbyeButtons(chat.Id)
-		res, buttons := formatting.FormattingReplacer(bot, chat, &leftMember, greetPrefs.GoodbyeSettings.GoodbyeText, buttons)
-		kb := &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(buttons)}
+		res, kb := renderGreeting(bot, chat, &leftMember, greetPrefs.GoodbyeSettings.GoodbyeText, buttons)
 		var threadID int64
 		if ctx.EffectiveMessage != nil {
 			threadID = ctx.EffectiveMessage.MessageThreadId
