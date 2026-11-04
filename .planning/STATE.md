@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 11-12-PLAN.md
-last_updated: "2026-11-04T19:26:06.885Z"
+stopped_at: Completed 11-13-PLAN.md
+last_updated: "2026-11-04T19:39:54.077Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: a28d8b63ac2efb1e8076d10a349738977357c938
+state_head: af8cdfe9cc43361910da2c7719e56a7b6cb2c9ac
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 22
+  completed_plans: 23
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 13 of 14
+Plan: 14 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -98,6 +98,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P10 | 25min | 3 tasks | 2 files |
 | Phase 11 P11 | 75min | 3 tasks | 6 files |
 | Phase 11 P12 | 50min | 3 tasks | 5 files |
+| Phase 11 P13 | 15min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-09: the text prompt's caption limit follows stored media (a file ID of a known kind), not the raw type column
 - [Phase 11]: 11-11: the typed-reply door guards panics with RecoverFromPanic as the deferred func and a named result set to EndGroups once the message is consumed
 - [Phase 11]: 11-12: a preview is built by renderGreeting and sent by media.SendGreeting to query.From.Id only; Preview of one part and Full preview share settingsEditRunPreview, and a Welcome or Goodbye text is always previewable (the default text is a message too) while every other part only while set
+- [Phase 11]: 11-13: the album gate runs in settingsInput before the live checks and the claim (first item to take fuku:settings:inputalbum wins, the rest are silent); the album-cut notice is added by the saved page for any message with a valid media group ID
 
 ### Pending Todos
 
@@ -231,8 +233,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T19:25:55.273Z
-Stopped at: Completed 11-12-PLAN.md
+Last session: 2026-11-04T19:39:53.931Z
+Stopped at: Completed 11-13-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

@@ -24,14 +24,14 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **EDIT-01**: From the menu an admin opens Rules, Welcome or Goodbye and sees which parts are set (text, media, URL buttons) with a button to set or remove each part.
 - [x] **EDIT-02**: After pressing a part's button, the bot waits for the user's next private message and stores it as that part. A Cancel button or `/cancel` leaves the message unchanged, the wait ends by itself after 10 minutes, and it works whichever replica receives the message.
 - [x] **EDIT-03**: Text keeps its formatting and the existing placeholders (`{first}`, `{mention}` and the rest). Text that is too long to send (4096 characters, or 1024 as a caption) is refused with the reason, and the wait stays open.
-- [ ] **EDIT-04**: Media accepts one item of a kind the welcome already supports (photo, video, GIF, document, sticker, audio, voice). From an album only one item is kept, and the user is told so.
-- [ ] **EDIT-05**: URL buttons use the bot's existing button syntax. A bad syntax or URL is refused with the reason, and the wait stays open.
+- [x] **EDIT-04**: Media accepts one item of a kind the welcome already supports (photo, video, GIF, document, sticker, audio, voice). From an album only one item is kept, and the user is told so.
+- [x] **EDIT-05**: URL buttons use the bot's existing button syntax. A bad syntax or URL is refused with the reason, and the wait stays open.
 - [x] **EDIT-06**: Each part has a Preview, and "Full preview" sends the whole message exactly as members will see it, through the same send path the group uses.
 - [ ] **EDIT-07**: "Media under text" shows a photo, video or GIF below its text instead of above it.
 - [ ] **EDIT-08**: Rules gain media and URL buttons, and `/rules` (in the group and as private rules) shows them.
 - [ ] **EDIT-09**: Welcome has "Greet once": a member is greeted only the first time they ever join that group, also when the join reaches several replicas.
 - [x] **EDIT-10**: Welcome and Goodbye have their on/off switch and "Delete last welcome/goodbye" in the menu, stored exactly as `/welcome`, `/goodbye`, `/cleanwelcome` and `/cleangoodbye` store them.
-- [ ] **EDIT-11**: A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, and a message that Telegram would refuse to send is refused before saving.
+- [x] **EDIT-11**: A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, and a message that Telegram would refuse to send is refused before saving.
 
 ### Member requirements and name blocks
 
@@ -143,14 +143,14 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | EDIT-01 | Phase 11 | Complete |
 | EDIT-02 | Phase 11 | Complete |
 | EDIT-03 | Phase 11 | Complete |
-| EDIT-04 | Phase 11 | Pending |
-| EDIT-05 | Phase 11 | Pending |
+| EDIT-04 | Phase 11 | Complete |
+| EDIT-05 | Phase 11 | Complete |
 | EDIT-06 | Phase 11 | Complete |
 | EDIT-07 | Phase 12 | Pending |
 | EDIT-08 | Phase 12 | Pending |
 | EDIT-09 | Phase 12 | Pending |
 | EDIT-10 | Phase 11 | Complete |
-| EDIT-11 | Phase 11 | Pending |
+| EDIT-11 | Phase 11 | Complete |
 | MREQ-01 | Phase 13 | Pending |
 | MREQ-02 | Phase 13 | Pending |
 | MREQ-03 | Phase 13 | Pending |
