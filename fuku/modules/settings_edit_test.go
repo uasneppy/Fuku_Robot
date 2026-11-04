@@ -3,10 +3,20 @@
 package modules
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db/rules"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 )
 
 // settingsEditControl returns the button labelled labelKey on a page, checks its control is t, and returns
@@ -109,4 +119,545 @@ func mustSettingsPageButton(t *testing.T, keyboard [][]gotgbot.InlineKeyboardBut
 		t.Fatalf("no button for page %q", pageKey)
 	}
 	return button
+}
+
+// settingsEditView is the view of a group menu or a private menu of the worst-case IDs.
+func settingsEditView(tr *i18n.Translator, private bool) settingsView {
+	if private {
+		return settingsView{Tr: tr, Private: true, OwnerKey: "c", OwnerValue: "-1001234567890", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}
+	}
+	return settingsView{Tr: tr, OwnerKey: "u", OwnerValue: "1234567890", GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N"}
+}
+
+// settingsEditDef is the definition of the page with key.
+func settingsEditDef(t *testing.T, key string) settingsEditPageDef {
+	t.Helper()
+	def, ok := settingsEditPageByKey(key)
+	if !ok {
+		t.Fatalf("no editor page %q", key)
+	}
+	return def
+}
+
+// settingsEditHasButton reports whether a keyboard has a button whose label carries the marker.
+func settingsEditHasButton(keyboard [][]gotgbot.InlineKeyboardButton, labelKey string) bool {
+	_, ok := settingsButtonByMarker(keyboard, labelKey)
+	return ok
+}
+
+func TestSettingsEditPages(t *testing.T) {
+	withStaffLocale(t)
+	tr := i18n.MustNewTranslator("en")
+	welcome := settingsEditDef(t, settingsPageWelcome)
+	rulesDef := settingsEditDef(t, settingsPageRules)
+
+	t.Run("a custom text shows its length and never itself", func(t *testing.T) {
+		st := settingsEditState{
+			Kind: settingsEditWelcome, Text: "<b>SECRETTEXT</b> hello {first}", Enabled: true,
+			Buttons: models.ButtonArray{{Name: "SECRETBUTTON", Url: "https://secret.example/path"}, {Name: "Two", Url: "https://two.example"}},
+		}
+		screen := renderSettingsEditor(settingsEditView(tr, false), welcome, st, settingsEditScreenOpts{})
+		want := fmt.Sprintf("%s %d", staffMarker("settings_edit_state_text_len"), formatting.VisibleLength(st.Text))
+		if !strings.Contains(screen.Text, want) {
+			t.Errorf("page %q lacks %q", screen.Text, want)
+		}
+		if want := staffMarker("settings_edit_state_buttons_n") + " 2"; !strings.Contains(screen.Text, want) {
+			t.Errorf("page %q lacks %q", screen.Text, want)
+		}
+		for _, secret := range []string{"SECRETTEXT", "SECRETBUTTON", "secret.example", "two.example"} {
+			if strings.Contains(screen.Text, secret) {
+				t.Errorf("page %q echoes %q", screen.Text, secret)
+			}
+			for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+				if strings.Contains(button.Text, secret) || strings.Contains(button.CallbackData, secret) || strings.Contains(button.Url, secret) {
+					t.Errorf("button %+v echoes %q", button, secret)
+				}
+			}
+		}
+	})
+
+	t.Run("every media kind has its word, and no media is Not set", func(t *testing.T) {
+		kinds := []struct {
+			mediaType int
+			key       string
+		}{
+			{db.PHOTO, "settings_edit_media_photo"}, {db.VIDEO, "settings_edit_media_video"},
+			{db.DOCUMENT, "settings_edit_media_file"}, {db.STICKER, "settings_edit_media_sticker"},
+			{db.AUDIO, "settings_edit_media_audio"}, {db.VOICE, "settings_edit_media_voice"},
+			{db.VIDEO_NOTE, "settings_edit_media_video_note"},
+		}
+		for _, kind := range kinds {
+			st := settingsEditState{Kind: settingsEditWelcome, TextIsDefault: true, MediaType: kind.mediaType, FileID: "f", Enabled: true}
+			text := renderSettingsEditor(settingsEditView(tr, true), welcome, st, settingsEditScreenOpts{}).Text
+			if want := staffMarker("settings_edit_line_media") + " " + staffMarker(kind.key); !strings.Contains(text, want) {
+				t.Errorf("media type %d: page %q lacks %q", kind.mediaType, text, want)
+			}
+			wantNote := kind.mediaType == db.STICKER || kind.mediaType == db.VIDEO_NOTE
+			if got := strings.Contains(text, staffMarker("settings_edit_note_no_caption")); got != wantNote {
+				t.Errorf("media type %d: no-caption note shown = %v, want %v", kind.mediaType, got, wantNote)
+			}
+		}
+		for name, st := range map[string]settingsEditState{
+			"text type":    {Kind: settingsEditWelcome, MediaType: db.TEXT, FileID: "f"},
+			"no file ID":   {Kind: settingsEditWelcome, MediaType: db.PHOTO},
+			"unknown type": {Kind: settingsEditWelcome, MediaType: 99, FileID: "f"},
+		} {
+			text := renderSettingsEditor(settingsEditView(tr, true), welcome, st, settingsEditScreenOpts{}).Text
+			if want := staffMarker("settings_edit_line_media") + " " + staffMarker("settings_state_not_set"); !strings.Contains(text, want) {
+				t.Errorf("%s: page %q lacks %q", name, text, want)
+			}
+		}
+	})
+
+	t.Run("Rules has the text line only and no switch", func(t *testing.T) {
+		for _, text := range []string{"", "the rules"} {
+			screen := renderSettingsEditor(settingsEditView(tr, false), rulesDef,
+				settingsEditState{Kind: settingsEditRules, Text: text}, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
+			if !strings.Contains(screen.Text, staffMarker("settings_edit_line_text")) {
+				t.Errorf("Rules page %q has no text line", screen.Text)
+			}
+			for _, absent := range []string{"settings_edit_line_media", "settings_edit_line_buttons", "settings_edit_clean_hint_welcome", "settings_edit_clean_hint_goodbye"} {
+				if strings.Contains(screen.Text, staffMarker(absent)) {
+					t.Errorf("Rules page %q carries %s", screen.Text, absent)
+				}
+			}
+			for _, absent := range []string{"settings_btn_edit_welcome_toggle", "settings_btn_edit_clean_welcome", "settings_btn_edit_goodbye_toggle"} {
+				if settingsEditHasButton(screen.Keyboard.InlineKeyboard, absent) {
+					t.Errorf("Rules page has the %s button", absent)
+				}
+			}
+		}
+		set := renderSettingsEditor(settingsEditView(tr, true), rulesDef, settingsEditState{Kind: settingsEditRules, Text: "abc"}, settingsEditScreenOpts{}).Text
+		if want := staffMarker("settings_edit_state_text_len") + " 3"; !strings.Contains(set, want) {
+			t.Errorf("Rules page %q lacks %q", set, want)
+		}
+		unset := renderSettingsEditor(settingsEditView(tr, true), rulesDef, settingsEditState{Kind: settingsEditRules}, settingsEditScreenOpts{}).Text
+		if want := staffMarker("settings_edit_line_text") + " " + staffMarker("settings_state_not_set"); !strings.Contains(unset, want) {
+			t.Errorf("an empty Rules page %q lacks %q", unset, want)
+		}
+	})
+
+	t.Run("Open in private only in a group menu, rows and navigation", func(t *testing.T) {
+		for _, def := range settingsEditPages {
+			st := settingsEditState{Kind: def.Kind, Enabled: true}
+			group := renderSettingsEditor(settingsEditView(tr, false), def, st, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
+			private := renderSettingsEditor(settingsEditView(tr, true), def, st, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
+
+			var urls []string
+			for _, button := range settingsAllButtons(group.Keyboard.InlineKeyboard) {
+				if button.Url != "" {
+					urls = append(urls, button.Url)
+				}
+			}
+			if want := "https://t.me/FukuTestBot?start=settings_-1001234567890"; len(urls) != 1 || urls[0] != want {
+				t.Errorf("%s group page URL buttons = %v, want [%s]", def.Key, urls, want)
+			}
+			for _, button := range settingsAllButtons(private.Keyboard.InlineKeyboard) {
+				if button.Url != "" {
+					t.Errorf("%s private page has a URL button %q", def.Key, button.Url)
+				}
+			}
+			if rows := len(private.Keyboard.InlineKeyboard); rows > 8 {
+				t.Errorf("%s private page has %d rows, want at most 8", def.Key, rows)
+			}
+			if rows := len(group.Keyboard.InlineKeyboard); rows > 9 {
+				t.Errorf("%s group page has %d rows, want at most 9", def.Key, rows)
+			}
+			for name, screen := range map[string]settingsScreen{"group": group, "private": private} {
+				rows := screen.Keyboard.InlineKeyboard
+				last := rows[len(rows)-1]
+				if len(last) != 2 || !strings.Contains(last[0].Text, staffMarker("settings_btn_back")) || !strings.Contains(last[1].Text, staffMarker("settings_btn_close")) {
+					t.Errorf("%s %s page ends with %+v, want Back and Close", def.Key, name, last)
+				}
+			}
+			// No username: no row at all, and the page still draws.
+			noName := renderSettingsEditor(settingsEditView(tr, false), def, st, settingsEditScreenOpts{})
+			for _, button := range settingsAllButtons(noName.Keyboard.InlineKeyboard) {
+				if button.Url != "" {
+					t.Errorf("%s page without a bot username has a URL button %q", def.Key, button.Url)
+				}
+			}
+		}
+	})
+
+	t.Run("Delete last twice and the goodbye twins store their own columns", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		msgID := openEditPage(env, owner, settingsPageWelcome)
+
+		env.press(owner, msgID, env.groupFields(owner, "a", "tg", "p", "w", "t", "d", "v", "1"))
+		row, ok := settingsEditStored(t, env.chat.Id)
+		if !ok || !row.WelcomeSettings.CleanWelcome || row.GoodbyeSettings.CleanGoodbye {
+			t.Fatalf("after Delete last on Welcome: %+v (found %v), want welcome_clean_old only", row, ok)
+		}
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		if _, fields := settingsEditControl(t, keyboard, "settings_btn_edit_clean_welcome", settingsEditControlClean); fields["v"] != "0" {
+			t.Errorf("the redrawn Delete last carries %v, want v=0", fields)
+		}
+
+		env.press(owner, msgID, env.groupFields(owner, "a", "op", "p", "g"))
+		env.press(owner, msgID, env.groupFields(owner, "a", "tg", "p", "g", "t", "d", "v", "1"))
+		env.press(owner, msgID, env.groupFields(owner, "a", "tg", "p", "g", "t", "e", "v", "0"))
+		row, _ = settingsEditStored(t, env.chat.Id)
+		if !row.GoodbyeSettings.CleanGoodbye || row.GoodbyeSettings.ShouldGoodbye || !row.WelcomeSettings.CleanWelcome {
+			t.Errorf("after the Goodbye presses: %+v, want goodbye_clean_old on, goodbye off, welcome_clean_old still on", row)
+		}
+	})
+}
+
+func TestSettingsEditReadsCreateNothing(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	msgID := env.openMenu(owner)
+	chats := func() int64 {
+		var n int64
+		if err := db.DB.Model(&models.Chat{}).Where("chat_id = ?", env.chat.Id).Count(&n).Error; err != nil {
+			t.Fatalf("count chats: %v", err)
+		}
+		return n
+	}
+	before := chats()
+	for _, page := range []string{"w", "g", "r"} {
+		env.press(owner, msgID, env.groupFields(owner, "a", "op", "p", page))
+		env.press(owner, msgID, env.groupFields(owner, "a", "bk"))
+	}
+	if _, ok := settingsEditStored(t, env.chat.Id); ok {
+		t.Error("opening Main and the pages created a greetings row")
+	}
+	if _, ok := settingsEditRulesStored(t, env.chat.Id); ok {
+		t.Error("opening Main and the pages created a rules row")
+	}
+	if after := chats(); after != before {
+		t.Errorf("chats rows for the chat went from %d to %d", before, after)
+	}
+}
+
+func TestSettingsEditReadFailure(t *testing.T) {
+	cases := []struct {
+		name    string
+		page    string
+		titles  []string
+		healthy []string
+		fail    func()
+		restore func()
+	}{
+		{
+			name: "greetings read", page: "w",
+			titles: []string{"settings_page_welcome", "settings_page_goodbye"}, healthy: []string{"settings_page_rules"},
+			fail: func() {
+				settingsEditGreetingsRead = func(context.Context, int64) (*models.GreetingSettings, error) {
+					return nil, errors.New("database unavailable")
+				}
+			},
+			restore: func() { settingsEditGreetingsRead = greetings.LoadSettingsContext },
+		},
+		{
+			name: "rules read", page: "r",
+			titles: []string{"settings_page_rules"}, healthy: []string{"settings_page_welcome", "settings_page_goodbye"},
+			fail: func() {
+				settingsEditRulesRead = func(context.Context, int64) (string, error) { return "", errors.New("database unavailable") }
+			},
+			restore: func() { settingsEditRulesRead = rules.LoadRulesContext },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsEditEnv(t)
+			tc.fail()
+			t.Cleanup(tc.restore)
+
+			msgID := env.openMenu(env.admin)
+			mainText, keyboard := env.lastEdit(env.chat.Id, msgID)
+			for _, key := range tc.titles {
+				if line, found := settingsMainStateLine(mainText, key); !found || !strings.HasSuffix(line, settingsUnknownState) {
+					t.Errorf("%s status line %q (found %v) does not end with the unknown mark", key, line, found)
+				}
+			}
+			for _, key := range tc.healthy {
+				if line, found := settingsMainStateLine(mainText, key); !found || strings.HasSuffix(line, settingsUnknownState) {
+					t.Errorf("%s status line %q (found %v) shows the unknown mark for a page that reads fine", key, line, found)
+				}
+			}
+
+			before := env.answerCount()
+			env.pressRaw(env.chat, env.admin, msgID, mustSettingsPageButton(t, keyboard, tc.page).CallbackData)
+			if got := env.answerCount() - before; got != 1 {
+				t.Errorf("the press was answered %d times, want once", got)
+			}
+			answer, alert := env.lastAnswer()
+			if !alert || !strings.Contains(answer, staffMarker("settings_cannot_open_alert")) {
+				t.Errorf("answer = %q (alert %v), want the alert settings_cannot_open_alert", answer, alert)
+			}
+			text, kb := env.lastEdit(env.chat.Id, msgID)
+			if !strings.Contains(text, staffMarker("settings_cannot_open")) || len(kb) != 0 {
+				t.Errorf("the menu was edited to %q with keyboard %+v, want the cannot-open edit without a keyboard", text, kb)
+			}
+		})
+	}
+}
+
+func TestSettingsEditDefaultsMatchRuntime(t *testing.T) {
+	withStaffLocale(t)
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	// The bot knows every group it works in, which is what makes the first write store Goodbye On.
+	if err := db.EnsureChatInDb(env.chat.Id, env.chat.Title); err != nil {
+		t.Fatalf("EnsureChatInDb: %v", err)
+	}
+
+	msgID := openEditPage(env, owner, settingsPageGoodbye)
+	text, keyboard := env.lastEdit(env.chat.Id, msgID)
+	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_goodbye_toggle", settingsEditControlEnabled)
+	if !strings.Contains(toggle.Text, staffMarker("common_status_on")) || fields["v"] != "0" {
+		t.Errorf("a fresh chat's Goodbye switch is %q with %v, want On", toggle.Text, fields)
+	}
+	clean, cleanFields := settingsEditControl(t, keyboard, "settings_btn_edit_clean_goodbye", settingsEditControlClean)
+	if !strings.Contains(clean.Text, staffMarker("common_status_off")) || cleanFields["v"] != "1" {
+		t.Errorf("a fresh chat's Delete last is %q with %v, want Off", clean.Text, cleanFields)
+	}
+	if strings.Contains(text, settingsNoticeWarnIcon) {
+		t.Errorf("a fresh page carries a notice: %q", text)
+	}
+
+	runtime := greetings.GetGreetingSettings(env.chat.Id)
+	if runtime.GoodbyeSettings == nil || !runtime.GoodbyeSettings.ShouldGoodbye || runtime.GoodbyeSettings.CleanGoodbye {
+		t.Errorf("the runtime reads %+v, want goodbye on and delete last off, as the page showed", runtime.GoodbyeSettings)
+	}
+}
+
+func TestSettingsEditSwitchFailure(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	msgID := openEditPage(env, owner, settingsPageWelcome)
+
+	previous := greetingWrites.WelcomeToggle
+	greetingWrites.WelcomeToggle = func(int64, bool) error { return errors.New("write failed") }
+	t.Cleanup(func() { greetingWrites.WelcomeToggle = previous })
+
+	env.press(owner, msgID, env.groupFields(owner, "a", "tg", "p", "w", "t", "e", "v", "0"))
+
+	text, keyboard := env.lastEdit(env.chat.Id, msgID)
+	if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("common_settings_save_failed")) {
+		t.Errorf("a failed write drew %q, want the save-failed notice", text)
+	}
+	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_welcome_toggle", settingsEditControlEnabled)
+	if !strings.Contains(toggle.Text, staffMarker("common_status_on")) || fields["v"] != "0" {
+		t.Errorf("the switch after a failed write is %q with %v, want the old state On", toggle.Text, fields)
+	}
+	if row, ok := settingsEditStored(t, env.chat.Id); ok && !row.WelcomeSettings.ShouldWelcome {
+		t.Errorf("a failed write left %+v", row)
+	}
+}
+
+// settingsEditPressAs hand-builds a press of an editor control in chat as user in a group menu.
+func settingsEditPressAs(env *settingsEnv, chat gotgbot.Chat, user gotgbot.User, msgID int64, page, control, value string) {
+	env.t.Helper()
+	data := encodeCallbackData(settingsCallbackNamespace, env.groupFields(user, "a", "tg", "p", page, "t", control, "v", value))
+	if data == "" {
+		env.t.Fatalf("press %s %s %s did not encode", page, control, value)
+	}
+	env.pressRaw(chat, user, msgID, data)
+}
+
+func TestSettingsParityGreetingSwitches(t *testing.T) {
+	const menuMsgID = 6161
+	cases := []struct {
+		name, page, control, value, command string
+	}{
+		{"welcome off", "w", "e", "0", "/welcome off"},
+		{"welcome on after off", "w", "e", "1", "/welcome on"},
+		{"goodbye off", "g", "e", "0", "/goodbye off"},
+		{"goodbye on", "g", "e", "1", "/goodbye on"},
+		{"delete last welcome on", "w", "d", "1", "/cleanwelcome on"},
+		{"delete last goodbye on", "g", "d", "1", "/cleangoodbye on"},
+		{"delete last welcome off", "w", "d", "0", "/cleanwelcome off"},
+	}
+	env := newSettingsEditEnv(t)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			menuChat, commandChat := env.addChat(), env.addChat()
+			editCleanup(t, menuChat.Id, commandChat.Id)
+			menuOwner, commandOwner := env.newOwner(menuChat), env.newOwner(commandChat)
+			// Warm the cached read of both chats, so a missing invalidation shows as a stale value.
+			greetings.GetGreetingSettings(menuChat.Id)
+			greetings.GetGreetingSettings(commandChat.Id)
+
+			settingsEditPressAs(env, menuChat, menuOwner, menuMsgID, tc.page, tc.control, tc.value)
+			env.sendIn(commandChat, commandOwner, tc.command)
+
+			requireSameGreetingRow(t, loadGreetingRow(t, commandChat.Id), loadGreetingRow(t, menuChat.Id))
+			menuStored, _ := settingsEditStored(t, menuChat.Id)
+			commandStored, _ := settingsEditStored(t, commandChat.Id)
+			if menuStored.WelcomeSettings.ShouldWelcome != commandStored.WelcomeSettings.ShouldWelcome ||
+				menuStored.GoodbyeSettings.ShouldGoodbye != commandStored.GoodbyeSettings.ShouldGoodbye ||
+				menuStored.WelcomeSettings.CleanWelcome != commandStored.WelcomeSettings.CleanWelcome ||
+				menuStored.GoodbyeSettings.CleanGoodbye != commandStored.GoodbyeSettings.CleanGoodbye {
+				t.Errorf("stored rows differ: menu %+v, command %+v", menuStored, commandStored)
+			}
+			menuCached, commandCached := greetings.GetGreetingSettings(menuChat.Id), greetings.GetGreetingSettings(commandChat.Id)
+			if menuCached.WelcomeSettings.ShouldWelcome != commandCached.WelcomeSettings.ShouldWelcome ||
+				menuCached.GoodbyeSettings.ShouldGoodbye != commandCached.GoodbyeSettings.ShouldGoodbye ||
+				menuCached.WelcomeSettings.CleanWelcome != commandCached.WelcomeSettings.CleanWelcome ||
+				menuCached.GoodbyeSettings.CleanGoodbye != commandCached.GoodbyeSettings.CleanGoodbye {
+				t.Errorf("cached reads differ: menu %+v/%+v, command %+v/%+v",
+					menuCached.WelcomeSettings, menuCached.GoodbyeSettings, commandCached.WelcomeSettings, commandCached.GoodbyeSettings)
+			}
+			// The value really changed: the row is not the untouched default.
+			wantOn := tc.value == "1"
+			var got bool
+			switch tc.page + tc.control {
+			case "we":
+				got = menuCached.WelcomeSettings.ShouldWelcome
+			case "ge":
+				got = menuCached.GoodbyeSettings.ShouldGoodbye
+			case "wd":
+				got = menuCached.WelcomeSettings.CleanWelcome
+			default:
+				got = menuCached.GoodbyeSettings.CleanGoodbye
+			}
+			if got != wantOn {
+				t.Errorf("the stored switch is %v, want %v", got, wantOn)
+			}
+		})
+	}
+}
+
+func TestSettingsDriftGreetings(t *testing.T) {
+	withStaffLocale(t)
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	chatID := env.chat.Id
+	buttons := []models.Button{{Name: "SECRETBUTTON", Url: "https://secret.example"}, {Name: "Second", Url: "https://second.example"}}
+	if err := greetings.SetWelcomeText(chatID, "a custom welcome", "photo-file", buttons, db.PHOTO); err != nil {
+		t.Fatalf("SetWelcomeText: %v", err)
+	}
+	if err := greetings.SetGoodbyeText(chatID, "a custom goodbye", "", nil, db.TEXT); err != nil {
+		t.Fatalf("SetGoodbyeText: %v", err)
+	}
+	for _, write := range []error{
+		greetings.SetWelcomeToggle(chatID, false), greetings.SetCleanWelcomeSetting(chatID, true),
+		greetings.SetGoodbyeToggle(chatID, true), greetings.SetCleanGoodbyeSetting(chatID, false),
+	} {
+		if write != nil {
+			t.Fatalf("seeding a switch: %v", write)
+		}
+	}
+
+	msgID := openEditPage(env, owner, settingsPageWelcome)
+	text, keyboard := env.lastEdit(env.chat.Id, msgID)
+	for _, want := range []string{
+		staffMarker("settings_edit_state_text_len") + " 16", staffMarker("settings_edit_media_photo"), staffMarker("settings_edit_state_buttons_n") + " 2",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the Welcome page %q lacks %q", text, want)
+		}
+	}
+	if toggle, _ := settingsEditControl(t, keyboard, "settings_btn_edit_welcome_toggle", settingsEditControlEnabled); !strings.Contains(toggle.Text, staffMarker("common_status_off")) {
+		t.Errorf("the Welcome switch %q does not show Off", toggle.Text)
+	}
+	if clean, _ := settingsEditControl(t, keyboard, "settings_btn_edit_clean_welcome", settingsEditControlClean); !strings.Contains(clean.Text, staffMarker("common_status_on")) {
+		t.Errorf("Delete last welcome %q does not show On", clean.Text)
+	}
+	if strings.Contains(text, "SECRETBUTTON") || strings.Contains(text, "custom welcome") {
+		t.Errorf("the page echoes stored content: %q", text)
+	}
+
+	env.press(owner, msgID, env.groupFields(owner, "a", "op", "p", "g"))
+	text, keyboard = env.lastEdit(env.chat.Id, msgID)
+	if want := staffMarker("settings_edit_state_text_len") + " 16"; !strings.Contains(text, want) {
+		t.Errorf("the Goodbye page %q lacks %q", text, want)
+	}
+	if want := staffMarker("settings_edit_line_media") + " " + staffMarker("settings_state_not_set"); !strings.Contains(text, want) {
+		t.Errorf("the Goodbye page %q lacks %q", text, want)
+	}
+	if toggle, _ := settingsEditControl(t, keyboard, "settings_btn_edit_goodbye_toggle", settingsEditControlEnabled); !strings.Contains(toggle.Text, staffMarker("common_status_on")) {
+		t.Errorf("the Goodbye switch %q does not show On", toggle.Text)
+	}
+
+	if err := rules.SetChatRules(chatID, "the rules text"); err != nil {
+		t.Fatalf("SetChatRules: %v", err)
+	}
+	env.press(owner, msgID, env.groupFields(owner, "a", "op", "p", "r"))
+	text, _ = env.lastEdit(env.chat.Id, msgID)
+	if want := staffMarker("settings_edit_state_text_len") + " 14"; !strings.Contains(text, want) {
+		t.Errorf("the Rules page %q lacks %q", text, want)
+	}
+}
+
+func TestSettingsAuthorityParityGreetings(t *testing.T) {
+	const menuMsgID = 7171
+	nextAdmin := int64(5_000_000)
+	newAdmin := func(env *settingsEnv, chat gotgbot.Chat, canChangeInfo bool) gotgbot.User {
+		nextAdmin++
+		admin := gotgbot.User{Id: uniqueLinkOwnerID() + nextAdmin, FirstName: "Plain"}
+		listEditAdmin(env, chat, admin, canChangeInfo)
+		return admin
+	}
+
+	t.Run("an administrator without can_change_info", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		menuChat, commandChat := env.addChat(), env.addChat()
+		editCleanup(t, menuChat.Id, commandChat.Id)
+		menuAdmin, commandAdmin := newAdmin(env, menuChat, false), newAdmin(env, commandChat, false)
+
+		answers := env.answerCount()
+		settingsEditPressAs(env, menuChat, menuAdmin, menuMsgID, "w", "d", "1")
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the press was answered %d times, want once", got)
+		}
+		answer, alert := env.lastAnswer()
+		if !alert || !strings.Contains(answer, staffMarker("settings_no_change_info")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_no_change_info", answer, alert)
+		}
+		if _, ok := settingsEditStored(t, menuChat.Id); ok {
+			t.Error("a refused Delete last press wrote a row")
+		}
+
+		env.sendIn(commandChat, commandAdmin, "/cleanwelcome on")
+		if !settingsAntifloodSentHas(env, commandChat.Id, staffMarker("chat_status_change_info_cmd_error")) {
+			t.Error("/cleanwelcome on was not refused for an administrator without can_change_info")
+		}
+		if row, ok := settingsEditStored(t, commandChat.Id); ok && row.WelcomeSettings.CleanWelcome {
+			t.Error("/cleanwelcome on wrote although it was refused")
+		}
+
+		// The switch is allowed to any administrator, in the menu as /welcome off is.
+		settingsEditPressAs(env, menuChat, menuAdmin, menuMsgID, "w", "e", "0")
+		if row, ok := settingsEditStored(t, menuChat.Id); !ok || row.WelcomeSettings.ShouldWelcome {
+			t.Errorf("the switch press left %+v (found %v), want welcome off", row, ok)
+		}
+		env.sendIn(commandChat, commandAdmin, "/welcome off")
+		if row, ok := settingsEditStored(t, commandChat.Id); !ok || row.WelcomeSettings.ShouldWelcome {
+			t.Errorf("/welcome off left %+v (found %v), want welcome off", row, ok)
+		}
+	})
+
+	t.Run("an administrator with can_change_info", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		menuChat, commandChat := env.addChat(), env.addChat()
+		editCleanup(t, menuChat.Id, commandChat.Id)
+		menuAdmin, commandAdmin := newAdmin(env, menuChat, true), newAdmin(env, commandChat, true)
+
+		settingsEditPressAs(env, menuChat, menuAdmin, menuMsgID, "g", "d", "1")
+		env.sendIn(commandChat, commandAdmin, "/cleangoodbye on")
+		for name, chatID := range map[string]int64{"menu": menuChat.Id, "command": commandChat.Id} {
+			if row, ok := settingsEditStored(t, chatID); !ok || !row.GoodbyeSettings.CleanGoodbye {
+				t.Errorf("%s left %+v (found %v), want goodbye_clean_old on", name, row, ok)
+			}
+		}
+	})
+
+	t.Run("a plain member's press is refused", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 6_000_000, FirstName: "Member"}
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		settingsEditPressAs(env, env.chat, member, menuMsgID, "w", "e", "0")
+		answer, alert := env.lastAnswer()
+		if !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+		}
+		if _, ok := settingsEditStored(t, env.chat.Id); ok {
+			t.Error("a plain member's press wrote a row")
+		}
+	})
 }

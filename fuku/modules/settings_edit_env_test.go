@@ -3,7 +3,10 @@
 package modules
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -100,4 +103,70 @@ func openEditPagePrivate(env *settingsEnv, user gotgbot.User, pageKey string) in
 	}
 	env.pressRaw(settingsPrivateChat(user), user, sent.MessageID, button.CallbackData)
 	return sent.MessageID
+}
+
+// settingsEditListClient wraps the env's Bot API fake so that getChatAdministrators answers a
+// listed administrator's entry with the raw record a test chose (the staff fake lists every
+// administrator with can_restrict_members and nothing else). The cached command checks read that
+// list, so this is how a test gives an administrator can_change_info in the admin cache.
+type settingsEditListClient struct {
+	gotgbot.BotClient
+
+	mu        sync.Mutex
+	overrides map[[2]int64]string
+}
+
+// RequestWithContext implements gotgbot.BotClient.
+func (c *settingsEditListClient) RequestWithContext(
+	ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts,
+) (json.RawMessage, error) {
+	raw, err := c.BotClient.RequestWithContext(ctx, token, method, params, opts)
+	if err != nil || method != "getChatAdministrators" {
+		return raw, err
+	}
+	var chatID int64
+	if _, scanErr := fmt.Sscan(fmt.Sprint(params["chat_id"]), &chatID); scanErr != nil {
+		return raw, nil
+	}
+	var entries []json.RawMessage
+	if json.Unmarshal(raw, &entries) != nil {
+		return raw, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, entry := range entries {
+		var probe struct {
+			User struct {
+				ID int64 `json:"id"`
+			} `json:"user"`
+		}
+		if json.Unmarshal(entry, &probe) != nil {
+			continue
+		}
+		if override, ok := c.overrides[[2]int64{chatID, probe.User.ID}]; ok {
+			entries[i] = json.RawMessage(override)
+		}
+	}
+	out, marshalErr := json.Marshal(entries)
+	if marshalErr != nil {
+		return raw, nil
+	}
+	return out, nil
+}
+
+// listEditAdmin makes user an administrator of chat with or without can_change_info, both in the
+// live getChatMember answer and in the administrator list the cached command checks read.
+func listEditAdmin(env *settingsEnv, chat gotgbot.Chat, user gotgbot.User, canChangeInfo bool) {
+	env.t.Helper()
+	client, ok := env.bot.BotClient.(*settingsEditListClient)
+	if !ok {
+		client = &settingsEditListClient{BotClient: env.bot.BotClient, overrides: map[[2]int64]string{}}
+		env.bot.BotClient = client
+	}
+	raw := settingsEditAdminJSON(user.Id, canChangeInfo)
+	client.mu.Lock()
+	client.overrides[[2]int64{chat.Id, user.Id}] = raw
+	client.mu.Unlock()
+	env.fake.setMemberRaw(chat.Id, user.Id, raw)
+	env.fake.listAdministrator(chat.Id, user.Id)
 }
