@@ -197,19 +197,48 @@ func NotesParser(sent string) (pvtOnly, grpOnly, adminOnly, webPrev, protectedCo
 	return pvtOnly, grpOnly, adminOnly, webPrev, protectedContent, noNotif, sent
 }
 
+// TextLengthRefusal returns the reply the commands send when a stored text is too long for Telegram: a message
+// text above 4096 code points, or the caption of any media type above 1024. It returns "" when the length is
+// fine. The count is the code points of the stored HTML, exactly as /setwelcome, /save and /filter count them.
+// The commands and the settings message editor both call it, so the two cannot drift.
+func TextLengthRefusal(text string, dataType int, language string) string {
+	textRuneCount := utf8.RuneCountInString(text)
+
+	var key string
+	switch {
+	case dataType == db.TEXT && textRuneCount > 4096:
+		key = "content_text_too_long"
+	case dataType != db.TEXT && textRuneCount > 1024:
+		key = "content_caption_too_long"
+	default:
+		return ""
+	}
+
+	template, _ := i18n.MustNewTranslator(language).GetString(key)
+	return fmt.Sprintf(template, textRuneCount)
+}
+
+// ValidButtonURL reports whether a button link may be stored: it must parse as a URL with the scheme http or
+// https and a non-empty host. javascript:, file:, tg:, scheme-less and empty links are refused. The commands'
+// button filter and the settings message editor both call it.
+func ValidButtonURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// ExtractMedia returns the Telegram file ID and the stored media type of a message, with the choices the
+// commands make for a replied-to message: sticker, then document (an animation also carries a document, so a GIF
+// is stored as a document), the largest photo, audio, voice, video, an animation alone as a document, and video
+// note. Anything else, and a nil message, gives ("", -1). The settings message editor calls it for the message
+// the owner sends.
+func ExtractMedia(msg *gotgbot.Message) (fileID string, dataType int) {
+	return extractMediaFromReply(msg)
+}
+
 func preFixes(buttons []tgmd2html.ButtonV2, defaultNameButton string, text *string, dataType *int, fileid string, dbButtons *[]db.Button, errorMsg *string, language string) {
-	tr := i18n.MustNewTranslator(language)
-
-	textRuneCount := utf8.RuneCountInString(*text)
-
-	if *dataType == db.TEXT && textRuneCount > 4096 {
+	if refusal := TextLengthRefusal(*text, *dataType, language); refusal != "" {
 		*dataType = -1
-		template, _ := tr.GetString("content_text_too_long")
-		*errorMsg = fmt.Sprintf(template, textRuneCount)
-	} else if *dataType != db.TEXT && textRuneCount > 1024 {
-		*dataType = -1
-		template, _ := tr.GetString("content_caption_too_long")
-		*errorMsg = fmt.Sprintf(template, textRuneCount)
+		*errorMsg = refusal
 	} else {
 		for i, button := range buttons {
 			if button.Name == "" {
@@ -220,8 +249,7 @@ func preFixes(buttons []tgmd2html.ButtonV2, defaultNameButton string, text *stri
 		buttonUrlFixer := func(_buttons *[]tgmd2html.ButtonV2) {
 			validButtons := make([]tgmd2html.ButtonV2, 0, len(*_buttons))
 			for _, btn := range *_buttons {
-				u, err := url.Parse(btn.Content)
-				if err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+				if ValidButtonURL(btn.Content) {
 					validButtons = append(validButtons, btn)
 				}
 			}
