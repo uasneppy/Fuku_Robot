@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,70 @@ import (
 
 var adminCacheGroup singleflight.Group
 var adminCacheGeneration atomic.Uint64
+
+// AdminListKind says what a loaded admin list established about a chat.
+type AdminListKind int
+
+const (
+	// AdminListLoaded means the bot is an administrator and Telegram answered a non-empty
+	// administrator list; the event carries every listed member.
+	AdminListLoaded AdminListKind = iota + 1
+	// AdminListBotNotAdmin means the bot's own status is member, left, kicked or anything but
+	// administrator or creator.
+	AdminListBotNotAdmin
+	// AdminListBotGone means the bot's own lookup was refused with a Telegram client error
+	// (4xx other than 429): the bot cannot see the chat.
+	AdminListBotGone
+)
+
+// AdminListEvent is what the observer receives after a load established a definitive fact
+// about a chat. Admins is set only for AdminListLoaded and must not be modified.
+type AdminListEvent struct {
+	ChatID int64
+	Kind   AdminListKind
+	Admins []gotgbot.MergedChatMember
+}
+
+// adminListObserver is the one installed observer, nil when none is. This package cannot
+// import the database layer, so the module that stores the roster installs itself here.
+var adminListObserver atomic.Pointer[func(AdminListEvent)]
+
+// SetAdminListObserver installs fn as the observer of definitive admin list facts; nil
+// removes it. The observer runs synchronously inside the load, under the chat's singleflight,
+// so a slow observer delays that one load and nothing else.
+func SetAdminListObserver(fn func(AdminListEvent)) {
+	if fn == nil {
+		adminListObserver.Store(nil)
+		return
+	}
+	adminListObserver.Store(&fn)
+}
+
+// notifyAdminList hands ev to the installed observer. A panicking observer is logged and
+// never changes the admin cache result.
+func notifyAdminList(ev AdminListEvent) {
+	fn := adminListObserver.Load()
+	if fn == nil || *fn == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("[AdminCache] observer panic for chat %d: %v", ev.ChatID, r)
+		}
+	}()
+	(*fn)(ev)
+}
+
+// isBotLookupClientError reports whether err is a Telegram answer in the 4xx range other than
+// 429: the bot's own getChatMember was refused, so it cannot see the chat. A 429, a 5xx and a
+// transport error say nothing about the chat.
+func isBotLookupClientError(err error) bool {
+	var tgErr *gotgbot.TelegramError
+	if !errors.As(err, &tgErr) || tgErr == nil {
+		return false
+	}
+	return tgErr.Code >= 400 && tgErr.Code <= 499 && tgErr.Code != 429
+}
 
 func adminCacheKey(chatId int64) string {
 	return fmt.Sprintf("%sadminCache:%d", DataCachePrefix, chatId)
@@ -81,6 +146,9 @@ func loadAdminCacheFromTelegram(b *gotgbot.Bot, chatId int64) AdminCache {
 			"botId":  b.Id,
 			"error":  botErr,
 		}).Warning("LoadAdminCache: Could not verify bot admin status")
+		if isBotLookupClientError(botErr) && generation == adminCacheGeneration.Load() {
+			notifyAdminList(AdminListEvent{ChatID: chatId, Kind: AdminListBotGone})
+		}
 		return storeWithTTL(AdminCache{
 			ChatId:   chatId,
 			UserInfo: []gotgbot.MergedChatMember{},
@@ -90,6 +158,9 @@ func loadAdminCacheFromTelegram(b *gotgbot.Bot, chatId int64) AdminCache {
 
 	botStatus := botMember.GetStatus()
 	if botStatus != "administrator" && botStatus != "creator" {
+		if generation == adminCacheGeneration.Load() {
+			notifyAdminList(AdminListEvent{ChatID: chatId, Kind: AdminListBotNotAdmin})
+		}
 		return storeNegativeResult(AdminCache{
 			ChatId:   chatId,
 			UserInfo: []gotgbot.MergedChatMember{},
@@ -167,7 +238,13 @@ func loadAdminCacheFromTelegram(b *gotgbot.Bot, chatId int64) AdminCache {
 		Cached:   true,
 	}
 
-	return storeResult(adminCache)
+	result := storeResult(adminCache)
+	// Only a fresh, non-empty list whose load no invalidation overtook becomes a fact: the
+	// retry-failure and empty-list returns above never reach this point.
+	if generation == adminCacheGeneration.Load() {
+		notifyAdminList(AdminListEvent{ChatID: chatId, Kind: AdminListLoaded, Admins: userList})
+	}
+	return result
 }
 
 func GetAdminCacheList(chatId int64) (bool, AdminCache) {
