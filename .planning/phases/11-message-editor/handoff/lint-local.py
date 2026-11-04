@@ -2,10 +2,11 @@
 """Local stand-in for the CI lint (golangci-lint cannot run in this sandbox).
 Runs on the Go code added since a base commit: the repo's three extra linters (dupl at 100 tokens on non-test files,
   gocyclo over 19, godox TODO/FIXME/BUG) and the default linters that can run here (staticcheck, which includes
-  unused, and errcheck, tests included).
+  unused, errcheck, and the QF quickfix checks via qfcheck, tests included).
 Reports only findings that touch lines added since the base (committed or not), like CI's `new: true`.
 Setup once (one install per tool; go install takes one versioned package at a time):
   for t in github.com/mibk/dupl github.com/fzipp/gocyclo/cmd/gocyclo honnef.co/go/tools/cmd/staticcheck github.com/kisielk/errcheck; do GOBIN=$LINT_TOOLS go install $t@latest; done
+Also build qfcheck once: cd .planning/phases/11-message-editor/handoff/qfcheck && go mod tidy && go build -o $LINT_TOOLS/qfcheck .
 Usage: python3 lint-local.py [base-rev]   (default 72a692b). Exit 1 when something is found."""
 import subprocess, sys, re, os, collections
 SP = os.environ.get("LINT_TOOLS", os.path.expanduser("~/.cache/fuku-lint-tools"))  # dir holding dupl, gocyclo, staticcheck, errcheck
@@ -56,6 +57,12 @@ for pkg in pkgs:
         m = re.match(r"(\S+\.go):(\d+):\d+: ", line)
         if m and int(m.group(2)) in allgo.get(m.group(1), ()):
             problems.append("staticcheck: " + line)
+    for line in run([SP + "/qfcheck", "-tags", "testtools", pkg]).splitlines():   # golangci's staticcheck also runs the QF quickfix checks
+        m = re.match(r"(\S+\.go):(\d+):\d+: ", line)
+        if m:
+            rel = os.path.relpath(m.group(1), os.getcwd()) if os.path.isabs(m.group(1)) else m.group(1)
+            if int(m.group(2)) in allgo.get(rel, ()):
+                problems.append("staticcheck-QF: " + rel + line[len(m.group(1)):])
     for line in run([SP + "/errcheck", "-tags", "testtools", pkg]).splitlines():
         m = re.match(r"(\S+\.go):(\d+):\d+:", line)
         if m and int(m.group(2)) in allgo.get(m.group(1), ()):
