@@ -111,6 +111,29 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_staff_no_group":          {120, 170},
 	"settings_staff_pick_more":         {120, 170},
 
+	// The settings hub and the owner gate (plan 10-02). The ceilings are the UI-SPEC "New
+	// locale keys" columns; the alert and reply rows are held lower than Telegram's 200 so a
+	// long translation still fits.
+	"settings_page_groups":       {14, 18},
+	"settings_page_access":       {14, 18},
+	"settings_btn_groups":        {12, 18},
+	"settings_main_state_line":   {60, 84},
+	"settings_state_access_on":   {20, 28},
+	"settings_state_access_off":  {20, 28},
+	"settings_list_intro":        {80, 112},
+	"settings_list_hint":         {200, 280},
+	"settings_list_empty":        {140, 200},
+	"settings_access_status":     {50, 70},
+	"settings_access_on_desc":    {100, 140},
+	"settings_access_off_desc":   {130, 182},
+	"settings_btn_access_toggle": {36, 40},
+	"settings_access_confirm":    {240, 336},
+	"settings_gate_owner_only":   {120, 160},
+	"settings_access_owner_only": {120, 160},
+	"settings_pick_unavailable":  {120, 160},
+	"settings_refuse_owner_only": {70, 98},
+	"settings_start_owner_only":  {70, 98},
+
 	// The /help entry (plan 09-13).
 	"settings_help_msg": {900, 1260},
 }
@@ -125,6 +148,9 @@ var settingsAlertKeys = []string{
 	"settings_min_value",
 	"settings_max_value",
 	"settings_cannot_open_alert",
+	"settings_gate_owner_only",
+	"settings_access_owner_only",
+	"settings_pick_unavailable",
 }
 
 // settingsAlertMaxRunes is the length Telegram allows an alert.
@@ -146,7 +172,7 @@ func settingsKeys(data map[string]any) map[string]struct{} {
 	return keys
 }
 
-// TestSettingsLocaleKeys guards every settings_ string across all 7 locales. make
+// TestSettingsLocaleKeys guards every settings_ string across all 8 locales. make
 // check-translations only sees keys that are literal GetString arguments, so it cannot
 // catch a key that is empty, too long for the layout, carrying markup it should not or a
 // renamed placeholder.
