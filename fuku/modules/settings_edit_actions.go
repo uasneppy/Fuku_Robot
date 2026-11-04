@@ -257,14 +257,18 @@ func settingsEditRemove(def settingsEditPageDef) func(*settingsPress) *settingsS
 	})
 }
 
-// settingsEditActions are the page's Set, Remove and Cancel actions. Set and Remove need the
-// right of the matching commands, Cancel only the admin check every press makes; all three have
-// t checked before any I/O.
+// settingsEditActions are the page's Set, Remove and Cancel actions and its Full preview. Set
+// and Remove need the right of the matching commands, Cancel and the previews only the admin
+// check every press makes; the first three have t checked before any I/O.
 func settingsEditActions(def settingsEditPageDef) map[string]settingsPageAction {
 	validate := settingsEditValidatePart(def.Key)
-	return map[string]settingsPageAction{
+	actions := map[string]settingsPageAction{
 		def.SetCode:    {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditSet(def)},
 		def.RemoveCode: {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditRemove(def)},
 		def.CancelCode: {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: validate, Run: settingsEditCancel(def)},
 	}
+	if def.FullCode != "" {
+		actions[def.FullCode] = settingsPageAction{Right: settingsRightAdmin, Run: settingsEditFullPreview(def)}
+	}
+	return actions
 }

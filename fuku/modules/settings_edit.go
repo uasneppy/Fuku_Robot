@@ -71,8 +71,9 @@ type settingsEditPageDef struct {
 	// ToggleLabelKey and CleanLabelKey are the labels of the on/off switch and of Delete last
 	// (empty on Rules, which has neither).
 	ToggleLabelKey, CleanLabelKey string
-	// SetCode, RemoveCode and CancelCode are the page's action codes for Set, Remove and Cancel.
-	SetCode, RemoveCode, CancelCode string
+	// SetCode, RemoveCode and CancelCode are the page's action codes for Set, Remove and Cancel;
+	// FullCode is its Full preview.
+	SetCode, RemoveCode, CancelCode, FullCode string
 	// EditRight is the right Set and Remove need, the one the matching commands need.
 	EditRight settingsRight
 	Parts     []settingsEditPart
@@ -108,7 +109,7 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_welcome", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_welcome",
 		ToggleLabelKey: "settings_btn_edit_welcome_toggle", CleanLabelKey: "settings_btn_edit_clean_welcome",
-		SetCode: "ws", RemoveCode: "wr", CancelCode: "wc", EditRight: settingsRightChangeInfo,
+		SetCode: "ws", RemoveCode: "wr", CancelCode: "wc", FullCode: "wf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
@@ -116,7 +117,7 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_goodbye", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_goodbye",
 		ToggleLabelKey: "settings_btn_edit_goodbye_toggle", CleanLabelKey: "settings_btn_edit_clean_goodbye",
-		SetCode: "gs", RemoveCode: "gr", CancelCode: "gc", EditRight: settingsRightChangeInfo,
+		SetCode: "gs", RemoveCode: "gr", CancelCode: "gc", FullCode: "gf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
@@ -319,6 +320,17 @@ func settingsEditPartRows(k *settingsKeyboard, def settingsEditPageDef, st setti
 	}
 }
 
+// settingsEditPreviewRows is the block of the preview buttons, right after the part rows: Full
+// preview, always, two buttons to a row. A page that has no Full preview code draws none.
+func settingsEditPreviewRows(k *settingsKeyboard, def settingsEditPageDef) {
+	if def.FullCode == "" {
+		return
+	}
+	if full, ok := k.button(settingsText(k.view.Tr, "settings_btn_edit_full_preview"), map[string]string{"a": def.FullCode}); ok {
+		k.row(full)
+	}
+}
+
 // settingsEditSwitchRows is the block of the on/off switch and Delete last. Each button sends
 // the absolute target value, so a double tap writes the same value.
 func settingsEditSwitchRows(k *settingsKeyboard, def settingsEditPageDef, st settingsEditState) {
@@ -358,6 +370,7 @@ func renderSettingsEditor(v settingsView, def settingsEditPageDef, st settingsEd
 	body := settingsEditBody(v, def, st)
 	k := newSettingsKeyboard(v)
 	settingsEditPartRows(k, def, st)
+	settingsEditPreviewRows(k, def)
 	settingsEditSwitchRows(k, def, st)
 	settingsEditOpenPrivateRow(k, opts)
 	k.navRow(false)

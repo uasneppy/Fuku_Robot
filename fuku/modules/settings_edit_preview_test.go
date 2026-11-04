@@ -48,11 +48,16 @@ func (c *settingsEditTitleClient) RequestWithContext(
 	if err != nil || method != "getChat" {
 		return raw, err
 	}
-	var chat map[string]any
+	// The chat ID is far beyond 2^53 in these tests, so every other field stays raw JSON.
+	var chat map[string]json.RawMessage
 	if json.Unmarshal(raw, &chat) != nil {
 		return raw, nil
 	}
-	chat["title"] = c.title
+	title, marshalErr := json.Marshal(c.title)
+	if marshalErr != nil {
+		return raw, nil
+	}
+	chat["title"] = title
 	out, marshalErr := json.Marshal(chat)
 	if marshalErr != nil {
 		return raw, nil
@@ -99,7 +104,7 @@ func TestSettingsEditFullPreview(t *testing.T) {
 	answers := env.answerCount()
 	fields := settingsEditPressButton(env, owner, menuID, "settings_btn_edit_full_preview")
 	if fields["a"] != "wf" || fields["c"] != strconv.FormatInt(env.chat.Id, 10) || len(fields) != 2 {
-		t.Fatalf("the Full preview button carries %v, want wf and the group in c", fields)
+		t.Fatalf("the Full preview button carries %v, want wf and the group %d in c", fields, env.chat.Id)
 	}
 
 	sent := settingsEditPreviewSentTo(env, owner.Id, before)
