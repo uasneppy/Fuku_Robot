@@ -163,7 +163,7 @@ extra call.
 |------|-----------------|--------------------|---------------|
 | `/settings` typed in a group | group only, live admin check (existing, unchanged), then the gate | a plain public reply to the command: `settings_refuse_owner_only`. No keyboard. It never mentions the switch, the Access page or the Staff Group | a non-admin gets the existing refusal of `requireLockdownAuthority`; the gate never runs for them, so the new text never reaches a member |
 | Anonymous admin in a group | the existing `PromptAnonAdminProof` first; after the proof tap the tapper is the sender and is checked live, then gated as above (D-17) | the same `settings_refuse_owner_only` | the proof tap of a non-admin gets the existing refusal |
-| `/start settings_<chat id>` in private | strict payload parse, live check, then the gate, then one `getChat` | a plain reply `settings_start_owner_only`, no keyboard, no menu | bad payload `settings_start_invalid`; not an admin, or bot missing or group gone at the live check, `settings_start_not_admin` (the same words, unchanged, so the reply never tells anyone whether the bot is in a chat); lookup error `settings_check_failed` |
+| `/start settings_<chat id>` in private | strict payload parse, live check, then the gate, then one `getChat` | a plain reply `settings_start_owner_only`, no keyboard, no menu | bad payload `settings_start_invalid`; not an admin (any non-admin status), or **any Telegram 4xx client error** at the live `getChatMember` (bot missing, group gone, chat not found, forbidden, bad request, any wording, whether or not `chat_status.IsBotMissingError` recognises its text), `settings_start_not_admin` (the same words a plain non-member gets, so the reply never tells anyone whether the bot is in a chat); a failure that is not a client error (transport error, timeout, 5xx, 429, unreadable answer) `settings_check_failed`. After the gate, the one `getChat`: a 4xx client error, or a chat that is not a `group` or `supergroup`, `settings_start_not_admin` as well (the neutral refusal); a failure that is not a client error `settings_check_failed`. The class rule (a 4xx answer, never its wording) **overrides Phase 9's phrase-based mapping for this door**, which sent the three `IsBotMissingError` phrases to `settings_start_not_admin` and every other wording to `settings_check_failed`, and sent a gone or non-group chat at `getChat` to `settings_cannot_open` |
 | A button press (any menu, any page, Close included) | the Phase 9 steps 1 to 4, then the gate, then the control's right | an alert `settings_gate_owner_only`; the menu is left exactly as it is (D-10) | not an admin `settings_not_admin`; lookup error `settings_check_failed` |
 | Pick from the private list (`pk`) | the press pipeline with the pick overrides below (`settings_pick_unavailable` replaces `settings_not_admin` and the cannot-open edit, and answers every Telegram client error (any 4xx) at `getChatMember` and `getChat`, whatever its wording) | the same alert `settings_gate_owner_only`, and the list stays | the pick rules below; `settings_check_failed` only for transport errors, timeouts, 5xx and 429 |
 
@@ -209,7 +209,7 @@ Rules that hold for every refusal this phase adds (the checker's privacy dimensi
 |---|------|
 | R1 | A gate refusal is produced only after the presser's live status is proven to be creator or administrator of that group, so it tells no non-admin anything. It is never shown for a failed or unproven check. |
 | R2 | No refusal, alert, notice, list text or hint contains a group title, a chat ID or the words "Staff Group", in any of the 8 languages. The refusals name no setting, switch or page (the in-menu alert says "the owner", never "Access"). |
-| R3 | Where the presser is not proven an admin of the group named in the request (deep link, forged `c` in a pick), the answer is the same text and has the same effect whether the bot is in that chat or not, the chat is gone, or it is not a group. For the pick door this is spelled out in "The pick rules": every non-admin outcome and every Telegram client error (any 4xx, whatever its wording) at every step answers `settings_pick_unavailable`, the list stays, nothing is edited. |
+| R3 | Where the presser is not proven an admin of the group named in the request (deep link, forged `c` in a pick), the answer is the same text and has the same effect whether the bot is in that chat or not, the chat is gone, or it is not a group. For the pick door this is spelled out in "The pick rules": every non-admin outcome and every Telegram client error (any 4xx, whatever its wording) at every step answers `settings_pick_unavailable`, the list stays, nothing is edited. For the deep link door the same class rule applies with its own text: every non-admin status and every Telegram 4xx at the `getChatMember` step answers `settings_start_not_admin`, and a 4xx or a non-group at the later `getChat` step answers it too; only failures that are not a client error (transport, timeout, 5xx, 429, unreadable answer) answer `settings_check_failed`, because none of them depends on the named chat. |
 | R4 | The public group reply (`settings_refuse_owner_only`) never mentions the switch, the Access page or what an owner could do. |
 | R5 | The empty-list text is one text for every user. It never changes with what the bot knows about the person. |
 | R6 | When anything is unclear (unreadable switch, unknown right) the gate refuses. |
@@ -464,6 +464,16 @@ Let the admins of this group change its settings? Every admin of this group, now
 - The page is not a "live state" page, so it has no Updated line.
 - The Access page never mentions the Staff Group, in a private menu or a group menu.
 
+### Focal points
+
+Each screen has one primary anchor the eye lands on first; everything else on it is secondary.
+
+| Screen | Primary focal point |
+|--------|---------------------|
+| Private group list | The group title buttons: the stack of full-width, plain title buttons is the only thing to act on; the intro line only tells the reader to pick one, and the hint, `Page` line and Close are secondary |
+| Main | The group line (bold title plus chat ID) together with the status block beneath it: the page answers "which group, and what state is it in" first, and the grid buttons are the way to act on a line of that block |
+| Access | The toggle button `Admins can change settings: {state}`: its label repeats the current state shown in the status line above it, and it is the one control on the page (on the ON card, the question text above `[ Yes \| No ]` takes the anchor) |
+
 ---
 
 ## Callback data (64-byte cap)
@@ -604,10 +614,11 @@ who is not proven an admin of it (rules R1 to R7).
 | In-menu alert, any press | `settings_gate_owner_only` | Only this group's owner can use these settings now. Nothing changed. | a gated admin's next press on an open menu, or a pick of a stale row (D-10) | step 4b runs after step 4 proved the presser is an admin |
 | Access control by a non-owner | `settings_access_owner_only` | Only the group's owner can change who may use these settings. Nothing changed. | an allowed admin's forged press of an Access control, or a Yes after the creator changed | says "the owner" and "who may use", never the page or switch name |
 | Pick of an unusable group | `settings_pick_unavailable` | I can't open that group's settings right now. Send /settings again to get a fresh list. | a pick whose group is no longer usable for the presser: not an admin of it (any non-admin status), Telegram answered the lookup with a client error (any 4xx, whatever its wording, so the bot not in the chat, the group gone and any unrecognised refusal), not a group or supergroup | one text for every one of those, so a forged `c` learns nothing about the bot's membership (R3), even when Telegram's wording is one `IsBotMissingError` does not know; it replaces `settings_not_admin` and the cannot-open edit at a pick only |
-| Lookup failed without a client error (pick, press, deep link) | `settings_check_failed` | (Phase 9 wording) | transport error, timeout, 5xx, 429 or an unreadable answer; at a pick this applies to both the `getChatMember` and the `getChat` step | none of these depends on which chat was named, so the answer reveals nothing about it |
+| Deep link: not an admin, or any Telegram 4xx (R3) | `settings_start_not_admin` | (Phase 9 wording, unchanged) | `/start settings_<id>` where the live `getChatMember` shows any non-admin status or returns any Telegram 4xx client error (bot not in the chat, group gone, forbidden, bad request, any wording), and the later `getChat` returns a 4xx or a chat that is not a group or supergroup. By class, never by wording; this overrides Phase 9's three-phrase mapping for the deep link door | the same words a plain non-member gets, so a forged payload learns nothing about the bot's membership |
+| Lookup failed without a client error (pick, press, deep link) | `settings_check_failed` | (Phase 9 wording) | transport error, timeout, 5xx, 429 or an unreadable answer; at a pick and at the deep link this applies to both the `getChatMember` and the `getChat` step | none of these depends on which chat was named, so the answer reveals nothing about it |
 | Gate cannot decide (any door) | `settings_check_failed` | (Phase 9 wording) | the switch is unreadable, or the owner-state read failed, timed out or was unusable | reached only for a proven admin; says nothing about whether an owner exists (R7) |
 | Empty list | `settings_list_empty` + `settings_list_hint` | There are no groups to show here. Only a group's owner can change its settings, unless the owner lets admins in. If a group you own is missing, ... | no recorded groups for the user | identical for everyone (R5) |
-| Existing, unchanged | `settings_start_not_admin`, `settings_start_invalid`, `settings_not_admin`, `settings_check_failed`, `settings_not_your_menu`, `lockdown_alert_post_as_yourself` | (Phase 9 wording) | their Phase 9 conditions (`settings_not_admin` is not used at a pick) | already reviewed in Phase 9 |
+| Existing, unchanged | `settings_start_not_admin`, `settings_start_invalid`, `settings_not_admin`, `settings_check_failed`, `settings_not_your_menu`, `lockdown_alert_post_as_yourself` | (Phase 9 wording) | their Phase 9 conditions, except that `settings_not_admin` is not used at a pick and `settings_start_not_admin` now covers every 4xx at the deep link (rows above) | already reviewed in Phase 9 |
 
 Group menu privacy: the gate refusals above are only ever produced for an admin who typed or pressed them, and none
 carries a group or Staff Group name, so a group menu's text and alerts stay free of the Staff Group (D-21, D-32).
@@ -658,6 +669,7 @@ characters so a long translation still fits Telegram's 200.
 | Every page's group line is line 2 | The private group list has no group line (it manages no group) |
 | Press pipeline steps 1 to 5 | Step 4b (the owner gate, with its owner-state read) is added; step 5 gains `settingsRightOwner` |
 | Step 4 refusals: non-admin is `settings_not_admin`; a bot-missing error is the cannot-open edit | Unchanged for every action except `pk`, where a non-admin status and every Telegram client error (any 4xx, not only the three phrases `IsBotMissingError` knows) at `getChatMember` and `getChat` answer `settings_pick_unavailable` and edit nothing (R3) |
+| Deep link: only the three `IsBotMissingError` phrases at `getChatMember` answer `settings_start_not_admin`; any other lookup error is `settings_check_failed`; a gone or non-group chat at `getChat` is `settings_cannot_open` | Class-based: every Telegram 4xx at `getChatMember`, and every 4xx or non-group at `getChat`, answers `settings_start_not_admin` (the words a plain non-member gets); `settings_check_failed` only for transport, timeout, 5xx, 429 and unreadable answers. This overrides the phrase-based mapping for the deep link door (R3). A proven admin whose gate refuses still gets `settings_start_owner_only` |
 | Authority-parity tests: the menu refuses what the command refuses | A documented carve-out (D-19): the menu is now stricter than the commands for a non-owner admin while the switch is off. For every control, "the menu allows" implies "the command allows" and an owner or an allowed admin is refused exactly where the command refuses; the commands are not tightened. The Access controls have no command, so they get a drift test and an owner-authority test instead of a parity test |
 | `<code>` only for chat IDs | Also for a command the reader must send in another chat (`settings_list_hint`) |
 | 7 locales | 8 locales (en, es, fr, hi, id, pt, ru, uk); `AGENTS.md`, `CLAUDE.md` lists and the locale tests say 8 (PLAT-05) |
@@ -683,7 +695,7 @@ Applicable state considerations resolved: 18 covered, 3 backstop, 4 unresolved.
 | stale | list drawn before a demotion, an ownership change or a switch flip; a menu left open after OFF; an old ON card | ✅ covered | every pick and press is live-checked (the rows are only a hint); a stale pick answers an alert and the list stays; an open menu is refused on its next press; the lazy 5-minute card expiry |
 | double-submit | repeated tap on the toggle, Yes pressed twice, Next pressed twice | ✅ covered | the toggle sends an absolute value (`v`), so a repeat is idempotent; the OFF write and the ON write are idempotent; "message is not modified" is success |
 | cross-replica | a flip on replica A, the next press on replica B | ✅ covered | the gate reads the switch fresh (or a `skipLocal` key) and the redraw after a write comes from the apply result; the owner-state read is live on every replica, its only memo being a 30 s per-replica positive one that can only keep an admin out; planner adds the two-instance test (D-12) |
-| privacy | a refusal that reveals a group or the bot's presence; the Staff Group in any new text | ✅ covered | rules R1 to R7, the pick's single neutral alert for every non-admin outcome and every Telegram client error (4xx, by class and not by wording), the identical empty-list text, no new key names a group or the Staff Group, and `TestSettingsStaffPrivacy` is extended to render the list, Main and Access screens |
+| privacy | a refusal that reveals a group or the bot's presence; the Staff Group in any new text | ✅ covered | rules R1 to R7, the pick's single neutral alert for every non-admin outcome and every Telegram client error (4xx, by class and not by wording), the deep link's `settings_start_not_admin` for the same set (4xx by class, overriding Phase 9's phrase mapping), the identical empty-list text, no new key names a group or the Staff Group, and `TestSettingsStaffPrivacy` is extended to render the list, Main and Access screens |
 | unavailable | a group where the bot lost its admin rights or left | ✅ covered | the row is hidden when the record is cleared (D-02, D-06); a stale row answers `settings_pick_unavailable` at the pick |
 | no owner | a group whose creator account is gone | ✅ covered | admins are let in, still live-checked, when the owner-state read shows no creator entry; if the read fails they are refused (R7); nobody sees Access (D-15) |
 | language | private menu versus group menu | ✅ covered | the list and a private menu speak the opener's language, a group menu the group's (D-18); Access strings are true to any reader of a group menu |
@@ -733,7 +745,7 @@ No UI library, icon set, font or CSS framework is used. The registry vetting gat
 | D-17 (anonymous owner) | the doors table, the anonymous row |
 | D-18 (language, Staff Group privacy) | the list door and the privacy rows; no new key names the Staff Group |
 | D-19 (one apply function, parity carve-out) | Access switch closing paragraph, "Changes to Phase 9 rules" |
-| D-20 (two-column grid with Close, Back on every page, 8 locales), as clarified in 10-CONTEXT.md | Main grid, Close and Back, the 8-locale statements. "Every page" is every page of a group's menu, and each has Back; the private list is the top level of the hub (no parent, Close only, like the v1.0 main menu) and a private Main page's Back slot holds `⬅️ Groups` back to it. Compliant, not a deviation (see the list's Navigation row) |
+| D-20 (two-column grid with Close, Back on every page, 8 locales), as clarified in 10-CONTEXT.md | Main grid, Close and Back, the 8-locale statements. "Every page" is every page of a group's menu, and each has Back; the private list is the top level of the hub (no parent, Close only, like the v1.0 main menu) and a private Main page's Back slot holds `⬅️ Groups` back to it. Compliant (see the list's Navigation row) |
 
 ---
 
@@ -748,6 +760,11 @@ No UI library, icon set, font or CSS framework is used. The registry vetting gat
   `getChat`, classified by status code and not by wording, so `IsBotMissingError`'s three phrases are a subset) answer
   `settings_pick_unavailable` and keep the list; it must not call `cannotOpen()` and must not use `settings_not_admin`
   for those cases. Only transport errors, timeouts, 5xx, 429 and unreadable answers answer `settings_check_failed`.
+- The deep link handler (`settingsStartDeepLink`) classifies its two lookups like the pick does: a Telegram 4xx
+  (`gotgbot.TelegramError` with a client status code) at `getChatMember`, and a 4xx or a non-group type at `getChat`,
+  answer `settings_start_not_admin`; transport, timeout, 5xx, 429 and unreadable answers answer `settings_check_failed`.
+  This replaces the `chat_status.IsBotMissingError` phrase check and the `settings_cannot_open` answer at that door;
+  share one classifier with the pick so the two doors cannot drift.
 - The gate is one function (the step 4b decision) shared by all five doors; the owner-state read (`getChatAdministrators`
   scan, 3 s timeout, per-chat singleflight, 30 s positive-only memo) lives behind a test seam. The binding part is the
   outcomes in "The owner-state read"; plan-phase research may replace the mechanism if the same outcomes hold.
@@ -761,10 +778,19 @@ No UI library, icon set, font or CSS framework is used. The registry vetting gat
     four answer `settings_pick_unavailable`. An unrecognised 4xx wording (a Telegram client error whose text
     `IsBotMissingError` does not match, for example a bad request with unusual wording or a 403 with a description
     outside the three known phrases) at `getChatMember`, and again at `getChat`, still answers
-    `settings_pick_unavailable` with the same effect as the four cases above. A transport error, a timeout and a 5xx
-    answer `settings_check_failed` at both steps. An admin presser whose gate refuses answers
+    `settings_pick_unavailable` with the same effect as the four cases above. A transport error, a timeout, a 5xx and a
+    429 rate limit answer `settings_check_failed` at both the `getChatMember` and the `getChat` step. An admin presser whose gate refuses answers
     `settings_gate_owner_only`, and a proven admin whose gate cannot decide answers `settings_check_failed` (R7
     unchanged); in every case the list stays.
+  - Deep link, same answer (R3): `/start settings_<id>` answers `settings_start_not_admin` with the same text and effect
+    (no menu, no keyboard, nothing written) for a plain non-member of a chat the bot is in, a chat the bot is not in, a
+    chat that is gone, and an unrecognised 4xx wording at `getChatMember` (a Telegram client error whose text
+    `IsBotMissingError` does not match, for example a bad request or a 403 with a description outside the three known
+    phrases): the reply is identical to a non-member's. At the later `getChat` step a 4xx and a chat that is not a group
+    or supergroup also answer `settings_start_not_admin`. A 429, a transport error, a timeout and a 5xx answer
+    `settings_check_failed` at both the `getChatMember` and the `getChat` step. A proven admin whose gate refuses still
+    answers `settings_start_owner_only`, and a proven admin whose gate cannot decide answers `settings_check_failed`
+    (R1, R7 unchanged).
   - Gate, owner-state read: creator makes no `getChatAdministrators` call; an admin with the switch on makes none; an
     admin with the switch off and a creator entry for another user is refused with the gated text; an admin with the switch
     off and no creator entry is let in; an error, a timeout, an empty list, and a list without the presser's own entry each
