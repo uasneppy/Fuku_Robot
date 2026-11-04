@@ -42,7 +42,7 @@ var (
 // after start, so the private list is filled soon after a deploy (the backfill, D-05). A
 // variable so tests can shorten it.
 var adminIndexSweepFirstDelay = func() time.Duration {
-	return 30*time.Second + time.Duration(rand.IntN(61))*time.Second
+	return 30*time.Second + time.Duration(rand.IntN(61))*time.Second // #nosec G404 -- start-up jitter for scheduling, not a security value
 }
 
 // adminIndexSweepCycleHook, when not nil, runs at the start of every cycle. Production leaves
