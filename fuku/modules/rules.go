@@ -68,20 +68,11 @@ func applyRulesClear(ctx context.Context, chatID int64) rulesApplyResult {
 // finishRulesApply turns the error of the rules write into the apply result. A failed
 // read-back is only logged, because the write succeeded.
 func finishRulesApply(ctx context.Context, chatID int64, what string, writeErr error) rulesApplyResult {
-	if writeErr != nil {
-		log.Errorf("[Rules] Failed to %s rules for chat %d: %v", what, chatID, writeErr)
-		return rulesApplyResult{Outcome: greetingSaveFailed, Err: writeErr}
-	}
-	result := rulesApplyResult{Outcome: greetingApplied}
-	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
-	defer cancel()
-	stored, err := rules.LoadRulesContext(readCtx, chatID)
-	if err != nil {
-		log.Warnf("[Rules] read back rules of chat %d after %s: %v", chatID, what, err)
-		return result
-	}
-	result.Rules = stored
-	return result
+	stored, outcome, err := applyReadBack(ctx, writeErr,
+		func(e error) { log.Errorf("[Rules] Failed to %s rules for chat %d: %v", what, chatID, e) },
+		func(e error) { log.Warnf("[Rules] read back rules of chat %d after %s: %v", chatID, what, e) },
+		func(c context.Context) (string, error) { return rules.LoadRulesContext(c, chatID) })
+	return rulesApplyResult{Outcome: outcome, Rules: stored, Err: err}
 }
 
 //nolint:dupl // clearRules has similar structure to resetRulesBtn

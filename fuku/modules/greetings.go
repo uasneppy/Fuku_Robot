@@ -193,24 +193,44 @@ var greetingWrites = struct {
 // greetingApplyTimeout bounds the read-back an apply function makes after its write.
 const greetingApplyTimeout = 5 * time.Second
 
+// applyReadBack is the shared tail of the greeting and rules apply functions. A failed
+// write is reported through logWriteFailure and comes back as greetingSaveFailed with the
+// write error. A stored write reads its value back with read, under its own timeout that
+// outlives a cancelled request. A failed read-back is only reported through logReadFailure,
+// because the write succeeded: the outcome is still greetingApplied and the value is the
+// zero value, so the caller reloads.
+func applyReadBack[T any](
+	ctx context.Context,
+	writeErr error,
+	logWriteFailure, logReadFailure func(error),
+	read func(context.Context) (T, error),
+) (T, greetingApplyOutcome, error) {
+	var zero T
+	if writeErr != nil {
+		logWriteFailure(writeErr)
+		return zero, greetingSaveFailed, writeErr
+	}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
+	defer cancel()
+	value, err := read(readCtx)
+	if err != nil {
+		logReadFailure(err)
+		return zero, greetingApplied, nil
+	}
+	return value, greetingApplied, nil
+}
+
 // finishGreetingApply turns the error of one greeting write into the apply result: a
 // failure is logged with the chat ID and returned as greetingSaveFailed, a success reads
 // the stored row back. A failed read-back is only logged, because the write succeeded.
 func finishGreetingApply(ctx context.Context, chatID int64, what string, writeErr error) greetingApplyResult {
-	if writeErr != nil {
-		log.Errorf("[Greetings] %s failed for chat %d: %v", what, chatID, writeErr)
-		return greetingApplyResult{Outcome: greetingSaveFailed, Err: writeErr}
-	}
-	result := greetingApplyResult{Outcome: greetingApplied}
-	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
-	defer cancel()
-	settings, err := greetings.LoadSettingsContext(readCtx, chatID)
-	if err != nil {
-		log.Warnf("[Greetings] read back settings of chat %d after %s: %v", chatID, what, err)
-		return result
-	}
-	result.Settings = settings
-	return result
+	settings, outcome, err := applyReadBack(ctx, writeErr,
+		func(e error) { log.Errorf("[Greetings] %s failed for chat %d: %v", what, chatID, e) },
+		func(e error) { log.Warnf("[Greetings] read back settings of chat %d after %s: %v", chatID, what, e) },
+		func(c context.Context) (*models.GreetingSettings, error) {
+			return greetings.LoadSettingsContext(c, chatID)
+		})
+	return greetingApplyResult{Outcome: outcome, Settings: settings, Err: err}
 }
 
 // applyWelcomeEnabled stores the welcome switch. The value is absolute, so a repeated
