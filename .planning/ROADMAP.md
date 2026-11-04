@@ -98,19 +98,20 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Only the live owner sees and can press "Admins can change settings". While it is on, live administrators get the full menu as in v1.0. A change takes effect on every replica at the next press. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
   4. The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
   5. Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` describes the 8-locale set.
-**Plans:** 10 plans in 7 waves
+**Plans:** 11 plans in 8 waves
 
 Plans:
 - [ ] 10-01-PLAN.md — the switch and roster tables and their repositories, concurrent replaces serialized per chat (wave 1)
 - [ ] 10-02-PLAN.md — the 19 new strings and the new /help text in all 8 locales, the sizing tests and the regenerated docs (wave 1)
 - [ ] 10-03-PLAN.md — the locale-set guard test and the 8-locale wording of the project documents (wave 1)
 - [ ] 10-04-PLAN.md — the settings test harness, the PostgreSQL integrity list and the AGENTS.md rules for the new tables and the 8 locales (wave 2)
-- [ ] 10-05-PLAN.md — the owner gate on in-group /settings, every press and the deep link (wave 3)
+- [ ] 10-05-PLAN.md — the owner gate on in-group /settings (with the anonymous re-entry) and every press (wave 3)
 - [ ] 10-06-PLAN.md — the owner-only Access page: two taps on, one tap off, every replica at the next press (wave 4)
 - [ ] 10-07-PLAN.md — the roster feed from admin-list loads, promotions, demotions and the bot leaving (wave 4)
-- [ ] 10-08-PLAN.md — the startup backfill, the hourly sweep and the group /settings repair path (wave 5)
-- [ ] 10-09-PLAN.md — the private group list and the pick (wave 6)
-- [ ] 10-10-PLAN.md — the two-column Main grid with the status block and the Groups button, the owner's live checks and the phase gate (wave 7)
+- [ ] 10-08-PLAN.md — the startup backfill, the hourly sweep and the group /settings repair path (wave 6)
+- [ ] 10-09-PLAN.md — the private group list and the pick (wave 7)
+- [ ] 10-10-PLAN.md — the two-column Main grid with the status block and the Groups button, the owner's live checks and the phase gate (wave 8)
+- [ ] 10-11-PLAN.md — the owner gate and the 4xx class rule on the deep link, every door deciding the same, and the permissions reference (wave 5)
 **UI hint**: yes
 
 ### Phase 11: Message Editor
