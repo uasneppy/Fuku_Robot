@@ -238,10 +238,10 @@ func settingsEditRemove(def settingsEditPageDef) func(*settingsPress) *settingsS
 		if !settingsEditPartIsSet(st, part) {
 			return settingsEditRedraw(p, def, settingsNoticeWarn(settingsText(p.tr, "settings_edit_nothing_to_remove")))
 		}
-		notice := ""
+		var notice string
 		outcome, stored := settingsEditApplyRemove(ctx, def, part, p.group.Id)
-		switch {
-		case outcome == greetingSaveFailed:
+		switch outcome {
+		case greetingSaveFailed:
 			log.Errorf("[Settings] Remove %s of chat %d failed", part, p.group.Id)
 			notice = settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed"))
 		default:
