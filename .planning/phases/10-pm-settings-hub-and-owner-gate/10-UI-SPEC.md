@@ -1,10 +1,11 @@
 ---
 phase: "10"
 slug: "pm-settings-hub-and-owner-gate"
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: "2026-11-04"
+reviewed_at: "2026-11-04"
 ---
 
 # Phase 10 - UI Design Contract
@@ -150,7 +151,12 @@ CURRENT state (`Admins can change settings: ❌ Off`) and pressing it flips it.
 
 ## Interaction Contract
 
-### The four doors and the gate (MENU-11, MENU-13, D-13, D-15, D-16, D-17)
+### The doors and the gate (MENU-11, MENU-13, D-13, D-15, D-16, D-17)
+
+**Definition (governs every "Telegram client error", "any 4xx" and "4xx" in this document):** a Telegram client error is a
+4xx answer from Telegram **other than 429**. A 429 (rate limit) depends on load and not on the named chat, so it is grouped
+with transport errors, timeouts, 5xx and unreadable answers as "a failure that is not a client error", and answers
+`settings_check_failed` at every door. Wherever this document says "any 4xx", read "any 4xx except 429".
 
 Every way in re-checks the person live with `getChatMember` against the group it affects (never the admin cache or
 Redis), and the owner gate sits on top of that check. The gate's answer for a person whose live status is
@@ -691,7 +697,7 @@ Applicable state considerations resolved: 18 covered, 3 backstop, 4 unresolved.
 | gate read fails | switch unreadable, owner-state read fails, times out or is unusable | ✅ covered | unknown refuses with `settings_check_failed` on every door (R6, R7); never lets the admin in, never answers the gated-admin text; 3 s bound, singleflight, positive-only memo |
 | partial | a Main page whose `MainState` read fails | ✅ covered | the status line keeps its place with `❔` as the state |
 | loading | list page, Main status block, Access page | ✅ covered | the list and Access are database-only reads with no Telegram call; Main's states are database reads (Phase 9), so no spinner state exists; the callback is answered once and the message edited in place. The gate's only Telegram call (owner-state read) runs before the answer and is bounded at 3 s |
-| permissions | live owner, allowed admin, gated admin, non-admin, demoted opener, service identity, anonymous admin | ✅ covered | "The four doors and the gate" table: each door's refusal, step 4b, `settingsRightOwner`, proof tap then live check of the tapper |
+| permissions | live owner, allowed admin, gated admin, non-admin, demoted opener, service identity, anonymous admin | ✅ covered | "The doors and the gate" table: each door's refusal, step 4b, `settingsRightOwner`, proof tap then live check of the tapper |
 | stale | list drawn before a demotion, an ownership change or a switch flip; a menu left open after OFF; an old ON card | ✅ covered | every pick and press is live-checked (the rows are only a hint); a stale pick answers an alert and the list stays; an open menu is refused on its next press; the lazy 5-minute card expiry |
 | double-submit | repeated tap on the toggle, Yes pressed twice, Next pressed twice | ✅ covered | the toggle sends an absolute value (`v`), so a repeat is idempotent; the OFF write and the ON write are idempotent; "message is not modified" is success |
 | cross-replica | a flip on replica A, the next press on replica B | ✅ covered | the gate reads the switch fresh (or a `skipLocal` key) and the redraw after a write comes from the apply result; the owner-state read is live on every replica, its only memo being a 30 s per-replica positive one that can only keep an admin out; planner adds the two-instance test (D-12) |
@@ -803,18 +809,21 @@ No UI library, icon set, font or CSS framework is used. The registry vetting gat
   Phase 9 `settings_` keys; this phase adds 19 keys and changes `settings_help_msg` in all 8 files. Whether to fill older
   uk gaps is the owner's call (STATE).
 - Update `AGENTS.md` in the same commit: the locale count (8), the new callback codes and namespace, the gate step 4b and
-  the owner-state read, the pick's neutral answers, the Access table's read policy and backup status, the sweeper and its drain.
+  the owner-state read, the pick's neutral answers, the deep link's reclassification (the Handlers bullet for the `settings_` deep link still
+  describes the Phase 9 three-phrase mapping and `settings_cannot_open` at `getChat`; it becomes the class rule: every 4xx
+  except 429 at `getChatMember` or `getChat`, and a non-group chat, answer `settings_start_not_admin`), the Access table's
+  read policy and backup status, the sweeper and its drain.
 
 ---
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS (no colour exists; status icons substitute)
-- [ ] Dimension 4 Typography: PASS (HTML tags substitute)
-- [ ] Dimension 5 Spacing: PASS (message layout substitutes)
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS (no colour exists; status icons substitute)
+- [x] Dimension 4 Typography: PASS (HTML tags substitute)
+- [x] Dimension 5 Spacing: PASS (message layout substitutes)
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
 
-**Approval:** pending
+**Approval:** approved 2026-11-04 (checker review 4; revisions: 3, the third by the owner's choice beyond the usual cap)
