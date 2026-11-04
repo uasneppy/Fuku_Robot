@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 11-06-PLAN.md
-last_updated: "2026-11-04T17:09:35.350Z"
+stopped_at: Completed 11-07-PLAN.md
+last_updated: "2026-11-04T17:22:03.223Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 4be989283edc6ee7babb1e7e5cf8e125762dd390
+state_head: c7227a181acc504a5b2568adb46bdcac45eaf6b2
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 17
+  completed_plans: 18
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 7 of 14
+Plan: 8 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -92,6 +92,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P04 | 15min | 2 tasks | 10 files |
 | Phase 11 P05 | 25min | 3 tasks | 4 files |
 | Phase 11 P06 | 20min | 2 tasks | 3 files |
+| Phase 11 P07 | 35min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,8 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-02: content.TextLengthRefusal/ValidButtonURL/ExtractMedia and formatting.FillPlaceholders/VisibleLength are the shared rule functions the commands call and the editor reuses; FillPlaceholders makes no Telegram call and no database read
 - [Phase 11]: 11-04: wait-ended note puts {part} in parentheses in es, fr, pt, uk and ru so one lower-case noun fits every grammar
 - [Phase 11]: 11-04: uk and hi name 'the start button' instead of quoting Telegram's localized Start label
+- [Phase 11]: [11-07] The Cancel script has a fifth outcome: no wait but a marker means the wait expired, and the marker is deleted once the person has been told
+- [Phase 11]: [11-07] /cancel while a claim is held answers settings_edit_cancel_nothing and leaves the wait to the write in flight
 
 ### Pending Todos
 
@@ -218,8 +221,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T17:09:35.188Z
-Stopped at: Completed 11-06-PLAN.md
+Last session: 2026-11-04T17:21:57.045Z
+Stopped at: Completed 11-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
