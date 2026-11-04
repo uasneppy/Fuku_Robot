@@ -518,10 +518,11 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 }
 
 // settingsHelpCommands are the commands settings_help_msg must name: /settings itself and
-// the eleven commands every menu change is the same as.
+// the commands every menu change is the same as.
 var settingsHelpCommands = []string{
 	"/settings", "/linkstaff", "/unlinkstaff", "/unlockdown", "/autolockdown", "/captcha",
 	"/captchamode", "/captchatime", "/captchaaction", "/setflood", "/setfloodmode", "/delflood",
+	"/setwelcome", "/setgoodbye", "/setrules",
 }
 
 // TestSettingsHelpFitsOneMessage holds the /help entry of the settings menu to the UI-SPEC
