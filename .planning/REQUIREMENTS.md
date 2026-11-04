@@ -11,11 +11,11 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 ### PM settings hub and owner gate
 
-- [ ] **MENU-09**: `/settings` in the bot's private chat lists the groups the user may manage (paged), and picking one opens that group's main menu.
-- [ ] **MENU-10**: The list is built from the bot's own record of each group's owner and admins, refreshed whenever the bot loads a group's admin list or sees a promotion or demotion, and cleared when the bot leaves. Every pick is checked live. An empty or incomplete list tells the user to run `/admincache` or `/settings` in the missing group.
-- [ ] **MENU-11**: By default only a group's live owner can open and change its settings: in the PM list, through in-group `/settings`, through the `/start settings_<chat id>` deep link and on every button press.
+- [x] **MENU-09**: `/settings` in the bot's private chat lists the groups the user may manage (paged), and picking one opens that group's main menu.
+- [x] **MENU-10**: The list is built from the bot's own record of each group's owner and admins, refreshed whenever the bot loads a group's admin list or sees a promotion or demotion, and cleared when the bot leaves. Every pick is checked live. An empty or incomplete list tells the user to run `/admincache` or `/settings` in the missing group.
+- [x] **MENU-11**: By default only a group's live owner can open and change its settings: in the PM list, through in-group `/settings`, through the `/start settings_<chat id>` deep link and on every button press.
 - [x] **MENU-12**: The owner can switch "Admins can change settings" on or off from the menu. Only the live owner sees and can press it. While it is on, live administrators get the full menu as in v1.0.
-- [ ] **MENU-13**: While admin access is off, a regular admin does not see the group in their PM list, and in-group `/settings` and the deep link refuse them with a short reply that never names the Staff Group. In-group setting commands (`/setrules`, `/setwelcome`, `/captchamode` and the rest) keep working for admins exactly as before.
+- [x] **MENU-13**: While admin access is off, a regular admin does not see the group in their PM list, and in-group `/settings` and the deep link refuse them with a short reply that never names the Staff Group. In-group setting commands (`/setrules`, `/setwelcome`, `/captchamode` and the rest) keep working for admins exactly as before.
 - [x] **MENU-14**: A change to admin access applies on every replica at once. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
 - [ ] **MENU-15**: The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
 
@@ -133,11 +133,11 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MENU-09 | Phase 10 | Pending |
-| MENU-10 | Phase 10 | Pending |
-| MENU-11 | Phase 10 | Pending |
+| MENU-09 | Phase 10 | Complete |
+| MENU-10 | Phase 10 | Complete |
+| MENU-11 | Phase 10 | Complete |
 | MENU-12 | Phase 10 | Complete |
-| MENU-13 | Phase 10 | Pending |
+| MENU-13 | Phase 10 | Complete |
 | MENU-14 | Phase 10 | Complete |
 | MENU-15 | Phase 10 | Pending |
 | EDIT-01 | Phase 11 | Pending |

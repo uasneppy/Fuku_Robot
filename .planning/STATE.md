@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Completed 10-08-PLAN.md
-last_updated: "2026-11-04T13:58:44.508Z"
+stopped_at: Completed 10-09-PLAN.md
+last_updated: "2026-11-04T14:15:45.927Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: e1f56d016cc45160794c3b0de86e652a6f411f30
+state_head: c5c1cf78b90fd3af1492d2fb82dd79e588c474b0
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 10 (PM Settings Hub and Owner Gate) — EXECUTING
-Plan: 9 of 11
+Plan: 10 of 11
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 10 execution started
 
@@ -84,6 +84,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 10 P07 | 25 min | 2 tasks | 5 files |
 | Phase 10 P11 | 15 min | 2 tasks | 5 files |
 | Phase 10 P08 | 27 min | 3 tasks | 7 files |
+| Phase 10 P09 | 55 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,8 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-11: the settings deep link no longer answers settings_cannot_open; Telegram errors at getChatMember and getChat are classified by isTelegramClientError, and settingsGate runs on the deep link's own member record before getChat
 - [Phase 10]: 10-08: the sweep paces and bounds every Telegram request through a BotClient wrapper (adminIndexPacedClient) from the sweep context; its lock is released by compare-and-delete only when a cancel cut the cycle off
 - [Phase 10]: 10-08: group /settings refreshes the group's roster record after the choice message (second repair path, 10 s, error only logged)
+- [Phase 10]: 10-09: a private chat passes requireSettingsAccess at once and settingsDesc.RequiredChecks is requireSettingsAccess() alone; the pick overrides settings_not_admin and the cannot-open edit with settings_pick_unavailable for every non-admin status and Telegram 4xx except 429 (R3)
+- [Phase 10]: 10-09: list rows sort by the lower-cased collapsed title, or by the chat ID text for a titleless group, so the order matches what the reader sees
 
 ### Pending Todos
 
@@ -197,8 +200,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T13:58:44.454Z
-Stopped at: Completed 10-08-PLAN.md
+Last session: 2026-11-04T14:15:45.852Z
+Stopped at: Completed 10-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
