@@ -23,10 +23,8 @@ const (
 	settingsBoundLabel = "·"
 	// settingsSelectedPrefix marks the selected option of a choice row.
 	settingsSelectedPrefix = "✅ "
-	// settingsUnknownState is appended to a Main page button whose state could not be read.
+	// settingsUnknownState stands in a Main page status line whose state could not be read.
 	settingsUnknownState = "❔"
-	// settingsStateSeparator sits between a page name and its state on a Main page button.
-	settingsStateSeparator = " · "
 	// settingsNameToken stands for the opener's escaped name until after translation.
 	settingsNameToken = "<<settings-name>>"
 	// settingsGroupToken stands for the escaped group title until after translation.
@@ -208,13 +206,33 @@ func (k *settingsKeyboard) row(buttons ...gotgbot.InlineKeyboardButton) {
 	k.rows = append(k.rows, buttons)
 }
 
-// navRow appends the navigation row, which is always the last row: Close alone on the Main
-// page, Back and Close everywhere else.
+// settingsHubGroupsButton is the private Main page's way back to the group list: the shub|v1
+// press `a=lp&v=1` that settingsHubCallback answers by redrawing the list at page 1 in the same
+// message. It returns false when the data does not fit 64 bytes, which it always does.
+func settingsHubGroupsButton(tr *i18n.Translator) (gotgbot.InlineKeyboardButton, bool) {
+	data := encodeCallbackData(settingsHubNamespace, map[string]string{"a": settingsHubActPage, "v": "1"})
+	if data == "" {
+		return gotgbot.InlineKeyboardButton{}, false
+	}
+	return gotgbot.InlineKeyboardButton{Text: settingsText(tr, "settings_btn_groups"), CallbackData: data}, true
+}
+
+// navRow appends the navigation row, which is always the last row. The Main page of a private
+// menu ends with Groups (back to the list) and Close, the Main page of a group menu with Close
+// alone, and every other page with Back and Close (D-20).
 func (k *settingsKeyboard) navRow(main bool) {
 	var buttons []gotgbot.InlineKeyboardButton
-	if !main {
+	switch {
+	case !main:
 		if back, ok := k.button(settingsText(k.view.Tr, "settings_btn_back"), map[string]string{"a": settingsActBack}); ok {
 			buttons = append(buttons, back)
+		}
+	case k.view.Private:
+		if groups, ok := settingsHubGroupsButton(k.view.Tr); ok {
+			buttons = append(buttons, groups)
+		} else {
+			log.Errorf("[Settings] Groups button skipped: callback data does not fit")
+			k.omitted++
 		}
 	}
 	if closeButton, ok := k.button(settingsText(k.view.Tr, "settings_btn_close"), map[string]string{"a": settingsActClose}); ok {
@@ -323,13 +341,13 @@ func settingsToggleButton(k *settingsKeyboard, page, control, label string, on b
 type settingsPage struct {
 	// Key is the p value in callback data.
 	Key string
-	// Order sorts the Main page buttons (Staff Group 10, Lockdown 20, Captcha 30,
+	// Order sorts the Main page grid (Staff Group 10, Lockdown 20, Captcha 30,
 	// Antiflood 40).
 	Order int
 	Icon  string
 	// TitleKey is the locale key of the page name (a literal at the registration).
 	TitleKey string
-	// MainState is the state word shown on the page's Main button. It makes database reads
+	// MainState is the state word shown on the page's line of the Main status block. It makes database reads
 	// only, no Telegram call, and takes no press so the private entry can draw the same
 	// Main page. ok is false when the state could not be read.
 	MainState func(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Chat) (state string, ok bool)
@@ -341,7 +359,7 @@ type settingsPage struct {
 	Actions map[string]settingsPageAction
 	// OwnerOnly marks a page drawn and opened only for the live creator of the group: Main
 	// leaves it out for anyone else without reading its state, and openPage refuses it with
-	// settings_access_owner_only. Plan 10-10 anchors such a page after the grid.
+	// settings_access_owner_only. Main gives such a page its own full-width row after the grid.
 	OwnerOnly bool
 }
 
@@ -427,6 +445,9 @@ type settingsMainEntry struct {
 	Key, Icon, Title, State string
 	// Known is false when the state could not be read.
 	Known bool
+	// OwnerOnly is copied from the page: the entry is drawn on its own full-width row after the
+	// grid and its status line comes last.
+	OwnerOnly bool
 }
 
 // settingsMainEntries asks every registered page for its Main state, in page order. It
@@ -439,7 +460,7 @@ func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Cha
 		if pg.OwnerOnly && !viewerIsOwner {
 			continue
 		}
-		entry := settingsMainEntry{Key: pg.Key, Icon: pg.Icon, Title: settingsText(tr, pg.TitleKey)}
+		entry := settingsMainEntry{Key: pg.Key, Icon: pg.Icon, Title: settingsText(tr, pg.TitleKey), OwnerOnly: pg.OwnerOnly}
 		if pg.MainState != nil {
 			entry.State, entry.Known = pg.MainState(b, tr, group)
 		}
@@ -448,8 +469,13 @@ func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Cha
 	return entries
 }
 
-// renderSettingsMain draws the Main page: the header, the group line, the hint, the
-// opener's name in a group menu, one button per page and Close.
+// renderSettingsMain draws the Main page. The body is the hint, the opener's name in a group
+// menu and, when at least one page is visible, a blank line and the status block: one
+// settings_main_state_line per page in the grid's order, the owner-only pages last. The keyboard
+// is a two-column grid of "icon name" buttons filled left to right in the order given (an odd
+// last one stays alone on a full-width row), then each owner-only page on its own full-width row,
+// then the navigation row. The state sits in the body, never in a button, and is spliced as the
+// page's MainState returned it, which never names the Staff Group (D-21).
 func renderSettingsMain(v settingsView, entries []settingsMainEntry, notice string) settingsScreen {
 	body := []string{settingsText(v.Tr, "settings_main_hint")}
 	if !v.Private {
@@ -457,15 +483,42 @@ func renderSettingsMain(v settingsView, entries []settingsMainEntry, notice stri
 		body = append(body, lockdownSplice(owner, settingsNameToken, staffDisplayTitle(v.OpenerName)))
 	}
 
-	k := newSettingsKeyboard(v)
+	var grid, anchored []settingsMainEntry
 	for _, entry := range entries {
-		label := entry.Icon + " " + entry.Title + settingsStateSeparator
-		if entry.Known {
-			label += entry.State
+		if entry.OwnerOnly {
+			anchored = append(anchored, entry)
 		} else {
-			label += settingsUnknownState
+			grid = append(grid, entry)
 		}
-		if button, ok := k.button(label, map[string]string{"a": settingsActOpen, "p": entry.Key}); ok {
+	}
+	ordered := slices.Concat(grid, anchored)
+	if len(ordered) > 0 {
+		body = append(body, "")
+	}
+	for _, entry := range ordered {
+		state := settingsUnknownState
+		if entry.Known {
+			state = entry.State
+		}
+		body = append(body, settingsText(v.Tr, "settings_main_state_line", i18n.TranslationParams{
+			"icon": entry.Icon, "page": entry.Title, "state": state,
+		}))
+	}
+
+	k := newSettingsKeyboard(v)
+	var pair []gotgbot.InlineKeyboardButton
+	for _, entry := range grid {
+		if button, ok := k.button(entry.Icon+" "+entry.Title, map[string]string{"a": settingsActOpen, "p": entry.Key}); ok {
+			pair = append(pair, button)
+		}
+		if len(pair) == 2 {
+			k.row(pair...)
+			pair = nil
+		}
+	}
+	k.row(pair...)
+	for _, entry := range anchored {
+		if button, ok := k.button(entry.Icon+" "+entry.Title, map[string]string{"a": settingsActOpen, "p": entry.Key}); ok {
 			k.row(button)
 		}
 	}

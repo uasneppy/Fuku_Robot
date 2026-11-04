@@ -723,13 +723,13 @@ func TestSettingsCaptchaReadFailure(t *testing.T) {
 	t.Cleanup(func() { settingsCaptchaRead = previous })
 
 	msgID := env.openMenu(env.admin)
-	_, keyboard := env.lastEdit(env.chat.Id, msgID)
+	mainText, keyboard := env.lastEdit(env.chat.Id, msgID)
 	button, ok := settingsButtonByMarker(keyboard, "settings_page_captcha")
 	if !ok {
 		t.Fatal("no Captcha button on the Main page")
 	}
-	if !strings.HasSuffix(button.Text, " · ❔") {
-		t.Errorf("Captcha button %q does not end with the unreadable state ' · ❔'", button.Text)
+	if line, found := settingsMainStateLine(mainText, "settings_page_captcha"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+		t.Errorf("Captcha status line %q (found %v) does not end with the unknown mark", line, found)
 	}
 
 	before := env.answerCount()

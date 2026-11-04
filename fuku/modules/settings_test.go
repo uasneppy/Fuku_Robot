@@ -61,6 +61,9 @@ func settingsOpenCaptchaPage(t *testing.T, env *settingsEnv) int64 {
 func settingsPageButton(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, pageKey string) (gotgbot.InlineKeyboardButton, bool) {
 	t.Helper()
 	for _, button := range settingsAllButtons(keyboard) {
+		if strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|") {
+			continue
+		}
 		fields := settingsButtonFields(t, button)
 		if fields["a"] == "op" && fields["p"] == pageKey {
 			return button, true
@@ -166,14 +169,16 @@ func TestSettingsTracer(t *testing.T) {
 				pages = append(pages, page)
 			}
 		}
-		if len(keyboard) != len(pages)+1 {
-			t.Fatalf("Main keyboard has %d rows, want one per page (%d) and the Close row", len(keyboard), len(pages))
+		gridRows := (len(pages) + 1) / 2
+		if len(keyboard) != gridRows+1 {
+			t.Fatalf("Main keyboard has %d rows, want %d grid rows (two pages each) and the Close row", len(keyboard), gridRows)
 		}
 		for i, page := range pages {
-			if len(keyboard[i]) != 1 {
-				t.Fatalf("page row %d has %d buttons, want 1", i, len(keyboard[i]))
+			row := keyboard[i/2]
+			if want := min(2, len(pages)-i/2*2); len(row) != want {
+				t.Fatalf("grid row %d has %d buttons, want %d", i/2, len(row), want)
 			}
-			fields := settingsButtonFields(t, keyboard[i][0])
+			fields := settingsButtonFields(t, row[i%2])
 			if len(fields) != 3 || fields["a"] != "op" || fields["u"] != fmt.Sprint(env.admin.Id) || fields["p"] != page.Key {
 				t.Errorf("page %q button fields = %v, want {a: op, u: %d, p: %s}", page.Key, fields, env.admin.Id, page.Key)
 			}
@@ -191,8 +196,8 @@ func TestSettingsTracer(t *testing.T) {
 		if !ok {
 			t.Fatal("no Captcha button on the Main page")
 		}
-		if !strings.Contains(captchaButton.Text, staffMarker("common_status_off")) {
-			t.Errorf("Captcha button %q does not show the Off state of a fresh chat", captchaButton.Text)
+		if line, found := settingsMainStateLine(text, "settings_page_captcha"); !found || !strings.Contains(line, staffMarker("common_status_off")) {
+			t.Errorf("Captcha status line %q (found %v) does not show the Off state of a fresh chat (button %q)", line, found, captchaButton.Text)
 		}
 
 		if got := env.answerCount() - before; got != 1 {

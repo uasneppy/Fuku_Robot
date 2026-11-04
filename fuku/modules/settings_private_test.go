@@ -75,6 +75,10 @@ func TestSettingsStartDeepLink(t *testing.T) {
 			t.Fatal("the private Main page has no buttons")
 		}
 		for _, button := range buttons {
+			if strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|") {
+				// Groups, the way back to the list, is the hub's and names no group.
+				continue
+			}
 			fields := settingsButtonFields(t, button)
 			if fields["c"] != fmt.Sprint(env.chat.Id) {
 				t.Errorf("button %q has c = %q, want the group's chat ID %d", button.Text, fields["c"], env.chat.Id)

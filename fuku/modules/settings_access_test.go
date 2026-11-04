@@ -581,13 +581,13 @@ func TestSettingsAccessReadFailure(t *testing.T) {
 	settingsAccessLookup = func(context.Context, int64) (bool, error) { return false, errors.New("database is down") }
 
 	msgID := env.openMenu(owner)
-	_, main := env.lastEdit(env.chat.Id, msgID)
+	mainText, main := env.lastEdit(env.chat.Id, msgID)
 	button, ok := settingsPageButton(t, main, settingsPageAccess)
 	if !ok {
 		t.Fatalf("the Main page has no Access button: %+v", main)
 	}
-	if !strings.Contains(button.Text, settingsUnknownState) {
-		t.Errorf("the Access button %q does not show the unknown mark", button.Text)
+	if line, found := settingsMainStateLine(mainText, "settings_page_access"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+		t.Errorf("the Access status line %q (found %v) does not show the unknown mark", line, found)
 	}
 
 	env.pressRaw(env.chat, owner, msgID, button.CallbackData)
