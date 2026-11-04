@@ -3,7 +3,9 @@ package modules
 import (
 	"fmt"
 	"html"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	tgmd2html "github.com/PaulSonOfLars/gotg_md2html"
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -13,6 +15,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/content"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
 )
 
 const (
@@ -24,7 +27,20 @@ const (
 	// a message text and of a caption.
 	settingsEditTextLimit    = 4096
 	settingsEditCaptionLimit = 1024
+
+	// settingsEditMaxButtons and settingsEditMaxRowButtons are Telegram's limits of the buttons of
+	// one message and of the buttons in one row.
+	settingsEditMaxButtons    = 100
+	settingsEditMaxRowButtons = 8
+
+	// settingsEditDefaultButtonName is the label a button written with no name gets, as the
+	// commands give it.
+	settingsEditDefaultButtonName = "Greeting"
 )
+
+// settingsEditRulesTokenPattern finds the {rules}, {rules:same} and {rules:up} token that adds the
+// rules button at a join (the same pattern the join fill uses).
+var settingsEditRulesTokenPattern = regexp.MustCompile(`(?s){rules(:(same|up))?}`)
 
 // settingsEditRulesLanguages are the languages the Rules dry run takes the /rules heading in: the
 // group's language can change later, so the longest of them is held to the limit.
@@ -92,11 +108,17 @@ func settingsEditCheck(in settingsEditCheckInput) settingsEditVerdict {
 	if in.Msg == nil {
 		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
 	}
-	if in.Part == settingsEditPartText {
-		if in.Def.Kind == settingsEditRules {
-			return settingsEditCheckRulesText(in)
-		}
+	switch {
+	case in.Part == settingsEditPartText && in.Def.Kind == settingsEditRules:
+		return settingsEditCheckRulesText(in)
+	case in.Part == settingsEditPartText:
 		return settingsEditCheckGreetingText(in)
+	case in.Def.Kind == settingsEditRules:
+		// Rules has a text part only.
+	case in.Part == settingsEditPartMedia:
+		return settingsEditCheckMedia(in)
+	case in.Part == settingsEditPartButtons:
+		return settingsEditCheckButtons(in)
 	}
 	return settingsEditRefusal("settings_edit_refuse_need_text", nil)
 }
@@ -140,10 +162,15 @@ func settingsEditCheckGreetingText(in settingsEditCheckInput) settingsEditVerdic
 	return settingsEditVerdict{OK: true, Text: stored}
 }
 
+// settingsEditOverLimit is a refusal that names how long the message would be and the limit.
+func settingsEditOverLimit(key string, n, limit int) settingsEditVerdict {
+	return settingsEditRefusal(key, i18n.TranslationParams{"n": n, "max": limit})
+}
+
 // settingsEditTooLong is the refusal of a message that is too long once its placeholders or its
 // heading are filled in.
 func settingsEditTooLong(n, limit int) settingsEditVerdict {
-	return settingsEditRefusal("settings_edit_refuse_too_long_filled", i18n.TranslationParams{"n": n, "max": limit})
+	return settingsEditOverLimit("settings_edit_refuse_too_long_filled", n, limit)
 }
 
 // settingsEditWorstUser is the member whose names make a filled message longest: 64 letter first
@@ -221,4 +248,81 @@ func settingsEditRulesHeadings(title string) []string {
 		}
 	}
 	return headings
+}
+
+// settingsEditCheckMedia accepts exactly one message with media of a kind the commands store (a
+// video note, which cannot carry the text, and everything that is not media are refused) and
+// holds the stored text to the caption limit, because the text is sent as its caption.
+func settingsEditCheckMedia(in settingsEditCheckInput) settingsEditVerdict {
+	if in.Msg.Text != "" {
+		return settingsEditRefusal("settings_edit_refuse_need_media", nil)
+	}
+	fileID, dataType := content.ExtractMedia(in.Msg)
+	if dataType == -1 || dataType == db.VIDEO_NOTE {
+		return settingsEditRefusal("settings_edit_refuse_need_media", nil)
+	}
+	stored := in.State.Text
+	if content.TextLengthRefusal(stored, dataType, in.Language) != "" {
+		return settingsEditOverLimit("settings_edit_refuse_media_text_long", utf8.RuneCountInString(stored), settingsEditCaptionLimit)
+	}
+	if longest, _ := settingsEditFilledLongest(in, stored); longest > settingsEditCaptionLimit {
+		return settingsEditOverLimit("settings_edit_refuse_media_text_long", longest, settingsEditCaptionLimit)
+	}
+	return settingsEditVerdict{OK: true, FileID: fileID, DataType: dataType, CaptionIgnored: in.Msg.Caption != ""}
+}
+
+// settingsEditCheckButtons reads the button lines of a typed message with the commands' parser
+// and refuses what the commands would drop silently or Telegram would refuse at a join.
+func settingsEditCheckButtons(in settingsEditCheckInput) settingsEditVerdict {
+	if in.Msg.Text == "" {
+		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
+	}
+	var parsed []tgmd2html.ButtonV2
+	if _, ok := settingsEditConvert(func() string {
+		_, parsed = tgmd2html.MD2HTMLButtonsV2(in.Msg.OriginalMDV2())
+		return ""
+	}); !ok {
+		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
+	}
+	if len(parsed) == 0 {
+		return settingsEditRefusal("settings_edit_refuse_buttons_syntax", nil)
+	}
+	for i := range parsed {
+		if parsed[i].Name == "" {
+			parsed[i].Name = settingsEditDefaultButtonName
+		}
+	}
+	for i, button := range parsed {
+		if !content.ValidButtonURL(button.Content) {
+			return settingsEditRefusal("settings_edit_refuse_button_url", i18n.TranslationParams{"n": i + 1})
+		}
+	}
+	buttons := content.ConvertButtonV2ToDbButton(parsed)
+	total, widest := settingsEditButtonRows(buttons, in.State.Text)
+	if total > settingsEditMaxButtons || widest > settingsEditMaxRowButtons {
+		return settingsEditRefusal("settings_edit_refuse_buttons_limit", nil)
+	}
+	return settingsEditVerdict{OK: true, Buttons: buttons}
+}
+
+// settingsEditButtonRows counts what a join sends: the buttons in all and the widest row, rows
+// grouped as keyboard.BuildKeyboard groups them. A {rules} token in the stored text adds the
+// rules button where the join puts it (last, on the last row for {rules:same}, or first for
+// {rules:up}), counted even though a group with no rules would not show it.
+func settingsEditButtonRows(buttons []db.Button, storedText string) (total, widest int) {
+	all := buttons
+	if token := settingsEditRulesTokenPattern.FindStringSubmatch(storedText); token != nil {
+		rulesButton := db.Button{Name: "Rules", Url: "https://t.me/bot", SameLine: token[2] == "same"}
+		if token[2] == "up" {
+			all = append([]db.Button{rulesButton}, buttons...)
+		} else {
+			all = append(append([]db.Button(nil), buttons...), rulesButton)
+		}
+	}
+	for _, row := range keyboard.BuildKeyboard(all) {
+		if len(row) > widest {
+			widest = len(row)
+		}
+	}
+	return len(all), widest
 }
