@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
-status: executing
-stopped_at: Completed 11-13-PLAN.md
-last_updated: "2026-11-04T19:39:54.077Z"
+status: verifying
+stopped_at: Completed 11-14-PLAN.md
+last_updated: "2026-11-04T20:25:37.282Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: af8cdfe9cc43361910da2c7719e56a7b6cb2c9ac
+state_head: 32907172397c6d2aa48736898897a980219a18ff
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 23
+  completed_plans: 25
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 Phase: 11 (Message Editor) — EXECUTING
 Plan: 14 of 14
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-04 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
@@ -99,6 +99,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P11 | 75min | 3 tasks | 6 files |
 | Phase 11 P12 | 50min | 3 tasks | 5 files |
 | Phase 11 P13 | 15min | 3 tasks | 3 files |
+| Phase 11 P14 | 55min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -167,6 +168,8 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-11: the typed-reply door guards panics with RecoverFromPanic as the deferred func and a named result set to EndGroups once the message is consumed
 - [Phase 11]: 11-12: a preview is built by renderGreeting and sent by media.SendGreeting to query.From.Id only; Preview of one part and Full preview share settingsEditRunPreview, and a Welcome or Goodbye text is always previewable (the default text is a message too) while every other part only while set
 - [Phase 11]: 11-13: the album gate runs in settingsInput before the live checks and the claim (first item to take fuku:settings:inputalbum wins, the rest are silent); the album-cut notice is added by the saved page for any message with a valid media group ID
+- [Phase 11]: 11-14: the typed-reply door's refusal and saved notice are pure builders (renderSettingsInputRefusal, settingsInputSavedNotice) so privacy and fit tests render exactly what is sent
+- [Phase 11]: 11-14: fuku/modules takes 639 s under make test flags in the sandbox, over the 10 minute per-package timeout; judged by running it alone with -timeout 40m (recorded in the SUMMARY)
 
 ### Pending Todos
 
@@ -233,8 +236,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T19:39:53.931Z
-Stopped at: Completed 11-13-PLAN.md
+Last session: 2026-11-04T20:25:26.493Z
+Stopped at: Completed 11-14-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
