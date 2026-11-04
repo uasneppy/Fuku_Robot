@@ -208,9 +208,11 @@ func main() {
 	})
 	// Registered right after the staff sweeper's stop, so LIFO runs it after the staff
 	// actions drain below (it never takes from that drain's 31 s) and before the database
-	// closes. It returns at once: every Telegram call of a sweep derives from the sweep
-	// context, which the stop cancels, and the one roster write in flight is bounded by the
-	// database context it was started with.
+	// closes. It cancels the sweep context and then waits on the sweep's WaitGroup, so it
+	// returns once the in-flight call ends: every Telegram call of a sweep derives from that
+	// cancelled context and the one roster write in flight is bounded by the database context
+	// it was started with. A database call that ignored cancellation would hold it until its
+	// own 10 s handler timeout.
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Stopping admin index sweeper...")
 		modules.StopAdminIndexSweeper()
