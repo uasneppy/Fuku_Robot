@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/menuaccess"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
@@ -62,7 +64,73 @@ func newSettingsEnvWith(t *testing.T, opts settingsEnvOptions) *settingsEnv {
 	LoadBotUpdates(env.dispatcher)
 
 	settingsCleanup(t, env.chat.Id)
+	// The default environment is an administrator who was let in by the owner, so every
+	// Phase 9 press test keeps passing once the owner gate exists (R-09). A gate test sets
+	// the switch it depends on explicitly and never relies on this seed.
+	env.setAdminsAllowed(env.chat.Id, true)
 	return env
+}
+
+// setAdminsAllowed stores the owner switch of chatID through the real repository.
+func (e *settingsEnv) setAdminsAllowed(chatID int64, allowed bool) {
+	e.t.Helper()
+	if err := menuaccess.SetAdminsAllowed(context.Background(), chatID, allowed, e.admin.Id); err != nil {
+		e.t.Fatalf("SetAdminsAllowed(%d, %t) error = %v", chatID, allowed, err)
+	}
+}
+
+// newOwner makes a user who is the live creator of chat and the creator entry of its
+// administrator list, with the default admin listed as an administrator beside the owner.
+func (e *settingsEnv) newOwner(chat gotgbot.Chat) gotgbot.User {
+	e.t.Helper()
+	owner := gotgbot.User{Id: uniqueLinkOwnerID() + 7_000_000, FirstName: "Owner"}
+	e.fake.setMember(chat.Id, owner.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusCreator})
+	e.fake.setCreator(chat.Id, owner.Id)
+	e.fake.listAdministrator(chat.Id, e.admin.Id)
+	return owner
+}
+
+// listAdmin makes userID appear in chatID's getChatAdministrators answer.
+func (e *settingsEnv) listAdmin(chatID, userID int64) {
+	e.t.Helper()
+	e.fake.listAdministrator(chatID, userID)
+}
+
+// otherReplica builds a second bot process over the same database and Redis: its own
+// fake and dispatcher with the modules newSettingsEnvWith loads, the env's chat and
+// admin, and an update ID range that never meets the base environment's. A test adds its
+// own setMember and setCreator calls on the replica's fake.
+func (e *settingsEnv) otherReplica() *settingsEnv {
+	e.t.Helper()
+	fake := newLockdownFake()
+	bot := newModuleTestBot(fake.moduleBotClient)
+	bot.BotClient = fake
+
+	base := &lockdownEnv{
+		t:          e.t,
+		redis:      e.redis,
+		fake:       fake,
+		bot:        bot,
+		chat:       e.chat,
+		admin:      e.admin,
+		nextUpdate: 50000,
+	}
+	fake.setMember(base.chat.Id, base.admin.Id, staffFakeMember{
+		Status:             gotgbot.ChatMemberStatusAdministrator,
+		CanRestrictMembers: true,
+	})
+	fake.setChatPermsRaw(base.chat.Id, lockdownTestPrePermissions)
+	fake.setCreator(base.chat.Id, base.admin.Id)
+
+	base.dispatcher = ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+	LoadLockdown(base.dispatcher)
+	LoadSettings(base.dispatcher)
+	LoadCaptcha(base.dispatcher)
+	LoadAntiflood(base.dispatcher)
+	LoadStaff(base.dispatcher)
+	LoadHelp(base.dispatcher)
+	LoadBotUpdates(base.dispatcher)
+	return &settingsEnv{lockdownEnv: base}
 }
 
 // withRealLocales installs the real locale files of the languages a settings test reads
@@ -130,6 +198,8 @@ func settingsCleanup(t *testing.T, chatIDs ...int64) {
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.CaptchaSettings{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.AntifloodSettings{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.Chat{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatSettingsAccess{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatAdminIndex{})
 		for _, id := range chatIDs {
 			dbcache.DeleteCache(dbcache.CacheKey("captcha_settings", id))
 			dbcache.DeleteCache(dbcache.CacheKey("antiflood", id))
@@ -152,6 +222,8 @@ func (e *settingsEnv) addChat() gotgbot.Chat {
 	chat := e.lockdownEnv.addChat()
 	e.fake.setCreator(chat.Id, e.admin.Id)
 	settingsCleanup(e.t, chat.Id)
+	// Same seed as the default environment: this admin was let in (R-09).
+	e.setAdminsAllowed(chat.Id, true)
 	return chat
 }
 
