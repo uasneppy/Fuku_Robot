@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Completed 10-07-PLAN.md
-last_updated: "2026-11-04T13:33:32.948Z"
+stopped_at: Completed 10-11-PLAN.md
+last_updated: "2026-11-04T13:43:44.500Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: b21e8fbb36ef67f00e78f02a31ebb7793b25fb48
+state_head: 2fc7375b2d1b7d6ba9319a8c6557422adeccc2b1
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 10 P05 | 40 min | 2 tasks | 6 files |
 | Phase 10 P06 | 25min | 2 tasks | 7 files |
 | Phase 10 P07 | 25 min | 2 tasks | 5 files |
+| Phase 10 P11 | 15 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,7 @@ Recent decisions affecting current work:
 - [Phase 10]: Plan 10-05: only an 'owner exists' owner-state answer is memoised (under 30 s, per chat, per replica); late getChatAdministrators answers are discarded inside the singleflight
 - [Phase 10]: 10-06: settingsRightOwner is appended after settingsRightRestrict so the zero settingsRight stays Admin; OwnerOnly pages are hidden from Main without a MainState read and refused in openPage
 - [Phase 10]: 10-07: the admin roster is fed by an observer hook in loadAdminCacheFromTelegram (cache never imports the database layer), run synchronously under the chat's singleflight with a 3 s write bound; only definitive facts (fresh non-empty list, non-admin bot, 4xx bot lookup) change rows
+- [Phase 10]: 10-11: the settings deep link no longer answers settings_cannot_open; Telegram errors at getChatMember and getChat are classified by isTelegramClientError, and settingsGate runs on the deep link's own member record before getChat
 
 ### Pending Todos
 
@@ -192,8 +194,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T13:33:32.879Z
-Stopped at: Completed 10-07-PLAN.md
+Last session: 2026-11-04T13:43:44.442Z
+Stopped at: Completed 10-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
