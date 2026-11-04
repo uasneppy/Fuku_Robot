@@ -50,12 +50,12 @@ const (
 )
 
 // settingsEditPart is one row of the parts table: the part's code (its t value), the locale key
-// of the line that shows its state, the keys of its Set and Remove labels, the notice a Remove
-// shows and the body of its waiting prompt.
+// of the line that shows its state, the keys of its Set, Remove and Preview labels, the notice a
+// Remove shows and the body of its waiting prompt.
 type settingsEditPart struct {
 	Code, LineKey                           string
 	SetLabelKey, RemoveLabelKey, RemovedKey string
-	WaitKey                                 string
+	WaitKey, PreviewLabelKey                string
 }
 
 // settingsEditPageDef is everything that differs between the three pages. The renderer and
@@ -72,8 +72,8 @@ type settingsEditPageDef struct {
 	// (empty on Rules, which has neither).
 	ToggleLabelKey, CleanLabelKey string
 	// SetCode, RemoveCode and CancelCode are the page's action codes for Set, Remove and Cancel;
-	// FullCode is its Full preview.
-	SetCode, RemoveCode, CancelCode, FullCode string
+	// PreviewCode is its Preview of one part and FullCode its Full preview.
+	SetCode, RemoveCode, CancelCode, PreviewCode, FullCode string
 	// EditRight is the right Set and Remove need, the one the matching commands need.
 	EditRight settingsRight
 	Parts     []settingsEditPart
@@ -84,21 +84,25 @@ var (
 		Code: settingsEditPartText, LineKey: "settings_edit_line_text",
 		SetLabelKey: "settings_btn_edit_set_text", RemoveLabelKey: "settings_btn_edit_remove_text",
 		RemovedKey: "settings_edit_removed_text_default", WaitKey: "settings_edit_wait_text",
+		PreviewLabelKey: "settings_btn_edit_preview_text",
 	}
 	settingsEditRulesTextPart = settingsEditPart{
 		Code: settingsEditPartText, LineKey: "settings_edit_line_text",
 		SetLabelKey: "settings_btn_edit_set_text", RemoveLabelKey: "settings_btn_edit_remove_text",
 		RemovedKey: "settings_edit_removed_text_rules", WaitKey: "settings_edit_wait_text_rules",
+		PreviewLabelKey: "settings_btn_edit_preview_text",
 	}
 	settingsEditMediaPart = settingsEditPart{
 		Code: settingsEditPartMedia, LineKey: "settings_edit_line_media",
 		SetLabelKey: "settings_btn_edit_set_media", RemoveLabelKey: "settings_btn_edit_remove_media",
 		RemovedKey: "settings_edit_removed_media", WaitKey: "settings_edit_wait_media",
+		PreviewLabelKey: "settings_btn_edit_preview_media",
 	}
 	settingsEditButtonsPart = settingsEditPart{
 		Code: settingsEditPartButtons, LineKey: "settings_edit_line_buttons",
 		SetLabelKey: "settings_btn_edit_set_buttons", RemoveLabelKey: "settings_btn_edit_remove_buttons",
 		RemovedKey: "settings_edit_removed_buttons", WaitKey: "settings_edit_wait_buttons",
+		PreviewLabelKey: "settings_btn_edit_preview_buttons",
 	}
 )
 
@@ -109,7 +113,7 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_welcome", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_welcome",
 		ToggleLabelKey: "settings_btn_edit_welcome_toggle", CleanLabelKey: "settings_btn_edit_clean_welcome",
-		SetCode: "ws", RemoveCode: "wr", CancelCode: "wc", FullCode: "wf", EditRight: settingsRightChangeInfo,
+		SetCode: "ws", RemoveCode: "wr", CancelCode: "wc", PreviewCode: "wv", FullCode: "wf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
@@ -117,13 +121,13 @@ var settingsEditPages = []settingsEditPageDef{
 		TitleKey: "settings_page_goodbye", HintKey: "settings_edit_hint_greeting",
 		CleanHintKey:   "settings_edit_clean_hint_goodbye",
 		ToggleLabelKey: "settings_btn_edit_goodbye_toggle", CleanLabelKey: "settings_btn_edit_clean_goodbye",
-		SetCode: "gs", RemoveCode: "gr", CancelCode: "gc", FullCode: "gf", EditRight: settingsRightChangeInfo,
+		SetCode: "gs", RemoveCode: "gr", CancelCode: "gc", PreviewCode: "gv", FullCode: "gf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
 		Key: settingsPageRules, Kind: settingsEditRules, Order: 70, Icon: "📜",
 		TitleKey: "settings_page_rules", HintKey: "settings_edit_hint_rules",
-		SetCode: "rs", RemoveCode: "rr", CancelCode: "rc", EditRight: settingsRightAdminBotAdmin,
+		SetCode: "rs", RemoveCode: "rr", CancelCode: "rc", PreviewCode: "rv", FullCode: "rf", EditRight: settingsRightAdminBotAdmin,
 		Parts: []settingsEditPart{settingsEditRulesTextPart},
 	},
 }
@@ -320,14 +324,32 @@ func settingsEditPartRows(k *settingsKeyboard, def settingsEditPageDef, st setti
 	}
 }
 
-// settingsEditPreviewRows is the block of the preview buttons, right after the part rows: Full
-// preview, always, two buttons to a row. A page that has no Full preview code draws none.
-func settingsEditPreviewRows(k *settingsKeyboard, def settingsEditPageDef) {
-	if def.FullCode == "" {
-		return
+// settingsEditPreviewable reports whether a part has something to preview. A Welcome or Goodbye
+// text always has, because the default text is a message too; every other part only while it is
+// set.
+func settingsEditPreviewable(def settingsEditPageDef, st settingsEditState, part string) bool {
+	return (def.isGreeting() && part == settingsEditPartText) || settingsEditPartIsSet(st, part)
+}
+
+// settingsEditPreviewRows is the block of the preview buttons, right after the part rows: Preview
+// for each part that has something to show, in the parts table's order, then Full preview, always
+// last, two buttons to a row.
+func settingsEditPreviewRows(k *settingsKeyboard, def settingsEditPageDef, st settingsEditState) {
+	tr := k.view.Tr
+	var buttons []gotgbot.InlineKeyboardButton
+	for _, part := range def.Parts {
+		if !settingsEditPreviewable(def, st, part.Code) {
+			continue
+		}
+		if button, ok := k.button(settingsText(tr, part.PreviewLabelKey), map[string]string{"a": def.PreviewCode, "t": part.Code}); ok {
+			buttons = append(buttons, button)
+		}
 	}
-	if full, ok := k.button(settingsText(k.view.Tr, "settings_btn_edit_full_preview"), map[string]string{"a": def.FullCode}); ok {
-		k.row(full)
+	if full, ok := k.button(settingsText(tr, "settings_btn_edit_full_preview"), map[string]string{"a": def.FullCode}); ok {
+		buttons = append(buttons, full)
+	}
+	for i := 0; i < len(buttons); i += 2 {
+		k.row(buttons[i:min(i+2, len(buttons))]...)
 	}
 }
 
@@ -370,7 +392,7 @@ func renderSettingsEditor(v settingsView, def settingsEditPageDef, st settingsEd
 	body := settingsEditBody(v, def, st)
 	k := newSettingsKeyboard(v)
 	settingsEditPartRows(k, def, st)
-	settingsEditPreviewRows(k, def)
+	settingsEditPreviewRows(k, def, st)
 	settingsEditSwitchRows(k, def, st)
 	settingsEditOpenPrivateRow(k, opts)
 	k.navRow(false)
