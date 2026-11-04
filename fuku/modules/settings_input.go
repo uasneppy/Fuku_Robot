@@ -116,23 +116,40 @@ return 0
 `)
 
 // settingsInputCancelScript is the Cancel button: it deletes the wait and the marker only for
-// the button's own group, page and part.
+// the button's own group, page and part, and only when the message the button sits on is the
+// wait's own prompt or one of the refusal replies noted for that wait.
 //
-// KEYS[1] = the wait, KEYS[2] = the marker. ARGV = c, p, t. Returns 2 while a claim is held, 4
-// when there is no wait but a marker (the wait expired; the marker is deleted because the
-// person has now been told), 0 when there is neither, 1 after deleting the wait and marker
-// when c, p and t match, and 3 when they differ (a stale prompt: the live wait is untouched).
+// KEYS[1] = the wait, KEYS[2] = the marker. ARGV = c, p, t, the ID of the message the button was
+// pressed on. Returns 2 while a claim is held, 4 when there is no wait but a marker (the wait
+// expired; the marker is deleted because the person has now been told), 0 when there is neither,
+// 1 after deleting the wait and marker when c, p and t match and the message is the stored prompt
+// (field m) or a noted refusal (field r<id>), and 3 otherwise (a stale prompt: the live wait is
+// untouched).
 var settingsInputCancelScript = redis.NewScript(`
 if redis.call('HEXISTS', KEYS[1], 'k') == 1 then return 2 end
-local f = redis.call('HMGET', KEYS[1], 'c', 'p', 't')
+local f = redis.call('HMGET', KEYS[1], 'c', 'p', 't', 'm')
 if not f[1] then
   if redis.call('EXISTS', KEYS[2]) == 1 then redis.call('DEL', KEYS[2]); return 4 end
   return 0
 end
-if f[1] == ARGV[1] and f[2] == ARGV[2] and f[3] == ARGV[3] then
+if f[1] == ARGV[1] and f[2] == ARGV[2] and f[3] == ARGV[3]
+  and (f[4] == ARGV[4] or redis.call('HEXISTS', KEYS[1], 'r' .. ARGV[4]) == 1) then
   redis.call('DEL', KEYS[1]); redis.call('DEL', KEYS[2]); return 1
 end
 return 3
+`)
+
+// settingsInputNoteRefusalScript records the ID of a refusal reply (the message that carries a
+// Cancel button besides the prompt) on the wait of the holder of the nonce, so that button can end
+// the wait it belongs to. A Set deletes the hash, so the refusals of an earlier wait never match a
+// newer one. At most 40 fields are kept, which bounds the hash.
+//
+// KEYS[1] = the wait. ARGV = the wait's nonce, the refusal message's ID.
+var settingsInputNoteRefusalScript = redis.NewScript(`
+if redis.call('HGET', KEYS[1], 'n') ~= ARGV[1] then return 0 end
+if redis.call('HLEN', KEYS[1]) >= 40 then return 0 end
+redis.call('HSET', KEYS[1], 'r' .. ARGV[2], '1')
+return 1
 `)
 
 // settingsInputClaimScript claims the wait for the holder of the nonce, once.
@@ -442,10 +459,34 @@ func settingsInputRunCancel(ctx context.Context, userID int64, script *redis.Scr
 }
 
 // settingsInputCancel is the Cancel button: it deletes userID's wait and marker only when the
-// wait is for the button's group, page and part, so a stale prompt never ends a newer wait.
-func settingsInputCancel(ctx context.Context, userID, groupID int64, page, part string) (settingsInputCancelOutcome, error) {
+// wait is for the button's group, page and part and the button sits on the wait's own prompt
+// (promptMsgID, the pressed message's ID) or on a refusal reply noted for it, so a stale prompt
+// never ends a newer wait, not even one for the same group, page and part.
+func settingsInputCancel(
+	ctx context.Context, userID, groupID int64, page, part string, promptMsgID int64,
+) (settingsInputCancelOutcome, error) {
 	return settingsInputRunCancel(ctx, userID, settingsInputCancelScript,
-		strconv.FormatInt(groupID, 10), page, part)
+		strconv.FormatInt(groupID, 10), page, part, strconv.FormatInt(promptMsgID, 10))
+}
+
+// settingsInputNoteRefusal records messageID, a refusal reply of the wait of the holder of nonce,
+// so its Cancel button is accepted. Without a usable nonce or ID it writes nothing.
+func settingsInputNoteRefusal(ctx context.Context, userID int64, nonce string, messageID int64) error {
+	client, err := settingsInputClient()
+	if err != nil {
+		return err
+	}
+	if messageID <= 0 || !settingsInputNonceValid(nonce) {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, settingsInputRedisTimeout)
+	defer cancel()
+	err = settingsInputNoteRefusalScript.Run(ctx, client,
+		[]string{settingsInputKey(userID)}, nonce, strconv.FormatInt(messageID, 10)).Err()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return err
+	}
+	return nil
 }
 
 // settingsInputAlbumIDRe is the media group ID of an album: 1 to 20 ASCII digits.

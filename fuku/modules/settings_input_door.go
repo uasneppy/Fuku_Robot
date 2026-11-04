@@ -339,10 +339,11 @@ func (r *settingsInputReply) plain(text string) {
 	r.send(text, nil, true)
 }
 
-// send posts text to the private chat, as a reply to the message when reply is set.
-func (r *settingsInputReply) send(text string, keyboard *gotgbot.InlineKeyboardMarkup, reply bool) {
+// send posts text to the private chat, as a reply to the message when reply is set. It returns
+// the ID of the message sent, 0 when nothing was sent.
+func (r *settingsInputReply) send(text string, keyboard *gotgbot.InlineKeyboardMarkup, reply bool) int64 {
 	if text == "" {
-		return
+		return 0
 	}
 	opts := &gotgbot.SendMessageOpts{
 		ParseMode:          formatting.HTML,
@@ -354,9 +355,15 @@ func (r *settingsInputReply) send(text string, keyboard *gotgbot.InlineKeyboardM
 	if keyboard != nil && len(keyboard.InlineKeyboard) > 0 {
 		opts.ReplyMarkup = *keyboard
 	}
-	if _, err := r.b.SendMessage(r.msg.Chat.Id, text, opts); err != nil {
+	sent, err := r.b.SendMessage(r.msg.Chat.Id, text, opts)
+	if err != nil {
 		log.Warnf("[Settings] answering the typed reply of user %d failed: %v", r.user.Id, err)
+		return 0
 	}
+	if sent == nil {
+		return 0
+	}
+	return sent.MessageId
 }
 
 // keep answers key and leaves the wait as it is: the answer could not be established, so
@@ -368,7 +375,7 @@ func (r *settingsInputReply) keep(key string) {
 // end deletes the wait and its marker (only this wait: a newer wait for another group, page or
 // part is left alone) and answers key. The person has been told, so the marker goes too.
 func (r *settingsInputReply) end(key string) {
-	outcome, err := settingsInputCancel(context.Background(), r.user.Id, r.wait.GroupID, r.wait.Page, r.wait.Part)
+	outcome, err := settingsInputCancel(context.Background(), r.user.Id, r.wait.GroupID, r.wait.Page, r.wait.Part, r.wait.PromptMsgID)
 	if err != nil && !errors.Is(err, errSettingsInputUnavailable) {
 		log.Warnf("[Settings] ending the wait of user %d failed: %v", r.user.Id, err)
 	}
@@ -408,7 +415,12 @@ func renderSettingsInputRefusal(v settingsView, def settingsEditPageDef, part, r
 // time not extended.
 func (r *settingsInputReply) refuse(reason string) {
 	screen := renderSettingsInputRefusal(r.view(), r.def, r.wait.Part, reason)
-	r.send(screen.Text, &screen.Keyboard, true)
+	id := r.send(screen.Text, &screen.Keyboard, true)
+	// The refusal carries a Cancel button of its own: note it on the wait, so a press on it ends
+	// this wait while a stale prompt's button still cannot.
+	if err := settingsInputNoteRefusal(context.Background(), r.user.Id, r.wait.Nonce, id); err != nil {
+		log.Warnf("[Settings] noting the refusal reply of user %d failed: %v", r.user.Id, err)
+	}
 }
 
 // apply writes the checked message through the apply function of the part's command and

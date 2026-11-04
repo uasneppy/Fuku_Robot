@@ -290,6 +290,86 @@ func TestSettingsEditSetUnavailable(t *testing.T) {
 	}
 }
 
+// TestSettingsEditStalePromptSamePart: two private menus of one group are open and Set is pressed
+// on the same part of both. The first prompt's Cancel (same group, page and part, another message)
+// is stale and leaves the second menu's wait alone; the second prompt's Cancel deletes it.
+func TestSettingsEditStalePromptSamePart(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	first := settingsEditPrivateMenu(env, owner, settingsPageWelcome)
+	// A second deep link sends a second private menu; openEditPagePrivate allows one only.
+	env.sendPrivate(owner, fmt.Sprintf("/start settings_%d", env.chat.Id))
+	sent := env.fake.sentTo(owner.Id)
+	last := sent[len(sent)-1]
+	pageButton, ok := settingsPageButton(t, staffKeyboardOf(last.Params["reply_markup"]), settingsPageWelcome)
+	if !ok {
+		t.Fatal("the second private Main page has no Welcome button")
+	}
+	second := last.MessageID
+	env.pressRaw(settingsPrivateChat(owner), owner, second, pageButton.CallbackData)
+	if first == second {
+		t.Fatalf("both private menus are message %d", first)
+	}
+	settingsEditPressButton(env, owner, first, "settings_btn_edit_set_text")
+	settingsEditPressButton(env, owner, second, "settings_btn_edit_set_text")
+	live := settingsEditWaitOf(env, owner)
+	if live["m"] != strconv.FormatInt(second, 10) {
+		t.Fatalf("the wait names prompt %s, want the second menu %d", live["m"], second)
+	}
+
+	answers := env.answerCount()
+	settingsEditPressButton(env, owner, first, "settings_btn_edit_cancel")
+	if got := env.answerCount() - answers; got != 1 {
+		t.Errorf("the stale Cancel was answered %d times, want once", got)
+	}
+	if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_edit_prompt_stale")) {
+		t.Errorf("the stale Cancel answered %q (alert %v), want the alert settings_edit_prompt_stale", answer, alert)
+	}
+	if after := settingsEditWaitOf(env, owner); after["n"] != live["n"] || after["m"] != live["m"] {
+		t.Errorf("a Cancel on the first menu changed the live wait to %v", after)
+	}
+	if !env.redis.Exists(settingsInputDoneKey(owner.Id)) {
+		t.Error("a Cancel on the first menu deleted the marker of the live wait")
+	}
+
+	settingsEditPressButton(env, owner, second, "settings_btn_edit_cancel")
+	if env.redis.Exists(settingsInputKey(owner.Id)) || env.redis.Exists(settingsInputDoneKey(owner.Id)) {
+		t.Error("Cancel on the second menu left the wait or its marker")
+	}
+	if text, _ := env.lastEdit(owner.Id, second); !strings.Contains(text, staffMarker("settings_edit_cancelled")) {
+		t.Errorf("Cancel on the second menu edited it to %q, want the cancelled notice", text)
+	}
+}
+
+// TestSettingsEditRefusalCancel: the Cancel button of a refusal reply sits on a message that is
+// not the prompt, and it still ends the wait it belongs to.
+func TestSettingsEditRefusalCancel(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	settingsEditSetWait(env, owner, settingsPageWelcome, settingsEditPartText)
+
+	photo := []gotgbot.PhotoSize{{FileId: "photo-id", FileUniqueId: "photo-unique", Width: 1, Height: 1}}
+	sendPrivateMessage(env, owner, gotgbot.Message{Photo: photo})
+	sent := env.fake.sentTo(owner.Id)
+	refusal := sent[len(sent)-1]
+	keyboard := staffKeyboardOf(refusal.Params["reply_markup"])
+	button, ok := settingsButtonByMarker(keyboard, "settings_btn_edit_cancel")
+	if !ok {
+		t.Fatalf("the refusal has no Cancel button: %+v", keyboard)
+	}
+	if refusal.MessageID == 0 || env.redis.HGet(settingsInputKey(owner.Id), "r"+strconv.FormatInt(refusal.MessageID, 10)) == "" {
+		t.Fatalf("the refusal message %d was not noted on the wait: %v", refusal.MessageID, settingsEditWaitOf(env, owner))
+	}
+
+	env.pressRaw(settingsPrivateChat(owner), owner, refusal.MessageID, button.CallbackData)
+	if env.redis.Exists(settingsInputKey(owner.Id)) || env.redis.Exists(settingsInputDoneKey(owner.Id)) {
+		t.Error("Cancel on the refusal reply left the wait or its marker")
+	}
+	if text, _ := env.lastEdit(owner.Id, refusal.MessageID); !strings.Contains(text, staffMarker("settings_edit_cancelled")) {
+		t.Errorf("Cancel on the refusal edited it to %q, want the cancelled notice", text)
+	}
+}
+
 func TestSettingsEditStaleCancel(t *testing.T) {
 	env := newSettingsEditEnv(t)
 	owner := env.newOwner(env.chat)

@@ -158,7 +158,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `chat_status_bot_not_admin`), and an answer that cannot be established (a 429, a 5xx, a transport error, a timeout,
   an undecided gate, an unreadable page) answers `settings_check_failed` and keeps the wait. A message the check refuses
   is a reply with the reason, a blank line, `settings_edit_still_waiting` and one Cancel button, and the wait is neither
-  claimed nor extended; a write that fails after the claim releases the claim and answers the same way with
+  claimed nor extended (its message ID is noted on the wait by `settingsInputNoteRefusal`, so that Cancel button ends this
+  wait); a write that fails after the claim releases the claim and answers the same way with
   `common_settings_save_failed`. A save sends the page as a new message in the private chat (with
   `settings_edit_saved_text`, `_media` or `_buttons`, plus `settings_edit_caption_ignored` when a caption was not used and
   `settings_edit_album_cut` when the saved message came from an album)
@@ -432,7 +433,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   answers the alert `settings_edit_unavailable` and edits nothing, while Remove and the switches still work. In a menu
   opened in the group, Set, Remove and Cancel write nothing and await nothing: the page is redrawn with the notice
   `settings_edit_group_note` and its Open in private row, so no group menu ever creates a wait (D-01). Cancel
-  (`settingsInputCancel`) compares group, page and part with the wait before deleting anything: a deleted wait edits the
+  (`settingsInputCancel`) compares group, page and part with the wait, and the ID of the message the button was pressed on
+  with the wait's prompt (field `m`, no new callback field: the script gets `query.Message`'s own ID) or with a refusal
+  reply noted on the wait, before deleting anything, so the Cancel of an older prompt of the same group, page and part
+  (two private menus open) never ends the newer wait: a deleted wait edits the
   message into the page with the cancelled notice, a prompt whose wait was replaced, used or is being saved answers
   `settings_edit_prompt_stale` and leaves the live wait alone, one after the ten minutes answers
   `settings_edit_wait_expired`, and each of those edits the message into the page. A Cancel that meets a Redis error other
@@ -557,17 +561,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The message editor's wait for a typed reply (`settings_input.go`, all outside the `fuku:cache:` prefix in the
   `fuku:settings:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps them, and holding IDs and codes only, never message text or
   a file ID). `fuku:settings:input:<user>` is one hash per user with `c` (group chat ID), `p` (page key), `t` (part), `m`
-  (prompt message ID), `n` (16 hex nonce from `crypto/rand`), `x` (expiry, unix ms) and, while a claim is held, `k`; its own
+  (prompt message ID), `n` (16 hex nonce from `crypto/rand`), `x` (expiry, unix ms), `r<message id>` for each refusal reply that carries a Cancel button (at most 40 fields in
+  all, no text) and, while a claim is held, `k`; its own
   10-minute `PEXPIRE` is the wait's expiry, with no timer, no process map and no shutdown drain.
   `fuku:settings:inputdone:<user>` is the marker `c|p|t`, 15 minutes, written by every Set; every deliberate end (finish,
   the Cancel button, `/cancel`, an ended access) deletes both keys in one script, so a marker with no wait means only
   "the wait expired". `fuku:settings:inputalbum:<user>:<media_group_id>` is the album memory, `SET NX EX 30`, for a media
-  group ID of 1 to 20 digits (anything else is not an album and writes nothing). Atomicity is six Lua scripts in
-  `settings_input.go`: Set (writes both keys and returns the replaced wait's fields), claim (only the holder of the
+  group ID of 1 to 20 digits (anything else is not an album and writes nothing). Atomicity is seven Lua scripts in
+  `settings_input.go`: Set (writes both keys and returns the replaced wait's fields; it deletes the hash first, so the
+  refusal fields below never survive a new Set), note-refusal (adds the field `r<message id>` for a refusal reply, only for the
+  holder of the nonce and at most 40 fields in all), claim (only the holder of the
   current nonce, once), finish and release (only the claim holder; finish and release run on `context.WithoutCancel` with
   their own bound, so a cancelled update never strands a claim; release removes only `k`, so the wait keeps its remaining
   TTL), and the Cancel button's and `/cancel`'s scripts (a held claim answers busy and deletes nothing; the button also
-  compares `c`, `p`, `t`, so a stale prompt never ends a newer wait). Reads are one pipeline of `HGETALL` and `GET`; a hash
+  compares `c`, `p`, `t` and the pressed message's ID with `m` or a noted refusal `r<id>`, so a stale prompt never ends a
+  newer wait, not even one for the same group, page and part). Reads are one pipeline of `HGETALL` and `GET`; a hash
   that does not parse is no wait. Without Redis every store function returns `errSettingsInputUnavailable`, so Set
   answers `settings_edit_unavailable` and nothing else needs Redis.
 - `fuku:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and

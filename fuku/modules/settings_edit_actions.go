@@ -167,7 +167,7 @@ func settingsEditCancel(def settingsEditPageDef) func(*settingsPress) *settingsS
 	return settingsEditPrivateOnly(def, func(p *settingsPress, part string) *settingsScreen {
 		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 		defer cancel()
-		outcome, err := settingsInputCancel(ctx, p.query.From.Id, p.group.Id, def.Key, part)
+		outcome, err := settingsInputCancel(ctx, p.query.From.Id, p.group.Id, def.Key, part, p.query.Message.GetMessageId())
 		notice := ""
 		switch {
 		case errors.Is(err, errSettingsInputUnavailable):

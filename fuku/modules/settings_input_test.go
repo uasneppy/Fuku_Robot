@@ -285,7 +285,7 @@ func TestSettingsInputCancelOutcomes(t *testing.T) {
 	t.Run("cancel of the same part deletes both keys", func(t *testing.T) {
 		user := settingsInputTestUser()
 		settingsInputSeed(t, user.Id, -100, "w", "x")
-		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x")
+		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", 7)
 		if err != nil || outcome != settingsInputCancelDeleted {
 			t.Fatalf("cancel = %v, %v, want Deleted", outcome, err)
 		}
@@ -301,7 +301,7 @@ func TestSettingsInputCancelOutcomes(t *testing.T) {
 			group      int64
 			page, part string
 		}{{-100, "w", "m"}, {-100, "g", "x"}, {-200, "w", "x"}} {
-			outcome, err := settingsInputCancel(ctx, user.Id, args.group, args.page, args.part)
+			outcome, err := settingsInputCancel(ctx, user.Id, args.group, args.page, args.part, 7)
 			if err != nil || outcome != settingsInputCancelOther {
 				t.Fatalf("cancel %+v = %v, %v, want Other", args, outcome, err)
 			}
@@ -311,13 +311,60 @@ func TestSettingsInputCancelOutcomes(t *testing.T) {
 		}
 	})
 
+	t.Run("cancel from another message leaves the live wait", func(t *testing.T) {
+		user := settingsInputTestUser()
+		wait := settingsInputSeed(t, user.Id, -100, "w", "x")
+		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", wait.PromptMsgID+1)
+		if err != nil || outcome != settingsInputCancelOther {
+			t.Fatalf("cancel from another message = %v, %v, want Other", outcome, err)
+		}
+		if !env.redis.Exists(settingsInputKey(user.Id)) || !env.redis.Exists(settingsInputDoneKey(user.Id)) {
+			t.Error("a Cancel from another message deleted the live wait")
+		}
+	})
+
+	t.Run("cancel from a noted refusal reply deletes the wait, another reply does not", func(t *testing.T) {
+		user := settingsInputTestUser()
+		wait := settingsInputSeed(t, user.Id, -100, "w", "x")
+		if err := settingsInputNoteRefusal(ctx, user.Id, "ffffffffffffffff", 90); err != nil {
+			t.Fatalf("note with another nonce error = %v", err)
+		}
+		if err := settingsInputNoteRefusal(ctx, user.Id, wait.Nonce, 91); err != nil {
+			t.Fatalf("note error = %v", err)
+		}
+		for _, id := range []int64{90, 92} {
+			if outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", id); err != nil || outcome != settingsInputCancelOther {
+				t.Fatalf("cancel from the un-noted message %d = %v, %v, want Other", id, outcome, err)
+			}
+		}
+		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", 91)
+		if err != nil || outcome != settingsInputCancelDeleted {
+			t.Fatalf("cancel from the noted refusal = %v, %v, want Deleted", outcome, err)
+		}
+		if env.redis.Exists(settingsInputKey(user.Id)) || env.redis.Exists(settingsInputDoneKey(user.Id)) {
+			t.Error("cancel from the noted refusal left the wait or its marker")
+		}
+	})
+
+	t.Run("a new Set forgets the refusals of the wait it replaced", func(t *testing.T) {
+		user := settingsInputTestUser()
+		wait := settingsInputSeed(t, user.Id, -100, "w", "x")
+		if err := settingsInputNoteRefusal(ctx, user.Id, wait.Nonce, 91); err != nil {
+			t.Fatalf("note error = %v", err)
+		}
+		settingsInputSeed(t, user.Id, -100, "w", "x")
+		if outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", 91); err != nil || outcome != settingsInputCancelOther {
+			t.Fatalf("cancel from the old refusal after a new Set = %v, %v, want Other", outcome, err)
+		}
+	})
+
 	t.Run("cancel while a claim is held is busy", func(t *testing.T) {
 		user := settingsInputTestUser()
 		wait := settingsInputSeed(t, user.Id, -100, "w", "x")
 		if _, ok, err := settingsInputClaim(ctx, user.Id, wait.Nonce); err != nil || !ok {
 			t.Fatalf("claim = %v, %v", ok, err)
 		}
-		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x")
+		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", 7)
 		if err != nil || outcome != settingsInputCancelBusy {
 			t.Fatalf("cancel = %v, %v, want Busy", outcome, err)
 		}
@@ -328,7 +375,7 @@ func TestSettingsInputCancelOutcomes(t *testing.T) {
 
 	t.Run("cancel with neither key and with only the marker", func(t *testing.T) {
 		user := settingsInputTestUser()
-		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x")
+		outcome, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", 7)
 		if err != nil || outcome != settingsInputCancelNone {
 			t.Fatalf("cancel with nothing = %v, %v, want None", outcome, err)
 		}
@@ -337,7 +384,7 @@ func TestSettingsInputCancelOutcomes(t *testing.T) {
 		if env.redis.Exists(settingsInputKey(user.Id)) {
 			t.Fatal("the wait did not expire")
 		}
-		outcome, err = settingsInputCancel(ctx, user.Id, -100, "w", "x")
+		outcome, err = settingsInputCancel(ctx, user.Id, -100, "w", "x", 7)
 		if err != nil || outcome != settingsInputCancelExpired {
 			t.Fatalf("cancel with only the marker = %v, %v, want Expired", outcome, err)
 		}
@@ -503,7 +550,7 @@ func TestSettingsInputWithoutRedis(t *testing.T) {
 			return settingsInputRelease(ctx, user.Id, "0123456789abcdef")
 		},
 		"cancel": func() error {
-			_, err := settingsInputCancel(ctx, user.Id, -100, "w", "x")
+			_, err := settingsInputCancel(ctx, user.Id, -100, "w", "x", 7)
 			return err
 		},
 		"cancel any": func() error { _, err := settingsInputCancelAny(ctx, user.Id); return err },
