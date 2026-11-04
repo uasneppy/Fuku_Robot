@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 10
 current_phase_name: PM Settings Hub and Owner Gate
 status: executing
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-11-04T12:35:23.056Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-11-04T12:40:55.774Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 10 execution started
-state_head: 4219fd69a6cfea342cc509440f6718f5443a2dd6
+state_head: e37e532d36a4aa898d1cdcc0c4235e9e32eb4439
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 11
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 10 (PM Settings Hub and Owner Gate) — EXECUTING
-Plan: 2 of 11
+Plan: 3 of 11
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 10 execution started
 
@@ -76,6 +76,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 03 P08 | 13min | 2 tasks | 13 files |
 | Phase 03 P09 | 20min | 2 tasks | 11 files |
 | Phase 10 P01 | 6 min | 2 tasks | 10 files |
+| Phase 10 P02 | 8 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,8 @@ Recent decisions affecting current work:
 - [Phase 9]: Lift and Unlink cards carry the object they were drawn for (`r`, `l`) and a lazy expiry, so a stale Yes cannot hit a newer lockdown or link (D-33). A group menu, and a private menu of an admin who is not the group's creator, never name the Staff Group (D-21, D-32); `settingsStaffViewFor` is the one place that decides. A Lift from a group menu only wakes the worker (its redrawn menu is the notice); from a private menu it also posts the public notice (D-26).
 - [Phase 10]: 10-01: owner switch (chat_settings_access) is read fresh on every decision, never cached; AdminsAllowed has no GORM default tag
 - [Phase 10]: 10-01: adminindex.ReplaceChat is upsert + NOT IN prune under a per-chat pg_advisory_xact_lock, never delete-then-insert
+- [Phase 10]: Phase 10 plan 02: no new hub or refusal string carries a placeholder beyond icon, page and state, so none can name a group title, user or the Staff Group.
+- [Phase 10]: The three alert keys are held to 160 code points and tag-free in all 8 languages so a translation still fits Telegram 200.
 
 ### Pending Todos
 
@@ -178,8 +181,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T12:35:22.990Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-11-04T12:40:55.717Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

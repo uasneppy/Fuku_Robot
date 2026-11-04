@@ -98,12 +98,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Only the live owner sees and can press "Admins can change settings". While it is on, live administrators get the full menu as in v1.0. A change takes effect on every replica at the next press. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
   4. The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
   5. Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` describes the 8-locale set.
-**Plans:** 1/11 plans executed in 8 waves
+**Plans:** 2/11 plans executed in 8 waves
 
 Plans:
 **Wave 1**
 - [x] 10-01-PLAN.md — the switch and roster tables and their repositories, concurrent replaces serialized per chat (wave 1)
-- [ ] 10-02-PLAN.md — the 19 new strings and the new /help text in all 8 locales, the sizing tests and the regenerated docs (wave 1)
+- [x] 10-02-PLAN.md — the 19 new strings and the new /help text in all 8 locales, the sizing tests and the regenerated docs (wave 1)
 - [ ] 10-03-PLAN.md — the locale-set guard test and the 8-locale wording of the project documents (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -277,7 +277,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 10. PM Settings Hub and Owner Gate | 1/11 | In Progress | - |
+| 10. PM Settings Hub and Owner Gate | 2/11 | In Progress | - |
 | 11. Message Editor | 0/TBD | Not started | - |
 | 12. Rules Media, Media Under Text and Greet Once | 0/TBD | Not started | - |
 | 13. Member Requirements | 0/TBD | Not started | - |
