@@ -24,6 +24,7 @@ This phase carries a UI hint: a UI design contract (`10-UI-SPEC.md`, via `/gsd-u
 
 ### The private group list (MENU-09)
 - **D-01:** Each row of the list is one button showing the group's title only, like the owner's GroupHelp screenshot. No role marker and no attention marker. The title is escaped and spliced in after translation. A pick opens that group's main menu through the existing live-checked pipeline.
+  - *Clarification recorded 2026-11-04 during the autonomous run (orchestrator, not a new owner choice; flagged for the owner's review):* "escaped and spliced in after translation" applies to message bodies, where Telegram parses HTML. A button label is plain text that Telegram never parses, so the title goes on the button as it is (cut to a fixed length for the button) and escaping it would show `&amp;` to the reader. The intent of D-01, showing the title faithfully and safely, is unchanged. The UI-SPEC's Text Styling rule says the same.
 - **D-02:** A group where the bot is not an admin is hidden. The list holds only groups the bot has verified, because the bot learns a group's owner and admins from its admin list, which it loads only where it is an admin. The empty-list hint tells owners to make the bot an admin and run `/admincache`.
 - **D-03:** `/settings` in the private chat always shows the list, even when the user has exactly one manageable group.
 - **D-04:** The list is alphabetical by group title, eight groups per page, paged.
