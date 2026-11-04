@@ -1579,6 +1579,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Every fire-and-forget goroutine starts with `defer error_handling.RecoverFromPanic(...)`. Async user/chat writers
   join the WaitGroup drained by `DrainUsersAsyncWrites`.
 - Register every new secret with `logredact.RegisterSecret` (≥6 chars), or it is logged verbatim.
+- SQL log lines carry no parameters: the GORM logger in `fuku/db/conn.go` sets `ParameterizedQueries: true`, so a failed or
+  slow (over 1 s) statement is logged with its placeholders and never the welcome, goodbye or rules text, button links or
+  other values it wrote. Do not add a logger that prints bound values.
 - A file the bot downloads itself never puts its URL in an error or a log: the Telegram file URL holds the bot token and
   `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
   follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
