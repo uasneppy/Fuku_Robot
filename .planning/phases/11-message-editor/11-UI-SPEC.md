@@ -329,7 +329,7 @@ One setting, one code path: each apply function holds the validation, the refusa
 `cache.DeleteCache`, and returns a typed result (outcome, the stored value read back, the repository error); the command
 maps it to its unchanged reply and the menu to a redraw. The press sends the absolute target (`v`), so a double tap is
 harmless. A successful flip adds no notice (like the Access and Antiflood switches); a failure redraws with
-`⚠️ common_settings_save_failed` and the old state. Defaults when there is no row: Welcome On, Goodbye Off, Delete last
+`⚠️ common_settings_save_failed` and the old state. Defaults when there is no row: Welcome On, Goodbye On (the database default is `goodbye_enabled true`; research Q1), Delete last
 Off (what `checkGreetingSettings` returns). The pages read through an error-returning read (see Notes for the planner):
 `GetGreetingSettings` and `GetChatRulesInfo` hide read errors, and a getter that hides read errors is never used by a
 page, so a read error is the cannot-open edit (`settings_cannot_open`, with the alert `settings_cannot_open_alert`).
@@ -356,7 +356,7 @@ not edited.
 | Page | Key | Order | Icon | Name key | Main state |
 |------|-----|-------|------|----------|------------|
 | Welcome | `w` | 50 | 🎉 | `settings_page_welcome` | `common_status_on` or `common_status_off` (default On) |
-| Goodbye | `g` | 60 | 👋 | `settings_page_goodbye` | `common_status_on` or `common_status_off` (default Off) |
+| Goodbye | `g` | 60 | 👋 | `settings_page_goodbye` | `common_status_on` or `common_status_off` (default On for Welcome and for Goodbye, the database default; research Q1) |
 | Rules | `r` | 70 | 📜 | `settings_page_rules` | `settings_state_set` or `settings_state_not_set` |
 
 Existing orders: Staff Group 10, Lockdown 20, Captcha 30, Antiflood 40, Access 90 (owner only, always its own last
@@ -367,7 +367,7 @@ before the Access line:
 
 ```
 🎉 Welcome: On
-👋 Goodbye: Off
+👋 Goodbye: On
 📜 Rules: Not set
 ```
 
@@ -423,7 +423,7 @@ Delete last welcome: I delete my previous welcome when I send a new one (only me
 [ ⬅️ Back | ✖️ Close ]
 ```
 
-Goodbye is identical with its own words and the default `Goodbye: ❌ Off`.
+Goodbye is identical with its own words and the default `Goodbye: ✅ On` (the database default; research Q1).
 
 ### Welcome, private menu, some parts set
 
@@ -928,7 +928,7 @@ Applicable state considerations resolved: 22 covered, 4 backstop, 5 unresolved.
 | text with button lines | pasted button syntax in the Text part | ✅ covered | refused (`settings_edit_refuse_text_buttons`), nothing silently moved |
 | bad link | a non-http link, a missing host | ✅ covered | refused with the button's number (EDIT-05); the commands' silent drop is not copied |
 | group menu | Set and Remove in a menu opened in the group | ✅ covered | notice plus the always-present Open in private row; no wait is ever created in a group (D-01) |
-| defaults | a chat with no greetings row | ✅ covered | Welcome On, Goodbye Off, Delete last Off, default texts, as `checkGreetingSettings` returns |
+| defaults | a chat with no greetings row | ✅ covered | Welcome On, Goodbye On (database default), Delete last Off, default texts, as `checkGreetingSettings` returns |
 | populated | the typical page | ✅ covered | the mock pages above |
 | real client behaviour | tap-to-copy of `<code>` examples; `/cancel` tap-to-send; truncation of 20-character labels in hi, ru, uk; GIF shown as file or animation | 🧪 backstop | rendered-length tests bound the labels; the rest is on the owner's device checklist |
 | edit rate limits | fast taps on Preview or a switch | 🧪 backstop | not retried; nothing was written; the next press redraws |
@@ -1031,6 +1031,8 @@ change by recording a decision.
   guarantee rests on PostgreSQL, so nothing joins `make test-postgres-integrity`.
 
 ---
+
+> **Correction 2026-11-04 (research Q1, verified by a scratch run):** a chat with no greetings row reads as Goodbye On, not Off, because `goodbye_enabled` defaults to true in the database and GORM turns a Go `false` back into it. The pages show what the runtime does, so every Goodbye default above is On. Also 83 locale keys, not 79 (research Q9 adds `settings_edit_wait_ended_note` and `settings_edit_part_text|media|buttons` for the D-12 reply).
 
 ## Checker Sign-Off
 
