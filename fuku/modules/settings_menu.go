@@ -242,6 +242,11 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 		for _, key := range entry.action.Fields {
 			allowed[key] = true
 		}
+		// The action's own strict check runs on the whole field set once the allow-list is
+		// known, still before any I/O.
+		if entry.action.Validate != nil && !entry.action.Validate(fields) {
+			return false
+		}
 	}
 	for key := range fields {
 		if !allowed[key] {

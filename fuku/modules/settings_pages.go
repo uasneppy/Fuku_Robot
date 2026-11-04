@@ -372,12 +372,17 @@ type settingsControl struct {
 }
 
 // settingsPageAction is a page-specific action. Fields are the extra keys the callback may
-// carry besides a and the owner; they are allowed, not required, and Run parses them
-// strictly.
+// carry besides a and the owner; they are allowed, not required, unless Validate says
+// otherwise, and Run parses them strictly.
 type settingsPageAction struct {
 	Fields []string
 	Right  settingsRight
-	Run    func(p *settingsPress) *settingsScreen
+	// Validate is an optional strict check of the action's own fields. It runs with the rest
+	// of step 1, after the allow-list check and before any I/O, and a false answer refuses
+	// the press as an invalid request. Nil means the fields are allowed and not required, as
+	// before.
+	Validate func(fields map[string]string) bool
+	Run      func(p *settingsPress) *settingsScreen
 }
 
 // settingsActionEntry maps a page action code back to its page.
