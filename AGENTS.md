@@ -1584,8 +1584,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   message by message, so whichever part claims the wait first is stored and the other parts are dropped without a reply;
   the owner sees the saved page with its length, and there is no ordering signal for plain texts to do better. A claim
   that is never finished or released (a crash, or a Redis timeout on finish) stays until the wait's 10 minutes end,
-  during which the sender's non-command private messages get no reply and Cancel and `/cancel` answer that nothing can be
-  cancelled; pressing Set again replaces the wait and its claim.
+  during which the sender's non-command private messages get no reply, the prompt's Cancel answers that it is no longer
+  waiting and `/cancel` says there is nothing to cancel; pressing Set again replaces the wait and its claim.
 
 ## Go rules
 
