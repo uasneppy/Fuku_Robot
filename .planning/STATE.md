@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 11
 current_phase_name: Message Editor
 status: executing
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-11-04T16:49:15.652Z"
+stopped_at: Completed 11-04-PLAN.md
+last_updated: "2026-11-04T16:56:20.539Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: c3517a2ce0f8ad3a6d2dece7450b0ef4b50f88b9
+state_head: 5eecd15ebe258ac5529b7fefcfbd4561f2da8300
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 25
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 11 (Message Editor) — EXECUTING
-Plan: 4 of 14
+Plan: 5 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -89,6 +89,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 11 P01 | 14 min | 3 tasks | 10 files |
 | Phase 11 P02 | 8 min | 2 tasks | 4 files |
 | Phase 11 P03 | 12 min | 2 tasks | 4 files |
+| Phase 11 P04 | 15min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,8 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-10: a private Main ends with Groups (shub a=lp&v=1) and Close, a group Main with Close alone; the owner-only Access page gets its own full-width row after the two-column grid and each page's state moved from the button label into a status block in the body
 - [Phase 11]: 11-01: the literal {id} of settings_edit_wait_text is exempt from the settings_ {id} placeholder ban (only that key, only {id}); {staff} stays forbidden
 - [Phase 11]: 11-02: content.TextLengthRefusal/ValidButtonURL/ExtractMedia and formatting.FillPlaceholders/VisibleLength are the shared rule functions the commands call and the editor reuses; FillPlaceholders makes no Telegram call and no database read
+- [Phase 11]: 11-04: wait-ended note puts {part} in parentheses in es, fr, pt, uk and ru so one lower-case noun fits every grammar
+- [Phase 11]: 11-04: uk and hi name 'the start button' instead of quoting Telegram's localized Start label
 
 ### Pending Todos
 
@@ -213,8 +216,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T16:49:15.556Z
-Stopped at: Completed 11-03-PLAN.md
+Last session: 2026-11-04T16:56:12.256Z
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
