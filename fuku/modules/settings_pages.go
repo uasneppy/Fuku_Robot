@@ -471,7 +471,7 @@ func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Cha
 
 // renderSettingsMain draws the Main page. The body is the hint, the opener's name in a group
 // menu and, when at least one page is visible, a blank line and the status block: one
-// settings_main_state_line per page in the grid's order, the owner-only pages last. The keyboard
+// status line per page in the grid's order, the owner-only pages last. The keyboard
 // is a two-column grid of "icon name" buttons filled left to right in the order given (an odd
 // last one stays alone on a full-width row), then each owner-only page on its own full-width row,
 // then the navigation row. The state sits in the body, never in a button, and is spliced as the
