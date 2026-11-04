@@ -255,13 +255,97 @@ func SetWelcomeText(chatID int64, welcometxt, fileId string, buttons []models.Bu
 	return nil
 }
 
-// RED-phase stubs: replaced by the real column-targeted writers in the next commit.
-func SetWelcomeTextOnly(chatID int64, text string) error                  { return nil }
-func SetWelcomeMediaOnly(chatID int64, fileID string, dataType int) error { return nil }
-func SetWelcomeButtonsOnly(chatID int64, buttons []models.Button) error   { return nil }
-func SetGoodbyeTextOnly(chatID int64, text string) error                  { return nil }
-func SetGoodbyeMediaOnly(chatID int64, fileID string, dataType int) error { return nil }
-func SetGoodbyeButtonsOnly(chatID int64, buttons []models.Button) error   { return nil }
+// The Set{Welcome,Goodbye}{Text,Media,Buttons}Only writers are the settings editor's
+// one-part writes: each stores only its own columns through upsertGreetingSettings, so
+// the other parts of the row stay as they were and the greetings cache key is
+// invalidated like every other greetings write. SetWelcomeText and SetGoodbyeText stay
+// the commands' four-column writes.
+
+// SetWelcomeTextOnly stores only the welcome text.
+func SetWelcomeTextOnly(chatID int64, text string) error {
+	updates := map[string]any{
+		"welcome_text": text,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetWelcomeTextOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetWelcomeMediaOnly stores only the welcome media: file ID and type.
+func SetWelcomeMediaOnly(chatID int64, fileID string, dataType int) error {
+	updates := map[string]any{
+		"welcome_file_id": fileID,
+		"welcome_type":    dataType,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetWelcomeMediaOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetWelcomeButtonsOnly stores only the welcome buttons.
+func SetWelcomeButtonsOnly(chatID int64, buttons []models.Button) error {
+	updates := map[string]any{
+		"welcome_btns": models.ButtonArray(buttons),
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetWelcomeButtonsOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetGoodbyeTextOnly stores only the goodbye text.
+func SetGoodbyeTextOnly(chatID int64, text string) error {
+	updates := map[string]any{
+		"goodbye_text": text,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetGoodbyeTextOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetGoodbyeMediaOnly stores only the goodbye media: file ID and type.
+func SetGoodbyeMediaOnly(chatID int64, fileID string, dataType int) error {
+	updates := map[string]any{
+		"goodbye_file_id": fileID,
+		"goodbye_type":    dataType,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetGoodbyeMediaOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetGoodbyeButtonsOnly stores only the goodbye buttons.
+func SetGoodbyeButtonsOnly(chatID int64, buttons []models.Button) error {
+	updates := map[string]any{
+		"goodbye_btns": models.ButtonArray(buttons),
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetGoodbyeButtonsOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
 
 func SetWelcomeToggle(chatID int64, pref bool) error {
 	updates := map[string]any{
