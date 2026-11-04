@@ -40,12 +40,35 @@ var rulesWrites = struct {
 	SetChatRules func(chatID int64, rules string) error
 }{rules.SetChatRules}
 
+// applyRulesText stores the rules text (the HTML /setrules and the editor keep) and reads
+// it back. It is the one write path of /setrules and the menu.
 func applyRulesText(ctx context.Context, chatID int64, html string) rulesApplyResult {
-	return rulesApplyResult{Outcome: greetingApplied}
+	return finishRulesApply(ctx, chatID, "set", rulesWrites.SetChatRules(chatID, html))
 }
 
+// applyRulesClear stores empty rules, the one write path of /clearrules and the menu's
+// Remove.
 func applyRulesClear(ctx context.Context, chatID int64) rulesApplyResult {
-	return rulesApplyResult{Outcome: greetingApplied}
+	return finishRulesApply(ctx, chatID, "clear", rulesWrites.SetChatRules(chatID, ""))
+}
+
+// finishRulesApply turns the error of the rules write into the apply result. A failed
+// read-back is only logged, because the write succeeded.
+func finishRulesApply(ctx context.Context, chatID int64, what string, writeErr error) rulesApplyResult {
+	if writeErr != nil {
+		log.Errorf("[Rules] Failed to %s rules for chat %d: %v", what, chatID, writeErr)
+		return rulesApplyResult{Outcome: greetingSaveFailed, Err: writeErr}
+	}
+	result := rulesApplyResult{Outcome: greetingApplied}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
+	defer cancel()
+	stored, err := rules.LoadRulesContext(readCtx, chatID)
+	if err != nil {
+		log.Warnf("[Rules] read back rules of chat %d after %s: %v", chatID, what, err)
+		return result
+	}
+	result.Rules = stored
+	return result
 }
 
 //nolint:dupl // clearRules has similar structure to resetRulesBtn
@@ -59,8 +82,10 @@ func (moduleStruct) clearRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	var text string
-	if err := rules.SetChatRules(chat.Id, ""); err != nil {
-		log.Errorf("[Rules] Failed to clear rules for chat %d: %v", chat.Id, err)
+	applyCtx, cancel := greetingApplyContext()
+	res := applyRulesClear(applyCtx, chat.Id)
+	cancel()
+	if res.Outcome == greetingSaveFailed {
 		text, _ = tr.GetString("common_settings_save_failed")
 	} else {
 		text, _ = tr.GetString("rules_cleared_successfully")
@@ -225,8 +250,10 @@ func (moduleStruct) setRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 				return ext.EndGroups
 			}
 		}
-		if err := rules.SetChatRules(chat.Id, tgmd2html.MD2HTMLV2(text)); err != nil {
-			log.Errorf("[Rules] Failed to set rules for chat %d: %v", chat.Id, err)
+		applyCtx, cancel := greetingApplyContext()
+		res := applyRulesText(applyCtx, chat.Id, tgmd2html.MD2HTMLV2(text))
+		cancel()
+		if res.Outcome == greetingSaveFailed {
 			text, _ = tr.GetString("common_settings_save_failed")
 		} else {
 			text, _ = tr.GetString("rules_set_successfully")

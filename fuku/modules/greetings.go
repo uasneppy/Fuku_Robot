@@ -235,39 +235,58 @@ func applyCleanGoodbye(ctx context.Context, chatID int64, on bool) greetingApply
 	return finishGreetingApply(ctx, chatID, "SetCleanGoodbyeSetting", greetingWrites.CleanGoodbye(chatID, on))
 }
 
-// applyGreetingText stores one greeting's text.
+// applyGreetingText stores one greeting's text (the HTML the editor keeps) and nothing
+// else of the row.
 func applyGreetingText(ctx context.Context, chatID int64, isWelcome bool, html string) greetingApplyResult {
-	return greetingApplyResult{Outcome: greetingApplied}
+	if isWelcome {
+		return finishGreetingApply(ctx, chatID, "SetWelcomeTextOnly", greetingWrites.WelcomeTextOnly(chatID, html))
+	}
+	return finishGreetingApply(ctx, chatID, "SetGoodbyeTextOnly", greetingWrites.GoodbyeTextOnly(chatID, html))
 }
 
-// applyGreetingMedia stores one greeting's file ID and type.
+// applyGreetingMedia stores one greeting's file ID and media type and nothing else.
 func applyGreetingMedia(ctx context.Context, chatID int64, isWelcome bool, fileID string, dataType int) greetingApplyResult {
-	return greetingApplyResult{Outcome: greetingApplied}
+	if isWelcome {
+		return finishGreetingApply(ctx, chatID, "SetWelcomeMediaOnly", greetingWrites.WelcomeMediaOnly(chatID, fileID, dataType))
+	}
+	return finishGreetingApply(ctx, chatID, "SetGoodbyeMediaOnly", greetingWrites.GoodbyeMediaOnly(chatID, fileID, dataType))
 }
 
-// applyGreetingButtons stores one greeting's buttons.
+// applyGreetingButtons stores one greeting's buttons and nothing else.
 func applyGreetingButtons(ctx context.Context, chatID int64, isWelcome bool, buttons []db.Button) greetingApplyResult {
-	return greetingApplyResult{Outcome: greetingApplied}
+	if isWelcome {
+		return finishGreetingApply(ctx, chatID, "SetWelcomeButtonsOnly", greetingWrites.WelcomeButtonsOnly(chatID, buttons))
+	}
+	return finishGreetingApply(ctx, chatID, "SetGoodbyeButtonsOnly", greetingWrites.GoodbyeButtons(chatID, buttons))
 }
 
-// applyGreetingRemoveText puts back the default text.
+// applyGreetingRemoveText puts back the default text (db.DefaultWelcome or
+// db.DefaultGoodbye), the text column a reset writes.
 func applyGreetingRemoveText(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
-	return greetingApplyResult{Outcome: greetingApplied}
+	if isWelcome {
+		return applyGreetingText(ctx, chatID, true, db.DefaultWelcome)
+	}
+	return applyGreetingText(ctx, chatID, false, db.DefaultGoodbye)
 }
 
-// applyGreetingRemoveMedia clears the file.
+// applyGreetingRemoveMedia clears the file ID and makes the type text, the media columns
+// a reset writes.
 func applyGreetingRemoveMedia(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
-	return greetingApplyResult{Outcome: greetingApplied}
+	return applyGreetingMedia(ctx, chatID, isWelcome, "", db.TEXT)
 }
 
-// applyGreetingRemoveButtons clears the buttons.
+// applyGreetingRemoveButtons clears the buttons, the column a reset writes.
 func applyGreetingRemoveButtons(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
-	return greetingApplyResult{Outcome: greetingApplied}
+	return applyGreetingButtons(ctx, chatID, isWelcome, nil)
 }
 
-// applyGreetingReset is the four-column reset.
+// applyGreetingReset is the four-column write /resetwelcome and /resetgoodbye make: the
+// default text, no file, no buttons and the text type.
 func applyGreetingReset(ctx context.Context, chatID int64, isWelcome bool) greetingApplyResult {
-	return greetingApplyResult{Outcome: greetingApplied}
+	if isWelcome {
+		return finishGreetingApply(ctx, chatID, "SetWelcomeText", greetingWrites.WelcomeText(chatID, db.DefaultWelcome, "", nil, db.TEXT))
+	}
+	return finishGreetingApply(ctx, chatID, "SetGoodbyeText", greetingWrites.GoodbyeText(chatID, db.DefaultGoodbye, "", nil, db.TEXT))
 }
 
 // greetingApplyContext is the context the commands give an apply function.
@@ -483,20 +502,13 @@ func (moduleStruct) resetGreeting(bot *gotgbot.Bot, ctx *ext.Context, isWelcome 
 	}
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	if isWelcome {
-		if dbErr := greetings.SetWelcomeText(chat.Id, db.DefaultWelcome, "", nil, db.TEXT); dbErr != nil {
-			log.Errorf("[Greetings] SetWelcomeText failed for chat %d: %v", chat.Id, dbErr)
-			errText, _ := tr.GetString("common_settings_save_failed")
-			_, _ = msg.Reply(bot, errText, formatting.Shtml())
-			return ext.EndGroups
-		}
-	} else {
-		if dbErr := greetings.SetGoodbyeText(chat.Id, db.DefaultGoodbye, "", nil, db.TEXT); dbErr != nil {
-			log.Errorf("[Greetings] SetGoodbyeText failed for chat %d: %v", chat.Id, dbErr)
-			errText, _ := tr.GetString("common_settings_save_failed")
-			_, _ = msg.Reply(bot, errText, formatting.Shtml())
-			return ext.EndGroups
-		}
+	applyCtx, cancel := greetingApplyContext()
+	res := applyGreetingReset(applyCtx, chat.Id, isWelcome)
+	cancel()
+	if res.Outcome == greetingSaveFailed {
+		errText, _ := tr.GetString("common_settings_save_failed")
+		_, _ = msg.Reply(bot, errText, formatting.Shtml())
+		return ext.EndGroups
 	}
 	translationKey := "greetings_welcome_reset_success"
 	if !isWelcome {
