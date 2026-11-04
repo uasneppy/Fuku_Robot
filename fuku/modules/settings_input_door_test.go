@@ -522,6 +522,48 @@ func TestSettingsEditDoorAuthority(t *testing.T) {
 			},
 		},
 		{
+			// The person's own lookup passes (nil), then the bot's cache-miss lookup and the door's
+			// live check of the bot both meet a 429: nothing is established, so the wait is kept.
+			name: "the bot lookup answers 429 and the page is Rules", page: settingsPageRules, setup: owner,
+			want: "settings_check_failed", kept: true,
+			change: func(env *settingsEnv, _ gotgbot.User) {
+				dbcache.DeleteCache(dbcache.CacheKey("admin_list", env.chat.Id))
+				dbcache.ResetLocalForTest()
+				env.fake.script("getChatMember", env.chat.Id, nil, staffFake429(1), staffFake429(1))
+			},
+		},
+		{
+			name: "the bot lookup answers 500 and the page is Rules", page: settingsPageRules, setup: owner,
+			want: "settings_check_failed", kept: true,
+			change: func(env *settingsEnv, _ gotgbot.User) {
+				dbcache.DeleteCache(dbcache.CacheKey("admin_list", env.chat.Id))
+				dbcache.ResetLocalForTest()
+				env.fake.script("getChatMember", env.chat.Id, nil, staffFakeError(500, "Internal Server Error"),
+					staffFakeError(500, "Internal Server Error"))
+			},
+		},
+		{
+			name: "the bot lookup answers 403 and the page is Rules", page: settingsPageRules, setup: owner,
+			want: "chat_status_bot_not_admin",
+			change: func(env *settingsEnv, _ gotgbot.User) {
+				dbcache.DeleteCache(dbcache.CacheKey("admin_list", env.chat.Id))
+				dbcache.ResetLocalForTest()
+				env.fake.script("getChatMember", env.chat.Id, nil, staffFakeError(403, "Forbidden: bot was kicked"),
+					staffFakeError(403, "Forbidden: bot was kicked"))
+			},
+		},
+		{
+			// The first bot lookup fails but the live check says the bot is an administrator: the
+			// door cannot tell a stale answer from a loss, so it keeps the wait.
+			name: "the bot lookup fails once and the live check says administrator", page: settingsPageRules, setup: owner,
+			want: "settings_check_failed", kept: true,
+			change: func(env *settingsEnv, _ gotgbot.User) {
+				dbcache.DeleteCache(dbcache.CacheKey("admin_list", env.chat.Id))
+				dbcache.ResetLocalForTest()
+				env.fake.script("getChatMember", env.chat.Id, nil, staffFake429(1), nil)
+			},
+		},
+		{
 			name: "getChat answers 400", page: settingsPageWelcome, setup: owner, want: "settings_edit_refuse_access_lost",
 			change: func(env *settingsEnv, _ gotgbot.User) {
 				env.fake.script("getChat", env.chat.Id, staffFakeError(400, "Bad Request: chat not found"))
@@ -552,6 +594,9 @@ func TestSettingsEditDoorAuthority(t *testing.T) {
 			settingsEditWantReply(t, env, person, before, w.want)
 			if w.kept {
 				settingsEditWaitKept(t, env, person)
+				if !env.redis.Exists(settingsInputDoneKey(person.Id)) {
+					t.Error("a kept wait lost its marker")
+				}
 			} else {
 				settingsEditWaitGone(t, env, person)
 			}

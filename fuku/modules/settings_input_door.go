@@ -266,9 +266,7 @@ func (r *settingsInputReply) authorize() bool {
 		r.end(key)
 		return false
 	}
-	if r.def.EditRight == settingsRightAdminBotAdmin &&
-		!chat_status.IsBotAdmin(r.b, nil, &gotgbot.Chat{Id: r.wait.GroupID, Type: "supergroup"}) {
-		r.end("chat_status_bot_not_admin")
+	if r.def.EditRight == settingsRightAdminBotAdmin && !r.botAdmin() {
 		return false
 	}
 
@@ -291,6 +289,35 @@ func (r *settingsInputReply) authorize() bool {
 	}
 	r.group = group
 	return true
+}
+
+// botAdmin is the Rules bot check, never looser than /setrules: it proceeds only when
+// chat_status.IsBotAdmin is true. That predicate returns a bare bool, so a false is either a bot
+// that is no administrator or a lookup that failed; one live getChatMember of the bot tells the
+// two apart. A definite non-administrator status, or a Telegram client error, ends the wait; an
+// error that cannot be established (429, 5xx, transport, timeout) and a live answer that says
+// the bot is an administrator (the predicate's answer was stale) keep it. It answers the refusal
+// itself and reports whether the reply may go on.
+func (r *settingsInputReply) botAdmin() bool {
+	if chat_status.IsBotAdmin(r.b, nil, &gotgbot.Chat{Id: r.wait.GroupID, Type: "supergroup"}) {
+		return true
+	}
+	bot, err := lockdownLiveMember(r.b, r.wait.GroupID, r.b.Id)
+	if err != nil {
+		log.Warnf("[Settings] live check of the bot in chat %d for a typed reply failed: %v", r.wait.GroupID, err)
+		if isTelegramClientError(err) {
+			r.end("chat_status_bot_not_admin")
+		} else {
+			r.keep("settings_check_failed")
+		}
+		return false
+	}
+	if bot.Status == gotgbot.ChatMemberStatusAdministrator {
+		r.keep("settings_check_failed")
+		return false
+	}
+	r.end("chat_status_bot_not_admin")
+	return false
 }
 
 // text translates key in the sender's language.
