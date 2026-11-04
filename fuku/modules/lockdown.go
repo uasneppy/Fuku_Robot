@@ -136,43 +136,55 @@ func lockdownLiveMember(b *gotgbot.Bot, chatID, userID int64) (gotgbot.MergedCha
 // only inside the command pipeline.
 func requireLockdownAuthority(needRestrict bool) helpers.CheckFunc {
 	return func(c *helpers.CommandContext) bool {
-		if c.User == nil || c.Chat == nil || c.Ctx == nil {
-			return false
-		}
-		refuse := func(key string) bool { return lockdownRefuse(c, key) }
+		_, ok := lockdownAuthorityMember(c, needRestrict)
+		return ok
+	}
+}
 
-		if sender := c.Ctx.EffectiveSender; sender != nil && sender.IsAnonymousAdmin() {
-			if err := chat_status.PromptAnonAdminProof(c.Bot, c.Chat, c.Msg); err != nil {
-				log.Errorf("[Lockdown] anonymous admin proof prompt in chat %d: %v", c.Chat.Id, err)
-			}
-			return false
-		}
+// lockdownAuthorityMember is the body of requireLockdownAuthority. It returns the live
+// member record of the sender when the check passes, so a caller that needs more than the
+// verdict (the settings owner gate) reuses the record instead of asking Telegram again. On
+// a refusal it has replied exactly as requireLockdownAuthority always did and returns false.
+func lockdownAuthorityMember(c *helpers.CommandContext, needRestrict bool) (gotgbot.MergedChatMember, bool) {
+	if c.User == nil || c.Chat == nil || c.Ctx == nil {
+		return gotgbot.MergedChatMember{}, false
+	}
+	refuse := func(key string) (gotgbot.MergedChatMember, bool) {
+		lockdownRefuse(c, key)
+		return gotgbot.MergedChatMember{}, false
+	}
 
-		// A message sent as another chat or channel cannot be tied to one person.
-		if sender := c.Ctx.EffectiveSender; sender != nil && sender.Chat != nil && sender.Chat.Id != c.Chat.Id {
-			return refuse("chat_status_user_admin_cmd_error")
+	if sender := c.Ctx.EffectiveSender; sender != nil && sender.IsAnonymousAdmin() {
+		if err := chat_status.PromptAnonAdminProof(c.Bot, c.Chat, c.Msg); err != nil {
+			log.Errorf("[Lockdown] anonymous admin proof prompt in chat %d: %v", c.Chat.Id, err)
 		}
+		return gotgbot.MergedChatMember{}, false
+	}
 
-		member, err := lockdownLiveMember(c.Bot, c.Chat.Id, c.User.Id)
-		if err != nil {
-			log.Warnf("[Lockdown] live check of user %d in chat %d failed: %v", c.User.Id, c.Chat.Id, err)
-			return refuse("lockdown_check_failed")
-		}
+	// A message sent as another chat or channel cannot be tied to one person.
+	if sender := c.Ctx.EffectiveSender; sender != nil && sender.Chat != nil && sender.Chat.Id != c.Chat.Id {
+		return refuse("chat_status_user_admin_cmd_error")
+	}
 
-		if needRestrict {
-			switch staffIssuerSkipReason(member) {
-			case "":
-				return true
-			case staffReasonSkipIssuerNoRight:
-				return refuse("chat_status_restrict_cmd_error")
-			}
-			return refuse("chat_status_user_admin_cmd_error")
-		}
-		if member.Status == gotgbot.ChatMemberStatusCreator || member.Status == gotgbot.ChatMemberStatusAdministrator {
-			return true
+	member, err := lockdownLiveMember(c.Bot, c.Chat.Id, c.User.Id)
+	if err != nil {
+		log.Warnf("[Lockdown] live check of user %d in chat %d failed: %v", c.User.Id, c.Chat.Id, err)
+		return refuse("lockdown_check_failed")
+	}
+
+	if needRestrict {
+		switch staffIssuerSkipReason(member) {
+		case "":
+			return member, true
+		case staffReasonSkipIssuerNoRight:
+			return refuse("chat_status_restrict_cmd_error")
 		}
 		return refuse("chat_status_user_admin_cmd_error")
 	}
+	if member.Status == gotgbot.ChatMemberStatusCreator || member.Status == gotgbot.ChatMemberStatusAdministrator {
+		return member, true
+	}
+	return refuse("chat_status_user_admin_cmd_error")
 }
 
 // lockdownHasPermissions reports whether a getChat permissions member is present

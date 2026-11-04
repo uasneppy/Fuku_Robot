@@ -31,11 +31,13 @@ const (
 )
 
 // settingsDesc is deliberately not Disableable. Its authority is a live getChatMember of
-// the sender (a creator or an administrator), never the admin cache; an anonymous admin
-// gets the proof first and re-enters as the person who tapped.
+// the sender (a creator or an administrator), never the admin cache, and then the owner
+// gate (requireSettingsAccess: by default only the owner, or an administrator the owner let
+// in); an anonymous admin gets the proof first and re-enters as the person who tapped, who
+// is checked and gated like anyone else.
 var settingsDesc = helpers.CommandDescriptor{
 	Name:           "settings",
-	RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireLockdownAuthority(false)},
+	RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireSettingsAccess()},
 }
 
 // settingsPrivateURL is the Open in private link: a deep link into the bot's /start with
