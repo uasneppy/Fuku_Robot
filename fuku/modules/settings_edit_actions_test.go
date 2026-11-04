@@ -325,6 +325,42 @@ func TestSettingsEditStaleCancel(t *testing.T) {
 	}
 }
 
+// TestSettingsEditCancelRedisError: a Cancel that meets a Redis error may never have run its
+// script, so the wait can still be live. The prompt and its Cancel button stay (nothing is
+// edited), the press is answered once with the alert, and the wait is still there; a retry
+// after Redis is back cancels it.
+func TestSettingsEditCancelRedisError(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	menuID := settingsEditPrivateMenu(env, owner, settingsPageWelcome)
+	settingsEditPressButton(env, owner, menuID, "settings_btn_edit_set_text")
+	edits := len(env.edits(owner.Id, menuID))
+	answers := env.answerCount()
+
+	env.redis.SetError("connection reset")
+	settingsEditPressButton(env, owner, menuID, "settings_btn_edit_cancel")
+	env.redis.SetError("")
+
+	answer, alert := env.lastAnswer()
+	if got := env.answerCount() - answers; got != 1 || !alert || !strings.Contains(answer, staffMarker("settings_edit_unavailable")) {
+		t.Errorf("Cancel with a Redis error answered %q (alert %v, %d answers), want one alert settings_edit_unavailable", answer, alert, got)
+	}
+	if got := len(env.edits(owner.Id, menuID)); got != edits {
+		t.Errorf("the prompt was edited %d times by a Cancel that met a Redis error, want none", got-edits)
+	}
+	if !env.redis.Exists(settingsInputKey(owner.Id)) || !env.redis.Exists(settingsInputDoneKey(owner.Id)) {
+		t.Error("the wait or its marker is gone after a Cancel that never ran")
+	}
+
+	settingsEditPressButton(env, owner, menuID, "settings_btn_edit_cancel")
+	if env.redis.Exists(settingsInputKey(owner.Id)) {
+		t.Error("a Cancel with Redis back did not delete the wait")
+	}
+	if text, _ := env.lastEdit(owner.Id, menuID); !strings.Contains(text, staffMarker("settings_edit_cancelled")) {
+		t.Errorf("the retried Cancel edited the message to %q, want the cancelled notice", text)
+	}
+}
+
 func TestSettingsEditExpiredPrompt(t *testing.T) {
 	env := newSettingsEditEnv(t)
 	owner := env.newOwner(env.chat)

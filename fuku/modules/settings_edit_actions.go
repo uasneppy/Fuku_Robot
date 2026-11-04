@@ -170,11 +170,15 @@ func settingsEditCancel(def settingsEditPageDef) func(*settingsPress) *settingsS
 		outcome, err := settingsInputCancel(ctx, p.query.From.Id, p.group.Id, def.Key, part)
 		notice := ""
 		switch {
-		case err != nil:
-			if !errors.Is(err, errSettingsInputUnavailable) {
-				log.Warnf("[Settings] the wait of user %d could not be cancelled: %v", p.query.From.Id, err)
-			}
+		case errors.Is(err, errSettingsInputUnavailable):
+			// No Redis means no wait can exist, so the page is the right thing to show.
 			p.answer(settingsText(p.tr, "settings_edit_unavailable"), true)
+		case err != nil:
+			// The script may never have run, or its reply was lost: the wait can still be live, so
+			// the prompt and its Cancel button stay and nothing is edited.
+			log.Warnf("[Settings] the wait of user %d could not be cancelled: %v", p.query.From.Id, err)
+			p.answer(settingsText(p.tr, "settings_edit_unavailable"), true)
+			return nil
 		case outcome == settingsInputCancelDeleted:
 			notice = settingsNoticeOK(settingsText(p.tr, "settings_edit_cancelled"))
 		case outcome == settingsInputCancelExpired:

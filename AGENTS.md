@@ -435,7 +435,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`settingsInputCancel`) compares group, page and part with the wait before deleting anything: a deleted wait edits the
   message into the page with the cancelled notice, a prompt whose wait was replaced, used or is being saved answers
   `settings_edit_prompt_stale` and leaves the live wait alone, one after the ten minutes answers
-  `settings_edit_wait_expired`, and each of those edits the message into the page. Remove is one tap with no card, through
+  `settings_edit_wait_expired`, and each of those edits the message into the page. A Cancel that meets a Redis error other
+  than "no Redis" (a timeout, a dropped connection: the script may never have run, so the wait can still be live) answers
+  the alert `settings_edit_unavailable` and edits nothing, so the prompt and its Cancel button stay; with no Redis no wait
+  can exist and the page is drawn. Remove is one tap with no card, through
   the commands' apply functions (`applyGreetingRemoveText`, `applyGreetingRemoveMedia`, `applyGreetingRemoveButtons`,
   `applyRulesClear`), so the three Remove presses of a Welcome or Goodbye page together store what `/resetwelcome` or
   `/resetgoodbye` store and Rules Remove what `/clearrules` stores; it redraws from the read-back with a notice that says
