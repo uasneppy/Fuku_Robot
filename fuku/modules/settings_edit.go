@@ -185,8 +185,21 @@ func settingsEditLoad(ctx context.Context, def settingsEditPageDef, chatID int64
 // settingsEditMediaKey is the locale key of the kind word of a stored media type, or "" for
 // no media. A GIF is stored as a document, exactly as the commands store it.
 func settingsEditMediaKey(mediaType int) string {
-	if mediaType == db.PHOTO {
+	switch mediaType {
+	case db.PHOTO:
 		return "settings_edit_media_photo"
+	case db.VIDEO:
+		return "settings_edit_media_video"
+	case db.DOCUMENT:
+		return "settings_edit_media_file"
+	case db.STICKER:
+		return "settings_edit_media_sticker"
+	case db.AUDIO:
+		return "settings_edit_media_audio"
+	case db.VOICE:
+		return "settings_edit_media_voice"
+	case db.VIDEO_NOTE:
+		return "settings_edit_media_video_note"
 	}
 	return ""
 }
@@ -405,6 +418,11 @@ func settingsEditSetEnabled(def settingsEditPageDef) func(*settingsPress, string
 	return settingsEditSetSwitch(def, settingsEditControlEnabled)
 }
 
+// settingsEditSetClean serves control d, Delete last (as /cleanwelcome and /cleangoodbye).
+func settingsEditSetClean(def settingsEditPageDef) func(*settingsPress, string) *settingsScreen {
+	return settingsEditSetSwitch(def, settingsEditControlClean)
+}
+
 func init() {
 	for _, def := range settingsEditPages {
 		pg := settingsPage{
@@ -418,6 +436,7 @@ func init() {
 		if def.isGreeting() {
 			pg.Controls = map[string]settingsControl{
 				settingsEditControlEnabled: {Right: settingsRightAdmin, Set: settingsEditSetEnabled(def)},
+				settingsEditControlClean:   {Right: settingsRightChangeInfo, Set: settingsEditSetClean(def)},
 			}
 		}
 		registerSettingsPage(pg)
