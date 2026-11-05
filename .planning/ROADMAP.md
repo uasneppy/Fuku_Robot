@@ -224,7 +224,7 @@ Plans:
 - [x] 12-14-PLAN.md — Full preview with Media under text and the Rules previews in the group's language (completes EDIT-07, EDIT-08) (wave 9)
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 12-15-PLAN.md — droppable: the atomic swap of the last welcome and goodbye message ID (wave 10)
+- [ ] 12-15-PLAN.md — droppable: the atomic swap of the last welcome and goodbye message ID (wave 10). **Dropped** by the orchestrator: its worst case is a cosmetic orphan welcome from a race that predates the phase, no requirement needs it, and 12-16 records the known race in AGENTS.md (accepted risk AR-03 in 12-SECURITY.md)
 
 **Wave 11** *(blocked on Wave 10 completion, or Wave 9 when 12-15 is dropped)*
 - [x] 12-16-PLAN.md — privacy and size checks of every Phase 12 screen, the PostgreSQL list, the rulebook and docs, the owner's live checks and the phase gate (wave 11)
