@@ -674,6 +674,18 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 			}
 		}
 
+		// Member requirements have no command (Phase 13): the help says so in English, and in
+		// every other language names the page the way the menu does, which ties the two.
+		if lang == "en" {
+			for _, phrase := range []string{"member requirements", "have no command"} {
+				if !strings.Contains(help, phrase) {
+					failures = append(failures, fmt.Sprintf("en: settings_help_msg does not contain %q", phrase))
+				}
+			}
+		} else if page, _ := data["settings_page_mreq"].(string); page == "" || !strings.Contains(strings.ToLower(help), strings.ToLower(page)) {
+			failures = append(failures, fmt.Sprintf("%s: settings_help_msg does not name the page %q", lang, page))
+		}
+
 		total := lockdownHelpLength(strings.ReplaceAll(header, "%s", "Settings")) + lockdownHelpLength(help)
 		t.Logf("%s: help %d of %d UTF-16 units, headroom %d", lang, total, lockdownHelpTelegramLimit, lockdownHelpTelegramLimit-total)
 		if total > lockdownHelpTelegramLimit {
