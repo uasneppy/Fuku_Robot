@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 12
 current_phase_name: Rules Media, Media Under Text and Greet Once
 status: executing
-stopped_at: Completed 12-04-PLAN.md
-last_updated: "2026-11-05T11:39:33.001Z"
+stopped_at: Completed 12-06-PLAN.md
+last_updated: "2026-11-05T11:50:45.611Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 2d0fd6960e22b0d2e92dec5cf0f10a6e651036e6
+state_head: 9ba9082058014dd8b59725254420d99d8021730f
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 41
-  completed_plans: 30
+  completed_plans: 31
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 12 (Rules Media, Media Under Text and Greet Once) — READY TO EXECUTE
-Plan: 6 of 16
+Plan: 7 of 16
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -104,6 +104,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 12 P05 | 20min | 2 tasks | 9 files |
 | Phase 12 P03 | 30min | 3 tasks | 8 files |
 | Phase 12 P04 | 45min | 3 tasks | 11 files |
+| Phase 12 P06 | 20min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -175,6 +176,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-14: the typed-reply door's refusal and saved notice are pure builders (renderSettingsInputRefusal, settingsInputSavedNotice) so privacy and fit tests render exactly what is sent
 - [Phase 11]: 11-14: fuku/modules takes 639 s under make test flags in the sandbox, over the 10 minute per-package timeout; judged by running it alone with -timeout 40m (recorded in the SUMMARY)
 - [Phase 12]: 12-04: sendPhoto, sendVideo and sendAnimation share one sendCaptioned (type switch) to stay under the dupl threshold; Send keeps separate cases
+- [Phase 12]: 12-06: the control existence check also refuses an unregistered page in step 1; settingsEditSetSwitch keeps its own 0-or-1 guard as a second line
 
 ### Pending Todos
 
@@ -244,8 +246,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T11:39:32.809Z
-Stopped at: Completed 12-04-PLAN.md
+Last session: 2026-11-05T11:50:38.651Z
+Stopped at: Completed 12-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
