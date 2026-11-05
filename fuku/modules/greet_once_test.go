@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -32,13 +33,26 @@ func greetOnceSetup(t *testing.T) (gotgbot.Chat, *moduleBotClient, *gotgbot.Bot)
 	return chat, client, newModuleTestBot(client)
 }
 
-// greetOnceCleanup deletes the greeted_members rows of the chat when the test ends.
+// greetOnceMemberIDs are the user IDs the tests of this file join. The captcha path stores a users row for the
+// member, named by the fake's getChatMember answer ("Member"), and caches it, so a later test that expects the
+// same ID to be unknown (the staff action card of /ban 4242) would otherwise read that stored name.
+var greetOnceMemberIDs = []int64{4242, 4343, 777000}
+
+// greetOnceCleanup deletes the greeted_members rows of the chat, and the users rows and cached copies of the
+// members the tests join, when the test ends.
 func greetOnceCleanup(t *testing.T, chatID int64) {
 	t.Helper()
 	t.Cleanup(func() {
 		if err := db.DB.Where("chat_id = ?", chatID).Delete(&models.GreetedMember{}).Error; err != nil {
 			t.Errorf("cleanup greeted_members: %v", err)
 		}
+		if err := db.DB.Where("user_id IN ?", greetOnceMemberIDs).Delete(&models.User{}).Error; err != nil {
+			t.Errorf("cleanup users: %v", err)
+		}
+		for _, id := range greetOnceMemberIDs {
+			dbcache.DeleteCache(dbcache.CacheKey("user", id))
+		}
+		dbcache.ResetLocalForTest()
 	})
 }
 
