@@ -497,6 +497,13 @@ func settingsEditSetSwitch(def settingsEditPageDef, control string) func(*settin
 	}
 }
 
+// settingsEditSwitchValue is the strict check of an editor switch's target value: exactly "0" or
+// "1". It is the Validate of the e and d controls, so any other value is an invalid request in
+// step 1, before any lookup.
+func settingsEditSwitchValue(value string) bool {
+	return value == "0" || value == "1"
+}
+
 // settingsEditSetEnabled serves control e, the on/off switch (as /welcome on|off and
 // /goodbye on|off).
 func settingsEditSetEnabled(def settingsEditPageDef) func(*settingsPress, string) *settingsScreen {
@@ -521,8 +528,8 @@ func init() {
 		}
 		if def.isGreeting() {
 			pg.Controls = map[string]settingsControl{
-				settingsEditControlEnabled: {Right: settingsRightAdmin, Set: settingsEditSetEnabled(def)},
-				settingsEditControlClean:   {Right: settingsRightChangeInfo, Set: settingsEditSetClean(def)},
+				settingsEditControlEnabled: {Right: settingsRightAdmin, Validate: settingsEditSwitchValue, Set: settingsEditSetEnabled(def)},
+				settingsEditControlClean:   {Right: settingsRightChangeInfo, Validate: settingsEditSwitchValue, Set: settingsEditSetClean(def)},
 			}
 		}
 		registerSettingsPage(pg)
