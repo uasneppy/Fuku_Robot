@@ -382,11 +382,16 @@ comma).
   paragraph.
 - **A failed mute-notice send.** The mute is already in place when the notice is sent: the hold is inserted first, the
   mute is applied, and the notice message ID is stored on the hold only after the send. If Telegram refuses the send (or
-  it times out), the notice is retried **once**. If the retry fails too, the mute and the hold are kept, one Warn log line
-  names the chat ID and the user ID only (never the name or the notice text), and nothing else is posted. This is an
-  **accepted limit**: that member has no "I fixed it" button for this episode, and an admin can unmute them with
-  `/unmute`. The bullet below ("never dropped by notice pacing") is about the bot's own pacing, not about a refusal by
-  Telegram.
+  it times out), the notice is retried **once**. If the retry fails too, the mute is **lifted** through the same unmute
+  path "I fixed it" uses (`resolveUnmutePermissions`, so an active lockdown's stored permissions apply), the hold is kept
+  only as a pending row (the two-minute backoff, so the member's next message after it starts the episode again and the
+  notice is tried again), one Warn log line names the chat ID and the user ID only (never the name or the notice text),
+  and nothing else is posted. The rule (planner revision of 2026-11-05): a mute that has been applied always has a
+  button, or it is not left in place. Only when Telegram also refuses that lift is the mute kept, with the hold still
+  punished, so the rejoin reset and an admin's `/unmute` still end it; the Warn line says so. The button itself matches
+  its hold by the hold ID, the chat and the member alone, so a tap before the notice ID was stored, or after storing it
+  failed, still works (section 8, step 3). The bullet below ("never dropped by notice pacing") is about the bot's own
+  pacing, not about a refusal by Telegram.
 - **Held welcome (D-02), in words.** A member muted by the join check gets no welcome. The welcome waits until "I fixed
   it" succeeds, and is then sent once through `SendWelcomeMessage`, so Greet once (Phase 12) claims the member only when
   the welcome really goes out. A member kicked or banned on join gets no welcome. A member warned on join gets the warn
@@ -417,7 +422,7 @@ The checks run in this order, each refusing before the next runs:
 |---|------|----------------|-------------------|
 | 1 | decode: `a=f`, `u` and `h` positive whole numbers of at most 19 digits, nothing else; the message exists and is in a group or supergroup | alert `common_callback_invalid_request` | no |
 | 2 | `query.From.Id == u` | alert `mreq_fixed_not_yours` | no |
-| 3 | the hold `h` read fresh: exists, belongs to this chat and to `u`, is a mute hold, and its stored notice message ID is the pressed message | alert `mreq_fixed_stale` (fixed already by another tap, the member left or rejoined, a newer episode) | no |
+| 3 | the hold `h` read fresh: exists and belongs to this chat and to `u` (the hold ID, the chat and the member alone: its stored notice message ID only chooses which message step 10 edits, and when it is 0 or another message the pressed message is edited; planner revision of 2026-11-05) | alert `mreq_fixed_stale` (fixed already by another tap, the member left or rejoined, a newer episode) | no |
 | 4 | live `getChatMember(chat, u)`: restricted with an `until_date` within 2 s of the hold's marker (D-08) | any error (429, 5xx, timeout, 4xx): alert `mreq_fixed_check_failed`. Not restricted, or restricted with another end date (an admin, staff, the captcha, antiflood or a lockdown placed or replaced it): alert `mreq_fixed_not_ours` | no |
 | 5 | re-check the rules live on that member record's first name, last name and username, against the group's current settings; a rule now set to Off is not checked | an unreadable setting: `mreq_fixed_check_failed`. A rule still broken: alert `mreq_fixed_still_broken` with `{rules}` = every rule still broken whose punishment is not Off | no |
 | 6 | `getChat` of the group: `resolveUnmutePermissions` takes the group's `*gotgbot.ChatFullInfo` (`chat_permissions.go:66`) | any failure: alert `mreq_fixed_check_failed`, nothing changed | no |
@@ -916,7 +921,8 @@ and in ru and uk the hint still names Belarusian and Bulgarian. Shorten a transl
    warn button); `{rules}` names every broken rule whose punishment is not Off, in rule order, even when weaker rules are
    among them, and never a rule set to Off; the punishment is the strictest (D-04); exactly one notice per episode; a
    punishment Telegram refused posts no notice; a refused mute-notice send is retried once and, when the retry fails too,
-   the mute and the hold stay and one Warn line with only the chat and user IDs is logged; a warn notice's
+   the mute is lifted through `resolveUnmutePermissions`, the hold goes back to a pending backoff row and one Warn line with
+   only the chat and user IDs is logged; a warn notice's
    `{n}` and `{limit}` equal the stored count and limit; the three warn-limit variants follow the group's warn mode and the
    warn-limit mute has no button; the mention escapes `<`, `&` and quotes, caps the name (without the isolates) at 64
    runes, then adds U+2068/U+2069 around it, and falls back to `@username`, then `user {id}`; every notice rendered with a
@@ -924,7 +930,7 @@ and in ru and uk the hint still names Belarusian and Bulgarian. Shorten a transl
    every language (English as written 247, any language at its ceilings 354) and is in the group's language; templates
    hold no markup.
 10. **"I fixed it".** Each row of the step table is a test: another user (an admin included) gets `mreq_fixed_not_yours`
-    with no read; a stale hold, a hold of another message and a lost conditional delete give `mreq_fixed_stale`; a mute
+    with no read; a stale hold, a hold of another chat or member and a lost conditional delete give `mreq_fixed_stale`, while a hold whose stored notice ID is 0 or another message still works and edits the pressed message (revision of 2026-11-05); a mute
     whose `until_date` is not the marker (admin, staff, captcha, antiflood, lockdown) gives `mreq_fixed_not_ours` and no
     Telegram write; a member who is no longer restricted gets `mreq_fixed_not_ours` with nothing changed, and the same
     answer on a second press; a still-broken rule gives `mreq_fixed_still_broken` naming exactly the rules still broken
@@ -965,7 +971,7 @@ Applicable state considerations resolved: 17 covered, 3 backstop, 4 unresolved.
 | zero-one-many | rules on: 0, 1, 5; broken rules in one episode: 1 to 5 | ✅ covered | Main `{n} on`; `{rules}` lists every broken rule whose punishment is not Off, size-checked with all five |
 | long-text | translated cells, hints, notices with a 64-rune name | ✅ covered | cells 20 rendered, choice cells 13/15, screens 3800 UTF-16, notices 400 code points, alerts 160/200 |
 | overflow | later phases adding rules | ✅ covered | row budget: 5 rows now, 6 with eight rules, under 8/9 |
-| error | failed read, failed write, failed send, failed edit | ✅ covered | cannot-open edit, `⚠️ common_settings_save_failed`, no notice for a refused punishment, a refused mute-notice send retried once then kept as an accepted limit (an admin can unmute), a failed notice edit is only logged, a failed unmute restores the hold under the same ID |
+| error | failed read, failed write, failed send, failed edit | ✅ covered | cannot-open edit, `⚠️ common_settings_save_failed`, no notice for a refused punishment, a refused mute-notice send retried once, then the mute lifted and the hold left pending (never a mute with no button), a failed notice edit is only logged, a failed unmute restores the hold under the same ID |
 | permissions | choices, switches, Yes, "I fixed it" | ✅ covered | `settingsRightRestrict` on every write; "I fixed it" only for `u` |
 | stale | expired card, old notice, a hold that ended | ✅ covered | `settings_card_expired`; `mreq_fixed_stale` |
 | double-submit | double tap on a choice, two taps of "I fixed it" on two replicas | ✅ covered | absolute `v`; the conditional delete of the hold, the loser gets `mreq_fixed_stale` |
@@ -975,7 +981,7 @@ Applicable state considerations resolved: 17 covered, 3 backstop, 4 unresolved.
 | welcome | join hold, message hold, warn on join, kick and ban on join | ✅ covered | section 7, check 10 |
 | privacy | the Staff Group, other members | ✅ covered | section 10, check 12 |
 | group menu | the page opened in the group | ✅ covered | identical to private, no Open in private row (nothing awaits input) |
-| language | notices and their edits in the group's language; the menu and every "I fixed it" answer in the presser's | ✅ covered | sections 7 and 8; per-locale note; the quote-consistency check (check 11) |
+| language | notices, their edits and every "I fixed it" answer in the group's language (D-23); the menu in the presser's | ✅ covered | sections 7 and 8; per-locale note; the quote-consistency check (check 11) |
 | related-language wording | Ukrainian not named, Belarusian, Bulgarian, Persian, Urdu and Japanese named | ✅ covered | A11 resolved: 13-CONTEXT D-10 now carries the correction |
 | populated | the typical page and notices | ✅ covered | the mocks above |
 | bidi | Arabic and other RTL names in an LTR notice | 🧪 backstop | isolates U+2068/U+2069; checked on a phone (Android, iOS, Desktop) on the owner's checklist |
@@ -1065,8 +1071,8 @@ that change what the owner sees most. A11 is resolved** (13-CONTEXT D-10 carries
 - **Warn path.** The requirement warn needs the warn module's counting and limit action without its reply: return the new
   count, the limit and the action taken from a shared function, and let the requirement notice say it.
 - **Notices.** Build them with the group's translator; splice the mention after translation; disable link previews; never
-  drop a mute notice when pacing (it carries the only button); retry a refused mute-notice send once, then keep the mute
-  and the hold and log chat and user IDs at Warn.
+  drop a mute notice when pacing (it carries the only button); retry a refused mute-notice send once, then lift the mute
+  through `resolveUnmutePermissions`, leave the hold pending as the backoff and log chat and user IDs at Warn.
 - **"I fixed it".** A new callback handler for `mreq|`, answered exactly once in the group's language (`ctxTr`), presser
   checked before any read; `getChat` of the group, then `resolveUnmutePermissions` on its `*gotgbot.ChatFullInfo`, both
   before the conditional delete; if the unmute call fails after the delete, re-insert the hold with the same row ID and
