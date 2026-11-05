@@ -8,6 +8,9 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/lang"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
@@ -21,8 +24,9 @@ import (
 // text preview, of a greeting that contains {rules} reads the rules through the join path's
 // reader (renderGreeting, then rules.GetChatRulesInfo), which creates an empty rules row (and a
 // chats row) for a group that has none, exactly as a real join does, and nothing else is written.
-// The Rules Full preview's heading is built in the presser's language (buildRulesText with the
-// presser's translator), whereas /rules uses the group's language.
+// The Rules Full preview is the message /rules sends in the group, built by buildRulesMessage in
+// the group's language (read by chat ID, as /rules reads it) and sent by sendRulesMessage; only the
+// header line before it is in the presser's language.
 
 // settingsEditIsForbidden reports whether err is a Telegram 403, also when wrapped: the answer
 // to a send to a user who never started the bot. It is classified by code, never by wording.
@@ -55,16 +59,25 @@ func settingsEditPreviewSend(p *settingsPress, def settingsEditPageDef, st setti
 	return settingsEditPreviewGreeting(p, st, part)
 }
 
-// settingsEditPreviewRules sends the Rules content the way /rules sends it: Full preview is
-// buildRulesText's message (the heading and the text, or the no-rules line), Preview text the
-// stored rules made safe for HTML.
+// settingsEditPreviewRules sends the Rules content. Full preview is the message /rules sends in the
+// group with private rules off for the same stored row: buildRulesMessage (the group form) in the
+// group's language, sent by sendRulesMessage without the member-path degrade, so a refused media is
+// seen as a failed preview and never as a different message. Preview text is the stored rules made
+// safe for HTML.
 func settingsEditPreviewRules(p *settingsPress, st settingsEditState, part string) error {
-	text := buildRulesText(p.tr, p.group.Title, st.Text)
+	target := p.query.From.Id
+	opts := &gotgbot.SendMessageOpts{ParseMode: formatting.HTML}
 	if part == settingsEditPartText {
-		text = normalizeRulesForHTML(st.Text)
+		_, err := p.b.SendMessage(target, normalizeRulesForHTML(st.Text), opts)
+		return err
 	}
-	_, err := p.b.SendMessage(p.query.From.Id, text, &gotgbot.SendMessageOpts{ParseMode: formatting.HTML})
-	return err
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	row := models.RulesSettings{
+		Rules: st.Text, FileID: st.FileID, MediaType: st.MediaType, Buttons: st.Buttons, MediaBelow: st.MediaBelow,
+	}
+	m := buildRulesMessage(i18n.MustNewTranslator(lang.GetGroupLanguage(ctx, p.group.Id)), p.group.Title, &row, rulesFormGroup)
+	return sendRulesMessage(p.b, target, m, opts, false)
 }
 
 // settingsEditPreviewGreeting sends the Welcome or Goodbye content. Full preview is the whole
