@@ -247,8 +247,9 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c memberReqCase
 
 // memberReqTakeHold claims the member's hold for this violation (insert-first), or reclaims
 // the stale pending one it was given. It returns the hold and true only for the one caller
-// that won.
-func memberReqTakeHold(ctx context.Context, c memberReqCase, stale *models.ChatRequirementHold, broken, action int) (*models.ChatRequirementHold, bool) {
+// that won. keepUntil is the marker of a mute that is already live (zero for none): the hold
+// keeps it instead of a new one, so the marker on the member and on the hold stay equal.
+func memberReqTakeHold(ctx context.Context, c memberReqCase, stale *models.ChatRequirementHold, broken, action int, keepUntil int64) (*models.ChatRequirementHold, bool) {
 	now := time.Now()
 	hold := &models.ChatRequirementHold{
 		ChatID:      c.Chat.Id,
@@ -260,6 +261,9 @@ func memberReqTakeHold(ctx context.Context, c memberReqCase, stale *models.ChatR
 	}
 	if action == models.RequirementActionMute {
 		hold.MuteUntil = memberReqMuteUntil(now)
+		if keepUntil != 0 {
+			hold.MuteUntil = keepUntil
+		}
 	}
 	if stale != nil {
 		won, id, err := memberreq.ReclaimStaleHold(ctx, hold)
@@ -305,6 +309,7 @@ func memberReqWarnStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr 
 	})
 	if err != nil {
 		log.Errorf("[MemberReq] warn of user %d in chat %d did not complete (recorded %t): %s", c.User.Id, c.Chat.Id, res.Recorded, memberReqErrText(err))
+		memberReqBackoff(ctx, c, hold)
 		return memberReqNotApplied, nil
 	}
 	if res.LimitApplied && (res.Mode == "kick" || res.Mode == "ban") {
@@ -313,35 +318,86 @@ func memberReqWarnStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr 
 	return memberReqWarned, &res
 }
 
-// memberReqSendStep makes one paced Telegram call of a punishment. When Telegram did not
-// answer success nothing is recorded as punished and the hold stays pending; when it did the
-// hold is marked punished and the outcome is returned.
-func memberReqSendStep(ctx context.Context, c memberReqCase, hold *models.ChatRequirementHold, outcome memberReqOutcome, call func(context.Context) error) memberReqOutcome {
+// memberReqRefused reports whether a failed Telegram call is a definite refusal: a 4xx other
+// than 429 (by code, never by wording), or the pacer giving up on a 429 or a long block
+// (ratelimit.ErrRateLimited, where no request may have been made at all). Anything else (a 5xx,
+// a timeout, a dropped connection) says nothing about whether the request took effect.
+func memberReqRefused(err error) bool {
+	return isTelegramClientError(err) || errors.Is(err, ratelimit.ErrRateLimited)
+}
+
+// memberReqBackoff refreshes created_at of the pending hold, so the member's next messages are
+// the held path (no Telegram call) until memberreq.StaleClaim has passed, and then one winner
+// reclaims it. A failed write is logged; the hold is then reclaimable earlier, never lost.
+func memberReqBackoff(ctx context.Context, c memberReqCase, hold *models.ChatRequirementHold) {
+	recordCtx, cancel := memberReqRecordCtx(ctx)
+	defer cancel()
+	if _, err := memberreq.BackoffHold(recordCtx, hold.ID); err != nil {
+		log.Errorf("[MemberReq] backing off the hold of user %d in chat %d failed: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
+	}
+}
+
+// memberReqSendFailed decides what a punishment call that did not answer success means (research
+// S-05). A definite refusal backs the hold off with no notice. Any other answer of a mute is
+// checked with one live getChatMember against the stored marker: present means the mute took
+// effect (the answer was lost), absent backs off, and an unreadable record leaves the hold
+// pending for the reclaim, which checks the marker first. A kick or ban with an unknown answer
+// leaves the hold pending and posts nothing. It returns the outcome only when the punishment
+// proved applied.
+func memberReqSendFailed(ctx context.Context, b *gotgbot.Bot, c memberReqCase, hold *models.ChatRequirementHold, applied memberReqOutcome, err error) memberReqOutcome {
+	log.Warnf("[MemberReq] punishment %d of user %d in chat %d was not confirmed: %s", hold.Action, c.User.Id, c.Chat.Id, memberReqErrText(err))
+	switch {
+	case memberReqRefused(err):
+		memberReqBackoff(ctx, c, hold)
+	case hold.Action == models.RequirementActionMute:
+		live, liveErr := memberReqLiveMember(ctx, b, c.Chat.Id, c.User.Id)
+		switch {
+		case liveErr != nil:
+			log.Warnf("[MemberReq] the mute of user %d in chat %d could not be verified: %s", c.User.Id, c.Chat.Id, memberReqErrText(liveErr))
+		case isMemberReqMute(live, hold.MuteUntil):
+			memberReqMarkPunished(ctx, c, hold)
+			return applied
+		default:
+			memberReqBackoff(ctx, c, hold)
+		}
+	}
+	return memberReqNotApplied
+}
+
+// memberReqSendStep makes one paced Telegram call of a punishment. When Telegram answered
+// success the hold is marked punished and the outcome is returned; otherwise
+// memberReqSendFailed decides, and nothing is recorded as punished unless the marker proves it.
+func memberReqSendStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, hold *models.ChatRequirementHold, outcome memberReqOutcome, call func(context.Context) error) memberReqOutcome {
 	if err := memberReqPaced(ctx, call); err != nil {
-		log.Warnf("[MemberReq] punishment %d of user %d in chat %d was not applied: %s", hold.Action, c.User.Id, c.Chat.Id, memberReqErrText(err))
-		return memberReqNotApplied
+		return memberReqSendFailed(ctx, b, c, hold, outcome, err)
 	}
 	memberReqMarkPunished(ctx, c, hold)
 	return outcome
 }
 
 // memberReqApplyStep applies the hold's punishment. A warn is marked punished inside its own
-// lock; every other punishment is marked here once it took effect.
-func memberReqApplyStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, hold *models.ChatRequirementHold) (memberReqOutcome, *warnApplyResult) {
+// lock; every other punishment is marked here once it took effect. alreadyMuted says the live
+// record already carries this hold's mute marker, so a mute is confirmed and not sent again.
+func memberReqApplyStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, hold *models.ChatRequirementHold, alreadyMuted bool) (memberReqOutcome, *warnApplyResult) {
 	switch hold.Action {
 	case models.RequirementActionWarn:
 		return memberReqWarnStep(ctx, b, c, tr, hold)
 	case models.RequirementActionKick:
-		return memberReqSendStep(ctx, c, hold, memberReqRemoved, func(callCtx context.Context) error {
+		return memberReqSendStep(ctx, b, c, hold, memberReqRemoved, func(callCtx context.Context) error {
 			return kickMemberContext(callCtx, b, c.Chat.Id, c.User.Id)
 		}), nil
 	case models.RequirementActionBan:
-		return memberReqSendStep(ctx, c, hold, memberReqRemoved, func(callCtx context.Context) error {
+		return memberReqSendStep(ctx, b, c, hold, memberReqRemoved, func(callCtx context.Context) error {
 			_, err := b.BanChatMemberWithContext(callCtx, c.Chat.Id, c.User.Id, nil)
 			return err
 		}), nil
 	case models.RequirementActionMute:
-		return memberReqSendStep(ctx, c, hold, memberReqMuted, func(callCtx context.Context) error {
+		if alreadyMuted {
+			// A reclaimed mute whose marker is live: the earlier answer was lost, never mute again.
+			memberReqMarkPunished(ctx, c, hold)
+			return memberReqMuted, nil
+		}
+		return memberReqSendStep(ctx, b, c, hold, memberReqMuted, func(callCtx context.Context) error {
 			_, err := b.RestrictChatMemberWithContext(callCtx, c.Chat.Id, c.User.Id, MutedPermissions,
 				&gotgbot.RestrictChatMemberOpts{UntilDate: hold.MuteUntil})
 			return err
@@ -368,9 +424,9 @@ func memberReqAnnounce(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr 
 
 // memberReqPunish applies the claimed hold's punishment and, once it took effect, posts the
 // notice. A punishment that did not take effect leaves the pending hold and posts nothing.
-func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user gotgbot.User, hold *models.ChatRequirementHold) memberReqResult {
+func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user gotgbot.User, hold *models.ChatRequirementHold, alreadyMuted bool) memberReqResult {
 	tr := memberReqTranslator(ctx, c.Chat.Id)
-	outcome, warn := memberReqApplyStep(ctx, b, c, tr, hold)
+	outcome, warn := memberReqApplyStep(ctx, b, c, tr, hold, alreadyMuted)
 	if outcome == memberReqNotApplied {
 		return memberReqResult{Outcome: outcome, Hold: hold}
 	}
@@ -386,8 +442,10 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //  3. the member's hold, read fresh: one that is not a stale pending one is Held;
 //  4. one live getChatMember through the pacer, the admin check and the source of the names;
 //  5. the rules on the live names, the strictest punishment of the broken ones;
-//  6. the claim of the hold, before any punishment (one winner across replicas);
-//  7. the punishment, then the one notice.
+//  6. the claim of the hold, before any punishment (one winner across replicas); a reclaimed
+//     mute whose marker is already live is adopted, not applied again;
+//  7. the punishment, then the one notice. A punishment Telegram refuses backs the hold off
+//     and posts nothing (memberReqSendFailed).
 func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memberReqResult {
 	if memberReqNeverChecked(b, c.User) || memberReqExempt(ctx, c) {
 		return memberReqResult{}
@@ -404,14 +462,30 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	if !ok {
 		return memberReqResult{}
 	}
-	hold, won := memberReqTakeHold(ctx, c, stale, broken, memberReqStrictest(c.Settings, broken))
+	action := memberReqStrictest(c.Settings, broken)
+	keepUntil := memberReqLiveMarker(stale, member, action)
+	hold, won := memberReqTakeHold(ctx, c, stale, broken, action, keepUntil)
 	if !won {
 		if hold == nil {
 			return memberReqResult{}
 		}
 		return memberReqResult{Outcome: memberReqHeld}
 	}
-	return memberReqPunish(ctx, b, c, member.User, hold)
+	return memberReqPunish(ctx, b, c, member.User, hold, keepUntil != 0)
+}
+
+// memberReqLiveMarker returns the marker of a stale pending mute hold when the member's live
+// record still carries it and the new action is a mute too, else zero. A pending mute may have
+// taken effect with its answer lost, so the reclaim checks the marker before muting again and
+// adopts it (the hold keeps the marker that is live).
+func memberReqLiveMarker(stale *models.ChatRequirementHold, live gotgbot.MergedChatMember, action int) int64 {
+	if stale == nil || stale.Action != models.RequirementActionMute || action != models.RequirementActionMute {
+		return 0
+	}
+	if isMemberReqMute(live, stale.MuteUntil) {
+		return stale.MuteUntil
+	}
+	return 0
 }
 
 // memberReqUntilMatches reports whether a live restriction end date is the stored marker,
