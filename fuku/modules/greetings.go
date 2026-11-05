@@ -364,6 +364,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 		var buttons []db.Button
 		var fileID string
 		var greetingDataType int
+		var mediaBelow bool
 		var shouldGreet bool
 		var cleanGreet bool
 
@@ -383,6 +384,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 			buttons = greetings.GetWelcomeButtons(chat.Id)
 			fileID = greetPrefs.WelcomeSettings.FileID
 			greetingDataType = greetPrefs.WelcomeSettings.WelcomeType
+			mediaBelow = greetPrefs.WelcomeSettings.MediaBelow
 			shouldGreet = greetPrefs.WelcomeSettings.ShouldWelcome
 			cleanGreet = greetPrefs.WelcomeSettings.CleanWelcome
 		} else {
@@ -401,6 +403,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 			buttons = greetings.GetGoodbyeButtons(chat.Id)
 			fileID = greetPrefs.GoodbyeSettings.FileID
 			greetingDataType = greetPrefs.GoodbyeSettings.GoodbyeType
+			mediaBelow = greetPrefs.GoodbyeSettings.MediaBelow
 			shouldGreet = greetPrefs.GoodbyeSettings.ShouldGoodbye
 			cleanGreet = greetPrefs.GoodbyeSettings.CleanGoodbye
 		}
@@ -418,14 +421,28 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 
 		if noformat {
 			greetingText += content.RevertButtons(buttons)
-			_, err := media.SendGreeting(bot, ctx.EffectiveChat.Id, greetingText, fileID, greetingDataType, &gotgbot.InlineKeyboardMarkup{InlineKeyboard: nil}, ctx.EffectiveMessage.MessageThreadId)
+			_, err := media.SendGreetingMessage(bot, ctx.EffectiveChat.Id, media.GreetingMessage{
+				Text:         greetingText,
+				FileID:       fileID,
+				MsgType:      greetingDataType,
+				CaptionAbove: mediaBelow,
+				Keyboard:     &gotgbot.InlineKeyboardMarkup{InlineKeyboard: nil},
+				ThreadID:     ctx.EffectiveMessage.MessageThreadId,
+			})
 			if err != nil {
 				log.Error(err)
 				return err
 			}
 		} else {
 			greetingText, kb := renderGreeting(bot, chat, user, greetingText, buttons)
-			_, err := media.SendGreeting(bot, ctx.EffectiveChat.Id, greetingText, fileID, greetingDataType, kb, ctx.EffectiveMessage.MessageThreadId)
+			_, err := media.SendGreetingMessage(bot, ctx.EffectiveChat.Id, media.GreetingMessage{
+				Text:         greetingText,
+				FileID:       fileID,
+				MsgType:      greetingDataType,
+				CaptionAbove: mediaBelow,
+				Keyboard:     kb,
+				ThreadID:     ctx.EffectiveMessage.MessageThreadId,
+			})
 			if err != nil {
 				log.Error(err)
 				return err
@@ -910,7 +927,14 @@ func (moduleStruct) leftMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 		if ctx.EffectiveMessage != nil {
 			threadID = ctx.EffectiveMessage.MessageThreadId
 		}
-		sent, err := media.SendGreeting(bot, chat.Id, res, greetPrefs.GoodbyeSettings.FileID, greetPrefs.GoodbyeSettings.GoodbyeType, kb, threadID)
+		sent, err := media.SendGreetingMessage(bot, chat.Id, media.GreetingMessage{
+			Text:         res,
+			FileID:       greetPrefs.GoodbyeSettings.FileID,
+			MsgType:      greetPrefs.GoodbyeSettings.GoodbyeType,
+			CaptionAbove: greetPrefs.GoodbyeSettings.MediaBelow,
+			Keyboard:     kb,
+			ThreadID:     threadID,
+		})
 		if err != nil {
 			logJoinOperationError("[Greetings][leftMember] Failed to send goodbye message", err)
 			return err
