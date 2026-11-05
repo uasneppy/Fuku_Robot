@@ -405,7 +405,9 @@ func TestSetMediaBelowColumnTargeted(t *testing.T) {
 			before := rest(load(t, chatID), w.clear)
 
 			for _, on := range []bool{true, false} {
-				mr.Set(key, "stale")
+				if err := mr.Set(key, "stale"); err != nil {
+					t.Fatalf("seed cache key: %v", err)
+				}
 				if err := w.write(chatID, on); err != nil {
 					t.Fatalf("write(%v) error = %v", on, err)
 				}
