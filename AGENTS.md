@@ -1789,7 +1789,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsEditDoor*` and `TestSettingsEditAlbum*` (`settings_input_door_test.go`, `settings_input_media_test.go`:
   the door's order, the album gate, the media and buttons parts and `TestSettingsEditWholeMessageParity`), the previews
   `TestSettingsEditPreview*` and `TestSettingsEditFullPreview` (`settings_edit_preview_test.go`), the pure check
-  `TestSettingsEditCheck*` (`settings_edit_check_test.go`) and the store `settings_input_test.go`. The test files are
+  `TestSettingsEditCheck*` (`settings_edit_check_test.go`), the store `settings_input_test.go` and the switch grid with
+  Greet once (`settings_edit_switch_test.go`: `TestSettingsEditOnceSwitch`, `TestSettingsEditSwitchGrid`,
+  `TestSettingsDriftOnce` and `TestSettingsAuthorityOnce`, which decides over the four owner worlds exactly as the press
+  door of `TestSettingsGateAllDoors`; `editCleanup` also deletes the chats' `greeted_members` rows). The test files are
   `settings_edit_*_test.go` and `settings_input*_test.go`; the typed reply is the sixth door of `TestSettingsGateAllDoors`.
   `TestSettingsEditScreensFitEveryLocale` (`settings_edit_screens_test.go`, whose `settingsEditScreens` builds every
   non-page editor screen and is also what `TestSettingsStaffPrivacy` renders) holds them to 3800 UTF-16 units and 64-byte

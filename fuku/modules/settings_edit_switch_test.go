@@ -287,3 +287,183 @@ func settingsButtonByText(keyboard [][]gotgbot.InlineKeyboardButton, text string
 	}
 	return gotgbot.InlineKeyboardButton{}, false
 }
+
+func TestSettingsDriftOnce(t *testing.T) {
+	withStaffLocale(t)
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	chat := settingsOnceChat(env)
+	greetOnceCleanup(t, chat.Id)
+	if err := greetings.SetWelcomeText(chat.Id, "Welcome {first}", "", nil, db.TEXT); err != nil {
+		t.Fatalf("SetWelcomeText: %v", err)
+	}
+	// The switch is written straight through the repository, not through the menu.
+	if err := greetings.SetWelcomeOnce(chat.Id, true); err != nil {
+		t.Fatalf("SetWelcomeOnce: %v", err)
+	}
+
+	msgID := openEditPage(env, owner, settingsPageWelcome)
+	text, keyboard := env.lastEdit(env.chat.Id, msgID)
+	if want := staffMarker("settings_edit_line_once") + " ✅ " + staffMarker("common_status_on"); !strings.Contains(text, want) {
+		t.Errorf("the page %q lacks %q for a stored welcome_once", text, want)
+	}
+	once, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_once", settingsEditControlOnce)
+	if !strings.Contains(once.Text, "✅") || fields["v"] != "0" {
+		t.Errorf("the cell is %q with %v, want the on icon and v=0", once.Text, fields)
+	}
+
+	// The join reads the same switch.
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	member := gotgbot.User{Id: 6262, FirstName: "Bea"}
+	greetOnceJoin(t, bot, chat, member)
+	greetOnceLeave(t, bot, chat, member)
+	greetOnceJoin(t, bot, chat, member)
+	if got := greetOnceWelcomes(client); got != 1 {
+		t.Errorf("the join welcomed %d times, want once", got)
+	}
+	if greetedRows(t, chat.Id) == 0 {
+		t.Fatal("the join left no greeted_members row to test against")
+	}
+
+	// Rows of the record change nothing on the page, which never reads them.
+	for _, id := range []int64{7001, 7002, 7003} {
+		if err := db.DB.Create(&models.GreetedMember{ChatID: chat.Id, UserID: id}).Error; err != nil {
+			t.Fatalf("seed greeted_members: %v", err)
+		}
+	}
+	reopened := openEditPage(env, owner, settingsPageWelcome)
+	again, _ := env.lastEdit(env.chat.Id, reopened)
+	if again != text {
+		t.Errorf("the page changed with the record's rows:\n%q\nwant\n%q", again, text)
+	}
+}
+
+// settingsOnceDoor is the press door of TestSettingsGateAllDoors with the Greet once press in
+// place of the Back press: the same opener, the same world change, one answer.
+func settingsOnceDoor(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	var msgID int64
+	if !c.ownerPerson {
+		msgID = c.env.openMenu(c.env.admin)
+	}
+	c.apply()
+	person := c.person()
+	if c.ownerPerson {
+		msgID = c.env.openMenu(person)
+	}
+	answers := c.env.answerCount()
+
+	c.env.press(person, msgID, c.env.groupFields(person, "a", settingsActToggle, "p", settingsPageWelcome, "t", settingsEditControlOnce, "v", "1"))
+
+	if got := c.env.answerCount() - answers; got != 1 {
+		t.Fatalf("the Greet once press was answered %d times, want once", got)
+	}
+	if answer, alert := c.env.lastAnswer(); alert {
+		return settingsGateClassify([]string{answer})
+	}
+	if settingsOnceStored(t, c.env.chat.Id) {
+		return "in"
+	}
+	return "none"
+}
+
+func TestSettingsAuthorityOnce(t *testing.T) {
+	const menuMsgID = 7272
+	nextAdmin := int64(8_000_000)
+	newAdmin := func(env *settingsEnv, chat gotgbot.Chat, canChangeInfo bool) gotgbot.User {
+		nextAdmin++
+		admin := gotgbot.User{Id: uniqueLinkOwnerID() + nextAdmin, FirstName: "Plain"}
+		listEditAdmin(env, chat, admin, canChangeInfo)
+		return admin
+	}
+
+	t.Run("any live administrator may press it when the owner let admins in", func(t *testing.T) {
+		for _, canChangeInfo := range []bool{false, true} {
+			env := newSettingsEditEnv(t)
+			chat := env.addChat()
+			editCleanup(t, chat.Id)
+			admin := newAdmin(env, chat, canChangeInfo)
+			settingsEditPressAs(env, chat, admin, menuMsgID, "w", "o", "1")
+			if answer, alert := env.lastAnswer(); alert {
+				t.Errorf("can_change_info %v: the press was refused with %q", canChangeInfo, answer)
+			}
+			if !settingsOnceStored(t, chat.Id) {
+				t.Errorf("can_change_info %v: the press did not write welcome_once", canChangeInfo)
+			}
+		}
+	})
+
+	t.Run("a plain member is refused and nothing is written", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 9_000_000, FirstName: "Member"}
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		settingsEditPressAs(env, env.chat, member, menuMsgID, "w", "o", "1")
+		answer, alert := env.lastAnswer()
+		if !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+		}
+		if _, ok := settingsEditStored(t, env.chat.Id); ok {
+			t.Error("a plain member's press wrote a row")
+		}
+	})
+
+	t.Run("over the four owner worlds it decides as the press door does", func(t *testing.T) {
+		worlds := []struct {
+			name, want string
+			owner      bool
+			setup      func(env *settingsEnv)
+		}{
+			{"owner exists, switch off: the administrator", "owner_only", false, func(env *settingsEnv) {
+				env.newOwner(env.chat)
+				env.setAdminsAllowed(env.chat.Id, false)
+			}},
+			{"owner exists, switch off: the owner", "in", true, func(env *settingsEnv) {
+				env.setAdminsAllowed(env.chat.Id, false)
+			}},
+			{"switch on", "in", false, func(env *settingsEnv) {
+				env.newOwner(env.chat)
+				env.setAdminsAllowed(env.chat.Id, true)
+			}},
+			{"no owner", "in", false, func(env *settingsEnv) {
+				env.fake.clearCreator(env.chat.Id)
+				env.listAdmin(env.chat.Id, env.admin.Id)
+				env.setAdminsAllowed(env.chat.Id, false)
+			}},
+			{"owner state unknown", "check_failed", false, func(env *settingsEnv) {
+				env.newOwner(env.chat)
+				env.setAdminsAllowed(env.chat.Id, false)
+				env.fake.setFailure("getChatAdministrators", env.chat.Id, staffFakeError(500, "Internal Server Error"))
+			}},
+		}
+		for _, world := range worlds {
+			t.Run(world.name, func(t *testing.T) {
+				decide := func(door func(*testing.T, settingsGateCase) string) string {
+					resetSettingsOwnerMemo(t)
+					env := newSettingsEditEnv(t)
+					var owner gotgbot.User
+					return door(t, settingsGateCase{
+						env:         env,
+						ownerPerson: world.owner,
+						apply: func() {
+							if world.owner {
+								owner = env.newOwner(env.chat)
+							}
+							world.setup(env)
+						},
+						person: func() gotgbot.User {
+							if world.owner {
+								return owner
+							}
+							return env.admin
+						},
+					})
+				}
+				once, press := decide(settingsOnceDoor), decide(settingsGateDoorPress)
+				if once != world.want || press != world.want {
+					t.Errorf("Greet once decided %q and the press door %q, want both %q", once, press, world.want)
+				}
+			})
+		}
+	})
+}
