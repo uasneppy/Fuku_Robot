@@ -222,3 +222,164 @@ func TestSettingsEditRulesMainState(t *testing.T) {
 		})
 	}
 }
+
+// settingsRulesBelowStored reads Media under text of the chat's rules straight from the database.
+func settingsRulesBelowStored(t *testing.T, chatID int64) bool {
+	t.Helper()
+	row, ok := settingsEditRulesStored(t, chatID)
+	return ok && row.MediaBelow
+}
+
+// TestSettingsRulesMediaBelow: the Rules page offers Media under text only for a photo, a video or an animation,
+// the press stores it through applyRulesMediaBelow, /rules then sends the caption above the media, a stale press
+// writes nothing, and the bot must be an administrator.
+func TestSettingsRulesMediaBelow(t *testing.T) {
+	for _, private := range []bool{true, false} {
+		name := "group menu"
+		if private {
+			name = "private menu"
+		}
+		t.Run("a photo in the "+name, func(t *testing.T) {
+			env := newSettingsEditEnv(t)
+			owner := env.newOwner(env.chat)
+			settingsRulesSeedAll(t, env.chat.Id)
+			msgID, press := settingsEditPageFor(env, owner, settingsPageRules, private)
+			shown := chatForPage(env, owner, private)
+
+			text, keyboard := env.lastEdit(shown, msgID)
+			if want := staffMarker("settings_edit_line_below") + " ❌ " + staffMarker("common_status_off"); !strings.Contains(text, want) {
+				t.Errorf("the page %q lacks the off line %q", text, want)
+			}
+			below, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_below", settingsEditControlBelow)
+			if !strings.Contains(below.Text, "❌") || fields["a"] != settingsActToggle || fields["p"] != settingsPageRules || fields["v"] != "1" {
+				t.Fatalf("the Media under text cell is %q with %v, want the off icon and tg on page r with v=1", below.Text, fields)
+			}
+
+			answers := env.answerCount()
+			press(msgID, "a", "tg", "p", settingsPageRules, "t", "u", "v", "1")
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("the press was answered %d times, want once", got)
+			}
+			row, _ := settingsEditRulesStored(t, env.chat.Id)
+			if !row.MediaBelow || row.Rules != "Be kind" || row.FileID != "rules-photo" || len(row.Buttons) != 2 {
+				t.Fatalf("after the press the rules are %+v, want only media_below turned on", row)
+			}
+			text, keyboard = env.lastEdit(shown, msgID)
+			if want := staffMarker("settings_edit_line_below") + " ✅ " + staffMarker("common_status_on"); !strings.Contains(text, want) {
+				t.Errorf("after the press the page %q lacks the on line %q", text, want)
+			}
+			if settingsEditHasNoticeLine(text, settingsNoticeWarnIcon) || settingsEditHasNoticeLine(text, settingsNoticeOKIcon) {
+				t.Errorf("a stored write redrew with a notice: %q", text)
+			}
+			if _, fields = settingsEditControl(t, keyboard, "settings_btn_edit_switch_below", settingsEditControlBelow); fields["v"] != "0" {
+				t.Errorf("after the press the cell carries %v, want v=0", fields)
+			}
+
+			// The switch is the runtime's: /rules sends the photo with the caption above it.
+			client, _ := rulesGroupCommand(t, env.chat.Id, "Test Chat")
+			if params := rulesOnlyCall(t, client, "sendPhoto"); params["show_caption_above_media"] != true {
+				t.Errorf("sendPhoto show_caption_above_media = %v, want true", params["show_caption_above_media"])
+			}
+
+			press(msgID, "a", "tg", "p", settingsPageRules, "t", "u", "v", "0")
+			if settingsRulesBelowStored(t, env.chat.Id) {
+				t.Error("a v=0 press left the switch on")
+			}
+		})
+	}
+
+	t.Run("kinds that cannot carry the caption above show no cell", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			mediaType int
+			hint      bool
+		}{
+			"document": {db.DOCUMENT, true}, "audio": {db.AUDIO, false}, "sticker": {db.STICKER, false}, "none": {0, false},
+		} {
+			env := newSettingsEditEnv(t)
+			owner := env.newOwner(env.chat)
+			if tc.mediaType != 0 {
+				if err := rules.SetRulesMediaOnly(env.chat.Id, "rules-file", tc.mediaType); err != nil {
+					t.Fatalf("SetRulesMediaOnly: %v", err)
+				}
+			}
+			msgID := settingsEditPrivateMenu(env, owner, settingsPageRules)
+			text, keyboard := env.lastEdit(owner.Id, msgID)
+			if strings.Contains(text, staffMarker("settings_edit_line_below")) || settingsEditHasButton(keyboard, "settings_btn_edit_switch_below") {
+				t.Errorf("%s: the page %q draws Media under text", name, text)
+			}
+			if got := strings.Contains(text, staffMarker("settings_edit_hint_below_file")); got != tc.hint {
+				t.Errorf("%s: the file hint is shown = %v, want %v", name, got, tc.hint)
+			}
+		}
+	})
+
+	t.Run("a press after the media became a sticker writes nothing", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesSeedAll(t, env.chat.Id)
+		msgID, press := settingsEditPageFor(env, owner, settingsPageRules, true)
+		if res := applyRulesMedia(t.Context(), env.chat.Id, "rules-sticker", db.STICKER); res.Outcome != greetingApplied {
+			t.Fatalf("applyRulesMedia outcome = %v, err = %v", res.Outcome, res.Err)
+		}
+		answers := env.answerCount()
+		press(msgID, "a", "tg", "p", settingsPageRules, "t", "u", "v", "1")
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the stale press was answered %d times, want once", got)
+		}
+		if settingsRulesBelowStored(t, env.chat.Id) {
+			t.Error("a stale press wrote media_below")
+		}
+		text, keyboard := env.lastEdit(owner.Id, msgID)
+		if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("settings_edit_below_unavailable")) {
+			t.Errorf("the stale press drew %q, want the warning settings_edit_below_unavailable", text)
+		}
+		if settingsEditHasButton(keyboard, "settings_btn_edit_switch_below") {
+			t.Error("the page redrawn for a sticker still has the Media under text cell")
+		}
+	})
+
+	t.Run("the bot must be an administrator", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		env.fake.setBotRole(env.chat.Id, staffRoleMember)
+		owner := env.newOwner(env.chat)
+		settingsRulesSeedAll(t, env.chat.Id)
+		answers, edits := env.answerCount(), len(env.edits(owner.Id, 9191))
+		env.pressPrivate(owner, 9191, env.privateFields(env.chat.Id, "a", "tg", "p", settingsPageRules, "t", "u", "v", "1"))
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the press was answered %d times, want once", got)
+		}
+		if got := len(env.edits(owner.Id, 9191)) - edits; got != 1 {
+			t.Errorf("the press edited the message %d times, want the one redraw with the notice", got)
+		}
+		if text, _ := env.lastEdit(owner.Id, 9191); !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("chat_status_bot_not_admin")) {
+			t.Errorf("the refused press drew %q, want the notice chat_status_bot_not_admin", text)
+		}
+		if settingsRulesBelowStored(t, env.chat.Id) {
+			t.Error("a refused press wrote media_below")
+		}
+	})
+
+	t.Run("another control of the page is an invalid request", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesSeedAll(t, env.chat.Id)
+		msgID := settingsEditPrivateMenu(env, owner, settingsPageRules)
+		for _, control := range []string{"o", "e", "d"} {
+			lookups := env.memberLookupsOf(env.chat.Id, owner.Id)
+			edits := len(env.edits(owner.Id, msgID))
+			env.pressPrivate(owner, msgID, env.privateFields(env.chat.Id, "a", "tg", "p", settingsPageRules, "t", control, "v", "1"))
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("t=%s answered %q (alert %v), want the alert common_callback_invalid_request", control, answer, alert)
+			}
+			if got := env.memberLookupsOf(env.chat.Id, owner.Id); got != lookups {
+				t.Errorf("t=%s made %d getChatMember calls", control, got-lookups)
+			}
+			if got := len(env.edits(owner.Id, msgID)); got != edits {
+				t.Errorf("t=%s edited the message %d times", control, got-edits)
+			}
+		}
+		if settingsRulesBelowStored(t, env.chat.Id) {
+			t.Error("an invalid press wrote media_below")
+		}
+	})
+}

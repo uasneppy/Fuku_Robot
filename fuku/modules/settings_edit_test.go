@@ -504,6 +504,10 @@ func TestSettingsEditPages(t *testing.T) {
 			rows  []string
 		}{
 			{"rules not set", settingsEditState{Kind: settingsEditRules}, []string{"set_text", "set_media", "set_buttons", "full_preview", "back | close"}},
+			{"rules photo", settingsEditState{Kind: settingsEditRules, Text: "the rules", MediaType: db.PHOTO, FileID: "f"}, []string{
+				"set_text | remove_text", "set_media | remove_media", "set_buttons",
+				"preview_text | preview_media", "full_preview", "switch_below", "back | close",
+			}},
 			{"rules text set", settingsEditState{Kind: settingsEditRules, Text: "the rules"}, []string{
 				"set_text | remove_text", "set_media", "set_buttons", "preview_text | full_preview", "back | close",
 			}},
@@ -945,9 +949,8 @@ func TestSettingsEditRegistry(t *testing.T) {
 			t.Errorf("page %q = order %d icon %q title %q owner-only %v, want %d %q %q false",
 				w.key, pg.Order, pg.Icon, pg.TitleKey, pg.OwnerOnly, w.order, w.icon, w.titleKey)
 		}
-		// Welcome e, d, u, o; Goodbye e, d, u; Rules none (plan 12-12 adds the Media under text switch
-		// of Rules).
-		wantControls := map[string]int{"w": 4, "g": 3, "r": 0}[w.key]
+		// Welcome e, d, u, o; Goodbye e, d, u; Rules u alone.
+		wantControls := map[string]int{"w": 4, "g": 3, "r": 1}[w.key]
 		if len(pg.Controls) != wantControls {
 			t.Errorf("page %q declares %d controls, want %d", w.key, len(pg.Controls), wantControls)
 		}
@@ -958,18 +961,25 @@ func TestSettingsEditRegistry(t *testing.T) {
 	if pg, _ := settingsPageByKey("g"); len(pg.Controls) != 3 || pg.Controls[settingsEditControlOnce].Set != nil {
 		t.Error("Greet once must be on Welcome only")
 	}
-	for _, key := range []string{"w", "g"} {
+	if pg, _ := settingsPageByKey("r"); pg.Controls[settingsEditControlEnabled].Set != nil || pg.Controls[settingsEditControlClean].Set != nil ||
+		pg.Controls[settingsEditControlOnce].Set != nil {
+		t.Error("Rules must declare Media under text only")
+	}
+	for _, key := range []string{"w", "g", "r"} {
 		pg, _ := settingsPageByKey(key)
+		// Media under text needs the page's own edit right (UI-SPEC assumption A2): Rules needs the bot an administrator too.
+		def := settingsEditDef(t, key)
+		if got := pg.Controls[settingsEditControlBelow]; got.Right != def.EditRight || got.Set == nil || got.Validate == nil {
+			t.Errorf("page %q control u declares right %d (Set nil %v), want the page's EditRight %d", key, got.Right, got.Set == nil, def.EditRight)
+		}
+		if key == "r" {
+			continue
+		}
 		if got := pg.Controls[settingsEditControlEnabled].Right; got != settingsRightAdmin {
 			t.Errorf("page %q control e declares right %d, want settingsRightAdmin", key, got)
 		}
 		if got := pg.Controls[settingsEditControlClean].Right; got != settingsRightChangeInfo {
 			t.Errorf("page %q control d declares right %d, want settingsRightChangeInfo", key, got)
-		}
-		// Media under text needs the page's own edit right (UI-SPEC assumption A2).
-		def := settingsEditDef(t, key)
-		if got := pg.Controls[settingsEditControlBelow]; got.Right != def.EditRight || got.Set == nil || got.Validate == nil {
-			t.Errorf("page %q control u declares right %d (Set nil %v), want the page's EditRight %d", key, got.Right, got.Set == nil, def.EditRight)
 		}
 	}
 
@@ -1061,7 +1071,7 @@ func TestSettingsEditCallbackBytes(t *testing.T) {
 						below, hasBelow = button, true
 					}
 				}
-				if want := def.isGreeting() && settingsEditMediaBelowEligible(st); hasBelow != want {
+				if want := settingsEditMediaBelowEligible(st); hasBelow != want {
 					t.Errorf("%s: the Media under text cell is drawn = %v, want %v", label, hasBelow, want)
 				}
 				if limit := map[bool]int{true: 45, false: 41}[private]; hasBelow && len(below.CallbackData) > limit {
@@ -1070,6 +1080,9 @@ func TestSettingsEditCallbackBytes(t *testing.T) {
 				wantRows := 8
 				if !private {
 					wantRows = 9
+				}
+				if def.Kind == settingsEditRules {
+					wantRows-- // Rules has no switch row but Media under text: 7 rows private, 8 in a group menu
 				}
 				if rows := len(screen.Keyboard.InlineKeyboard); rows > wantRows {
 					t.Errorf("%s has %d rows, want at most %d", label, rows, wantRows)
