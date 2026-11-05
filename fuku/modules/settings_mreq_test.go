@@ -555,6 +555,48 @@ func TestSettingsAuthorityMreq(t *testing.T) {
 		}
 	})
 
+	t.Run("an administrator without can_restrict_members opens every rule screen and is refused every choice and Yes", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		writes := settingsMreqCountWrites(t)
+		helper := env.newOutsider()
+		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: false,
+		})
+		msgID := settingsMreqOpenPage(t, env, helper)
+		for i, code := range settingsMreqRuleCodes {
+			env.press(helper, msgID, settingsMreqRuleFields(env, helper, "mo", code))
+			text, keyboard := env.lastEdit(env.chat.Id, msgID)
+			settingsMreqWantRuleScreen(t, text, i, 0)
+			settingsMreqWantRuleKeyboard(t, keyboard, i, 0)
+		}
+
+		refused := func(name string, fields map[string]string) {
+			t.Helper()
+			edits, answers := len(env.edits(env.chat.Id, msgID)), env.answerCount()
+			env.press(helper, msgID, fields)
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("%s answered %d times, want once", name, got)
+			}
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_no_restrict")) {
+				t.Errorf("%s answered %q (alert %v), want the settings_no_restrict alert", name, answer, alert)
+			}
+			if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+				t.Errorf("%s edited the menu (a card must not even be drawn without the right)", name)
+			}
+		}
+		for _, code := range settingsMreqRuleCodes {
+			for v := 0; v <= 4; v++ {
+				refused(fmt.Sprintf("st %s v=%d", code, v), settingsMreqRuleFields(env, helper, "st", code, "p", settingsPageMreq, "v", fmt.Sprint(v)))
+			}
+			for v := 2; v <= 4; v++ {
+				refused(fmt.Sprintf("my %s v=%d", code, v), settingsMreqRuleFields(env, helper, "my", code, "v", fmt.Sprint(v), "e", settingsMreqExpiryMinute()))
+			}
+		}
+		if _, has := settingsMreqStored(t, env.chat.Id); has || *writes != 0 {
+			t.Errorf("a refused press wrote (row %v, %d writes)", has, *writes)
+		}
+	})
+
 	t.Run("a plain member is not an administrator", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		member := env.newOutsider()
@@ -612,7 +654,7 @@ func TestSettingsAuthorityMreq(t *testing.T) {
 
 // settingsMreqScreens renders the page in the states that matter for size: every rule off, and
 // every punishment used once with both switches on, each without a notice and under the notices a
-// press can put on it.
+// press can put on it, then every rule screen and every card.
 func settingsMreqScreens(tr *i18n.Translator, view settingsView) map[string]settingsScreen {
 	states := map[string]*models.ChatRequirements{
 		"all off": {},
@@ -633,6 +675,16 @@ func settingsMreqScreens(tr *i18n.Translator, view settingsView) map[string]sett
 			screens[stateName+", "+noticeName] = renderSettingsMreqPage(view, row, notice)
 		}
 	}
+	// The five rule screens (every punishment used once, each under every notice) and the fifteen
+	// cards.
+	for _, rule := range memberReqRules {
+		for noticeName, notice := range notices {
+			screens["rule "+rule.Code+", "+noticeName] = renderSettingsMreqRuleScreen(view, rule, states["every punishment"], notice)
+		}
+		for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
+			screens[fmt.Sprintf("card %s %d", rule.Code, action)] = renderSettingsMreqCard(view, rule, action)
+		}
+	}
 	return screens
 }
 
@@ -651,8 +703,8 @@ func TestSettingsMreqPageFitsEveryLocale(t *testing.T) {
 					view := settingsEditView(tr, private)
 					view.GroupTitle, view.OpenerName = title, title
 					screens := settingsMreqScreens(tr, view)
-					if len(screens) != 6 {
-						t.Fatalf("%s %s: %d screens were rendered, want 6", code, titleName, len(screens))
+					if len(screens) != 6+15+15 {
+						t.Fatalf("%s %s: %d screens were rendered, want 6 page states, 15 rule screens and 15 cards", code, titleName, len(screens))
 					}
 					for name, screen := range screens {
 						label := fmt.Sprintf("%s %s private=%v %s", code, titleName, private, name)
@@ -732,6 +784,42 @@ func TestSettingsMreqCallbackBytes(t *testing.T) {
 		for _, button := range screen.Keyboard.InlineKeyboard[3] {
 			if n := len(button.CallbackData); n != wantSwitch {
 				t.Errorf("%s: the switch button %q has %d bytes, want %d", label, button.Text, n, wantSwitch)
+			}
+		}
+
+		// Phase 13 plan 06: the rule cells, the choices, the card and the rule screen's Back.
+		wantCell, wantChoice, wantYes, wantNo := 34, 42, 49, 33
+		if private {
+			wantCell, wantChoice, wantYes, wantNo = 38, 46, 53, 37
+		}
+		checkBytes := func(what string, screen settingsScreen, buttons []gotgbot.InlineKeyboardButton, want int) {
+			t.Helper()
+			if screen.Omitted != 0 {
+				t.Errorf("%s: %s omitted %d buttons for overflow", label, what, screen.Omitted)
+			}
+			for _, button := range buttons {
+				if n := len(button.CallbackData); n != want {
+					t.Errorf("%s: %s button %q has %d bytes, want %d", label, what, button.Text, n, want)
+				}
+				for key, value := range settingsButtonFields(t, button) {
+					if !settingsMreqCodeShape.MatchString(value) {
+						t.Errorf("%s: %s button %q field %s=%q is not a number or a code", label, what, button.Text, key, value)
+					}
+				}
+			}
+		}
+		checkBytes("rule cell", screen, settingsAllButtons(screen.Keyboard.InlineKeyboard[:3]), wantCell)
+		for _, rule := range memberReqRules {
+			rs := renderSettingsMreqRuleScreen(view, rule, &models.ChatRequirements{}, "")
+			checkBytes("choice", rs, settingsAllButtons(rs.Keyboard.InlineKeyboard[:2]), wantChoice)
+			checkBytes("rule screen Back", rs, rs.Keyboard.InlineKeyboard[2][:1], wantMain)
+			for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
+				card := renderSettingsMreqCard(view, rule, action)
+				if len(card.Keyboard.InlineKeyboard) != 2 {
+					t.Fatalf("%s: the card has %d rows, want 2", label, len(card.Keyboard.InlineKeyboard))
+				}
+				checkBytes("card Yes", card, card.Keyboard.InlineKeyboard[0][:1], wantYes)
+				checkBytes("card No", card, card.Keyboard.InlineKeyboard[0][1:], wantNo)
 			}
 		}
 	}
@@ -1058,5 +1146,43 @@ func TestApplyMemberReqAction(t *testing.T) {
 	}
 	if result = applyMemberReqAction(ctx, chatID, memberreq.RuleChinese, models.RequirementActionOff); result.Row == nil || result.Row.ChineseAction != 0 {
 		t.Errorf("Off result = %+v, want a Go zero written and read back", result)
+	}
+}
+
+func TestSettingsMreqRowBudget(t *testing.T) {
+	tr := i18n.MustNewTranslator("en")
+	everyPunishment := &models.ChatRequirements{
+		LastNameAction: models.RequirementActionWarn, UsernameAction: models.RequirementActionKick,
+		RussianAction: models.RequirementActionBan, ArabicAction: models.RequirementActionMute,
+		ChineseAction: models.RequirementActionOff, CheckOnJoin: true, DeleteMessages: true,
+	}
+	for _, private := range []bool{true, false} {
+		view := settingsEditView(tr, private)
+		label := fmt.Sprintf("private=%v", private)
+
+		page := renderSettingsMreqPage(view, everyPunishment, "")
+		if rows := len(page.Keyboard.InlineKeyboard); rows != 5 {
+			t.Errorf("%s: the page has %d rows, want 5 (the grid, the switches, the navigation)", label, rows)
+		}
+		for r, widths := range []int{2, 2, 1, 2, 2} {
+			if got := len(page.Keyboard.InlineKeyboard[r]); got != widths {
+				t.Errorf("%s: page row %d has %d buttons, want %d", label, r, got, widths)
+			}
+		}
+		for _, button := range settingsAllButtons(page.Keyboard.InlineKeyboard) {
+			if button.Url != "" {
+				t.Errorf("%s: the page has a URL button %q, want no Open in private row", label, button.Text)
+			}
+		}
+		for _, rule := range memberReqRules {
+			if rows := len(renderSettingsMreqRuleScreen(view, rule, everyPunishment, "").Keyboard.InlineKeyboard); rows != 3 {
+				t.Errorf("%s: the %s rule screen has %d rows, want 3", label, rule.Code, rows)
+			}
+			for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
+				if rows := len(renderSettingsMreqCard(view, rule, action).Keyboard.InlineKeyboard); rows != 2 {
+					t.Errorf("%s: the %s card has %d rows, want 2", label, rule.Code, rows)
+				}
+			}
+		}
 	}
 }

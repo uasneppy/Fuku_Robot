@@ -200,6 +200,15 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					for i, notice := range notices {
 						screens[fmt.Sprintf("member requirements %s all off notice %d", viewName, i)] = renderSettingsMreqPage(view, allOff, notice)
 						screens[fmt.Sprintf("member requirements %s every punishment notice %d", viewName, i)] = renderSettingsMreqPage(view, everyPunishment, notice)
+						// The five rule screens (each under every notice) and the fifteen cards.
+						for _, rule := range memberReqRules {
+							screens[fmt.Sprintf("member requirements rule %s %s notice %d", rule.Code, viewName, i)] = renderSettingsMreqRuleScreen(view, rule, everyPunishment, notice)
+						}
+					}
+					for _, rule := range memberReqRules {
+						for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
+							screens[fmt.Sprintf("member requirements card %s %d %s", rule.Code, action, viewName)] = renderSettingsMreqCard(view, rule, action)
+						}
 					}
 				}
 				for i, notice := range notices {
@@ -267,6 +276,11 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		}
 		private("a", "tg", "p", "w", "t", "e", "v", "0")
 		private("a", "tg", "p", settingsPageMreq, "t", settingsMreqControlJoin, "v", "1")
+		// A rule screen, a strict choice (the card), its Yes and a Warn press, as the admin sees them.
+		private("a", settingsActMreqOpen, "t", "ln")
+		private("a", "st", "p", settingsPageMreq, "t", "ln", "v", "4")
+		private("a", settingsActMreqYes, "t", "ln", "v", "4", "e", settingsCardExpiry(time.Now()))
+		private("a", "st", "p", settingsPageMreq, "t", "un", "v", "1")
 
 		var seen []string
 		for _, edit := range env.edits(moderator.Id, menuMsgID) {

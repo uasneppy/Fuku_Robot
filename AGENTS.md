@@ -282,7 +282,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   takes an allow-listed field set (an unknown key is refused), all checked before any I/O. A page action may also declare `Validate`, a strict check of its own fields that runs in that same
   step 1, after the allow-list and before any I/O, and whose false answer is `common_callback_invalid_request`; a nil
   `Validate` keeps the fields allowed and not required. A `tg` or `st` press must also name a control its page registers
-  (`settingsControlFieldsValid`), and a control may declare `Validate` of `v`; both run in that same step 1, before any
+  (`settingsControlFieldsValid`), and a control may declare `Validate` of `v` and `Actions`, the core codes it accepts
+  (`tg` and `st`; a press with any other code is refused in that same step 1, and nil keeps both); all run before any
   I/O. Steppers and toggles send the
   absolute target value (`v`), never a delta, so a double tap is harmless. Every press runs one pipeline, each step
   refusing before the next (`settingsPress.verify`): (1) decode and structure, refused with the alert
@@ -303,8 +304,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   that cannot read its data is the cannot-open edit (`settings_cannot_open`, no keyboard, with the alert
   `settings_cannot_open_alert`). Every button's data is at most 64 bytes for a 14-character chat ID and a 10-digit user
   ID (a Lift or Unlink Yes also carries a row ID, which fits up to 17 digits); an encode that overflows is counted in `settingsScreen.Omitted` and logged, and a worst-case test fails on any.
-  A new page is one `registerSettingsPage` call from its own file's `init` plus its strings, and never edits
-  `settings_pages.go`. A private press makes two Telegram calls, `getChatMember` of the presser in `c` and `getChat` of
+  Registering a new page is one `registerSettingsPage` call from its own file's `init` plus its strings, and never edits
+  `settings_pages.go` (the `Actions` field of `settingsControl` was added there once, in Phase 13). A private press makes two Telegram calls, `getChatMember` of the presser in `c` and `getChat` of
   `c`; an error of either that `chat_status.IsBotMissingError` recognises ("bot was kicked", "bot is not a member",
   "chat not found") is the cannot-open edit with its alert (`settingsPress.cannotOpen`, D-11), and every other error is
   the `settings_check_failed` alert with no edit. A `c` whose `getChat` answer is not a `group` or `supergroup` (callback data
@@ -422,8 +423,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
   creates nothing. The body is the intro, the all-off line while every rule is Off, one line per rule of `memberReqRules`
   in table order (icon from `memberReqActionIcon` plus the option word), the Check on join and Delete messages lines and
-  the five hints; a failed read is the cannot-open edit. The keyboard is the switch row and the navigation row (the rule
-  grid arrives with the rule screens), with no Open in private row in either menu. The switches are controls `j` Check on
+  the five hints; a failed read is the cannot-open edit. The keyboard is the rule grid, the switch row and the navigation
+  row, five rows in a private and in a group menu and no Open in private row (`TestSettingsMreqRowBudget`). The rule grid
+  is one cell per rule of `memberReqRules` in rule order, two per row with an odd last cell alone, each the rule's
+  punishment icon (`memberReqActionIcon`) and short name (the `CellKey` of the table); a cell presses `a=mo&t=<code>`
+  (`ln un ru ar zh`), the page action `mo` (exactly `t`, a rule code, right `settingsRightAdmin`), which opens the rule
+  screen (`renderSettingsMreqRuleScreen`, pure): the rule's name, what breaks it (plus the blank last name hint on the
+  last-name rule only), `Punishment: icon word`, the two hints and the choice rows `[Off | Warn]` and
+  `[Kick | Ban | Mute]` with `✅ ` on the stored value, then Back to the page (`a=op&p=m`, the one Back that does not
+  open Main) and Close. The rule controls `ln un ru ar zh` accept `st` only (`Actions: []string{"st"}`, so a `tg` on one
+  is an invalid request in step 1) with `v` exactly one digit 0..4 and right `settingsRightRestrict`. Off and Warn are
+  written at once through `applyMemberReqAction(ctx, chatID, rule, action)` (in `memberreq_settings.go`: the rule and the
+  value 0..4 are checked before any write, then the `memberReqWrites.Action` column-targeted write, a Go 0 written, the
+  cache key dropped by the repository, the row read back); Kick, Ban and Mute write nothing and draw the shared card
+  (`renderSettingsMreqCard`, `settingsCardRows`: the question with the rule's name, a line saying the rule acts on every
+  member at their next message, members already in the group included, `[Yes | No]`, then Back to Main and Close). Yes is
+  the page action `my` (`settingsActMreqYes`, `a=my&t&v&e`: exactly `t`, `v` 2..4 and `e`, right `settingsRightRestrict`, so a Yes runs the whole press
+  pipeline again and a presser demoted since the first tap is refused with `settings_no_restrict`; a Yes can never carry
+  Off or Warn), an expired Yes writes nothing, and the four exits are asymmetric on purpose: Yes and an expired Yes redraw
+  the rule screen (the expired one with `settings_card_expired`), No redraws the page, Back opens Main. A press of the
+  value already stored writes nothing and draws no card, and "already stored" is judged by a fresh database read
+  (`settingsMreqFresh`, `memberreq.GetSettingsFresh`), never the cache, because another replica's in-process layer can be
+  `CACHE_LOCAL_TTL` behind (a failed fresh read redraws the rule screen with `common_settings_save_failed`). The
+  switches are controls `j` Check on
   join and `d` Delete messages: `tg` or `st`, `v` exactly 0 or 1 (`settingsEditSwitchValue` as the control's `Validate`,
   so anything else is an invalid request before any lookup), right `settingsRightRestrict`, written through
   `applyMemberReqJoin` and `applyMemberReqDelete` in `memberreq_settings.go` (beside the requirements code, because there
@@ -598,7 +620,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `FetchBotMember`. A notice refusal answers empty and redraws the page with the warning line; an alert refusal edits
   nothing. A control the presser lacks the right for is still drawn and its press refused.
   `settingsRightOwner` needs the creator from the press's own member record (no extra call) and refuses with the alert
-  `settings_access_owner_only`; only the Access page's control and action declare it.
+  `settings_access_owner_only`; only the Access page's control and action declare it. On the Member requirements page
+  (`m`) opening the page and a rule screen needs `settingsRightAdmin`, and every punishment choice (any `v`, so the card is
+  not even drawn without the right), the card's Yes and both switches need `settingsRightRestrict`.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
   `/cleangoodbye` refuse through `CanUserChangeInfo`). `settingsRightRefusalFor` is the one pure judgement of a right's
@@ -1920,8 +1944,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   read across two replicas (a flip on one is seen by the very next press on the other, a memoised owner never hides a
   flip to ON, D-12).
   The Member requirements page has `TestSettingsMreq*` (`TestSettingsMreqOpensFromMain`, `TestSettingsMreqMainState`,
-  `TestSettingsMreqSwitches`, `TestSettingsMreqPageFitsEveryLocale`, `TestSettingsMreqCallbackBytes`),
-  `TestSettingsDriftMreq` and `TestSettingsAuthorityMreq` (`settings_mreq_test.go`). The module harness carries both Phase
+  `TestSettingsMreqSwitches`, `TestSettingsMreqRuleScreen`, `TestSettingsControlActionAllowList`,
+  `TestSettingsMreqRowBudget`, `TestSettingsMreqPageFitsEveryLocale`, `TestSettingsMreqCallbackBytes`),
+  `TestApplyMemberReqAction`, `TestSettingsDriftMreq` and `TestSettingsAuthorityMreq` (`settings_mreq_test.go`) and
+  `TestSettingsMreqCard` (`settings_mreq_card_test.go`: the card's four exits, the demotion between the taps, the stale
+  cache and the forged `my` fields). The module harness carries both Phase
   13 tables (`ChatRequirements`, `ChatRequirementHold` in the `AutoMigrate` list of `test_harness_test.go`), and
   `settingsCleanup` deletes their rows of its chats and the `member_requirements` cache key.
 
