@@ -227,6 +227,7 @@ func TestSendMediaFallsBackToTextWhenFileIDMissing(t *testing.T) {
 		{name: "voice", msgType: db.VOICE},
 		{name: "video", msgType: db.VIDEO},
 		{name: "video note", msgType: db.VIDEO_NOTE},
+		{name: "animation", msgType: db.ANIMATION},
 		{name: "unknown", msgType: 999},
 	}
 
@@ -267,6 +268,7 @@ func TestSendMediaUsesTelegramMethodForFileID(t *testing.T) {
 		{name: "voice", msgType: db.VOICE, wantKey: "voice", wantMedia: "sendVoice"},
 		{name: "video", msgType: db.VIDEO, wantKey: "video", wantMedia: "sendVideo"},
 		{name: "video note", msgType: db.VIDEO_NOTE, wantKey: "video_note", wantMedia: "sendVideoNote"},
+		{name: "animation", msgType: db.ANIMATION, wantKey: "animation", wantMedia: "sendAnimation"},
 	}
 
 	for _, tc := range tests {
@@ -306,6 +308,40 @@ func TestSendMediaUsesTelegramMethodForFileID(t *testing.T) {
 				t.Fatalf("disable_notification = %#v, want true", got)
 			}
 		})
+	}
+}
+
+func TestSendAnimationUsesSendAnimation(t *testing.T) {
+	t.Parallel()
+
+	client := &recordingBotClient{}
+	bot := newRecordingBot(client)
+	if _, err := Send(bot, Content{Text: "a <b>gif</b>", FileID: "anim-1", MsgType: db.ANIMATION, Name: "gif"}, Options{
+		ChatID: -100, ThreadID: 7, IsProtected: true, NoNotif: true,
+	}); err != nil {
+		t.Fatalf("Send animation error = %v", err)
+	}
+	if client.method != "sendAnimation" {
+		t.Fatalf("method = %q, want sendAnimation", client.method)
+	}
+	for key, want := range map[string]any{
+		"caption": "a <b>gif</b>", "message_thread_id": int64(7), "protect_content": true,
+		"disable_notification": true, "parse_mode": "HTML",
+	} {
+		if got := client.params[key]; got != want {
+			t.Errorf("%s = %#v, want %#v", key, got, want)
+		}
+	}
+	if client.params["animation"] == nil {
+		t.Fatalf("param animation missing from %#v", client.params)
+	}
+
+	empty := &recordingBotClient{}
+	if _, err := Send(newRecordingBot(empty), Content{Text: "words", MsgType: db.ANIMATION}, Options{ChatID: -100}); err != nil {
+		t.Fatalf("Send animation without a file ID error = %v", err)
+	}
+	if empty.method != "sendMessage" {
+		t.Fatalf("empty file ID method = %q, want sendMessage", empty.method)
 	}
 }
 
