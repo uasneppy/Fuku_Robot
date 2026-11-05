@@ -128,15 +128,17 @@ func settingsMreqWantPage(t *testing.T, text string, actions [5]int, join, del b
 	}
 }
 
-// settingsMreqWantSwitchRow fails the test unless the keyboard is the switch row and the
-// navigation row, with each switch cell showing the given state icon.
+// settingsMreqWantSwitchRow fails the test unless the keyboard is the page's five rows (three rule
+// grid rows, the switch row, the navigation row), with each switch cell showing the given state
+// icon. The grid itself is judged by settingsMreqWantGrid.
 func settingsMreqWantSwitchRow(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, join, del bool) {
 	t.Helper()
-	if len(keyboard) != 2 {
-		t.Fatalf("the page has %d keyboard rows, want the switch row and the navigation row: %+v", len(keyboard), keyboard)
+	if len(keyboard) != 5 {
+		t.Fatalf("the page has %d keyboard rows, want the three grid rows, the switch row and the navigation row: %+v", len(keyboard), keyboard)
 	}
-	if len(keyboard[0]) != 2 {
-		t.Fatalf("the switch row has %d buttons, want 2", len(keyboard[0]))
+	switchRow := keyboard[3]
+	if len(switchRow) != 2 {
+		t.Fatalf("the switch row has %d buttons, want 2", len(switchRow))
 	}
 	icon := func(on bool) string {
 		if on {
@@ -152,7 +154,7 @@ func settingsMreqWantSwitchRow(t *testing.T, keyboard [][]gotgbot.InlineKeyboard
 		{"settings_btn_mreq_switch_join", join, "j"},
 		{"settings_btn_mreq_switch_delete", del, "d"},
 	} {
-		button := keyboard[0][i]
+		button := switchRow[i]
 		if !containsMarker(button.Text, want.key) || !strings.Contains(button.Text, icon(want.on)) {
 			t.Errorf("switch cell %d = %q, want the %s marker with %s", i, button.Text, want.key, icon(want.on))
 		}
@@ -165,9 +167,45 @@ func settingsMreqWantSwitchRow(t *testing.T, keyboard [][]gotgbot.InlineKeyboard
 			t.Errorf("switch cell %d fields = %v, want tg on page m, control %s, v=%s", i, fields, want.code, wantV)
 		}
 	}
-	nav := keyboard[1]
+	nav := keyboard[4]
 	if len(nav) != 2 || !containsMarker(nav[0].Text, "settings_btn_back") || !containsMarker(nav[1].Text, "settings_btn_close") {
 		t.Errorf("navigation row = %+v, want Back and Close", nav)
+	}
+}
+
+// settingsMreqRuleCodes and settingsMreqCellKeys are the contract's rule codes and cell label keys in
+// rule order (written out here, not read from the code under test).
+var (
+	settingsMreqRuleCodes = []string{"ln", "un", "ru", "ar", "zh"}
+	settingsMreqCellKeys  = []string{
+		"settings_btn_mreq_lastname", "settings_btn_mreq_username", "settings_btn_mreq_russian",
+		"settings_btn_mreq_arabic", "settings_btn_mreq_chinese",
+	}
+)
+
+// settingsMreqWantGrid fails the test unless the first three rows of the keyboard are the rule grid
+// of the contract: two cells per row filled left to right, the odd last cell alone, each cell the
+// rule's stored punishment icon and its label key, pressing a=mo with that rule's code.
+func settingsMreqWantGrid(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, actions [5]int) {
+	t.Helper()
+	if len(keyboard) < 3 {
+		t.Fatalf("the keyboard has %d rows, want the rule grid first: %+v", len(keyboard), keyboard)
+	}
+	i := 0
+	for r, width := range []int{2, 2, 1} {
+		if len(keyboard[r]) != width {
+			t.Fatalf("grid row %d has %d cells, want %d: %+v", r, len(keyboard[r]), width, keyboard[r])
+		}
+		for _, button := range keyboard[r] {
+			if !containsMarker(button.Text, settingsMreqCellKeys[i]) || !strings.Contains(button.Text, settingsMreqIcons[actions[i]]) {
+				t.Errorf("grid cell %d = %q, want %s and the icon %s", i, button.Text, settingsMreqCellKeys[i], settingsMreqIcons[actions[i]])
+			}
+			fields := settingsButtonFields(t, button)
+			if fields["a"] != "mo" || fields["t"] != settingsMreqRuleCodes[i] || len(fields) != 3 {
+				t.Errorf("grid cell %d fields = %v, want exactly a=mo, t=%s and the owner", i, fields, settingsMreqRuleCodes[i])
+			}
+			i++
+		}
 	}
 }
 
@@ -355,7 +393,7 @@ func TestSettingsMreqSwitches(t *testing.T) {
 
 	t.Run("a value that is not 0 or 1 is refused before any lookup", func(t *testing.T) {
 		for _, bad := range []struct{ action, control, value string }{
-			{"tg", "j", "2"}, {"tg", "d", "x"}, {"st", "j", "01"}, {"st", "d", ""}, {"tg", "zz", "1"}, {"st", "ln", "1"},
+			{"tg", "j", "2"}, {"tg", "d", "x"}, {"st", "j", "01"}, {"st", "d", ""}, {"tg", "zz", "1"}, {"st", "zz", "1"}, {"tg", "ln", "1"},
 		} {
 			lookups := env.memberLookupsOf(env.chat.Id, owner.Id)
 			edits, answers := len(env.edits(env.chat.Id, msgID)), env.answerCount()
@@ -681,8 +719,8 @@ func TestSettingsMreqCallbackBytes(t *testing.T) {
 		if screen.Omitted != 0 {
 			t.Errorf("%s: the page omitted %d buttons for overflow", label, screen.Omitted)
 		}
-		if len(screen.Keyboard.InlineKeyboard) != 2 {
-			t.Errorf("%s: the page has %d rows, want the switch row and the navigation row", label, len(screen.Keyboard.InlineKeyboard))
+		if len(screen.Keyboard.InlineKeyboard) != 5 {
+			t.Errorf("%s: the page has %d rows, want the grid, the switch row and the navigation row", label, len(screen.Keyboard.InlineKeyboard))
 		}
 		for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
 			for key, value := range settingsButtonFields(t, button) {
@@ -691,10 +729,291 @@ func TestSettingsMreqCallbackBytes(t *testing.T) {
 				}
 			}
 		}
-		for _, button := range screen.Keyboard.InlineKeyboard[0] {
+		for _, button := range screen.Keyboard.InlineKeyboard[3] {
 			if n := len(button.CallbackData); n != wantSwitch {
 				t.Errorf("%s: the switch button %q has %d bytes, want %d", label, button.Text, n, wantSwitch)
 			}
 		}
 	}
+}
+
+// settingsMreqDescKeys are the contract's "what breaks it" keys in rule order.
+var settingsMreqDescKeys = []string{
+	"settings_mreq_desc_lastname", "settings_mreq_desc_username", "settings_mreq_desc_russian",
+	"settings_mreq_desc_arabic", "settings_mreq_desc_chinese",
+}
+
+// settingsMreqWantRuleScreen fails the test unless text is the rule screen of rule i with the given
+// stored punishment: the rule's name, what breaks it, the blank hint on the last-name rule only,
+// the punishment line and the two hints, in order, and nothing of the page or of another rule.
+func settingsMreqWantRuleScreen(t *testing.T, text string, i, action int) {
+	t.Helper()
+	markers := []string{
+		staffMarker("settings_header") + " " + staffMarker("settings_page_mreq"),
+		staffMarker(settingsMreqRuleKeys[i]),
+		staffMarker(settingsMreqDescKeys[i]),
+	}
+	if i == 0 {
+		markers = append(markers, staffMarker("settings_mreq_hint_blank"))
+	}
+	markers = append(markers,
+		staffMarker("settings_mreq_now")+" "+settingsMreqIcons[action]+" "+staffMarker(settingsMreqWordKeys[action]),
+		staffMarker("settings_mreq_choose_hint"),
+		staffMarker("settings_mreq_actions_hint"),
+	)
+	at := 0
+	for _, marker := range markers {
+		idx := strings.Index(text[at:], marker)
+		if idx < 0 {
+			t.Fatalf("the rule screen %q lacks %q after offset %d", text, marker, at)
+		}
+		at += idx + len(marker)
+	}
+	if strings.Contains(text, staffMarker("settings_mreq_hint_blank")) != (i == 0) {
+		t.Errorf("rule %d: the blank last name hint present = %v, want it on the last-name rule only", i, !(i == 0))
+	}
+	for other, key := range settingsMreqRuleKeys {
+		if other != i && strings.Contains(text, staffMarker(key)) {
+			t.Errorf("rule %d screen names rule %d: %q", i, other, text)
+		}
+	}
+	for _, page := range []string{"settings_mreq_intro", "settings_mreq_hint_letters", "settings_mreq_hint_join"} {
+		if strings.Contains(text, staffMarker(page)) {
+			t.Errorf("rule %d screen carries the page text %s", i, page)
+		}
+	}
+}
+
+// settingsMreqWantRuleKeyboard fails the test unless the keyboard is the rule screen's three rows:
+// [Off | Warn], [Kick | Ban | Mute] with the check mark on the stored value only, each pressing st
+// with its absolute value, then Back to the page (a=op, p=m) and Close.
+func settingsMreqWantRuleKeyboard(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, i, action int) {
+	t.Helper()
+	if len(keyboard) != 3 {
+		t.Fatalf("the rule screen has %d rows, want 3: %+v", len(keyboard), keyboard)
+	}
+	v := 0
+	for r, width := range []int{2, 3} {
+		if len(keyboard[r]) != width {
+			t.Fatalf("choice row %d has %d buttons, want %d", r, len(keyboard[r]), width)
+		}
+		for _, button := range keyboard[r] {
+			want := staffMarker(settingsMreqWordKeys[v])
+			if v == action {
+				want = "✅ " + want
+			}
+			if button.Text != want {
+				t.Errorf("choice %d = %q, want %q", v, button.Text, want)
+			}
+			fields := settingsButtonFields(t, button)
+			if fields["a"] != "st" || fields["p"] != settingsPageMreq || fields["t"] != settingsMreqRuleCodes[i] || fields["v"] != fmt.Sprint(v) || len(fields) != 5 {
+				t.Errorf("choice %d fields = %v, want st, p=m, t=%s, v=%d and the owner", v, fields, settingsMreqRuleCodes[i], v)
+			}
+			v++
+		}
+	}
+	nav := keyboard[2]
+	if len(nav) != 2 || !containsMarker(nav[0].Text, "settings_btn_back") || !containsMarker(nav[1].Text, "settings_btn_close") {
+		t.Fatalf("navigation row = %+v, want Back and Close", nav)
+	}
+	if back := settingsButtonFields(t, nav[0]); back["a"] != "op" || back["p"] != settingsPageMreq || len(back) != 3 {
+		t.Errorf("Back fields = %v, want a=op and p=m (the page, not Main)", back)
+	}
+	if closeFields := settingsButtonFields(t, nav[1]); closeFields["a"] != "cl" {
+		t.Errorf("Close fields = %v, want a=cl", closeFields)
+	}
+}
+
+// settingsMreqRuleFields is the field set of a menu button of the rule screen of a group menu.
+func settingsMreqRuleFields(env *settingsEnv, opener gotgbot.User, action, code string, kv ...string) map[string]string {
+	return env.groupFields(opener, append([]string{"a", action, "t", code}, kv...)...)
+}
+
+// settingsMreqCountWrites makes the rule write seam count its calls, then runs the real write.
+func settingsMreqCountWrites(t *testing.T) *int {
+	t.Helper()
+	settingsMreqSeams(t)
+	calls := 0
+	real := memberReqWrites.Action
+	memberReqWrites.Action = func(ctx context.Context, chatID int64, rule memberreq.Rule, action int) error {
+		calls++
+		return real(ctx, chatID, rule, action)
+	}
+	return &calls
+}
+
+func TestSettingsMreqRuleScreen(t *testing.T) {
+	env := newSettingsEnv(t)
+	owner := env.newOwner(env.chat)
+	writes := settingsMreqCountWrites(t)
+	msgID := settingsMreqOpenPage(t, env, owner)
+
+	t.Run("the page carries the rule grid above the switch row", func(t *testing.T) {
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantGrid(t, keyboard, [5]int{})
+		settingsMreqWantSwitchRow(t, keyboard, false, false)
+	})
+
+	t.Run("each cell opens its own screen", func(t *testing.T) {
+		for i, code := range settingsMreqRuleCodes {
+			env.press(owner, msgID, settingsMreqRuleFields(env, owner, "mo", code))
+			text, keyboard := env.lastEdit(env.chat.Id, msgID)
+			settingsMreqWantRuleScreen(t, text, i, 0)
+			settingsMreqWantRuleKeyboard(t, keyboard, i, 0)
+		}
+		if _, has := settingsMreqStored(t, env.chat.Id); has || *writes != 0 {
+			t.Errorf("opening the rule screens wrote (row %v, %d writes)", has, *writes)
+		}
+	})
+
+	t.Run("Warn and Off write at once and redraw the rule screen and the page", func(t *testing.T) {
+		env.press(owner, msgID, settingsMreqRuleFields(env, owner, "st", "ar", "p", settingsPageMreq, "v", "1"))
+		stored, has := settingsMreqStored(t, env.chat.Id)
+		if !has || [5]int{stored.LastNameAction, stored.UsernameAction, stored.RussianAction, stored.ArabicAction, stored.ChineseAction} != [5]int{0, 0, 0, 1, 0} {
+			t.Fatalf("stored = %+v (row %v), want only the Arabic rule on Warn", stored, has)
+		}
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantRuleScreen(t, text, 3, 1)
+		settingsMreqWantRuleKeyboard(t, keyboard, 3, 1)
+		if strings.Contains(text, "⚠️") {
+			t.Errorf("the redraw carries a notice: %q", text)
+		}
+
+		env.press(owner, msgID, env.groupFields(owner, "a", "op", "p", settingsPageMreq))
+		pageText, pageKeyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantPage(t, pageText, [5]int{0, 0, 0, 1, 0}, false, false)
+		settingsMreqWantGrid(t, pageKeyboard, [5]int{0, 0, 0, 1, 0})
+
+		env.press(owner, msgID, settingsMreqRuleFields(env, owner, "st", "ar", "p", settingsPageMreq, "v", "0"))
+		stored, _ = settingsMreqStored(t, env.chat.Id)
+		if stored.ArabicAction != 0 {
+			t.Errorf("Off stored %d, want 0 (a Go zero is written)", stored.ArabicAction)
+		}
+		text, keyboard = env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantRuleScreen(t, text, 3, 0)
+		settingsMreqWantRuleKeyboard(t, keyboard, 3, 0)
+	})
+
+	t.Run("pressing the stored value writes nothing", func(t *testing.T) {
+		env.press(owner, msgID, settingsMreqRuleFields(env, owner, "st", "un", "p", settingsPageMreq, "v", "1"))
+		before := *writes
+		env.press(owner, msgID, settingsMreqRuleFields(env, owner, "st", "un", "p", settingsPageMreq, "v", "1"))
+		if *writes != before {
+			t.Errorf("a press of the stored value made %d writes, want none", *writes-before)
+		}
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantRuleScreen(t, text, 1, 1)
+		settingsMreqWantRuleKeyboard(t, keyboard, 1, 1)
+	})
+
+	t.Run("a forged mo is refused before any lookup", func(t *testing.T) {
+		for name, fields := range map[string]map[string]string{
+			"without t":      env.groupFields(owner, "a", "mo"),
+			"an unknown t":   env.groupFields(owner, "a", "mo", "t", "xx"),
+			"an empty t":     env.groupFields(owner, "a", "mo", "t", "ln "),
+			"an extra key":   env.groupFields(owner, "a", "mo", "t", "ln", "v", "1"),
+			"a page key too": env.groupFields(owner, "a", "mo", "t", "ln", "p", settingsPageMreq),
+		} {
+			lookups, edits, answers := env.memberLookupsOf(env.chat.Id, owner.Id), len(env.edits(env.chat.Id, msgID)), env.answerCount()
+			env.press(owner, msgID, fields)
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("%s answered %q (alert %v), want the invalid request alert", name, answer, alert)
+			}
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("%s answered %d times, want once", name, got)
+			}
+			if got := env.memberLookupsOf(env.chat.Id, owner.Id); got != lookups {
+				t.Errorf("%s made %d getChatMember calls, want none", name, got-lookups)
+			}
+			if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+				t.Errorf("%s edited the message", name)
+			}
+		}
+	})
+}
+
+func TestSettingsControlActionAllowList(t *testing.T) {
+	env := newSettingsEnv(t)
+	owner := env.newOwner(env.chat)
+	msgID := settingsMreqOpenPage(t, env, owner)
+	storedActions := func() [5]int {
+		stored, _ := settingsMreqStored(t, env.chat.Id)
+		return [5]int{stored.LastNameAction, stored.UsernameAction, stored.RussianAction, stored.ArabicAction, stored.ChineseAction}
+	}
+	refused := func(name string, fields map[string]string) {
+		t.Helper()
+		lookups, edits, answers := env.memberLookupsOf(env.chat.Id, owner.Id), len(env.edits(env.chat.Id, msgID)), env.answerCount()
+		env.press(owner, msgID, fields)
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+			t.Errorf("%s answered %q (alert %v), want the invalid request alert", name, answer, alert)
+		}
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("%s answered %d times, want once", name, got)
+		}
+		if got := env.memberLookupsOf(env.chat.Id, owner.Id); got != lookups {
+			t.Errorf("%s made %d getChatMember calls before refusing, want none", name, got-lookups)
+		}
+		if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+			t.Errorf("%s edited the message", name)
+		}
+	}
+
+	t.Run("tg on a rule control is refused in step 1", func(t *testing.T) {
+		refused("tg ln", settingsMreqSwitchFields(env, owner, "tg", "ln", "1"))
+		if _, has := settingsMreqStored(t, env.chat.Id); has {
+			t.Error("a refused tg wrote a row")
+		}
+	})
+
+	t.Run("st on a rule control is accepted and a bad value is not", func(t *testing.T) {
+		env.press(owner, msgID, settingsMreqSwitchFields(env, owner, "st", "ln", "1"))
+		if got := storedActions(); got != [5]int{1, 0, 0, 0, 0} {
+			t.Fatalf("st ln v=1 stored %v, want the last-name rule on Warn", got)
+		}
+		for _, bad := range []string{"5", "04", "x", "", "-1", "10"} {
+			refused("st ln v="+bad, settingsMreqSwitchFields(env, owner, "st", "ln", bad))
+		}
+		if got := storedActions(); got != [5]int{1, 0, 0, 0, 0} {
+			t.Errorf("a refused value changed the rules to %v", got)
+		}
+	})
+
+	t.Run("tg and st stay accepted on the two switches", func(t *testing.T) {
+		for _, action := range []string{"tg", "st"} {
+			for _, control := range []string{"j", "d"} {
+				env.press(owner, msgID, settingsMreqSwitchFields(env, owner, action, control, "1"))
+				stored, _ := settingsMreqStored(t, env.chat.Id)
+				if (control == "j" && !stored.CheckOnJoin) || (control == "d" && !stored.DeleteMessages) {
+					t.Errorf("%s on %s did not write: %+v", action, control, stored)
+				}
+				env.press(owner, msgID, settingsMreqSwitchFields(env, owner, action, control, "0"))
+			}
+		}
+	})
+
+	t.Run("every control of the other pages still accepts tg and st alike", func(t *testing.T) {
+		checked := 0
+		for _, pg := range settingsPagesInOrder() {
+			if pg.Key == settingsPageMreq {
+				continue
+			}
+			for code := range pg.Controls {
+				fields := map[string]string{"p": pg.Key, "t": code, "v": "1"}
+				tg, st := settingsControlFieldsValid("tg", fields), settingsControlFieldsValid("st", fields)
+				if tg != st {
+					t.Errorf("page %s control %s: tg accepted %v, st accepted %v, want the same (no allow-list)", pg.Key, code, tg, st)
+				}
+				checked++
+			}
+		}
+		if checked < 8 {
+			t.Fatalf("only %d controls of the other pages were checked", checked)
+		}
+		for _, c := range []struct{ page, control string }{{settingsPageCaptcha, settingsCaptchaEnabled}, {settingsPageAccess, settingsAccessControlSwitch}} {
+			fields := map[string]string{"p": c.page, "t": c.control, "v": "1"}
+			if !settingsControlFieldsValid("tg", fields) || !settingsControlFieldsValid("st", fields) {
+				t.Errorf("page %s control %s must accept both tg and st", c.page, c.control)
+			}
+		}
+	})
 }

@@ -20,9 +20,11 @@ var memberReqSettingsLookup = memberreq.GetSettings
 var memberReqWrites = struct {
 	CheckOnJoin    func(ctx context.Context, chatID int64, on bool) error
 	DeleteMessages func(ctx context.Context, chatID int64, on bool) error
+	Action         func(ctx context.Context, chatID int64, rule memberreq.Rule, action int) error
 }{
 	CheckOnJoin:    memberreq.SetCheckOnJoin,
 	DeleteMessages: memberreq.SetDeleteMessages,
+	Action:         memberreq.SetRuleAction,
 }
 
 // memberReqApplyOutcome is what an apply function did.

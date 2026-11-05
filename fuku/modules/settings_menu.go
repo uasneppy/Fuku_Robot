@@ -264,7 +264,7 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 			allowed[key] = true
 			required = append(required, key)
 		}
-		if !settingsControlFieldsValid(fields) {
+		if !settingsControlFieldsValid(action, fields) {
 			return false
 		}
 	default:
@@ -298,7 +298,7 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 // page p is registered, it has the control t, and the control's own Validate, when it declares
 // one, accepts the value v. It runs in step 1, before any I/O, so a forged control or value
 // costs no Telegram call.
-func settingsControlFieldsValid(fields map[string]string) bool {
+func settingsControlFieldsValid(_ string, fields map[string]string) bool {
 	pg, ok := settingsPageByKey(fields["p"])
 	if !ok {
 		return false
