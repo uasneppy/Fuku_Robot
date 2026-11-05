@@ -188,7 +188,7 @@ Plans:
   2. With "Media under text" on, a photo, video or GIF in a welcome, goodbye or rules message appears below its text, both in Full preview and in the group.
   3. With "Greet once" on, a member is welcomed only the first time they ever join the group. Leaving and rejoining brings no second welcome, also when the join reaches several replicas.
   4. Rules, welcomes and goodbyes saved before this phase look exactly as they did until someone changes them.
-**Plans:** 10/16 plans executed in 11 waves (12-15 is droppable)
+**Plans:** 11/16 plans executed in 11 waves (12-15 is droppable)
 
 Plans:
 **Wave 1**
@@ -212,7 +212,7 @@ Plans:
 - [x] 12-10-PLAN.md — the switch grid and the Welcome page's Greet once switch (completes EDIT-09) (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 12-11-PLAN.md — Media under text on the Welcome and Goodbye pages (wave 6)
+- [x] 12-11-PLAN.md — Media under text on the Welcome and Goodbye pages (wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 12-12-PLAN.md — the Rules page's media and buttons parts, /clearrules over three parts, Rules Media under text (wave 7)
@@ -349,7 +349,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 |-------|----------------|--------|-----------|
 | 10. PM Settings Hub and Owner Gate | 11/11 | In Progress | - |
 | 11. Message Editor | 14/14 | In Progress | - |
-| 12. Rules Media, Media Under Text and Greet Once | 10/16 | In Progress | - |
+| 12. Rules Media, Media Under Text and Greet Once | 11/16 | In Progress | - |
 | 13. Member Requirements | 0/TBD | Not started | - |
 | 14. Profile Photo and Channel Rules | 0/TBD | Not started | - |
 | 15. AI Spam-Name Check | 0/TBD | Not started | - |
