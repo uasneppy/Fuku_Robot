@@ -3,8 +3,11 @@
 package modules
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -51,13 +54,18 @@ func greetOnceSwitchOn(t *testing.T, chatID int64) {
 // first so a second call is a real second join and not the same one delivered twice.
 func greetOnceJoin(t *testing.T, bot *gotgbot.Bot, chat gotgbot.Chat, member gotgbot.User) {
 	t.Helper()
+	if err := greetOnceJoinErr(bot, chat, member); err != ext.EndGroups {
+		t.Fatalf("newMember error = %v, want EndGroups", err)
+	}
+}
+
+// greetOnceJoinErr is greetOnceJoin for a join whose welcome send may fail, so it returns what the handler returned.
+func greetOnceJoinErr(bot *gotgbot.Bot, chat gotgbot.Chat, member gotgbot.User) error {
 	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
 	ctx := newChatMemberContext(bot, chat, admin,
 		gotgbot.ChatMemberLeft{User: member}, gotgbot.ChatMemberMember{User: member})
 	clearRecentJoinProcessing(chat.Id, member.Id)
-	if err := greetingsModule.newMember(bot, ctx); err != ext.EndGroups {
-		t.Fatalf("newMember error = %v, want EndGroups", err)
-	}
+	return greetingsModule.newMember(bot, ctx)
 }
 
 // greetOnceLeave drives the member's leave through the chat_member handler.
@@ -274,5 +282,142 @@ func TestGreetOnceWithoutRedis(t *testing.T) {
 	}
 	if got := greetedRows(t, chat.Id); got != 1 {
 		t.Fatalf("greeted rows without Redis = %d, want 1", got)
+	}
+}
+
+func TestGreetOnceConcurrentOneWelcome(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	greetOnceSwitchOn(t, chat.Id)
+
+	const joins = 16
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	start := make(chan struct{})
+	errs := make(chan error, joins)
+	var wg sync.WaitGroup
+	for range joins {
+		ctx := newChatMemberContext(bot, chat, admin,
+			gotgbot.ChatMemberLeft{User: member}, gotgbot.ChatMemberMember{User: member})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- SendWelcomeMessage(bot, ctx, member.Id, member.FirstName)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Errorf("SendWelcomeMessage error = %v, want nil", err)
+		}
+	}
+
+	if got := greetOnceWelcomes(client); got != 1 {
+		t.Fatalf("welcomes for %d concurrent joins of one member = %d, want exactly 1", joins, got)
+	}
+	if got := greetedRows(t, chat.Id); got != 1 {
+		t.Fatalf("greeted rows = %d, want 1", got)
+	}
+}
+
+func TestGreetOnceDefiniteRefusalReleases(t *testing.T) {
+	withMiniredis(t)
+	cases := []struct {
+		name string
+		err  error
+		// restricted marks the chat restricted before the join, so the send fails with media.ErrNoPermission and no request.
+		restricted bool
+	}{
+		{name: "400 wrong file identifier", err: &gotgbot.TelegramError{
+			Method: "sendMessage", Code: 400, Description: "Bad Request: wrong file identifier"}},
+		{name: "403 bot kicked", err: &gotgbot.TelegramError{
+			Method: "sendMessage", Code: 403, Description: "Forbidden: bot was kicked from the supergroup chat"}},
+		{name: "429 too many requests", err: &gotgbot.TelegramError{
+			Method: "sendMessage", Code: 429, Description: "Too Many Requests: retry after 5"}},
+		{name: "chat already restricted", restricted: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			chat, client, bot := greetOnceSetup(t)
+			member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+			greetOnceSwitchOn(t, chat.Id)
+			if tc.restricted {
+				cache.MarkChatRestricted(chat.Id)
+				t.Cleanup(func() { cache.MarkChatNotRestricted(chat.Id) })
+			} else {
+				client.errors["sendMessage"] = tc.err
+			}
+
+			_ = greetOnceJoinErr(bot, chat, member)
+			if got := greetedRows(t, chat.Id); got != 0 {
+				t.Fatalf("greeted rows after a refused welcome = %d, want 0: a definite refusal gives the claim back", got)
+			}
+			refused := greetOnceWelcomes(client)
+
+			delete(client.errors, "sendMessage")
+			cache.MarkChatNotRestricted(chat.Id)
+			greetOnceJoin(t, bot, chat, member)
+			if got := greetOnceWelcomes(client); got != refused+1 {
+				t.Fatalf("welcome requests after the retry = %d, want %d: the next join is welcomed", got, refused+1)
+			}
+			if got := greetedRows(t, chat.Id); got != 1 {
+				t.Fatalf("greeted rows after the welcome went through = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestGreetOnceUnknownOutcomeKeeps(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "502 bad gateway", err: &gotgbot.TelegramError{Method: "sendMessage", Code: 502, Description: "Bad Gateway"}},
+		{name: "transport error", err: errors.New("read tcp: connection reset by peer")},
+		{name: "deadline exceeded", err: context.DeadlineExceeded},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			chat, client, bot := greetOnceSetup(t)
+			member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+			greetOnceSwitchOn(t, chat.Id)
+			client.errors["sendMessage"] = tc.err
+
+			_ = greetOnceJoinErr(bot, chat, member)
+			if got := greetedRows(t, chat.Id); got != 1 {
+				t.Fatalf("greeted rows after an unknown outcome = %d, want 1: the welcome may have been delivered, so the claim stays", got)
+			}
+			attempted := greetOnceWelcomes(client)
+
+			delete(client.errors, "sendMessage")
+			greetOnceJoin(t, bot, chat, member)
+			if got := greetOnceWelcomes(client); got != attempted {
+				t.Fatalf("welcome requests after the next join = %d, want %d: a double welcome is worse than a missing one", got, attempted)
+			}
+			if got := greetedRows(t, chat.Id); got != 1 {
+				t.Fatalf("greeted rows after the next join = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestGreetOnceClaimErrorFailsClosed(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	greetOnceSwitchOn(t, chat.Id)
+
+	previous := greetOnceStore
+	greetOnceStore.Claim = func(int64, int64) (bool, error) { return false, errors.New("database is down") }
+	t.Cleanup(func() { greetOnceStore = previous })
+
+	greetOnceJoin(t, bot, chat, member)
+
+	if got := greetOnceWelcomes(client); got != 0 {
+		t.Fatalf("welcomes with a failing claim = %d, want 0: the join fails closed", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 0 {
+		t.Fatalf("greeted rows with a failing claim = %d, want 0", got)
 	}
 }

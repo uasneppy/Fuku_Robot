@@ -927,9 +927,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   welcomed while the welcome's `welcome_once` switch was on, with a primary key on both columns, `created_at` and no
   foreign key (the claim must work for a chat the `chats` table does not know yet). It is read fresh through the
   database, never cached, so no `DeleteCache` applies. It is never part of backup, export, import or reset
-  (`TestGreetedMembersStayOutOfBackup`) and rows are kept for good. `models.GreetedMember` maps it. The claim rule
-  (an `INSERT ... ON CONFLICT DO NOTHING` inside `SendWelcomeMessage`, given back on a definite refusal) arrives with the
-  greet-once plan of Phase 12.
+  (`TestGreetedMembersStayOutOfBackup`) and rows are kept for good. `models.GreetedMember` maps it. The claim rule:
+  `SendWelcomeMessage` claims the member with `greetings.ClaimGreeting` (one `INSERT ... ON CONFLICT DO NOTHING`) after
+  the Welcome-on check and before the message is built and sent, while `welcome_once` is on; a lost claim sends nothing
+  and runs no clean-old step, a claim database error sends nothing (fail closed), a definite refusal
+  (`welcomeDefinitelyNotSent`: `media.ErrNoPermission`, a Telegram 4xx other than 429 by code, or a 429) gives the claim
+  back with `greetings.ReleaseGreeting`, and an unknown outcome (a transport error, a timeout, a 5xx, an unreadable
+  answer) keeps it, because a double welcome is worse than a missing one. The claim never uses Redis or
+  `claimRecentJoinProcessing`, so it holds across replicas and with no Redis. The switch is written by
+  `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), which has no production caller until the Welcome page's Greet once
+  switch arrives.
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
   (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
@@ -983,6 +990,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Fed-ban lookups cache per `(fed, user)` with a negative sentinel; every ban/unban write must invalidate it.
 - A join arrives as both `ChatMemberUpdated` and a service message; dedupe through `claimRecentJoinProcessing`
   (the lockdown guard, which runs first, dedupes by its joiner row instead and never gates a ban on Redis).
+- Greet once (`welcome_once`, `greeted_members`): the only place that claims is `SendWelcomeMessage`, which the
+  `chat_member` join, the join service message and the captcha pass (button and web, through `finishCaptchaPass`) all
+  call, so a member is claimed exactly where they are really welcomed. A captcha-failed joiner, a joiner the lockdown
+  guard records for a ban, a join while the Welcome switch is off, any join while Greet once is off and every preview
+  write no row, because none of them reaches the claim (`TestGreetOnceWelcomeOffNoClaim`, `TestGreetOnceOffNoRecord`,
+  `TestGreetOnceCaptchaPathAndFailure`, `TestGreetOnceLockdownBanNoRecord`). `TestGreetOnceConcurrentOneWelcome` proves
+  one welcome for 16 concurrent joins of one member. Accepted limits: a basic group's migration to a supergroup changes
+  the chat ID, so its members are welcomed once more; members who join while the Welcome switch is off are not recorded
+  and are welcomed once when it is back on; bots that join are claimed like any member; rows are kept for good. A 429
+  counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
+  flood limit is welcomed on their next join.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
