@@ -37,6 +37,11 @@ func settingsEditRefusalReasons(tr *i18n.Translator) map[string]string {
 	} {
 		reasons[key] = settingsText(tr, key, numbers)
 	}
+	// The two Rules caption refusals name the caption limit and the longest heading plus text (UI-SPEC check 8).
+	captionNumbers := i18n.TranslationParams{"n": 1180, "max": settingsEditCaptionLimit}
+	for _, key := range []string{"settings_edit_refuse_text_rules_long", "settings_edit_refuse_media_rules_long"} {
+		reasons[key] = settingsText(tr, key, captionNumbers)
+	}
 	return reasons
 }
 

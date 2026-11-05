@@ -177,7 +177,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and edits the prompt to `settings_edit_prompt_closed`, best effort. No log line of the door carries the message text,
   a caption, a button name, a link or a file ID. The media part stores what `/setwelcome` or `/setgoodbye` by reply stores (a GIF saved from Phase 12 on as `db.ANIMATION`, one saved earlier as a document, the caption not used, the text
   and buttons kept) and the buttons part what they store for the same lines, replacing the set, but the editor refuses a link
-  that is not http or https instead of dropping it (EDIT-05). The typed reply is the sixth door of `TestSettingsGateAllDoors`.
+  that is not http or https instead of dropping it (EDIT-05). On the Rules page the three parts go through `settingsInputReply.applyRules`
+  (`applyRulesText`, `applyRulesMedia`, `applyRulesButtons`), so Rules media and buttons store what the Welcome's store for the same
+  message, with the same saved page, album gate and caption note. The typed reply is the sixth door of `TestSettingsGateAllDoors`.
   After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
   record through `refreshChatAdminIndex` (at most two Telegram calls, a 10 s context, the error only logged), the
   second repair path after `/admincache` (D-07, MENU-10). It runs after the reply, so a slow or failed refresh never
@@ -1686,7 +1688,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the owner sees the saved page with its length, and there is no ordering signal for plain texts to do better. A claim
   that is never finished or released (a crash, or a Redis timeout on finish) stays until the wait's 10 minutes end,
   during which the sender's non-command private messages get no reply, the prompt's Cancel answers that it is no longer
-  waiting and `/cancel` says there is nothing to cancel; pressing Set again replaces the wait and its claim.
+  waiting and `/cancel` says there is nothing to cancel; pressing Set again replaces the wait and its claim. Rules shares the Welcome's media and buttons predicates (no list of kinds of its own), holds heading plus text to 1024 UTF-16 units
+  while any media is stored (`settings_edit_refuse_text_rules_long` on the text part, `settings_edit_refuse_media_rules_long` on the media part,
+  both measured by `settingsEditRulesLongest` over both heading forms and the 8 languages with the group's real title), keeps the old 4096 limit
+  and its `settings_edit_refuse_too_long_filled` wording without media (so removing the media keeps a long text up to 3800), and counts no `{rules}`
+  token of its stored text as a button, because `/rules` adds none (`TestSettingsRulesCaptionParity` holds the Rules and Welcome boundaries
+  together for every media kind).
 
 ## Go rules
 

@@ -4,6 +4,7 @@ package modules
 
 import (
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -136,5 +137,159 @@ func TestSettingsEditRulesTypedParity(t *testing.T) {
 		if button := rows[0].([]any)[0].(map[string]any); button["text"] != "Site" || button["url"] != "https://example.com" {
 			t.Errorf("button = %v, want Site https://example.com", button)
 		}
+	})
+}
+
+// settingsRulesWantRefusal fails the test unless the bot sent exactly one reply since before, carrying the reason,
+// the still-waiting line and one Cancel button, and the wait is still there.
+func settingsRulesWantRefusal(t *testing.T, env *settingsEnv, owner gotgbot.User, before int, reason string) {
+	t.Helper()
+	settingsEditWantReply(t, env, owner, before, reason, "settings_edit_still_waiting")
+	sent := env.fake.sentTo(owner.Id)
+	buttons := settingsAllButtons(staffKeyboardOf(sent[len(sent)-1].Params["reply_markup"]))
+	if len(buttons) != 1 || !strings.Contains(buttons[0].Text, staffMarker("settings_btn_edit_cancel")) {
+		t.Errorf("the refusal carries the buttons %+v, want the one Cancel button", buttons)
+	}
+	settingsEditWaitKept(t, env, owner)
+}
+
+// settingsRulesStoredNothing fails the test when the chat's rules row holds media or buttons.
+func settingsRulesStoredNothing(t *testing.T, chatID int64) {
+	t.Helper()
+	if row, ok := settingsEditRulesStored(t, chatID); ok && (row.FileID != "" || row.MediaType != 0 || len(row.Buttons) > 0) {
+		t.Errorf("a refused message stored media or buttons: %+v", row)
+	}
+}
+
+// TestSettingsEditRulesTypedRefusals: a Rules wait refuses what the Welcome's refuses and the two caption
+// refusals, keeps the wait with the Cancel button, and saves nothing; an album is one item, a caption is
+// ignored, and a bot that is no administrator any more ends the wait.
+func TestSettingsEditRulesTypedRefusals(t *testing.T) {
+	t.Run("a Rules media wait refuses a text and a video note", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id)
+		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartMedia)
+		for _, kind := range []string{"text", "videonote"} {
+			before := settingsEditSentCount(env, owner)
+			sendPrivateMedia(env, owner, kind)
+			settingsRulesWantRefusal(t, env, owner, before, "settings_edit_refuse_need_media")
+		}
+		settingsRulesStoredNothing(t, env.chat.Id)
+	})
+
+	t.Run("a Rules media over a long stored text is refused for the caption", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id)
+		if err := rules.SetChatRules(env.chat.Id, strings.Repeat("a", 1100)); err != nil {
+			t.Fatalf("SetChatRules: %v", err)
+		}
+		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartMedia)
+		before := settingsEditSentCount(env, owner)
+		sendPrivateMedia(env, owner, "photo")
+		settingsRulesWantRefusal(t, env, owner, before, "settings_edit_refuse_media_rules_long")
+		settingsRulesStoredNothing(t, env.chat.Id)
+	})
+
+	t.Run("a Rules text over the caption limit is refused while media is stored", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id)
+		if err := rules.SetRulesMediaOnly(env.chat.Id, "rules-photo", db.PHOTO); err != nil {
+			t.Fatalf("SetRulesMediaOnly: %v", err)
+		}
+		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartText)
+		before := settingsEditSentCount(env, owner)
+		sendPrivateMessage(env, owner, gotgbot.Message{Text: strings.Repeat("a", 1100)})
+		settingsRulesWantRefusal(t, env, owner, before, "settings_edit_refuse_text_rules_long")
+		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "" {
+			t.Errorf("a refused rules text was stored: %q", row.Rules)
+		}
+	})
+
+	t.Run("a Rules buttons wait refuses a bad link and 101 buttons", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id)
+		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartButtons)
+		for _, tc := range []struct{ text, want string }{
+			{"[a](buttonurl://https://e.com)\n[b](buttonurl://javascript:alert(1))", "settings_edit_refuse_button_url"},
+			{settingsEditButtonLines(101, 1000), "settings_edit_refuse_buttons_limit"},
+		} {
+			before := settingsEditSentCount(env, owner)
+			sendPrivateMessage(env, owner, gotgbot.Message{Text: tc.text})
+			settingsRulesWantRefusal(t, env, owner, before, tc.want)
+		}
+		settingsRulesStoredNothing(t, env.chat.Id)
+	})
+
+	t.Run("an album sent to a Rules media wait stores one item and says so", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id)
+		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartMedia)
+		var writes atomic.Int32
+		previous := rulesWrites.SetRulesMediaOnly
+		rulesWrites.SetRulesMediaOnly = func(chatID int64, fileID string, mediaType int) error {
+			writes.Add(1)
+			return previous(chatID, fileID, mediaType)
+		}
+		t.Cleanup(func() { rulesWrites.SetRulesMediaOnly = previous })
+		before := settingsEditSentCount(env, owner)
+
+		sendPrivateAlbum(env, owner, settingsMediaAlbumOf(6), true)
+
+		if got := writes.Load(); got != 1 {
+			t.Errorf("the album wrote the rules media %d times, want once", got)
+		}
+		row, _ := settingsEditRulesStored(t, env.chat.Id)
+		if !strings.HasPrefix(row.FileID, "album-") || row.MediaType != db.PHOTO {
+			t.Errorf("the rules media is file %q type %d, want one of the album's photos", row.FileID, row.MediaType)
+		}
+		settingsEditWantReply(t, env, owner, before, "settings_edit_saved_media", "settings_edit_album_cut")
+		settingsEditWaitGone(t, env, owner)
+	})
+
+	t.Run("a caption on a Rules photo is not used and is not echoed", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id)
+		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartMedia)
+		before := settingsEditSentCount(env, owner)
+		photo := settingsMediaItemID("photo", "rules-big")
+		photo.Caption = "SECRETCAPTION"
+
+		sendPrivateMessage(env, owner, photo)
+
+		row, _ := settingsEditRulesStored(t, env.chat.Id)
+		if row.FileID != "rules-big" || row.MediaType != db.PHOTO || row.Rules != "" {
+			t.Errorf("the rules are %+v, want only the photo", row)
+		}
+		settingsEditWantReply(t, env, owner, before, "settings_edit_saved_media", "settings_edit_caption_ignored")
+		if strings.Contains(settingsEditPageText(env, owner), "SECRETCAPTION") {
+			t.Errorf("the saved page echoes the caption: %q", settingsEditPageText(env, owner))
+		}
+	})
+
+	t.Run("a bot that is no administrator any more ends the Rules media wait", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id)
+		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartMedia)
+		env.fake.setBotRole(env.chat.Id, staffRoleMember)
+		dbcache.DeleteCache(dbcache.CacheKey("admin_list", env.chat.Id))
+		dbcache.ResetLocalForTest()
+		before := settingsEditSentCount(env, owner)
+
+		sendPrivateMedia(env, owner, "photo")
+
+		settingsEditWantReply(t, env, owner, before, "chat_status_bot_not_admin")
+		text := settingsEditTextsSince(env, owner, before)[0]
+		if !strings.HasSuffix(text, staffMarker("chat_status_bot_not_admin")+"\n\n"+staffMarker("settings_edit_wait_stopped")) {
+			t.Errorf("the reply %q is not the reason, a blank line and the wait-stopped line", text)
+		}
+		settingsEditWaitGone(t, env, owner)
+		settingsRulesStoredNothing(t, env.chat.Id)
 	})
 }
