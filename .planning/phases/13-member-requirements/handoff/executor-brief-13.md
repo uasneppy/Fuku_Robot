@@ -22,7 +22,7 @@ You are a SEQUENTIAL executor agent on the main working tree of /home/user/Fuku_
 - Update AGENTS.md in the same commit as any rule your change invalidates, as your plan says.
 - Never print or commit secrets. Do not modify go.mod or go.sum (a plan gate checks `git diff --exit-code 8c0c827 -- go.mod go.sum`).
 - If a test outside your plan's file list fails because of your change, fix that test only where the plan says its expectation changes (or where the new behaviour obviously requires it), and name it in the SUMMARY under deviations.
-- THE KILL SWITCH: `memberReqEnforcementLive` (added by plan 13-09, an atomic or guarded switch, false in production code) keeps the message watcher and the join entry inert until plan 13-13 turns it on together with the `mreq|` button handler. No plan before 13-13 may flip it to true outside a test helper that restores it, and no code path may restrict, kick, ban, warn or delete before 13-13 regardless of the switch's own check. Plan 13-13 is the only plan that sets it true.
+- THE KILL SWITCH: `memberReqEnforcementLive` (added by plan 13-09 as an `atomic.Bool`, read only through `memberReqLive()`, false in production code until plan 13-13) keeps the message watcher and the join entry inert until plan 13-13 turns it on together with the `mreq|` button handler. No plan before 13-13 may flip it to true outside a test helper that restores it, and no code path may restrict, kick, ban, warn or delete before 13-13 regardless of the switch's own check. Plan 13-13 is the only plan that sets it true.
 
 ## Read first (use the Read tool; the orchestrator did not inline these)
 1. /home/user/Fuku_Robot/.claude/gsd-core/workflows/execute-plan.md
