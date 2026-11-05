@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"slices"
 
 	log "github.com/sirupsen/logrus"
 
@@ -77,4 +78,27 @@ func applyMemberReqJoin(ctx context.Context, chatID int64, on bool) memberReqApp
 // is of Check on join.
 func applyMemberReqDelete(ctx context.Context, chatID int64, on bool) memberReqApplyResult {
 	return finishMemberReqApply(ctx, chatID, "delete messages", memberReqWrites.DeleteMessages(ctx, chatID, on))
+}
+
+// applyMemberReqAction is the one write path of a rule's punishment: it validates the rule and the
+// value 0..4 before any write, makes the column-targeted write (a Go 0 is written), the cache key
+// is dropped by the repository, and the row is read back. There is no command for it (D-17), so a
+// drift test and an authority test stand in for a parity test. The action is the absolute target,
+// so repeating it writes the same value again. Whether a strict value needed the card first is the
+// caller's decision: this function writes whatever it is given.
+func applyMemberReqAction(ctx context.Context, chatID int64, rule memberreq.Rule, action int) memberReqApplyResult {
+	var invalid error
+	switch {
+	case !slices.Contains(memberreq.Rules, rule):
+		invalid = memberreq.ErrUnknownRule
+	case action < models.RequirementActionOff || action > models.RequirementActionMute:
+		invalid = memberreq.ErrActionOutOfRange
+	}
+	if invalid != nil {
+		return memberReqApplyResult{
+			Outcome: memberReqSaveFailed, Key: "common_settings_save_failed",
+			Err: errors.Wrapf(invalid, "refuse member requirement rule %q action %d of chat %d", rule, action, chatID),
+		}
+	}
+	return finishMemberReqApply(ctx, chatID, "rule "+string(rule), memberReqWrites.Action(ctx, chatID, rule, action))
 }

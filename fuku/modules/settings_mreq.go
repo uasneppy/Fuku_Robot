@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -24,9 +25,29 @@ const (
 	settingsMreqControlJoin = "j"
 	// settingsMreqControlDelete is the t value of the Delete messages switch.
 	settingsMreqControlDelete = "d"
+	// settingsActMreqOpen is the action code of a rule cell: it opens that rule's screen (field t).
+	settingsActMreqOpen = "mo"
 )
 
+// settingsMreqFresh is the fresh database read of a group's requirement settings that the
+// same-value check of a punishment press makes, never the cached loader (D-05). It is a variable
+// only so a test can make it fail.
+var settingsMreqFresh = func(ctx context.Context, chatID int64) (*models.ChatRequirements, error) {
+	return memberreq.GetSettingsFresh(ctx, chatID)
+}
+
 func init() {
+	controls := map[string]settingsControl{
+		settingsMreqControlJoin:   {Right: settingsRightRestrict, Validate: settingsEditSwitchValue, Set: settingsMreqSetJoin},
+		settingsMreqControlDelete: {Right: settingsRightRestrict, Validate: settingsEditSwitchValue, Set: settingsMreqSetDelete},
+	}
+	for _, rule := range memberReqRules {
+		// A rule control takes st only: a tg naming it is refused in step 1 (UI-SPEC section 2).
+		controls[rule.Code] = settingsControl{
+			Right: settingsRightRestrict, Actions: []string{settingsActSet},
+			Validate: settingsMreqActionValue, Set: settingsMreqRuleSet(rule),
+		}
+	}
 	registerSettingsPage(settingsPage{
 		Key:       settingsPageMreq,
 		Order:     80,
@@ -34,9 +55,9 @@ func init() {
 		TitleKey:  "settings_page_mreq",
 		MainState: settingsMreqMainState,
 		Open:      settingsMreqOpen,
-		Controls: map[string]settingsControl{
-			settingsMreqControlJoin:   {Right: settingsRightRestrict, Validate: settingsEditSwitchValue, Set: settingsMreqSetJoin},
-			settingsMreqControlDelete: {Right: settingsRightRestrict, Validate: settingsEditSwitchValue, Set: settingsMreqSetDelete},
+		Controls:  controls,
+		Actions: map[string]settingsPageAction{
+			settingsActMreqOpen: {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: settingsMreqOpenFields, Run: settingsMreqOpenRule},
 		},
 	})
 }
@@ -122,6 +143,26 @@ func settingsMreqOpen(p *settingsPress, notice string) (settingsScreen, error) {
 	return renderSettingsMreqPage(p.view(), row, notice), nil
 }
 
+// settingsMreqResult unpacks an apply result for a redraw: the row to draw (the read-back, or a
+// reload through the cached loader when the read-back failed) and the notice a failed write adds.
+// ok is false after the cannot-open edit: the reload failed too and the press is already answered.
+func settingsMreqResult(p *settingsPress, what string, result memberReqApplyResult) (row *models.ChatRequirements, notice string, ok bool) {
+	if result.Outcome == memberReqSaveFailed {
+		log.Errorf("[Settings] write of the %s of chat %d failed: %v", what, p.group.Id, result.Err)
+		notice = settingsNoticeWarn(settingsText(p.tr, result.Key))
+	}
+	row = result.Row
+	if row == nil {
+		var err error
+		if row, err = settingsMreqRead(p.group.Id); err != nil {
+			log.Warnf("[Settings] the requirements page of chat %d could not be read after a press: %v", p.group.Id, err)
+			p.cannotOpen()
+			return nil, "", false
+		}
+	}
+	return row, notice, true
+}
+
 // settingsMreqSetSwitch serves a switch control: it calls the apply function with the absolute
 // target (the control's Validate already refused anything but "0" and "1" in step 1) and redraws
 // the page from the row the function read back, with no notice. A failed write redraws the stored
@@ -132,20 +173,9 @@ func settingsMreqSetSwitch(
 ) *settingsScreen {
 	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 	defer cancel()
-	result := apply(ctx, p.group.Id, on)
-	notice := ""
-	if result.Outcome == memberReqSaveFailed {
-		log.Errorf("[Settings] write of the %s switch of chat %d failed: %v", what, p.group.Id, result.Err)
-		notice = settingsNoticeWarn(settingsText(p.tr, result.Key))
-	}
-	row := result.Row
-	if row == nil {
-		var err error
-		if row, err = settingsMreqRead(p.group.Id); err != nil {
-			log.Warnf("[Settings] the requirements page of chat %d could not be read after a press: %v", p.group.Id, err)
-			p.cannotOpen()
-			return nil
-		}
+	row, notice, ok := settingsMreqResult(p, what+" switch", apply(ctx, p.group.Id, on))
+	if !ok {
+		return nil
 	}
 	screen := renderSettingsMreqPage(p.view(), row, notice)
 	return &screen
@@ -190,13 +220,32 @@ func settingsMreqBody(v settingsView, row *models.ChatRequirements) []string {
 	return body
 }
 
+// settingsMreqRuleGrid adds the rule grid: one cell per rule in rule order, the rule's punishment
+// icon and short name, two per row filled left to right with an odd last cell alone. A cell opens
+// that rule's screen (UI-SPEC amendment M4).
+func settingsMreqRuleGrid(k *settingsKeyboard, row *models.ChatRequirements) {
+	var cells []gotgbot.InlineKeyboardButton
+	for _, rule := range memberReqRules {
+		label := settingsText(k.view.Tr, rule.CellKey, i18n.TranslationParams{
+			"state": memberReqActionIcon(memberreq.ActionOf(row, rule.Store)),
+		})
+		if button, ok := k.button(label, map[string]string{"a": settingsActMreqOpen, "t": rule.Code}); ok {
+			cells = append(cells, button)
+		}
+	}
+	for i := 0; i < len(cells); i += 2 {
+		k.row(cells[i:min(i+2, len(cells))]...)
+	}
+}
+
 // renderSettingsMreqPage draws the page. It is pure. A nil row draws everything off. The keyboard
-// is the switch row and the navigation row; the rule grid joins with the rule screens.
+// is the rule grid, the switch row and the navigation row.
 func renderSettingsMreqPage(v settingsView, row *models.ChatRequirements, notice string) settingsScreen {
 	if row == nil {
 		row = &models.ChatRequirements{}
 	}
 	k := newSettingsKeyboard(v)
+	settingsMreqRuleGrid(k, row)
 	var cells []gotgbot.InlineKeyboardButton
 	for _, sw := range []struct {
 		control, labelKey string
@@ -211,4 +260,132 @@ func renderSettingsMreqPage(v settingsView, row *models.ChatRequirements, notice
 	k.row(cells...)
 	k.navRow(false)
 	return k.screen(settingsCompose(v, "settings_page_mreq", settingsMreqBody(v, row), notice, false))
+}
+
+// settingsMreqActionValue is the Validate of a rule control: v is exactly one ASCII digit 0 to 4
+// (a stored punishment number), so "5", "04" and "x" are refused in step 1.
+func settingsMreqActionValue(value string) bool {
+	return len(value) == 1 && value[0] >= '0' && value[0] <= '4'
+}
+
+// settingsMreqOpenFields is the Validate of the mo action: its one field t is a rule code of this
+// page.
+func settingsMreqOpenFields(fields map[string]string) bool {
+	_, ok := memberReqRuleByCode(fields["t"])
+	return ok
+}
+
+// renderSettingsMreqRuleScreen draws one rule's screen. It is pure: the rule's name and what breaks
+// it, the blank last name hint on that rule only, the stored punishment, the two hints, the choice
+// rows [Off | Warn] and [Kick | Ban | Mute] with the check mark on the stored value, and Back to the
+// page (not Main, UI-SPEC amendment M5) with Close. A nil row draws the rule off.
+func renderSettingsMreqRuleScreen(v settingsView, rule memberReqRule, row *models.ChatRequirements, notice string) settingsScreen {
+	if row == nil {
+		row = &models.ChatRequirements{}
+	}
+	tr := v.Tr
+	action := memberreq.ActionOf(row, rule.Store)
+	body := []string{settingsText(tr, rule.LineKey), settingsText(tr, rule.DescKey)}
+	if rule.Store == memberreq.RuleLastName {
+		body = append(body, settingsText(tr, "settings_mreq_hint_blank"))
+	}
+	body = append(body, "",
+		settingsText(tr, "settings_mreq_now", i18n.TranslationParams{
+			"action": memberReqActionIcon(action) + " " + settingsMreqActionWord(tr, action),
+		}),
+		"",
+		settingsText(tr, "settings_mreq_choose_hint"),
+		settingsText(tr, "settings_mreq_actions_hint"),
+	)
+
+	k := newSettingsKeyboard(v)
+	selected := strconv.Itoa(action)
+	for _, values := range [][]int{{models.RequirementActionOff, models.RequirementActionWarn},
+		{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute}} {
+		options := make([]settingsOption, 0, len(values))
+		for _, value := range values {
+			options = append(options, settingsOption{Value: strconv.Itoa(value), Label: settingsMreqActionWord(tr, value)})
+		}
+		k.row(settingsChoiceRow(k, settingsPageMreq, rule.Code, options, selected)...)
+	}
+	var nav []gotgbot.InlineKeyboardButton
+	if back, ok := k.button(settingsText(tr, "settings_btn_back"), map[string]string{"a": settingsActOpen, "p": settingsPageMreq}); ok {
+		nav = append(nav, back)
+	}
+	if closeButton, ok := k.button(settingsText(tr, "settings_btn_close"), map[string]string{"a": settingsActClose}); ok {
+		nav = append(nav, closeButton)
+	}
+	k.row(nav...)
+	return k.screen(settingsCompose(v, "settings_page_mreq", body, notice, false))
+}
+
+// settingsMreqOpenRule serves the mo action: it reads the settings and draws the rule's screen. A
+// read error is the cannot-open edit. The rule code was checked by settingsMreqOpenFields.
+func settingsMreqOpenRule(p *settingsPress) *settingsScreen {
+	rule, ok := memberReqRuleByCode(p.fields["t"])
+	if !ok {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	row, err := settingsMreqRead(p.group.Id)
+	if err != nil {
+		log.Warnf("[Settings] the rule screen of chat %d could not be read: %v", p.group.Id, err)
+		p.cannotOpen()
+		return nil
+	}
+	screen := renderSettingsMreqRuleScreen(p.view(), rule, row, "")
+	return &screen
+}
+
+// settingsMreqRuleSet makes the Set of a rule control. The value is one digit 0..4 (the control's
+// Validate checked it in step 1).
+func settingsMreqRuleSet(rule memberReqRule) func(p *settingsPress, value string) *settingsScreen {
+	return func(p *settingsPress, value string) *settingsScreen {
+		return settingsMreqChoose(p, rule, int(value[0]-'0'))
+	}
+}
+
+// settingsMreqRedrawRule draws a rule's screen from row with the given notice.
+func settingsMreqRedrawRule(p *settingsPress, rule memberReqRule, row *models.ChatRequirements, notice string) *settingsScreen {
+	screen := renderSettingsMreqRuleScreen(p.view(), rule, row, notice)
+	return &screen
+}
+
+// settingsMreqChoose serves a punishment press. The stored value is read fresh from the database,
+// never from the cache (a stale "same value" would skip a card the owner should see, D-05): a
+// press of the stored value writes nothing, Off and Warn write at once, and a failed read is the
+// save-failed notice with no write.
+func settingsMreqChoose(p *settingsPress, rule memberReqRule, action int) *settingsScreen {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	stored, err := settingsMreqFresh(ctx, p.group.Id)
+	if err != nil {
+		log.Errorf("[Settings] fresh read of the requirements of chat %d failed: %v", p.group.Id, err)
+		row, readErr := settingsMreqRead(p.group.Id)
+		if readErr != nil {
+			p.cannotOpen()
+			return nil
+		}
+		return settingsMreqRedrawRule(p, rule, row, settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed")))
+	}
+	if memberreq.ActionOf(stored, rule.Store) == action {
+		return settingsMreqRedrawRule(p, rule, stored, "")
+	}
+	if action >= models.RequirementActionKick {
+		// Kick, Ban and Mute draw the card in the next step; until then nothing is written.
+		return settingsMreqRedrawRule(p, rule, stored, "")
+	}
+	return settingsMreqApplyRule(p, rule, action)
+}
+
+// settingsMreqApplyRule writes the punishment through applyMemberReqAction and redraws the rule
+// screen from the row read back, with the save-failed notice when the write failed.
+func settingsMreqApplyRule(p *settingsPress, rule memberReqRule, action int) *settingsScreen {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	row, notice, ok := settingsMreqResult(p, "punishment of rule "+rule.Code, applyMemberReqAction(ctx, p.group.Id, rule.Store, action))
+	if !ok {
+		return nil
+	}
+	return settingsMreqRedrawRule(p, rule, row, notice)
 }

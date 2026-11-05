@@ -1017,3 +1017,46 @@ func TestSettingsControlActionAllowList(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyMemberReqAction(t *testing.T) {
+	chatID := uniqueModuleChatID()
+	settingsCleanup(t, chatID)
+	writes := settingsMreqCountWrites(t)
+	ctx := context.Background()
+
+	for _, bad := range []struct {
+		name   string
+		rule   memberreq.Rule
+		action int
+	}{
+		{"an action above 4", memberreq.RuleArabic, 5},
+		{"a negative action", memberreq.RuleArabic, -1},
+		{"an unknown rule", memberreq.Rule("profile_photo"), 1},
+	} {
+		result := applyMemberReqAction(ctx, chatID, bad.rule, bad.action)
+		if result.Outcome != memberReqSaveFailed || result.Key != "common_settings_save_failed" || result.Err == nil {
+			t.Errorf("%s: result = %+v, want a refused save with the save-failed key", bad.name, result)
+		}
+		if *writes != 0 {
+			t.Fatalf("%s reached the write seam", bad.name)
+		}
+	}
+	if _, has := settingsMreqStored(t, chatID); has {
+		t.Error("a refused apply created a row")
+	}
+
+	// A cached read first: the apply must drop the key, so the next cached read sees the write.
+	if _, err := memberreq.GetSettings(ctx, chatID); err != nil {
+		t.Fatalf("GetSettings: %v", err)
+	}
+	result := applyMemberReqAction(ctx, chatID, memberreq.RuleChinese, models.RequirementActionMute)
+	if result.Outcome != memberReqApplied || result.Row == nil || result.Row.ChineseAction != models.RequirementActionMute {
+		t.Fatalf("result = %+v, want applied with the Chinese rule on Mute read back", result)
+	}
+	if cached, err := memberreq.GetSettings(ctx, chatID); err != nil || cached.ChineseAction != models.RequirementActionMute {
+		t.Errorf("the cached read after the write = %+v, %v, want the new value (the key was dropped)", cached, err)
+	}
+	if result = applyMemberReqAction(ctx, chatID, memberreq.RuleChinese, models.RequirementActionOff); result.Row == nil || result.Row.ChineseAction != 0 {
+		t.Errorf("Off result = %+v, want a Go zero written and read back", result)
+	}
+}

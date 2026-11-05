@@ -383,6 +383,10 @@ type settingsControl struct {
 	// the press as an invalid request. Nil keeps the old behaviour: any non-empty v is allowed
 	// and Set judges it.
 	Validate func(value string) bool
+	// Actions is an optional allow-list of the core action codes the control accepts, "tg" and "st".
+	// A press with any other code is refused in step 1, before any I/O. Nil keeps the old behaviour:
+	// the control accepts both.
+	Actions []string
 }
 
 // settingsPageAction is a page-specific action. Fields are the extra keys the callback may

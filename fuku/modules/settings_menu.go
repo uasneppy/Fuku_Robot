@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"time"
 
@@ -295,16 +296,20 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 }
 
 // settingsControlFieldsValid reports whether a tg or st press names a control that exists: the
-// page p is registered, it has the control t, and the control's own Validate, when it declares
-// one, accepts the value v. It runs in step 1, before any I/O, so a forged control or value
-// costs no Telegram call.
-func settingsControlFieldsValid(_ string, fields map[string]string) bool {
+// page p is registered, it has the control t, the control accepts the action (its Actions
+// allow-list, when it declares one, holds it), and the control's own Validate, when it declares
+// one, accepts the value v. It runs in step 1, before any I/O, so a forged control, action or
+// value costs no Telegram call.
+func settingsControlFieldsValid(action string, fields map[string]string) bool {
 	pg, ok := settingsPageByKey(fields["p"])
 	if !ok {
 		return false
 	}
 	control, ok := pg.Controls[fields["t"]]
 	if !ok {
+		return false
+	}
+	if len(control.Actions) > 0 && !slices.Contains(control.Actions, action) {
 		return false
 	}
 	return control.Validate == nil || control.Validate(fields["v"])
