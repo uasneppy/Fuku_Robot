@@ -29,7 +29,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **EDIT-06**: Each part has a Preview, and "Full preview" sends the whole message exactly as members will see it, through the same send path the group uses.
 - [ ] **EDIT-07**: "Media under text" shows a photo, video or GIF below its text instead of above it.
 - [ ] **EDIT-08**: Rules gain media and URL buttons, and `/rules` (in the group and as private rules) shows them.
-- [ ] **EDIT-09**: Welcome has "Greet once": a member is greeted only the first time they ever join that group, also when the join reaches several replicas.
+- [x] **EDIT-09**: Welcome has "Greet once": a member is greeted only the first time they ever join that group, also when the join reaches several replicas.
 - [x] **EDIT-10**: Welcome and Goodbye have their on/off switch and "Delete last welcome/goodbye" in the menu, stored exactly as `/welcome`, `/goodbye`, `/cleanwelcome` and `/cleangoodbye` store them.
 - [x] **EDIT-11**: A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, and a message that Telegram would refuse to send is refused before saving.
 
@@ -148,7 +148,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | EDIT-06 | Phase 11 | Complete |
 | EDIT-07 | Phase 12 | Pending |
 | EDIT-08 | Phase 12 | Pending |
-| EDIT-09 | Phase 12 | Pending |
+| EDIT-09 | Phase 12 | Complete |
 | EDIT-10 | Phase 11 | Complete |
 | EDIT-11 | Phase 11 | Complete |
 | MREQ-01 | Phase 13 | Pending |
