@@ -8,6 +8,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 )
@@ -16,6 +17,10 @@ import (
 // names the member and every broken rule. The member's name is a token spliced in after
 // translation (memberReqMention escapes it), so it never passes through the translator and a
 // name such as "{rules}" is printed literally.
+
+// memberReqCallbackNamespace is the namespace of the "I fixed it" button (mreq|v1|...). The
+// handler that answers it comes with the plan that turns enforcement on.
+const memberReqCallbackNamespace = "mreq"
 
 // memberReqNameToken stands for the member's mention in a template until it is spliced.
 const memberReqNameToken = "<<mreq-name>>"
@@ -59,10 +64,32 @@ func memberReqNoticeParams(tr *i18n.Translator, broken int, warn *warnApplyResul
 	return params
 }
 
+// memberReqNoticeKey chooses the template of a punishment: kick, ban and mute have their own;
+// a warn is the plain warn notice, or the variant of the group's warn mode when the limit
+// action took effect (a refused limit action is the plain notice, so a removal that did not
+// happen is never claimed).
+func memberReqNoticeKey(action int, warn *warnApplyResult) string {
+	switch action {
+	case models.RequirementActionKick:
+		return "mreq_notice_kick"
+	case models.RequirementActionBan:
+		return "mreq_notice_ban"
+	case models.RequirementActionMute:
+		return "mreq_notice_mute"
+	}
+	if warn != nil && warn.LimitReached && warn.LimitApplied {
+		switch warn.Mode {
+		case "kick", "ban", "mute":
+			return "mreq_notice_warn_limit_" + warn.Mode
+		}
+	}
+	return "mreq_notice_warn"
+}
+
 // memberReqNoticeText builds the notice of a punishment: the template of the punishment
 // translated with the broken rules and the warn numbers, then the member's mention spliced in.
 func memberReqNoticeText(tr *i18n.Translator, user gotgbot.User, broken, action int, warn *warnApplyResult) string {
-	text := memberReqText(tr, "mreq_notice_warn", memberReqNoticeParams(tr, broken, warn))
+	text := memberReqText(tr, memberReqNoticeKey(action, warn), memberReqNoticeParams(tr, broken, warn))
 	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(user.Id, 10)})
 	return lockdownSplice(text, memberReqNameToken, memberReqMention(user, fallback))
 }
@@ -90,10 +117,29 @@ func memberReqPostNotice(ctx context.Context, b *gotgbot.Bot, chatID int64, text
 	return sent.MessageId, nil
 }
 
-func memberReqFixedButton(_ *i18n.Translator, _, _ int64) gotgbot.InlineKeyboardMarkup {
-	return gotgbot.InlineKeyboardMarkup{}
+// memberReqFixedButton is the one full-width "I fixed it" button of a mute notice. Its data
+// carries only numbers: a=f, h the hold ID and u the member, at most 52 bytes. Anyone else's
+// tap is refused by the handler, so the button grants nothing by itself.
+func memberReqFixedButton(tr *i18n.Translator, holdID, userID int64) gotgbot.InlineKeyboardMarkup {
+	data := encodeCallbackData(memberReqCallbackNamespace, map[string]string{
+		"a": "f",
+		"h": strconv.FormatInt(holdID, 10),
+		"u": strconv.FormatInt(userID, 10),
+	})
+	if data == "" {
+		return gotgbot.InlineKeyboardMarkup{}
+	}
+	return gotgbot.InlineKeyboardMarkup{InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{
+		{Text: memberReqText(tr, "mreq_btn_fixed"), CallbackData: data},
+	}}}
 }
 
-func memberReqNoticeKeyboard(_ *i18n.Translator, _ int, _, _ int64) gotgbot.InlineKeyboardMarkup {
-	return gotgbot.InlineKeyboardMarkup{}
+// memberReqNoticeKeyboard is the keyboard of a notice: the button for a mute, none for a warn
+// (a warn-limit mute is the warn module's mute and is never lifted by the button), a kick or
+// a ban.
+func memberReqNoticeKeyboard(tr *i18n.Translator, action int, holdID, userID int64) gotgbot.InlineKeyboardMarkup {
+	if action != models.RequirementActionMute {
+		return gotgbot.InlineKeyboardMarkup{}
+	}
+	return memberReqFixedButton(tr, holdID, userID)
 }

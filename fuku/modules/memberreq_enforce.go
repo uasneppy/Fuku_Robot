@@ -294,7 +294,22 @@ func memberReqWarnStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr 
 		log.Errorf("[MemberReq] warn of user %d in chat %d did not complete (recorded %t): %s", c.User.Id, c.Chat.Id, res.Recorded, memberReqErrText(err))
 		return memberReqNotApplied, nil
 	}
+	if res.LimitApplied && (res.Mode == "kick" || res.Mode == "ban") {
+		return memberReqRemoved, &res
+	}
 	return memberReqWarned, &res
+}
+
+// memberReqSendStep makes one paced Telegram call of a punishment. When Telegram did not
+// answer success nothing is recorded as punished and the hold stays pending; when it did the
+// hold is marked punished and the outcome is returned.
+func memberReqSendStep(ctx context.Context, c memberReqCase, hold *models.ChatRequirementHold, outcome memberReqOutcome, call func(context.Context) error) memberReqOutcome {
+	if err := memberReqPaced(ctx, call); err != nil {
+		log.Warnf("[MemberReq] punishment %d of user %d in chat %d was not applied: %s", hold.Action, c.User.Id, c.Chat.Id, memberReqErrText(err))
+		return memberReqNotApplied
+	}
+	memberReqMarkPunished(ctx, c, hold)
+	return outcome
 }
 
 // memberReqApplyStep applies the hold's punishment. A warn is marked punished inside its own
@@ -303,6 +318,21 @@ func memberReqApplyStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr
 	switch hold.Action {
 	case models.RequirementActionWarn:
 		return memberReqWarnStep(ctx, b, c, tr, hold)
+	case models.RequirementActionKick:
+		return memberReqSendStep(ctx, c, hold, memberReqRemoved, func(callCtx context.Context) error {
+			return kickMemberContext(callCtx, b, c.Chat.Id, c.User.Id)
+		}), nil
+	case models.RequirementActionBan:
+		return memberReqSendStep(ctx, c, hold, memberReqRemoved, func(callCtx context.Context) error {
+			_, err := b.BanChatMemberWithContext(callCtx, c.Chat.Id, c.User.Id, nil)
+			return err
+		}), nil
+	case models.RequirementActionMute:
+		return memberReqSendStep(ctx, c, hold, memberReqMuted, func(callCtx context.Context) error {
+			_, err := b.RestrictChatMemberWithContext(callCtx, c.Chat.Id, c.User.Id, MutedPermissions,
+				&gotgbot.RestrictChatMemberOpts{UntilDate: hold.MuteUntil})
+			return err
+		}), nil
 	}
 	return memberReqNotApplied, nil
 }
@@ -311,7 +341,7 @@ func memberReqApplyStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr
 // A failure is logged by IDs only; the punishment stays.
 func memberReqAnnounce(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, user gotgbot.User, hold *models.ChatRequirementHold, warn *warnApplyResult) {
 	text := memberReqNoticeText(tr, user, hold.Rules, hold.Action, warn)
-	msgID, err := memberReqPostNotice(ctx, b, c.Chat.Id, text, gotgbot.InlineKeyboardMarkup{})
+	msgID, err := memberReqPostNotice(ctx, b, c.Chat.Id, text, memberReqNoticeKeyboard(tr, hold.Action, hold.ID, user.Id))
 	if err != nil {
 		log.Warnf("[MemberReq] the notice for user %d in chat %d was not delivered: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
 		return
@@ -371,4 +401,25 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	return memberReqPunish(ctx, b, c, member.User, hold)
 }
 
-func isMemberReqMute(_ gotgbot.MergedChatMember, _ int64) bool { return false }
+// memberReqUntilMatches reports whether a live restriction end date is the stored marker,
+// within lockdownBanUntilTolerance seconds. A zero on either side never matches.
+func memberReqUntilMatches(live, stored int64) bool {
+	if live == 0 || stored == 0 {
+		return false
+	}
+	diff := live - stored
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= lockdownBanUntilTolerance
+}
+
+// isMemberReqMute reports whether a live chat member is under the requirement mute: still in
+// the group, restricted, with an end date within two seconds of the hold's mute_until. It is
+// the only proof that the requirements placed a mute (D-08): every other mute path writes an
+// end date of 0 or a date the person chose, so an admin's, a staff, the captcha's, the
+// antiflood's or the warn limit's mute is never taken for this one, and "I fixed it" never
+// lifts it. With no marker stored nothing is ours.
+func isMemberReqMute(m gotgbot.MergedChatMember, muteUntil int64) bool {
+	return m.Status == gotgbot.ChatMemberStatusRestricted && m.IsMember && memberReqUntilMatches(m.UntilDate, muteUntil)
+}
