@@ -119,9 +119,9 @@ var memberReqCorpus = []corpusRow{
 	{group: "latin evasion", first: "Пëтр"},
 
 	// A zero-width character inside a name changes no verdict.
-	{group: "zero-width", first: "Пе​тр"},
-	{group: "zero-width", first: "Э​", ru: true},
-	{group: "zero-width", first: "​王", han: true},
+	{group: "zero-width", first: "Пе\u200bтр"},
+	{group: "zero-width", first: "Э\u200b", ru: true},
+	{group: "zero-width", first: "\u200b王", han: true},
 }
 
 func TestMemberReqRulesCorpus(t *testing.T) {

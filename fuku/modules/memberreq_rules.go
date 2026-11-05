@@ -1,6 +1,10 @@
 package modules
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -8,6 +12,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 )
 
 // memberReqNames are the three profile fields the member requirement rules judge.
@@ -186,8 +191,60 @@ func memberReqStrictest(settings *models.ChatRequirements, broken int) int {
 	return best
 }
 
-func memberReqPassValue(*models.ChatRequirements, memberReqNames) string { return "" }
+// memberReqPassValue is a fingerprint of everything that decides whether a member is
+// clean in a chat: the five actions in rule order and the three names. It is the first 16
+// hex characters of a SHA-256, not a secret. The watcher stores it per member so it can
+// skip the clean-path DELETE while nothing changed, and any rename or settings change
+// gives another value (D-12, D-20). Each field is length-prefixed, so no name can slide
+// into its neighbour. Nil settings read as every rule off.
+func memberReqPassValue(settings *models.ChatRequirements, names memberReqNames) string {
+	if settings == nil {
+		settings = &models.ChatRequirements{}
+	}
+	var sb strings.Builder
+	for _, rule := range memberreq.Rules {
+		sb.WriteString(strconv.Itoa(memberreq.ActionOf(settings, rule)))
+		sb.WriteByte(';')
+	}
+	for _, field := range []string{names.First, names.Last, names.Username} {
+		sb.WriteString(strconv.Itoa(len(field)))
+		sb.WriteByte(':')
+		sb.WriteString(field)
+	}
+	sum := sha256.Sum256([]byte(sb.String()))
+	return hex.EncodeToString(sum[:])[:16]
+}
 
-func memberReqDisplayName(gotgbot.User) (string, bool) { return "", false }
+// memberReqNameCap is the most runes of a name a notice carries. The isolates are added
+// around it, so a link text has at most memberReqNameCap + 2 code points.
+const memberReqNameCap = 64
 
-func memberReqMention(gotgbot.User, string) string { return "" }
+// memberReqDisplayName chooses the name a notice shows for u: the first name when it has
+// a visible character (the test of the last-name rule), else "@" and the username, else
+// nothing (false), and the caller supplies its own text.
+func memberReqDisplayName(u gotgbot.User) (string, bool) {
+	if !memberReqBlank(u.FirstName) {
+		return u.FirstName, true
+	}
+	if u.Username != "" {
+		return "@" + u.Username, true
+	}
+	return "", false
+}
+
+// memberReqMention names u in a group notice as a link to the user (so the member is
+// notified), with the chosen name, or fallback when there is none, cut to 64 runes and
+// wrapped in the isolates U+2068 and U+2069 so a right-to-left name cannot reorder the
+// sentence around it. formatting.MentionHtml escapes the text. The result is spliced into
+// a notice after translation; a member's name never passes through the translator. It
+// logs nothing.
+func memberReqMention(u gotgbot.User, fallback string) string {
+	name, ok := memberReqDisplayName(u)
+	if !ok {
+		name = fallback
+	}
+	if runes := []rune(name); len(runes) > memberReqNameCap {
+		name = string(runes[:memberReqNameCap])
+	}
+	return formatting.MentionHtml(u.Id, "\u2068"+name+"\u2069")
+}
