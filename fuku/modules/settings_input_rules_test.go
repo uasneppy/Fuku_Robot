@@ -9,8 +9,24 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 )
+
+// settingsRulesCleanUsers removes, when the test ends, the users rows and cached copies that the owners'
+// private messages left behind, so a later test of the package finds those IDs unknown.
+func settingsRulesCleanUsers(t *testing.T, ids ...int64) {
+	t.Helper()
+	t.Cleanup(func() {
+		DrainUsersAsyncWrites()
+		db.DB.Where("user_id IN ?", ids).Delete(&models.User{})
+		for _, id := range ids {
+			dbcache.DeleteCache(dbcache.CacheKey("user", id))
+		}
+		dbcache.ResetLocalForTest()
+	})
+}
 
 // settingsRulesTypedOn runs fn with the env's group set to chat, the group the settings helpers address.
 func settingsRulesTypedOn(env *settingsEnv, chat gotgbot.Chat, fn func()) {
@@ -28,6 +44,7 @@ func TestSettingsEditRulesTypedParity(t *testing.T) {
 		t.Run("media/"+kind, func(t *testing.T) {
 			env := newSettingsEditEnv(t)
 			pair := newSettingsEditPair(env)
+			settingsRulesCleanUsers(t, pair.commandOwner.Id, pair.editorOwner.Id)
 			settingsRulesTypedOn(env, pair.command, func() {
 				settingsEditSetWait(env, pair.commandOwner, settingsPageWelcome, settingsEditPartMedia)
 				sendPrivateMedia(env, pair.commandOwner, kind)
@@ -62,6 +79,7 @@ func TestSettingsEditRulesTypedParity(t *testing.T) {
 		const typed = "[Site](buttonurl://https://example.com)\n[Chat](buttonurl://https://t.me/x:same)"
 		env := newSettingsEditEnv(t)
 		pair := newSettingsEditPair(env)
+		settingsRulesCleanUsers(t, pair.commandOwner.Id, pair.editorOwner.Id)
 		settingsRulesTypedOn(env, pair.command, func() {
 			settingsEditSetWait(env, pair.commandOwner, settingsPageWelcome, settingsEditPartButtons)
 			sendPrivateMessage(env, pair.commandOwner, gotgbot.Message{Text: typed})
@@ -92,13 +110,16 @@ func TestSettingsEditRulesTypedParity(t *testing.T) {
 	t.Run("/rules sends the typed photo with the text as its caption and the button", func(t *testing.T) {
 		env := newSettingsEditEnv(t)
 		owner := env.newOwner(env.chat)
+		buttonOwner := env.newOwner(env.chat)
+		settingsRulesCleanUsers(t, owner.Id, buttonOwner.Id)
 		if err := rules.SetChatRules(env.chat.Id, "Be kind"); err != nil {
 			t.Fatalf("SetChatRules: %v", err)
 		}
 		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartMedia)
 		sendPrivateMessage(env, owner, settingsMediaItemID("photo", "typed-rules-photo"))
-		settingsEditSetWait(env, owner, settingsPageRules, settingsEditPartButtons)
-		sendPrivateMessage(env, owner, gotgbot.Message{Text: "[Site](buttonurl://https://example.com)"})
+		// The private menu is opened by the deep link once per person, so the buttons come from a second owner.
+		settingsEditSetWait(env, buttonOwner, settingsPageRules, settingsEditPartButtons)
+		sendPrivateMessage(env, buttonOwner, gotgbot.Message{Text: "[Site](buttonurl://https://example.com)"})
 
 		client, _ := rulesGroupCommand(t, env.chat.Id, "Test Chat")
 		params := rulesOnlyCall(t, client, "sendPhoto")

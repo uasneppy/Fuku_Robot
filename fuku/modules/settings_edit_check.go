@@ -113,8 +113,6 @@ func settingsEditCheck(in settingsEditCheckInput) settingsEditVerdict {
 		return settingsEditCheckRulesText(in)
 	case in.Part == settingsEditPartText:
 		return settingsEditCheckGreetingText(in)
-	case in.Def.Kind == settingsEditRules:
-		// Rules has a text part only.
 	case in.Part == settingsEditPartMedia:
 		return settingsEditCheckMedia(in)
 	case in.Part == settingsEditPartButtons:
@@ -304,7 +302,13 @@ func settingsEditCheckButtons(in settingsEditCheckInput) settingsEditVerdict {
 		}
 	}
 	buttons := content.ConvertButtonV2ToDbButton(parsed)
-	total, widest := settingsEditButtonRows(buttons, in.State.Text)
+	// A {rules} token adds a button to a Welcome or Goodbye join, never to the /rules message, so the
+	// Rules page counts no token of its stored text.
+	storedText := in.State.Text
+	if in.Def.Kind == settingsEditRules {
+		storedText = ""
+	}
+	total, widest := settingsEditButtonRows(buttons, storedText)
 	if total > settingsEditMaxButtons || widest > settingsEditMaxRowButtons {
 		return settingsEditRefusal("settings_edit_refuse_buttons_limit", nil)
 	}

@@ -440,7 +440,7 @@ func (r *settingsInputReply) apply(verdict settingsEditVerdict) bool {
 	defer cancel()
 	groupID := r.wait.GroupID
 	if r.def.Kind == settingsEditRules {
-		return applyRulesText(ctx, groupID, verdict.Text).Outcome != greetingSaveFailed
+		return r.applyRules(ctx, groupID, verdict)
 	}
 	isWelcome := r.def.Kind == settingsEditWelcome
 	var result greetingApplyResult
@@ -451,6 +451,23 @@ func (r *settingsInputReply) apply(verdict settingsEditVerdict) bool {
 		result = applyGreetingMedia(ctx, groupID, isWelcome, verdict.FileID, verdict.DataType)
 	case settingsEditPartButtons:
 		result = applyGreetingButtons(ctx, groupID, isWelcome, verdict.Buttons)
+	default:
+		return false
+	}
+	return result.Outcome != greetingSaveFailed
+}
+
+// applyRules writes a checked Rules message through the apply function of its part, the ones the
+// /setrules command and the Remove buttons use, and reports whether it was stored.
+func (r *settingsInputReply) applyRules(ctx context.Context, groupID int64, verdict settingsEditVerdict) bool {
+	var result rulesApplyResult
+	switch r.wait.Part {
+	case settingsEditPartText:
+		result = applyRulesText(ctx, groupID, verdict.Text)
+	case settingsEditPartMedia:
+		result = applyRulesMedia(ctx, groupID, verdict.FileID, verdict.DataType)
+	case settingsEditPartButtons:
+		result = applyRulesButtons(ctx, groupID, verdict.Buttons)
 	default:
 		return false
 	}
