@@ -435,3 +435,27 @@ func TestGreetOnceClaimErrorFailsClosed(t *testing.T) {
 		t.Fatalf("greeted rows with a failing claim = %d, want 0", got)
 	}
 }
+
+// TestGreetOnceReadErrorFailsClosed pins WR-01 of the Phase 12 review: when the greetings read fails with a
+// database error, the welcome path cannot know whether Greet once is on, so it sends nothing and claims nothing. The
+// read used to fall back to Welcome on and Greet once off, which welcomed an already greeted member a second time.
+func TestGreetOnceReadErrorFailsClosed(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	greeted := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	fresh := gotgbot.User{Id: 4343, FirstName: "Bob"}
+	greetOnceSwitchOn(t, chat.Id)
+	if won, err := greetings.ClaimGreeting(chat.Id, greeted.Id); err != nil || !won {
+		t.Fatalf("ClaimGreeting setup = %v, %v, want a won claim", won, err)
+	}
+
+	settingsStaffTestFailRead(t, "greetings")
+	greetOnceJoin(t, bot, chat, greeted)
+	greetOnceJoin(t, bot, chat, fresh)
+
+	if got := len(client.callsFor("sendMessage")); got != 0 {
+		t.Fatalf("sendMessage calls with a failing greetings read = %d, want 0: a double welcome is worse than a missing one", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 1 {
+		t.Fatalf("greeted rows with a failing greetings read = %d, want 1: nothing is claimed and the old row stays", got)
+	}
+}
