@@ -157,3 +157,6 @@ func ChangeGroupLanguage(GroupID int64, lang string) error {
 	log.Infof("[Database] ChangeGroupLanguage: %d", GroupID)
 	return nil
 }
+
+// GetGroupLanguage is a stub that the green commit replaces.
+func GetGroupLanguage(ctx context.Context, groupID int64) string { return "" }
