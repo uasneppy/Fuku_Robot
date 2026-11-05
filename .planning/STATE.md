@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 13
 current_phase_name: Member Requirements
 status: executing
-stopped_at: Completed 13-02-PLAN.md
-last_updated: "2026-11-05T18:12:00.295Z"
+stopped_at: Completed 13-03-PLAN.md
+last_updated: "2026-11-05T18:20:41.041Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 518e5a1c9a1dae59a755e835b92bbafb60d0a4c3
+state_head: ccdb5b507599c7e0e3b711ca611f6dc17e37c550
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 55
-  completed_plans: 42
+  completed_plans: 43
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 13 (Member Requirements) — READY TO EXECUTE
-Plan: 3 of 14
+Plan: 4 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -116,6 +116,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 12 P16 | 40min | 3 tasks | 8 files |
 | Phase 13 P01 | 35min | 3 tasks | 10 files |
 | Phase 13 P02 | 25min | 3 tasks | 2 files |
+| Phase 13 P03 | 25m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -192,6 +193,7 @@ Recent decisions affecting current work:
 - [Phase 12]: 12-10: the editor switches are a table-driven two-column grid of icon-only buttons with state body lines; Greet once is control o on Welcome only (settingsRightAdmin, applyWelcomeOnce)
 - [Phase 12]: 12-11: Media under text (control u) on Welcome and Goodbye uses the page's EditRight, is drawn only for media.CaptionAboveEligible media, and a stale press writes nothing and warns
 - [Phase 12]: Plan 12-14: Rules Full preview is the group-form /rules message in the group's language (degrade false); previews ignore Greet once and write nothing (A9, A12)
+- [Phase 13]: 13-03: warnApplyResult carries a Recorded flag so warnThisUser tells a record error from a reset error; applyWarn sends no message
 
 ### Pending Todos
 
@@ -263,8 +265,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T18:11:59.935Z
-Stopped at: Completed 13-02-PLAN.md
+Last session: 2026-11-05T18:20:40.671Z
+Stopped at: Completed 13-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
