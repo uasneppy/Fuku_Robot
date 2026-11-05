@@ -129,9 +129,9 @@ var (
 
 // The switch cells of the pages. Each calls the apply function of the command it mirrors
 // (/welcome on|off, /goodbye on|off, /cleanwelcome, /cleangoodbye); Greet once and Media under text
-// have no command, so their one write paths are applyWelcomeOnce(ctx, chatID, on),
-// applyWelcomeMediaBelow(ctx, chatID, on) and applyGoodbyeMediaBelow(ctx, chatID, on). Media under
-// text needs the page's EditRight.
+// have no command, so their one write paths are applyWelcomeOnce(ctx, chatID, on) for Greet once,
+// applyWelcomeMediaBelow(ctx, chatID, on) for Welcome's Media under text and
+// applyGoodbyeMediaBelow(ctx, chatID, on) for Goodbye's. Media under text needs the page's EditRight.
 var (
 	settingsEditWelcomeSwitch = settingsEditSwitch{
 		Control: settingsEditControlEnabled, LabelKey: "settings_btn_edit_switch_welcome",
