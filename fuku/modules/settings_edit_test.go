@@ -619,7 +619,19 @@ func TestSettingsEditDefaultsMatchRuntime(t *testing.T) {
 		t.Errorf("a fresh page carries a notice: %q", text)
 	}
 
+	// Welcome's Greet once is off for a chat with no row, which is what the bot does.
+	welcomeMsgID := openEditPage(env, owner, settingsPageWelcome)
+	welcomeText, welcomeKeyboard := env.lastEdit(env.chat.Id, welcomeMsgID)
+	once, onceFields := settingsEditControl(t, welcomeKeyboard, "settings_btn_edit_switch_once", settingsEditControlOnce)
+	if !strings.Contains(once.Text, "❌") || onceFields["v"] != "1" ||
+		!strings.Contains(welcomeText, staffMarker("settings_edit_line_once")+" ❌ "+staffMarker("common_status_off")) {
+		t.Errorf("a fresh chat's Greet once is %q with %v in %q, want Off", once.Text, onceFields, welcomeText)
+	}
+
 	runtime := greetings.GetGreetingSettings(env.chat.Id)
+	if runtime.WelcomeSettings == nil || runtime.WelcomeSettings.Once {
+		t.Errorf("the runtime reads %+v, want Greet once off, as the page showed", runtime.WelcomeSettings)
+	}
 	if runtime.GoodbyeSettings == nil || !runtime.GoodbyeSettings.ShouldGoodbye || runtime.GoodbyeSettings.CleanGoodbye {
 		t.Errorf("the runtime reads %+v, want goodbye on and delete last off, as the page showed", runtime.GoodbyeSettings)
 	}
@@ -928,10 +940,12 @@ func settingsEditCallbackStates(def settingsEditPageDef) map[string]settingsEdit
 		"default": {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true},
 		"all set": {
 			Kind: def.Kind, Text: strings.Repeat("x", 3000), MediaType: db.VIDEO_NOTE, FileID: "f",
-			Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true,
+			Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true, Once: true,
 		},
-		"off":     {Kind: def.Kind, Text: "t", MediaType: db.PHOTO, FileID: "f"},
-		"sticker": {Kind: def.Kind, Text: "t", MediaType: db.STICKER, FileID: "f", Clean: true},
+		"off":      {Kind: def.Kind, Text: "t", MediaType: db.PHOTO, FileID: "f"},
+		"sticker":  {Kind: def.Kind, Text: "t", MediaType: db.STICKER, FileID: "f", Clean: true},
+		"once on":  {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true, Once: true},
+		"once off": {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true},
 	}
 }
 
@@ -958,6 +972,19 @@ func TestSettingsEditCallbackBytes(t *testing.T) {
 				}
 				if callbacks == 0 {
 					t.Errorf("%s has no callback buttons", label)
+				}
+				var once gotgbot.InlineKeyboardButton
+				hasOnce := false
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					if decoded, ok := decodeCallbackData(button.CallbackData, settingsCallbackNamespace); ok && decoded.Fields["t"] == settingsEditControlOnce {
+						once, hasOnce = button, true
+					}
+				}
+				if hasOnce != (def.Key == settingsPageWelcome) {
+					t.Errorf("%s: the Greet once cell is drawn = %v, want it on Welcome only", label, hasOnce)
+				}
+				if hasOnce && (len(once.CallbackData) < 1 || len(once.CallbackData) > 64) {
+					t.Errorf("%s: the Greet once button has %d bytes, want 1..64", label, len(once.CallbackData))
 				}
 				wantRows := 8
 				if !private {
