@@ -90,7 +90,7 @@ type settingsEditPageDef struct {
 	Icon  string
 	// TitleKey is the page name; HintKey the hint under the part lines.
 	TitleKey, HintKey string
-	// Switches is the page's switch table in grid order (none on Rules).
+	// Switches is the page's switch table in grid order (Rules has only Media under text).
 	Switches []settingsEditSwitch
 	// SetCode, RemoveCode and CancelCode are the page's action codes for Set, Remove and Cancel;
 	// PreviewCode is its Preview of one part and FullCode its Full preview.
@@ -131,7 +131,8 @@ var (
 // (/welcome on|off, /goodbye on|off, /cleanwelcome, /cleangoodbye); Greet once and Media under text
 // have no command, so their one write paths are applyWelcomeOnce(ctx, chatID, on) for Greet once,
 // applyWelcomeMediaBelow(ctx, chatID, on) for Welcome's Media under text and
-// applyGoodbyeMediaBelow(ctx, chatID, on) for Goodbye's. Media under text needs the page's EditRight.
+// applyGoodbyeMediaBelow(ctx, chatID, on) for Goodbye's and applyRulesMediaBelow(ctx, chatID, on) for Rules'.
+// Media under text needs the page's EditRight.
 var (
 	settingsEditWelcomeSwitch = settingsEditSwitch{
 		Control: settingsEditControlEnabled, LabelKey: "settings_btn_edit_switch_welcome",
@@ -175,6 +176,16 @@ var (
 		Drawn: settingsEditMediaBelowEligible,
 		Apply: settingsEditGreetingApply(applyGoodbyeMediaBelow),
 	}
+	// Rules' Media under text needs the page's EditRight, which on Rules includes the bot being an administrator
+	// (UI-SPEC assumption A2); its one write path is applyRulesMediaBelow(ctx, chatID, on).
+	settingsEditRulesBelowSwitch = settingsEditSwitch{
+		Control: settingsEditControlBelow, LabelKey: "settings_btn_edit_switch_below",
+		LineKey: "settings_edit_line_below", UnavailableKey: "settings_edit_below_unavailable",
+		Right: settingsRightAdminBotAdmin,
+		Value: func(st settingsEditState) bool { return st.MediaBelow },
+		Drawn: settingsEditMediaBelowEligible,
+		Apply: settingsEditRulesApply(applyRulesMediaBelow),
+	}
 	settingsEditOnceSwitch = settingsEditSwitch{
 		Control: settingsEditControlOnce, LabelKey: "settings_btn_edit_switch_once",
 		LineKey: "settings_edit_line_once", HintKey: "settings_edit_hint_once",
@@ -203,7 +214,8 @@ var settingsEditPages = []settingsEditPageDef{
 	{
 		Key: settingsPageRules, Kind: settingsEditRules, Order: 70, Icon: "📜",
 		TitleKey: "settings_page_rules", HintKey: "settings_edit_hint_rules",
-		SetCode: "rs", RemoveCode: "rr", CancelCode: "rc", PreviewCode: "rv", FullCode: "rf", EditRight: settingsRightAdminBotAdmin,
+		Switches: []settingsEditSwitch{settingsEditRulesBelowSwitch},
+		SetCode:  "rs", RemoveCode: "rr", CancelCode: "rc", PreviewCode: "rv", FullCode: "rf", EditRight: settingsRightAdminBotAdmin,
 		Parts: []settingsEditPart{settingsEditRulesTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 }
@@ -591,6 +603,26 @@ func settingsEditGreetingApply(
 			return result.Outcome, nil
 		}
 		return result.Outcome, &st
+	}
+}
+
+// settingsEditRulesApply adapts a rules apply function to a switch cell, as settingsEditGreetingApply does for
+// the greetings: the outcome, and the state read back from the row the function returned, nil when the write
+// failed or the read-back did, in which case the caller reloads the page.
+func settingsEditRulesApply(
+	apply func(context.Context, int64, bool) rulesApplyResult,
+) func(context.Context, settingsEditPageDef, int64, bool) (greetingApplyOutcome, *settingsEditState) {
+	return func(ctx context.Context, def settingsEditPageDef, chatID int64, on bool) (greetingApplyOutcome, *settingsEditState) {
+		res := apply(ctx, chatID, on)
+		if res.Outcome == greetingSaveFailed {
+			log.Errorf("[Settings] %s switch of chat %d failed: %v", def.Key, chatID, res.Err)
+			return greetingSaveFailed, nil
+		}
+		if res.Row == nil {
+			return res.Outcome, nil
+		}
+		st := settingsEditRulesStateOf(res.Row)
+		return res.Outcome, &st
 	}
 }
 

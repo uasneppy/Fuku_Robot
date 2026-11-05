@@ -415,7 +415,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
-  have parts `x` text, `m` media and `b` buttons, Rules has `x` only, so a later part is a table row and not new renderer
+  have parts `x` text, `m` media and `b` buttons, and Rules has the same three (`x m b`; its parts table is
+  `settingsEditRulesTextPart`, `settingsEditMediaPart`, `settingsEditButtonsPart`), so a later part is a table row and not new renderer
   code. A line is a state word and never the stored content: text is Default or Set with its visible length
   (`formatting.VisibleLength`), media Not set or its kind word (a GIF saved from Phase 12 on is stored as `db.ANIMATION` (9) and reads GIF; a GIF saved earlier stays a document and reads File or GIF),
   buttons Not set or Set with the total; the stored text, a button name and a link are never echoed, and a sticker or a
@@ -429,13 +430,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   order. Welcome has controls `e` the on/off switch (`settingsRightAdmin`, as `/welcome on|off`), `d` Delete last
   (`settingsRightChangeInfo`, as `/cleanwelcome` and `/cleangoodbye`) and `o` Greet once (`settingsRightAdmin`,
   `applyWelcomeOnce`, hint `settings_edit_hint_once`) and `u` Media under text between them (below). Goodbye has `e`, `d`
-  and `u`, Rules none yet (its `u` arrives with plan 12-12), and Greet once is never offered on Goodbye or Rules. Greet
+  and `u`, Rules `u` alone (below), and Greet once is never offered on Goodbye or Rules. Greet
   once has no command, so
   it carries a drift test and an authority test instead of a parity test (`TestSettingsDriftOnce`,
   `TestSettingsAuthorityOnce`); `/resetwelcome`, `/resetgoodbye` and the Remove buttons leave it as it is, and the page
   never reads `greeted_members`. Media under text (`u`, `settings_btn_edit_switch_below`, line `settings_edit_line_below`)
   needs the page's `EditRight` (`settingsRightChangeInfo`, UI-SPEC assumption A2), calls `applyWelcomeMediaBelow` or
-  `applyGoodbyeMediaBelow` and is drawn, with its body line, only while `settingsEditMediaBelowEligible` holds: media is
+  `applyGoodbyeMediaBelow`, and on Rules it needs `settingsRightAdminBotAdmin` (the page's `EditRight`, so the bot must be an
+  administrator, notice `chat_status_bot_not_admin`) and calls `applyRulesMediaBelow` (`rules.SetRulesMediaBelow`); it is drawn, with its body line, only while `settingsEditMediaBelowEligible` holds: media is
   stored and `media.CaptionAboveEligible` (the sender's own predicate: a photo, a video or an animation) says its kind can
   carry the caption above it, so a document (a GIF saved before Phase 12), audio, voice, sticker, video note or no media
   closes the grid up. A press of the switch loads the page fresh first (`settingsEditStaleSwitch`, a cell with a `Drawn`
@@ -444,7 +446,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   then, and comes back with an eligible one; Remove and the resets leave it (assumption A3). A press makes no length check,
   because the switch changes no length. Each press sends the absolute target `v` ("0" or "1", anything else is an
   invalid request: `settingsEditSwitchValue`), calls `applyWelcomeEnabled`, `applyGoodbyeEnabled`, `applyCleanWelcome`,
-  `applyCleanGoodbye` or `applyWelcomeOnce`, and redraws from the row the function read back, with no notice; a failed
+  `applyCleanGoodbye`, `applyWelcomeOnce` or `applyRulesMediaBelow`, and redraws from the row the function read back, with no notice; a failed
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
@@ -477,8 +479,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the alert `settings_edit_unavailable` and edits nothing, so the prompt and its Cancel button stay; with no Redis no wait
   can exist and the page is drawn. Remove is one tap with no card, through
   the commands' apply functions (`applyGreetingRemoveText`, `applyGreetingRemoveMedia`, `applyGreetingRemoveButtons`,
-  `applyRulesClear`), so the three Remove presses of a Welcome or Goodbye page together store what `/resetwelcome` or
-  `/resetgoodbye` store and Rules Remove what `/clearrules` stores; it redraws from the read-back with a notice that says
+  `applyRulesText("")`, `applyRulesMedia`, `applyRulesButtons`), so the three Remove presses of a Welcome or Goodbye page
+  together store what `/resetwelcome` or `/resetgoodbye` store. On Rules, Remove clears just its part (text through
+  `applyRulesText` with an empty text, media through `applyRulesMedia` with no file and type 0, buttons through
+  `applyRulesButtons` with none) and `/clearrules` clears all three through `applyRulesClear` (`rules.ClearRules`), so the
+  three Remove presses store exactly what `/clearrules` stores and none of them touches Media under text, private rules or
+  the rules button (assumption A3). The Rules page and its Main line read the whole row through
+  `rules.LoadRulesSettingsContext` (the `settingsEditRulesRead` seam, which creates nothing), and Main reads Set when the text,
+  the media or the buttons exist (`RulesSettings.HasContent`, assumption A1). A Remove redraws from the read-back with a notice that says
   what was removed (the long text cannot be undone in the menu), a stale Remove of an empty part redraws with
   `settings_edit_nothing_to_remove` and writes nothing, and a failed write redraws the freshly loaded page with
   `common_settings_save_failed`.
@@ -1632,7 +1640,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every reachable screen in all 8 languages (the private list empty and populated, the Main status block, the Access page
   and its card included), runs a group menu end to end and runs a private menu of an admin who is not the creator end to
   end.
-- The editor pages and their Main lines read through `greetings.LoadSettingsContext` and `rules.LoadRulesContext`
+- The editor pages and their Main lines read through `greetings.LoadSettingsContext` and `rules.LoadRulesSettingsContext`
   (the `settingsEditGreetingsRead` and `settingsEditRulesRead` seams), which create nothing and return their errors, and
   never through `GetGreetingSettings` or `GetChatRulesInfo`, which create rows and hide a failed read: opening Main or a
   page leaves no greetings, rules or chats row behind, and a failed read is the cannot-open edit on the page and the
