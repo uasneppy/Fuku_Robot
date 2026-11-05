@@ -28,7 +28,7 @@ func newSettingsEditEnv(t *testing.T) *settingsEnv {
 	return env
 }
 
-// editCleanup removes the greetings and rules rows of the given chats, and the cached greetings
+// editCleanup removes the greetings, rules and greet-once rows of the given chats, and the cached greetings
 // copy, before and after the test.
 func editCleanup(t *testing.T, chatIDs ...int64) {
 	t.Helper()
@@ -38,6 +38,7 @@ func editCleanup(t *testing.T, chatIDs ...int64) {
 		}
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.GreetingSettings{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.RulesSettings{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.GreetedMember{})
 		for _, id := range chatIDs {
 			dbcache.DeleteCache(dbcache.CacheKey("greetings", id))
 		}

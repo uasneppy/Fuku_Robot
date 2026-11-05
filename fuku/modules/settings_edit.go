@@ -38,6 +38,9 @@ const (
 	// switch and of Delete last.
 	settingsEditControlEnabled = "e"
 	settingsEditControlClean   = "d"
+
+	// settingsEditControlOnce is the t value of the Welcome page's Greet once switch.
+	settingsEditControlOnce = "o"
 )
 
 // settingsEditKind says which message an editor page edits.
