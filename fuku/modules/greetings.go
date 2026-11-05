@@ -245,6 +245,11 @@ func applyGoodbyeEnabled(ctx context.Context, chatID int64, on bool) greetingApp
 	return finishGreetingApply(ctx, chatID, "SetGoodbyeToggle", greetingWrites.GoodbyeToggle(chatID, on))
 }
 
+// applyWelcomeMediaBelow is a compile-only stub for the RED commit of plan 12-08.
+func applyWelcomeMediaBelow(_ context.Context, _ int64, _ bool) greetingApplyResult {
+	return greetingApplyResult{}
+}
+
 // applyCleanWelcome stores the "delete the last welcome" switch.
 func applyCleanWelcome(ctx context.Context, chatID int64, on bool) greetingApplyResult {
 	return finishGreetingApply(ctx, chatID, "SetCleanWelcomeSetting", greetingWrites.CleanWelcome(chatID, on))
