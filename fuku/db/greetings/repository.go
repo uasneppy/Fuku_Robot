@@ -506,11 +506,34 @@ func LoadGreetingsStats() (enabledWelcome, enabledGoodbye, cleanServiceEnabled, 
 	return stats.EnabledWelcome, stats.EnabledGoodbye, stats.CleanServiceEnabled, stats.CleanWelcomeEnabled, stats.CleanGoodbyeEnabled
 }
 
-// SetWelcomeMediaBelow is a stub that the green commit replaces.
-func SetWelcomeMediaBelow(chatID int64, on bool) error { return nil }
+// SetWelcomeMediaBelow stores only whether the welcome's media is shown under its text.
+// A false is written like a true: the column is set through a column-targeted upsert.
+func SetWelcomeMediaBelow(chatID int64, on bool) error {
+	if err := upsertGreetingSettings(chatID, map[string]any{"welcome_media_below": on}); err != nil {
+		log.Errorf("[Database][SetWelcomeMediaBelow]: %v", err)
+		return err
+	}
 
-// SetGoodbyeMediaBelow is a stub that the green commit replaces.
-func SetGoodbyeMediaBelow(chatID int64, on bool) error { return nil }
+	return nil
+}
 
-// SetWelcomeOnce is a stub that the green commit replaces.
-func SetWelcomeOnce(chatID int64, on bool) error { return nil }
+// SetGoodbyeMediaBelow stores only whether the goodbye's media is shown under its text.
+func SetGoodbyeMediaBelow(chatID int64, on bool) error {
+	if err := upsertGreetingSettings(chatID, map[string]any{"goodbye_media_below": on}); err != nil {
+		log.Errorf("[Database][SetGoodbyeMediaBelow]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetWelcomeOnce stores only the Greet once switch: whether a member is welcomed the
+// first time they join and never again.
+func SetWelcomeOnce(chatID int64, on bool) error {
+	if err := upsertGreetingSettings(chatID, map[string]any{"welcome_once": on}); err != nil {
+		log.Errorf("[Database][SetWelcomeOnce]: %v", err)
+		return err
+	}
+
+	return nil
+}
