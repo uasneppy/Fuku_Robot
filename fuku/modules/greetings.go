@@ -885,7 +885,13 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 		}
 	}()
 	chat := ctx.EffectiveChat
-	greetPrefs := greetings.GetGreetingSettings(chat.Id)
+	greetPrefs, err := greetings.LoadGreetingSettings(chat.Id)
+	if err != nil {
+		// The read says whether Welcome and Greet once are on, so a guess could welcome a member twice: send
+		// nothing and claim nothing. A double welcome is worse than a missing one.
+		log.Errorf("[Greetings][SendWelcomeMessage] read greeting settings of chat %d: %v", chat.Id, err)
+		return nil
+	}
 
 	if greetPrefs.WelcomeSettings == nil {
 		log.Warnf("[Greetings][SendWelcomeMessage] WelcomeSettings is nil for chat %d, skipping welcome message", chat.Id)

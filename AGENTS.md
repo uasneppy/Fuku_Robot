@@ -963,7 +963,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`TestGreetedMembersStayOutOfBackup`) and rows are kept for good. `models.GreetedMember` maps it. The claim rule:
   `SendWelcomeMessage` claims the member with `greetings.ClaimGreeting` (one `INSERT ... ON CONFLICT DO NOTHING`) after
   the Welcome-on check and before the message is built and sent, while `welcome_once` is on; a lost claim sends nothing
-  and runs no clean-old step, a claim database error sends nothing (fail closed), a definite refusal
+  and runs no clean-old step, a claim database error sends nothing (fail closed), and so does a failed greetings read
+  (`SendWelcomeMessage` reads through `greetings.LoadGreetingSettings`, which returns the read error, and sends and claims
+  nothing on it, `TestGreetOnceReadErrorFailsClosed`; `GetGreetingSettings` and every other caller keep the fallback
+  defaults on a read error), a definite refusal
   (`welcomeDefinitelyNotSent`: `media.ErrNoPermission`, a Telegram 4xx other than 429 by code, or a 429) gives the claim
   back with `greetings.ReleaseGreeting`, and an unknown outcome (a transport error, a timeout, a 5xx, an unreadable
   answer) keeps it, because a double welcome is worse than a missing one. The claim never uses Redis or

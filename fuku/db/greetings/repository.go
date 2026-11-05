@@ -15,8 +15,14 @@ import (
 	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
 )
 
-func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) {
-	greetingSrc = &models.GreetingSettings{}
+// LoadGreetingSettings reads a chat's greetings row for the welcome path and returns the read's own error. On a
+// successful read, and when the chat has no row, it behaves exactly as GetGreetingSettings (stored values, or the
+// defaults, creating the row for a chat the bot knows). Any other read error (a timeout, a dropped connection) is
+// returned together with the fallback defaults GetGreetingSettings would use; a caller that must not act on a guess,
+// like the Greet once welcome, ignores the settings and fails closed on the error.
+func LoadGreetingSettings(chatID int64) (*models.GreetingSettings, error) {
+	var readErr error
+	greetingSrc := &models.GreetingSettings{}
 	err := db.GetRecord(greetingSrc, map[string]any{"chat_id": chatID})
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -41,7 +47,7 @@ func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) 
 					GoodbyeType:   db.TEXT,
 					Button:        models.ButtonArray{},
 				},
-			}
+			}, nil
 		}
 
 		greetingSrc = &models.GreetingSettings{
@@ -70,7 +76,7 @@ func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) 
 			log.Errorf("[Database][checkGreetingSettings]: %v ", err)
 		}
 	} else if err != nil {
-		log.Errorf("[Database][checkGreetingSettings]: %v", err)
+		readErr = fukuerrors.Wrapf(err, "read greeting settings of chat %d", chatID)
 		greetingSrc = &models.GreetingSettings{
 			ChatID:             chatID,
 			ShouldCleanService: false,
@@ -119,6 +125,16 @@ func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) 
 		greetingSrc.GoodbyeSettings.GoodbyeText = db.DefaultGoodbye
 	}
 
+	return greetingSrc, readErr
+}
+
+// checkGreetingSettings is LoadGreetingSettings for every caller that keeps the fallback defaults on a read error:
+// it logs the error once and returns them.
+func checkGreetingSettings(chatID int64) *models.GreetingSettings {
+	greetingSrc, err := LoadGreetingSettings(chatID)
+	if err != nil {
+		log.Errorf("[Database][checkGreetingSettings]: %v", err)
+	}
 	return greetingSrc
 }
 
