@@ -17,21 +17,27 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
-// settingsOncePage opens the Welcome page of the env's chat, in the group menu or in the owner's
-// private chat, and returns the message ID plus a press function that sends the given fields
+// settingsEditPageFor opens the editor page pageKey of the env's chat, in the group menu or in the
+// owner's private chat, and returns the message ID plus a press function that sends the given fields
 // of the page in the same place.
-func settingsOncePage(env *settingsEnv, owner gotgbot.User, private bool) (int64, func(msgID int64, kv ...string)) {
+func settingsEditPageFor(env *settingsEnv, owner gotgbot.User, pageKey string, private bool) (int64, func(msgID int64, kv ...string)) {
 	env.t.Helper()
 	if private {
-		msgID := openEditPagePrivate(env, owner, settingsPageWelcome)
+		msgID := openEditPagePrivate(env, owner, pageKey)
 		return msgID, func(id int64, kv ...string) {
 			env.pressPrivate(owner, id, env.privateFields(env.chat.Id, kv...))
 		}
 	}
-	msgID := openEditPage(env, owner, settingsPageWelcome)
+	msgID := openEditPage(env, owner, pageKey)
 	return msgID, func(id int64, kv ...string) {
 		env.press(owner, id, env.groupFields(owner, kv...))
 	}
+}
+
+// settingsOncePage opens the Welcome page of the env's chat for the Greet once tests.
+func settingsOncePage(env *settingsEnv, owner gotgbot.User, private bool) (int64, func(msgID int64, kv ...string)) {
+	env.t.Helper()
+	return settingsEditPageFor(env, owner, settingsPageWelcome, private)
 }
 
 // settingsOnceChat is the supergroup the env's chat stands for, as the join handlers see it.
@@ -466,4 +472,110 @@ func TestSettingsAuthorityOnce(t *testing.T) {
 			})
 		}
 	})
+}
+
+// settingsBelowStored reads welcome_media_below (goodbye false) or goodbye_media_below of the chat
+// straight from the database.
+func settingsBelowStored(t *testing.T, chatID int64, welcome bool) bool {
+	t.Helper()
+	row, ok := settingsEditStored(t, chatID)
+	if !ok {
+		return false
+	}
+	if welcome {
+		return row.WelcomeSettings != nil && row.WelcomeSettings.MediaBelow
+	}
+	return row.GoodbyeSettings != nil && row.GoodbyeSettings.MediaBelow
+}
+
+// settingsBelowSeed stores the chat's welcome or goodbye with a text and one media of the given kind.
+func settingsBelowSeed(t *testing.T, chatID int64, welcome bool, fileID string, mediaType int) {
+	t.Helper()
+	if welcome {
+		if err := greetings.SetWelcomeText(chatID, "Hi {first}", fileID, nil, mediaType); err != nil {
+			t.Fatalf("SetWelcomeText: %v", err)
+		}
+		return
+	}
+	if err := greetings.SetGoodbyeText(chatID, "Bye {first}", fileID, nil, mediaType); err != nil {
+		t.Fatalf("SetGoodbyeText: %v", err)
+	}
+	if err := greetings.SetGoodbyeToggle(chatID, true); err != nil {
+		t.Fatalf("SetGoodbyeToggle: %v", err)
+	}
+}
+
+func TestSettingsEditMediaBelowSwitch(t *testing.T) {
+	cases := []struct {
+		name      string
+		page      string
+		welcome   bool
+		mediaType int
+		method    string
+	}{
+		{"Welcome photo", settingsPageWelcome, true, db.PHOTO, "sendPhoto"},
+		{"Goodbye video", settingsPageGoodbye, false, db.VIDEO, "sendVideo"},
+	}
+	for _, tc := range cases {
+		for _, private := range []bool{true, false} {
+			name := tc.name + " in the group menu"
+			if private {
+				name = tc.name + " in the private menu"
+			}
+			t.Run(name, func(t *testing.T) {
+				env := newSettingsEditEnv(t)
+				owner := env.newOwner(env.chat)
+				chat := settingsOnceChat(env)
+				settingsBelowSeed(t, chat.Id, tc.welcome, "stored-media", tc.mediaType)
+				msgID, press := settingsEditPageFor(env, owner, tc.page, private)
+
+				text, keyboard := env.lastEdit(chatForPage(env, owner, private), msgID)
+				if want := staffMarker("settings_edit_line_below") + " ❌ " + staffMarker("common_status_off"); !strings.Contains(text, want) {
+					t.Errorf("the page %q lacks the off line %q", text, want)
+				}
+				below, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_below", settingsEditControlBelow)
+				if !strings.Contains(below.Text, "❌") || fields["a"] != settingsActToggle || fields["p"] != tc.page || fields["v"] != "1" {
+					t.Fatalf("the Media under text cell is %q with %v, want the off icon and tg on page %s with v=1", below.Text, fields, tc.page)
+				}
+
+				answers := env.answerCount()
+				press(msgID, "a", "tg", "p", tc.page, "t", "u", "v", "1")
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press was answered %d times, want once", got)
+				}
+				if !settingsBelowStored(t, chat.Id, tc.welcome) {
+					t.Fatal("the press did not store the switch")
+				}
+				text, keyboard = env.lastEdit(chatForPage(env, owner, private), msgID)
+				if want := staffMarker("settings_edit_line_below") + " ✅ " + staffMarker("common_status_on"); !strings.Contains(text, want) {
+					t.Errorf("after the press the page %q lacks the on line %q", text, want)
+				}
+				if settingsEditHasNoticeLine(text, settingsNoticeWarnIcon) || settingsEditHasNoticeLine(text, settingsNoticeOKIcon) {
+					t.Errorf("a stored write redrew with a notice: %q", text)
+				}
+				below, fields = settingsEditControl(t, keyboard, "settings_btn_edit_switch_below", settingsEditControlBelow)
+				if !strings.Contains(below.Text, "✅") || fields["v"] != "0" {
+					t.Errorf("after the press the cell is %q with %v, want the on icon and v=0", below.Text, fields)
+				}
+
+				// The switch is the runtime's: the next join or leave sends the media with the caption above it.
+				client := mediaBelowClient()
+				bot := newModuleTestBot(client)
+				if tc.welcome {
+					greetOnceJoin(t, bot, chat, gotgbot.User{Id: 4242, FirstName: "Newbie"})
+				} else {
+					greetOnceLeave(t, bot, chat, gotgbot.User{Id: 4242, FirstName: "Newbie"})
+				}
+				if call := mediaBelowOnlyCall(t, client, tc.method); call.Params["show_caption_above_media"] != true {
+					t.Errorf("%s show_caption_above_media = %v, want true", tc.method, call.Params["show_caption_above_media"])
+				}
+
+				// Pressing v=0 writes false.
+				press(msgID, "a", "tg", "p", tc.page, "t", "u", "v", "0")
+				if settingsBelowStored(t, chat.Id, tc.welcome) {
+					t.Error("a v=0 press left the switch on")
+				}
+			})
+		}
+	}
 }

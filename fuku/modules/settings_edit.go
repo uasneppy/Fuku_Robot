@@ -41,6 +41,9 @@ const (
 
 	// settingsEditControlOnce is the t value of the Welcome page's Greet once switch.
 	settingsEditControlOnce = "o"
+
+	// settingsEditControlBelow is the t value of Media under text on the Welcome and Goodbye pages.
+	settingsEditControlBelow = "u"
 )
 
 // settingsEditKind says which message an editor page edits.
