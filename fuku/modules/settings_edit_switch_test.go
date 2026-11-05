@@ -579,3 +579,198 @@ func TestSettingsEditMediaBelowSwitch(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsEditMediaBelowEligibility(t *testing.T) {
+	withStaffLocale(t)
+	tr := i18n.MustNewTranslator("en")
+	welcome := settingsEditDef(t, settingsPageWelcome)
+	goodbye := settingsEditDef(t, settingsPageGoodbye)
+
+	render := func(def settingsEditPageDef, mediaType int, fileID string) settingsScreen {
+		st := settingsEditState{Kind: def.Kind, TextIsDefault: true, Enabled: true, MediaType: mediaType, FileID: fileID}
+		return renderSettingsEditor(settingsEditView(tr, true), def, st, settingsEditScreenOpts{})
+	}
+	hasBelow := func(screen settingsScreen) (line, cell bool) {
+		_, cell = settingsButtonByMarker(screen.Keyboard.InlineKeyboard, "settings_btn_edit_switch_below")
+		return strings.Contains(screen.Text, staffMarker("settings_edit_line_below")), cell
+	}
+
+	kinds := []struct {
+		name      string
+		mediaType int
+		fileID    string
+		eligible  bool
+	}{
+		{"photo", db.PHOTO, "f", true},
+		{"video", db.VIDEO, "f", true},
+		{"animation", db.ANIMATION, "f", true},
+		{"document", db.DOCUMENT, "f", false},
+		{"audio", db.AUDIO, "f", false},
+		{"voice", db.VOICE, "f", false},
+		{"sticker", db.STICKER, "f", false},
+		{"video note", db.VIDEO_NOTE, "f", false},
+		{"no media", db.TEXT, "", false},
+		{"a photo type with no file", db.PHOTO, "", false},
+	}
+	for _, def := range []settingsEditPageDef{welcome, goodbye} {
+		for _, tc := range kinds {
+			t.Run(def.Key+" "+tc.name, func(t *testing.T) {
+				screen := render(def, tc.mediaType, tc.fileID)
+				line, cell := hasBelow(screen)
+				if line != tc.eligible || cell != tc.eligible {
+					t.Errorf("line drawn %v and cell drawn %v, want both %v", line, cell, tc.eligible)
+				}
+				if tc.eligible {
+					return
+				}
+				// Without the cell the grid closes up.
+				want := []string{"switch_welcome | switch_clean", "switch_once"}
+				if def.Key == settingsPageGoodbye {
+					want = []string{"switch_goodbye | switch_clean"}
+				}
+				rows := settingsEditRowNames(screen)
+				if got := rows[len(rows)-1-len(want) : len(rows)-1]; !slices.Equal(got, want) {
+					t.Errorf("the switch rows are %q, want %q", got, want)
+				}
+			})
+		}
+	}
+
+	t.Run("the file hint shows for a document and for no other kind, after the other hints", func(t *testing.T) {
+		for _, def := range []settingsEditPageDef{welcome, goodbye} {
+			for _, tc := range kinds {
+				text := render(def, tc.mediaType, tc.fileID).Text
+				has := strings.Contains(text, staffMarker("settings_edit_hint_below_file"))
+				if has != (tc.mediaType == db.DOCUMENT && tc.fileID != "") {
+					t.Errorf("%s %s: file hint drawn %v in %q", def.Key, tc.name, has, text)
+				}
+			}
+			text := render(def, db.DOCUMENT, "f").Text
+			if strings.Contains(text, staffMarker("settings_edit_line_below")) {
+				t.Errorf("%s: a document page draws the Media under text line: %q", def.Key, text)
+			}
+			last := -1
+			for _, key := range []string{"settings_edit_hint_greeting", "settings_edit_clean_hint_" + map[string]string{"w": "welcome", "g": "goodbye"}[def.Key], "settings_edit_hint_below_file"} {
+				at := strings.Index(text, staffMarker(key))
+				if at <= last {
+					t.Errorf("%s: %s is at %d, want after %d in %q", def.Key, key, at, last, text)
+				}
+				last = at
+			}
+		}
+	})
+
+	t.Run("a document reads File or GIF and an animation reads GIF", func(t *testing.T) {
+		if text := render(welcome, db.DOCUMENT, "f").Text; !strings.Contains(text, staffMarker("settings_edit_media_file")) {
+			t.Errorf("a document page %q does not read File or GIF", text)
+		}
+		if text := render(welcome, db.ANIMATION, "f").Text; !strings.Contains(text, staffMarker("settings_edit_media_animation")) {
+			t.Errorf("an animation page %q does not read GIF", text)
+		}
+	})
+}
+
+func TestSettingsEditMediaBelowStalePress(t *testing.T) {
+	for _, private := range []bool{true, false} {
+		name := "group menu"
+		if private {
+			name = "private menu"
+		}
+		t.Run(name, func(t *testing.T) {
+			env := newSettingsEditEnv(t)
+			owner := env.newOwner(env.chat)
+			chat := settingsOnceChat(env)
+			settingsBelowSeed(t, chat.Id, true, "stored-photo", db.PHOTO)
+			msgID, press := settingsEditPageFor(env, owner, settingsPageWelcome, private)
+			_, drawn := env.lastEdit(chatForPage(env, owner, private), msgID)
+			if _, ok := settingsButtonByMarker(drawn, "settings_btn_edit_switch_below"); !ok {
+				t.Fatal("the page drawn for a photo has no Media under text cell")
+			}
+
+			// The media is replaced by a sticker after the page was drawn; the old button is pressed.
+			if res := applyGreetingMedia(t.Context(), chat.Id, true, "stored-sticker", db.STICKER); res.Outcome != greetingApplied {
+				t.Fatalf("applyGreetingMedia outcome = %v, err = %v", res.Outcome, res.Err)
+			}
+			answers := env.answerCount()
+			press(msgID, "a", "tg", "p", settingsPageWelcome, "t", "u", "v", "1")
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("the stale press was answered %d times, want once", got)
+			}
+			if settingsBelowStored(t, chat.Id, true) {
+				t.Error("a stale press wrote welcome_media_below")
+			}
+			text, keyboard := env.lastEdit(chatForPage(env, owner, private), msgID)
+			if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("settings_edit_below_unavailable")) {
+				t.Errorf("the stale press drew %q, want the warning settings_edit_below_unavailable", text)
+			}
+			if _, ok := settingsButtonByMarker(keyboard, "settings_btn_edit_switch_below"); ok {
+				t.Error("the page redrawn for a sticker still has the Media under text cell")
+			}
+			if strings.Contains(text, staffMarker("settings_edit_line_below")) {
+				t.Error("the page redrawn for a sticker still has the Media under text line")
+			}
+		})
+	}
+}
+
+func TestSettingsEditMediaBelowStoredOnIgnored(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	chat := settingsOnceChat(env)
+	settingsBelowSeed(t, chat.Id, true, "stored-photo", db.PHOTO)
+	msgID, press := settingsEditPageFor(env, owner, settingsPageWelcome, true)
+	press(msgID, "a", "tg", "p", settingsPageWelcome, "t", "u", "v", "1")
+	if !settingsBelowStored(t, chat.Id, true) {
+		t.Fatal("the press did not turn Media under text on")
+	}
+	page := func() (string, [][]gotgbot.InlineKeyboardButton) {
+		press(msgID, "a", "op", "p", settingsPageWelcome)
+		return env.lastEdit(owner.Id, msgID)
+	}
+	join := func(method string) moduleBotCall {
+		client := mediaBelowClient()
+		greetOnceJoin(t, newModuleTestBot(client), chat, gotgbot.User{Id: 4242, FirstName: "Newbie"})
+		return mediaBelowOnlyCall(t, client, method)
+	}
+
+	// A sticker cannot carry a caption above it: the stored on is kept, neither drawn nor sent.
+	if res := applyGreetingMedia(t.Context(), chat.Id, true, "stored-sticker", db.STICKER); res.Outcome != greetingApplied {
+		t.Fatalf("applyGreetingMedia(sticker) outcome = %v", res.Outcome)
+	}
+	text, keyboard := page()
+	if _, ok := settingsButtonByMarker(keyboard, "settings_btn_edit_switch_below"); ok || strings.Contains(text, staffMarker("settings_edit_line_below")) {
+		t.Errorf("a sticker page still draws Media under text: %q", text)
+	}
+	if !settingsBelowStored(t, chat.Id, true) {
+		t.Error("replacing the media with a sticker turned the stored switch off")
+	}
+	if call := join("sendSticker"); call.Params["show_caption_above_media"] != nil {
+		t.Errorf("sendSticker carries show_caption_above_media = %v", call.Params["show_caption_above_media"])
+	}
+
+	// A video can: the line is on again and the join honours the stored on.
+	if res := applyGreetingMedia(t.Context(), chat.Id, true, "stored-video", db.VIDEO); res.Outcome != greetingApplied {
+		t.Fatalf("applyGreetingMedia(video) outcome = %v", res.Outcome)
+	}
+	text, _ = page()
+	if want := staffMarker("settings_edit_line_below") + " ✅ " + staffMarker("common_status_on"); !strings.Contains(text, want) {
+		t.Errorf("the video page %q lacks the on line %q", text, want)
+	}
+	if call := join("sendVideo"); call.Params["show_caption_above_media"] != true {
+		t.Errorf("sendVideo show_caption_above_media = %v, want true", call.Params["show_caption_above_media"])
+	}
+
+	// Remove media, Remove text and /resetwelcome leave the switch as it is (UI-SPEC assumption A3).
+	press(msgID, "a", "wr", "t", "m")
+	if !settingsBelowStored(t, chat.Id, true) {
+		t.Error("Remove media turned the switch off")
+	}
+	press(msgID, "a", "wr", "t", "x")
+	if !settingsBelowStored(t, chat.Id, true) {
+		t.Error("Remove text turned the switch off")
+	}
+	env.sendIn(env.chat, owner, "/resetwelcome")
+	if !settingsBelowStored(t, chat.Id, true) {
+		t.Error("/resetwelcome turned the switch off")
+	}
+}
