@@ -822,50 +822,153 @@ func TestSettingsEditRulesPreviewGroupLanguage(t *testing.T) {
 	})
 }
 
+// settingsEditRowCounts counts the rows a preview must not create for chatID: its greetings, rules,
+// chats and greeted_members rows.
+func settingsEditRowCounts(t *testing.T, chatID int64) map[string]int64 {
+	t.Helper()
+	counts := make(map[string]int64)
+	for name, model := range map[string]any{
+		"greetings": &models.GreetingSettings{}, "rules": &models.RulesSettings{},
+		"chats": &models.Chat{}, "greeted_members": &models.GreetedMember{},
+	} {
+		var n int64
+		if err := db.DB.Model(model).Where("chat_id = ?", chatID).Count(&n).Error; err != nil {
+			t.Fatalf("count %s rows: %v", name, err)
+		}
+		counts[name] = n
+	}
+	return counts
+}
+
+// settingsEditCleanUsers removes the users rows and cached copies of ids when the test ends, so a
+// later test that expects one of these IDs to be unknown still finds it so.
+func settingsEditCleanUsers(t *testing.T, ids ...int64) {
+	t.Helper()
+	t.Cleanup(func() {
+		db.DB.Where("user_id IN ?", ids).Delete(&models.User{})
+		for _, id := range ids {
+			dbcache.DeleteCache(dbcache.CacheKey("user", id))
+		}
+		dbcache.ResetLocalForTest()
+	})
+}
+
 func TestSettingsEditPreviewWritesNothing(t *testing.T) {
+	t.Run("Welcome and Goodbye previews leave the greetings row as it was", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		settingsEditFakeSends(env)
+		owner := env.newOwner(env.chat)
+		settingsEditSeedPreview(t, settingsPageWelcome, env.chat.Id, db.PHOTO, "file-1")
+		settingsEditSeedPreview(t, settingsPageGoodbye, env.chat.Id, db.VIDEO, "file-2")
+		for _, step := range []func() error{
+			func() error { return greetings.SetCleanWelcomeSetting(env.chat.Id, true) },
+			func() error { return greetings.SetCleanWelcomeMsgId(env.chat.Id, 4242) },
+			func() error { return greetings.SetCleanGoodbyeSetting(env.chat.Id, true) },
+			func() error { return greetings.SetCleanGoodbyeMsgId(env.chat.Id, 4343) },
+		} {
+			if err := step(); err != nil {
+				t.Fatalf("seed the clean-old bookkeeping: %v", err)
+			}
+		}
+		menuID := settingsEditPrivateMenu(env, owner, settingsPageWelcome)
+
+		row, ok := settingsEditStored(t, env.chat.Id)
+		if !ok || row.WelcomeSettings.LastMsgId != 4242 || row.GoodbyeSettings.LastMsgId != 4343 {
+			t.Fatalf("the seeded row = %+v, %t, want both last message IDs stored", row, ok)
+		}
+		groupBefore := len(env.fake.sentTo(env.chat.Id))
+		deletes := len(env.fake.callsFor("deleteMessage"))
+
+		for _, press := range [][]string{
+			{"wf"}, {"wv", "t", "x"}, {"wv", "t", "m"}, {"wv", "t", "b"},
+			{"gf"}, {"gv", "t", "x"}, {"gv", "t", "m"}, {"gv", "t", "b"},
+		} {
+			settingsEditPreviewPress(env, owner, menuID, press[0], press[1:]...)
+			if text, alert := env.lastAnswer(); text != "" || alert {
+				t.Fatalf("press %v answered %q (alert %t), want an empty answer", press, text, alert)
+			}
+		}
+
+		after, ok := settingsEditStored(t, env.chat.Id)
+		if !ok || !reflect.DeepEqual(row, after) {
+			t.Errorf("the greetings row changed:\nbefore %+v\nafter  %+v", row, after)
+		}
+		if got := len(env.fake.callsFor("deleteMessage")) - deletes; got != 0 {
+			t.Errorf("the previews deleted %d messages, want none", got)
+		}
+		if got := len(env.fake.sentTo(env.chat.Id)) - groupBefore; got != 0 {
+			t.Errorf("the previews sent %d messages into the group, want none", got)
+		}
+	})
+
+	t.Run("Rules previews and a group with no rows create no row", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		settingsEditFakeSends(env)
+		owner := env.newOwner(env.chat)
+		settingsEditCleanUsers(t, owner.Id, env.admin.Id)
+		presses := [][]string{{"rf"}, {"rv", "t", "x"}, {"rv", "t", "m"}, {"rv", "t", "b"}}
+
+		// A group the bot has no row for: every press is a stale or a default message, none writes.
+		before := settingsEditRowCounts(t, env.chat.Id)
+		settingsEditPreviewPress(env, owner, 7001, "rf")
+		if after := settingsEditRowCounts(t, env.chat.Id); !reflect.DeepEqual(before, after) {
+			t.Errorf("a preview of a group with no rows changed the row counts from %v to %v", before, after)
+		}
+
+		// A rules row with media, buttons and Media under text.
+		settingsEditRulesSeed(t, env.chat.Id, "Be kind", "rules-photo", db.PHOTO,
+			[]models.Button{{Name: "Site", Url: "https://example.com"}}, true)
+		before = settingsEditRowCounts(t, env.chat.Id)
+		var rowBefore models.RulesSettings
+		if err := db.DB.Where("chat_id = ?", env.chat.Id).First(&rowBefore).Error; err != nil {
+			t.Fatalf("read the rules row: %v", err)
+		}
+		for _, press := range presses {
+			settingsEditPreviewPress(env, owner, 7001, press[0], press[1:]...)
+		}
+		var rowAfter models.RulesSettings
+		if err := db.DB.Where("chat_id = ?", env.chat.Id).First(&rowAfter).Error; err != nil {
+			t.Fatalf("read the rules row again: %v", err)
+		}
+		if !reflect.DeepEqual(rowBefore, rowAfter) {
+			t.Errorf("the rules row changed:\nbefore %+v\nafter  %+v", rowBefore, rowAfter)
+		}
+		if after := settingsEditRowCounts(t, env.chat.Id); !reflect.DeepEqual(before, after) {
+			t.Errorf("the Rules previews changed the row counts from %v to %v", before, after)
+		}
+	})
+}
+
+func TestSettingsEditPreviewNeverClaims(t *testing.T) {
 	env := newSettingsEditEnv(t)
 	settingsEditFakeSends(env)
 	owner := env.newOwner(env.chat)
-	settingsEditSeedPreview(t, settingsPageWelcome, env.chat.Id, db.PHOTO, "file-1")
-	settingsEditSeedPreview(t, settingsPageGoodbye, env.chat.Id, db.VIDEO, "file-2")
-	for _, step := range []func() error{
-		func() error { return greetings.SetCleanWelcomeSetting(env.chat.Id, true) },
-		func() error { return greetings.SetCleanWelcomeMsgId(env.chat.Id, 4242) },
-		func() error { return greetings.SetCleanGoodbyeSetting(env.chat.Id, true) },
-		func() error { return greetings.SetCleanGoodbyeMsgId(env.chat.Id, 4343) },
-	} {
-		if err := step(); err != nil {
-			t.Fatalf("seed the clean-old bookkeeping: %v", err)
-		}
+	greetOnceCleanup(t, env.chat.Id)
+	settingsEditCleanUsers(t, owner.Id, env.admin.Id)
+	if err := greetings.SetWelcomeText(env.chat.Id, "Welcome {first}", "", nil, db.TEXT); err != nil {
+		t.Fatalf("SetWelcomeText: %v", err)
 	}
-	menuID := settingsEditPrivateMenu(env, owner, settingsPageWelcome)
+	greetOnceSwitchOn(t, env.chat.Id)
 
-	row, ok := settingsEditStored(t, env.chat.Id)
-	if !ok || row.WelcomeSettings.LastMsgId != 4242 || row.GoodbyeSettings.LastMsgId != 4343 {
-		t.Fatalf("the seeded row = %+v, %t, want both last message IDs stored", row, ok)
-	}
-	groupBefore := len(env.fake.sentTo(env.chat.Id))
-	deletes := len(env.fake.callsFor("deleteMessage"))
-
-	for _, press := range [][]string{
-		{"wf"}, {"wv", "t", "x"}, {"wv", "t", "m"}, {"wv", "t", "b"},
-		{"gf"}, {"gv", "t", "x"}, {"gv", "t", "m"}, {"gv", "t", "b"},
-	} {
-		settingsEditPreviewPress(env, owner, menuID, press[0], press[1:]...)
+	for _, press := range [][]string{{"wf"}, {"wv", "t", "x"}} {
+		settingsEditPreviewPress(env, owner, 7001, press[0], press[1:]...)
 		if text, alert := env.lastAnswer(); text != "" || alert {
 			t.Fatalf("press %v answered %q (alert %t), want an empty answer", press, text, alert)
 		}
 	}
+	if got := greetedRows(t, env.chat.Id); got != 0 {
+		t.Fatalf("the previews left %d greeted_members rows, want none", got)
+	}
 
-	after, ok := settingsEditStored(t, env.chat.Id)
-	if !ok || !reflect.DeepEqual(row, after) {
-		t.Errorf("the greetings row changed:\nbefore %+v\nafter  %+v", row, after)
+	// The member's real join is still welcomed, and only now recorded.
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	joinClient := newModuleBotClient()
+	greetOnceJoin(t, newModuleTestBot(joinClient), env.chat, member)
+	if got := greetOnceWelcomes(joinClient); got != 1 {
+		t.Errorf("the member's first real join got %d welcomes, want 1", got)
 	}
-	if got := len(env.fake.callsFor("deleteMessage")) - deletes; got != 0 {
-		t.Errorf("the previews deleted %d messages, want none", got)
-	}
-	if got := len(env.fake.sentTo(env.chat.Id)) - groupBefore; got != 0 {
-		t.Errorf("the previews sent %d messages into the group, want none", got)
+	if got := greetedRows(t, env.chat.Id); got != 1 {
+		t.Errorf("greeted rows after the real join = %d, want 1", got)
 	}
 }
 

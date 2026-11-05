@@ -1593,7 +1593,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (which builds its text with `buildRulesText`), never a second builder, and a preview never writes and never sends to
   the group.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
-  `/start rules_<chat id>` deep link opens and (from plan 12-14) the Rules page's Full preview are built by
+  `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
   `rules_for_chat_header`, no-rules line `rules_no_rules_set`) and the private form (`rulesFormPrivate`: `rules_for_chat`,
   `rules_not_set`); a row with media or buttons but no text gets the heading alone as its text or caption. Rules are set
@@ -1660,15 +1660,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`settings_edit_preview.go`) are the actions `wv` `wf` (Welcome), `gv` `gf` (Goodbye) and `rv` `rf` (Rules): `v` previews
   the part named by `t` (only a part that is set, plus a Welcome or Goodbye text, which always has the default), `f` is the
   whole message with no `t`, and both need only the admin check every press makes. A preview is the header line
-  (`settings_edit_preview_header`, or `_rules`) and then the content, built by `renderGreeting` (the join's own builder,
-  filled in with the presser's name and the group's title) or `buildRulesText` and sent by `media.SendGreeting`, always to
-  the presser's own private chat (`query.From.Id`), never to the group and never through the senders that keep the
-  clean-old bookkeeping, so it writes no `last_msg_id`, deletes no message and writes no greeting or rules text. One side effect
+  (`settings_edit_preview_header`, or `_rules`) and then the content. Full preview of a Welcome or Goodbye is built by
+  `renderGreeting` (the join's own builder, filled in with the presser's name and the group's title) and sent by
+  `media.SendGreetingMessage` with `CaptionAbove` from the stored Media under text switch (the join's own sender, so a
+  photo, video or GIF arrives with its caption above it exactly as the join or the leave sends it); Preview of one part is
+  sent by `media.SendGreeting` (the media alone has no caption, so it never carries the placement; the Rules `m` and `b`
+  parts use the same two helpers, `settingsEditPreviewMediaAlone` and `settingsEditPreviewButtonsAlone`). Every preview goes
+  to the presser's own private chat (`query.From.Id`), never to the group and never through the senders that keep the
+  clean-old bookkeeping, so it writes no `last_msg_id`, deletes no message and writes no greeting or rules text, and it
+  never calls `SendWelcomeMessage` or `ClaimGreeting`: a preview ignores Greet once (A9), claims no member and leaves no
+  `greeted_members` row, so the member's real join is still welcomed (`TestSettingsEditPreviewNeverClaims`). One side effect
   is the join path's own: a Full preview, or a text preview, of a Welcome or Goodbye whose text contains `{rules}` reads the
   rules through the join path's reader (`renderGreeting`, then `rules.GetChatRulesInfo`), which creates an empty rules row
-  (and a chats row) for a group that has none, exactly as a real join does; nothing else is written. The Rules Full preview's
-  heading is built in the presser's language (`buildRulesText` with the presser's translator), not the group's as `/rules`
-  has it, so it is not word for word what members see. A menu opened in the
+  (and a chats row) for a group that has none, exactly as a real join does; nothing else is written. The Rules Full preview is built
+  by `buildRulesMessage` (group form) in the group's language, read by `lang.GetGroupLanguage` with the group's chat ID (the
+  cached read `/rules` makes, uk on a miss, no row created), and sent by `sendRulesMessage` without the member-path
+  degrade, so it is the message `/rules` sends in the group with private rules off, media, caption placement and
+  buttons included; the header line before it stays in the presser's language. With private rules on it still shows the
+  group form (members then read the private message in their own language, which no single preview can show, A12). A menu opened in the
   private chat answers the press empty; one opened in the group answers the toast `settings_edit_preview_sent`; a Telegram
   403 (classified by code, `settingsEditIsForbidden`) is the alert `settings_edit_preview_need_start` and any other
   failure `settings_edit_preview_failed`, with Telegram's wording in the log only; a stale Preview of an empty part is
@@ -1683,7 +1692,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a first Set on a group with no greetings row also turns the goodbye on (the database default; the page shows it).
   Also known and accepted, like the other rolling-deploy caveats here: during a rolling deploy a typed reply that lands on
   a replica still on the previous code (no group-1 door and no `/cancel`) passes through with no answer, and the wait stays
-  until it expires. A text over the limit that the Telegram client splits into several consecutive messages is handled
+  until it expires. EDIT-07 limit (D-07, D-08): a GIF stored before Phase 12 is still a document, shows exactly as before and gets no Media under text switch until the owner sets that GIF again, which stores it as an animation and makes the switch appear. A text over the limit that the Telegram client splits into several consecutive messages is handled
   message by message, so whichever part claims the wait first is stored and the other parts are dropped without a reply;
   the owner sees the saved page with its length, and there is no ordering signal for plain texts to do better. A claim
   that is never finished or released (a crash, or a Redis timeout on finish) stays until the wait's 10 minutes end,
