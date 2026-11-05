@@ -946,12 +946,21 @@ func settingsEditCallbackStates(def settingsEditPageDef) map[string]settingsEdit
 		"default": {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true},
 		"all set": {
 			Kind: def.Kind, Text: strings.Repeat("x", 3000), MediaType: db.VIDEO_NOTE, FileID: "f",
-			Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true, Once: true,
+			Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true, Once: true, MediaBelow: true,
 		},
 		"off":      {Kind: def.Kind, Text: "t", MediaType: db.PHOTO, FileID: "f"},
 		"sticker":  {Kind: def.Kind, Text: "t", MediaType: db.STICKER, FileID: "f", Clean: true},
 		"once on":  {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true, Once: true},
 		"once off": {Kind: def.Kind, TextIsDefault: def.Kind != settingsEditRules, Enabled: true},
+		// Media under text is drawn for a photo (on or off) and an animation, and the file hint
+		// for a document.
+		"photo below on": {
+			Kind: def.Kind, Text: strings.Repeat("x", 3000), MediaType: db.PHOTO, FileID: "f",
+			Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true, Once: true, MediaBelow: true,
+		},
+		"photo below off": {Kind: def.Kind, Text: "t", MediaType: db.PHOTO, FileID: "f", Enabled: true},
+		"animation below": {Kind: def.Kind, Text: "t", MediaType: db.ANIMATION, FileID: "f", Enabled: true, MediaBelow: true},
+		"document":        {Kind: def.Kind, Text: "t", MediaType: db.DOCUMENT, FileID: "f", Enabled: true, MediaBelow: true},
 	}
 }
 
@@ -991,6 +1000,21 @@ func TestSettingsEditCallbackBytes(t *testing.T) {
 				}
 				if hasOnce && (len(once.CallbackData) < 1 || len(once.CallbackData) > 64) {
 					t.Errorf("%s: the Greet once button has %d bytes, want 1..64", label, len(once.CallbackData))
+				}
+				// Media under text is on the two greeting pages, drawn exactly for the kinds a caption can go
+				// above, and its button is within 64 bytes (45 in a private menu and 41 in a group menu).
+				var below gotgbot.InlineKeyboardButton
+				hasBelow := false
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					if decoded, ok := decodeCallbackData(button.CallbackData, settingsCallbackNamespace); ok && decoded.Fields["t"] == settingsEditControlBelow {
+						below, hasBelow = button, true
+					}
+				}
+				if want := def.isGreeting() && settingsEditMediaBelowEligible(st); hasBelow != want {
+					t.Errorf("%s: the Media under text cell is drawn = %v, want %v", label, hasBelow, want)
+				}
+				if limit := map[bool]int{true: 45, false: 41}[private]; hasBelow && len(below.CallbackData) > limit {
+					t.Errorf("%s: the Media under text button has %d bytes, want at most %d", label, len(below.CallbackData), limit)
 				}
 				wantRows := 8
 				if !private {

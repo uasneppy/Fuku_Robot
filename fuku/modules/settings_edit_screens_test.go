@@ -66,7 +66,7 @@ func settingsEditScreens(tr *i18n.Translator, view settingsView) map[string]sett
 			// The page under each notice an action or the door puts on it.
 			for _, key := range []string{
 				"settings_edit_cancelled", "settings_edit_group_note", "settings_edit_nothing_to_remove",
-				"common_settings_save_failed", "settings_edit_removed_media", "settings_edit_removed_buttons",
+				"common_settings_save_failed", "settings_edit_below_unavailable", "settings_edit_removed_media", "settings_edit_removed_buttons",
 				"settings_edit_removed_text_default", "settings_edit_removed_text_rules",
 			} {
 				notice := settingsNoticeWarn(settingsText(tr, key))
