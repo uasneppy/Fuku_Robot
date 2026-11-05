@@ -4,6 +4,7 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -457,5 +458,78 @@ func TestGreetOnceReadErrorFailsClosed(t *testing.T) {
 	}
 	if got := greetedRows(t, chat.Id); got != 1 {
 		t.Fatalf("greeted rows with a failing greetings read = %d, want 1: nothing is claimed and the old row stays", got)
+	}
+}
+
+// greetOncePanicAfterSendClient is a bot client whose sendMessage records the request like the fake does and then
+// panics, so the panic comes after the welcome's send was attempted and its outcome is unknown.
+type greetOncePanicAfterSendClient struct {
+	*moduleBotClient
+	panicOnSend bool
+}
+
+func (c *greetOncePanicAfterSendClient) RequestWithContext(ctx context.Context, token, method string,
+	params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	res, err := c.moduleBotClient.RequestWithContext(ctx, token, method, params, opts)
+	if c.panicOnSend && method == "sendMessage" {
+		panic("the client panicked after the request went out")
+	}
+	return res, err
+}
+
+// TestGreetOncePanicBeforeSendReleasesClaim pins IN-01 of the Phase 12 review: a panic between the claim and the send
+// proves no welcome went out, so the claim is given back and the member's next join is welcomed. Without it the row
+// stayed and that member was never welcomed.
+func TestGreetOncePanicBeforeSendReleasesClaim(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	greetOnceSwitchOn(t, chat.Id)
+
+	previous := welcomeRender
+	welcomeRender = func(*gotgbot.Bot, *gotgbot.Chat, *gotgbot.User, string, []db.Button) (string, *gotgbot.InlineKeyboardMarkup) {
+		panic("the render step panicked")
+	}
+	t.Cleanup(func() { welcomeRender = previous })
+
+	greetOnceJoin(t, bot, chat, member)
+	if got := len(client.callsFor("sendMessage")); got != 0 {
+		t.Fatalf("sendMessage calls after a panic before the send = %d, want 0", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 0 {
+		t.Fatalf("greeted rows after a panic before the send = %d, want 0: nothing was sent, so the claim goes back", got)
+	}
+
+	welcomeRender = previous
+	greetOnceJoin(t, bot, chat, member)
+	if got := greetOnceWelcomes(client); got != 1 {
+		t.Fatalf("welcomes after the next join = %d, want 1: the member is welcomed", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 1 {
+		t.Fatalf("greeted rows after the next join = %d, want 1", got)
+	}
+}
+
+// TestGreetOncePanicAfterSendKeepsClaim is the other side of IN-01: once the send was attempted its outcome is
+// unknown (the request may have been delivered), so a panic after it keeps the claim.
+func TestGreetOncePanicAfterSendKeepsClaim(t *testing.T) {
+	chat, client, _ := greetOnceSetup(t)
+	panicking := &greetOncePanicAfterSendClient{moduleBotClient: client, panicOnSend: true}
+	bot := newModuleTestBot(nil)
+	bot.BotClient = panicking
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	greetOnceSwitchOn(t, chat.Id)
+
+	greetOnceJoin(t, bot, chat, member)
+	if got := len(client.callsFor("sendMessage")); got != 1 {
+		t.Fatalf("sendMessage calls = %d, want 1: the send was attempted before the panic", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 1 {
+		t.Fatalf("greeted rows after a panic after the send = %d, want 1: the outcome is unknown, so the claim stays", got)
+	}
+
+	panicking.panicOnSend = false
+	greetOnceJoin(t, bot, chat, member)
+	if got := len(client.callsFor("sendMessage")); got != 1 {
+		t.Fatalf("sendMessage calls after the next join = %d, want still 1: a double welcome is worse than a missing one", got)
 	}
 }

@@ -322,6 +322,10 @@ func giveBackWelcome(chatID, userID int64, sendErr error) {
 	}
 }
 
+// welcomeRender builds the welcome's text and keyboard. It is a variable only so a test can make the step between
+// the greet-once claim and the send panic.
+var welcomeRender = renderGreeting
+
 // applyCleanWelcome stores the "delete the last welcome" switch.
 func applyCleanWelcome(ctx context.Context, chatID int64, on bool) greetingApplyResult {
 	return finishGreetingApply(ctx, chatID, "SetCleanWelcomeSetting", greetingWrites.CleanWelcome(chatID, on))
@@ -910,7 +914,7 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 		}
 
 		buttons := greetings.GetWelcomeButtons(chat.Id)
-		res, kb := renderGreeting(bot, chat, user, greetPrefs.WelcomeSettings.WelcomeText, buttons)
+		res, kb := welcomeRender(bot, chat, user, greetPrefs.WelcomeSettings.WelcomeText, buttons)
 
 		var threadID int64
 		if ctx.EffectiveMessage != nil {
