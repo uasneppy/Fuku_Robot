@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -68,8 +69,8 @@ func TestGreetingsMediaBelowEverywhere(t *testing.T) {
 		if call.Params["show_caption_above_media"] != true {
 			t.Fatalf("show_caption_above_media = %v, want true", call.Params["show_caption_above_media"])
 		}
-		if call.Params["caption"] != "Hi Newbie" || call.Params["photo"] != "w-photo" {
-			t.Fatalf("caption/photo = %v / %v", call.Params["caption"], call.Params["photo"])
+		if body := legacyRequestJSON(t, call); !strings.Contains(body, `"caption":"Hi Newbie"`) || !strings.Contains(body, `"photo":"w-photo"`) {
+			t.Fatalf("request = %s, want the caption and the stored photo", body)
 		}
 		if call.Params["reply_markup"] == nil {
 			t.Fatalf("the stored keyboard is missing from the request")

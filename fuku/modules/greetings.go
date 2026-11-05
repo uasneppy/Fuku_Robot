@@ -175,6 +175,8 @@ var greetingWrites = struct {
 	GoodbyeButtons     func(chatID int64, buttons []db.Button) error
 	WelcomeText        func(chatID int64, text, fileID string, buttons []db.Button, dataType int) error
 	GoodbyeText        func(chatID int64, text, fileID string, buttons []db.Button, dataType int) error
+	WelcomeMediaBelow  func(chatID int64, on bool) error
+	GoodbyeMediaBelow  func(chatID int64, on bool) error
 }{
 	WelcomeToggle:      greetings.SetWelcomeToggle,
 	GoodbyeToggle:      greetings.SetGoodbyeToggle,
@@ -188,6 +190,8 @@ var greetingWrites = struct {
 	GoodbyeButtons:     greetings.SetGoodbyeButtonsOnly,
 	WelcomeText:        greetings.SetWelcomeText,
 	GoodbyeText:        greetings.SetGoodbyeText,
+	WelcomeMediaBelow:  greetings.SetWelcomeMediaBelow,
+	GoodbyeMediaBelow:  greetings.SetGoodbyeMediaBelow,
 }
 
 // greetingApplyTimeout bounds the read-back an apply function makes after its write.
@@ -245,9 +249,17 @@ func applyGoodbyeEnabled(ctx context.Context, chatID int64, on bool) greetingApp
 	return finishGreetingApply(ctx, chatID, "SetGoodbyeToggle", greetingWrites.GoodbyeToggle(chatID, on))
 }
 
-// applyWelcomeMediaBelow is a compile-only stub for the RED commit of plan 12-08.
-func applyWelcomeMediaBelow(_ context.Context, _ int64, _ bool) greetingApplyResult {
-	return greetingApplyResult{}
+// applyWelcomeMediaBelow stores whether the welcome's photo, video or GIF is shown under its text. It is the one
+// write path of the menu's Media under text switch (no command exists), column-targeted so nothing else of the row
+// changes, and absolute so a repeated call stores the same row.
+func applyWelcomeMediaBelow(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "SetWelcomeMediaBelow", greetingWrites.WelcomeMediaBelow(chatID, on))
+}
+
+// applyGoodbyeMediaBelow stores whether the goodbye's photo, video or GIF is shown under its text, the one write
+// path of the menu's Media under text switch of the goodbye.
+func applyGoodbyeMediaBelow(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "SetGoodbyeMediaBelow", greetingWrites.GoodbyeMediaBelow(chatID, on))
 }
 
 // applyCleanWelcome stores the "delete the last welcome" switch.
@@ -817,7 +829,14 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 		if ctx.EffectiveMessage != nil {
 			threadID = ctx.EffectiveMessage.MessageThreadId
 		}
-		sent, err := media.SendGreeting(bot, chat.Id, res, greetPrefs.WelcomeSettings.FileID, greetPrefs.WelcomeSettings.WelcomeType, kb, threadID)
+		sent, err := media.SendGreetingMessage(bot, chat.Id, media.GreetingMessage{
+			Text:         res,
+			FileID:       greetPrefs.WelcomeSettings.FileID,
+			MsgType:      greetPrefs.WelcomeSettings.WelcomeType,
+			CaptionAbove: greetPrefs.WelcomeSettings.MediaBelow,
+			Keyboard:     kb,
+			ThreadID:     threadID,
+		})
 		if err != nil {
 			logJoinOperationError("[Greetings][SendWelcomeMessage] Failed to send welcome message", err)
 			return err
