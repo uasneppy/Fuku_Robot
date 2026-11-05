@@ -341,6 +341,187 @@ func TestSettingsEditCheckRules(t *testing.T) {
 			t.Fatalf("verdict OK=%v key=%q, want settings_edit_refuse_need_text", got.OK, got.RefusalKey)
 		}
 	})
+
+	// Rules media of any kind makes heading plus text a caption (D-03, UI-SPEC check 8).
+	storedKinds := map[string]int{
+		"photo": db.PHOTO, "video": db.VIDEO, "animation": db.ANIMATION, "document": db.DOCUMENT,
+		"sticker": db.STICKER, "audio": db.AUDIO, "voice": db.VOICE, "video note": db.VIDEO_NOTE,
+	}
+	for name, mediaType := range storedKinds {
+		t.Run("with a "+name+" stored the caption limit holds", func(t *testing.T) {
+			prefix := settingsEditRulesPrefixLength(t, title)
+			st := settingsEditState{Kind: settingsEditRules, MediaType: mediaType, FileID: "f"}
+			if got := settingsEditRulesCheckState(t, strings.Repeat("a", 1024-prefix), title, st); !got.OK {
+				t.Fatalf("heading plus text of exactly 1024 was refused: %q", got.RefusalKey)
+			}
+			got := settingsEditRulesCheckState(t, strings.Repeat("a", 1025-prefix), title, st)
+			if got.OK || got.RefusalKey != "settings_edit_refuse_text_rules_long" {
+				t.Fatalf("verdict OK=%v key=%q, want settings_edit_refuse_text_rules_long", got.OK, got.RefusalKey)
+			}
+			if n, max := settingsEditParam(t, got, "n"), settingsEditParam(t, got, "max"); n != 1025 || max != 1024 {
+				t.Fatalf("n = %d, max = %d, want 1025 and 1024", n, max)
+			}
+		})
+	}
+
+	t.Run("without media a text up to the old limit is accepted again", func(t *testing.T) {
+		prefix := settingsEditRulesPrefixLength(t, title)
+		if got := settingsEditRulesCheckState(t, strings.Repeat("a", 3000-prefix), title, settingsEditState{Kind: settingsEditRules}); !got.OK {
+			t.Fatalf("a rules message of 3000 units with no media was refused: %q", got.RefusalKey)
+		}
+	})
+
+	t.Run("a Rules media over a long stored text is refused with the number and the limit", func(t *testing.T) {
+		prefix := settingsEditRulesPrefixLength(t, title)
+		for name, msg := range map[string]*gotgbot.Message{
+			"photo":   {Photo: []gotgbot.PhotoSize{{FileId: "p"}}},
+			"video":   {Video: &gotgbot.Video{FileId: "v"}},
+			"gif":     {Animation: &gotgbot.Animation{FileId: "g"}, Document: &gotgbot.Document{FileId: "g"}},
+			"file":    {Document: &gotgbot.Document{FileId: "d"}},
+			"sticker": {Sticker: &gotgbot.Sticker{FileId: "s"}},
+			"audio":   {Audio: &gotgbot.Audio{FileId: "a"}},
+			"voice":   {Voice: &gotgbot.Voice{FileId: "o"}},
+		} {
+			fits := settingsEditRulesMediaCheck(t, msg, title, strings.Repeat("a", 1024-prefix))
+			if !fits.OK {
+				t.Errorf("%s: heading plus stored text of exactly 1024 was refused: %q", name, fits.RefusalKey)
+			}
+			got := settingsEditRulesMediaCheck(t, msg, title, strings.Repeat("a", 1025-prefix))
+			if got.OK || got.RefusalKey != "settings_edit_refuse_media_rules_long" {
+				t.Errorf("%s: verdict OK=%v key=%q, want settings_edit_refuse_media_rules_long", name, got.OK, got.RefusalKey)
+				continue
+			}
+			if n, max := settingsEditParam(t, got, "n"), settingsEditParam(t, got, "max"); n != 1025 || max != 1024 {
+				t.Errorf("%s: n = %d, max = %d, want 1025 and 1024", name, n, max)
+			}
+		}
+	})
+
+	t.Run("a Rules media with no stored text is accepted", func(t *testing.T) {
+		got := settingsEditRulesMediaCheck(t, &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "p"}}}, title, "")
+		if !got.OK {
+			t.Fatalf("a photo over empty rules was refused: %q", got.RefusalKey)
+		}
+	})
+
+	t.Run("a Rules video note and anything that is not media are refused", func(t *testing.T) {
+		for name, msg := range map[string]*gotgbot.Message{
+			"video note": {VideoNote: &gotgbot.VideoNote{FileId: "n"}},
+			"text":       {Text: "words"},
+			"contact":    {Contact: &gotgbot.Contact{PhoneNumber: "1"}},
+		} {
+			got := settingsEditRulesMediaCheck(t, msg, title, "Be kind")
+			if got.OK || got.RefusalKey != "settings_edit_refuse_need_media" {
+				t.Errorf("%s: verdict OK=%v key=%q, want settings_edit_refuse_need_media", name, got.OK, got.RefusalKey)
+			}
+		}
+	})
+
+	t.Run("a {rules} token in the Rules text adds no button to the buttons part", func(t *testing.T) {
+		def := settingsEditCheckEnv(t, settingsPageRules)
+		got := settingsEditCheck(settingsEditCheckInput{
+			Def: def, Part: settingsEditPartButtons, Msg: settingsEditTypedMessage(settingsEditButtonLines(100, 1000)),
+			State: settingsEditState{Kind: def.Kind, Text: "Be kind {rules}"}, Owner: gotgbot.User{Id: 1, FirstName: "Al"},
+			GroupTitle: title, Language: "en",
+		})
+		if !got.OK {
+			t.Fatalf("100 buttons over a Rules text holding {rules} were refused: %q", got.RefusalKey)
+		}
+	})
+
+	t.Run("a with-media refusal never carries the old filled-too-long wording", func(t *testing.T) {
+		prefix := settingsEditRulesPrefixLength(t, title)
+		st := settingsEditState{Kind: settingsEditRules, MediaType: db.PHOTO, FileID: "f"}
+		for _, n := range []int{1025, 3000, 4097} {
+			got := settingsEditRulesCheckState(t, strings.Repeat("a", n-prefix), title, st)
+			if got.OK || got.RefusalKey == "settings_edit_refuse_too_long_filled" || got.RefusalKey == "" {
+				t.Errorf("%d units with media: OK=%v key=%q, want a Rules caption refusal", n, got.OK, got.RefusalKey)
+			}
+		}
+	})
+}
+
+// settingsEditRulesCheckState is settingsEditRulesCheck over a stored state.
+func settingsEditRulesCheckState(t *testing.T, text, title string, st settingsEditState) settingsEditVerdict {
+	t.Helper()
+	def := settingsEditCheckEnv(t, settingsPageRules)
+	st.Kind = def.Kind
+	return settingsEditCheck(settingsEditCheckInput{
+		Def: def, Part: settingsEditPartText, Msg: settingsEditTypedMessage(text),
+		State: st, Owner: gotgbot.User{Id: 1, FirstName: strings.Repeat("A", 60)},
+		GroupTitle: title, Language: "en",
+	})
+}
+
+// settingsEditRulesMediaCheck judges a typed message for the Rules media part over a stored rules text.
+func settingsEditRulesMediaCheck(t *testing.T, msg *gotgbot.Message, title, storedText string) settingsEditVerdict {
+	t.Helper()
+	def := settingsEditCheckEnv(t, settingsPageRules)
+	return settingsEditCheck(settingsEditCheckInput{
+		Def: def, Part: settingsEditPartMedia, Msg: msg,
+		State: settingsEditState{Kind: def.Kind, Text: storedText}, Owner: gotgbot.User{Id: 1, FirstName: "Al"},
+		GroupTitle: title, Language: "en",
+	})
+}
+
+// TestSettingsRulesCaptionParity holds Rules to the Welcome's caption rule at 1000, 1024 and 1025 units of each
+// page's own measure, for every stored media kind and from both sides (UI-SPEC check 8): the Welcome counts the
+// filled text, the Rules page the heading plus the text.
+func TestSettingsRulesCaptionParity(t *testing.T) {
+	const title = "Group"
+	prefix := settingsEditRulesPrefixLength(t, title)
+	kinds := []struct {
+		name      string
+		mediaType int
+	}{
+		{"none", 0}, {"photo", db.PHOTO}, {"video", db.VIDEO}, {"animation", db.ANIMATION}, {"document", db.DOCUMENT},
+		{"sticker", db.STICKER}, {"audio", db.AUDIO}, {"voice", db.VOICE}, {"video note", db.VIDEO_NOTE},
+	}
+	welcomeDef := settingsEditCheckEnv(t, settingsPageWelcome)
+	rulesDef := settingsEditCheckEnv(t, settingsPageRules)
+	owner := gotgbot.User{Id: 1, FirstName: "Al"}
+	for _, kind := range kinds {
+		for _, n := range []int{1000, 1024, 1025} {
+			t.Run(fmt.Sprintf("%s/%d", kind.name, n), func(t *testing.T) {
+				fileID := ""
+				if kind.mediaType != 0 {
+					fileID = "f"
+				}
+				welcomeState := settingsEditState{Kind: welcomeDef.Kind, MediaType: kind.mediaType, FileID: fileID}
+				rulesState := settingsEditState{Kind: rulesDef.Kind, MediaType: kind.mediaType, FileID: fileID}
+
+				welcome := settingsEditCheck(settingsEditCheckInput{
+					Def: welcomeDef, Part: settingsEditPartText, Msg: settingsEditTypedMessage(strings.Repeat("a", n)),
+					State: welcomeState, Owner: owner, GroupTitle: title, Language: "en",
+				})
+				rulesVerdict := settingsEditCheck(settingsEditCheckInput{
+					Def: rulesDef, Part: settingsEditPartText, Msg: settingsEditTypedMessage(strings.Repeat("a", n-prefix)),
+					State: rulesState, Owner: owner, GroupTitle: title, Language: "en",
+				})
+				want := kind.mediaType == 0 || n <= settingsEditCaptionLimit
+				if welcome.OK != want || rulesVerdict.OK != want {
+					t.Errorf("text: Welcome OK=%v (%q), Rules OK=%v (%q), both want %v",
+						welcome.OK, welcome.RefusalKey, rulesVerdict.OK, rulesVerdict.RefusalKey, want)
+				}
+
+				// The media side: a typed photo over a stored text of this length.
+				if kind.mediaType != 0 {
+					return
+				}
+				photo := &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "p"}}}
+				welcomeMedia := settingsEditCheck(settingsEditCheckInput{
+					Def: welcomeDef, Part: settingsEditPartMedia, Msg: photo,
+					State: settingsEditState{Kind: welcomeDef.Kind, Text: strings.Repeat("a", n)}, Owner: owner, GroupTitle: title, Language: "en",
+				})
+				rulesMedia := settingsEditRulesMediaCheck(t, photo, title, strings.Repeat("a", n-prefix))
+				wantMedia := n <= settingsEditCaptionLimit
+				if welcomeMedia.OK != wantMedia || rulesMedia.OK != wantMedia {
+					t.Errorf("media: Welcome OK=%v (%q), Rules OK=%v (%q), both want %v",
+						welcomeMedia.OK, welcomeMedia.RefusalKey, rulesMedia.OK, rulesMedia.RefusalKey, wantMedia)
+				}
+			})
+		}
+	}
 }
 
 // settingsEditPartCheck runs the check of part of the Welcome page for msg with state st.

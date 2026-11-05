@@ -476,6 +476,8 @@ func TestSettingsEditPromptMax(t *testing.T) {
 		"welcome with a photo":   {welcome, settingsEditState{Kind: settingsEditWelcome, MediaType: db.PHOTO, FileID: "f"}, 1024},
 		"welcome with a sticker": {welcome, settingsEditState{Kind: settingsEditWelcome, MediaType: db.STICKER, FileID: "f"}, 1024},
 		"rules":                  {rulesDef, settingsEditState{Kind: settingsEditRules, Text: "t"}, 3800},
+		"rules with a photo":     {rulesDef, settingsEditState{Kind: settingsEditRules, Text: "t", MediaType: db.PHOTO, FileID: "f"}, 1024},
+		"rules with a sticker":   {rulesDef, settingsEditState{Kind: settingsEditRules, Text: "t", MediaType: db.STICKER, FileID: "f"}, 1024},
 	} {
 		if got := settingsEditPromptMax(tc.def, tc.st); got != tc.want {
 			t.Errorf("%s: settingsEditPromptMax = %d, want %d", name, got, tc.want)
@@ -504,6 +506,16 @@ func TestSettingsEditPromptMax(t *testing.T) {
 	if text, _ := env.lastEdit(owner.Id, menuID); !settingsEditPromptHas(text, 3800) ||
 		!strings.Contains(text, staffMarker("settings_edit_wait_text_rules")) {
 		t.Errorf("the Rules prompt is not the rules text with 3800: %q", text)
+	}
+
+	// Stored Rules media makes the rules text its caption: the private Rules prompt says 1024.
+	if err := rules.SetRulesMediaOnly(env.chat.Id, "rules-photo", db.PHOTO); err != nil {
+		t.Fatalf("SetRulesMediaOnly: %v", err)
+	}
+	settingsEditSwitchPage(env, owner, menuID, settingsPageRules)
+	settingsEditPressButton(env, owner, menuID, "settings_btn_edit_set_text")
+	if text, _ := env.lastEdit(owner.Id, menuID); !settingsEditPromptHas(text, 1024) {
+		t.Errorf("the Rules prompt of a group with Rules media is not 1024: %q", text)
 	}
 }
 
