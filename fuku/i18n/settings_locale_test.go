@@ -226,8 +226,19 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	// Phase 12 (plan 12-05). The five switch rows count the template as written, with {state}
 	// as 7 characters, so a correct 18-character name still fits; the binding ceiling is the
 	// rendered 20 of TestSettingsLabelLengths, where {state} is the one-code-point icon.
-	"settings_btn_edit_switch_once": {26, 26},
-	"settings_edit_line_once":       {40, 56},
+	"settings_btn_edit_switch_welcome":      {26, 26},
+	"settings_btn_edit_switch_goodbye":      {26, 26},
+	"settings_btn_edit_switch_clean":        {26, 26},
+	"settings_btn_edit_switch_below":        {26, 26},
+	"settings_btn_edit_switch_once":         {26, 26},
+	"settings_edit_line_below":              {40, 56},
+	"settings_edit_line_once":               {40, 56},
+	"settings_edit_hint_once":               {160, 224},
+	"settings_edit_hint_below_file":         {140, 196},
+	"settings_edit_media_animation":         {14, 20},
+	"settings_edit_refuse_media_rules_long": {170, 238},
+	"settings_edit_below_unavailable":       {100, 140},
+	"settings_edit_refuse_text_rules_long":  {120, 168},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -434,7 +445,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
 	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.
 	editorCells := []string{
-		"settings_btn_edit_switch_once",
+		"settings_btn_edit_switch_welcome", "settings_btn_edit_switch_goodbye", "settings_btn_edit_switch_clean",
+		"settings_btn_edit_switch_below", "settings_btn_edit_switch_once",
 	}
 
 	for _, lang := range staffLocales {
@@ -677,8 +689,15 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_edit_line_text", []string{"{state}"}},
 		{"settings_edit_line_media", []string{"{state}"}},
 		{"settings_edit_line_buttons", []string{"{state}"}},
+		{"settings_btn_edit_switch_welcome", []string{"{state}"}},
+		{"settings_btn_edit_switch_goodbye", []string{"{state}"}},
+		{"settings_btn_edit_switch_clean", []string{"{state}"}},
+		{"settings_btn_edit_switch_below", []string{"{state}"}},
 		{"settings_btn_edit_switch_once", []string{"{state}"}},
+		{"settings_edit_line_below", []string{"{state}"}},
 		{"settings_edit_line_once", []string{"{state}"}},
+		{"settings_edit_refuse_media_rules_long", []string{"{n}", "{max}"}},
+		{"settings_edit_refuse_text_rules_long", []string{"{n}", "{max}"}},
 		{"settings_btn_edit_welcome_toggle", []string{"{state}"}},
 		{"settings_btn_edit_goodbye_toggle", []string{"{state}"}},
 		{"settings_btn_edit_clean_welcome", []string{"{state}"}},
