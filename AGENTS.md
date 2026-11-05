@@ -923,6 +923,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   chat when the user has a creator row, and also when the user has an administrator row and either the chat's switch is on
   or the chat has no creator row at all; it does not filter on `chats.is_inactive`, because the activity monitor marks quiet
   groups inactive. It is read fresh, never cached, and never part of backup, export, import or reset.
+- `greeted_members` (migration 20261105120000) is the Greet once record: one row per `(chat_id, user_id)` the bot
+  welcomed while the welcome's `welcome_once` switch was on, with a primary key on both columns, `created_at` and no
+  foreign key (the claim must work for a chat the `chats` table does not know yet). It is read fresh through the
+  database, never cached, so no `DeleteCache` applies. It is never part of backup, export, import or reset
+  (`TestGreetedMembersStayOutOfBackup`) and rows are kept for good. `models.GreetedMember` maps it. The claim rule
+  (an `INSERT ... ON CONFLICT DO NOTHING` inside `SendWelcomeMessage`, given back on a definite refusal) arrives with the
+  greet-once plan of Phase 12.
+- The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
+  `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
+  (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
+  `NOT NULL DEFAULT` its zero value, so a row saved before it reads exactly as it did, and the Go models
+  (`WelcomeSettings.MediaBelow` and `Once`, `GoodbyeSettings.MediaBelow`, `RulesSettings.FileID`, `MediaType`, `Buttons`
+  and `MediaBelow`) carry no `default:` tag on any boolean. They travel in backup JSON through their model tags
+  (`media_below`, `once`, `file_id`, `media_type`, `btns`); an export made before the migration has none of those keys and
+  imports as zeros, the old behaviour (`TestOldGreetingsExportDecodesToZeros`). `RulesSettings.HasContent` (a non-blank
+  text, a file ID or at least one button) is the one test of "Rules is set".
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -1668,7 +1684,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fuku/db/raiddetection/testmain_test.go` and `fuku/db/devs/testmain_test.go` (the developer `/stats` reads it), and
   `raidCleanup` in the modules tests deletes its rows and their cached copies. A fixture that creates
   `ChatRaidDetection` rows directly must set `AIThreshold` (3..500): the `CHECK` applies on SQLite too, because GORM
-  builds it from the model tag (`seedRaidSettings` fills the AI defaults when it is left at 0).
+  builds it from the model tag (`seedRaidSettings` fills the AI defaults when it is left at 0). The Phase 12 model
+  `GreetedMember` is in the AutoMigrate lists of `fuku/modules/test_harness_test.go`, `fuku/db/greetings/testmain_test.go`
+  and `fuku/db/backup/testmain_test.go`; `TestRulesMediaMigrationDefaults` (`./fuku/db/migrations`) is PostgreSQL only and
+  skips locally, and joins `make test-postgres-integrity` in the Phase 12 gate plan.
 - `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
   prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
   `TestBanRunStart` (one running ban run per lockdown, the partial unique index), plus the Phase 5 conditional updates:
