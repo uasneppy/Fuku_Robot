@@ -89,3 +89,11 @@ func memberReqPostNotice(ctx context.Context, b *gotgbot.Bot, chatID int64, text
 	}
 	return sent.MessageId, nil
 }
+
+func memberReqFixedButton(_ *i18n.Translator, _, _ int64) gotgbot.InlineKeyboardMarkup {
+	return gotgbot.InlineKeyboardMarkup{}
+}
+
+func memberReqNoticeKeyboard(_ *i18n.Translator, _ int, _, _ int64) gotgbot.InlineKeyboardMarkup {
+	return gotgbot.InlineKeyboardMarkup{}
+}

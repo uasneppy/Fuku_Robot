@@ -370,3 +370,5 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	}
 	return memberReqPunish(ctx, b, c, member.User, hold)
 }
+
+func isMemberReqMute(_ gotgbot.MergedChatMember, _ int64) bool { return false }
