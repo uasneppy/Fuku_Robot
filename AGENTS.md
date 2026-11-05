@@ -279,7 +279,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   present: `c` is accepted only on a message in a private chat and `u` only on one in a non-private chat, and each action
   takes an allow-listed field set (an unknown key is refused), all checked before any I/O. A page action may also declare `Validate`, a strict check of its own fields that runs in that same
   step 1, after the allow-list and before any I/O, and whose false answer is `common_callback_invalid_request`; a nil
-  `Validate` keeps the fields allowed and not required. Steppers and toggles send the
+  `Validate` keeps the fields allowed and not required. A `tg` or `st` press must also name a control its page registers
+  (`settingsControlFieldsValid`), and a control may declare `Validate` of `v`; both run in that same step 1, before any
+  I/O. Steppers and toggles send the
   absolute target value (`v`), never a delta, so a double tap is harmless. Every press runs one pipeline, each step
   refusing before the next (`settingsPress.verify`): (1) decode and structure, refused with the alert
   `common_callback_invalid_request` (a missing message is `common_callback_message_unavailable`); (2) a Telegram service
@@ -418,12 +420,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`formatting.VisibleLength`), media Not set or its kind word (a GIF saved from Phase 12 on is stored as `db.ANIMATION` (9) and reads GIF; a GIF saved earlier stays a document and reads File or GIF),
   buttons Not set or Set with the total; the stored text, a button name and a link are never echoed, and a sticker or a
   video note adds `settings_edit_note_no_caption`. `renderSettingsEditor` is pure and built in row blocks (part rows,
-  switches, Open in private, navigation), so a later plan adds a block without touching the others. Welcome and Goodbye carry control `e`,
-  the on/off switch (`settingsRightAdmin`, as `/welcome on|off`), and control `d`, Delete last (`settingsRightChangeInfo`,
-  as `/cleanwelcome` and `/cleangoodbye`). Each press sends the absolute target `v` ("0" or "1", anything else is an
-  invalid request), calls `applyWelcomeEnabled`, `applyGoodbyeEnabled`, `applyCleanWelcome` or `applyCleanGoodbye`, and
-  redraws from the row the function read back, with no notice; a failed write redraws the freshly loaded page with
-  `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
+  switches, Open in private, navigation), so a later plan adds a block without touching the others. The switches are a
+  two-column grid built from the page's switch table (`settingsEditSwitch`: control, label, body line, hint, right,
+  value and apply), filled left to right with an odd last cell alone on its row (`settingsEditSwitchGrid`). Each button
+  is the state icon alone and the name (`settings_btn_edit_switch_*`, `settingsStateIcon`: a cell must fit 20 code
+  points in every language), and each state word is a body line, one per drawn switch between the part lines and the
+  hints (`settings_edit_line_*`, `settingsStateWord`); a drawn switch's own hint paragraph follows the page hint, in grid
+  order. Welcome has controls `e` the on/off switch (`settingsRightAdmin`, as `/welcome on|off`), `d` Delete last
+  (`settingsRightChangeInfo`, as `/cleanwelcome` and `/cleangoodbye`) and `o` Greet once (`settingsRightAdmin`,
+  `applyWelcomeOnce`, hint `settings_edit_hint_once`); Media under text `u` arrives with plan 12-11. Goodbye has `e` and
+  `d`, Rules none yet, and Greet once is never offered on Goodbye or Rules. Greet once has no command, so
+  it carries a drift test and an authority test instead of a parity test (`TestSettingsDriftOnce`,
+  `TestSettingsAuthorityOnce`); `/resetwelcome`, `/resetgoodbye` and the Remove buttons leave it as it is, and the page
+  never reads `greeted_members`. Each press sends the absolute target `v` ("0" or "1", anything else is an
+  invalid request: `settingsEditSwitchValue`), calls `applyWelcomeEnabled`, `applyGoodbyeEnabled`, `applyCleanWelcome`,
+  `applyCleanGoodbye` or `applyWelcomeOnce`, and redraws from the row the function read back, with no notice; a failed
+  write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
   with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r`, then Access for the owner) with
@@ -538,7 +550,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   menu is stricter than the commands, and where the menu allows a control the command allows it too.
 - Each settings menu control declares one `settingsRight`, and the menu refuses what the matching command refuses.
   `settingsRightAdmin` needs only the live admin check every press already makes (`/captchamode`, `/captchatime`,
-  `/captchaaction`). `settingsRightAdminBotAdmin` also needs `chat_status.IsBotAdmin` and refuses with the notice
+  `/captchaaction`, the editor's Welcome and Goodbye switches and Greet once). `settingsRightAdminBotAdmin` also needs `chat_status.IsBotAdmin` and refuses with the notice
   `chat_status_bot_not_admin` (`/captcha`). `settingsRightAdminFloodBot` also needs `chat_status.IsUserAdmin(b, chat, b.Id)`
   and refuses with the notice `connections_is_user_connected_bot_not_admin` (`/setflood`, `/setfloodmode`, `/delflood`).
   `settingsRightRestrict` needs the creator or an administrator with `can_restrict_members` from the same member record
@@ -935,8 +947,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   back with `greetings.ReleaseGreeting`, and an unknown outcome (a transport error, a timeout, a 5xx, an unreadable
   answer) keeps it, because a double welcome is worse than a missing one. The claim never uses Redis or
   `claimRecentJoinProcessing`, so it holds across replicas and with no Redis. The switch is written by
-  `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), which has no production caller until the Welcome page's Greet once
-  switch arrives.
+  `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), the one write path of the Welcome page's Greet once switch (control
+  `o`, no command).
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
   (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is

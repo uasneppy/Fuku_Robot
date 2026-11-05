@@ -61,6 +61,19 @@ type settingsEditPart struct {
 	WaitKey, PreviewLabelKey                string
 }
 
+// settingsEditSwitch is one switch of an editor page: its control (the t value), the key of the
+// button label (the state icon alone, spliced into {state}), the key of the body line that says the
+// state in words, the key of its hint paragraph (empty for none), the right a press needs, the
+// state's value, whether the page draws it now (nil means always) and the apply function that
+// writes it. Apply returns the outcome and the state read back (nil when the caller must reload).
+type settingsEditSwitch struct {
+	Control, LabelKey, LineKey, HintKey string
+	Right                               settingsRight
+	Value                               func(settingsEditState) bool
+	Drawn                               func(settingsEditState) bool
+	Apply                               func(ctx context.Context, def settingsEditPageDef, chatID int64, on bool) (greetingApplyOutcome, *settingsEditState)
+}
+
 // settingsEditPageDef is everything that differs between the three pages. The renderer and
 // the controls read only this table, so a page or a part is one entry and never new code.
 type settingsEditPageDef struct {
@@ -68,12 +81,10 @@ type settingsEditPageDef struct {
 	Kind  settingsEditKind
 	Order int
 	Icon  string
-	// TitleKey is the page name; HintKey the hint under the part lines; CleanHintKey the Delete
-	// last hint (empty on Rules).
-	TitleKey, HintKey, CleanHintKey string
-	// ToggleLabelKey and CleanLabelKey are the labels of the on/off switch and of Delete last
-	// (empty on Rules, which has neither).
-	ToggleLabelKey, CleanLabelKey string
+	// TitleKey is the page name; HintKey the hint under the part lines.
+	TitleKey, HintKey string
+	// Switches is the page's switch table in grid order (none on Rules).
+	Switches []settingsEditSwitch
 	// SetCode, RemoveCode and CancelCode are the page's action codes for Set, Remove and Cancel;
 	// PreviewCode is its Preview of one part and FullCode its Full preview.
 	SetCode, RemoveCode, CancelCode, PreviewCode, FullCode string
@@ -109,22 +120,59 @@ var (
 	}
 )
 
+// The switch cells of the pages. Each calls the apply function of the command it mirrors
+// (/welcome on|off, /goodbye on|off, /cleanwelcome, /cleangoodbye); Greet once has no command, so
+// its one write path is applyWelcomeOnce(ctx, chatID, on).
+var (
+	settingsEditWelcomeSwitch = settingsEditSwitch{
+		Control: settingsEditControlEnabled, LabelKey: "settings_btn_edit_switch_welcome",
+		LineKey: "settings_edit_line_welcome", Right: settingsRightAdmin,
+		Value: func(st settingsEditState) bool { return st.Enabled },
+		Apply: settingsEditGreetingApply(applyWelcomeEnabled),
+	}
+	settingsEditGoodbyeSwitch = settingsEditSwitch{
+		Control: settingsEditControlEnabled, LabelKey: "settings_btn_edit_switch_goodbye",
+		LineKey: "settings_edit_line_goodbye", Right: settingsRightAdmin,
+		Value: func(st settingsEditState) bool { return st.Enabled },
+		Apply: settingsEditGreetingApply(applyGoodbyeEnabled),
+	}
+	settingsEditCleanWelcomeSwitch = settingsEditSwitch{
+		Control: settingsEditControlClean, LabelKey: "settings_btn_edit_switch_clean",
+		LineKey: "settings_edit_line_clean_welcome", HintKey: "settings_edit_clean_hint_welcome",
+		Right: settingsRightChangeInfo,
+		Value: func(st settingsEditState) bool { return st.Clean },
+		Apply: settingsEditGreetingApply(applyCleanWelcome),
+	}
+	settingsEditCleanGoodbyeSwitch = settingsEditSwitch{
+		Control: settingsEditControlClean, LabelKey: "settings_btn_edit_switch_clean",
+		LineKey: "settings_edit_line_clean_goodbye", HintKey: "settings_edit_clean_hint_goodbye",
+		Right: settingsRightChangeInfo,
+		Value: func(st settingsEditState) bool { return st.Clean },
+		Apply: settingsEditGreetingApply(applyCleanGoodbye),
+	}
+	settingsEditOnceSwitch = settingsEditSwitch{
+		Control: settingsEditControlOnce, LabelKey: "settings_btn_edit_switch_once",
+		LineKey: "settings_edit_line_once", HintKey: "settings_edit_hint_once",
+		Right: settingsRightAdmin,
+		Value: func(st settingsEditState) bool { return st.Once },
+		Apply: settingsEditGreetingApply(applyWelcomeOnce),
+	}
+)
+
 // settingsEditPages are the three definitions in page order.
 var settingsEditPages = []settingsEditPageDef{
 	{
 		Key: settingsPageWelcome, Kind: settingsEditWelcome, Order: 50, Icon: "🎉",
 		TitleKey: "settings_page_welcome", HintKey: "settings_edit_hint_greeting",
-		CleanHintKey:   "settings_edit_clean_hint_welcome",
-		ToggleLabelKey: "settings_btn_edit_welcome_toggle", CleanLabelKey: "settings_btn_edit_clean_welcome",
-		SetCode: "ws", RemoveCode: "wr", CancelCode: "wc", PreviewCode: "wv", FullCode: "wf", EditRight: settingsRightChangeInfo,
+		Switches: []settingsEditSwitch{settingsEditWelcomeSwitch, settingsEditCleanWelcomeSwitch, settingsEditOnceSwitch},
+		SetCode:  "ws", RemoveCode: "wr", CancelCode: "wc", PreviewCode: "wv", FullCode: "wf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
 		Key: settingsPageGoodbye, Kind: settingsEditGoodbye, Order: 60, Icon: "👋",
 		TitleKey: "settings_page_goodbye", HintKey: "settings_edit_hint_greeting",
-		CleanHintKey:   "settings_edit_clean_hint_goodbye",
-		ToggleLabelKey: "settings_btn_edit_goodbye_toggle", CleanLabelKey: "settings_btn_edit_clean_goodbye",
-		SetCode: "gs", RemoveCode: "gr", CancelCode: "gc", PreviewCode: "gv", FullCode: "gf", EditRight: settingsRightChangeInfo,
+		Switches: []settingsEditSwitch{settingsEditGoodbyeSwitch, settingsEditCleanGoodbyeSwitch},
+		SetCode:  "gs", RemoveCode: "gr", CancelCode: "gc", PreviewCode: "gv", FullCode: "gf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
@@ -161,8 +209,9 @@ type settingsEditState struct {
 	MediaType     int
 	FileID        string
 	Buttons       models.ButtonArray
-	// Enabled and Clean are the switch and Delete last (false on Rules).
-	Enabled, Clean bool
+	// Enabled and Clean are the switch and Delete last (false on Rules); Once is Greet once
+	// (Welcome only).
+	Enabled, Clean, Once bool
 }
 
 // settingsEditScreenOpts are the extras of one drawing: a notice line and the bot's username
@@ -182,7 +231,7 @@ func settingsEditStateOf(def settingsEditPageDef, row *models.GreetingSettings) 
 		}
 		st.Text, st.TextIsDefault = w.WelcomeText, w.WelcomeText == "" || w.WelcomeText == db.DefaultWelcome
 		st.MediaType, st.FileID, st.Buttons = w.WelcomeType, w.FileID, w.Button
-		st.Enabled, st.Clean = w.ShouldWelcome, w.CleanWelcome
+		st.Enabled, st.Clean, st.Once = w.ShouldWelcome, w.CleanWelcome, w.Once
 	case settingsEditGoodbye:
 		g := row.GoodbyeSettings
 		if g == nil {
@@ -293,7 +342,9 @@ func (def settingsEditPageDef) isGreeting() bool {
 }
 
 // settingsEditBody is the page's text lines: one line per part, the note for a media kind that
-// carries no caption, a blank line, the hint, and the Delete last hint on Welcome and Goodbye.
+// carries no caption, then one blank line and a state line per drawn switch (none when no switch
+// is drawn), a blank line and the hint, and a blank line and the hint of each drawn switch that
+// has one, in the grid's order.
 func settingsEditBody(v settingsView, def settingsEditPageDef, st settingsEditState) []string {
 	var body []string
 	for _, part := range def.Parts {
@@ -304,9 +355,20 @@ func settingsEditBody(v settingsView, def settingsEditPageDef, st settingsEditSt
 	if settingsEditPartIsSet(st, settingsEditPartMedia) && (st.MediaType == db.STICKER || st.MediaType == db.VIDEO_NOTE) {
 		body = append(body, settingsText(v.Tr, "settings_edit_note_no_caption"))
 	}
+	cells := settingsEditSwitchCells(def, st)
+	if len(cells) > 0 {
+		body = append(body, "")
+	}
+	for _, cell := range cells {
+		body = append(body, settingsText(v.Tr, cell.LineKey, i18n.TranslationParams{
+			"state": settingsStateWord(v.Tr, cell.Value(st)),
+		}))
+	}
 	body = append(body, "", settingsText(v.Tr, def.HintKey))
-	if def.isGreeting() {
-		body = append(body, "", settingsText(v.Tr, def.CleanHintKey))
+	for _, cell := range cells {
+		if cell.HintKey != "" {
+			body = append(body, "", settingsText(v.Tr, cell.HintKey))
+		}
 	}
 	return body
 }
@@ -359,19 +421,31 @@ func settingsEditPreviewRows(k *settingsKeyboard, def settingsEditPageDef, st se
 	}
 }
 
-// settingsEditSwitchRows is the block of the on/off switch and Delete last. Each button sends
-// the absolute target value, so a double tap writes the same value.
-func settingsEditSwitchRows(k *settingsKeyboard, def settingsEditPageDef, st settingsEditState) {
-	if !def.isGreeting() {
-		return
+// settingsEditSwitchCells is the page's switches that are drawn for the state, in grid order.
+func settingsEditSwitchCells(def settingsEditPageDef, st settingsEditState) []settingsEditSwitch {
+	var cells []settingsEditSwitch
+	for _, cell := range def.Switches {
+		if cell.Drawn == nil || cell.Drawn(st) {
+			cells = append(cells, cell)
+		}
 	}
+	return cells
+}
+
+// settingsEditSwitchGrid is the block of the switches: a two-column grid of half-width cells
+// filled left to right, an odd last cell alone on its row. Each button is the state icon and the
+// name, and sends the absolute target value, so a double tap writes the same value.
+func settingsEditSwitchGrid(k *settingsKeyboard, def settingsEditPageDef, st settingsEditState) {
 	tr := k.view.Tr
-	k.row(settingsToggleButton(k, def.Key, settingsEditControlEnabled,
-		settingsText(tr, def.ToggleLabelKey, i18n.TranslationParams{"state": settingsStateWord(tr, st.Enabled)}),
-		st.Enabled)...)
-	k.row(settingsToggleButton(k, def.Key, settingsEditControlClean,
-		settingsText(tr, def.CleanLabelKey, i18n.TranslationParams{"state": settingsStateWord(tr, st.Clean)}),
-		st.Clean)...)
+	var buttons []gotgbot.InlineKeyboardButton
+	for _, cell := range settingsEditSwitchCells(def, st) {
+		on := cell.Value(st)
+		label := settingsText(tr, cell.LabelKey, i18n.TranslationParams{"state": settingsStateIcon(on)})
+		buttons = append(buttons, settingsToggleButton(k, def.Key, cell.Control, label, on)...)
+	}
+	for i := 0; i < len(buttons); i += 2 {
+		k.row(buttons[i:min(i+2, len(buttons))]...)
+	}
 }
 
 // settingsEditOpenPrivateRow is the block of the Open in private URL row of a group menu: the
@@ -399,7 +473,7 @@ func renderSettingsEditor(v settingsView, def settingsEditPageDef, st settingsEd
 	k := newSettingsKeyboard(v)
 	settingsEditPartRows(k, def, st)
 	settingsEditPreviewRows(k, def, st)
-	settingsEditSwitchRows(k, def, st)
+	settingsEditSwitchGrid(k, def, st)
 	settingsEditOpenPrivateRow(k, opts)
 	k.navRow(false)
 	return k.screen(settingsCompose(v, def.TitleKey, body, opts.Notice, false))
@@ -444,56 +518,69 @@ func settingsEditOpen(def settingsEditPageDef) func(*settingsPress, string) (set
 	}
 }
 
-// settingsEditApplySwitch calls the apply function of the command the control mirrors:
-// /welcome on|off, /goodbye on|off, /cleanwelcome and /cleangoodbye.
-func settingsEditApplySwitch(
-	ctx context.Context, def settingsEditPageDef, control string, chatID int64, on bool,
-) greetingApplyResult {
-	switch {
-	case def.Kind == settingsEditWelcome && control == settingsEditControlEnabled:
-		return applyWelcomeEnabled(ctx, chatID, on)
-	case def.Kind == settingsEditGoodbye && control == settingsEditControlEnabled:
-		return applyGoodbyeEnabled(ctx, chatID, on)
-	case def.Kind == settingsEditWelcome && control == settingsEditControlClean:
-		return applyCleanWelcome(ctx, chatID, on)
-	case def.Kind == settingsEditGoodbye && control == settingsEditControlClean:
-		return applyCleanGoodbye(ctx, chatID, on)
+// settingsEditGreetingApply adapts a greeting apply function (the one beside its command) to a
+// switch cell: the outcome, and the state read back from the row the function returned, nil when
+// the write failed or the read-back did, in which case the caller reloads the page.
+func settingsEditGreetingApply(
+	apply func(context.Context, int64, bool) greetingApplyResult,
+) func(context.Context, settingsEditPageDef, int64, bool) (greetingApplyOutcome, *settingsEditState) {
+	return func(ctx context.Context, def settingsEditPageDef, chatID int64, on bool) (greetingApplyOutcome, *settingsEditState) {
+		result := apply(ctx, chatID, on)
+		if result.Outcome == greetingSaveFailed {
+			log.Errorf("[Settings] %s switch of chat %d failed: %v", def.Key, chatID, result.Err)
+			return greetingSaveFailed, nil
+		}
+		if result.Settings == nil {
+			return result.Outcome, nil
+		}
+		st, err := settingsEditStateOf(def, result.Settings)
+		if err != nil {
+			log.Warnf("[Settings] %s page of chat %d could not be read back after a press: %v", def.Key, chatID, err)
+			return result.Outcome, nil
+		}
+		return result.Outcome, &st
 	}
-	return greetingApplyResult{Outcome: greetingSaveFailed, Err: errors.New("settings editor: no such switch")}
 }
 
-// settingsEditSetSwitch serves a switch control of a Welcome or Goodbye page: v is "0" or "1"
-// (anything else is an invalid request), the press calls the command's apply function and the
-// page is redrawn from the row the function read back, with no notice. A failed write redraws
-// the freshly loaded page, with the old state and the save-failed notice.
+// settingsEditSwitchByControl finds the switch of a page by its control.
+func settingsEditSwitchByControl(def settingsEditPageDef, control string) (settingsEditSwitch, bool) {
+	for _, cell := range def.Switches {
+		if cell.Control == control {
+			return cell, true
+		}
+	}
+	return settingsEditSwitch{}, false
+}
+
+// settingsEditSetSwitch serves a switch control of an editor page: v is "0" or "1" (anything else
+// is an invalid request), the press calls the cell's apply function and the page is redrawn from
+// the row the function read back, with no notice. A failed write redraws the freshly loaded page,
+// with the old state and the save-failed notice.
 func settingsEditSetSwitch(def settingsEditPageDef, control string) func(*settingsPress, string) *settingsScreen {
+	cell, found := settingsEditSwitchByControl(def, control)
 	return func(p *settingsPress, value string) *settingsScreen {
-		if value != "0" && value != "1" {
+		if !found || !settingsEditSwitchValue(value) {
 			p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
 			return nil
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 		defer cancel()
 
-		result := settingsEditApplySwitch(ctx, def, control, p.group.Id, value == "1")
+		outcome, st := cell.Apply(ctx, def, p.group.Id, value == "1")
 		notice := ""
-		var st settingsEditState
-		var err error
-		if result.Outcome == greetingSaveFailed {
-			log.Errorf("[Settings] %s switch %s of chat %d failed: %v", def.Key, control, p.group.Id, result.Err)
+		if outcome == greetingSaveFailed {
 			notice = settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed"))
-			st, err = settingsEditLoad(ctx, def, p.group.Id)
-		} else if result.Settings != nil {
-			st, err = settingsEditStateOf(def, result.Settings)
-		} else {
-			st, err = settingsEditLoad(ctx, def, p.group.Id)
 		}
-		if err != nil {
-			log.Warnf("[Settings] %s page of chat %d could not be read after a press: %v", def.Key, p.group.Id, err)
-			p.cannotOpen()
-			return nil
+		if st == nil {
+			loaded, err := settingsEditLoad(ctx, def, p.group.Id)
+			if err != nil {
+				log.Warnf("[Settings] %s page of chat %d could not be read after a press: %v", def.Key, p.group.Id, err)
+				p.cannotOpen()
+				return nil
+			}
+			st = &loaded
 		}
-		screen := renderSettingsEditor(p.view(), def, st, settingsEditScreenOpts{
+		screen := renderSettingsEditor(p.view(), def, *st, settingsEditScreenOpts{
 			Notice: notice, BotUsername: getBotUsername(p.b),
 		})
 		return &screen
@@ -501,21 +588,10 @@ func settingsEditSetSwitch(def settingsEditPageDef, control string) func(*settin
 }
 
 // settingsEditSwitchValue is the strict check of an editor switch's target value: exactly "0" or
-// "1". It is the Validate of the e and d controls, so any other value is an invalid request in
+// "1". It is the Validate of every switch control, so any other value is an invalid request in
 // step 1, before any lookup.
 func settingsEditSwitchValue(value string) bool {
 	return value == "0" || value == "1"
-}
-
-// settingsEditSetEnabled serves control e, the on/off switch (as /welcome on|off and
-// /goodbye on|off).
-func settingsEditSetEnabled(def settingsEditPageDef) func(*settingsPress, string) *settingsScreen {
-	return settingsEditSetSwitch(def, settingsEditControlEnabled)
-}
-
-// settingsEditSetClean serves control d, Delete last (as /cleanwelcome and /cleangoodbye).
-func settingsEditSetClean(def settingsEditPageDef) func(*settingsPress, string) *settingsScreen {
-	return settingsEditSetSwitch(def, settingsEditControlClean)
 }
 
 func init() {
@@ -529,10 +605,12 @@ func init() {
 			Open:      settingsEditOpen(def),
 			Actions:   settingsEditActions(def),
 		}
-		if def.isGreeting() {
-			pg.Controls = map[string]settingsControl{
-				settingsEditControlEnabled: {Right: settingsRightAdmin, Validate: settingsEditSwitchValue, Set: settingsEditSetEnabled(def)},
-				settingsEditControlClean:   {Right: settingsRightChangeInfo, Validate: settingsEditSwitchValue, Set: settingsEditSetClean(def)},
+		if len(def.Switches) > 0 {
+			pg.Controls = make(map[string]settingsControl, len(def.Switches))
+			for _, cell := range def.Switches {
+				pg.Controls[cell.Control] = settingsControl{
+					Right: cell.Right, Validate: settingsEditSwitchValue, Set: settingsEditSetSwitch(def, cell.Control),
+				}
 			}
 		}
 		registerSettingsPage(pg)

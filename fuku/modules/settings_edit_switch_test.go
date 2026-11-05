@@ -81,7 +81,7 @@ func TestSettingsEditOnceSwitch(t *testing.T) {
 			if want := staffMarker("settings_edit_line_once") + " ✅ " + staffMarker("common_status_on"); !strings.Contains(text, want) {
 				t.Errorf("after the press the page %q lacks the on line %q", text, want)
 			}
-			if strings.Contains(text, settingsNoticeWarnIcon) || strings.Contains(text, settingsNoticeOKIcon) {
+			if settingsEditHasNoticeLine(text, settingsNoticeWarnIcon) || settingsEditHasNoticeLine(text, settingsNoticeOKIcon) {
 				t.Errorf("a stored write redrew with a notice: %q", text)
 			}
 			once, fields = settingsEditControl(t, keyboard, "settings_btn_edit_switch_once", settingsEditControlOnce)

@@ -166,7 +166,7 @@ func TestSettingsEditCancelButton(t *testing.T) {
 	if !strings.Contains(text, settingsNoticeOKIcon+staffMarker("settings_edit_cancelled")) {
 		t.Errorf("the page after Cancel %q lacks the cancelled notice", text)
 	}
-	if _, fields := settingsEditControl(t, keyboard, "settings_btn_edit_welcome_toggle", settingsEditControlEnabled); fields["p"] != "w" {
+	if _, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_welcome", settingsEditControlEnabled); fields["p"] != "w" {
 		t.Errorf("the page after Cancel is not Welcome: %v", fields)
 	}
 	if _, ok := settingsEditStored(t, env.chat.Id); ok {
@@ -227,7 +227,7 @@ func TestSettingsEditReplaceWait(t *testing.T) {
 		t.Errorf("wait TTL after a stale Cancel = %v", ttl)
 	}
 	text, keyboard := env.lastEdit(owner.Id, menuID)
-	if strings.Contains(text, settingsNoticeOKIcon) || !settingsEditHasButton(keyboard, "settings_btn_edit_welcome_toggle") {
+	if settingsEditHasNoticeLine(text, settingsNoticeOKIcon) || !settingsEditHasButton(keyboard, "settings_btn_edit_switch_welcome") {
 		t.Errorf("the stale Cancel did not redraw the page without a notice: %q", text)
 	}
 
@@ -385,7 +385,7 @@ func TestSettingsEditStaleCancel(t *testing.T) {
 		t.Errorf("Cancel after the wait was used answered %q (alert %v), want settings_edit_prompt_stale", answer, alert)
 	}
 	text, keyboard := env.lastEdit(owner.Id, menuID)
-	if strings.Contains(text, settingsNoticeOKIcon) || !settingsEditHasButton(keyboard, "settings_btn_edit_set_text") {
+	if settingsEditHasNoticeLine(text, settingsNoticeOKIcon) || !settingsEditHasButton(keyboard, "settings_btn_edit_set_text") {
 		t.Errorf("the stale Cancel did not edit the message into the page without a notice: %q", text)
 	}
 
@@ -457,7 +457,7 @@ func TestSettingsEditExpiredPrompt(t *testing.T) {
 		t.Errorf("Cancel after the wait expired answered %q (alert %v), want settings_edit_wait_expired", answer, alert)
 	}
 	text, keyboard := env.lastEdit(owner.Id, menuID)
-	if strings.Contains(text, settingsNoticeOKIcon) || !settingsEditHasButton(keyboard, "settings_btn_edit_set_text") {
+	if settingsEditHasNoticeLine(text, settingsNoticeOKIcon) || !settingsEditHasButton(keyboard, "settings_btn_edit_set_text") {
 		t.Errorf("the expired Cancel did not edit the message into the page: %q", text)
 	}
 	if env.redis.Exists(settingsInputDoneKey(owner.Id)) {

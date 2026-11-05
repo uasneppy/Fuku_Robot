@@ -162,10 +162,10 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_edit_hint_rules":             {140, 196},
 	"settings_edit_clean_hint_welcome":     {150, 210},
 	"settings_edit_clean_hint_goodbye":     {150, 210},
-	"settings_btn_edit_welcome_toggle":     {20, 28},
-	"settings_btn_edit_goodbye_toggle":     {20, 28},
-	"settings_btn_edit_clean_welcome":      {28, 40},
-	"settings_btn_edit_clean_goodbye":      {28, 40},
+	"settings_edit_line_welcome":           {20, 28},
+	"settings_edit_line_goodbye":           {20, 28},
+	"settings_edit_line_clean_welcome":     {28, 40},
+	"settings_edit_line_clean_goodbye":     {28, 40},
 	"settings_btn_edit_set_media":          {18, 20},
 	"settings_btn_edit_set_buttons":        {18, 20},
 	"settings_btn_edit_remove_text":        {18, 20},
@@ -405,8 +405,6 @@ func TestSettingsLabelLengths(t *testing.T) {
 		groupsButton   = 18
 		choiceMaxOther = 15
 		choiceMaxEn    = 13
-		// editorSwitchMax is the full-width ceiling of the editor's switch buttons.
-		editorSwitchMax = 40
 		// editorCellMax is the ceiling of a half-width switch cell rendered with its icon alone.
 		editorCellMax = 20
 	)
@@ -435,12 +433,6 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_btn_edit_remove_text", "settings_btn_edit_remove_media", "settings_btn_edit_remove_buttons",
 		"settings_btn_edit_preview_text", "settings_btn_edit_preview_media", "settings_btn_edit_preview_buttons",
 		"settings_btn_edit_full_preview", "settings_btn_edit_cancel",
-	}
-	// The editor's four full-width switches (rows 24 to 27): at most 40 rendered with the
-	// longer state of the language.
-	editorSwitches := []string{
-		"settings_btn_edit_welcome_toggle", "settings_btn_edit_goodbye_toggle",
-		"settings_btn_edit_clean_welcome", "settings_btn_edit_clean_goodbye",
 	}
 	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
 	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.
@@ -484,19 +476,6 @@ func TestSettingsLabelLengths(t *testing.T) {
 				label := settingsLocaleString(t, lang, data, key)
 				if runes := utf8.RuneCountInString(label); runes > gridMax {
 					t.Errorf("%s: editor button %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
-				}
-			}
-
-			for _, key := range editorSwitches {
-				template := settingsLocaleString(t, lang, data, key)
-				for _, state := range []struct{ icon, key string }{
-					{"✅ ", "common_status_on"},
-					{"❌ ", "common_status_off"},
-				} {
-					rendered := strings.ReplaceAll(template, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
-					if runes := utf8.RuneCountInString(rendered); runes > editorSwitchMax {
-						t.Errorf("%s: editor switch %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorSwitchMax)
-					}
 				}
 			}
 
@@ -698,10 +677,10 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_edit_line_once", []string{"{state}"}},
 		{"settings_edit_refuse_media_rules_long", []string{"{n}", "{max}"}},
 		{"settings_edit_refuse_text_rules_long", []string{"{n}", "{max}"}},
-		{"settings_btn_edit_welcome_toggle", []string{"{state}"}},
-		{"settings_btn_edit_goodbye_toggle", []string{"{state}"}},
-		{"settings_btn_edit_clean_welcome", []string{"{state}"}},
-		{"settings_btn_edit_clean_goodbye", []string{"{state}"}},
+		{"settings_edit_line_welcome", []string{"{state}"}},
+		{"settings_edit_line_goodbye", []string{"{state}"}},
+		{"settings_edit_line_clean_welcome", []string{"{state}"}},
+		{"settings_edit_line_clean_goodbye", []string{"{state}"}},
 	}
 
 	english := loadStaffLocale(t, "en")

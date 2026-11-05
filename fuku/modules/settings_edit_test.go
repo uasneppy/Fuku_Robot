@@ -64,11 +64,11 @@ func TestSettingsEditWelcomeSwitch(t *testing.T) {
 			t.Errorf("the Welcome page %q lacks %s", text, want)
 		}
 	}
-	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_welcome_toggle", settingsEditControlEnabled)
+	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_welcome", settingsEditControlEnabled)
 	if fields["a"] != settingsActToggle || fields["p"] != settingsPageWelcome || fields["v"] != "0" {
 		t.Fatalf("the switch carries %v, want tg on page w with v=0", fields)
 	}
-	if !strings.Contains(toggle.Text, staffMarker("common_status_on")) {
+	if !strings.Contains(toggle.Text, "✅") {
 		t.Errorf("the switch label %q does not show On", toggle.Text)
 	}
 	if _, ok := settingsEditStored(t, env.chat.Id); ok {
@@ -86,8 +86,8 @@ func TestSettingsEditWelcomeSwitch(t *testing.T) {
 		t.Fatalf("stored row = %+v (found %v), want welcome_enabled false", row, ok)
 	}
 	text, keyboard = env.lastEdit(env.chat.Id, msgID)
-	toggle, fields = settingsEditControl(t, keyboard, "settings_btn_edit_welcome_toggle", settingsEditControlEnabled)
-	if fields["v"] != "1" || !strings.Contains(toggle.Text, staffMarker("common_status_off")) {
+	toggle, fields = settingsEditControl(t, keyboard, "settings_btn_edit_switch_welcome", settingsEditControlEnabled)
+	if fields["v"] != "1" || !strings.Contains(toggle.Text, "❌") {
 		t.Errorf("after the press the switch is %q with %v, want Off and v=1", toggle.Text, fields)
 	}
 	if strings.Contains(text, settingsNoticeWarnIcon) {
@@ -140,6 +140,18 @@ func settingsEditDef(t *testing.T, key string) settingsEditPageDef {
 		t.Fatalf("no editor page %q", key)
 	}
 	return def
+}
+
+// settingsEditHasNoticeLine reports whether some line of a page text starts with the notice icon.
+// A switch's state line also shows the check mark, but it starts with its locale key, so only a
+// notice line starts with the icon itself.
+func settingsEditHasNoticeLine(text, icon string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, icon) {
+			return true
+		}
+	}
+	return false
 }
 
 // settingsEditHasButton reports whether a keyboard has a button whose label carries the marker.
@@ -277,7 +289,7 @@ func TestSettingsEditPages(t *testing.T) {
 					t.Errorf("Rules page %q carries %s", screen.Text, absent)
 				}
 			}
-			for _, absent := range []string{"settings_btn_edit_welcome_toggle", "settings_btn_edit_clean_welcome", "settings_btn_edit_goodbye_toggle"} {
+			for _, absent := range []string{"settings_btn_edit_switch_welcome", "settings_btn_edit_switch_clean", "settings_btn_edit_switch_goodbye"} {
 				if settingsEditHasButton(screen.Keyboard.InlineKeyboard, absent) {
 					t.Errorf("Rules page has the %s button", absent)
 				}
@@ -383,8 +395,13 @@ func TestSettingsEditPages(t *testing.T) {
 	t.Run("the mock states draw exactly the contract's rows", func(t *testing.T) {
 		buttons := models.ButtonArray{{Name: "B", Url: "https://example.com"}}
 		for _, def := range []settingsEditPageDef{welcome, settingsEditDef(t, settingsPageGoodbye)} {
-			toggle := settingsEditLabelName(def.ToggleLabelKey)
-			clean := settingsEditLabelName(def.CleanLabelKey)
+			// The switches are a two-column grid: [on/off | Delete last], and on Welcome [Greet once].
+			grid := []string{
+				settingsEditLabelName(def.Switches[0].LabelKey) + " | " + settingsEditLabelName(def.Switches[1].LabelKey),
+			}
+			if len(def.Switches) > 2 {
+				grid = append(grid, settingsEditLabelName(def.Switches[2].LabelKey))
+			}
 			states := []struct {
 				name  string
 				state settingsEditState
@@ -393,32 +410,33 @@ func TestSettingsEditPages(t *testing.T) {
 				{
 					"nothing set", settingsEditState{Kind: def.Kind, TextIsDefault: true, Enabled: true},
 					[]string{
-						"set_text", "set_media", "set_buttons", "preview_text | full_preview", toggle, clean, "back | close",
+						"set_text", "set_media", "set_buttons", "preview_text | full_preview", "switches", "back | close",
 					},
 				},
 				{
 					"text and media set", settingsEditState{Kind: def.Kind, Text: "custom", MediaType: db.PHOTO, FileID: "f", Enabled: true},
 					[]string{
 						"set_text | remove_text", "set_media | remove_media", "set_buttons",
-						"preview_text | preview_media", "full_preview", toggle, clean, "back | close",
+						"preview_text | preview_media", "full_preview", "switches", "back | close",
 					},
 				},
 				{
 					"everything set", settingsEditState{Kind: def.Kind, Text: "custom", MediaType: db.STICKER, FileID: "f", Buttons: buttons, Enabled: true},
 					[]string{
 						"set_text | remove_text", "set_media | remove_media", "set_buttons | remove_buttons",
-						"preview_text | preview_media", "preview_buttons | full_preview", toggle, clean, "back | close",
+						"preview_text | preview_media", "preview_buttons | full_preview", "switches", "back | close",
 					},
 				},
 				{
 					"only buttons set", settingsEditState{Kind: def.Kind, TextIsDefault: true, Buttons: buttons, Enabled: true},
 					[]string{
 						"set_text", "set_media", "set_buttons | remove_buttons",
-						"preview_text | preview_buttons", "full_preview", toggle, clean, "back | close",
+						"preview_text | preview_buttons", "full_preview", "switches", "back | close",
 					},
 				},
 			}
 			for _, tc := range states {
+				tc.rows = slices.Concat(tc.rows[:len(tc.rows)-2], grid, tc.rows[len(tc.rows)-1:])
 				t.Run(def.Key+" "+tc.name, func(t *testing.T) {
 					private := renderSettingsEditor(settingsEditView(tr, true), def, tc.state, settingsEditScreenOpts{})
 					if got := settingsEditRowNames(private); !slices.Equal(got, tc.rows) {
@@ -473,7 +491,7 @@ func TestSettingsEditPages(t *testing.T) {
 			t.Fatalf("after Delete last on Welcome: %+v (found %v), want welcome_clean_old only", row, ok)
 		}
 		_, keyboard := env.lastEdit(env.chat.Id, msgID)
-		if _, fields := settingsEditControl(t, keyboard, "settings_btn_edit_clean_welcome", settingsEditControlClean); fields["v"] != "0" {
+		if _, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_clean", settingsEditControlClean); fields["v"] != "0" {
 			t.Errorf("the redrawn Delete last carries %v, want v=0", fields)
 		}
 
@@ -589,12 +607,12 @@ func TestSettingsEditDefaultsMatchRuntime(t *testing.T) {
 
 	msgID := openEditPage(env, owner, settingsPageGoodbye)
 	text, keyboard := env.lastEdit(env.chat.Id, msgID)
-	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_goodbye_toggle", settingsEditControlEnabled)
-	if !strings.Contains(toggle.Text, staffMarker("common_status_on")) || fields["v"] != "0" {
+	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_goodbye", settingsEditControlEnabled)
+	if !strings.Contains(toggle.Text, "✅") || fields["v"] != "0" {
 		t.Errorf("a fresh chat's Goodbye switch is %q with %v, want On", toggle.Text, fields)
 	}
-	clean, cleanFields := settingsEditControl(t, keyboard, "settings_btn_edit_clean_goodbye", settingsEditControlClean)
-	if !strings.Contains(clean.Text, staffMarker("common_status_off")) || cleanFields["v"] != "1" {
+	clean, cleanFields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_clean", settingsEditControlClean)
+	if !strings.Contains(clean.Text, "❌") || cleanFields["v"] != "1" {
 		t.Errorf("a fresh chat's Delete last is %q with %v, want Off", clean.Text, cleanFields)
 	}
 	if strings.Contains(text, settingsNoticeWarnIcon) {
@@ -622,8 +640,8 @@ func TestSettingsEditSwitchFailure(t *testing.T) {
 	if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("common_settings_save_failed")) {
 		t.Errorf("a failed write drew %q, want the save-failed notice", text)
 	}
-	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_welcome_toggle", settingsEditControlEnabled)
-	if !strings.Contains(toggle.Text, staffMarker("common_status_on")) || fields["v"] != "0" {
+	toggle, fields := settingsEditControl(t, keyboard, "settings_btn_edit_switch_welcome", settingsEditControlEnabled)
+	if !strings.Contains(toggle.Text, "✅") || fields["v"] != "0" {
 		t.Errorf("the switch after a failed write is %q with %v, want the old state On", toggle.Text, fields)
 	}
 	if row, ok := settingsEditStored(t, env.chat.Id); ok && !row.WelcomeSettings.ShouldWelcome {
@@ -734,10 +752,10 @@ func TestSettingsDriftGreetings(t *testing.T) {
 			t.Errorf("the Welcome page %q lacks %q", text, want)
 		}
 	}
-	if toggle, _ := settingsEditControl(t, keyboard, "settings_btn_edit_welcome_toggle", settingsEditControlEnabled); !strings.Contains(toggle.Text, staffMarker("common_status_off")) {
+	if toggle, _ := settingsEditControl(t, keyboard, "settings_btn_edit_switch_welcome", settingsEditControlEnabled); !strings.Contains(toggle.Text, "❌") {
 		t.Errorf("the Welcome switch %q does not show Off", toggle.Text)
 	}
-	if clean, _ := settingsEditControl(t, keyboard, "settings_btn_edit_clean_welcome", settingsEditControlClean); !strings.Contains(clean.Text, staffMarker("common_status_on")) {
+	if clean, _ := settingsEditControl(t, keyboard, "settings_btn_edit_switch_clean", settingsEditControlClean); !strings.Contains(clean.Text, "✅") {
 		t.Errorf("Delete last welcome %q does not show On", clean.Text)
 	}
 	if strings.Contains(text, "SECRETBUTTON") || strings.Contains(text, "custom welcome") {
@@ -752,7 +770,7 @@ func TestSettingsDriftGreetings(t *testing.T) {
 	if want := staffMarker("settings_edit_line_media") + " " + staffMarker("settings_state_not_set"); !strings.Contains(text, want) {
 		t.Errorf("the Goodbye page %q lacks %q", text, want)
 	}
-	if toggle, _ := settingsEditControl(t, keyboard, "settings_btn_edit_goodbye_toggle", settingsEditControlEnabled); !strings.Contains(toggle.Text, staffMarker("common_status_on")) {
+	if toggle, _ := settingsEditControl(t, keyboard, "settings_btn_edit_switch_goodbye", settingsEditControlEnabled); !strings.Contains(toggle.Text, "✅") {
 		t.Errorf("the Goodbye switch %q does not show On", toggle.Text)
 	}
 
@@ -863,9 +881,18 @@ func TestSettingsEditRegistry(t *testing.T) {
 			t.Errorf("page %q = order %d icon %q title %q owner-only %v, want %d %q %q false",
 				w.key, pg.Order, pg.Icon, pg.TitleKey, pg.OwnerOnly, w.order, w.icon, w.titleKey)
 		}
-		if (w.key != "r") != (len(pg.Controls) == 2) {
-			t.Errorf("page %q declares %d controls", w.key, len(pg.Controls))
+		// Welcome e, d, o; Goodbye e, d; Rules none (plans 12-11 and 12-12 add the Media under text
+		// switch u to the first two and the one of Rules).
+		wantControls := map[string]int{"w": 3, "g": 2, "r": 0}[w.key]
+		if len(pg.Controls) != wantControls {
+			t.Errorf("page %q declares %d controls, want %d", w.key, len(pg.Controls), wantControls)
 		}
+	}
+	if pg, _ := settingsPageByKey("w"); pg.Controls[settingsEditControlOnce].Right != settingsRightAdmin {
+		t.Errorf("Welcome control o declares right %d, want settingsRightAdmin", pg.Controls[settingsEditControlOnce].Right)
+	}
+	if pg, _ := settingsPageByKey("g"); len(pg.Controls) != 2 || pg.Controls[settingsEditControlOnce].Set != nil {
+		t.Error("Greet once must be on Welcome only")
 	}
 	for _, key := range []string{"w", "g"} {
 		pg, _ := settingsPageByKey(key)

@@ -105,6 +105,15 @@ func settingsStateWord(tr *i18n.Translator, on bool) string {
 	return "❌ " + settingsText(tr, "common_status_off")
 }
 
+// settingsStateIcon is the check mark of a switch that is on and the cross of one that is off,
+// the icon alone: an editor switch button carries it and its body line carries the word.
+func settingsStateIcon(on bool) string {
+	if on {
+		return "✅"
+	}
+	return "❌"
+}
+
 // settingsParseNumber reads a non-negative whole number of 1 to maxDigits ASCII digits.
 // A sign, a space, a letter or a non-ASCII digit is refused.
 func settingsParseNumber(v string, maxDigits int) (int, bool) {
