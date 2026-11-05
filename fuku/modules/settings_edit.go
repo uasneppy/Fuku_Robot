@@ -204,7 +204,7 @@ var settingsEditPages = []settingsEditPageDef{
 		Key: settingsPageRules, Kind: settingsEditRules, Order: 70, Icon: "📜",
 		TitleKey: "settings_page_rules", HintKey: "settings_edit_hint_rules",
 		SetCode: "rs", RemoveCode: "rr", CancelCode: "rc", PreviewCode: "rv", FullCode: "rf", EditRight: settingsRightAdminBotAdmin,
-		Parts: []settingsEditPart{settingsEditRulesTextPart},
+		Parts: []settingsEditPart{settingsEditRulesTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 }
 
@@ -212,7 +212,7 @@ var settingsEditPages = []settingsEditPageDef{
 // errors. They are variables only so a test can make a read fail.
 var (
 	settingsEditGreetingsRead = greetings.LoadSettingsContext
-	settingsEditRulesRead     = rules.LoadRulesContext
+	settingsEditRulesRead     = rules.LoadRulesSettingsContext
 )
 
 // settingsEditPageByKey finds an editor page definition.
@@ -274,15 +274,27 @@ func settingsEditStateOf(def settingsEditPageDef, row *models.GreetingSettings) 
 	return st, nil
 }
 
+// settingsEditRulesStateOf turns a stored rules row into the state of the Rules page: the text, the media,
+// the buttons and Media under text. The private switch and the rules button are not part of the page.
+func settingsEditRulesStateOf(row *models.RulesSettings) settingsEditState {
+	return settingsEditState{
+		Kind: settingsEditRules, Text: row.Rules, MediaType: row.MediaType, FileID: row.FileID,
+		Buttons: row.Buttons, MediaBelow: row.MediaBelow,
+	}
+}
+
 // settingsEditLoad reads the stored message of a page, creating nothing. The read error is
 // returned unchanged, so a failed read is never drawn as a default.
 func settingsEditLoad(ctx context.Context, def settingsEditPageDef, chatID int64) (settingsEditState, error) {
 	if def.Kind == settingsEditRules {
-		text, err := settingsEditRulesRead(ctx, chatID)
+		row, err := settingsEditRulesRead(ctx, chatID)
 		if err != nil {
 			return settingsEditState{}, err
 		}
-		return settingsEditState{Kind: def.Kind, Text: text}, nil
+		if row == nil {
+			return settingsEditState{}, errors.New("rules settings: no row and no default")
+		}
+		return settingsEditRulesStateOf(row), nil
 	}
 	row, err := settingsEditGreetingsRead(ctx, chatID)
 	if err != nil {

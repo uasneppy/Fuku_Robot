@@ -169,18 +169,24 @@ func sendRulesText(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgb
 	return err
 }
 
-// rulesApplyResult is what the rules apply functions return.
+// rulesApplyResult is what the rules apply functions return. Row is the whole rules row read back after
+// a stored write (nil when the write or the read-back failed); Rules is its text, kept for the commands.
 type rulesApplyResult struct {
 	Outcome greetingApplyOutcome
 	Rules   string
+	Row     *models.RulesSettings
 	Err     error
 }
 
-// rulesWrites is the rules repository write the apply functions call. It is a variable
-// only so a test can make the write fail.
+// rulesWrites is the rules repository writes the apply functions call. It is a variable
+// only so a test can make a write fail.
 var rulesWrites = struct {
-	SetChatRules func(chatID int64, rules string) error
-}{rules.SetChatRules}
+	SetChatRules        func(chatID int64, rules string) error
+	SetRulesMediaOnly   func(chatID int64, fileID string, mediaType int) error
+	SetRulesButtonsOnly func(chatID int64, buttons []models.Button) error
+	SetRulesMediaBelow  func(chatID int64, on bool) error
+	ClearRules          func(chatID int64) error
+}{rules.SetChatRules, rules.SetRulesMediaOnly, rules.SetRulesButtonsOnly, rules.SetRulesMediaBelow, rules.ClearRules}
 
 // applyRulesText stores the rules text (the HTML /setrules and the editor keep) and reads
 // it back. It is the one write path of /setrules and the menu.
@@ -188,20 +194,44 @@ func applyRulesText(ctx context.Context, chatID int64, html string) rulesApplyRe
 	return finishRulesApply(ctx, chatID, "set", rulesWrites.SetChatRules(chatID, html))
 }
 
-// applyRulesClear stores empty rules, the one write path of /clearrules and the menu's
-// Remove.
-func applyRulesClear(ctx context.Context, chatID int64) rulesApplyResult {
-	return finishRulesApply(ctx, chatID, "clear", rulesWrites.SetChatRules(chatID, ""))
+// applyRulesMedia stores only the rules media, a file ID and its type (an empty ID with type 0 removes
+// it), and reads the row back. It is the one write path of the menu's Rules media.
+func applyRulesMedia(ctx context.Context, chatID int64, fileID string, mediaType int) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "set the media of", rulesWrites.SetRulesMediaOnly(chatID, fileID, mediaType))
 }
 
-// finishRulesApply turns the error of the rules write into the apply result. A failed
-// read-back is only logged, because the write succeeded.
+// applyRulesButtons stores only the rules buttons (nil or empty removes them) and reads the row back.
+func applyRulesButtons(ctx context.Context, chatID int64, buttons []models.Button) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "set the buttons of", rulesWrites.SetRulesButtonsOnly(chatID, buttons))
+}
+
+// applyRulesMediaBelow stores only whether the rules media is shown under the text and reads the row
+// back. A false is written.
+func applyRulesMediaBelow(ctx context.Context, chatID int64, on bool) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "set Media under text of", rulesWrites.SetRulesMediaBelow(chatID, on))
+}
+
+// applyRulesClear empties the rules text, media and buttons together, the one write path of /clearrules
+// and, as three Removes, of the menu. It leaves Media under text, the private switch and the rules button
+// as they were.
+func applyRulesClear(ctx context.Context, chatID int64) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "clear", rulesWrites.ClearRules(chatID))
+}
+
+// finishRulesApply turns the error of a rules write into the apply result and reads the whole row back. A
+// failed read-back is only logged, because the write succeeded.
 func finishRulesApply(ctx context.Context, chatID int64, what string, writeErr error) rulesApplyResult {
-	stored, outcome, err := applyReadBack(ctx, writeErr,
+	row, outcome, err := applyReadBack(ctx, writeErr,
 		func(e error) { log.Errorf("[Rules] Failed to %s rules for chat %d: %v", what, chatID, e) },
 		func(e error) { log.Warnf("[Rules] read back rules of chat %d after %s: %v", chatID, what, e) },
-		func(c context.Context) (string, error) { return rules.LoadRulesContext(c, chatID) })
-	return rulesApplyResult{Outcome: outcome, Rules: stored, Err: err}
+		func(c context.Context) (*models.RulesSettings, error) {
+			return rules.LoadRulesSettingsContext(c, chatID)
+		})
+	res := rulesApplyResult{Outcome: outcome, Row: row, Err: err}
+	if row != nil {
+		res.Rules = row.Rules
+	}
+	return res
 }
 
 //nolint:dupl // clearRules has similar structure to resetRulesBtn

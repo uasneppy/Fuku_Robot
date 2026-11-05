@@ -197,11 +197,7 @@ func settingsEditApplyRemove(
 	ctx context.Context, def settingsEditPageDef, part string, chatID int64,
 ) (greetingApplyOutcome, *settingsEditState) {
 	if def.Kind == settingsEditRules {
-		res := applyRulesClear(ctx, chatID)
-		if res.Outcome == greetingSaveFailed {
-			return res.Outcome, nil
-		}
-		return res.Outcome, &settingsEditState{Kind: def.Kind}
+		return settingsEditApplyRemoveRules(ctx, part, chatID)
 	}
 	isWelcome := def.Kind == settingsEditWelcome
 	var res greetingApplyResult
@@ -222,6 +218,28 @@ func settingsEditApplyRemove(
 	if err != nil {
 		return res.Outcome, nil
 	}
+	return res.Outcome, &st
+}
+
+// settingsEditApplyRemoveRules removes one part of the rules, each through its own apply function: the
+// text as applyRulesText with "", the media as applyRulesMedia with no file and type 0 and the buttons as
+// applyRulesButtons with none. The three together store what applyRulesClear (/clearrules) stores.
+func settingsEditApplyRemoveRules(ctx context.Context, part string, chatID int64) (greetingApplyOutcome, *settingsEditState) {
+	var res rulesApplyResult
+	switch part {
+	case settingsEditPartText:
+		res = applyRulesText(ctx, chatID, "")
+	case settingsEditPartMedia:
+		res = applyRulesMedia(ctx, chatID, "", 0)
+	case settingsEditPartButtons:
+		res = applyRulesButtons(ctx, chatID, nil)
+	default:
+		return greetingSaveFailed, nil
+	}
+	if res.Outcome == greetingSaveFailed || res.Row == nil {
+		return res.Outcome, nil
+	}
+	st := settingsEditRulesStateOf(res.Row)
 	return res.Outcome, &st
 }
 

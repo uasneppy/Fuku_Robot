@@ -556,9 +556,11 @@ func TestSettingsEditReadFailure(t *testing.T) {
 			name: "rules read", page: "r",
 			titles: []string{"settings_page_rules"}, healthy: []string{"settings_page_welcome", "settings_page_goodbye"},
 			fail: func() {
-				settingsEditRulesRead = func(context.Context, int64) (string, error) { return "", errors.New("database unavailable") }
+				settingsEditRulesRead = func(context.Context, int64) (*models.RulesSettings, error) {
+					return nil, errors.New("database unavailable")
+				}
 			},
-			restore: func() { settingsEditRulesRead = rules.LoadRulesContext },
+			restore: func() { settingsEditRulesRead = rules.LoadRulesSettingsContext },
 		},
 	}
 	for _, tc := range cases {
