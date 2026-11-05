@@ -969,7 +969,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   defaults on a read error), a definite refusal
   (`welcomeDefinitelyNotSent`: `media.ErrNoPermission`, a Telegram 4xx other than 429 by code, or a 429) gives the claim
   back with `greetings.ReleaseGreeting`, and an unknown outcome (a transport error, a timeout, a 5xx, an unreadable
-  answer) keeps it, because a double welcome is worse than a missing one. The claim never uses Redis or
+  answer) keeps it, because a double welcome is worse than a missing one; a panic between the claim and the send
+  (`SendWelcomeMessage`'s own recover, `TestGreetOncePanicBeforeSendReleasesClaim`) gives the claim back too, since nothing
+  was sent, while a panic after the send was attempted keeps it (`TestGreetOncePanicAfterSendKeepsClaim`). The claim never uses Redis or
   `claimRecentJoinProcessing`, so it holds across replicas and with no Redis. The switch is written by
   `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), the one write path of the Welcome page's Greet once switch (control
   `o`, no command).

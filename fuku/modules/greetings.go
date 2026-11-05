@@ -322,6 +322,15 @@ func giveBackWelcome(chatID, userID int64, sendErr error) {
 	}
 }
 
+// releaseUnsentWelcome returns the claim of a welcome that was never sent because the code between the claim and
+// the send panicked. Like giveBackWelcome it works on the store's own connection, and a failure is only logged.
+func releaseUnsentWelcome(chatID, userID int64) {
+	if err := greetOnceStore.Release(chatID, userID); err != nil {
+		log.Warnf("[Greetings][SendWelcomeMessage] greet-once release after a panic failed for chat %d user %d: %v",
+			chatID, userID, err)
+	}
+}
+
 // welcomeRender builds the welcome's text and keyboard. It is a variable only so a test can make the step between
 // the greet-once claim and the send panic.
 var welcomeRender = renderGreeting
@@ -883,9 +892,19 @@ func (m moduleStruct) delJoined(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 // SendWelcomeMessage sends the configured welcome message for a user in a chat.
 func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstName string) error {
+	var (
+		claimed       bool
+		claimedChatID int64
+		sendAttempted bool
+	)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorf("[Greetings][SendWelcomeMessage] Recovered from panic: %v", r)
+			// A panic before the send proves no welcome went out, so the claim is given back and the member's
+			// next join is welcomed. After the send was attempted the outcome is unknown and the claim stays.
+			if claimed && !sendAttempted {
+				releaseUnsentWelcome(claimedChatID, userID)
+			}
 		}
 	}()
 	chat := ctx.EffectiveChat
@@ -903,10 +922,11 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 	}
 
 	if greetPrefs.WelcomeSettings.ShouldWelcome {
-		send, claimed := claimWelcome(chat.Id, userID, greetPrefs.WelcomeSettings.Once)
+		send, won := claimWelcome(chat.Id, userID, greetPrefs.WelcomeSettings.Once)
 		if !send {
 			return nil
 		}
+		claimed, claimedChatID = won, chat.Id
 		user := &gotgbot.User{
 			Id:        userID,
 			FirstName: firstName,
@@ -920,6 +940,7 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 		if ctx.EffectiveMessage != nil {
 			threadID = ctx.EffectiveMessage.MessageThreadId
 		}
+		sendAttempted = true
 		sent, err := media.SendGreetingMessage(bot, chat.Id, media.GreetingMessage{
 			Text:         res,
 			FileID:       greetPrefs.WelcomeSettings.FileID,
