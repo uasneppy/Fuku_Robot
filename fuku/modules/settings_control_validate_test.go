@@ -23,6 +23,14 @@ var settingsControlUnknownCases = []settingsControlRefusal{
 	{"extra key k", []string{"p", "w", "t", "e", "v", "1", "k", "1"}},
 }
 
+// settingsControlValueCases are presses of a real switch with a value that is not 0 or 1.
+var settingsControlValueCases = []settingsControlRefusal{
+	{"Welcome switch with v=2", []string{"p", "w", "t", "e", "v", "2"}},
+	{"Goodbye clean with v=-1", []string{"p", "g", "t", "d", "v", "-1"}},
+	{"Welcome switch with v=+1", []string{"p", "w", "t", "e", "v", "+1"}},
+	{"Welcome switch with an empty v", []string{"p", "w", "t", "e", "v", ""}},
+}
+
 // TestSettingsControlValidate proves that a forged tg or st press is refused in step 1: answered
 // once with the alert common_callback_invalid_request, with no getChatMember, no getChat, no
 // edit and no write, in a group menu and in a private one. A valid press still runs.
@@ -48,7 +56,7 @@ func TestSettingsControlValidate(t *testing.T) {
 		return env.groupFields(owner, kv...)
 	}
 
-	cases := settingsControlUnknownCases
+	cases := append(append([]settingsControlRefusal{}, settingsControlUnknownCases...), settingsControlValueCases...)
 	for _, private := range []bool{false, true} {
 		kind := "group menu"
 		menuChat, menuID := group, groupMenu
