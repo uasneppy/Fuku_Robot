@@ -524,27 +524,11 @@ func rulesDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, 
 		return ext.EndGroups
 	}
 
-	rulesrc := rules.GetChatRulesInfo(chatID)
-	normalizedRules := normalizeRulesForHTML(rulesrc.Rules)
-
-	if normalizedRules == "" {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("rules_not_set")
-		_, err := msg.Reply(b, text, formatting.Shtml())
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-		return ext.EndGroups
-	}
-
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	text, _ := tr.GetString("rules_for_chat", i18n.TranslationParams{
-		"first":  html.EscapeString(chatinfo.Title),
-		"second": normalizedRules,
-	})
-	_, err = msg.Reply(b, text, formatting.Shtml())
-	if err != nil {
+	rm := buildRulesMessage(tr, chatinfo.Title, rules.GetChatRulesInfo(chatID), rulesFormPrivate)
+	opts := formatting.Shtml()
+	opts.ReplyParameters.MessageId = msg.MessageId
+	if err := sendRulesMessage(b, msg.Chat.Id, rm, opts, true); err != nil {
 		log.Error(err)
 		return err
 	}

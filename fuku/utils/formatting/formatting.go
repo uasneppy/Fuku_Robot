@@ -316,7 +316,7 @@ func FormattingReplacer(b *gotgbot.Bot, chat *gotgbot.Chat, user *gotgbot.User, 
 	btns = append([]db.Button(nil), buttons...)
 
 	rulesDb := rules.GetChatRulesInfo(chat.Id)
-	if rulesDb.Rules == "" {
+	if !rulesDb.HasContent() {
 		return res, btns
 	}
 
