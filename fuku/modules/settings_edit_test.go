@@ -395,13 +395,6 @@ func TestSettingsEditPages(t *testing.T) {
 	t.Run("the mock states draw exactly the contract's rows", func(t *testing.T) {
 		buttons := models.ButtonArray{{Name: "B", Url: "https://example.com"}}
 		for _, def := range []settingsEditPageDef{welcome, settingsEditDef(t, settingsPageGoodbye)} {
-			// The switches are a two-column grid: [on/off | Delete last], and on Welcome [Greet once].
-			grid := []string{
-				settingsEditLabelName(def.Switches[0].LabelKey) + " | " + settingsEditLabelName(def.Switches[1].LabelKey),
-			}
-			if len(def.Switches) > 2 {
-				grid = append(grid, settingsEditLabelName(def.Switches[2].LabelKey))
-			}
 			states := []struct {
 				name  string
 				state settingsEditState
@@ -436,6 +429,14 @@ func TestSettingsEditPages(t *testing.T) {
 				},
 			}
 			for _, tc := range states {
+				// The switches that are drawn for the state are a two-column grid, filled left to right.
+				var names, grid []string
+				for _, cell := range settingsEditSwitchCells(def, tc.state) {
+					names = append(names, settingsEditLabelName(cell.LabelKey))
+				}
+				for i := 0; i < len(names); i += 2 {
+					grid = append(grid, strings.Join(names[i:min(i+2, len(names))], " | "))
+				}
 				tc.rows = slices.Concat(tc.rows[:len(tc.rows)-2], grid, tc.rows[len(tc.rows)-1:])
 				t.Run(def.Key+" "+tc.name, func(t *testing.T) {
 					private := renderSettingsEditor(settingsEditView(tr, true), def, tc.state, settingsEditScreenOpts{})
@@ -893,9 +894,9 @@ func TestSettingsEditRegistry(t *testing.T) {
 			t.Errorf("page %q = order %d icon %q title %q owner-only %v, want %d %q %q false",
 				w.key, pg.Order, pg.Icon, pg.TitleKey, pg.OwnerOnly, w.order, w.icon, w.titleKey)
 		}
-		// Welcome e, d, o; Goodbye e, d; Rules none (plans 12-11 and 12-12 add the Media under text
-		// switch u to the first two and the one of Rules).
-		wantControls := map[string]int{"w": 3, "g": 2, "r": 0}[w.key]
+		// Welcome e, d, u, o; Goodbye e, d, u; Rules none (plan 12-12 adds the Media under text switch
+		// of Rules).
+		wantControls := map[string]int{"w": 4, "g": 3, "r": 0}[w.key]
 		if len(pg.Controls) != wantControls {
 			t.Errorf("page %q declares %d controls, want %d", w.key, len(pg.Controls), wantControls)
 		}
@@ -903,7 +904,7 @@ func TestSettingsEditRegistry(t *testing.T) {
 	if pg, _ := settingsPageByKey("w"); pg.Controls[settingsEditControlOnce].Right != settingsRightAdmin {
 		t.Errorf("Welcome control o declares right %d, want settingsRightAdmin", pg.Controls[settingsEditControlOnce].Right)
 	}
-	if pg, _ := settingsPageByKey("g"); len(pg.Controls) != 2 || pg.Controls[settingsEditControlOnce].Set != nil {
+	if pg, _ := settingsPageByKey("g"); len(pg.Controls) != 3 || pg.Controls[settingsEditControlOnce].Set != nil {
 		t.Error("Greet once must be on Welcome only")
 	}
 	for _, key := range []string{"w", "g"} {
@@ -913,6 +914,11 @@ func TestSettingsEditRegistry(t *testing.T) {
 		}
 		if got := pg.Controls[settingsEditControlClean].Right; got != settingsRightChangeInfo {
 			t.Errorf("page %q control d declares right %d, want settingsRightChangeInfo", key, got)
+		}
+		// Media under text needs the page's own edit right (UI-SPEC assumption A2).
+		def := settingsEditDef(t, key)
+		if got := pg.Controls[settingsEditControlBelow]; got.Right != def.EditRight || got.Set == nil || got.Validate == nil {
+			t.Errorf("page %q control u declares right %d (Set nil %v), want the page's EditRight %d", key, got.Right, got.Set == nil, def.EditRight)
 		}
 	}
 

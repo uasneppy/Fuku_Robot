@@ -13,6 +13,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
 // This file is the message editor's pages: Welcome, Goodbye and Rules. Each page shows which
@@ -67,10 +68,13 @@ type settingsEditPart struct {
 // settingsEditSwitch is one switch of an editor page: its control (the t value), the key of the
 // button label (the state icon alone, spliced into {state}), the key of the body line that says the
 // state in words, the key of its hint paragraph (empty for none), the right a press needs, the
-// state's value, whether the page draws it now (nil means always) and the apply function that
-// writes it. Apply returns the outcome and the state read back (nil when the caller must reload).
+// state's value, whether the page draws it now (nil means always), the key of the warning a press
+// shows, with nothing written, when the cell is no longer drawn (UnavailableKey) and the apply
+// function that writes it. Apply returns the outcome and the state read back (nil when the caller
+// must reload).
 type settingsEditSwitch struct {
 	Control, LabelKey, LineKey, HintKey string
+	UnavailableKey                      string
 	Right                               settingsRight
 	Value                               func(settingsEditState) bool
 	Drawn                               func(settingsEditState) bool
@@ -124,8 +128,9 @@ var (
 )
 
 // The switch cells of the pages. Each calls the apply function of the command it mirrors
-// (/welcome on|off, /goodbye on|off, /cleanwelcome, /cleangoodbye); Greet once has no command, so
-// its one write path is applyWelcomeOnce(ctx, chatID, on).
+// (/welcome on|off, /goodbye on|off, /cleanwelcome, /cleangoodbye); Greet once and Media under text
+// have no command, so their one write paths are applyWelcomeOnce(ctx, chatID, on) and
+// applyWelcomeMediaBelow / applyGoodbyeMediaBelow. Media under text needs the page's EditRight.
 var (
 	settingsEditWelcomeSwitch = settingsEditSwitch{
 		Control: settingsEditControlEnabled, LabelKey: "settings_btn_edit_switch_welcome",
@@ -153,6 +158,22 @@ var (
 		Value: func(st settingsEditState) bool { return st.Clean },
 		Apply: settingsEditGreetingApply(applyCleanGoodbye),
 	}
+	settingsEditWelcomeBelowSwitch = settingsEditSwitch{
+		Control: settingsEditControlBelow, LabelKey: "settings_btn_edit_switch_below",
+		LineKey: "settings_edit_line_below", UnavailableKey: "settings_edit_below_unavailable",
+		Right: settingsRightChangeInfo,
+		Value: func(st settingsEditState) bool { return st.MediaBelow },
+		Drawn: settingsEditMediaBelowEligible,
+		Apply: settingsEditGreetingApply(applyWelcomeMediaBelow),
+	}
+	settingsEditGoodbyeBelowSwitch = settingsEditSwitch{
+		Control: settingsEditControlBelow, LabelKey: "settings_btn_edit_switch_below",
+		LineKey: "settings_edit_line_below", UnavailableKey: "settings_edit_below_unavailable",
+		Right: settingsRightChangeInfo,
+		Value: func(st settingsEditState) bool { return st.MediaBelow },
+		Drawn: settingsEditMediaBelowEligible,
+		Apply: settingsEditGreetingApply(applyGoodbyeMediaBelow),
+	}
 	settingsEditOnceSwitch = settingsEditSwitch{
 		Control: settingsEditControlOnce, LabelKey: "settings_btn_edit_switch_once",
 		LineKey: "settings_edit_line_once", HintKey: "settings_edit_hint_once",
@@ -167,14 +188,14 @@ var settingsEditPages = []settingsEditPageDef{
 	{
 		Key: settingsPageWelcome, Kind: settingsEditWelcome, Order: 50, Icon: "🎉",
 		TitleKey: "settings_page_welcome", HintKey: "settings_edit_hint_greeting",
-		Switches: []settingsEditSwitch{settingsEditWelcomeSwitch, settingsEditCleanWelcomeSwitch, settingsEditOnceSwitch},
+		Switches: []settingsEditSwitch{settingsEditWelcomeSwitch, settingsEditCleanWelcomeSwitch, settingsEditWelcomeBelowSwitch, settingsEditOnceSwitch},
 		SetCode:  "ws", RemoveCode: "wr", CancelCode: "wc", PreviewCode: "wv", FullCode: "wf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
 	{
 		Key: settingsPageGoodbye, Kind: settingsEditGoodbye, Order: 60, Icon: "👋",
 		TitleKey: "settings_page_goodbye", HintKey: "settings_edit_hint_greeting",
-		Switches: []settingsEditSwitch{settingsEditGoodbyeSwitch, settingsEditCleanGoodbyeSwitch},
+		Switches: []settingsEditSwitch{settingsEditGoodbyeSwitch, settingsEditCleanGoodbyeSwitch, settingsEditGoodbyeBelowSwitch},
 		SetCode:  "gs", RemoveCode: "gr", CancelCode: "gc", PreviewCode: "gv", FullCode: "gf", EditRight: settingsRightChangeInfo,
 		Parts: []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart},
 	},
@@ -215,6 +236,9 @@ type settingsEditState struct {
 	// Enabled and Clean are the switch and Delete last (false on Rules); Once is Greet once
 	// (Welcome only).
 	Enabled, Clean, Once bool
+	// MediaBelow is Media under text (Welcome and Goodbye); it is kept while the stored media is of a
+	// kind that cannot take it, and then neither drawn nor sent.
+	MediaBelow bool
 }
 
 // settingsEditScreenOpts are the extras of one drawing: a notice line and the bot's username
@@ -234,7 +258,7 @@ func settingsEditStateOf(def settingsEditPageDef, row *models.GreetingSettings) 
 		}
 		st.Text, st.TextIsDefault = w.WelcomeText, w.WelcomeText == "" || w.WelcomeText == db.DefaultWelcome
 		st.MediaType, st.FileID, st.Buttons = w.WelcomeType, w.FileID, w.Button
-		st.Enabled, st.Clean, st.Once = w.ShouldWelcome, w.CleanWelcome, w.Once
+		st.Enabled, st.Clean, st.Once, st.MediaBelow = w.ShouldWelcome, w.CleanWelcome, w.Once, w.MediaBelow
 	case settingsEditGoodbye:
 		g := row.GoodbyeSettings
 		if g == nil {
@@ -242,7 +266,7 @@ func settingsEditStateOf(def settingsEditPageDef, row *models.GreetingSettings) 
 		}
 		st.Text, st.TextIsDefault = g.GoodbyeText, g.GoodbyeText == "" || g.GoodbyeText == db.DefaultGoodbye
 		st.MediaType, st.FileID, st.Buttons = g.GoodbyeType, g.FileID, g.Button
-		st.Enabled, st.Clean = g.ShouldGoodbye, g.CleanGoodbye
+		st.Enabled, st.Clean, st.MediaBelow = g.ShouldGoodbye, g.CleanGoodbye, g.MediaBelow
 	default:
 		return st, errors.New("settings editor: not a greetings page")
 	}
@@ -337,6 +361,13 @@ func settingsEditStateWord(tr *i18n.Translator, st settingsEditState, part strin
 		return settingsText(tr, "settings_edit_state_buttons_n", i18n.TranslationParams{"n": len(st.Buttons)})
 	}
 	return notSet
+}
+
+// settingsEditMediaBelowEligible reports whether Media under text is drawn for the state: media is
+// stored and it is a photo, a video or an animation. The kind test is the sender's own predicate, so
+// the page, the stale-press check and the send cannot disagree.
+func settingsEditMediaBelowEligible(st settingsEditState) bool {
+	return st.FileID != "" && media.CaptionAboveEligible(st.MediaType)
 }
 
 // isGreeting reports whether the page has the on/off switch and Delete last.
@@ -569,6 +600,11 @@ func settingsEditSetSwitch(def settingsEditPageDef, control string) func(*settin
 		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 		defer cancel()
 
+		if cell.Drawn != nil {
+			if screen, stop := settingsEditStaleSwitch(ctx, p, def, cell); stop {
+				return screen
+			}
+		}
 		outcome, st := cell.Apply(ctx, def, p.group.Id, value == "1")
 		notice := ""
 		if outcome == greetingSaveFailed {
@@ -588,6 +624,28 @@ func settingsEditSetSwitch(def settingsEditPageDef, control string) func(*settin
 		})
 		return &screen
 	}
+}
+
+// settingsEditStaleSwitch is the check of a press of a switch that is drawn only for some states:
+// the page is loaded fresh and, when the cell is not drawn for it (the media changed since the page
+// was drawn), nothing is written and the page is redrawn with the cell's unavailable warning. It
+// stop is false when the press may go on. When it is true the press is over: the screen is the
+// redrawn page, or nil when the page could not be read and was already answered as the cannot-open
+// edit.
+func settingsEditStaleSwitch(ctx context.Context, p *settingsPress, def settingsEditPageDef, cell settingsEditSwitch) (screen *settingsScreen, stop bool) {
+	loaded, err := settingsEditLoad(ctx, def, p.group.Id)
+	if err != nil {
+		log.Warnf("[Settings] %s page of chat %d could not be read before a press: %v", def.Key, p.group.Id, err)
+		p.cannotOpen()
+		return nil, true
+	}
+	if cell.Drawn(loaded) {
+		return nil, false
+	}
+	redrawn := renderSettingsEditor(p.view(), def, loaded, settingsEditScreenOpts{
+		Notice: settingsNoticeWarn(settingsText(p.tr, cell.UnavailableKey)), BotUsername: getBotUsername(p.b),
+	})
+	return &redrawn, true
 }
 
 // settingsEditSwitchValue is the strict check of an editor switch's target value: exactly "0" or

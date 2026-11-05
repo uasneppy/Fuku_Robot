@@ -428,11 +428,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   hints (`settings_edit_line_*`, `settingsStateWord`); a drawn switch's own hint paragraph follows the page hint, in grid
   order. Welcome has controls `e` the on/off switch (`settingsRightAdmin`, as `/welcome on|off`), `d` Delete last
   (`settingsRightChangeInfo`, as `/cleanwelcome` and `/cleangoodbye`) and `o` Greet once (`settingsRightAdmin`,
-  `applyWelcomeOnce`, hint `settings_edit_hint_once`); Media under text `u` arrives with plan 12-11. Goodbye has `e` and
-  `d`, Rules none yet, and Greet once is never offered on Goodbye or Rules. Greet once has no command, so
+  `applyWelcomeOnce`, hint `settings_edit_hint_once`) and `u` Media under text between them (below). Goodbye has `e`, `d`
+  and `u`, Rules none yet (its `u` arrives with plan 12-12), and Greet once is never offered on Goodbye or Rules. Greet
+  once has no command, so
   it carries a drift test and an authority test instead of a parity test (`TestSettingsDriftOnce`,
   `TestSettingsAuthorityOnce`); `/resetwelcome`, `/resetgoodbye` and the Remove buttons leave it as it is, and the page
-  never reads `greeted_members`. Each press sends the absolute target `v` ("0" or "1", anything else is an
+  never reads `greeted_members`. Media under text (`u`, `settings_btn_edit_switch_below`, line `settings_edit_line_below`)
+  needs the page's `EditRight` (`settingsRightChangeInfo`, UI-SPEC assumption A2), calls `applyWelcomeMediaBelow` or
+  `applyGoodbyeMediaBelow` and is drawn, with its body line, only while `settingsEditMediaBelowEligible` holds: media is
+  stored and `media.CaptionAboveEligible` (the sender's own predicate: a photo, a video or an animation) says its kind can
+  carry the caption above it, so a document (a GIF saved before Phase 12), audio, voice, sticker, video note or no media
+  closes the grid up. A press of the switch loads the page fresh first (`settingsEditStaleSwitch`, a cell with a `Drawn`
+  function): when the cell is no longer drawn it writes nothing and redraws with `settings_edit_below_unavailable` (UI-SPEC
+  assumption A5). A stored on is kept when the media changes to an ineligible kind or is removed, is neither drawn nor sent
+  then, and comes back with an eligible one; Remove and the resets leave it (assumption A3). A press makes no length check,
+  because the switch changes no length. Each press sends the absolute target `v` ("0" or "1", anything else is an
   invalid request: `settingsEditSwitchValue`), calls `applyWelcomeEnabled`, `applyGoodbyeEnabled`, `applyCleanWelcome`,
   `applyCleanGoodbye` or `applyWelcomeOnce`, and redraws from the row the function read back, with no notice; a failed
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
