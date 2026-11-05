@@ -27,6 +27,8 @@ const (
 	settingsMreqControlDelete = "d"
 	// settingsActMreqOpen is the action code of a rule cell: it opens that rule's screen (field t).
 	settingsActMreqOpen = "mo"
+	// settingsActMreqYes is the action code of the card's Yes (fields t, v, e): v is Kick, Ban or Mute.
+	settingsActMreqYes = "my"
 )
 
 // settingsMreqFresh is the fresh database read of a group's requirement settings that the
@@ -58,6 +60,7 @@ func init() {
 		Controls:  controls,
 		Actions: map[string]settingsPageAction{
 			settingsActMreqOpen: {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: settingsMreqOpenFields, Run: settingsMreqOpenRule},
+			settingsActMreqYes:  {Fields: []string{"t", "v", "e"}, Right: settingsRightRestrict, Validate: settingsMreqYesFields, Run: settingsMreqYes},
 		},
 	})
 }
@@ -372,10 +375,71 @@ func settingsMreqChoose(p *settingsPress, rule memberReqRule, action int) *setti
 		return settingsMreqRedrawRule(p, rule, stored, "")
 	}
 	if action >= models.RequirementActionKick {
-		// Kick, Ban and Mute draw the card in the next step; until then nothing is written.
-		return settingsMreqRedrawRule(p, rule, stored, "")
+		// Kick, Ban and Mute write nothing before the card's Yes: they ask first (D-05).
+		screen := renderSettingsMreqCard(p.view(), rule, action)
+		return &screen
 	}
 	return settingsMreqApplyRule(p, rule, action)
+}
+
+// settingsMreqYesFields is the Validate of the my action: exactly t, v and e, t a rule code, v one
+// of "2", "3", "4" (a Yes can never carry Off or Warn) and e the card's expiry minute.
+func settingsMreqYesFields(fields map[string]string) bool {
+	if !settingsMreqOpenFields(fields) {
+		return false
+	}
+	if v := fields["v"]; len(v) != 1 || v[0] < '2' || v[0] > '4' {
+		return false
+	}
+	_, ok := settingsCardNumber(fields["e"])
+	return ok
+}
+
+// renderSettingsMreqCard draws the shared two-tap card for setting rule to a strict action (Kick, Ban
+// or Mute): the question with the rule's name and the plain option word, a blank line and what
+// happens (every member at their next message, members already in the group included), then
+// [Yes | No] and [Back | Close]. It is pure and writes nothing; Yes carries only the strict value.
+func renderSettingsMreqCard(v settingsView, rule memberReqRule, action int) settingsScreen {
+	tr := v.Tr
+	consequence := map[int]string{
+		models.RequirementActionKick: "settings_mreq_confirm_kick",
+		models.RequirementActionBan:  "settings_mreq_confirm_ban",
+		models.RequirementActionMute: "settings_mreq_confirm_mute",
+	}[action]
+	body := []string{
+		settingsText(tr, "settings_mreq_confirm", i18n.TranslationParams{
+			"rule":   settingsText(tr, rule.LineKey),
+			"action": settingsMreqActionWord(tr, action),
+		}),
+		"",
+		settingsText(tr, consequence),
+	}
+	k := newSettingsKeyboard(v)
+	settingsCardRows(k, map[string]string{"a": settingsActMreqYes, "t": rule.Code, "v": strconv.Itoa(action)}, settingsPageMreq)
+	return k.screen(settingsCompose(v, "settings_page_mreq", body, "", false))
+}
+
+// settingsMreqYes serves the card's Yes. The press already ran the whole pipeline again, so a
+// presser who lost the restrict right since the first tap never gets here. An expired Yes writes
+// nothing and redraws the rule screen with the expiry note; a live one writes v through
+// applyMemberReqAction and redraws the rule screen from the read-back.
+func settingsMreqYes(p *settingsPress) *settingsScreen {
+	rule, ok := memberReqRuleByCode(p.fields["t"])
+	expired, validExpiry := settingsCardExpired(p.fields)
+	if !ok || !validExpiry || !settingsMreqYesFields(p.fields) {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	if expired {
+		row, err := settingsMreqRead(p.group.Id)
+		if err != nil {
+			log.Warnf("[Settings] the rule screen of chat %d could not be read after an expired card: %v", p.group.Id, err)
+			p.cannotOpen()
+			return nil
+		}
+		return settingsMreqRedrawRule(p, rule, row, settingsNoticeWarn(settingsText(p.tr, "settings_card_expired")))
+	}
+	return settingsMreqApplyRule(p, rule, int(p.fields["v"][0]-'0'))
 }
 
 // settingsMreqApplyRule writes the punishment through applyMemberReqAction and redraws the rule
