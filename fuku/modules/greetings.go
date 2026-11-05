@@ -177,6 +177,7 @@ var greetingWrites = struct {
 	GoodbyeText        func(chatID int64, text, fileID string, buttons []db.Button, dataType int) error
 	WelcomeMediaBelow  func(chatID int64, on bool) error
 	GoodbyeMediaBelow  func(chatID int64, on bool) error
+	WelcomeOnce        func(chatID int64, on bool) error
 }{
 	WelcomeToggle:      greetings.SetWelcomeToggle,
 	GoodbyeToggle:      greetings.SetGoodbyeToggle,
@@ -192,6 +193,7 @@ var greetingWrites = struct {
 	GoodbyeText:        greetings.SetGoodbyeText,
 	WelcomeMediaBelow:  greetings.SetWelcomeMediaBelow,
 	GoodbyeMediaBelow:  greetings.SetGoodbyeMediaBelow,
+	WelcomeOnce:        greetings.SetWelcomeOnce,
 }
 
 // greetingApplyTimeout bounds the read-back an apply function makes after its write.
@@ -262,12 +264,62 @@ func applyGoodbyeMediaBelow(ctx context.Context, chatID int64, on bool) greeting
 	return finishGreetingApply(ctx, chatID, "SetGoodbyeMediaBelow", greetingWrites.GoodbyeMediaBelow(chatID, on))
 }
 
-// applyWelcomeOnce is a compile-only stub for the red commit of plan 12-09.
+// applyWelcomeOnce stores the Greet once switch: whether a member is welcomed only the first time they ever join.
+// It is the one write path of the Welcome page's switch (no command exists), column-targeted so nothing else of
+// the row changes, and absolute so a repeated call stores the same row.
 func applyWelcomeOnce(ctx context.Context, chatID int64, on bool) greetingApplyResult {
-	_ = ctx
-	_ = chatID
-	_ = on
-	return greetingApplyResult{}
+	return finishGreetingApply(ctx, chatID, "SetWelcomeOnce", greetingWrites.WelcomeOnce(chatID, on))
+}
+
+// greetOnceStore is the greet-once record the welcome path claims from and gives back to. It is a variable only
+// so a test can make a claim fail. The record is the greeted_members table: never Redis and never
+// claimRecentJoinProcessing, so it works with no Redis and across replicas.
+var greetOnceStore = struct {
+	Claim   func(chatID, userID int64) (bool, error)
+	Release func(chatID, userID int64) error
+}{
+	Claim:   greetings.ClaimGreeting,
+	Release: greetings.ReleaseGreeting,
+}
+
+// welcomeDefinitelyNotSent reports whether err proves Telegram did not deliver the welcome: the bot may not
+// send there (media.ErrNoPermission), or Telegram answered with a 4xx (a wrong file ID, a lost right) or a 429
+// (too many requests, answered without processing the request), classified by code and never by wording. A
+// transport error, a timeout, a 5xx and an unreadable answer may have delivered it and are not definite.
+func welcomeDefinitelyNotSent(err error) bool {
+	if errors.Is(err, media.ErrNoPermission) || isTelegramClientError(err) {
+		return true
+	}
+	var tgErr *gotgbot.TelegramError
+	return errors.As(err, &tgErr) && tgErr != nil && tgErr.Code == 429
+}
+
+// claimWelcome takes the member's greet-once claim before the welcome is built and sent. It returns true when the
+// welcome may be sent: Greet once is off (nothing is recorded), or this call won the claim. A lost claim means the
+// member was welcomed before, and a claim database error fails closed: nothing is sent, because a double welcome
+// is worse than a missing one.
+func claimWelcome(chatID, userID int64, once bool) (send, claimed bool) {
+	if !once {
+		return true, false
+	}
+	won, err := greetOnceStore.Claim(chatID, userID)
+	if err != nil {
+		log.Errorf("[Greetings][SendWelcomeMessage] greet-once claim failed for chat %d: %v", chatID, err)
+		return false, false
+	}
+	return won, won
+}
+
+// giveBackWelcome returns the claim of a welcome Telegram definitely refused, so the member's next join can still
+// be welcomed. An unknown outcome keeps the claim. The store works on its own database connection and takes no
+// request context, so a cancelled update cannot stop the give-back.
+func giveBackWelcome(chatID, userID int64, sendErr error) {
+	if !welcomeDefinitelyNotSent(sendErr) {
+		return
+	}
+	if err := greetOnceStore.Release(chatID, userID); err != nil {
+		log.Warnf("[Greetings][SendWelcomeMessage] greet-once release failed for chat %d: %v", chatID, err)
+	}
 }
 
 // applyCleanWelcome stores the "delete the last welcome" switch.
@@ -841,6 +893,10 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 	}
 
 	if greetPrefs.WelcomeSettings.ShouldWelcome {
+		send, claimed := claimWelcome(chat.Id, userID, greetPrefs.WelcomeSettings.Once)
+		if !send {
+			return nil
+		}
 		user := &gotgbot.User{
 			Id:        userID,
 			FirstName: firstName,
@@ -864,6 +920,9 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 		})
 		if err != nil {
 			logJoinOperationError("[Greetings][SendWelcomeMessage] Failed to send welcome message", err)
+			if claimed {
+				giveBackWelcome(chat.Id, userID, err)
+			}
 			return err
 		}
 		if greetPrefs.WelcomeSettings.CleanWelcome {

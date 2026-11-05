@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -58,9 +59,15 @@ func greetedRows(t *testing.T, chatID int64) int64 {
 	return n
 }
 
-// greetOnceWelcomes counts the welcome messages the fake received.
+// greetOnceWelcomes counts the welcome messages the fake received (the goodbye a leave sends is not one).
 func greetOnceWelcomes(client *moduleBotClient) int {
-	return len(client.callsFor("sendMessage"))
+	n := 0
+	for _, call := range client.callsFor("sendMessage") {
+		if text, _ := call.Params["text"].(string); strings.Contains(text, "Welcome") {
+			n++
+		}
+	}
+	return n
 }
 
 func TestGreetOnceFirstJoinOnly(t *testing.T) {
