@@ -532,7 +532,13 @@ func TestSettingsInputAlbumAndMarker(t *testing.T) {
 		if !ok || groupID != -100 || page != "w" || part != "x" {
 			t.Errorf("parse of -100|w|x = %d, %q, %q, %v", groupID, page, part, ok)
 		}
-		for _, bad := range []string{"x", "", "-100|q|x", "abc|w|x", "-100|w|z", "100|w|x", "-100|w", "-100|w|x|y", "-100|r|m"} {
+		// Rules has the parts x, m and b since Phase 12 (plan 12-12), so its media and buttons markers parse.
+		for _, part := range []string{"m", "b"} {
+			if groupID, page, got, ok := settingsInputParseMarker("-100|r|" + part); !ok || groupID != -100 || page != "r" || got != part {
+				t.Errorf("parse of -100|r|%s = %d, %q, %q, %v", part, groupID, page, got, ok)
+			}
+		}
+		for _, bad := range []string{"x", "", "-100|q|x", "abc|w|x", "-100|w|z", "100|w|x", "-100|w", "-100|w|x|y", "-100|r|z"} {
 			if _, _, _, ok := settingsInputParseMarker(bad); ok {
 				t.Errorf("parse of %q accepted it", bad)
 			}
