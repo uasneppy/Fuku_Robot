@@ -227,6 +227,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| verification | Phase 11 live Telegram checks and owner review (`phases/11-message-editor/11-SPIKE.md`, `11-VERIFICATION.md` status `human_needed`): GIF as welcome media (A3), album order (A4), the 403 alert for an admin who never started the bot (A5), fast taps and rate limits (A6), Telegram's real length and button limits (A1, A2, A7, A8), typed text sent as `rich_message` (A9), tap-to-copy on the code examples and label truncation in hi, ru and uk, two live replicas, a real 10-minute expiry, native-speaker read of the 83 new strings, `make lint` on a Go 1.26 golangci-lint; follow-up decisions: the `/rules` double escaping and Goodbye On by default, accepted limits AR-04 in `11-SECURITY.md` | deferred; the owner re-ran the autonomous run after the Phase 11 verification, so the Phase 10 choice (defer and keep going) stands; code verified 13/13, security 0 open | 2026-11-05 | v1.1 |
 | verification | Phase 10 live Telegram checks and owner review (`phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md`, `10-VERIFICATION.md` status `human_needed`): list and pick, Access ON card and OFF, gated admin refusals, anonymous owner proof tap, deleted-owner group (A1), two replicas, D-01/D-20 wording, native-speaker read of the 19 new strings | deferred by the owner's choice in the autonomous run; code verified 5/5, security 0 open | 2026-11-04 | v1.1 |
 
 ## Deferred Verification
@@ -234,6 +235,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 | Phase | State | Resume |
 |-------|-------|--------|
 | 10 | verification_deferred_human | /gsd-verify-work 10 |
+| 11 | verification_deferred_human | /gsd-verify-work 11 |
 
 ## Session Continuity
 
