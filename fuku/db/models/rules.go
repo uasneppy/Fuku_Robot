@@ -29,3 +29,9 @@ type RulesSettings struct {
 func (RulesSettings) TableName() string {
 	return "rules"
 }
+
+// HasContent reports whether the rules message is set. Red stub: it is filled in by the
+// next commit.
+func (r RulesSettings) HasContent() bool {
+	return false
+}
