@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -33,6 +34,10 @@ func init() {
 		TitleKey:  "settings_page_mreq",
 		MainState: settingsMreqMainState,
 		Open:      settingsMreqOpen,
+		Controls: map[string]settingsControl{
+			settingsMreqControlJoin:   {Right: settingsRightRestrict, Validate: settingsEditSwitchValue, Set: settingsMreqSetJoin},
+			settingsMreqControlDelete: {Right: settingsRightRestrict, Validate: settingsEditSwitchValue, Set: settingsMreqSetDelete},
+		},
 	})
 }
 
@@ -115,6 +120,45 @@ func settingsMreqOpen(p *settingsPress, notice string) (settingsScreen, error) {
 		return settingsScreen{}, err
 	}
 	return renderSettingsMreqPage(p.view(), row, notice), nil
+}
+
+// settingsMreqSetSwitch serves a switch control: it calls the apply function with the absolute
+// target (the control's Validate already refused anything but "0" and "1" in step 1) and redraws
+// the page from the row the function read back, with no notice. A failed write redraws the stored
+// state with the save-failed notice; a read-back that failed too reloads the page.
+func settingsMreqSetSwitch(
+	p *settingsPress, what string, on bool,
+	apply func(context.Context, int64, bool) memberReqApplyResult,
+) *settingsScreen {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	result := apply(ctx, p.group.Id, on)
+	notice := ""
+	if result.Outcome == memberReqSaveFailed {
+		log.Errorf("[Settings] write of the %s switch of chat %d failed: %v", what, p.group.Id, result.Err)
+		notice = settingsNoticeWarn(settingsText(p.tr, result.Key))
+	}
+	row := result.Row
+	if row == nil {
+		var err error
+		if row, err = settingsMreqRead(p.group.Id); err != nil {
+			log.Warnf("[Settings] the requirements page of chat %d could not be read after a press: %v", p.group.Id, err)
+			p.cannotOpen()
+			return nil
+		}
+	}
+	screen := renderSettingsMreqPage(p.view(), row, notice)
+	return &screen
+}
+
+// settingsMreqSetJoin serves tg and st on the Check on join switch.
+func settingsMreqSetJoin(p *settingsPress, value string) *settingsScreen {
+	return settingsMreqSetSwitch(p, "check on join", value == "1", applyMemberReqJoin)
+}
+
+// settingsMreqSetDelete serves tg and st on the Delete messages switch.
+func settingsMreqSetDelete(p *settingsPress, value string) *settingsScreen {
+	return settingsMreqSetSwitch(p, "delete messages", value == "1", applyMemberReqDelete)
 }
 
 // settingsMreqBody is the body of the page: the intro, the all-off line while every rule is off,
