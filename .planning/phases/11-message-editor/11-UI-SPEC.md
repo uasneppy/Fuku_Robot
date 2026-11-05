@@ -266,6 +266,7 @@ Other rules for every part:
   Telegram dislikes); that is reported by `settings_edit_preview_failed` and the cause goes to the log only.
 - Media and text of a sticker: Telegram sends a sticker without text, so a Welcome with a sticker never shows its text.
   Setting a sticker, or text over a sticker, is allowed; the page shows `settings_edit_note_no_caption` while it applies.
+  *(Amended in Phase 12, 2026-11-05: the shipped check does not allow text over 1024 with a sticker stored, nor a sticker over a longer text; a stored sticker holds the text to the caption limit through the same predicate as every media kind. See `12-UI-SPEC.md`, "Which media the 1024 applies to".)*
 - A wrong-type message is refused with the reason and the wait stays open once per update; it is not "re-prompted" with
   the long prompt body again (Pitfall 10).
 

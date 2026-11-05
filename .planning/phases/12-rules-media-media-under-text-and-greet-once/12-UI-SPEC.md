@@ -1,7 +1,8 @@
 ---
 phase: "12"
 slug: "rules-media-media-under-text-and-greet-once"
-status: draft
+status: approved
+reviewed_at: "2026-11-05"
 shadcn_initialized: false
 preset: none
 created: "2026-11-05"
@@ -557,8 +558,8 @@ Switch buttons. **The ceiling is 20 rendered code points in every column and eve
 icon (`✅` or `❌`, one code point), one space, then the translated name, so **the name is at most 18 code points**. `{state}`
 is the icon alone, from a new helper (Assumption A4, amendment M1), not the icon plus word that `settingsStateWord` returns.
 For these five keys the limits row in `fuku/i18n/settings_locale_test.go` counts `{state}` as the **1 code point** it renders
-as, so the limit is the rendered 20, and a count of the template with `{state}` written out (7 code points, 26 in all) is
-**never** the limit: nobody may read 26 as allowed. The columns below are rendered lengths with the icon substituted; "Max
+as, so the limit is the rendered 20, and a count of the template with `{state}` written out is
+**never** the limit: only the rendered length counts. The columns below are rendered lengths with the icon substituted; "Max
 name" is what a translator may use.
 
 | # | Key | English (template) | Rendered EN | Max rendered, every locale | Name EN | Max name, every locale |
@@ -821,12 +822,12 @@ Rules": Rules follows the Welcome's rule for every media kind, by sharing one pr
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS (no colour exists; status icons substitute)
-- [ ] Dimension 4 Typography: PASS (HTML tags substitute)
-- [ ] Dimension 5 Spacing: PASS (message layout and row budget substitute)
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS (no colour exists; status icons substitute)
+- [x] Dimension 4 Typography: PASS (HTML tags substitute)
+- [x] Dimension 5 Spacing: PASS (message layout and row budget substitute)
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
 
-**Approval:** pending
+**Approval:** approved 2026-11-05 after the third check (revision 2). The first check blocked on the Rules Full preview heading language (now the group's language, amendment M3); the second on a sticker exemption that narrowed D-03 (withdrawn, Rules shares the Welcome's predicate). Recommendations carried to the planner: assumptions A1, A2, A3, A4 and A12 need the owner's confirmation at plan review, and the Phase 11 sticker sentence is corrected in `11-UI-SPEC.md`. The `## UI Considerations` section was authored by the researcher against the same taxonomy and kept as the written-back resolution (the probe engine would replace it).
