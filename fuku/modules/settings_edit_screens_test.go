@@ -100,6 +100,21 @@ func settingsEditScreens(tr *i18n.Translator, view settingsView) map[string]sett
 			}
 		}
 	}
+
+	// The Main page with the Rules line Set (a Rules row with only a photo reads Set): every other page
+	// shows the longest state it can, so the page is the worst case of the status block.
+	state := settingsMainWorstState(tr)
+	var entries []settingsMainEntry
+	for _, pg := range settingsPagesInOrder() {
+		entry := settingsMainEntry{
+			Key: pg.Key, Icon: pg.Icon, Title: settingsText(tr, pg.TitleKey), State: state, Known: true, OwnerOnly: pg.OwnerOnly,
+		}
+		if pg.Key == settingsPageRules {
+			entry.State = settingsText(tr, "settings_state_set")
+		}
+		entries = append(entries, entry)
+	}
+	screens["main with the Rules line Set"] = renderSettingsMain(view, entries, "")
 	return screens
 }
 

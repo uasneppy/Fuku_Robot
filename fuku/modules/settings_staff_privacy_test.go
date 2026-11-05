@@ -44,6 +44,18 @@ func settingsStaffPrivacyScreenText(screen settingsScreen) string {
 	return sb.String()
 }
 
+// settingsPrivacyMainRulesSet is entries with the Rules line reading Set, as a Rules row with only a
+// photo reports it on Main.
+func settingsPrivacyMainRulesSet(tr *i18n.Translator, entries []settingsMainEntry) []settingsMainEntry {
+	out := append([]settingsMainEntry(nil), entries...)
+	for i := range out {
+		if out[i].Key == settingsPageRules {
+			out[i].State = settingsText(tr, "settings_state_set")
+		}
+	}
+	return out
+}
+
 func TestSettingsStaffPrivacy(t *testing.T) {
 	t.Run("pure renders in every language", func(t *testing.T) {
 		withRealLocales(t)
@@ -86,6 +98,8 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					settingsNoticeWarn(settingsText(tr, "staff_check_failed")),
 					settingsNoticeWarn(settingsText(tr, "staff_link_no_staff_group")),
 					settingsNoticeWarn(settingsText(tr, "settings_staff_no_group")),
+					// Phase 12: the notice a Media under text press that cannot apply puts on a page.
+					settingsNoticeWarn(settingsText(tr, "settings_edit_below_unavailable")),
 				}
 				for r := staffRefusalNone + 1; r <= staffRefusalCheckFailed; r++ {
 					notices = append(notices, settingsNoticeWarn(staffLinkRefusalText(tr, r, groupView.GroupTitle)))
@@ -120,6 +134,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					"main, not linked":               renderSettingsMain(groupView, mainEntries(settingsText(tr, "settings_state_not_linked")), ""),
 					"private admin main":             renderSettingsMain(privateAdminView, mainEntries(settingsText(tr, "settings_state_linked")), ""),
 					"private creator main":           renderSettingsMain(privateView, mainEntries(settingsText(tr, "settings_state_linked")), ""),
+					"private admin main, Rules Set":  renderSettingsMain(privateAdminView, settingsPrivacyMainRulesSet(tr, mainEntries(settingsText(tr, "settings_state_linked"))), ""),
 					"list empty":                     renderSettingsHubList(tr, nil, 1),
 					"list populated":                 renderSettingsHubList(tr, []adminindex.ListedGroup{{ChatID: link.GroupChatID, Title: "Test Group"}, {ChatID: link.GroupChatID - 1, Title: "Other"}}, 1),
 					"access page on":                 renderSettingsAccessPage(groupView, true, ""),
@@ -141,6 +156,15 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 						"all set":    {Kind: def.Kind, Text: "custom <b>text</b>", MediaType: db.PHOTO, FileID: "f", Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}}, Enabled: true, Clean: true},
 						"sticker":    {Kind: def.Kind, Text: "custom", MediaType: db.STICKER, FileID: "f"},
 						"video note": {Kind: def.Kind, MediaType: db.VIDEO_NOTE, FileID: "f", TextIsDefault: true},
+						// Phase 12: a photo alone (a Rules row with only media) and Greet once with Media
+						// under text on.
+						"photo only":  {Kind: def.Kind, MediaType: db.PHOTO, FileID: "f", TextIsDefault: def.Kind != settingsEditRules},
+						"video below": {Kind: def.Kind, Text: "custom", MediaType: db.VIDEO, FileID: "f", Enabled: true, Once: true, MediaBelow: true},
+					}
+					// Every state the page tests of Phase 12 draw: each switch on and off, Greet once,
+					// Media under text for a photo, a video and an animation, and the file hint of a document.
+					for name, st := range settingsEditCallbackStates(def) {
+						states["phase 12 "+name] = st
 					}
 					for stateName, st := range states {
 						for viewName, view := range map[string]settingsView{"group": groupView, "private admin": privateAdminView} {
@@ -328,6 +352,74 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		} {
 			if strings.Contains(everything, leak) {
 				t.Errorf("the typed editor run of an admin who is not the creator received %q: %q", leak, everything)
+			}
+		}
+	})
+
+	// Phase 12: the same administrator, who is not the creator, sets a Rules photo by typing it, turns the
+	// Rules Media under text on, runs the Rules Full preview, then turns Greet once and Media under text on
+	// for the Welcome and runs its Full preview. Nothing the bot produced names the Staff Group, and the
+	// run writes no greeted_members row, so no page can show who was greeted.
+	t.Run("a private Phase 12 run by an admin who is not the creator never names the Staff Group or a greeted member", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		staffChat := settingsStaffTestOwnedStaffGroup(env, settingsStaffPrivacyTitle)
+		linkLockdownGroupTo(env.lockdownEnv, staffChat)
+		moderator := gotgbot.User{Id: env.admin.Id + 47, FirstName: "Moderator"}
+		listEditAdmin(env, env.chat, moderator, true)
+		settingsRulesCleanUsers(t, moderator.Id)
+		settingsBelowSeed(t, env.chat.Id, true, "privacy-welcome-photo", db.PHOTO)
+
+		menuID := settingsEditSetWait(env, moderator, settingsPageRules, settingsEditPartMedia)
+		sendPrivateMessage(env, moderator, settingsMediaItemID("photo", "privacy-rules-photo"))
+		settingsEditWaitGone(t, env, moderator)
+		private := func(kv ...string) {
+			env.pressPrivate(moderator, menuID, env.privateFields(env.chat.Id, kv...))
+		}
+		private("a", "tg", "p", settingsPageRules, "t", settingsEditControlBelow, "v", "1")
+		private("a", "rf")
+		private("a", "op", "p", settingsPageWelcome)
+		private("a", "tg", "p", settingsPageWelcome, "t", settingsEditControlOnce, "v", "1")
+		private("a", "tg", "p", settingsPageWelcome, "t", settingsEditControlBelow, "v", "1")
+		private("a", "wf")
+
+		var seen []string
+		collect := func(params map[string]any) {
+			seen = append(seen, fmt.Sprint(params["text"]), fmt.Sprint(params["caption"]))
+			for _, button := range settingsAllButtons(staffKeyboardOf(params["reply_markup"])) {
+				seen = append(seen, button.Text, button.CallbackData, button.Url)
+			}
+		}
+		for _, sent := range env.fake.sentTo(moderator.Id) {
+			collect(sent.Params)
+		}
+		for _, edit := range callsToChat(env.fake.staffBotClient, "editMessageText", moderator.Id) {
+			collect(edit.Params)
+		}
+		for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+			seen = append(seen, fmt.Sprint(answer.Params["text"]))
+		}
+		everything := strings.Join(seen, "\n")
+
+		for _, wanted := range []string{
+			"settings_btn_edit_switch_once", "settings_edit_line_once", "settings_btn_edit_switch_below",
+			"settings_edit_line_below", "settings_edit_saved_media", "settings_edit_preview_header_rules",
+		} {
+			if !containsMarker(everything, wanted) {
+				t.Errorf("the run never produced %s: %q", wanted, everything)
+			}
+		}
+		if !settingsBelowStored(t, env.chat.Id, true) || !settingsOnceStored(t, env.chat.Id) || !settingsRulesBelowStored(t, env.chat.Id) {
+			t.Error("the run did not turn the Phase 12 switches on, so it did not exercise their pages")
+		}
+		if n := greetedRows(t, env.chat.Id); n != 0 {
+			t.Errorf("the settings run left %d greeted_members rows, want none", n)
+		}
+		for _, leak := range []string{
+			"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+			strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"),
+		} {
+			if strings.Contains(everything, leak) {
+				t.Errorf("the Phase 12 run of an admin who is not the creator received %q: %q", leak, everything)
 			}
 		}
 	})
