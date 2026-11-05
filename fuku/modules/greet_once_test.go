@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -10,8 +11,10 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
 // greetOnceSetup stores a welcome text for a fresh supergroup and returns the chat and a bot over a fresh fake.
@@ -22,7 +25,26 @@ func greetOnceSetup(t *testing.T) (gotgbot.Chat, *moduleBotClient, *gotgbot.Bot)
 	if err := greetings.SetWelcomeText(chat.Id, "Welcome {first}", "", nil, db.TEXT); err != nil {
 		t.Fatalf("SetWelcomeText setup error = %v", err)
 	}
+	greetOnceCleanup(t, chat.Id)
 	return chat, client, newModuleTestBot(client)
+}
+
+// greetOnceCleanup deletes the greeted_members rows of the chat when the test ends.
+func greetOnceCleanup(t *testing.T, chatID int64) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := db.DB.Where("chat_id = ?", chatID).Delete(&models.GreetedMember{}).Error; err != nil {
+			t.Errorf("cleanup greeted_members: %v", err)
+		}
+	})
+}
+
+// greetOnceSwitchOn turns Greet once on for the chat through the apply function the Welcome page will call.
+func greetOnceSwitchOn(t *testing.T, chatID int64) {
+	t.Helper()
+	if res := applyWelcomeOnce(t.Context(), chatID, true); res.Outcome != greetingApplied {
+		t.Fatalf("applyWelcomeOnce(true) outcome = %v, err = %v", res.Outcome, res.Err)
+	}
 }
 
 // greetOnceJoin drives one join of the member through the chat_member handler, with the in-process dedupe cleared
@@ -106,5 +128,151 @@ func TestGreetOnceFirstJoinOnly(t *testing.T) {
 	greetOnceJoin(t, bot, chat, memberA)
 	if got := greetOnceWelcomes(client); got != 3 {
 		t.Fatalf("welcomes after A joined with Greet once off = %d, want 3", got)
+	}
+}
+
+func TestGreetOnceWelcomeOffNoClaim(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	greetOnceSwitchOn(t, chat.Id)
+	if err := greetings.SetWelcomeToggle(chat.Id, false); err != nil {
+		t.Fatalf("SetWelcomeToggle setup error = %v", err)
+	}
+
+	greetOnceJoin(t, bot, chat, member)
+
+	if got := greetOnceWelcomes(client); got != 0 {
+		t.Fatalf("welcomes with the Welcome switch off = %d, want 0", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 0 {
+		t.Fatalf("greeted rows with the Welcome switch off = %d, want 0: a welcome that was never sent records nobody", got)
+	}
+}
+
+func TestGreetOnceOffNoRecord(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+
+	greetOnceJoin(t, bot, chat, member)
+	greetOnceJoin(t, bot, chat, member)
+
+	if got := greetOnceWelcomes(client); got != 2 {
+		t.Fatalf("welcomes with Greet once off = %d, want 2", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 0 {
+		t.Fatalf("greeted rows with Greet once off = %d, want 0", got)
+	}
+}
+
+func TestGreetOnceCaptchaPathAndFailure(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	passer := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	failer := gotgbot.User{Id: 4343, FirstName: "Bob"}
+	greetOnceSwitchOn(t, chat.Id)
+	if err := captcha.SetCaptchaEnabled(chat.Id, true); err != nil {
+		t.Fatalf("SetCaptchaEnabled setup error = %v", err)
+	}
+	if err := captcha.SetCaptchaFailureAction(chat.Id, "ban"); err != nil {
+		t.Fatalf("SetCaptchaFailureAction setup error = %v", err)
+	}
+	if err := captcha.SetCaptchaMaxAttempts(chat.Id, 1); err != nil {
+		t.Fatalf("SetCaptchaMaxAttempts setup error = %v", err)
+	}
+
+	greetOnceJoin(t, bot, chat, passer)
+	greetOnceJoin(t, bot, chat, failer)
+	if got := greetOnceWelcomes(client); got != 0 {
+		t.Fatalf("welcomes before any captcha is solved = %d, want 0", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 0 {
+		t.Fatalf("greeted rows before any captcha is solved = %d, want 0: the challenge is not a welcome", got)
+	}
+
+	press := func(member gotgbot.User, answer string) {
+		t.Helper()
+		attempt, err := captcha.GetCaptchaAttempt(member.Id, chat.Id)
+		if err != nil || attempt == nil {
+			t.Fatalf("GetCaptchaAttempt(%d) = %v, %v, want an attempt", member.Id, attempt, err)
+		}
+		if answer == "" {
+			answer = attempt.Answer
+		}
+		data := encodeCallbackData("captcha_verify",
+			map[string]string{"a": fmt.Sprint(attempt.ID), "u": fmt.Sprint(member.Id), "s": answer})
+		ctx := newModuleCallbackContext(bot, chat, member, data)
+		if err := captchaModule.captchaVerifyCallback(bot, ctx); err != nil {
+			t.Fatalf("captchaVerifyCallback(%d) error = %v", member.Id, err)
+		}
+	}
+
+	press(failer, "not-the-answer")
+	if got := len(client.callsFor("banChatMember")); got != 1 {
+		t.Fatalf("banChatMember calls after the final wrong answer = %d, want the failure action once", got)
+	}
+	if got := greetOnceWelcomes(client); got != 0 {
+		t.Fatalf("welcomes after a captcha failure = %d, want 0", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 0 {
+		t.Fatalf("greeted rows after a captcha failure = %d, want 0", got)
+	}
+
+	press(passer, "")
+	if got := greetOnceWelcomes(client); got != 1 {
+		t.Fatalf("welcomes after the captcha pass = %d, want 1", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 1 {
+		t.Fatalf("greeted rows after the captcha pass = %d, want 1", got)
+	}
+}
+
+func TestGreetOnceLockdownBanNoRecord(t *testing.T) {
+	env := newLockdownEnv(t)
+	env.loadJoinModules()
+	env.enableJoinWelcome(false)
+	if err := greetings.SetWelcomeText(env.chat.Id, "Welcome {first}", "", nil, db.TEXT); err != nil {
+		t.Fatalf("SetWelcomeText setup error = %v", err)
+	}
+	greetOnceCleanup(t, env.chat.Id)
+	greetOnceSwitchOn(t, env.chat.Id)
+
+	control := env.newJoiner("Control")
+	env.join(control, control, "https://t.me/+ctl")
+	if got := greetedRows(t, env.chat.Id); got != 1 {
+		t.Fatalf("greeted rows after the control join = %d, want 1: before the lockdown a join is welcomed and recorded", got)
+	}
+
+	env.lockAsAdmin("raid")
+	messagesBefore, _, _ := env.chatSends()
+	raider := env.newJoiner("Raider")
+	env.join(raider, raider, "https://t.me/+abc")
+
+	if row := env.joinerRow(raider.Id); row.State != models.JoinerStatePending {
+		t.Fatalf("raider state = %q, want pending: the guard recorded them for a ban", row.State)
+	}
+	if messagesAfter, _, _ := env.chatSends(); messagesAfter != messagesBefore {
+		t.Fatalf("messages sent to a banned joiner's chat = %d, want %d: no welcome", messagesAfter, messagesBefore)
+	}
+	if got := greetedRows(t, env.chat.Id); got != 1 {
+		t.Fatalf("greeted rows after the raider's join = %d, want still 1: a lockdown-banned joiner is never recorded", got)
+	}
+}
+
+func TestGreetOnceWithoutRedis(t *testing.T) {
+	chat, client, bot := greetOnceSetup(t)
+	member := gotgbot.User{Id: 4242, FirstName: "Alice"}
+	greetOnceSwitchOn(t, chat.Id)
+
+	marshal, manager, redisClient := cache.GetCacheState()
+	cache.SetCacheState(nil, nil, nil)
+	t.Cleanup(func() { cache.SetCacheState(marshal, manager, redisClient) })
+
+	greetOnceJoin(t, bot, chat, member)
+	greetOnceJoin(t, bot, chat, member)
+
+	if got := greetOnceWelcomes(client); got != 1 {
+		t.Fatalf("welcomes without Redis = %d, want 1", got)
+	}
+	if got := greetedRows(t, chat.Id); got != 1 {
+		t.Fatalf("greeted rows without Redis = %d, want 1", got)
 	}
 }
