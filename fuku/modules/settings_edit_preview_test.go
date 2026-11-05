@@ -14,7 +14,9 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
+	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -84,6 +86,142 @@ func settingsEditPreviewSentTo(env *settingsEnv, chatID int64, skip int) []staff
 		env.t.Fatalf("the bot sent %d messages to %d, want at least %d", len(sent), chatID, skip)
 	}
 	return sent[skip:]
+}
+
+// settingsEditSeen is what a member (or a previewing owner) sees of one sent message, decoded the
+// way Telegram receives it: the send method, the text or caption, the media file, the parse mode,
+// whether the caption is above the media (nil when the key is absent) and the keyboard as JSON ("" for
+// none). The chat and the reply target differ by nature and are not part of it.
+type settingsEditSeen struct {
+	Method, Text, File, ParseMode string
+	Above                         any
+	Keyboard                      string
+}
+
+// settingsEditSendMethods are the Bot API methods a greeting or rules message can go out through.
+var settingsEditSendMethods = []string{"sendMessage", "sendPhoto", "sendVideo", "sendAnimation", "sendDocument"}
+
+// settingsEditMarkSends counts, per method, the sends to chatID so far.
+func settingsEditMarkSends(env *settingsEnv, chatID int64) map[string]int {
+	mark := make(map[string]int, len(settingsEditSendMethods))
+	for _, method := range settingsEditSendMethods {
+		mark[method] = len(callsToChat(env.fake.staffBotClient, method, chatID))
+	}
+	return mark
+}
+
+// settingsEditSeenSince returns the one message sent to chatID since mark. With header true the
+// first new sendMessage is the preview's header line and is dropped; anything but exactly one message
+// left fails the test.
+func settingsEditSeenSince(t *testing.T, env *settingsEnv, chatID int64, mark map[string]int, header bool) settingsEditSeen {
+	t.Helper()
+	var calls []moduleBotCall
+	for _, method := range settingsEditSendMethods {
+		fresh := callsToChat(env.fake.staffBotClient, method, chatID)[mark[method]:]
+		if header && method == "sendMessage" && len(fresh) > 0 {
+			fresh = fresh[1:]
+		}
+		calls = append(calls, fresh...)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("the bot sent %d messages to %d since the mark, want exactly 1: %+v", len(calls), chatID, calls)
+	}
+	params := rulesCallParams(t, calls[0])
+	seen := settingsEditSeen{Method: calls[0].Method, ParseMode: fmt.Sprint(params["parse_mode"]), Above: params["show_caption_above_media"]}
+	seen.Text = fmt.Sprint(params["text"])
+	if caption, ok := params["caption"]; ok {
+		seen.Text = fmt.Sprint(caption)
+	}
+	for _, key := range []string{"photo", "video", "animation", "document"} {
+		if file, ok := params[key]; ok {
+			seen.File = fmt.Sprint(file)
+		}
+	}
+	if markup, ok := params["reply_markup"].(map[string]any); ok {
+		if rows, _ := markup["inline_keyboard"].([]any); len(rows) > 0 {
+			raw, err := json.Marshal(markup)
+			if err != nil {
+				t.Fatalf("encode the keyboard: %v", err)
+			}
+			seen.Keyboard = string(raw)
+		}
+	}
+	return seen
+}
+
+// settingsEditRulesPreviewEnv is the settings environment with the real locale files, the
+// greetings and rules modules, the group named as the env's own chat (so a preview and /rules read
+// the same title), a fake that answers every media send and an owner of the group.
+func settingsEditRulesPreviewEnv(t *testing.T) (*settingsEnv, gotgbot.User) {
+	t.Helper()
+	env := newSettingsEnvWith(t, settingsEnvOptions{RealLocale: true})
+	LoadGreetings(env.dispatcher)
+	LoadRules(env.dispatcher)
+	editCleanup(t, env.chat.Id)
+	settingsEditFakeSends(env)
+	settingsEditNameGroup(env, env.chat.Title)
+	return env, env.newOwner(env.chat)
+}
+
+// settingsEditSetLanguages stores the presser's language and the group's, and removes the users row
+// they create and every cached copy when the test ends, so no later test sees this user.
+func settingsEditSetLanguages(t *testing.T, userID int64, userLang string, groupID int64, groupLang string) {
+	t.Helper()
+	clean := func() {
+		db.DB.Where("user_id IN ?", []int64{userID}).Delete(&models.User{})
+		dbcache.DeleteCache(dbcache.CacheKey("user", userID))
+		dbcache.DeleteCache(dbcache.CacheKey("user_lang", userID))
+		dbcache.DeleteCache(dbcache.CacheKey("chat_lang", groupID))
+		dbcache.ResetLocalForTest()
+	}
+	t.Cleanup(clean)
+	if err := lang.ChangeUserLanguage(userID, userLang); err != nil {
+		t.Fatalf("ChangeUserLanguage: %v", err)
+	}
+	if err := lang.ChangeGroupLanguage(groupID, groupLang); err != nil {
+		t.Fatalf("ChangeGroupLanguage: %v", err)
+	}
+}
+
+// settingsEditRulesSeed stores a complete rules row for chatID through the real repository.
+func settingsEditRulesSeed(t *testing.T, chatID int64, text, fileID string, mediaType int, buttons []models.Button, below bool) {
+	t.Helper()
+	steps := []func() error{
+		func() error { return rules.SetChatRules(chatID, text) },
+		func() error { return rules.SetRulesMediaOnly(chatID, fileID, mediaType) },
+		func() error { return rules.SetRulesButtonsOnly(chatID, buttons) },
+		func() error { return rules.SetRulesMediaBelow(chatID, below) },
+	}
+	for _, step := range steps {
+		if err := step(); err != nil {
+			t.Fatalf("seed the rules row: %v", err)
+		}
+	}
+}
+
+// settingsEditRulesMembersSee runs /rules in the group and returns the one message members get.
+func settingsEditRulesMembersSee(t *testing.T, env *settingsEnv) settingsEditSeen {
+	t.Helper()
+	mark := settingsEditMarkSends(env, env.chat.Id)
+	env.send(env.admin, "/rules")
+	return settingsEditSeenSince(t, env, env.chat.Id, mark, false)
+}
+
+// settingsEditRulesFullPreview presses Full preview of the private Rules menu of owner and returns
+// the header line and the content message the owner received.
+func settingsEditRulesFullPreview(t *testing.T, env *settingsEnv, owner gotgbot.User) (header string, content settingsEditSeen) {
+	t.Helper()
+	before := len(env.fake.sentTo(owner.Id))
+	mark := settingsEditMarkSends(env, owner.Id)
+	settingsEditPreviewPress(env, owner, 7001, "rf")
+	if text, alert := env.lastAnswer(); text != "" || alert {
+		t.Fatalf("Full preview answered %q (alert %t), want an empty answer", text, alert)
+	}
+	sent := settingsEditPreviewSentTo(env, owner.Id, before)
+	if len(sent) == 0 {
+		t.Fatal("Full preview sent the owner nothing")
+	}
+	return fmt.Sprint(sent[0].Params["text"]), settingsEditSeenSince(t, env, owner.Id, mark, true)
 }
 
 func TestSettingsEditFullPreview(t *testing.T) {
@@ -312,13 +450,16 @@ func TestSettingsEditRulesPreview(t *testing.T) {
 		}
 
 		// Full preview is the /rules message itself, also while private rules is on.
-		tr := i18n.MustNewTranslator("en")
-		want := buildRulesText(tr, env.chat.Title, stored)
+		if err := rules.SetPrivateRules(env.chat.Id, false); err != nil {
+			t.Fatalf("SetPrivateRules: %v", err)
+		}
+		want := settingsEditRulesMembersSee(t, env)
 		for _, private := range []bool{false, true} {
 			if err := rules.SetPrivateRules(env.chat.Id, private); err != nil {
 				t.Fatalf("SetPrivateRules(%t): %v", private, err)
 			}
 			before = len(env.fake.sentTo(owner.Id))
+			mark := settingsEditMarkSends(env, owner.Id)
 			fullFields := settingsEditPressButton(env, owner, menuID, "settings_btn_edit_full_preview")
 			if fullFields["a"] != "rf" || len(fullFields) != 2 {
 				t.Fatalf("Full preview carries %v, want rf and c", fullFields)
@@ -327,20 +468,71 @@ func TestSettingsEditRulesPreview(t *testing.T) {
 			if len(sent) != 2 || !containsMarker(fmt.Sprint(sent[0].Params["text"]), "settings_edit_preview_header_rules") {
 				t.Fatalf("private=%t: the bot sent %+v, want the rules header and the message", private, sent)
 			}
-			if got := fmt.Sprint(sent[1].Params["text"]); got != want {
-				t.Errorf("private=%t: Full preview = %q, want buildRulesText's %q", private, got, want)
+			if got := settingsEditSeenSince(t, env, owner.Id, mark, true); !reflect.DeepEqual(got, want) {
+				t.Errorf("private=%t: Full preview = %+v, want what /rules sends: %+v", private, got, want)
 			}
 		}
+	})
 
-		// The same chat's /rules answer is that very text.
-		if err := rules.SetPrivateRules(env.chat.Id, false); err != nil {
+	t.Run("a media-only row is what /rules sends", func(t *testing.T) {
+		env, owner := newRulesEnv(t)
+		settingsEditFakeSends(env)
+		settingsEditRulesSeed(t, env.chat.Id, "", "rules-photo", db.PHOTO, nil, true)
+		menuID := settingsEditPrivateMenu(env, owner, settingsPageRules)
+		want := settingsEditRulesMembersSee(t, env)
+		before := len(env.fake.sentTo(owner.Id))
+		mark := settingsEditMarkSends(env, owner.Id)
+		settingsEditPressButton(env, owner, menuID, "settings_btn_edit_full_preview")
+		if len(settingsEditPreviewSentTo(env, owner.Id, before)) == 0 {
+			t.Fatal("Full preview sent nothing")
+		}
+		got := settingsEditSeenSince(t, env, owner.Id, mark, true)
+		if !reflect.DeepEqual(got, want) || got.Method != "sendPhoto" || got.Above != true {
+			t.Errorf("Full preview = %+v, want /rules' photo message %+v", got, want)
+		}
+	})
+
+	t.Run("photo with buttons and Media under text, the heading in the group's language", func(t *testing.T) {
+		env, owner := settingsEditRulesPreviewEnv(t)
+		settingsEditSetLanguages(t, owner.Id, "en", env.chat.Id, "uk")
+		settingsEditRulesSeed(t, env.chat.Id, "Be kind", "rules-photo", db.PHOTO,
+			[]models.Button{{Name: "Site", Url: "https://example.com"}}, true)
+
+		want := settingsEditRulesMembersSee(t, env)
+		header, got := settingsEditRulesFullPreview(t, env, owner)
+
+		english, _ := i18n.MustNewTranslator("en").GetString("settings_edit_preview_header_rules")
+		if header != english {
+			t.Errorf("the header line = %q, want the presser's English %q", header, english)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Full preview = %+v, want the message /rules sends: %+v", got, want)
+		}
+		if got.Method != "sendPhoto" || got.File != "rules-photo" || got.Above != true || got.Keyboard == "" {
+			t.Errorf("Full preview = %+v, want a photo with its caption above and the keyboard", got)
+		}
+		ukHeading, _ := i18n.MustNewTranslator("uk").GetString("rules_for_chat_header")
+		enHeading, _ := i18n.MustNewTranslator("en").GetString("rules_for_chat_header")
+		if ukHeading == enHeading {
+			t.Fatal("the uk and en headings are identical, the test cannot tell the languages apart")
+		}
+		if !strings.HasPrefix(got.Text, fmt.Sprintf(ukHeading, env.chat.Title)) {
+			t.Errorf("the caption %q does not start with the group's Ukrainian heading", got.Text)
+		}
+	})
+
+	t.Run("an empty row is rules_no_rules_set, also while private rules is on", func(t *testing.T) {
+		env, owner := newRulesEnv(t)
+		menuID := settingsEditPrivateMenu(env, owner, settingsPageRules)
+		want := settingsEditRulesMembersSee(t, env)
+		if err := rules.SetPrivateRules(env.chat.Id, true); err != nil {
 			t.Fatalf("SetPrivateRules: %v", err)
 		}
-		groupBefore := len(env.fake.sentTo(env.chat.Id))
-		env.send(env.admin, "/rules")
-		reply := settingsEditPreviewSentTo(env, env.chat.Id, groupBefore)
-		if len(reply) != 1 || fmt.Sprint(reply[0].Params["text"]) != want {
-			t.Errorf("/rules sent %+v, want the text Full preview sends: %q", reply, want)
+		mark := settingsEditMarkSends(env, owner.Id)
+		settingsEditPressButton(env, owner, menuID, "settings_btn_edit_full_preview")
+		got := settingsEditSeenSince(t, env, owner.Id, mark, true)
+		if !reflect.DeepEqual(got, want) || !containsMarker(got.Text, "rules_no_rules_set") {
+			t.Errorf("Full preview = %+v, want /rules' no-rules message %+v", got, want)
 		}
 	})
 
