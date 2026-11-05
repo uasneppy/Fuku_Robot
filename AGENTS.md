@@ -272,7 +272,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   again) shows `lockdown_revoke_already` instead.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -414,6 +414,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   through the same fresh `settingsAccessLookup` seam, there is no cache key to invalidate, an unreadable switch is the
   cannot-open edit on the page and the unknown mark on Main, and a flip is announced nowhere (no group, Staff Group or
   log channel message, D-11).
+- The Member requirements page (`settings_mreq.go`, page `m`, `Order` 80, icon 🛂, `settings_page_mreq`, between Rules and
+  Access) registers from its own file through `registerSettingsPage`, so `settings_pages.go` is not edited. It reads
+  through `memberReqSettingsLookup` (`memberreq.GetSettings`, the cached `member_requirements:<chat>` key, the one read
+  that the page, Main and the message watcher share; the `skipLocal` clause for that key is added with the watcher).
+  Main's state is Off when every rule is Off (whatever the two switches say), `{n} on` for the n rules that are not Off,
+  and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
+  creates nothing. The body is the intro, the all-off line while every rule is Off, one line per rule of `memberReqRules`
+  in table order (icon from `memberReqActionIcon` plus the option word), the Check on join and Delete messages lines and
+  the five hints; a failed read is the cannot-open edit. The keyboard is the switch row and the navigation row (the rule
+  grid arrives with the rule screens), with no Open in private row in either menu. The switches are controls `j` Check on
+  join and `d` Delete messages: `tg` or `st`, `v` exactly 0 or 1 (`settingsEditSwitchValue` as the control's `Validate`,
+  so anything else is an invalid request before any lookup), right `settingsRightRestrict`, written through
+  `applyMemberReqJoin` and `applyMemberReqDelete` in `memberreq_settings.go` (beside the requirements code, because there
+  is no command: column-targeted write through the `memberReqWrites` seam, a Go `false` written, the cache key dropped by
+  the repository, the row read back with `memberreq.GetSettingsFresh`). A failed write redraws the stored state with
+  `common_settings_save_failed`. Drift and authority tests stand in for a parity test (`TestSettingsDriftMreq`,
+  `TestSettingsAuthorityMreq`). No screen of the page names the Staff Group, a member or a count of held members
+  (`TestSettingsStaffPrivacy` renders it in 8 languages).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -453,7 +471,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r`, then Access for the owner) with
+  with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r|m`, then Access for the owner; `m` is the Member requirements page below) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules.
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
@@ -1901,6 +1919,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsOwnerAuthorityAccess` instead of a parity test, and `TestSettingsAccessAcrossReplicas` proves the fresh
   read across two replicas (a flip on one is seen by the very next press on the other, a memoised owner never hides a
   flip to ON, D-12).
+  The Member requirements page has `TestSettingsMreq*` (`TestSettingsMreqOpensFromMain`, `TestSettingsMreqMainState`,
+  `TestSettingsMreqSwitches`, `TestSettingsMreqPageFitsEveryLocale`, `TestSettingsMreqCallbackBytes`),
+  `TestSettingsDriftMreq` and `TestSettingsAuthorityMreq` (`settings_mreq_test.go`). The module harness carries both Phase
+  13 tables (`ChatRequirements`, `ChatRequirementHold` in the `AutoMigrate` list of `test_harness_test.go`), and
+  `settingsCleanup` deletes their rows of its chats and the `member_requirements` cache key.
 
 ## Commits
 

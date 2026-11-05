@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // settingsMreqIcons and settingsMreqWordKeys are the UI contract's punishment icons and the reused
@@ -568,4 +570,131 @@ func TestSettingsAuthorityMreq(t *testing.T) {
 			}
 		}
 	})
+}
+
+// settingsMreqScreens renders the page in the states that matter for size: every rule off, and
+// every punishment used once with both switches on, each without a notice and under the notices a
+// press can put on it.
+func settingsMreqScreens(tr *i18n.Translator, view settingsView) map[string]settingsScreen {
+	states := map[string]*models.ChatRequirements{
+		"all off": {},
+		"every punishment": {
+			LastNameAction: models.RequirementActionWarn, UsernameAction: models.RequirementActionKick,
+			RussianAction: models.RequirementActionBan, ArabicAction: models.RequirementActionMute,
+			ChineseAction: models.RequirementActionMute, CheckOnJoin: true, DeleteMessages: true,
+		},
+	}
+	notices := map[string]string{
+		"no notice":   "",
+		"save failed": settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")),
+		"expired":     settingsNoticeWarn(settingsText(tr, "settings_card_expired")),
+	}
+	screens := map[string]settingsScreen{}
+	for stateName, row := range states {
+		for noticeName, notice := range notices {
+			screens[stateName+", "+noticeName] = renderSettingsMreqPage(view, row, notice)
+		}
+	}
+	return screens
+}
+
+func TestSettingsMreqPageFitsEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	titles := map[string]string{
+		"ampersands": strings.Repeat("&", 64),
+		"astral":     strings.Repeat("😀", 64),
+		"multibyte":  strings.Repeat("Ж", 64),
+	}
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			for titleName, title := range titles {
+				for _, private := range []bool{false, true} {
+					view := settingsEditView(tr, private)
+					view.GroupTitle, view.OpenerName = title, title
+					screens := settingsMreqScreens(tr, view)
+					if len(screens) != 6 {
+						t.Fatalf("%s %s: %d screens were rendered, want 6", code, titleName, len(screens))
+					}
+					for name, screen := range screens {
+						label := fmt.Sprintf("%s %s private=%v %s", code, titleName, private, name)
+						if units := panelUTF16Len(screen.Text); units == 0 || units > 3800 {
+							t.Errorf("%s is %d UTF-16 units, want 1..3800", label, units)
+						}
+						for _, placeholder := range []string{"{state}", "{rule}", "{action}", "{page}", "%!"} {
+							if strings.Contains(screen.Text, placeholder) {
+								t.Errorf("%s keeps the unfilled %s: %q", label, placeholder, screen.Text)
+							}
+						}
+						if screen.Omitted != 0 {
+							t.Errorf("%s omitted %d buttons for overflow", label, screen.Omitted)
+						}
+						for _, leak := range []string{"ZZ Staff", settingsStaffPrivacyDigits} {
+							if strings.Contains(settingsStaffPrivacyScreenText(screen), leak) {
+								t.Errorf("%s names a Staff Group marker %q", label, leak)
+							}
+						}
+						if rows, limit := len(screen.Keyboard.InlineKeyboard), map[bool]int{true: 8, false: 9}[private]; rows > limit {
+							t.Errorf("%s has %d rows, want at most %d", label, rows, limit)
+						}
+						for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+							if strings.TrimSpace(button.Text) == "" {
+								t.Errorf("%s has a button with an empty label", label)
+							}
+							if n := len(button.CallbackData); n < 1 || n > 64 {
+								t.Errorf("%s button %q has %d bytes of callback data, want 1..64", label, button.Text, n)
+							}
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+// settingsMreqCodeShape is what a callback field of this page may hold: a whole number, or a
+// code of one or two lower-case letters. Never a name or a text.
+var settingsMreqCodeShape = regexp.MustCompile(`^(-?[0-9]+|[a-z]{1,2})$`)
+
+func TestSettingsMreqCallbackBytes(t *testing.T) {
+	tr := i18n.MustNewTranslator("en")
+	for _, private := range []bool{true, false} {
+		view := settingsEditView(tr, private)
+		label := fmt.Sprintf("private=%v", private)
+		wantMain, wantSwitch := 33, 41
+		if private {
+			wantMain, wantSwitch = 37, 45
+		}
+
+		main := renderSettingsMain(view, []settingsMainEntry{
+			{Key: settingsPageMreq, Icon: "🛂", Title: settingsText(tr, "settings_page_mreq"), State: settingsText(tr, "settings_state_off_plain"), Known: true},
+		}, "")
+		grid, ok := settingsPageButton(t, main.Keyboard.InlineKeyboard, settingsPageMreq)
+		if !ok {
+			t.Fatalf("%s: the Main grid has no Requirements button", label)
+		}
+		if n := len(grid.CallbackData); n != wantMain {
+			t.Errorf("%s: the Main grid button has %d bytes, want %d", label, n, wantMain)
+		}
+
+		screen := renderSettingsMreqPage(view, &models.ChatRequirements{CheckOnJoin: true, DeleteMessages: true}, "")
+		if screen.Omitted != 0 {
+			t.Errorf("%s: the page omitted %d buttons for overflow", label, screen.Omitted)
+		}
+		if len(screen.Keyboard.InlineKeyboard) != 2 {
+			t.Errorf("%s: the page has %d rows, want the switch row and the navigation row", label, len(screen.Keyboard.InlineKeyboard))
+		}
+		for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+			for key, value := range settingsButtonFields(t, button) {
+				if !settingsMreqCodeShape.MatchString(value) {
+					t.Errorf("%s: button %q field %s=%q is not a number or a code", label, button.Text, key, value)
+				}
+			}
+		}
+		for _, button := range screen.Keyboard.InlineKeyboard[0] {
+			if n := len(button.CallbackData); n != wantSwitch {
+				t.Errorf("%s: the switch button %q has %d bytes, want %d", label, button.Text, n, wantSwitch)
+			}
+		}
+	}
 }
