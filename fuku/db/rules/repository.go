@@ -103,3 +103,20 @@ func LoadRulesStats() (setRules, pvtRules int64) {
 
 	return
 }
+
+// LoadRulesSettingsContext is a stub that the green commit replaces.
+func LoadRulesSettingsContext(ctx context.Context, chatID int64) (*models.RulesSettings, error) {
+	return &models.RulesSettings{ChatId: chatID}, nil
+}
+
+// SetRulesMediaOnly is a stub that the green commit replaces.
+func SetRulesMediaOnly(chatID int64, fileID string, mediaType int) error { return nil }
+
+// SetRulesButtonsOnly is a stub that the green commit replaces.
+func SetRulesButtonsOnly(chatID int64, buttons []models.Button) error { return nil }
+
+// SetRulesMediaBelow is a stub that the green commit replaces.
+func SetRulesMediaBelow(chatID int64, on bool) error { return nil }
+
+// ClearRules is a stub that the green commit replaces.
+func ClearRules(chatID int64) error { return nil }

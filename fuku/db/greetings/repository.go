@@ -505,3 +505,12 @@ func LoadGreetingsStats() (enabledWelcome, enabledGoodbye, cleanServiceEnabled, 
 
 	return stats.EnabledWelcome, stats.EnabledGoodbye, stats.CleanServiceEnabled, stats.CleanWelcomeEnabled, stats.CleanGoodbyeEnabled
 }
+
+// SetWelcomeMediaBelow is a stub that the green commit replaces.
+func SetWelcomeMediaBelow(chatID int64, on bool) error { return nil }
+
+// SetGoodbyeMediaBelow is a stub that the green commit replaces.
+func SetGoodbyeMediaBelow(chatID int64, on bool) error { return nil }
+
+// SetWelcomeOnce is a stub that the green commit replaces.
+func SetWelcomeOnce(chatID int64, on bool) error { return nil }
