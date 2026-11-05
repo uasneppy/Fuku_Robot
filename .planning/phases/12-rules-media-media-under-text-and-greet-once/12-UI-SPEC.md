@@ -60,7 +60,7 @@ Telegram limits that bite this phase (Phase 11 table stands; these are the ones 
 
 | Limit | Value | Where it bites in Phase 12 |
 |-------|-------|----------------------------|
-| Caption | 1024 characters after parsing | a Rules message with media is one message: the caption is the `/rules` heading plus the rules text (D-03), so the heading counts. Only media that carries a caption is held to it: a sticker or a video note is sent without text, so the 1024 never applies to them (Assumption A13) |
+| Caption | 1024 characters after parsing | a Rules message with media is one message: the caption is the `/rules` heading plus the rules text (D-03), so the heading counts. Rules follows the Welcome's rule for every media kind (section "Refusals new to Rules") |
 | `show_caption_above_media` | photo, video, animation only | the Media under text switch (D-07, D-08); the spike confirms it on a real client |
 | Keyboard rows | 8 on a private editor page, 9 on a page opened in a group (Phase 11, AGENTS.md) | the switch block below is laid out to hold this |
 | Callback data | 64 bytes through `callbackcodec` | worst new button is 45 bytes, table "Callback data" |
@@ -197,26 +197,46 @@ are `settings_edit_wait_media` and `settings_edit_wait_buttons` unchanged.
 rule is the Welcome's: 1024 with media, and the editor says why. The wait stays open on each refusal, with
 `settings_edit_still_waiting` and Cancel, exactly as in Phase 11.
 
-**Which media the 1024 applies to (Assumption A13).** The caption limit applies only while the stored (or incoming) media is
-one that carries a caption: photo, video, GIF (animation), document, audio, voice. It does **not** apply to a sticker or a
-video note: Telegram sends those without text, so a Rules text is never shown with them (the page says so through
-`settings_edit_note_no_caption`), and refusing a text for a limit that is never reached would block a legal state. Phase 11
-already allows "a sticker, or text over a sticker" (11-UI-SPEC, Media and text of a sticker). So with a sticker or video note
-the Rules text limits are the no-media ones (stored form 3800, dry run heading plus text 4096), and setting such a media is
-never refused for the text's length. Everywhere below, "caption media" means those six kinds and "media" alone is not enough
-to trigger a 1024 refusal.
+**Which media the 1024 applies to: every kind, the Welcome's rule.** Rules follows the Welcome's rule for every media kind, by
+sharing one predicate, so the two can never differ (D-03: "Welcome, Goodbye and Rules all follow this one rule"; the owner's
+answer was "Refuse, like the welcome"; D-01 lists sticker among the kinds). The contract adds no exemption for any kind. What
+the shared check in `settings_edit_check.go` actually does today, which Rules inherits unchanged:
+
+- **Text side.** `settingsEditCheckGreetingText` switches to the caption limit (1024) whenever `settingsEditPartIsSet(state,
+  media)` holds, that is whenever a file ID is stored with a media type the editor names (photo, video, document or GIF
+  document, sticker, audio, voice, video note), and it takes the stored media type as the data type for the commands' own
+  length refusal (`content.TextLengthRefusal`: over 1024 characters of stored HTML for any non-text type). So a **sticker or a
+  video note stored on a Welcome puts its text under 1024 exactly like a photo does**; there is no carve-out.
+- **Media side.** `settingsEditCheckMedia` accepts a photo, video, document or GIF, sticker, audio or voice message and holds
+  the stored text to 1024 (rune count first, then the filled length), refusing with `settings_edit_refuse_media_text_long`. A
+  **sticker is therefore refused over a text longer than 1024**, like any other kind. A **video note is not accepted as typed
+  media at all** (`dataType == db.VIDEO_NOTE` gives `settings_edit_refuse_need_media`, as does anything that is not media);
+  a video note can only be on a message stored by `/setwelcome` or `/setgoodbye` by reply, and then it still holds the text
+  to 1024 through the text side above.
+- **What Rules takes from it.** The Rules typed-reply path stops being "text only" (`settingsEditCheck`'s Rules arm for media
+  and buttons is removed) and uses the same two predicates: a Rules text is held to 1024 (heading included) while
+  `settingsEditPartIsSet(state, media)` holds, whatever the kind, and a Rules media is refused over a stored text whose heading
+  plus text is over 1024, for every kind `settingsEditCheckMedia` accepts; a video note sent as Rules media is refused with
+  `settings_edit_refuse_need_media`, as on Welcome. The plan shares the predicates by calling them, not by copying them. What
+  Rules adds is only the measure: the length is the `/rules` heading (with the group's real title, in the longest of the
+  8 languages, as `settingsEditRulesHeadings` already does) plus the rules text, because placeholders do not exist in rules.
+- **Note for the planner (not an owner question).** `11-UI-SPEC.md` ("Media and text of a sticker") says that setting a sticker,
+  or text over a sticker, is allowed. The code does not do that: a stored sticker holds the text to 1024 and a text over 1024
+  refuses a sticker, as for every other kind, and a video note cannot be typed at all. The note shown for a sticker or a video
+  note (`settings_edit_note_no_caption`, "sent without text, so the text is not shown") describes what a member sees, not a
+  relaxation of the limit. Rules stays equal to the Welcome; if the Phase 11 sentence is ever to be made true, that is a change
+  to the shared predicate for all three pages, not a Rules exception.
 
 | Typed part | Condition | Refusal key | Notes |
 |------------|-----------|-------------|-------|
-| Rules text | caption media is set and the visible length of heading plus new text is over 1024 UTF-16 units | **new** `settings_edit_refuse_text_rules_long` (`{n}` = that length, `{max}` = 1024) | Rules-specific wording, no "names": "With the heading added, this would be {n} characters, and the limit with media is {max}. Please shorten it." The heading is built with the group's real title by the same code `/rules` uses; no placeholders exist in rules. `settings_edit_refuse_too_long_filled` is **not** used for Rules and stays unchanged for Welcome and Goodbye |
-| Rules media | the media being set is caption media and the stored text, with the heading, is over 1024 | **new** `settings_edit_refuse_media_rules_long` (`{n}`, `{max}`) | says the heading counts and to shorten the rules first. Welcome and Goodbye keep `settings_edit_refuse_media_text_long` |
-| Rules media | the media being set is a sticker or a video note | none | accepted whatever the text length; the saved page shows `settings_edit_note_no_caption` |
-| Rules text | no media, or a sticker or video note: stored form over 3800 as before; dry run heading plus text over 4096 | unchanged (`content_text_too_long` and the stored-form key of Phase 11) | removing the media keeps a long text, up to 3800 (D-03); the 1024 never applies here |
-| Rules media or buttons | not text/not media, bad syntax, bad link, too many | the Welcome keys above | no new key |
+| Rules text | media of any kind is set (`settingsEditPartIsSet(state, media)`, the Welcome's test) and the visible length of heading plus new text is over 1024 UTF-16 units | **new** `settings_edit_refuse_text_rules_long` (`{n}` = that length, `{max}` = 1024) | Rules-specific wording, no "names": "With the heading added, this would be {n} characters, and the limit with media is {max}. Please shorten it." The heading is built with the group's real title by the same code `/rules` uses; no placeholders exist in rules. `settings_edit_refuse_too_long_filled` is **not** used for Rules and stays unchanged for Welcome and Goodbye |
+| Rules media | the media being set is any kind `settingsEditCheckMedia` accepts (photo, video, document or GIF, **sticker**, audio, voice) and the stored text, with the heading, is over 1024 | **new** `settings_edit_refuse_media_rules_long` (`{n}`, `{max}`) | says the heading counts and to shorten the rules first. Welcome and Goodbye keep `settings_edit_refuse_media_text_long`. A sticker is refused here exactly as it is on Welcome |
+| Rules text | no media stored: stored form over 3800 as before; dry run heading plus text over 4096 | unchanged (`content_text_too_long` and the stored-form key of Phase 11) | removing the media keeps a long text, up to 3800 (D-03); the 1024 applies only while media is stored |
+| Rules media or buttons | not media (a video note included, as on Welcome), not text, bad syntax, bad link, too many | the Welcome keys above (`settings_edit_refuse_need_media` for a video note) | no new key |
 
-The wait prompt for Rules text shows `Up to {max} characters` with **1024 while the group's Rules has caption media and 3800
-otherwise** (no media, a sticker or a video note; a code constant, as in Phase 11 A7; the dry run is exact and the heading
-eats part of the 1024, so the refusal number is the true one). Assumption A6.
+The wait prompt for Rules text shows `Up to {max} characters` with **1024 while the group's Rules has media of any kind stored
+(the same `settingsEditPartIsSet(state, media)` test the check uses) and 3800 otherwise** (no media; a code constant, as in
+Phase 11 A7; the dry run is exact and the heading eats part of the 1024, so the refusal number is the true one). Assumption A6.
 
 **"Rules is set" (Assumption A1).** A rules message exists when the text, the media or the buttons are non-empty. `/rules`
 answers `rules_no_rules_set` only when all three are empty; with media or buttons and an empty text it sends the heading as
@@ -234,8 +254,8 @@ the Media under text flag (Assumption A3).
 preview are one message built by one builder: with media, the media with `heading + text` as its caption and the buttons
 under it; with no media, the text message with the buttons under it as before. A rules row saved before this phase sends the
 same text-only message as today, byte for byte. With a sticker or a video note the text is not shown (Telegram sends them without text)
-and the page shows `settings_edit_note_no_caption` on Rules as it does on Welcome; the 1024 caption refusal does not apply to
-them (Assumption A13). `/rules` in the group has its heading in the group's language, and Full preview builds it the same way
+and the page shows `settings_edit_note_no_caption` on Rules as it does on Welcome; the note describes what a member sees and
+relaxes no limit: the 1024 rule above holds for them as for every kind. `/rules` in the group has its heading in the group's language, and Full preview builds it the same way
 (section "Preview on Rules"). When private rules is on, the click-to-read
 message in the group carries no media and no buttons; they appear in the private message the member opens (Assumption A8).
 
@@ -425,8 +445,8 @@ set: `Text: Not set`, `Media: Not set`, `Buttons: Not set`, rows `[ ✏️ Set t
 
 ### Rules prompts and refusals
 
-Text prompt while the Rules has caption media (`settings_edit_wait_text_rules`, `{max}` = 1024; with no media, a sticker or a
-video note it reads 3800):
+Text prompt while the Rules has media of any kind stored (`settings_edit_wait_text_rules`, `{max}` = 1024; with no media it
+reads 3800):
 
 ```
 Send me the new rules text now, as a normal message. Bold, italic, links and other formatting are kept. Placeholders such as {first} do not work in rules.
@@ -436,8 +456,8 @@ Up to 1024 characters.
 I'll wait until 14:32 UTC. Tap Cancel or send /cancel to keep things as they are.
 ```
 
-Refusal of a Rules text over the caption while caption media (not a sticker or video note) is set (reply to the owner's
-message, wait stays; `settings_edit_refuse_text_rules_long`):
+Refusal of a Rules text over 1024 while media of any kind is stored, a sticker included (reply to the owner's message, wait
+stays; `settings_edit_refuse_text_rules_long`):
 
 ```
 With the heading added, this would be 1180 characters, and the limit with media is 1024. Please shorten it.
@@ -447,8 +467,8 @@ I'm still waiting. Send it again, or tap Cancel.
 [ ❌ Cancel ]
 ```
 
-Refusal of Rules caption media (a photo, video, GIF, file, audio or voice message) over a long text (a sticker is accepted
-whatever the text length and the saved page carries `settings_edit_note_no_caption`):
+Refusal of Rules media (a photo, video, GIF, file, sticker, audio or voice message) over a long text (a video note is refused
+earlier, as on Welcome, with `settings_edit_refuse_need_media`):
 
 ```
 With its heading, the rules text is 1180 characters, which is too long for a caption (the limit is 1024). Shorten the rules first, then set the media.
@@ -520,7 +540,18 @@ translated by the executors under these limits.
 
 ### New locale keys (13)
 
-Thirteen new keys, so the editor's key count goes from 83 to 96. All values are the English source.
+Thirteen new keys. All values are the English source.
+
+**Key counts (reproducible; counting rule: top-level keys of `locales/en.yml` that begin with `settings_edit_` or
+`settings_btn_edit_`, the two prefixes of the editor).** Before this phase (counted 2026-11-05 with
+`grep -cE '^settings_edit_' locales/en.yml` and `grep -cE '^settings_btn_edit_' locales/en.yml`): **62** `settings_edit_` plus
+**15** `settings_btn_edit_` = **77**. The limits table `fuku/i18n/settings_locale_test.go` carries the same 62 + 15 rows (77) inside
+its **186** `settings_` rows, and `en.yml` has the same 186 `settings_` keys, which is the "covers exactly the `settings_` keys"
+rule. After this phase: the four renames move four keys from `settings_btn_edit_` to `settings_edit_` (62 + 4 = 66 and 15 - 4 = 11),
+the 13 new keys add 8 `settings_edit_` (rows 6 to 13 below: `line_below`, `line_once`, `hint_once`, `hint_below_file`,
+`media_animation`, `refuse_media_rules_long`, `below_unavailable`, `refuse_text_rules_long`) and 5 `settings_btn_edit_` (rows 1
+to 5), giving **74** `settings_edit_` plus **16** `settings_btn_edit_` = **90** (77 + 13), and **199**
+`settings_` keys in all (186 + 13). `settings_edit_hint_rules` changes text only and adds no key.
 
 Switch buttons. **The ceiling is 20 rendered code points in every column and every language**: the rendered label is the
 icon (`✅` or `❌`, one code point), one space, then the translated name, so **the name is at most 18 code points**. `{state}`
@@ -632,14 +663,18 @@ All of Phase 11's checks stand (the Phase 11 contract's list). Phase 12 adds or 
    read. Parity: the three Remove presses of Rules store what `/clearrules` stores; a Rules media or buttons typed reply stores
    what the Welcome path stores for the same input; the three switch writes are column-targeted, write a Go `false`, and call
    `cache.DeleteCache` for the key they change.
-8. **Rules caption rule.** A Rules text over 1024 with caption media set (photo, video, GIF, file, audio, voice) is refused with
-   `settings_edit_refuse_text_rules_long` and its number, and a caption media over a text over 1024 with
-   `settings_edit_refuse_media_rules_long`, and the wait stays in both; **with a sticker or a video note as the media, a Rules text
-   over 1024 (up to the no-media limits) is accepted, a sticker is accepted over a long text, the prompt shows 3800 and the page
-   shows `settings_edit_note_no_caption`** (the dry run never refuses for a limit that does not apply); with the media removed, a
-   text up to the old limit is accepted again; a rules row saved before this phase sends a message byte-identical to today's. A
-   Rules refusal never carries the wording of `settings_edit_refuse_too_long_filled`, and Welcome and Goodbye still use it.
-   The `/rules` heading is counted in the 1024 with the group's real title.
+8. **Rules caption rule (same as the Welcome, every kind).** A Rules text over 1024 (heading included) with media of any kind
+   stored, a sticker and a video note stored by another path included, is refused with `settings_edit_refuse_text_rules_long`
+   and its number, and a Rules media of any kind the check accepts (photo, video, GIF, file, sticker, audio, voice) over a text
+   whose heading plus text is over 1024 is refused with `settings_edit_refuse_media_rules_long`, and the wait stays in both; a
+   video note sent as Rules media is refused with `settings_edit_refuse_need_media`; the prompt shows 1024 while any media is
+   stored and 3800 otherwise. A **parity table test** runs the same inputs through a Welcome page and a Rules page (text at
+   1000, 1024 and 1025 visible units less the Rules heading, for each stored kind: none, photo, video, GIF, file, sticker,
+   audio, voice, video note) and asserts that the two accept or refuse alike at the same boundary, so a kind can never be
+   exempt on one page and not on the other; with the media removed, a text up to the old limit is accepted again; a rules row
+   saved before this phase sends a message byte-identical to today's. A Rules refusal never carries the wording of
+   `settings_edit_refuse_too_long_filled`, and Welcome and Goodbye still use it. The `/rules` heading is counted in the 1024
+   with the group's real title.
 9. **No side effects.** Opening Welcome, Goodbye or Rules, Preview and Full preview create no row (`greetings`, `rules`,
    `chats`, `greeted_members`) and write nothing; Full preview of a Welcome with Greet once on never claims a member.
 10. **Privacy.** `TestSettingsStaffPrivacy` renders every Phase 12 screen in all 8 languages, once in a group menu and once in a
@@ -649,7 +684,10 @@ All of Phase 11's checks stand (the Phase 11 contract's list). Phase 12 adds or 
     rows under their new names, and still covers exactly the `settings_` keys; the rows of keys 1 to 5 count `{state}` as the 1
     code point it renders as and carry the ceiling 20 (never 26); the placeholder test asserts `{state}` in keys 1 to 7, `{n}`
     and `{max}` in keys 11 and 13, and that `<code>/rules</code>` survives in `settings_edit_hint_rules` in all 8 locales.
-    The editor's `settings_edit_` key total is 96. `make check-translations` passes.
+    The totals, counted on `locales/en.yml` as the key section states (prefixes `settings_edit_` and `settings_btn_edit_`): 62 +
+    15 = 77 before, **74 + 16 = 90** after (the four renames move four keys from the second prefix to the first, and the 13 new
+    keys are 8 and 5), and 186 before and **199** after for all `settings_` keys, the figure the limits table must cover
+    exactly. `make check-translations` passes.
 12. **Rules Full preview matches the member view.** With the presser's language different from the group's: in a private menu
     and in a menu opened in the group, the Full preview message (heading, no-rules line, text, media, caption placement, buttons)
     is equal to what `/rules` sends in the group for the same stored row (compare the calls the fake client records), with the
@@ -667,7 +705,7 @@ Applicable state considerations resolved: 14 covered, 3 backstop, 4 unresolved.
 |----------|------------|--------|---------------------|
 | empty | Rules with no text, media or buttons; Welcome with no row | ✅ covered | `Not set` / `Default` words, three `[Set]` rows, Full preview alone and `rules_no_rules_set`; Welcome shows the defaults the runtime uses (Greet once off, Media under text not drawn) |
 | zero-one-many | Rules buttons: 0, 1, many; an album for Rules media | ✅ covered | the Phase 11 words and limits (100 buttons, 8 per row, an album keeps one) apply to Rules |
-| long-text | Rules text with caption media (heading counts toward 1024); a sticker or video note; five translated switch labels | ✅ covered | the two Rules-specific refusals with the true number; no refusal for a sticker or video note (A13); the five cells at most 20 rendered in 8 languages (name at most 18); pages at most 3800 units |
+| long-text | Rules text with media of any kind (heading counts toward 1024); five translated switch labels | ✅ covered | the two Rules-specific refusals with the true number, held to the Welcome's rule for every media kind by one shared predicate; the five cells at most 20 rendered in 8 languages (name at most 18); pages at most 3800 units |
 | overflow | Welcome and Goodbye with every part and switch set | ✅ covered | the row budget table: 8 private, 9 group; the switch block is a two-column grid; a test builds the worst case |
 | error | failed read, failed write, failed send, failed edit | ✅ covered | unchanged from Phase 11; a failed switch write redraws with `⚠️ common_settings_save_failed` and the old state |
 | permissions | Media under text, Greet once, Rules media and buttons | ✅ covered | rights per switch and part as above; step 4b on every press; the typed-reply door re-checks live |
@@ -718,8 +756,11 @@ recording a decision.
 | A9 | Does a preview touch the greet-once record? | Never: Preview and Full preview ignore the switch and write nothing |
 | A10 | Does the page warn about members welcomed before Greet once was turned on? | Yes, one sentence in `settings_edit_hint_once`: the record starts when the switch is on, so earlier members are welcomed once more |
 | A11 | Does the Main line for Welcome mention Greet once or Media under text? | No: it stays On or Off, short, and the two switches are details of the page |
-| A12 | Which language does the Rules Full preview use when private rules is on? | The group's language, as `/rules` in the group with private rules off (amendment M3). Members of a private-rules group read the private message with its heading in their own language, which no single preview can show; the content, media, buttons and caption placement are identical because both go through the one builder |
-| A13 | Does the 1024 caption refusal apply to a Rules sticker or video note? | No. Those kinds are sent without text, so the text is not shown, the page says so (`settings_edit_note_no_caption`) and the no-media limits (3800 stored, 4096 dry run) apply; the refusals, the prompt's `{max}` and the checks all use one "carries a caption" predicate. This reads D-03's "while media is set" through its reason (the caption limit) and agrees with Phase 11's "a sticker, or text over a sticker, is allowed" |
+| A12 | Which language does the Rules Full preview use when private rules is on? | The group's language, as `/rules` in the group with private rules off (amendment M3). Members of a private-rules group read the private message with its heading in their own language, which no single preview can show; the content, media, buttons and caption placement are identical because both go through the one builder. **The owner should confirm A12 when the plan is reviewed.** D-02's "exactly" is read as "the same content, media and buttons through the one builder": it cannot be word for word in every member's own language when private rules is on |
+
+There is no A13: it was withdrawn in revision 2 because it narrowed locked D-03 for a sticker and a video note. The number is
+not reused, so A12 and the other numbers keep their meaning. The rule that replaced it is stated once, in "Refusals new to
+Rules": Rules follows the Welcome's rule for every media kind, by sharing one predicate.
 
 ---
 
@@ -729,7 +770,7 @@ recording a decision.
 |----------|------------------------------------------|
 | D-01 (Rules gain media and buttons through the parts table) | "Rules: media and buttons parts", "Body of the three editor pages", the Rules mocks, callback `t=m` and `t=b` on Rules |
 | D-02 (`/rules` and private rules through the shared send path; media and buttons only from the editor; Full preview shows exactly what members see) | "What a member sees", "Preview on Rules" and "Language of the Rules Full preview", amendment M3, check 12 |
-| D-03 (one message, caption limit 1024, refuse both ways, say why) | "Refusals new to Rules", `settings_edit_refuse_text_rules_long`, `settings_edit_refuse_media_rules_long`, the prompt `{max}` rule, A13 (caption media only) |
+| D-03 (one message, caption limit 1024, refuse both ways, say why) | "Refusals new to Rules", `settings_edit_refuse_text_rules_long`, `settings_edit_refuse_media_rules_long`, the prompt `{max}` rule, the shared predicate (Rules follows the Welcome's rule for every media kind, no exemption), parity test in check 8 |
 | D-04 (Remove clears one part; `/clearrules` all three) | "Remove", row 7 of the checks |
 | D-05 (rules saved before this phase read the same) | Assumption A1, check 8 |
 | D-06 (Media under text switch, three pages, default off) | "Media under text switch", Welcome, Goodbye and Rules mocks |
@@ -755,15 +796,24 @@ recording a decision.
 - **State icon.** Add `settingsStateIcon(on bool)` (`✅`/`❌`); `settingsStateWord` stays for the body lines.
 - **Eligibility.** One function of the media type decides: photo, video and the new animation type. The page, the stale-press
   check and the sender use it; the sender also reads the stored flag only through it, so a stored "on" with another kind is ignored.
-- **Locales.** `make check-translations` first; add 13 keys and rename 4 in all 8 files, change `settings_edit_hint_rules` in all 8,
+- **Locales.** `make check-translations` first; add 13 keys and rename 4 in all 8 files (editor keys by the counting rule in
+  "New locale keys": 62 + 15 = 77 before, 74 + 16 = 90 after; all `settings_` keys 186 before, 199 after, the number the limits
+  table must cover exactly), change `settings_edit_hint_rules` in all 8,
   update the limits rows (the five switch rows count `{state}` as 1 and carry 20) and the two label tests. `AGENTS.md` (Callbacks, Data,
   Subsystem traps) is updated in the same commit as the code, including the new controls `u` and `o` and the Rules parts, and the
   rewritten Previews sentence on the Rules Full preview heading (amendment M3).
 - **Rules Full preview language.** Build the Rules Full preview message with a translator for the group's language, got by the
   group's chat ID through a new accessor on the cached language read in `fuku/db/lang` (the read `/rules` reaches); keep the
   presser's translator for the header line only. Update the comment above the Rules Full preview in `settings_edit_preview.go`.
-- **Caption rule.** One predicate says whether a media kind carries a caption (not sticker, not video note); the Rules dry run, the
-  prompt's `{max}` and the media refusal all use it.
+- **Caption rule.** Rules follows the Welcome's rule for every media kind, by sharing one predicate, so the two can never
+  differ. Do not write a Rules-only kind list. The text side is `settingsEditPartIsSet(state, media)` (any stored kind the editor
+  names, sticker and video note included) switching the limit to 1024; the media side is `settingsEditCheckMedia`'s accepted kinds
+  (a video note is refused as typed media, `settings_edit_refuse_need_media`). Remove the "Rules has a text part only" arm of
+  `settingsEditCheck` so Rules media and buttons reach those functions, and give `settingsEditCheckRulesText` the same
+  media-stored branch (limit 1024 on heading plus text, `settings_edit_refuse_text_rules_long`) beside its no-media limit. The
+  prompt's `{max}` uses the same test. A parity table test (check 8) runs Welcome and Rules over every stored kind. Phase 11's
+  sentence "a sticker, or text over a sticker, is allowed" is not what the code does (see "Which media the 1024 applies to"); the
+  planner keeps Rules equal to the Welcome and does not ask the owner.
 - **Spike first** (roadmap flag): `show_caption_above_media` on photo, video and animation on a real client, the 1024 limit, and a
   GIF through `sendAnimation`; the dry run and the Rules caption rule depend on it.
 
