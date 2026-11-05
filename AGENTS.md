@@ -975,6 +975,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `claimRecentJoinProcessing`, so it holds across replicas and with no Redis. The switch is written by
   `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), the one write path of the Welcome page's Greet once switch (control
   `o`, no command).
+- `chat_requirements` (migration 20261106120000) is the member requirements setting, one row per chat: five `SMALLINT`
+  action columns (`last_name_action`, `username_action`, `russian_action`, `arabic_action`, `chinese_action`, 0 off, 1 warn,
+  2 kick, 3 ban, 4 mute, each under its own named CHECK `chk_chat_requirements_<rule>` for 0..4) and the `check_on_join`
+  and `delete_messages` switches. A chat without a row means every rule off and both switches off. It is read through
+  `cache.GetFromCacheOrLoad` under `cache.CacheKey("member_requirements", chat)` (`memberreq.GetSettings`; `GetSettingsFresh`
+  is the same query without the cache) and creates no row. `memberreq.SetRuleAction`, `SetCheckOnJoin` and
+  `SetDeleteMessages` are three column-targeted `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of their own column plus
+  `updated_at`, so a Go 0 or `false` is written and two admins changing two rules never clobber each other, each followed by
+  `cache.DeleteCache` of that key; a value outside 0..4 or an unknown rule is refused before any write. The model has no
+  `default:` tag on its booleans. It is never part of backup, export, import or reset.
+- `chat_requirement_holds` (same migration) is one member's requirement episode in one chat, unique on `(chat_id, user_id)`
+  (`uk_chat_requirement_holds_chat_user`): both the latch that makes a violation punished once across replicas and the
+  record of a mute the bot placed. `memberreq.ClaimHold` is one `INSERT ... ON CONFLICT DO NOTHING` and only the caller whose
+  insert landed (`RowsAffected == 1`) acts; a pending hold (not yet confirmed punished) older than `memberreq.StaleClaim`
+  (2 minutes) is taken over by `ReclaimStaleHold`, one conditional update with one winner. The other operations (mark
+  punished, notice ID, welcome held, backoff, revert to pending, take by ID with `DELETE ... RETURNING`, restore, the clean
+  predicate, clear all, take before a join) are fresh database statements too. The hold is read fresh, never cached (so no
+  `DeleteCache` applies), never touches Redis and works without it, and is never part of backup, export, import or reset.
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
   (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
@@ -1830,6 +1848,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestImportGreetingsOmittedBlocks` (`./fuku/db/backup`: a greetings import whose payload omits `welcome_settings` or
   `goodbye_settings` imports and writes the three NOT NULL switch columns as false, because `importGreetings` fills a missing
   block with an empty one; without it the nil embedded block inserts NULL and PostgreSQL answers SQLSTATE 23502).
+  The Phase 13 guarantees are `TestChatRequirementsSettings` (`./fuku/db/memberreq`: the five action CHECKs refuse 5 and -1
+  with SQLSTATE 23514, column-targeted upserts of two rules at once never clobber each other, a Go 0 and `false` are
+  written), `TestRequirementHoldClaimConcurrent` (of 16 concurrent claims of one `(chat_id, user_id)` exactly one wins, and of
+  16 concurrent reclaims of one stale pending hold exactly one wins) and `TestRequirementHolds` (the take, restore, clean and
+  clear semantics); all three also run on SQLite in `make test`, and `fuku/db/memberreq/testmain_test.go` migrates both models.
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
