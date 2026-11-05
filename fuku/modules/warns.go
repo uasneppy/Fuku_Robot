@@ -133,7 +133,7 @@ func applyWarn(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID i
 		return res, nil
 	}
 	res.LimitReached = true
-	punished, actionErr := applyWarnLimitAction(b, chat, userID, settings.WarnMode)
+	punished, actionErr := applyWarnLimitAction(ctx, b, chat, userID, settings.WarnMode)
 	if actionErr != nil {
 		res.LimitErr = actionErr
 		return res, nil
@@ -149,10 +149,10 @@ func applyWarn(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID i
 
 // applyWarnLimitAction runs the group's limit action for mode. punished is false for a mode the
 // warn module does not know, which applies nothing.
-func applyWarnLimitAction(b *gotgbot.Bot, chat *gotgbot.Chat, userID int64, mode string) (punished bool, err error) {
+func applyWarnLimitAction(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID int64, mode string) (punished bool, err error) {
 	switch mode {
 	case "kick":
-		err = kickMember(b, chat.Id, userID)
+		err = kickMemberContext(ctx, b, chat.Id, userID)
 		if err != nil {
 			log.Errorf("[warn] warnlimit: kick (%d) - %s", userID, err)
 			return false, err

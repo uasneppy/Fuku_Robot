@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,7 +26,14 @@ import (
 var bansModule = moduleStruct{moduleName: "Bans"}
 
 func kickMember(b *gotgbot.Bot, chatID, userID int64) error {
-	_, err := b.UnbanChatMember(chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
+	return kickMemberContext(context.Background(), b, chatID, userID)
+}
+
+// kickMemberContext removes a member with the member-removing unbanChatMember the Bot API
+// defines (only_if_banned false): a current member is removed from the group and can join again.
+// It is the kick of /kick, the captcha and the member requirements, bounded by ctx.
+func kickMemberContext(ctx context.Context, b *gotgbot.Bot, chatID, userID int64) error {
+	_, err := b.UnbanChatMemberWithContext(ctx, chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
 	return err
 }
 

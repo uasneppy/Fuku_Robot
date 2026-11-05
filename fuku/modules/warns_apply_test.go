@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -55,14 +56,17 @@ func newApplyWarnEnv(t *testing.T, limit int, mode string) *applyWarnEnv {
 	return env
 }
 
-// storedWarns counts the member's stored warns straight from the database.
+// storedWarns reads the member's stored warn count straight from the database (0 when no row).
 func (e *applyWarnEnv) storedWarns(t *testing.T) int64 {
 	t.Helper()
-	var n int64
-	if err := db.DB.Model(&models.Warns{}).Where("chat_id = ? AND user_id = ?", e.chat.Id, e.userID).Count(&n).Error; err != nil {
-		t.Fatalf("count warns: %v", err)
+	var rows []models.Warns
+	if err := db.DB.Where("chat_id = ? AND user_id = ?", e.chat.Id, e.userID).Find(&rows).Error; err != nil {
+		t.Fatalf("read warns: %v", err)
 	}
-	return n
+	if len(rows) == 0 {
+		return 0
+	}
+	return int64(rows[0].NumWarns)
 }
 
 // assertNoTelegramWrite fails when the fake saw a message, a restriction, a ban or an unban.
@@ -200,9 +204,7 @@ func applyWarnLimitCases(t *testing.T) {
 			}
 			switch mode {
 			case "kick":
-				if only, ok := call.Params["only_if_banned"].(bool); !ok || only {
-					t.Fatalf("only_if_banned = %v, want false so the member is removed", call.Params["only_if_banned"])
-				}
+				assertOnlyIfBannedOff(t, call)
 			case "mute":
 				perms, ok := call.Params["permissions"].(gotgbot.ChatPermissions)
 				if !ok || perms.CanSendMessages || perms.CanSendPhotos || perms.CanSendOtherMessages {
@@ -247,6 +249,7 @@ func TestKickMemberContext(t *testing.T) {
 	t.Run("a cancelled context makes no request", func(t *testing.T) {
 		client := newModuleBotClient()
 		bot := newModuleTestBot(client)
+		bot.BotClient = ctxAwareBotClient{moduleBotClient: client}
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		if err := kickMemberContext(ctx, bot, chatID, userID); err == nil {
@@ -285,7 +288,25 @@ func assertKickCall(t *testing.T, call moduleBotCall, chatID, userID int64) {
 	if fmt.Sprint(call.Params["chat_id"]) != fmt.Sprint(chatID) || fmt.Sprint(call.Params["user_id"]) != fmt.Sprint(userID) {
 		t.Fatalf("unbanChatMember params = %v, want chat %d and user %d", call.Params, chatID, userID)
 	}
-	if only, ok := call.Params["only_if_banned"].(bool); !ok || only {
-		t.Fatalf("only_if_banned = %v, want false", call.Params["only_if_banned"])
+	assertOnlyIfBannedOff(t, call)
+}
+
+// assertOnlyIfBannedOff fails unless the unban is the member-removing one: gotgbot leaves a false
+// only_if_banned off the wire, where Telegram's default is the same false.
+func assertOnlyIfBannedOff(t *testing.T, call moduleBotCall) {
+	t.Helper()
+	if only, present := call.Params["only_if_banned"]; present && only != false {
+		t.Fatalf("only_if_banned = %v, want false so the member is removed", only)
 	}
+}
+
+// ctxAwareBotClient refuses a request whose context is done before it is recorded, as gotgbot's
+// own HTTP client does; the shared fake ignores the context.
+type ctxAwareBotClient struct{ *moduleBotClient }
+
+func (c ctxAwareBotClient) RequestWithContext(ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return c.moduleBotClient.RequestWithContext(ctx, token, method, params, opts)
 }
