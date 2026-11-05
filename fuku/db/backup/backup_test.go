@@ -483,6 +483,53 @@ func TestClearChatData_AllModules(t *testing.T) {
 	}
 }
 
+// TestClearWarnsRestoresFreshChatDefaults pins what a warns reset stores: the limit and
+// mode a chat that never configured warns gets, never an empty mode. PostgreSQL's legacy
+// chk_warns_mode refuses an empty warn_mode, which SQLite does not model, so the reset
+// step is also proven on PostgreSQL by make test-postgres-integrity.
+func TestClearWarnsRestoresFreshChatDefaults(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano()
+	freshChatID := chatID + 1
+	warnedUserID := chatID + 2
+	require.NoError(t, chats.EnsureChatInDb(chatID, "test_clear_warns"))
+	require.NoError(t, chats.EnsureChatInDb(freshChatID, "test_clear_warns_fresh"))
+	t.Cleanup(func() {
+		cleanupBackupChat(t, chatID)
+		cleanupBackupChat(t, freshChatID)
+	})
+
+	require.NoError(t, warns.SetWarnLimit(chatID, 10))
+	require.NoError(t, warns.SetWarnMode(chatID, "ban"))
+	_, _, err := warns.WarnUser(warnedUserID, chatID, "spam")
+	require.NoError(t, err)
+
+	// Read through the cache first so a stale entry would survive an unclean reset.
+	configured := warns.GetWarnSetting(chatID)
+	require.Equal(t, 10, configured.WarnLimit)
+	require.Equal(t, "ban", configured.WarnMode)
+
+	require.NoError(t, ClearChatData(chatID, []string{BackupModuleWarns}))
+
+	fresh := warns.GetWarnSetting(freshChatID)
+	require.NotEmpty(t, fresh.WarnMode)
+
+	stored, err := findChatSetting[models.WarnSettings](chatID)
+	require.NoError(t, err)
+	require.NotNil(t, stored, "a reset stores the default warn settings row")
+	assert.Equal(t, fresh.WarnLimit, stored.WarnLimit)
+	assert.Equal(t, fresh.WarnMode, stored.WarnMode)
+
+	cached := warns.GetWarnSetting(chatID)
+	assert.Equal(t, fresh.WarnLimit, cached.WarnLimit)
+	assert.Equal(t, fresh.WarnMode, cached.WarnMode)
+
+	var remaining int64
+	require.NoError(t, db.DB.Model(&models.Warns{}).Where("chat_id = ?", chatID).Count(&remaining).Error)
+	assert.Zero(t, remaining, "a reset clears every user's warns")
+}
+
 func TestClearChatData_InvalidModule(t *testing.T) {
 	skipIfNoDb(t)
 
@@ -517,7 +564,7 @@ func TestClearModuleData_IndividualModules(t *testing.T) {
 	require.NoError(t, warns.SetWarnMode(chatID, "ban"))
 	require.NoError(t, ClearModuleData(chatID, BackupModuleWarns))
 	assert.Equal(t, 3, warns.GetWarnSetting(chatID).WarnLimit)
-	assert.Equal(t, "", warns.GetWarnSetting(chatID).WarnMode)
+	assert.Equal(t, "mute", warns.GetWarnSetting(chatID).WarnMode)
 
 	require.NoError(t, locks.UpdateLock(chatID, " stickers", true))
 	require.NoError(t, ClearModuleData(chatID, BackupModuleLocks))

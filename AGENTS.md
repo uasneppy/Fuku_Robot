@@ -693,6 +693,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Antiflood counters are in-process (per replica). The raid detection counters (`fuku:raid:*`) are Redis-only: without
   Redis the automatic triggers do nothing, and `/lockdown` still works.
 - Fed-ban lookups cache per `(fed, user)` with a negative sentinel; every ban/unban write must invalidate it.
+- `warns_settings.warn_mode` has two live CHECKs: the legacy `chk_warns_mode` (migration 20250805204145: `NULL` or one of
+  `ban`, `kick`, `mute`, `tban`, `tmute`) and `chk_warn_mode` (migration 20260412000000, which also allows `''`). Nothing
+  drops the legacy one, so PostgreSQL refuses an empty `warn_mode` (SQLSTATE 23514) while SQLite, which builds its check
+  from the model tag, accepts it. Write a real mode whenever a whole `WarnSettings` row is written: the warns repository's
+  default is `mute`, and the all-modules reset (`clearWarns`) stores it as `defaultWarnMode`. An empty mode is not a
+  harmless "unset" either: the warn handler treats it as an unknown mode and punishes nobody at the limit. Known gap: a
+  backup import whose `warn_settings` carries no `warn_mode` (`importWarns` writes it as it is) fails the same way on
+  PostgreSQL and rolls the import back.
 - A join arrives as both `ChatMemberUpdated` and a service message; dedupe through `claimRecentJoinProcessing`
   (the lockdown guard, which runs first, dedupes by its joiner row instead and never gates a ban on Redis).
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
@@ -1319,6 +1327,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `turnstile`, `math` and `text` and refuses the rest with `check_violation`, exactly one `captcha_mode` check is left
   on `captcha_settings`, and the migration's statements run twice without error; `TestCaptchaModeMigrationStatements`
   is its database-free half and runs in `make test`).
+  The backup reset guarantee is `TestClearChatData_AllModules` and `TestClearWarnsRestoresFreshChatDefaults`
+  (`./fuku/db/backup`: a reset of every module commits on PostgreSQL, and the warns reset stores the fresh-chat default
+  limit and a mode the legacy `chk_warns_mode` accepts). SQLite builds its checks from the model tags and has no
+  `chk_warns_mode`, so only PostgreSQL can fail it.
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
