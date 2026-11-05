@@ -987,7 +987,7 @@ func TestSettingsEditRegistry(t *testing.T) {
 	owner := env.newOwner(env.chat)
 	msgID := env.openMenu(owner)
 	text, keyboard := env.lastEdit(env.chat.Id, msgID)
-	if got, wantShape := settingsMainShape(t, keyboard), "s|l / c|f / w|g / r / a / close"; got != wantShape {
+	if got, wantShape := settingsMainShape(t, keyboard), "s|l / c|f / w|g / r|m / a / close"; got != wantShape {
 		t.Errorf("the owner's group Main = %q, want %q", got, wantShape)
 	}
 	for _, key := range []string{"settings_page_welcome", "settings_page_goodbye", "settings_page_rules"} {

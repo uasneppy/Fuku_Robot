@@ -119,6 +119,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 						{Key: "w", Icon: "🎉", Title: settingsText(tr, "settings_page_welcome"), State: settingsText(tr, "common_status_on"), Known: true},
 						{Key: "g", Icon: "👋", Title: settingsText(tr, "settings_page_goodbye"), State: settingsText(tr, "common_status_off"), Known: true},
 						{Key: "r", Icon: "📜", Title: settingsText(tr, "settings_page_rules"), State: settingsText(tr, "settings_state_not_set"), Known: true},
+						{Key: "m", Icon: "🛂", Title: settingsText(tr, "settings_page_mreq"), State: settingsText(tr, "settings_state_off_plain"), Known: true},
 						{Key: "a", Icon: "🔑", Title: settingsText(tr, "settings_page_access"), State: settingsText(tr, "settings_state_access_off"), Known: true, OwnerOnly: true},
 					}
 				}
@@ -186,6 +187,21 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 						screens["editor screen "+viewName+" "+name] = screen
 					}
 				}
+				// Phase 13: the Member requirements page with every rule off, and with every punishment
+				// used once and both switches on, under every notice, for a group menu and for the private
+				// menu of an admin who is not the creator.
+				allOff := &models.ChatRequirements{}
+				everyPunishment := &models.ChatRequirements{
+					LastNameAction: models.RequirementActionWarn, UsernameAction: models.RequirementActionKick,
+					RussianAction: models.RequirementActionBan, ArabicAction: models.RequirementActionMute,
+					ChineseAction: models.RequirementActionOff, CheckOnJoin: true, DeleteMessages: true,
+				}
+				for viewName, view := range map[string]settingsView{"group": groupView, "private admin": privateAdminView} {
+					for i, notice := range notices {
+						screens[fmt.Sprintf("member requirements %s all off notice %d", viewName, i)] = renderSettingsMreqPage(view, allOff, notice)
+						screens[fmt.Sprintf("member requirements %s every punishment notice %d", viewName, i)] = renderSettingsMreqPage(view, everyPunishment, notice)
+					}
+				}
 				for i, notice := range notices {
 					name := fmt.Sprintf("notice %d", i)
 					screens["linked, "+name] = renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), notice)
@@ -246,10 +262,11 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		private("a", "ua")
 		private("a", "op", "p", "s")
 		private("a", "lk")
-		for _, page := range []string{"w", "g", "r"} {
+		for _, page := range []string{"w", "g", "r", settingsPageMreq} {
 			private("a", "op", "p", page)
 		}
 		private("a", "tg", "p", "w", "t", "e", "v", "0")
+		private("a", "tg", "p", settingsPageMreq, "t", settingsMreqControlJoin, "v", "1")
 
 		var seen []string
 		for _, edit := range env.edits(moderator.Id, menuMsgID) {

@@ -200,12 +200,15 @@ func settingsCleanup(t *testing.T, chatIDs ...int64) {
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.Chat{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatSettingsAccess{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatAdminIndex{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatRequirements{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatRequirementHold{})
 		for _, id := range chatIDs {
 			dbcache.DeleteCache(dbcache.CacheKey("captcha_settings", id))
 			dbcache.DeleteCache(dbcache.CacheKey("antiflood", id))
 			dbcache.DeleteCache(dbcache.CacheKey("chat_lang", id))
 			dbcache.DeleteCache(dbcache.CacheKey("chat_settings", id))
 			dbcache.DeleteCache(dbcache.CacheKey("chat", id))
+			dbcache.DeleteCache(dbcache.CacheKey("member_requirements", id))
 		}
 		dbcache.ResetLocalForTest()
 	}
