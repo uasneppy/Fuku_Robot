@@ -409,7 +409,7 @@ comma).
 | Fields | exactly `a=f`, `u` (the held member's user ID) and `h` (the hold row ID). Numbers only; never a name, a rule or a text |
 | Who may press | only the member whose ID is `u`. Anyone else (an admin included) gets the alert `mreq_fixed_not_yours` with **no read and no edit**. Admins lift a mute with `/unmute`, unchanged |
 | Answered | exactly once on every path |
-| Language | every callback answer (the `mreq_fixed_*` alerts, the `mreq_fixed_done` toast and `common_callback_invalid_request`) is in the **presser's language**, from the translator of the callback update (`ctxTr`). The edit of the group notice (`mreq_notice_fixed`, `mreq_notice_fixed_lockdown`, the `{name}` fallback and nothing else) stays in the **group's language**, like the notice it replaces |
+| Language | every callback answer (the `mreq_fixed_*` alerts, the `mreq_fixed_done` toast and `common_callback_invalid_request`) is in the **group's language**, from the translator of the callback update (`ctxTr`, which in a group callback is the group's language: `fuku/db/lang/repository.go:42-53`; research finding, the earlier presser-language choice is withdrawn because it would need a new per-user language lookup). The edit of the group notice (`mreq_notice_fixed`, `mreq_notice_fixed_lockdown`, the `{name}` fallback and nothing else) is in the **group's language** too, like the notice it replaces |
 
 The checks run in this order, each refusing before the next runs:
 
@@ -825,7 +825,7 @@ Rows 1 to 24 are always added. Row 25 is added only if research keeps a per-chat
 
 Rules for this family: no markup in any template (the only link is the spliced mention); `{name}` is a token spliced
 after translation; `{rules}` is built from rows 1 to 5 in the same language; `{n}`, `{limit}`, `{minutes}` and `{id}` are
-numbers. Alerts (rows 18 to 23) and the toast (row 17) are plain text in the presser's language (section 8), at most 160
+numbers. Alerts (rows 18 to 23) and the toast (row 17) are plain text in the group's language (section 8), at most 160
 code points as templates.
 
 **The rendered-length tests are the binding checks; the per-key ceilings are what makes them satisfiable.** A translation
@@ -931,8 +931,8 @@ and in ru and uk the hint still names Belarusian and Bulgarian. Shorten a transl
     whose punishment is not Off and not a rule since set to Off; a `getChat` failure and a `resolveUnmutePermissions` error
     each give `mreq_fixed_check_failed` and nothing changes; a failed unmute after the conditional delete answers
     `mreq_fixed_check_failed`, restores the hold with the same row ID and notice message ID, and a second tap of the same
-    button then succeeds; the alerts and the toast are in the presser's language while the notice edit is in the group's
-    (a test with the two languages different); success
+    button then succeeds; the alerts, the toast and the notice edit are all in the group's language (a test with a group language other than
+    English asserts it); success
     edits the notice to `mreq_notice_fixed` with no keyboard and answers the toast; during a lockdown the unmute uses the
     stored pre-lockdown permissions, the notice reads `mreq_notice_fixed_lockdown` and the answer is the alert; the
     callback is answered exactly once on every path; the held welcome is sent once through `SendWelcomeMessage` only for a
@@ -1067,7 +1067,7 @@ that change what the owner sees most. A11 is resolved** (13-CONTEXT D-10 carries
 - **Notices.** Build them with the group's translator; splice the mention after translation; disable link previews; never
   drop a mute notice when pacing (it carries the only button); retry a refused mute-notice send once, then keep the mute
   and the hold and log chat and user IDs at Warn.
-- **"I fixed it".** A new callback handler for `mreq|`, answered exactly once in the presser's language (`ctxTr`), presser
+- **"I fixed it".** A new callback handler for `mreq|`, answered exactly once in the group's language (`ctxTr`), presser
   checked before any read; `getChat` of the group, then `resolveUnmutePermissions` on its `*gotgbot.ChatFullInfo`, both
   before the conditional delete; if the unmute call fails after the delete, re-insert the hold with the same row ID and
   the same notice message ID, so the button's `h` still names it. Edit the notice with the group's translator.
