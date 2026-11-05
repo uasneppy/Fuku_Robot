@@ -54,8 +54,8 @@ func TestSetWelcomeGifIsAnimation(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("sendAnimation calls = %d, want 1", len(calls))
 	}
-	if got := calls[0].Params["animation"]; got != "gif-anim" {
-		t.Errorf("sendAnimation animation = %v, want gif-anim", got)
+	if got := legacyRequestJSON(t, calls[0]); !strings.Contains(got, `"animation":"gif-anim"`) {
+		t.Errorf("sendAnimation request %s lacks the animation file ID", got)
 	}
 	if docs := client.callsFor("sendDocument"); len(docs) != 0 {
 		t.Errorf("sendDocument calls = %d, want 0", len(docs))

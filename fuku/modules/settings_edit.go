@@ -215,7 +215,8 @@ func settingsEditLoad(ctx context.Context, def settingsEditPageDef, chatID int64
 }
 
 // settingsEditMediaKey is the locale key of the kind word of a stored media type, or "" for
-// no media. A GIF is stored as a document, exactly as the commands store it.
+// no media. A GIF saved from Phase 12 on is an animation, exactly as the commands store it; one saved earlier
+// is a document and reads File or GIF.
 func settingsEditMediaKey(mediaType int) string {
 	switch mediaType {
 	case db.PHOTO:
@@ -224,6 +225,8 @@ func settingsEditMediaKey(mediaType int) string {
 		return "settings_edit_media_video"
 	case db.DOCUMENT:
 		return "settings_edit_media_file"
+	case db.ANIMATION:
+		return "settings_edit_media_animation"
 	case db.STICKER:
 		return "settings_edit_media_sticker"
 	case db.AUDIO:

@@ -87,15 +87,17 @@ func Send(b *gotgbot.Bot, content Content, opts Options) (*gotgbot.Message, erro
 	case db.DOCUMENT:
 		return sendDocument(b, content, opts, parseMode, replyParams)
 	case db.PHOTO:
-		return sendPhoto(b, content, opts, parseMode, replyParams)
+		return sendCaptioned(b, content, opts, parseMode, replyParams)
 	case db.AUDIO:
 		return sendAudio(b, content, opts, parseMode, replyParams)
 	case db.VOICE:
 		return sendVoice(b, content, opts, parseMode, replyParams)
 	case db.VIDEO:
-		return sendVideo(b, content, opts, parseMode, replyParams)
+		return sendCaptioned(b, content, opts, parseMode, replyParams)
 	case db.VIDEO_NOTE:
 		return sendVideoNote(b, content, opts, replyParams)
+	case db.ANIMATION:
+		return sendCaptioned(b, content, opts, parseMode, replyParams)
 	default:
 		log.Warnf("[Media] Unknown message type %d, falling back to text", content.MsgType)
 		return sendText(b, content, opts, parseMode, replyParams)
@@ -152,22 +154,33 @@ func sendDocument(b *gotgbot.Bot, content Content, opts Options, parseMode strin
 	return resolveSendResult(msg, err, opts.ChatID, "document", sentAt)
 }
 
-func sendPhoto(b *gotgbot.Bot, content Content, opts Options, parseMode string, replyParams *gotgbot.ReplyParameters) (*gotgbot.Message, error) {
+// captionedKinds names the media types sendCaptioned sends, in lower case, for its logs and errors.
+var captionedKinds = map[int]string{db.PHOTO: "photo", db.VIDEO: "video", db.ANIMATION: "animation"}
+
+// sendCaptioned sends a photo, a video or an animation with its caption. It falls back to the text when the
+// file ID is empty and turns the outcome of the one Telegram call into the sender's error values. Only these
+// three types have a method that can place the caption above the media.
+func sendCaptioned(b *gotgbot.Bot, content Content, opts Options, parseMode string, replyParams *gotgbot.ReplyParameters) (*gotgbot.Message, error) {
+	kind := captionedKinds[content.MsgType]
 	if content.FileID == "" {
-		log.Warnf("[Media] Empty FileID for PHOTO '%s' in chat %d, falling back to text", content.Name, opts.ChatID)
+		log.Warnf("[Media] Empty FileID for %s '%s' in chat %d, falling back to text", strings.ToUpper(kind), content.Name, opts.ChatID)
 		return sendText(b, content, opts, parseMode, replyParams)
 	}
-	sentAt := time.Now()
-	msg, err := b.SendPhoto(opts.ChatID, gotgbot.InputFileByID(content.FileID), &gotgbot.SendPhotoOpts{
-		ReplyParameters:     replyParams,
-		ParseMode:           parseMode,
-		ReplyMarkup:         opts.Keyboard,
-		Caption:             content.Text,
-		ProtectContent:      opts.IsProtected,
-		DisableNotification: opts.NoNotif,
-		MessageThreadId:     opts.ThreadID,
-	})
-	return resolveSendResult(msg, err, opts.ChatID, "photo", sentAt)
+	var (
+		msg    *gotgbot.Message
+		err    error
+		sentAt = time.Now()
+		file   = gotgbot.InputFileByID(content.FileID)
+	)
+	switch content.MsgType {
+	case db.PHOTO:
+		msg, err = b.SendPhoto(opts.ChatID, file, &gotgbot.SendPhotoOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
+	case db.VIDEO:
+		msg, err = b.SendVideo(opts.ChatID, file, &gotgbot.SendVideoOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
+	default:
+		msg, err = b.SendAnimation(opts.ChatID, file, &gotgbot.SendAnimationOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
+	}
+	return resolveSendResult(msg, err, opts.ChatID, kind, sentAt)
 }
 
 func sendAudio(b *gotgbot.Bot, content Content, opts Options, parseMode string, replyParams *gotgbot.ReplyParameters) (*gotgbot.Message, error) {
@@ -204,24 +217,6 @@ func sendVoice(b *gotgbot.Bot, content Content, opts Options, parseMode string, 
 		MessageThreadId:     opts.ThreadID,
 	})
 	return resolveSendResult(msg, err, opts.ChatID, "voice", sentAt)
-}
-
-func sendVideo(b *gotgbot.Bot, content Content, opts Options, parseMode string, replyParams *gotgbot.ReplyParameters) (*gotgbot.Message, error) {
-	if content.FileID == "" {
-		log.Warnf("[Media] Empty FileID for VIDEO '%s' in chat %d, falling back to text", content.Name, opts.ChatID)
-		return sendText(b, content, opts, parseMode, replyParams)
-	}
-	sentAt := time.Now()
-	msg, err := b.SendVideo(opts.ChatID, gotgbot.InputFileByID(content.FileID), &gotgbot.SendVideoOpts{
-		ReplyParameters:     replyParams,
-		ParseMode:           parseMode,
-		ReplyMarkup:         opts.Keyboard,
-		Caption:             content.Text,
-		ProtectContent:      opts.IsProtected,
-		DisableNotification: opts.NoNotif,
-		MessageThreadId:     opts.ThreadID,
-	})
-	return resolveSendResult(msg, err, opts.ChatID, "video", sentAt)
 }
 
 func sendVideoNote(b *gotgbot.Bot, content Content, opts Options, replyParams *gotgbot.ReplyParameters) (*gotgbot.Message, error) {

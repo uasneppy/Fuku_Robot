@@ -171,7 +171,7 @@ func ExtractWelcome(msg *gotgbot.Message, greetingType string, language string) 
 		if len(args) == 0 && replyMsg.Text != "" {
 			result.DataType = db.TEXT
 		} else {
-			result.FileID, result.DataType = extractMediaFromReply(replyMsg)
+			result.FileID, result.DataType = extractGreetingMedia(replyMsg)
 		}
 	}
 
@@ -227,12 +227,23 @@ func ValidButtonURL(raw string) bool {
 }
 
 // ExtractMedia returns the Telegram file ID and the stored media type of a message, with the choices the
-// commands make for a replied-to message: sticker, then document (an animation also carries a document, so a GIF
-// is stored as a document), the largest photo, audio, voice, video, an animation alone as a document, and video
-// note. Anything else, and a nil message, gives ("", -1). The settings message editor calls it for the message
-// the owner sends.
+// greeting commands make for a replied-to message: an animation first (a GIF is stored as db.ANIMATION with the
+// animation's file ID, although Telegram also sets a document on it), then sticker, document, the largest photo,
+// audio, voice, video and video note. Anything else, and a nil message, gives ("", -1). Notes, filters and pins
+// do not use it and keep storing a GIF as a document. The settings message editor calls it for the message the
+// owner sends.
 func ExtractMedia(msg *gotgbot.Message) (fileID string, dataType int) {
-	return extractMediaFromReply(msg)
+	return extractGreetingMedia(msg)
+}
+
+// extractGreetingMedia is the media extraction of the greeting messages (/setwelcome, /setgoodbye and the
+// message editor). It differs from extractMediaFromReply, which notes, filters and pins keep, only for a GIF:
+// the animation is tested first and stored as db.ANIMATION, so Telegram can show its caption above it.
+func extractGreetingMedia(m *gotgbot.Message) (fileID string, dataType int) {
+	if m != nil && m.Animation != nil {
+		return m.Animation.FileId, db.ANIMATION
+	}
+	return extractMediaFromReply(m)
 }
 
 func preFixes(buttons []tgmd2html.ButtonV2, defaultNameButton string, text *string, dataType *int, fileid string, dbButtons *[]db.Button, errorMsg *string, language string) {
