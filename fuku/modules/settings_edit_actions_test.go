@@ -510,15 +510,17 @@ func TestSettingsEditPromptMax(t *testing.T) {
 func TestSettingsEditGroupMenuRefusal(t *testing.T) {
 	env := newSettingsEditEnv(t)
 	owner := env.newOwner(env.chat)
-	for _, tc := range []struct{ page, code string }{
-		{settingsPageWelcome, "ws"}, {settingsPageWelcome, "wr"}, {settingsPageWelcome, "wc"},
-		{settingsPageGoodbye, "gs"}, {settingsPageGoodbye, "gr"}, {settingsPageGoodbye, "gc"},
-		{settingsPageRules, "rs"}, {settingsPageRules, "rr"}, {settingsPageRules, "rc"},
+	for _, tc := range []struct{ page, code, part string }{
+		{settingsPageWelcome, "ws", "x"}, {settingsPageWelcome, "wr", "x"}, {settingsPageWelcome, "wc", "x"},
+		{settingsPageGoodbye, "gs", "x"}, {settingsPageGoodbye, "gr", "x"}, {settingsPageGoodbye, "gc", "x"},
+		{settingsPageRules, "rs", "x"}, {settingsPageRules, "rr", "x"}, {settingsPageRules, "rc", "x"},
+		{settingsPageRules, "rs", "m"}, {settingsPageRules, "rr", "m"}, {settingsPageRules, "rc", "m"},
+		{settingsPageRules, "rs", "b"}, {settingsPageRules, "rr", "b"}, {settingsPageRules, "rc", "b"},
 	} {
-		t.Run(tc.code, func(t *testing.T) {
+		t.Run(tc.code+" t="+tc.part, func(t *testing.T) {
 			msgID := openEditPage(env, owner, tc.page)
 			answers := env.answerCount()
-			env.press(owner, msgID, env.groupFields(owner, "a", tc.code, "t", "x"))
+			env.press(owner, msgID, env.groupFields(owner, "a", tc.code, "t", tc.part))
 			if got := env.answerCount() - answers; got != 1 {
 				t.Errorf("the press was answered %d times, want once", got)
 			}
@@ -538,8 +540,8 @@ func TestSettingsEditGroupMenuRefusal(t *testing.T) {
 			if _, ok := settingsEditStored(t, env.chat.Id); ok {
 				t.Error("a group menu press wrote a greetings row")
 			}
-			if row, ok := settingsEditRulesStored(t, env.chat.Id); ok && row.Rules != "" {
-				t.Errorf("a group menu press wrote rules %q", row.Rules)
+			if row, ok := settingsEditRulesStored(t, env.chat.Id); ok && row.HasContent() {
+				t.Errorf("a group menu press wrote rules %+v", row)
 			}
 		})
 	}
@@ -933,35 +935,35 @@ func TestSettingsAuthorityParityEdit(t *testing.T) {
 		env := newSettingsEditEnv(t)
 		env.fake.setBotRole(env.chat.Id, staffRoleMember)
 		owner := env.newOwner(env.chat)
-		if err := rules.SetChatRules(env.chat.Id, "the rules"); err != nil {
-			t.Fatalf("SetChatRules: %v", err)
-		}
+		settingsRulesSeedAll(t, env.chat.Id)
 		for _, action := range []string{"rs", "rr"} {
-			answers, edits := env.answerCount(), len(env.edits(owner.Id, 9191))
-			press(env, env.chat, owner, "a", action, "t", "x")
-			if got := env.answerCount() - answers; got != 1 {
-				t.Errorf("%s was answered %d times, want once", action, got)
-			}
-			if got := len(env.edits(owner.Id, 9191)) - edits; got != 1 {
-				t.Errorf("%s edited the message %d times, want the one redraw with the notice", action, got)
-			}
-			text, _ := env.lastEdit(owner.Id, 9191)
-			if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("chat_status_bot_not_admin")) {
-				t.Errorf("%s with the bot not an administrator drew %q, want the notice chat_status_bot_not_admin", action, text)
+			for _, part := range []string{"x", "m", "b"} {
+				answers, edits := env.answerCount(), len(env.edits(owner.Id, 9191))
+				press(env, env.chat, owner, "a", action, "t", part)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("%s t=%s was answered %d times, want once", action, part, got)
+				}
+				if got := len(env.edits(owner.Id, 9191)) - edits; got != 1 {
+					t.Errorf("%s t=%s edited the message %d times, want the one redraw with the notice", action, part, got)
+				}
+				text, _ := env.lastEdit(owner.Id, 9191)
+				if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("chat_status_bot_not_admin")) {
+					t.Errorf("%s t=%s with the bot not an administrator drew %q, want the notice chat_status_bot_not_admin", action, part, text)
+				}
 			}
 		}
 		if keys := settingsEditInputKeys(env); len(keys) != 0 {
 			t.Errorf("a refused Rules Set created %v", keys)
 		}
-		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "the rules" {
-			t.Errorf("a refused Rules Remove changed the rules to %q", row.Rules)
+		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "Be kind" || row.FileID != "rules-photo" || len(row.Buttons) != 2 {
+			t.Errorf("a refused Rules Remove changed the rules to %+v", row)
 		}
 		env.sendIn(env.chat, owner, "/setrules new rules")
 		if !settingsAntifloodSentHas(env, env.chat.Id, staffMarker("connections_is_user_connected_bot_not_admin")) &&
 			!settingsAntifloodSentHas(env, env.chat.Id, staffMarker("chat_status_bot_not_admin")) {
 			t.Error("/setrules was not refused with the bot not an administrator")
 		}
-		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "the rules" {
+		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "Be kind" {
 			t.Errorf("a refused /setrules changed the rules to %q", row.Rules)
 		}
 		// Cancel needs no bot right.
@@ -974,16 +976,16 @@ func TestSettingsAuthorityParityEdit(t *testing.T) {
 	t.Run("rules with the bot as an administrator", func(t *testing.T) {
 		env := newSettingsEditEnv(t)
 		owner := env.newOwner(env.chat)
-		if err := rules.SetChatRules(env.chat.Id, "the rules"); err != nil {
-			t.Fatalf("SetChatRules: %v", err)
+		settingsRulesSeedAll(t, env.chat.Id)
+		for _, part := range []string{"x", "m", "b"} {
+			press(env, env.chat, owner, "a", "rs", "t", part)
+			if !env.redis.Exists(settingsInputKey(owner.Id)) {
+				t.Errorf("Rules Set of %s was refused with the bot an administrator", part)
+			}
+			press(env, env.chat, owner, "a", "rr", "t", part)
 		}
-		press(env, env.chat, owner, "a", "rs", "t", "x")
-		if !env.redis.Exists(settingsInputKey(owner.Id)) {
-			t.Error("Rules Set was refused with the bot an administrator")
-		}
-		press(env, env.chat, owner, "a", "rr", "t", "x")
-		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.Rules != "" {
-			t.Errorf("Rules Remove left %q", row.Rules)
+		if row, _ := settingsEditRulesStored(t, env.chat.Id); row.HasContent() {
+			t.Errorf("the three Rules Removes left %+v", row)
 		}
 	})
 }

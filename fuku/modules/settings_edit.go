@@ -531,7 +531,7 @@ func renderSettingsEditor(v settingsView, def settingsEditPageDef, st settingsEd
 }
 
 // settingsEditMainState is the page's state on Main: On or Off for Welcome and Goodbye, Set or
-// Not set for Rules. ok is false when the read failed.
+// Not set for Rules (set while the text, the media or the buttons exist). ok is false when the read failed.
 func settingsEditMainState(def settingsEditPageDef) func(*gotgbot.Bot, *i18n.Translator, *gotgbot.Chat) (string, bool) {
 	return func(_ *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Chat) (string, bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
@@ -546,7 +546,8 @@ func settingsEditMainState(def settingsEditPageDef) func(*gotgbot.Bot, *i18n.Tra
 			}
 			return settingsText(tr, "common_status_off"), true
 		}
-		if settingsEditPartIsSet(st, settingsEditPartText) {
+		// Rules is set when its text, its media or its buttons exist, the one test of the rules message.
+		if (models.RulesSettings{Rules: st.Text, FileID: st.FileID, Buttons: st.Buttons}).HasContent() {
 			return settingsText(tr, "settings_state_set"), true
 		}
 		return settingsText(tr, "settings_state_not_set"), true
