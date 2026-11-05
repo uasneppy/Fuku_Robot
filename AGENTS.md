@@ -462,7 +462,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Goodbye `settingsRightChangeInfo`, Rules `settingsRightAdminBotAdmin`; Cancel needs only `settingsRightAdmin`. Set
   writes the wait (`settingsInputSet`, the press's own group, page, part, message ID and a fresh nonce, ten minutes) only
   from a private menu and edits the message into the waiting prompt (`renderSettingsEditPrompt`: the part's prompt body,
-  the limit after "Up to" from `settingsEditPromptMax`, 4096, 1024 while the group has stored media or 3800 on Rules, the
+  the limit after "Up to" from `settingsEditPromptMax`: 1024 while the group has stored media (Rules too), 3800 on Rules without media, 4096 otherwise, the
   end time in UTC, one Cancel button and no Back or Close); a wait it replaced for another group, page or part adds
   `settings_edit_replaced_note`, the same part only refreshes the ten minutes. With no Redis, or when the write fails, Set
   answers the alert `settings_edit_unavailable` and edits nothing, while Remove and the switches still work. In a menu

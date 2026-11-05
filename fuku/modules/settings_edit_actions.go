@@ -51,14 +51,14 @@ func settingsEditPartByCode(def settingsEditPageDef, code string) *settingsEditP
 	return &def.Parts[i]
 }
 
-// settingsEditPromptMax is the number the text prompt shows after "Up to": 3800 on Rules, else
-// 1024 while the group has stored media (the text is its caption) and 4096 without.
+// settingsEditPromptMax is the number the text prompt shows after "Up to": 1024 while the group has stored
+// media on any page (the text is its caption), else 3800 on Rules and 4096 on Welcome and Goodbye.
 func settingsEditPromptMax(def settingsEditPageDef, st settingsEditState) int {
 	switch {
-	case def.Kind == settingsEditRules:
-		return settingsEditRulesPromptMax
 	case settingsEditPartIsSet(st, settingsEditPartMedia):
 		return settingsEditCaptionMax
+	case def.Kind == settingsEditRules:
+		return settingsEditRulesPromptMax
 	}
 	return settingsEditTextMax
 }

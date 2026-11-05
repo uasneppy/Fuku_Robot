@@ -223,17 +223,29 @@ func settingsEditCheckRulesText(in settingsEditCheckInput) settingsEditVerdict {
 	if !ok || strings.TrimSpace(tgmd2html.StripHTMLV2(stored)) == "" {
 		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
 	}
-	normalized := normalizeRulesForHTML(stored)
-	longest := 0
-	for _, heading := range settingsEditRulesHeadings(in.GroupTitle) {
-		if n := formatting.VisibleLength(heading + normalized); n > longest {
-			longest = n
-		}
+	longest := settingsEditRulesLongest(in.GroupTitle, normalizeRulesForHTML(stored))
+	// With any media stored the heading and the text are the media's caption, one message with the
+	// Welcome's limit; without media /rules is a text message (research Open Question 10).
+	if settingsEditPartIsSet(in.State, settingsEditPartMedia) && longest > settingsEditCaptionLimit {
+		return settingsEditOverLimit("settings_edit_refuse_text_rules_long", longest, settingsEditCaptionLimit)
 	}
 	if longest > settingsEditTextLimit {
 		return settingsEditTooLong(longest, settingsEditTextLimit)
 	}
 	return settingsEditVerdict{OK: true, Text: stored}
+}
+
+// settingsEditRulesLongest is the visible length, in UTF-16 units, of the /rules message built from the
+// normalized rules text in the longest of the eight languages and both heading forms. It is the one
+// measure of the Rules text part and of the Rules media part, so the two cannot disagree.
+func settingsEditRulesLongest(title, normalized string) int {
+	longest := 0
+	for _, heading := range settingsEditRulesHeadings(title) {
+		if n := formatting.VisibleLength(heading + normalized); n > longest {
+			longest = n
+		}
+	}
+	return longest
 }
 
 // settingsEditRulesHeadings returns, for every language and both ways the bot words the rules
@@ -256,7 +268,8 @@ func settingsEditRulesHeadings(title string) []string {
 
 // settingsEditCheckMedia accepts exactly one message with media of a kind the commands store (a
 // video note, which cannot carry the text, and everything that is not media are refused) and
-// holds the stored text to the caption limit, because the text is sent as its caption.
+// holds the stored text to the caption limit, because the text is sent as its caption. The
+// Rules page shares every predicate and measures the heading in.
 func settingsEditCheckMedia(in settingsEditCheckInput) settingsEditVerdict {
 	if in.Msg.Text != "" {
 		return settingsEditRefusal("settings_edit_refuse_need_media", nil)
@@ -265,14 +278,30 @@ func settingsEditCheckMedia(in settingsEditCheckInput) settingsEditVerdict {
 	if dataType == -1 || dataType == db.VIDEO_NOTE {
 		return settingsEditRefusal("settings_edit_refuse_need_media", nil)
 	}
-	stored := in.State.Text
-	if content.TextLengthRefusal(stored, dataType, in.Language) != "" {
-		return settingsEditOverLimit("settings_edit_refuse_media_text_long", utf8.RuneCountInString(stored), settingsEditCaptionLimit)
-	}
-	if longest, _ := settingsEditFilledLongest(in, stored); longest > settingsEditCaptionLimit {
-		return settingsEditOverLimit("settings_edit_refuse_media_text_long", longest, settingsEditCaptionLimit)
+	if refusal, refused := settingsEditMediaCaptionRefusal(in, dataType); refused {
+		return refusal
 	}
 	return settingsEditVerdict{OK: true, FileID: fileID, DataType: dataType, CaptionIgnored: in.Msg.Caption != ""}
+}
+
+// settingsEditMediaCaptionRefusal refuses a typed media when the stored text could not be its caption: the
+// Welcome and Goodbye text filled in for the worst-case member, the Rules heading plus text in the longest
+// language, both held to 1024 units. It reports whether it refused.
+func settingsEditMediaCaptionRefusal(in settingsEditCheckInput, dataType int) (settingsEditVerdict, bool) {
+	stored := in.State.Text
+	if in.Def.Kind == settingsEditRules {
+		if longest := settingsEditRulesLongest(in.GroupTitle, normalizeRulesForHTML(stored)); longest > settingsEditCaptionLimit {
+			return settingsEditOverLimit("settings_edit_refuse_media_rules_long", longest, settingsEditCaptionLimit), true
+		}
+		return settingsEditVerdict{}, false
+	}
+	if content.TextLengthRefusal(stored, dataType, in.Language) != "" {
+		return settingsEditOverLimit("settings_edit_refuse_media_text_long", utf8.RuneCountInString(stored), settingsEditCaptionLimit), true
+	}
+	if longest, _ := settingsEditFilledLongest(in, stored); longest > settingsEditCaptionLimit {
+		return settingsEditOverLimit("settings_edit_refuse_media_text_long", longest, settingsEditCaptionLimit), true
+	}
+	return settingsEditVerdict{}, false
 }
 
 // settingsEditCheckButtons reads the button lines of a typed message with the commands' parser
