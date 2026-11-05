@@ -264,6 +264,9 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 			allowed[key] = true
 			required = append(required, key)
 		}
+		if !settingsControlFieldsValid(fields) {
+			return false
+		}
 	default:
 		entry, ok := settingsActions[action]
 		if !ok {
@@ -289,6 +292,22 @@ func settingsCheckFields(action string, fields map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// settingsControlFieldsValid reports whether a tg or st press names a control that exists: the
+// page p is registered, it has the control t, and the control's own Validate, when it declares
+// one, accepts the value v. It runs in step 1, before any I/O, so a forged control or value
+// costs no Telegram call.
+func settingsControlFieldsValid(fields map[string]string) bool {
+	pg, ok := settingsPageByKey(fields["p"])
+	if !ok {
+		return false
+	}
+	control, ok := pg.Controls[fields["t"]]
+	if !ok {
+		return false
+	}
+	return control.Validate == nil || control.Validate(fields["v"])
 }
 
 // newSettingsPress is the press of a callback before any of its checks ran.

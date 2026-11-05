@@ -369,6 +369,11 @@ type settingsControl struct {
 	// Set applies the absolute value v and returns the screen to draw. A nil screen means
 	// the handler already answered (a bound toast) and nothing is edited.
 	Set func(p *settingsPress, value string) *settingsScreen
+	// Validate is an optional strict check of the absolute value v. It runs in step 1 of the
+	// press pipeline, after the allow-list check and before any I/O, and a false answer refuses
+	// the press as an invalid request. Nil keeps the old behaviour: any non-empty v is allowed
+	// and Set judges it.
+	Validate func(value string) bool
 }
 
 // settingsPageAction is a page-specific action. Fields are the extra keys the callback may
