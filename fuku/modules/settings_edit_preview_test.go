@@ -99,7 +99,10 @@ type settingsEditSeen struct {
 }
 
 // settingsEditSendMethods are the Bot API methods a greeting or rules message can go out through.
-var settingsEditSendMethods = []string{"sendMessage", "sendPhoto", "sendVideo", "sendAnimation", "sendDocument"}
+var settingsEditSendMethods = []string{
+	"sendMessage", "sendPhoto", "sendVideo", "sendAnimation", "sendDocument",
+	"sendSticker", "sendAudio", "sendVoice", "sendVideoNote",
+}
 
 // settingsEditMarkSends counts, per method, the sends to chatID so far.
 func settingsEditMarkSends(env *settingsEnv, chatID int64) map[string]int {
@@ -110,11 +113,9 @@ func settingsEditMarkSends(env *settingsEnv, chatID int64) map[string]int {
 	return mark
 }
 
-// settingsEditSeenSince returns the one message sent to chatID since mark. With header true the
-// first new sendMessage is the preview's header line and is dropped; anything but exactly one message
-// left fails the test.
-func settingsEditSeenSince(t *testing.T, env *settingsEnv, chatID int64, mark map[string]int, header bool) settingsEditSeen {
-	t.Helper()
+// settingsEditNewSends returns every send to chatID since mark. With header true the first new
+// sendMessage is the preview's header line and is dropped.
+func settingsEditNewSends(env *settingsEnv, chatID int64, mark map[string]int, header bool) []moduleBotCall {
 	var calls []moduleBotCall
 	for _, method := range settingsEditSendMethods {
 		fresh := callsToChat(env.fake.staffBotClient, method, chatID)[mark[method]:]
@@ -123,6 +124,14 @@ func settingsEditSeenSince(t *testing.T, env *settingsEnv, chatID int64, mark ma
 		}
 		calls = append(calls, fresh...)
 	}
+	return calls
+}
+
+// settingsEditSeenSince returns the one message sent to chatID since mark, with the preview's header
+// line dropped when header is true; anything but exactly one message left fails the test.
+func settingsEditSeenSince(t *testing.T, env *settingsEnv, chatID int64, mark map[string]int, header bool) settingsEditSeen {
+	t.Helper()
+	calls := settingsEditNewSends(env, chatID, mark, header)
 	if len(calls) != 1 {
 		t.Fatalf("the bot sent %d messages to %d since the mark, want exactly 1: %+v", len(calls), chatID, calls)
 	}
@@ -163,7 +172,7 @@ func settingsEditRulesPreviewEnv(t *testing.T) (*settingsEnv, gotgbot.User) {
 	return env, env.newOwner(env.chat)
 }
 
-// settingsEditSetLanguages stores the presser's language and the group's, and removes the users row
+// settingsEditSetLanguages stores the presser's language and, unless groupLang is empty, the group's, and removes the users row
 // they create and every cached copy when the test ends, so no later test sees this user.
 func settingsEditSetLanguages(t *testing.T, userID int64, userLang string, groupID int64, groupLang string) {
 	t.Helper()
@@ -177,6 +186,9 @@ func settingsEditSetLanguages(t *testing.T, userID int64, userLang string, group
 	t.Cleanup(clean)
 	if err := lang.ChangeUserLanguage(userID, userLang); err != nil {
 		t.Fatalf("ChangeUserLanguage: %v", err)
+	}
+	if groupLang == "" {
+		return
 	}
 	if err := lang.ChangeGroupLanguage(groupID, groupLang); err != nil {
 		t.Fatalf("ChangeGroupLanguage: %v", err)
@@ -548,6 +560,264 @@ func TestSettingsEditRulesPreview(t *testing.T) {
 		sent := settingsEditPreviewSentTo(env, owner.Id, before)
 		if len(sent) != 2 || !containsMarker(fmt.Sprint(sent[1].Params["text"]), "rules_no_rules_set") {
 			t.Fatalf("the bot sent %+v, want the rules header and the no-rules line", sent)
+		}
+	})
+}
+
+// settingsEditAboveKey is the Bot API field of Media under text.
+const settingsEditAboveKey = "show_caption_above_media"
+
+func TestSettingsEditFullPreviewMediaBelow(t *testing.T) {
+	site := []models.Button{{Name: "Site", Url: "https://example.com"}}
+	pages := []struct {
+		key, fullCode, partCode string
+		seed                    func(t *testing.T, chatID int64, mediaType int, below bool)
+	}{
+		{settingsPageWelcome, "wf", "wv", func(t *testing.T, chatID int64, mediaType int, below bool) {
+			settingsEditSeedPreview(t, settingsPageWelcome, chatID, mediaType, "file-x")
+			if err := greetings.SetWelcomeMediaBelow(chatID, below); err != nil {
+				t.Fatalf("SetWelcomeMediaBelow: %v", err)
+			}
+		}},
+		{settingsPageGoodbye, "gf", "gv", func(t *testing.T, chatID int64, mediaType int, below bool) {
+			settingsEditSeedPreview(t, settingsPageGoodbye, chatID, mediaType, "file-x")
+			if err := greetings.SetGoodbyeMediaBelow(chatID, below); err != nil {
+				t.Fatalf("SetGoodbyeMediaBelow: %v", err)
+			}
+		}},
+		{settingsPageRules, "rf", "rv", func(t *testing.T, chatID int64, mediaType int, below bool) {
+			settingsEditRulesSeed(t, chatID, "Be kind", "file-x", mediaType, site, below)
+		}},
+	}
+	cases := []struct {
+		name      string
+		page      string
+		mediaType int
+		below     bool
+		wantAbove bool
+	}{
+		{"a Welcome photo with the switch on", settingsPageWelcome, db.PHOTO, true, true},
+		{"a Welcome document with the switch on", settingsPageWelcome, db.DOCUMENT, true, false},
+		{"a Welcome sticker with the switch on", settingsPageWelcome, db.STICKER, true, false},
+		{"a Welcome audio with the switch on", settingsPageWelcome, db.AUDIO, true, false},
+		{"a Welcome photo with the switch off", settingsPageWelcome, db.PHOTO, false, false},
+		{"a Goodbye video with the switch on", settingsPageGoodbye, db.VIDEO, true, true},
+		{"a Goodbye video with the switch off", settingsPageGoodbye, db.VIDEO, false, false},
+		{"a Rules animation with the switch on", settingsPageRules, db.ANIMATION, true, true},
+		{"a Rules document with the switch on", settingsPageRules, db.DOCUMENT, true, false},
+		{"a Rules animation with the switch off", settingsPageRules, db.ANIMATION, false, false},
+	}
+	env := newSettingsEditEnv(t)
+	settingsEditFakeSends(env)
+	settingsEditNameGroup(env, env.chat.Title)
+	owner := env.newOwner(env.chat)
+	for _, tc := range cases {
+		page := pages[0]
+		for _, candidate := range pages {
+			if candidate.key == tc.page {
+				page = candidate
+			}
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			page.seed(t, env.chat.Id, tc.mediaType, tc.below)
+			mark := settingsEditMarkSends(env, owner.Id)
+			settingsEditPreviewPress(env, owner, 7001, page.fullCode)
+			if text, alert := env.lastAnswer(); text != "" || alert {
+				t.Fatalf("Full preview answered %q (alert %t), want an empty answer", text, alert)
+			}
+			calls := settingsEditNewSends(env, owner.Id, mark, true)
+			if len(calls) == 0 {
+				t.Fatal("Full preview sent the owner no message")
+			}
+			var above bool
+			for _, call := range calls {
+				value, has := rulesCallParams(t, call)[settingsEditAboveKey]
+				if has && value != true {
+					t.Errorf("%s carries %s=%v, want true or no key", call.Method, settingsEditAboveKey, value)
+				}
+				above = above || has
+			}
+			if above != tc.wantAbove {
+				t.Errorf("Full preview carries %s: %t, want %t", settingsEditAboveKey, above, tc.wantAbove)
+			}
+
+			// Preview media alone never has a caption, so it never carries the placement.
+			if tc.mediaType == db.PHOTO || tc.mediaType == db.VIDEO || tc.mediaType == db.ANIMATION {
+				mark = settingsEditMarkSends(env, owner.Id)
+				settingsEditPreviewPress(env, owner, 7001, page.partCode, "t", "m")
+				for _, call := range settingsEditNewSends(env, owner.Id, mark, true) {
+					if _, has := rulesCallParams(t, call)[settingsEditAboveKey]; has {
+						t.Errorf("Preview media made a %s call carrying %s", call.Method, settingsEditAboveKey)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSettingsEditRulesPreviewParts(t *testing.T) {
+	site := []models.Button{{Name: "Site", Url: "https://example.com"}, {Name: "Docs", Url: "https://docs.example"}}
+
+	t.Run("each part is previewed alone", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		settingsEditFakeSends(env)
+		owner := env.newOwner(env.chat)
+		settingsEditRulesSeed(t, env.chat.Id, "<b>Be kind</b>", "rules-photo", db.PHOTO, site, true)
+		groupBefore := len(env.fake.sentTo(env.chat.Id))
+
+		mark := settingsEditMarkSends(env, owner.Id)
+		settingsEditPreviewPress(env, owner, 7001, "rv", "t", "m")
+		calls := settingsEditNewSends(env, owner.Id, mark, true)
+		if len(calls) != 1 || calls[0].Method != "sendPhoto" {
+			t.Fatalf("Preview media sent %+v, want one sendPhoto", calls)
+		}
+		params := rulesCallParams(t, calls[0])
+		if got := fmt.Sprint(params["photo"]); !strings.Contains(got, "rules-photo") {
+			t.Errorf("the media sent is %q, want the stored file", got)
+		}
+		if caption, ok := params["caption"]; ok && fmt.Sprint(caption) != "" {
+			t.Errorf("Preview media carries the caption %q, want none", caption)
+		}
+		if rows := staffKeyboardOf(calls[0].Params["reply_markup"]); len(rows) != 0 {
+			t.Errorf("Preview media carries the keyboard %+v, want none", rows)
+		}
+
+		before := len(env.fake.sentTo(owner.Id))
+		settingsEditPreviewPress(env, owner, 7001, "rv", "t", "b")
+		sent := settingsEditPreviewSentTo(env, owner.Id, before)
+		if len(sent) != 2 || !containsMarker(fmt.Sprint(sent[1].Params["text"]), "settings_edit_preview_buttons_body") {
+			t.Fatalf("Preview buttons sent %+v, want the header and the buttons body", sent)
+		}
+		rows := staffKeyboardOf(sent[1].Params["reply_markup"])
+		if len(rows) != 2 || rows[0][0].Text != "Site" || rows[0][0].Url != "https://example.com" ||
+			rows[1][0].Text != "Docs" || rows[1][0].Url != "https://docs.example" {
+			t.Errorf("the previewed keyboard = %+v, want Site and Docs as stored", rows)
+		}
+
+		before = len(env.fake.sentTo(owner.Id))
+		settingsEditPreviewPress(env, owner, 7001, "rv", "t", "x")
+		sent = settingsEditPreviewSentTo(env, owner.Id, before)
+		if len(sent) != 2 || fmt.Sprint(sent[1].Params["text"]) != "<b>Be kind</b>" {
+			t.Fatalf("Preview text sent %+v, want the stored text alone", sent)
+		}
+		if rows := staffKeyboardOf(sent[1].Params["reply_markup"]); len(rows) != 0 {
+			t.Errorf("Preview text carries the keyboard %+v, want none", rows)
+		}
+		if got := len(env.fake.sentTo(env.chat.Id)) - groupBefore; got != 0 {
+			t.Errorf("the previews sent %d messages into the group, want none", got)
+		}
+	})
+
+	t.Run("a stale Preview of an empty part sends nothing", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		settingsEditFakeSends(env)
+		owner := env.newOwner(env.chat)
+		if err := rules.SetChatRules(env.chat.Id, "Be kind"); err != nil {
+			t.Fatalf("SetChatRules: %v", err)
+		}
+		before := len(env.fake.sentTo(owner.Id))
+		marks := settingsEditMarkSends(env, owner.Id)
+		for _, part := range []string{"m", "b"} {
+			settingsEditPreviewPress(env, owner, 7001, "rv", "t", part)
+			if text, alert := env.lastAnswer(); !containsMarker(text, "settings_edit_nothing_to_preview") || !alert {
+				t.Errorf("part %s answered %q (alert %t), want the nothing-to-preview alert", part, text, alert)
+			}
+		}
+		if got := len(settingsEditNewSends(env, owner.Id, marks, false)); got != 0 || len(env.fake.sentTo(owner.Id)) != before {
+			t.Errorf("a stale preview sent %d messages, want none", got)
+		}
+	})
+
+	t.Run("a menu opened in the group answers the toast and sends only to the presser", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		settingsEditFakeSends(env)
+		settingsEditRulesSeed(t, env.chat.Id, "Be kind", "rules-photo", db.PHOTO, site, false)
+		groupBefore := len(env.fake.sentTo(env.chat.Id))
+		groupMark := settingsEditMarkSends(env, env.chat.Id)
+		adminMark := settingsEditMarkSends(env, env.admin.Id)
+
+		for _, part := range []string{"m", "b"} {
+			env.press(env.admin, 7002, env.groupFields(env.admin, "a", "rv", "t", part))
+			text, alert := env.lastAnswer()
+			if !containsMarker(text, "settings_edit_preview_sent") || alert {
+				t.Errorf("part %s answered %q (alert %t), want the sent toast and no alert", part, text, alert)
+			}
+		}
+		if got := len(settingsEditNewSends(env, env.admin.Id, adminMark, false)); got != 4 {
+			t.Errorf("the presser's private chat got %d messages, want two headers and two previews", got)
+		}
+		if got := len(settingsEditNewSends(env, env.chat.Id, groupMark, false)); got != 0 || len(env.fake.sentTo(env.chat.Id)) != groupBefore {
+			t.Errorf("a group-menu preview sent %d messages into the group, want none", got)
+		}
+	})
+}
+
+func TestSettingsEditRulesPreviewGroupLanguage(t *testing.T) {
+	heading := func(code string) string {
+		text, err := i18n.MustNewTranslator(code).GetString("rules_for_chat_header")
+		if err != nil || text == "" {
+			t.Fatalf("%s rules_for_chat_header: %q, %v", code, text, err)
+		}
+		return text
+	}
+
+	t.Run("the heading follows the group's language, the header line the presser's", func(t *testing.T) {
+		env, owner := settingsEditRulesPreviewEnv(t)
+		settingsEditSetLanguages(t, owner.Id, "en", env.chat.Id, "es")
+		settingsEditRulesSeed(t, env.chat.Id, "Be kind", "", 0, nil, false)
+
+		englishHeader, _ := i18n.MustNewTranslator("en").GetString("settings_edit_preview_header_rules")
+		header, got := settingsEditRulesFullPreview(t, env, owner)
+		if header != englishHeader {
+			t.Errorf("the header line = %q, want the presser's English %q", header, englishHeader)
+		}
+		if want := fmt.Sprintf(heading("es"), env.chat.Title); !strings.HasPrefix(got.Text, want) {
+			t.Errorf("Full preview = %q, want it to start with the Spanish heading %q", got.Text, want)
+		}
+
+		// A group whose language changed is seen at the next preview.
+		if err := lang.ChangeGroupLanguage(env.chat.Id, "fr"); err != nil {
+			t.Fatalf("ChangeGroupLanguage: %v", err)
+		}
+		_, got = settingsEditRulesFullPreview(t, env, owner)
+		if want := fmt.Sprintf(heading("fr"), env.chat.Title); !strings.HasPrefix(got.Text, want) {
+			t.Errorf("Full preview after the change = %q, want it to start with the French heading %q", got.Text, want)
+		}
+	})
+
+	t.Run("a group with no chats row gets the uk heading and no row is created", func(t *testing.T) {
+		env, owner := settingsEditRulesPreviewEnv(t)
+		settingsEditSetLanguages(t, owner.Id, "en", env.chat.Id, "")
+		settingsEditRulesSeed(t, env.chat.Id, "Be kind", "", 0, nil, false)
+		rowsOf := func() int64 {
+			var count int64
+			if err := db.DB.Model(&models.Chat{}).Where("chat_id = ?", env.chat.Id).Count(&count).Error; err != nil {
+				t.Fatalf("count chats rows: %v", err)
+			}
+			return count
+		}
+		before := rowsOf()
+
+		_, got := settingsEditRulesFullPreview(t, env, owner)
+		if want := fmt.Sprintf(heading("uk"), env.chat.Title); !strings.HasPrefix(got.Text, want) {
+			t.Errorf("Full preview = %q, want it to start with the Ukrainian heading %q", got.Text, want)
+		}
+		if after := rowsOf(); after != before {
+			t.Errorf("a preview changed the chats rows of the group from %d to %d", before, after)
+		}
+	})
+
+	t.Run("a menu opened in the group gives the same message", func(t *testing.T) {
+		env, owner := settingsEditRulesPreviewEnv(t)
+		settingsEditSetLanguages(t, owner.Id, "en", env.chat.Id, "es")
+		settingsEditRulesSeed(t, env.chat.Id, "Be kind", "rules-photo", db.PHOTO,
+			[]models.Button{{Name: "Site", Url: "https://example.com"}}, true)
+
+		_, private := settingsEditRulesFullPreview(t, env, owner)
+		mark := settingsEditMarkSends(env, owner.Id)
+		env.press(owner, 7002, env.groupFields(owner, "a", "rf"))
+		if got := settingsEditSeenSince(t, env, owner.Id, mark, true); !reflect.DeepEqual(got, private) {
+			t.Errorf("the group menu's Full preview = %+v, want the private menu's %+v", got, private)
 		}
 	})
 }
