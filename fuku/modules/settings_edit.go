@@ -377,8 +377,9 @@ func (def settingsEditPageDef) isGreeting() bool {
 
 // settingsEditBody is the page's text lines: one line per part, the note for a media kind that
 // carries no caption, then one blank line and a state line per drawn switch (none when no switch
-// is drawn), a blank line and the hint, and a blank line and the hint of each drawn switch that
-// has one, in the grid's order.
+// is drawn), a blank line and the hint, a blank line and the hint of each drawn switch that
+// has one, in the grid's order, and last, while the stored media is a document (a GIF saved before
+// Phase 12 reads File or GIF), the hint that Media under text needs a photo, a video or a GIF.
 func settingsEditBody(v settingsView, def settingsEditPageDef, st settingsEditState) []string {
 	var body []string
 	for _, part := range def.Parts {
@@ -403,6 +404,9 @@ func settingsEditBody(v settingsView, def settingsEditPageDef, st settingsEditSt
 		if cell.HintKey != "" {
 			body = append(body, "", settingsText(v.Tr, cell.HintKey))
 		}
+	}
+	if settingsEditPartIsSet(st, settingsEditPartMedia) && st.MediaType == db.DOCUMENT {
+		body = append(body, "", settingsText(v.Tr, "settings_edit_hint_below_file"))
 	}
 	return body
 }
