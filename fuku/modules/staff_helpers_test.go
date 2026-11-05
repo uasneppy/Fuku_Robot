@@ -203,19 +203,41 @@ func staffMarker(key string) string {
 
 var staffPlaceholderRe = regexp.MustCompile(`\{\w+\}`)
 
+// staffLocale is the marker locale's manager, built once for the whole test binary: reading,
+// parsing, marking and re-parsing the 160 KB en.yml took about 300 ms under -race and ran in
+// every lockdown, staff and settings environment (hundreds of times per run). The manager is
+// read-only once built, so every test installs the same one.
+var staffLocale struct {
+	once    sync.Once
+	manager *i18n.LocaleManager
+	err     error
+}
+
 // withStaffLocale replaces the translator's locale data with every en.yml string
 // swapped for its staffMarker plus the placeholders it carried, so tests can
 // assert which key a reply used and that its params were interpolated.
 func withStaffLocale(t *testing.T) {
 	t.Helper()
 
+	staffLocale.once.Do(func() {
+		staffLocale.manager, staffLocale.err = buildStaffLocaleManager()
+	})
+	if staffLocale.err != nil {
+		t.Fatalf("build marker locale: %v", staffLocale.err)
+	}
+	t.Cleanup(i18n.InstallManagerForTest(staffLocale.manager))
+}
+
+// buildStaffLocaleManager reads en.yml and returns a manager whose every string is its
+// staffMarker plus the placeholders it carried.
+func buildStaffLocaleManager() (*i18n.LocaleManager, error) {
 	raw, err := os.ReadFile("../../locales/en.yml")
 	if err != nil {
-		t.Fatalf("read en.yml: %v", err)
+		return nil, fmt.Errorf("read en.yml: %w", err)
 	}
 	var data map[string]any
 	if err := yaml.Unmarshal(raw, &data); err != nil {
-		t.Fatalf("parse en.yml: %v", err)
+		return nil, fmt.Errorf("parse en.yml: %w", err)
 	}
 	marked := make(map[string]any, len(data))
 	for key, value := range data {
@@ -229,13 +251,9 @@ func withStaffLocale(t *testing.T) {
 	}
 	out, err := yaml.Marshal(marked)
 	if err != nil {
-		t.Fatalf("marshal marker locale: %v", err)
+		return nil, fmt.Errorf("marshal marker locale: %w", err)
 	}
-	restore, err := i18n.OverrideManagerForTest(string(out))
-	if err != nil {
-		t.Fatalf("override locale manager: %v", err)
-	}
-	t.Cleanup(restore)
+	return i18n.NewManagerForTest(map[string]string{"en": string(out)})
 }
 
 // runStaffCommand mirrors helpers.WrapCommand without a dispatcher: it builds the

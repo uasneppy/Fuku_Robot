@@ -59,6 +59,23 @@ func OverrideManagerForTest(yamlContent string) (restore func(), err error) {
 // returns a restore function to call from t.Cleanup, and is guarded by the testtools build
 // tag like the helpers above.
 func OverrideManagerLanguagesForTest(yamlByLang map[string]string) (restore func(), err error) {
+	lm, err := NewManagerForTest(yamlByLang)
+	if err != nil {
+		return nil, err
+	}
+	return InstallManagerForTest(lm), nil
+}
+
+// NewManagerForTest parses the given locale files (a language code mapped to the full YAML
+// text, "en" among them as the default) into a LocaleManager without installing it. Parsing
+// 8 real locale files costs over a second under -race, so a package whose tests install the
+// same locales many times builds the manager once, behind a sync.Once, and installs that one
+// value in each test with InstallManagerForTest.
+//
+// The manager is safe to share between tests: the locale maps and every lookup index and
+// translator built from them are never written after they are built (the translator cache is
+// a sync.Map filled once per language), so one value can be installed again and again.
+func NewManagerForTest(yamlByLang map[string]string) (*LocaleManager, error) {
 	localeMaps := make(map[string]map[string]any, len(yamlByLang))
 	for code, content := range yamlByLang {
 		data, parseErr := parseYAML([]byte(content))
@@ -68,16 +85,26 @@ func OverrideManagerLanguagesForTest(yamlByLang map[string]string) (restore func
 		localeMaps[code] = data
 	}
 	if _, ok := localeMaps["en"]; !ok {
-		return nil, errors.New("OverrideManagerLanguagesForTest: the default language en is missing")
+		return nil, errors.New("NewManagerForTest: the default language en is missing")
 	}
+	// A non-nil *embed.FS is required to pass GetTranslator's localeFS nil-guard.
+	// The value is never used for file I/O because localeMaps is already populated.
 	var dummyFS embed.FS
-	lm := &LocaleManager{
+	return &LocaleManager{
 		defaultLang: "en",
 		localeMaps:  localeMaps,
 		localeFS:    &dummyFS,
-	}
+	}, nil
+}
+
+// InstallManagerForTest makes lm the global LocaleManager and returns a restore function that
+// puts the previous one back; call it from t.Cleanup. Like OverrideManagerForTest it is not
+// safe across parallel tests that install different managers.
+func InstallManagerForTest(lm *LocaleManager) (restore func()) {
+	// Ensure managerOnce.Do has already fired before overwriting managerInstance, or the
+	// first GetManager call afterwards would replace lm with the empty default singleton.
 	_ = GetManager()
 	prev := managerInstance
 	managerInstance = lm
-	return func() { managerInstance = prev }, nil
+	return func() { managerInstance = prev }
 }

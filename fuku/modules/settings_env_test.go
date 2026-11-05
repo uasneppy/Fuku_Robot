@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -65,23 +66,36 @@ func newSettingsEnvWith(t *testing.T, opts settingsEnvOptions) *settingsEnv {
 	return env
 }
 
+// realLocales is the manager over the real locale files, built once for the whole test
+// binary: parsing all 8 files (1.7 MB of YAML) took over a second under -race, and every
+// RealLocale test paid it. The manager is read-only once built, so every test installs the
+// same one.
+var realLocales struct {
+	once    sync.Once
+	manager *i18n.LocaleManager
+	err     error
+}
+
 // withRealLocales installs the real locale files of the languages a settings test reads
 // as the translator's data, for the test's lifetime.
 func withRealLocales(t *testing.T) {
 	t.Helper()
-	files := make(map[string]string)
-	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
-		raw, err := os.ReadFile("../../locales/" + code + ".yml")
-		if err != nil {
-			t.Fatalf("read %s.yml: %v", code, err)
+	realLocales.once.Do(func() {
+		files := make(map[string]string)
+		for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
+			raw, err := os.ReadFile("../../locales/" + code + ".yml")
+			if err != nil {
+				realLocales.err = fmt.Errorf("read %s.yml: %w", code, err)
+				return
+			}
+			files[code] = string(raw)
 		}
-		files[code] = string(raw)
+		realLocales.manager, realLocales.err = i18n.NewManagerForTest(files)
+	})
+	if realLocales.err != nil {
+		t.Fatalf("install real locales: %v", realLocales.err)
 	}
-	restore, err := i18n.OverrideManagerLanguagesForTest(files)
-	if err != nil {
-		t.Fatalf("install real locales: %v", err)
-	}
-	t.Cleanup(restore)
+	t.Cleanup(i18n.InstallManagerForTest(realLocales.manager))
 }
 
 // newRealLocaleLockdownEnv is newLockdownEnv with the real locale files instead of the
