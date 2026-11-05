@@ -3,6 +3,9 @@
 package modules
 
 import (
+	"fmt"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -460,4 +463,140 @@ func TestMemberReqStrictest(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no combination was checked")
 	}
+}
+
+func TestMemberReqPassValue(t *testing.T) {
+	base := requirementsOf(1, 2, 3, 4, 0)
+	names := memberReqNames{First: "Олена", Last: "Пчілка", Username: "olena"}
+
+	got := memberReqPassValue(base, names)
+	if !regexp.MustCompile(`^[0-9a-f]{16}$`).MatchString(got) {
+		t.Fatalf("pass value %q is not 16 lowercase hex characters", got)
+	}
+	if again := memberReqPassValue(requirementsOf(1, 2, 3, 4, 0), names); again != got {
+		t.Errorf("same settings and names gave %q then %q", got, again)
+	}
+
+	// Any one of the five actions changes the value.
+	for i := 0; i < 5; i++ {
+		actions := []int{1, 2, 3, 4, 0}
+		actions[i] = (actions[i] + 1) % 5
+		if memberReqPassValue(requirementsOf(actions...), names) == got {
+			t.Errorf("changing the action of rule %d did not change the pass value", i)
+		}
+	}
+
+	// Any one of the three names changes it, and so does a username of one space.
+	variants := map[string]memberReqNames{
+		"first":          {First: "Олена!", Last: names.Last, Username: names.Username},
+		"last":           {First: names.First, Last: "Пчілка!", Username: names.Username},
+		"username":       {First: names.First, Last: names.Last, Username: "olena2"},
+		"empty username": {First: names.First, Last: names.Last},
+	}
+	seen := map[string]string{got: "base"}
+	for label, variant := range variants {
+		value := memberReqPassValue(base, variant)
+		if other, dup := seen[value]; dup {
+			t.Errorf("%s gave the pass value of %s", label, other)
+		}
+		seen[value] = label
+	}
+	if memberReqPassValue(base, memberReqNames{First: "A"}) == memberReqPassValue(base, memberReqNames{First: "A", Username: " "}) {
+		t.Error("an empty username and a username of one space gave the same value")
+	}
+
+	// A name cannot slide into its neighbour.
+	if memberReqPassValue(base, memberReqNames{First: "a", Last: "bc"}) == memberReqPassValue(base, memberReqNames{First: "ab", Last: "c"}) {
+		t.Error("moving a character from the last name to the first name kept the value")
+	}
+	if memberReqPassValue(base, memberReqNames{First: "a", Last: "", Username: "b"}) == memberReqPassValue(base, memberReqNames{First: "a", Last: "b", Username: ""}) {
+		t.Error("moving a name from the username to the last name kept the value")
+	}
+
+	// No settings reads as every rule off.
+	if memberReqPassValue(nil, names) != memberReqPassValue(requirementsOf(0, 0, 0, 0, 0), names) {
+		t.Error("nil settings must fingerprint like every rule off")
+	}
+}
+
+// mentionLinkText returns the link text of a mention built by memberReqMention.
+func mentionLinkText(t *testing.T, mention string) string {
+	t.Helper()
+	open := strings.Index(mention, `">`)
+	if !strings.HasPrefix(mention, "<a href=\"") || open < 0 || !strings.HasSuffix(mention, "</a>") {
+		t.Fatalf("mention %q is not a link", mention)
+	}
+	return mention[open+2 : len(mention)-len("</a>")]
+}
+
+func TestMemberReqMention(t *testing.T) {
+	const id int64 = 123456789
+	fallback := fmt.Sprintf("user %d", id)
+
+	t.Run("the first name when it has a visible character", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: "Олена", LastName: "Пчілка", Username: "olena"}
+		name, ok := memberReqDisplayName(u)
+		if name != "Олена" || !ok {
+			t.Errorf("memberReqDisplayName = %q, %v", name, ok)
+		}
+		mention := memberReqMention(u, fallback)
+		want := `<a href="tg://user?id=123456789">` + "\u2068Олена\u2069" + `</a>`
+		if mention != want {
+			t.Errorf("mention = %q, want %q", mention, want)
+		}
+	})
+
+	t.Run("an invisible first name falls back to the username", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: "\u200b\u3164\u2800", Username: "olena_u"}
+		name, ok := memberReqDisplayName(u)
+		if name != "@olena_u" || !ok {
+			t.Errorf("memberReqDisplayName = %q, %v", name, ok)
+		}
+		if text := mentionLinkText(t, memberReqMention(u, fallback)); text != "\u2068@olena_u\u2069" {
+			t.Errorf("link text = %q", text)
+		}
+	})
+
+	t.Run("no visible name and no username falls back to the caller's text", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: "\u200b"}
+		if name, ok := memberReqDisplayName(u); name != "" || ok {
+			t.Errorf("memberReqDisplayName = %q, %v, want empty and false", name, ok)
+		}
+		mention := memberReqMention(u, fallback)
+		if text := mentionLinkText(t, mention); text != "\u2068"+fallback+"\u2069" {
+			t.Errorf("link text = %q", text)
+		}
+		if !strings.Contains(mention, `href="tg://user?id=123456789"`) {
+			t.Errorf("mention %q lacks the user link", mention)
+		}
+	})
+
+	t.Run("a long name is cut to 64 runes before the isolates", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: strings.Repeat("Ж", 70)}
+		text := mentionLinkText(t, memberReqMention(u, fallback))
+		runes := []rune(text)
+		if len(runes) != 66 {
+			t.Fatalf("link text has %d runes, want 66", len(runes))
+		}
+		if runes[0] != '\u2068' || runes[len(runes)-1] != '\u2069' {
+			t.Errorf("link text %q is not wrapped in U+2068 and U+2069", text)
+		}
+		if inner := string(runes[1 : len(runes)-1]); inner != strings.Repeat("Ж", 64) {
+			t.Errorf("inner name = %q, want 64 letters", inner)
+		}
+	})
+
+	t.Run("a name is escaped", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: `<b>&"`}
+		mention := memberReqMention(u, fallback)
+		if strings.Contains(mention, "<b>") {
+			t.Errorf("mention %q has a raw tag", mention)
+		}
+		if !strings.Contains(mention, "&lt;b&gt;&amp;") {
+			t.Errorf("mention %q does not carry the escaped name", mention)
+		}
+		if strings.Count(mention, "<") != 2 {
+			t.Errorf("mention %q has more than the link's own two tags", mention)
+		}
+	})
 }

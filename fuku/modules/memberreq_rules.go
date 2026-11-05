@@ -185,3 +185,9 @@ func memberReqStrictest(settings *models.ChatRequirements, broken int) int {
 	}
 	return best
 }
+
+func memberReqPassValue(*models.ChatRequirements, memberReqNames) string { return "" }
+
+func memberReqDisplayName(gotgbot.User) (string, bool) { return "", false }
+
+func memberReqMention(gotgbot.User, string) string { return "" }
