@@ -7,6 +7,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
 // memberReqNames are the three profile fields the member requirement rules judge.
@@ -106,3 +107,11 @@ func memberReqRuleByCode(code string) (memberReqRule, bool) {
 	}
 	return memberReqRule{}, false
 }
+
+func memberReqBlank(string) bool { return false }
+
+func memberReqBroken(*models.ChatRequirements, memberReqNames) int { return 0 }
+
+func memberReqSeverity(int) int { return 0 }
+
+func memberReqStrictest(*models.ChatRequirements, int) int { return 0 }
