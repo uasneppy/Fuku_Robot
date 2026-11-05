@@ -13,6 +13,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
@@ -289,9 +290,282 @@ func TestSettingsMreqMainState(t *testing.T) {
 	})
 }
 
-// settingsMreqSeams restores the read seam of the page when the test ends.
+// settingsMreqSeams restores the read and write seams of the page when the test ends.
 func settingsMreqSeams(t *testing.T) {
 	t.Helper()
-	lookup := memberReqSettingsLookup
-	t.Cleanup(func() { memberReqSettingsLookup = lookup })
+	lookup, writes := memberReqSettingsLookup, memberReqWrites
+	t.Cleanup(func() { memberReqSettingsLookup, memberReqWrites = lookup, writes })
+}
+
+// settingsMreqOpenPage opens the menu as opener and then the Requirements page, and returns the
+// menu message's ID.
+func settingsMreqOpenPage(t *testing.T, env *settingsEnv, opener gotgbot.User) int64 {
+	t.Helper()
+	msgID := env.openMenu(opener)
+	env.press(opener, msgID, env.groupFields(opener, "a", "op", "p", settingsPageMreq))
+	return msgID
+}
+
+// settingsMreqSwitchFields is the field set of a switch press of a menu opened in the group.
+func settingsMreqSwitchFields(env *settingsEnv, opener gotgbot.User, action, control, value string) map[string]string {
+	return env.groupFields(opener, "a", action, "p", settingsPageMreq, "t", control, "v", value)
+}
+
+func TestSettingsMreqSwitches(t *testing.T) {
+	env := newSettingsEnv(t)
+	owner := env.newOwner(env.chat)
+	msgID := settingsMreqOpenPage(t, env, owner)
+	press := func(action, control, value string) {
+		t.Helper()
+		env.press(owner, msgID, settingsMreqSwitchFields(env, owner, action, control, value))
+	}
+
+	cases := []struct {
+		name, action, control string
+		join, del             bool
+	}{
+		{"tg joins on", "tg", "j", true, false},
+		{"tg joins off", "tg", "j", false, false},
+		{"st joins on", "st", "j", true, false},
+		{"st joins off", "st", "j", false, false},
+		{"tg delete on", "tg", "d", false, true},
+		{"tg delete off", "tg", "d", false, false},
+		{"st delete on", "st", "d", false, true},
+		{"st delete off", "st", "d", false, false},
+	}
+	for _, c := range cases {
+		value := "0"
+		if (c.control == "j" && c.join) || (c.control == "d" && c.del) {
+			value = "1"
+		}
+		press(c.action, c.control, value)
+		stored, has := settingsMreqStored(t, env.chat.Id)
+		if !has || stored.CheckOnJoin != c.join || stored.DeleteMessages != c.del {
+			t.Fatalf("%s: stored = %+v (row %v), want join %v and delete %v", c.name, stored, has, c.join, c.del)
+		}
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantPage(t, text, [5]int{}, c.join, c.del)
+		settingsMreqWantSwitchRow(t, keyboard, c.join, c.del)
+		if strings.Contains(text, "⚠️") {
+			t.Errorf("%s: the redraw carries a notice: %q", c.name, text)
+		}
+	}
+
+	t.Run("a value that is not 0 or 1 is refused before any lookup", func(t *testing.T) {
+		for _, bad := range []struct{ action, control, value string }{
+			{"tg", "j", "2"}, {"tg", "d", "x"}, {"st", "j", "01"}, {"st", "d", ""}, {"tg", "zz", "1"}, {"st", "ln", "1"},
+		} {
+			lookups := env.memberLookupsOf(env.chat.Id, owner.Id)
+			edits, answers := len(env.edits(env.chat.Id, msgID)), env.answerCount()
+			press(bad.action, bad.control, bad.value)
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("%+v answered %q (alert %v), want the invalid request alert", bad, answer, alert)
+			}
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("%+v answered %d times, want once", bad, got)
+			}
+			if got := env.memberLookupsOf(env.chat.Id, owner.Id); got != lookups {
+				t.Errorf("%+v made %d getChatMember calls before refusing, want none", bad, got-lookups)
+			}
+			if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+				t.Errorf("%+v edited the page", bad)
+			}
+			if stored, _ := settingsMreqStored(t, env.chat.Id); stored.CheckOnJoin || stored.DeleteMessages {
+				t.Errorf("%+v wrote a switch: %+v", bad, stored)
+			}
+		}
+	})
+
+	t.Run("a failed write redraws the stored state with the save-failed notice", func(t *testing.T) {
+		settingsMreqSeams(t)
+		memberReqWrites.CheckOnJoin = func(context.Context, int64, bool) error { return errors.New("write failed") }
+		memberReqWrites.DeleteMessages = func(context.Context, int64, bool) error { return errors.New("write failed") }
+		settingsMreqSeed(t, env.chat.Id, [5]int{1, 0, 0, 3, 0}, false, true)
+		for _, c := range []struct{ control, value string }{{"j", "1"}, {"d", "0"}} {
+			press("tg", c.control, c.value)
+			text, keyboard := env.lastEdit(env.chat.Id, msgID)
+			if want := settingsNoticeWarnMarker("common_settings_save_failed"); !strings.Contains(text, want) {
+				t.Errorf("control %s: the redraw %q lacks the notice %q", c.control, text, want)
+			}
+			settingsMreqWantPage(t, text, [5]int{1, 0, 0, 3, 0}, false, true)
+			settingsMreqWantSwitchRow(t, keyboard, false, true)
+			if stored, _ := settingsMreqStored(t, env.chat.Id); stored.CheckOnJoin || !stored.DeleteMessages {
+				t.Errorf("control %s: stored = %+v after a failed write, want it unchanged", c.control, stored)
+			}
+		}
+	})
+}
+
+// settingsNoticeWarnMarker is the notice line of a warning whose text is the marker of key.
+func settingsNoticeWarnMarker(key string) string {
+	return settingsNoticeWarnIcon + staffMarker(key)
+}
+
+func TestSettingsDriftMreq(t *testing.T) {
+	env := newSettingsEnv(t)
+	owner := env.newOwner(env.chat)
+	seeded := [5]int{1, 2, 3, 4, 0}
+
+	t.Run("the page and Main read through the cached loader", func(t *testing.T) {
+		settingsMreqSeed(t, env.chat.Id, seeded, false, true)
+		// Load the key into the cache, then change the table behind it: whatever the cache holds is
+		// what the page and Main draw, so they read the key the watcher will read.
+		if _, err := memberreq.GetSettings(context.Background(), env.chat.Id); err != nil {
+			t.Fatalf("GetSettings: %v", err)
+		}
+		if err := db.DB.Model(&models.ChatRequirements{}).Where("chat_id = ?", env.chat.Id).
+			Updates(map[string]any{"last_name_action": 0, "username_action": 0, "russian_action": 4}).Error; err != nil {
+			t.Fatalf("change the row behind the cache: %v", err)
+		}
+		msgID := settingsMreqOpenPage(t, env, owner)
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantPage(t, text, seeded, false, true)
+
+		// The seam is the only read: a crafted answer is what the page draws.
+		settingsMreqSeams(t)
+		var asked []int64
+		memberReqSettingsLookup = func(_ context.Context, chatID int64) (*models.ChatRequirements, error) {
+			asked = append(asked, chatID)
+			return &models.ChatRequirements{ChatID: chatID, ArabicAction: models.RequirementActionKick, CheckOnJoin: true}, nil
+		}
+		env.press(owner, msgID, env.groupFields(owner, "a", "op", "p", settingsPageMreq))
+		text, _ = env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantPage(t, text, [5]int{0, 0, 0, 2, 0}, true, false)
+		env.press(owner, msgID, env.groupFields(owner, "a", "bk"))
+		if len(asked) < 2 {
+			t.Errorf("the seam was asked %d times by the page and Main, want at least 2", len(asked))
+		}
+		for _, id := range asked {
+			if id != env.chat.Id {
+				t.Errorf("the seam was asked about chat %d, want only %d", id, env.chat.Id)
+			}
+		}
+	})
+
+	t.Run("each switch changes only its column and drops the cached key", func(t *testing.T) {
+		settingsMreqSeed(t, env.chat.Id, seeded, false, true)
+		msgID := settingsMreqOpenPage(t, env, owner)
+		if _, err := memberreq.GetSettings(context.Background(), env.chat.Id); err != nil {
+			t.Fatalf("GetSettings: %v", err)
+		}
+		env.press(owner, msgID, settingsMreqSwitchFields(env, owner, "tg", "j", "1"))
+		stored, _ := settingsMreqStored(t, env.chat.Id)
+		if got := [5]int{stored.LastNameAction, stored.UsernameAction, stored.RussianAction, stored.ArabicAction, stored.ChineseAction}; got != seeded || !stored.CheckOnJoin || !stored.DeleteMessages {
+			t.Errorf("after Check on join: %+v, want the actions %v, join on and delete still on", stored, seeded)
+		}
+		cached, err := memberreq.GetSettings(context.Background(), env.chat.Id)
+		if err != nil || !cached.CheckOnJoin {
+			t.Errorf("the cached read after the write = %+v, %v, want the new value (the key was dropped)", cached, err)
+		}
+
+		env.press(owner, msgID, settingsMreqSwitchFields(env, owner, "tg", "d", "0"))
+		stored, _ = settingsMreqStored(t, env.chat.Id)
+		if got := [5]int{stored.LastNameAction, stored.UsernameAction, stored.RussianAction, stored.ArabicAction, stored.ChineseAction}; got != seeded || !stored.CheckOnJoin || stored.DeleteMessages {
+			t.Errorf("after Delete messages: %+v, want the actions %v, join still on and delete off", stored, seeded)
+		}
+		cached, err = memberreq.GetSettings(context.Background(), env.chat.Id)
+		if err != nil || cached.DeleteMessages {
+			t.Errorf("the cached read after the write = %+v, %v, want delete off (the key was dropped)", cached, err)
+		}
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantPage(t, text, seeded, true, false)
+	})
+
+	t.Run("opening the page and Main creates no row", func(t *testing.T) {
+		fresh := newSettingsEnv(t)
+		freshOwner := fresh.newOwner(fresh.chat)
+		msgID := settingsMreqOpenPage(t, fresh, freshOwner)
+		fresh.press(freshOwner, msgID, fresh.groupFields(freshOwner, "a", "bk"))
+		fresh.press(freshOwner, msgID, fresh.groupFields(freshOwner, "a", "op", "p", settingsPageMreq))
+		if _, has := settingsMreqStored(t, fresh.chat.Id); has {
+			t.Error("opening the page and Main left a chat_requirements row")
+		}
+	})
+}
+
+func TestSettingsAuthorityMreq(t *testing.T) {
+	t.Run("an administrator without can_restrict_members opens the page and is refused every switch", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		helper := env.newOutsider()
+		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: false,
+		})
+		msgID := settingsMreqOpenPage(t, env, helper)
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		settingsMreqWantPage(t, text, [5]int{}, false, false)
+		settingsMreqWantSwitchRow(t, keyboard, false, false)
+
+		for _, control := range []string{"j", "d"} {
+			for _, action := range []string{"tg", "st"} {
+				edits, answers := len(env.edits(env.chat.Id, msgID)), env.answerCount()
+				env.press(helper, msgID, settingsMreqSwitchFields(env, helper, action, control, "1"))
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("%s on %s answered %d times, want once", action, control, got)
+				}
+				if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_no_restrict")) {
+					t.Errorf("%s on %s answered %q (alert %v), want the settings_no_restrict alert", action, control, answer, alert)
+				}
+				if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+					t.Errorf("%s on %s edited the page", action, control)
+				}
+			}
+		}
+		if _, has := settingsMreqStored(t, env.chat.Id); has {
+			t.Error("a refused press wrote a row")
+		}
+	})
+
+	t.Run("a plain member is not an administrator", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		member := env.newOutsider()
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		msgID := settingsMreqOpenPage(t, env, env.admin)
+		edits := len(env.edits(env.chat.Id, msgID))
+		env.press(member, msgID, settingsMreqSwitchFields(env, member, "tg", "j", "1"))
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("answer = %q (alert %v), want settings_not_admin", answer, alert)
+		}
+		if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+			t.Error("the press edited the page")
+		}
+		if _, has := settingsMreqStored(t, env.chat.Id); has {
+			t.Error("a refused press wrote a row")
+		}
+	})
+
+	t.Run("the owner gate decides before the right", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsEnv(t)
+		env.newOwner(env.chat)
+		helper := env.newOutsider()
+		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: false,
+		})
+		env.fake.listAdministrator(env.chat.Id, helper.Id)
+		env.setAdminsAllowed(env.chat.Id, false)
+		const menuMsgID = 4747
+		env.press(helper, menuMsgID, settingsMreqSwitchFields(env, helper, "tg", "j", "1"))
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_gate_owner_only")) {
+			t.Errorf("answer = %q (alert %v), want settings_gate_owner_only before any right is judged", answer, alert)
+		}
+		if _, has := settingsMreqStored(t, env.chat.Id); has {
+			t.Error("a gated press wrote a row")
+		}
+	})
+
+	t.Run("the creator and an administrator with the right write both ways", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		owner := env.newOwner(env.chat)
+		for _, opener := range []gotgbot.User{owner, env.admin} {
+			msgID := settingsMreqOpenPage(t, env, opener)
+			env.press(opener, msgID, settingsMreqSwitchFields(env, opener, "tg", "j", "1"))
+			if stored, _ := settingsMreqStored(t, env.chat.Id); !stored.CheckOnJoin {
+				t.Errorf("opener %d: Check on join was not written", opener.Id)
+			}
+			env.press(opener, msgID, settingsMreqSwitchFields(env, opener, "tg", "j", "0"))
+			if stored, has := settingsMreqStored(t, env.chat.Id); !has || stored.CheckOnJoin {
+				t.Errorf("opener %d: Check on join was not turned off (row %v)", opener.Id, has)
+			}
+		}
+	})
 }
