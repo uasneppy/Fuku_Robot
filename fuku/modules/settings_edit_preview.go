@@ -12,6 +12,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
 	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
@@ -59,50 +60,72 @@ func settingsEditPreviewSend(p *settingsPress, def settingsEditPageDef, st setti
 	return settingsEditPreviewGreeting(p, st, part)
 }
 
+// settingsEditPreviewMediaAlone sends the stored media of a page to the presser with no caption and no
+// keyboard: what Preview media shows on every page, so it never carries Media under text.
+func settingsEditPreviewMediaAlone(p *settingsPress, st settingsEditState) error {
+	_, err := media.SendGreeting(p.b, p.query.From.Id, "", st.FileID, st.MediaType, &gotgbot.InlineKeyboardMarkup{}, 0)
+	return err
+}
+
+// settingsEditPreviewButtonsAlone sends the buttons of a page to the presser under the line that says what
+// they are: what Preview buttons shows on every page.
+func settingsEditPreviewButtonsAlone(p *settingsPress, kb *gotgbot.InlineKeyboardMarkup) error {
+	_, err := media.SendGreeting(p.b, p.query.From.Id, settingsText(p.tr, "settings_edit_preview_buttons_body"), "", db.TEXT, kb, 0)
+	return err
+}
+
 // settingsEditPreviewRules sends the Rules content. Full preview is the message /rules sends in the
 // group with private rules off for the same stored row: buildRulesMessage (the group form) in the
 // group's language, sent by sendRulesMessage without the member-path degrade, so a refused media is
 // seen as a failed preview and never as a different message. Preview text is the stored rules made
-// safe for HTML.
+// safe for HTML, Preview media the media alone and Preview buttons the rules keyboard.
 func settingsEditPreviewRules(p *settingsPress, st settingsEditState, part string) error {
 	target := p.query.From.Id
 	opts := &gotgbot.SendMessageOpts{ParseMode: formatting.HTML}
-	if part == settingsEditPartText {
+	switch part {
+	case "":
+		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+		defer cancel()
+		row := models.RulesSettings{
+			Rules: st.Text, FileID: st.FileID, MediaType: st.MediaType, Buttons: st.Buttons, MediaBelow: st.MediaBelow,
+		}
+		m := buildRulesMessage(i18n.MustNewTranslator(lang.GetGroupLanguage(ctx, p.group.Id)), p.group.Title, &row, rulesFormGroup)
+		return sendRulesMessage(p.b, target, m, opts, false)
+	case settingsEditPartText:
 		_, err := p.b.SendMessage(target, normalizeRulesForHTML(st.Text), opts)
 		return err
+	case settingsEditPartMedia:
+		return settingsEditPreviewMediaAlone(p, st)
+	case settingsEditPartButtons:
+		return settingsEditPreviewButtonsAlone(p, &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(st.Buttons)})
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
-	defer cancel()
-	row := models.RulesSettings{
-		Rules: st.Text, FileID: st.FileID, MediaType: st.MediaType, Buttons: st.Buttons, MediaBelow: st.MediaBelow,
-	}
-	m := buildRulesMessage(i18n.MustNewTranslator(lang.GetGroupLanguage(ctx, p.group.Id)), p.group.Title, &row, rulesFormGroup)
-	return sendRulesMessage(p.b, target, m, opts, false)
+	return errors.New("settings editor: no such part to preview")
 }
 
 // settingsEditPreviewGreeting sends the Welcome or Goodbye content. Full preview is the whole
-// message as the join sends it: the text, the media and the keyboard together. A Preview of one
-// part sends only that part: the text with no keyboard, the media with no caption and no keyboard,
-// or the buttons under a line that says what they are.
+// message as the join sends it, through the join's own sender: the text, the media with its caption
+// above or below as Media under text says, and the keyboard together. A Preview of one part sends only
+// that part: the text with no keyboard, the media with no caption and no keyboard, or the buttons under
+// a line that says what they are.
 func settingsEditPreviewGreeting(p *settingsPress, st settingsEditState, part string) error {
 	target := p.query.From.Id
 	none := &gotgbot.InlineKeyboardMarkup{}
 	switch part {
 	case "":
 		text, kb := renderGreeting(p.b, p.group, &p.query.From, st.Text, st.Buttons)
-		_, err := media.SendGreeting(p.b, target, text, st.FileID, st.MediaType, kb, 0)
+		_, err := media.SendGreetingMessage(p.b, target, media.GreetingMessage{
+			Text: text, FileID: st.FileID, MsgType: st.MediaType, CaptionAbove: st.MediaBelow, Keyboard: kb,
+		})
 		return err
 	case settingsEditPartText:
 		text, _ := renderGreeting(p.b, p.group, &p.query.From, st.Text, nil)
 		_, err := media.SendGreeting(p.b, target, text, "", db.TEXT, none, 0)
 		return err
 	case settingsEditPartMedia:
-		_, err := media.SendGreeting(p.b, target, "", st.FileID, st.MediaType, none, 0)
-		return err
+		return settingsEditPreviewMediaAlone(p, st)
 	case settingsEditPartButtons:
 		_, kb := renderGreeting(p.b, p.group, &p.query.From, "", st.Buttons)
-		_, err := media.SendGreeting(p.b, target, settingsText(p.tr, "settings_edit_preview_buttons_body"), "", db.TEXT, kb, 0)
-		return err
+		return settingsEditPreviewButtonsAlone(p, kb)
 	}
 	return errors.New("settings editor: no such part to preview")
 }
