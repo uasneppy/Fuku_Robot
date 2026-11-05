@@ -1821,7 +1821,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The Phase 12 guarantees are `TestGreetedMemberClaimConcurrent` (`./fuku/db/greetings`: of many concurrent claims of one
   `(chat_id, user_id)` exactly one wins, the primary key; it also runs on SQLite in `make test`) and
   `TestRulesMediaMigrationDefaults` (`./fuku/db/migrations`: the Phase 12 columns take their zero defaults, the migration's
-  statements run twice without error and `greeted_members` holds one row per member; PostgreSQL only, it skips locally).
+  statements run twice without error and `greeted_members` holds one row per member; PostgreSQL only, it skips locally) and
+  `TestImportGreetingsOmittedBlocks` (`./fuku/db/backup`: a greetings import whose payload omits `welcome_settings` or
+  `goodbye_settings` imports and writes the three NOT NULL switch columns as false, because `importGreetings` fills a missing
+  block with an empty one; without it the nil embedded block inserts NULL and PostgreSQL answers SQLSTATE 23502).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
