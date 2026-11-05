@@ -125,3 +125,34 @@ func RevertHoldToPending(ctx context.Context, id int64) (bool, error) {
 	return updateHold(ctx, id, "punished_at IS NOT NULL",
 		map[string]any{"punished_at": nil, "created_at": time.Now()}, "revert requirement hold to pending")
 }
+
+// TakeHoldByID stub.
+func TakeHoldByID(ctx context.Context, id, chatID, userID int64) (*models.ChatRequirementHold, bool, error) {
+	return nil, false, nil
+}
+
+// RestoreHold stub.
+func RestoreHold(ctx context.Context, hold *models.ChatRequirementHold) error { return nil }
+
+// ClearHoldOnClean stub.
+func ClearHoldOnClean(ctx context.Context, chatID, userID int64, msgDate time.Time) (bool, error) {
+	return false, nil
+}
+
+// ClearHolds stub.
+func ClearHolds(ctx context.Context, chatID, userID int64) (int64, error) { return 0, nil }
+
+// TakeHoldsBefore stub.
+func TakeHoldsBefore(ctx context.Context, chatID, userID int64, joinDate time.Time) ([]models.ChatRequirementHold, error) {
+	return nil, nil
+}
+
+// GetHoldFresh stub.
+func GetHoldFresh(ctx context.Context, chatID, userID int64) (*models.ChatRequirementHold, error) {
+	return nil, nil
+}
+
+// GetHoldByIDFresh stub.
+func GetHoldByIDFresh(ctx context.Context, id int64) (*models.ChatRequirementHold, error) {
+	return nil, nil
+}
