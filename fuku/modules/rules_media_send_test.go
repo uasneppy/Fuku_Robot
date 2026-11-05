@@ -4,6 +4,7 @@ package modules
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	log "github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/connections"
@@ -364,6 +367,99 @@ func TestRulesMediaBelowEverywhere(t *testing.T) {
 				_, got = rulesOnlyCall(t, client, kind.method)["show_caption_above_media"]
 				if got != want {
 					t.Fatalf("deep link: show_caption_above_media present = %v, want %v", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestRulesDegradesToTextOnClientError(t *testing.T) {
+	withRealLocales(t)
+	site := []models.Button{{Name: "Site", Url: "https://example.com"}}
+	const caption = "Be kind"
+
+	cases := []struct {
+		name     string
+		err      error
+		fallback bool
+	}{
+		{"caption too long", &gotgbot.TelegramError{Method: "sendPhoto", Code: 400, Description: "Bad Request: message caption is too long"}, true},
+		{"foreign file id", &gotgbot.TelegramError{Method: "sendPhoto", Code: 400, Description: "Bad Request: wrong file identifier/HTTP URL specified"}, true},
+		{"bad gateway", &gotgbot.TelegramError{Method: "sendPhoto", Code: 502, Description: "Bad Gateway"}, false},
+		{"transport error", errors.New("dial tcp: connection reset"), false},
+		{"rate limited", &gotgbot.TelegramError{Method: "sendPhoto", Code: 429, Description: "Too Many Requests: retry after 3"}, false},
+	}
+	for i, tc := range cases {
+		for _, path := range []string{"group", "deep link"} {
+			t.Run(tc.name+" "+path, func(t *testing.T) {
+				chatID := rulesChatID(int64(200 + 2*i))
+				if path == "deep link" {
+					chatID = rulesChatID(int64(201 + 2*i))
+				}
+				rulesSeed(t, chatID, caption, "rules-file", db.PHOTO, site)
+				// The fallback log line names the chat the message was sent to: the group for /rules,
+				// the member's private chat for the deep link.
+				sentTo := chatID
+				if path == "deep link" {
+					sentTo = 42
+				}
+				hook := logtest.NewGlobal()
+				t.Cleanup(hook.Reset)
+
+				client := rulesTestClient()
+				client.errors["sendPhoto"] = tc.err
+				bot := newModuleTestBot(client)
+				var handled error
+				if path == "group" {
+					chat := gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Rules Co"}
+					ctx := newModuleMessageContext(bot, chat, gotgbot.User{Id: 42, FirstName: "Member"}, "/rules")
+					handled = rulesModule.sendRules(bot, ctx)
+				} else {
+					user := gotgbot.User{Id: 42, FirstName: "Member"}
+					ctx := newModuleMessageContext(bot, gotgbot.Chat{Id: user.Id, Type: "private", FirstName: "Member"}, user, "/start")
+					handled = rulesDeepLinkHandler(bot, ctx, &user, "rules_"+strconv.FormatInt(chatID, 10))
+				}
+
+				if got := len(client.callsFor("sendPhoto")); got != 1 {
+					t.Fatalf("sendPhoto calls = %d, want the one failed attempt", got)
+				}
+				messages := client.callsFor("sendMessage")
+				warned := 0
+				for _, entry := range hook.AllEntries() {
+					if entry.Level == log.WarnLevel && strings.Contains(entry.Message, "[Rules]") {
+						warned++
+						for _, secret := range []string{caption, "rules-file", "example.com"} {
+							if strings.Contains(entry.Message, secret) {
+								t.Fatalf("the fallback log line carries %q: %s", secret, entry.Message)
+							}
+						}
+						if !strings.Contains(entry.Message, strconv.FormatInt(sentTo, 10)) {
+							t.Fatalf("the fallback log line does not name the chat: %s", entry.Message)
+						}
+					}
+				}
+				if !tc.fallback {
+					if handled == nil || handled == ext.EndGroups {
+						t.Fatalf("handler returned %v, want the send error", handled)
+					}
+					if len(messages) != 0 || warned != 0 {
+						t.Fatalf("sendMessage calls = %d, warnings = %d, want none: %v is not a definite refusal", len(messages), warned, tc.err)
+					}
+					return
+				}
+				if handled != ext.EndGroups {
+					t.Fatalf("handler returned %v, want EndGroups after the text fallback", handled)
+				}
+				if len(messages) != 1 || warned != 1 {
+					t.Fatalf("sendMessage calls = %d, warnings = %d, want one each", len(messages), warned)
+				}
+				photo := rulesCallParams(t, client.callsFor("sendPhoto")[0])
+				text := rulesCallParams(t, messages[0])
+				if text["text"] != photo["caption"] {
+					t.Fatalf("fallback text = %q, want the photo's caption %q", text["text"], photo["caption"])
+				}
+				if rows := rulesKeyboardButtons(text); len(rows) != 1 {
+					t.Fatalf("fallback keyboard = %v, want the rules button", text["reply_markup"])
 				}
 			})
 		}
