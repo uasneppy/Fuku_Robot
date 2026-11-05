@@ -222,6 +222,12 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_edit_part_media":             {14, 20},
 	"settings_edit_part_buttons":           {14, 20},
 	"settings_no_change_info":              {120, 160},
+
+	// Phase 12 (plan 12-05). The five switch rows count the template as written, with {state}
+	// as 7 characters, so a correct 18-character name still fits; the binding ceiling is the
+	// rendered 20 of TestSettingsLabelLengths, where {state} is the one-code-point icon.
+	"settings_btn_edit_switch_once": {26, 26},
+	"settings_edit_line_once":       {40, 56},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -390,6 +396,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 		choiceMaxEn    = 13
 		// editorSwitchMax is the full-width ceiling of the editor's switch buttons.
 		editorSwitchMax = 40
+		// editorCellMax is the ceiling of a half-width switch cell rendered with its icon alone.
+		editorCellMax = 20
 	)
 	type gridPage struct {
 		icon string
@@ -422,6 +430,11 @@ func TestSettingsLabelLengths(t *testing.T) {
 	editorSwitches := []string{
 		"settings_btn_edit_welcome_toggle", "settings_btn_edit_goodbye_toggle",
 		"settings_btn_edit_clean_welcome", "settings_btn_edit_clean_goodbye",
+	}
+	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
+	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.
+	editorCells := []string{
+		"settings_btn_edit_switch_once",
 	}
 
 	for _, lang := range staffLocales {
@@ -471,6 +484,16 @@ func TestSettingsLabelLengths(t *testing.T) {
 					rendered := strings.ReplaceAll(template, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
 					if runes := utf8.RuneCountInString(rendered); runes > editorSwitchMax {
 						t.Errorf("%s: editor switch %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorSwitchMax)
+					}
+				}
+			}
+
+			for _, key := range editorCells {
+				template := settingsLocaleString(t, lang, data, key)
+				for _, icon := range []string{"✅", "❌"} {
+					rendered := strings.ReplaceAll(template, "{state}", icon)
+					if runes := utf8.RuneCountInString(rendered); runes > editorCellMax {
+						t.Errorf("%s: editor cell %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorCellMax)
 					}
 				}
 			}
@@ -654,6 +677,8 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_edit_line_text", []string{"{state}"}},
 		{"settings_edit_line_media", []string{"{state}"}},
 		{"settings_edit_line_buttons", []string{"{state}"}},
+		{"settings_btn_edit_switch_once", []string{"{state}"}},
+		{"settings_edit_line_once", []string{"{state}"}},
 		{"settings_btn_edit_welcome_toggle", []string{"{state}"}},
 		{"settings_btn_edit_goodbye_toggle", []string{"{state}"}},
 		{"settings_btn_edit_clean_welcome", []string{"{state}"}},
