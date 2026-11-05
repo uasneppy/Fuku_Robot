@@ -53,6 +53,14 @@ func GetLanguage(ctx *ext.Context) string {
 	return getGroupLanguageContext(tracing.UpdateContext(ctx), chat.Id)
 }
 
+// GetGroupLanguage returns a group's language by its chat ID through the same cached
+// chat_lang read that GetLanguage makes in a group, which is what /rules reaches. It
+// falls back to uk on a missing row, an empty value or an error, and creates no row. It
+// is for callers whose update's chat is not the group, such as a private settings menu.
+func GetGroupLanguage(ctx context.Context, groupID int64) string {
+	return getGroupLanguageContext(ctx, groupID)
+}
+
 func getGroupLanguage(GroupID int64) string {
 	return getGroupLanguageContext(context.Background(), GroupID)
 }
@@ -157,6 +165,3 @@ func ChangeGroupLanguage(GroupID int64, lang string) error {
 	log.Infof("[Database] ChangeGroupLanguage: %d", GroupID)
 	return nil
 }
-
-// GetGroupLanguage is a stub that the green commit replaces.
-func GetGroupLanguage(ctx context.Context, groupID int64) string { return "" }
