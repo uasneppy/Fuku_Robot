@@ -430,6 +430,36 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Antiflood limit, action and delete switch | Admin, and the bot an admin | `/setflood`, `/setfloodmode`, `/delflood` |
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
+| Welcome and Goodbye: Set text, media or buttons, Remove, Delete last | Creator, or an admin who can change info | `/setwelcome`, `/setgoodbye`, `/resetwelcome`, `/resetgoodbye`, `/cleanwelcome`, `/cleangoodbye` |
+| Rules: Set and Remove of the text, the media and the buttons | Admin, and the bot an admin | `/setrules`, `/clearrules` |
+| Media under text: Welcome and Goodbye | Creator, or an admin who can change info | no command |
+| Media under text: Rules | Admin, and the bot an admin | no command |
+| Greet once (Welcome) | Admin | no command; the on/off switch of `/welcome` |
+| Welcome and Goodbye on/off switch, every Preview and Full preview, Cancel | Admin | `/welcome`, `/goodbye` |
+
+### Typing a message into the editor
+
+After Set the bot waits ten minutes for your next private message. That message is judged like a button press: a live
+check that you are still the creator or an administrator of the group, the owner gate above, the right of the part from
+the table, and a live look at the group. If you lost access in between, the wait ends and the bot says so; if the bot
+cannot tell, it says the check failed and keeps waiting. Nothing is saved on a guess. `/cancel` in the bot's private chat
+ends the wait.
+
+### Who can open the menu
+
+By default only the group's owner (its creator) can open the settings menu, whichever way they come in: the `/settings`
+command in the group, the Open in private button and the buttons of a menu that is already open. An administrator who is
+not the owner is told that only the owner can open it, and an open menu stops answering such an administrator at their
+next press.
+
+- The owner can let the group's administrators in from the menu's Access page, and take that back at any time. The
+  switch is off until the owner turns it on.
+- A group with no live owner (the owner's account was deleted) lets its administrators in, because nobody is left who
+  could grant it.
+- If the bot cannot tell whether the switch is on or whether the group has an owner, it refuses and says the check
+  failed. It never lets someone in on a guess.
+- The setting commands themselves (`/setrules`, `/setwelcome`, `/captchamode`, `/setflood` and the rest) are not
+  affected. They work for administrators exactly as before.
 
 ## Special Telegram IDs
 

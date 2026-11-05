@@ -17,7 +17,7 @@ Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs 
   - Migrations are append-only, with timestamped names and one transaction per file.
   - Every write `cache.DeleteCache`s the keys it affects.
   - Commands go through `helpers.WrapCommand`.
-  - Locale keys go in all 7 locale files.
+  - Locale keys go in all 8 locale files.
   - Fire-and-forget goroutines recover from panics.
   - Tests use real fixtures (no mock libraries) and run through `make test`.
 - **Security:**
@@ -244,7 +244,7 @@ Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs 
 | Command Pipeline | Builds context, checks permissions, invokes command handler | `fuku/utils/helpers/command_pipeline.go` |
 | Database Repos | Read via cache layer; write with cache invalidation | `fuku/db/<domain>/` (30+ files) |
 | Cache Layer | Two-tier: local in-process LRU + Redis; generation-based invalidation | `fuku/db/cache/` |
-| i18n Translator | Loads 7 locales; translates strings on-demand | `fuku/i18n/` |
+| i18n Translator | Loads 8 locales; translates strings on-demand | `fuku/i18n/` |
 | HTTP Server | Health checks, metrics, webhook (or polling health) | `fuku/utils/httpserver/` |
 | Shutdown Manager | LIFO drain of goroutines and resources within 60s | `fuku/utils/shutdown/` |
 | Monitoring | Stats collection, error tracking, activity monitoring, performance remediation | `fuku/utils/monitoring/` |
@@ -275,7 +275,7 @@ Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs 
 - Contains: IsUserAdmin, IsGroupAdmin, RequireGroup, CheckDisabledCmd (return bools, never reply)
 - Depends on: Cache layer (admin list caching), chat/user models
 - Used by: Command pipeline, handlers via predicates or PermissionResponder
-- Purpose: Localize messages across 7 languages (en, es, fr, hi, id, pt, ru)
+- Purpose: Localize messages across 8 languages (en, es, fr, hi, id, pt, ru, uk)
 - Location: `fuku/i18n/`, `locales/` (embedded), `fuku/db/lang/`
 - Contains: Translator (stateful per language), cache of parsed YAML, fallback to English
 - Depends on: Embedded locale files, user language preference from DB

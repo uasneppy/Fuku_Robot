@@ -1,38 +1,40 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 9
-current_phase_name: Settings Menu
-status: completed
-stopped_at: Phase 9 complete — all phases complete
-last_updated: "2026-10-30T20:36:05.259Z"
-last_activity: 2026-10-30
-last_activity_desc: Phase 9 complete
-state_head: d2b368f8b88c33f6827d54f003f58d781f56aec6
+milestone: v1.1
+milestone_name: PM Settings Hub & Member Screening
+current_phase: 13
+current_phase_name: Member Requirements
+status: executing
+stopped_at: Completed 13-07-PLAN.md
+last_updated: "2026-11-05T19:36:15.207Z"
+last_activity: 2026-11-04
+last_activity_desc: Phase 11 execution started
+state_head: 8f563b31d07643dbec0c358f7a02bbf08d96166d
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 106
-  completed_plans: 106
-  percent: 100
+  total_phases: 10
+  completed_phases: 0
+  total_plans: 55
+  completed_plans: 47
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-30)
+See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** All phases complete — follow-ups and deferred live checks only
+**Current focus:** Phase 11 — Message Editor
 
 ## Current Position
 
-Phase: 9 of 9 (Settings Menu) — complete
-Plan: 14 of 14
-Status: All phases complete
-Last activity: 2026-10-30 — Completed quick task 261030-rig: Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API
+Phase: 13 (Member Requirements) — READY TO EXECUTE
+Plan: 8 of 14
+Status: Ready to execute
+Last activity: 2026-11-04 — Phase 11 execution started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0% (v1.1)
 
 ## Performance Metrics
 
@@ -73,6 +75,52 @@ Progress: [██████████] 100%
 | Phase 03 P07 | 11min | 2 tasks | 11 files |
 | Phase 03 P08 | 13min | 2 tasks | 13 files |
 | Phase 03 P09 | 20min | 2 tasks | 11 files |
+| Phase 10 P01 | 6 min | 2 tasks | 10 files |
+| Phase 10 P02 | 8 min | 2 tasks | 10 files |
+| Phase 10 P03 | 6 min | 2 tasks | 10 files |
+| Phase 10 P04 | 15 min | 2 tasks | 6 files |
+| Phase 10 P05 | 40 min | 2 tasks | 6 files |
+| Phase 10 P06 | 25min | 2 tasks | 7 files |
+| Phase 10 P07 | 25 min | 2 tasks | 5 files |
+| Phase 10 P11 | 15 min | 2 tasks | 5 files |
+| Phase 10 P08 | 27 min | 3 tasks | 7 files |
+| Phase 10 P09 | 55 min | 2 tasks | 9 files |
+| Phase 10 P10 | 35min | 3 tasks | 12 files |
+| Phase 11 P01 | 14 min | 3 tasks | 10 files |
+| Phase 11 P02 | 8 min | 2 tasks | 4 files |
+| Phase 11 P03 | 12 min | 2 tasks | 4 files |
+| Phase 11 P04 | 15min | 2 tasks | 10 files |
+| Phase 11 P05 | 25min | 3 tasks | 4 files |
+| Phase 11 P06 | 20min | 2 tasks | 3 files |
+| Phase 11 P07 | 35min | 3 tasks | 4 files |
+| Phase 11 P08 | 55min | 3 tasks | 7 files |
+| Phase 11 P09 | 75min | 3 tasks | 6 files |
+| Phase 11 P10 | 25min | 3 tasks | 2 files |
+| Phase 11 P11 | 75min | 3 tasks | 6 files |
+| Phase 11 P12 | 50min | 3 tasks | 5 files |
+| Phase 11 P13 | 15min | 3 tasks | 3 files |
+| Phase 11 P14 | 55min | 3 tasks | 10 files |
+| Phase 12 P02 | 25min | 3 tasks | 12 files |
+| Phase 12 P05 | 20min | 2 tasks | 9 files |
+| Phase 12 P03 | 30min | 3 tasks | 8 files |
+| Phase 12 P04 | 45min | 3 tasks | 11 files |
+| Phase 12 P06 | 20min | 2 tasks | 4 files |
+| Phase 12 P07 | 50min | 3 tasks | 5 files |
+| Phase 12 P08 | 15min | 2 tasks | 2 files |
+| Phase 12 P09 | 40min | 3 tasks | 3 files |
+| Phase 12 P10 | 75min | 3 tasks | 15 files |
+| Phase 12 P11 | 70min | 3 tasks | 5 files |
+| Phase 12 P12 | 75min | 3 tasks | 9 files |
+| Phase 12 P13 | 70min | 3 tasks | 8 files |
+| Phase 12 P14 | 95min | 3 tasks | 4 files |
+| Phase 12 P16 | 40min | 3 tasks | 8 files |
+| Phase 13 P01 | 35min | 3 tasks | 10 files |
+| Phase 13 P02 | 25min | 3 tasks | 2 files |
+| Phase 13 P03 | 25m | 2 tasks | 3 files |
+| Phase 13 P04 | 30min | 3 tasks | 11 files |
+| Phase 13 P05 | 75min | 3 tasks | 8 files |
+| Phase 13 P06 | 70min | 3 tasks | 8 files |
+| Phase 13 P07 | 100min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -81,6 +129,11 @@ Progress: [██████████] 100%
 Decisions are logged in the PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [v1.1 Roadmap]: Ten phases, 10-19, in the owner's priority order, which is also the dependency order: hub and owner gate (10), message editor (11), rules media, media under text and greet once (12), member requirements with local rules and "I fixed it" (13), photo and channel lookups (14), AI spam-name check (15), service and bot message deletion with the durable queue (16), command, edit and self-destruct deletion (17), remaining settings pages (18), blacklist, filter and note pages (19).
+- [v1.1 Roadmap]: PLAT-05 (8 locales) is mapped to Phase 10 and PLAT-06 (shared rate budgets, crash recovery, shutdown drain for new background work) to Phase 14, where each first matters. Both apply to every later phase (ROADMAP Cross-Cutting Constraints), as PLAT-01..03 did in v1.0.
+- [v1.1 Roadmap]: MREQ-15 (requirement notices deleted automatically) sits in Phase 16 with the bot-message timer it needs. MREQ-10 is in Phase 14, and its "AI not configured" status line lands with the AI rule in Phase 15. The AI name check is its own one-requirement phase so it can be spiked and deferred on its own.
+- [v1.1 Roadmap]: The 17 design disagreements in `research/SUMMARY.md` ("Decisions for phase research") are left to each phase's researcher. Each phase's Research flags line names the ones it settles. The roadmap records only the owner's settled decisions.
+- [v1.1 Owner]: Settled before research: settings owner-only by default with an owner-only switch that lets admins in (hidden from admins otherwise, in-group commands unchanged); captcha before the requirement check on join; welcome held until "I fixed it" succeeds; only a mute gets "I fixed it"; command deletion includes admins' commands; edited-message deletion has a 1-minute default grace and exempts admins and approved users; self-destruct exempts admins, approved users and pins; the spam-name check uses Claude Haiku on names only; 8 locales with uk as the default.
 - [Roadmap]: Image classification uses Gemini `gemini-3.5-flash-lite` (owner's decision). This replaces the research STACK's Claude Haiku / `anthropic-sdk-go` recommendation, so Phase 7 research must target Gemini.
 - [Roadmap]: Raid auto-triggers are on by default with conservative thresholds (owner's decision), not "off until configured" as the research suggested.
 - [Roadmap]: Multiple replicas are the deployment target, so fan-out pacing and detection counters go through Redis, not an in-process limiter. This closes research gap 5.
@@ -108,6 +161,43 @@ Recent decisions affecting current work:
 - [Phase 8]: The page decides nothing: a pass needs signed `initData` (HMAC, 5 min, user must match) and a `siteverify` success echoing hostname, action `captcha_join` and `cdata`. Only provable failures kick (D-28); Cloudflare, network and setup faults retry with the token re-armed; five failed solves in a row with no pass are held back as a suspected key mismatch (`fuku:captcha:streak`). The verify route has Redis rate windows, a readiness gate, a decided-answer replay marker and shares the bot's port: the owner's proxy must forward only `/captcha*`.
 - [Phase 9]: The settings menu (`settings|v1`) is stateless: no migration, model, Redis key, shutdown drain or handler group. Every press runs one pipeline (decode and allow-list, service identity, opener, live `getChatMember` of the presser in the configured group, the control's `settingsRight`), is answered exactly once and edits the one message. Every setting has one apply function beside its command, so menu and command cannot drift (parity, drift and authority-parity tests per setting). A page is one `registerSettingsPage` call from its own file.
 - [Phase 9]: Lift and Unlink cards carry the object they were drawn for (`r`, `l`) and a lazy expiry, so a stale Yes cannot hit a newer lockdown or link (D-33). A group menu, and a private menu of an admin who is not the group's creator, never name the Staff Group (D-21, D-32); `settingsStaffViewFor` is the one place that decides. A Lift from a group menu only wakes the worker (its redrawn menu is the notice); from a private menu it also posts the public notice (D-26).
+- [Phase 10]: 10-01: owner switch (chat_settings_access) is read fresh on every decision, never cached; AdminsAllowed has no GORM default tag
+- [Phase 10]: 10-01: adminindex.ReplaceChat is upsert + NOT IN prune under a per-chat pg_advisory_xact_lock, never delete-then-insert
+- [Phase 10]: Phase 10 plan 02: no new hub or refusal string carries a placeholder beyond icon, page and state, so none can name a group title, user or the Staff Group.
+- [Phase 10]: The three alert keys are held to 160 code points and tag-free in all 8 languages so a translation still fits Telegram 200.
+- [Phase 10]: 10-03: locale-set drift guarded by TestLocalesAreTheEight (set comparison of locales dir vs staffLocales, exactly 8); project docs outside AGENTS.md state 8 locales
+- [Phase 10]: 10-04: clearCreator already existed in staff_ownership_test.go and is reused; the default settings env seeds admins_allowed true so gate tests must set the switch explicitly
+- [Phase 10]: Plan 10-05: settingsGate verdict and owner-state enums put the refusing value (undecided, unknown) at iota zero, so an uninitialised value fails closed
+- [Phase 10]: Plan 10-05: only an 'owner exists' owner-state answer is memoised (under 30 s, per chat, per replica); late getChatAdministrators answers are discarded inside the singleflight
+- [Phase 10]: 10-06: settingsRightOwner is appended after settingsRightRestrict so the zero settingsRight stays Admin; OwnerOnly pages are hidden from Main without a MainState read and refused in openPage
+- [Phase 10]: 10-07: the admin roster is fed by an observer hook in loadAdminCacheFromTelegram (cache never imports the database layer), run synchronously under the chat's singleflight with a 3 s write bound; only definitive facts (fresh non-empty list, non-admin bot, 4xx bot lookup) change rows
+- [Phase 10]: 10-11: the settings deep link no longer answers settings_cannot_open; Telegram errors at getChatMember and getChat are classified by isTelegramClientError, and settingsGate runs on the deep link's own member record before getChat
+- [Phase 10]: 10-08: the sweep paces and bounds every Telegram request through a BotClient wrapper (adminIndexPacedClient) from the sweep context; its lock is released by compare-and-delete only when a cancel cut the cycle off
+- [Phase 10]: 10-08: group /settings refreshes the group's roster record after the choice message (second repair path, 10 s, error only logged)
+- [Phase 10]: 10-09: a private chat passes requireSettingsAccess at once and settingsDesc.RequiredChecks is requireSettingsAccess() alone; the pick overrides settings_not_admin and the cannot-open edit with settings_pick_unavailable for every non-admin status and Telegram 4xx except 429 (R3)
+- [Phase 10]: 10-09: list rows sort by the lower-cased collapsed title, or by the chat ID text for a titleless group, so the order matches what the reader sees
+- [Phase 10]: 10-10: a private Main ends with Groups (shub a=lp&v=1) and Close, a group Main with Close alone; the owner-only Access page gets its own full-width row after the two-column grid and each page's state moved from the button label into a status block in the body
+- [Phase 11]: 11-01: the literal {id} of settings_edit_wait_text is exempt from the settings_ {id} placeholder ban (only that key, only {id}); {staff} stays forbidden
+- [Phase 11]: 11-02: content.TextLengthRefusal/ValidButtonURL/ExtractMedia and formatting.FillPlaceholders/VisibleLength are the shared rule functions the commands call and the editor reuses; FillPlaceholders makes no Telegram call and no database read
+- [Phase 11]: 11-04: wait-ended note puts {part} in parentheses in es, fr, pt, uk and ru so one lower-case noun fits every grammar
+- [Phase 11]: 11-04: uk and hi name 'the start button' instead of quoting Telegram's localized Start label
+- [Phase 11]: [11-07] The Cancel script has a fifth outcome: no wait but a marker means the wait expired, and the marker is deleted once the person has been told
+- [Phase 11]: [11-07] /cancel while a claim is held answers settings_edit_cancel_nothing and leaves the wait to the write in flight
+- [Phase 11]: 11-08: the three editor pages share one definition table; Welcome and Goodbye differ only by a Kind switch, so no twin code
+- [Phase 11]: 11-08: control d uses settingsRightChangeInfo and control e settingsRightAdmin, as /cleanwelcome and /welcome on|off check
+- [Phase 11]: 11-09: the text prompt's caption limit follows stored media (a file ID of a known kind), not the raw type column
+- [Phase 11]: 11-11: the typed-reply door guards panics with RecoverFromPanic as the deferred func and a named result set to EndGroups once the message is consumed
+- [Phase 11]: 11-12: a preview is built by renderGreeting and sent by media.SendGreeting to query.From.Id only; Preview of one part and Full preview share settingsEditRunPreview, and a Welcome or Goodbye text is always previewable (the default text is a message too) while every other part only while set
+- [Phase 11]: 11-13: the album gate runs in settingsInput before the live checks and the claim (first item to take fuku:settings:inputalbum wins, the rest are silent); the album-cut notice is added by the saved page for any message with a valid media group ID
+- [Phase 11]: 11-14: the typed-reply door's refusal and saved notice are pure builders (renderSettingsInputRefusal, settingsInputSavedNotice) so privacy and fit tests render exactly what is sent
+- [Phase 11]: 11-14: fuku/modules takes 639 s under make test flags in the sandbox, over the 10 minute per-package timeout; judged by running it alone with -timeout 40m (recorded in the SUMMARY)
+- [Phase 12]: 12-04: sendPhoto, sendVideo and sendAnimation share one sendCaptioned (type switch) to stay under the dupl threshold; Send keeps separate cases
+- [Phase 12]: 12-06: the control existence check also refuses an unregistered page in step 1; settingsEditSetSwitch keeps its own 0-or-1 guard as a second line
+- [Phase 12]: 12-09: a 429 counts as a definite refusal of a greet-once welcome (the claim is given back); an unknown outcome keeps the claim
+- [Phase 12]: 12-10: the editor switches are a table-driven two-column grid of icon-only buttons with state body lines; Greet once is control o on Welcome only (settingsRightAdmin, applyWelcomeOnce)
+- [Phase 12]: 12-11: Media under text (control u) on Welcome and Goodbye uses the page's EditRight, is drawn only for media.CaptionAboveEligible media, and a stale press writes nothing and warns
+- [Phase 12]: Plan 12-14: Rules Full preview is the group-form /rules message in the group's language (degrade false); previews ignore Greet once and write nothing (A9, A12)
+- [Phase 13]: 13-03: warnApplyResult carries a Recorded flag so warnThisUser tells a record error from a reset error; applyWarn sends no message
 
 ### Pending Todos
 
@@ -115,6 +205,10 @@ None yet.
 
 ### Blockers/Concerns
 
+- [v1.1 Roadmap]: Live Telegram spikes the owner runs before the phase that needs them is planned (Gaps to Address in `research/SUMMARY.md`): caption placement with `show_caption_above_media` (Phase 12); the per-group message rate limit for notices during a raid (Phase 13); `getUserProfilePhotos` for a hidden photo and `getChatMember` on a channel whose admin the bot is not (Phase 14); a Claude Haiku name accuracy, latency and cost run with the owner's key (Phase 15); `deleteMessages` with one undeletable ID in a batch (Phase 16); how often link previews and caption touches arrive as edits (Phase 17).
+- [v1.1 Roadmap]: Open owner questions: a group with no live creator, admins allowed or everyone denied (Phase 10); whether "I fixed it" in a captcha group re-runs the challenge, which the captcha-first decision may already answer (Phase 13); the name-AI verdict bar and the AI rule's default punishment (Phase 15); the self-destruct storage failure mode the owner must accept, PostgreSQL rows or a Redis set (Phase 17).
+- [v1.1 Roadmap]: `locales/uk.yml` exists but is shorter than `en.yml` (2,437 lines against 3,095), and `AGENTS.md` still says 7 locales. Phase 10 runs `make check-translations` first to see which keys uk lacks. PLAT-05 covers new keys; whether to fill older uk gaps in the same phase is the owner's call.
+- [v1.1 Roadmap]: Shutdown budget: the 75 s `stop_grace_period` is nearly used by the existing drains (research Pitfall 30). Any new drain (requirement lookups in Phase 14, the AI name pool in Phase 15, the deletion worker in Phase 16) must recompute the sum against the 60 s budget before it ships.
 - [Phase 7]: The owner accepted the seven live checks without running them ("All good, continue"): the Gemini spike with a paid-tier key (the 0.85 image bar, the GIF/video thumbnail choice, the model id, latency, cost, safety-block rate), a real AI burst, two replicas, `make test-postgres-integrity` for the new `ai_threshold` CHECK, a native-speaker read of the translations (the es, pt and id help paragraphs were shortened; pt has 26 units of headroom against Telegram's 4096), a live log grep for the Gemini key and bot token, and `make lint` on Go 1.26. Code review WR-01..WR-05 and IN-01..IN-09 were all fixed (`07-REVIEW-FIX.md`).
 - [Phase 7]: The security audit closed 48/48 threats (`07-SECURITY.md`, `threats_open: 0`); validation is compliant (`07-VALIDATION.md`, no gaps). Open non-blocking notes: O-1 (worth a follow-up) the raid-only TypeSafe text path has no hourly volume cap or verdict cache like the Gemini 20/150/500 guards, so a sustained link flood from fresh accounts could spend roughly 14,000 TypeSafe calls an hour (bounded only by the 4-worker pool, the 128-job queue and the candidate rule; D-20 names Gemini only), and a per-account and per-chat hourly counter for text jobs would close it; O-2 `aispamCarvedOut` on the group 2 path uses the bot client's default timeout; O-3 `ValidModel` accepts `.` and `..`; O-8 five crafted unusable Gemini answers can pause one chat's image trigger for 5 minutes (join and flood triggers are unaffected). Accepted risks AR-07-01..04 and transfer TR-07-01 (images and texts go to Google and TypeSafe by the owner's choice).
 - [Phase 7]: Accepted limit: a follower of a shared image verdict inherits the leader's refusal only within one chat; overlap across replicas is covered only once a verdict is cached. A rolling deploy can make an `ai off` setting read as on for up to 30 minutes (documented in AGENTS.md).
@@ -133,7 +227,7 @@ None yet.
 - [Phase 3]: Open code-review warnings WR-03 (a retry after an ambiguous `ReleaseUndo` error can run `FinalizeUndo` on a released record) and WR-04 (a history page press is answered before the data is read, so a DB error is a silent no-op), plus 6 info notes (`03-REVIEW-DISPOSITION.md`). The owner accepted WR-01, WR-02 and IN-02 in UAT.
 - [Phase 4]: Spike 1 answered by the owner: Telegram greys out a per-user "Send messages" exception once the default is locked, so approved users are muted during a lockdown like everyone else (LOCK-03 fallback, 04-CONTEXT D-01/D-02). Spike 2 (join paths) is designed away, with live join delivery checked in UAT.
 - [Phase 4]: Code review info notes IN-01..IN-04 are open (`04-REVIEW-DISPOSITION.md`); CR-01, WR-01 and WR-02 were fixed before verification. UI review copy fixes landed in quick task 261008-j3d.
-- [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) shipped in Phase 4; the alert's Lift button (LOCK-06) and listing removed joiners on the alert (LOCK-01) shipped in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7.
+- [Cross-phase]: Some requirements are only partly checkable in their own phase, and a later phase finishes them. The `/staff` in-lockdown status (SETUP-08) shipped in Phase 4; the alert's Lift button (LOCK-06) and listing removed joiners on the alert (LOCK-01) shipped in Phase 5. The AI-trigger toggle (RAID-06) lands in Phase 7. In v1.1, Rules gets its media and button parts (EDIT-01) in Phase 12, and MREQ-10's "AI not configured" line lands in Phase 15.
 - [Phase 5]: Live Telegram UAT (Lift from both copies, real Ban N run, revoke refusal texts, hourly reminders) and `make test-postgres-integrity` in CI were accepted by the owner without being run here. Code review WR-01..WR-03 and IN-01..IN-09 were all fixed (`05-REVIEW-FIX.md`). By decision D-04/D-20 the alert text is not refreshed and a log channel with the admin category off gets no copy.
 - [Quick 261008-j3b]: Shutdown follow-ups not fixed: `DrainAISpamChecks` waits up to 30 s but keeps the 10 s allowance; in polling mode the 60 s budget can still cut the staff drain short; `render.yaml`, `app.json`/Procfile and `railway.toml` keep their platforms' 30 s stop limits.
 - [Quick 261008-j3a]: Follow-up candidate: an anonymous admin's ban-family command also gets a stray `chat_status_restrict_cmd_error` reply before the proof tap (pre-existing).
@@ -141,6 +235,7 @@ None yet.
 - [Phase 6]: The six non-English translations of the new lockdown and antiraid texts have not had a native-speaker review. `lockdown_help_msg` is near Telegram's 4096-character limit in es (margin 44) and pt (margin 31); `TestLockdownHelpFitsOneMessage` guards it.
 - [Phase 6]: The security audit closed 39/39 threats (`06-SECURITY.md`, `threats_open: 0`). Open non-blocking notes: O-1 the per-message settings read is bounded at 2 s (not 250 ms) and bypasses the in-process cache, so a Redis brownout can hold a message in group -4 for up to 2 s; O-4 the `lockdown_help_msg` sentence "only the owner or a restricting admin can use these commands" is stricter than the code for `/lockdownstatus` and for viewing `/autolockdown` (any live admin), in all 7 locales; O-5 a stale flooder snapshot can reach a second flood alert if its write fails inside the 15-minute TTL. Accepted risk AR-06-02: someone can lock a group on purpose (15 fresh accounts joining in 60 s, or 3 accounts that joined in the last 24 h sending 30 items in 30 s); the cost is one `/unlockdown`.
 - [Tooling]: `make lint` needs a golangci-lint built with Go 1.26; the sandbox's is built with Go 1.25, so the quick batch was linted only with `go vet` and `gofmt`.
+- [Tooling]: The project-local `gsd-tools.cjs` is broken (missing vendor file); use `node /root/.claude/gsd-core/bin/gsd-tools.cjs` until it is repaired.
 
 ### Quick Tasks Completed
 
@@ -152,6 +247,7 @@ None yet.
 | 261008-j3c | Make TestStaffActionNonStaffUnchanged robust to second boundaries | 2026-10-08 | 077ee2e | .planning/quick/261008-j3c-make-the-flaky-test-teststaffactionnonstaffunchanged-tmute-a |
 | 261008-j3d | Lockdown copy polish: no raw Telegram errors, warning markers, code-formatted help | 2026-10-08 | 924b5e6 | .planning/quick/261008-j3d-lockdown-copy-polish-from-planning-phases-04-manual-lockdown |
 | 261030-rig | Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API | 2026-10-30 | d2b368f | [261030-rig-change-gemini-to-claude-haiku-5-5-via-th](./quick/261030-rig-change-gemini-to-claude-haiku-5-5-via-th/) |
+| 7 | Raise make test per-package timeout 10m to 15m (fuku/modules hit 600 s on a slow CI runner) | 2026-11-04 | ff87d62 | — |
 
 ## Deferred Items
 
@@ -159,10 +255,25 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+| verification | Phase 12 live Telegram checks and owner review (`phases/12-rules-media-media-under-text-and-greet-once/12-SPIKE.md`, `12-VERIFICATION.md` status `human_needed`): the caption above a photo, video and GIF on Android, iOS, Desktop and Web (A1), an older client's layout (A6), a new GIF looping through `sendAnimation` and the EDIT-07 limit that a GIF saved before Phase 12 has no Media under text switch until it is set again (A7), Telegram's real 1024-unit caption limit and the member-path text fallback (A3), Greet once on two live replicas, `/rules` with media and buttons and the Full preview language (A12), hi, ru and uk switch labels at phone width, native-speaker read of the 13 new strings, `make lint` on a Go 1.26 golangci-lint; follow-up decisions: UI-SPEC assumptions A1, A2, A3, A4 and A12, the 429 clause of the Greet once give-back, the member-path text fallback (a deliberate deviation from D-03), the `/setrules` note when media is set (review IN-02), the whitespace-only rules text and the `{rules}` button, the owner-only backup import caveat (audit NEW-03), the Delete-last race left by the dropped plan 12-15, the full reset that fails on PostgreSQL at warns (pre-existing, review IN-03), accepted limits AR-01 to AR-04 in `12-SECURITY.md` | deferred; the owner's standing choice (defer the live checks and keep going) applies; code verified 10/10, security 0 open threats, validation passed, review findings WR-01, WR-02 and IN-01 fixed | 2026-11-05 | v1.1 |
+| verification | Phase 11 live Telegram checks and owner review (`phases/11-message-editor/11-SPIKE.md`, `11-VERIFICATION.md` status `human_needed`): GIF as welcome media (A3), album order (A4), the 403 alert for an admin who never started the bot (A5), fast taps and rate limits (A6), Telegram's real length and button limits (A1, A2, A7, A8), typed text sent as `rich_message` (A9), tap-to-copy on the code examples and label truncation in hi, ru and uk, two live replicas, a real 10-minute expiry, native-speaker read of the 83 new strings, `make lint` on a Go 1.26 golangci-lint; follow-up decisions: the `/rules` double escaping and Goodbye On by default, accepted limits AR-04 in `11-SECURITY.md` | deferred; the owner re-ran the autonomous run after the Phase 11 verification, so the Phase 10 choice (defer and keep going) stands; code verified 13/13, security 0 open | 2026-11-05 | v1.1 |
+| verification | Phase 10 live Telegram checks and owner review (`phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md`, `10-VERIFICATION.md` status `human_needed`): list and pick, Access ON card and OFF, gated admin refusals, anonymous owner proof tap, deleted-owner group (A1), two replicas, D-01/D-20 wording, native-speaker read of the 19 new strings | deferred by the owner's choice in the autonomous run; code verified 5/5, security 0 open | 2026-11-04 | v1.1 |
+
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 10 | verification_deferred_human | /gsd-verify-work 10 |
+| 11 | verification_deferred_human | /gsd-verify-work 11 |
+| 12 | verification_deferred_human | /gsd-verify-work 12 |
 
 ## Session Continuity
 
-Last session: 2026-10-30T13:30:00.000Z
-Stopped at: Phase 9 complete — all phases complete
+Last session: 2026-11-05T19:36:14.765Z
+Stopped at: Completed 13-07-PLAN.md
 Resume file: None
+
+## Operator Next Steps
+
+- Review and approve the v1.1 roadmap (`.planning/ROADMAP.md`)
+- Then discuss Phase 10 with /gsd-discuss-phase 10, and plan it with /gsd-plan-phase 10

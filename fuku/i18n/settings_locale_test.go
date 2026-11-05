@@ -111,8 +111,175 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_staff_no_group":          {120, 170},
 	"settings_staff_pick_more":         {120, 170},
 
-	// The /help entry (plan 09-13).
-	"settings_help_msg": {900, 1260},
+	// The settings hub and the owner gate (plan 10-02). The ceilings are the UI-SPEC "New
+	// locale keys" columns; the alert and reply rows are held lower than Telegram's 200 so a
+	// long translation still fits.
+	"settings_page_groups":       {14, 18},
+	"settings_page_access":       {14, 18},
+	"settings_btn_groups":        {12, 18},
+	"settings_main_state_line":   {60, 84},
+	"settings_state_access_on":   {20, 28},
+	"settings_state_access_off":  {20, 28},
+	"settings_list_intro":        {80, 112},
+	"settings_list_hint":         {200, 280},
+	"settings_list_empty":        {140, 200},
+	"settings_access_status":     {50, 70},
+	"settings_access_on_desc":    {100, 140},
+	"settings_access_off_desc":   {130, 182},
+	"settings_btn_access_toggle": {36, 40},
+	"settings_access_confirm":    {240, 336},
+	"settings_gate_owner_only":   {120, 160},
+	"settings_access_owner_only": {120, 160},
+	"settings_pick_unavailable":  {120, 160},
+	"settings_refuse_owner_only": {70, 98},
+	"settings_start_owner_only":  {70, 98},
+
+	// The /help entry (plan 09-13, widened by plan 10-02).
+	"settings_help_msg": {1100, 1540},
+
+	// The message editor (plan 11-01). The ceilings are the UI-SPEC "New locale keys" columns.
+	"settings_page_welcome":                {12, 18},
+	"settings_page_goodbye":                {12, 18},
+	"settings_page_rules":                  {12, 18},
+	"settings_btn_edit_set_text":           {18, 20},
+	"settings_state_set":                   {10, 14},
+	"settings_state_not_set":               {12, 18},
+	"settings_state_default":               {12, 18},
+	"settings_edit_line_text":              {40, 56},
+	"settings_edit_line_media":             {40, 56},
+	"settings_edit_line_buttons":           {40, 56},
+	"settings_edit_state_text_len":         {30, 42},
+	"settings_edit_state_buttons_n":        {30, 42},
+	"settings_edit_media_photo":            {14, 20},
+	"settings_edit_media_video":            {14, 20},
+	"settings_edit_media_file":             {16, 24},
+	"settings_edit_media_sticker":          {14, 20},
+	"settings_edit_media_audio":            {14, 20},
+	"settings_edit_media_voice":            {14, 20},
+	"settings_edit_media_video_note":       {16, 24},
+	"settings_edit_note_no_caption":        {90, 126},
+	"settings_edit_hint_greeting":          {170, 240},
+	"settings_edit_hint_rules":             {140, 196},
+	"settings_edit_clean_hint_welcome":     {150, 210},
+	"settings_edit_clean_hint_goodbye":     {150, 210},
+	"settings_edit_line_welcome":           {20, 28},
+	"settings_edit_line_goodbye":           {20, 28},
+	"settings_edit_line_clean_welcome":     {28, 40},
+	"settings_edit_line_clean_goodbye":     {28, 40},
+	"settings_btn_edit_set_media":          {18, 20},
+	"settings_btn_edit_set_buttons":        {18, 20},
+	"settings_btn_edit_remove_text":        {18, 20},
+	"settings_btn_edit_remove_media":       {18, 20},
+	"settings_btn_edit_remove_buttons":     {18, 20},
+	"settings_btn_edit_preview_text":       {18, 20},
+	"settings_btn_edit_preview_media":      {18, 20},
+	"settings_btn_edit_preview_buttons":    {18, 20},
+	"settings_btn_edit_full_preview":       {18, 20},
+	"settings_btn_edit_cancel":             {12, 20},
+	"settings_edit_wait_text":              {420, 590},
+	"settings_edit_wait_text_rules":        {240, 340},
+	"settings_edit_wait_media":             {230, 320},
+	"settings_edit_wait_buttons":           {340, 480},
+	"settings_edit_wait_footer":            {110, 154},
+	"settings_edit_replaced_note":          {80, 112},
+	"settings_edit_removed_text_default":   {70, 98},
+	"settings_edit_removed_text_rules":     {50, 70},
+	"settings_edit_removed_media":          {40, 56},
+	"settings_edit_removed_buttons":        {40, 56},
+	"settings_edit_nothing_to_remove":      {60, 84},
+	"settings_edit_wait_stopped":           {60, 84},
+	"settings_edit_cancelled":              {50, 70},
+	"settings_edit_cancel_nothing":         {50, 70},
+	"settings_edit_group_note":             {110, 154},
+	"settings_edit_prompt_closed":          {40, 56},
+	"settings_edit_unavailable":            {120, 160},
+	"settings_edit_prompt_stale":           {120, 160},
+	"settings_edit_wait_expired":           {120, 160},
+	"settings_edit_saved_text":             {40, 56},
+	"settings_edit_still_waiting":          {70, 98},
+	"settings_edit_saved_media":            {40, 56},
+	"settings_edit_saved_buttons":          {40, 56},
+	"settings_edit_album_cut":              {80, 112},
+	"settings_edit_caption_ignored":        {90, 126},
+	"settings_edit_nothing_to_preview":     {120, 160},
+	"settings_edit_preview_sent":           {120, 160},
+	"settings_edit_preview_need_start":     {120, 160},
+	"settings_edit_preview_failed":         {120, 160},
+	"settings_edit_refuse_need_text":       {60, 84},
+	"settings_edit_refuse_need_media":      {130, 182},
+	"settings_edit_refuse_too_long_filled": {150, 210},
+	"settings_edit_refuse_media_text_long": {170, 238},
+	"settings_edit_refuse_buttons_syntax":  {160, 224},
+	"settings_edit_refuse_button_url":      {110, 154},
+	"settings_edit_refuse_buttons_limit":   {120, 168},
+	"settings_edit_refuse_text_buttons":    {150, 210},
+	"settings_edit_refuse_access_lost":     {140, 196},
+	"settings_edit_preview_header":         {90, 126},
+	"settings_edit_preview_header_rules":   {50, 70},
+	"settings_edit_preview_buttons_body":   {40, 56},
+	"settings_edit_wait_ended_note":        {120, 168},
+	"settings_edit_part_text":              {14, 20},
+	"settings_edit_part_media":             {14, 20},
+	"settings_edit_part_buttons":           {14, 20},
+	"settings_no_change_info":              {120, 160},
+
+	// Phase 12 (plan 12-05). The five switch rows count the template as written, with {state}
+	// as 7 characters, so a correct 18-character name still fits; the binding ceiling is the
+	// rendered 20 of TestSettingsLabelLengths, where {state} is the one-code-point icon.
+	"settings_btn_edit_switch_welcome":      {26, 26},
+	"settings_btn_edit_switch_goodbye":      {26, 26},
+	"settings_btn_edit_switch_clean":        {26, 26},
+	"settings_btn_edit_switch_below":        {26, 26},
+	"settings_btn_edit_switch_once":         {26, 26},
+	"settings_edit_line_below":              {40, 56},
+	"settings_edit_line_once":               {40, 56},
+	"settings_edit_hint_once":               {160, 224},
+	"settings_edit_hint_below_file":         {140, 196},
+	"settings_edit_media_animation":         {14, 20},
+	"settings_edit_refuse_media_rules_long": {170, 238},
+	"settings_edit_below_unavailable":       {100, 140},
+	"settings_edit_refuse_text_rules_long":  {120, 168},
+
+	// Phase 13 (plan 13-04), the Member requirements page. The seven cell rows count the
+	// template as written, with {state} as 7 characters, so a correct 18-character name still
+	// fits; the binding ceiling is the rendered 20 of TestSettingsLabelLengths, where {state}
+	// is the one-code-point icon.
+	"settings_page_mreq":              {14, 18},
+	"settings_state_mreq_on":          {14, 20},
+	"settings_mreq_intro":             {110, 154},
+	"settings_mreq_all_off":           {60, 84},
+	"settings_mreq_line":              {20, 28},
+	"settings_mreq_rule_lastname":     {28, 40},
+	"settings_mreq_rule_username":     {28, 40},
+	"settings_mreq_rule_russian":      {28, 40},
+	"settings_mreq_rule_arabic":       {28, 40},
+	"settings_mreq_rule_chinese":      {28, 40},
+	"settings_mreq_line_join":         {40, 56},
+	"settings_mreq_line_delete":       {40, 56},
+	"settings_mreq_hint_letters":      {280, 392},
+	"settings_mreq_hint_blank":        {100, 140},
+	"settings_mreq_hint_join":         {240, 336},
+	"settings_mreq_hint_delete":       {130, 182},
+	"settings_mreq_hint_mute":         {220, 308},
+	"settings_btn_mreq_lastname":      {26, 26},
+	"settings_btn_mreq_username":      {26, 26},
+	"settings_btn_mreq_russian":       {26, 26},
+	"settings_btn_mreq_arabic":        {26, 26},
+	"settings_btn_mreq_chinese":       {26, 26},
+	"settings_btn_mreq_switch_join":   {26, 26},
+	"settings_btn_mreq_switch_delete": {26, 26},
+	"settings_mreq_desc_lastname":     {70, 98},
+	"settings_mreq_desc_username":     {70, 98},
+	"settings_mreq_desc_russian":      {170, 238},
+	"settings_mreq_desc_arabic":       {170, 238},
+	"settings_mreq_desc_chinese":      {170, 238},
+	"settings_mreq_now":               {40, 56},
+	"settings_mreq_choose_hint":       {100, 140},
+	"settings_mreq_actions_hint":      {190, 266},
+	"settings_mreq_confirm":           {40, 56},
+	"settings_mreq_confirm_kick":      {170, 238},
+	"settings_mreq_confirm_ban":       {170, 238},
+	"settings_mreq_confirm_mute":      {180, 252},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -125,6 +292,17 @@ var settingsAlertKeys = []string{
 	"settings_min_value",
 	"settings_max_value",
 	"settings_cannot_open_alert",
+	"settings_gate_owner_only",
+	"settings_access_owner_only",
+	"settings_pick_unavailable",
+	"settings_edit_unavailable",
+	"settings_edit_prompt_stale",
+	"settings_edit_wait_expired",
+	"settings_edit_nothing_to_preview",
+	"settings_edit_preview_sent",
+	"settings_edit_preview_need_start",
+	"settings_edit_preview_failed",
+	"settings_no_change_info",
 }
 
 // settingsAlertMaxRunes is the length Telegram allows an alert.
@@ -146,7 +324,7 @@ func settingsKeys(data map[string]any) map[string]struct{} {
 	return keys
 }
 
-// TestSettingsLocaleKeys guards every settings_ string across all 7 locales. make
+// TestSettingsLocaleKeys guards every settings_ string across all 8 locales. make
 // check-translations only sees keys that are literal GetString arguments, so it cannot
 // catch a key that is empty, too long for the layout, carrying markup it should not or a
 // renamed placeholder.
@@ -252,51 +430,131 @@ func settingsLocaleString(t *testing.T, lang string, data map[string]any, key st
 	return text
 }
 
-// TestSettingsLabelLengths holds the composite buttons to the UI-SPEC sizing checks: a
-// main-page button (icon, page name, separator and its longest state) is at most 34
-// characters in English and 44 in the other languages, and a choice-row button (a check
-// mark and the option) at most 13 and 15.
+// TestSettingsLabelLengths holds the composite buttons to the UI-SPEC sizing checks, in
+// code points. A two-column grid button (the page's icon, a space and its name) is at most
+// 20; the Access toggle rendered with its state (a check or cross icon and the language's
+// On or Off word, the longer of the two) is at most 40; the Groups button is at most 18; and a
+// choice-row button (a check mark and the option) is at most 13 in English and 15 in the
+// others. The Phase 9 ceiling for state inside the Main button no longer applies: state
+// moved to the status block of the Main page (UI-SPEC "Changes to Phase 9 rules"). The icons
+// are the code constants of the modules, written literally here because fuku/i18n cannot
+// import fuku/modules.
 func TestSettingsLabelLengths(t *testing.T) {
-	type mainPage struct {
-		icon   string
-		page   string
-		states []string
+	const (
+		gridMax        = 20
+		accessToggle   = 40
+		groupsButton   = 18
+		choiceMaxOther = 15
+		choiceMaxEn    = 13
+		// editorCellMax is the ceiling of a half-width switch cell rendered with its icon alone.
+		editorCellMax = 20
+	)
+	type gridPage struct {
+		icon string
+		page string
 	}
-	pages := []mainPage{
-		{"👥", "settings_page_staff", []string{"settings_state_linked", "settings_state_not_linked", "settings_state_staff_n"}},
-		{"🔒", "settings_page_lockdown", []string{"settings_state_lock_none", "settings_state_lock_active", "settings_state_lock_lifting"}},
-		{"🧩", "settings_page_captcha", []string{"common_status_on", "common_status_off"}},
-		{"🌊", "settings_page_antiflood", []string{"settings_state_limit", "settings_state_off_plain"}},
+	pages := []gridPage{
+		{"👥", "settings_page_staff"},
+		{"🔒", "settings_page_lockdown"},
+		{"🧩", "settings_page_captcha"},
+		{"🌊", "settings_page_antiflood"},
+		{"🔑", "settings_page_access"},
+		{"🎉", "settings_page_welcome"},
+		{"👋", "settings_page_goodbye"},
+		{"📜", "settings_page_rules"},
+		{"🛂", "settings_page_mreq"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
 		"settings_opt_kick", "settings_opt_ban", "settings_opt_mute",
+		// The Member requirements rule screen's Off and Warn choices (Phase 13).
+		"settings_state_off_plain", "settings_opt_warn",
 	}
+	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
+	// written, icon included.
+	editorButtons := []string{
+		"settings_btn_edit_set_text", "settings_btn_edit_set_media", "settings_btn_edit_set_buttons",
+		"settings_btn_edit_remove_text", "settings_btn_edit_remove_media", "settings_btn_edit_remove_buttons",
+		"settings_btn_edit_preview_text", "settings_btn_edit_preview_media", "settings_btn_edit_preview_buttons",
+		"settings_btn_edit_full_preview", "settings_btn_edit_cancel",
+	}
+	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
+	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.
+	editorCells := []string{
+		"settings_btn_edit_switch_welcome", "settings_btn_edit_switch_goodbye", "settings_btn_edit_switch_clean",
+		"settings_btn_edit_switch_below", "settings_btn_edit_switch_once",
+	}
+	// The Member requirements rule cells carry the rule's punishment icon in place of {state}
+	// (Phase 13, UI-SPEC check 2); the two switch cells carry the check mark or the cross.
+	mreqRuleCells := []string{
+		"settings_btn_mreq_lastname", "settings_btn_mreq_username", "settings_btn_mreq_russian",
+		"settings_btn_mreq_arabic", "settings_btn_mreq_chinese",
+	}
+	mreqRuleIcons := []string{"❌", "❗", "👢", "⛔", "🔇"}
+	mreqSwitchCells := []string{"settings_btn_mreq_switch_join", "settings_btn_mreq_switch_delete"}
 
 	for _, lang := range staffLocales {
 		t.Run(lang, func(t *testing.T) {
 			data := loadStaffLocale(t, lang)
-			mainMax, choiceMax := 44, 15
+			choiceMax := choiceMaxOther
 			if lang == "en" {
-				mainMax, choiceMax = 34, 13
+				choiceMax = choiceMaxEn
 			}
 
 			for _, page := range pages {
-				name := settingsLocaleString(t, lang, data, page.page)
-				for _, stateKey := range page.states {
-					state := settingsLocaleString(t, lang, data, stateKey)
-					state = strings.ReplaceAll(state, "{count}", "100")
-					state = strings.ReplaceAll(state, "{n}", "100")
-					if strings.HasPrefix(stateKey, "common_status_") {
-						icon := "❌ "
-						if stateKey == "common_status_on" {
-							icon = "✅ "
-						}
-						state = icon + state
+				label := page.icon + " " + settingsLocaleString(t, lang, data, page.page)
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: grid label %q has %d characters, ceiling %d", lang, label, runes, gridMax)
+				}
+			}
+
+			toggle := settingsLocaleString(t, lang, data, "settings_btn_access_toggle")
+			for _, state := range []struct{ icon, key string }{
+				{"✅ ", "common_status_on"},
+				{"❌ ", "common_status_off"},
+			} {
+				rendered := strings.ReplaceAll(toggle, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
+				if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
+					t.Errorf("%s: Access toggle %q has %d characters, ceiling %d", lang, rendered, runes, accessToggle)
+				}
+			}
+
+			groups := settingsLocaleString(t, lang, data, "settings_btn_groups")
+			if runes := utf8.RuneCountInString(groups); runes > groupsButton {
+				t.Errorf("%s: Groups button %q has %d characters, ceiling %d", lang, groups, runes, groupsButton)
+			}
+
+			for _, key := range editorButtons {
+				label := settingsLocaleString(t, lang, data, key)
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: editor button %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
+				}
+			}
+
+			for _, key := range editorCells {
+				template := settingsLocaleString(t, lang, data, key)
+				for _, icon := range []string{"✅", "❌"} {
+					rendered := strings.ReplaceAll(template, "{state}", icon)
+					if runes := utf8.RuneCountInString(rendered); runes > editorCellMax {
+						t.Errorf("%s: editor cell %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorCellMax)
 					}
-					label := page.icon + " " + name + " · " + state
-					if runes := utf8.RuneCountInString(label); runes > mainMax {
-						t.Errorf("%s: main-page label %q has %d characters, ceiling %d", lang, label, runes, mainMax)
+				}
+			}
+
+			for _, group := range []struct {
+				keys  []string
+				icons []string
+			}{
+				{mreqRuleCells, mreqRuleIcons},
+				{mreqSwitchCells, []string{"✅", "❌"}},
+			} {
+				for _, key := range group.keys {
+					template := settingsLocaleString(t, lang, data, key)
+					for _, icon := range group.icons {
+						rendered := strings.ReplaceAll(template, "{state}", icon)
+						if runes := utf8.RuneCountInString(rendered); runes > editorCellMax {
+							t.Errorf("%s: requirements cell %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorCellMax)
+						}
 					}
 				}
 			}
@@ -359,6 +617,12 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 				}
 				text, _ := value.(string)
 				for _, name := range staffPlaceholders(text) {
+					// The editor's text prompt lists the literal {id} placeholder of a welcome
+					// text as copyable code; it is never filled in (TestSettingsEditLocaleTokens
+					// holds it byte-identical), so it cannot name anyone.
+					if name == "id" && key == settingsEditWaitTextKey {
+						continue
+					}
 					if name == "staff" || name == "id" {
 						t.Errorf("%s: %s holds {%s}, only settings_staff_linked_to may", lang, key, name)
 					}
@@ -369,14 +633,15 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 }
 
 // settingsHelpCommands are the commands settings_help_msg must name: /settings itself and
-// the eleven commands every menu change is the same as.
+// the commands every menu change is the same as.
 var settingsHelpCommands = []string{
 	"/settings", "/linkstaff", "/unlinkstaff", "/unlockdown", "/autolockdown", "/captcha",
 	"/captchamode", "/captchatime", "/captchaaction", "/setflood", "/setfloodmode", "/delflood",
+	"/setwelcome", "/setgoodbye", "/setrules",
 }
 
 // TestSettingsHelpFitsOneMessage holds the /help entry of the settings menu to the UI-SPEC
-// ceiling (900 runes in English, 1260 in the others), to the b tag only, to naming every
+// ceiling (1100 runes in English, 1540 in the others), to the b tag only, to naming every
 // command it stands for, and, with the module help header, to one Telegram message.
 func TestSettingsHelpFitsOneMessage(t *testing.T) {
 	var failures []string
@@ -389,9 +654,9 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 			continue
 		}
 
-		ceiling := 1260
+		ceiling := 1540
 		if lang == "en" {
-			ceiling = 900
+			ceiling = 1100
 		}
 		if runes := utf8.RuneCountInString(help); runes > ceiling {
 			failures = append(failures, fmt.Sprintf("%s: settings_help_msg has %d characters, ceiling %d", lang, runes, ceiling))
@@ -409,6 +674,18 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 			}
 		}
 
+		// Member requirements have no command (Phase 13): the help says so in English, and in
+		// every other language names the page the way the menu does, which ties the two.
+		if lang == "en" {
+			for _, phrase := range []string{"member requirements", "have no command"} {
+				if !strings.Contains(help, phrase) {
+					failures = append(failures, fmt.Sprintf("en: settings_help_msg does not contain %q", phrase))
+				}
+			}
+		} else if page, _ := data["settings_page_mreq"].(string); page == "" || !strings.Contains(strings.ToLower(help), strings.ToLower(page)) {
+			failures = append(failures, fmt.Sprintf("%s: settings_help_msg does not name the page %q", lang, page))
+		}
+
 		total := lockdownHelpLength(strings.ReplaceAll(header, "%s", "Settings")) + lockdownHelpLength(help)
 		t.Logf("%s: help %d of %d UTF-16 units, headroom %d", lang, total, lockdownHelpTelegramLimit, lockdownHelpTelegramLimit-total)
 		if total > lockdownHelpTelegramLimit {
@@ -418,5 +695,109 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 	sort.Strings(failures)
 	for _, failure := range failures {
 		t.Error(failure)
+	}
+}
+
+// settingsEditWaitTextKey is the Welcome and Goodbye text prompt, the one settings_ string
+// that carries the literal {id} placeholder.
+const settingsEditWaitTextKey = "settings_edit_wait_text"
+
+// settingsEditLiteralTokens are the welcome-text placeholders and the button syntax the
+// editor's prompts show as copyable code. They are never translated, in any language, and
+// the translator leaves unknown {name} tokens alone, so each must reach the owner unchanged.
+var settingsEditLiteralTokens = []string{
+	"<code>{first}</code>", "<code>{last}</code>", "<code>{fullname}</code>", "<code>{username}</code>",
+	"<code>{mention}</code>", "<code>{id}</code>", "<code>{count}</code>", "<code>{chatname}</code>",
+	"<code>{rules}</code>",
+}
+
+const (
+	settingsEditButtonExample1 = "<code>[Rules](buttonurl://https://example.com/rules)</code>"
+	settingsEditButtonExample2 = "<code>[Chat](buttonurl://https://t.me/example:same)</code>"
+	// settingsEditSyntaxExample is the example line of the buttons-syntax refusal (UI-SPEC row 72).
+	settingsEditSyntaxExample = "<code>[Name](buttonurl://https://example.com)</code>"
+)
+
+// TestSettingsEditLocaleTokens holds the literal tokens of the editor's prompts byte-identical
+// in every language, and the real parameters ({max}, {time}, {state}) where the English has
+// them. A translated placeholder would ship a prompt that tells the owner to type a token the
+// bot never replaces.
+func TestSettingsEditLocaleTokens(t *testing.T) {
+	type tokenKey struct {
+		key    string
+		tokens []string
+	}
+	literal := []tokenKey{
+		{"settings_edit_wait_text", settingsEditLiteralTokens},
+		{"settings_edit_wait_text_rules", []string{"<code>{first}</code>"}},
+		{"settings_edit_wait_buttons", []string{
+			settingsEditButtonExample1, settingsEditButtonExample2, "<code>:same</code>",
+		}},
+		{"settings_edit_hint_rules", []string{"<code>/rules</code>"}},
+		{"settings_edit_refuse_buttons_syntax", []string{settingsEditSyntaxExample}},
+	}
+
+	parameters := []tokenKey{
+		{"settings_edit_wait_text", []string{"{max}"}},
+		{"settings_edit_wait_text_rules", []string{"{max}"}},
+		{"settings_edit_wait_footer", []string{"{time}"}},
+		{"settings_edit_refuse_too_long_filled", []string{"{n}", "{max}"}},
+		{"settings_edit_refuse_media_text_long", []string{"{n}", "{max}"}},
+		{"settings_edit_refuse_button_url", []string{"{n}"}},
+		{"settings_edit_wait_ended_note", []string{"{part}"}},
+		{"settings_edit_state_text_len", []string{"{n}"}},
+		{"settings_edit_state_buttons_n", []string{"{n}"}},
+		{"settings_edit_line_text", []string{"{state}"}},
+		{"settings_edit_line_media", []string{"{state}"}},
+		{"settings_edit_line_buttons", []string{"{state}"}},
+		{"settings_btn_edit_switch_welcome", []string{"{state}"}},
+		{"settings_btn_edit_switch_goodbye", []string{"{state}"}},
+		{"settings_btn_edit_switch_clean", []string{"{state}"}},
+		{"settings_btn_edit_switch_below", []string{"{state}"}},
+		{"settings_btn_edit_switch_once", []string{"{state}"}},
+		{"settings_edit_line_below", []string{"{state}"}},
+		{"settings_edit_line_once", []string{"{state}"}},
+		{"settings_edit_refuse_media_rules_long", []string{"{n}", "{max}"}},
+		{"settings_edit_refuse_text_rules_long", []string{"{n}", "{max}"}},
+		{"settings_edit_line_welcome", []string{"{state}"}},
+		{"settings_edit_line_goodbye", []string{"{state}"}},
+		{"settings_edit_line_clean_welcome", []string{"{state}"}},
+		{"settings_edit_line_clean_goodbye", []string{"{state}"}},
+	}
+
+	english := loadStaffLocale(t, "en")
+	for _, group := range [][]tokenKey{literal, parameters} {
+		for _, entry := range group {
+			text := settingsLocaleString(t, "en", english, entry.key)
+			for _, token := range entry.tokens {
+				if !strings.Contains(text, token) {
+					t.Fatalf("en: %s does not carry %q, the test table is out of date", entry.key, token)
+				}
+			}
+		}
+	}
+
+	for _, lang := range staffLocales {
+		t.Run(lang, func(t *testing.T) {
+			data := loadStaffLocale(t, lang)
+			for _, group := range [][]tokenKey{literal, parameters} {
+				for _, entry := range group {
+					text := settingsLocaleString(t, lang, data, entry.key)
+					for _, token := range entry.tokens {
+						if got, want := strings.Count(text, token), strings.Count(settingsLocaleString(t, "en", english, entry.key), token); got != want {
+							t.Errorf("%s: %s carries %q %d times, en.yml %d", lang, entry.key, token, got, want)
+						}
+					}
+				}
+			}
+
+			// The prompts for the Welcome and Goodbye text name every placeholder once.
+			text := settingsLocaleString(t, lang, data, settingsEditWaitTextKey)
+			for _, token := range settingsEditLiteralTokens {
+				if strings.Count(text, token) != 1 {
+					t.Errorf("%s: %s must carry %q exactly once", lang, settingsEditWaitTextKey, token)
+				}
+			}
+		})
 	}
 }

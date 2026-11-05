@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"strconv"
@@ -14,16 +15,223 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
+	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
+	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
 var rulesModule = moduleStruct{
 	moduleName:      "Rules",
 	defaultRulesBtn: "Rules",
+}
+
+// buildRulesText is the one builder of the /rules text: the heading with the escaped
+// group title, a blank line and the stored rules made safe for HTML, or the no-rules
+// line when nothing is stored. /rules and the menu's preview send what it returns.
+func buildRulesText(tr *i18n.Translator, title, rawRules string) string {
+	normalized := normalizeRulesForHTML(rawRules)
+	if normalized == "" {
+		text, _ := tr.GetString("rules_no_rules_set")
+		return text
+	}
+	header, _ := tr.GetString("rules_for_chat_header")
+	return fmt.Sprintf(header, html.EscapeString(title)) + "\n\n" + normalized
+}
+
+// rulesForm is the wording of a rules message: the heading and the no-rules line differ between what
+// /rules shows in a chat and what the private-rules message (the deep link) shows.
+type rulesForm int
+
+const (
+	// rulesFormGroup is /rules: the heading rules_for_chat_header and the line rules_no_rules_set.
+	rulesFormGroup rulesForm = iota
+	// rulesFormPrivate is the private-rules message: the heading rules_for_chat and the line rules_not_set.
+	rulesFormPrivate
+)
+
+// noRulesKey is the locale key of the line said when the rules hold nothing.
+func (f rulesForm) noRulesKey() string {
+	if f == rulesFormPrivate {
+		return "rules_not_set"
+	}
+	return "rules_no_rules_set"
+}
+
+// text is the heading with the escaped group title and the stored rules made safe for HTML. With no text
+// (a rules message of media or buttons only) it is the heading alone.
+func (f rulesForm) text(tr *i18n.Translator, title, rawRules string) string {
+	body := normalizeRulesForHTML(rawRules)
+	if f == rulesFormPrivate {
+		text, _ := tr.GetString("rules_for_chat", i18n.TranslationParams{
+			"first":  html.EscapeString(title),
+			"second": body,
+		})
+		if body == "" {
+			text = strings.TrimRight(text, "\n")
+		}
+		return text
+	}
+	if body != "" {
+		return buildRulesText(tr, title, rawRules)
+	}
+	header, _ := tr.GetString("rules_for_chat_header")
+	return fmt.Sprintf(header, html.EscapeString(title))
+}
+
+// rulesMessage is a rules message ready to send: the text (or the caption of the media), the media, whether
+// the media is shown under the text, the rules' URL buttons and whether the rules hold nothing at all.
+type rulesMessage struct {
+	Text     string
+	FileID   string
+	MsgType  int
+	Below    bool
+	Keyboard *gotgbot.InlineKeyboardMarkup
+	Empty    bool
+}
+
+// buildRulesMessage is the one builder of a member-facing rules message. Rules are set when the row has a text,
+// a media or a button (RulesSettings.HasContent); a row with none of them is Empty and carries the form's
+// no-rules line. The keyboard exists only when the row has buttons.
+func buildRulesMessage(tr *i18n.Translator, title string, row *models.RulesSettings, form rulesForm) rulesMessage {
+	if !row.HasContent() {
+		text, _ := tr.GetString(form.noRulesKey())
+		return rulesMessage{Text: text, Empty: true}
+	}
+	m := rulesMessage{
+		Text:    form.text(tr, title, row.Rules),
+		FileID:  row.FileID,
+		MsgType: row.MediaType,
+		Below:   row.MediaBelow,
+	}
+	if len(row.Buttons) > 0 {
+		m.Keyboard = &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(row.Buttons)}
+	}
+	return m
+}
+
+// sendRulesMessage is the one sender of a member-facing rules message. Without media it is the caller's own
+// SendMessage call, with its options exactly as they were (textOpts), and only the rules keyboard added when
+// the rules have buttons, so a rules row saved before media existed makes the request it always made. It is
+// never routed through the greeting sender, which turns link previews off and drops the reply target. With media
+// it is one media message: the text as its caption, the buttons under it, and the caption above the media when
+// Media under text is on and the kind allows it. With degrade true (/rules and the deep link, never the Full
+// preview) a media send Telegram definitely refuses (a 4xx other than 429) is retried once as the text with the
+// buttons, a deliberate exception to the one-message rule.
+func sendRulesMessage(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgbot.SendMessageOpts, degrade bool) error {
+	if m.FileID == "" {
+		return sendRulesText(b, chatID, m, textOpts)
+	}
+	var (
+		replyMsgID        int64
+		allowWithoutReply bool
+	)
+	if textOpts != nil && textOpts.ReplyParameters != nil {
+		replyMsgID = textOpts.ReplyParameters.MessageId
+		allowWithoutReply = textOpts.ReplyParameters.AllowSendingWithoutReply
+	}
+	_, err := media.Send(b, media.Content{
+		Text:         m.Text,
+		FileID:       m.FileID,
+		MsgType:      m.MsgType,
+		CaptionAbove: m.Below && media.CaptionAboveEligible(m.MsgType),
+		Name:         "rules",
+	}, media.Options{
+		ChatID:            chatID,
+		ReplyMsgID:        replyMsgID,
+		AllowWithoutReply: allowWithoutReply,
+		Keyboard:          m.Keyboard,
+	})
+	if err != nil && degrade && isTelegramClientError(err) {
+		// A definite 4xx means Telegram sent nothing, so the retry cannot duplicate a message. Only the chat is
+		// logged: never the text, the caption, a button, a link or the file ID.
+		log.Warnf("[Rules] the rules media of chat %d was refused, sending the text alone: %v", chatID, err)
+		return sendRulesText(b, chatID, m, textOpts)
+	}
+	return err
+}
+
+// sendRulesText sends the rules as a text message with the caller's options. The rules keyboard replaces the
+// options' ReplyMarkup only when the rules have buttons.
+func sendRulesText(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgbot.SendMessageOpts) error {
+	var opts gotgbot.SendMessageOpts
+	if textOpts != nil {
+		opts = *textOpts
+	}
+	if m.Keyboard != nil {
+		opts.ReplyMarkup = *m.Keyboard
+	}
+	_, err := b.SendMessage(chatID, m.Text, &opts)
+	return err
+}
+
+// rulesApplyResult is what the rules apply functions return. Row is the whole rules row read back after
+// a stored write (nil when the write or the read-back failed); Rules is its text, kept for the commands.
+type rulesApplyResult struct {
+	Outcome greetingApplyOutcome
+	Rules   string
+	Row     *models.RulesSettings
+	Err     error
+}
+
+// rulesWrites is the rules repository writes the apply functions call. It is a variable
+// only so a test can make a write fail.
+var rulesWrites = struct {
+	SetChatRules        func(chatID int64, rules string) error
+	SetRulesMediaOnly   func(chatID int64, fileID string, mediaType int) error
+	SetRulesButtonsOnly func(chatID int64, buttons []models.Button) error
+	SetRulesMediaBelow  func(chatID int64, on bool) error
+	ClearRules          func(chatID int64) error
+}{rules.SetChatRules, rules.SetRulesMediaOnly, rules.SetRulesButtonsOnly, rules.SetRulesMediaBelow, rules.ClearRules}
+
+// applyRulesText stores the rules text (the HTML /setrules and the editor keep) and reads
+// it back. It is the one write path of /setrules and the menu.
+func applyRulesText(ctx context.Context, chatID int64, html string) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "set", rulesWrites.SetChatRules(chatID, html))
+}
+
+// applyRulesMedia stores only the rules media, a file ID and its type (an empty ID with type 0 removes
+// it), and reads the row back. It is the one write path of the menu's Rules media.
+func applyRulesMedia(ctx context.Context, chatID int64, fileID string, mediaType int) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "set the media of", rulesWrites.SetRulesMediaOnly(chatID, fileID, mediaType))
+}
+
+// applyRulesButtons stores only the rules buttons (nil or empty removes them) and reads the row back.
+func applyRulesButtons(ctx context.Context, chatID int64, buttons []models.Button) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "set the buttons of", rulesWrites.SetRulesButtonsOnly(chatID, buttons))
+}
+
+// applyRulesMediaBelow stores only whether the rules media is shown under the text and reads the row
+// back. A false is written.
+func applyRulesMediaBelow(ctx context.Context, chatID int64, on bool) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "set Media under text of", rulesWrites.SetRulesMediaBelow(chatID, on))
+}
+
+// applyRulesClear empties the rules text, media and buttons together, the one write path of /clearrules
+// and, as three Removes, of the menu. It leaves Media under text, the private switch and the rules button
+// as they were.
+func applyRulesClear(ctx context.Context, chatID int64) rulesApplyResult {
+	return finishRulesApply(ctx, chatID, "clear", rulesWrites.ClearRules(chatID))
+}
+
+// finishRulesApply turns the error of a rules write into the apply result and reads the whole row back. A
+// failed read-back is only logged, because the write succeeded.
+func finishRulesApply(ctx context.Context, chatID int64, what string, writeErr error) rulesApplyResult {
+	row, outcome, err := applyReadBack(ctx, writeErr,
+		func(e error) { log.Errorf("[Rules] Failed to %s rules for chat %d: %v", what, chatID, e) },
+		func(e error) { log.Warnf("[Rules] read back rules of chat %d after %s: %v", chatID, what, e) },
+		func(c context.Context) (*models.RulesSettings, error) {
+			return rules.LoadRulesSettingsContext(c, chatID)
+		})
+	res := rulesApplyResult{Outcome: outcome, Row: row, Err: err}
+	if row != nil {
+		res.Rules = row.Rules
+	}
+	return res
 }
 
 //nolint:dupl // clearRules has similar structure to resetRulesBtn
@@ -37,8 +245,10 @@ func (moduleStruct) clearRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	var text string
-	if err := rules.SetChatRules(chat.Id, ""); err != nil {
-		log.Errorf("[Rules] Failed to clear rules for chat %d: %v", chat.Id, err)
+	applyCtx, cancel := greetingApplyContext()
+	res := applyRulesClear(applyCtx, chat.Id)
+	cancel()
+	if res.Outcome == greetingSaveFailed {
 		text, _ = tr.GetString("common_settings_save_failed")
 	} else {
 		text, _ = tr.GetString("rules_cleared_successfully")
@@ -114,9 +324,6 @@ func (m moduleStruct) sendRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 	chat := connectedChat
 	var (
 		replyMsgId int64
-		Text       = ""
-		err        error
-		rulesKb    gotgbot.InlineKeyboardMarkup
 		rulesBtn   string
 	)
 
@@ -126,24 +333,23 @@ func (m moduleStruct) sendRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 		replyMsgId = msg.MessageId
 	}
 
-	rules := rules.GetChatRulesInfo(chat.Id)
-	rulesBtn = rules.RulesBtn
+	row := rules.GetChatRulesInfo(chat.Id)
+	rulesBtn = row.RulesBtn
 	if rulesBtn == "" {
 		rulesBtn = m.defaultRulesBtn
 	}
-	normalizedRules := normalizeRulesForHTML(rules.Rules)
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	if normalizedRules != "" {
-		temp, _ := tr.GetString("rules_for_chat_header")
-		Text += fmt.Sprintf(temp, html.EscapeString(chat.Title)) + "\n\n"
-		Text += normalizedRules
-	} else {
-		Text, _ = tr.GetString("rules_no_rules_set")
+	opts := &gotgbot.SendMessageOpts{
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId:                replyMsgId,
+			AllowSendingWithoutReply: true,
+		},
+		ParseMode: formatting.HTML,
 	}
 
-	if chat_status.RequireGroup(bot, ctx, nil) && rules.Private {
-		Text, _ = tr.GetString("rules_click_for_rules")
-		rulesKb = gotgbot.InlineKeyboardMarkup{
+	if chat_status.RequireGroup(bot, ctx, nil) && row.Private {
+		text, _ := tr.GetString("rules_click_for_rules")
+		opts.ReplyMarkup = gotgbot.InlineKeyboardMarkup{
 			InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 				{
 					{
@@ -153,19 +359,17 @@ func (m moduleStruct) sendRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 				},
 			},
 		}
+		if _, err := msg.Reply(bot, text, opts); err != nil {
+			log.Error(err)
+			return err
+		}
+		return ext.EndGroups
 	}
 
-	_, err = msg.Reply(bot, Text,
-		&gotgbot.SendMessageOpts{
-			ReplyMarkup: rulesKb,
-			ReplyParameters: &gotgbot.ReplyParameters{
-				MessageId:                replyMsgId,
-				AllowSendingWithoutReply: true,
-			},
-			ParseMode: formatting.HTML,
-		},
-	)
-	if err != nil {
+	// The zero-value markup is what /rules has always sent for a rules message with no buttons.
+	opts.ReplyMarkup = gotgbot.InlineKeyboardMarkup{}
+	rm := buildRulesMessage(tr, chat.Title, row, rulesFormGroup)
+	if err := sendRulesMessage(bot, msg.Chat.Id, rm, opts, true); err != nil {
 		log.Error(err)
 		return err
 	}
@@ -203,8 +407,10 @@ func (moduleStruct) setRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 				return ext.EndGroups
 			}
 		}
-		if err := rules.SetChatRules(chat.Id, tgmd2html.MD2HTMLV2(text)); err != nil {
-			log.Errorf("[Rules] Failed to set rules for chat %d: %v", chat.Id, err)
+		applyCtx, cancel := greetingApplyContext()
+		res := applyRulesText(applyCtx, chat.Id, tgmd2html.MD2HTMLV2(text))
+		cancel()
+		if res.Outcome == greetingSaveFailed {
 			text, _ = tr.GetString("common_settings_save_failed")
 		} else {
 			text, _ = tr.GetString("rules_set_successfully")
@@ -355,27 +561,11 @@ func rulesDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, 
 		return ext.EndGroups
 	}
 
-	rulesrc := rules.GetChatRulesInfo(chatID)
-	normalizedRules := normalizeRulesForHTML(rulesrc.Rules)
-
-	if normalizedRules == "" {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("rules_not_set")
-		_, err := msg.Reply(b, text, formatting.Shtml())
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-		return ext.EndGroups
-	}
-
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-	text, _ := tr.GetString("rules_for_chat", i18n.TranslationParams{
-		"first":  html.EscapeString(chatinfo.Title),
-		"second": normalizedRules,
-	})
-	_, err = msg.Reply(b, text, formatting.Shtml())
-	if err != nil {
+	rm := buildRulesMessage(tr, chatinfo.Title, rules.GetChatRulesInfo(chatID), rulesFormPrivate)
+	opts := formatting.Shtml()
+	opts.ReplyParameters.MessageId = msg.MessageId
+	if err := sendRulesMessage(b, msg.Chat.Id, rm, opts, true); err != nil {
 		log.Error(err)
 		return err
 	}

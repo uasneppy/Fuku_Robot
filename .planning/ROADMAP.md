@@ -1,461 +1,373 @@
 # Roadmap: Fuku Robot
 
+## Milestones
+
+- ✅ **v1.0 Staff Group, Raid Protection, Web Captcha & Settings Menu** - Phases 1-9 (shipped 2026-11-02, archived in `milestones/v1.0-ROADMAP.md`)
+- 🚧 **v1.1 PM Settings Hub & Member Screening** - Phases 10-19 (in progress)
+
+<details>
+<summary>✅ v1.0 Staff Group, Raid Protection, Web Captcha & Settings Menu (Phases 1-9) - SHIPPED 2026-11-02</summary>
+
+Full phase details, success criteria and plan lists: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md). Requirements: [milestones/v1.0-REQUIREMENTS.md](milestones/v1.0-REQUIREMENTS.md).
+
+- [x] **Phase 1: Staff Group Links** - 10/10 plans (completed 2026-10-05)
+- [x] **Phase 2: Staff Actions Across Groups** - 10/10 plans (completed 2026-10-05)
+- [x] **Phase 3: Staff Audit and Undo** - 12/12 plans (completed 2026-10-06)
+- [x] **Phase 4: Manual Lockdown** - 8/8 plans (completed 2026-10-08)
+- [x] **Phase 5: Lockdown Alerts and Response** - 14/14 plans (completed 2026-10-18)
+- [x] **Phase 6: Automatic Raid Detection** - 13/13 plans (completed 2026-10-29)
+- [x] **Phase 7: AI-Assisted Raid Detection** - 14/14 plans (completed 2026-10-29)
+- [x] **Phase 8: Turnstile Web Captcha** - 11/11 plans (completed 2026-10-30)
+- [x] **Phase 9: Settings Menu** - 14/14 plans (completed 2026-10-30)
+
+</details>
+
+## v1.1 PM Settings Hub & Member Screening
+
+**Milestone Goal:** Configure everything for a group from the bot's private chat with buttons, like GroupHelp, and screen members automatically on join and on every message.
+
 ## Overview
 
-Fuku Robot turns the Fuku Robot fork into a GroupHelp-style bot for the owner's own communities, in the owner's priority order. First comes the Staff Group. Owners link their groups to one staff room (Phase 1). Staff then act on a bad actor in every linked group at once, behind a Confirm tap and live per-group admin checks (Phase 2), and every action becomes logged and reversible (Phase 3). Raid protection comes next: a durable lockdown that only an admin can lift (Phase 4), alerts with one-tap responses (Phase 5), rule-based auto-triggers that replace the old `/antiraid` (Phase 6), and AI that helps the rules without ever deciding alone (Phase 7). Then a Cloudflare Turnstile captcha served as a Telegram Mini App (Phase 8). Last, an inline settings menu brings it all together (Phase 9). Every phase ships an end-to-end slice the owner can try in real groups.
+v1.1 moves every group setting into the bot's private chat behind buttons, lets each group's owner decide who may configure it, and adds member screening and message deletion. The phases follow the owner's priority, which is also the dependency order. The owner gate and the private-chat hub come first, because every later page rides on them (Phase 10). Next comes the private input state and the message editor. Welcome, Goodbye and Rules are written by sending messages in private (Phase 11), then rules gain media and buttons, media can sit under its text, and members can be greeted only once (Phase 12). Member requirements follow, cheapest first. Last name, username and name-script rules come with their punishments, one notice per violation and the "I fixed it" button (Phase 13). Profile-photo and channel-subscription lookups come next (Phase 14), and the AI spam-name check is last (Phase 15). Message deletion starts with a durable queue for service messages and the bot's own messages (Phase 16) and ends with members' commands, edits and self-destruct (Phase 17). The remaining pages close the milestone: simple settings and locks (Phase 18), then blacklists, filters and notes, which need the input state (Phase 19). Every phase ships a slice the owner can try in a real group.
+
+`.planning/research/SUMMARY.md` lists 17 design points where the four research files disagree, plus live Telegram spikes and owner questions. Each phase's **Research flags** line names the ones its phase researcher settles. This roadmap decides none of them. It records only the decisions the owner has already made.
 
 ## Cross-Cutting Constraints
 
 These apply to every phase. Planners carry them into each phase's must-haves.
 
-- **AGENTS.md is the rulebook.** Migrations are append-only and timestamped. Every write calls `cache.DeleteCache`. Commands go through `helpers.WrapCommand` and callbacks through `callbackcodec` (64-byte cap). Tests use real fixtures, no mock libraries. `make generate-docs`, `make check-translations`, `make test` and `make lint` pass at the end of every phase. A new handler group, Redis key family or rule change updates `AGENTS.md` in the same commit.
-- **The per-group admin check is never skipped.** Every action, button press and setting change re-checks the presser live against the group it affects.
-- **PLAT-03 (mapped to Phase 1):** each phase adds its new messages and button labels to all 7 locale files.
-- **PLAT-01 (mapped to Phase 2):** each later phase keeps its own state shared across replicas too. That covers lockdown state (Phase 4), detection counters (Phases 6 and 7) and captcha challenges (Phase 8).
-- **PLAT-02 (mapped to Phase 7):** the Turnstile secret added in Phase 8 is registered with `logredact.RegisterSecret`, like the Gemini key.
+- **AGENTS.md is the rulebook.** Migrations are append-only and timestamped (read the latest file in `migrations/` when the phase starts). Every write calls `cache.DeleteCache`, and a key that must be fresh on every replica is listed in `skipLocal`. Commands go through `helpers.WrapCommand` and callbacks through `callbackcodec` (64-byte cap). Fire-and-forget goroutines recover from panics. Tests use real fixtures, no mock libraries. `make generate-docs`, `make check-translations`, `make test` and `make lint` pass at the end of every phase. A new handler group, callback namespace, Redis key family, table (with its backup status), shutdown drain or rule change updates `AGENTS.md` in the same commit.
+- **The per-group admin check is never skipped.** Every way into the menu (private list, in-group `/settings`, deep link, button press, typed input) re-checks the person live against the group it affects with `getChatMember`, never with the admin cache or Redis state. The owner gate from Phase 10 sits on top of that check and never replaces it.
+- **State is shared across replicas (v1.0 PLAT-01).** Input waits, violation latches, greet-once records, the owner's admin-access switch and the deletion schedule behave the same whichever replica handles an update.
+- **Secrets are registered with `logredact.RegisterSecret` (v1.0 PLAT-02).** The Anthropic key the name check uses already is. Any new secret is registered too, and no key or Telegram file URL reaches a log or an error.
+- **PLAT-05 (mapped to Phase 10):** every later phase adds its new messages and button labels to all 8 locale files (en, es, fr, hi, id, pt, ru, uk).
+- **PLAT-06 (mapped to Phase 14):** the AI name checks (Phase 15) and the deletion work (Phases 16 and 17) also share Telegram rate budgets across replicas, recover from crashes and drain within the existing shutdown budget.
+- **New handler groups stay below 12.** Group 12 (the late raid flood counter) must stay after every other group, so any new handler group gets a lower number and is added to the handler list in `AGENTS.md`.
+- **One setting, one code path (v1.0 MENU-08, and EDIT-11 and PAGE-10 in v1.1).** Every menu control calls its command's apply function, which holds the validation, the refusals, the write and its cache invalidation. Each new setting gets the parity, drift and authority-parity tests Phase 9 set up.
+- **Unknown never punishes.** All four research files agree on this. A screening or lookup answer is pass, fail or unknown, and unknown does nothing. Every punishment and every unmute goes through an existing executor (the warn core, the ban, kick and mute paths, `resolveUnmutePermissions`), never a second copy.
+- **Nothing names the Staff Group (v1.0 D-21, D-32).** No menu, refusal, notice or page shows a Staff Group's title or ID to anyone but the creator of the group being configured.
+
+### Settled owner decisions
+
+These were decided before research and are not reopened by any phase.
+
+- Settings are owner-only by default. An owner-only switch lets the group's admins in. A regular admin without it does not see the group in `/settings` at all; there is no read-only view. In-group setting commands are unchanged (Phase 10).
+- 8 locales (en, es, fr, hi, id, pt, ru, uk), and uk is the default language (Phase 10, PLAT-05).
+- On join the captcha runs before the requirement check (Phase 13).
+- A member who fails a requirement on join and is muted gets no welcome until "I fixed it" succeeds (Phase 13).
+- Only a mute gets the "I fixed it" button. A kicked member rejoins and is checked again, a banned member waits for an admin, and a warn only warns (Phase 13).
+- The AI spam-name check uses Claude Haiku through the owner's Anthropic key, on names only (Phase 15).
+- Command deletion includes admins' commands (Phase 17).
+- Edited-message deletion has a 1-minute default grace and exempts admins and approved users (Phase 17).
+- Self-destruct exempts admins, approved users and pinned messages (Phase 17).
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- Integer phases (10, 11, 12): Planned milestone work, continuing from v1.0's Phase 9
+- Decimal phases (10.1, 10.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Staff Group Links** - Owners designate a Staff Group and link the groups they own to it; `/staff` shows each link's health (completed 2026-10-05)
-- [x] **Phase 2: Staff Actions Across Groups** - Staff ban, mute, kick, unban or unmute someone in every linked group at once, after a Confirm tap, with live per-group admin checks (completed 2026-10-05)
-- [x] **Phase 3: Staff Audit and Undo** - Every staff action is posted to log channels, listed in `/staff`, and reversible with "Undo everywhere" (completed 2026-10-06)
-- [x] **Phase 4: Manual Lockdown** - `/lockdown` removes joiners and mutes non-admins in one group; `/unlockdown` restores its permissions exactly (completed 2026-10-08)
-- [x] **Phase 5: Lockdown Alerts and Response** - Each lockdown alerts the Staff Group and log channel with Lift, "Ban N recent joiners" and "Revoke link" buttons (completed 2026-10-18)
-- [x] **Phase 6: Automatic Raid Detection** - Join surges and new-member floods lock a group automatically; the old `/antiraid` is retired (completed 2026-10-29)
-- [x] **Phase 7: AI-Assisted Raid Detection** - TypeSafe (text) and Gemini (images) spam verdicts feed a burst trigger, while rules still decide (completed 2026-10-29)
-- [x] **Phase 8: Turnstile Web Captcha** - New members verify through Cloudflare Turnstile in a bot-hosted Telegram Mini App (completed 2026-10-30)
-- [x] **Phase 9: Settings Menu** - `/settings` opens an inline-button menu with Staff Group, Lockdown, Captcha and Antiflood pages (completed 2026-10-30)
+- [ ] **Phase 10: PM Settings Hub and Owner Gate** - `/settings` in private lists the user's groups, and only the owner configures a group unless they let admins in
+- [ ] **Phase 11: Message Editor** - Welcome, Goodbye and Rules are written from the private chat by sending messages, with preview
+- [ ] **Phase 12: Rules Media, Media Under Text and Greet Once** - Rules gain media and buttons, media can sit under its text, and members can be greeted only once
+- [ ] **Phase 13: Member Requirements** - Last-name, username and name-script rules with per-rule punishments, one notice per violation and "I fixed it" for muted members
+- [ ] **Phase 14: Profile Photo and Channel Rules** - Paced, fail-safe profile-photo and channel-subscription lookups
+- [ ] **Phase 15: AI Spam-Name Check** - Claude Haiku judges members' names (names only), cached and budgeted
+- [ ] **Phase 16: Scheduled Deletion of Service and Bot Messages** - A durable deletion queue removes service messages and the bot's own messages on a timer
+- [ ] **Phase 17: Command, Edit and Self-Destruct Deletion** - Members' commands, late edits and, optionally, every message are deleted automatically
+- [ ] **Phase 18: Remaining Settings Pages** - Warnings, switches, language, log channel, anonymous admins and locks on menu pages
+- [ ] **Phase 19: Blacklist, Filter and Note Pages** - Browse, delete and add list entries from the private chat
+
+**Coverage:** 53/53 v1.1 requirements mapped, each to exactly one phase (see the Traceability table in `REQUIREMENTS.md`).
 
 ## Phase Details
 
-### Phase 1: Staff Group Links
+### Phase 10: PM Settings Hub and Owner Gate
 
-**Goal:** As a community owner, I want to make one group my Staff Group and link my groups to it, so that staff have one control room.
+**Goal:** As a group owner, I want to open my groups' settings from the bot's private chat and decide whether my admins may change them, so that I control who configures the bot.
 **Mode:** mvp
-**Depends on:** Nothing (first phase)
-**Research flag:** During phase research, confirm whether Telegram sends `chat_member` updates when group ownership is transferred. If it doesn't, the live owner checks (on `/staff`, and from Phase 2 before every staff action) are the only thing that removes stale links.
-**Requirements:** SETUP-01, SETUP-02, SETUP-03, SETUP-04, SETUP-05, SETUP-06, SETUP-07, SETUP-08, PLAT-03
+**Depends on:** Phase 9 (the v1.0 settings menu, its press pipeline and pages)
+**Requirements:** MENU-09, MENU-10, MENU-11, MENU-12, MENU-13, MENU-14, MENU-15, PLAT-05
+**Owner decisions:** owner-only by default; an owner-only switch lets admins in; an admin without it does not see the group at all; in-group setting commands are unchanged; 8 locales with uk as the default.
+**Research flags:** Mostly standard patterns (Stage 1 in SUMMARY.md). Settle decision 9 (the table behind the private group list and how it is fed: `chat_admin_index` or `chat_managers`, whether it may be seeded from `chat_users`, and whether a group whose bot is not an admin shows as unknown or is hidden), decision 10 (the admin-access table and its read policy: fresh read or cached with `skipLocal`, proven by a two-instance test) and the hub half of decision 16 (`settings|v1` or a new namespace for the list). Owner question from Gaps to Address: whether a group with no live creator lets admins in or denies everyone. Repo-side: `locales/uk.yml` exists but is shorter than `en.yml`, so run `make check-translations` first to see which keys uk lacks, and update the 7-locale wording in `AGENTS.md`. Pitfalls 6 to 9 (a stale owner switch on another replica, an anonymous admin taken for the owner, refusal texts that reveal a group exists, an empty list for an owner who never spoke).
 **Success Criteria** (what must be TRUE):
-  1. A group's owner can make that group the Staff Group. A channel, or a group that can't be used, is refused with a reason. Only the Staff Group's owner can remove the status, and removing it unlinks all its groups.
-  2. A user who owns both a group and the Staff Group can link and unlink that group. Anyone who doesn't own both (checked live) is refused with a reason, and so is a group that's already linked to a Staff Group.
-  3. When ownership of either group passes to someone else, the link disappears without anyone running a command.
-  4. A link and the Staff Group status keep working after a group upgrades to a supergroup and gets a new chat ID.
-  5. `/staff` in the Staff Group shows the help text and each linked group's status: linked, bot is admin, bot can restrict members, owner still matches. All its text exists in all 7 languages. The in-lockdown status is added when Phase 4 ships.
-
-**Plans:** 10/10 plans complete
+  1. `/settings` in the bot's private chat lists the groups the user may manage, paged, and picking one opens that group's main menu after a live check. The list comes from the bot's own record of each group's owner and admins. That record is refreshed when the admin list loads or on a promotion or demotion, and cleared when the bot leaves. An empty or incomplete list tells the user to run `/admincache` or `/settings` in the missing group.
+  2. By default only the group's live owner gets in, whether through the private list, in-group `/settings`, the `/start settings_<chat id>` deep link or a button press. A regular admin does not see the group in their list. In-group `/settings` and the deep link refuse them with a short reply that never names the Staff Group. `/setrules`, `/setwelcome`, `/captchamode` and the other in-group setting commands keep working for admins exactly as before.
+  3. Only the live owner sees and can press "Admins can change settings". While it is on, live administrators get the full menu as in v1.0. A change takes effect on every replica at the next press. An owner posting anonymously is identified by the proof tap, and the tapper's live status decides.
+  4. The main menu shows every page of the group in a two-column grid with Close, in the opener's language, and every page has Back.
+  5. Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` describes the 8-locale set.
+**Plans:** 11/11 plans executed in 8 waves
 
 Plans:
 **Wave 1**
-- [x] 01-01-PLAN.md: Walking skeleton. `/setstaff` makes a Staff Group and `/staff` shows it (schema, repository, live owner check, test harness, locale parity test)
+- [x] 10-01-PLAN.md — the switch and roster tables and their repositories, concurrent replaces serialized per chat (wave 1)
+- [x] 10-02-PLAN.md — the 19 new strings and the new /help text in all 8 locales, the sizing tests and the regenerated docs (wave 1)
+- [x] 10-03-PLAN.md — the locale-set guard test and the 8-locale wording of the project documents (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [x] 01-02-PLAN.md: `/unsetstaff` with confirm, plus the full `/setstaff` refusal matrix (anonymous, channel, bot not admin, linked group)
-- [x] 01-03-PLAN.md: Chat-migration re-key, so the Staff Group and its links survive a supergroup upgrade (StaffWatchers module, group -3)
-- [x] 01-04-PLAN.md: D-10 role exclusivity in PostgreSQL. Decision checkpoint, then a trigger with an advisory lock and a CI-only test
+- [x] 10-04-PLAN.md — the settings test harness, the PostgreSQL integrity list and the AGENTS.md rules for the new tables and the 8 locales (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [x] 01-05-PLAN.md: Linking by `/linkstaff [id]` and the "Add group" picker, with live owner-of-both checks and quiet linked groups
+- [x] 10-05-PLAN.md — the owner gate on in-group /settings (with the anonymous re-entry) and every press (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [x] 01-06-PLAN.md: Unlinking by `/unlinkstaff` and the Unlink button with confirm
+- [x] 10-06-PLAN.md — the owner-only Access page: two taps on, one tap off, every replica at the next press (wave 4)
+- [x] 10-07-PLAN.md — the roster feed from admin-list loads, promotions, demotions and the bot leaving (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [x] 01-07-PLAN.md: Auto-unlink on ownership change (service messages and chat_member; one recheck core; exactly-once notices)
+- [x] 10-11-PLAN.md — the owner gate and the 4xx class rule on the deep link, every door deciding the same, and the permissions reference (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [x] 01-08-PLAN.md: Bot-health tracking, with one heads-up per change, including recovery
+- [x] 10-08-PLAN.md — the startup backfill, the hourly sweep and the group /settings repair path (wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [x] 01-09-PLAN.md: Live `/staff` panel with per-group statuses, Refresh in place, paging and length cap
-- [x] 01-10-PLAN.md: Hourly and startup sweeper behind a Redis lock, wired into startup and shutdown
-
-### Phase 2: Staff Actions Across Groups
-
-**Goal:** As a staff member, I want to ban, mute or kick someone in every linked group at once, so that one command protects them all.
-**Mode:** mvp
-**Depends on:** Phase 1
-**Research flag:** During phase research, confirm what `restrictChatMember` does to a target who is banned from a group or not in it, so that mute and unmute fan-out can never lift a ban by accident.
-**Requirements:** STAFF-01, STAFF-02, STAFF-03, STAFF-04, STAFF-05, STAFF-06, STAFF-07, STAFF-08, STAFF-12, STAFF-13, PLAT-01
-**Success Criteria** (what must be TRUE):
-  1. In the Staff Group, any member can run `/ban`, `/mute`, `/kick`, `/unban` or `/unmute` against an `@username` or numeric ID. Ban and mute can be timed, and any action can carry a reason. The bot first shows a confirmation: the resolved name and ID, the action, the duration, the reason and the number of linked groups. Nothing happens until the issuer taps Confirm, and nobody else can confirm or cancel. An `@username` the bot has never seen is refused with a hint to use the numeric ID.
-  2. After Confirm, the action is applied in every linked group where the issuer is an admin with the right to restrict members at that moment. It is never applied in the Staff Group itself. A group is skipped, with the reason, if the issuer lacks that right there, the target is an admin or the owner there, or the target is the bot. A link whose owner no longer matches is removed and reported, not acted on.
-  3. A post from an anonymous admin in the Staff Group gets the reply "post as yourself", and nothing else happens.
-  4. The issuer gets one summary message that updates as groups finish. Every linked group is marked done, skipped (with the reason) or failed (with the reason, such as missing bot rights or rate limiting). The bot stays within Telegram's rate limits even with many groups and several bot replicas, and waits and retries when Telegram says to. No group is ever silently dropped.
-  5. `/ban`, `/mute`, `/kick`, `/unban` and `/unmute` work exactly as before in every group that isn't a Staff Group.
-
-**Plans:** 10/10 plans complete
-
-Plans:
-**Wave 1**
-- [x] 02-01-PLAN.md: Tracer. `/ban <ID> [reason]` from the Staff Group, Redis confirm card (issuer-only Confirm and Cancel), live per-group checks, ban in every linked group, card edited into the summary; per-group `/ban` unchanged elsewhere; anonymous senders refused
-
-**Wave 2** *(blocked on Wave 1 completion)*
-- [x] 02-02-PLAN.md: `/mute`, `/kick`, `/unban` and `/unmute`, with a status-first decision table that never lifts or shortens a ban (research flag)
-
-**Wave 3** *(blocked on Wave 2 completion)*
-- [x] 02-03-PLAN.md: Timed bans and mutes (`/ban <ID> 2d`, `/tban`, `/tmute`); duration on the card, over 366 days treated as permanent, end date fixed at Confirm
-
-**Wave 4** *(blocked on Wave 3 completion)*
-- [x] 02-04-PLAN.md: Targets by `@username` (case-insensitive, never guessed) and text mention; hints for unknown or ambiguous names, bare replies and the refused `/sban`-style variants
-
-**Wave 5** *(blocked on Wave 4 completion)*
-- [x] 02-05-PLAN.md: Card lifecycle: 5-minute expiry, exactly-once Confirm across replicas, abort when linked groups changed, one staff action per target; `/staff` help text
-
-**Wave 6** *(blocked on Wave 5 completion)*
-- [x] 02-06-PLAN.md: Fleet-wide Redis pacer with shared `retry_after`, four paced workers, D-19 failure reasons
-
-**Wave 7** *(blocked on Wave 6 completion)*
-- [x] 02-07-PLAN.md: Live summary: tally, batched edits, collapse and continuation, final-edit retry and fallback, shutdown drain
-
-**Wave 8** *(gap closure, blocked on Wave 7 completion)*
-- [x] 02-08-PLAN.md: Gap 1 (WR-01). One delivery budget per summary message so a long `retry_after` cannot lose the final summary; progress edits back off after a 429
-- [x] 02-09-PLAN.md: Gap 2, pacer half (WR-02). A paced call refuses a slot beyond `MaxWait` at once, without a Telegram request or a slot; `retry_after` overflow clamp
-
-**Wave 9** *(gap closure, blocked on Wave 8 completion)*
-- [x] 02-10-PLAN.md: Gap 2, lock half (WR-02). The run's coordinator renews its target lock by compare-and-set; AGENTS.md rules and the full phase gate
-
-### Phase 3: Staff Audit and Undo
-
-**Goal:** As a staff member, I want to log, list and undo every staff action, so that mistakes can be reversed and we stay accountable.
-**Mode:** mvp
-**Depends on:** Phase 2
-**Requirements:** STAFF-09, STAFF-10, STAFF-11, SETUP-09
-**Success Criteria** (what must be TRUE):
-  1. Every group where a staff action was applied gets a log-channel post with the action, target, issuer and reason.
-  2. Every staff action is recorded with the issuer, target, action, duration, reason, time and per-group outcomes. The record survives bot restarts.
-  3. `/staff` lists recent staff actions with who, what, target, when, reason and the outcome in each group.
-  4. "Undo everywhere" on a summary reverses the action in each group where the person pressing it is a Staff Group member and an admin with restrict rights. The other groups are skipped with the reason, and the result appears in the same done, skipped or failed summary. Someone outside the Staff Group can't undo anything.
-
-**Plans:** 12/12 plans complete
-
-Plans:
-**Wave 1**
-- [x] 03-01-PLAN.md: Tracer. Owner confirms the one-way prior-state columns (checkpoint), then every confirmed staff action is recorded with each group's prior state (written before the Telegram write) and outcome; survives restarts and chat migration
-
-**Wave 2** *(blocked on Wave 1 completion)*
-- [x] 03-02-PLAN.md: Undo decision table, test-first: decideStaffUndo restores the prior state, skips groups changed since, never re-applies an end date inside 120 s; invariants over every combination
-- [x] 03-03-PLAN.md: Log-channel posts for applied actions (admin category, paced, never naming the Staff Group, never changing the result); the run engine takes a spec
-
-**Wave 3** *(blocked on Wave 2 completion)*
-- [x] 03-04-PLAN.md: "Recent actions" on /staff: paged list, newest first, 10 per page, offset cursor, members only
-
-**Wave 4** *(blocked on Wave 3 completion)*
-- [x] 03-05-PLAN.md: History detail view: per-group lines in the summary format, undo outcomes, unlinked and unfinished groups, wording for every undo reason
-
-**Wave 5** *(blocked on Wave 4 completion)*
-- [x] 03-06-PLAN.md: Tracer for "Undo everywhere": button on the final summary, confirm card replying to it, presser-only Confirm, DB claim, live per-group checks for the presser, undo summary, original marked "Undone by"
-
-**Wave 6** *(blocked on Wave 5 completion)*
-- [x] 03-07-PLAN.md: Undo lifecycle and safety: cancel, expiry, refusals, one undo per action across replicas, shared target lock, shutdown mid-undo, no time limit
-
-**Wave 7** *(blocked on Wave 6 completion)*
-- [x] 03-08-PLAN.md: Undo restores exactly the prior state end to end (independent permissions), skips changed, unapplied, unlinked and rightless groups; #STAFF_UNDO log posts
+- [x] 10-09-PLAN.md — the private group list and the pick (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [x] 03-09-PLAN.md: Undo from the history detail view, /staff help and docs, final AGENTS.md pass, full phase gate with PostgreSQL migration chain
+- [x] 10-10-PLAN.md — the two-column Main grid with the status block and the Groups button, the owner's live checks and the phase gate (wave 8)
 
-**Wave 9** *(gap closure G-03-4, blocked on Wave 8 completion)*
-- [x] 03-10-PLAN.md: Gap G-03-4, claim half (WR-01). An undo that reached no Telegram write gives its claim back (ReleaseUndo); the original summary is marked at the end of the run, "Undone by" or "changed nothing"; help text and docs
-
-**Wave 10** *(gap closure G-03-4, blocked on Wave 9 completion)*
-- [x] 03-11-PLAN.md: Gap G-03-4, shutdown half (WR-01). The undo Confirm joins the shutdown drain before it claims and refuses to claim once the shutdown began
-
-**Wave 11** *(gap closure G-03-4, blocked on Wave 10 completion)*
-- [x] 03-12-PLAN.md: Gap G-03-4, label half (WR-02). Recent actions, the detail view and the Undo answers say undone, running, interrupted or changed nothing from the stored undo outcomes; full phase gate
-
-### Phase 4: Manual Lockdown
-
-**Goal:** As a group admin, I want to lock my group down during a raid and lift it when safe, so that attackers are stopped and settings survive.
-**Mode:** mvp
-**Depends on:** Phase 1
-**Spike gate:** Before planning, run two spikes in a throwaway supergroup. (1) Can a per-user restriction let approved users talk while the group's default permissions are locked? If not, the owner picks the LOCK-03 fallback before this phase is planned. (2) How do joins arrive: as `chat_member` updates, as join service messages (which may be missing in large groups), or as join requests? Does the join guard's `EndGroups` really stop greetings and captcha for a removed joiner? **Resolved 2026-10-06:** (1) can't: the per-user toggle is greyed out once the default is locked, so approved users are muted too (04-CONTEXT D-01, D-02). (2) is designed away: the join guard handles all three join paths, and live delivery is a UAT item (04-CONTEXT D-03).
-**Requirements:** LOCK-01, LOCK-02, LOCK-03, LOCK-04, LOCK-05, LOCK-06, LOCK-07, LOCK-08, LOCK-09
-**Success Criteria** (what must be TRUE):
-  1. When an admin runs `/lockdown`, everyone except the group's admins is muted, and anyone who joins is removed at once. Removed users can rejoin after the lockdown is lifted. Other linked groups are unaffected.
-  2. Approved users can still talk during a lockdown. If the spike shows Telegram can't allow this, the fallback the owner chose applies instead and is stated in the lockdown notice.
-  3. An admin can see whether the group is locked, since when and why, and `/staff` shows the group as in lockdown. Running `/lockdown` again during a lockdown reports the existing one instead of starting another.
-  4. A lockdown never lifts on its own. It survives bot restarts and a Redis flush, and every bot replica enforces it. Only an admin of the group can lift it with `/unlockdown`, and anyone else is refused.
-  5. Lifting the lockdown restores the group's permissions exactly as they were before. Anyone unmuted during the lockdown, by `/unmute` or by passing the captcha, can still talk after it lifts.
-
-**Plans:** 8/8 plans complete
-
-Plans:
-**Wave 1**
-- [x] 04-01-PLAN.md: Tracer. `/lockdown` stores the exact getChat permissions, then locks; `/unlockdown` restores them byte for byte; live authority (owner or admin with restrict), refusals that record nothing, one active lockdown per chat on SQLite and PostgreSQL
-
-**Wave 2** *(blocked on Wave 1 completion)*
-- [x] 04-02-PLAN.md: `/lockdownstatus` (since, who, why, removed count, hand-edit warning); the lift replaces hand edits, stays locked when the restore fails, lifts once; anonymous admins always prove who they are
-
-**Wave 3** *(blocked on Wave 2 completion)*
-- [x] 04-03-PLAN.md: Joiners recorded by the group -7 guard and banned until the lift by a paced, DB-driven worker (no welcome or captcha); the lift unbans only the lockdown's own bans and posts one tally
-
-**Wave 4** *(blocked on Wave 3 completion)*
-- [x] 04-04-PLAN.md: Every join path handled once (service messages, cross-path dedupe, re-joins, mixed messages, D-24 approvals); only admin-added users get in, bots never; no goodbye for removed joiners
-
-**Wave 5** *(blocked on Wave 4 completion)*
-- [x] 04-05-PLAN.md: Join requests declined during a lockdown and the Accept button refuses; a lockdown stays inside its own group; `/antiraid` steps aside while one is active
-
-**Wave 6** *(blocked on Wave 5 completion)*
-- [x] 04-06-PLAN.md: Restart mid-lift resumes, stale claims released, unconfirmed locks settled, Redis flush or outage changes nothing, a lockdown never lifts on its own
-
-**Wave 7** *(blocked on Wave 6 completion)*
-- [x] 04-07-PLAN.md: Unmuting during a lockdown (`/unmute`, button, captcha pass, staff `/unmute`) gives the pre-lockdown permissions, so the user talks after the lift
-
-**Wave 8** *(blocked on Wave 7 completion)*
-- [x] 04-08-PLAN.md: `/staff` marks locked groups (SETUP-08); a staff ban on a lockdown joiner survives the lift; lockdown locale parity test, final AGENTS.md pass and full phase gate
-
-### Phase 5: Lockdown Alerts and Response
-
-**Goal:** As a group admin or staff member, I want to get a lockdown alert with one-tap fixes, so that we can see a raid and clean it up fast.
-**Mode:** mvp
-**Depends on:** Phase 2, Phase 4
-**Requirements:** LOCK-11, LOCK-12, LOCK-13, LOCK-14
-**Success Criteria** (what must be TRUE):
-  1. Each lockdown posts one alert to the group's Staff Group (if it has one) and to its log channel. The alert shows the trigger, the counts behind it, and a sample of the accounts that joined during the burst, including those removed during the lockdown.
-  2. "Lift lockdown" works only for an admin of the locked group, whether it's pressed in the Staff Group or in the log channel. Anyone else is refused and nothing changes. If the lockdown has already been lifted, pressing a button on its alert says so and does nothing.
-  3. An admin of the locked group can press "Ban N recent joiners" to ban the accounts that joined during the burst, except admins and approved users. They are told how many were banned, skipped and failed.
-  4. When Telegram reports which invite link the burst used, the alert shows it. Only an admin of that group can revoke it with "Revoke link".
-  5. While the group stays locked, the alert is re-posted periodically as a reminder. The reminders stop once the lockdown is lifted.
-
-**Plans:** 14/14 plans complete
-
-Plans:
-**Wave 1**
-- [x] 05-01-PLAN.md: Tracer. A lockdown of a linked group posts one alert in its Staff Group (exactly-once gate, worker-posted copy, stored text)
-
-**Wave 2** *(blocked on Wave 1 completion)*
-- [x] 05-02-PLAN.md: The alert's Lift button: live authority, asker-only confirm card, the shared lift function with /unlockdown, the public lift notice
-
-**Wave 3** *(blocked on Wave 2 completion)*
-- [x] 05-03-PLAN.md: Every copy closes at the lift ("Lifted by X at T", no buttons); stale buttons do nothing; repository tests for the gate and claims
-
-**Wave 4** *(blocked on Wave 3 completion)*
-- [x] 05-04-PLAN.md: Lift button safety: service identities, forged chats, no restrict right, demotion; card expiry; 64-byte callbacks; works without Redis
-- [x] 05-05-PLAN.md: The 10-minute Redis join tracker (D-17) written by both group -7 join paths, best effort
-
-**Wave 5** *(blocked on Wave 4 completion)*
-- [x] 05-06-PLAN.md: The alert in the log channel (admin category) with a working Lift; delivery retries, rate limits, stale claims, concurrent replicas, the settle path
-
-**Wave 6** *(blocked on Wave 5 completion)*
-- [x] 05-07-PLAN.md: The burst on the alert: the tracker snapshot saved with the lockdown, up to 10 accounts with name, @username and ID, bots marked, the trigger's counts
-
-**Wave 7** *(blocked on Wave 6 completion)*
-- [x] 05-08-PLAN.md: The ban policy core: per-account decision and ban with no end date, admins, approved users, people an admin let in (D-22) and the bot skipped, safe beside the worker and the lift; ban run storage
-- [x] 05-09-PLAN.md: The invite link the burst used on the alert, with a pointer when the bot cannot revoke it
-
-**Wave 8** *(blocked on Wave 7 completion)*
-- [x] 05-10-PLAN.md: "Ban N recent joiners": button, asker-only card, DB-driven run, result; approved users read fresh
-
-**Wave 9** *(blocked on Wave 8 completion)*
-- [x] 05-11-PLAN.md: Ban again during a raid (new accounts only, resume, stop at the lift); full result with skip reasons and declined requests; one #LOCKDOWN_BAN log post
-
-**Wave 10** *(blocked on Wave 9 completion)*
-- [x] 05-12-PLAN.md: "Revoke link" for bot-created links by admins with the invite right; every copy says who revoked it; plain-word refusals
-
-**Wave 11** *(blocked on Wave 10 completion)*
-- [x] 05-13-PLAN.md: Hourly reminders with fresh counts and live buttons; the previous reminder loses its buttons; none after the lift, no backlog after downtime
-
-**Wave 12** *(blocked on Wave 11 completion)*
-- [x] 05-14-PLAN.md: Help text and docs in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
-
-### Phase 6: Automatic Raid Detection
-
-**Goal:** As a group admin, I want to have raids detected and locked down automatically, so that my group is protected when no admin is online.
-**Mode:** mvp
-**Depends on:** Phase 5
-**Requirements:** RAID-01, RAID-02, RAID-06, RAID-07, LOCK-10, LOCK-15
-**Success Criteria** (what must be TRUE):
-  1. A burst of joins in a short window locks the group automatically. The alert names the join surge and its count.
-  2. A burst of messages, photos, GIFs or stickers, mostly from recently joined members, locks the group automatically. A busy conversation among established members does not. Admins and approved users never count toward either trigger.
-  3. Both triggers are on by default in every group, with conservative thresholds. An admin can turn each one off or change its threshold, and the next burst follows the new setting.
-  4. When several triggers fire at once, the group gets exactly one lockdown and one alert. This holds even when different bot replicas handle the joins and messages.
-  5. `/antiraid` and its old timing commands now point admins to `/lockdown`. A group's old auto-threshold becomes its join-surge threshold, and the old raid mode no longer temp-bans anyone.
-
-**Plans:** 13/13 plans complete
-
-Plans:
-**Wave 1**
-- [x] 06-01-PLAN.md: One start path shared by /lockdown and the triggers (`startLockdownRow`, replies unchanged), the trigger columns on `chat_lockdowns`, and the alert line that names the trigger
-
-**Wave 2** *(blocked on Wave 1 completion)*
-- [x] 06-02-PLAN.md: Tracer. 15 joins in 60 s lock a group automatically and the alert names the join surge with its count; settings table with the threshold carry-over (clamped to 3..500, D-22)
-
-**Wave 3** *(blocked on Wave 2 completion)*
-- [x] 06-03-PLAN.md: Every join path counted once; admin-added, approved, the bot and join requests never count; window, script and no-Redis pinned; the guard suites still pass
-- [x] 06-04-PLAN.md: The flood trigger at handler group -4: 30 items in 30 s, 60% from members who joined in the last day, at least 3 accounts; exemptions and item kinds
-
-**Wave 4** *(blocked on Wave 3 completion)*
-- [x] 06-05-PLAN.md: `/autolockdown` shows and changes each trigger (live owner or restricting admin), and the next burst follows it on every replica
-- [x] 06-06-PLAN.md: One lockdown and one alert however many triggers and replicas fire; 10 quiet minutes after a lift; the fire latch by outcome
-
-**Wave 5** *(blocked on Wave 4 completion)*
-- [x] 06-07-PLAN.md: The group is told it was locked automatically; a raid the bot cannot lock is reported once a day to the Staff Group and the log channel
-
-**Wave 6** *(blocked on Wave 5 completion)*
-- [x] 06-08-PLAN.md: /lockdownstatus, /lockdown and reminders name the automatic trigger
-
-**Wave 7** *(blocked on Wave 6 completion)*
-- [x] 06-09-PLAN.md: A flood alert lists the flooding accounts and "Ban N recent joiners" can ban them (D-17)
-
-**Wave 8** *(blocked on Wave 7 completion)*
-- [x] 06-10-PLAN.md: The old raid mode is retired: pointer commands, the `/autoantiraid` alias, no temp-bans, startup key sweep
-- [x] 06-11-PLAN.md: Developer stats on the new table and the PostgreSQL carry-over proof
-- [x] 06-12-PLAN.md: The docs pages describe the automatic triggers and the retired raid mode
-
-**Wave 9** *(blocked on Wave 8 completion)*
-- [x] 06-13-PLAN.md: Help text in all 7 languages, PostgreSQL integrity list, final AGENTS.md pass, full phase gate
-
-### Phase 7: AI-Assisted Raid Detection
-
-**Goal:** As a group admin, I want to have AI flag borderline spam text and images, so that subtler raids still trigger a lockdown.
-**Mode:** mvp
-**Depends on:** Phase 6
-**Spike gate:** Before planning, test `gemini-3.5-flash-lite` on sample spam photos, GIFs and stickers: accuracy, latency, cost, and how animated media is sampled. Then run `/gsd-ai-integration-phase` for the AI-SPEC. The research STACK recommended Claude Haiku through `anthropic-sdk-go`, but the owner chose Gemini, so this phase's research must target the Gemini Go client instead.
-**Requirements:** RAID-03, RAID-04, RAID-05, PLAT-02
-**Success Criteria** (what must be TRUE):
-  1. Borderline text is checked with the existing TypeSafe AI check. Borderline photos, GIFs and stickers are checked with Gemini (`gemini-3.5-flash-lite`, using the owner's key). Ordinary messages are not sent to any AI.
-  2. A burst of AI spam verdicts in a short window locks the group, and the alert names the AI trigger and its count. Like the other triggers, it's on by default, and an admin can turn it off or change its threshold.
-  3. AI never decides a lockdown alone. A single verdict doesn't lock a group. If an AI provider is slow, down or not configured, the rule-based triggers keep working and nothing waits on AI.
-  4. The Gemini API key never appears in logs, including errors and debug output.
-
-**Plans:** 14/14 plans complete
-
-Plans:
-**Wave 1**
-- [x] 07-01-PLAN.md: Tracer. Five /aispam spam verdicts from three accounts lock the group as `ai_burst` through `raidFire`; every trigger-kind surface names the AI trigger; the alert lists the accounts behind the verdicts
-- [x] 07-02-PLAN.md: The stdlib-only Gemini client (`fuku/utils/gemini`): verified request, strict verdict, key-free errors, one retry within 2 s, leaf-package test
-
-**Wave 2** *(blocked on Wave 1 completion)*
-- [x] 07-03-PLAN.md: `GEMINI_API_KEY` and `GEMINI_MODEL` loaded, validated and registered with `logredact`; Google-key shape scrubbed; env docs with the paid-tier note
-- [x] 07-04-PLAN.md: `ai_enabled` / `ai_threshold` on `chat_raid_detection` (append-only migration, CHECK 3..500), stale-cache defaults, and the counter follows each group's setting
-- [x] 07-05-PLAN.md: The owner's Gemini spike kit (`scripts/gemini-spike/` with `-probe` and `-models-get`) and `07-SPIKE.md`
-
-**Wave 3** *(blocked on Wave 2 completion)*
-- [x] 07-06-PLAN.md: The group 2 candidate watcher and the raid AI pool: new members' suspicious text checked once by TypeSafe, one verdict shared with /aispam, silent raid-only breaker, inert without Redis
-
-**Wave 4** *(blocked on Wave 3 completion)*
-- [x] 07-07-PLAN.md: `/autolockdown ai N|on|off` with the same live checks, the AI status line and the "not set up" notice; records the help-text headroom
-
-**Wave 5** *(blocked on Wave 4 completion)*
-- [x] 07-14-PLAN.md: AI-triggered lockdown starts off the workers, the pool context, and the `StopRaidAI` drain registered after `RegisterRaidPostsDrain`
-
-**Wave 6** *(blocked on Wave 5 completion)*
-- [x] 07-08-PLAN.md: New members' photos, GIFs, stickers and videos judged by Gemini; the right frame per kind; token-safe download; secrets never logged
-
-**Wave 7** *(blocked on Wave 6 completion)*
-- [x] 07-09-PLAN.md: Hourly Gemini budgets, verdict cache, album gate, fire-latch skip, per-chat breaker and provider-wide pause
-
-**Wave 8** *(blocked on Wave 7 completion)*
-- [x] 07-10-PLAN.md: Developer `/stats`: AI-off groups and this replica's AI check counters
-- [x] 07-11-PLAN.md: Architecture and reference docs for the AI trigger, its keys and what is sent where
-
-**Wave 9** *(blocked on Wave 8 completion)*
-- [x] 07-12-PLAN.md: The /lockdown help in all 7 languages within a hard length budget, the generated page, the final AGENTS.md pass
-
-**Wave 10** *(blocked on Wave 9 completion)*
-- [x] 07-13-PLAN.md: Final integration: an image burst locks end to end, the AI path never acts, join and flood still fire with every provider down; full phase gate
-
-### Phase 8: Turnstile Web Captcha
-
-**Goal:** As a group admin, I want to verify new members with Turnstile in a Telegram Mini App, so that bots stay out with little friction.
-**Mode:** mvp
-**Depends on:** Phase 4
-**Spike gate:** Before planning, test on real Android, iOS and Desktop clients. (1) A Direct Link Mini App button posted in a group opens the page with signed `initData` for the user who tapped it. A user who isn't the target is rejected, and the `startapp` parameter is long enough for the challenge token. (2) The Turnstile widget renders and returns a token inside Telegram's WebViews, and siteverify reports the Mini App's hostname. For the spike, the owner provides a public HTTPS hostname, a BotFather Mini App and Turnstile keys.
-**Requirements:** CAPT-01, CAPT-02, CAPT-03, CAPT-04, CAPT-05, CAPT-06, CAPT-07, CAPT-08, PLAT-04
-**Success Criteria** (what must be TRUE):
-  1. An admin can set a group's captcha mode to Turnstile, and math and text stay available. In a Turnstile group, a new member is muted on joining and gets a challenge message. Its button opens the bot's captcha page as a Mini App in the member's language.
-  2. A member who passes is unmuted, their held messages are replayed, the greeting runs and the challenge is cleaned up, as with the existing captcha.
-  3. Only the member the challenge was issued to can pass it. Another user's tap, a reused challenge, or a page reporting a pass by itself never unmutes anyone. The bot's server decides a pass using only Telegram's signed user data and Cloudflare's verification.
-  4. A member who fails the Turnstile check, or doesn't pass within the group's time limit, is kicked and can rejoin to try again. This works no matter which bot replica handles the join or the check.
-  5. The owner can deploy the captcha page by following the documented steps: a public HTTPS hostname, BotFather Mini App registration, and Turnstile keys. The Turnstile secret never appears in logs.
-
-**Plans:** 11/11 plans complete
 **UI hint**: yes
 
+### Phase 11: Message Editor
+
+**Goal:** As a group owner, I want to write the welcome, goodbye and rules from the bot's private chat by sending them as messages, so that I can set them up without typing commands in the group.
+**Mode:** mvp
+**Depends on:** Phase 10 (every editor page and every typed reply goes through the owner gate)
+**Requirements:** EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, EDIT-06, EDIT-10, EDIT-11
+**Research flags:** Short spike first (Stage 2 in SUMMARY.md): whether a message sent in private stores in the same form as `/setwelcome` (entities to stored text), how an album is cut to one item, and how a preview is sent into the private chat through the group's send path. Settle decision 1 (handler group of the private input consumer: -1 or 1, below 12 either way), the input and cancel half of decision 16, and the pending-input key name from the naming list. Owner question from Gaps to Address: stepper buttons as "type a number" through the input state. Pitfalls 10, 11 and 12 (a wait state that is per replica or single-slot, formatting and UTF-16 entity offsets, length limits checked after placeholders are filled in).
+**Success Criteria** (what must be TRUE):
+  1. From the menu the owner opens Welcome, Goodbye or Rules and sees which parts are set (text, media, URL buttons; Rules gains media and buttons in Phase 12), with a button to set or remove each. After pressing one, the owner's next private message becomes that part. Cancel or `/cancel` leaves the message unchanged, the wait ends by itself after 10 minutes, and it works whichever replica receives the message.
+  2. Text keeps its formatting and the placeholders (`{first}`, `{mention}` and the rest). Text too long to send (4096 characters, or 1024 as a caption), a bad button syntax or a bad URL is refused with the reason, and the wait stays open. One media item of a kind the welcome supports (photo, video, GIF, document, sticker, audio, voice) is accepted. From an album only one item is kept, and the owner is told.
+  3. Each part has a Preview, and Full preview sends the whole message exactly as members will see it, through the same send path the group uses. A message Telegram would refuse is refused before it is saved.
+  4. A message saved in the editor is stored exactly as `/setwelcome`, `/setgoodbye` or `/setrules` would store it, so the next real join, leave or `/rules` in the group shows it, and those commands still work as before.
+  5. The Welcome and Goodbye pages switch each message on or off and turn "Delete last welcome/goodbye" on or off, stored exactly as `/welcome`, `/goodbye`, `/cleanwelcome` and `/cleangoodbye` store them.
+**Plans:** 14/14 plans executed in 7 waves
+
 Plans:
 **Wave 1**
-- [x] 08-01-PLAN.md: Tracer. A joiner in a Turnstile group gets one Mini App button; a signed POST confirmed by Cloudflare unmutes them through the pass path shared with the button; forged buttons refused; math fallback, rollback, re-join and recovery
-- [x] 08-02-PLAN.md: The four web captcha settings (plus trusted proxies) load all-or-nothing, the Turnstile secret is registered with `logredact`, env docs
+- [x] 11-01-PLAN.md — the first 57 editor strings and the new settings /help in all 8 locales, with their guards (wave 1)
+- [x] 11-02-PLAN.md — the commands' length, link, media and placeholder rules as shared helpers (wave 1)
+- [x] 11-03-PLAN.md — side-effect-free greetings and rules reads and one-part greeting writes (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [x] 08-03-PLAN.md: Strict `initData` validation pinned by the published known-answer vector; the `captchaweb` leaf-package test
-- [x] 08-04-PLAN.md: Append-only migration widening `chk_captcha_mode` (legacy inline check dropped too), `SetCaptchaMode` accepts turnstile, PostgreSQL guarantee in CI
-- [x] 08-05-PLAN.md: The embedded Mini App page: per-response nonce CSP, 9 states, `cData` binding, one POST per token, `node --test` for its script
+- [x] 11-04-PLAN.md — the remaining 26 editor strings (refusals, previews, saved, wait ended) in all 8 locales (wave 2)
+- [x] 11-05-PLAN.md — one apply function per greeting and rules setting and the shared message builders, used by the commands (wave 2)
+- [x] 11-06-PLAN.md — the page-action Validate hook and the change-info right in the settings pipeline (wave 2)
+- [x] 11-07-PLAN.md — the Redis wait store and /cancel (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [x] 08-06-PLAN.md: A failed check kicks once, Cloudflare and setup faults retry with the token re-armed, timeouts and checks decide once on any replica, nothing secret is logged
-- [x] 08-07-PLAN.md: The 26 page strings in all 7 languages, the per-language string table, the locale parity test
+- [x] 11-08-PLAN.md — the Welcome, Goodbye and Rules pages with their switches and Delete last (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [x] 08-08-PLAN.md: Verify-route hardening: Redis windows per IP, user and challenge, trusted-proxy client address, JSON-only limits, readiness gate, health check, consume-once and replay
+- [x] 11-09-PLAN.md — Set, Cancel and Remove on every part, and the group-menu refusal (wave 4)
+- [x] 11-10-PLAN.md — the pure check and dry run of a typed part (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [x] 08-09-PLAN.md: `/captchamode turnstile` with its three ordered refusals; the mode texts in all 7 languages and the commands page
+- [x] 11-11-PLAN.md — the typed-reply door at handler group 1, text parts end to end, the sixth gate door (wave 5)
+- [x] 11-12-PLAN.md — Preview and Full preview through the group's send path (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [x] 08-10-PLAN.md: The routes on the bot's port when configured, `MarkCaptchaWebReady`, shared-port warnings, the developer `/stats` counters
-- [x] 08-11-PLAN.md: The self-hosting guide (D-15) and the owner's real-device checklist `08-SPIKE.md` (D-18)
+- [x] 11-13-PLAN.md — media, albums and buttons through the door, and whole-message parity with the commands (wave 6)
 
-### Phase 9: Settings Menu
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 11-14-PLAN.md — privacy and size checks of every editor screen, the rulebook and docs, the owner's live checks and the phase gate (wave 7)
 
-**Goal:** As a group admin, I want to manage my group from one button menu, so that staff, lockdown, captcha and antiflood need no commands.
-**Mode:** mvp
-**Depends on:** Phase 3, Phase 7, Phase 8
-**Requirements:** MENU-01, MENU-02, MENU-03, MENU-04, MENU-05, MENU-06, MENU-07, MENU-08
-**Success Criteria** (what must be TRUE):
-  1. `/settings` in a group asks the admin whether to open the menu in the group or in private. A menu opened in the group responds only to the admin who opened it. A menu opened in private manages the group it was opened from.
-  2. The menu edits one message in place, with Back and Close on every page. Every press re-checks live that the presser is still an admin of that group, so a press by a demoted admin is refused.
-  3. The Staff Group page shows the `/staff` panel information. Only the owner of both groups can link or unlink.
-  4. The Lockdown page shows the current state, a working Lift button, and an on/off switch and threshold for each automatic trigger. The Captcha page sets the mode and time limit, and the Antiflood page configures antiflood.
-  5. A setting changed in the menu is identical to the same setting changed by command, and both always show the same current value.
-
-**Plans:** 14/14 plans complete
 **UI hint**: yes
+
+### Phase 12: Rules Media, Media Under Text and Greet Once
+
+**Goal:** As a group owner, I want rules with media and buttons, media shown under its text, and members greeted only on their first join, so that my messages look and behave the way I set them.
+**Mode:** mvp
+**Depends on:** Phase 11 (the editor, its input state and the shared send path)
+**Requirements:** EDIT-07, EDIT-08, EDIT-09
+**Research flags:** Live spike "Caption placement" from Gaps to Address: `show_caption_above_media` for photo, video and animation, and a caption over 1024 characters refused before the send. Settle decision 15 (the greet-once record and its timing: claim before the send, so a failed send suppresses the welcome, or after it, so two replicas may both greet; and the table name). Repo-side backup item: the new greetings and rules columns travel in backup JSON, and the greet-once record stays out of backup, export, import and reset. Pitfall 22 (last-welcome and greet-once races).
+**Success Criteria** (what must be TRUE):
+  1. The owner adds one media item and URL buttons to Rules from the editor, and `/rules` shows them both in the group and as private rules.
+  2. With "Media under text" on, a photo, video or GIF in a welcome, goodbye or rules message appears below its text, both in Full preview and in the group.
+  3. With "Greet once" on, a member is welcomed only the first time they ever join the group. Leaving and rejoining brings no second welcome, also when the join reaches several replicas.
+  4. Rules, welcomes and goodbyes saved before this phase look exactly as they did until someone changes them.
+**Plans:** 15/16 plans executed in 11 waves (12-15 is droppable)
 
 Plans:
 **Wave 1**
-- [x] 09-01-PLAN.md: Tracer. `/settings` in a group, the choice message, Open here, the Main page, the full press pipeline and rights, the Captcha time stepper through `applyCaptchaTimeout` shared with `/captchatime`, Back and Close
-- [x] 09-02-PLAN.md: Staff seams: the panel row split into head and status, a length limit on the panel text, the link flow split into `listVerifiedOwnStaffGroups`, `linkToStaffGroup` and `announceStaffLink`
-- [x] 09-03-PLAN.md: Antiflood first-write characterization and `applyFloodLimit/Mode/Delete` with a database read-back, shared by the commands
-- [x] 09-04-PLAN.md: `applyAutoLockdown`, `applyLockdownLift`, `lockdownAnnounceLift` and `lockdownStatusHead`, shared by the lockdown commands and the alert
+- [x] 12-01-PLAN.md — characterization: pin the requests old rules, welcomes, goodbyes and document GIFs send, before any refactor (wave 1)
+- [x] 12-02-PLAN.md — the migration, the model fields, HasContent, greeted_members and the backup proofs (wave 1)
+- [x] 12-05-PLAN.md — the 13 new editor strings and the new Rules hint in all 8 locales, with the five-cell label check (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [x] 09-05-PLAN.md: Every page and card string in all 7 languages, with ceiling, label-length and privacy-placeholder tests
-- [x] 09-06-PLAN.md: `applyCaptchaEnabled`, `applyCaptchaMode` (Turnstile's three refusals) and `applyCaptchaAction`, shared by the captcha commands
-- [x] 09-07-PLAN.md: Open in private: `/start settings_<id>` with a live admin check, and the cannot-open edit for a dead private menu
+- [x] 12-03-PLAN.md — the greet-once claim, the column-targeted writers, the whole-row rules read and the group language by chat ID (wave 2)
+- [x] 12-04-PLAN.md — GIF greetings as animations, sendAnimation and the caption-above flag through one predicate (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [x] 09-08-PLAN.md: Captcha page: on/off, mode and failure action, with parity, drift and authority parity
-- [x] 09-09-PLAN.md: Antiflood page: Off then 3..100, mute/ban/kick, the delete switch, with the bot-admin rule
-- [x] 09-10-PLAN.md: Lockdown page: the state and the three automatic triggers' switches and thresholds
-- [x] 09-11-PLAN.md: Staff Group page: health, Link with the picker, Unlink with a second tap, the read-only panel, and the group-menu privacy test
+- [x] 12-06-PLAN.md — forged settings controls and switch values refused before any lookup (wave 3)
+- [x] 12-07-PLAN.md — /rules and private rules show media and buttons through one builder, old rows unchanged (wave 3)
+- [x] 12-08-PLAN.md — the join, the leave and the greeting displays honour Media under text (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [x] 09-12-PLAN.md: Lift from the Lockdown page with a second tap, the public notice, and parity with `/unlockdown`
+- [x] 12-09-PLAN.md — Greet once: one welcome per member ever, across replicas, given back only on a definite refusal (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [x] 09-13-PLAN.md: `settings_help_msg`, `alt_names.Settings`, the generated command page, the command and permission references, AGENTS.md testing notes
-- [x] 09-14-PLAN.md: The owner's real-client checklist `09-SPIKE.md`
+- [x] 12-10-PLAN.md — the switch grid and the Welcome page's Greet once switch (completes EDIT-09) (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 12-11-PLAN.md — Media under text on the Welcome and Goodbye pages (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 12-12-PLAN.md — the Rules page's media and buttons parts, /clearrules over three parts, Rules Media under text (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [x] 12-13-PLAN.md — typed Rules media and buttons and the one-message caption rule (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [x] 12-14-PLAN.md — Full preview with Media under text and the Rules previews in the group's language (completes EDIT-07, EDIT-08) (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 12-15-PLAN.md — droppable: the atomic swap of the last welcome and goodbye message ID (wave 10). **Dropped** by the orchestrator: its worst case is a cosmetic orphan welcome from a race that predates the phase, no requirement needs it, and 12-16 records the known race in AGENTS.md (accepted risk AR-03 in 12-SECURITY.md)
+
+**Wave 11** *(blocked on Wave 10 completion, or Wave 9 when 12-15 is dropped)*
+- [x] 12-16-PLAN.md — privacy and size checks of every Phase 12 screen, the PostgreSQL list, the rulebook and docs, the owner's live checks and the phase gate (wave 11)
+
+**UI hint**: yes
+
+### Phase 13: Member Requirements
+
+**Goal:** As a group owner, I want members with no last name or username, or with names in a script I block, warned, removed or muted automatically, and a muted member able to free themselves once they fix it, so that the group screens people when no admin is online.
+**Mode:** mvp
+**Depends on:** Phase 10 (the page and its gate), Phase 12 (the welcome, greet once included, that a held member gets once let in)
+**Requirements:** MREQ-01, MREQ-02, MREQ-03, MREQ-04, MREQ-05, MREQ-06, MREQ-07, MREQ-08, MREQ-09, MREQ-13
+**Owner decisions:** the captcha runs before the requirement check on join; a member muted on join gets no welcome until "I fixed it" succeeds; only a mute gets the "I fixed it" button (kick lets the member rejoin and be checked again, a ban waits for an admin, a warn only warns).
+**Research flags:** Settle decision 2 (handler group of the message watcher: -1 holds back a violator's commands, 1 lets them run), decision 11 (the requirement row shape: one wide row per chat or one row per rule), decision 12 (who owns a requirement mute: a marker `until_date` or a ledger cleared by every other mute path, and what a captcha pass does to a held member), decision 13 ("I fixed it" during an active lockdown: unmute through `resolveUnmutePermissions` or refuse until the lift), what is left of decision 14 now that the owner put the captcha first and holds the welcome, the "I fixed it" half of decision 16, and the requirement Redis key family name. From Gaps to Address: the per-group message rate limit for notices during a raid (live check), and the owner question on whether "I fixed it" in a captcha group sends the member through the challenge again (check whether the captcha-first decision already answers it). Build a table-driven Unicode corpus for the name rules (Ukrainian, Belarusian, Bulgarian, Russian, mixed script, zero-width). The requirement holds stay out of backup. Pitfalls 1 to 4 and 23.
+**Success Criteria** (what must be TRUE):
+  1. A Member requirements page gives each rule its own punishment (off, warn, kick, ban or mute), with "Check on join" and "Delete messages" switches, and everything is off by default. This phase's rules work: must have a last name, must have a username, no Russian name, no Arabic name, no Chinese name. The page says the name rules go by letters (Russian-only ы, ъ, э, ё; Arabic script; Chinese characters) and can also catch related languages, and an invisible or whitespace-only last name does not count as one.
+  2. With "Check on join" on, a new member is checked right after passing the captcha, or on joining when the group has no captcha, and every member is checked when they send a message. Admins, approved users, bots, Telegram service accounts and messages sent as a channel or by an anonymous admin are never checked.
+  3. A violation is punished once and posts one notice in the group naming the member and the rule broken. Further messages from that member add no warns, notices or punishments until they fix it or rejoin, across replicas. A warn counts toward the group's warn limit, and "Delete messages" removes the violator's messages. A kicked member can rejoin and is checked again, and a banned member stays banned until an admin unbans them.
+  4. A member muted by a rule gets an "I fixed it" button only they can use. The bot re-checks them live. If the problem is fixed, they are unmuted (respecting an active lockdown) and get the welcome that was held back. If not, they are told what is still missing. The button never lifts a mute placed by an admin, a staff action, the captcha, antiflood or a lockdown.
+**Plans:** 7/14 plans executed
+- [x] 13-01-PLAN.md
+- [x] 13-02-PLAN.md
+- [x] 13-03-PLAN.md
+- [x] 13-04-PLAN.md
+- [x] 13-05-PLAN.md
+- [x] 13-06-PLAN.md
+- [x] 13-07-PLAN.md
+- [ ] 13-08-PLAN.md
+- [ ] 13-09-PLAN.md
+- [ ] 13-10-PLAN.md
+- [ ] 13-11-PLAN.md
+- [ ] 13-12-PLAN.md
+- [ ] 13-13-PLAN.md
+- [ ] 13-14-PLAN.md
+**UI hint**: yes
+
+### Phase 14: Profile Photo and Channel Rules
+
+**Goal:** As a group owner, I want to require a profile photo and, in a channel's comment group, a subscription to that channel, so that throwaway accounts and outsiders are screened too, without anyone punished because a lookup failed.
+**Mode:** mvp
+**Depends on:** Phase 13 (the rules engine, its punisher and its page)
+**Requirements:** MREQ-10, MREQ-11, MREQ-12, PLAT-06
+**Research flags:** Two live spikes from Gaps to Address. "Profile photo privacy": does `getUserProfilePhotos` return zero or an error for a user who hides their photo? "Channel subscription": what exact error does `getChatMember(channel, user)` give when the bot is not the channel's admin? `chat_status.IsBotMissingError` reads "chat not found" as bot-missing, which is wrong for a channel lookup. Settle the lookup pacer's Redis key family, a pass cache for positive results only, singleflight per lookup, and the shutdown budget for any new drain (Pitfall 30, recomputed against 60 s and `stop_grace_period: 75s`). Pitfalls 5 and 17 to 21.
+**Success Criteria** (what must be TRUE):
+  1. The profile-photo rule punishes a member who has no photo the bot can see. A photo hidden from the bot counts as missing, and the page says so.
+  2. The channel rule is offered only in a group linked to a channel, and it punishes a member who is not subscribed to that channel.
+  3. A check that cannot be answered (a Telegram error, a lookup that times out, the bot not being an admin of the linked channel) never punishes anyone. The page shows when a rule cannot work in that group (no linked channel, the bot not admin there). The "AI not configured" line arrives with the AI rule in Phase 15.
+  4. During a burst of joins or messages, photo and channel lookups share one Telegram rate budget across replicas and never hold up the rest of the bot. A lookup cut off by a crash or a shutdown punishes nobody and leaves nothing stuck, and lookups in flight end within the existing shutdown budget.
+**Plans:** TBD
+**UI hint**: yes
+
+### Phase 15: AI Spam-Name Check
+
+**Goal:** As a group owner, I want accounts whose names look like spam flagged by AI, so that advertising accounts are screened when they join, with no message text leaving the server.
+**Mode:** mvp
+**Depends on:** Phase 14 (the requirement page's "cannot work" status lines and the shared lookup budgets)
+**Requirements:** MREQ-14
+**Owner decisions:** the check uses Claude Haiku through the owner's Anthropic key (the key the raid image checks use), on names only.
+**Research flags:** Spike before planning, as Stage 3 in SUMMARY.md asks: Claude Haiku's accuracy, latency and cost on a labelled set of real names, run with the owner's key through a `scripts/claude-spike`-style tool. Settle decision 8 (a separate small pool or a third job kind in the raid AI pool; two of the three files prefer a separate pool, to be confirmed with a load note), decision 17 (an established member's first sight only records a baseline; this is the proposed default to confirm) and the requirement key family name. Owner questions from Gaps to Address: the verdict bar (0.85 or 0.9) and the AI rule's default punishment (warn or mute recommended, never ban by default).
+**Success Criteria** (what must be TRUE):
+  1. With the AI spam-name rule on, a member whose names the AI judges as spam gets the rule's punishment when they join or change their names. Only the first name, last name and username are sent, never message text.
+  2. An established member's names are first recorded without a call, so switching the rule on in a large group causes no burst of calls. Names already judged are answered from the cache, and hourly budgets cap the cost.
+  3. With `ENABLE_AISPAM=false` or no Anthropic key the rule is off, and the page says AI is not configured. A slow, failing, rate-limited or over-budget AI gives no verdict and punishes nobody.
+**Plans:** TBD
+**UI hint**: yes
+
+### Phase 16: Scheduled Deletion of Service and Bot Messages
+
+**Goal:** As a group owner, I want Telegram's service messages and the bot's own messages removed on a schedule I set, so that the chat stays readable.
+**Mode:** mvp
+**Depends on:** Phase 13 (requirement notices are one of the automatic-punishment messages this phase schedules)
+**Requirements:** DEL-01, DEL-02, DEL-06, DEL-07, DEL-08, MREQ-15
+**Research flags:** Live spike "Batch delete" from Gaps to Address: what `deleteMessages` does when one ID in the batch is too old or cannot be deleted, so a per-ID fallback can isolate it. Settle decision 3 (where service-message deletion runs; the group-0 `cleanService` also drives join processing, and joined and left must keep sharing `/cleanservice` storage), decision 7 (the maximum delay, 24 h or 47 h; all files agree the age is measured from the message's own send time), the deletion half of decision 11 (row shape) and the naming list (pacer keys, delete kinds, the claim shape). Also work out the service-type policy table and the roughly fifteen manual-punishment reply sites in `bans.go`, `mute.go` and `warns.go`, recompute the shutdown budget before the new drain ships (Pitfall 30), and keep the deletion queue out of backup. Two owner questions are already closed: the Staff Group exemption (answered by DEL-07) and "Own commands" (deferred as DEL2-01). Pitfalls 13 to 17.
+**Success Criteria** (what must be TRUE):
+  1. A Service messages page sets each Telegram service-message type to keep, delete immediately or delete after N seconds. The types include member joined, member left, new photo, new title, pinned message, forum topics, boosts, video chats, auto-delete timer changes and the rest. Joined and left share storage with `/cleanservice`.
+  2. A Bot messages page sets each kind of the bot's own message to keep or delete after N minutes: welcome, goodbye, rules, automatic punishments (requirement notices included) and replies to manual `/ban`, `/mute`, `/kick`, `/warn` and the like.
+  3. Scheduled deletions survive a restart and run once across replicas. Delays are capped below Telegram's 48-hour limit, and a message too old to delete is dropped quietly.
+  4. Deletion never touches Staff Group summaries and cards, lockdown alerts, captcha challenges, log-channel posts or anything in a Staff Group.
+  5. When the bot lacks the right to delete messages, every deletion page says so instead of failing silently.
+**Plans:** TBD
+**UI hint**: yes
+
+### Phase 17: Command, Edit and Self-Destruct Deletion
+
+**Goal:** As a group owner, I want members' commands, late edits and, when I choose, every message removed automatically, so that the group stays clean and an edited message cannot slip spam in later.
+**Mode:** mvp
+**Depends on:** Phase 16 (the deletion queue, its worker and the deletion pages)
+**Requirements:** DEL-03, DEL-04, DEL-05
+**Owner decisions:** command deletion includes admins' commands; edited-message deletion has a 1-minute default grace and exempts admins and approved users; self-destruct exempts admins, approved users and pinned messages.
+**Research flags:** Settle decision 4 (how edited messages are caught; the grace length is settled at 1 minute by default, and whether an edit that changes nothing counts is open), decision 5 (how a command is deleted after the bot has answered it, covering commands from raw `NewCommand` handlers and the anonymous-admin re-entry), decision 6 (self-destruct storage: PostgreSQL rows or a Redis set; the owner must accept the failure mode of the choice) and decision 7 (the delay cap). Live spike "Edited-message noise" from Gaps to Address: how often a link preview or caption touch arrives as an edit. Pitfalls 13, 15 and 16.
+**Success Criteria** (what must be TRUE):
+  1. With "Delete commands" on, every member's command in the group, admins' included, is deleted after the bot has answered it, and the answer still arrives.
+  2. With "Delete edited messages" on, a member's message edited after the grace period (1 minute by default, adjustable on the page) is deleted. Edits by admins and approved users are kept.
+  3. With "Self-destruct" on, every member message is deleted N minutes after it was sent. Messages from admins and approved users, and pinned messages, stay.
+  4. In a busy group with self-destruct on, deletions keep pace without hitting Telegram's limits or slowing the bot's replies, and nothing on the never-delete list (Staff Group items, lockdown alerts, captcha challenges, log-channel posts) is touched.
+**Plans:** TBD
+**UI hint**: yes
+
+### Phase 18: Remaining Settings Pages
+
+**Goal:** As a group owner, I want warnings, reports, language, the log channel, anonymous-admin mode and locks on menu pages, so that I can configure them without commands.
+**Mode:** mvp
+**Depends on:** Phase 10 (the owner gate and the main menu grid)
+**Requirements:** PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05, PAGE-06, PAGE-10
+**Research flags:** Standard patterns (Stage 5 in SUMMARY.md): one apply function per setting beside its command and one page per file, as Phase 9 set up. Check which apply functions must be extracted first (`applyWarnLimit`, `applyWarnMode` and the rest), which right the Anonymous admins page needs (PAGE-05 says the same as `/anonadmin`; the research suggests the owner), locks paging within the 64-byte callback cap (Pitfall 28), and labels that still fit in the longer languages (Pitfall 29).
+**Success Criteria** (what must be TRUE):
+  1. A Warnings page sets the warn limit and the action at the limit. A switches page turns reports, the AI spam filter (`/aispam`) and auto-approve of join requests on or off.
+  2. A Language page sets the group's language, and the menu redraws in the new language.
+  3. A Log channel page shows the group's log channel and turns each log category on or off; linking a new channel stays a command. An Anonymous admins page sets the anonymous-admin mode, with the same rights `/anonadmin` needs.
+  4. A Locks page turns each lock type on or off, paged.
+  5. Every setting changed on these pages is stored, cached and refused exactly as by its command, and the page and the command always show the same value.
+**Plans:** TBD
+**UI hint**: yes
+
+### Phase 19: Blacklist, Filter and Note Pages
+
+**Goal:** As a group owner, I want to browse, delete and add blacklisted words, filters and notes from the bot's private chat, so that I can manage long lists without commands.
+**Mode:** mvp
+**Depends on:** Phase 11 (the private input state the add flows type into)
+**Requirements:** PAGE-07, PAGE-08, PAGE-09
+**Research flags:** Design the list add flows (a filter and a note take two typed messages: the keyword or name first, kept in the wait state, then the reply or content), validation that refuses a blacklist word or filter that would match everything, and delete by row ID within the 64-byte cap. Pitfalls 26 and 28. Search inside long lists stays deferred (MENU2-04).
+**Success Criteria** (what must be TRUE):
+  1. A Blacklist page lists the group's blacklisted words (paged), deletes one, adds one typed in the private chat, and sets the blacklist action.
+  2. A Filters page lists the filters (paged), deletes one, and adds one by typing the keyword and then the reply.
+  3. A Notes page lists the notes (paged), deletes one, and adds one by typing the name and then the content.
+  4. Each add, delete and action change is stored, cached and refused exactly as the matching command does it, and works in the group at once: the blacklisted word is acted on, the filter answers and the note can be fetched.
+**Plans:** TBD
+**UI hint**: yes
 
 ## Progress
 
 **Execution Order:**
-Phases run in numeric order, 1 → 9, which is the owner's priority. Phase 4 needs only Phase 1, and Phase 8 needs only Phase 4, but each still waits its turn unless the owner says otherwise.
+Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 needs only Phase 10 and Phase 19 needs only Phase 11, but each waits its turn unless the owner says otherwise.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Staff Group Links | 10/10 | Complete    | 2026-10-05 |
-| 2. Staff Actions Across Groups | 10/10 | Complete    | 2026-10-05 |
-| 3. Staff Audit and Undo | 12/12 | Complete    | 2026-10-06 |
-| 4. Manual Lockdown | 8/8 | Complete    | 2026-10-08 |
-| 5. Lockdown Alerts and Response | 14/14 | Complete    | 2026-10-18 |
-| 6. Automatic Raid Detection | 13/13 | Complete    | 2026-10-29 |
-| 7. AI-Assisted Raid Detection | 14/14 | Complete    | 2026-10-29 |
-| 8. Turnstile Web Captcha | 11/11 | Complete    | 2026-10-30 |
-| 9. Settings Menu | 14/14 | Complete    | 2026-10-30 |
+| 10. PM Settings Hub and Owner Gate | 11/11 | In Progress | - |
+| 11. Message Editor | 14/14 | In Progress | - |
+| 12. Rules Media, Media Under Text and Greet Once | 15/16 | In Progress | - |
+| 13. Member Requirements | 7/14 | In Progress | - |
+| 14. Profile Photo and Channel Rules | 0/TBD | Not started | - |
+| 15. AI Spam-Name Check | 0/TBD | Not started | - |
+| 16. Scheduled Deletion of Service and Bot Messages | 0/TBD | Not started | - |
+| 17. Command, Edit and Self-Destruct Deletion | 0/TBD | Not started | - |
+| 18. Remaining Settings Pages | 0/TBD | Not started | - |
+| 19. Blacklist, Filter and Note Pages | 0/TBD | Not started | - |

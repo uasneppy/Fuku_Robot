@@ -53,7 +53,10 @@ func init() {
 			SlowThreshold:             time.Second,
 			LogLevel:                  logger.Warn,
 			IgnoreRecordNotFoundError: true,
-			Colorful:                  false,
+			// A failed or slow statement is logged with its placeholders, never its values: a
+			// write can carry a welcome, goodbye or rules text and button links.
+			ParameterizedQueries: true,
+			Colorful:             false,
 		},
 	)
 

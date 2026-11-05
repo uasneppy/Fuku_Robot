@@ -6,7 +6,7 @@ Update this file in the same commit as any change that invalidates a rule below.
 ## Commands
 
 ```bash
-make test                 # the only valid full test run (tags, race, coverage, skip gate)
+make test                 # the only valid full test run (tags, race, coverage, skip gate; 15 min per package, fuku/modules runs 7-11 min)
 make lint                 # golangci-lint v2
 make check-translations   # missing locale keys
 make check-docs           # generated-docs drift; fix with `make generate-docs`
@@ -61,6 +61,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   waits at most 1 s for `raidAIJobs` and `raidAIFires` to go idle, logging one warning when the wait runs out. Queued
   jobs are dropped as no verdict. A lockdown start still running after the wait is cut off with the process and leaves at
   worst an unconfirmed row that the lockdown worker settles.
+- `StopAdminIndexSweeper` is a plain shutdown handler (`RegisterHandler`, the 10 s default, no drain registration)
+  that `main.go` registers right after the staff sweeper's stop, so LIFO runs it after `StopStaffActions` (it never takes
+  from that drain's 31 s) and before the database close. It cancels the loop and waits for it. It returns at once because
+  every Telegram call of a sweep derives from the sweep context (`adminIndexPacedClient` paces and bounds each request
+  from it), and the one roster write in flight is bounded by that same context. A cycle cut off by the cancel releases
+  its lock by compare-and-delete on its own owner token (`releaseAdminIndexSweepLock`), so a restarted replica's first
+  cycle is not skipped for an hour; a finished cycle, and one ended by a second 429, keeps the lock until its TTL.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 - The Turnstile web captcha is configured in `main` (`registerCaptchaWeb`) when `config.AppConfig.CaptchaWebConfigured()`
   holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
@@ -87,7 +94,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
-  `-1` users tracker · `0` commands/help/greetings · `2` raid AI candidate watcher (hands a new member's suspicious
+  `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
+  `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
   after every other group).
@@ -110,21 +118,87 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
-- The Settings module (priority 239, `settings.go`) adds no handler group. `/settings` goes through `helpers.WrapCommand`
-  with `requireLockdownGroup()` and `requireLockdownAuthority(false)` (a live creator or administrator, never the admin
-  cache), is not `Disableable`, and re-enters for anonymous admins through `RegisterAnonymousAdminHandler("settings", ...)`:
-  the tapper becomes the opener. The `settings|` callback is registered with `callbackquery.Prefix("settings|")` and no
+- The Settings module (priority 239, `settings.go`) adds one handler group, `1`, for the typed-reply door below; its other entry points are `/settings`, the callbacks and the deep link. `/settings` goes through `helpers.WrapCommand`
+  with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
+  once, because the private list needs no group; in a group a live creator or administrator from
+  `lockdownAuthorityMember`, the body of `requireLockdownAuthority(false)`, never the admin cache, then the owner gate
+  below). In the bot's private chat `/settings` sends the group list (`settingsPrivateList`) as a new message in the
+  user's language, built only from the sender's own ID with a database read (`settingsHubLookup`, default
+  `adminindex.ListForUserFresh`) and no Telegram call; a failed read is one plain `settings_check_failed` reply. An administrator the gate refuses gets the plain public reply `settings_refuse_owner_only` to the command with
+  no keyboard, and an undecided gate `settings_check_failed` (D-13); a plain member still gets the lockdown check's
+  `chat_status_user_admin_cmd_error` and never an owner-only text. The command is not `Disableable`, and it re-enters for
+  anonymous admins through `RegisterAnonymousAdminHandler("settings", ...)`: the tapper becomes the opener, is checked
+  live and gated like anyone else (`anonPipelineHandler` re-runs `RequiredChecks`, so an anonymous owner gets the choice
+  message and an anonymous gated administrator `settings_refuse_owner_only`). The `settings|` callback is registered with `callbackquery.Prefix("settings|")` and no
   `SetAllowChannel`, because a menu is never a channel message.
+  `LoadSettings` ends by calling `LoadSettingsInput` (`settings_input.go`), which registers `/cancel` through
+  `helpers.WrapCommand` (its one check, `settingsInputPrivateOnly`, passes only in the bot's private chat and never
+  replies; it is not `Disableable`) and the typed-reply door (below). A `/cancel` sent anywhere but the bot's private
+  chat is not the bot's command and is never ended: `settingsCancelPassOn`, a raw handler registered at group 0 just
+  before the pipeline's `/cancel` (a second documented exception to the `WrapCommand` rule, beside the StaffActions
+  interceptors; it matches through `handlers.NewCommand`'s own `CheckUpdate`), takes it first, replies and writes nothing,
+  makes no Telegram call and returns `nil`. In this gotgbot `nil` leaves the group and moves on to group 1 and later, while
+  `ext.ContinueGroups` would only try the next handler of group 0, which is the pipeline's `/cancel` that ends the update
+  (so a member's `/cancel <spam link>` would skip aispam, antiflood, locks, blacklists, filters, the log channel and the
+  late raid flood counter, which now see it like any other text, and group 12 counts it as an unknown slash word). `/cancel` deletes the sender's own wait and
+  marker (the keys are built from the sender's ID alone) and answers `settings_edit_cancelled`, or
+  `settings_edit_cancel_nothing` when there was none, when a write holds the wait, and without Redis.
+  The typed-reply door (`settings_input_door.go`, `settingsModule.settingsInput`, registered by `LoadSettingsInput` with
+  `handlers.NewMessage(settingsInputIsPrivate, ...)` at group `settingsInputGroup` = 1, after the group-0 commands and
+  before every group that could end a private update) reads the owner's next private message after Set. A candidate is a
+  new private message whose sender is the chat itself (not the bot, not a Telegram service identity), with no
+  `rich_message` and no command (`settingsInputLooksLikeCommand`: a `bot_command` entity at offset 0 or a slash followed
+  by a non-space, in the text or the caption); anything else, and a sender with neither a wait nor a marker, returns
+  `ext.ContinueGroups` with no reply, no write and no Telegram call, so ordinary private chat is untouched. The order is
+  fixed, each step refusing before the next: `settingsInputRead` (an error or no Redis is not the door's); no wait but a
+  marker is one plain `settings_edit_wait_ended_note` naming the part (the marker taken with `GETDEL`, so two deliveries
+  answer once; nothing is saved); with a live wait, a message whose `media_group_id` is 1 to 20 digits passes the album gate
+  (`fuku:settings:inputalbum:<user>:<media_group_id>`, `SET NX EX 30`, first wins) before the live checks and the claim, so an
+  album is checked and saved once, the items that lost the gate get no reply and no Telegram call, a refused album gets one
+  refusal and a late one the one wait-ended reply, and a Redis error ends the update with no write; the live `getChatMember` of the sender, the owner gate (`settingsGate`), the right of
+  the part (`settingsRightRefusalFor`, and `chat_status.IsBotAdmin` on Rules), a live `getChat` of the group, the
+  stored state, `settingsEditCheck`, `settingsInputClaim`, the part's apply function, `settingsInputFinish`. A lost
+  authority ends the wait and answers one plain reply (a non-admin status or a Telegram 4xx other than 429 at
+  `getChatMember` or `getChat`, and a chat that is not a group or supergroup: `settings_edit_refuse_access_lost`; the gate
+  refusing an administrator: `settings_gate_owner_only`; a lost right: `settings_no_change_info` or
+  `chat_status_bot_not_admin`; every reason except `settings_edit_refuse_access_lost`, whose text says it, is followed by
+  a blank line and `settings_edit_wait_stopped`, so the person knows the next message is not read). The Rules bot check
+  proceeds only when `chat_status.IsBotAdmin` is true, as the command does; because that predicate returns a bare bool,
+  a false is classified by one live `getChatMember` of the bot (`botAdmin`): a definite non-administrator status or a
+  Telegram 4xx other than 429 ends the wait with `chat_status_bot_not_admin`, while a 429, a 5xx, a transport error, a
+  timeout, or a live answer that says the bot is an administrator keeps it with `settings_check_failed`. An answer that cannot be established (a 429, a 5xx, a transport error, a timeout,
+  an undecided gate, an unreadable page) answers `settings_check_failed` and keeps the wait. A message the check refuses
+  is a reply with the reason, a blank line, `settings_edit_still_waiting` and one Cancel button, and the wait is neither
+  claimed nor extended (its message ID is noted on the wait by `settingsInputNoteRefusal`, so that Cancel button ends this
+  wait); a write that fails after the claim releases the claim and answers the same way with
+  `common_settings_save_failed`. A save sends the page as a new message in the private chat (with
+  `settings_edit_saved_text`, `_media` or `_buttons`, plus `settings_edit_caption_ignored` when a caption was not used and
+  `settings_edit_album_cut` when the saved message came from an album)
+  and edits the prompt to `settings_edit_prompt_closed`, best effort. No log line of the door carries the message text,
+  a caption, a button name, a link or a file ID. The media part stores what `/setwelcome` or `/setgoodbye` by reply stores (a GIF saved from Phase 12 on as `db.ANIMATION`, one saved earlier as a document, the caption not used, the text
+  and buttons kept) and the buttons part what they store for the same lines, replacing the set, but the editor refuses a link
+  that is not http or https instead of dropping it (EDIT-05). On the Rules page the three parts go through `settingsInputReply.applyRules`
+  (`applyRulesText`, `applyRulesMedia`, `applyRulesButtons`), so Rules media and buttons store what the Welcome's store for the same
+  message, with the same saved page, album gate and caption note. The typed reply is the sixth door of `TestSettingsGateAllDoors`.
+  After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
+  record through `refreshChatAdminIndex` (at most two Telegram calls, a 10 s context, the error only logged), the
+  second repair path after `/admincache` (D-07, MENU-10). It runs after the reply, so a slow or failed refresh never
+  delays or changes what the sender sees, and a gated or refused sender, who never reaches the handler, never triggers it.
 - The settings menu's private entry is `RegisterDeepLinkHandler("settings_", settingsStartDeepLink)`, the Open in private
   button's `/start settings_<chat id>`; `help.go`'s `start` is not edited and the router picks the longest prefix. The
   payload is parsed strictly (`parseStaffChatIDArg`: an optional minus, digits, at most 20 characters, a negative
-  result; anything else is `settings_start_invalid` with no Telegram call) and never authorizes anything: a live
-  `getChatMember` of the user in that group must show the creator or an administrator (`settings_start_not_admin`
-  otherwise, `settings_check_failed` for a lookup error), then one `getChat` of the group, and only a group or supergroup
-  is opened. A bot that is missing from the group or a group that is gone at the `getChatMember` step
-  (`chat_status.IsBotMissingError`) is answered `settings_start_not_admin`, the words a plain member gets, because the
-  payload is attacker-controlled text and a different answer would tell anyone whether the bot is in chat X; once the
-  admin check has passed, a group that is gone at `getChat` or any other chat type is `settings_cannot_open`. Every refusal is a plain reply with no keyboard. The Main page is sent to the
+  result; anything else is `settings_start_invalid` with no Telegram call) and never authorizes anything. The order is
+  fixed and each step refuses before the next runs: the strict parse; a live `getChatMember` of the user in that group,
+  which must show the creator or an administrator (a Telegram 4xx other than 429, and any non-admin status, answer
+  `settings_start_not_admin`; a 429, a 5xx, a transport error or a timeout answers `settings_check_failed`); then the
+  owner gate, `settingsGate` on the member record that check returned (`settings_start_owner_only` for an administrator
+  it refuses, `settings_check_failed` when it cannot decide, so a gated administrator costs no `getChat`); then one
+  `getChat` of the group (a 4xx other than 429, or a chat that is not a group or supergroup, answers
+  `settings_start_not_admin`; anything else that fails `settings_check_failed`). Errors are classified by
+  `isTelegramClientError`, never by wording, and the deep link no longer answers `settings_cannot_open`: a plain member,
+  a chat the bot is not in, a gone chat, a channel and any unrecognised 4xx wording get the same words, because the
+  payload is attacker-controlled text and a different answer would tell anyone whether the bot is in chat X
+  (`TestSettingsStartDeepLinkSameAnswer`). Every refusal is a plain reply with no keyboard. The Main page is sent to the
   private chat in the user's language, its buttons carrying `c` (the group's chat ID) and no opener field. A `/start`
   with extra words (`settings_ -100`) has an unexpected argument count, so `start` ignores it and the handler never runs.
 
@@ -198,22 +272,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   again) shows `lockdown_revoke_already` instead.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
   Close, `tg` toggle, `st` set, `no` cancel a card back to page `p`; a page declares its own codes through
   `registerSettingsPage`, which panics at init on a duplicate page key or action code. Exactly one of `c` and `u` is
   present: `c` is accepted only on a message in a private chat and `u` only on one in a non-private chat, and each action
-  takes an allow-listed field set (an unknown key is refused), all checked before any I/O. Steppers and toggles send the
+  takes an allow-listed field set (an unknown key is refused), all checked before any I/O. A page action may also declare `Validate`, a strict check of its own fields that runs in that same
+  step 1, after the allow-list and before any I/O, and whose false answer is `common_callback_invalid_request`; a nil
+  `Validate` keeps the fields allowed and not required. A `tg` or `st` press must also name a control its page registers
+  (`settingsControlFieldsValid`), and a control may declare `Validate` of `v` and `Actions`, the core codes it accepts
+  (`tg` and `st`; a press with any other code is refused in that same step 1, and nil keeps both); all run before any
+  I/O. Steppers and toggles send the
   absolute target value (`v`), never a delta, so a double tap is harmless. Every press runs one pipeline, each step
   refusing before the next (`settingsPress.verify`): (1) decode and structure, refused with the alert
   `common_callback_invalid_request` (a missing message is `common_callback_message_unavailable`); (2) a Telegram service
   identity (`staffServiceUserIDs`) gets `lockdown_alert_post_as_yourself` before any lookup; (3) in a group menu
   `query.From.Id` must equal `u`, else `settings_not_your_menu`, with no lookup; (4) one live `getChatMember` of the presser
   in the group being configured (the message's chat for a group menu, `c` for a private one, after one `getChat` of `c`),
-  creator or administrator, else `settings_not_admin`, and a failed lookup `settings_check_failed`; then (5) the right of
-  the control. The callback is answered exactly once, only through `settingsPress.answer` (which calls
+  creator or administrator, else `settings_not_admin`, and a failed lookup `settings_check_failed`; then (4b) the owner gate
+  `settingsGate(b, groupID, query.From, member)` on that same record, before the private `getChat`: an administrator
+  the gate refuses is answered the alert `settings_gate_owner_only` and an undecided gate `settings_check_failed`, each
+  editing and writing nothing (D-10: a menu opened earlier is gated again on every press, Close included, so an
+  administrator the owner has since shut out loses it at the next press, and deletes the stale message with Telegram's
+  own delete); then (5) the right of the control. The callback is answered exactly once, only through `settingsPress.answer` (which calls
   `answerStaffCallback`; no settings file calls `query.Answer`; `settingsCallback` defers an empty answer after its
   recover, so a page that panics is recovered and still answers once), and the menu message is edited in place; Telegram's
   "message is not modified" is success, and a failed or rate-limited edit is logged once, never retried and never undoes
@@ -221,13 +304,61 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   that cannot read its data is the cannot-open edit (`settings_cannot_open`, no keyboard, with the alert
   `settings_cannot_open_alert`). Every button's data is at most 64 bytes for a 14-character chat ID and a 10-digit user
   ID (a Lift or Unlink Yes also carries a row ID, which fits up to 17 digits); an encode that overflows is counted in `settingsScreen.Omitted` and logged, and a worst-case test fails on any.
-  A new page is one `registerSettingsPage` call from its own file's `init` plus its strings, and never edits
-  `settings_pages.go`. A private press makes two Telegram calls, `getChatMember` of the presser in `c` and `getChat` of
+  Registering a new page is one `registerSettingsPage` call from its own file's `init` plus its strings, and never edits
+  `settings_pages.go` (the `Actions` field of `settingsControl` was added there once, in Phase 13). A private press makes two Telegram calls, `getChatMember` of the presser in `c` and `getChat` of
   `c`; an error of either that `chat_status.IsBotMissingError` recognises ("bot was kicked", "bot is not a member",
   "chat not found") is the cannot-open edit with its alert (`settingsPress.cannotOpen`, D-11), and every other error is
   the `settings_check_failed` alert with no edit. A `c` whose `getChat` answer is not a `group` or `supergroup` (callback data
   is not authenticated, so it can name a channel or a private chat the presser administers) is the same cannot-open edit
   with its alert and no write, as the deep link refuses it. A group menu's pipeline is unchanged.
+- The Main page (`renderSettingsMain` in `settings_pages.go`, MENU-15) is a two-column grid with a status block. Each
+  registered page is an "icon name" button (`a=op`, `p=<key>`, never a state in the label), two per row filled left to
+  right in page order (`Order`, then `Key`), and an odd last one stays alone on a full-width row. An `OwnerOnly` page
+  (`settingsMainEntry.OwnerOnly`, copied from the page) is never paired into the grid: for the live owner it gets its own
+  full-width row after the last grid row, so the owner's grid and an administrator's differ by that row only, and an
+  administrator's Main has neither the row nor the line. Each page's state is one `settings_main_state_line` (icon, page
+  name and the page's `MainState`, or the unknown mark `settingsUnknownState` when it could not be read) in a status
+  block of the body, in the grid's order with the owner-only line last, after the hint (and the owner line in a group
+  menu) and one blank line; with no visible page there is no status block and no blank line, only the hint and the
+  navigation row. The states are spliced as the pages return them and never name the Staff Group. The navigation row is
+  `settingsKeyboard.navRow`: a private Main ends with Groups (`settingsHubGroupsButton`, the `shub|v1` press `a=lp&v=1`,
+  at most 16 bytes, which `settingsHubCallback` answers by redrawing the list at page 1 in the same message; the page the
+  user came from is not remembered) and Close, a group Main with Close alone, and every other page, Access included, with
+  Back and Close. A page added by a later phase joins the grid by its `Order` with no edit to the renderer.
+- The private group list and the pick (`settings_hub.go`, MENU-09, MENU-13). The list is a message in the bot's private
+  chat: the header with the Groups page name, `settings_list_intro`, `settings_list_hint` (it names `/admincache` and
+  `/settings` in the group, the two repair paths), a `Page N/M` line only when there is more than one page, one
+  full-width button per group, a paging row and Close. Zero groups is the one neutral text `settings_list_empty` plus the
+  hint with Close only, byte-identical for a stranger, a gated administrator and an owner with no recorded group; one
+  group is still a one-button list (D-03). Rows are the plain title (a button label is plain text that Telegram never
+  parses, so it is not HTML-escaped; line breaks and runs of spaces collapse to one space, trimmed, cut at 32 code
+  points with an ellipsis appended, the chat ID when the title is empty), sorted by the lower-cased collapsed title in
+  code point order, ties by chat ID ascending, 8 a page (`settingsHubSort`, `settingsHubLabel`); a user with more than
+  999 pages (7,992 groups) sees the last page as the limit. A gated administrator's group is not listed
+  (`adminindex.ListForUserFresh`: a creator row, or an administrator row with the switch on or no creator row at all). The
+  message text names no group. The list's own buttons are the `shub|v1` namespace (registered with
+  `callbackquery.Prefix("shub|")` and no `SetAllowChannel`, no handler group): `lp` with exactly `a` and `v` (a whole
+  number of 1 to 3 digits; 0 and anything else is `common_callback_invalid_request`, a number past the last page shows the
+  last page) and `cx` with exactly `a` (Close, deleting the message or editing it to `settings_closed` when the delete
+  fails). `settingsHubCallback` accepts a press only on a message in a private chat, refuses a Telegram service identity
+  (`staffServiceUserIDs`) with `lockdown_alert_post_as_yourself` before any read, rebuilds the list from `query.From.Id`
+  and never from the callback data, so a replayed or forwarded list button shows the presser their own groups, and
+  answers the query exactly once (a failed read is the alert `settings_check_failed` with no edit). The roster is a hint,
+  never authority. Every button's data is at most 64 bytes (a pick for `-1001234567890` is 33, a paging button 18, Close
+  12) and carries no title, name or Staff Group.
+- The pick is the core action `pk` of `settings|v1` (`settingsActPick`, exactly `a` and `c`, private only, no page may
+  register it). It runs the whole press pipeline, so the live `getChatMember`, the owner gate (step 4b) and the one
+  `getChat` all run before anything is shown, and on success edits the list message in place into that group's Main page
+  (the list message is never deleted and never turned into the cannot-open edit). Because `c` is attacker-controlled,
+  the pick overrides two mappings of the other actions (`settingsPress.verify`): every non-admin status and every
+  Telegram client error (`isTelegramClientError`, any 4xx other than 429, by class and never by wording) at the member
+  lookup or at `getChat`, and a chat that is not a group or supergroup, answer the alert `settings_pick_unavailable`
+  with the list left exactly as drawn, nothing written and one answer, whether or not the bot is in that chat
+  (`TestSettingsPickSameAnswer`); a 429, a 5xx, a transport error or a timeout answers `settings_check_failed`; a proven
+  administrator the gate refuses gets `settings_gate_owner_only`, and an undecided gate `settings_check_failed`. The pick
+  is the fifth door of `TestSettingsGateAllDoors`. Every other private action keeps the step-4 mapping above, so a forged
+  `c` on `op` or `tg` can still meet the cannot-open edit (known note: the class rule is scoped to the pick and the deep
+  link, research Pitfall 7).
 - The Staff Group page (`settings_staff.go`, page `s`) declares four actions: `lk` Link (with an optional `s`), `ua` Unlink
   ask, `uy` Unlink Yes (with `e` and `l`) and `pg` (with `v`, the page of the read-only panel, parsed by `settingsParseNumber`
   and clamped; a value that is not a number is an invalid request). `s` is the staff_groups row ID, never a chat ID:
@@ -267,6 +398,141 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   menu is then announced through `lockdownAnnounceLift`; a lift from a menu opened in the group only wakes the worker,
   because the redrawn menu already says it in that same chat and a second public message would say it twice. The page
   never starts a lockdown.
+- The Access page (`settings_access.go`, page `a`, `OwnerOnly`) is the owner switch "Admins can change settings". It
+  declares control `s` and the page action `ay` (Yes, with `e`), both with `settingsRightOwner`. An `OwnerOnly` page is
+  drawn and opened only for the live creator: `settingsMainEntries` skips it without calling its `MainState` unless the
+  viewer is the owner, and `openPage` refuses it for anyone else with the alert `settings_access_owner_only`, editing
+  nothing, so a forged `op`, `no` or Refresh naming page `a` is refused too. `settingsView.Owner` (the press's own live
+  member record is the creator, in a group menu and in a private one, and in the deep link) is distinct from `Creator`
+  (a private menu of the creator, which gates only the Staff Group title, D-32). The toggle with `v=1` (`tg` and `st`
+  alike) draws the shared two-tap card (`settings_access_confirm`) and writes nothing; Yes runs `settingsCardExpired`
+  (an expired minute redraws the page with `settings_card_expired`, a bad `e` is an invalid request) and writes ON
+  after the whole press pipeline, so a Yes by someone who is no longer the live creator is refused; `v=0` writes OFF at
+  once, and any other `v` is an invalid request. Both writes go through `applyAdminsAllowed`, which refuses a status
+  other than creator (`accessRefusedNotOwner`, behind the right), writes through the `settingsAccessWrite` seam
+  (`menuaccess.SetAdminsAllowed`) and returns the value to draw: the requested one after a write, the unchanged one
+  after a failure, which redraws the page with `common_settings_save_failed`. The page and the gate read the switch
+  through the same fresh `settingsAccessLookup` seam, there is no cache key to invalidate, an unreadable switch is the
+  cannot-open edit on the page and the unknown mark on Main, and a flip is announced nowhere (no group, Staff Group or
+  log channel message, D-11).
+- The Member requirements page (`settings_mreq.go`, page `m`, `Order` 80, icon 🛂, `settings_page_mreq`, between Rules and
+  Access) registers from its own file through `registerSettingsPage`, so `settings_pages.go` is not edited. It reads
+  through `memberReqSettingsLookup` (`memberreq.GetSettings`, the cached `member_requirements:<chat>` key, the one read
+  that the page, Main and the message watcher share; the `skipLocal` clause for that key is added with the watcher).
+  Main's state is Off when every rule is Off (whatever the two switches say), `{n} on` for the n rules that are not Off,
+  and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
+  creates nothing. The body is the intro, the all-off line while every rule is Off, one line per rule of `memberReqRules`
+  in table order (icon from `memberReqActionIcon` plus the option word), the Check on join and Delete messages lines and
+  the five hints; a failed read is the cannot-open edit. The keyboard is the rule grid, the switch row and the navigation
+  row, five rows in a private and in a group menu and no Open in private row (`TestSettingsMreqRowBudget`). The rule grid
+  is one cell per rule of `memberReqRules` in rule order, two per row with an odd last cell alone, each the rule's
+  punishment icon (`memberReqActionIcon`) and short name (the `CellKey` of the table); a cell presses `a=mo&t=<code>`
+  (`ln un ru ar zh`), the page action `mo` (exactly `t`, a rule code, right `settingsRightAdmin`), which opens the rule
+  screen (`renderSettingsMreqRuleScreen`, pure): the rule's name, what breaks it (plus the blank last name hint on the
+  last-name rule only), `Punishment: icon word`, the two hints and the choice rows `[Off | Warn]` and
+  `[Kick | Ban | Mute]` with `✅ ` on the stored value, then Back to the page (`a=op&p=m`, the one Back that does not
+  open Main) and Close. The rule controls `ln un ru ar zh` accept `st` only (`Actions: []string{"st"}`, so a `tg` on one
+  is an invalid request in step 1) with `v` exactly one digit 0..4 and right `settingsRightRestrict`. Off and Warn are
+  written at once through `applyMemberReqAction(ctx, chatID, rule, action)` (in `memberreq_settings.go`: the rule and the
+  value 0..4 are checked before any write, then the `memberReqWrites.Action` column-targeted write, a Go 0 written, the
+  cache key dropped by the repository, the row read back); Kick, Ban and Mute write nothing and draw the shared card
+  (`renderSettingsMreqCard`, `settingsCardRows`: the question with the rule's name, a line saying the rule acts on every
+  member at their next message, members already in the group included, `[Yes | No]`, then Back to Main and Close). Yes is
+  the page action `my` (`settingsActMreqYes`, `a=my&t&v&e`: exactly `t`, `v` 2..4 and `e`, right `settingsRightRestrict`, so a Yes runs the whole press
+  pipeline again and a presser demoted since the first tap is refused with `settings_no_restrict`; a Yes can never carry
+  Off or Warn), an expired Yes writes nothing, and the four exits are asymmetric on purpose: Yes and an expired Yes redraw
+  the rule screen (the expired one with `settings_card_expired`), No redraws the page, Back opens Main. A press of the
+  value already stored writes nothing and draws no card, and "already stored" is judged by a fresh database read
+  (`settingsMreqFresh`, `memberreq.GetSettingsFresh`), never the cache, because another replica's in-process layer can be
+  `CACHE_LOCAL_TTL` behind (a failed fresh read redraws the rule screen with `common_settings_save_failed`). The
+  switches are controls `j` Check on
+  join and `d` Delete messages: `tg` or `st`, `v` exactly 0 or 1 (`settingsEditSwitchValue` as the control's `Validate`,
+  so anything else is an invalid request before any lookup), right `settingsRightRestrict`, written through
+  `applyMemberReqJoin` and `applyMemberReqDelete` in `memberreq_settings.go` (beside the requirements code, because there
+  is no command: column-targeted write through the `memberReqWrites` seam, a Go `false` written, the cache key dropped by
+  the repository, the row read back with `memberreq.GetSettingsFresh`). A failed write redraws the stored state with
+  `common_settings_save_failed`. Drift and authority tests stand in for a parity test (`TestSettingsDriftMreq`,
+  `TestSettingsAuthorityMreq`). No screen of the page names the Staff Group, a member or a count of held members
+  (`TestSettingsStaffPrivacy` renders it in 8 languages).
+- The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
+  registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
+  parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
+  have parts `x` text, `m` media and `b` buttons, and Rules has the same three (`x m b`; its parts table is
+  `settingsEditRulesTextPart`, `settingsEditMediaPart`, `settingsEditButtonsPart`), so a later part is a table row and not new renderer
+  code. A line is a state word and never the stored content: text is Default or Set with its visible length
+  (`formatting.VisibleLength`), media Not set or its kind word (a GIF saved from Phase 12 on is stored as `db.ANIMATION` (9) and reads GIF; a GIF saved earlier stays a document and reads File or GIF),
+  buttons Not set or Set with the total; the stored text, a button name and a link are never echoed, and a sticker or a
+  video note adds `settings_edit_note_no_caption`. `renderSettingsEditor` is pure and built in row blocks (part rows,
+  switches, Open in private, navigation), so a later plan adds a block without touching the others. The switches are a
+  two-column grid built from the page's switch table (`settingsEditSwitch`: control, label, body line, hint, right,
+  value and apply), filled left to right with an odd last cell alone on its row (`settingsEditSwitchGrid`). Each button
+  is the state icon alone and the name (`settings_btn_edit_switch_*`, `settingsStateIcon`: a cell must fit 20 code
+  points in every language), and each state word is a body line, one per drawn switch between the part lines and the
+  hints (`settings_edit_line_*`, `settingsStateWord`); a drawn switch's own hint paragraph follows the page hint, in grid
+  order. Welcome has controls `e` the on/off switch (`settingsRightAdmin`, as `/welcome on|off`), `d` Delete last
+  (`settingsRightChangeInfo`, as `/cleanwelcome` and `/cleangoodbye`) and `o` Greet once (`settingsRightAdmin`,
+  `applyWelcomeOnce`, hint `settings_edit_hint_once`) and `u` Media under text between them (below). Goodbye has `e`, `d`
+  and `u`, Rules `u` alone (below), and Greet once is never offered on Goodbye or Rules. Greet
+  once has no command, so
+  it carries a drift test and an authority test instead of a parity test (`TestSettingsDriftOnce`,
+  `TestSettingsAuthorityOnce`); `/resetwelcome`, `/resetgoodbye` and the Remove buttons leave it as it is, and the page
+  never reads `greeted_members`. Known Delete-last race (plan 12-15 not shipped): two welcomes or goodbyes close together on
+  two replicas can leave one old message undeleted (research Pitfall 22). Media under text (`u`, `settings_btn_edit_switch_below`, line `settings_edit_line_below`)
+  needs the page's `EditRight` (`settingsRightChangeInfo`, UI-SPEC assumption A2), calls `applyWelcomeMediaBelow` or
+  `applyGoodbyeMediaBelow`, and on Rules it needs `settingsRightAdminBotAdmin` (the page's `EditRight`, so the bot must be an
+  administrator, notice `chat_status_bot_not_admin`) and calls `applyRulesMediaBelow` (`rules.SetRulesMediaBelow`); it is drawn, with its body line, only while `settingsEditMediaBelowEligible` holds: media is
+  stored and `media.CaptionAboveEligible` (the sender's own predicate: a photo, a video or an animation) says its kind can
+  carry the caption above it, so a document (a GIF saved before Phase 12), audio, voice, sticker, video note or no media
+  closes the grid up. A press of the switch loads the page fresh first (`settingsEditStaleSwitch`, a cell with a `Drawn`
+  function): when the cell is no longer drawn it writes nothing and redraws with `settings_edit_below_unavailable` (UI-SPEC
+  assumption A5). A stored on is kept when the media changes to an ineligible kind or is removed, is neither drawn nor sent
+  then, and comes back with an eligible one; Remove and the resets leave it (assumption A3). A press makes no length check,
+  because the switch changes no length. Each press sends the absolute target `v` ("0" or "1", anything else is an
+  invalid request: `settingsEditSwitchValue`), calls `applyWelcomeEnabled`, `applyGoodbyeEnabled`, `applyCleanWelcome`,
+  `applyCleanGoodbye`, `applyWelcomeOnce` or `applyRulesMediaBelow`, and redraws from the row the function read back, with no notice; a failed
+  write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
+  existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
+  row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
+  with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r|m`, then Access for the owner; `m` is the Member requirements page below) with
+  `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
+  for Rules.
+  Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
+  `[Set | Remove]` while it is (a Welcome or Goodbye text counts as set only while it differs from the default), in the
+  order of the state lines, and a group menu draws them too. The actions are Welcome `ws` `wr` `wc` (Set, Remove,
+  Cancel), Goodbye `gs` `gr` `gc` and Rules `rs` `rr` `rc`, each with the one field `t` (a part code of that page),
+  checked by `Validate` (`settingsEditValidatePart`) before any I/O, so a missing, unknown or extra field is an invalid
+  request with no `getChatMember`. Set and Remove need the right of the matching commands (`EditRight`): Welcome and
+  Goodbye `settingsRightChangeInfo`, Rules `settingsRightAdminBotAdmin`; Cancel needs only `settingsRightAdmin`. Set
+  writes the wait (`settingsInputSet`, the press's own group, page, part, message ID and a fresh nonce, ten minutes) only
+  from a private menu and edits the message into the waiting prompt (`renderSettingsEditPrompt`: the part's prompt body,
+  the limit after "Up to" from `settingsEditPromptMax`: 1024 while the group has stored media (Rules too), 3800 on Rules without media, 4096 otherwise, the
+  end time in UTC, one Cancel button and no Back or Close); a wait it replaced for another group, page or part adds
+  `settings_edit_replaced_note`, the same part only refreshes the ten minutes. With no Redis, or when the write fails, Set
+  answers the alert `settings_edit_unavailable` and edits nothing, while Remove and the switches still work. In a menu
+  opened in the group, Set, Remove and Cancel write nothing and await nothing: the page is redrawn with the notice
+  `settings_edit_group_note` and its Open in private row, so no group menu ever creates a wait (D-01). Cancel
+  (`settingsInputCancel`) compares group, page and part with the wait, and the ID of the message the button was pressed on
+  with the wait's prompt (field `m`, no new callback field: the script gets `query.Message`'s own ID) or with a refusal
+  reply noted on the wait, before deleting anything, so the Cancel of an older prompt of the same group, page and part
+  (two private menus open) never ends the newer wait: a deleted wait edits the
+  message into the page with the cancelled notice, a prompt whose wait was replaced, used or is being saved answers
+  `settings_edit_prompt_stale` and leaves the live wait alone, one after the ten minutes answers
+  `settings_edit_wait_expired`, and each of those edits the message into the page. A Cancel that meets a Redis error other
+  than "no Redis" (a timeout, a dropped connection: the script may never have run, so the wait can still be live) answers
+  the alert `settings_edit_unavailable` and edits nothing, so the prompt and its Cancel button stay; with no Redis no wait
+  can exist and the page is drawn. Remove is one tap with no card, through
+  the commands' apply functions (`applyGreetingRemoveText`, `applyGreetingRemoveMedia`, `applyGreetingRemoveButtons`,
+  `applyRulesText("")`, `applyRulesMedia`, `applyRulesButtons`), so the three Remove presses of a Welcome or Goodbye page
+  together store what `/resetwelcome` or `/resetgoodbye` store. On Rules, Remove clears just its part (text through
+  `applyRulesText` with an empty text, media through `applyRulesMedia` with no file and type 0, buttons through
+  `applyRulesButtons` with none) and `/clearrules` clears all three through `applyRulesClear` (`rules.ClearRules`), so the
+  three Remove presses store exactly what `/clearrules` stores and none of them touches Media under text, private rules or
+  the rules button (assumption A3). The Rules page and its Main line read the whole row through
+  `rules.LoadRulesSettingsContext` (the `settingsEditRulesRead` seam, which creates nothing), and Main reads Set when the text,
+  the media or the buttons exist (`RulesSettings.HasContent`, assumption A1). A Remove redraws from the read-back with a notice that says
+  what was removed (the long text cannot be undone in the menu), a stale Remove of an empty part redraws with
+  `settings_edit_nothing_to_remove` and writes nothing, and a failed write redraws the freshly loaded page with
+  `common_settings_save_failed`.
 
 ## Permissions
 
@@ -298,7 +564,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   kill switch for the whole raid AI path: `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
   watcher enqueues nothing, and a job already queued is dropped by `raidAIProcessJob` / `raidAIProcessImage` without
   a `getFile` or any provider call. The `/lockdown` help says what the AI trigger sends to
-  TypeSafe and to Anthropic Claude (`lockdown_help_msg`, all 7 locales, D-15), and its length is held by
+  TypeSafe and to Anthropic Claude (`lockdown_help_msg`, all 8 locales, D-15), and its length is held by
   `TestLockdownHelpFitsOneMessage`.
   Anonymous admins always get the proof first and re-enter through `RegisterAnonymousAdminHandler`; the cached command's
   arguments then pick view or change for the tapper. The command is not `Disableable`. `/autoantiraid` is its alias for
@@ -312,9 +578,40 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `can_restrict_members` by a live `chat_status.FetchBotMember` (never the admin cache; an unknown answer refuses,
   `captcha_web_refuse_no_rights`). Math and text are unchanged and need none of these checks. The refusal texts name no
   setting, variable, secret or URL.
+- The settings owner gate (`settings_gate.go`): `settingsGate` is the one decision every settings door calls after its own
+  live `getChatMember` of the person, today in-group `/settings` with its anonymous re-entry (`requireSettingsAccess`),
+  the `/start settings_<chat id>` deep link (`settingsStartDeepLink`, on the member record of its own check and before its
+  `getChat`), every button press (step 4b), the pick of the private list (the same step 4b) and the typed reply of the
+  message editor (`settingsInput`, on the member record of its own live check); the other doors call it as
+  they arrive, and `TestSettingsGateAllDoors`
+  proves that every door decides the same over the four worlds (owner with the switch off, switch on, no owner, owner
+  state unknown), each later door adding a column to it. The order is fixed: a live creator is in with no
+  read; any status other than administrator is undecided; for an administrator the switch is read fresh
+  (`menuaccess.AdminsAllowedFresh`, a missing row is off, an error is undecided) and true is in, never consulting the
+  memo below, so a flip to on is seen at the very next press; with the switch off the owner state decides. The owner-state
+  read (`settingsOwnerState`) is one `getChatAdministrators` call bounded to 3 s (`settingsOwnerLookupTimeout`), shared per
+  chat by a singleflight, and an answer that arrives after the deadline is discarded. It is evaluated per presser: a
+  creator entry that is not a deleted account means an owner exists and keeps the administrator out; no creator entry, or
+  only deleted accounts, means no owner and lets the administrator in (D-15); an error, a timeout, an empty list, a list
+  without the presser's own administrator entry and a creator entry that is the presser are unknown and refuse. Only
+  "an owner exists" is remembered, per chat on this replica, for less than 30 s (`settingsOwnerMemoTTL`; a memo exactly that
+  old is expired), because it can only keep an administrator out; nothing else is memoised. `settingsCreatorGone`
+  (planner assumption A1) is `isDeletedAccount` of the first name plus no last name and no username, the one test for a
+  gone creator. Accepted limitation: it decides from the display name alone, because Telegram gives no second signal,
+  so a creator with a username or a last name is always a live owner, but a live owner whose first name is exactly
+  "Deleted Account" with neither looks gone, and with the switch off every administrator is then let in. The failure
+  direction is that administrators are allowed in, never that the owner is locked out (a live creator is in before the
+  owner state is read), and the owner fixes it by adding a username or a last name. The owner's live check A1 in
+  `.planning/phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md` confirms what the API returns for a deleted owner. Unknown always
+  refuses with `settings_check_failed`, never with the owner-only text, and no refusal names the Staff Group, a group
+  title, a chat ID or the switch. `isTelegramClientError` (a Telegram 4xx other than 429, also wrapped) is the one
+  client-error classifier of the settings doors. The in-group setting commands (`/captchamode`, `/setflood`,
+  `/autolockdown` and the rest) are not gated and keep their own checks (MENU-13); the authority-parity tests carry the
+  documented carve-out (`TestSettingsAuthorityParityOwnerGate`): for a non-owner administrator with the switch off the
+  menu is stricter than the commands, and where the menu allows a control the command allows it too.
 - Each settings menu control declares one `settingsRight`, and the menu refuses what the matching command refuses.
   `settingsRightAdmin` needs only the live admin check every press already makes (`/captchamode`, `/captchatime`,
-  `/captchaaction`). `settingsRightAdminBotAdmin` also needs `chat_status.IsBotAdmin` and refuses with the notice
+  `/captchaaction`, the editor's Welcome and Goodbye switches and Greet once). `settingsRightAdminBotAdmin` also needs `chat_status.IsBotAdmin` and refuses with the notice
   `chat_status_bot_not_admin` (`/captcha`). `settingsRightAdminFloodBot` also needs `chat_status.IsUserAdmin(b, chat, b.Id)`
   and refuses with the notice `connections_is_user_connected_bot_not_admin` (`/setflood`, `/setfloodmode`, `/delflood`).
   `settingsRightRestrict` needs the creator or an administrator with `can_restrict_members` from the same member record
@@ -322,6 +619,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is live, so it is stricter than the commands' cached one; the bot check uses the commands' own predicate, never a live
   `FetchBotMember`. A notice refusal answers empty and redraws the page with the warning line; an alert refusal edits
   nothing. A control the presser lacks the right for is still drawn and its press refused.
+  `settingsRightOwner` needs the creator from the press's own member record (no extra call) and refuses with the alert
+  `settings_access_owner_only`; only the Access page's control and action declare it. On the Member requirements page
+  (`m`) opening the page and a rule screen needs `settingsRightAdmin`, and every punishment choice (any `v`, so the card is
+  not even drawn without the right), the card's Yes and both switches need `settingsRightRestrict`.
+  `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
+  extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
+  `/cleangoodbye` refuse through `CanUserChangeInfo`). `settingsRightRefusalFor` is the one pure judgement of a right's
+  member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
 
 ## Data
 
@@ -331,9 +636,34 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
-- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`) sit outside the
+- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
+- `fuku:settings:sweep:lock` (new family `fuku:settings:*`, also outside the `fuku:cache:` prefix, so
+  `CLEAR_CACHE_ON_STARTUP` keeps it) is the admin index sweep's per-cycle lock (`admin_index_sweeper.go`): `SET NX` with a
+  per-process owner (`adminIndexSweepOwner`, a UUID) and a TTL of the interval minus one minute, so one replica runs each
+  hourly cycle. Without Redis, or on a Redis error, a cycle runs unguarded and stays correct, because every roster write is
+  a replace of the whole roster or a clear. Only a cycle cut off by a cancel gives it back, by compare-and-delete.
+- The message editor's wait for a typed reply (`settings_input.go`, all outside the `fuku:cache:` prefix in the
+  `fuku:settings:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps them, and holding IDs and codes only, never message text or
+  a file ID). `fuku:settings:input:<user>` is one hash per user with `c` (group chat ID), `p` (page key), `t` (part), `m`
+  (prompt message ID), `n` (16 hex nonce from `crypto/rand`), `x` (expiry, unix ms), `r<message id>` for each refusal reply that carries a Cancel button (at most 40 fields in
+  all, no text) and, while a claim is held, `k`; its own
+  10-minute `PEXPIRE` is the wait's expiry, with no timer, no process map and no shutdown drain.
+  `fuku:settings:inputdone:<user>` is the marker `c|p|t`, 15 minutes, written by every Set; every deliberate end (finish,
+  the Cancel button, `/cancel`, an ended access) deletes both keys in one script, so a marker with no wait means only
+  "the wait expired". `fuku:settings:inputalbum:<user>:<media_group_id>` is the album memory, `SET NX EX 30`, for a media
+  group ID of 1 to 20 digits (anything else is not an album and writes nothing). Atomicity is seven Lua scripts in
+  `settings_input.go`: Set (writes both keys and returns the replaced wait's fields; it deletes the hash first, so the
+  refusal fields below never survive a new Set), note-refusal (adds the field `r<message id>` for a refusal reply, only for the
+  holder of the nonce and at most 40 fields in all), claim (only the holder of the
+  current nonce, once), finish and release (only the claim holder; finish and release run on `context.WithoutCancel` with
+  their own bound, so a cancelled update never strands a claim; release removes only `k`, so the wait keeps its remaining
+  TTL), and the Cancel button's and `/cancel`'s scripts (a held claim answers busy and deletes nothing; the button also
+  compares `c`, `p`, `t` and the pressed message's ID with `m` or a noted refusal `r<id>`, so a stale prompt never ends a
+  newer wait, not even one for the same group, page and part). Reads are one pipeline of `HGETALL` and `GET`; a hash
+  that does not parse is no wait. Without Redis every store function returns `errSettingsInputUnavailable`, so Set
+  answers `settings_edit_unavailable` and nothing else needs Redis.
 - `fuku:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and
   1 hour once terminal, and moves state only through the Lua compare-and-set in `staff_action_card.go`.
   It expires through a timer on the creating replica plus a lazy check on any tap, and Confirm aborts when the
@@ -502,6 +832,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
   once as rate limited and the joiner row goes back without counting an attempt.
+- `fuku:memberreq:pace:next` and `fuku:memberreq:pace:block` are the fleet-wide Telegram pacing of the member
+  requirements executor (`memberReqPaced`, `memberReqPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block
+  design with its own keys, so screening, a staff fan-out and a lockdown each keep their own budget. Every Telegram call
+  of `memberReqEnforce` (the live `getChatMember`, the punishment, the notice) goes through it, each bounded by 10 s.
 - `fuku:captcha:ch:<token>` is the Turnstile captcha's challenge handle (`fuku/utils/captchaweb`, `challenge.go`): a hash
   of decimal strings `u` (user ID), `a` (attempt ID), `c` (chat ID) and `x` (the attempt's expiry in unix ms), living the
   attempt's time left plus 5 minutes (`ChallengeGrace`). The token is 16 random bytes in base64url (22 characters) and is
@@ -651,6 +985,69 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   conditional update (`link_revoked_at IS NULL`), so one confirm wins, and in the same transaction it marks every posted,
   open copy with live buttons `edit_pending`. The columns are read fresh, never cached, and never part of
   backup/export/import/reset.
+- `chat_settings_access` (migration 20261104120000) is the owner switch "Admins can change settings", one row per chat; a
+  chat without a row means owner only. It is read only through `menuaccess.AdminsAllowedFresh`, a fresh query that is never
+  cached (so no `DeleteCache` applies, and a cache added later needs `skipLocal` and a `DeleteCache` on every write), and an
+  unreadable switch is an error the caller refuses on, never a guessed value. `menuaccess.SetAdminsAllowed` is one
+  column-targeted `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of the switch, `updated_by` and `updated_at`, so a Go `false`
+  is written (the model has no `default:` tag on the boolean). It is never part of backup, export, import or reset, so
+  restoring a backup can never widen who may change a group's settings.
+- `chat_admin_index` (same migration) is the bot's record of each group's creator and human administrators: one row per chat
+  and user, `role` under the `chk_chat_admin_index_role` CHECK (`creator` or `administrator`), unique on `(chat_id, user_id)`
+  and an index on `user_id`. It is a hint for the private settings list and never authority: every pick from the list is
+  checked against a live `getChatMember`. `adminindex.ReplaceChat` takes a per-chat `pg_advisory_xact_lock` as the first
+  statement of its transaction on PostgreSQL, then upserts every entry and prunes every other user of the chat, never delete
+  then insert (two replaces of one chat would race into a unique violation, and two replaces with disjoint rosters would
+  commit the union); `ClearChat` goes through the same locked transaction as an empty roster. `ListForUserFresh` lists a
+  chat when the user has a creator row, and also when the user has an administrator row and either the chat's switch is on
+  or the chat has no creator row at all; it does not filter on `chats.is_inactive`, because the activity monitor marks quiet
+  groups inactive. It is read fresh, never cached, and never part of backup, export, import or reset.
+- `greeted_members` (migration 20261105120000) is the Greet once record: one row per `(chat_id, user_id)` the bot
+  welcomed while the welcome's `welcome_once` switch was on, with a primary key on both columns, `created_at` and no
+  foreign key (the claim must work for a chat the `chats` table does not know yet). It is read fresh through the
+  database, never cached, so no `DeleteCache` applies. It is never part of backup, export, import or reset
+  (`TestGreetedMembersStayOutOfBackup`) and rows are kept for good. `models.GreetedMember` maps it. The claim rule:
+  `SendWelcomeMessage` claims the member with `greetings.ClaimGreeting` (one `INSERT ... ON CONFLICT DO NOTHING`) after
+  the Welcome-on check and before the message is built and sent, while `welcome_once` is on; a lost claim sends nothing
+  and runs no clean-old step, a claim database error sends nothing (fail closed), and so does a failed greetings read
+  (`SendWelcomeMessage` reads through `greetings.LoadGreetingSettings`, which returns the read error, and sends and claims
+  nothing on it, `TestGreetOnceReadErrorFailsClosed`; `GetGreetingSettings` and every other caller keep the fallback
+  defaults on a read error), a definite refusal
+  (`welcomeDefinitelyNotSent`: `media.ErrNoPermission`, a Telegram 4xx other than 429 by code, or a 429) gives the claim
+  back with `greetings.ReleaseGreeting`, and an unknown outcome (a transport error, a timeout, a 5xx, an unreadable
+  answer) keeps it, because a double welcome is worse than a missing one; a panic between the claim and the send
+  (`SendWelcomeMessage`'s own recover, `TestGreetOncePanicBeforeSendReleasesClaim`) gives the claim back too, since nothing
+  was sent, while a panic after the send was attempted keeps it (`TestGreetOncePanicAfterSendKeepsClaim`). The claim never uses Redis or
+  `claimRecentJoinProcessing`, so it holds across replicas and with no Redis. The switch is written by
+  `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), the one write path of the Welcome page's Greet once switch (control
+  `o`, no command).
+- `chat_requirements` (migration 20261106120000) is the member requirements setting, one row per chat: five `SMALLINT`
+  action columns (`last_name_action`, `username_action`, `russian_action`, `arabic_action`, `chinese_action`, 0 off, 1 warn,
+  2 kick, 3 ban, 4 mute, each under its own named CHECK `chk_chat_requirements_<rule>` for 0..4) and the `check_on_join`
+  and `delete_messages` switches. A chat without a row means every rule off and both switches off. It is read through
+  `cache.GetFromCacheOrLoad` under `cache.CacheKey("member_requirements", chat)` (`memberreq.GetSettings`; `GetSettingsFresh`
+  is the same query without the cache) and creates no row. `memberreq.SetRuleAction`, `SetCheckOnJoin` and
+  `SetDeleteMessages` are three column-targeted `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of their own column plus
+  `updated_at`, so a Go 0 or `false` is written and two admins changing two rules never clobber each other, each followed by
+  `cache.DeleteCache` of that key; a value outside 0..4 or an unknown rule is refused before any write. The model has no
+  `default:` tag on its booleans. It is never part of backup, export, import or reset.
+- `chat_requirement_holds` (same migration) is one member's requirement episode in one chat, unique on `(chat_id, user_id)`
+  (`uk_chat_requirement_holds_chat_user`): both the latch that makes a violation punished once across replicas and the
+  record of a mute the bot placed. `memberreq.ClaimHold` is one `INSERT ... ON CONFLICT DO NOTHING` and only the caller whose
+  insert landed (`RowsAffected == 1`) acts; a pending hold (not yet confirmed punished) older than `memberreq.StaleClaim`
+  (2 minutes) is taken over by `ReclaimStaleHold`, one conditional update with one winner. The other operations (mark
+  punished, notice ID, welcome held, backoff, revert to pending, take by ID with `DELETE ... RETURNING`, restore, the clean
+  predicate, clear all, take before a join) are fresh database statements too. The hold is read fresh, never cached (so no
+  `DeleteCache` applies), never touches Redis and works without it, and is never part of backup, export, import or reset.
+- The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
+  `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
+  (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
+  `NOT NULL DEFAULT` its zero value, so a row saved before it reads exactly as it did, and the Go models
+  (`WelcomeSettings.MediaBelow` and `Once`, `GoodbyeSettings.MediaBelow`, `RulesSettings.FileID`, `MediaType`, `Buttons`
+  and `MediaBelow`) carry no `default:` tag on any boolean. They travel in backup JSON through their model tags
+  (`media_below`, `once`, `file_id`, `media_type`, `btns`); an export made before the migration has none of those keys and
+  imports as zeros, the old behaviour (`TestOldGreetingsExportDecodesToZeros`). `RulesSettings.HasContent` (a non-blank
+  text, a file ID or at least one button) is the one test of "Rules is set".
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -672,7 +1069,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
    whenever you change an existing model.
 5. Add `fuku/modules/<name>.go` with `LoadXxx`, registered in `init()` via `RegisterLegacyModule`.
 6. Register commands with `helpers.WrapCommand`; add `RegisterAnonymousAdminHandler` for admin commands.
-7. Add locale keys to all 7 files in `locales/`.
+7. Add locale keys to all 8 files in `locales/` (en, es, fr, hi, id, pt, ru, uk).
 8. Run `make generate-docs`, `make check-translations`, `make test`, `make lint`.
 
 ## Subsystem traps
@@ -695,6 +1092,38 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Fed-ban lookups cache per `(fed, user)` with a negative sentinel; every ban/unban write must invalidate it.
 - A join arrives as both `ChatMemberUpdated` and a service message; dedupe through `claimRecentJoinProcessing`
   (the lockdown guard, which runs first, dedupes by its joiner row instead and never gates a ban on Redis).
+- Greet once (`welcome_once`, `greeted_members`): the only place that claims is `SendWelcomeMessage`, which the
+  `chat_member` join, the join service message and the captcha pass (button and web, through `finishCaptchaPass`) all
+  call, so a member is claimed exactly where they are really welcomed. A captcha-failed joiner, a joiner the lockdown
+  guard records for a ban, a join while the Welcome switch is off, any join while Greet once is off and every preview
+  write no row, because none of them reaches the claim (`TestGreetOnceWelcomeOffNoClaim`, `TestGreetOnceOffNoRecord`,
+  `TestGreetOnceCaptchaPathAndFailure`, `TestGreetOnceLockdownBanNoRecord`). `TestGreetOnceConcurrentOneWelcome` proves
+  one welcome for 16 concurrent joins of one member. Accepted limits: a basic group's migration to a supergroup changes
+  the chat ID, so its members are welcomed once more; members who join while the Welcome switch is off are not recorded
+  and are welcomed once when it is back on; bots that join are claimed like any member; rows are kept for good. A 429
+  counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
+  flood limit is welcomed on their next join.
+- Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`): `memberReqEnforce` is the one
+  place that punishes a member for a broken rule, and nothing in production calls it until the watcher and the join
+  check do. Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
+  itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
+  failed load is an error, never "not approved") and the pending captcha through the two context reads (same three
+  states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds nothing); one live
+  `getChatMember` through `memberReqPaced`, which is the admin check (creator, administrator, left, kicked, a restricted
+  non-member and bots are never punished) and the source of the names the rules judge; the strictest of the broken rules
+  whose punishment is not Off; the claim of the hold before any punishment (`memberreq.ClaimHold`, or
+  `ReclaimStaleHold` for a pending hold older than two minutes); then the punishment and one notice. Never use
+  `IsUserAdmin`, `IsUserApproved` or `aispamCarvedOut` there. A warn goes through `applyWarn` with the hold marked
+  punished in its `afterRecord` hook, inside the warn lock right after the warn is stored, so a recorded warn and a
+  punished hold cannot be separated by a reclaim, and the warn module's own reply and Remove warn button are never sent.
+  Kick is `kickMemberContext`, ban a `banChatMember` with no end date, mute a `restrictChatMember` with
+  `MutedPermissions` and the marker `until_date` (now plus 330 days, `lockdownBanSpan`) stored on the hold before the
+  call. The requirement mute is owned by its marker alone (`isMemberReqMute`: restricted, still a member, `until_date`
+  within 2 s of the hold's `mute_until`); no other mute path is changed. A punishment Telegram refuses leaves the pending
+  hold and posts nothing. One notice per episode is a new message in the group's language, sent after the punishment
+  took effect, with the member's mention (`memberReqMention`) spliced in after translation and every broken rule whose
+  punishment is not Off in rule order; only a mute carries the `mreq|v1` "I fixed it" button (`a=f`, `h`, `u`). Logs carry
+  chat and user IDs and outcomes only, never a name, a rule text or a notice text.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -803,6 +1232,34 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The staff sweeper (`StartStaffSweeper`/`StopStaffSweeper`) rechecks every Staff Group link hourly (first run 1-5 min
   after start) behind `SETNX fuku:staff:sweep:lock`; without Redis it runs unguarded because every staff write is
   conditional. Staff tables are never part of backup/export/import/reset.
+- The settings roster (`chat_admin_index`, keep it current without anyone acting). The feed: `cache.SetAdminListObserver`
+  is a hook in the admin cache loader (`fuku/utils/cache` imports nothing from `fuku/db`), installed by the `AdminIndex`
+  module (priority 31, `LoadAdminIndex`, no handler and no database access at load). It reports one event per definitive
+  fact, each guarded by the load's generation, so a load overtaken by an invalidation reports nothing: a successful
+  non-empty list replaces the chat's rows with its creator and human administrators (a bot is never stored, and a creator
+  that `settingsCreatorGone` recognises is not stored, so that group reads as having no live owner), and a bot that is not
+  an administrator (`BotNotAdmin`) or whose own lookup was refused with Bot API error code 400 or 403 (`BotGone`,
+  `cache.IsBotGoneError`: "chat not found", "bot was kicked", "bot is not a member", "bot was blocked") clears them; a
+  401 (a revoked or rotated token), 404, 409, 429, 5xx, a transport error and a timeout leave them, so one fleet-wide
+  fault cannot empty the table. This is a narrower rule than `isTelegramClientError`, which the settings doors keep
+  for choosing an answer and which never changes a row. The
+  retry-failure and the empty-list paths report nothing. The write runs synchronously under the chat's admin-cache
+  singleflight with a 3 s bound (`adminIndexWriteTimeout`) and a failed write is only logged. `adminCacheAutoUpdate`
+  clears a group's rows when a `my_chat_member` update takes the bot to left or kicked. `/admincache` refreshes the rows on
+  its main path, and with a non-admin bot it loads nothing and leaves them. `refreshChatAdminIndex` is the one-group
+  refresh (at most two Telegram calls, never sleeps, never touches the admin cache) shared by the sweep and the group
+  `/settings` repair path: it changes rows only on definitive facts, and returns the Telegram error whatever the outcome.
+  The sweep (`StartAdminIndexSweeper`/`StopAdminIndexSweeper`, `admin_index_sweeper.go`, started in `postInit` right after
+  `StartStaffSweeper`): the first cycle 30 to 90 s after start is the backfill, so the private list works right after a
+  deploy, then one cycle every hour, one code path for both. The candidates are every negative chat ID in `chats`
+  (`adminindex.ListCandidateChatIDsFresh`), inactive chats included, because the activity monitor marks quiet groups
+  inactive. Every Telegram request waits a 250 ms pace and runs under 5 s (4 calls a second per runner, about 8 minutes for
+  1000 groups). Definitive facts only: an error, a timeout, a 429 or an empty list leaves a chat's rows as they were, and
+  only a bot that is not an administrator, or whose own lookup answered 400 or 403 (`cache.IsBotGoneError`), clears them;
+  a 401 or any other error code leaves them. A 429 waits `min(retry_after, 30 s)` and
+  retries that chat once; a second 429 ends the cycle with the remaining chats untouched. A panic in a cycle is recovered
+  and the next cycle runs, Start twice runs one loop and Stop is idempotent. The roster is a hint for the private list and
+  never authority.
 - The lockdown join guard (handler group `-7`, `lockdownOnJoinMember`) reads the lockdown fresh from PostgreSQL, records
   the joiner row first and only then ends the update with `ext.EndGroups`, so no welcome, captcha challenge or captcha
   attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
@@ -1197,6 +1654,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
   than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not
   an end date: `until_date` is computed once at Confirm and that one value goes to every group.
+- Greeting media types (Phase 12): `db.ANIMATION` (9) is a GIF saved by `/setwelcome`, `/setgoodbye` or the message
+  editor's media part, stored with the animation's file ID and sent with `sendAnimation`. Only the greeting extraction
+  returns it: `extractGreetingMedia` (animation first, then `extractMediaFromReply`) sits behind `ExtractWelcome` and
+  `ExtractMedia`, while notes, filters and pins keep `extractMediaFromReply` and store a GIF as a document
+  (`TestExtractNoteAndFilterGifStaysDocument`, `pins.go` untouched). A GIF stored before this phase stays a document, is
+  not converted, sends `sendDocument` as before and reads File or GIF on the page. `media.Content.CaptionAbove` becomes
+  `show_caption_above_media` only in `sendPhoto`, `sendVideo` and `sendAnimation` (now one `sendCaptioned`; no other
+  sender reads it) and a false flag adds no parameter, so every request of a message saved before is unchanged.
+  `media.CaptionAboveEligible` (photo, video, animation) is the one predicate of "Media under text works for this
+  media". `media.SendGreetingMessage` ANDs the flag with it, and `media.SendGreeting` is its flag-off wrapper. Rolling
+  deploy caveat (accepted, like the others here): a replica on the previous code sends a type 9 welcome as its text
+  only (`Unknown message type 9, falling back to text`) until it is replaced.
 - One setting, one code path (the settings menu): every setting the menu changes has one apply function beside its
   command (`applyCaptchaTimeout` in `captcha.go` first), which holds the validation, the refusals, the repository write
   and its `cache.DeleteCache`, and returns a typed result (`captchaApplyResult`: outcome, the locale key the command
@@ -1208,9 +1677,38 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `antiflood` keys are not in `skipLocal`, so another replica can show an old value for up to `CACHE_LOCAL_TTL`, exactly
   as the commands can; the replica that took the press is consistent. A group menu's text is readable by every member of
   the group, and a menu or choice message stays until used or closed (no auto-close timer). The "Only {name} can use this
-  menu." line carries an escaped name, not a mention, so it pings nobody.
+  menu." line carries an escaped name, not a mention, so it pings nobody. The message editor follows the same rule: the
+  switches, Remove and every typed part call the greetings and rules apply functions that sit beside the commands, so
+  the menu, the typed reply and `/setwelcome`, `/resetwelcome`, `/setrules` and the rest write one way. The join, the
+  leave, `/welcome`, `/rules` and the previews all build their message through `renderGreeting` and `buildRulesMessage`
+  (which builds its text with `buildRulesText`), never a second builder, and a preview never writes and never sends to
+  the group.
+- Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
+  `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
+  `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
+  `rules_for_chat_header`, no-rules line `rules_no_rules_set`) and the private form (`rulesFormPrivate`: `rules_for_chat`,
+  `rules_not_set`); a row with media or buttons but no text gets the heading alone as its text or caption. Rules are set
+  when `RulesSettings.HasContent` holds (a text, a media or a button), which is also what gates a welcome's `{rules}`
+  button, so a media-only rules row keeps that button; only a row with none of the three answers the no-rules line.
+  `sendRulesMessage`'s text-only branch is each caller's old `SendMessage` call (the options are passed in, so an old row's
+  request is byte-identical: previews on and the empty reply markup for `/rules`, `formatting.Shtml()` for the deep link;
+  the `rules_legacy_request_test.go` goldens prove it and are never re-recorded) with the rules keyboard added only when
+  the rules have buttons, and it is never routed through `media.SendGreeting`, which turns link previews off and drops the
+  reply target. Its media branch is one `media.Send`: the media with the text as its caption and the buttons under it,
+  and `show_caption_above_media` only when Media under text is on and `CaptionAboveEligible` accepts the kind (a photo, a
+  video or an animation; a stored on with any other kind is ignored). With private rules on, the click-to-read message in
+  the group is unchanged and carries no media and no buttons; they are in the private message. When Telegram definitely
+  refuses the media send (a 4xx other than 429, by `isTelegramClientError`: a caption over 1024 that `/setrules` or a
+  backup import let in, another bot's file ID), `/rules` and the private rules message retry once as the text and the
+  buttons alone. This retry is a deliberate exception to the one-message rule (Phase 12 D-03): it drops the owner's media
+  and sends the text and the buttons alone, so a rules media can disappear from `/rules` and the private rules message.
+  Every such retry
+  is logged at Warn with the chat ID only (`[Rules] the rules media of chat <id> was refused`; the chat is the one the
+  message was sent to, so the member's private chat for the deep link), never the text, a caption, a button, a link or
+  a file ID. A 429, a 5xx and a transport error are not retried. Full preview never falls back (it passes `degrade`
+  false), so the owner sees the refusal as `settings_edit_preview_failed` and can fix the stored message.
 - A menu opened in the group never shows the Staff Group's title or chat ID (D-21): not in any text, button label, notice,
-  alert or callback data, in any of the 7 languages, on any page, picker, card or refusal. Nor does a private menu, except
+  alert or callback data, in any of the 8 languages, on any page, picker, card or refusal. Nor does a private menu, except
   to the live creator of the group being configured (D-32): a private menu is shown to every live admin of the group, who
   need not be staff, so only the person who can link the group (the press's own live `getChatMember` record has status
   creator, `settingsView.Creator`, no extra Telegram call) sees `settings_staff_linked_to`; any other admin gets the same
@@ -1232,8 +1730,70 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the owner check removed draws as "Not linked" with no notice. Inside a Staff Group the page is the `/staff` panel
   read-only (`renderSettingsStaffPanel`, 8 groups a page, inside 3800 UTF-16 units with the settings header and the
   `settings_staff_readonly` line) with no Link, Unlink, Add group or Recent actions. `TestSettingsStaffPrivacy` renders
-  every reachable screen in all 7 languages, runs a group menu end to end and runs a private menu of an admin who is not
-  the creator end to end.
+  every reachable screen in all 8 languages (the private list empty and populated, the Main status block, the Access page
+  and its card included), runs a group menu end to end and runs a private menu of an admin who is not the creator end to
+  end.
+- The editor pages and their Main lines read through `greetings.LoadSettingsContext` and `rules.LoadRulesSettingsContext`
+  (the `settingsEditGreetingsRead` and `settingsEditRulesRead` seams), which create nothing and return their errors, and
+  never through `GetGreetingSettings` or `GetChatRulesInfo`, which create rows and hide a failed read: opening Main or a
+  page leaves no greetings, rules or chats row behind, and a failed read is the cannot-open edit on the page and the
+  unknown mark on Main, never a default. A chat with no greetings row reads as Welcome On, Goodbye On (the database
+  default of `goodbye_enabled`, which the first write stores for a chat the bot knows) and Delete last Off, which is what
+  the bot then does, and the pages show exactly that (`TestSettingsEditDefaultsMatchRuntime`).
+- Message editor (Phase 11), the pieces in one place; each has its own bullet: the pages, Set, Cancel and Remove are
+  under Callbacks (`settings|v1`, codes `w g r`, parts `x m b`, controls `e d o u`: `o` Greet once on Welcome, `u` Media under text on all three pages), the wait and its keys under Data
+  (`fuku:settings:input:*`), the typed-reply door at handler group 1 and `/cancel` under Handlers, the check
+  (`settingsEditCheck`, pure; the text and the buttons part hold one keyboard limit between them, at most 100 buttons and 8
+  in a row, with the `{rules}` button that a stored text adds counted against the stored buttons whichever part is being
+  set) and the right of each part under Permissions. A part is written only by the apply function
+  of its command, whether the owner pressed a button or typed the message, and a typed reply is judged like a press:
+  live `getChatMember`, owner gate, right, live `getChat`, then the check, the claim and the write. Previews
+  (`settings_edit_preview.go`) are the actions `wv` `wf` (Welcome), `gv` `gf` (Goodbye) and `rv` `rf` (Rules): `v` previews
+  the part named by `t` (only a part that is set, plus a Welcome or Goodbye text, which always has the default), `f` is the
+  whole message with no `t`, and both need only the admin check every press makes. A preview is the header line
+  (`settings_edit_preview_header`, or `_rules`) and then the content. Full preview of a Welcome or Goodbye is built by
+  `renderGreeting` (the join's own builder, filled in with the presser's name and the group's title) and sent by
+  `media.SendGreetingMessage` with `CaptionAbove` from the stored Media under text switch (the join's own sender, so a
+  photo, video or GIF arrives with its caption above it exactly as the join or the leave sends it); Preview of one part is
+  sent by `media.SendGreeting` (the media alone has no caption, so it never carries the placement; the Rules `m` and `b`
+  parts use the same two helpers, `settingsEditPreviewMediaAlone` and `settingsEditPreviewButtonsAlone`). Every preview goes
+  to the presser's own private chat (`query.From.Id`), never to the group and never through the senders that keep the
+  clean-old bookkeeping, so it writes no `last_msg_id`, deletes no message and writes no greeting or rules text, and it
+  never calls `SendWelcomeMessage` or `ClaimGreeting`: a preview ignores Greet once (A9), claims no member and leaves no
+  `greeted_members` row, so the member's real join is still welcomed (`TestSettingsEditPreviewNeverClaims`). One side effect
+  is the join path's own: a Full preview, or a text preview, of a Welcome or Goodbye whose text contains `{rules}` reads the
+  rules through the join path's reader (`renderGreeting`, then `rules.GetChatRulesInfo`), which creates an empty rules row
+  (and a chats row) for a group that has none, exactly as a real join does; nothing else is written. The Rules Full preview is built
+  by `buildRulesMessage` (group form) in the group's language, read by `lang.GetGroupLanguage` with the group's chat ID (the
+  cached read `/rules` makes, uk on a miss, no row created), and sent by `sendRulesMessage` without the member-path
+  degrade, so it is the message `/rules` sends in the group with private rules off, media, caption placement and
+  buttons included; the header line before it stays in the presser's language. With private rules on it still shows the
+  group form (members then read the private message in their own language, which no single preview can show, A12). A menu opened in the
+  private chat answers the press empty; one opened in the group answers the toast `settings_edit_preview_sent`; a Telegram
+  403 (classified by code, `settingsEditIsForbidden`) is the alert `settings_edit_preview_need_start` and any other
+  failure `settings_edit_preview_failed`, with Telegram's wording in the log only; a stale Preview of an empty part is
+  `settings_edit_nothing_to_preview` and sends nothing. The page reads are uncached and have no side effect (see the bullet
+  above), so a page and a typed save never create a row or fill a cache entry the commands would not; a preview does so
+  only through the `{rules}` read described above, which is the join path's. No
+  editor screen names the Staff Group (D-21, D-32) and every prompt, refusal, saved page and wait-ended reply fits 3800
+  UTF-16 units and 64-byte buttons in all 8 languages (`TestSettingsStaffPrivacy`, `TestSettingsEditScreensFitEveryLocale`;
+  the door's refusal and the saved notice come from the pure `renderSettingsInputRefusal` and
+  `settingsInputSavedNotice`, so a test renders exactly what is sent). Known and accepted: the `/rules` text is escaped
+  twice for a rules text with `'`, `&` or `<` and no formatting (a pre-existing behaviour the editor keeps for parity), and
+  a first Set on a group with no greetings row also turns the goodbye on (the database default; the page shows it).
+  Also known and accepted, like the other rolling-deploy caveats here: during a rolling deploy a typed reply that lands on
+  a replica still on the previous code (no group-1 door and no `/cancel`) passes through with no answer, and the wait stays
+  until it expires. EDIT-07 limit (D-07, D-08): a GIF stored before Phase 12 is still a document, shows exactly as before and gets no Media under text switch until the owner sets that GIF again, which stores it as an animation and makes the switch appear. A text over the limit that the Telegram client splits into several consecutive messages is handled
+  message by message, so whichever part claims the wait first is stored and the other parts are dropped without a reply;
+  the owner sees the saved page with its length, and there is no ordering signal for plain texts to do better. A claim
+  that is never finished or released (a crash, or a Redis timeout on finish) stays until the wait's 10 minutes end,
+  during which the sender's non-command private messages get no reply, the prompt's Cancel answers that it is no longer
+  waiting and `/cancel` says there is nothing to cancel; pressing Set again replaces the wait and its claim. Rules shares the Welcome's media and buttons predicates (no list of kinds of its own), holds heading plus text to 1024 UTF-16 units
+  while any media is stored (`settings_edit_refuse_text_rules_long` on the text part, `settings_edit_refuse_media_rules_long` on the media part,
+  both measured by `settingsEditRulesLongest` over both heading forms and the 8 languages with the group's real title), keeps the old 4096 limit
+  and its `settings_edit_refuse_too_long_filled` wording without media (so removing the media keeps a long text up to 3800), and counts no `{rules}`
+  token of its stored text as a button, because `/rules` adds none (`TestSettingsRulesCaptionParity` holds the Rules and Welcome boundaries
+  together for every media kind).
 
 ## Go rules
 
@@ -1241,6 +1801,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Every fire-and-forget goroutine starts with `defer error_handling.RecoverFromPanic(...)`. Async user/chat writers
   join the WaitGroup drained by `DrainUsersAsyncWrites`.
 - Register every new secret with `logredact.RegisterSecret` (≥6 chars), or it is logged verbatim.
+- SQL log lines carry no parameters: the GORM logger in `fuku/db/conn.go` sets `ParameterizedQueries: true`, so a failed or
+  slow (over 1 s) statement is logged with its placeholders and never the welcome, goodbye or rules text, button links or
+  other values it wrote. Do not add a logger that prints bound values.
 - A file the bot downloads itself never puts its URL in an error or a log: the Telegram file URL holds the bot token and
   `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
   follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
@@ -1290,8 +1853,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`fuku/utils/captchaweb/page/captcha.html`) is served with a per-response nonce CSP (`captchaweb.CSPFor`) and must
   keep no inline `style` attribute and no inline event handler, because the CSP would block them. `make
   check-translations` cannot see the `captcha_web_` keys the page reads from `captchaweb.PageKeys`;
-  `TestCaptchaWebLocaleKeys` (`fuku/i18n`) guards them in all 7 locales (present, not empty, length and no markup), and
+  `TestCaptchaWebLocaleKeys` (`fuku/i18n`) guards them in all 8 locales (present, not empty, length and no markup), and
   `TestStringTable` guards the table `main` builds from them.
+- The settings hub tables (`ChatSettingsAccess`, `ChatAdminIndex`) are in the AutoMigrate list of
+  `fuku/modules/test_harness_test.go` and in the testmains of `fuku/db/menuaccess` and `fuku/db/adminindex`, and
+  `settingsCleanup` deletes their rows of its chats. The default settings environment (`newSettingsEnvWith` and
+  `settingsEnv.addChat`) seeds `admins_allowed` true for its chats through the real `menuaccess` repository, because it
+  is an administrator the owner let in; the seed keeps every Phase 9 press test valid once the owner gate exists
+  (`TestSettingsEnvSeedsAdminAccess` pins it). A gate test never relies on it: it sets the switch it depends on with
+  `settingsEnv.setAdminsAllowed`. The other fixtures are `newOwner` (a live creator who is also the fake's creator entry,
+  with the default admin listed), `listAdmin` and the fake's `listAdministrator` (an administrator appears in
+  `getChatAdministrators` only when a test opts in), `setDeletedCreator` (the creator entry reads "Deleted Account" with no
+  last name and no username), `clearCreator` (no creator entry and no live creator) and `otherReplica` (a second dispatcher
+  and bot fake over the same database and miniredis, with update IDs from 50000 so they never meet the base environment's).
 - The harness `AutoMigrate` lists (`fuku/modules/test_harness_test.go`, `fuku/db/staff/testmain_test.go`,
   `fuku/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown
   models are in `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go` and
@@ -1302,7 +1876,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fuku/db/raiddetection/testmain_test.go` and `fuku/db/devs/testmain_test.go` (the developer `/stats` reads it), and
   `raidCleanup` in the modules tests deletes its rows and their cached copies. A fixture that creates
   `ChatRaidDetection` rows directly must set `AIThreshold` (3..500): the `CHECK` applies on SQLite too, because GORM
-  builds it from the model tag (`seedRaidSettings` fills the AI defaults when it is left at 0).
+  builds it from the model tag (`seedRaidSettings` fills the AI defaults when it is left at 0). The Phase 12 model
+  `GreetedMember` is in the AutoMigrate lists of `fuku/modules/test_harness_test.go`, `fuku/db/greetings/testmain_test.go`
+  and `fuku/db/backup/testmain_test.go`. The Phase 12 characterization tests record what the code did before the phase and
+  must never be re-recorded to make a change pass: `TestRulesLegacyRowSendsTodaysRequest` (a Rules row with no media sends
+  today's request) and `TestLegacyGreetingsRequestsUnchanged` (an old greetings row sends today's request), both in
+  `rules_legacy_request_test.go`. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
+  `TestGreetingsMediaBelow*` (`greetings_media_below_test.go`), `TestRules*` in `rules_media_send_test.go`,
+  `TestSettingsEditMediaBelow*`, `TestSettings*MediaBelow`, `TestSettings*Once`, `TestSettingsEditSwitchGrid` and
+  `TestSettingsEditRules*` (`settings_edit_switch_test.go`, `settings_edit_rules_test.go`, `settings_input_rules_test.go`),
+  `TestSettingsRulesCaptionParity` and `TestSettingsControlValidate` (`settings_control_validate_test.go`). A test that
+  drives a press, a door or a join with a user ID must delete its `users` rows and cache entries, and its greetings, rules
+  and `greeted_members` rows, in `t.Cleanup` and use a fresh chat ID, because CI runs all of `fuku/modules` in one
+  PostgreSQL database in source order.
 - `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
   prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
   `TestBanRunStart` (one running ban run per lockdown, the partial unique index), plus the Phase 5 conditional updates:
@@ -1319,13 +1905,48 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `turnstile`, `math` and `text` and refuses the rest with `check_violation`, exactly one `captcha_mode` check is left
   on `captcha_settings`, and the migration's statements run twice without error; `TestCaptchaModeMigrationStatements`
   is its database-free half and runs in `make test`).
+  The Phase 10 guarantees are `TestAdminIndexReplaceConcurrent` (`./fuku/db/adminindex`: concurrent replaces of one chat
+  leave one roster, with the role CHECK and the unique key intact) and `TestMenuAccessUpsert` (`./fuku/db/menuaccess`: a
+  Go `false` is written, one row per chat).
+  The Phase 12 guarantees are `TestGreetedMemberClaimConcurrent` (`./fuku/db/greetings`: of many concurrent claims of one
+  `(chat_id, user_id)` exactly one wins, the primary key; it also runs on SQLite in `make test`) and
+  `TestRulesMediaMigrationDefaults` (`./fuku/db/migrations`: the Phase 12 columns take their zero defaults, the migration's
+  statements run twice without error and `greeted_members` holds one row per member; PostgreSQL only, it skips locally) and
+  `TestImportGreetingsOmittedBlocks` (`./fuku/db/backup`: a greetings import whose payload omits `welcome_settings` or
+  `goodbye_settings` imports and writes the three NOT NULL switch columns as false, because `importGreetings` fills a missing
+  block with an empty one; without it the nil embedded block inserts NULL and PostgreSQL answers SQLSTATE 23502).
+  The Phase 13 guarantees are `TestChatRequirementsSettings` (`./fuku/db/memberreq`: the five action CHECKs refuse 5 and -1
+  with SQLSTATE 23514, column-targeted upserts of two rules at once never clobber each other, a Go 0 and `false` are
+  written), `TestRequirementHoldClaimConcurrent` (of 16 concurrent claims of one `(chat_id, user_id)` exactly one wins, and of
+  16 concurrent reclaims of one stale pending hold exactly one wins) and `TestRequirementHolds` (the take, restore, clean and
+  clear semantics); all three also run on SQLite in `make test`, and `fuku/db/memberreq/testmain_test.go` migrates both models.
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
 - The settings menu tests share one toolkit, `fuku/modules/settings_env_test.go` (`newSettingsEnv`, `newSettingsEnvWith`
   with `RealLocale`, `openMenu`, `press`, `pressRaw`, `pressPrivate`, `pressNoMessage`, `sendIn`, `sendPrivate`, `edits`,
   `lastEdit`, `answerCount`, `settingsButtonByMarker`, `settingsButtonFields`): page tests call it by name and do not edit
-  it. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
+  it. The message editor adds `fuku/modules/settings_edit_env_test.go` on top of it (`newSettingsEditEnv`, `editCleanup`,
+  `settingsEditAdminJSON`, `listEditAdmin`, `settingsEditStored`, `settingsEditRulesStored`, `openEditPage`,
+  `openEditPagePrivate`) and its families `TestSettingsEdit*`, `TestSettingsParityGreeting*`, `TestSettingsDriftGreetings`
+  and `TestSettingsAuthorityParityGreetings` (`settings_edit_test.go`), plus `TestSettingsEditSet*`,
+  `TestSettingsEditCancel*`, `TestSettingsEditRemove*` and `TestSettingsAuthorityParityEdit` (`settings_edit_actions_test.go`:
+  the wait, Remove, their parity with the commands and the rights). The typed-reply door adds `TestSettingsEditTyped*`,
+  `TestSettingsEditDoor*` and `TestSettingsEditAlbum*` (`settings_input_door_test.go`, `settings_input_media_test.go`:
+  the door's order, the album gate, the media and buttons parts and `TestSettingsEditWholeMessageParity`), the previews
+  `TestSettingsEditPreview*` and `TestSettingsEditFullPreview` (`settings_edit_preview_test.go`), the pure check
+  `TestSettingsEditCheck*` (`settings_edit_check_test.go`), the store `settings_input_test.go` and the switch grid with
+  Greet once (`settings_edit_switch_test.go`: `TestSettingsEditOnceSwitch`, `TestSettingsEditSwitchGrid`,
+  `TestSettingsDriftOnce` and `TestSettingsAuthorityOnce`, which decides over the four owner worlds exactly as the press
+  door of `TestSettingsGateAllDoors`; `editCleanup` also deletes the chats' `greeted_members` rows), and Media under text
+  on Welcome and Goodbye in the same file (`TestSettingsEditMediaBelowSwitch`, `TestSettingsEditMediaBelowEligibility`,
+  `TestSettingsEditMediaBelowStalePress`, `TestSettingsEditMediaBelowStoredOnIgnored`, `TestSettingsParityMediaBelow` (the
+  press and `applyWelcomeMediaBelow` leave the same row and cache state, there being no command to compare with),
+  `TestSettingsDriftMediaBelow` and `TestSettingsAuthorityMediaBelow`). The test files are
+  `settings_edit_*_test.go` and `settings_input*_test.go`; the typed reply is the sixth door of `TestSettingsGateAllDoors`.
+  `TestSettingsEditScreensFitEveryLocale` (`settings_edit_screens_test.go`, whose `settingsEditScreens` builds every
+  non-page editor screen and is also what `TestSettingsStaffPrivacy` renders) holds them to 3800 UTF-16 units and 64-byte
+  buttons with a 64-rune title. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
   has no locale manager of its own. `fuku/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
 - Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./fuku/modules ./fuku/i18n`.
@@ -1333,12 +1954,28 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   has a parity test (`TestSettingsParity*`: the menu press and the command leave the same stored row and the same
   cache), a drift test (`TestSettingsDrift*`: the page reads what the command reads) and an authority-parity test
   (`TestSettingsAuthorityParity*`: the menu refuses what the command refuses, with the right the control declares),
-  and every page has a worst-case callback test (`TestSettings*CallbackBytes`, 64 bytes) and a length test in all 7
+  and every page has a worst-case callback test (`TestSettings*CallbackBytes`, 64 bytes) and a length test in all 8
   languages (`TestSettings*PageFitsEveryLocale`); a new setting in the menu adds all of them. `TestSettingsStaffPrivacy`
   guards D-21 and D-32 (a group menu, and a private menu of an admin who is not the creator, never name the Staff Group), `TestSettingsHelpFitsOneMessage` holds `settings_help_msg`
   to one Telegram message in every language, and `TestLoadSettingsRegistersHelp` guards the `/help` entry. No settings
   guarantee rests on PostgreSQL (no migration, no partial index, no `CHECK`), so nothing of the menu joins
-  `make test-postgres-integrity`.
+  `make test-postgres-integrity`. The hub, the owner gate and the Main grid have their own families:
+  `TestSettingsHub*` (list, paging, pick, Groups), `TestSettingsAccess*`, `TestSettingsGate*`, `TestSettingsOwnerState*`,
+  `TestSettingsMain*` (`TestSettingsMainGrid`, `TestSettingsMainPageFitsEveryLocale`: 3800 UTF-16 units and the button
+  limits with a 64-rune title in every language) and `TestAdminIndex*`; `TestSettingsLabelLengths`
+  (`fuku/i18n/settings_locale_test.go`) holds the two-column limits (a grid button at most 20 code points, the Groups
+  button 18) in code points. The Access controls have no command, so they carry `TestSettingsDriftAccess` and
+  `TestSettingsOwnerAuthorityAccess` instead of a parity test, and `TestSettingsAccessAcrossReplicas` proves the fresh
+  read across two replicas (a flip on one is seen by the very next press on the other, a memoised owner never hides a
+  flip to ON, D-12).
+  The Member requirements page has `TestSettingsMreq*` (`TestSettingsMreqOpensFromMain`, `TestSettingsMreqMainState`,
+  `TestSettingsMreqSwitches`, `TestSettingsMreqRuleScreen`, `TestSettingsControlActionAllowList`,
+  `TestSettingsMreqRowBudget`, `TestSettingsMreqPageFitsEveryLocale`, `TestSettingsMreqCallbackBytes`),
+  `TestApplyMemberReqAction`, `TestSettingsDriftMreq` and `TestSettingsAuthorityMreq` (`settings_mreq_test.go`) and
+  `TestSettingsMreqCard` (`settings_mreq_card_test.go`: the card's four exits, the demotion between the taps, the stale
+  cache and the forged `my` fields). The module harness carries both Phase
+  13 tables (`ChatRequirements`, `ChatRequirementHold` in the `AutoMigrate` list of `test_harness_test.go`), and
+  `settingsCleanup` deletes their rows of its chats and the `member_requirements` cache key.
 
 ## Commits
 

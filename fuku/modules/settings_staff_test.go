@@ -166,10 +166,12 @@ func TestSettingsStaffPageVariants(t *testing.T) {
 		msgID := env.openMenu(env.admin)
 
 		// Main shows the state word.
-		_, main := env.lastEdit(env.chat.Id, msgID)
-		button, ok := settingsButtonByMarker(main, "settings_page_staff")
-		if !ok || !containsMarker(button.Text, "settings_state_linked") {
-			t.Fatalf("Main page Staff button = %q (found %v), want the linked state", button.Text, ok)
+		mainText, main := env.lastEdit(env.chat.Id, msgID)
+		if _, ok := settingsButtonByMarker(main, "settings_page_staff"); !ok {
+			t.Fatalf("Main page has no Staff button: %+v", main)
+		}
+		if line, ok := settingsMainStateLine(mainText, "settings_page_staff"); !ok || !containsMarker(line, "settings_state_linked") {
+			t.Fatalf("Main page Staff line = %q (found %v), want the linked state", line, ok)
 		}
 
 		before := len(settingsStaffTestCalls(env))
@@ -305,10 +307,12 @@ func TestSettingsStaffPageVariants(t *testing.T) {
 	t.Run("a group that is not linked offers Link", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		msgID := env.openMenu(env.admin)
-		_, main := env.lastEdit(env.chat.Id, msgID)
-		button, ok := settingsButtonByMarker(main, "settings_page_staff")
-		if !ok || !containsMarker(button.Text, "settings_state_not_linked") {
-			t.Fatalf("Main page Staff button = %q (found %v), want the not linked state", button.Text, ok)
+		mainText, main := env.lastEdit(env.chat.Id, msgID)
+		if _, ok := settingsButtonByMarker(main, "settings_page_staff"); !ok {
+			t.Fatalf("Main page has no Staff button: %+v", main)
+		}
+		if line, ok := settingsMainStateLine(mainText, "settings_page_staff"); !ok || !containsMarker(line, "settings_state_not_linked") {
+			t.Fatalf("Main page Staff line = %q (found %v), want the not linked state", line, ok)
 		}
 
 		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "op", "p", "s"))
@@ -346,10 +350,12 @@ func TestSettingsStaffReadOnly(t *testing.T) {
 		settingsStaffTestStaffGroupWithLinks(env, 10)
 		msgID := env.openMenu(env.admin)
 
-		_, main := env.lastEdit(env.chat.Id, msgID)
-		button, ok := settingsButtonByMarker(main, "settings_page_staff")
-		if !ok || !containsMarker(button.Text, "settings_state_staff_n") || !strings.HasSuffix(button.Text, " 10") {
-			t.Fatalf("Main page Staff button = %q (found %v), want the count of 10 linked groups", button.Text, ok)
+		mainText, main := env.lastEdit(env.chat.Id, msgID)
+		if _, ok := settingsButtonByMarker(main, "settings_page_staff"); !ok {
+			t.Fatalf("Main page has no Staff button: %+v", main)
+		}
+		if line, ok := settingsMainStateLine(mainText, "settings_page_staff"); !ok || !containsMarker(line, "settings_state_staff_n") || !strings.HasSuffix(line, " 10") {
+			t.Fatalf("Main page Staff line = %q (found %v), want the count of 10 linked groups", line, ok)
 		}
 
 		env.press(env.admin, msgID, env.groupFields(env.admin, "a", "op", "p", "s"))

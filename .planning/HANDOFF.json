@@ -1,0 +1,139 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-05T19:47:06Z",
+  "phase": "13",
+  "phase_name": "member-requirements",
+  "phase_dir": ".planning/phases/13-member-requirements",
+  "plan": 8,
+  "task": 2,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": "13-01..13-07",
+      "name": "plans 13-01 to 13-07 (storage, rules engine, warn core, locale keys, page m, rule screens and card, enforcement core)",
+      "status": "done",
+      "commit": "cdf258c"
+    },
+    {
+      "id": "13-08/1",
+      "name": "13-08 task 1: back off a refused punishment, verify an unknown mute by its marker",
+      "status": "done",
+      "commit": "5d8a485"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": "13-08/2",
+      "name": "13-08 task 2: lockdown-aware unmute, notice retry, undeliverable mute notice lifts the mute (RED then GREEN, then family run, SUMMARY)",
+      "status": "not_started"
+    },
+    {
+      "id": "13-09",
+      "name": "watcher at group -2, kill switch, skipLocal entry, runner, drain",
+      "status": "not_started"
+    },
+    {
+      "id": "13-10",
+      "name": "Delete messages and per-chat cap",
+      "status": "not_started"
+    },
+    {
+      "id": "13-11",
+      "name": "join entry and captcha guard",
+      "status": "not_started"
+    },
+    {
+      "id": "13-12",
+      "name": "leave and rejoin",
+      "status": "not_started"
+    },
+    {
+      "id": "13-13",
+      "name": "I fixed it handler and turn enforcement on",
+      "status": "not_started"
+    },
+    {
+      "id": "13-14",
+      "name": "phase gate (privacy sweep, backup exclusion, docs, 13-SPIKE.md, make test)",
+      "status": "not_started"
+    },
+    {
+      "id": "P13-verify",
+      "name": "Phase 13 verification chain (code review, fix pass, security audit, Nyquist, verifier, disposition)",
+      "status": "not_started"
+    },
+    {
+      "id": "P14-P19",
+      "name": "Phases 14 to 19: discuss, plan, execute, verify each",
+      "status": "not_started"
+    },
+    {
+      "id": "milestone",
+      "name": "audit-milestone, complete-milestone v1.1, cleanup, update PR 8",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Live Telegram checks for Phases 10, 11, 12 and 13 (13-SPIKE.md will list the Phase 13 ones)",
+      "context": "deferred by the user: Defer live checks, keep going",
+      "blocking": false
+    },
+    {
+      "action": "Owner confirmation of UI-SPEC assumptions (Phase 12 A1-A4, A12; Phase 13 A1-A18)",
+      "context": "recommended defaults are built in",
+      "blocking": false
+    },
+    {
+      "action": "Native-speaker read of the 61 Phase 13 strings and the help text in es, fr, hi, id, pt, ru, uk; phone check of hi cells",
+      "context": "translations were written by the model",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "One punishment and one notice per episode (strictest wins); confirm card for kick, ban and mute",
+      "rationale": "user answers to the two Phase 13 questions",
+      "phase": "13"
+    },
+    {
+      "decision": "MREQ-01 stays Pending after 13-06",
+      "rationale": "its text names eight rules, Phase 13 ships five; the brief only ticks a requirement whose whole text is true",
+      "phase": "13"
+    },
+    {
+      "decision": "gosec G101 fixed by renaming memberReqNameToken to memberReqNamePlaceholder, QF1001 by i != 0",
+      "rationale": "CI failures of the 13-06 and 13-07 pushes",
+      "phase": "13"
+    }
+  ],
+  "uncommitted_files": [
+    " M .planning/phases/13-member-requirements/handoff/executor-brief-13.md",
+    "?? .planning/phases/13-member-requirements/.continue-here.md",
+    "?? .planning/phases/13-member-requirements/handoff/lint-local.py"
+  ],
+  "uncommitted_note": "measured at write time: only the handoff files themselves, the fixed lint-local.py copy and the executor-brief path/rule edits, all committed with this handoff; the executor of 13-08 stopped at a clean commit boundary",
+  "git": {
+    "branch": "claude/ecstatic-goldberg-qsss05",
+    "pushed_head": "cdf258c0febd0c15e4678d8eec3317456c096872",
+    "local_commits_pushed_with_handoff": [
+      "87f302c fix(13-07) gosec rename",
+      "0ee9a87 test(13-08) RED",
+      "5d8a485 feat(13-08) GREEN task 1"
+    ],
+    "pr": "uasneppy/Fuku_Robot#8"
+  },
+  "constraints": [
+    "lint-local.py is fixed (QF step); read its exit code directly; gosec G101 cannot run here: no string constant named like token/secret/password",
+    "do not push while CI is running for the previous head; push by exact SHA; fetch-verify",
+    "tests mint fresh IDs and clean up (CI single database)",
+    "one executor at a time; never edit or commit under a running executor; no history rewrite, no git stash",
+    "memberReqEnforcementLive is added by 13-09 as false and set true only by 13-13",
+    "tick a requirement only when its whole text is true (MREQ-01 stays Pending)"
+  ],
+  "next_action": "git status and log; check CI for the pushed head via get_check_runs on PR 8; rebuild lint tools if the container is new; dispatch gsd-executor for plan 13-08 task 2 only (steps in .planning/phases/13-member-requirements/.continue-here.md), then 13-09",
+  "context_notes": "Sequential execution of Phase 13, one gsd-executor (sonnet) per plan, verified by the orchestrator before each push. See .continue-here.md in the phase directory for the full handoff."
+}

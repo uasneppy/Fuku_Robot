@@ -76,6 +76,9 @@ func floodMessage(t *testing.T, from gotgbot.User, kind string) gotgbot.Message 
 	case kind == "slash":
 		msg.Text = "/x spam"
 		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 2}}
+	case kind == "cancel":
+		msg.Text = "/cancel https://x.example"
+		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 7}}
 	case kind == "otherbot":
 		msg.Text = "/start@otherbot"
 		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 15}}

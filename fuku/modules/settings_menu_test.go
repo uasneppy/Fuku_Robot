@@ -451,6 +451,68 @@ func TestSettingsNavigation(t *testing.T) {
 		}
 	})
 
+	// lastRow names the last keyboard row by the action codes of its buttons.
+	lastRow := func(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton) string {
+		t.Helper()
+		if len(keyboard) == 0 {
+			t.Fatal("the page has no keyboard")
+		}
+		var names []string
+		for _, button := range keyboard[len(keyboard)-1] {
+			if strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|") {
+				names = append(names, "groups")
+				continue
+			}
+			names = append(names, settingsButtonFields(t, button)["a"])
+		}
+		return strings.Join(names, "|")
+	}
+
+	t.Run("every page ends with Back and Close in a group menu, Back draws Main", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		owner := env.newOwner(env.chat)
+		msgID := env.openMenu(owner)
+		if _, keyboard := env.lastEdit(env.chat.Id, msgID); lastRow(t, keyboard) != settingsActClose {
+			t.Fatalf("a group Main ends with %q, want Close alone", lastRow(t, keyboard))
+		}
+		for _, pg := range settingsPagesInOrder() {
+			env.press(owner, msgID, env.groupFields(owner, "a", settingsActOpen, "p", pg.Key))
+			_, keyboard := env.lastEdit(env.chat.Id, msgID)
+			if got, want := lastRow(t, keyboard), settingsActBack+"|"+settingsActClose; got != want {
+				t.Errorf("page %q ends with %q, want %q", pg.Key, got, want)
+				continue
+			}
+			env.press(owner, msgID, env.groupFields(owner, "a", settingsActBack))
+			text, _ := env.lastEdit(env.chat.Id, msgID)
+			if !strings.Contains(text, staffMarker("settings_header_main")) {
+				t.Errorf("Back from page %q drew %q, want the Main page", pg.Key, text)
+			}
+		}
+	})
+
+	t.Run("every page ends with Back and Close in a private menu, Main with Groups and Close", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		owner := env.newOwner(env.chat)
+		env.sendPrivate(owner, fmt.Sprintf("/start settings_%d", env.chat.Id))
+		sent := settingsPrivateOnlySent(t, env, owner)
+		if got, want := lastRow(t, staffKeyboardOf(sent.Params["reply_markup"])), "groups|"+settingsActClose; got != want {
+			t.Fatalf("a private Main ends with %q, want %q", got, want)
+		}
+		for _, pg := range settingsPagesInOrder() {
+			env.pressPrivate(owner, sent.MessageID, env.privateFields(env.chat.Id, "a", settingsActOpen, "p", pg.Key))
+			_, keyboard := env.lastEdit(owner.Id, sent.MessageID)
+			if got, want := lastRow(t, keyboard), settingsActBack+"|"+settingsActClose; got != want {
+				t.Errorf("private page %q ends with %q, want %q", pg.Key, got, want)
+				continue
+			}
+			env.pressPrivate(owner, sent.MessageID, env.privateFields(env.chat.Id, "a", settingsActBack))
+			_, main := env.lastEdit(owner.Id, sent.MessageID)
+			if got, want := lastRow(t, main), "groups|"+settingsActClose; got != want {
+				t.Errorf("Back from private page %q draws a Main ending with %q, want %q", pg.Key, got, want)
+			}
+		}
+	})
+
 	t.Run("not modified is success", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		msgID := settingsOpenCaptchaPage(t, env)
@@ -521,6 +583,7 @@ func TestSettingsCallbackBytes(t *testing.T) {
 		{Key: "l", Icon: "🔒", Title: "Lockdown", State: "Not active", Known: true},
 		{Key: "c", Icon: "🧩", Title: "Captcha", State: "On", Known: true},
 		{Key: "f", Icon: "🌊", Title: "Antiflood", State: "Limit 100", Known: false},
+		{Key: "a", Icon: "🔑", Title: "Access", State: "Owner only", Known: true, OwnerOnly: true},
 	}
 	for _, variant := range []struct {
 		name string
@@ -531,6 +594,9 @@ func TestSettingsCallbackBytes(t *testing.T) {
 	} {
 		t.Run(variant.name, func(t *testing.T) {
 			check(t, "Main", renderSettingsMain(variant.view, entries, ""))
+			if groups, ok := settingsHubGroupsButton(tr); !ok || len(groups.CallbackData) > 16 {
+				t.Errorf("the Groups button is %q (ok %v), want at most 16 bytes", groups.CallbackData, ok)
+			}
 			for _, minutes := range []int{1, 5, 10} {
 				check(t, fmt.Sprintf("Captcha %d", minutes), renderSettingsCaptcha(variant.view, &models.CaptchaSettings{Timeout: minutes}, settingsCaptchaWeb{}, ""))
 			}
@@ -723,13 +789,13 @@ func TestSettingsCaptchaReadFailure(t *testing.T) {
 	t.Cleanup(func() { settingsCaptchaRead = previous })
 
 	msgID := env.openMenu(env.admin)
-	_, keyboard := env.lastEdit(env.chat.Id, msgID)
+	mainText, keyboard := env.lastEdit(env.chat.Id, msgID)
 	button, ok := settingsButtonByMarker(keyboard, "settings_page_captcha")
 	if !ok {
 		t.Fatal("no Captcha button on the Main page")
 	}
-	if !strings.HasSuffix(button.Text, " · ❔") {
-		t.Errorf("Captcha button %q does not end with the unreadable state ' · ❔'", button.Text)
+	if line, found := settingsMainStateLine(mainText, "settings_page_captcha"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+		t.Errorf("Captcha status line %q (found %v) does not end with the unknown mark", line, found)
 	}
 
 	before := env.answerCount()

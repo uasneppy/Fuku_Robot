@@ -32,6 +32,14 @@ type staffFakeMember struct {
 	Perms *gotgbot.ChatPermissions
 }
 
+// staffFakeProfile is the name fields the fake reports for a user in every getChatMember
+// answer built from a member record. The zero value keeps the fake's old "User<id>" first
+// name and no last name or username, so a test that never calls setProfile sees what it
+// always saw.
+type staffFakeProfile struct {
+	First, Last, Username string
+}
+
 // staffSentMessage is one sendMessage the fake answered.
 type staffSentMessage struct {
 	ChatID    int64
@@ -50,6 +58,7 @@ type staffActionFake struct {
 
 	fmu       sync.Mutex
 	records   map[[2]int64]*staffFakeMember
+	profiles  map[int64]staffFakeProfile
 	scripted  map[string][]error
 	chatPerms map[int64]gotgbot.ChatPermissions
 	nextMsgID int64
@@ -69,6 +78,7 @@ func newStaffActionFake() *staffActionFake {
 	return &staffActionFake{
 		staffBotClient: newStaffBotClient(),
 		records:        make(map[[2]int64]*staffFakeMember),
+		profiles:       make(map[int64]staffFakeProfile),
 		scripted:       make(map[string][]error),
 		chatPerms:      make(map[int64]gotgbot.ChatPermissions),
 		nextMsgID:      5000,
@@ -140,6 +150,22 @@ func (f *staffActionFake) setMember(chatID, userID int64, m staffFakeMember) {
 	f.fmu.Lock()
 	defer f.fmu.Unlock()
 	f.records[[2]int64{chatID, userID}] = &m
+}
+
+// setProfile sets the first name, last name and username the fake reports for userID in
+// every getChatMember answer built from a member record, so a restrict that replaces the
+// record keeps the names. An empty first name keeps "User<id>".
+func (f *staffActionFake) setProfile(userID int64, first, last, username string) {
+	f.fmu.Lock()
+	defer f.fmu.Unlock()
+	f.profiles[userID] = staffFakeProfile{First: first, Last: last, Username: username}
+}
+
+// profile returns the profile set for userID, or the zero value.
+func (f *staffActionFake) profile(userID int64) staffFakeProfile {
+	f.fmu.Lock()
+	defer f.fmu.Unlock()
+	return f.profiles[userID]
 }
 
 // member returns a copy of the record of userID in chatID, or nil.
@@ -244,8 +270,29 @@ func staffIsAdminStatus(status string) bool {
 	return status == gotgbot.ChatMemberStatusCreator || status == gotgbot.ChatMemberStatusAdministrator
 }
 
-func staffFakeMemberJSON(userID int64, m *staffFakeMember) json.RawMessage {
-	user := fmt.Sprintf(`{"id":%d,"is_bot":false,"first_name":"User%d"}`, userID, userID)
+// staffFakeUserJSON is the user object of an answer: the profile's names, or "User<id>" and
+// no other name field when none was set.
+func staffFakeUserJSON(userID int64, profile staffFakeProfile) string {
+	first := profile.First
+	if first == "" {
+		first = fmt.Sprintf("User%d", userID)
+	}
+	user := map[string]any{"id": userID, "is_bot": false, "first_name": first}
+	if profile.Last != "" {
+		user["last_name"] = profile.Last
+	}
+	if profile.Username != "" {
+		user["username"] = profile.Username
+	}
+	raw, err := json.Marshal(user)
+	if err != nil {
+		panic(fmt.Sprintf("staffActionFake: marshal user: %v", err))
+	}
+	return string(raw)
+}
+
+func staffFakeMemberJSON(userID int64, m *staffFakeMember, profile staffFakeProfile) json.RawMessage {
+	user := staffFakeUserJSON(userID, profile)
 	switch m.Status {
 	case gotgbot.ChatMemberStatusCreator:
 		return json.RawMessage(fmt.Sprintf(`{"status":"creator","user":%s,"is_anonymous":false}`, user))
@@ -257,7 +304,7 @@ func staffFakeMemberJSON(userID int64, m *staffFakeMember) json.RawMessage {
 			user, m.CanRestrictMembers))
 	case gotgbot.ChatMemberStatusRestricted:
 		if m.Perms != nil {
-			return staffFakeRestrictedWithPerms(userID, m)
+			return staffFakeRestrictedWithPerms(userID, m, profile)
 		}
 		return json.RawMessage(fmt.Sprintf(
 			`{"status":"restricted","user":%s,"is_member":%t,"can_send_messages":%t,"until_date":%d}`,
@@ -271,7 +318,7 @@ func staffFakeMemberJSON(userID int64, m *staffFakeMember) json.RawMessage {
 
 // staffFakeRestrictedWithPerms is the getChatMember answer for a restricted member
 // that carries a full permission set: every can_* flag comes from Perms.
-func staffFakeRestrictedWithPerms(userID int64, m *staffFakeMember) json.RawMessage {
+func staffFakeRestrictedWithPerms(userID int64, m *staffFakeMember, profile staffFakeProfile) json.RawMessage {
 	raw, err := json.Marshal(m.Perms)
 	if err != nil {
 		panic(fmt.Sprintf("staffActionFake: marshal permissions: %v", err))
@@ -281,7 +328,7 @@ func staffFakeRestrictedWithPerms(userID int64, m *staffFakeMember) json.RawMess
 		panic(fmt.Sprintf("staffActionFake: unmarshal permissions: %v", err))
 	}
 	out["status"] = gotgbot.ChatMemberStatusRestricted
-	out["user"] = map[string]any{"id": userID, "is_bot": false, "first_name": fmt.Sprintf("User%d", userID)}
+	out["user"] = json.RawMessage(staffFakeUserJSON(userID, profile))
 	out["is_member"] = m.IsMember
 	out["until_date"] = m.UntilDate
 	answer, err := json.Marshal(out)
@@ -329,7 +376,7 @@ func (f *staffActionFake) RequestWithContext(
 		}
 		if rec := f.member(chatID, userID); rec != nil {
 			f.record(method, params)
-			return staffFakeMemberJSON(userID, rec), nil
+			return staffFakeMemberJSON(userID, rec, f.profile(userID)), nil
 		}
 	case "banChatMember":
 		f.record(method, params)

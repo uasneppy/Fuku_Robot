@@ -1,6 +1,7 @@
 package greetings
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -14,8 +15,14 @@ import (
 	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
 )
 
-func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) {
-	greetingSrc = &models.GreetingSettings{}
+// LoadGreetingSettings reads a chat's greetings row for the welcome path and returns the read's own error. On a
+// successful read, and when the chat has no row, it behaves exactly as GetGreetingSettings (stored values, or the
+// defaults, creating the row for a chat the bot knows). Any other read error (a timeout, a dropped connection) is
+// returned together with the fallback defaults GetGreetingSettings would use; a caller that must not act on a guess,
+// like the Greet once welcome, ignores the settings and fails closed on the error.
+func LoadGreetingSettings(chatID int64) (*models.GreetingSettings, error) {
+	var readErr error
+	greetingSrc := &models.GreetingSettings{}
 	err := db.GetRecord(greetingSrc, map[string]any{"chat_id": chatID})
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -40,7 +47,7 @@ func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) 
 					GoodbyeType:   db.TEXT,
 					Button:        models.ButtonArray{},
 				},
-			}
+			}, nil
 		}
 
 		greetingSrc = &models.GreetingSettings{
@@ -69,7 +76,7 @@ func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) 
 			log.Errorf("[Database][checkGreetingSettings]: %v ", err)
 		}
 	} else if err != nil {
-		log.Errorf("[Database][checkGreetingSettings]: %v", err)
+		readErr = fukuerrors.Wrapf(err, "read greeting settings of chat %d", chatID)
 		greetingSrc = &models.GreetingSettings{
 			ChatID:             chatID,
 			ShouldCleanService: false,
@@ -118,7 +125,74 @@ func checkGreetingSettings(chatID int64) (greetingSrc *models.GreetingSettings) 
 		greetingSrc.GoodbyeSettings.GoodbyeText = db.DefaultGoodbye
 	}
 
+	return greetingSrc, readErr
+}
+
+// checkGreetingSettings is LoadGreetingSettings for every caller that keeps the fallback defaults on a read error:
+// it logs the error once and returns them.
+func checkGreetingSettings(chatID int64) *models.GreetingSettings {
+	greetingSrc, err := LoadGreetingSettings(chatID)
+	if err != nil {
+		log.Errorf("[Database][checkGreetingSettings]: %v", err)
+	}
 	return greetingSrc
+}
+
+// LoadSettingsContext reads a chat's greetings row with the caller's context and
+// creates nothing. With no row it returns, without writing, the settings
+// GetGreetingSettings would end up with: Welcome on, Delete last off, the default
+// texts and Goodbye on for a chat the chats table knows (the database default of
+// goodbye_enabled is true, which the first write stores) or off for a chat it does
+// not know. Any other read error is returned, never turned into defaults, so a
+// settings page must use this instead of GetGreetingSettings, which creates rows
+// and hides errors.
+func LoadSettingsContext(ctx context.Context, chatID int64) (*models.GreetingSettings, error) {
+	settings := &models.GreetingSettings{}
+	err := db.DB.WithContext(ctx).Where("chat_id = ?", chatID).First(settings).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		var known int64
+		if cerr := db.DB.WithContext(ctx).Model(&models.Chat{}).
+			Where("chat_id = ?", chatID).Count(&known).Error; cerr != nil {
+			return nil, fukuerrors.Wrapf(cerr, "check chat %d for greeting settings", chatID)
+		}
+		return defaultGreetingSettingsView(chatID, known > 0), nil
+	}
+	if err != nil {
+		return nil, fukuerrors.Wrapf(err, "load greeting settings for chat %d", chatID)
+	}
+
+	if settings.WelcomeSettings == nil {
+		settings.WelcomeSettings = defaultGreetingSettingsView(chatID, false).WelcomeSettings
+	} else if settings.WelcomeSettings.WelcomeText == "" {
+		settings.WelcomeSettings.WelcomeText = db.DefaultWelcome
+	}
+	if settings.GoodbyeSettings == nil {
+		settings.GoodbyeSettings = defaultGreetingSettingsView(chatID, false).GoodbyeSettings
+	} else if settings.GoodbyeSettings.GoodbyeText == "" {
+		settings.GoodbyeSettings.GoodbyeText = db.DefaultGoodbye
+	}
+	return settings, nil
+}
+
+// defaultGreetingSettingsView is the in-memory settings of a chat with no greetings
+// row. goodbyeOn is true for a chat in the chats table, whose first write stores the
+// column default of goodbye_enabled.
+func defaultGreetingSettingsView(chatID int64, goodbyeOn bool) *models.GreetingSettings {
+	return &models.GreetingSettings{
+		ChatID: chatID,
+		WelcomeSettings: &models.WelcomeSettings{
+			ShouldWelcome: true,
+			WelcomeText:   db.DefaultWelcome,
+			WelcomeType:   db.TEXT,
+			Button:        models.ButtonArray{},
+		},
+		GoodbyeSettings: &models.GoodbyeSettings{
+			ShouldGoodbye: goodbyeOn,
+			GoodbyeText:   db.DefaultGoodbye,
+			GoodbyeType:   db.TEXT,
+			Button:        models.ButtonArray{},
+		},
+	}
 }
 
 func GetGreetingSettings(chatID int64) *models.GreetingSettings {
@@ -191,6 +265,98 @@ func SetWelcomeText(chatID int64, welcometxt, fileId string, buttons []models.Bu
 	err := upsertGreetingSettings(chatID, updates)
 	if err != nil {
 		log.Errorf("[Database][SetWelcomeText]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// The Set{Welcome,Goodbye}{Text,Media,Buttons}Only writers are the settings editor's
+// one-part writes: each stores only its own columns through upsertGreetingSettings, so
+// the other parts of the row stay as they were and the greetings cache key is
+// invalidated like every other greetings write. SetWelcomeText and SetGoodbyeText stay
+// the commands' four-column writes.
+
+// SetWelcomeTextOnly stores only the welcome text.
+func SetWelcomeTextOnly(chatID int64, text string) error {
+	updates := map[string]any{
+		"welcome_text": text,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetWelcomeTextOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetWelcomeMediaOnly stores only the welcome media: file ID and type.
+func SetWelcomeMediaOnly(chatID int64, fileID string, dataType int) error {
+	updates := map[string]any{
+		"welcome_file_id": fileID,
+		"welcome_type":    dataType,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetWelcomeMediaOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetWelcomeButtonsOnly stores only the welcome buttons.
+func SetWelcomeButtonsOnly(chatID int64, buttons []models.Button) error {
+	updates := map[string]any{
+		"welcome_btns": models.ButtonArray(buttons),
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetWelcomeButtonsOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetGoodbyeTextOnly stores only the goodbye text.
+func SetGoodbyeTextOnly(chatID int64, text string) error {
+	updates := map[string]any{
+		"goodbye_text": text,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetGoodbyeTextOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetGoodbyeMediaOnly stores only the goodbye media: file ID and type.
+func SetGoodbyeMediaOnly(chatID int64, fileID string, dataType int) error {
+	updates := map[string]any{
+		"goodbye_file_id": fileID,
+		"goodbye_type":    dataType,
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetGoodbyeMediaOnly]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetGoodbyeButtonsOnly stores only the goodbye buttons.
+func SetGoodbyeButtonsOnly(chatID int64, buttons []models.Button) error {
+	updates := map[string]any{
+		"goodbye_btns": models.ButtonArray(buttons),
+	}
+
+	if err := upsertGreetingSettings(chatID, updates); err != nil {
+		log.Errorf("[Database][SetGoodbyeButtonsOnly]: %v", err)
 		return err
 	}
 
@@ -354,4 +520,36 @@ func LoadGreetingsStats() (enabledWelcome, enabledGoodbye, cleanServiceEnabled, 
 	}
 
 	return stats.EnabledWelcome, stats.EnabledGoodbye, stats.CleanServiceEnabled, stats.CleanWelcomeEnabled, stats.CleanGoodbyeEnabled
+}
+
+// SetWelcomeMediaBelow stores only whether the welcome's media is shown under its text.
+// A false is written like a true: the column is set through a column-targeted upsert.
+func SetWelcomeMediaBelow(chatID int64, on bool) error {
+	if err := upsertGreetingSettings(chatID, map[string]any{"welcome_media_below": on}); err != nil {
+		log.Errorf("[Database][SetWelcomeMediaBelow]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetGoodbyeMediaBelow stores only whether the goodbye's media is shown under its text.
+func SetGoodbyeMediaBelow(chatID int64, on bool) error {
+	if err := upsertGreetingSettings(chatID, map[string]any{"goodbye_media_below": on}); err != nil {
+		log.Errorf("[Database][SetGoodbyeMediaBelow]: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// SetWelcomeOnce stores only the Greet once switch: whether a member is welcomed the
+// first time they join and never again.
+func SetWelcomeOnce(chatID int64, on bool) error {
+	if err := upsertGreetingSettings(chatID, map[string]any{"welcome_once": on}); err != nil {
+		log.Errorf("[Database][SetWelcomeOnce]: %v", err)
+		return err
+	}
+
+	return nil
 }

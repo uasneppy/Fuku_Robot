@@ -44,6 +44,7 @@ func TestMain(m *testing.M) {
 			&models.WarnSettings{},
 			&models.Warns{},
 			&models.GreetingSettings{},
+			&models.GreetedMember{},
 			&models.ChatFilters{},
 			&models.AdminSettings{},
 			&models.BlacklistSettings{},

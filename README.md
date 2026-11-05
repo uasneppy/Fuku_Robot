@@ -138,7 +138,7 @@ on that branch):
 
 **Operations**
 - Back up a group's settings to JSON and import or reset them module by module.
-- 7 interface languages: English, Spanish, French, Hindi, Indonesian, Portuguese and Russian.
+- 8 interface languages: Ukrainian (the default), English, Spanish, French, Hindi, Indonesian, Portuguese and Russian.
 - Webhook or long-polling mode, `/health`, Prometheus `/metrics` and optional OpenTelemetry tracing.
 - Versioned SQL migrations whose checksums are verified at startup, a Redis read-through cache with an in-process LRU
   layer, and graceful shutdown.
@@ -378,6 +378,10 @@ Admins only.
 | `/cleanwelcome` · `/cleangoodbye` `<on/off>` | Delete the previous welcome or goodbye message |
 | `/cleanservice <on/off>` | Delete "X joined the group" service messages |
 | `/autoapprove <on/off>` | Approve join requests automatically |
+
+You can also set the welcome, the goodbye and the rules from `/settings` in the bot's private chat: pick the page, tap Set and send the text, media or buttons as a normal message. `/cancel` ends the wait.
+
+The rules can carry one media item (a photo, video, GIF or file) and URL buttons, set from `/settings` in private; `/rules` shows them in the group and as private rules. Media under text puts a photo, video or GIF below its text, for the welcome, the goodbye and the rules. Greet once welcomes each member only the first time they join.
 
 </details>
 
@@ -877,7 +881,7 @@ Fuku_Robot/
 │   ├── i18n/                  # locale manager and translator
 │   ├── modules/               # one file per bot module: bans.go, notes.go, captcha.go, federations.go, …
 │   └── utils/                 # command pipeline, permission checks, callback codec, cache, HTTP server, tracing, monitoring, …
-├── locales/                   # en, es, fr, hi, id, pt, ru + config.yml (help aliases)
+├── locales/                   # uk, en, es, fr, hi, id, pt, ru + config.yml (help aliases)
 ├── migrations/                # 42 timestamped .sql files: the schema's source of truth
 ├── docker/                    # alpine (production), alpine.debug, goreleaser, pr-build Dockerfiles
 ├── docs/                      # Blume docs site: generated command pages, guides, architecture notes
@@ -921,7 +925,7 @@ CGO_ENABLED=0 go build ./...                                         # quick com
 - Tests run on SQLite and miniredis by default. Set `DATABASE_URL` and `FUKU_TEST_DATABASE=true` to use real
   PostgreSQL.
 - Before adding a module, migration or command, read [AGENTS.md](AGENTS.md). It covers migration naming and checksums,
-  cache invalidation, handler groups, the locale rule (every new key goes into all 7 files) and conventional commits.
+  cache invalidation, handler groups, the locale rule (every new key goes into all 8 files) and conventional commits.
 - [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs gosec and govulncheck, lint, build, tests with a 78 %
   coverage floor, docs and translation drift checks, and a Docker build. On pushes to `main` it publishes
   `ghcr.io/<owner>/<repo>:dev`. GitHub usually keeps workflows off on a fork until you enable them in the **Actions** tab. The
