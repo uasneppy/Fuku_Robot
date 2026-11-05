@@ -188,7 +188,47 @@ Plans:
   2. With "Media under text" on, a photo, video or GIF in a welcome, goodbye or rules message appears below its text, both in Full preview and in the group.
   3. With "Greet once" on, a member is welcomed only the first time they ever join the group. Leaving and rejoining brings no second welcome, also when the join reaches several replicas.
   4. Rules, welcomes and goodbyes saved before this phase look exactly as they did until someone changes them.
-**Plans:** TBD
+**Plans:** 16 plans in 11 waves (12-15 is droppable)
+
+Plans:
+**Wave 1**
+- [ ] 12-01-PLAN.md — characterization: pin the requests old rules, welcomes, goodbyes and document GIFs send, before any refactor (wave 1)
+- [ ] 12-02-PLAN.md — the migration, the model fields, HasContent, greeted_members and the backup proofs (wave 1)
+- [ ] 12-05-PLAN.md — the 13 new editor strings and the new Rules hint in all 8 locales, with the five-cell label check (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 12-03-PLAN.md — the greet-once claim, the column-targeted writers, the whole-row rules read and the group language by chat ID (wave 2)
+- [ ] 12-04-PLAN.md — GIF greetings as animations, sendAnimation and the caption-above flag through one predicate (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 12-06-PLAN.md — forged settings controls and switch values refused before any lookup (wave 3)
+- [ ] 12-07-PLAN.md — /rules and private rules show media and buttons through one builder, old rows unchanged (wave 3)
+- [ ] 12-08-PLAN.md — the join, the leave and the greeting displays honour Media under text (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 12-09-PLAN.md — Greet once: one welcome per member ever, across replicas, given back only on a definite refusal (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 12-10-PLAN.md — the switch grid and the Welcome page's Greet once switch (completes EDIT-09) (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 12-11-PLAN.md — Media under text on the Welcome and Goodbye pages (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 12-12-PLAN.md — the Rules page's media and buttons parts, /clearrules over three parts, Rules Media under text (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 12-13-PLAN.md — typed Rules media and buttons and the one-message caption rule (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 12-14-PLAN.md — Full preview with Media under text and the Rules previews in the group's language (completes EDIT-07, EDIT-08) (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 12-15-PLAN.md — droppable: the atomic swap of the last welcome and goodbye message ID (wave 10)
+
+**Wave 11** *(blocked on Wave 10 completion, or Wave 9 when 12-15 is dropped)*
+- [ ] 12-16-PLAN.md — privacy and size checks of every Phase 12 screen, the PostgreSQL list, the rulebook and docs, the owner's live checks and the phase gate (wave 11)
+
 **UI hint**: yes
 
 ### Phase 13: Member Requirements
