@@ -4,10 +4,10 @@ current_phase: 9
 current_phase_name: Settings Menu
 status: completed
 stopped_at: Phase 9 complete — all phases complete
-last_updated: "2026-10-30T20:36:05.259Z"
+last_updated: "2026-11-05T19:02:25.040Z"
 last_activity: 2026-10-30
 last_activity_desc: Phase 9 complete
-state_head: d2b368f8b88c33f6827d54f003f58d781f56aec6
+state_head: 1d433ec68d6bb0f6a25d2b1008e6ec7959aa9efd
 progress:
   total_phases: 9
   completed_phases: 9
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-30)
 Phase: 9 of 9 (Settings Menu) — complete
 Plan: 14 of 14
 Status: All phases complete
-Last activity: 2026-10-30 — Completed quick task 261030-rig: Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API
+Last activity: 2026-11-05 — Completed quick task 261105-q6x: Store the default warn mode when a reset clears warns (PostgreSQL chk_warns_mode)
 
 Progress: [██████████] 100%
 
@@ -152,6 +152,7 @@ None yet.
 | 261008-j3c | Make TestStaffActionNonStaffUnchanged robust to second boundaries | 2026-10-08 | 077ee2e | .planning/quick/261008-j3c-make-the-flaky-test-teststaffactionnonstaffunchanged-tmute-a |
 | 261008-j3d | Lockdown copy polish: no raw Telegram errors, warning markers, code-formatted help | 2026-10-08 | 924b5e6 | .planning/quick/261008-j3d-lockdown-copy-polish-from-planning-phases-04-manual-lockdown |
 | 261030-rig | Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API | 2026-10-30 | d2b368f | [261030-rig-change-gemini-to-claude-haiku-5-5-via-th](./quick/261030-rig-change-gemini-to-claude-haiku-5-5-via-th/) |
+| 261105-q6x | Store the default warn mode when a reset clears warns (chk_warns_mode rejected an empty mode on PostgreSQL) and prove it in test-postgres-integrity | 2026-11-05 | 1d433ec | [261105-q6x-fix-clearchatdata-clearwarns-writing-an-](./quick/261105-q6x-fix-clearchatdata-clearwarns-writing-an-/) |
 
 ## Deferred Items
 

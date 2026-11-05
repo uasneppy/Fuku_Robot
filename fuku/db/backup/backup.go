@@ -1055,12 +1055,18 @@ func clearRules(tx *gorm.DB, chatID int64) ([]string, error) {
 	return nil, replaceChatSetting(tx, chatID, &models.RulesSettings{ChatId: chatID})
 }
 
+// defaultWarnMode is the mode a chat that never chose one gets from the warns repository
+// (checkWarnSettingsContext, SetWarnLimit). A reset stores it rather than an empty mode:
+// PostgreSQL's legacy chk_warns_mode refuses an empty warn_mode, and the warn handler
+// treats one as an unknown mode that punishes nobody at the limit.
+const defaultWarnMode = "mute"
+
 func clearWarns(tx *gorm.DB, chatID int64) ([]string, error) {
 	var userIDs []int64
 	if err := tx.Model(&models.Warns{}).Where("chat_id = ?", chatID).Pluck("user_id", &userIDs).Error; err != nil {
 		return nil, err
 	}
-	if err := replaceChatSetting(tx, chatID, &models.WarnSettings{ChatId: chatID, WarnLimit: 3}); err != nil {
+	if err := replaceChatSetting(tx, chatID, &models.WarnSettings{ChatId: chatID, WarnLimit: 3, WarnMode: defaultWarnMode}); err != nil {
 		return nil, err
 	}
 	if err := replaceChatRows[models.Warns](tx, chatID, nil); err != nil {
