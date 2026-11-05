@@ -858,7 +858,7 @@ func settingsMreqWantRuleScreen(t *testing.T, text string, i, action int) {
 		at += idx + len(marker)
 	}
 	if strings.Contains(text, staffMarker("settings_mreq_hint_blank")) != (i == 0) {
-		t.Errorf("rule %d: the blank last name hint present = %v, want it on the last-name rule only", i, !(i == 0))
+		t.Errorf("rule %d: the blank last name hint present = %v, want it on the last-name rule only", i, i != 0)
 	}
 	for other, key := range settingsMreqRuleKeys {
 		if other != i && strings.Contains(text, staffMarker(key)) {
