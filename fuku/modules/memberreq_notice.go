@@ -22,8 +22,8 @@ import (
 // handler that answers it comes with the plan that turns enforcement on.
 const memberReqCallbackNamespace = "mreq"
 
-// memberReqNameToken stands for the member's mention in a template until it is spliced.
-const memberReqNameToken = "<<mreq-name>>"
+// memberReqNamePlaceholder stands for the member's mention in a template until it is spliced.
+const memberReqNamePlaceholder = "<<mreq-name>>"
 
 // memberReqRulesSeparator joins the rule phrases of a notice; all 8 languages use the comma.
 const memberReqRulesSeparator = ", "
@@ -54,7 +54,7 @@ func memberReqRulesText(tr *i18n.Translator, broken int) string {
 // numbers are the warn count and limit when a warn was recorded.
 func memberReqNoticeParams(tr *i18n.Translator, broken int, warn *warnApplyResult) i18n.TranslationParams {
 	params := i18n.TranslationParams{
-		"name":  memberReqNameToken,
+		"name":  memberReqNamePlaceholder,
 		"rules": memberReqRulesText(tr, broken),
 	}
 	if warn != nil {
@@ -91,7 +91,7 @@ func memberReqNoticeKey(action int, warn *warnApplyResult) string {
 func memberReqNoticeText(tr *i18n.Translator, user gotgbot.User, broken, action int, warn *warnApplyResult) string {
 	text := memberReqText(tr, memberReqNoticeKey(action, warn), memberReqNoticeParams(tr, broken, warn))
 	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(user.Id, 10)})
-	return lockdownSplice(text, memberReqNameToken, memberReqMention(user, fallback))
+	return lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(user, fallback))
 }
 
 // memberReqPostNotice sends the notice as a new message (never a reply: the member's message

@@ -70,7 +70,7 @@ func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 			if strings.Contains(text, strconv.FormatInt(-chatID, 10)) || strings.Contains(strings.ToLower(text), "staff") {
 				t.Errorf("%s %s: the notice names a chat ID or the Staff Group: %q", code, sc.name, text)
 			}
-			if strings.Contains(text, "{") || strings.Contains(text, memberReqNameToken) {
+			if strings.Contains(text, "{") || strings.Contains(text, memberReqNamePlaceholder) {
 				t.Errorf("%s %s: unfilled placeholder in %q", code, sc.name, text)
 			}
 
