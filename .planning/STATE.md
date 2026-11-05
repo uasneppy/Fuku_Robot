@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 12
 current_phase_name: Rules Media, Media Under Text and Greet Once
 status: executing
-stopped_at: Completed 12-03-PLAN.md
-last_updated: "2026-11-05T11:23:53.923Z"
+stopped_at: Completed 12-04-PLAN.md
+last_updated: "2026-11-05T11:39:33.001Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 6ac15247073c56edb5473b66f5e73504ea6d3606
+state_head: 2d0fd6960e22b0d2e92dec5cf0f10a6e651036e6
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 41
-  completed_plans: 29
+  completed_plans: 30
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 12 (Rules Media, Media Under Text and Greet Once) — READY TO EXECUTE
-Plan: 5 of 16
+Plan: 6 of 16
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -103,6 +103,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 12 P02 | 25min | 3 tasks | 12 files |
 | Phase 12 P05 | 20min | 2 tasks | 9 files |
 | Phase 12 P03 | 30min | 3 tasks | 8 files |
+| Phase 12 P04 | 45min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-13: the album gate runs in settingsInput before the live checks and the claim (first item to take fuku:settings:inputalbum wins, the rest are silent); the album-cut notice is added by the saved page for any message with a valid media group ID
 - [Phase 11]: 11-14: the typed-reply door's refusal and saved notice are pure builders (renderSettingsInputRefusal, settingsInputSavedNotice) so privacy and fit tests render exactly what is sent
 - [Phase 11]: 11-14: fuku/modules takes 639 s under make test flags in the sandbox, over the 10 minute per-package timeout; judged by running it alone with -timeout 40m (recorded in the SUMMARY)
+- [Phase 12]: 12-04: sendPhoto, sendVideo and sendAnimation share one sendCaptioned (type switch) to stay under the dupl threshold; Send keeps separate cases
 
 ### Pending Todos
 
@@ -242,8 +244,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T11:23:53.715Z
-Stopped at: Completed 12-03-PLAN.md
+Last session: 2026-11-05T11:39:32.809Z
+Stopped at: Completed 12-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
