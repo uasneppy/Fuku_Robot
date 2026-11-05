@@ -278,6 +278,12 @@ func TestAISpamJevDecideFailsOpenOnHungResponse(t *testing.T) {
 	released := make(chan struct{})
 	withAISpamJevServer(t, func(w http.ResponseWriter, r *http.Request) {
 		defer close(released)
+		// net/http starts watching for the client's disconnect only once the request body
+		// has been read to its end, so a handler that never reads the POST body would
+		// not see r.Context() end when the caller gives up and would sit out the whole
+		// 10 s timer below. Draining the body first keeps the hung answer hung, but lets
+		// it end as soon as the caller's 200 ms deadline closes the connection.
+		_, _ = io.Copy(io.Discard, r.Body)
 		select {
 		case <-r.Context().Done():
 		case <-time.After(10 * time.Second):

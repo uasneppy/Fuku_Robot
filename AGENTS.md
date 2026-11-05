@@ -1325,9 +1325,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The settings menu tests share one toolkit, `fuku/modules/settings_env_test.go` (`newSettingsEnv`, `newSettingsEnvWith`
   with `RealLocale`, `openMenu`, `press`, `pressRaw`, `pressPrivate`, `pressNoMessage`, `sendIn`, `sendPrivate`, `edits`,
   `lastEdit`, `answerCount`, `settingsButtonByMarker`, `settingsButtonFields`): page tests call it by name and do not edit
-  it. `RealLocale` installs the real locale files through `i18n.OverrideManagerLanguagesForTest`, because the test binary
-  has no locale manager of its own. `fuku/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
+  it. `RealLocale` installs the real locale files (`withRealLocales`), because the test binary has no locale manager of
+  its own. `fuku/i18n/settings_locale_test.go` keeps a limits table that must cover exactly the
   `settings_` keys of the locale files, so a plan that adds a key adds its row.
+- Test locale managers are built once per test binary and installed per test: parsing the locale files costs about 300 ms
+  (the marker locale of `withStaffLocale`, from `en.yml`) to 1.3 s (`withRealLocales`, all 8 files) under `-race`, and
+  `newLockdownEnv` and `newSettingsEnv` ran it in every test, which was most of the `./fuku/modules` run (561 s before,
+  about 90 s after). Both helpers build their `*i18n.LocaleManager` behind a `sync.Once` with `i18n.NewManagerForTest` and
+  install it with `i18n.InstallManagerForTest` (`t.Cleanup` of its restore function). A shared manager is only safe because
+  a locale map, its lookup index and its translators are never written after they are built: never add a test helper
+  that edits one. A fixture that needs other strings builds its own manager with `i18n.OverrideManagerForTest`, and a new
+  fixture that would parse a whole locale file for every test builds it once the same way. Measure a slow package with
+  `go test -tags testtools -race -count=1 -json ./fuku/modules` (the package line's `Elapsed`, not the wall clock of a
+  cold build) and rank the per-test `Elapsed` values before cutting anything.
+- An `httptest` handler that hangs on purpose (`select` on `r.Context().Done()`) must read the request body first
+  (`io.Copy(io.Discard, r.Body)`): `net/http` watches for the client's disconnect only after the body has been read to
+  its end, so a handler that skips it never sees the caller give up and sits out its whole timer
+  (`TestAISpamJevDecideFailsOpenOnHungResponse` took 10 s for a 200 ms deadline).
 - Run the settings tests with `go test -tags testtools -race -count=1 -run '^(TestSettings|TestLoadSettings)' ./fuku/modules ./fuku/i18n`.
   Page tests add page-prefixed helpers in their own files (`settings_<page>_test.go`). Every setting the menu changes
   has a parity test (`TestSettingsParity*`: the menu press and the command leave the same stored row and the same
