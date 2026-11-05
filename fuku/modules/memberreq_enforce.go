@@ -194,9 +194,19 @@ func memberReqPending(ctx context.Context, c memberReqCase) (pending bool, err e
 	return attempt != nil, nil
 }
 
-// memberReqExempt reports whether the member must not be punished now: a pending captcha, or
-// a read that failed. Anything unknown is exempt.
+// memberReqExempt reports whether the member must not be punished now: approved, with a
+// pending captcha, or a read of either that failed. Each is yes, no or unknown, and an
+// unknown is exempt, so nobody is punished on a state that could not be read. Approvals go
+// through the tri-state reader, never the cached predicate that hides a failed load.
 func memberReqExempt(ctx context.Context, c memberReqCase) bool {
+	approved, err := memberReqApprovedLookup(ctx, c.Chat.Id, c.User.Id)
+	if err != nil {
+		log.Warnf("[MemberReq] approval of user %d in chat %d is unknown: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
+		return true
+	}
+	if approved {
+		return true
+	}
 	pending, err := memberReqPending(ctx, c)
 	if err != nil {
 		log.Warnf("[MemberReq] captcha state of user %d in chat %d is unknown: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
@@ -372,7 +382,7 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 // answered returns memberReqNone with no hold:
 //
 //  1. the bot itself, bots and Telegram service accounts;
-//  2. a pending captcha attempt (a read that failed counts as pending);
+//  2. an approved member or a pending captcha attempt (a read that failed counts as exempt);
 //  3. the member's hold, read fresh: one that is not a stale pending one is Held;
 //  4. one live getChatMember through the pacer, the admin check and the source of the names;
 //  5. the rules on the live names, the strictest punishment of the broken ones;

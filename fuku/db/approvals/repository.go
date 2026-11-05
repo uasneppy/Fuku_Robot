@@ -42,16 +42,11 @@ func GetApprovedUsers(chatID int64) []*models.ApprovedUsers {
 	return GetApprovedUsersContext(context.Background(), chatID)
 }
 
-// IsUserApprovedContext is IsUserApproved for a caller that must not act on an unknown. It
-// reads the same cached list as GetApprovedUsersContext, but a list that could not be loaded
-// is an error and not "nobody is approved", so a caller can tell the two apart (D-11).
-func IsUserApprovedContext(ctx context.Context, chatID, userID int64) (bool, error) {
-	return false, nil
-}
-
-func GetApprovedUsersContext(ctx context.Context, chatID int64) []*models.ApprovedUsers {
+// loadApprovedUsers is the one load path of a chat's approved users: the cached list under
+// approvals:<chat>, loaded from the database on a miss. Every write deletes that key.
+func loadApprovedUsers(ctx context.Context, chatID int64) ([]*models.ApprovedUsers, error) {
 	cacheKey := cache.CacheKey("approvals", chatID)
-	result, err := cache.GetFromCacheOrLoad(ctx, cacheKey, cache.CacheTTLApprovals, func(ctx context.Context) ([]*models.ApprovedUsers, error) {
+	return cache.GetFromCacheOrLoad(ctx, cacheKey, cache.CacheTTLApprovals, func(ctx context.Context) ([]*models.ApprovedUsers, error) {
 		var users []*models.ApprovedUsers
 		err := db.GetRecordsContext(ctx, &users, models.ApprovedUsers{ChatID: chatID})
 		if err != nil {
@@ -60,10 +55,30 @@ func GetApprovedUsersContext(ctx context.Context, chatID int64) []*models.Approv
 		}
 		return users, nil
 	})
+}
+
+func GetApprovedUsersContext(ctx context.Context, chatID int64) []*models.ApprovedUsers {
+	result, err := loadApprovedUsers(ctx, chatID)
 	if err != nil {
 		return nil
 	}
 	return result
+}
+
+// IsUserApprovedContext is IsUserApproved for a caller that must not act on an unknown. It
+// reads the same cached list as GetApprovedUsersContext, but a list that could not be loaded
+// is an error and not "nobody is approved", so a caller can tell the two apart (D-11).
+func IsUserApprovedContext(ctx context.Context, chatID, userID int64) (bool, error) {
+	users, err := loadApprovedUsers(ctx, chatID)
+	if err != nil {
+		return false, errors.Wrapf(err, "read approved users of chat %d", chatID)
+	}
+	for _, u := range users {
+		if u.UserID == userID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ListApprovedIDsFresh reads the approved users of one chat straight from the database and

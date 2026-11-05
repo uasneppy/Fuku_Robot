@@ -636,7 +636,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
-- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`) sit outside the
+- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
 - `fuku:settings:sweep:lock` (new family `fuku:settings:*`, also outside the `fuku:cache:` prefix, so
@@ -832,6 +832,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unbans, declines and deletes (`lockdownPaced`, `lockdownPacer`): the same slot-plus-block design as the staff pacer,
   with its own keys so a raid and a staff fan-out each keep their own budget. A slot more than `MaxWait` away fails at
   once as rate limited and the joiner row goes back without counting an attempt.
+- `fuku:memberreq:pace:next` and `fuku:memberreq:pace:block` are the fleet-wide Telegram pacing of the member
+  requirements executor (`memberReqPaced`, `memberReqPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block
+  design with its own keys, so screening, a staff fan-out and a lockdown each keep their own budget. Every Telegram call
+  of `memberReqEnforce` (the live `getChatMember`, the punishment, the notice) goes through it, each bounded by 10 s.
 - `fuku:captcha:ch:<token>` is the Turnstile captcha's challenge handle (`fuku/utils/captchaweb`, `challenge.go`): a hash
   of decimal strings `u` (user ID), `a` (attempt ID), `c` (chat ID) and `x` (the attempt's expiry in unix ms), living the
   attempt's time left plus 5 minutes (`ChallengeGrace`). The token is 16 random bytes in base64url (22 characters) and is
@@ -1099,6 +1103,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and are welcomed once when it is back on; bots that join are claimed like any member; rows are kept for good. A 429
   counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
   flood limit is welcomed on their next join.
+- Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`): `memberReqEnforce` is the one
+  place that punishes a member for a broken rule, and nothing in production calls it until the watcher and the join
+  check do. Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
+  itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
+  failed load is an error, never "not approved") and the pending captcha through the two context reads (same three
+  states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds nothing); one live
+  `getChatMember` through `memberReqPaced`, which is the admin check (creator, administrator, left, kicked, a restricted
+  non-member and bots are never punished) and the source of the names the rules judge; the strictest of the broken rules
+  whose punishment is not Off; the claim of the hold before any punishment (`memberreq.ClaimHold`, or
+  `ReclaimStaleHold` for a pending hold older than two minutes); then the punishment and one notice. Never use
+  `IsUserAdmin`, `IsUserApproved` or `aispamCarvedOut` there. A warn goes through `applyWarn` with the hold marked
+  punished in its `afterRecord` hook, inside the warn lock right after the warn is stored, so a recorded warn and a
+  punished hold cannot be separated by a reclaim, and the warn module's own reply and Remove warn button are never sent.
+  Kick is `kickMemberContext`, ban a `banChatMember` with no end date, mute a `restrictChatMember` with
+  `MutedPermissions` and the marker `until_date` (now plus 330 days, `lockdownBanSpan`) stored on the hold before the
+  call. The requirement mute is owned by its marker alone (`isMemberReqMute`: restricted, still a member, `until_date`
+  within 2 s of the hold's `mute_until`); no other mute path is changed. A punishment Telegram refuses leaves the pending
+  hold and posts nothing. One notice per episode is a new message in the group's language, sent after the punishment
+  took effect, with the member's mention (`memberReqMention`) spliced in after translation and every broken rule whose
+  punishment is not Off in rule order; only a mute carries the `mreq|v1` "I fixed it" button (`a=f`, `h`, `u`). Logs carry
+  chat and user IDs and outcomes only, never a name, a rule text or a notice text.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
