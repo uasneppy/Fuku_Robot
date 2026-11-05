@@ -436,7 +436,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   once has no command, so
   it carries a drift test and an authority test instead of a parity test (`TestSettingsDriftOnce`,
   `TestSettingsAuthorityOnce`); `/resetwelcome`, `/resetgoodbye` and the Remove buttons leave it as it is, and the page
-  never reads `greeted_members`. Media under text (`u`, `settings_btn_edit_switch_below`, line `settings_edit_line_below`)
+  never reads `greeted_members`. Known Delete-last race (plan 12-15 not shipped): two welcomes or goodbyes close together on
+  two replicas can leave one old message undeleted (research Pitfall 22). Media under text (`u`, `settings_btn_edit_switch_below`, line `settings_edit_line_below`)
   needs the page's `EditRight` (`settingsRightChangeInfo`, UI-SPEC assumption A2), calls `applyWelcomeMediaBelow` or
   `applyGoodbyeMediaBelow`, and on Rules it needs `settingsRightAdminBotAdmin` (the page's `EditRight`, so the bot must be an
   administrator, notice `chat_status_bot_not_admin`) and calls `applyRulesMediaBelow` (`rules.SetRulesMediaBelow`); it is drawn, with its body line, only while `settingsEditMediaBelowEligible` holds: media is
@@ -1650,7 +1651,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   default of `goodbye_enabled`, which the first write stores for a chat the bot knows) and Delete last Off, which is what
   the bot then does, and the pages show exactly that (`TestSettingsEditDefaultsMatchRuntime`).
 - Message editor (Phase 11), the pieces in one place; each has its own bullet: the pages, Set, Cancel and Remove are
-  under Callbacks (`settings|v1`, codes `w g r`, parts `x m b`, controls `e d`), the wait and its keys under Data
+  under Callbacks (`settings|v1`, codes `w g r`, parts `x m b`, controls `e d o u`: `o` Greet once on Welcome, `u` Media under text on all three pages), the wait and its keys under Data
   (`fuku:settings:input:*`), the typed-reply door at handler group 1 and `/cancel` under Handlers, the check
   (`settingsEditCheck`, pure; the text and the buttons part hold one keyboard limit between them, at most 100 buttons and 8
   in a row, with the `{rules}` button that a stored text adds counted against the stored buttons whichever part is being
@@ -1787,8 +1788,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ChatRaidDetection` rows directly must set `AIThreshold` (3..500): the `CHECK` applies on SQLite too, because GORM
   builds it from the model tag (`seedRaidSettings` fills the AI defaults when it is left at 0). The Phase 12 model
   `GreetedMember` is in the AutoMigrate lists of `fuku/modules/test_harness_test.go`, `fuku/db/greetings/testmain_test.go`
-  and `fuku/db/backup/testmain_test.go`; `TestRulesMediaMigrationDefaults` (`./fuku/db/migrations`) is PostgreSQL only and
-  skips locally, and joins `make test-postgres-integrity` in the Phase 12 gate plan.
+  and `fuku/db/backup/testmain_test.go`. The Phase 12 characterization tests record what the code did before the phase and
+  must never be re-recorded to make a change pass: `TestRulesLegacyRowSendsTodaysRequest` (a Rules row with no media sends
+  today's request) and `TestLegacyGreetingsRequestsUnchanged` (an old greetings row sends today's request), both in
+  `rules_legacy_request_test.go`. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
+  `TestGreetingsMediaBelow*` (`greetings_media_below_test.go`), `TestRules*` in `rules_media_send_test.go`,
+  `TestSettingsEditMediaBelow*`, `TestSettings*MediaBelow`, `TestSettings*Once`, `TestSettingsEditSwitchGrid` and
+  `TestSettingsEditRules*` (`settings_edit_switch_test.go`, `settings_edit_rules_test.go`, `settings_input_rules_test.go`),
+  `TestSettingsRulesCaptionParity` and `TestSettingsControlValidate` (`settings_control_validate_test.go`). A test that
+  drives a press, a door or a join with a user ID must delete its `users` rows and cache entries, and its greetings, rules
+  and `greeted_members` rows, in `t.Cleanup` and use a fresh chat ID, because CI runs all of `fuku/modules` in one
+  PostgreSQL database in source order.
 - `make test-postgres-integrity` is the PostgreSQL run in CI. Its `-run` list holds the guarantees SQLite cannot
   prove: `TestStartLockdownOneActivePerChat`, `TestBeginAlert` (the alert is decided exactly once) and
   `TestBanRunStart` (one running ban run per lockdown, the partial unique index), plus the Phase 5 conditional updates:
@@ -1808,6 +1818,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The Phase 10 guarantees are `TestAdminIndexReplaceConcurrent` (`./fuku/db/adminindex`: concurrent replaces of one chat
   leave one roster, with the role CHECK and the unique key intact) and `TestMenuAccessUpsert` (`./fuku/db/menuaccess`: a
   Go `false` is written, one row per chat).
+  The Phase 12 guarantees are `TestGreetedMemberClaimConcurrent` (`./fuku/db/greetings`: of many concurrent claims of one
+  `(chat_id, user_id)` exactly one wins, the primary key; it also runs on SQLite in `make test`) and
+  `TestRulesMediaMigrationDefaults` (`./fuku/db/migrations`: the Phase 12 columns take their zero defaults, the migration's
+  statements run twice without error and `greeted_members` holds one row per member; PostgreSQL only, it skips locally).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.

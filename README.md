@@ -381,6 +381,8 @@ Admins only.
 
 You can also set the welcome, the goodbye and the rules from `/settings` in the bot's private chat: pick the page, tap Set and send the text, media or buttons as a normal message. `/cancel` ends the wait.
 
+The rules can carry one media item (a photo, video, GIF or file) and URL buttons, set from `/settings` in private; `/rules` shows them in the group and as private rules. Media under text puts a photo, video or GIF below its text, for the welcome, the goodbye and the rules. Greet once welcomes each member only the first time they join.
+
 </details>
 
 <details>

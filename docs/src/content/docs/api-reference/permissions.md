@@ -431,7 +431,10 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
 | Welcome and Goodbye: Set text, media or buttons, Remove, Delete last | Creator, or an admin who can change info | `/setwelcome`, `/setgoodbye`, `/resetwelcome`, `/resetgoodbye`, `/cleanwelcome`, `/cleangoodbye` |
-| Rules: Set and Remove | Admin, and the bot an admin | `/setrules`, `/clearrules` |
+| Rules: Set and Remove of the text, the media and the buttons | Admin, and the bot an admin | `/setrules`, `/clearrules` |
+| Media under text: Welcome and Goodbye | Creator, or an admin who can change info | no command |
+| Media under text: Rules | Admin, and the bot an admin | no command |
+| Greet once (Welcome) | Admin | no command; the on/off switch of `/welcome` |
 | Welcome and Goodbye on/off switch, every Preview and Full preview, Cancel | Admin | `/welcome`, `/goodbye` |
 
 ### Typing a message into the editor

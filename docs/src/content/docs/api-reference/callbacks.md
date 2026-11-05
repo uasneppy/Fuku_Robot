@@ -247,14 +247,19 @@ The message editor's pages and codes:
 
 | Page (`p`) | Part codes (`t`) | Controls (`t`) | Set | Remove | Cancel | Preview | Full preview |
 |------------|------------------|----------------|-----|--------|--------|---------|--------------|
-| `w` Welcome | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last | `ws` | `wr` | `wc` | `wv` | `wf` |
-| `g` Goodbye | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last | `gs` | `gr` | `gc` | `gv` | `gf` |
-| `r` Rules | `x` text | | `rs` | `rr` | `rc` | `rv` | `rf` |
+| `w` Welcome | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last, `o` greet once, `u` media under text | `ws` | `wr` | `wc` | `wv` | `wf` |
+| `g` Goodbye | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last, `u` media under text | `gs` | `gr` | `gc` | `gv` | `gf` |
+| `r` Rules | `x` text, `m` media, `b` buttons | `u` media under text | `rs` | `rr` | `rc` | `rv` | `rf` |
 
 Set, Remove, Cancel and Preview carry exactly one field, `t`, a part code of the page (a missing, unknown or extra field is
 an invalid request); Full preview carries none. Set works only from a private menu and waits for the owner's next private
 message; in a menu opened in the group Set, Remove and Cancel write nothing and point to the private chat. A preview is
 always sent to the presser's own private chat.
+
+A switch is pressed with the toggle action `tg`: its `t` must be a control of the page (`e`, `d`, `o` or `u` as the table
+lists them) and its `v` the absolute target, `0` or `1`; anything else is an invalid request, refused before any lookup.
+Media under text (`u`) is drawn only while the stored media is a photo, a video or a GIF; a press on a switch that is no
+longer drawn writes nothing and redraws the page with a notice.
 
 ### Warns
 
