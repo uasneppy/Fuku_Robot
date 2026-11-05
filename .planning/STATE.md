@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 12
 current_phase_name: Rules Media, Media Under Text and Greet Once
 status: executing
-stopped_at: Completed 12-13-PLAN.md
-last_updated: "2026-11-05T13:50:25.023Z"
+stopped_at: Completed 12-14-PLAN.md
+last_updated: "2026-11-05T14:10:46.202Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: a3a646988161a21517616243da6dedef3f8e9c90
+state_head: 5c639769961610f0c37676826a6e1ee99b253dd5
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 41
-  completed_plans: 38
+  completed_plans: 39
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 12 (Rules Media, Media Under Text and Greet Once) — READY TO EXECUTE
-Plan: 14 of 16
+Plan: 15 of 16
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -112,6 +112,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 12 P11 | 70min | 3 tasks | 5 files |
 | Phase 12 P12 | 75min | 3 tasks | 9 files |
 | Phase 12 P13 | 70min | 3 tasks | 8 files |
+| Phase 12 P14 | 95min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -187,6 +188,7 @@ Recent decisions affecting current work:
 - [Phase 12]: 12-09: a 429 counts as a definite refusal of a greet-once welcome (the claim is given back); an unknown outcome keeps the claim
 - [Phase 12]: 12-10: the editor switches are a table-driven two-column grid of icon-only buttons with state body lines; Greet once is control o on Welcome only (settingsRightAdmin, applyWelcomeOnce)
 - [Phase 12]: 12-11: Media under text (control u) on Welcome and Goodbye uses the page's EditRight, is drawn only for media.CaptionAboveEligible media, and a stale press writes nothing and warns
+- [Phase 12]: Plan 12-14: Rules Full preview is the group-form /rules message in the group's language (degrade false); previews ignore Greet once and write nothing (A9, A12)
 
 ### Pending Todos
 
@@ -256,8 +258,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T13:50:24.787Z
-Stopped at: Completed 12-13-PLAN.md
+Last session: 2026-11-05T14:10:37.666Z
+Stopped at: Completed 12-14-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
