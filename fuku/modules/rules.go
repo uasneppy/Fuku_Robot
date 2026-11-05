@@ -119,7 +119,9 @@ func buildRulesMessage(tr *i18n.Translator, title string, row *models.RulesSetti
 // the rules have buttons, so a rules row saved before media existed makes the request it always made. It is
 // never routed through the greeting sender, which turns link previews off and drops the reply target. With media
 // it is one media message: the text as its caption, the buttons under it, and the caption above the media when
-// Media under text is on and the kind allows it.
+// Media under text is on and the kind allows it. With degrade true (/rules and the deep link, never the Full
+// preview) a media send Telegram definitely refuses (a 4xx other than 429) is retried once as the text with the
+// buttons, a deliberate exception to the one-message rule.
 func sendRulesMessage(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgbot.SendMessageOpts, degrade bool) error {
 	if m.FileID == "" {
 		return sendRulesText(b, chatID, m, textOpts)
@@ -144,7 +146,12 @@ func sendRulesMessage(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *go
 		AllowWithoutReply: allowWithoutReply,
 		Keyboard:          m.Keyboard,
 	})
-	_ = degrade
+	if err != nil && degrade && isTelegramClientError(err) {
+		// A definite 4xx means Telegram sent nothing, so the retry cannot duplicate a message. Only the chat is
+		// logged: never the text, the caption, a button, a link or the file ID.
+		log.Warnf("[Rules] the rules media of chat %d was refused, sending the text alone: %v", chatID, err)
+		return sendRulesText(b, chatID, m, textOpts)
+	}
 	return err
 }
 

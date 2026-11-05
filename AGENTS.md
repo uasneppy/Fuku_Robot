@@ -1539,8 +1539,33 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   menu." line carries an escaped name, not a mention, so it pings nobody. The message editor follows the same rule: the
   switches, Remove and every typed part call the greetings and rules apply functions that sit beside the commands, so
   the menu, the typed reply and `/setwelcome`, `/resetwelcome`, `/setrules` and the rest write one way. The join, the
-  leave, `/welcome`, `/rules` and the previews all build their message through `renderGreeting` and `buildRulesText`,
-  never a second builder, and a preview never writes and never sends to the group.
+  leave, `/welcome`, `/rules` and the previews all build their message through `renderGreeting` and `buildRulesMessage`
+  (which builds its text with `buildRulesText`), never a second builder, and a preview never writes and never sends to
+  the group.
+- Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
+  `/start rules_<chat id>` deep link opens and (from plan 12-14) the Rules page's Full preview are built by
+  `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
+  `rules_for_chat_header`, no-rules line `rules_no_rules_set`) and the private form (`rulesFormPrivate`: `rules_for_chat`,
+  `rules_not_set`); a row with media or buttons but no text gets the heading alone as its text or caption. Rules are set
+  when `RulesSettings.HasContent` holds (a text, a media or a button), which is also what gates a welcome's `{rules}`
+  button, so a media-only rules row keeps that button; only a row with none of the three answers the no-rules line.
+  `sendRulesMessage`'s text-only branch is each caller's old `SendMessage` call (the options are passed in, so an old row's
+  request is byte-identical: previews on and the empty reply markup for `/rules`, `formatting.Shtml()` for the deep link;
+  the `rules_legacy_request_test.go` goldens prove it and are never re-recorded) with the rules keyboard added only when
+  the rules have buttons, and it is never routed through `media.SendGreeting`, which turns link previews off and drops the
+  reply target. Its media branch is one `media.Send`: the media with the text as its caption and the buttons under it,
+  and `show_caption_above_media` only when Media under text is on and `CaptionAboveEligible` accepts the kind (a photo, a
+  video or an animation; a stored on with any other kind is ignored). With private rules on, the click-to-read message in
+  the group is unchanged and carries no media and no buttons; they are in the private message. When Telegram definitely
+  refuses the media send (a 4xx other than 429, by `isTelegramClientError`: a caption over 1024 that `/setrules` or a
+  backup import let in, another bot's file ID), `/rules` and the private rules message retry once as the text and the
+  buttons alone. This retry is a deliberate exception to the one-message rule (Phase 12 D-03): it drops the owner's media
+  and sends the text and the buttons alone, so a rules media can disappear from `/rules` and the private rules message.
+  Every such retry
+  is logged at Warn with the chat ID only (`[Rules] the rules media of chat <id> was refused`; the chat is the one the
+  message was sent to, so the member's private chat for the deep link), never the text, a caption, a button, a link or
+  a file ID. A 429, a 5xx and a transport error are not retried. Full preview never falls back (it passes `degrade`
+  false), so the owner sees the refusal as `settings_edit_preview_failed` and can fix the stored message.
 - A menu opened in the group never shows the Staff Group's title or chat ID (D-21): not in any text, button label, notice,
   alert or callback data, in any of the 8 languages, on any page, picker, card or refusal. Nor does a private menu, except
   to the live creator of the group being configured (D-32): a private menu is shown to every live admin of the group, who
