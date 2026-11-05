@@ -46,6 +46,8 @@ type Content struct {
 	FileID  string
 	MsgType int
 	Name    string
+	// CaptionAbove is stub scaffolding for the RED commit.
+	CaptionAbove bool
 }
 
 type Options struct {
@@ -338,4 +340,21 @@ func SendGreeting(b *gotgbot.Bot, chatID int64, text, fileID string, msgType int
 		IsProtected:       false,
 		AllowWithoutReply: true,
 	})
+}
+
+// CaptionAboveEligible is a RED-commit stub.
+func CaptionAboveEligible(msgType int) bool { return false }
+
+// GreetingMessage is a RED-commit stub.
+type GreetingMessage struct {
+	Text, FileID string
+	MsgType      int
+	CaptionAbove bool
+	Keyboard     *gotgbot.InlineKeyboardMarkup
+	ThreadID     int64
+}
+
+// SendGreetingMessage is a RED-commit stub.
+func SendGreetingMessage(b *gotgbot.Bot, chatID int64, msg GreetingMessage) (*gotgbot.Message, error) {
+	return SendGreeting(b, chatID, msg.Text, msg.FileID, msg.MsgType, msg.Keyboard, msg.ThreadID)
 }

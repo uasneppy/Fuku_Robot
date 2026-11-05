@@ -61,7 +61,7 @@ func TestContentAndOptionsZeroValues(t *testing.T) {
 	t.Parallel()
 
 	var content Content
-	if content.Text != "" || content.FileID != "" || content.MsgType != 0 || content.Name != "" {
+	if content.Text != "" || content.FileID != "" || content.MsgType != 0 || content.Name != "" || content.CaptionAbove {
 		t.Fatalf("Content zero value = %#v, want empty fields", content)
 	}
 
@@ -343,6 +343,110 @@ func TestSendAnimationUsesSendAnimation(t *testing.T) {
 	if empty.method != "sendMessage" {
 		t.Fatalf("empty file ID method = %q, want sendMessage", empty.method)
 	}
+}
+
+func TestCaptionAboveEligible(t *testing.T) {
+	t.Parallel()
+
+	for msgType, want := range map[int]bool{
+		db.PHOTO: true, db.VIDEO: true, db.ANIMATION: true,
+		db.TEXT: false, 0: false, db.DOCUMENT: false, db.STICKER: false, db.AUDIO: false,
+		db.VOICE: false, db.VIDEO_NOTE: false, -1: false, 99: false,
+	} {
+		if got := CaptionAboveEligible(msgType); got != want {
+			t.Errorf("CaptionAboveEligible(%d) = %v, want %v", msgType, got, want)
+		}
+	}
+}
+
+func TestSendGreetingMessageCaptionAbove(t *testing.T) {
+	t.Parallel()
+
+	const key = "show_caption_above_media"
+	cases := []struct {
+		name      string
+		msgType   int
+		wantMedia string
+		fileID    string
+		eligible  bool
+	}{
+		{"photo", db.PHOTO, "sendPhoto", "f", true},
+		{"video", db.VIDEO, "sendVideo", "f", true},
+		{"animation", db.ANIMATION, "sendAnimation", "f", true},
+		{"document", db.DOCUMENT, "sendDocument", "f", false},
+		{"audio", db.AUDIO, "sendAudio", "f", false},
+		{"voice", db.VOICE, "sendVoice", "f", false},
+		{"sticker", db.STICKER, "sendSticker", "f", false},
+		{"video note", db.VIDEO_NOTE, "sendVideoNote", "f", false},
+		{"text", db.TEXT, "sendMessage", "", false},
+	}
+	keyboard := &gotgbot.InlineKeyboardMarkup{InlineKeyboard: [][]gotgbot.InlineKeyboardButton{{{Text: "b", Url: "https://example.com"}}}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			send := func(above bool) *recordingBotClient {
+				client := &recordingBotClient{}
+				_, err := SendGreetingMessage(newRecordingBot(client), -100, GreetingMessage{
+					Text: "hello", FileID: tc.fileID, MsgType: tc.msgType, CaptionAbove: above, Keyboard: keyboard, ThreadID: 9,
+				})
+				if err != nil {
+					t.Fatalf("SendGreetingMessage(above=%v) error = %v", above, err)
+				}
+				return client
+			}
+
+			on, off := send(true), send(false)
+			if on.method != tc.wantMedia || off.method != tc.wantMedia {
+				t.Fatalf("methods = %q and %q, want %q", on.method, off.method, tc.wantMedia)
+			}
+			if tc.eligible {
+				if got := on.params[key]; got != true {
+					t.Errorf("%s with the flag on = %#v, want true", key, got)
+				}
+			} else if _, present := on.params[key]; present {
+				t.Errorf("%s is sent by %s even though Telegram does not take it there", key, tc.wantMedia)
+			}
+			if _, present := off.params[key]; present {
+				t.Errorf("%s is sent with the flag off", key)
+			}
+			if _, present := on.params["reply_parameters"]; present {
+				t.Error("a greeting is never sent as a reply")
+			}
+			if got := on.params["message_thread_id"]; got != int64(9) {
+				t.Errorf("message_thread_id = %#v, want 9", got)
+			}
+			if on.params["reply_markup"] == nil {
+				t.Error("the keyboard is not passed through")
+			}
+			if tc.msgType == db.TEXT {
+				preview, ok := on.params["link_preview_options"].(*gotgbot.LinkPreviewOptions)
+				if !ok || !preview.IsDisabled {
+					t.Errorf("link_preview_options = %#v, want previews disabled", on.params["link_preview_options"])
+				}
+			}
+		})
+	}
+
+	t.Run("SendGreeting is the flag-off call", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tc := range cases {
+			wrapper, direct := &recordingBotClient{}, &recordingBotClient{}
+			if _, err := SendGreeting(newRecordingBot(wrapper), -100, "hello", tc.fileID, tc.msgType, keyboard, 9); err != nil {
+				t.Fatalf("%s: SendGreeting error = %v", tc.name, err)
+			}
+			if _, err := SendGreetingMessage(newRecordingBot(direct), -100, GreetingMessage{
+				Text: "hello", FileID: tc.fileID, MsgType: tc.msgType, Keyboard: keyboard, ThreadID: 9,
+			}); err != nil {
+				t.Fatalf("%s: SendGreetingMessage error = %v", tc.name, err)
+			}
+			if wrapper.method != direct.method || !reflect.DeepEqual(wrapper.params, direct.params) {
+				t.Errorf("%s: SendGreeting request %s %#v differs from SendGreetingMessage %s %#v",
+					tc.name, wrapper.method, wrapper.params, direct.method, direct.params)
+			}
+		}
+	})
 }
 
 func TestSendConvenienceWrappersBuildContentAndOptions(t *testing.T) {
