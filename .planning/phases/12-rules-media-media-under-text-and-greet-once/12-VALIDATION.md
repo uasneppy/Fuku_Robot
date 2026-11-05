@@ -2,9 +2,9 @@
 phase: "12"
 slug: "rules-media-media-under-text-and-greet-once"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-11-05"
 ---
 
@@ -39,27 +39,27 @@ created: "2026-11-05"
 The planner assigns task IDs, plans and waves when the plans are written; the executors set the status. Test function names are the plan's contract.
 
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
-|-------------|----------|-----------|-------------------|-------------|--------|
-| EDIT-07 | `sendPhoto`, `sendVideo`, `sendAnimation` carry `show_caption_above_media` true only when the flag is set; documents, audio, voice, sticker, video note never; flag off adds no parameter | unit | `-run '^(TestSendGreetingMessageCaptionAbove | TestCaptionAboveEligible | ⬜ pending |
-| EDIT-07 | A GIF through the editor and through `/setwelcome` by reply is `db.ANIMATION`; notes/filters/pins still `DOCUMENT`; a legacy document GIF stays document | unit + integration | `-run '^(TestExtractMedia | TestExtractGreetingMediaAnimation | ⬜ pending |
-| EDIT-07 | Switch drawn exactly for photo, video, animation; not for document, audio, voice, sticker, video note, no media, legacy GIF; stored "on" ignored and not sent; returns on an eligible replacement; stale press writes nothing and shows `settings_edit_below_unavailable` | integration | `-run '^(TestSettingsEditMediaBelowEligibility | TestSettingsEditMediaBelowStalePress | ⬜ pending |
-| EDIT-07 | The join, leave, `/welcome`, `/goodbye`, `/rules`, private rules and Full preview all send with the flag from the stored column | integration | `-run '^(TestGreetingsMediaBelowEverywhere | TestRulesMediaBelowEverywhere)$' ./fuku/modules` | ⬜ pending |
-| EDIT-07 | Three switch writes are column-targeted, write a Go `false`, keep other columns, call `cache.DeleteCache`; drift and authority (Welcome/Goodbye `can_change_info` alert, Rules bot-admin notice) | integration + db | `-run '^(TestSettingsParityMediaBelow | TestSettingsDriftMediaBelow | ⬜ pending |
-| EDIT-08 | Legacy rows: `/rules` and the deep link send the same request as today (recorded before the refactor) | integration (characterization) | `-run '^TestRulesLegacyRowSendsTodaysRequest$' ./fuku/modules` | ❌ Wave 0 (write first, green on old code) | ⬜ pending |
-| EDIT-08 | `/rules` in the group, private rules (deep link) and a connected private chat show media with caption and buttons; media-only and buttons-only rules; click-to-read group message carries none | integration | `-run '^(TestRulesMediaAndButtonsInGroup | TestPrivateRulesMediaAndButtons | ⬜ pending |
-| EDIT-08 | Rules page: three parts, Set/Remove/Cancel/Preview for `m` and `b`, `t=z` invalid, right = bot admin (notice), group menu refusal, Remove stores `/clearrules`' row, `/clearrules` clears all three | integration | `-run '^(TestSettingsEditRulesParts | TestSettingsEditRulesRemoveParity | ⬜ pending |
-| EDIT-08 | Typed Rules media and buttons store what the Welcome path stores for the same input; caption rule parity table (text at 1000/1024/1025 less heading, every stored kind) between Welcome and Rules; prompt 1024 with media else 3800; video note refused as typed media | integration + unit | `-run '^(TestSettingsEditRulesTypedParity | TestSettingsRulesCaptionParity | ⬜ pending |
-| EDIT-08 | Full preview equals `/rules` for the same row (heading in the group's language, header in the presser's), group language change seen next preview, unreadable language falls back to `uk`, language read creates no row | integration | `-run '^(TestSettingsEditRulesPreview | TestSettingsEditRulesPreviewGroupLanguage)$' ./fuku/modules`; `-run '^TestGetGroupLanguage$' ./fuku/db/lang` | ⬜ pending |
-| EDIT-08 | Runtime degrade: a definite 4xx on a media rules send retries once as text-only in `/rules` and the deep link, not in Full preview | integration | `-run '^TestRulesDegradesToTextOnClientError$' ./fuku/modules` | ❌ Wave 0 | ⬜ pending |
-| EDIT-08 | Rules loader creates no row; writers column-targeted; `ClearRules` stores zeros; `HasContent`; `{rules}` button for media-only rules | db + unit | `-run '^(TestLoadRulesSettingsCreatesNothing | TestRulesMediaWriters | ⬜ pending |
-| EDIT-09 | First join welcomed, second not; welcome off -> no row; `Once` off -> no row and today's behaviour; captcha-failed and lockdown-banned joiners leave no row; the captcha-pass path claims; works without Redis | integration | `-run '^(TestGreetOnceFirstJoinOnly | TestGreetOnceWelcomeOffNoClaim | ⬜ pending |
-| EDIT-09 | Concurrent `SendWelcomeMessage` for one `(chat, user)` -> exactly one welcome; definite refusal (403, 400, `ErrNoPermission`, 429) gives the row back; unknown outcome (timeout, 5xx) keeps it; claim error sends nothing | integration | `-run '^(TestGreetOnceConcurrentOneWelcome | TestGreetOnceDefiniteRefusalReleases | ⬜ pending |
-| EDIT-09 | `ClaimGreeting`/`ReleaseGreeting` repository behaviour; PostgreSQL concurrency | db (+ PostgreSQL only) | `-run '^TestGreetedMemberClaim$' ./fuku/db/greetings`; CI `TestGreetedMemberClaimConcurrent` | ❌ Wave 0 | ⬜ pending |
-| EDIT-09 | Switch `o`: Welcome only, `settingsRightAdmin`, absolute value, drift and authority, the four owner worlds through the press and the typed-reply door; preview and Full preview never claim; the page never reads `greeted_members` | integration | `-run '^(TestSettingsEditOnceSwitch | TestSettingsDriftOnce | ⬜ pending |
-| EDIT-07/08/09 | Migration: statement shape (db-free) and defaults on PostgreSQL; backup round trip carries the new columns, an old export decodes to zeros, `greeted_members` untouched by export/import/reset | unit + PostgreSQL + db | `-run '^TestRulesMediaMigrationStatements$' ./fuku/db/migrations`; CI `TestRulesMediaMigrationDefaults`; `-run '^(TestAllModulesRoundTripEveryMeaningfulField | TestOldGreetingsExportDecodesToZeros | ⬜ pending |
-| UI | Row budget (8 private / 9 group) at worst case for Welcome, Goodbye, Rules and the grid fill; callback bytes of every new button at worst-case IDs (largest 45) with `Omitted` 0; `tg` unknown `t`, `t=o` on g/r, `t=e | d` on r, `v=2`, missing `t`, extra key refused before any `getChatMember` | integration | `-run '^(TestSettingsEditSwitchGrid | ⬜ pending |
-| UI / locale | 13 new + 4 renamed rows, exactly 199 `settings_` keys, five switch labels <= 20 rendered with `✅` and `❌` in 8 locales, tokens, hints, Rules hint keeps `<code>/rules</code>`; pages fit 3800 units in 8 locales with a 64-rune title; privacy (no Staff Group on any new screen) | unit + integration | `-run '^(TestSettingsLocaleKeys | TestSettingsLabelLengths | ⬜ pending |
-| Success 4 | Rules, welcomes and goodbyes saved before the phase look exactly as before: legacy `/rules` request, flag-off requests carry no `show_caption_above_media`, an old export imports, an old GIF document sends with `sendDocument` | integration | the characterization test above plus `-run '^TestLegacyGreetingsRequestsUnchanged$' ./fuku/modules` | ❌ Wave 0 | ⬜ pending |
+|---|---|---|---|---|---|
+| EDIT-07 | `sendPhoto`, `sendVideo`, `sendAnimation` carry `show_caption_above_media` true only when the flag is set; documents, audio, voice, sticker, video note never; flag off adds no parameter | unit | `-run '^(TestSendGreetingMessageCaptionAbove\|TestCaptionAboveEligible)$' ./fuku/utils/media` | ✅ | ✅ green |
+| EDIT-07 | A GIF through the editor and through `/setwelcome` by reply is `db.ANIMATION`; notes/filters/pins still `DOCUMENT`; a legacy document GIF stays document | unit + integration | `-run '^(TestExtractMedia\|TestExtractMediaFromReply\|TestExtractGreetingMediaAnimation)$' ./fuku/utils/content`; `-run '^(TestLegacyGreetingsRequestsUnchanged)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-07 | Switch drawn exactly for photo, video, animation; not for document, audio, voice, sticker, video note, no media, legacy GIF; stored "on" ignored and not sent; returns on an eligible replacement; stale press writes nothing and shows `settings_edit_below_unavailable` | integration | `-run '^(TestSettingsEditMediaBelowEligibility\|TestSettingsEditMediaBelowStoredOnIgnored\|TestSettingsEditMediaBelowStalePress\|TestSettingsEditMediaBelowSwitch)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-07 | The join, leave, `/welcome`, `/goodbye`, `/rules`, private rules and Full preview all send with the flag from the stored column | integration | `-run '^(TestGreetingsMediaBelowEverywhere\|TestRulesMediaBelowEverywhere)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-07 | Three switch writes are column-targeted, write a Go `false`, keep other columns, call `cache.DeleteCache`; drift and authority (Welcome/Goodbye `can_change_info` alert, Rules bot-admin notice) | integration + db | `-run '^(TestSettingsParityMediaBelow\|TestSettingsDriftMediaBelow\|TestSettingsAuthorityParityEdit)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-08 | Legacy rows: `/rules` and the deep link send the same request as today (recorded before the refactor) | integration (characterization) | `-run '^(TestRulesLegacyRowSendsTodaysRequest)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-08 | `/rules` in the group, private rules (deep link) and a connected private chat show media with caption and buttons; media-only and buttons-only rules; click-to-read group message carries none | integration | `-run '^(TestRulesMediaAndButtonsInGroup\|TestPrivateRulesMediaAndButtons)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-08 | Rules page: three parts, Set/Remove/Cancel/Preview for `m` and `b`, `t=z` invalid, right = bot admin (notice), group menu refusal, Remove stores `/clearrules`' row, `/clearrules` clears all three | integration | `-run '^(TestSettingsEditRulesParts\|TestSettingsEditRulesCallbackParts\|TestSettingsEditRulesRemoveParity\|TestSettingsEditRulesPreviewParts\|TestSettingsEditRulesMainState)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-08 | Typed Rules media and buttons store what the Welcome path stores for the same input; caption rule parity table between Welcome and Rules; video note refused as typed media | integration + unit | `-run '^(TestSettingsEditRulesTypedParity\|TestSettingsEditRulesTypedRefusals\|TestSettingsRulesCaptionParity\|TestSettingsEditRulesParity)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-08 | Full preview equals `/rules` for the same row, group language change seen next preview, unreadable language falls back to `uk`, language read creates no row | integration | `-run '^(TestSettingsEditRulesPreview\|TestSettingsEditRulesPreviewGroupLanguage)$' ./fuku/modules`; `-run '^(TestGetGroupLanguage)$' ./fuku/db/lang` | ✅ | ✅ green |
+| EDIT-08 | Runtime degrade: a definite 4xx on a media rules send retries once as text-only in `/rules` and the deep link, not in Full preview | integration | `-run '^(TestRulesDegradesToTextOnClientError)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-08 | Rules loader creates no row; writers column-targeted; `ClearRules` stores zeros; `HasContent`; `{rules}` button for media-only rules | db + unit | `-run '^(TestLoadRulesSettingsCreatesNothing\|TestRulesMediaWriters)$' ./fuku/db/rules` | ✅ | ✅ green |
+| EDIT-09 | First join welcomed, second not; welcome off -> no row; `Once` off -> no row; captcha-failed and lockdown-banned joiners leave no row; the captcha-pass path claims; works without Redis | integration | `-run '^(TestGreetOnceFirstJoinOnly\|TestGreetOnceWelcomeOffNoClaim\|TestGreetOnceOffNoRecord\|TestGreetOnceCaptchaPathAndFailure\|TestGreetOnceLockdownBanNoRecord\|TestGreetOnceWithoutRedis)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-09 | Concurrent `SendWelcomeMessage` for one `(chat, user)` -> exactly one welcome; definite refusal gives the row back; unknown outcome keeps it; claim and read errors send nothing; a panic before the send releases, after the send keeps | integration | `-run '^(TestGreetOnceConcurrentOneWelcome\|TestGreetOnceDefiniteRefusalReleases\|TestGreetOnceUnknownOutcomeKeeps\|TestGreetOnceClaimErrorFailsClosed\|TestGreetOnceReadErrorFailsClosed\|TestGreetOncePanicBeforeSendReleasesClaim\|TestGreetOncePanicAfterSendKeepsClaim)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-09 | `ClaimGreeting`/`ReleaseGreeting` repository behaviour; PostgreSQL concurrency | db (+ PostgreSQL) | `-run '^(TestGreetedMemberClaim\|TestGreetedMemberClaimConcurrent)$' ./fuku/db/greetings` (both run on SQLite; CI runs them on PostgreSQL) | ✅ | ✅ green |
+| EDIT-09 | Switch `o`: Welcome only, `settingsRightAdmin`, absolute value, drift and authority; a leave and rejoin welcomes once; preview and Full preview never claim | integration | `-run '^(TestSettingsEditOnceSwitch\|TestSettingsDriftOnce\|TestSettingsAuthorityParityEdit)$' ./fuku/modules` | ✅ | ✅ green |
+| EDIT-07/08/09 | Migration: statement shape (db-free) and defaults on PostgreSQL; backup round trip carries the new columns, an old export decodes to zeros, `greeted_members` untouched by export/import/reset | unit + PostgreSQL + db | `-run '^(TestRulesMediaMigrationStatements)$' ./fuku/db/migrations`; CI `TestRulesMediaMigrationDefaults` (skips without PostgreSQL); `-run '^(TestAllModulesRoundTripEveryMeaningfulField\|TestOldGreetingsExportDecodesToZeros\|TestGreetedMembersStayOutOfBackup\|TestImportGreetingsOmittedBlocks)$' ./fuku/db/backup` | ✅ | ✅ green |
+| UI | Row budget (8 private / 9 group) at worst case; callback bytes of every new button with `Omitted` 0; forged `t`, `v` refused before any `getChatMember` | integration | `-run '^(TestSettingsEditSwitchGrid\|TestSettingsEditCallbackBytes\|TestSettingsEditCallbackFields\|TestSettingsPageActionValidate\|TestSettingsEditPagesFitEveryLocale)$' ./fuku/modules` | ✅ | ✅ green |
+| UI / locale | New and renamed `settings_` keys in 8 locales, label ceilings, tokens, help fits one message; privacy (no Staff Group on any new screen) | unit + integration | `-run '^(TestSettingsLocaleKeys\|TestSettingsLabelLengths\|TestSettingsEditLocaleTokens\|TestSettingsHelpFitsOneMessage)$' ./fuku/i18n`; `-run '^(TestSettingsStaffPrivacy)$' ./fuku/modules` | ✅ | ✅ green |
+| Success 4 | Rules, welcomes and goodbyes saved before the phase look exactly as before: legacy `/rules` request, flag-off requests carry no `show_caption_above_media`, an old export imports, an old GIF document sends with `sendDocument` | integration | `-run '^(TestRulesLegacyRowSendsTodaysRequest\|TestLegacyGreetingsRequestsUnchanged)$' ./fuku/modules`; `-run '^(TestOldGreetingsExportDecodesToZeros)$' ./fuku/db/backup` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -67,16 +67,16 @@ The planner assigns task IDs, plans and waves when the plans are written; the ex
 
 ## Wave 0 Requirements
 
-- [ ] **Characterization first:** `fuku/modules/rules_legacy_request_test.go` records the fake's `sendMessage` params for `/rules` (private rules off and on) and the deep link for an old row, and a legacy greeting/goodbye request with the flag off; commit it green against untouched code before any refactor.
-- [ ] `fuku/utils/media/sender_test.go`: caption-above and animation tests; `fuku/utils/content`: greeting extraction tests.
-- [ ] `fuku/db/greetings/greeted_test.go` and `testmain_test.go` (add `&models.GreetedMember{}`); writers' tests; `fuku/db/rules` loader/writer tests; `fuku/db/lang` `TestGetGroupLanguage`.
-- [ ] `fuku/db/backup`: `testmain_test.go` gains `GreetedMember`; round-trip fields; `TestOldGreetingsExportDecodesToZeros`, `TestGreetedMembersStayOutOfBackup`.
-- [ ] `fuku/db/migrations`: `rules_media_migration_test.go` (statements, and the PostgreSQL defaults test).
-- [ ] `fuku/modules/test_harness_test.go`: `&models.GreetedMember{}`; `editCleanup` deletes `greeted_members`; a join-driving helper reusing the `TestMemberJoinAndLeaveSendConfiguredGreetings` pattern; fake answers for `sendAnimation` already exist (`settingsEditFakeSends`, `settings_edit_preview_test.go:27-37`).
-- [ ] `fuku/i18n/settings_locale_test.go`: 13 rows, 4 renames, five-cell rendered check, new token rows.
-- [ ] Makefile: add the new PostgreSQL test names and `./fuku/db/greetings` to `test-postgres-integrity`.
-- [ ] `AGENTS.md` (S-07), `make generate-docs`.
-- [ ] Owner's `12-SPIKE.md`: the live items of the S-01 table.
+- [x] **Characterization first:** `fuku/modules/rules_legacy_request_test.go` records the fake's `sendMessage` params for `/rules` (private rules off and on) and the deep link for an old row, and a legacy greeting/goodbye request with the flag off; commit it green against untouched code before any refactor.
+- [x] `fuku/utils/media/sender_test.go`: caption-above and animation tests; `fuku/utils/content`: greeting extraction tests.
+- [x] `fuku/db/greetings/greeted_test.go` and `testmain_test.go` (add `&models.GreetedMember{}`); writers' tests; `fuku/db/rules` loader/writer tests; `fuku/db/lang` `TestGetGroupLanguage`.
+- [x] `fuku/db/backup`: `testmain_test.go` gains `GreetedMember`; round-trip fields; `TestOldGreetingsExportDecodesToZeros`, `TestGreetedMembersStayOutOfBackup`.
+- [x] `fuku/db/migrations`: `rules_media_migration_test.go` (statements, and the PostgreSQL defaults test).
+- [x] `fuku/modules/test_harness_test.go`: `&models.GreetedMember{}`; `editCleanup` deletes `greeted_members`; a join-driving helper reusing the `TestMemberJoinAndLeaveSendConfiguredGreetings` pattern; fake answers for `sendAnimation` already exist (`settingsEditFakeSends`, `settings_edit_preview_test.go:27-37`).
+- [x] `fuku/i18n/settings_locale_test.go`: 13 rows, 4 renames, five-cell rendered check, new token rows.
+- [x] Makefile: add the new PostgreSQL test names and `./fuku/db/greetings` to `test-postgres-integrity`.
+- [x] `AGENTS.md` (S-07), `make generate-docs`.
+- [x] Owner's `12-SPIKE.md`: the live items of the S-01 table.
 
 ---
 
@@ -96,11 +96,21 @@ Covered by the owner's live checklist `12-SPIKE.md` (written by the phase gate p
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency: a focused `-run` under 30 s; the settings family (about 3.6 minutes) only per wave
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency: a focused `-run` under 30 s; the settings family (about 3.6 minutes) only per wave
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-11-05. Audit: every test name in the map exists, is selected by its `-run` and ran green with no skip on SQLite/miniredis at HEAD 76d9193 (the settings family `TestSettings|TestLoadSettings` over `./fuku/modules` 271.9 s and `./fuku/i18n` 5.7 s; the Phase 12 db and utils packages; 20 focused `fuku/modules` tests). No gaps found, none escalated. Local skips: `TestRulesMediaMigrationDefaults` and the other PostgreSQL migration tests (CI only; CI run 106 on head 4dae0c5 was green including `make test-postgres-integrity`); `TestGreetedMemberClaimConcurrent` runs on SQLite locally. Not run here: `make test`, `make lint`, a throwaway PostgreSQL cluster. Manual-only: client rendering, live Telegram behaviour, two live replicas, native-speaker read (`12-SPIKE.md`).
+
+---
+
+## Validation Audit 2026-11-05
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
