@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // RulesSettings is one chat's rules message. A row saved before the media columns
 // existed holds text only, and its FileID, MediaType, Buttons and MediaBelow read as zero
@@ -30,8 +33,10 @@ func (RulesSettings) TableName() string {
 	return "rules"
 }
 
-// HasContent reports whether the rules message is set. Red stub: it is filled in by the
-// next commit.
+// HasContent reports whether the rules message is set: a text that is not blank, a media
+// file, or at least one button. It is the one test of "Rules is set" for /rules, the deep
+// link, the Full preview, the Rules page, Main and the {rules} button, so a row saved
+// before the media columns existed (text only) reads exactly as it did.
 func (r RulesSettings) HasContent() bool {
-	return false
+	return strings.TrimSpace(r.Rules) != "" || r.FileID != "" || len(r.Buttons) > 0
 }
