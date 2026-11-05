@@ -13,6 +13,9 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -584,4 +587,137 @@ func TestMemberReqNoticeLanguage(t *testing.T) {
 	if !strings.Contains(text, "\u2068{rules}&lt;b&gt;\u2069") {
 		t.Errorf("notice %q does not print the name literally, escaped and isolated", text)
 	}
+}
+
+// mreqSwap installs replacement in *target for the test.
+func mreqSwap[T any](t *testing.T, target *T, replacement T) {
+	t.Helper()
+	previous := *target
+	*target = replacement
+	t.Cleanup(func() { *target = previous })
+}
+
+func TestMemberReqEnforceExemptions(t *testing.T) {
+	env := newMemberReqEnv(t)
+	// Mute is the punishment that would show most: a hold, a restrict and a notice.
+	env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+
+	// wantNobody fails when the executor did anything: a hold, a warn, a Telegram write or a notice.
+	wantNobody := func(t *testing.T, user gotgbot.User, got memberReqResult) {
+		t.Helper()
+		if got.Outcome != memberReqNone || got.Hold != nil {
+			t.Errorf("outcome = %+v, want None with no hold", got)
+		}
+		if hold := env.mreqHold(user.Id); hold != nil {
+			t.Errorf("hold = %+v, want none", hold)
+		}
+		if row := env.mreqWarnRow(user.Id); row != nil {
+			t.Errorf("warns row = %+v, want none", row)
+		}
+	}
+	// writesAndNotices is how many writes and messages the executor sent in all so far.
+	writesAndNotices := func() int {
+		return len(env.mreqWrites()) + len(env.mreqNotices())
+	}
+	before := writesAndNotices()
+	t.Cleanup(func() {
+		if after := writesAndNotices(); after != before {
+			t.Errorf("exempt members caused %d Telegram writes or messages, want none", after-before)
+		}
+	})
+
+	liveStates := []struct {
+		name   string
+		record staffFakeMember
+	}{
+		{"a live creator", staffFakeMember{Status: gotgbot.ChatMemberStatusCreator}},
+		{"a live administrator", staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true}},
+		{"a member who left", staffFakeMember{Status: gotgbot.ChatMemberStatusLeft}},
+		{"a kicked member", staffFakeMember{Status: gotgbot.ChatMemberStatusKicked}},
+		{"a restricted non-member", staffFakeMember{Status: gotgbot.ChatMemberStatusRestricted, IsMember: false}},
+	}
+	for _, tc := range liveStates {
+		t.Run(tc.name, func(t *testing.T) {
+			member := env.mreqMember("Alex", "", "alex")
+			env.fake.setMember(env.chat.Id, member.Id, tc.record)
+			wantNobody(t, member, env.mreqEnforce(env.mreqCase(member)))
+		})
+	}
+
+	t.Run("an approved member", func(t *testing.T) {
+		member := env.mreqMember("Alex", "", "alex")
+		if err := approvals.AddApprovedUser(env.chat.Id, member.Id, env.admin.Id, "trusted"); err != nil {
+			t.Fatal(err)
+		}
+		wantNobody(t, member, env.mreqEnforce(env.mreqCase(member)))
+	})
+
+	t.Run("a member with a pending captcha attempt", func(t *testing.T) {
+		member := env.mreqMember("Alex", "", "alex")
+		if _, err := captcha.CreateCaptchaAttemptPreMessage(member.Id, env.chat.Id, "answer", 5); err != nil {
+			t.Fatal(err)
+		}
+		dbcache.DeleteCache(dbcache.CacheKey("captcha_pending", env.chat.Id))
+		wantNobody(t, member, env.mreqEnforce(env.mreqCase(member)))
+	})
+
+	t.Run("a bot, the bot itself and the service accounts", func(t *testing.T) {
+		for _, id := range []int64{env.bot.Id, 777000, 1087968824, 136817688} {
+			user := gotgbot.User{Id: id, FirstName: "Service"}
+			wantNobody(t, user, env.mreqEnforce(env.mreqCase(user)))
+		}
+		other := env.mreqMember("Robo", "", "robot")
+		other.IsBot = true
+		wantNobody(t, other, env.mreqEnforce(env.mreqCase(other)))
+	})
+
+	t.Run("an approvals read error", func(t *testing.T) {
+		member := env.mreqMember("Alex", "", "alex")
+		mreqSwap(t, &memberReqApprovedLookup, func(context.Context, int64, int64) (bool, error) {
+			return false, context.DeadlineExceeded
+		})
+		wantNobody(t, member, env.mreqEnforce(env.mreqCase(member)))
+	})
+
+	t.Run("a captcha read error", func(t *testing.T) {
+		member := env.mreqMember("Alex", "", "alex")
+		mreqSwap(t, &memberReqCaptchaPendingLookup, func(context.Context, int64) (bool, error) {
+			return false, context.DeadlineExceeded
+		})
+		wantNobody(t, member, env.mreqEnforce(env.mreqCase(member)))
+	})
+
+	t.Run("a captcha attempt read error", func(t *testing.T) {
+		member := env.mreqMember("Alex", "", "alex")
+		mreqSwap(t, &memberReqCaptchaPendingLookup, func(context.Context, int64) (bool, error) { return true, nil })
+		mreqSwap(t, &memberReqCaptchaAttemptLookup, func(int64, int64) (*models.CaptchaAttempts, error) {
+			return nil, context.DeadlineExceeded
+		})
+		wantNobody(t, member, env.mreqEnforce(env.mreqCase(member)))
+	})
+
+	lookupFailures := []struct {
+		name string
+		errs []error
+	}{
+		{"a 400", []error{staffFakeError(400, "Bad Request: chat not found")}},
+		{"a 403", []error{staffFakeError(403, "Forbidden: bot was kicked")}},
+		{"a 429 that never clears", []error{staffFake429(1), staffFake429(1), staffFake429(1), staffFake429(1), staffFake429(1)}},
+		{"a 502", []error{staffFakeError(502, "Bad Gateway")}},
+		{"a timeout", []error{context.DeadlineExceeded}},
+	}
+	for _, tc := range lookupFailures {
+		t.Run("getChatMember answering "+tc.name, func(t *testing.T) {
+			member := env.mreqMember("Alex", "", "alex")
+			env.fake.script("getChatMember", env.chat.Id, tc.errs...)
+			wantNobody(t, member, env.mreqEnforce(env.mreqCase(member)))
+		})
+	}
+
+	t.Run("a member renamed since the update", func(t *testing.T) {
+		member := env.mreqMember("Alex", "", "alex")
+		stale := env.mreqCase(member)
+		env.fake.setProfile(member.Id, "Alex", "Smith", "alex")
+		wantNobody(t, member, env.mreqEnforce(stale))
+	})
 }

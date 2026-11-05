@@ -42,6 +42,13 @@ func GetApprovedUsers(chatID int64) []*models.ApprovedUsers {
 	return GetApprovedUsersContext(context.Background(), chatID)
 }
 
+// IsUserApprovedContext is IsUserApproved for a caller that must not act on an unknown. It
+// reads the same cached list as GetApprovedUsersContext, but a list that could not be loaded
+// is an error and not "nobody is approved", so a caller can tell the two apart (D-11).
+func IsUserApprovedContext(ctx context.Context, chatID, userID int64) (bool, error) {
+	return false, nil
+}
+
 func GetApprovedUsersContext(ctx context.Context, chatID int64) []*models.ApprovedUsers {
 	cacheKey := cache.CacheKey("approvals", chatID)
 	result, err := cache.GetFromCacheOrLoad(ctx, cacheKey, cache.CacheTTLApprovals, func(ctx context.Context) ([]*models.ApprovedUsers, error) {

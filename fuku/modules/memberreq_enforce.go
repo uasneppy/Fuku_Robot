@@ -9,6 +9,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -106,6 +107,8 @@ var (
 	// memberReqApplyWarn is the warn module's core, a variable so a test can look inside the
 	// warn lock or make the warn write fail.
 	memberReqApplyWarn = applyWarn
+	// memberReqApprovedLookup is the tri-state approvals read: an error is an unknown.
+	memberReqApprovedLookup = approvals.IsUserApprovedContext
 	// memberReqCaptchaPendingLookup and memberReqCaptchaAttemptLookup are the two pending
 	// captcha reads, variables so a test can make one fail.
 	memberReqCaptchaPendingLookup = captcha.HasPendingCaptchaAttemptsContext
