@@ -149,11 +149,11 @@ func TestExtractMedia(t *testing.T) {
 		wantType int
 	}{
 		{"sticker", &gotgbot.Message{Sticker: &gotgbot.Sticker{FileId: "st"}}, "st", db.STICKER},
-		{"animation also carries a document: stored as document", &gotgbot.Message{
+		{"animation also carries a document: stored as an animation", &gotgbot.Message{
 			Animation: &gotgbot.Animation{FileId: "an"},
 			Document:  &gotgbot.Document{FileId: "doc"},
-		}, "doc", db.DOCUMENT},
-		{"animation alone is stored as document", &gotgbot.Message{Animation: &gotgbot.Animation{FileId: "an"}}, "an", db.DOCUMENT},
+		}, "an", db.ANIMATION},
+		{"animation alone is stored as an animation", &gotgbot.Message{Animation: &gotgbot.Animation{FileId: "an"}}, "an", db.ANIMATION},
 		{"photo gives the largest size", &gotgbot.Message{Photo: []gotgbot.PhotoSize{{FileId: "small"}, {FileId: "big"}}}, "big", db.PHOTO},
 		{"audio", &gotgbot.Message{Audio: &gotgbot.Audio{FileId: "au"}}, "au", db.AUDIO},
 		{"voice", &gotgbot.Message{Voice: &gotgbot.Voice{FileId: "vo"}}, "vo", db.VOICE},
@@ -167,7 +167,11 @@ func TestExtractMedia(t *testing.T) {
 		if id != c.wantID || typ != c.wantType {
 			t.Errorf("%s: got (%q, %d), want (%q, %d)", c.name, id, typ, c.wantID, c.wantType)
 		}
-		// The editor and the commands must agree on every message.
+		// The editor and the commands must agree on every message, except that a GIF is an
+		// animation for greetings and stays a document for notes, filters and pins.
+		if typ == db.ANIMATION {
+			continue
+		}
 		cid, ctyp := extractMediaFromReply(c.msg)
 		if id != cid || typ != ctyp {
 			t.Errorf("%s: ExtractMedia differs from extractMediaFromReply", c.name)

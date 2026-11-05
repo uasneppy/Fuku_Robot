@@ -377,10 +377,10 @@ func TestSettingsEditMediaKinds(t *testing.T) {
 		})
 	}
 
-	t.Run("a GIF is stored as a document", func(t *testing.T) {
+	t.Run("a GIF is stored as an animation", func(t *testing.T) {
 		got := settingsEditPartCheck(t, settingsEditPartMedia, accepted["gif"], settingsEditState{})
-		if got.DataType != db.DOCUMENT {
-			t.Fatalf("a GIF is stored as type %d, want the document type %d", got.DataType, db.DOCUMENT)
+		if got.DataType != db.ANIMATION || got.FileID != "gif-1" {
+			t.Fatalf("a GIF is stored as (%q, %d), want (gif-1, animation type %d)", got.FileID, got.DataType, db.ANIMATION)
 		}
 	})
 

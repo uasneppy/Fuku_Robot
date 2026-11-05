@@ -234,8 +234,8 @@ func TestSettingsEditMediaParity(t *testing.T) {
 					t.Errorf("the editor stored file %q type %d, the command stored file %q type %d",
 						editorFile, editorType, commandFile, commandType)
 				}
-				if kind == "animation" && editorType != db.DOCUMENT {
-					t.Errorf("a GIF is stored as type %d, want the document type %d", editorType, db.DOCUMENT)
+				if kind == "animation" && editorType != db.ANIMATION {
+					t.Errorf("a GIF is stored as type %d, want the animation type %d", editorType, db.ANIMATION)
 				}
 				settingsEditWaitGone(t, env, pair.editorOwner)
 			})
