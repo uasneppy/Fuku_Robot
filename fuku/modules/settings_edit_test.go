@@ -277,14 +277,20 @@ func TestSettingsEditPages(t *testing.T) {
 		}
 	})
 
-	t.Run("Rules has the text line only and no switch", func(t *testing.T) {
-		for _, text := range []string{"", "the rules"} {
-			screen := renderSettingsEditor(settingsEditView(tr, false), rulesDef,
-				settingsEditState{Kind: settingsEditRules, Text: text}, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
-			if !strings.Contains(screen.Text, staffMarker("settings_edit_line_text")) {
-				t.Errorf("Rules page %q has no text line", screen.Text)
+	t.Run("Rules has three parts", func(t *testing.T) {
+		buttons := models.ButtonArray{{Name: "SECRETBUTTON", Url: "https://secret.example"}, {Name: "Two", Url: "https://two.example"}}
+		for _, st := range []settingsEditState{
+			{Kind: settingsEditRules},
+			{Kind: settingsEditRules, Text: "the rules"},
+			{Kind: settingsEditRules, Text: "the rules", MediaType: db.STICKER, FileID: "SECRETFILE", Buttons: buttons},
+		} {
+			screen := renderSettingsEditor(settingsEditView(tr, false), rulesDef, st, settingsEditScreenOpts{BotUsername: "FukuTestBot"})
+			for _, line := range []string{"settings_edit_line_text", "settings_edit_line_media", "settings_edit_line_buttons"} {
+				if !strings.Contains(screen.Text, staffMarker(line)) {
+					t.Errorf("Rules page %q has no %s line", screen.Text, line)
+				}
 			}
-			for _, absent := range []string{"settings_edit_line_media", "settings_edit_line_buttons", "settings_edit_clean_hint_welcome", "settings_edit_clean_hint_goodbye"} {
+			for _, absent := range []string{"settings_edit_clean_hint_welcome", "settings_edit_clean_hint_goodbye"} {
 				if strings.Contains(screen.Text, staffMarker(absent)) {
 					t.Errorf("Rules page %q carries %s", screen.Text, absent)
 				}
@@ -294,14 +300,32 @@ func TestSettingsEditPages(t *testing.T) {
 					t.Errorf("Rules page has the %s button", absent)
 				}
 			}
+			for _, secret := range []string{"SECRETBUTTON", "SECRETFILE", "secret.example", "the rules"} {
+				if strings.Contains(screen.Text, secret) {
+					t.Errorf("Rules page %q echoes %q", screen.Text, secret)
+				}
+			}
 		}
 		set := renderSettingsEditor(settingsEditView(tr, true), rulesDef, settingsEditState{Kind: settingsEditRules, Text: "abc"}, settingsEditScreenOpts{}).Text
 		if want := staffMarker("settings_edit_state_text_len") + " 3"; !strings.Contains(set, want) {
 			t.Errorf("Rules page %q lacks %q", set, want)
 		}
 		unset := renderSettingsEditor(settingsEditView(tr, true), rulesDef, settingsEditState{Kind: settingsEditRules}, settingsEditScreenOpts{}).Text
-		if want := staffMarker("settings_edit_line_text") + " " + staffMarker("settings_state_not_set"); !strings.Contains(unset, want) {
-			t.Errorf("an empty Rules page %q lacks %q", unset, want)
+		for _, line := range []string{"settings_edit_line_text", "settings_edit_line_media", "settings_edit_line_buttons"} {
+			if want := staffMarker(line) + " " + staffMarker("settings_state_not_set"); !strings.Contains(unset, want) {
+				t.Errorf("an empty Rules page %q lacks %q", unset, want)
+			}
+		}
+		full := renderSettingsEditor(settingsEditView(tr, true), rulesDef,
+			settingsEditState{Kind: settingsEditRules, Text: "r", MediaType: db.VIDEO_NOTE, FileID: "f", Buttons: buttons}, settingsEditScreenOpts{}).Text
+		for _, want := range []string{
+			staffMarker("settings_edit_line_media") + " " + staffMarker("settings_edit_media_video_note"),
+			staffMarker("settings_edit_state_buttons_n") + " 2",
+			staffMarker("settings_edit_note_no_caption"),
+		} {
+			if !strings.Contains(full, want) {
+				t.Errorf("Rules page %q lacks %q", full, want)
+			}
 		}
 	})
 
@@ -380,15 +404,31 @@ func TestSettingsEditPages(t *testing.T) {
 			}
 		}
 		empty := renderSettingsEditor(view, rulesDef, settingsEditState{Kind: settingsEditRules}, settingsEditScreenOpts{})
-		if got := rowOf(empty, 0); len(got) != 1 || !strings.Contains(got[0], staffMarker("settings_btn_edit_set_text")) {
-			t.Errorf("empty Rules row 0 = %v, want Set text alone", got)
+		for i, key := range []string{"settings_btn_edit_set_text", "settings_btn_edit_set_media", "settings_btn_edit_set_buttons"} {
+			if got := rowOf(empty, i); len(got) != 1 || !strings.Contains(got[0], staffMarker(key)) {
+				t.Errorf("empty Rules row %d = %v, want [%s] alone", i, got, key)
+			}
 		}
 		set := renderSettingsEditor(view, rulesDef, settingsEditState{Kind: settingsEditRules, Text: "r"}, settingsEditScreenOpts{})
 		if got := rowOf(set, 0); len(got) != 2 || !strings.Contains(got[1], staffMarker("settings_btn_edit_remove_text")) {
 			t.Errorf("Rules row 0 with text = %v, want Set and Remove", got)
 		}
-		if settingsEditHasButton(set.Keyboard.InlineKeyboard, "settings_btn_edit_set_media") {
-			t.Error("the Rules page has a media row")
+		if got := rowOf(set, 1); len(got) != 1 || !strings.Contains(got[0], staffMarker("settings_btn_edit_set_media")) {
+			t.Errorf("Rules row 1 with text only = %v, want Set media alone", got)
+		}
+		all := renderSettingsEditor(view, rulesDef, settingsEditState{
+			Kind: settingsEditRules, Text: "r", MediaType: db.STICKER, FileID: "f",
+			Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}},
+		}, settingsEditScreenOpts{})
+		for i, keys := range [][2]string{
+			{"settings_btn_edit_set_text", "settings_btn_edit_remove_text"},
+			{"settings_btn_edit_set_media", "settings_btn_edit_remove_media"},
+			{"settings_btn_edit_set_buttons", "settings_btn_edit_remove_buttons"},
+		} {
+			got := rowOf(all, i)
+			if len(got) != 2 || !strings.Contains(got[0], staffMarker(keys[0])) || !strings.Contains(got[1], staffMarker(keys[1])) {
+				t.Errorf("Rules row %d with everything set = %v, want [%s, %s]", i, got, keys[0], keys[1])
+			}
 		}
 	})
 
@@ -463,8 +503,17 @@ func TestSettingsEditPages(t *testing.T) {
 			state settingsEditState
 			rows  []string
 		}{
-			{"rules set", settingsEditState{Kind: settingsEditRules, Text: "the rules"}, []string{"set_text | remove_text", "preview_text | full_preview", "back | close"}},
-			{"rules not set", settingsEditState{Kind: settingsEditRules}, []string{"set_text", "full_preview", "back | close"}},
+			{"rules not set", settingsEditState{Kind: settingsEditRules}, []string{"set_text", "set_media", "set_buttons", "full_preview", "back | close"}},
+			{"rules text set", settingsEditState{Kind: settingsEditRules, Text: "the rules"}, []string{
+				"set_text | remove_text", "set_media", "set_buttons", "preview_text | full_preview", "back | close",
+			}},
+			{"rules everything set", settingsEditState{
+				Kind: settingsEditRules, Text: "the rules", MediaType: db.STICKER, FileID: "f",
+				Buttons: models.ButtonArray{{Name: "B", Url: "https://example.com"}},
+			}, []string{
+				"set_text | remove_text", "set_media | remove_media", "set_buttons | remove_buttons",
+				"preview_text | preview_media", "preview_buttons | full_preview", "back | close",
+			}},
 		}
 		for _, tc := range rulesStates {
 			t.Run(tc.name, func(t *testing.T) {

@@ -553,7 +553,10 @@ func TestSettingsEditCallbackFields(t *testing.T) {
 	for name, fields := range map[string]map[string]string{
 		"ws without t":     env.privateFields(group, "a", "ws"),
 		"ws with t=z":      env.privateFields(group, "a", "ws", "t", "z"),
-		"rs with t=m":      env.privateFields(group, "a", "rs", "t", "m"),
+		"rs with t=z":      env.privateFields(group, "a", "rs", "t", "z"),
+		"rr with t=z":      env.privateFields(group, "a", "rr", "t", "z"),
+		"rc with t=z":      env.privateFields(group, "a", "rc", "t", "z"),
+		"rs without t":     env.privateFields(group, "a", "rs"),
 		"ws with t=é":      env.privateFields(group, "a", "ws", "t", "é"),
 		"ws with an extra": env.privateFields(group, "a", "ws", "t", "x", "q", "1"),
 		"wc without t":     env.privateFields(group, "a", "wc"),
@@ -581,6 +584,28 @@ func TestSettingsEditCallbackFields(t *testing.T) {
 				t.Errorf("the refused press created %v", keys)
 			}
 		})
+	}
+}
+
+// TestSettingsEditRulesCallbackParts: Rules Set, Remove and Cancel accept the part codes m and b as they accept
+// x, and each press is answered once.
+func TestSettingsEditRulesCallbackParts(t *testing.T) {
+	env := newSettingsEditEnv(t)
+	owner := env.newOwner(env.chat)
+	menuID := settingsEditPrivateMenu(env, owner, settingsPageRules)
+	for _, code := range []string{"rs", "rr", "rc"} {
+		for _, part := range []string{"x", "m", "b"} {
+			t.Run(code+" t="+part, func(t *testing.T) {
+				answers := env.answerCount()
+				env.pressPrivate(owner, menuID, env.privateFields(env.chat.Id, "a", code, "t", part))
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press was answered %d times, want once", got)
+				}
+				if answer, _ := env.lastAnswer(); strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+					t.Errorf("%s with t=%s was refused as an invalid request", code, part)
+				}
+			})
+		}
 	}
 }
 
@@ -803,16 +828,19 @@ func TestSettingsEditRemoveParity(t *testing.T) {
 		editCleanup(t, menuChat.Id, commandChat.Id)
 		menuOwner, commandOwner := env.newOwner(menuChat), env.newOwner(commandChat)
 		for _, id := range []int64{menuChat.Id, commandChat.Id} {
-			if err := rules.SetChatRules(id, "the rules text"); err != nil {
-				t.Fatalf("SetChatRules: %v", err)
-			}
+			settingsRulesSeedAll(t, id)
 		}
-		env.pressPrivate(menuOwner, 8181, map[string]string{"a": "rr", "t": "x", "c": strconv.FormatInt(menuChat.Id, 10)})
+		for _, part := range []string{"x", "m", "b"} {
+			env.pressPrivate(menuOwner, 8181, map[string]string{"a": "rr", "t": part, "c": strconv.FormatInt(menuChat.Id, 10)})
+		}
 		env.sendIn(commandChat, commandOwner, "/clearrules")
 
 		menuRow, menuOK := settingsEditRulesStored(t, menuChat.Id)
 		commandRow, commandOK := settingsEditRulesStored(t, commandChat.Id)
-		if !menuOK || !commandOK || menuRow.Rules != commandRow.Rules || menuRow.Rules != "" {
+		if !menuOK || !commandOK || menuRow.Rules != commandRow.Rules || menuRow.Rules != "" ||
+			menuRow.FileID != commandRow.FileID || menuRow.FileID != "" ||
+			menuRow.MediaType != commandRow.MediaType || menuRow.MediaType != 0 ||
+			len(menuRow.Buttons) != len(commandRow.Buttons) || len(menuRow.Buttons) != 0 {
 			t.Errorf("rules differ: menu %+v (%v), command %+v (%v), want both empty", menuRow, menuOK, commandRow, commandOK)
 		}
 		menuCached, err := rules.LoadRulesContext(context.Background(), menuChat.Id)

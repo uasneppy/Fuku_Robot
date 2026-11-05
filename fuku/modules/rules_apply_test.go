@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
@@ -40,14 +41,25 @@ func TestRulesApplyParity(t *testing.T) {
 		bot := newModuleTestBot(client)
 		chatA := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "A"}
 		chatB := uniqueModuleChatID()
-		require.NoError(t, rules.SetChatRules(chatA.Id, "old"))
-		require.NoError(t, rules.SetChatRules(chatB, "old"))
+		editCleanup(t, chatA.Id, chatB)
+		for _, id := range []int64{chatA.Id, chatB} {
+			settingsRulesSeedAll(t, id)
+			settingsRulesSeedKept(t, id)
+		}
 
 		require.Equal(t, ext.EndGroups, rulesModule.clearRules(bot, newModuleMessageContext(bot, chatA, admin, "/clearrules")))
 		res := applyRulesClear(context.Background(), chatB)
 		require.Equal(t, greetingApplied, res.Outcome)
-		assert.Equal(t, rules.GetChatRulesInfo(chatA.Id).Rules, rules.GetChatRulesInfo(chatB).Rules)
-		assert.Empty(t, rules.GetChatRulesInfo(chatB).Rules)
+		require.NotNil(t, res.Row, "the whole row is read back")
+		assert.Empty(t, res.Rules)
+		rowA, rowB := rules.GetChatRulesInfo(chatA.Id), rules.GetChatRulesInfo(chatB)
+		for name, row := range map[string]*models.RulesSettings{"command": rowA, "apply": rowB, "read back": res.Row} {
+			assert.Empty(t, row.Rules, name)
+			assert.Empty(t, row.FileID, name)
+			assert.Zero(t, row.MediaType, name)
+			assert.Empty(t, row.Buttons, name)
+			assert.True(t, settingsRulesKeptOK(*row), "%s keeps Media under text, private rules and the rules button", name)
+		}
 	})
 }
 
