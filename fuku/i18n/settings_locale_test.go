@@ -239,6 +239,47 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_edit_refuse_media_rules_long": {170, 238},
 	"settings_edit_below_unavailable":       {100, 140},
 	"settings_edit_refuse_text_rules_long":  {120, 168},
+
+	// Phase 13 (plan 13-04), the Member requirements page. The seven cell rows count the
+	// template as written, with {state} as 7 characters, so a correct 18-character name still
+	// fits; the binding ceiling is the rendered 20 of TestSettingsLabelLengths, where {state}
+	// is the one-code-point icon.
+	"settings_page_mreq":              {14, 18},
+	"settings_state_mreq_on":          {14, 20},
+	"settings_mreq_intro":             {110, 154},
+	"settings_mreq_all_off":           {60, 84},
+	"settings_mreq_line":              {20, 28},
+	"settings_mreq_rule_lastname":     {28, 40},
+	"settings_mreq_rule_username":     {28, 40},
+	"settings_mreq_rule_russian":      {28, 40},
+	"settings_mreq_rule_arabic":       {28, 40},
+	"settings_mreq_rule_chinese":      {28, 40},
+	"settings_mreq_line_join":         {40, 56},
+	"settings_mreq_line_delete":       {40, 56},
+	"settings_mreq_hint_letters":      {280, 392},
+	"settings_mreq_hint_blank":        {100, 140},
+	"settings_mreq_hint_join":         {240, 336},
+	"settings_mreq_hint_delete":       {130, 182},
+	"settings_mreq_hint_mute":         {220, 308},
+	"settings_btn_mreq_lastname":      {26, 26},
+	"settings_btn_mreq_username":      {26, 26},
+	"settings_btn_mreq_russian":       {26, 26},
+	"settings_btn_mreq_arabic":        {26, 26},
+	"settings_btn_mreq_chinese":       {26, 26},
+	"settings_btn_mreq_switch_join":   {26, 26},
+	"settings_btn_mreq_switch_delete": {26, 26},
+	"settings_mreq_desc_lastname":     {70, 98},
+	"settings_mreq_desc_username":     {70, 98},
+	"settings_mreq_desc_russian":      {170, 238},
+	"settings_mreq_desc_arabic":       {170, 238},
+	"settings_mreq_desc_chinese":      {170, 238},
+	"settings_mreq_now":               {40, 56},
+	"settings_mreq_choose_hint":       {100, 140},
+	"settings_mreq_actions_hint":      {190, 266},
+	"settings_mreq_confirm":           {40, 56},
+	"settings_mreq_confirm_kick":      {170, 238},
+	"settings_mreq_confirm_ban":       {170, 238},
+	"settings_mreq_confirm_mute":      {180, 252},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -421,10 +462,13 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🎉", "settings_page_welcome"},
 		{"👋", "settings_page_goodbye"},
 		{"📜", "settings_page_rules"},
+		{"🛂", "settings_page_mreq"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
 		"settings_opt_kick", "settings_opt_ban", "settings_opt_mute",
+		// The Member requirements rule screen's Off and Warn choices (Phase 13).
+		"settings_state_off_plain", "settings_opt_warn",
 	}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
 	// written, icon included.
@@ -440,6 +484,14 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_btn_edit_switch_welcome", "settings_btn_edit_switch_goodbye", "settings_btn_edit_switch_clean",
 		"settings_btn_edit_switch_below", "settings_btn_edit_switch_once",
 	}
+	// The Member requirements rule cells carry the rule's punishment icon in place of {state}
+	// (Phase 13, UI-SPEC check 2); the two switch cells carry the check mark or the cross.
+	mreqRuleCells := []string{
+		"settings_btn_mreq_lastname", "settings_btn_mreq_username", "settings_btn_mreq_russian",
+		"settings_btn_mreq_arabic", "settings_btn_mreq_chinese",
+	}
+	mreqRuleIcons := []string{"❌", "❗", "👢", "⛔", "🔇"}
+	mreqSwitchCells := []string{"settings_btn_mreq_switch_join", "settings_btn_mreq_switch_delete"}
 
 	for _, lang := range staffLocales {
 		t.Run(lang, func(t *testing.T) {
@@ -485,6 +537,24 @@ func TestSettingsLabelLengths(t *testing.T) {
 					rendered := strings.ReplaceAll(template, "{state}", icon)
 					if runes := utf8.RuneCountInString(rendered); runes > editorCellMax {
 						t.Errorf("%s: editor cell %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorCellMax)
+					}
+				}
+			}
+
+			for _, group := range []struct {
+				keys  []string
+				icons []string
+			}{
+				{mreqRuleCells, mreqRuleIcons},
+				{mreqSwitchCells, []string{"✅", "❌"}},
+			} {
+				for _, key := range group.keys {
+					template := settingsLocaleString(t, lang, data, key)
+					for _, icon := range group.icons {
+						rendered := strings.ReplaceAll(template, "{state}", icon)
+						if runes := utf8.RuneCountInString(rendered); runes > editorCellMax {
+							t.Errorf("%s: requirements cell %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorCellMax)
+						}
 					}
 				}
 			}

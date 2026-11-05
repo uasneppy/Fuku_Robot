@@ -186,6 +186,7 @@ func TestMemberReqLocaleKeys(t *testing.T) {
 			}
 
 			failures = append(failures, memberReqRenderedFailures(t, lang, data)...)
+			failures = append(failures, memberReqCrossFamilyFailures(lang, data)...)
 
 			sort.Strings(failures)
 			for _, failure := range failures {
@@ -222,6 +223,46 @@ func memberReqRenderedFailures(t *testing.T, lang string, data map[string]any) [
 	for _, key := range memberReqNoticeKeys {
 		if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key)); runes > memberReqNoticeMax {
 			failures = append(failures, fmt.Sprintf("%s: %s rendered with the worst case has %d characters, ceiling %d", lang, key, runes, memberReqNoticeMax))
+		}
+	}
+	return failures
+}
+
+// memberReqQuotingKeys are the texts that name the "I fixed it" button: in every language
+// the words of mreq_btn_fixed (without its check mark prefix) must appear verbatim in each,
+// so the text never names a button the member cannot find (UI-SPEC check 11).
+var memberReqQuotingKeys = []string{
+	"mreq_notice_mute", "settings_mreq_actions_hint", "settings_mreq_hint_mute", "settings_mreq_confirm_mute",
+}
+
+// memberReqLetterKeys are the texts that show the four Russian letters literally, in every
+// language (MREQ-13).
+var memberReqLetterKeys = []string{"settings_mreq_hint_letters", "settings_mreq_desc_russian"}
+
+// memberReqCrossFamilyFailures reads the mreq_ and settings_mreq_ families together: the
+// quote consistency of the button name and the literal letters of the Russian rule.
+func memberReqCrossFamilyFailures(lang string, data map[string]any) []string {
+	var failures []string
+
+	label, _ := data["mreq_btn_fixed"].(string)
+	words := strings.TrimSpace(strings.TrimPrefix(label, memberReqFixedPrefix))
+	if words == "" {
+		failures = append(failures, fmt.Sprintf("%s: mreq_btn_fixed has no words after its prefix", lang))
+	} else {
+		for _, key := range memberReqQuotingKeys {
+			text, _ := data[key].(string)
+			if !strings.Contains(text, words) {
+				failures = append(failures, fmt.Sprintf("%s: %s does not contain the button words %q verbatim", lang, key, words))
+			}
+		}
+	}
+
+	for _, key := range memberReqLetterKeys {
+		text, _ := data[key].(string)
+		for _, letter := range []string{"ы", "ъ", "э", "ё"} {
+			if !strings.Contains(text, letter) {
+				failures = append(failures, fmt.Sprintf("%s: %s does not contain the letter %s literally", lang, key, letter))
+			}
 		}
 	}
 	return failures
