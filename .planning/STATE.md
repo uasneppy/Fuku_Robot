@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 12
 current_phase_name: Rules Media, Media Under Text and Greet Once
 status: executing
-stopped_at: Completed 12-08-PLAN.md
-last_updated: "2026-11-05T12:10:42.999Z"
+stopped_at: Completed 12-09-PLAN.md
+last_updated: "2026-11-05T12:21:23.824Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: a75627ce0acc16383f9c23aa11260402e3eababc
+state_head: f18b57ce2eba27b9499847fdc255005ae4dd1f58
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 41
-  completed_plans: 33
+  completed_plans: 34
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 12 (Rules Media, Media Under Text and Greet Once) — READY TO EXECUTE
-Plan: 9 of 16
+Plan: 10 of 16
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -107,6 +107,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 12 P06 | 20min | 2 tasks | 4 files |
 | Phase 12 P07 | 50min | 3 tasks | 5 files |
 | Phase 12 P08 | 15min | 2 tasks | 2 files |
+| Phase 12 P09 | 40min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-14: fuku/modules takes 639 s under make test flags in the sandbox, over the 10 minute per-package timeout; judged by running it alone with -timeout 40m (recorded in the SUMMARY)
 - [Phase 12]: 12-04: sendPhoto, sendVideo and sendAnimation share one sendCaptioned (type switch) to stay under the dupl threshold; Send keeps separate cases
 - [Phase 12]: 12-06: the control existence check also refuses an unregistered page in step 1; settingsEditSetSwitch keeps its own 0-or-1 guard as a second line
+- [Phase 12]: 12-09: a 429 counts as a definite refusal of a greet-once welcome (the claim is given back); an unknown outcome keeps the claim
 
 ### Pending Todos
 
@@ -248,8 +250,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T12:10:42.777Z
-Stopped at: Completed 12-08-PLAN.md
+Last session: 2026-11-05T12:21:11.282Z
+Stopped at: Completed 12-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
