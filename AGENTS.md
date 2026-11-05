@@ -175,7 +175,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_edit_saved_text`, `_media` or `_buttons`, plus `settings_edit_caption_ignored` when a caption was not used and
   `settings_edit_album_cut` when the saved message came from an album)
   and edits the prompt to `settings_edit_prompt_closed`, best effort. No log line of the door carries the message text,
-  a caption, a button name, a link or a file ID. The media part stores what `/setwelcome` or `/setgoodbye` by reply stores (a GIF as a document, the caption not used, the text
+  a caption, a button name, a link or a file ID. The media part stores what `/setwelcome` or `/setgoodbye` by reply stores (a GIF saved from Phase 12 on as `db.ANIMATION`, one saved earlier as a document, the caption not used, the text
   and buttons kept) and the buttons part what they store for the same lines, replacing the set, but the editor refuses a link
   that is not http or https instead of dropping it (EDIT-05). The typed reply is the sixth door of `TestSettingsGateAllDoors`.
   After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
@@ -415,7 +415,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
   have parts `x` text, `m` media and `b` buttons, Rules has `x` only, so a later part is a table row and not new renderer
   code. A line is a state word and never the stored content: text is Default or Set with its visible length
-  (`formatting.VisibleLength`), media Not set or its kind word (a GIF is stored as a document and reads File or GIF),
+  (`formatting.VisibleLength`), media Not set or its kind word (a GIF saved from Phase 12 on is stored as `db.ANIMATION` (9) and reads GIF; a GIF saved earlier stays a document and reads File or GIF),
   buttons Not set or Set with the total; the stored text, a button name and a link are never echoed, and a sticker or a
   video note adds `settings_edit_note_no_caption`. `renderSettingsEditor` is pure and built in row blocks (part rows,
   switches, Open in private, navigation), so a later plan adds a block without touching the others. Welcome and Goodbye carry control `e`,
@@ -1513,6 +1513,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
   than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not
   an end date: `until_date` is computed once at Confirm and that one value goes to every group.
+- Greeting media types (Phase 12): `db.ANIMATION` (9) is a GIF saved by `/setwelcome`, `/setgoodbye` or the message
+  editor's media part, stored with the animation's file ID and sent with `sendAnimation`. Only the greeting extraction
+  returns it: `extractGreetingMedia` (animation first, then `extractMediaFromReply`) sits behind `ExtractWelcome` and
+  `ExtractMedia`, while notes, filters and pins keep `extractMediaFromReply` and store a GIF as a document
+  (`TestExtractNoteAndFilterGifStaysDocument`, `pins.go` untouched). A GIF stored before this phase stays a document, is
+  not converted, sends `sendDocument` as before and reads File or GIF on the page. `media.Content.CaptionAbove` becomes
+  `show_caption_above_media` only in `sendPhoto`, `sendVideo` and `sendAnimation` (now one `sendCaptioned`; no other
+  sender reads it) and a false flag adds no parameter, so every request of a message saved before is unchanged.
+  `media.CaptionAboveEligible` (photo, video, animation) is the one predicate of "Media under text works for this
+  media". `media.SendGreetingMessage` ANDs the flag with it, and `media.SendGreeting` is its flag-off wrapper. Rolling
+  deploy caveat (accepted, like the others here): a replica on the previous code sends a type 9 welcome as its text
+  only (`Unknown message type 9, falling back to text`) until it is replaced.
 - One setting, one code path (the settings menu): every setting the menu changes has one apply function beside its
   command (`applyCaptchaTimeout` in `captcha.go` first), which holds the validation, the refusals, the repository write
   and its `cache.DeleteCache`, and returns a typed result (`captchaApplyResult`: outcome, the locale key the command

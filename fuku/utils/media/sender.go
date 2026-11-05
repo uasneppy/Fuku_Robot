@@ -46,7 +46,9 @@ type Content struct {
 	FileID  string
 	MsgType int
 	Name    string
-	// CaptionAbove is stub scaffolding for the RED commit.
+	// CaptionAbove asks Telegram to show the caption above the media. Only the photo, video and animation
+	// senders, whose Telegram methods take show_caption_above_media, read it; every other sender ignores it.
+	// The zero value adds no parameter, so a request built without it is unchanged.
 	CaptionAbove bool
 }
 
@@ -176,11 +178,11 @@ func sendCaptioned(b *gotgbot.Bot, content Content, opts Options, parseMode stri
 	)
 	switch content.MsgType {
 	case db.PHOTO:
-		msg, err = b.SendPhoto(opts.ChatID, file, &gotgbot.SendPhotoOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
+		msg, err = b.SendPhoto(opts.ChatID, file, &gotgbot.SendPhotoOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ShowCaptionAboveMedia: content.CaptionAbove, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
 	case db.VIDEO:
-		msg, err = b.SendVideo(opts.ChatID, file, &gotgbot.SendVideoOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
+		msg, err = b.SendVideo(opts.ChatID, file, &gotgbot.SendVideoOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ShowCaptionAboveMedia: content.CaptionAbove, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
 	default:
-		msg, err = b.SendAnimation(opts.ChatID, file, &gotgbot.SendAnimationOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
+		msg, err = b.SendAnimation(opts.ChatID, file, &gotgbot.SendAnimationOpts{ReplyParameters: replyParams, ParseMode: parseMode, ReplyMarkup: opts.Keyboard, Caption: content.Text, ShowCaptionAboveMedia: content.CaptionAbove, ProtectContent: opts.IsProtected, DisableNotification: opts.NoNotif, MessageThreadId: opts.ThreadID})
 	}
 	return resolveSendResult(msg, err, opts.ChatID, kind, sentAt)
 }
@@ -323,17 +325,43 @@ func SendFilter(b *gotgbot.Bot, ctx *ext.Context, filter *db.ChatFilters, replyM
 	})
 }
 
-func SendGreeting(b *gotgbot.Bot, chatID int64, text, fileID string, msgType int, keyboard *gotgbot.InlineKeyboardMarkup, threadID int64) (*gotgbot.Message, error) {
+// CaptionAboveEligible reports whether a stored media type can have its caption shown above it: a photo, a video
+// or an animation. It is the one predicate the settings page, the stale-press check and the sender use, so none
+// of them can disagree about which media "Media under text" works for.
+func CaptionAboveEligible(msgType int) bool {
+	switch msgType {
+	case db.PHOTO, db.VIDEO, db.ANIMATION:
+		return true
+	}
+	return false
+}
+
+// GreetingMessage is one greeting (a welcome, a goodbye or a rules message) ready to send: its rendered text, its
+// media and whether the caption goes above the media.
+type GreetingMessage struct {
+	Text         string
+	FileID       string
+	MsgType      int
+	CaptionAbove bool
+	Keyboard     *gotgbot.InlineKeyboardMarkup
+	ThreadID     int64
+}
+
+// SendGreetingMessage sends a greeting to a chat, never as a reply and with link previews off. CaptionAbove only
+// takes effect for a type CaptionAboveEligible accepts, so a stored "on" with any other media sends the request it
+// always sent.
+func SendGreetingMessage(b *gotgbot.Bot, chatID int64, msg GreetingMessage) (*gotgbot.Message, error) {
 	return Send(b, Content{
-		Text:    text,
-		FileID:  fileID,
-		MsgType: msgType,
-		Name:    "greeting",
+		Text:         msg.Text,
+		FileID:       msg.FileID,
+		MsgType:      msg.MsgType,
+		Name:         "greeting",
+		CaptionAbove: msg.CaptionAbove && CaptionAboveEligible(msg.MsgType),
 	}, Options{
 		ChatID:            chatID,
 		ReplyMsgID:        0,
-		ThreadID:          threadID,
-		Keyboard:          keyboard,
+		ThreadID:          msg.ThreadID,
+		Keyboard:          msg.Keyboard,
 		NoFormat:          false,
 		NoNotif:           false,
 		WebPreview:        false,
@@ -342,19 +370,14 @@ func SendGreeting(b *gotgbot.Bot, chatID int64, text, fileID string, msgType int
 	})
 }
 
-// CaptionAboveEligible is a RED-commit stub.
-func CaptionAboveEligible(msgType int) bool { return false }
-
-// GreetingMessage is a RED-commit stub.
-type GreetingMessage struct {
-	Text, FileID string
-	MsgType      int
-	CaptionAbove bool
-	Keyboard     *gotgbot.InlineKeyboardMarkup
-	ThreadID     int64
-}
-
-// SendGreetingMessage is a RED-commit stub.
-func SendGreetingMessage(b *gotgbot.Bot, chatID int64, msg GreetingMessage) (*gotgbot.Message, error) {
-	return SendGreeting(b, chatID, msg.Text, msg.FileID, msg.MsgType, msg.Keyboard, msg.ThreadID)
+// SendGreeting sends a greeting with the caption below the media, as every greeting was sent before Media under
+// text existed. It is SendGreetingMessage with CaptionAbove off.
+func SendGreeting(b *gotgbot.Bot, chatID int64, text, fileID string, msgType int, keyboard *gotgbot.InlineKeyboardMarkup, threadID int64) (*gotgbot.Message, error) {
+	return SendGreetingMessage(b, chatID, GreetingMessage{
+		Text:     text,
+		FileID:   fileID,
+		MsgType:  msgType,
+		Keyboard: keyboard,
+		ThreadID: threadID,
+	})
 }
