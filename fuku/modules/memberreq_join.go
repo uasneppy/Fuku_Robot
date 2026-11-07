@@ -156,3 +156,6 @@ func memberReqCaptchaGuard(bot *gotgbot.Bot, chatID, userID int64) (handled bool
 	})
 	return true, err
 }
+
+// memberReqJoinReset is a compile-only stand-in of the red commit.
+func memberReqJoinReset(bot *gotgbot.Bot, chat *gotgbot.Chat, user gotgbot.User, joinDate time.Time) {}

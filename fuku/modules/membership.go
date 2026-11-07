@@ -39,6 +39,7 @@ type MembershipDeps struct {
 	IsApproved func(chatID, userID int64) bool
 	Challenge  func(user gotgbot.User) error
 	Welcome    func(user gotgbot.User) error
+	Reset      func(user gotgbot.User)
 }
 
 type joinErrorStage uint8
