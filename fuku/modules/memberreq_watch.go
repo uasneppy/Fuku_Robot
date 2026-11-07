@@ -37,6 +37,10 @@ const memberReqJobTimeout = 90 * time.Second
 // so a test can make it small.
 var memberReqMaxInFlight = 32
 
+// memberReqRedisClient is the operational Redis client of the pass cache, nil without Redis.
+// A variable so a test can take Redis away.
+var memberReqRedisClient = raidRedis
+
 // memberReqJobs counts the enforcement jobs in flight. It is a counter and not a
 // sync.WaitGroup because the shutdown drain gives up after its wait while a new job can still
 // start.

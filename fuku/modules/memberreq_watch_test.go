@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -12,7 +13,10 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/redis/go-redis/v9"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
+	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
@@ -259,4 +263,293 @@ func TestMemberReqWatcherContinuesGroups(t *testing.T) {
 		check(t, "settings error", text(env.mreqMember("Jo", "", "jo"), "error"))
 	})
 	memberReqJobs.wait()
+}
+
+// mreqPassKeyOf is the Redis key of a member's clean verdict in the environment's group.
+func (e *memberReqEnv) mreqPassKeyOf(userID int64) string {
+	return fmt.Sprintf("fuku:memberreq:pass:%d:%d", e.chat.Id, userID)
+}
+
+// mreqOldHold writes, straight through the repository, a hold of a warn that was claimed an
+// hour ago and confirmed, so a clean message dated now deletes it when the clean predicate
+// runs and leaves it when the predicate does not.
+func (e *memberReqEnv) mreqOldHold(userID int64) {
+	e.t.Helper()
+	punished := time.Now().Add(-time.Hour)
+	won, err := memberreq.ClaimHold(context.Background(), &models.ChatRequirementHold{
+		ChatID: e.chat.Id, UserID: userID, Rules: 1, Action: models.RequirementActionWarn,
+		CreatedAt: punished, PunishedAt: &punished,
+	})
+	if err != nil || !won {
+		e.t.Fatalf("seed hold: won = %t, error = %v", won, err)
+	}
+}
+
+func TestMemberReqPassCache(t *testing.T) {
+	setup := func(t *testing.T) (*memberReqEnv, gotgbot.User) {
+		env := newMemberReqEnv(t)
+		env.loadMemberReq()
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		return env, env.mreqMember("Bo", "Li", "bo")
+	}
+	holdGone := func(env *memberReqEnv, userID int64) bool { return env.mreqHold(userID) == nil }
+
+	t.Run("a clean first message writes the verdict and makes no Telegram call", func(t *testing.T) {
+		env, member := setup(t)
+		env.mreqSend(member, "hello")
+		memberReqJobs.wait()
+
+		key := env.mreqPassKeyOf(member.Id)
+		got, err := env.redis.Get(key)
+		if err != nil {
+			t.Fatalf("pass key %s not written: %v", key, err)
+		}
+		settings, _ := memberreq.GetSettingsFresh(context.Background(), env.chat.Id)
+		if want := memberReqPassValue(settings, memberReqNamesOf(member)); got != want || len(got) != 16 {
+			t.Errorf("pass value = %q, want the 16-hex fingerprint %q", got, want)
+		}
+		if ttl := env.redis.TTL(key); ttl < 29*time.Minute || ttl > 30*time.Minute {
+			t.Errorf("pass TTL = %v, want 30 minutes", ttl)
+		}
+		if strings.Contains(key, member.FirstName) || strings.Contains(got, member.FirstName) {
+			t.Error("the pass key or value carries a name")
+		}
+		if n := env.mreqCallsAbout(member.Id, "getChatMember", "restrictChatMember", "banChatMember", "unbanChatMember"); n != 0 {
+			t.Errorf("a clean message made %d Telegram calls about the member, want none", n)
+		}
+	})
+
+	t.Run("the second message finds the value and runs no clean predicate", func(t *testing.T) {
+		env, member := setup(t)
+		env.mreqSend(member, "first")
+		env.mreqOldHold(member.Id)
+		env.mreqSend(member, "second")
+		if holdGone(env, member.Id) {
+			t.Error("the clean predicate ran on the second message, the pass value should have skipped it")
+		}
+	})
+
+	t.Run("a rename misses and runs the predicate", func(t *testing.T) {
+		env, member := setup(t)
+		env.mreqSend(member, "first")
+		env.mreqOldHold(member.Id)
+		renamed := member
+		renamed.LastName = "Lee"
+		env.mreqSend(renamed, "after the rename")
+		if !holdGone(env, member.Id) {
+			t.Error("a renamed member's message did not run the clean predicate")
+		}
+		settings, _ := memberreq.GetSettingsFresh(context.Background(), env.chat.Id)
+		if got, _ := env.redis.Get(env.mreqPassKeyOf(member.Id)); got != memberReqPassValue(settings, memberReqNamesOf(renamed)) {
+			t.Errorf("pass value after the rename = %q, want the renamed member's fingerprint", got)
+		}
+	})
+
+	t.Run("a settings change misses and runs the predicate", func(t *testing.T) {
+		env, member := setup(t)
+		env.mreqSend(member, "first")
+		env.mreqOldHold(member.Id)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleUsername: models.RequirementActionKick})
+		env.mreqSend(member, "after the change")
+		if !holdGone(env, member.Id) {
+			t.Error("a settings change did not make the next message run the clean predicate")
+		}
+	})
+
+	t.Run("a violation never writes the verdict", func(t *testing.T) {
+		env, _ := setup(t)
+		violator := env.mreqMember("Alex", "", "alex")
+		env.mreqSend(violator, "violation")
+		memberReqJobs.wait()
+		if env.redis.Exists(env.mreqPassKeyOf(violator.Id)) {
+			t.Error("a pass value was written for a violator")
+		}
+	})
+
+	t.Run("a message much older than now never writes the verdict", func(t *testing.T) {
+		env, member := setup(t)
+		env.mreqSendAt(member, "old", time.Now().Add(-time.Hour).Unix())
+		if env.redis.Exists(env.mreqPassKeyOf(member.Id)) {
+			t.Error("a delayed old message wrote a pass value that would hide a later hold from the predicate")
+		}
+	})
+
+	t.Run("without Redis the predicate runs on every message and nobody is punished wrongly", func(t *testing.T) {
+		env, member := setup(t)
+		mreqSwap(t, &memberReqRedisClient, func() *redis.Client { return nil })
+		env.mreqSend(member, "first")
+		env.mreqOldHold(member.Id)
+		env.mreqSend(member, "second")
+		memberReqJobs.wait()
+		if !holdGone(env, member.Id) {
+			t.Error("with no pass cache the predicate did not run")
+		}
+		if env.mreqWarnRow(member.Id) != nil {
+			t.Error("a clean member was warned")
+		}
+	})
+}
+
+func TestMemberReqCleanEndsWarnHold(t *testing.T) {
+	env := newMemberReqEnv(t)
+	env.loadMemberReq()
+	env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+	member := env.mreqMember("Alex", "", "alex")
+
+	env.mreqSend(member, "no last name yet")
+	memberReqJobs.wait()
+	hold := env.mreqHold(member.Id)
+	if hold == nil || hold.PunishedAt == nil {
+		t.Fatalf("hold after the first violation = %+v, want a punished warn hold", hold)
+	}
+
+	t.Run("a message dated before the hold never deletes it", func(t *testing.T) {
+		fixed := member
+		fixed.LastName = "Smith"
+		env.mreqSendAt(fixed, "an old message processed late", hold.CreatedAt.Add(-time.Hour).Unix())
+		if env.mreqHold(member.Id) == nil {
+			t.Fatal("a message older than the hold deleted it")
+		}
+	})
+
+	t.Run("a later clean message ends the episode and a new break is a new episode", func(t *testing.T) {
+		fixed := member
+		fixed.LastName = "Smith"
+		env.mreqSendAt(fixed, "now with a last name", time.Now().Add(5*time.Second).Unix())
+		if env.mreqHold(member.Id) != nil {
+			t.Fatal("the hold is still there after a clean message more than 2 s later")
+		}
+		env.mreqSend(member, "no last name again")
+		memberReqJobs.wait()
+
+		row := env.mreqWarnRow(member.Id)
+		if row == nil || row.NumWarns != 2 {
+			t.Fatalf("warns after the second episode = %+v, want 2", row)
+		}
+		var notices int
+		for _, sent := range env.mreqNotices() {
+			if strings.Contains(mreqText(sent), staffMarker("mreq_notice_warn")) {
+				notices++
+			}
+		}
+		if notices != 2 {
+			t.Errorf("warn notices = %d, want one per episode (2)", notices)
+		}
+	})
+}
+
+func TestMemberReqWatcherExemptions(t *testing.T) {
+	env := newMemberReqEnv(t)
+	env.loadMemberReq()
+	env.mreqRules(map[memberreq.Rule]int{
+		memberreq.RuleLastName: models.RequirementActionMute,
+		memberreq.RuleUsername: models.RequirementActionMute,
+	})
+	text := func(u gotgbot.User) *gotgbot.Message {
+		return &gotgbot.Message{Chat: env.chat, From: &u, Text: "hello", Date: time.Now().Unix()}
+	}
+	violator := func() gotgbot.User { return env.mreqMember("Alex", "", "") }
+
+	// exempt runs send and asserts that the user was neither checked nor held nor noticed.
+	exempt := func(name string, userID int64, send func()) {
+		t.Run(name, func(t *testing.T) {
+			notices := len(env.mreqNotices())
+			send()
+			memberReqJobs.wait()
+			if env.mreqHold(userID) != nil {
+				t.Error("a hold was written")
+			}
+			if n := env.mreqCallsAbout(userID, "getChatMember", "restrictChatMember", "banChatMember", "unbanChatMember"); n != 0 {
+				t.Errorf("%d Telegram calls were made about the member, want none", n)
+			}
+			if after := len(env.mreqNotices()); after != notices {
+				t.Errorf("%d messages were posted, want none", after-notices)
+			}
+		})
+	}
+
+	admin := violator()
+	env.listAdmin(env.chat.Id, admin.Id)
+	cache.InvalidateAdminCache(env.chat.Id)
+	t.Cleanup(func() { cache.InvalidateAdminCache(env.chat.Id) })
+	cache.LoadAdminCache(env.bot, env.chat.Id)
+	exempt("a member the cached admin list knows as admin", admin.Id, func() { env.mreqProcess(text(admin)) })
+
+	approved := violator()
+	if err := approvals.AddApprovedUser(env.chat.Id, approved.Id, env.admin.Id, "trusted"); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	exempt("an approved member", approved.Id, func() { env.mreqProcess(text(approved)) })
+
+	pending := violator()
+	if _, err := captcha.CreateCaptchaAttemptPreMessage(pending.Id, env.chat.Id, "answer", 5); err != nil {
+		t.Fatalf("pending captcha: %v", err)
+	}
+	exempt("a member with a pending captcha", pending.Id, func() { env.mreqProcess(text(pending)) })
+
+	anon := violator()
+	exempt("a message sent as the group", anon.Id, func() {
+		msg := text(anon)
+		msg.SenderChat = &gotgbot.Chat{Id: env.chat.Id, Type: "supergroup"}
+		env.mreqProcess(msg)
+	})
+	channel := violator()
+	exempt("a message sent as a channel", channel.Id, func() {
+		msg := text(channel)
+		msg.SenderChat = &gotgbot.Chat{Id: -1009990002, Type: "channel"}
+		env.mreqProcess(msg)
+	})
+	forward := violator()
+	exempt("an automatic forward", forward.Id, func() {
+		msg := text(forward)
+		msg.IsAutomaticForward = true
+		env.mreqProcess(msg)
+	})
+	for _, id := range []int64{777000, 1087968824, 136817688} {
+		exempt(fmt.Sprintf("service account %d", id), id, func() {
+			env.mreqProcess(text(gotgbot.User{Id: id, FirstName: "Telegram"}))
+		})
+	}
+	edited := violator()
+	exempt("an edited message", edited.Id, func() {
+		id := env.updateID()
+		msg := text(edited)
+		msg.MessageId = id
+		msg.EditDate = time.Now().Unix()
+		if err := env.dispatcher.ProcessUpdate(env.bot, &gotgbot.Update{UpdateId: id, EditedMessage: msg}, nil); err != nil {
+			t.Errorf("ProcessUpdate error = %v", err)
+		}
+	})
+	private := violator()
+	exempt("a message in a private chat", private.Id, func() {
+		msg := text(private)
+		msg.Chat = gotgbot.Chat{Id: private.Id, Type: "private", FirstName: private.FirstName}
+		env.mreqProcess(msg)
+	})
+	basic := violator()
+	exempt("a message in a basic group", basic.Id, func() {
+		msg := text(basic)
+		msg.Chat = gotgbot.Chat{Id: env.chat.Id, Type: "group", Title: "Basic"}
+		env.mreqProcess(msg)
+	})
+	robot := violator()
+	exempt("a bot sender", robot.Id, func() {
+		bot := robot
+		bot.IsBot = true
+		env.mreqProcess(text(bot))
+	})
+	joiner := violator()
+	exempt("a new_chat_members service message", joiner.Id, func() {
+		msg := &gotgbot.Message{Chat: env.chat, From: &joiner, NewChatMembers: []gotgbot.User{joiner}, Date: time.Now().Unix()}
+		if err := memberReqModule.memberReqWatcher(env.bot, env.mreqWatcherCtx(msg)); !errors.Is(err, ext.ContinueGroups) {
+			t.Errorf("watcher returned %v", err)
+		}
+	})
+	unreadable := violator()
+	exempt("an unreadable setting", unreadable.Id, func() {
+		mreqSwap(t, &memberReqSettingsLookup, func(context.Context, int64) (*models.ChatRequirements, error) {
+			return nil, errors.New("database unavailable")
+		})
+		env.mreqProcess(text(unreadable))
+	})
 }
