@@ -1151,7 +1151,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (the lockdown guard, which runs first, dedupes by its joiner row instead and never gates a ban on Redis).
 - Greet once (`welcome_once`, `greeted_members`): the only place that claims is `SendWelcomeMessage`, which the
   `chat_member` join, the join service message and the captcha pass (button and web, through `finishCaptchaPass`) all
-  call, so a member is claimed exactly where they are really welcomed. A captcha-failed joiner, a joiner the lockdown
+  reach through `memberReqJoinThenWelcome` (the member requirements' join entry, below), so a member is claimed exactly
+  where they are really welcomed: a member the requirements kick, ban or mute on join is never claimed, because the entry
+  sends them no welcome. A captcha-failed joiner, a joiner the lockdown
   guard records for a ban, a join while the Welcome switch is off, any join while Greet once is off and every preview
   write no row, because none of them reaches the claim (`TestGreetOnceWelcomeOffNoClaim`, `TestGreetOnceOffNoRecord`,
   `TestGreetOnceCaptchaPathAndFailure`, `TestGreetOnceLockdownBanNoRecord`). `TestGreetOnceConcurrentOneWelcome` proves
@@ -1161,8 +1163,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
   flood limit is welcomed on their next join.
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
-  place that punishes a member for a broken rule; its only production caller is the message watcher's job, and only while
-  the enforcement switch is on (the join check will be the second). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
+  place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry
+  `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on. Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
   itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
   failed load is an error, never "not approved") and the pending captcha through the two context reads (same three
   states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds no warn, notice or
@@ -1218,6 +1220,35 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   invalidation, is the one window the watcher's own known-admin skip has too). Accepted limit: an unknown-status
   violator's message is not deleted during a pause (the cached list cannot say and a pause forbids the live lookup). Logs
   carry chat and user IDs and outcomes only, never a name, a rule text or a notice text.
+- Member requirements, the join (`memberreq_join.go`): `memberReqJoinThenWelcome` is the one entry of both welcome paths. The
+  Welcome dependency of `membershipDepsForJoin` (the `chat_member` join and the join service message, after
+  `claimRecentJoinProcessing`) and the last step of `finishCaptchaPass` (the button pass and the web pass, so the captcha
+  always runs first and the paths cannot drift) both call it, and `captcha.go` no longer calls `SendWelcomeMessage`
+  itself. It reads the switch through `memberReqLive()` first (never the variable: it runs on captcha lifecycle goroutines)
+  and, while it is false, sends exactly the plain welcome of before, as it does for a chat that is not a supergroup, a bot,
+  the bot itself and a Telegram service account (`memberReqNeverChecked`), a settings read that failed and a group with
+  every rule off. With a rule on it reads the member's hold fresh through `memberReqHoldRead` (the one hold read of the
+  entry and the guard, a test seam): a punished requirement mute, which is the D-08 race of a member who posted before
+  their captcha attempt existed, records `welcome_held` through `memberreq.SetHoldWelcomeHeld` and sends no welcome,
+  whatever Check on join says. With Check on join off the member is welcomed with no further read and no
+  `getChatMember`. Otherwise `memberReqEnforce` runs synchronously (`memberReqJoinTimeout`, 15 s, `memberReqFromJoin`) with
+  its one live `getChatMember`: a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
+  at the claim, a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
+  removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot) and a check that could
+  not be answered are welcomed. A captcha-failed joiner and a joiner the lockdown guard records for a ban never reach the
+  entry. The captcha guard (`memberReqCaptchaGuard`) is the first statement of `unmuteCaptchaUser`, the one choke point of
+  every captcha unmute (the pass, `restoreCaptchaPermissions`, restart recovery and the `captcha_muted_users` retry
+  worker). While `memberReqLive()` is false it reads nothing and changes no captcha unmute: no hold read, no Telegram call,
+  no error (`TestMemberReqCaptchaGuardOffUntilLive`, with a counting always-failing `memberReqHoldRead`). Once the switch is
+  on it reads the member's hold, and a punished requirement mute makes it re-apply `MutedPermissions` with `until_date`
+  the hold's own marker through `memberReqPaced` instead of unmuting, so a captcha pass never frees a held member and the
+  marker stays valid for "I fixed it" (D-08). A hold-read error fails closed: the guard returns an error wrapped with the
+  chat and user IDs only (`errMemberReqHoldUnreadable`, none of the database's text), `isPermanentUnmuteError` answers
+  false for it, and the member stays muted while the caller's own retry applies (a `captcha_muted_users` row that the
+  5-minute worker tries again, a kept row, or the logged error of restart recovery). A permanent answer would have made
+  the worker delete its row and leave the member muted with no retry. Accepted cost: a passing database fault delays a
+  captcha unmute until the next retry that can read, rather than freeing a member the requirements muted. No other mute
+  path is edited.
 - The member requirements runner (`memberReqRunAsync`, `memberreq_watch.go`): a violating message is handed to a job on its
   own goroutine, counted in `memberReqJobs` (a `raidPostTracker`) before `memberReqDraining` is read, capped at
   `memberReqMaxInFlight` (32) by `startBelow` (check and increment in one step), recovering from panics. A full runner sheds
