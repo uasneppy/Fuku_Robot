@@ -507,7 +507,7 @@ func TestProcessSingleNewMemberSkipsDuplicatesAndFallsBackWhenCaptchaMuteFails(t
 	}
 
 	_ = newServiceJoinContext(bot, chat, admin, []gotgbot.User{member})
-	processSingleNewMember(bot, &chat, 0, gotgbot.User{Id: bot.Id, FirstName: "Fuku", IsBot: true}, false)
+	_ = processSingleNewMember(bot, &chat, 0, gotgbot.User{Id: bot.Id, FirstName: "Fuku", IsBot: true}, false, time.Now())
 	if calls := client.callsFor("sendMessage"); len(calls) != 0 {
 		t.Fatalf("sendMessage calls = %d, want none for bot join", len(calls))
 	}
@@ -516,7 +516,7 @@ func TestProcessSingleNewMemberSkipsDuplicatesAndFallsBackWhenCaptchaMuteFails(t
 	if !claimRecentJoinProcessing(chat.Id, member.Id) {
 		t.Fatal("claimRecentJoinProcessing setup returned false")
 	}
-	processSingleNewMember(bot, &chat, 0, member, false)
+	_ = processSingleNewMember(bot, &chat, 0, member, false, time.Now())
 	if calls := client.callsFor("sendMessage"); len(calls) != 0 {
 		t.Fatalf("sendMessage calls = %d, want none for duplicate join", len(calls))
 	}
@@ -526,7 +526,7 @@ func TestProcessSingleNewMemberSkipsDuplicatesAndFallsBackWhenCaptchaMuteFails(t
 		t.Fatalf("SetCaptchaEnabled setup error = %v", err)
 	}
 	client.errors["restrictChatMember"] = errors.New("telegram: bot lacks restrict permission")
-	if err := processSingleNewMember(bot, &chat, 0, member, true); err == nil {
+	if err := processSingleNewMember(bot, &chat, 0, member, true, time.Now()); err == nil {
 		t.Fatal("processSingleNewMember should return error when mute fails")
 	}
 	if calls := client.callsFor("restrictChatMember"); len(calls) != 1 {
@@ -552,7 +552,7 @@ func TestProcessSingleNewMemberCaptchaSuccessSkipsWelcome(t *testing.T) {
 
 	_ = newServiceJoinContext(bot, chat, admin, []gotgbot.User{member})
 	clearRecentJoinProcessing(chat.Id, member.Id)
-	processSingleNewMember(bot, &chat, 0, member, true)
+	_ = processSingleNewMember(bot, &chat, 0, member, true, time.Now())
 
 	if calls := client.callsFor("restrictChatMember"); len(calls) != 1 {
 		t.Fatalf("restrictChatMember calls = %d, want initial mute", len(calls))
@@ -595,7 +595,7 @@ func TestProcessSingleNewMemberSkipsCaptchaForApprovedUser(t *testing.T) {
 
 	_ = newServiceJoinContext(bot, chat, gotgbot.User{Id: 777000, FirstName: "Telegram"}, []gotgbot.User{member})
 	clearRecentJoinProcessing(chat.Id, member.Id)
-	if err := processSingleNewMember(bot, &chat, 0, member, true); err != nil {
+	if err := processSingleNewMember(bot, &chat, 0, member, true, time.Now()); err != nil {
 		t.Fatalf("processSingleNewMember() error = %v", err)
 	}
 
@@ -626,7 +626,7 @@ func TestProcessSingleNewMemberCaptchaSendFailureUnmutesAndWelcomes(t *testing.T
 
 	_ = newServiceJoinContext(bot, chat, admin, []gotgbot.User{member})
 	clearRecentJoinProcessing(chat.Id, member.Id)
-	if err := processSingleNewMember(bot, &chat, 0, member, true); err == nil {
+	if err := processSingleNewMember(bot, &chat, 0, member, true, time.Now()); err == nil {
 		t.Fatal("processSingleNewMember should return error when captcha send fails")
 	}
 

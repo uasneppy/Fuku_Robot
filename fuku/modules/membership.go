@@ -76,6 +76,12 @@ func ProcessSingleJoin(chatID, botID int64, user gotgbot.User, captchaEnabled bo
 	if deps.Claim != nil && !deps.Claim(chatID, user.Id) {
 		return JoinIgnore, nil
 	}
+	// Reset settles what an earlier membership left behind (a requirement hold) before this
+	// join is decided. It runs only for the delivery that won the claim, so the join service
+	// message and the chat_member update of one join reset once.
+	if deps.Reset != nil {
+		deps.Reset(user)
+	}
 	approved := false
 	if deps.IsApproved != nil {
 		approved = deps.IsApproved(chatID, user.Id)

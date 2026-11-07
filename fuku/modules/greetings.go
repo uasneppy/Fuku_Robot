@@ -980,7 +980,7 @@ func (moduleStruct) newMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 		log.Errorf("[Greetings][newMember] Failed to get captcha settings for chat %d: %v", chat.Id, err)
 		captchaSettings = &db.CaptchaSettings{Enabled: false}
 	}
-	if err := processSingleNewMember(bot, &chatCopy, threadID, newMember, captchaSettings != nil && captchaSettings.Enabled); err != nil {
+	if err := processSingleNewMember(bot, &chatCopy, threadID, newMember, captchaSettings != nil && captchaSettings.Enabled, memberReqJoinDate(ctx.ChatMember.Date)); err != nil {
 		return err
 	}
 	return ext.EndGroups
@@ -1059,7 +1059,10 @@ func (moduleStruct) leftMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
-func membershipDepsForJoin(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64) MembershipDeps {
+func membershipDepsForJoin(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64, joinDate time.Time) MembershipDeps {
+	if joinDate.IsZero() {
+		joinDate = time.Now()
+	}
 	return MembershipDeps{
 		Claim: claimRecentJoinProcessing,
 		IsApproved: func(chatID, userID int64) bool {
@@ -1085,11 +1088,14 @@ func membershipDepsForJoin(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64)
 			}
 			return memberReqJoinThenWelcome(bot, &ctxCopy, user)
 		},
+		Reset: func(user gotgbot.User) {
+			memberReqJoinReset(bot, chat, user, joinDate)
+		},
 	}
 }
 
-func processSingleNewMember(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64, newMember gotgbot.User, captchaEnabled bool) error {
-	outcome, err := ProcessSingleJoin(chat.Id, bot.Id, newMember, captchaEnabled, membershipDepsForJoin(bot, chat, threadID))
+func processSingleNewMember(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64, newMember gotgbot.User, captchaEnabled bool, joinDate time.Time) error {
+	outcome, err := ProcessSingleJoin(chat.Id, bot.Id, newMember, captchaEnabled, membershipDepsForJoin(bot, chat, threadID, joinDate))
 	if err != nil {
 		logJoinOperationError("Failed to process new member join", err)
 		return err
@@ -1127,7 +1133,7 @@ func (moduleStruct) cleanService(bot *gotgbot.Bot, ctx *ext.Context) error {
 		chatCopyBase := *chat
 
 		if len(msg.NewChatMembers) > 0 {
-			deps := membershipDepsForJoin(bot, &chatCopyBase, threadID)
+			deps := membershipDepsForJoin(bot, &chatCopyBase, threadID, memberReqJoinDate(msg.Date))
 			for _, outcome := range ProcessJoins(chat.Id, bot.Id, msg.NewChatMembers, captchaEnabled, deps) {
 				if outcome == JoinIgnore {
 					continue

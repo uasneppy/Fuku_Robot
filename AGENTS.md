@@ -1096,6 +1096,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   punished, notice ID, welcome held, backoff, revert to pending, take by ID with `DELETE ... RETURNING`, restore, the clean
   predicate, clear all, take before a join) are fresh database statements too. The hold is read fresh, never cached (so no
   `DeleteCache` applies), never touches Redis and works without it, and is never part of backup, export, import or reset.
+  A detected leave (`leftMember`) deletes every hold of the member in the chat (`ClearHolds`); a rejoin deletes only the
+  holds created before the join's own date (`TakeHoldsBefore`) and lifts a live marker mute of a punished mute hold first
+  (restoring the hold on failure), and a leave that Telegram does not report (restricted to restricted) is settled the same
+  way at the rejoin, never by deleting a mute hold at the leave.
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
   (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
@@ -1248,7 +1252,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   5-minute worker tries again, a kept row, or the logged error of restart recovery). A permanent answer would have made
   the worker delete its row and leave the member muted with no retry. Accepted cost: a passing database fault delays a
   captcha unmute until the next retry that can read, rather than freeing a member the requirements muted. No other mute
-  path is edited.
+  path is edited. `MembershipDeps.Reset` (nil-safe, so every `MembershipDeps` literal without it keeps working) runs in
+  `ProcessSingleJoin` after the delivery that won the dedupe claim and before the join is decided, so the join service
+  message and the `chat_member` update of one join reset once. `membershipDepsForJoin` and `processSingleNewMember` carry
+  the join's own date (`newMember`: `ctx.ChatMember.Date`; `cleanService`: `msg.Date`; `memberReqJoinDate` reads a missing
+  date as now) and fill `Reset` with `memberReqJoinReset`. A requirement-muted member's leave and rejoin are invisible to
+  the `chat_member` handlers (`ExtractJoinLeftStatusChange` reads restricted to restricted as neither a leave nor a join),
+  so the rejoin's service message is what ends that episode: the reset deletes the member's holds created before the join
+  date (`memberreq.TakeHoldsBefore`, so a hold the watcher created for this very membership survives) and, for a punished
+  mute hold, reads the live record and lifts the mute only while it still carries the hold's marker (`isMemberReqMute`; an
+  admin's, staff's or captcha's mute is never lifted), only with permissions from
+  `resolveUnmutePermissionsWithLockdown` (`memberReqUnmutePermissions`, `memberReqLiftMute`), and puts the hold back with its
+  ID and notice ID (`memberreq.RestoreHold`) when any step of the lift fails, so the next join retries; the member is then
+  checked again on join. A crash between the delete and the lift can strand a mute with no hold (accepted: an admin's
+  `/unmute` ends it). `leftMember` calls `memberreq.ClearHolds` right after `clearRecentJoinProcessing`, so a kicked member
+  who rejoins is checked again; a failure is logged by IDs and never stops the goodbye. Neither the reset nor the leave
+  hook is behind `memberReqLive()`: they only delete holds or lift a requirement mute, and while the switch is off no hold
+  exists; each costs one statement per join or leave. Nothing of the requirements ever unbans, so a banned member stays
+  banned. Known limit: the goodbye after a requirement kick or ban is kept (parity with `/kick`, the captcha kick and the
+  warn limit), so with goodbye on every such removal posts one.
 - The member requirements runner (`memberReqRunAsync`, `memberreq_watch.go`): a violating message is handed to a job on its
   own goroutine, counted in `memberReqJobs` (a `raidPostTracker`) before `memberReqDraining` is read, capped at
   `memberReqMaxInFlight` (32) by `startBelow` (check and increment in one step), recovering from panics. A full runner sheds
@@ -1726,11 +1748,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute; it is a wrapper of
   `resolveUnmutePermissionsWithLockdown`, which returns the same permissions and error plus whether a lockdown was
   active, so a caller can choose its words without a second lookup (the member requirements' lift of a mute whose notice
-  could not be delivered, and later their rejoin reset and "I fixed it", use the sibling through `memberReqLiftMute`).
+  could not be delivered and their rejoin reset, and later "I fixed it", use the sibling through `memberReqLiftMute`).
   During an active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute
   path goes through it: `/unmute`, the unrestrict button's Unmute, a captcha pass, staff `/unmute` (and so the undo of a
-  staff mute) and the requirements' lift. It reads the lockdown fresh through the `lockdownSnapshotLookup` seam, only for a chat with a non-zero ID,
+  staff mute) and the requirements' lifts (the undeliverable notice and the rejoin reset). It reads the lockdown fresh through the `lockdownSnapshotLookup` seam, only for a chat with a non-zero ID,
   and only an active row counts. None of them may restrict or announce an unmute when it returns an error: `/unmute` and
   the button report the error, a captcha pass schedules its retry, and staff `/unmute` fails that group. The `/unmute`
   reply adds `mutes_unmute_lockdown_note` during a lockdown.

@@ -380,6 +380,7 @@ func TestMemberReqRejoinResetsMuteHold(t *testing.T) {
 				if won, err := memberreq.ClaimHold(context.Background(), old); err != nil || !won {
 					t.Fatalf("ClaimHold = %v, %v", won, err)
 				}
+				env.mreqAgeHold(old.ID)
 
 				env.mreqServiceJoinNow(member)
 

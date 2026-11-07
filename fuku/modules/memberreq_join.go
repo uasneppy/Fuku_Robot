@@ -157,5 +157,78 @@ func memberReqCaptchaGuard(bot *gotgbot.Bot, chatID, userID int64) (handled bool
 	return true, err
 }
 
-// memberReqJoinReset is a compile-only stand-in of the red commit.
-func memberReqJoinReset(bot *gotgbot.Bot, chat *gotgbot.Chat, user gotgbot.User, joinDate time.Time) {}
+// memberReqResetTimeout bounds the whole rejoin reset of one member: the hold statement, the
+// live getChatMember, the group read and the one lift.
+const memberReqResetTimeout = 20 * time.Second
+
+// memberReqJoinDate is the date of a join as the reset reads it: Telegram's Unix date, or now
+// when the update carries none.
+func memberReqJoinDate(unix int64) time.Time {
+	if unix <= 0 {
+		return time.Now()
+	}
+	return time.Unix(unix, 0)
+}
+
+// memberReqJoinReset settles the requirement holds an earlier membership of user left in chat,
+// at the join that won its dedupe claim (MembershipDeps.Reset; D-07, D-22). A member who was
+// muted by the requirements and left and rejoined is invisible to the chat_member handlers
+// (restricted to restricted is neither a leave nor a join), so the rejoin's service message is
+// the one place that ends that episode: without it the member would stay muted for the marker's
+// 330 days with no button.
+//
+// It deletes only the holds created before joinDate (memberreq.TakeHoldsBefore), so a hold the
+// watcher created for this very membership, because the member posted before their join was
+// processed, survives. For a punished mute hold it reads the member's live record and lifts the
+// mute only while that record still carries the hold's marker (isMemberReqMute): an admin's,
+// staff's or captcha's mute replaced the end date and is never ours to lift. The lift uses only
+// memberReqUnmutePermissions (the group's live defaults, or an active lockdown's stored
+// permissions) and memberReqLiftMute. When any step of the lift fails the hold is put back with
+// its ID and notice ID (memberreq.RestoreHold), so the next join retries and the member still
+// has a hold. Nothing here ever unbans, and every log line carries IDs only.
+//
+// It is deliberately not behind the enforcement switch: it only deletes holds or lifts a
+// requirement mute, and while the switch is off no hold exists.
+func memberReqJoinReset(bot *gotgbot.Bot, chat *gotgbot.Chat, user gotgbot.User, joinDate time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), memberReqResetTimeout)
+	defer cancel()
+	holds, err := memberreq.TakeHoldsBefore(ctx, chat.Id, user.Id, joinDate)
+	if err != nil {
+		log.Errorf("[MemberReq] resetting the holds of user %d in chat %d on their join failed: %s", user.Id, chat.Id, memberReqErrText(err))
+		return
+	}
+	for i := range holds {
+		if !memberReqPunishedMute(&holds[i]) {
+			continue
+		}
+		liftErr := memberReqLiftOldMute(ctx, bot, chat.Id, user.Id, &holds[i])
+		if liftErr == nil {
+			continue
+		}
+		restoreCtx, restoreCancel := memberReqRecordCtx(ctx)
+		if restoreErr := memberreq.RestoreHold(restoreCtx, &holds[i]); restoreErr != nil {
+			log.Errorf("[MemberReq] restoring the hold of user %d in chat %d after a failed rejoin lift failed: %s", user.Id, chat.Id, memberReqErrText(restoreErr))
+		}
+		restoreCancel()
+		log.Warnf("[MemberReq] the requirement mute of user %d in chat %d could not be lifted at their rejoin, so the hold was kept: %s",
+			user.Id, chat.Id, memberReqErrText(liftErr))
+	}
+}
+
+// memberReqLiftOldMute lifts a punished requirement mute at the rejoin, only while the member's
+// live record still carries the hold's marker. A record that does not carry it (an admin's mute,
+// no restriction left) is nothing to lift and no error.
+func memberReqLiftOldMute(ctx context.Context, bot *gotgbot.Bot, chatID, userID int64, hold *models.ChatRequirementHold) error {
+	member, err := memberReqLiveMember(ctx, bot, chatID, userID)
+	if err != nil {
+		return err
+	}
+	if !isMemberReqMute(member, hold.MuteUntil) {
+		return nil
+	}
+	perms, _, err := memberReqUnmutePermissions(ctx, bot, chatID)
+	if err != nil {
+		return err
+	}
+	return memberReqLiftMute(ctx, bot, chatID, userID, perms)
+}
