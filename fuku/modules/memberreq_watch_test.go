@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/redis/go-redis/v9"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
@@ -551,5 +552,185 @@ func TestMemberReqWatcherExemptions(t *testing.T) {
 			return nil, errors.New("database unavailable")
 		})
 		env.mreqProcess(text(unreadable))
+	})
+}
+
+// mreqRestrictCalls counts the restrictChatMember requests about userID that the given
+// environments' fakes recorded, together.
+func mreqRestrictCalls(userID int64, envs ...*memberReqEnv) int {
+	total := 0
+	for _, env := range envs {
+		total += env.mreqCallsAbout(userID, "restrictChatMember")
+	}
+	return total
+}
+
+// mreqNoticeCount counts the sent messages of the given environments that contain marker.
+func mreqNoticeCount(marker string, envs ...*memberReqEnv) int {
+	total := 0
+	for _, env := range envs {
+		for _, sent := range env.mreqNotices() {
+			if strings.Contains(mreqText(sent), marker) {
+				total++
+			}
+		}
+	}
+	return total
+}
+
+func TestMemberReqOnePunishmentAcrossReplicas(t *testing.T) {
+	// sendAtOnce sends n messages of user at the same time, spread over the three processes.
+	sendAtOnce := func(user gotgbot.User, n int, envs ...*memberReqEnv) {
+		var wg sync.WaitGroup
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func(env *memberReqEnv) {
+				defer wg.Done()
+				env.mreqSend(user, "same message")
+			}(envs[i%len(envs)])
+		}
+		wg.Wait()
+		memberReqJobs.wait()
+	}
+
+	t.Run("a mute: ten messages at once give one restrict with the marker and one notice with the button", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.loadMemberReq()
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		violator := env.mreqMember("Alex", "", "alex")
+		first, second := env.mreqReplica(violator), env.mreqReplica(violator)
+
+		sendAtOnce(violator, 10, env, first, second)
+
+		if n := mreqRestrictCalls(violator.Id, env, first, second); n != 1 {
+			t.Fatalf("restrictChatMember calls in all three processes = %d, want exactly 1", n)
+		}
+		hold := env.mreqHold(violator.Id)
+		if hold == nil || hold.PunishedAt == nil || hold.Action != models.RequirementActionMute || hold.MuteUntil == 0 {
+			t.Fatalf("hold = %+v, want one punished mute hold with its marker", hold)
+		}
+		var until int64
+		for _, e := range []*memberReqEnv{env, first, second} {
+			for _, call := range e.fake.callsFor("restrictChatMember") {
+				if staffParamInt(call.Params, "user_id") == violator.Id {
+					until = staffParamInt(call.Params, "until_date")
+				}
+			}
+		}
+		if until != hold.MuteUntil {
+			t.Errorf("the restrict call's until_date = %d, want the hold's marker %d", until, hold.MuteUntil)
+		}
+		if n := mreqNoticeCount(staffMarker("mreq_notice_mute"), env, first, second); n != 1 {
+			t.Errorf("mute notices in all three processes = %d, want exactly 1", n)
+		}
+		var buttons int
+		for _, e := range []*memberReqEnv{env, first, second} {
+			for _, sent := range e.mreqNotices() {
+				for _, data := range mreqKeyboardData(sent) {
+					if strings.HasPrefix(data, "mreq|") {
+						buttons++
+					}
+				}
+			}
+		}
+		if buttons != 1 {
+			t.Errorf("I fixed it buttons = %d, want exactly 1", buttons)
+		}
+	})
+
+	t.Run("a warn: the first message warns once and nine more at once across the processes add nothing", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.loadMemberReq()
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		violator := env.mreqMember("Alex", "", "alex")
+		first, second := env.mreqReplica(violator), env.mreqReplica(violator)
+
+		// One warn is judged alone first: the warn module's transaction reads and then writes,
+		// and on SQLite a concurrent writer makes it fail with "database is locked" where
+		// PostgreSQL waits. The claim race itself is the mute subtest above.
+		env.mreqSend(violator, "first")
+		memberReqJobs.wait()
+		sendAtOnce(violator, 9, env, first, second)
+
+		if row := env.mreqWarnRow(violator.Id); row == nil || row.NumWarns != 1 {
+			t.Fatalf("warns row = %+v, want exactly one warn", row)
+		}
+		if n := mreqNoticeCount(staffMarker("mreq_notice_warn"), env, first, second); n != 1 {
+			t.Errorf("warn notices in all three processes = %d, want exactly 1", n)
+		}
+	})
+}
+
+func TestMemberReqRunnerSheds(t *testing.T) {
+	t.Run("the job deadline ends before a reclaim can start", func(t *testing.T) {
+		if memberReqJobTimeout != 90*time.Second {
+			t.Errorf("memberReqJobTimeout = %v, want 90s", memberReqJobTimeout)
+		}
+		if margin := memberreq.StaleClaim - memberReqJobTimeout; margin < 30*time.Second {
+			t.Errorf("StaleClaim - memberReqJobTimeout = %v, want at least 30s", margin)
+		}
+	})
+
+	t.Run("a full runner sheds the job with one log line and the next message is punished", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.loadMemberReq()
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		first := env.mreqMember("Alex", "", "alex")
+		second := env.mreqMember("Bea", "", "bea")
+		mreqSwap(t, &memberReqMaxInFlight, 1)
+		hook := logrustest.NewGlobal()
+		t.Cleanup(hook.Reset)
+
+		started, release := make(chan struct{}), make(chan struct{})
+		var startOnce, freeOnce sync.Once
+		freed := func() { freeOnce.Do(func() { close(release) }) }
+		t.Cleanup(freed)
+		env.fake.setOnGetMember(func(_, userID int64) {
+			if userID == first.Id {
+				startOnce.Do(func() { close(started) })
+				<-release
+			}
+		})
+
+		env.mreqSend(first, "blocks the only slot")
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the first job never reached its lookup")
+		}
+		env.mreqSend(second, "shed")
+		if env.mreqHold(second.Id) != nil {
+			t.Error("the shed member got a hold")
+		}
+		var shed []string
+		for _, entry := range hook.AllEntries() {
+			if strings.Contains(entry.Message, "was shed") {
+				shed = append(shed, entry.Message)
+			}
+		}
+		if len(shed) != 1 {
+			t.Fatalf("shed log lines = %d (%q), want 1", len(shed), shed)
+		}
+		for _, want := range []string{fmt.Sprint(second.Id), fmt.Sprint(env.chat.Id)} {
+			if !strings.Contains(shed[0], want) {
+				t.Errorf("shed line %q does not name %s", shed[0], want)
+			}
+		}
+		for _, name := range []string{"Alex", "Bea"} {
+			if strings.Contains(shed[0], name) {
+				t.Errorf("shed line %q carries a name", shed[0])
+			}
+		}
+
+		freed()
+		memberReqJobs.wait()
+		env.mreqSend(second, "checked again")
+		memberReqJobs.wait()
+		if hold := env.mreqHold(second.Id); hold == nil || hold.PunishedAt == nil {
+			t.Errorf("hold of the shed member after their next message = %+v, want a punished mute", hold)
+		}
+		if hold := env.mreqHold(first.Id); hold == nil || hold.PunishedAt == nil {
+			t.Errorf("hold of the first member = %+v, want a punished mute", hold)
+		}
 	})
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
+	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/utils/shutdown"
 )
@@ -173,4 +174,80 @@ func TestShutdownWaitsForRaidPosts(t *testing.T) {
 	default:
 		t.Fatal("the database-close probe never ran")
 	}
+}
+
+// TestShutdownWaitsForMemberReqJobs holds an enforcement job inside a slow lookup and runs a
+// real shutdown.Manager. The DB-close probe (registered first, so it runs last) must only
+// find the runner idle once the job has wound down, which needs the drain's own allowance,
+// far above the manager's 50 ms default; the cancelled job punishes nobody, and a message
+// after the drain starts no job.
+func TestShutdownWaitsForMemberReqJobs(t *testing.T) {
+	t.Run("the drain cancels the job, waits for it and a later message starts none", func(t *testing.T) {
+		restoreMemberReqRunner(t)
+		env := newMemberReqEnv(t)
+		env.loadMemberReq()
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		inFlight := env.mreqMember("Alex", "", "alex")
+		late := env.mreqMember("Bea", "", "bea")
+		mreqSwap(t, &memberReqStopWait, 3*time.Second)
+		env.fake.setDelay("getChatMember", env.chat.Id, 400*time.Millisecond)
+
+		env.mreqSend(inFlight, "in flight")
+
+		idle := make(chan bool, 1)
+		m := shutdown.NewManager()
+		m.RegisterHandler(func() error {
+			select {
+			case <-memberReqJobs.idleChan():
+				idle <- true
+			default:
+				idle <- false
+			}
+			return nil
+		})
+		RegisterMemberReqDrain(m)
+		if code := m.RunForTest(10*time.Second, 50*time.Millisecond); code != 0 {
+			t.Fatalf("shutdown exit code = %d, want 0", code)
+		}
+		select {
+		case ok := <-idle:
+			if !ok {
+				t.Error("a job was still running when the database-close handler ran")
+			}
+		default:
+			t.Fatal("the database-close probe never ran")
+		}
+		if n := mreqRestrictCalls(inFlight.Id, env); n != 0 {
+			t.Errorf("the cancelled job restricted the member %d times, want 0", n)
+		}
+		if hold := env.mreqHold(inFlight.Id); hold != nil && hold.PunishedAt != nil {
+			t.Errorf("the cancelled job left a punished hold %+v", hold)
+		}
+
+		env.fake.setDelay("getChatMember", env.chat.Id, 0)
+		env.mreqSend(late, "after the drain")
+		memberReqJobs.wait()
+		if env.mreqHold(late.Id) != nil || env.mreqCallsAbout(late.Id, "getChatMember") != 0 {
+			t.Error("a message after the drain started a job")
+		}
+	})
+
+	t.Run("StopMemberReqJobs returns within its wait when a job does not end", func(t *testing.T) {
+		restoreMemberReqRunner(t)
+		env := newMemberReqEnv(t)
+		env.loadMemberReq()
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		stuck := env.mreqMember("Cy", "", "cy")
+		mreqSwap(t, &memberReqStopWait, 200*time.Millisecond)
+		env.fake.setDelay("getChatMember", env.chat.Id, 1500*time.Millisecond)
+		env.mreqSend(stuck, "stuck")
+
+		start := time.Now()
+		if StopMemberReqJobs() {
+			t.Error("StopMemberReqJobs reported idle although the job was still running")
+		}
+		if elapsed := time.Since(start); elapsed > memberReqStopWait+500*time.Millisecond {
+			t.Errorf("StopMemberReqJobs took %v, want about %v", elapsed, memberReqStopWait)
+		}
+	})
 }

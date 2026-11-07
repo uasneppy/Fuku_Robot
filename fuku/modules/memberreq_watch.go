@@ -229,3 +229,9 @@ func (m moduleStruct) memberReqWatcher(b *gotgbot.Bot, ctx *ext.Context) (err er
 	})
 	return ext.ContinueGroups
 }
+
+// memberReqStopWait is the longest StopMemberReqJobs waits for the jobs in flight.
+var memberReqStopWait = 2 * time.Second
+
+// StopMemberReqJobs is the shutdown drain of the enforcement jobs.
+func StopMemberReqJobs() bool { return true }

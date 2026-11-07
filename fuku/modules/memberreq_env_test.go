@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -265,4 +266,42 @@ func (e *memberReqEnv) mreqWarnRow(userID int64) *models.Warns {
 		return nil
 	}
 	return &rows[0]
+}
+
+// mreqReplicaSeq spreads the update IDs of the replicas, so two replicas never process the
+// same update ID.
+var mreqReplicaSeq atomic.Int64
+
+// mreqReplica builds a second bot process over the same database and Redis (the settings
+// environment's otherReplica) with the requirements, warns and greetings modules loaded on
+// its dispatcher, and tells its fake about each member: the profile and a plain member record.
+func (e *memberReqEnv) mreqReplica(members ...gotgbot.User) *memberReqEnv {
+	e.t.Helper()
+	replica := &memberReqEnv{settingsEnv: e.otherReplica()}
+	replica.nextUpdate += mreqReplicaSeq.Add(1) * 10000
+	LoadMemberRequirements(replica.dispatcher)
+	LoadWarns(replica.dispatcher)
+	LoadGreetings(replica.dispatcher)
+	for _, member := range members {
+		replica.fake.setProfile(member.Id, member.FirstName, member.LastName, member.Username)
+		replica.fake.setMember(replica.chat.Id, member.Id, staffFakeMember{
+			Status:          gotgbot.ChatMemberStatusMember,
+			IsMember:        true,
+			CanSendMessages: true,
+		})
+	}
+	return replica
+}
+
+// restoreMemberReqRunner puts the job runner back when the test ends: StopMemberReqJobs sets
+// the draining flag and cancels the jobs' root context for good, which would shed or abort
+// every job of a later test.
+func restoreMemberReqRunner(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		memberReqDraining.Store(false)
+		memberReqRoot.mu.Lock()
+		defer memberReqRoot.mu.Unlock()
+		memberReqRoot.ctx, memberReqRoot.cancel = context.WithCancel(context.Background())
+	})
 }

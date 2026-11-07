@@ -63,3 +63,6 @@ func RegisterRaidAIDrain(m *shutdown.Manager) {
 		return nil
 	}, raidAIStopWait+shutdownDrainGrace)
 }
+
+// RegisterMemberReqDrain registers StopMemberReqJobs.
+func RegisterMemberReqDrain(_ *shutdown.Manager) {}
