@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -27,6 +28,9 @@ const memberReqNamePlaceholder = "<<mreq-name>>"
 
 // memberReqRulesSeparator joins the rule phrases of a notice; all 8 languages use the comma.
 const memberReqRulesSeparator = ", "
+
+// memberReqNoticeRateLimitWait is a compile-only stand-in until the notice retry lands.
+var memberReqNoticeRateLimitWait = 2 * time.Second
 
 // memberReqText translates key, logging the error and returning "" for a missing key, as the
 // other modules' helpers do. The text may hold the name token but never a name.

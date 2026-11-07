@@ -5,12 +5,19 @@ package modules
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
@@ -320,6 +327,475 @@ func TestMemberReqPunishUnknown(t *testing.T) {
 			}
 			if n := len(env.calls("getChatMember")); n != 1 {
 				t.Errorf("getChatMember calls = %d, want only the first live read (no verification for %s)", n, punishment.name)
+			}
+		})
+	}
+}
+
+// mreqShortenNoticeWait makes the wait between two sends of a rate-limited mute notice short.
+func mreqShortenNoticeWait(t *testing.T) {
+	t.Helper()
+	previous := memberReqNoticeRateLimitWait
+	memberReqNoticeRateLimitWait = 5 * time.Millisecond
+	t.Cleanup(func() { memberReqNoticeRateLimitWait = previous })
+}
+
+// mreqRefusals scripts n Telegram refusals (400) of one call.
+func mreqRefusals(n int) []error {
+	errs := make([]error, n)
+	for i := range errs {
+		errs[i] = staffFakeError(400, "Bad Request: chat not found")
+	}
+	return errs
+}
+
+// mreqWarnLines returns the Warn lines of the requirements that the hook caught.
+func mreqWarnLines(hook *logrustest.Hook) []string {
+	var lines []string
+	for _, entry := range hook.AllEntries() {
+		if entry.Level == log.WarnLevel && strings.Contains(entry.Message, "[MemberReq]") {
+			lines = append(lines, entry.Message)
+		}
+	}
+	return lines
+}
+
+// mreqRestrictPermissions is the permission set carried by the n-th (0-based) restrictChatMember
+// call of the group.
+func mreqRestrictPermissions(t *testing.T, env *memberReqEnv, n int) (gotgbot.ChatPermissions, moduleBotCall) {
+	t.Helper()
+	calls := env.calls("restrictChatMember")
+	if len(calls) <= n {
+		t.Fatalf("restrictChatMember calls = %d, want at least %d", len(calls), n+1)
+	}
+	perms, ok := calls[n].Params["permissions"].(gotgbot.ChatPermissions)
+	if !ok {
+		t.Fatalf("restrictChatMember permissions parameter is %T, want gotgbot.ChatPermissions", calls[n].Params["permissions"])
+	}
+	return perms, calls[n]
+}
+
+// mreqStartLockdown starts a manual lockdown of chatID that stores pre as the pre-lockdown
+// permissions.
+func mreqStartLockdown(t *testing.T, chatID int64, pre string) {
+	t.Helper()
+	lockdownCleanup(t, chatID)
+	started, err := lockdown.Start(&models.ChatLockdown{
+		ChatID:         chatID,
+		TriggerKind:    models.LockdownTriggerManual,
+		StartedBy:      1,
+		PrePermissions: pre,
+	})
+	if err != nil || !started {
+		t.Fatalf("lockdown.Start = %v, %v", started, err)
+	}
+}
+
+func TestResolveUnmutePermissionsWithLockdown(t *testing.T) {
+	live := gotgbot.ChatPermissions{CanSendMessages: false, CanPinMessages: true}
+	lookups := 0
+	previous := lockdownSnapshotLookup
+	lockdownSnapshotLookup = func(chatID int64) (*models.ChatLockdown, error) {
+		lookups++
+		return previous(chatID)
+	}
+	t.Cleanup(func() { lockdownSnapshotLookup = previous })
+
+	cases := []struct {
+		name       string
+		setup      func(t *testing.T, chatID int64)
+		info       func(chatID int64) *gotgbot.ChatFullInfo
+		wantPerms  func(t *testing.T) gotgbot.ChatPermissions
+		wantActive bool
+		wantErr    bool
+		wantLookup bool
+	}{
+		{
+			name:       "no lockdown returns the live defaults",
+			info:       func(id int64) *gotgbot.ChatFullInfo { return &gotgbot.ChatFullInfo{Id: id, Permissions: &live} },
+			wantPerms:  func(*testing.T) gotgbot.ChatPermissions { return live },
+			wantLookup: true,
+		},
+		{
+			name:       "no lockdown and no live defaults returns the fallback",
+			info:       func(id int64) *gotgbot.ChatFullInfo { return &gotgbot.ChatFullInfo{Id: id} },
+			wantPerms:  func(*testing.T) gotgbot.ChatPermissions { return defaultUnmutePermissions() },
+			wantLookup: true,
+		},
+		{
+			name:      "a chat with no ID is never looked up",
+			info:      func(int64) *gotgbot.ChatFullInfo { return &gotgbot.ChatFullInfo{Permissions: &live} },
+			wantPerms: func(*testing.T) gotgbot.ChatPermissions { return live },
+		},
+		{
+			name:      "a missing chat returns the fallback",
+			info:      func(int64) *gotgbot.ChatFullInfo { return nil },
+			wantPerms: func(*testing.T) gotgbot.ChatPermissions { return defaultUnmutePermissions() },
+		},
+		{
+			name:       "an active lockdown returns the stored permissions and says so",
+			setup:      func(t *testing.T, id int64) { mreqStartLockdown(t, id, lockdownTestPrePermissions) },
+			info:       func(id int64) *gotgbot.ChatFullInfo { return &gotgbot.ChatFullInfo{Id: id, Permissions: &live} },
+			wantPerms:  lockdownSnapshotPermissions,
+			wantActive: true,
+			wantLookup: true,
+		},
+		{
+			name: "a stored snapshot that does not decode is an error",
+			setup: func(t *testing.T, id int64) {
+				mreqStartLockdown(t, id, `{"can_send_messages":`)
+			},
+			info:       func(id int64) *gotgbot.ChatFullInfo { return &gotgbot.ChatFullInfo{Id: id, Permissions: &live} },
+			wantErr:    true,
+			wantLookup: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			chatID := uniqueModuleChatID()
+			lockdownCleanup(t, chatID)
+			if tc.setup != nil {
+				tc.setup(t, chatID)
+			}
+			lookups = 0
+			info := tc.info(chatID)
+			perms, active, err := resolveUnmutePermissionsWithLockdown(info)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error = %v, want error %t", err, tc.wantErr)
+			}
+			if active != tc.wantActive {
+				t.Errorf("lockdown active = %t, want %t", active, tc.wantActive)
+			}
+			if got := lookups > 0; got != tc.wantLookup {
+				t.Errorf("lockdown looked up = %t, want %t", got, tc.wantLookup)
+			}
+			want := gotgbot.ChatPermissions{}
+			if tc.wantPerms != nil {
+				want = tc.wantPerms(t)
+			}
+			if !reflect.DeepEqual(perms, want) {
+				t.Errorf("permissions = %+v, want %+v", perms, want)
+			}
+			// The wrapper every existing caller uses answers exactly the same.
+			wrapped, wrappedErr := resolveUnmutePermissions(info)
+			if !reflect.DeepEqual(wrapped, perms) || (wrappedErr != nil) != (err != nil) {
+				t.Errorf("resolveUnmutePermissions = %+v, %v; want the same as %+v, %v", wrapped, wrappedErr, perms, err)
+			}
+		})
+	}
+
+	t.Run("a failed lookup is an error with no permissions", func(t *testing.T) {
+		lockdownSnapshotLookup = func(int64) (*models.ChatLockdown, error) { return nil, errors.New("database down") }
+		perms, active, err := resolveUnmutePermissionsWithLockdown(&gotgbot.ChatFullInfo{Id: uniqueModuleChatID(), Permissions: &live})
+		if err == nil {
+			t.Fatal("error = nil, want the lookup failure")
+		}
+		if active || !reflect.DeepEqual(perms, gotgbot.ChatPermissions{}) {
+			t.Errorf("got %+v, active %t with an error, want zero permissions and false", perms, active)
+		}
+		if _, wrappedErr := resolveUnmutePermissions(&gotgbot.ChatFullInfo{Id: 1}); wrappedErr == nil {
+			t.Error("resolveUnmutePermissions error = nil, want the same failure")
+		}
+	})
+}
+
+func TestMemberReqMuteNoticeRetry(t *testing.T) {
+	mreqShortenNoticeWait(t)
+
+	t.Run("a mute notice the pacer gave up on is sent once the block passes", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		env.fake.script("sendMessage", env.chat.Id, mreqRateLimited()...)
+
+		got := env.mreqEnforce(env.mreqCase(member))
+		if got.Outcome != memberReqMuted {
+			t.Fatalf("outcome = %+v, want Muted", got)
+		}
+		notices := env.mreqNotices()
+		if len(notices) != 1 {
+			t.Fatalf("notices = %d, want exactly one", len(notices))
+		}
+		if n := len(env.calls("sendMessage")); n != 5 {
+			t.Errorf("sendMessage calls = %d, want the four the pacer gave up on and one more", n)
+		}
+		if n := len(env.calls("restrictChatMember")); n != 1 {
+			t.Errorf("restrictChatMember calls = %d, want only the mute (nothing lifted)", n)
+		}
+		hold := env.mreqHold(member.Id)
+		if hold == nil || hold.PunishedAt == nil || hold.NoticeMsgID != notices[0].MessageID {
+			t.Errorf("hold = %+v, want punished with the notice %d stored", hold, notices[0].MessageID)
+		}
+		if len(mreqKeyboardData(notices[0])) != 1 {
+			t.Errorf("notice buttons = %v, want the one I fixed it button", mreqKeyboardData(notices[0]))
+		}
+	})
+
+	t.Run("a notice Telegram refused once is sent on the retry", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		env.fake.script("sendMessage", env.chat.Id, mreqRefusals(1)...)
+
+		env.mreqEnforce(env.mreqCase(member))
+		notices := env.mreqNotices()
+		if len(notices) != 1 {
+			t.Fatalf("notices = %d, want exactly one", len(notices))
+		}
+		if n := len(env.calls("sendMessage")); n != 2 {
+			t.Errorf("sendMessage calls = %d, want the refused one and one retry", n)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt == nil || hold.NoticeMsgID != notices[0].MessageID {
+			t.Errorf("hold = %+v, want punished with the notice %d stored", hold, notices[0].MessageID)
+		}
+		if n := len(env.calls("restrictChatMember")); n != 1 {
+			t.Errorf("restrictChatMember calls = %d, want only the mute", n)
+		}
+	})
+
+	t.Run("a notice without a button refused twice is logged and changes no punishment", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionBan})
+		env.fake.script("sendMessage", env.chat.Id, mreqRefusals(2)...)
+
+		got := env.mreqEnforce(env.mreqCase(member))
+		if got.Outcome != memberReqRemoved {
+			t.Fatalf("outcome = %+v, want Removed", got)
+		}
+		if n := len(env.calls("sendMessage")); n != 2 {
+			t.Errorf("sendMessage calls = %d, want the refused one and one retry", n)
+		}
+		if n := len(env.mreqNotices()); n != 0 {
+			t.Errorf("notices = %d, want none delivered", n)
+		}
+		hold := env.mreqHold(member.Id)
+		if hold == nil || hold.PunishedAt == nil || hold.NoticeMsgID != 0 {
+			t.Errorf("hold = %+v, want punished with no notice stored", hold)
+		}
+		if n := len(env.calls("unbanChatMember")); n != 0 {
+			t.Errorf("unbanChatMember calls = %d, want the ban left alone", n)
+		}
+	})
+
+	t.Run("a notice without a button is not retried when the pacer gives up", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionKick})
+		env.fake.script("sendMessage", env.chat.Id, mreqRateLimited()...)
+
+		env.mreqEnforce(env.mreqCase(member))
+		if n := len(env.calls("sendMessage")); n != 4 {
+			t.Errorf("sendMessage calls = %d, want the four the pacer made and no more", n)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt == nil {
+			t.Errorf("hold = %+v, want the kick to stand", hold)
+		}
+	})
+
+	t.Run("a mute notice stops waiting when its context ends", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		blocked := make([]error, 0, 400)
+		for i := 0; i < 100; i++ {
+			blocked = append(blocked, mreqRateLimited()...)
+		}
+		env.fake.script("sendMessage", env.chat.Id, blocked...)
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		started := time.Now()
+		_, err := memberReqPostNotice(ctx, env.bot, env.chat.Id, "text", memberReqFixedButton(memberReqTranslator(ctx, env.chat.Id), 1, 2))
+		if err == nil {
+			t.Fatal("error = nil, want the failure when the context ends")
+		}
+		if elapsed := time.Since(started); elapsed > 3*time.Second {
+			t.Errorf("waited %s, want to stop soon after the context ended", elapsed)
+		}
+		if n := len(env.calls("sendMessage")); n < 8 {
+			t.Errorf("sendMessage calls = %d, want the notice retried while the pacer kept giving up", n)
+		}
+	})
+}
+
+// mreqUndeliverable is a group whose mute notice Telegram refuses twice: a member who breaks
+// the last-name rule with a mute, and the group's live default permissions.
+func mreqUndeliverable(t *testing.T) (*memberReqEnv, gotgbot.User, *logrustest.Hook) {
+	t.Helper()
+	hook := logrustest.NewGlobal()
+	t.Cleanup(hook.Reset)
+	env := newMemberReqEnv(t)
+	member := env.mreqMember("Alex", "", "alex")
+	env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+	env.fake.setChatPermsRaw(env.chat.Id, `{"can_send_messages":true,"can_pin_messages":true}`)
+	env.fake.script("sendMessage", env.chat.Id, mreqRefusals(2)...)
+	return env, member, hook
+}
+
+func TestMemberReqMuteNoticeUndeliverable(t *testing.T) {
+	livePermissions := gotgbot.ChatPermissions{CanSendMessages: true, CanPinMessages: true}
+
+	t.Run("the mute is lifted and the hold is left as a backoff row", func(t *testing.T) {
+		env, member, hook := mreqUndeliverable(t)
+
+		env.mreqEnforce(env.mreqCase(member))
+
+		if n := len(env.calls("sendMessage")); n != 2 {
+			t.Errorf("sendMessage calls = %d, want the refused notice and its one retry", n)
+		}
+		if n := len(env.mreqNotices()); n != 0 {
+			t.Errorf("messages posted = %d, want nothing posted", n)
+		}
+		if n := len(env.calls("restrictChatMember")); n != 2 {
+			t.Fatalf("restrictChatMember calls = %d, want the mute and its lift", n)
+		}
+		_, mute := mreqRestrictPermissions(t, env, 0)
+		if staffParamInt(mute.Params, "until_date") == 0 {
+			t.Error("the mute carried no marker end date")
+		}
+		lifted, lift := mreqRestrictPermissions(t, env, 1)
+		if !reflect.DeepEqual(lifted, livePermissions) {
+			t.Errorf("lift permissions = %+v, want the group's live defaults %+v", lifted, livePermissions)
+		}
+		if until := staffParamInt(lift.Params, "until_date"); until != 0 {
+			t.Errorf("lift until_date = %d, want none", until)
+		}
+		rec := env.fake.member(env.chat.Id, member.Id)
+		if rec == nil || rec.Status != gotgbot.ChatMemberStatusRestricted || !rec.CanSendMessages || rec.UntilDate != 0 {
+			t.Errorf("member after the lift = %+v, want restricted to the live defaults with no end date", rec)
+		}
+
+		hold := env.mreqHold(member.Id)
+		if hold == nil || hold.PunishedAt != nil {
+			t.Fatalf("hold = %+v, want a pending backoff row", hold)
+		}
+		if age := time.Since(hold.CreatedAt); age > 5*time.Second {
+			t.Errorf("hold created_at is %s old, want refreshed when the mute was lifted", age)
+		}
+
+		lines := mreqWarnLines(hook)
+		if len(lines) != 1 {
+			t.Fatalf("Warn lines = %q, want exactly one", lines)
+		}
+		for _, want := range []string{fmt.Sprint(env.chat.Id), fmt.Sprint(member.Id)} {
+			if !strings.Contains(lines[0], want) {
+				t.Errorf("Warn line %q does not hold %s", lines[0], want)
+			}
+		}
+		for _, secret := range []string{"Alex", "alex"} {
+			if strings.Contains(lines[0], secret) {
+				t.Errorf("Warn line %q holds the member's name", lines[0])
+			}
+		}
+	})
+
+	t.Run("the member's next message inside the backoff adds nothing", func(t *testing.T) {
+		env, member, _ := mreqUndeliverable(t)
+		env.mreqEnforce(env.mreqCase(member))
+
+		before := env.mreqCallCount("getChatMember", "sendMessage", "restrictChatMember", "banChatMember", "unbanChatMember", "getChat")
+		if again := env.mreqEnforce(env.mreqCase(member)); again.Outcome != memberReqHeld {
+			t.Fatalf("next case inside the backoff = %+v, want Held", again)
+		}
+		if after := env.mreqCallCount("getChatMember", "sendMessage", "restrictChatMember", "banChatMember", "unbanChatMember", "getChat"); after != before {
+			t.Errorf("a held member made %d Telegram calls, want none", after-before)
+		}
+	})
+
+	t.Run("the first message after StaleClaim mutes the member again with a delivered notice", func(t *testing.T) {
+		mreqShortenStale(t, 600*time.Millisecond)
+		env, member, _ := mreqUndeliverable(t)
+		env.mreqEnforce(env.mreqCase(member))
+
+		time.Sleep(700 * time.Millisecond)
+		got := env.mreqEnforce(env.mreqCase(member))
+		if got.Outcome != memberReqMuted {
+			t.Fatalf("case after the backoff = %+v, want Muted again", got)
+		}
+		if n := len(env.calls("restrictChatMember")); n != 3 {
+			t.Errorf("restrictChatMember calls = %d, want the mute, its lift and the new mute", n)
+		}
+		notices := env.mreqNotices()
+		if len(notices) != 1 {
+			t.Fatalf("notices = %d, want the one delivered notice", len(notices))
+		}
+		hold := env.mreqHold(member.Id)
+		if hold == nil || hold.PunishedAt == nil || hold.NoticeMsgID != notices[0].MessageID {
+			t.Fatalf("hold = %+v, want punished with the notice %d stored", hold, notices[0].MessageID)
+		}
+		data := mreqKeyboardData(notices[0])
+		if len(data) != 1 {
+			t.Fatalf("notice buttons = %v, want the one I fixed it button", data)
+		}
+		decoded, ok := decodeCallbackData(data[0], memberReqCallbackNamespace)
+		if !ok || decoded.Fields["h"] != fmt.Sprint(hold.ID) || decoded.Fields["u"] != fmt.Sprint(member.Id) {
+			t.Errorf("button data = %+v, want the hold %d and the member %d", decoded.Fields, hold.ID, member.Id)
+		}
+	})
+
+	t.Run("during a lockdown the lift uses the stored pre-lockdown permissions", func(t *testing.T) {
+		env, member, _ := mreqUndeliverable(t)
+		mreqStartLockdown(t, env.chat.Id, lockdownTestPrePermissions)
+		// The group's live defaults are the locked set while the lockdown lasts.
+		env.fake.setChatPermsRaw(env.chat.Id, `{"can_send_messages":false}`)
+
+		env.mreqEnforce(env.mreqCase(member))
+
+		if n := len(env.calls("restrictChatMember")); n != 2 {
+			t.Fatalf("restrictChatMember calls = %d, want the mute and its lift", n)
+		}
+		lifted, lift := mreqRestrictPermissions(t, env, 1)
+		wantSnapshotPermissions(t, lifted)
+		if until := staffParamInt(lift.Params, "until_date"); until != 0 {
+			t.Errorf("lift until_date = %d, want none", until)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt != nil {
+			t.Errorf("hold = %+v, want a pending backoff row", hold)
+		}
+	})
+
+	refusedLifts := []struct {
+		name   string
+		method string
+		errs   []error
+		calls  int
+	}{
+		{"the lift is refused", "restrictChatMember", append([]error{nil}, mreqRefusals(1)...), 2},
+		{"the group cannot be read", "getChat", mreqRefusals(1), 1},
+	}
+	for _, refused := range refusedLifts {
+		t.Run("the mute stays, with the hold punished, when "+refused.name, func(t *testing.T) {
+			env, member, hook := mreqUndeliverable(t)
+			env.fake.script(refused.method, env.chat.Id, refused.errs...)
+
+			env.mreqEnforce(env.mreqCase(member))
+
+			if n := len(env.calls("restrictChatMember")); n != refused.calls {
+				t.Errorf("restrictChatMember calls = %d, want %d", n, refused.calls)
+			}
+			hold := env.mreqHold(member.Id)
+			if hold == nil || hold.PunishedAt == nil {
+				t.Fatalf("hold = %+v, want it to stay punished", hold)
+			}
+			rec := env.fake.member(env.chat.Id, member.Id)
+			if rec == nil || rec.Status != gotgbot.ChatMemberStatusRestricted || rec.UntilDate != hold.MuteUntil {
+				t.Errorf("member = %+v, want the mute with marker %d still in place", rec, hold.MuteUntil)
+			}
+			lines := mreqWarnLines(hook)
+			if len(lines) != 1 {
+				t.Fatalf("Warn lines = %q, want exactly one", lines)
+			}
+			if !strings.Contains(lines[0], "could not be lifted") {
+				t.Errorf("Warn line %q does not say the mute could not be lifted", lines[0])
+			}
+			for _, want := range []string{fmt.Sprint(env.chat.Id), fmt.Sprint(member.Id)} {
+				if !strings.Contains(lines[0], want) {
+					t.Errorf("Warn line %q does not hold %s", lines[0], want)
+				}
+			}
+			for _, secret := range []string{"Alex", "alex"} {
+				if strings.Contains(lines[0], secret) {
+					t.Errorf("Warn line %q holds the member's name", lines[0])
+				}
 			}
 		})
 	}

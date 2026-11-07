@@ -82,3 +82,9 @@ func resolveUnmutePermissions(chatInfo *gotgbot.ChatFullInfo) (gotgbot.ChatPermi
 	}
 	return defaultUnmutePermissions(), nil
 }
+
+// resolveUnmutePermissionsWithLockdown is a compile-only stand-in until the real body lands.
+func resolveUnmutePermissionsWithLockdown(chatInfo *gotgbot.ChatFullInfo) (gotgbot.ChatPermissions, bool, error) {
+	perms, err := resolveUnmutePermissions(chatInfo)
+	return perms, false, err
+}
