@@ -2194,7 +2194,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestMemberReqFixedNeverLifts`, `TestMemberReqFixedDuringLockdown`, `TestMemberReqFixedHeldWelcome`,
   `TestMemberReqEnforcementLive`); `TestMemberReqLocaleKeys` is in `fuku/i18n`; `TestApplyWarn` (`warns_apply_test.go`) is the
   warn extraction's own test; `TestChatRequirementsSettings`, `TestRequirementHoldClaimConcurrent` and `TestRequirementHolds`
-  are in `fuku/db/memberreq`. The toolkit is `fuku/modules/memberreq_env_test.go` on top of the settings environment:
+  are in `fuku/db/memberreq`. The toolkit is `fuku/modules/memberreq_env_test.go`, the `memberReqEnv` type on top of the settings environment:
   `newMemberReqEnv` (and `newMemberReqEnvWith`), `withMemberReqLive`, `mreqMember` (a member with the names a test asks for),
   `mreqSend`, `mreqReplica`, `mreqPressFixed` and `memberReqCleanup`. Its hygiene rule, which CI needs because all of
   `fuku/modules` runs in one PostgreSQL database in source order: every member comes from `uniqueLinkOwnerID()` and every
