@@ -62,7 +62,56 @@ func newMemberReqEnvWith(t *testing.T, opts settingsEnvOptions) *memberReqEnv {
 	env := &memberReqEnv{settingsEnv: newSettingsEnvWith(t, opts)}
 	withFastMemberReqPacer(t)
 	memberReqCleanup(t, []int64{env.chat.Id}, nil)
+	withMemberReqLive(t, true)
+	// Registered after the cleanups above, so it runs before them: no enforcement job is
+	// still writing holds, warns or notices when the rows are deleted.
+	t.Cleanup(memberReqJobs.wait)
 	return env
+}
+
+// withMemberReqLive sets the enforcement switch for the test and puts the PREVIOUS value back
+// when it ends (never a fixed false, so a test that ends cannot turn off a switch another
+// test set). It is the only test writer of memberReqEnforcementLive. A test that uses it
+// never calls t.Parallel.
+func withMemberReqLive(t *testing.T, on bool) {
+	t.Helper()
+	previous := memberReqEnforcementLive.Load()
+	memberReqEnforcementLive.Store(on)
+	t.Cleanup(func() { memberReqEnforcementLive.Store(previous) })
+}
+
+// loadMemberReq loads the watcher and the modules its tests drive on the environment's
+// dispatcher: the requirements, the warn module (the punishment of a Warn rule) and the rules
+// module (a command a violator sends must still be answered).
+func (e *memberReqEnv) loadMemberReq() {
+	e.t.Helper()
+	LoadMemberRequirements(e.dispatcher)
+	LoadWarns(e.dispatcher)
+	LoadRules(e.dispatcher)
+}
+
+// mreqSendAt runs a text message of user in the group through the real dispatcher with the
+// given Unix date (the environment's own send stamps 1970, and the clean predicate compares
+// message dates with the hold).
+func (e *memberReqEnv) mreqSendAt(user gotgbot.User, text string, date int64) {
+	e.t.Helper()
+	e.mreqProcess(&gotgbot.Message{Chat: e.chat, From: &user, Text: text, Date: date})
+}
+
+// mreqSend runs a text message of user in the group, dated now.
+func (e *memberReqEnv) mreqSend(user gotgbot.User, text string) {
+	e.t.Helper()
+	e.mreqSendAt(user, text, time.Now().Unix())
+}
+
+// mreqProcess gives msg a fresh ID and runs it through the environment's dispatcher.
+func (e *memberReqEnv) mreqProcess(msg *gotgbot.Message) {
+	e.t.Helper()
+	id := e.updateID()
+	msg.MessageId = id
+	if err := e.dispatcher.ProcessUpdate(e.bot, &gotgbot.Update{UpdateId: id, Message: msg}, nil); err != nil {
+		e.t.Errorf("ProcessUpdate(%d) error = %v", id, err)
+	}
 }
 
 // memberReqCleanup deletes, before the test and again when it ends, what a requirement test
@@ -78,6 +127,7 @@ func memberReqCleanup(t *testing.T, chatIDs, userIDs []int64) {
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatRequirementHold{})
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.Warns{})
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.WarnSettings{})
+			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.RulesSettings{})
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ApprovedUsers{})
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.CaptchaAttempts{})
 			for _, id := range chatIDs {
