@@ -1103,7 +1103,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and are welcomed once when it is back on; bots that join are claimed like any member; rows are kept for good. A 429
   counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
   flood limit is welcomed on their next join.
-- Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`): `memberReqEnforce` is the one
+- Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule, and nothing in production calls it until the watcher and the join
   check do. Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
   itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
@@ -1119,11 +1119,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Kick is `kickMemberContext`, ban a `banChatMember` with no end date, mute a `restrictChatMember` with
   `MutedPermissions` and the marker `until_date` (now plus 330 days, `lockdownBanSpan`) stored on the hold before the
   call. The requirement mute is owned by its marker alone (`isMemberReqMute`: restricted, still a member, `until_date`
-  within 2 s of the hold's `mute_until`); no other mute path is changed. A punishment Telegram refuses leaves the pending
-  hold and posts nothing. One notice per episode is a new message in the group's language, sent after the punishment
-  took effect, with the member's mention (`memberReqMention`) spliced in after translation and every broken rule whose
-  punishment is not Off in rule order; only a mute carries the `mreq|v1` "I fixed it" button (`a=f`, `h`, `u`). Logs carry
-  chat and user IDs and outcomes only, never a name, a rule text or a notice text.
+  within 2 s of the hold's `mute_until`); no other mute path is changed. A punishment Telegram definitely refuses (a 4xx
+  other than 429 by code, or the pacer's `ratelimit.ErrRateLimited`: `memberReqRefused`) posts nothing and backs the
+  pending hold off (`memberreq.BackoffHold` refreshes `created_at`), so the member's next messages inside
+  `memberreq.StaleClaim` are the held path with no Telegram call, and after it one winner reclaims the hold and retries;
+  a warn that fails is the same backoff. An unknown answer (a 5xx, a timeout, a dropped connection) of a mute is checked
+  with one live `getChatMember` against the stored marker (`memberReqSendFailed`): the marker present counts the mute as
+  applied, absent backs off, an unreadable record leaves the hold pending, and a kick or ban with an unknown answer
+  leaves it pending with no notice. A reclaimed pending mute hold whose old marker is still live on the member adopts it
+  (`memberReqLiveMarker`) instead of muting twice. One notice per episode is a new message in the group's language,
+  sent after the punishment took effect, with the member's mention (`memberReqMention`) spliced in after translation and
+  every broken rule whose punishment is not Off in rule order; only a mute carries the `mreq|v1` "I fixed it" button
+  (`a=f`, `h`, `u`). A mute notice is never dropped by pacing: `memberReqPostNotice` waits
+  `memberReqNoticeRateLimitWait` and sends again whenever the pacer gives up on it, until its context or
+  `memberReqMuteNoticeBudget` ends, and every notice whose send failed otherwise is retried once (a notice without a
+  button is not retried after `ErrRateLimited`). A mute whose notice still cannot be delivered is never left in place
+  without its button: `memberReqUndeliveredMute` lifts it through `memberReqUnmutePermissions` (one paced `getChat`, then
+  `resolveUnmutePermissionsWithLockdown`, so an active lockdown's stored permissions apply) and `memberReqLiftMute` (one
+  paced `restrictChatMember`, no end date), on a context that survives the run's cancellation, and turns the hold back
+  into a pending backoff row with `memberreq.RevertHoldToPending` (`punished_at` NULL, `created_at` now), so the
+  member's first message after `StaleClaim` starts the episode again with a fresh notice; it logs one Warn with the chat
+  and user IDs only, and a failed revert is logged at Error. Accepted limit: when Telegram also refuses the lift, the
+  mute stays and the hold stays punished with one Warn saying the mute could not be lifted; it takes two refusals in a
+  row, and the rejoin reset or an admin's `/unmute` followed by a clean message still ends it. Every requirement unmute
+  takes its permissions only from `resolveUnmutePermissionsWithLockdown`. Logs carry chat and user IDs and outcomes
+  only, never a name, a rule text or a notice text.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -1591,11 +1611,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `lockdownReleaseStale` also returns stale burst claims to the queue. These bans write nothing to the staff audit and
   cannot be undone. The card and button say only that the accounts are banned for good and cannot rejoin, which is
   exactly what the call does (no `revoke_messages` is sent, so nothing is said about their messages).
-- `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute. During an
-  active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
+- `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute; it is a wrapper of
+  `resolveUnmutePermissionsWithLockdown`, which returns the same permissions and error plus whether a lockdown was
+  active, so a caller can choose its words without a second lookup (the member requirements' lift of a mute whose notice
+  could not be delivered, and later their rejoin reset and "I fixed it", use the sibling through `memberReqLiftMute`).
+  During an active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute
-  path goes through it: `/unmute`, the unrestrict button's Unmute, a captcha pass and staff `/unmute` (and so the undo of a
-  staff mute). It reads the lockdown fresh through the `lockdownSnapshotLookup` seam, only for a chat with a non-zero ID,
+  path goes through it: `/unmute`, the unrestrict button's Unmute, a captcha pass, staff `/unmute` (and so the undo of a
+  staff mute) and the requirements' lift. It reads the lockdown fresh through the `lockdownSnapshotLookup` seam, only for a chat with a non-zero ID,
   and only an active row counts. None of them may restrict or announce an unmute when it returns an error: `/unmute` and
   the button report the error, a captcha pass schedules its retry, and staff `/unmute` fails that group. The `/unmute`
   reply adds `mutes_unmute_lockdown_note` during a lockdown.

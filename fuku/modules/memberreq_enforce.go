@@ -407,11 +407,17 @@ func memberReqApplyStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr
 }
 
 // memberReqAnnounce posts the one notice of the episode and stores its message ID on the hold.
-// A failure is logged by IDs only; the punishment stays.
+// A failure is logged by IDs only and the punishment stays, except for a mute: a mute whose
+// notice could not be delivered even after its retry is lifted again (memberReqUndeliveredMute),
+// because no member may be left muted without the button.
 func memberReqAnnounce(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, user gotgbot.User, hold *models.ChatRequirementHold, warn *warnApplyResult) {
 	text := memberReqNoticeText(tr, user, hold.Rules, hold.Action, warn)
 	msgID, err := memberReqPostNotice(ctx, b, c.Chat.Id, text, memberReqNoticeKeyboard(tr, hold.Action, hold.ID, user.Id))
 	if err != nil {
+		if hold.Action == models.RequirementActionMute {
+			memberReqUndeliveredMute(ctx, b, c, hold)
+			return
+		}
 		log.Warnf("[MemberReq] the notice for user %d in chat %d was not delivered: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
 		return
 	}
