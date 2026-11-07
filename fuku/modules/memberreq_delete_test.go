@@ -11,6 +11,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
@@ -297,5 +298,157 @@ func TestMemberReqDeleteMessages(t *testing.T) {
 				t.Errorf("deleted = %t with %d getChatMember calls, want not deleted after the failed one", deleted, lookups)
 			}
 		})
+	})
+}
+
+// mreqPause sets the chat's pause latch the way the cap does, for the test.
+func (e *memberReqEnv) mreqPause() {
+	e.t.Helper()
+	key := memberReqPausedKey(e.chat.Id)
+	if err := e.redis.Set(key, "1"); err != nil {
+		e.t.Fatalf("set the pause latch: %v", err)
+	}
+	e.redis.SetTTL(key, memberReqPause)
+}
+
+// mreqResume removes the chat's pause latch.
+func (e *memberReqEnv) mreqResume() {
+	e.t.Helper()
+	e.redis.Del(memberReqPausedKey(e.chat.Id))
+}
+
+func TestMemberReqDeleteDuringPause(t *testing.T) {
+	newPaused := func(t *testing.T, deleteOn bool) *memberReqEnv {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		env.mreqDeleteMessages(deleteOn)
+		return env
+	}
+	// quiet asserts that a case made no hold, no write, no notice and no lookup about the member.
+	quiet := func(t *testing.T, env *memberReqEnv, member gotgbot.User, notices int) {
+		t.Helper()
+		if n := env.mreqCallsAbout(member.Id, "getChatMember", "restrictChatMember", "banChatMember", "unbanChatMember"); n != 0 {
+			t.Errorf("%d Telegram calls about the member were made during the pause, want none", n)
+		}
+		if after := len(env.mreqNotices()); after != notices {
+			t.Errorf("%d messages were posted during the pause, want none", after-notices)
+		}
+	}
+
+	t.Run("a new violator the cached list knows as a non-admin is deleted and nothing else", func(t *testing.T) {
+		env := newPaused(t, true)
+		env.mreqAdminList()
+		env.mreqPause()
+		member := env.mreqMember("Alex", "", "alex")
+		notices := len(env.mreqNotices())
+
+		c := env.mreqCase(member)
+		if got := env.mreqEnforce(c); got.Outcome != memberReqNone {
+			t.Fatalf("enforcement = %+v, want None: nothing is punished during a pause", got)
+		}
+		if deleted := env.mreqDeleted(); len(deleted) != 1 || deleted[0] != c.MessageID {
+			t.Errorf("deleted = %v, want only %d", deleted, c.MessageID)
+		}
+		if env.mreqHold(member.Id) != nil {
+			t.Error("a hold was written during the pause")
+		}
+		quiet(t, env, member, notices)
+	})
+
+	t.Run("a held member the cached list knows as a non-admin keeps being deleted", func(t *testing.T) {
+		env := newPaused(t, true)
+		env.mreqAdminList()
+		member := mreqHoldMember(t, env)
+		env.mreqPause()
+		lookups, notices := env.mreqMemberLookups(member.Id), len(env.mreqNotices())
+
+		c := env.mreqCase(member)
+		if got := env.mreqEnforce(c); got.Outcome != memberReqHeld {
+			t.Fatalf("enforcement = %+v, want Held", got)
+		}
+		if deleted := env.mreqDeleted(); len(deleted) != 2 || deleted[1] != c.MessageID {
+			t.Errorf("deleted = %v, want the held member's message too", deleted)
+		}
+		if after := env.mreqMemberLookups(member.Id); after != lookups {
+			t.Errorf("%d getChatMember calls during the pause, want none", after-lookups)
+		}
+		if after := len(env.mreqNotices()); after != notices {
+			t.Errorf("%d messages were posted, want none", after-notices)
+		}
+	})
+
+	t.Run("with the cached list unknown nothing is deleted and no call is made", func(t *testing.T) {
+		env := newPaused(t, true)
+		env.mreqNoAdminList()
+		held := mreqHoldMember(t, env)
+		promoted := mreqHoldMember(t, env)
+		env.mreqPromote(promoted, gotgbot.ChatMemberStatusAdministrator)
+		env.mreqPause()
+		fresh := env.mreqMember("Bo", "", "bo")
+		deletedBefore, notices := len(env.mreqDeleted()), len(env.mreqNotices())
+		lookups := map[int64]int{held.Id: env.mreqMemberLookups(held.Id), promoted.Id: env.mreqMemberLookups(promoted.Id)}
+
+		for name, c := range map[string]memberReqCase{
+			"a new violator":          env.mreqCase(fresh),
+			"a held member":           env.mreqCase(held),
+			"a held member promoted":  env.mreqCase(promoted),
+			"a held member, again":    env.mreqCase(held),
+			"a promoted member again": env.mreqCase(promoted),
+		} {
+			env.mreqEnforce(c)
+			if after := len(env.mreqDeleted()); after != deletedBefore {
+				t.Errorf("%s: a message was deleted while the list is unknown and the chat is paused", name)
+			}
+		}
+		for id, before := range lookups {
+			if after := env.mreqMemberLookups(id); after != before {
+				t.Errorf("user %d: %d getChatMember calls during the pause, want none", id, after-before)
+			}
+		}
+		quiet(t, env, fresh, notices)
+		if env.mreqHold(fresh.Id) != nil {
+			t.Error("a hold was written for a new violator during the pause")
+		}
+
+		// Once the pause is over the same promoted member is checked live, and still not deleted.
+		env.mreqResume()
+		before, lookupsBefore := len(env.mreqDeleted()), env.mreqMemberLookups(promoted.Id)
+		if got := env.mreqEnforce(env.mreqCase(promoted)); got.Outcome != memberReqHeld {
+			t.Fatalf("promoted member after the pause = %+v, want Held", got)
+		}
+		if after := len(env.mreqDeleted()); after != before {
+			t.Error("a promoted administrator's message was deleted after the pause")
+		}
+		if after := env.mreqMemberLookups(promoted.Id); after != lookupsBefore+1 {
+			t.Errorf("getChatMember calls after the pause = %d, want one", after-lookupsBefore)
+		}
+	})
+
+	t.Run("with Delete messages off nothing is deleted during the pause", func(t *testing.T) {
+		env := newPaused(t, false)
+		env.mreqAdminList()
+		held := mreqHoldMember(t, env)
+		env.mreqPause()
+		fresh := env.mreqMember("Bo", "", "bo")
+
+		env.mreqEnforce(env.mreqCase(held))
+		env.mreqEnforce(env.mreqCase(fresh))
+		if deleted := env.mreqDeleted(); len(deleted) != 0 {
+			t.Errorf("deleted = %v, want nothing with Delete messages off", deleted)
+		}
+	})
+
+	t.Run("an approved member is never deleted during the pause", func(t *testing.T) {
+		env := newPaused(t, true)
+		env.mreqAdminList()
+		env.mreqPause()
+		member := env.mreqMember("Alex", "", "alex")
+		if err := approvals.AddApprovedUser(env.chat.Id, member.Id, env.admin.Id, "trusted"); err != nil {
+			t.Fatalf("approve: %v", err)
+		}
+		env.mreqEnforce(env.mreqCase(member))
+		if deleted := env.mreqDeleted(); len(deleted) != 0 {
+			t.Errorf("deleted = %v, want nothing for an approved member", deleted)
+		}
 	})
 }
