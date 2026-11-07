@@ -33,7 +33,7 @@ prod = {f: l for f, l in added.items() if not f.endswith("_test.go") and os.path
 problems = []
 dirs = sorted({os.path.dirname(f) for f in prod})
 for d in dirs:
-    files = sorted(os.path.join(d, x) for x in os.listdir(d) if x.endswith(".go") and not x.endswith("_test.go"))
+    files = sorted(os.path.join(d, x) for x in os.listdir(d or ".") if x.endswith(".go") and not x.endswith("_test.go"))
     out = run([SP + "/dupl", "-t", "100", "-files"], "\n".join(files) + "\n")
     clone = []
     for line in out.splitlines() + ["found"]:
