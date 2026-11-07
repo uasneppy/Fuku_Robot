@@ -140,7 +140,21 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 		return refuse("mreq_fixed_not_ours")
 	}
 
-	perms, _, err := memberReqUnmutePermissions(ctx, b, chat.Id)
+	// The rules are judged again on the live names against the group's current settings: a rule
+	// now set to Off is not checked, and a member who fixed only one of several rules stays held.
+	settings, err := memberReqSettingsLookup(ctx, chat.Id)
+	if err != nil {
+		log.Warnf("[MemberReq] the requirements of chat %d could not be read for the fix of user %d: %s", chat.Id, userID, memberReqErrText(err))
+		return refuse("mreq_fixed_check_failed")
+	}
+	if broken := memberReqBroken(settings, memberReqNamesOf(live.User)); broken != 0 {
+		return memberReqFixedResult{
+			Text:  memberReqText(tr, "mreq_fixed_still_broken", i18n.TranslationParams{"rules": memberReqRulesText(tr, broken)}),
+			Alert: true,
+		}
+	}
+
+	perms, lockedDown, err := memberReqUnmutePermissions(ctx, b, chat.Id)
 	if err != nil {
 		log.Warnf("[MemberReq] the unmute permissions of chat %d could not be resolved for user %d: %s", chat.Id, userID, memberReqErrText(err))
 		return refuse("mreq_fixed_check_failed")
@@ -161,8 +175,13 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 		return refuse("mreq_fixed_check_failed")
 	}
 
-	memberReqFixedEdit(ctx, b, tr, chat.Id, query.Message.GetMessageId(), live.User, "mreq_notice_fixed")
-	result := memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_done")}
+	// During a lockdown the member got the stored pre-lockdown permissions and can chat once it is
+	// lifted, which matters enough to be an alert and its own notice.
+	noticeKey, result := "mreq_notice_fixed", memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_done")}
+	if lockedDown {
+		noticeKey, result = "mreq_notice_fixed_lockdown", memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_done_lockdown"), Alert: true}
+	}
+	memberReqFixedEdit(ctx, b, tr, chat.Id, query.Message.GetMessageId(), live.User, noticeKey)
 	if taken.WelcomeHeld {
 		member := live.User
 		result.Welcome = &member
