@@ -100,8 +100,7 @@ func mreqFixedNoticeText(t *testing.T, tr *i18n.Translator, key string, member g
 func TestMemberReqFixedUnmutes(t *testing.T) {
 	t.Run("the group's live defaults, a toast and the notice edited", func(t *testing.T) {
 		env := newMemberReqEnv(t)
-		custom := gotgbot.ChatPermissions{CanSendMessages: true, CanSendPhotos: true, CanInviteUsers: true}
-		env.fake.chatPerms[env.chat.Id] = custom
+		live := lockdownSnapshotPermissions(t)
 		member, _, notice := mreqMutedMember(t, env)
 		member = env.mreqFix(member)
 		sentBefore := len(env.mreqNotices())
@@ -109,7 +108,7 @@ func TestMemberReqFixedUnmutes(t *testing.T) {
 
 		env.mreqPressFixed(member, notice)
 
-		mreqWantFixedUnmute(t, env, member, notice, restrictsBefore, answersBefore, custom,
+		mreqWantFixedUnmute(t, env, member, notice, restrictsBefore, answersBefore, live,
 			mreqAnswer{Text: staffMarker("mreq_fixed_done")},
 			mreqFixedNoticeText(t, env.translator(), "mreq_notice_fixed", member))
 		if n := len(env.mreqNotices()); n != sentBefore {
@@ -136,7 +135,7 @@ func TestMemberReqFixedUnmutes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		mreqWantFixedUnmute(t, env, member, notice, restrictsBefore, answersBefore, defaultUnmutePermissions(),
+		mreqWantFixedUnmute(t, env, member, notice, restrictsBefore, answersBefore, lockdownSnapshotPermissions(t),
 			mreqAnswer{Text: toast}, mreqFixedNoticeText(t, uk, "mreq_notice_fixed", member))
 	})
 }
@@ -155,7 +154,7 @@ func TestMemberReqFixedBeforeNoticeStored(t *testing.T) {
 
 			env.mreqPressFixed(member, notice)
 
-			mreqWantFixedUnmute(t, env, member, notice, restrictsBefore, answersBefore, defaultUnmutePermissions(),
+			mreqWantFixedUnmute(t, env, member, notice, restrictsBefore, answersBefore, lockdownSnapshotPermissions(t),
 				mreqAnswer{Text: staffMarker("mreq_fixed_done")},
 				mreqFixedNoticeText(t, env.translator(), "mreq_notice_fixed", member))
 			if edits := env.mreqNoticeEdits(stored); stored != 0 && len(edits) != 0 {
@@ -164,4 +163,3 @@ func TestMemberReqFixedBeforeNoticeStored(t *testing.T) {
 		})
 	}
 }
-

@@ -6,6 +6,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 )
 
 // The MemberRequirements module screens members against the rules a group's owner set on the
@@ -38,13 +39,16 @@ func memberReqLive() bool {
 	return memberReqEnforcementLive.Load()
 }
 
-// LoadMemberRequirements registers the message watcher. It is the only message handler of
-// handler group -2, which is what lets the watcher's ext.ContinueGroups be read as the
-// "keep going" it is: no other matching handler may be added to that group.
+// LoadMemberRequirements registers the message watcher and the "I fixed it" button. The
+// watcher is the only message handler of handler group -2, which is what lets its
+// ext.ContinueGroups be read as the "keep going" it is: no other matching handler may be added
+// to that group. The button's namespace is registered with no channel permission, because a
+// requirement notice is never a channel message.
 func LoadMemberRequirements(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(func(m *gotgbot.Message) bool {
 		return m.Chat.Type == "supergroup"
 	}, memberReqModule.memberReqWatcher), memberReqWatchGroup)
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("mreq|"), memberReqModule.memberReqFixedCallback))
 }
 
 func init() {

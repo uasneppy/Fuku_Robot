@@ -23,7 +23,7 @@ import (
 // name such as "{rules}" is printed literally.
 
 // memberReqCallbackNamespace is the namespace of the "I fixed it" button (mreq|v1|...). The
-// handler that answers it comes with the plan that turns enforcement on.
+// handler that answers it is memberReqFixedCallback (memberreq_fixed.go).
 const memberReqCallbackNamespace = "mreq"
 
 // memberReqNamePlaceholder stands for the member's mention in a template until it is spliced.
