@@ -45,6 +45,8 @@ var (
 	staffGroupPrefix     = CacheKey("staff_group") + ":"
 	staffLinkOfPrefix    = CacheKey("staff_link_of") + ":"
 	raidDetectionPrefix  = CacheKey("raid_detection") + ":"
+
+	memberRequirementsPrefix = CacheKey("member_requirements") + ":"
 )
 
 // skipLocal reports whether key must never be served from process memory.
@@ -64,10 +66,15 @@ func skipLocal(key string) bool {
 	// Raid detection settings decide whether a join or a message can lock the
 	// group, and an admin's change must reach every replica at once (D-12), not
 	// after CACHE_LOCAL_TTL seconds.
+	//
+	// Member requirements settings are read on every supergroup message by the
+	// requirements watcher: a rule an admin switched off must stop punishing on
+	// every replica at the next message, not after CACHE_LOCAL_TTL seconds (D-20).
 	return strings.HasPrefix(key, captchaPendingPrefix) ||
 		strings.HasPrefix(key, staffGroupPrefix) ||
 		strings.HasPrefix(key, staffLinkOfPrefix) ||
-		strings.HasPrefix(key, raidDetectionPrefix)
+		strings.HasPrefix(key, raidDetectionPrefix) ||
+		strings.HasPrefix(key, memberRequirementsPrefix)
 }
 
 func localSettings() (ttl, size int) {

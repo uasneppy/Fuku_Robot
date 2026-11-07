@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,8 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/error_handling"
 	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
@@ -31,6 +34,19 @@ const memberReqWatchGroup = -2
 // memberreq.StaleClaim (2 minutes), so a job always ends before another replica's reclaim of
 // the hold it claimed can start, and two jobs never act on one hold (research S-07).
 const memberReqJobTimeout = 90 * time.Second
+
+const (
+	// memberReqPassTTL is how long a clean verdict is remembered per member.
+	memberReqPassTTL = 30 * time.Minute
+
+	// memberReqPassMaxAge is how old a message may be and still write a clean verdict. A
+	// message processed long after it was sent (a backlog after downtime) must not hide a
+	// hold that is created later from the clean predicate for the whole TTL.
+	memberReqPassMaxAge = 2 * time.Minute
+
+	// memberReqCleanTimeout bounds the clean predicate's one database statement.
+	memberReqCleanTimeout = 3 * time.Second
+)
 
 // memberReqMaxInFlight is the most enforcement jobs that run at once on this replica. Over it
 // a job is shed with one log line and the member's next message is checked again. A variable
@@ -80,6 +96,62 @@ func (t *raidPostTracker) startBelow(limit int) bool {
 	}
 	t.running++
 	return true
+}
+
+// memberReqPassKey is the Redis key of a member's clean verdict in a chat. It is outside the
+// fuku:cache: prefix (so CLEAR_CACHE_ON_STARTUP keeps it) and holds no name: the value is a
+// fingerprint of the rule settings and the names.
+func memberReqPassKey(chatID, userID int64) string {
+	return "fuku:memberreq:pass:" + strconv.FormatInt(chatID, 10) + ":" + strconv.FormatInt(userID, 10)
+}
+
+// memberReqPassHit reports whether the member's stored clean verdict equals value. A Redis
+// error, no Redis and a missing key are all a miss: the clean predicate then runs, which is
+// correct and only slower.
+func memberReqPassHit(chatID, userID int64, value string) bool {
+	client := memberReqRedisClient()
+	if client == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	stored, err := client.Get(ctx, memberReqPassKey(chatID, userID)).Result()
+	return err == nil && stored == value
+}
+
+// memberReqClean runs the clean predicate for a member whose names break no rule: it ends the
+// hold of an earlier episode that the member has since fixed, so a later break is a new
+// episode (D-07). Only after the predicate succeeded, and only for a message that is not
+// stale, is the clean verdict stored, so the statement runs once per member per name change,
+// settings change or TTL instead of once per message. A violation never reaches this.
+func memberReqClean(ctx context.Context, chatID, userID int64, msgDate time.Time, value string) {
+	cleanCtx, cancel := context.WithTimeout(ctx, memberReqCleanTimeout)
+	defer cancel()
+	if _, err := memberreq.ClearHoldOnClean(cleanCtx, chatID, userID, msgDate); err != nil {
+		log.Warnf("[MemberReq] the clean check of user %d in chat %d failed: %s", userID, chatID, memberReqErrText(err))
+		return
+	}
+	if time.Since(msgDate) > memberReqPassMaxAge {
+		return
+	}
+	client := memberReqRedisClient()
+	if client == nil {
+		return
+	}
+	setCtx, setCancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer setCancel()
+	if err := client.Set(setCtx, memberReqPassKey(chatID, userID), value, memberReqPassTTL).Err(); err != nil {
+		log.Debugf("[MemberReq] the clean verdict of user %d in chat %d was not stored: %s", userID, chatID, memberReqErrText(err))
+	}
+}
+
+// memberReqCleanMember is the watcher's path for a member whose names break no rule.
+func memberReqCleanMember(ctx context.Context, chatID, userID, msgDate int64, settings *models.ChatRequirements, names memberReqNames) {
+	value := memberReqPassValue(settings, names)
+	if memberReqPassHit(chatID, userID, value) {
+		return
+	}
+	memberReqClean(ctx, chatID, userID, time.Unix(msgDate, 0), value)
 }
 
 // memberReqRunAsync hands a violating member to the executor on its own goroutine, so the
@@ -133,12 +205,14 @@ func (m moduleStruct) memberReqWatcher(b *gotgbot.Bot, ctx *ext.Context) (err er
 	if !ok {
 		return ext.ContinueGroups
 	}
-	settings, lookupErr := memberReqSettingsLookup(tracing.UpdateContext(ctx), chat.Id)
+	updateCtx := tracing.UpdateContext(ctx)
+	settings, lookupErr := memberReqSettingsLookup(updateCtx, chat.Id)
 	if lookupErr != nil || settings == nil || !memberreq.AnyRuleOn(settings) {
 		return ext.ContinueGroups
 	}
 	names := memberReqNamesOf(*msg.From)
 	if memberReqBroken(settings, names) == 0 {
+		memberReqCleanMember(updateCtx, chat.Id, userID, msg.Date, settings, names)
 		return ext.ContinueGroups
 	}
 	if known, isAdmin := cachedAdminStatus(chat.Id, userID); known && isAdmin {
