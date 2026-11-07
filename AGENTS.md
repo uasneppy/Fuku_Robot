@@ -6,7 +6,7 @@ Update this file in the same commit as any change that invalidates a rule below.
 ## Commands
 
 ```bash
-make test                 # the only valid full test run (tags, race, coverage, skip gate; 15 min per package, fuku/modules runs 7-11 min)
+make test                 # the only valid full test run (tags, race, coverage, skip gate; 30 min per package, 45 min for the CI job; fuku/modules runs 9-15 min depending on the machine, a CI runner can be 1.7x slower than another)
 make lint                 # golangci-lint v2
 make check-translations   # missing locale keys
 make check-docs           # generated-docs drift; fix with `make generate-docs`
