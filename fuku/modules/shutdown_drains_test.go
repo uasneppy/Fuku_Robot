@@ -4,6 +4,7 @@ package modules
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -190,9 +191,19 @@ func TestShutdownWaitsForMemberReqJobs(t *testing.T) {
 		inFlight := env.mreqMember("Alex", "", "alex")
 		late := env.mreqMember("Bea", "", "bea")
 		mreqSwap(t, &memberReqStopWait, 3*time.Second)
-		env.fake.setDelay("getChatMember", env.chat.Id, 400*time.Millisecond)
+		// Only the in-flight member's lookup is slow: a delay on the whole chat would also hold
+		// the update goroutine inside the other handlers' own lookups.
+		var reached sync.Once
+		started := make(chan struct{})
+		env.fake.setOnGetMember(func(_, userID int64) {
+			if userID == inFlight.Id {
+				reached.Do(func() { close(started) })
+				time.Sleep(400 * time.Millisecond)
+			}
+		})
 
 		env.mreqSend(inFlight, "in flight")
+		mreqAwait(t, started, "the job never reached its lookup")
 
 		idle := make(chan bool, 1)
 		m := shutdown.NewManager()
@@ -224,7 +235,6 @@ func TestShutdownWaitsForMemberReqJobs(t *testing.T) {
 			t.Errorf("the cancelled job left a punished hold %+v", hold)
 		}
 
-		env.fake.setDelay("getChatMember", env.chat.Id, 0)
 		env.mreqSend(late, "after the drain")
 		memberReqJobs.wait()
 		if env.mreqHold(late.Id) != nil || env.mreqCallsAbout(late.Id, "getChatMember") != 0 {
@@ -239,8 +249,17 @@ func TestShutdownWaitsForMemberReqJobs(t *testing.T) {
 		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
 		stuck := env.mreqMember("Cy", "", "cy")
 		mreqSwap(t, &memberReqStopWait, 200*time.Millisecond)
-		env.fake.setDelay("getChatMember", env.chat.Id, 1500*time.Millisecond)
+		var reached, freed sync.Once
+		started, release := make(chan struct{}), make(chan struct{})
+		t.Cleanup(func() { freed.Do(func() { close(release) }) })
+		env.fake.setOnGetMember(func(_, userID int64) {
+			if userID == stuck.Id {
+				reached.Do(func() { close(started) })
+				<-release
+			}
+		})
 		env.mreqSend(stuck, "stuck")
+		mreqAwait(t, started, "the job never reached its lookup")
 
 		start := time.Now()
 		if StopMemberReqJobs() {
@@ -250,4 +269,15 @@ func TestShutdownWaitsForMemberReqJobs(t *testing.T) {
 			t.Errorf("StopMemberReqJobs took %v, want about %v", elapsed, memberReqStopWait)
 		}
 	})
+}
+
+// mreqAwait waits for ch to close, so a test only acts once its job is inside the lookup it
+// holds.
+func mreqAwait(t *testing.T, ch <-chan struct{}, failure string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatal(failure)
+	}
 }

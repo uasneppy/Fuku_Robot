@@ -64,5 +64,16 @@ func RegisterRaidAIDrain(m *shutdown.Manager) {
 	}, raidAIStopWait+shutdownDrainGrace)
 }
 
-// RegisterMemberReqDrain registers StopMemberReqJobs.
-func RegisterMemberReqDrain(_ *shutdown.Manager) {}
+// RegisterMemberReqDrain registers StopMemberReqJobs with an allowance of memberReqStopWait
+// plus shutdownDrainGrace. Register it after the DB-close handler and right before
+// RegisterStaffActionsDrain, so LIFO runs it after the staff drain and before the admin index
+// sweeper stop and the database close: a job reads and writes holds, warns and notices. The
+// wait is short on purpose, because every hold resumes from the database and a job cut off
+// leaves a pending hold that a reclaim retries.
+func RegisterMemberReqDrain(m *shutdown.Manager) {
+	m.RegisterHandlerWithTimeout(func() error {
+		log.Info("[Shutdown] Draining member requirement jobs...")
+		StopMemberReqJobs()
+		return nil
+	}, memberReqStopWait+shutdownDrainGrace)
+}

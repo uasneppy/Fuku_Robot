@@ -39,6 +39,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   claims, so `StopStaffActions` waits for a Confirm that has already claimed, and its run gives the claim back when the
   shutdown cut every group off before its write. Once `StopStaffActions` has cancelled the run context an undo Confirm
   claims nothing and aborts its card with the restart text (`staff_undo_abort_restarting`).
+- `StopMemberReqJobs` is the drain of the member requirement enforcement jobs, registered after DB-close through
+  `RegisterMemberReqDrain` in `main.go` right before `RegisterStaffActionsDrain`. Its wait is `memberReqStopWait` (2 s)
+  plus `shutdownDrainGrace` (1 s), 3 s in all. It sets `memberReqDraining` (a late message starts no job), cancels the
+  jobs' root context first (`memberReqContext`: every paced call of a job derives from it) and waits at most 2 s for
+  `memberReqJobs`, logging one warning when the wait runs out. Each job runs under `memberReqJobTimeout` (90 s), which
+  ends 30 s before `memberreq.StaleClaim` (2 minutes) lets a reclaim start, so two jobs never act on one hold. LIFO
+  runs it after the staff drain and before the admin index sweeper stop, the staff sweeper stop, the captcha lifecycle
+  stop, the tracer shutdown, the monitoring stops, the users async writes drain and the database close. In webhook mode
+  the worst case of the drains up to and including it is 65 s (HTTP stop 10, AI spam 10, raid AI 2, raid posts 3,
+  lockdown 6, staff 31, member requirements 3) against the 60 s budget, so when every earlier drain runs to its limit
+  the staff drain is cut 2 s short and the member requirements drain and every handler after it in LIFO order, the
+  database close included, are cut, and the process exits with code 1 inside `stop_grace_period: 75s`, before SIGKILL; in
+  polling mode the updater's extra 10 s moves the cut earlier. This worst case costs no correctness, because every hold
+  resumes from the database and a job cut off leaves a pending hold that a reclaim retries after `memberreq.StaleClaim`
+  (the member is punished once and their notice comes late at worst).
 - `StopLockdownWorker` is another drain registered after DB-close, through `RegisterLockdownWorkerDrain`
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
@@ -93,7 +108,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 - Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
-  antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache ·
+  antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache (`my_chat_member` only) and the member requirements watcher (supergroup messages only, the only message handler of the group, `ext.ContinueGroups` on every path; never add another message handler to group -2) ·
   `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
   `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
@@ -117,6 +132,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
+- The `MemberRequirements` module (priority 241, `memberreq.go`, `memberreq_watch.go`) registers one message watcher at
+  group `-2` (`memberReqWatchGroup`), through `handlers.NewMessage` with a supergroup-only filter and no `SetAllow*`
+  (new messages only: no edits, channel posts or bot senders), the only message handler of that group. The member
+  requirements watcher returns `ext.ContinueGroups` on every path, its result is a named value preset to it so a
+  recovered panic cannot return `nil` (which would leave group 0 and kill every later group-0 handler), and it makes no
+  Telegram call and no database write for a clean member beyond the pass-guarded clean predicate. Its order is cheapest
+  first: the switch `memberReqEnforcementLive`, the item (`raidFloodItemKey`) and the sender's shape
+  (`raidFloodSenderCounts`: no `sender_chat`, automatic forward, service account or the bot), the cached settings
+  (`memberReqSettingsLookup`; an error or no rule on ends it, so an unreadable setting punishes nobody), the pure name
+  rules, then for a clean member the pass value and the clean predicate and for a violator the cached admin list
+  (`cachedAdminStatus`: a known admin ends it; an unknown cache goes to the job, whose live `getChatMember` decides).
+  The enforcement switch `memberReqEnforcementLive` is an `atomic.Bool` read only through `memberReqLive()`, and it
+  stays false until the "I fixed it" handler is registered (plan 13-13 is the only code that sets it), so until then
+  no path of the watcher or the join check can punish a member in a real group. It is atomic because goroutines a test
+  does not own read it (the dispatcher, and the captcha lifecycle goroutines that reach the join entry can outlive the
+  test that started them) and `make test` runs with `-race`; tests write it only through `withMemberReqLive`, which
+  restores the previous value in `t.Cleanup` (never a fixed false) and is never combined with `t.Parallel`.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 - The Settings module (priority 239, `settings.go`) adds one handler group, `1`, for the typed-reply door below; its other entry points are `/settings`, the callbacks and the deep link. `/settings` goes through `helpers.WrapCommand`
   with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
@@ -418,7 +450,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The Member requirements page (`settings_mreq.go`, page `m`, `Order` 80, icon 🛂, `settings_page_mreq`, between Rules and
   Access) registers from its own file through `registerSettingsPage`, so `settings_pages.go` is not edited. It reads
   through `memberReqSettingsLookup` (`memberreq.GetSettings`, the cached `member_requirements:<chat>` key, the one read
-  that the page, Main and the message watcher share; the `skipLocal` clause for that key is added with the watcher).
+  that the page, Main and the message watcher share; the key is in `skipLocal`).
   Main's state is Off when every rule is Off (whatever the two switches say), `{n} on` for the n rules that are not Off,
   and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
   creates nothing. The body is the intro, the all-off line while every rule is Off, one line per rule of `memberReqRules`
@@ -1030,7 +1062,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `SetDeleteMessages` are three column-targeted `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of their own column plus
   `updated_at`, so a Go 0 or `false` is written and two admins changing two rules never clobber each other, each followed by
   `cache.DeleteCache` of that key; a value outside 0..4 or an unknown rule is refused before any write. The model has no
-  `default:` tag on its booleans. It is never part of backup, export, import or reset.
+  `default:` tag on its booleans. The key `member_requirements:*` is listed in `skipLocal`, because the watcher reads it on
+  every supergroup message and a rule switched off must stop punishing on every replica at the next message, not after
+  `CACHE_LOCAL_TTL` (D-20). It is never part of backup, export, import or reset.
+- `fuku:memberreq:pass:<chat>:<user>` is the member requirements watcher's clean verdict (`memberreq_watch.go`): positive
+  only, a 16 hex fingerprint (`memberReqPassValue`, a SHA-256 of the five rule actions and the three names, so no name is in
+  the key or the value and a rename or any settings change is a miss), `SET EX` 30 minutes (`memberReqPassTTL`), written only
+  after a clean verdict and a successful clean predicate (`ClearHoldOnClean`) for a message not older than 2 minutes
+  (`memberReqPassMaxAge`, so a backlog message cannot hide a later hold from the predicate). It saves the clean `DELETE`, not
+  the rules, and a violation is never cached. A Redis error or no Redis is a miss and the predicate runs on every message
+  (correct, slower). It sits in the `fuku:memberreq:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps it.
 - `chat_requirement_holds` (same migration) is one member's requirement episode in one chat, unique on `(chat_id, user_id)`
   (`uk_chat_requirement_holds_chat_user`): both the latch that makes a violation punished once across replicas and the
   record of a mute the bot placed. `memberreq.ClaimHold` is one `INSERT ... ON CONFLICT DO NOTHING` and only the caller whose
@@ -1104,8 +1145,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
   flood limit is welcomed on their next join.
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
-  place that punishes a member for a broken rule, and nothing in production calls it until the watcher and the join
-  check do. Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
+  place that punishes a member for a broken rule; its only production caller is the message watcher's job, and only while
+  the enforcement switch is on (the join check will be the second). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
   itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
   failed load is an error, never "not approved") and the pending captcha through the two context reads (same three
   states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds nothing); one live
@@ -1144,6 +1185,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   row, and the rejoin reset or an admin's `/unmute` followed by a clean message still ends it. Every requirement unmute
   takes its permissions only from `resolveUnmutePermissionsWithLockdown`. Logs carry chat and user IDs and outcomes
   only, never a name, a rule text or a notice text.
+- The member requirements runner (`memberReqRunAsync`, `memberreq_watch.go`): a violating message is handed to a job on its
+  own goroutine, counted in `memberReqJobs` (a `raidPostTracker`) before `memberReqDraining` is read, capped at
+  `memberReqMaxInFlight` (32) by `startBelow` (check and increment in one step), recovering from panics. A full runner sheds
+  the job with one log line carrying the chat and user IDs only, and the member's next message is checked again: an
+  accepted, logged limit, so under overload a violator's message can stay undeleted until their next message.
+  A basic group is never screened in this phase (mute and kick are supergroup methods): the watcher's filter is supergroups
+  only, and Phase 14's "cannot work here" line will say so on the page.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -1999,6 +2047,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cache and the forged `my` fields). The module harness carries both Phase
   13 tables (`ChatRequirements`, `ChatRequirementHold` in the `AutoMigrate` list of `test_harness_test.go`), and
   `settingsCleanup` deletes their rows of its chats and the `member_requirements` cache key.
+  The watcher families are `TestMemberReqWatcher*`, `TestMemberReqPassCache`, `TestMemberReqCleanEndsWarnHold`,
+  `TestMemberReqOnePunishmentAcrossReplicas` (a mute at once across three processes; the warn variant judges its first
+  message alone, because on the SQLite of this suite a concurrent writer makes the warn module's read-then-write transaction
+  fail with "database is locked" where PostgreSQL waits), `TestMemberReqRunnerSheds` and `TestShutdownWaitsForMemberReqJobs`
+  (`memberreq_watch_test.go`, `shutdown_drains_test.go`). `newMemberReqEnv` turns the enforcement switch on through
+  `withMemberReqLive`, which restores the previous value in `t.Cleanup`; a test that uses it never calls `t.Parallel`. A test
+  that calls `StopMemberReqJobs` restores the runner with `restoreMemberReqRunner` (the drain sets the draining flag and
+  cancels the root context for good), and `memberReqCleanup` deletes the `fuku:memberreq:*` keys of its chats, the pass keys
+  included. `mreqReplica` builds a second bot process over the same database and Redis, `mreqSend` and `mreqSendAt` run a
+  message through the dispatcher (the settings environment's `send` stamps 1970), and the test environment waits for
+  `memberReqJobs` before its cleanups run.
 
 ## Commits
 

@@ -230,8 +230,29 @@ func (m moduleStruct) memberReqWatcher(b *gotgbot.Bot, ctx *ext.Context) (err er
 	return ext.ContinueGroups
 }
 
-// memberReqStopWait is the longest StopMemberReqJobs waits for the jobs in flight.
+// memberReqStopWait is the longest StopMemberReqJobs waits for the jobs in flight at
+// shutdown. A job cut off leaves at worst a pending hold that a reclaim retries after
+// memberreq.StaleClaim, so nothing is lost by giving up. A variable so a test can shorten it.
 var memberReqStopWait = 2 * time.Second
 
-// StopMemberReqJobs is the shutdown drain of the enforcement jobs.
-func StopMemberReqJobs() bool { return true }
+// StopMemberReqJobs is the shutdown drain of the enforcement jobs. It sets the draining flag,
+// so a late message starts no job, cancels the jobs' root context first (every paced Telegram
+// call and database write of a job in flight aborts at once, and a job cut off punishes
+// nobody it has not already punished), then waits at most memberReqStopWait for the jobs and
+// reports whether they all finished. It is registered after the database close, because a job
+// reads and writes the database.
+func StopMemberReqJobs() bool {
+	memberReqDraining.Store(true)
+	memberReqContext()
+	memberReqRoot.mu.Lock()
+	memberReqRoot.cancel()
+	memberReqRoot.mu.Unlock()
+
+	select {
+	case <-memberReqJobs.idleChan():
+		return true
+	case <-time.After(memberReqStopWait):
+		log.Warn("[MemberReq] shutdown drain timed out with enforcement jobs still in flight")
+		return false
+	}
+}

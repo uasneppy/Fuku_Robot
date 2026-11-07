@@ -218,6 +218,12 @@ func main() {
 		modules.StopAdminIndexSweeper()
 		return nil
 	})
+	// Registered right before the staff actions drain, so LIFO runs it after that drain and
+	// before the admin index sweeper stop and the database close: the enforcement jobs of the
+	// member requirements read and write holds, warns and notices. It cancels the jobs and
+	// waits at most 2 s, plus a grace period. Every hold resumes from the database: a job cut
+	// off leaves a pending hold that a reclaim retries.
+	modules.RegisterMemberReqDrain(shutdownManager)
 	// Also registered after the DB-close handler, so LIFO cancels the staff fan-outs
 	// and lets them deliver their final summaries before the database closes: their
 	// workers still write links through recheckLink while they wind down. It gets the
