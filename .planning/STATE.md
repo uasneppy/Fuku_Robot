@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 13
 current_phase_name: Member Requirements
 status: executing
-stopped_at: Completed 13-07-PLAN.md
-last_updated: "2026-11-05T19:36:15.207Z"
+stopped_at: Completed 13-08-PLAN.md
+last_updated: "2026-11-07T20:57:02.316Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 8f563b31d07643dbec0c358f7a02bbf08d96166d
+state_head: 43d6410d0a197914b5b56e1f60fd5c3a17ec1f5c
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 55
-  completed_plans: 47
+  completed_plans: 48
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 13 (Member Requirements) — READY TO EXECUTE
-Plan: 8 of 14
+Plan: 9 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -121,6 +121,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 13 P05 | 75min | 3 tasks | 8 files |
 | Phase 13 P06 | 70min | 3 tasks | 8 files |
 | Phase 13 P07 | 100min | 3 tasks | 10 files |
+| Phase 13 P08 | 35min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,7 @@ Recent decisions affecting current work:
 - [Phase 12]: 12-11: Media under text (control u) on Welcome and Goodbye uses the page's EditRight, is drawn only for media.CaptionAboveEligible media, and a stale press writes nothing and warns
 - [Phase 12]: Plan 12-14: Rules Full preview is the group-form /rules message in the group's language (degrade false); previews ignore Greet once and write nothing (A9, A12)
 - [Phase 13]: 13-03: warnApplyResult carries a Recorded flag so warnThisUser tells a record error from a reset error; applyWarn sends no message
+- [Phase 13]: 13-08: a reclaimed pending mute hold whose marker is still live adopts it instead of muting twice; a mute whose notice cannot be delivered is lifted through resolveUnmutePermissionsWithLockdown and the hold reverted to a pending backoff row
 
 ### Pending Todos
 
@@ -269,9 +271,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-07T20:50:00Z
-Stopped at: Session resumed after /gsd-pause-work; proceeding to plan 13-08 task 2 (plan 13-08 task 1 is committed green)
-Resume file: .planning/phases/13-member-requirements/.continue-here.md
+Last session: 2026-11-07T20:56:54.544Z
+Stopped at: Completed 13-08-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
