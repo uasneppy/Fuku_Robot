@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 13
 current_phase_name: Member Requirements
 status: executing
-stopped_at: Completed 13-11-PLAN.md
-last_updated: "2026-11-07T22:14:37.524Z"
+stopped_at: Completed 13-12-PLAN.md
+last_updated: "2026-11-07T22:43:11.554Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 1f4b25490268866c7230947ff4e68db38076e771
+state_head: 83929a5ac2d1f19f571b7d85d8e01483ebd8d700
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 55
-  completed_plans: 51
+  completed_plans: 52
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 13 (Member Requirements) — READY TO EXECUTE
-Plan: 12 of 14
+Plan: 13 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -125,6 +125,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 13 P09 | 180min | 3 tasks | 10 files |
 | Phase 13 P10 | 40 min | 2 tasks | 6 files |
 | Phase 13 P11 | 2h | 2 tasks | 7 files |
+| Phase 13 P12 | 40min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,7 @@ Recent decisions affecting current work:
 - [Phase 13]: 13-10: a message is deleted only when its sender is established as a non-admin (live lookup, or a known cached admin list without them); during a pause only the cached list decides, so an unknown-status violator keeps their message (accepted)
 - [Phase 13]: 13-10: the per-chat cap (10 attempts a minute, counted before the claim) pauses punishments for 10 minutes with one SET NX winner posting mreq_notice_paused; no Redis means no cap
 - [Phase 13]: 13-11: a hold-read error in the join entry welcomes (a welcome frees nobody); only the captcha guard fails closed, with an IDs-only error that isPermanentUnmuteError never reads as permanent
+- [Phase 13]: 13-12: the rejoin reset deletes holds first (one winner) and lifts only a live marker mute, restoring the hold on failure; the leave hook and the reset are not behind the kill switch
 
 ### Pending Todos
 
@@ -279,8 +281,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-07T22:14:37.070Z
-Stopped at: Completed 13-11-PLAN.md
+Last session: 2026-11-07T22:43:11.145Z
+Stopped at: Completed 13-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

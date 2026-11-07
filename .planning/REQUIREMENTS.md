@@ -38,11 +38,11 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [ ] **MREQ-01**: A Member requirements page lets the owner (or admins, when allowed) give each rule its own punishment: off, warn, kick, ban or mute. The rules are: must have a last name, must have a username, must have a profile photo, must be subscribed to the linked channel, no AI-flagged spam name, no Russian name, no Arabic name and no Chinese name. All rules are off by default.
 - [x] **MREQ-02**: With "Check on join" on, a new member is checked right after passing the captcha (or on joining, when the group has no captcha). Every member is checked when they send a message.
 - [x] **MREQ-03**: With "Delete messages" on, a message from a member who breaks a rule is deleted.
-- [ ] **MREQ-04**: A violation is punished once: further messages from the same member do not add warns, notices or punishments until the member fixes it or rejoins. This holds across replicas.
+- [x] **MREQ-04**: A violation is punished once: further messages from the same member do not add warns, notices or punishments until the member fixes it or rejoins. This holds across replicas.
 - [x] **MREQ-05**: Each violation posts one notice in the group naming the member and the rule broken. A warn counts toward the group's warn limit like any other warn.
 - [ ] **MREQ-06**: A member muted by a rule gets an "I fixed it" button that only they can use. The bot re-checks them live: if the problem is fixed, they are unmuted (respecting an active lockdown) and get the welcome that was held back; if not, they are told what is still missing.
 - [ ] **MREQ-07**: "I fixed it" only ever lifts a mute that a requirement rule placed. It never lifts a mute from an admin, a staff action, the captcha, antiflood or a lockdown.
-- [ ] **MREQ-08**: A kicked member can rejoin and is checked again. A banned member stays banned until an admin unbans them.
+- [x] **MREQ-08**: A kicked member can rejoin and is checked again. A banned member stays banned until an admin unbans them.
 - [x] **MREQ-09**: Admins, approved users, bots, Telegram service accounts and messages sent as a channel or by an anonymous admin are never checked.
 - [ ] **MREQ-10**: A check that cannot be answered (a Telegram error, a lookup that times out, the bot not being an admin of the linked channel) never punishes anyone. The page shows when a rule cannot work in that group (no linked channel, the bot not admin there, AI not configured).
 - [ ] **MREQ-11**: The profile-photo rule treats a photo the bot cannot see as missing, and the page says so.
@@ -154,11 +154,11 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | MREQ-01 | Phase 13 | Pending |
 | MREQ-02 | Phase 13 | Complete |
 | MREQ-03 | Phase 13 | Complete |
-| MREQ-04 | Phase 13 | Pending |
+| MREQ-04 | Phase 13 | Complete |
 | MREQ-05 | Phase 13 | Complete |
 | MREQ-06 | Phase 13 | Pending |
 | MREQ-07 | Phase 13 | Pending |
-| MREQ-08 | Phase 13 | Pending |
+| MREQ-08 | Phase 13 | Complete |
 | MREQ-09 | Phase 13 | Complete |
 | MREQ-10 | Phase 14 | Pending |
 | MREQ-11 | Phase 14 | Pending |
