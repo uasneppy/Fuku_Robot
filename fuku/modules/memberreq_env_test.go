@@ -345,3 +345,68 @@ func restoreMemberReqRunner(t *testing.T) {
 		memberReqRoot.ctx, memberReqRoot.cancel = context.WithCancel(context.Background())
 	})
 }
+
+// mreqMuteByMessage runs a plain text message of user through the real dispatcher (the
+// watcher must be loaded with loadMemberReq, and the rules stored with a Mute rule the member
+// breaks), waits for the enforcement job and returns the mute notice the group received.
+func (e *memberReqEnv) mreqMuteByMessage(user gotgbot.User) staffSentMessage {
+	e.t.Helper()
+	before := len(e.mreqNotices())
+	e.mreqSend(user, "plain text")
+	memberReqJobs.wait()
+	notices := e.mreqNotices()
+	if len(notices) != before+1 {
+		e.t.Fatalf("notices after the message of %d = %d, want %d (one new mute notice)", user.Id, len(notices), before+1)
+	}
+	return notices[len(notices)-1]
+}
+
+// mreqFixedData is the callback data of the one button of a mute notice.
+func (e *memberReqEnv) mreqFixedData(notice staffSentMessage) string {
+	e.t.Helper()
+	rows := staffKeyboardOf(notice.Params["reply_markup"])
+	if len(rows) != 1 || len(rows[0]) != 1 {
+		e.t.Fatalf("notice keyboard = %+v, want one row of one button", rows)
+	}
+	return rows[0][0].CallbackData
+}
+
+// mreqPressFixed presses the button of notice as from, through the real dispatcher, on the
+// notice's own message.
+func (e *memberReqEnv) mreqPressFixed(from gotgbot.User, notice staffSentMessage) {
+	e.t.Helper()
+	e.mreqPressData(from, notice.MessageID, e.mreqFixedData(notice))
+}
+
+// mreqPressData presses a button with the given callback data on message msgID of the group.
+func (e *memberReqEnv) mreqPressData(from gotgbot.User, msgID int64, data string) {
+	e.t.Helper()
+	e.pressRaw(e.chat, from, msgID, data)
+}
+
+// mreqAnswers returns the answers given to callback queries so far, as (text, alert) pairs.
+func (e *memberReqEnv) mreqAnswers() []mreqAnswer {
+	e.t.Helper()
+	var answers []mreqAnswer
+	for _, call := range e.fake.callsFor("answerCallbackQuery") {
+		answers = append(answers, mreqAnswer{Text: fmt.Sprint(call.Params["text"]), Alert: staffParamBool(call.Params, "show_alert")})
+	}
+	return answers
+}
+
+// mreqAnswer is one answerCallbackQuery.
+type mreqAnswer struct {
+	Text  string
+	Alert bool
+}
+
+// mreqOnlyAnswer fails the test unless exactly one query was answered since the first call
+// (every press of a test answers exactly once) and returns that answer.
+func (e *memberReqEnv) mreqOnlyAnswer(already int) mreqAnswer {
+	e.t.Helper()
+	answers := e.mreqAnswers()
+	if len(answers) != already+1 {
+		e.t.Fatalf("answers = %+v, want exactly one more than the %d before the press", answers, already)
+	}
+	return answers[len(answers)-1]
+}
