@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 13
 current_phase_name: Member Requirements
 status: executing
-stopped_at: Completed 13-08-PLAN.md
-last_updated: "2026-11-07T20:57:02.316Z"
+stopped_at: Completed 13-09-PLAN.md
+last_updated: "2026-11-07T21:30:13.961Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 43d6410d0a197914b5b56e1f60fd5c3a17ec1f5c
+state_head: f6407cf361fa4f05dbb268368dac9a04b70cdca0
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 55
-  completed_plans: 48
+  completed_plans: 49
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 13 (Member Requirements) — READY TO EXECUTE
-Plan: 9 of 14
+Plan: 10 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -122,6 +122,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 13 P06 | 70min | 3 tasks | 8 files |
 | Phase 13 P07 | 100min | 3 tasks | 10 files |
 | Phase 13 P08 | 35min | 2 tasks | 6 files |
+| Phase 13 P09 | 180min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,8 @@ Recent decisions affecting current work:
 - [Phase 12]: Plan 12-14: Rules Full preview is the group-form /rules message in the group's language (degrade false); previews ignore Greet once and write nothing (A9, A12)
 - [Phase 13]: 13-03: warnApplyResult carries a Recorded flag so warnThisUser tells a record error from a reset error; applyWarn sends no message
 - [Phase 13]: 13-08: a reclaimed pending mute hold whose marker is still live adopts it instead of muting twice; a mute whose notice cannot be delivered is lifted through resolveUnmutePermissionsWithLockdown and the hold reverted to a pending backoff row
+- [Phase 13]: 13-09: the watcher checks the atomic enforcement switch first; production never sets it until 13-13
+- [Phase 13]: 13-09: a clean verdict is written only for a message not older than 2 minutes, so a backlog message cannot hide a later hold from the clean predicate
 
 ### Pending Todos
 
@@ -271,8 +274,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-07T20:56:54.544Z
-Stopped at: Completed 13-08-PLAN.md
+Last session: 2026-11-07T21:30:07.114Z
+Stopped at: Completed 13-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
