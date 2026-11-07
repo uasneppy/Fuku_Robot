@@ -445,13 +445,20 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //
 //  1. the bot itself, bots and Telegram service accounts;
 //  2. an approved member or a pending captcha attempt (a read that failed counts as exempt);
-//  3. the member's hold, read fresh: one that is not a stale pending one is Held;
-//  4. one live getChatMember through the pacer, the admin check and the source of the names;
-//  5. the rules on the live names, the strictest punishment of the broken ones;
-//  6. the claim of the hold, before any punishment (one winner across replicas); a reclaimed
+//  3. the member's hold, read fresh: one that is not a stale pending one is Held, and with
+//     Delete messages on its message is deleted when the sender is established as a non-admin;
+//  4. a paused chat (memberReqPaused) punishes nobody and posts nothing; its message is deleted
+//     only when the cached admin list knows the sender as a non-admin, with no Telegram call;
+//  5. one live getChatMember through the pacer, the admin check and the source of the names;
+//  6. the rules on the live names, the strictest punishment of the broken ones;
+//  7. the chat's per-minute cap, counted before the claim (memberReqCapAllow): over it nothing
+//     is punished, the pause starts and the message is deleted (the live lookup showed a
+//     non-admin);
+//  8. the claim of the hold, before any punishment (one winner across replicas); a reclaimed
 //     mute whose marker is already live is adopted, not applied again;
-//  7. the punishment, then the one notice. A punishment Telegram refuses backs the hold off
-//     and posts nothing (memberReqSendFailed).
+//  9. the punishment, then the one notice. A punishment Telegram refuses backs the hold off
+//     and posts nothing (memberReqSendFailed). Then, with Delete messages on, the message is
+//     deleted whatever became of the punishment.
 func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memberReqResult {
 	if memberReqNeverChecked(b, c.User) || memberReqExempt(ctx, c) {
 		return memberReqResult{}
@@ -465,8 +472,20 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 		memberReqDeleteHeld(ctx, b, c)
 		return memberReqResult{Outcome: memberReqHeld, Hold: held}
 	}
+	if memberReqPaused(ctx, c.Chat.Id) {
+		// A pause stops punishments and notices, not deletes. With no Telegram call to decide it,
+		// the message goes only when the cached admin list knows the sender as a non-admin.
+		if memberReqDeletes(c) && memberReqSenderNonAdmin(ctx, b, c.Chat.Id, c.User.Id, false) {
+			memberReqDeleteMessage(ctx, b, c)
+		}
+		return memberReqResult{}
+	}
 	member, broken, ok := memberReqLiveViolation(ctx, b, c)
 	if !ok {
+		return memberReqResult{}
+	}
+	if !memberReqCapAllow(ctx, b, c.Chat.Id) {
+		memberReqDeleteMessage(ctx, b, c)
 		return memberReqResult{}
 	}
 	action := memberReqStrictest(c.Settings, broken)
@@ -533,9 +552,16 @@ func memberReqSenderNonAdmin(ctx context.Context, b *gotgbot.Bot, chatID, userID
 }
 
 // memberReqDeleteHeld deletes a held member's further message when the sender is established
-// as a non-admin by the cached admin list or, when it cannot say, by one live getChatMember.
+// as a non-admin by the cached admin list or, when it cannot say and the chat is not paused, by
+// one live getChatMember. During a pause an unknown status deletes nothing and asks nothing. The
+// pause is read only when the list cannot say, so a known list costs no Redis read.
 func memberReqDeleteHeld(ctx context.Context, b *gotgbot.Bot, c memberReqCase) {
-	if memberReqDeletes(c) && memberReqSenderNonAdmin(ctx, b, c.Chat.Id, c.User.Id, true) {
+	if !memberReqDeletes(c) {
+		return
+	}
+	known, _ := cachedAdminStatus(c.Chat.Id, c.User.Id)
+	mayAsk := !known && !memberReqPaused(ctx, c.Chat.Id)
+	if memberReqSenderNonAdmin(ctx, b, c.Chat.Id, c.User.Id, mayAsk) {
 		memberReqDeleteMessage(ctx, b, c)
 	}
 }

@@ -53,7 +53,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   database close included, are cut, and the process exits with code 1 inside `stop_grace_period: 75s`, before SIGKILL; in
   polling mode the updater's extra 10 s moves the cut earlier. This worst case costs no correctness, because every hold
   resumes from the database and a job cut off leaves a pending hold that a reclaim retries after `memberreq.StaleClaim`
-  (the member is punished once and their notice comes late at worst).
+  (the member is punished once and their notice comes late at worst). The pause latch of the per-chat punishment cap
+  (`fuku:memberreq:{<chat>}:paused`) is a Redis key with its own expiry, so a shutdown cut short neither ends a pause nor
+  starts one.
 - `StopLockdownWorker` is another drain registered after DB-close, through `RegisterLockdownWorkerDrain`
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
@@ -867,7 +869,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `fuku:memberreq:pace:next` and `fuku:memberreq:pace:block` are the fleet-wide Telegram pacing of the member
   requirements executor (`memberReqPaced`, `memberReqPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block
   design with its own keys, so screening, a staff fan-out and a lockdown each keep their own budget. Every Telegram call
-  of `memberReqEnforce` (the live `getChatMember`, the punishment, the notice) goes through it, each bounded by 10 s.
+  of `memberReqEnforce` (the live `getChatMember`, the punishment, the notice, the delete) goes through it, each bounded by 10 s.
+- `fuku:memberreq:{<chat>}:cap:<unix minute>` and `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat
+  brake (`memberreq_limits.go`, the chat ID a hash tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them).
+  The counter is a fixed 60 s window (`raidNow().Unix()/60`, so a test can stop the clock) of punishment attempts,
+  `INCR` plus `EXPIRE 120` in one pipeline under 250 ms, counted before the claim (`memberReqCapAllow`, between the live
+  lookup and `memberreq.ClaimHold`), so an attempt that is refused, lost or never confirmed still counts and a bot that keeps
+  being refused reaches the pause. More than `memberReqCapPerMinute` (10) refuses the punishment and sets the latch with
+  `SET NX EX` for `memberReqPause` (10 minutes); only the caller whose `SET NX` succeeded posts the one `mreq_notice_paused`
+  (`{n}` the cap, `{minutes}` the pause) in the group's language through `memberReqPostNotice`, best effort, so one notice
+  is posted however many replicas tip the cap at once. While the latch stands (`memberReqPaused`, read after the held path
+  and before the live lookup) no new punishment, hold or notice starts and the live `getChatMember` is not made; the held
+  members' own messages and the deletes go on (below). The brake never drops a notice already due, because the cap is
+  counted before the claim and never after the punishment. A Redis error or no Redis allows the punishment and pauses
+  nothing (accepted, like the raid counters): nothing the requirements need for correctness lives only in Redis. Both
+  numbers are package variables only so a test can shrink them.
 - `fuku:captcha:ch:<token>` is the Turnstile captcha's challenge handle (`fuku/utils/captchaweb`, `challenge.go`): a hash
   of decimal strings `u` (user ID), `a` (attempt ID), `c` (chat ID) and `x` (the attempt's expiry in unix ms), living the
   attempt's time left plus 5 minutes (`ChallengeGrace`). The token is 16 random bytes in base64url (22 characters) and is
@@ -1149,10 +1165,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the enforcement switch is on (the join check will be the second). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
   itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
   failed load is an error, never "not approved") and the pending captcha through the two context reads (same three
-  states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds nothing); one live
+  states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds no warn, notice or
+  punishment, and with Delete messages on its message is deleted, below); a paused chat (the Data bullet of the cap) ends
+  there with nothing punished or posted; one live
   `getChatMember` through `memberReqPaced`, which is the admin check (creator, administrator, left, kicked, a restricted
   non-member and bots are never punished) and the source of the names the rules judge; the strictest of the broken rules
-  whose punishment is not Off; the claim of the hold before any punishment (`memberreq.ClaimHold`, or
+  whose punishment is not Off; the chat's per-minute cap, counted before the claim; the claim of the hold before any punishment (`memberreq.ClaimHold`, or
   `ReclaimStaleHold` for a pending hold older than two minutes); then the punishment and one notice. Never use
   `IsUserAdmin`, `IsUserApproved` or `aispamCarvedOut` there. A warn goes through `applyWarn` with the hold marked
   punished in its `afterRecord` hook, inside the warn lock right after the warn is stored, so a recorded warn and a
@@ -1183,8 +1201,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and user IDs only, and a failed revert is logged at Error. Accepted limit: when Telegram also refuses the lift, the
   mute stays and the hold stays punished with one Warn saying the mute could not be lifted; it takes two refusals in a
   row, and the rejoin reset or an admin's `/unmute` followed by a clean message still ends it. Every requirement unmute
-  takes its permissions only from `resolveUnmutePermissionsWithLockdown`. Logs carry chat and user IDs and outcomes
-  only, never a name, a rule text or a notice text.
+  takes its permissions only from `resolveUnmutePermissionsWithLockdown`. Delete messages (`memberReqDeleteMessage`, one
+  paced `deleteMessage`, only for a message case with a message ID, never for a join or a clean member) deletes the
+  violating message after the punishment whatever became of it (it took effect, was refused or unknown, or another
+  replica won the claim), every further message of a held member, and during a pause the message of a violator the
+  cached admin list knows as a non-admin. It is not a punishment and posts no notice; a failed delete is only logged
+  (chat, user and message IDs and the error code, never the content) and never changes a punishment, hold or notice. A
+  message is deleted only when its sender is established as a non-admin (MREQ-09), by `memberReqSenderNonAdmin`: on the
+  punishing path the job's own live `getChatMember`; on the held and paused paths the cached admin list read at the
+  moment of the decision (`cachedAdminStatus`: known, and the sender not in it). When the list cannot say, the held
+  path outside a pause makes one live `getChatMember` (a creator, an administrator, someone gone and a failed lookup mean
+  no delete), and during a pause nothing is deleted and no Telegram call is made, so a pause never spends a call to decide
+  a delete. A held member promoted to administrator is never deleted: the promotion's `chat_member` update reaches
+  `adminCacheAutoUpdate` (group 0), which invalidates and reloads the admin list, so the member reads as an administrator
+  or as unknown, never as a known non-admin (a message handled at the very moment of the promotion, before that update's
+  invalidation, is the one window the watcher's own known-admin skip has too). Accepted limit: an unknown-status
+  violator's message is not deleted during a pause (the cached list cannot say and a pause forbids the live lookup). Logs
+  carry chat and user IDs and outcomes only, never a name, a rule text or a notice text.
 - The member requirements runner (`memberReqRunAsync`, `memberreq_watch.go`): a violating message is handed to a job on its
   own goroutine, counted in `memberReqJobs` (a `raidPostTracker`) before `memberReqDraining` is read, capped at
   `memberReqMaxInFlight` (32) by `startBelow` (check and increment in one step), recovering from panics. A full runner sheds
@@ -2057,7 +2090,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cancels the root context for good), and `memberReqCleanup` deletes the `fuku:memberreq:*` keys of its chats, the pass keys
   included. `mreqReplica` builds a second bot process over the same database and Redis, `mreqSend` and `mreqSendAt` run a
   message through the dispatcher (the settings environment's `send` stamps 1970), and the test environment waits for
-  `memberReqJobs` before its cleanups run.
+  `memberReqJobs` before its cleanups run. The delete and cap families are `TestMemberReqDeleteMessages`,
+  `TestMemberReqDeleteDuringPause`, `TestMemberReqCapPausesPunishments` and `TestMemberReqCapWithoutRedis`
+  (`memberreq_delete_test.go`, `memberreq_limits_test.go`): they prime the admin cache with `mreqAdminList` or empty it with
+  `mreqNoAdminList`, simulate a promotion with `mreqPromote` (the fake's administrator list plus
+  `cache.InvalidateAdminCache`, as the promotion's own update does), drop the chat's admin cache entry in `t.Cleanup`, stop
+  the minute clock with `mreqFixedClock` (a swap of `raidNow`) so a window never straddles a minute, and restore
+  `memberReqCapPerMinute` and `memberReqRedisClient` with `mreqSwap`.
 
 ## Commits
 

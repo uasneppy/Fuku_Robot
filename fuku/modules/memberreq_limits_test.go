@@ -150,13 +150,15 @@ func TestMemberReqCapPausesPunishments(t *testing.T) {
 		env := newMemberReqEnv(t)
 		allow := func() bool { return memberReqCapAllow(context.Background(), env.bot, env.chat.Id) }
 
-		if !allow() || !allow() || allow() {
-			t.Fatal("within one minute the first two attempts must pass and the third must not")
+		first, second, third := allow(), allow(), allow()
+		if !first || !second || third {
+			t.Fatalf("attempts within one minute = %t, %t, %t, want the first two allowed and the third refused", first, second, third)
 		}
 		env.redis.Del(memberReqPausedKey(env.chat.Id))
 		*clock = clock.Add(time.Minute)
-		if !allow() || !allow() {
-			t.Error("the first two attempts of the next minute were refused")
+		first, second = allow(), allow()
+		if !first || !second {
+			t.Errorf("attempts of the next minute = %t, %t, want both allowed", first, second)
 		}
 		if keys := env.mreqCapKeys(env.chat.Id); len(keys) != 2 {
 			t.Errorf("cap counters = %v, want one per minute", keys)
