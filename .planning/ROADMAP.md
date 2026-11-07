@@ -244,7 +244,7 @@ Plans:
   2. With "Check on join" on, a new member is checked right after passing the captcha, or on joining when the group has no captcha, and every member is checked when they send a message. Admins, approved users, bots, Telegram service accounts and messages sent as a channel or by an anonymous admin are never checked.
   3. A violation is punished once and posts one notice in the group naming the member and the rule broken. Further messages from that member add no warns, notices or punishments until they fix it or rejoin, across replicas. A warn counts toward the group's warn limit, and "Delete messages" removes the violator's messages. A kicked member can rejoin and is checked again, and a banned member stays banned until an admin unbans them.
   4. A member muted by a rule gets an "I fixed it" button only they can use. The bot re-checks them live. If the problem is fixed, they are unmuted (respecting an active lockdown) and get the welcome that was held back. If not, they are told what is still missing. The button never lifts a mute placed by an admin, a staff action, the captcha, antiflood or a lockdown.
-**Plans:** 9/14 plans executed
+**Plans:** 10/14 plans executed
 - [x] 13-01-PLAN.md
 - [x] 13-02-PLAN.md
 - [x] 13-03-PLAN.md
@@ -254,7 +254,7 @@ Plans:
 - [x] 13-07-PLAN.md
 - [x] 13-08-PLAN.md
 - [x] 13-09-PLAN.md
-- [ ] 13-10-PLAN.md
+- [x] 13-10-PLAN.md
 - [ ] 13-11-PLAN.md
 - [ ] 13-12-PLAN.md
 - [ ] 13-13-PLAN.md
@@ -364,7 +364,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 10. PM Settings Hub and Owner Gate | 11/11 | In Progress | - |
 | 11. Message Editor | 14/14 | In Progress | - |
 | 12. Rules Media, Media Under Text and Greet Once | 15/16 | In Progress | - |
-| 13. Member Requirements | 9/14 | In Progress | - |
+| 13. Member Requirements | 10/14 | In Progress | - |
 | 14. Profile Photo and Channel Rules | 0/TBD | Not started | - |
 | 15. AI Spam-Name Check | 0/TBD | Not started | - |
 | 16. Scheduled Deletion of Service and Bot Messages | 0/TBD | Not started | - |
