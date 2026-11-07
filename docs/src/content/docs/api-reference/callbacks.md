@@ -10,8 +10,8 @@ This page documents all inline button callback handlers in Fuku Robot.
 
 ## Overview
 
-- **Total Callbacks**: 26
-- **Modules with Callbacks**: 18
+- **Total Callbacks**: 27
+- **Modules with Callbacks**: 19
 
 ## Callback Data Format
 
@@ -54,6 +54,7 @@ versions, and legacy unversioned dot-notation payloads are rejected.
 | Help | `configuration` | botConfig |
 | Help | `helpq` | helpButtonHandler |
 | Languages | `change_language` | langBtnHandler |
+| Member requirements | `mreq` | memberReqFixedCallback |
 | Notes | `notes.overwrite` | noteOverWriteHandler |
 | Notes | `rmAllNotes` | notesButtonHandler |
 | Pins | `unpinallbtn` | unpinallCallback |
@@ -190,6 +191,21 @@ Handles confirmation callback for removing all approved users.
 - **Handler**: `langBtnHandler`
 - **Source**: `language.go`
 
+### Member requirements
+
+#### `mreq`
+
+- **Handler**: `memberReqFixedCallback`
+- **Source**: `memberreq_fixed.go`
+
+The I fixed it button of a requirement mute notice. Fields: exactly `a=f`, `h` the hold row ID and `u` the held member,
+positive whole numbers of at most 19 digits; anything else is an invalid request, refused before any lookup. Only the
+member `u` may press it, and an administrator who presses it is refused (admins lift a mute with `/unmute`). The hold is
+matched by its ID, the chat and the member, the member's live record must carry the requirements' own mute marker (an
+admin's, staff, captcha, antiflood or warn-limit mute is never lifted), the live names are judged again against the
+group's current settings, and the member is unmuted with the group's own permissions (the stored pre-lockdown
+permissions during a lockdown). The query is answered exactly once, in the group's language.
+
 ### Notes
 
 #### `notes.overwrite`
@@ -255,6 +271,18 @@ Set, Remove, Cancel and Preview carry exactly one field, `t`, a part code of the
 an invalid request); Full preview carries none. Set works only from a private menu and waits for the owner's next private
 message; in a menu opened in the group Set, Remove and Cancel write nothing and point to the private chat. A preview is
 always sent to the presser's own private chat.
+
+The Member requirements page (`m`, the Requirements page of the menu) has these controls and actions:
+
+| Item | Code | Fields | Notes |
+|------|------|--------|-------|
+| Rule screen | `a=mo` | `t` a rule code (`ln` last name, `un` username, `ru` Russian, `ar` Arabic, `zh` Chinese) | opens the screen of one rule |
+| Rule controls | `ln` `un` `ru` `ar` `zh` | `a=st`, `t`, `v` one digit `0` to `4` | `st` only (a `tg` on one is an invalid request); `0` Off, `1` Warn, `2` Kick, `3` Ban, `4` Mute |
+| Confirm card | `a=my` | `t`, `v` (`2` to `4`), `e` expiry in unix minutes | the Yes of the card a Kick, Ban or Mute press draws; Off and Warn are written at once |
+| Switches | `j` Check on join, `d` Delete messages | `a=tg` or `a=st`, `t`, `v` `0` or `1` | any other `v` is an invalid request |
+
+Each control declares the actions it accepts (the `Actions` allow-list of the control), and a press with any other code is
+refused before any lookup.
 
 A switch is pressed with the toggle action `tg`: its `t` must be a control of the page (`e`, `d`, `o` or `u` as the table
 lists them) and its `v` the absolute target, `0` or `1`; anything else is an invalid request, refused before any lookup.

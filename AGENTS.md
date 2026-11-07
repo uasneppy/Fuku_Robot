@@ -2188,6 +2188,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `cache.InvalidateAdminCache`, as the promotion's own update does), drop the chat's admin cache entry in `t.Cleanup`, stop
   the minute clock with `mreqFixedClock` (a swap of `raidNow`) so a window never straddles a minute, and restore
   `memberReqCapPerMinute` and `memberReqRedisClient` with `mreqSwap`.
+  The Phase 13 families in one place. Every `TestMemberReq*` test of `fuku/modules` lives in a `memberreq_*_test.go` file
+  (rules and corpus, the executor, the watcher, the join and the captcha guard, the rejoin reset, the notices, the limits,
+  the deletes, the failures and the "I fixed it" button: `TestMemberReqFixedUnmutes`, `TestMemberReqFixedRefusals`,
+  `TestMemberReqFixedNeverLifts`, `TestMemberReqFixedDuringLockdown`, `TestMemberReqFixedHeldWelcome`,
+  `TestMemberReqEnforcementLive`); `TestMemberReqLocaleKeys` is in `fuku/i18n`; `TestApplyWarn` (`warns_apply_test.go`) is the
+  warn extraction's own test; `TestChatRequirementsSettings`, `TestRequirementHoldClaimConcurrent` and `TestRequirementHolds`
+  are in `fuku/db/memberreq`. The toolkit is `fuku/modules/memberreq_env_test.go` on top of the settings environment:
+  `newMemberReqEnv` (and `newMemberReqEnvWith`), `withMemberReqLive`, `mreqMember` (a member with the names a test asks for),
+  `mreqSend`, `mreqReplica`, `mreqPressFixed` and `memberReqCleanup`. Its hygiene rule, which CI needs because all of
+  `fuku/modules` runs in one PostgreSQL database in source order: every member comes from `uniqueLinkOwnerID()` and every
+  chat from `uniqueModuleChatID()`, and `t.Cleanup` deletes the members' `users` rows and `user` cache keys, the rows of
+  both Phase 13 tables, their warns, the `member_requirements` settings key, the approvals keys and the `fuku:memberreq:*`
+  keys, then calls `ResetLocalForTest`. The size and privacy sweep is `TestMemberReqScreensFitEveryLocale` (every notice,
+  every "I fixed it" answer at 200 code points and the two notices that button edits in, in all 8 languages, none naming the
+  chat, the Staff Group or the admin who set the rule) and the Phase 13 part of `TestSettingsStaffPrivacy` (page `m`, five rule
+  screens and fifteen cards in every language, and a private run by an administrator who is not the creator through the page,
+  a rule screen, a Mute card and its Yes and both switches). `TestMemberRequirementsStayOutOfBackup` (`fuku/db/backup`,
+  SQLite, so not in the PostgreSQL list) proves that neither `chat_requirements` nor `chat_requirement_holds` is exported,
+  imported or reset.
 
 ## Commits
 

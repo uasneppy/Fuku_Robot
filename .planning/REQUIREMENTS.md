@@ -151,7 +151,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | EDIT-09 | Phase 12 | Complete |
 | EDIT-10 | Phase 11 | Complete |
 | EDIT-11 | Phase 11 | Complete |
-| MREQ-01 | Phase 13 | Pending |
+| MREQ-01 | Phase 13 (five of the eight rules; the other three through MREQ-11, MREQ-12, MREQ-14 in Phases 14 and 15) | Pending |
 | MREQ-02 | Phase 13 | Complete |
 | MREQ-03 | Phase 13 | Complete |
 | MREQ-04 | Phase 13 | Complete |

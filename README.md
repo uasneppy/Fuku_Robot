@@ -383,6 +383,8 @@ You can also set the welcome, the goodbye and the rules from `/settings` in the 
 
 The rules can carry one media item (a photo, video, GIF or file) and URL buttons, set from `/settings` in private; `/rules` shows them in the group and as private rules. Media under text puts a photo, video or GIF below its text, for the welcome, the goodbye and the rules. Greet once welcomes each member only the first time they join.
 
+Member requirements, in `/settings` on the Requirements page, give each of five rules (must have a last name, must have a username, no Russian, Arabic or Chinese name, judged by letters) its own punishment: off, warn, kick, ban or mute. Every rule is off by default. Members are checked at their next message and, with Check on join, right after the captcha; Delete messages removes a held member's messages. A muted member gets an I fixed it button that frees only them, and only from a mute the requirements placed. Supergroups only.
+
 </details>
 
 <details>
