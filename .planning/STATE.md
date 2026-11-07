@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 13
 current_phase_name: Member Requirements
 status: executing
-stopped_at: Completed 13-10-PLAN.md
-last_updated: "2026-11-07T21:48:10.290Z"
+stopped_at: Completed 13-11-PLAN.md
+last_updated: "2026-11-07T22:14:37.524Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
-state_head: 9413d6fcdb08f971115fca0331976643e76b3660
+state_head: 1f4b25490268866c7230947ff4e68db38076e771
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 55
-  completed_plans: 50
+  completed_plans: 51
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 13 (Member Requirements) — READY TO EXECUTE
-Plan: 11 of 14
+Plan: 12 of 14
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 11 execution started
 
@@ -124,6 +124,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 13 P08 | 35min | 2 tasks | 6 files |
 | Phase 13 P09 | 180min | 3 tasks | 10 files |
 | Phase 13 P10 | 40 min | 2 tasks | 6 files |
+| Phase 13 P11 | 2h | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -206,6 +207,7 @@ Recent decisions affecting current work:
 - [Phase 13]: 13-09: a clean verdict is written only for a message not older than 2 minutes, so a backlog message cannot hide a later hold from the clean predicate
 - [Phase 13]: 13-10: a message is deleted only when its sender is established as a non-admin (live lookup, or a known cached admin list without them); during a pause only the cached list decides, so an unknown-status violator keeps their message (accepted)
 - [Phase 13]: 13-10: the per-chat cap (10 attempts a minute, counted before the claim) pauses punishments for 10 minutes with one SET NX winner posting mreq_notice_paused; no Redis means no cap
+- [Phase 13]: 13-11: a hold-read error in the join entry welcomes (a welcome frees nobody); only the captcha guard fails closed, with an IDs-only error that isPermanentUnmuteError never reads as permanent
 
 ### Pending Todos
 
@@ -277,8 +279,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-07T21:48:09.865Z
-Stopped at: Completed 13-10-PLAN.md
+Last session: 2026-11-07T22:14:37.070Z
+Stopped at: Completed 13-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
