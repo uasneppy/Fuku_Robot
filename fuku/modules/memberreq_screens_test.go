@@ -28,8 +28,8 @@ func memberReqVisibleLength(text string) int {
 var memberReqScreenLanguages = []string{"en", "es", "fr", "hi", "id", "pt", "ru", "uk"}
 
 // TestMemberReqScreensFitEveryLocale is the rendered-size check of the requirement screens.
-// This half renders every group notice with the real locales, a 64-rune name, all five rules
-// and two-digit numbers; the "I fixed it" answers are added by the plan that builds them.
+// It renders every group notice with the real locales, a 64-rune name, all five rules and
+// two-digit numbers, then every "I fixed it" answer and the two notices that button edits in.
 func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 	withRealLocales(t)
 	const chatID int64 = -1001234567890
@@ -87,6 +87,65 @@ func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 				t.Errorf("%s %s: keyboard %+v, want %d button", code, sc.name, keyboard.InlineKeyboard, wantButtons)
 			}
 		}
+		assertMemberReqFixedAnswers(t, code, tr, allRules, user, chatID)
+	}
+}
+
+// memberReqFixedAdminName is the name of the admin who set a rule in the answer checks below:
+// no answer or notice is built from it, so it must never appear in one.
+const memberReqFixedAdminName = "ZZ Rule Setter"
+
+// assertMemberReqFixedAnswers measures every answer of the "I fixed it" button as the code
+// builds it (memberreq_fixed.go): each is an alert or a toast of at most 200 code points, which
+// is Telegram's limit for an answer, and none holds the chat ID, the Staff Group, the admin who
+// set the rule or an unfilled token. The two notices the button edits in follow the notice limit.
+func assertMemberReqFixedAnswers(t *testing.T, code string, tr *i18n.Translator, allRules int, user gotgbot.User, chatID int64) {
+	t.Helper()
+	answers := map[string]string{
+		"done":             memberReqText(tr, "mreq_fixed_done"),
+		"done lockdown":    memberReqText(tr, "mreq_fixed_done_lockdown"),
+		"still broken all": memberReqText(tr, "mreq_fixed_still_broken", i18n.TranslationParams{"rules": memberReqRulesText(tr, allRules)}),
+		"not yours":        memberReqText(tr, "mreq_fixed_not_yours"),
+		"not ours":         memberReqText(tr, "mreq_fixed_not_ours"),
+		"check failed":     memberReqText(tr, "mreq_fixed_check_failed"),
+		"stale":            memberReqText(tr, "mreq_fixed_stale"),
+		"invalid request":  memberReqText(tr, "common_callback_invalid_request"),
+	}
+	for _, rule := range memberReqRules {
+		answers["still broken "+rule.Code] = memberReqText(tr, "mreq_fixed_still_broken", i18n.TranslationParams{"rules": memberReqRulesText(tr, rule.Bit)})
+	}
+	for name, text := range answers {
+		if text == "" {
+			t.Errorf("%s answer %q: empty", code, name)
+			continue
+		}
+		if got := utf8.RuneCountInString(text); got > 200 {
+			t.Errorf("%s answer %q: %d code points, want at most 200", code, name, got)
+		}
+		assertMemberReqNoLeak(t, code+" answer "+name, text, chatID)
+	}
+
+	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(user.Id, 10)})
+	for _, key := range []string{"mreq_notice_fixed", "mreq_notice_fixed_lockdown"} {
+		text := memberReqText(tr, key, i18n.TranslationParams{"name": memberReqNamePlaceholder})
+		text = lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(user, fallback))
+		if got := memberReqVisibleLength(text); got > 400 {
+			t.Errorf("%s %s: %d visible code points, want at most 400", code, key, got)
+		}
+		assertMemberReqNoLeak(t, code+" "+key, text, chatID)
+	}
+}
+
+// assertMemberReqNoLeak fails when text names the chat, a Staff Group, the admin who set a
+// rule, or holds an unfilled placeholder.
+func assertMemberReqNoLeak(t *testing.T, name, text string, chatID int64) {
+	t.Helper()
+	if strings.Contains(text, strconv.FormatInt(-chatID, 10)) || strings.Contains(strings.ToLower(text), "staff") ||
+		strings.Contains(text, memberReqFixedAdminName) {
+		t.Errorf("%s: names a chat ID, the Staff Group or the admin who set the rule: %q", name, text)
+	}
+	if strings.Contains(text, "{") || strings.Contains(text, memberReqNamePlaceholder) {
+		t.Errorf("%s: unfilled placeholder in %q", name, text)
 	}
 }
 

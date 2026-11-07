@@ -276,6 +276,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		}
 		private("a", "tg", "p", "w", "t", "e", "v", "0")
 		private("a", "tg", "p", settingsPageMreq, "t", settingsMreqControlJoin, "v", "1")
+		private("a", "tg", "p", settingsPageMreq, "t", settingsMreqControlDelete, "v", "1")
 		// A rule screen, a strict choice (the card), its Yes and a Warn press, as the admin sees them.
 		private("a", settingsActMreqOpen, "t", "ln")
 		private("a", "st", "p", settingsPageMreq, "t", "ln", "v", "4")
