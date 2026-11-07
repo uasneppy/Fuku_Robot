@@ -40,8 +40,8 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **MREQ-03**: With "Delete messages" on, a message from a member who breaks a rule is deleted.
 - [x] **MREQ-04**: A violation is punished once: further messages from the same member do not add warns, notices or punishments until the member fixes it or rejoins. This holds across replicas.
 - [x] **MREQ-05**: Each violation posts one notice in the group naming the member and the rule broken. A warn counts toward the group's warn limit like any other warn.
-- [ ] **MREQ-06**: A member muted by a rule gets an "I fixed it" button that only they can use. The bot re-checks them live: if the problem is fixed, they are unmuted (respecting an active lockdown) and get the welcome that was held back; if not, they are told what is still missing.
-- [ ] **MREQ-07**: "I fixed it" only ever lifts a mute that a requirement rule placed. It never lifts a mute from an admin, a staff action, the captcha, antiflood or a lockdown.
+- [x] **MREQ-06**: A member muted by a rule gets an "I fixed it" button that only they can use. The bot re-checks them live: if the problem is fixed, they are unmuted (respecting an active lockdown) and get the welcome that was held back; if not, they are told what is still missing.
+- [x] **MREQ-07**: "I fixed it" only ever lifts a mute that a requirement rule placed. It never lifts a mute from an admin, a staff action, the captcha, antiflood or a lockdown.
 - [x] **MREQ-08**: A kicked member can rejoin and is checked again. A banned member stays banned until an admin unbans them.
 - [x] **MREQ-09**: Admins, approved users, bots, Telegram service accounts and messages sent as a channel or by an anonymous admin are never checked.
 - [ ] **MREQ-10**: A check that cannot be answered (a Telegram error, a lookup that times out, the bot not being an admin of the linked channel) never punishes anyone. The page shows when a rule cannot work in that group (no linked channel, the bot not admin there, AI not configured).
@@ -156,8 +156,8 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | MREQ-03 | Phase 13 | Complete |
 | MREQ-04 | Phase 13 | Complete |
 | MREQ-05 | Phase 13 | Complete |
-| MREQ-06 | Phase 13 | Pending |
-| MREQ-07 | Phase 13 | Pending |
+| MREQ-06 | Phase 13 | Complete |
+| MREQ-07 | Phase 13 | Complete |
 | MREQ-08 | Phase 13 | Complete |
 | MREQ-09 | Phase 13 | Complete |
 | MREQ-10 | Phase 14 | Pending |
