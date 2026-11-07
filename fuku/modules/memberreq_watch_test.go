@@ -132,8 +132,10 @@ func TestMemberReqWatcherPunishesOnce(t *testing.T) {
 }
 
 func TestMemberReqWatcherOffUntilLive(t *testing.T) {
-	if memberReqLive() {
-		t.Fatal("memberReqLive() is true outside any test helper, want the production default false")
+	// Plan 13-13 turned enforcement on by default (init() stores true once the "I fixed it"
+	// handler is registered), so this is the one existing expectation that changed with it.
+	if !memberReqLive() {
+		t.Fatal("memberReqLive() is false outside any test helper, want the production default true")
 	}
 
 	t.Run("with the switch off ten messages start nothing", func(t *testing.T) {

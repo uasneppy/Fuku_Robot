@@ -55,8 +55,8 @@ var lockdownSnapshotLookup = lockdown.GetActiveFresh
 
 // resolveUnmutePermissions is the single choke point of every unmute (D-23): /unmute,
 // the unrestrict button, a captcha pass, staff /unmute (whose undo of a staff mute uses it
-// too), the member requirements' lift of a mute whose notice could not be delivered and their
-// rejoin reset (a requirement-muted member who left and rejoined). It
+// too), the member requirements' lift of a mute whose notice could not be delivered, their
+// rejoin reset (a requirement-muted member who left and rejoined) and their "I fixed it" button. It
 // returns the permissions to give the unmuted user. It is resolveUnmutePermissionsWithLockdown
 // without the lockdown flag, so every caller that does not need the flag is unchanged.
 func resolveUnmutePermissions(chatInfo *gotgbot.ChatFullInfo) (gotgbot.ChatPermissions, error) {

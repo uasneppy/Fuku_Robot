@@ -145,12 +145,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`memberReqSettingsLookup`; an error or no rule on ends it, so an unreadable setting punishes nobody), the pure name
   rules, then for a clean member the pass value and the clean predicate and for a violator the cached admin list
   (`cachedAdminStatus`: a known admin ends it; an unknown cache goes to the job, whose live `getChatMember` decides).
-  The enforcement switch `memberReqEnforcementLive` is an `atomic.Bool` read only through `memberReqLive()`, and it
-  stays false until the "I fixed it" handler is registered (plan 13-13 is the only code that sets it), so until then
-  no path of the watcher or the join check can punish a member in a real group. It is atomic because goroutines a test
-  does not own read it (the dispatcher, and the captcha lifecycle goroutines that reach the join entry can outlive the
-  test that started them) and `make test` runs with `-race`; tests write it only through `withMemberReqLive`, which
-  restores the previous value in `t.Cleanup` (never a fixed false) and is never combined with `t.Parallel`.
+  The enforcement switch `memberReqEnforcementLive` is an `atomic.Bool` read only through `memberReqLive()`. It is true by
+  default since the "I fixed it" handler exists (the `mreq|v1` bullet under Callbacks): `memberreq.go`'s `init()` stores
+  true, and that store is the only production write of it (`LoadMemberRequirements` does not write it, because a test loads
+  the module after turning the switch off and a store at load would turn it back on under that test). So the watcher and
+  the join entry run in every group with a rule on, and the captcha guard reads a hold on every captcha unmute, a
+  hold-read error failing closed. It stays the one switch that turns enforcement, the join entry and the guard off
+  everywhere. It is atomic because goroutines a test does not own read it (the dispatcher, and the captcha lifecycle
+  goroutines that reach the join entry can outlive the test that started them) and `make test` runs with `-race`; tests
+  write it only through `withMemberReqLive`, which restores the previous value (now true) in `t.Cleanup` and is never
+  combined with `t.Parallel`. `TestMemberReqEnforcementLive` asserts the default and the registration together.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 - The Settings module (priority 239, `settings.go`) adds one handler group, `1`, for the typed-reply door below; its other entry points are `/settings`, the callbacks and the deep link. `/settings` goes through `helpers.WrapCommand`
   with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
@@ -304,6 +308,35 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   name the cause are mapped, so a bare 403 or "chat not found" gets the generic line; Telegram's own text goes to the log
   only) and records nothing, except that a refusal met after another admin's revoke was recorded (the lockdown is read
   again) shows `lockdown_revoke_already` instead.
+- The `mreq|v1` namespace is the "I fixed it" button of a requirement mute notice (`memberReqFixedCallback`, `memberreq_fixed.go`,
+  registered by `LoadMemberRequirements` with `callbackquery.Prefix("mreq|")` at group 0 and no channel permission, because a
+  notice is never a channel message). The fields are exactly `a=f`, `h` (the hold row ID) and `u` (the held member), parsed
+  strictly before any I/O by `memberReqParseFixed` (positive whole numbers of at most 19 digits, nothing else, the message
+  present and in a group or supergroup; anything else is `common_callback_invalid_request`). The data is at most 52 bytes
+  (33 typically) and carries no name, rule or text. Every press runs one fixed order under `memberReqFixedTimeout` (10 s), each step
+  refusing before the next: (1) the strict decode; (2) the presser must be `u`, before any read, else `mreq_fixed_not_yours`
+  (an admin is refused too and lifts a mute with `/unmute`); (3) the hold read fresh through `memberreq.GetHoldByIDFresh` and
+  matched by its ID, the chat and the member alone (the stored notice message ID is never compared: the message edited is
+  the one the button sits on, so a tap before the ID was stored, or after storing it failed, still works), else
+  `mreq_fixed_stale`; (4) one live `getChatMember` through `memberReqPaced` that must show the requirement marker
+  (`isMemberReqMute` against the hold's `mute_until`: an error is `mreq_fixed_check_failed`, anything else, including an
+  admin's, staff, captcha, antiflood or warn-limit mute and a member no longer restricted, is `mreq_fixed_not_ours` with no
+  write, the same on every repeat); (5) the live names judged again against the current settings
+  (`memberReqSettingsLookup`, `memberReqBroken`: a rule now Off is not checked, an unreadable setting is
+  `mreq_fixed_check_failed`, and a member who fixed only some of several rules stays held and gets `mreq_fixed_still_broken`
+  naming the rest); (6) and (7) `getChat` and `resolveUnmutePermissionsWithLockdown` through `memberReqUnmutePermissions`,
+  both before the hold is touched, any error being `mreq_fixed_check_failed` with nothing changed; (8) the conditional delete
+  `memberreq.TakeHoldByID`, on a context that survives the press's deadline, so of two taps on two replicas one wins and the
+  other gets `mreq_fixed_stale`; (9) `memberReqLiftMute` with exactly those permissions, never `MutedPermissions`, and when it
+  fails `memberreq.RestoreHold` puts the row back with the same ID, notice ID and every other column and the answer is
+  `mreq_fixed_check_failed`, so the same button works on the next tap; (10) the toast `mreq_fixed_done` and the notice edited
+  to `mreq_notice_fixed` with no keyboard, or, when the permissions came from an active lockdown, the alert
+  `mreq_fixed_done_lockdown` and `mreq_notice_fixed_lockdown`. Only a hold with `welcome_held` (a join mute) then sends the held
+  welcome, once, through `SendWelcomeMessage` after the query is answered, so Greet once claims the member only then; a
+  message hold sends none. The query is answered exactly once on every path, in the group's language (`ctxTr` of the group
+  callback): `memberReqFixedCallback` recovers from a panic and defers a single answer, as `settingsCallback` does. Every
+  Telegram call goes through `memberReqPaced`, the edit of the notice is logged by its error code only and never changes the
+  outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
   `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
@@ -605,6 +638,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the join threshold (see the retired raid mode under Subsystem traps) with exactly the same checks and anonymous-admin
   re-entry, so neither is ever decided by the cached admin list.
 
+- "I fixed it" (`mreq|v1`, `memberReqFixedCallback`) is for the held member only, with no admin override: the presser must be
+  the member `u` of the button, an admin who presses it is refused, and admins lift a mute with `/unmute`. It lifts only a
+  mute the requirements placed, proved by the live marker (`isMemberReqMute`), never an admin's, a staff, the captcha's,
+  antiflood's or a warn-limit mute (MREQ-07), and only with permissions from `resolveUnmutePermissionsWithLockdown`.
 - `/captchamode turnstile` keeps `captchaAdminGate` (a per-group admin check, first and unchanged) and then refuses,
   writing nothing, in this order (`captchaWebModeRefusal`): no web captcha runtime (the four settings are not all set,
   or the bot has no username, `captcha_web_refuse_not_configured`), no Redis `PING` within 250 ms (a fresh probe, not the
@@ -1168,7 +1205,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   flood limit is welcomed on their next join.
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry
-  `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on. Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
+  `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on (it is, by default, since the `mreq|` handler exists). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
   itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
   failed load is an error, never "not approved") and the pending captcha through the two context reads (same three
   states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds no warn, notice or
@@ -1243,8 +1280,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   entry. The captcha guard (`memberReqCaptchaGuard`) is the first statement of `unmuteCaptchaUser`, the one choke point of
   every captcha unmute (the pass, `restoreCaptchaPermissions`, restart recovery and the `captcha_muted_users` retry
   worker). While `memberReqLive()` is false it reads nothing and changes no captcha unmute: no hold read, no Telegram call,
-  no error (`TestMemberReqCaptchaGuardOffUntilLive`, with a counting always-failing `memberReqHoldRead`). Once the switch is
-  on it reads the member's hold, and a punished requirement mute makes it re-apply `MutedPermissions` with `until_date`
+  no error (`TestMemberReqCaptchaGuardOffUntilLive`, with a counting always-failing `memberReqHoldRead`). The switch is
+  true in production, so the guard reads a hold on every captcha unmute. Once the switch is on it reads the member's hold, and a punished requirement mute makes it re-apply `MutedPermissions` with `until_date`
   the hold's own marker through `memberReqPaced` instead of unmuting, so a captcha pass never frees a held member and the
   marker stays valid for "I fixed it" (D-08). A hold-read error fails closed: the guard returns an error wrapped with the
   chat and user IDs only (`errMemberReqHoldUnreadable`, none of the database's text), `isPermanentUnmuteError` answers
@@ -1748,11 +1785,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `resolveUnmutePermissions` returns `(permissions, error)` and is the one choke point of every unmute; it is a wrapper of
   `resolveUnmutePermissionsWithLockdown`, which returns the same permissions and error plus whether a lockdown was
   active, so a caller can choose its words without a second lookup (the member requirements' lift of a mute whose notice
-  could not be delivered and their rejoin reset, and later "I fixed it", use the sibling through `memberReqLiftMute`).
+  could not be delivered, their rejoin reset and "I fixed it" use the sibling through `memberReqUnmutePermissions` and
+  `memberReqLiftMute`).
   During an active lockdown it returns the lockdown's stored pre-lockdown permissions, because the group's live defaults are then
   the locked set and copying them into a user's own restriction would leave them muted after the lift (D-23). Every unmute
   path goes through it: `/unmute`, the unrestrict button's Unmute, a captcha pass, staff `/unmute` (and so the undo of a
-  staff mute) and the requirements' lifts (the undeliverable notice and the rejoin reset). It reads the lockdown fresh through the `lockdownSnapshotLookup` seam, only for a chat with a non-zero ID,
+  staff mute) and the requirements' lifts (the undeliverable notice, the rejoin reset and "I fixed it"). It reads the lockdown fresh through the `lockdownSnapshotLookup` seam, only for a chat with a non-zero ID,
   and only an active row counts. None of them may restrict or announce an unmute when it returns an error: `/unmute` and
   the button report the error, a captcha pass schedules its retry, and staff `/unmute` fails that group. The `/unmute`
   reply adds `mutes_unmute_lockdown_note` during a lockdown.

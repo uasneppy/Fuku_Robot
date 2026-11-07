@@ -20,11 +20,13 @@ var memberReqModule = moduleStruct{
 	handlerGroup: memberReqWatchGroup,
 }
 
-// memberReqEnforcementLive is the enforcement kill switch. It is false until the "I fixed
-// it" handler is registered (plan 13-13 is the only code that sets it), so until then no
-// path of the message watcher or the join check can punish a member in a real group: a mute
-// with no working button would be a dead end. The watcher, and later the join entry and the
-// captcha guard, check it first through memberReqLive and nowhere else.
+// memberReqEnforcementLive is the enforcement switch. It is true by default, stored by this
+// file's init(), since the "I fixed it" handler is registered by LoadMemberRequirements: a
+// mute always has a working button, so enforcement may run. It stays the one switch that turns
+// the message watcher, the join entry and the captcha guard off everywhere, and it is read
+// only through memberReqLive and nowhere else. The store is in init() and not in
+// LoadMemberRequirements, because a test loads the module after turning the switch off with
+// withMemberReqLive and a store at load would turn it back on under that test.
 //
 // It is an atomic.Bool and not a plain bool because goroutines a test does not own read it
 // (a dispatcher goroutine, and the captcha lifecycle goroutines that reach the join entry
@@ -52,5 +54,8 @@ func LoadMemberRequirements(dispatcher *ext.Dispatcher) {
 }
 
 func init() {
+	// The one production write of the switch: the button handler is registered by the module
+	// below, so enforcement is on from here.
+	memberReqEnforcementLive.Store(true)
 	RegisterLegacyModule("MemberRequirements", 241, LoadMemberRequirements)
 }
