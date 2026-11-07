@@ -23,6 +23,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
+	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
@@ -995,6 +996,16 @@ func (moduleStruct) leftMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	clearRecentJoinProcessing(chat.Id, leftMember.Id)
+
+	// A detected leave (a kick, a ban, a member leaving) ends the member's requirement episode,
+	// so a kicked member who rejoins is checked again (D-07, D-14). A failure is logged by IDs and
+	// never stops the cleanup or the goodbye below. A requirement-muted member's leave is not a
+	// detected leave (restricted to restricted); the rejoin reset settles that one.
+	clearCtx, clearCancel := context.WithTimeout(tracing.UpdateContext(ctx), memberReqRecordTimeout)
+	if _, clearErr := memberreq.ClearHolds(clearCtx, chat.Id, leftMember.Id); clearErr != nil {
+		log.Errorf("[MemberReq] clearing the holds of user %d in chat %d on their leave failed: %s", leftMember.Id, chat.Id, memberReqErrText(clearErr))
+	}
+	clearCancel()
 
 	captchaAttempt, err := captcha.GetCaptchaAttemptIncludingExpired(leftMember.Id, chat.Id)
 	if err != nil {

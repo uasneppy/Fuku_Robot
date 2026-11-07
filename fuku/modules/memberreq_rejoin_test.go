@@ -41,25 +41,6 @@ func (e *memberReqEnv) mreqJoinNow(user gotgbot.User) {
 	}
 }
 
-// mreqServiceJoinNow runs the member's join as the new_chat_members service message dated now.
-func (e *memberReqEnv) mreqServiceJoinNow(user gotgbot.User) {
-	e.t.Helper()
-	id := e.updateID()
-	update := &gotgbot.Update{
-		UpdateId: id,
-		Message: &gotgbot.Message{
-			MessageId:      id,
-			Date:           time.Now().Unix(),
-			Chat:           e.chat,
-			From:           &user,
-			NewChatMembers: []gotgbot.User{user},
-		},
-	}
-	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
-		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
-	}
-}
-
 // mreqLeave runs the chat_member update of the member going from member to the given
 // status (left or kicked), as Telegram reports a kick, a ban or a member leaving.
 func (e *memberReqEnv) mreqLeave(user gotgbot.User, to gotgbot.ChatMember) {
