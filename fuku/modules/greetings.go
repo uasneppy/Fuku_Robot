@@ -1072,7 +1072,7 @@ func membershipDepsForJoin(bot *gotgbot.Bot, chat *gotgbot.Chat, threadID int64)
 			if threadID != 0 {
 				ctxCopy.EffectiveMessage = &gotgbot.Message{Chat: *chat, MessageThreadId: threadID}
 			}
-			return SendWelcomeMessage(bot, &ctxCopy, user.Id, user.FirstName)
+			return memberReqJoinThenWelcome(bot, &ctxCopy, user)
 		},
 	}
 }
