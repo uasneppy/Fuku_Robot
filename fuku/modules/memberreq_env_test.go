@@ -131,13 +131,19 @@ func memberReqCleanup(t *testing.T, chatIDs, userIDs []int64) {
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.RulesSettings{})
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ApprovedUsers{})
 			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.CaptchaAttempts{})
+			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.CaptchaMutedUsers{})
+			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.GreetingSettings{})
+			db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.GreetedMember{})
 			for _, id := range chatIDs {
 				dbcache.DeleteCache(dbcache.CacheKey("member_requirements", id))
 				dbcache.DeleteCache(dbcache.CacheKey("approvals", id))
 				dbcache.DeleteCache(dbcache.CacheKey("captcha_pending", id))
 				dbcache.DeleteCache(dbcache.CacheKey("warn_settings", id))
+				dbcache.DeleteCache(dbcache.CacheKey("greetings", id))
+				dbcache.DeleteCache(dbcache.CacheKey("captcha_settings", id))
 			}
 			memberReqDeleteRedisKeys(chatIDs)
+			memberReqDeleteJoinClaims(chatIDs)
 		}
 		if len(userIDs) > 0 {
 			db.DB.Where("user_id IN ?", userIDs).Delete(&models.User{})
@@ -149,6 +155,40 @@ func memberReqCleanup(t *testing.T, chatIDs, userIDs []int64) {
 	}
 	clean()
 	t.Cleanup(clean)
+}
+
+// memberReqDeleteJoinClaims removes the join dedupe claims (fuku:recentJoinProcessing:<chat>:<user>,
+// in Redis and in the in-process fallback map) of the given chats, so a later test that joins a
+// member of one of them is never taken for a second delivery of an earlier join.
+func memberReqDeleteJoinClaims(chatIDs []int64) {
+	named := func(key string) bool {
+		for _, id := range chatIDs {
+			if strings.HasPrefix(key, fmt.Sprintf("fuku:recentJoinProcessing:%d:", id)) {
+				return true
+			}
+		}
+		return false
+	}
+	recentJoinProcessing.Range(func(key, _ any) bool {
+		if name, ok := key.(string); ok && named(name) {
+			recentJoinProcessing.Delete(key)
+		}
+		return true
+	})
+	_, _, client := cache.GetCacheState()
+	if client == nil {
+		return
+	}
+	ctx := context.Background()
+	keys, err := client.Keys(ctx, "fuku:recentJoinProcessing:*").Result()
+	if err != nil {
+		return
+	}
+	for _, key := range keys {
+		if named(key) {
+			client.Del(ctx, key)
+		}
+	}
 }
 
 // memberReqDeleteRedisKeys removes the fuku:memberreq:* keys that name one of chatIDs.
