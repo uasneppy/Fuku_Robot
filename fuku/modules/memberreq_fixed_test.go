@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -675,5 +677,155 @@ func TestMemberReqFixedTwoReplicas(t *testing.T) {
 	}
 	if env.mreqHold(member.Id) != nil {
 		t.Error("the hold is still there after the unmute")
+	}
+}
+
+// mreqNoticeWith returns the newest message the group received that holds marker.
+func (e *memberReqEnv) mreqNoticeWith(marker string) staffSentMessage {
+	e.t.Helper()
+	notices := e.mreqNotices()
+	for i := len(notices) - 1; i >= 0; i-- {
+		if strings.Contains(mreqText(notices[i]), marker) {
+			return notices[i]
+		}
+	}
+	e.t.Fatalf("no message of the group holds %q (messages %v)", marker, e.mreqSentTexts())
+	return staffSentMessage{}
+}
+
+func TestMemberReqFixedHeldWelcome(t *testing.T) {
+	setup := func(t *testing.T) *memberReqEnv {
+		t.Helper()
+		env := mreqJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute}, true)
+		env.loadMemberReq()
+		if err := greetings.SetWelcomeOnce(env.chat.Id, true); err != nil {
+			t.Fatalf("SetWelcomeOnce error = %v", err)
+		}
+		return env
+	}
+
+	t.Run("a member muted on join gets one welcome when they fix it, and Greet once claims them then", func(t *testing.T) {
+		env := setup(t)
+		member := env.mreqMember("Alex", "", "alex")
+		env.mreqJoin(member)
+		notice := env.mreqNoticeWith(staffMarker("mreq_notice_mute"))
+		if hold := env.mreqHold(member.Id); hold == nil || !hold.WelcomeHeld {
+			t.Fatalf("hold = %+v, want a mute hold with the welcome held", hold)
+		}
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 0 {
+			t.Fatalf("welcomes before the press = %d, want none", got)
+		}
+		if got := greetedRows(t, env.chat.Id); got != 0 {
+			t.Fatalf("greeted_members rows before the press = %d, want none: a held member is not claimed", got)
+		}
+		member = env.mreqFix(member)
+
+		env.mreqPressFixed(member, notice)
+
+		texts := env.mreqSentTexts()
+		if got := mreqCountText(texts, mreqWelcomeWord+" "+member.FirstName); got != 1 {
+			t.Fatalf("welcomes after the press = %d, want exactly one (texts %v)", got, texts)
+		}
+		if got := greetedRows(t, env.chat.Id); got != 1 {
+			t.Errorf("greeted_members rows after the press = %d, want the member claimed once", got)
+		}
+		if hold := env.mreqHold(member.Id); hold != nil {
+			t.Errorf("hold after the press = %+v, want none", hold)
+		}
+
+		// A second press is stale and sends no second welcome.
+		answersBefore := len(env.mreqAnswers())
+		env.mreqPressFixed(member, notice)
+		if got := env.mreqOnlyAnswer(answersBefore); got.Text != staffMarker("mreq_fixed_stale") || !got.Alert {
+			t.Errorf("second press answer = %+v, want the stale alert", got)
+		}
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 1 {
+			t.Errorf("welcomes after the second press = %d, want still 1", got)
+		}
+	})
+
+	t.Run("a member muted by the message check gets no welcome", func(t *testing.T) {
+		env := setup(t)
+		member := env.mreqMember("Alex", "", "alex")
+		notice := env.mreqMuteByMessage(member)
+		if hold := env.mreqHold(member.Id); hold == nil || hold.WelcomeHeld {
+			t.Fatalf("hold = %+v, want a message hold with no welcome held", hold)
+		}
+		member = env.mreqFix(member)
+
+		env.mreqPressFixed(member, notice)
+
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 0 {
+			t.Errorf("welcomes after the press = %d, want none for a message hold", got)
+		}
+		if got := greetedRows(t, env.chat.Id); got != 0 {
+			t.Errorf("greeted_members rows = %d, want none", got)
+		}
+		if env.mreqHold(member.Id) != nil {
+			t.Error("the hold is still there after the unmute")
+		}
+	})
+}
+
+func TestMemberReqFixedCallbackBytes(t *testing.T) {
+	env := newMemberReqEnv(t)
+	for _, c := range []struct {
+		name         string
+		hold, member int64
+		want         int
+	}{
+		{"typical", 123456, 1234567890, 33},
+		{"worst: a 19-digit hold and a 16-digit member", 9223372036854775807, 9007199254740991, 52},
+	} {
+		keyboard := memberReqFixedButton(env.translator(), c.hold, c.member)
+		if len(keyboard.InlineKeyboard) != 1 || len(keyboard.InlineKeyboard[0]) != 1 {
+			t.Fatalf("%s: keyboard = %+v, want one button", c.name, keyboard)
+		}
+		data := keyboard.InlineKeyboard[0][0].CallbackData
+		if len(data) != c.want || len(data) > 64 {
+			t.Errorf("%s: data %q is %d bytes, want %d (cap 64)", c.name, data, len(data), c.want)
+		}
+		decoded, ok := decodeCallbackData(data, memberReqCallbackNamespace)
+		if !ok {
+			t.Fatalf("%s: data %q does not decode", c.name, data)
+		}
+		if len(decoded.Fields) != 3 {
+			t.Errorf("%s: fields = %v, want exactly a, h and u (no name, rule or text)", c.name, decoded.Fields)
+		}
+		hold, member, ok := memberReqParseFixed(decoded.Fields)
+		if !ok || hold != c.hold || member != c.member {
+			t.Errorf("%s: parsed %d, %d, %t, want %d, %d", c.name, hold, member, ok, c.hold, c.member)
+		}
+	}
+}
+
+func TestMemberReqEnforcementLive(t *testing.T) {
+	// No withMemberReqLive: this is the production default, stored by the module's init().
+	if !memberReqLive() {
+		t.Fatal("memberReqLive() = false, want true by default once the I fixed it handler is registered")
+	}
+
+	// The handler is registered: a dispatcher loaded with the module answers an mreq| button,
+	// and the watcher is at group -2 (RemoveGroup says whether the group exists).
+	fresh := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+	LoadMemberRequirements(fresh)
+	if !fresh.RemoveGroup(memberReqWatchGroup) || memberReqWatchGroup != -2 {
+		t.Errorf("the watcher's group %d is not registered by LoadMemberRequirements, want group -2", memberReqWatchGroup)
+	}
+	if !fresh.RemoveGroup(0) {
+		t.Error("the mreq| button is not registered at group 0 by LoadMemberRequirements")
+	}
+
+	env := newSettingsEnv(t)
+	LoadMemberRequirements(env.dispatcher)
+	member, other := uniqueLinkOwnerID(), uniqueLinkOwnerID()
+	answersBefore := len(env.fake.callsFor("answerCallbackQuery"))
+	env.pressRaw(env.chat, gotgbot.User{Id: other, FirstName: "Bo"}, 77, mreqFixedButtonData(t, 5, member))
+	answers := env.fake.callsFor("answerCallbackQuery")
+	if len(answers) != answersBefore+1 {
+		t.Fatalf("answers = %d, want exactly one for a press by another member", len(answers)-answersBefore)
+	}
+	if text := fmt.Sprint(answers[len(answers)-1].Params["text"]); text != staffMarker("mreq_fixed_not_yours") {
+		t.Errorf("answer = %q, want mreq_fixed_not_yours", text)
 	}
 }
