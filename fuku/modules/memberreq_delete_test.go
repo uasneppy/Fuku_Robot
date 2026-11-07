@@ -166,7 +166,7 @@ func TestMemberReqDeleteMessages(t *testing.T) {
 		}
 		var logged string
 		for _, line := range mreqWarnLines(hook) {
-			if strings.Contains(line, "delete") {
+			if strings.Contains(line, "deleting message") {
 				logged = line
 			}
 		}
@@ -174,6 +174,9 @@ func TestMemberReqDeleteMessages(t *testing.T) {
 			if !strings.Contains(logged, fmt.Sprint(id)) {
 				t.Errorf("delete failure log %q lacks the ID %d", logged, id)
 			}
+		}
+		if logged == "" {
+			t.Error("the failed delete was not logged")
 		}
 		if strings.Contains(logged, "Bad Request") {
 			t.Errorf("delete failure log %q carries Telegram's wording, want the code only", logged)

@@ -462,6 +462,7 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 		return memberReqResult{}
 	}
 	if held != nil {
+		memberReqDeleteHeld(ctx, b, c)
 		return memberReqResult{Outcome: memberReqHeld, Hold: held}
 	}
 	member, broken, ok := memberReqLiveViolation(ctx, b, c)
@@ -471,13 +472,72 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	action := memberReqStrictest(c.Settings, broken)
 	keepUntil := memberReqLiveMarker(stale, member, action)
 	hold, won := memberReqTakeHold(ctx, c, stale, broken, action, keepUntil)
-	if !won {
-		if hold == nil {
-			return memberReqResult{}
-		}
-		return memberReqResult{Outcome: memberReqHeld}
+	var result memberReqResult
+	switch {
+	case won:
+		result = memberReqPunish(ctx, b, c, member.User, hold, keepUntil != 0)
+	case hold != nil:
+		result = memberReqResult{Outcome: memberReqHeld}
 	}
-	return memberReqPunish(ctx, b, c, member.User, hold, keepUntil != 0)
+	// The live lookup showed a non-admin who breaks a rule, so the message goes whatever became
+	// of the punishment: a refused or unknown one, or a claim another replica won, included.
+	memberReqDeleteMessage(ctx, b, c)
+	return result
+}
+
+// memberReqDeleteMessage deletes the message that reached the executor, through the requirement
+// pacer, when Delete messages is on and the case has a message (a join has none). It is not a
+// punishment and posts nothing: a failure is logged by the chat, user and message IDs and the
+// error's code, never the message, and changes no hold, punishment or notice. The caller has
+// established that the sender is a non-admin; this function never judges that.
+func memberReqDeleteMessage(ctx context.Context, b *gotgbot.Bot, c memberReqCase) {
+	if !memberReqDeletes(c) {
+		return
+	}
+	err := memberReqPaced(ctx, func(callCtx context.Context) error {
+		_, deleteErr := b.DeleteMessageWithContext(callCtx, c.Chat.Id, c.MessageID, nil)
+		return deleteErr
+	})
+	if err != nil {
+		log.Warnf("[MemberReq] deleting message %d of user %d in chat %d failed: %s", c.MessageID, c.User.Id, c.Chat.Id, memberReqErrText(err))
+	}
+}
+
+// memberReqDeletes reports whether the case calls for a delete at all: a message case with a
+// message ID in a group whose Delete messages switch is on.
+func memberReqDeletes(c memberReqCase) bool {
+	return c.Source == memberReqFromMessage && c.MessageID > 0 && c.Settings != nil && c.Settings.DeleteMessages
+}
+
+// memberReqSenderNonAdmin reports whether the sender is established as a non-admin, the one
+// condition for deleting a message the job's own live lookup has not covered. It reads the
+// cached admin list at the moment of the decision, not a value carried from the watcher, so an
+// invalidation between the message and the job counts. A known list answers true exactly when
+// the sender is not in it. With the list unknown, mayAsk makes one live getChatMember through
+// the pacer and answers true only for a member or restricted one (a creator, an administrator,
+// someone who left or was kicked and a failed lookup are false); without mayAsk it answers
+// false and makes no Telegram call.
+func memberReqSenderNonAdmin(ctx context.Context, b *gotgbot.Bot, chatID, userID int64, mayAsk bool) bool {
+	if known, isAdmin := cachedAdminStatus(chatID, userID); known {
+		return !isAdmin
+	}
+	if !mayAsk {
+		return false
+	}
+	live, err := memberReqLiveMember(ctx, b, chatID, userID)
+	if err != nil {
+		log.Warnf("[MemberReq] live record of user %d in chat %d is unknown, so nothing is deleted: %s", userID, chatID, memberReqErrText(err))
+		return false
+	}
+	return memberReqLiveEligible(live)
+}
+
+// memberReqDeleteHeld deletes a held member's further message when the sender is established
+// as a non-admin by the cached admin list or, when it cannot say, by one live getChatMember.
+func memberReqDeleteHeld(ctx context.Context, b *gotgbot.Bot, c memberReqCase) {
+	if memberReqDeletes(c) && memberReqSenderNonAdmin(ctx, b, c.Chat.Id, c.User.Id, true) {
+		memberReqDeleteMessage(ctx, b, c)
+	}
 }
 
 // memberReqLiveMarker returns the marker of a stale pending mute hold when the member's live
