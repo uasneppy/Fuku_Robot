@@ -76,8 +76,15 @@ func TestMemberReqWatcherPunishesOnce(t *testing.T) {
 	violator := env.mreqMember("Alex", "", "alex")
 	fine := env.mreqMember("Bo", "Li", "bo")
 
+	// The first message is judged alone: the warn module's transaction reads and then writes,
+	// and on the SQLite of this suite a concurrent writer (here the /rules command creating
+	// its rows) makes it fail with "database is locked" (PostgreSQL waits instead). The nine
+	// that follow find the hold; the race to claim it is proved with a mute in
+	// TestMemberReqOnePunishmentAcrossReplicas.
+	env.mreqSend(violator, "plain text")
+	memberReqJobs.wait()
 	env.mreqSend(violator, "/rules")
-	for i := 0; i < 9; i++ {
+	for i := 0; i < 8; i++ {
 		env.mreqSend(violator, "plain text")
 	}
 	memberReqJobs.wait()
