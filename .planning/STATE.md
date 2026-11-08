@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
 status: planning
-stopped_at: Completed 14-12-PLAN.md
-last_updated: "2026-11-08T12:01:07.394Z"
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-11-08T15:56:03.510Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 11 execution started
-state_head: 73aba642eed10bc1f5c1bb9cf891eade3d8217aa
+state_head: a114a718f30da5b83ccdf70d418d62f3f7c0aa6a
 progress:
   total_phases: 10
   completed_phases: 0
-  total_plans: 67
-  completed_plans: 66
+  total_plans: 78
+  completed_plans: 67
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 15 (AI Spam-Name Check) — not started (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items; it is not marked Complete in ROADMAP by the milestone convention)
-Plan: —
-Status: Ready to discuss Phase 15. It must also complete MREQ-10 (the `settings_mreq_here_ai` "AI not configured" line) and MREQ-14, and MREQ-01 completes with the AI rule
-Last activity: 2026-11-08 — Phase 14 verified (`human_needed`)
+Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
+Plan: 2 of 11
+Status: Executing Phase 15 (15-01 done: the ai_action column, model field and memberreq.RuleAI; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
+Last activity: 2026-11-08 — Plan 15-01 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -140,6 +140,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 14 P10 | 150min | 3 tasks | 5 files |
 | Phase 14 P11 | 150min | 3 tasks | 6 files |
 | Phase 14 P12 | 65min | 3 tasks | 7 files |
+| Phase 15 P01 | 25min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -305,8 +306,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T12:01:06.534Z
-Stopped at: Completed 14-12-PLAN.md
+Last session: 2026-11-08T15:56:02.380Z
+Stopped at: Completed 15-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
