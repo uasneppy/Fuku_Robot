@@ -2658,8 +2658,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 247 `settings_` keys and 29 `mreq_` keys, each `settings_` key one row of the limits table
-  of `fuku/i18n/settings_locale_test.go`. The two PostgreSQL facts of Phase 14 are `TestMemberRequirementLookupMigrationDefaults`
+  there). The locale files now hold 255 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  of `fuku/i18n/settings_locale_test.go` and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 15's ten keys
+  (eight `settings_`, two `mreq_`) were added before the table row that reads them: `mreq_rule_ai` is read
+  through the table field `PhraseKey` and `mreq_remedy_ai` by the notice builder through a key held in a variable, which
+  `make check-translations` cannot see, so the two limits tables and `TestMemberReqLocaleKeys` are their only guard. The 520 code point cap of the notices is a rendered
+  check over the real translations (eight phrases, 66 code point name, the photo tail, the AI tail and both), not a sum
+  of the ceilings, which at 636 no longer proves it. The two PostgreSQL facts of Phase 14 are `TestMemberRequirementLookupMigrationDefaults`
   (in the list above) and that the `fuku/modules` harness does not run on PostgreSQL (its AutoMigrate fails on
   `uni_users_user_id` against the migration-built schema), so Phase 14's module tests run on SQLite.
 
