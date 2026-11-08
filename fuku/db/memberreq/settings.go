@@ -32,10 +32,11 @@ const (
 	RuleChinese  Rule = "chinese"
 	RulePhoto    Rule = "photo"
 	RuleChannel  Rule = "channel"
+	RuleAI       Rule = "ai"
 )
 
 // Rules lists every rule in the order the settings page shows them.
-var Rules = []Rule{RuleLastName, RuleUsername, RuleRussian, RuleArabic, RuleChinese, RulePhoto, RuleChannel}
+var Rules = []Rule{RuleLastName, RuleUsername, RuleRussian, RuleArabic, RuleChinese, RulePhoto, RuleChannel, RuleAI}
 
 var (
 	// ErrActionOutOfRange is returned for an action outside 0..4. Nothing is written.
@@ -56,6 +57,7 @@ var ruleColumns = map[Rule]string{
 	RuleChinese:  "chinese_action",
 	RulePhoto:    "photo_action",
 	RuleChannel:  "channel_action",
+	RuleAI:       "ai_action",
 }
 
 // actionField returns a pointer to the action column of rule in row, or nil for a rule it
@@ -76,6 +78,8 @@ func actionField(row *models.ChatRequirements, rule Rule) *int {
 		return &row.PhotoAction
 	case RuleChannel:
 		return &row.ChannelAction
+	case RuleAI:
+		return &row.AIAction
 	}
 	return nil
 }
