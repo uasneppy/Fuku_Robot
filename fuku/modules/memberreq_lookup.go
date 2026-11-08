@@ -247,6 +247,12 @@ func memberReqPhotoRule(ctx context.Context, b *gotgbot.Bot, chatID, userID int6
 		return memberReqPass
 	}
 	return memberReqFlight(ctx, "p:"+strconv.FormatInt(userID, 10), func(flightCtx context.Context) memberReqVerdict {
+		// A caller whose cache read missed a moment before the previous flight wrote its positive
+		// and ended starts a new flight: the cache is read once more inside it, so a member's
+		// messages that arrive together make one request, not one per flight generation.
+		if !mode.Fresh && memberReqCacheHas(flightCtx, key) {
+			return memberReqPass
+		}
 		var photos *gotgbot.UserProfilePhotos
 		err := memberReqLookupPaced(flightCtx, func(callCtx context.Context) error {
 			var callErr error
@@ -471,6 +477,10 @@ func memberReqChannelRule(ctx context.Context, b *gotgbot.Bot, chatID, userID in
 	}
 	flightKey := "s:" + strconv.FormatInt(channel, 10) + ":" + strconv.FormatInt(userID, 10)
 	verdict := memberReqFlight(ctx, flightKey, func(flightCtx context.Context) memberReqVerdict {
+		// The cache is read once more inside the flight, for the same reason as the photo's.
+		if !mode.Fresh && memberReqCacheHas(flightCtx, key) {
+			return memberReqPass
+		}
 		var answer gotgbot.ChatMember
 		err := memberReqLookupPaced(flightCtx, func(callCtx context.Context) error {
 			var callErr error

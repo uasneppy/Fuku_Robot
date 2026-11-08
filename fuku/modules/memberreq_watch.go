@@ -263,7 +263,28 @@ func memberReqWatchClean(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat
 		}
 		return
 	}
+	if memberReqMissExempt(ctx, chat.Id, userID) {
+		return
+	}
 	memberReqStartJob(b, chat, msg, settings)
+}
+
+// memberReqMissExempt reports whether a member with a lookup cache miss costs no job (D-25): the
+// cached admin list knows them as an administrator, they are approved, or the approvals read
+// failed (an unknown, which never starts a job and so never punishes). Without it an exempt member
+// with no photo, who is exempt inside the job and so never gets a positive cached, would cost one
+// job per message for ever. It reads the cached admin list and the cached approvals only, and
+// makes no Telegram call.
+func memberReqMissExempt(ctx context.Context, chatID, userID int64) bool {
+	if known, isAdmin := cachedAdminStatus(chatID, userID); known && isAdmin {
+		return true
+	}
+	approved, err := memberReqApprovedLookup(ctx, chatID, userID)
+	if err != nil {
+		log.Debugf("[MemberReq] approval of user %d in chat %d is unknown, so no lookup job is started: %s", userID, chatID, memberReqErrText(err))
+		return true
+	}
+	return approved
 }
 
 // memberReqRunAsync hands a violating member to the executor on its own goroutine, so the
