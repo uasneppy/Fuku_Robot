@@ -3,13 +3,17 @@
 package modules
 
 import (
+	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
@@ -19,6 +23,8 @@ type settingsMreqHereEnv struct {
 	*memberReqEnv
 	state *mreqLookupState
 	owner gotgbot.User
+	// basic makes a group menu's messages sit in a chat of type group (a basic group).
+	basic bool
 }
 
 // newSettingsMreqHereEnv builds the environment and the owner of its group.
@@ -47,7 +53,15 @@ func (e *settingsMreqHereEnv) press(private bool, msgID int64, kv ...string) (st
 		e.pressPrivate(e.owner, msgID, e.privateFields(e.chat.Id, kv...))
 		return e.lastEdit(e.owner.Id, msgID)
 	}
-	e.settingsEnv.press(e.owner, msgID, e.groupFields(e.owner, kv...))
+	chat := e.chat
+	if e.basic {
+		chat.Type = "group"
+	}
+	data := encodeCallbackData(settingsCallbackNamespace, e.groupFields(e.owner, kv...))
+	if data == "" {
+		e.t.Fatalf("settings callback data %v did not encode", kv)
+	}
+	e.pressRaw(chat, e.owner, msgID, data)
 	return e.lastEdit(e.chat.Id, msgID)
 }
 
@@ -187,4 +201,525 @@ func TestSettingsMreqChannelStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+// settingsMreqRowWidths is the number of buttons of each row of a keyboard.
+func settingsMreqRowWidths(keyboard [][]gotgbot.InlineKeyboardButton) []int {
+	widths := make([]int, 0, len(keyboard))
+	for _, row := range keyboard {
+		widths = append(widths, len(row))
+	}
+	return widths
+}
+
+// settingsMreqSameInts reports whether two int slices are equal.
+func settingsMreqSameInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// settingsMreqChannelNow is the Punishment line of the channel rule with the given action.
+func settingsMreqChannelNow(action int) string {
+	return staffMarker("settings_mreq_now") + " " + settingsMreqIcons[action] + " " + staffMarker(settingsMreqWordKeys[action])
+}
+
+// settingsMreqWantChannelScreen fails the test unless text is the channel rule's screen with the
+// status slot `slot` (empty for none) and, when offOnly, without the two choice hints.
+func settingsMreqWantChannelScreen(t *testing.T, text, slot string, action int, offOnly bool) {
+	t.Helper()
+	desc := staffMarker("settings_mreq_desc_channel")
+	head := desc + "\n"
+	if slot != "" {
+		head += slot + "\n"
+	}
+	head += "\n" + settingsMreqChannelNow(action)
+	want := head + "\n\n" + staffMarker("settings_mreq_choose_hint") + "\n" + staffMarker("settings_mreq_actions_hint")
+	if offOnly {
+		want = head
+	}
+	if !strings.Contains(text, want) {
+		t.Errorf("the channel screen %q lacks %q", text, want)
+	}
+	hasHints := strings.Contains(text, staffMarker("settings_mreq_choose_hint")) || strings.Contains(text, staffMarker("settings_mreq_actions_hint"))
+	if offOnly && hasHints {
+		t.Errorf("the Off-only channel screen %q still has the choice hints", text)
+	}
+	if strings.Contains(text, "⚠️") || strings.Contains(text, staffMarker("settings_cannot_open")) {
+		t.Errorf("the channel screen %q carries an error or notice", text)
+	}
+}
+
+func TestSettingsMreqChannelStatusScreen(t *testing.T) {
+	type channelCase struct {
+		name string
+		// setup arranges the fake; private says which menu kind the case runs in.
+		setup func(t *testing.T, e *settingsMreqHereEnv, private bool)
+		// slot is the key of the slot line, icon its prefix; empty for no line.
+		icon, slot string
+		offOnly    bool
+		action     int
+	}
+	linked := func(status string) func(*testing.T, *settingsMreqHereEnv, bool) {
+		return func(t *testing.T, e *settingsMreqHereEnv, _ bool) { mreqChannel(t, e.state, e.chat.Id, status) }
+	}
+	botLookup := func(err error, times int) func(*testing.T, *settingsMreqHereEnv, bool) {
+		return func(t *testing.T, e *settingsMreqHereEnv, _ bool) {
+			channel := mreqChannel(t, e.state, e.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			for i := 0; i < times; i++ {
+				e.state.scriptMember(channel, staffTestBotID, err)
+			}
+		}
+	}
+	botAnswer := func(answer mreqChannelMember) func(*testing.T, *settingsMreqHereEnv, bool) {
+		return func(t *testing.T, e *settingsMreqHereEnv, _ bool) {
+			channel := mreqChannel(t, e.state, e.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			e.state.setMember(channel, staffTestBotID, answer)
+		}
+	}
+	const notAdmin, noLink, unknown = "settings_mreq_here_notadmin", "settings_mreq_here_nolink", "settings_mreq_here_unknown"
+	cases := []channelCase{
+		{name: "linked and an administrator bot has no slot line", setup: linked(gotgbot.ChatMemberStatusAdministrator), action: models.RequirementActionWarn},
+		{name: "the bot a plain member", setup: linked(gotgbot.ChatMemberStatusMember), icon: "🚫 ", slot: notAdmin, action: models.RequirementActionWarn},
+		{name: "the bot left", setup: linked(gotgbot.ChatMemberStatusLeft), icon: "🚫 ", slot: notAdmin, action: models.RequirementActionWarn},
+		{name: "the bot kicked", setup: linked(gotgbot.ChatMemberStatusKicked), icon: "🚫 ", slot: notAdmin, action: models.RequirementActionWarn},
+		{name: "the bot restricted", setup: linked(gotgbot.ChatMemberStatusRestricted), icon: "🚫 ", slot: notAdmin, action: models.RequirementActionWarn},
+		{name: "a 400 from the bot's lookup", setup: botLookup(staffFakeError(400, "Bad Request: chat not found"), 1), icon: "🚫 ", slot: notAdmin, action: models.RequirementActionWarn},
+		{name: "a 403 from the bot's lookup", setup: botLookup(staffFakeError(403, "Forbidden: bot was kicked"), 1), icon: "🚫 ", slot: notAdmin, action: models.RequirementActionWarn},
+		{
+			name: "no linked channel with a stored Ban is Off alone and the Ban stays visible",
+			setup: func(t *testing.T, e *settingsMreqHereEnv, _ bool) {
+				e.state.link(e.chat.Id, 0)
+			},
+			icon: "🚫 ", slot: noLink, offOnly: true, action: models.RequirementActionBan,
+		},
+		{name: "a 500 from the bot's lookup is unknown", setup: botLookup(staffFakeError(500, "Internal Server Error"), 1), icon: "❔ ", slot: unknown, action: models.RequirementActionWarn},
+		{name: "a 429 from the bot's lookup is unknown, never not an administrator", setup: botLookup(staffFake429(1), 2), icon: "❔ ", slot: unknown, action: models.RequirementActionWarn},
+		{name: "a null answer from the bot's lookup is unknown", setup: botAnswer(mreqChannelMember{Null: true}), icon: "❔ ", slot: unknown, action: models.RequirementActionWarn},
+		{name: "an unrecognised status from the bot's lookup is unknown", setup: botAnswer(mreqChannelMember{Status: "mystery"}), icon: "❔ ", slot: unknown, action: models.RequirementActionWarn},
+		{
+			name: "a lookup pacer that sheds is unknown",
+			setup: func(t *testing.T, e *settingsMreqHereEnv, _ bool) {
+				mreqChannel(t, e.state, e.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+				blockKey := memberReqLookupPacerOptions.BlockKey
+				mreqSetKey(t, e.memberReqEnv, blockKey, 30*time.Second)
+				t.Cleanup(func() { e.redis.Del(blockKey) })
+			},
+			icon: "❔ ", slot: unknown, action: models.RequirementActionWarn,
+		},
+		{
+			name: "a slow bot lookup times out as unknown",
+			setup: func(t *testing.T, e *settingsMreqHereEnv, _ bool) {
+				channel := mreqChannel(t, e.state, e.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+				release := e.state.holdKey(mreqChannelKey("getChatMember", channel, staffTestBotID))
+				t.Cleanup(release)
+				mreqSwap(t, &settingsMreqHereTimeout, 200*time.Millisecond)
+			},
+			icon: "❔ ", slot: unknown, action: models.RequirementActionWarn,
+		},
+		{
+			name: "a getChat of the group that fails with a 500 is unknown",
+			setup: func(t *testing.T, e *settingsMreqHereEnv, private bool) {
+				mreqChannel(t, e.state, e.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+				if private {
+					t.Skip("a private press's own getChat would meet the scripted error first")
+				}
+				e.state.scriptChat(e.chat.Id, staffFakeError(500, "Internal Server Error"))
+			},
+			icon: "❔ ", slot: unknown, action: models.RequirementActionWarn,
+		},
+		{
+			name: "a null getChat of the group is unknown",
+			setup: func(t *testing.T, e *settingsMreqHereEnv, private bool) {
+				mreqChannel(t, e.state, e.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+				if private {
+					t.Skip("a private press's own getChat would meet the null answer first")
+				}
+				e.state.nullGetChat(e.chat.Id)
+			},
+			icon: "❔ ", slot: unknown, action: models.RequirementActionWarn,
+		},
+	}
+	for _, private := range []bool{false, true} {
+		menu := map[bool]string{false: "group menu", true: "private menu"}[private]
+		for _, c := range cases {
+			t.Run(menu+": "+c.name, func(t *testing.T) {
+				env := newSettingsMreqHereEnv(t)
+				c.setup(t, env, private)
+				actions := settingsMreqChannelOn()
+				actions[6] = c.action
+				env.seed(actions, false, false)
+				msgID := env.openMenuOf(private)
+				answers := env.answerCount()
+				text, keyboard := env.press(private, msgID, "a", "mo", "t", "ch")
+
+				slot := ""
+				if c.slot != "" {
+					slot = settingsMreqHereLine(c.icon, c.slot)
+				}
+				settingsMreqWantChannelScreen(t, text, slot, c.action, c.offOnly)
+				wantRows := []int{2, 3, 2}
+				if c.offOnly {
+					wantRows = []int{1, 2}
+				}
+				if got := settingsMreqRowWidths(keyboard); !settingsMreqSameInts(got, wantRows) {
+					t.Errorf("rows = %v, want %v", got, wantRows)
+				}
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press was answered %d times, want once", got)
+				}
+				if answer, alert := env.lastAnswer(); answer != "" || alert {
+					t.Errorf("the press was answered %q (alert %v), want empty", answer, alert)
+				}
+				if strings.Contains(text, strconv.FormatInt(env.state.links[env.chat.Id], 10)) && env.state.links[env.chat.Id] != 0 {
+					t.Errorf("the screen %q names the linked channel's ID", text)
+				}
+			})
+		}
+	}
+}
+
+// settingsMreqCostEnv builds the environment of the call-count tests.
+func settingsMreqCostEnv(t *testing.T) (*settingsMreqHereEnv, int64) {
+	t.Helper()
+	env := newSettingsMreqHereEnv(t)
+	channel := mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+	return env, channel
+}
+
+// setRedisValue stores value under key with a TTL in the environment's Redis.
+func (e *settingsMreqHereEnv) setRedisValue(key, value string) {
+	e.t.Helper()
+	if err := e.redis.Set(key, value); err != nil {
+		e.t.Fatalf("set %s: %v", key, err)
+	}
+	e.redis.SetTTL(key, 10*time.Minute)
+}
+
+func TestSettingsMreqOpenCost(t *testing.T) {
+	// Counts are of the lookup requests (getChat of the group, getChatMember of the bot in the
+	// channel) a press made beyond the press pipeline's own: a group menu's pipeline makes neither,
+	// a private menu's makes one getChat of the group.
+	type draw struct {
+		name string
+		// prepare arranges the stored settings and the caches before the press.
+		prepare func(e *settingsMreqHereEnv, channel int64)
+		fields  []string
+		chats   int
+		members int
+	}
+	cases := []draw{
+		{name: "a page with the channel rule Off", prepare: func(e *settingsMreqHereEnv, _ int64) {
+			e.seed([7]int{models.RequirementActionWarn, 0, 0, 0, 0, models.RequirementActionMute, 0}, false, false)
+		}, fields: []string{"a", "op", "p", settingsPageMreq}},
+		{name: "the photo screen with the channel rule on", prepare: func(e *settingsMreqHereEnv, _ int64) {
+			e.seed([7]int{0, 0, 0, 0, 0, models.RequirementActionMute, models.RequirementActionWarn}, false, false)
+		}, fields: []string{"a", "mo", "t", "ph"}},
+		{name: "a page with a cached none", prepare: func(e *settingsMreqHereEnv, _ int64) {
+			e.seed(settingsMreqChannelOn(), false, false)
+			e.setRedisValue(memberReqLinkedKey(e.chat.Id), "0")
+		}, fields: []string{"a", "op", "p", settingsPageMreq}},
+		{name: "a page with a cached link makes the one member lookup", prepare: func(e *settingsMreqHereEnv, channel int64) {
+			e.seed(settingsMreqChannelOn(), false, false)
+			e.setRedisValue(memberReqLinkedKey(e.chat.Id), strconv.FormatInt(channel, 10))
+		}, fields: []string{"a", "op", "p", settingsPageMreq}, members: 1},
+		{name: "a page with a cached link and a cached administrator makes no call", prepare: func(e *settingsMreqHereEnv, channel int64) {
+			e.seed(settingsMreqChannelOn(), false, false)
+			e.setRedisValue(memberReqLinkedKey(e.chat.Id), strconv.FormatInt(channel, 10))
+			e.setRedisValue(memberReqBotAdminKey(channel), "1")
+		}, fields: []string{"a", "op", "p", settingsPageMreq}},
+		{name: "a page on a cache miss makes at most two calls", prepare: func(e *settingsMreqHereEnv, _ int64) {
+			e.seed(settingsMreqChannelOn(), false, false)
+		}, fields: []string{"a", "op", "p", settingsPageMreq}, chats: 1, members: 1},
+		{name: "opening the channel screen reads fresh past a stale cache", prepare: func(e *settingsMreqHereEnv, channel int64) {
+			e.seed(settingsMreqChannelOn(), false, false)
+			e.setRedisValue(memberReqLinkedKey(e.chat.Id), "0")
+			e.setRedisValue(memberReqBotAdminKey(channel), "1")
+		}, fields: []string{"a", "mo", "t", "ch"}, chats: 1, members: 1},
+	}
+	for _, private := range []bool{false, true} {
+		menu := map[bool]string{false: "group menu", true: "private menu"}[private]
+		for _, c := range cases {
+			t.Run(menu+": "+c.name, func(t *testing.T) {
+				env, channel := settingsMreqCostEnv(t)
+				c.prepare(env, channel)
+				msgID := env.openMenuOf(private)
+				chats, members := mreqChatCalls(env.memberReqEnv, env.chat.Id), mreqMemberCalls(env.memberReqEnv, channel, staffTestBotID)
+				answers := env.answerCount()
+				env.press(private, msgID, c.fields...)
+				wantChats := c.chats
+				if private {
+					wantChats++
+				}
+				if got := mreqChatCalls(env.memberReqEnv, env.chat.Id) - chats; got != wantChats {
+					t.Errorf("getChat requests = %d, want %d", got, wantChats)
+				}
+				if got := mreqMemberCalls(env.memberReqEnv, channel, staffTestBotID) - members; got != c.members {
+					t.Errorf("getChatMember requests of the bot = %d, want %d", got, c.members)
+				}
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press was answered %d times, want once", got)
+				}
+				for _, key := range []string{"fuku:memberreq:pace:next", "fuku:memberreq:pace:block"} {
+					if env.redis.Exists(key) {
+						t.Errorf("a draw wrote the Phase 13 pacer key %s", key)
+					}
+				}
+			})
+		}
+	}
+
+	t.Run("a fresh channel screen refreshes the link and the administrator caches", func(t *testing.T) {
+		env, channel := settingsMreqCostEnv(t)
+		env.seed(settingsMreqChannelOn(), false, false)
+		env.setRedisValue(memberReqLinkedKey(env.chat.Id), "0")
+		env.setRedisValue(memberReqBotAdminKey(channel), "1")
+		// The bot was demoted and the group linked since both were cached.
+		env.state.setMember(channel, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+		msgID := env.openMenuOf(false)
+		text, _ := env.press(false, msgID, "a", "mo", "t", "ch")
+		if !strings.Contains(text, settingsMreqHereLine("🚫 ", "settings_mreq_here_notadmin")) {
+			t.Errorf("the screen %q does not show the demoted bot", text)
+		}
+		if got, err := env.redis.Get(memberReqLinkedKey(env.chat.Id)); err != nil || got != strconv.FormatInt(channel, 10) {
+			t.Errorf("the link cache = %q (%v), want the refreshed channel", got, err)
+		}
+		if env.redis.Exists(memberReqBotAdminKey(channel)) {
+			t.Error("the stale administrator cache survived a fresh not-administrator answer")
+		}
+	})
+
+	t.Run("a slow lookup returns about the status bound, drawing the unknown mark", func(t *testing.T) {
+		env, channel := settingsMreqCostEnv(t)
+		env.seed(settingsMreqChannelOn(), false, false)
+		release := env.state.holdKey(mreqChannelKey("getChat", env.chat.Id, 0))
+		t.Cleanup(release)
+		mreqSwap(t, &settingsMreqHereTimeout, 300*time.Millisecond)
+		msgID := env.openMenuOf(false)
+		began := time.Now()
+		text, keyboard := env.press(false, msgID, "a", "op", "p", settingsPageMreq)
+		if took := time.Since(began); took > 3*time.Second {
+			t.Errorf("the draw took %s, want about the 300 ms bound", took)
+		}
+		if !strings.Contains(text, settingsMreqHereLine("❔ ", "settings_mreq_here_unknown")) || len(keyboard) != 6 {
+			t.Errorf("the page %q (%d rows) does not draw the unknown line on the full page", text, len(keyboard))
+		}
+		if mreqMemberCalls(env.memberReqEnv, channel, staffTestBotID) != 0 {
+			t.Error("a timed out link read still asked for the bot's status")
+		}
+	})
+
+	t.Run("Main makes no lookup request", func(t *testing.T) {
+		env, channel := settingsMreqCostEnv(t)
+		env.seed(settingsMreqChannelOn(), false, false)
+		msgID := env.openMenuOf(false)
+		before := env.lookupCalls(channel)
+		text, _ := env.press(false, msgID, "a", "bk")
+		if got := env.lookupCalls(channel); got != before {
+			t.Errorf("Main made %d lookup requests, want none", got-before)
+		}
+		if strings.Contains(text, "🚫") {
+			t.Errorf("Main %q carries a cannot-work flag", text)
+		}
+	})
+}
+
+// settingsMreqBasicEnv builds the environment of a basic group: no linked channel in the fake,
+// and either a private menu over a getChat that says "group" or a group menu in a chat of type group.
+func settingsMreqBasicEnv(t *testing.T, private bool) *settingsMreqHereEnv {
+	t.Helper()
+	env := newSettingsMreqHereEnv(t)
+	if private {
+		env.fake.setChatType(env.chat.Id, "group")
+	} else {
+		env.basic = true
+	}
+	return env
+}
+
+func TestSettingsMreqBasicGroup(t *testing.T) {
+	basicLine := "🚫 " + staffMarker("settings_mreq_here_basic")
+	for _, private := range []bool{false, true} {
+		menu := map[bool]string{false: "group menu", true: "private menu"}[private]
+		t.Run(menu+": the page shows the single basic line only while a rule is on", func(t *testing.T) {
+			env := settingsMreqBasicEnv(t, private)
+			env.seed([7]int{0, 0, 0, 0, 0, models.RequirementActionMute, models.RequirementActionWarn}, true, false)
+			msgID := env.openMenuOf(private)
+			chats := mreqChatCalls(env.memberReqEnv, env.chat.Id)
+			text, keyboard := env.press(private, msgID, "a", "op", "p", settingsPageMreq)
+
+			want := settingsMreqSwitchLine("settings_mreq_line_delete", false) + "\n\n" + basicLine + "\n\n" + staffMarker("settings_mreq_hint_letters")
+			if !strings.Contains(text, want) {
+				t.Errorf("the page %q lacks %q", text, want)
+			}
+			if n := strings.Count(text, staffMarker("settings_mreq_here_basic")); n != 1 {
+				t.Errorf("the basic line appears %d times, want once (never one per rule)", n)
+			}
+			if strings.Contains(text, staffMarker("settings_mreq_here_nolink")) {
+				t.Errorf("a basic group shows the channel line: %q", text)
+			}
+			if got := settingsMreqRowWidths(keyboard); !settingsMreqSameInts(got, []int{2, 2, 2, 1, 2, 2}) {
+				t.Errorf("rows = %v, want the six rows", got)
+			}
+			wantChats := 0
+			if private {
+				wantChats = 1
+			}
+			if got := mreqChatCalls(env.memberReqEnv, env.chat.Id) - chats; got != wantChats {
+				t.Errorf("getChat requests = %d, want %d (the pipeline's own only)", got, wantChats)
+			}
+
+			env.seed([7]int{}, false, false)
+			text, _ = env.press(private, msgID, "a", "op", "p", settingsPageMreq)
+			if !strings.Contains(text, staffMarker("settings_mreq_all_off")) || strings.Contains(text, "🚫") {
+				t.Errorf("with every rule Off the page %q must show the all-off line and no basic line", text)
+			}
+		})
+
+		t.Run(menu+": every rule screen says so and makes no lookup", func(t *testing.T) {
+			env := settingsMreqBasicEnv(t, private)
+			env.seed([7]int{0, 0, 0, 0, 0, models.RequirementActionMute, models.RequirementActionBan}, false, false)
+			msgID := env.openMenuOf(private)
+			for i, code := range settingsMreqRuleCodes {
+				chats := mreqChatCalls(env.memberReqEnv, env.chat.Id)
+				text, keyboard := env.press(private, msgID, "a", "mo", "t", code)
+				if !strings.Contains(text, basicLine+"\n\n"+staffMarker("settings_mreq_now")) {
+					t.Errorf("rule %s: the screen %q lacks the basic line in its slot", code, text)
+				}
+				wantRows, wantChats := []int{2, 3, 2}, 0
+				if code == "ch" {
+					wantRows = []int{1, 2}
+				}
+				if private {
+					wantChats = 1
+				}
+				if got := settingsMreqRowWidths(keyboard); !settingsMreqSameInts(got, wantRows) {
+					t.Errorf("rule %s: rows = %v, want %v", code, got, wantRows)
+				}
+				hasChoose := strings.Contains(text, staffMarker("settings_mreq_choose_hint"))
+				if hasChoose == (code == "ch") {
+					t.Errorf("rule %s: choose hint present = %v", code, hasChoose)
+				}
+				if code == "ph" && !strings.Contains(text, staffMarker("settings_mreq_hint_photo")+"\n"+basicLine) {
+					t.Errorf("the photo screen %q lacks its hint before the basic line", text)
+				}
+				if code == "ch" && !strings.Contains(text, settingsMreqChannelNow(models.RequirementActionBan)) {
+					t.Errorf("the stored Ban is not visible on the channel screen %q", text)
+				}
+				if got := mreqChatCalls(env.memberReqEnv, env.chat.Id) - chats; got != wantChats {
+					t.Errorf("rule %s (%d): getChat requests = %d, want %d", code, i, got, wantChats)
+				}
+			}
+			if n := len(env.fake.callsFor("getChatMember")); n > len(settingsMreqRuleCodes)+2 {
+				t.Errorf("getChatMember requests = %d, want only the presser's own per press", n)
+			}
+		})
+	}
+}
+
+func TestSettingsMreqRedrawKeepsStatus(t *testing.T) {
+	notAdminLine := settingsMreqHereLine("🚫 ", "settings_mreq_here_notadmin")
+	setup := func(t *testing.T) (*settingsMreqHereEnv, int64) {
+		env := newSettingsMreqHereEnv(t)
+		mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+		env.seed(settingsMreqChannelOn(), false, false)
+		msgID := env.openMenuOf(false)
+		return env, msgID
+	}
+	// press runs one press and fails unless it is answered once, empty, before the last status
+	// request, and the edit is not an error.
+	press := func(t *testing.T, env *settingsMreqHereEnv, msgID int64, kv ...string) (string, [][]gotgbot.InlineKeyboardButton) {
+		t.Helper()
+		var mu sync.Mutex
+		atRead := -1
+		env.state.setOnChannel(func(string, int64, int64) {
+			mu.Lock()
+			defer mu.Unlock()
+			atRead = env.answerCount()
+		})
+		before := env.answerCount()
+		text, keyboard := env.press(false, msgID, kv...)
+		if got := env.answerCount() - before; got != 1 {
+			t.Errorf("%v: answered %d times, want once", kv, got)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if atRead >= 0 && atRead-before < 1 {
+			t.Errorf("%v: the status was read before the press was answered", kv)
+		}
+		return text, keyboard
+	}
+
+	t.Run("a switch press keeps the status line", func(t *testing.T) {
+		env, msgID := setup(t)
+		press(t, env, msgID, "a", "op", "p", settingsPageMreq)
+		text, _ := press(t, env, msgID, "a", "tg", "p", settingsPageMreq, "t", "j", "v", "1")
+		if !strings.Contains(text, notAdminLine) {
+			t.Errorf("the redraw after a switch %q dropped the status line", text)
+		}
+		if stored, _ := settingsMreqStored(t, env.chat.Id); !stored.CheckOnJoin {
+			t.Error("the switch was not written")
+		}
+	})
+
+	t.Run("a choice, a card Yes and an expired Yes keep the rule's status slot", func(t *testing.T) {
+		env, msgID := setup(t)
+		text, _ := press(t, env, msgID, "a", "mo", "t", "ch")
+		if !strings.Contains(text, notAdminLine) {
+			t.Fatalf("the channel screen %q lacks the status line", text)
+		}
+		// Off writes at once and redraws with the status.
+		text, _ = press(t, env, msgID, "a", "st", "p", settingsPageMreq, "t", "ch", "v", "0")
+		if !strings.Contains(text, notAdminLine) || !strings.Contains(text, settingsMreqChannelNow(models.RequirementActionOff)) {
+			t.Errorf("the redraw after Off %q lost the status slot or the stored value", text)
+		}
+		// Ban asks first; the card's Yes writes and redraws the screen with the status.
+		_, keyboard := press(t, env, msgID, "a", "st", "p", settingsPageMreq, "t", "ch", "v", "3")
+		yes := settingsButtonFields(t, keyboard[0][0])
+		text, _ = press(t, env, msgID, "a", "my", "t", "ch", "v", "3", "e", yes["e"])
+		if !strings.Contains(text, notAdminLine) || !strings.Contains(text, settingsMreqChannelNow(models.RequirementActionBan)) {
+			t.Errorf("the redraw after Yes %q lost the status slot or the stored value", text)
+		}
+		// An expired Yes writes nothing and redraws with the note and the status.
+		text, _ = press(t, env, msgID, "a", "my", "t", "ch", "v", "2", "e", "1")
+		if !strings.Contains(text, notAdminLine) || !strings.Contains(text, settingsNoticeWarnMarker("settings_card_expired")) {
+			t.Errorf("the expired Yes redraw %q lost the status slot or the note", text)
+		}
+		if stored, _ := settingsMreqStored(t, env.chat.Id); stored.ChannelAction != models.RequirementActionBan {
+			t.Errorf("the expired Yes wrote: stored channel action %d, want Ban", stored.ChannelAction)
+		}
+	})
+
+	t.Run("a failed write redraws with the save-failed notice and the status", func(t *testing.T) {
+		env, msgID := setup(t)
+		settingsMreqSeams(t)
+		memberReqWrites.Action = func(context.Context, int64, memberreq.Rule, int) error { return errors.New("write failed") }
+		text, _ := press(t, env, msgID, "a", "st", "p", settingsPageMreq, "t", "ch", "v", "0")
+		if !strings.Contains(text, notAdminLine) || !strings.Contains(text, settingsNoticeWarnMarker("common_settings_save_failed")) {
+			t.Errorf("the failed-write redraw %q lacks the status line or the notice", text)
+		}
+		if stored, _ := settingsMreqStored(t, env.chat.Id); stored.ChannelAction != models.RequirementActionWarn {
+			t.Errorf("a failed write changed the stored value to %d", stored.ChannelAction)
+		}
+	})
+
+	t.Run("a redraw reads from the caches and never makes more than two requests", func(t *testing.T) {
+		env, msgID := setup(t)
+		channel := env.state.links[env.chat.Id]
+		press(t, env, msgID, "a", "mo", "t", "ch")
+		before := env.lookupCalls(channel)
+		press(t, env, msgID, "a", "st", "p", settingsPageMreq, "t", "ch", "v", "0")
+		if got := env.lookupCalls(channel) - before; got > 2 {
+			t.Errorf("a redraw made %d lookup requests, want at most 2 (the link comes from the cache)", got)
+		}
+		if got := mreqChatCalls(env.memberReqEnv, env.chat.Id); got != 1 {
+			t.Errorf("getChat requests in all = %d, want the one fresh read of the opening", got)
+		}
+	})
 }
