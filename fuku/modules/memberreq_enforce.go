@@ -40,6 +40,19 @@ var memberReqPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
 // memberReqCallTimeout bounds one Telegram request of the executor.
 const memberReqCallTimeout = 10 * time.Second
 
+var (
+	// memberReqLookupJobBudget is how long a message job waits for the lookup rules (the photo
+	// and the channel together). The job's own context is 90 s and the lookups run before the
+	// claim, so a slow lookup phase can only mean more unknowns, never a punishment; 20 s leaves
+	// the punishment and its notice their time. A variable so a test can shorten it.
+	memberReqLookupJobBudget = 20 * time.Second
+	// memberReqLookupJoinBudget is how long the synchronous join entry waits for the lookup
+	// rules. The entry runs on a dispatcher goroutine, so a raid of joins must not park every one
+	// of them for the entry's 15 s; a joiner whose lookup does not finish is welcomed and is
+	// checked again at their first message. A variable so a test can shorten it.
+	memberReqLookupJoinBudget = 4 * time.Second
+)
+
 // memberReqRecordTimeout bounds one database record write that must not be cancelled with
 // the run: marking a hold punished and storing its notice ID.
 const memberReqRecordTimeout = 5 * time.Second
@@ -256,7 +269,24 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	}
 	c.Settings = fresh
 	broken = memberReqBroken(c.Settings, memberReqNamesOf(member.User))
+	// The lookup rules (photo, then channel) come after the names, so an unanswerable lookup can
+	// never hide an established name breach. Each runs only while its action is not Off in the
+	// fresh row, and only an explicit breach adds a bit: an unknown or inert verdict is "not
+	// broken". The claim, the cap and the mute-over-restriction check all follow this step.
+	lookupCtx, cancel := context.WithTimeout(ctx, memberReqLookupBudget(c.Source))
+	defer cancel()
+	lookupMask, _ := memberReqLookupBroken(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{})
+	broken |= lookupMask
 	return member, broken, broken != 0
+}
+
+// memberReqLookupBudget is the time the lookup phase of one executor run may take: the short
+// join budget for the synchronous join entry, the job budget for everything else.
+func memberReqLookupBudget(source memberReqSource) time.Duration {
+	if source == memberReqFromJoin {
+		return memberReqLookupJoinBudget
+	}
+	return memberReqLookupJobBudget
 }
 
 // memberReqTakeHold claims the member's hold for this violation (insert-first), or reclaims
@@ -504,7 +534,12 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //  6. the settings read again (an unreadable row punishes nobody), then the rules on the live
 //     names and the strictest punishment of the broken ones, all from that fresh row, which
 //     also decides Delete messages from here on (a rule switched Off while the job waited
-//     punishes nobody);
+//     punishes nobody). Right after the names come the lookups (photo, then channel), each only
+//     while its action is not Off, under memberReqLookupJobBudget (a job) or
+//     memberReqLookupJoinBudget (the join entry): only an explicit breach adds its bit, an
+//     unknown or inert verdict adds none, and so an unanswerable lookup punishes nobody and never
+//     blocks a name breach already established. The claim (9) follows every lookup, so a lookup
+//     cut off by a crash or a shutdown leaves no hold;
 //  7. a Mute over a restriction someone else placed (the member is restricted below the group's
 //     defaults and carries no marker of this episode) places no mute, creates no hold, posts
 //     nothing and deletes nothing; the other punishments still apply;
