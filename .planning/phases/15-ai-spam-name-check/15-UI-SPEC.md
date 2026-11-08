@@ -404,8 +404,8 @@ admin to approve you" is accepted over a merged sentence (A15-A8): each tail is 
 tested alone.
 
 **The "I fixed it" order for the AI rule (D-15).** The press order of Phase 14 section 7 is unchanged (steps 1 to 4, 4b,
-5 to 10). Step 5 gains the AI rule as the last lookup row of `memberReqFixedJudge`: one **fresh** call for the member's
-three names (bypassing the verdict cache `fuku:memberreq:nv:<hash>` and refreshing it on a definite answer), through the
+5 to 10). Step 5 gains the AI rule as the last lookup row of `memberReqFixedJudge`: the verdict for the member's
+three names read from the verdict cache `fuku:memberreq:nv:<hash>` (CONTEXT D-23: the AI row ignores Fresh, so the button is deterministic for unchanged names; one call is made only on a cache miss, that is for changed names), through the
 breaker and the budgets (the member's per-account budget is reserved first), inside the `memberReqFixedLookupBudget` 5 s
 that the photo and channel lookups already share. The names come from the live record step 4 read, never from callback
 data.
@@ -812,8 +812,9 @@ mirip spam" (15), ru "имя, похожее на спам" (20), uk "ім'я, �
     (English as written 414; the worst real language must stay at or under 520 with the ceilings of the new keys, computed
     506), `mreq_warn_reason` with eight phrases at most **300**, the mute notice still carries the one button and the
     Phase 13 quote check is unchanged, no AI string says the model's name, a probability or the flagged name.
-11. **"I fixed it".** Step 5: the AI call is **fresh** (a cached "not spam" verdict for the names does not hide a spam
-    verdict, and a definite answer refreshes the cache), reserves the member's per-account budget first, and runs inside the
+11. **"I fixed it".** Step 5: the AI row ignores Fresh (CONTEXT D-23): it answers from the verdict cache for the member's
+    names, so the button is deterministic for unchanged names, and a call is made only on a cache miss (changed names),
+    which reserves the member's per-account budget first, and runs inside the
     one 5 s budget shared with the photo and channel lookups; one to four broken rules: `mreq_fixed_still_broken` listing
     exactly them (rendered at most 160 in English and 200 elsewhere with the four longest of eight phrases); five or more:
     `mreq_fixed_still_broken_many` with the right `{n}` (5 to 8), at most 160; an AI call that is unknown (error, 429, timeout,
@@ -935,7 +936,7 @@ the planner may change by recording a decision. A15-A1, A15-A4, A15-A6, A15-A7 a
 | D-08 (no answer never punishes; an unknown stricter rule defers a weaker one) | sections 3, 7 and 8, the inert (not unknown) answer while not configured |
 | D-09 (an eighth lookup row, no new drain) | section 1 (table row), section 8, M17 |
 | D-10 (own hourly budgets, per-account first) | A15-A4, check 11 |
-| D-11 (verdict cache by names hash, Fresh bypasses it) | section 7 "I fixed it", check 11 |
+| D-11 (verdict cache by names hash; amended by CONTEXT D-23: Fresh reads the cache) | section 7 "I fixed it", check 11 |
 | D-12 (own breaker) | `mreq_fixed_check_failed` for a paused breaker, check 11 and 13 |
 | D-13 (eighth cell, four rows of two, six rows, 53 bytes, fingerprint of eight) | M14, section 1, Row budget, Callback data |
 | D-14 (AI not configured: one line, Off-only, refused press, Off never refused) | sections 3 and 5, M15, M16, M17, checks 5 to 8 |
