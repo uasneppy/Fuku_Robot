@@ -526,8 +526,11 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //
 //  1. the bot itself, bots and Telegram service accounts;
 //  2. an approved member or a pending captcha attempt (a read that failed counts as exempt);
-//  3. the member's hold, read fresh: one that is not a stale pending one is Held, and with
-//     Delete messages on its message is deleted when the sender is established as a non-admin;
+//  3. the member's hold, read fresh: one that is not a stale pending one is first given the held
+//     release (memberReqHeldReleased: a message from a member whose names are clean and whose
+//     lookup bits of the hold now pass ends the hold, deleting nothing and punishing nobody);
+//     otherwise it is Held, and with Delete messages on its message is deleted when the sender
+//     is established as a non-admin;
 //  4. a paused chat (memberReqPaused) punishes nobody and posts nothing; its message is deleted
 //     only when the cached admin list knows the sender as a non-admin, with no Telegram call;
 //  5. one live getChatMember through the pacer, the admin check and the source of the names;
@@ -561,6 +564,9 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 		return memberReqResult{}
 	}
 	if held != nil {
+		if memberReqHeldReleased(ctx, b, c, held) {
+			return memberReqResult{}
+		}
 		memberReqDeleteHeld(ctx, b, c)
 		return memberReqResult{Outcome: memberReqHeld, Hold: held}
 	}

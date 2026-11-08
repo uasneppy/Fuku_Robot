@@ -149,6 +149,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`memberReqSettingsLookup`; an error or no rule on ends it, so an unreadable setting punishes nobody), the pure name
   rules, then for a clean member the pass value and the clean predicate and for a violator the cached admin list
   (`cachedAdminStatus`: a known admin ends it; an unknown cache goes to the job, whose live `getChatMember` decides).
+  For a member with clean names in a group with a lookup rule on (the photo or the channel rule, action not Off) the
+  watcher reads the cached lookup verdicts first (`memberReqLookupCached`, Redis only and still no Telegram call): one
+  pipelined round of single-key `GET`s of the pass key, `fuku:memberreq:photo:<user>` (photo rule on) and
+  `fuku:memberreq:lc:<chat>` (channel rule on), then `fuku:memberreq:sub:<channel>:<user>` only when `lc` holds a channel
+  ID (`lc` reading `0`, a group with no linked channel, is nothing to verify). The member is clean only when every lookup
+  rule that is on has its cached positive, and then the Phase 13 clean path runs with the pass answer already read; the
+  pass key is read in that same round but is never consulted without the lookup positives and never stands in for one.
+  A miss, a Redis error, no Redis and an `lc` it cannot read are all "not satisfied", and then the watcher starts no job
+  for a member the cached admin list knows as an administrator, for an approved member or when the approvals read fails
+  (`memberReqMissExempt`, D-25: an exempt member is exempt inside the job and so never gets a positive cached, and would
+  cost a job per message for ever), and otherwise hands exactly one job to the runner (below). The watcher writes no
+  verdict of any kind (an inert or unknown lookup is never cached by it or by the lookups, only a pass is) and never
+  classifies; a group with name rules only keeps its single `GET` exactly as before.
   The enforcement switch `memberReqEnforcementLive` is an `atomic.Bool` read only through `memberReqLive()`. It is true by
   default since the "I fixed it" handler exists (the `mreq|v1` bullet under Callbacks): `memberreq.go`'s `init()` stores
   true, and that store is the only production write of it (`LoadMemberRequirements` does not write it, because a test loads
@@ -1142,7 +1155,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   after a clean verdict and a successful clean predicate (`ClearHoldOnClean`) for a message not older than 2 minutes
   (`memberReqPassMaxAge`, so a backlog message cannot hide a later hold from the predicate). It saves the clean `DELETE`, not
   the rules, and a violation is never cached. A Redis error or no Redis is a miss and the predicate runs on every message
-  (correct, slower). It sits in the `fuku:memberreq:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps it.
+  (correct, slower). In a group with a lookup rule on the key is read in the same pipelined round as the lookup positives
+  but is never consulted without them and never stands in for a lookup verdict: a pass hit with no photo positive still
+  hands the member to a job, so a pass can never hide a missing photo or subscription (R2). It sits in the
+  `fuku:memberreq:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps it.
 - `fuku:memberreq:photo:<user>` is the positive-only profile photo verdict of the lookup layer (`memberreq_lookup.go`,
   `memberReqPhotoRule`): the value is `1`, `SET EX` 30 minutes (`memberReqPositiveTTL`), written inside the flight only when
   `getUserProfilePhotos` answered with a total above zero or a non-empty list. A missing photo and every unknown answer (an
@@ -1305,8 +1321,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on (it is, by default, since the `mreq|` handler exists). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
   itself, bots and `staffServiceUserIDs`; approvals through `approvals.IsUserApprovedContext` (yes, no or unknown: a
   failed load is an error, never "not approved") and the pending captcha through the two context reads (same three
-  states); the hold read fresh (one that is not a stale pending one is `memberReqHeld` and adds no warn, notice or
-  punishment, and with Delete messages on its message is deleted, below); a paused chat (the Data bullet of the cap) ends
+  states); the hold read fresh (one that is not a stale pending one is first given the held release, below, and otherwise
+  is `memberReqHeld` and adds no warn, notice or punishment, and with Delete messages on its message is deleted, below); a paused chat (the Data bullet of the cap) ends
   there with nothing punished or posted; one live
   `getChatMember` through `memberReqPaced`, which is the admin check (creator, administrator, left, kicked, a restricted
   non-member and bots are never punished) and the source of the names the rules judge; then the group's settings are
@@ -1457,11 +1473,43 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   exists; each costs one statement per join or leave. Nothing of the requirements ever unbans, so a banned member stays
   banned. Known limit: the goodbye after a requirement kick or ban is kept (parity with `/kick`, the captcha kick and the
   warn limit), so with goodbye on every such removal posts one.
+- Member requirements, the held release (`memberreq_held.go`, D-21): `memberReqHeldReleased` is the one re-check a held
+  member's message gets before the Phase 13 held path (`memberReqDeleteHeld`). A hold ends by a leave, a rejoin, the clean
+  predicate and "I fixed it", and the clean predicate runs only in the watcher's clean path, which a group with a lookup
+  rule on reaches only for a member whose lookups are cached positive; a held member's messages never ask Telegram, so a
+  Warn hold with a photo or channel bit would otherwise never end after the member fixed it, and the watcher would hand
+  the runner a job for every message of theirs. The release runs in the job, after the exemption, the hold read and
+  before the pause check, and returns true (the executor then returns an empty result: no Held outcome, no delete) only
+  when all of these hold: the case is a message with a message ID and a date (a join is never released); the settings read
+  again through `memberReqSettingsLookup` without an error (an unreadable one keeps the hold); the sender's names break no
+  rule that is on (a member who still breaks a name rule stays held and no lookup is spent on them); every lookup rule the
+  hold carries a bit of and that is still on answers pass or inert when run with `memberReqLookupMode{Classify: true}`
+  under `memberReqLookupJobBudget` (an unknown, a breach, a cut-off lookup keep the hold; a rule now Off counts as
+  released, and only the hold's own lookup bits are asked); and `memberreq.ClearHoldOnClean` with its two second margin
+  deleted the row. A hold with name bits only needs no lookup, so a member who fixed their name is released by the same
+  call, which keeps the Phase 13 behaviour (a clean message ends a warn hold) true in a group that also has a lookup rule
+  on, where the watcher's clean path is no longer reached by a member whose lookups are not cached. The release only
+  deletes the hold row: it never punishes, claims, warns, posts or restricts, and it never lifts a mute (for a punished mute
+  the predicate deletes the row only when the mute was confirmed more than two seconds before the message, and a member
+  the bot muted cannot send, so that message shows an administrator lifted it; otherwise a mute is freed only by "I fixed
+  it" or an administrator). A passing lookup is cached by the lookup itself and a missing photo or subscription never is, so
+  a held member who still lacks the photo or the subscription costs one paced lookup per message, bounded by the lookup
+  pacer, the flights and the runner: accepted (D-24).
 - The member requirements runner (`memberReqRunAsync`, `memberreq_watch.go`): a violating message is handed to a job on its
   own goroutine, counted in `memberReqJobs` (a `raidPostTracker`) before `memberReqDraining` is read, capped at
   `memberReqMaxInFlight` (32) by `startBelow` (check and increment in one step), recovering from panics. A full runner sheds
   the job with one log line carrying the chat and user IDs only, and the member's next message is checked again: an
-  accepted, logged limit, so under overload a violator's message can stay undeleted until their next message.
+  accepted, logged limit, so under overload a violator's message can stay undeleted until their next message. A lookup
+  miss (a member with clean names and no cached lookup positive, after the D-25 skip) is handed to the runner exactly like
+  a violator, so it is capped at the same 32, counted in `memberReqJobs`, refused while `memberReqDraining` is set and shed
+  with the same one line when the runner is full; 100 messages of one member make one lookup request, because the jobs
+  share one flight per member, the flight reads the cache once more before it asks Telegram and writes the positive before
+  it returns. With Redis down every message of a member in a group with a lookup rule on is a job (nothing is cached and
+  the watcher cannot say the member is clean), by design (D-12): it costs at most 32 jobs, the lookup pacer's one-replica
+  fallback interval and shedding, and never a punishment, because a lookup that cannot be answered is never a breach.
+  The same cost applies, for the same reason, to a group whose linked channel the bot cannot read (an inert or unknown
+  channel verdict is never cached, so such a group's non-exempt members are a job per message until the owner fixes the
+  bot's standing in the channel or turns the channel rule Off).
   A basic group is never screened in this phase (mute and kick are supergroup methods): the watcher's filter is supergroups
   only, and Phase 14's "cannot work here" line will say so on the page.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
