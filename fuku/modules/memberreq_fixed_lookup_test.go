@@ -717,3 +717,100 @@ func TestMemberReqChannelInert(t *testing.T) {
 		mreqWantNothing(t, env, member, env.mreqEnforce(env.mreqCase(member)))
 	})
 }
+
+func TestMemberReqFixedNeverLiftsWithLookupRules(t *testing.T) {
+	until := func(offset time.Duration) func(int64) *gotgbot.RestrictChatMemberOpts {
+		return func(int64) *gotgbot.RestrictChatMemberOpts {
+			return &gotgbot.RestrictChatMemberOpts{UntilDate: time.Now().Add(offset).Unix()}
+		}
+	}
+	noEnd := func(int64) *gotgbot.RestrictChatMemberOpts { return nil }
+	replace := map[string]func(marker int64) *gotgbot.RestrictChatMemberOpts{
+		"an admin's /mute (no end date)":      noEnd,
+		"a /tmute of one hour":                until(time.Hour),
+		"a staff mute of a day":               until(24 * time.Hour),
+		"the captcha's re-mute (no end date)": noEnd,
+		"antiflood's mute (no end date)":      noEnd,
+		"a warn-limit mute (no end date)":     noEnd,
+		"a mute three seconds past the marker": func(marker int64) *gotgbot.RestrictChatMemberOpts {
+			return &gotgbot.RestrictChatMemberOpts{UntilDate: marker + 3}
+		},
+		"a mute three seconds before the marker": func(marker int64) *gotgbot.RestrictChatMemberOpts {
+			return &gotgbot.RestrictChatMemberOpts{UntilDate: marker - 3}
+		},
+	}
+
+	// setup mutes a member for the photo and channel rules, who is also approved, and traces the
+	// seams a press could reach, so the test can prove none of them was.
+	setup := func(t *testing.T) (*memberReqEnv, gotgbot.User, int64, *models.ChatRequirementHold, staffSentMessage, *mreqPressTrace) {
+		t.Helper()
+		env, state := mreqWatchLookupEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{
+			memberreq.RulePhoto:   models.RequirementActionMute,
+			memberreq.RuleChannel: models.RequirementActionMute,
+		})
+		member, channel := mreqChannelUser(t, env, state, gotgbot.ChatMemberStatusAdministrator, gotgbot.ChatMemberStatusLeft)
+		state.set(member.Id, mreqPhotoAnswer{})
+		notice := env.mreqMuteByMessage(member)
+		hold := env.mreqHold(member.Id)
+		if hold == nil || hold.Rules != mreqRuleMask(t, "ph", "ch") || hold.PunishedAt == nil {
+			t.Fatalf("hold = %+v, want a punished mute hold with the photo and channel bits", hold)
+		}
+		mreqApprove(t, env, member)
+		return env, member, channel, hold, notice, mreqTracePress(t, env, state, member)
+	}
+	// wantUntouched fails when a press reached an approvals read, a settings read or a lookup.
+	wantUntouched := func(t *testing.T, env *memberReqEnv, trace *mreqPressTrace, channel, member, trafficBefore int64, chatsBefore int) {
+		t.Helper()
+		if got := trace.log(); len(got) != 0 {
+			t.Errorf("seams reached = %v, want none: the marker check of step 4 comes first", got)
+		}
+		if n := int64(mreqLookupTraffic(env, channel, member)); n != trafficBefore {
+			t.Errorf("lookup requests = %d, want the %d before the presses", n, trafficBefore)
+		}
+		if n := mreqChatCalls(env, env.chat.Id); n != chatsBefore {
+			t.Errorf("getChat requests of the group = %d, want the %d before the presses", n, chatsBefore)
+		}
+	}
+
+	for name, opts := range replace {
+		t.Run(name, func(t *testing.T) {
+			env, member, channel, hold, notice, trace := setup(t)
+			if _, err := env.bot.RestrictChatMember(env.chat.Id, member.Id, MutedPermissions, opts(hold.MuteUntil)); err != nil {
+				t.Fatal(err)
+			}
+			data := env.mreqFixedData(notice)
+			traffic, chats := int64(mreqLookupTraffic(env, channel, member.Id)), mreqChatCalls(env, env.chat.Id)
+
+			mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_not_ours")
+			mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_not_ours")
+
+			wantUntouched(t, env, trace, channel, member.Id, traffic, chats)
+			mreqWantHeld(t, env, hold)
+		})
+	}
+
+	t.Run("a member an admin unmuted", func(t *testing.T) {
+		env, member, channel, hold, notice, trace := setup(t)
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember, IsMember: true, CanSendMessages: true})
+		data := env.mreqFixedData(notice)
+		traffic, chats := int64(mreqLookupTraffic(env, channel, member.Id)), mreqChatCalls(env, env.chat.Id)
+
+		mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_not_ours")
+		mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_not_ours")
+
+		wantUntouched(t, env, trace, channel, member.Id, traffic, chats)
+		mreqWantHeld(t, env, hold)
+	})
+
+	t.Run("a member who left", func(t *testing.T) {
+		env, member, channel, hold, notice, trace := setup(t)
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusLeft})
+		traffic, chats := int64(mreqLookupTraffic(env, channel, member.Id)), mreqChatCalls(env, env.chat.Id)
+
+		mreqPressRefused(t, env, member, member, notice.MessageID, env.mreqFixedData(notice), "mreq_fixed_not_ours")
+
+		wantUntouched(t, env, trace, channel, member.Id, traffic, chats)
+		mreqWantHeld(t, env, hold)
+	})
+}
