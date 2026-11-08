@@ -225,11 +225,11 @@ Steps: set Channel to Warn in a linked group, then unlink the channel in the gro
 Requirements page at once, again after a minute, and again after eleven minutes. Link it again and repeat. Open the Channel
 rule screen each time.
 
-Pass looks like: the page may still say the channel is linked for up to 10 minutes (`lc` is cached for 10 minutes), the
+Pass looks like: the page may still say the channel is linked for up to 60 seconds (a positive `lc` is cached for 60 seconds, a none for 10 minutes), the
 Channel rule screen read is always fresh and shows the Off-only form once the link is gone, a stored Warn stays visible and
 inert, and no member is warned while there is no link.
 
-If not: if the status line is stale for longer than 10 minutes, record the replica count; the `lc` key expires on its own.
+If not: if the status line is stale for longer than a minute after a relink (10 minutes after a link appears where none was cached), record the replica count; the `lc` key expires on its own.
 
 ### 11. A native-speaker read of the new and reworded keys
 
@@ -314,20 +314,30 @@ These are choices the planner made as recommended defaults and the owner still c
 
 The code and the rulebook state these; none blocks the phase.
 
-- **A channel the bot cannot read costs one runner job and one paced lookup per message of every non-exempt member.** An
-  inert or unknown verdict is never cached (no negative cache, D-24; only a pass is), so in a group whose linked channel the
-  bot is not an administrator of, every message of a member who is not an administrator or approved starts a job that makes
-  one paced lookup, capped at 32 jobs in flight and bounded by the lookup pacer. Nobody is punished. Fix the bot's standing
-  in the channel or turn the channel rule Off. The same applies to a member who stays without a photo or a subscription, and
-  to every member while Redis is down.
+- **A channel the bot cannot read costs one channel-level fact per minute (bounded since the Phase 14 review fix, WR-01).** A
+  verdict about a member that is inert or unknown is still never cached (D-24; only a pass is), but the bot's own definite
+  not-administrator standing in the channel is cached for the channel only, as `fuku:memberreq:cna:<channel>` (60 s, fixed
+  marker, never a user verdict). While it stands the channel rule is inert at the top of the executor with no Telegram call and
+  the watcher starts no job, so after the first message such a group costs one `getChatMember` of the bot per channel per
+  minute. A standing that cannot be established (a 429, a 5xx, a timeout, a shed) writes nothing, so the per-message job (one
+  runner job and the paced lookups, capped at 32 jobs in flight and bounded by the lookup pacer) stays until it can. Nobody is
+  punished either way. The same per-message cost applies to a member who stays without a photo or a subscription, and to every
+  member while Redis is down. The shed log line is Debug.
 - **A member can be stuck behind "I fixed it" only while a channel lookup for them stays unanswerable AND the bot is neither a
   definite non-administrator nor bot-gone.** Then the classifier keeps the rule unknown and the press answers "I couldn't
   check right now". An administrator's `/unmute` is the fallback and the 330-day marker mute is the worst case.
 - **The photo and subscription positives are cached for 30 minutes** at the watcher, so a member who removes their photo or
   unsubscribes is not checked again for up to 30 minutes (the "I fixed it" press is always fresh).
-- **A partial episode:** an unknown lookup never blocks an established name breach. The member is punished for the names and
-  the hold and notice name only the rules that were established; the unknown rule is judged again once the hold clears.
-- **The page's linked-channel read can be 10 minutes old** (`lc`); opening the Channel rule screen reads fresh.
+- **A partial episode is fixed where it did harm (Phase 14 review fix, WR-02):** an unknown lookup never blocks an established
+  name breach when the rule it could not answer is equal or weaker; when that rule is stricter (a Ban channel rule over a Warn
+  last-name rule, say) nothing is claimed and the member is judged again at their next message, so a stricter rule is never
+  dropped behind a weaker punishment and its hold. A stricter rule that stays unanswerable holds the weaker punishment back
+  for as long as it does (nobody is punished on a guess). The member is punished for the names, with a hold and notice that
+  name only the rules established, when the unknown rule is equal or weaker.
+- **A stale link is fixed (Phase 14 review fix, WR-05):** a positive `lc` is cached for 60 s (none stays 10 minutes), and a
+  not-subscribed candidate reads the link fresh once before the gate, so a punishment never rests on a link older than one
+  request. The page's own linked-channel read can still be up to 60 s old (a link) or 10 minutes (none); opening the Channel
+  rule screen reads fresh.
 - **`cache.IsBotGoneError` matches any 400 or 403** (R3), so a 403 for another reason reads as "not an administrator". That is
   inert and never a punishment.
 - **The log of a non-gotgbot client's transport errors is not scrubbed.** `TestMemberReqLookupLogsCarryIDsOnly` relies on
