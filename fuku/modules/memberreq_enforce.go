@@ -230,9 +230,13 @@ func memberReqPriorHold(ctx context.Context, c memberReqCase) (stale, held *mode
 }
 
 // memberReqLiveViolation makes the one live getChatMember and returns the member's current
-// record and the mask of rules the live names break. ok is false when the lookup failed, the
-// member is exempt by the live record, or nothing is broken any more.
-func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c memberReqCase) (member gotgbot.MergedChatMember, broken int, ok bool) {
+// record and the mask of rules the live names break. It then reads the group's settings again
+// and judges the names against that fresh row, storing it in c.Settings, so a rule switched Off
+// or changed, or Delete messages turned off, after the watcher's snapshot is honoured by the
+// job that snapshot started (D-20); the snapshot stays the watcher's cheap pre-filter only. ok
+// is false when the lookup failed, the member is exempt by the live record, the settings could
+// not be read (an unreadable setting punishes nobody) or nothing is broken any more.
+func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCase) (member gotgbot.MergedChatMember, broken int, ok bool) {
 	member, err := memberReqLiveMember(ctx, b, c.Chat.Id, c.User.Id)
 	if err != nil {
 		log.Warnf("[MemberReq] live record of user %d in chat %d is unknown: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
@@ -241,6 +245,16 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c memberReqCase
 	if !memberReqLiveEligible(member) {
 		return member, 0, false
 	}
+	fresh, err := memberReqSettingsLookup(ctx, c.Chat.Id)
+	if err != nil {
+		log.Warnf("[MemberReq] the requirements of chat %d could not be read again for user %d, so nobody is punished: %s",
+			c.Chat.Id, c.User.Id, memberReqErrText(err))
+		return member, 0, false
+	}
+	if fresh == nil {
+		return member, 0, false
+	}
+	c.Settings = fresh
 	broken = memberReqBroken(c.Settings, memberReqNamesOf(member.User))
 	return member, broken, broken != 0
 }
@@ -450,7 +464,10 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //  4. a paused chat (memberReqPaused) punishes nobody and posts nothing; its message is deleted
 //     only when the cached admin list knows the sender as a non-admin, with no Telegram call;
 //  5. one live getChatMember through the pacer, the admin check and the source of the names;
-//  6. the rules on the live names, the strictest punishment of the broken ones;
+//  6. the settings read again (an unreadable row punishes nobody), then the rules on the live
+//     names and the strictest punishment of the broken ones, all from that fresh row, which
+//     also decides Delete messages from here on (a rule switched Off while the job waited
+//     punishes nobody);
 //  7. a Mute over a restriction someone else placed (the member is restricted below the group's
 //     defaults and carries no marker of this episode) places no mute, creates no hold, posts
 //     nothing and deletes nothing; the other punishments still apply;
@@ -483,7 +500,7 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 		}
 		return memberReqResult{}
 	}
-	member, broken, ok := memberReqLiveViolation(ctx, b, c)
+	member, broken, ok := memberReqLiveViolation(ctx, b, &c)
 	if !ok {
 		return memberReqResult{}
 	}

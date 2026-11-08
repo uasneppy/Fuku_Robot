@@ -1212,8 +1212,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   punishment, and with Delete messages on its message is deleted, below); a paused chat (the Data bullet of the cap) ends
   there with nothing punished or posted; one live
   `getChatMember` through `memberReqPaced`, which is the admin check (creator, administrator, left, kicked, a restricted
-  non-member and bots are never punished) and the source of the names the rules judge; the strictest of the broken rules
-  whose punishment is not Off; then, when that strictest punishment is a Mute and the live record is `restricted` with no
+  non-member and bots are never punished) and the source of the names the rules judge; then the group's settings are
+  read again (`memberReqSettingsLookup`, the cached key that is in `skipLocal`) and the broken rules, the strictest of them
+  whose punishment is not Off and the Delete messages switch all come from that fresh row, not from the snapshot the
+  watcher or the join entry handed in (WR-02, D-20: a rule switched Off, changed or a Delete messages turned off while the
+  job waited behind the pacer is honoured, and an unreadable setting punishes nobody; the snapshot is only the cheap
+  pre-filter, and the held and paused paths before the live lookup still use it for their deletes); then, when that strictest punishment is a Mute and the live record is `restricted` with no
   marker of this episode (the stale hold's marker that `memberReqLiveMarker` adopts is the one exception), the one
   paced `getChat` of `memberReqUnmutePermissions` reads the group's defaults and `memberReqRestrictedBelow` asks whether
   the member lacks a right the group grants: if so the restriction is someone else's (an admin's `/mute`, a partial
