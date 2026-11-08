@@ -119,9 +119,9 @@ func memberReqSendHeldWelcome(b *gotgbot.Bot, ctx *ext.Context, chat gotgbot.Cha
 
 // memberReqFixedRun runs the checks and the unmute of one press, in the order of the UI
 // contract (steps 3 to 10): the hold matched by its ID, the chat and the member alone; the
-// live marker; the permissions resolved before the hold is touched; the conditional delete of
-// the hold; the unmute; the edit of the notice. It never reads the press's own notice ID: the
-// message edited is the one the button sits on.
+// live marker; the approvals (4b); the rules judged again (5); the permissions resolved before
+// the hold is touched; the conditional delete of the hold; the unmute; the edit of the notice.
+// It never reads the press's own notice ID: the message edited is the one the button sits on.
 func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator, holdID, userID int64) memberReqFixedResult {
 	chat := query.Message.GetChat()
 	refuse := func(key string) memberReqFixedResult {
@@ -146,10 +146,20 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 		return refuse("mreq_fixed_not_ours")
 	}
 
-	// Every enabled rule is judged again against the group's current settings: the name rules on
-	// the live record and the lookup rules with fresh lookups.
-	if refused := memberReqFixedJudge(ctx, b, tr, chat.Id, userID, live); refused != nil {
-		return *refused
+	// An approved member is judged clean for every rule, the name rules included, so nothing below
+	// is read for them. The approvals come after the live marker check, so only a mute the
+	// requirements placed can be freed this way, and an unknown answer changes nothing.
+	approved, err := memberReqApprovedLookup(ctx, chat.Id, userID)
+	if err != nil {
+		log.Warnf("[MemberReq] the approvals of chat %d could not be read for the fix of user %d: %s", chat.Id, userID, memberReqErrText(err))
+		return refuse("mreq_fixed_check_failed")
+	}
+	if !approved {
+		// Every enabled rule is judged again against the group's current settings: the name rules
+		// on the live record and the lookup rules with fresh lookups.
+		if refused := memberReqFixedJudge(ctx, b, tr, chat.Id, userID, live); refused != nil {
+			return *refused
+		}
 	}
 
 	perms, lockedDown, err := memberReqUnmutePermissions(ctx, b, chat.Id)

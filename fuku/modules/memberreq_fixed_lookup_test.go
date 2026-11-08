@@ -140,7 +140,13 @@ func mreqTracePress(t *testing.T, env *memberReqEnv, state *mreqLookupState, mem
 			trace.add("photo")
 		}
 	})
-	state.setOnChannel(func(method string, _, _ int64) { trace.add("channel:" + method) })
+	state.setOnChannel(func(method string, chat, _ int64) {
+		// The getChat of the group itself is the unmute's own permissions read, not a lookup.
+		if method == "getChat" && chat == env.chat.Id {
+			return
+		}
+		trace.add("channel:" + method)
+	})
 	return trace
 }
 
@@ -171,10 +177,15 @@ func TestMemberReqFixedApproved(t *testing.T) {
 		trace := mreqTracePress(t, env, state, member)
 		trafficBefore := mreqLookupTraffic(env, channel, member.Id)
 		liveBefore := env.mreqCallsAbout(member.Id, "getChatMember")
+		chatsBefore := mreqChatCalls(env, env.chat.Id)
 		restrictsBefore, answersBefore := len(env.mreqRestricts(member.Id)), len(env.mreqAnswers())
 
 		env.mreqPressFixed(member, notice)
 
+		// The one getChat of the group is the unmute's permissions read: no linked channel lookup.
+		if n := mreqChatCalls(env, env.chat.Id); n != chatsBefore+1 {
+			t.Errorf("getChat requests of the group = %d, want %d (the permissions read only)", n, chatsBefore+1)
+		}
 		mreqWantFixedUnmute(t, env, member, notice, restrictsBefore, answersBefore, perms,
 			mreqAnswer{Text: staffMarker("mreq_fixed_done")},
 			mreqFixedNoticeText(t, env.translator(), "mreq_notice_fixed", member))
