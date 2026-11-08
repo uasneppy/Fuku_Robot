@@ -2,10 +2,10 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
-current_phase: 13
-current_phase_name: Member Requirements
-status: verifying
-stopped_at: Completed 13-14-PLAN.md
+current_phase: 14
+current_phase_name: Profile Photo and Channel Rules
+status: planning
+stopped_at: Phase 13 verified (human_needed); ready to discuss Phase 14
 last_updated: "2026-11-08T00:13:42.551Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 11 execution started
@@ -25,13 +25,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 11 — Message Editor
+**Current focus:** Phase 14 — Profile Photo and Channel Rules
 
 ## Current Position
 
-Phase: 13 (Member Requirements) — READY TO EXECUTE
-Plan: 14 of 14
-Status: Phase complete — ready for verification
+Phase: 14 (Profile Photo and Channel Rules) — NOT STARTED (Phase 13 is built and verified, `human_needed`: its live checks are deferred, see Deferred Items)
+Plan: 0 of TBD
+Status: Ready to discuss Phase 14
 Last activity: 2026-11-04 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
@@ -270,6 +270,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| verification | Phase 13 live Telegram checks and owner review (`phases/13-member-requirements/13-SPIKE.md`, `13-VERIFICATION.md` status `human_needed`): BEFORE any group sets a rule to Mute run SPIKE checks 2 (the 330-day marker `until_date` read back by `getChatMember`), 3 (a muted member's leave and rejoin), 4 (a restricted member's readback), 5 (answer time of the button) and 8 (the unmute during a lockdown) and 14 (a member lifted to the group's defaults reads back with the group's rights, which the CR-01 rule "restricted below the defaults" rests on); Warn, Kick and Ban do not depend on them. Also checks 1 (the group message limit against the cap of 10 a minute), 6 and 7 (a collectible-username account, names after a rename), 9 and 10 (bidi isolates with an Arabic name, hi, ru and uk cells at phone width), 11 (native-speaker read of the 61 new strings), 12 (two live replicas over one PostgreSQL), 13 (`make lint` on a Go 1.26 golangci-lint, `make test-postgres-integrity` in CI); follow-up decisions: UI-SPEC assumptions A1, A4, A8, A14, A15, A17 and A18, review items IN-01 to IN-06 and NEW-02 to NEW-04 (`13-REVIEW-DISPOSITION.md`), audit items SEC-NEW-03 to SEC-NEW-06 and accepted risks AR-01 to AR-18 (`13-SECURITY.md`); MREQ-01 stays Pending until Phases 14 and 15 deliver the other three rules | deferred; the owner's standing choice (defer the live checks and keep going) applies; enforcement is ON in code by default but every rule defaults Off, so nothing is screened until an owner sets a rule; code verified 17/17, security 0 open threats (59 of 59 closed), validation 10/10 covered, review findings CR-01, WR-01, WR-02, WR-03 and the two low audit items fixed | 2026-11-08 | v1.1 |
 | verification | Phase 12 live Telegram checks and owner review (`phases/12-rules-media-media-under-text-and-greet-once/12-SPIKE.md`, `12-VERIFICATION.md` status `human_needed`): the caption above a photo, video and GIF on Android, iOS, Desktop and Web (A1), an older client's layout (A6), a new GIF looping through `sendAnimation` and the EDIT-07 limit that a GIF saved before Phase 12 has no Media under text switch until it is set again (A7), Telegram's real 1024-unit caption limit and the member-path text fallback (A3), Greet once on two live replicas, `/rules` with media and buttons and the Full preview language (A12), hi, ru and uk switch labels at phone width, native-speaker read of the 13 new strings, `make lint` on a Go 1.26 golangci-lint; follow-up decisions: UI-SPEC assumptions A1, A2, A3, A4 and A12, the 429 clause of the Greet once give-back, the member-path text fallback (a deliberate deviation from D-03), the `/setrules` note when media is set (review IN-02), the whitespace-only rules text and the `{rules}` button, the owner-only backup import caveat (audit NEW-03), the Delete-last race left by the dropped plan 12-15, the full reset that fails on PostgreSQL at warns (pre-existing, review IN-03), accepted limits AR-01 to AR-04 in `12-SECURITY.md` | deferred; the owner's standing choice (defer the live checks and keep going) applies; code verified 10/10, security 0 open threats, validation passed, review findings WR-01, WR-02 and IN-01 fixed | 2026-11-05 | v1.1 |
 | verification | Phase 11 live Telegram checks and owner review (`phases/11-message-editor/11-SPIKE.md`, `11-VERIFICATION.md` status `human_needed`): GIF as welcome media (A3), album order (A4), the 403 alert for an admin who never started the bot (A5), fast taps and rate limits (A6), Telegram's real length and button limits (A1, A2, A7, A8), typed text sent as `rich_message` (A9), tap-to-copy on the code examples and label truncation in hi, ru and uk, two live replicas, a real 10-minute expiry, native-speaker read of the 83 new strings, `make lint` on a Go 1.26 golangci-lint; follow-up decisions: the `/rules` double escaping and Goodbye On by default, accepted limits AR-04 in `11-SECURITY.md` | deferred; the owner re-ran the autonomous run after the Phase 11 verification, so the Phase 10 choice (defer and keep going) stands; code verified 13/13, security 0 open | 2026-11-05 | v1.1 |
 | verification | Phase 10 live Telegram checks and owner review (`phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md`, `10-VERIFICATION.md` status `human_needed`): list and pick, Access ON card and OFF, gated admin refusals, anonymous owner proof tap, deleted-owner group (A1), two replicas, D-01/D-20 wording, native-speaker read of the 19 new strings | deferred by the owner's choice in the autonomous run; code verified 5/5, security 0 open | 2026-11-04 | v1.1 |
