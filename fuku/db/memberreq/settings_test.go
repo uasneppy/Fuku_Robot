@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/vmihailenco/msgpack/v5"
+
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -280,17 +282,44 @@ func TestChatRequirementsSettings(t *testing.T) {
 
 	t.Run("an old row", func(t *testing.T) {
 		chatID := requirementsChat(t)
-		// A row written before the migration that added photo_action and channel_action
-		// holds only chat_id; the column defaults must read as off.
-		if err := db.DB.Exec("INSERT INTO chat_requirements (chat_id) VALUES (?)", chatID).Error; err != nil {
-			t.Fatalf("insert an old-style row: %v", err)
+		// The SQLite harness builds its table from the model, which has no column defaults,
+		// so a row holding only chat_id can be inserted on PostgreSQL alone, where the
+		// migration-built schema carries the DEFAULT 0 that makes an old row read as off.
+		if db.DB.Dialector.Name() == "postgres" {
+			if err := db.DB.Exec("INSERT INTO chat_requirements (chat_id) VALUES (?)", chatID).Error; err != nil {
+				t.Fatalf("insert an old-style row: %v", err)
+			}
+			got, err := GetSettingsFresh(ctx, chatID)
+			if err != nil {
+				t.Fatalf("GetSettingsFresh: %v", err)
+			}
+			if actionsOf(got) != [7]int{} || AnyRuleOn(got) {
+				t.Errorf("old row read %v, want all seven rules off", actionsOf(got))
+			}
 		}
-		got, err := GetSettingsFresh(ctx, chatID)
+
+		// A value cached by the previous build has no photo or channel field; msgpack must
+		// decode both as 0 (off), never as a rule that is on.
+		type previousBuild struct {
+			ChatID         int64 `json:"chat_id,omitempty"`
+			LastNameAction int   `json:"last_name_action"`
+			UsernameAction int   `json:"username_action"`
+			RussianAction  int   `json:"russian_action"`
+			ArabicAction   int   `json:"arabic_action"`
+			ChineseAction  int   `json:"chinese_action"`
+			CheckOnJoin    bool  `json:"check_on_join"`
+			DeleteMessages bool  `json:"delete_messages"`
+		}
+		raw, err := msgpack.Marshal(previousBuild{ChatID: chatID, UsernameAction: models.RequirementActionKick, CheckOnJoin: true})
 		if err != nil {
-			t.Fatalf("GetSettingsFresh: %v", err)
+			t.Fatalf("encode the previous build's value: %v", err)
 		}
-		if actionsOf(got) != [7]int{} || got.PhotoAction != 0 || got.ChannelAction != 0 || AnyRuleOn(got) {
-			t.Errorf("old row read %v (photo %d, channel %d), want all seven rules off", actionsOf(got), got.PhotoAction, got.ChannelAction)
+		var decoded models.ChatRequirements
+		if err := msgpack.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("decode the previous build's value: %v", err)
+		}
+		if want := [7]int{0, 2, 0, 0, 0, 0, 0}; actionsOf(&decoded) != want || !decoded.CheckOnJoin {
+			t.Errorf("previous build's cached value decoded as %v (join %v), want %v with photo and channel off", actionsOf(&decoded), decoded.CheckOnJoin, want)
 		}
 	})
 

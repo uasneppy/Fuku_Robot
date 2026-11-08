@@ -3,7 +3,7 @@ package models
 import "time"
 
 // The punishments a group can choose for a broken member requirement. The values are
-// stored in the five action columns of chat_requirements (CHECK 0..4) and, from 1 to 4,
+// stored in the seven action columns of chat_requirements (CHECK 0..4) and, from 1 to 4,
 // in chat_requirement_holds.action.
 const (
 	// RequirementActionOff means the rule is not enforced.
@@ -33,6 +33,8 @@ type ChatRequirements struct {
 	RussianAction  int       `gorm:"column:russian_action;type:smallint;not null;check:chk_chat_requirements_russian,russian_action BETWEEN 0 AND 4" json:"russian_action"`
 	ArabicAction   int       `gorm:"column:arabic_action;type:smallint;not null;check:chk_chat_requirements_arabic,arabic_action BETWEEN 0 AND 4" json:"arabic_action"`
 	ChineseAction  int       `gorm:"column:chinese_action;type:smallint;not null;check:chk_chat_requirements_chinese,chinese_action BETWEEN 0 AND 4" json:"chinese_action"`
+	PhotoAction    int       `gorm:"column:photo_action;type:smallint;not null;check:chk_chat_requirements_photo,photo_action BETWEEN 0 AND 4" json:"photo_action"`
+	ChannelAction  int       `gorm:"column:channel_action;type:smallint;not null;check:chk_chat_requirements_channel,channel_action BETWEEN 0 AND 4" json:"channel_action"`
 	CheckOnJoin    bool      `gorm:"column:check_on_join;not null" json:"check_on_join"`
 	DeleteMessages bool      `gorm:"column:delete_messages;not null" json:"delete_messages"`
 	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
