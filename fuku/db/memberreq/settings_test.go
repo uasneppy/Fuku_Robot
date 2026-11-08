@@ -55,9 +55,9 @@ func storedRequirements(t *testing.T, chatID int64) (models.ChatRequirements, bo
 	return rows[0], true
 }
 
-// actionsOf returns the five actions in rule order.
-func actionsOf(row *models.ChatRequirements) [5]int {
-	var out [5]int
+// actionsOf returns the seven actions in rule order.
+func actionsOf(row *models.ChatRequirements) [7]int {
+	var out [7]int
 	for i, rule := range Rules {
 		out[i] = ActionOf(row, rule)
 	}
@@ -77,7 +77,7 @@ func TestChatRequirementsSettings(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s read: %v", name, err)
 			}
-			if got.ChatID != chatID || actionsOf(got) != [5]int{} || got.CheckOnJoin || got.DeleteMessages {
+			if got.ChatID != chatID || actionsOf(got) != [7]int{} || got.CheckOnJoin || got.DeleteMessages {
 				t.Errorf("%s read = %+v, want every rule off and both switches off for chat %d", name, got, chatID)
 			}
 			if AnyRuleOn(got) {
@@ -101,7 +101,7 @@ func TestChatRequirementsSettings(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetSettings: %v", err)
 		}
-		if want := [5]int{0, 0, 0, 3, 0}; actionsOf(got) != want {
+		if want := [7]int{0, 0, 0, 3, 0, 0, 0}; actionsOf(got) != want {
 			t.Errorf("actions = %v, want %v (the write must delete the cached read)", actionsOf(got), want)
 		}
 		if !AnyRuleOn(got) {
@@ -138,17 +138,43 @@ func TestChatRequirementsSettings(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetSettingsFresh: %v", err)
 		}
-		if want := [5]int{0, 2, 0, 0, 0}; actionsOf(got) != want {
+		if want := [7]int{0, 2, 0, 0, 0, 0, 0}; actionsOf(got) != want {
 			t.Errorf("actions after the switch writes = %v, want %v (switches never touch the actions)", actionsOf(got), want)
+		}
+
+		// The photo and channel rules have their own columns and touch nothing else.
+		if err := SetRuleAction(ctx, chatID, RulePhoto, models.RequirementActionMute); err != nil {
+			t.Fatalf("SetRuleAction(photo): %v", err)
+		}
+		got, err = GetSettings(ctx, chatID)
+		if err != nil {
+			t.Fatalf("GetSettings: %v", err)
+		}
+		if want := [7]int{0, 2, 0, 0, 0, 4, 0}; actionsOf(got) != want {
+			t.Errorf("actions after the photo write = %v, want %v (the write must delete the cached read)", actionsOf(got), want)
+		}
+		if err := SetRuleAction(ctx, chatID, RuleChannel, models.RequirementActionKick); err != nil {
+			t.Fatalf("SetRuleAction(channel, 2): %v", err)
+		}
+		if err := SetRuleAction(ctx, chatID, RuleChannel, models.RequirementActionOff); err != nil {
+			t.Fatalf("SetRuleAction(channel, 0): %v", err)
+		}
+		row, _ = storedRequirements(t, chatID)
+		if row.ChannelAction != 0 || row.PhotoAction != 4 || row.UsernameAction != 2 {
+			t.Errorf("stored (channel, photo, username) = (%d, %d, %d), want (0, 4, 2): a Go 0 must be written and no write may touch another column",
+				row.ChannelAction, row.PhotoAction, row.UsernameAction)
 		}
 	})
 
-	t.Run("two rules at once", func(t *testing.T) {
+	t.Run("several rules at once", func(t *testing.T) {
 		chatID := requirementsChat(t)
 		start := make(chan struct{})
 		var wg sync.WaitGroup
-		errs := make(chan error, 2)
-		for rule, action := range map[Rule]int{RuleRussian: models.RequirementActionWarn, RuleChinese: models.RequirementActionMute} {
+		errs := make(chan error, 4)
+		for rule, action := range map[Rule]int{
+			RuleRussian: models.RequirementActionWarn, RuleChinese: models.RequirementActionMute,
+			RulePhoto: models.RequirementActionBan, RuleChannel: models.RequirementActionKick,
+		} {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -168,7 +194,7 @@ func TestChatRequirementsSettings(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetSettingsFresh: %v", err)
 		}
-		if want := [5]int{0, 0, 1, 0, 4}; actionsOf(got) != want {
+		if want := [7]int{0, 0, 1, 0, 4, 3, 2}; actionsOf(got) != want {
 			t.Errorf("actions = %v, want %v", actionsOf(got), want)
 		}
 	})
@@ -180,8 +206,17 @@ func TestChatRequirementsSettings(t *testing.T) {
 				t.Errorf("action %d: err = %v, want ErrActionOutOfRange", action, err)
 			}
 		}
-		if err := SetRuleAction(ctx, chatID, Rule("nope"), 1); !errors.Is(err, ErrUnknownRule) {
-			t.Errorf("unknown rule: err = %v, want ErrUnknownRule", err)
+		for _, rule := range []Rule{RulePhoto, RuleChannel} {
+			for _, action := range []int{5, -1} {
+				if err := SetRuleAction(ctx, chatID, rule, action); !errors.Is(err, ErrActionOutOfRange) {
+					t.Errorf("%s action %d: err = %v, want ErrActionOutOfRange", rule, action, err)
+				}
+			}
+		}
+		for _, unknown := range []Rule{"nope", "profile_photo"} {
+			if err := SetRuleAction(ctx, chatID, unknown, 1); !errors.Is(err, ErrUnknownRule) {
+				t.Errorf("unknown rule %q: err = %v, want ErrUnknownRule", unknown, err)
+			}
 		}
 		if _, ok := storedRequirements(t, chatID); ok {
 			t.Error("a refused write created a row")
@@ -243,8 +278,24 @@ func TestChatRequirementsSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("an old row", func(t *testing.T) {
+		chatID := requirementsChat(t)
+		// A row written before the migration that added photo_action and channel_action
+		// holds only chat_id; the column defaults must read as off.
+		if err := db.DB.Exec("INSERT INTO chat_requirements (chat_id) VALUES (?)", chatID).Error; err != nil {
+			t.Fatalf("insert an old-style row: %v", err)
+		}
+		got, err := GetSettingsFresh(ctx, chatID)
+		if err != nil {
+			t.Fatalf("GetSettingsFresh: %v", err)
+		}
+		if actionsOf(got) != [7]int{} || got.PhotoAction != 0 || got.ChannelAction != 0 || AnyRuleOn(got) {
+			t.Errorf("old row read %v (photo %d, channel %d), want all seven rules off", actionsOf(got), got.PhotoAction, got.ChannelAction)
+		}
+	})
+
 	t.Run("rule order", func(t *testing.T) {
-		want := []Rule{"last_name", "username", "russian", "arabic", "chinese"}
+		want := []Rule{"last_name", "username", "russian", "arabic", "chinese", "photo", "channel"}
 		if len(Rules) != len(want) {
 			t.Fatalf("Rules = %v, want %v", Rules, want)
 		}
@@ -253,12 +304,18 @@ func TestChatRequirementsSettings(t *testing.T) {
 				t.Errorf("Rules[%d] = %q, want %q", i, Rules[i], want[i])
 			}
 		}
-		row := &models.ChatRequirements{LastNameAction: 1, UsernameAction: 2, RussianAction: 3, ArabicAction: 4}
-		if got := actionsOf(row); got != [5]int{1, 2, 3, 4, 0} {
-			t.Errorf("ActionOf per rule = %v, want [1 2 3 4 0]", got)
+		row := &models.ChatRequirements{LastNameAction: 1, UsernameAction: 2, RussianAction: 3, ArabicAction: 4, PhotoAction: 2, ChannelAction: 3}
+		if got := actionsOf(row); got != [7]int{1, 2, 3, 4, 0, 2, 3} {
+			t.Errorf("ActionOf per rule = %v, want [1 2 3 4 0 2 3]", got)
 		}
 		if !AnyRuleOn(&models.ChatRequirements{ChineseAction: 1}) {
 			t.Error("AnyRuleOn is false with Chinese on")
+		}
+		if !AnyRuleOn(&models.ChatRequirements{PhotoAction: 1}) {
+			t.Error("AnyRuleOn is false with only the photo rule on")
+		}
+		if !AnyRuleOn(&models.ChatRequirements{ChannelAction: 4}) {
+			t.Error("AnyRuleOn is false with only the channel rule on")
 		}
 		if AnyRuleOn(&models.ChatRequirements{}) {
 			t.Error("AnyRuleOn is true with every rule off")
