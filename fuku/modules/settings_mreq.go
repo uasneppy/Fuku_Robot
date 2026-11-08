@@ -615,9 +615,7 @@ func settingsMreqChannelGate(p *settingsPress, rule memberReqRule, stored *model
 			return true
 		}
 	}
-	p.answer(settingsText(p.tr, "settings_mreq_here_nolink", i18n.TranslationParams{
-		"rule": settingsText(p.tr, "settings_mreq_rule_channel"),
-	}), true)
+	p.answer(settingsMreqNoLinkAlert(p.tr), true)
 	if stored == nil {
 		var err error
 		if stored, err = settingsMreqRead(p.group.Id); err != nil {
@@ -628,6 +626,14 @@ func settingsMreqChannelGate(p *settingsPress, rule memberReqRule, stored *model
 	}
 	p.edit(renderSettingsMreqRuleScreenStatus(p.view(), rule, stored, "", status))
 	return false
+}
+
+// settingsMreqNoLinkAlert is the alert of a refused channel press: the no-link line with the
+// channel rule's translated name. It names no channel, group, member or setting.
+func settingsMreqNoLinkAlert(tr *i18n.Translator) string {
+	return settingsText(tr, "settings_mreq_here_nolink", i18n.TranslationParams{
+		"rule": settingsText(tr, "settings_mreq_rule_channel"),
+	})
 }
 
 // settingsMreqYesFields is the Validate of the my action: exactly t, v and e, t a rule code, v one

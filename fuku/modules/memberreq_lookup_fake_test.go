@@ -26,6 +26,8 @@ type mreqPhotoAnswer struct {
 	List bool
 	// Null answers a body of null.
 	Null bool
+	// FileID is the file_id of the listed photo; "f" when empty.
+	FileID string
 }
 
 // mreqLookupState is the state of the lookup fake. Two fakes (two replicas) share one state,
@@ -54,6 +56,10 @@ type mreqLookupState struct {
 	// at what exists at that moment (a hold row, a cap counter) or log the order of requests.
 	onPhoto   func(user int64)
 	onChannel func(method string, chat, user int64)
+
+	// titles is the title getChat reports for a chat that is no group of links (a channel):
+	// nothing of the bot asks for a channel's own record, so a title here is a leak detector.
+	titles map[int64]string
 }
 
 // mreqChannelMember is what the fake answers for getChatMember of one (chat, user).
@@ -84,7 +90,23 @@ func newMreqLookupState() *mreqLookupState {
 		members:   make(map[[2]int64]mreqChannelMember),
 		chanErrs:  make(map[string][]error),
 		chanGates: make(map[string]chan struct{}),
+		titles:    make(map[int64]string),
 	}
+}
+
+// setTitle makes getChat of chat (a channel) answer a record with this title.
+func (s *mreqLookupState) setTitle(chat int64, title string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.titles[chat] = title
+}
+
+// titleOf returns the title set for chat.
+func (s *mreqLookupState) titleOf(chat int64) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	title, ok := s.titles[chat]
+	return title, ok
 }
 
 // setOnPhoto installs the hook that runs when a getUserProfilePhotos request arrives.
@@ -282,6 +304,10 @@ func (f *mreqLookupFake) RequestWithContext(
 	case "getChat", "getChatMember":
 		chat := staffParamInt(params, "chat_id")
 		user := staffParamInt(params, "user_id")
+		if title, ok := f.state.titleOf(chat); ok && method == "getChat" {
+			f.record(method, params)
+			return json.RawMessage(fmt.Sprintf(`{"id":%d,"type":"channel","title":%q}`, chat, title)), nil
+		}
 		step := f.state.beginChannel(method, chat, user)
 		if !step.Handled {
 			return f.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
@@ -354,7 +380,11 @@ func (f *mreqLookupFake) photos(ctx context.Context, method string, params map[s
 	}
 	photos := `[]`
 	if answer.List {
-		photos = `[[{"file_id":"f","file_unique_id":"u","width":1,"height":1}]]`
+		fileID := answer.FileID
+		if fileID == "" {
+			fileID = "f"
+		}
+		photos = fmt.Sprintf(`[[{"file_id":%q,"file_unique_id":"u","width":1,"height":1}]]`, fileID)
 	}
 	return json.RawMessage(fmt.Sprintf(`{"total_count":%d,"photos":%s}`, answer.Total, photos)), nil
 }

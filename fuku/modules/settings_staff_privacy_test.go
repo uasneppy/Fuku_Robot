@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"strconv"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/adminindex"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -28,6 +31,15 @@ const (
 	// settingsStaffPrivacyDigits is the ID without its sign, so a leak that drops the minus
 	// is still found.
 	settingsStaffPrivacyDigits = "1009876543210"
+)
+
+// What the Phase 14 privacy checks hide besides the Staff Group: the linked channel's title and
+// ID (the fake knows both) and a held member's name. A screen, an alert or a message that holds
+// one of them leaks.
+const (
+	settingsPrivacyChannelTitle  = "ZZ Channel Marker"
+	settingsPrivacyChannelDigits = "1002468013579"
+	settingsPrivacyMemberName    = "ZZ Member Marker"
 )
 
 // settingsStaffPrivacyScreenText is everything a reader of a screen receives: its text, every
@@ -54,6 +66,49 @@ func settingsPrivacyMainRulesSet(tr *i18n.Translator, entries []settingsMainEntr
 		}
 	}
 	return out
+}
+
+// settingsPrivacyMainMreq is entries with the Requirements line reading the given state.
+func settingsPrivacyMainMreq(entries []settingsMainEntry, state string) []settingsMainEntry {
+	out := append([]settingsMainEntry(nil), entries...)
+	for i := range out {
+		if out[i].Key == settingsPageMreq {
+			out[i].State = state
+		}
+	}
+	return out
+}
+
+// settingsPrivacyMreqStatusScreens renders the Requirements page and every rule screen under
+// every status a draw can know (nothing read, a channel the bot administers, one it does not,
+// no link, an unreadable link and a basic group), for rules all Off and with every punishment
+// used, under a plain draw and under a warning notice, in each view. It renders through the
+// functions the code sends with, so it cannot drift from them.
+func settingsPrivacyMreqStatusScreens(views map[string]settingsView, notices []string, everyPunishment *models.ChatRequirements) map[string]settingsScreen {
+	statuses := map[string]settingsMreqStatus{
+		"unread":   {},
+		"ok":       {Channel: settingsMreqChannelOK},
+		"notadmin": {Channel: settingsMreqChannelNotAdmin},
+		"nolink":   {Channel: settingsMreqChannelNoLink},
+		"unknown":  {Channel: settingsMreqChannelUnknown},
+		"basic":    {Basic: true},
+	}
+	rows := map[string]*models.ChatRequirements{"all off": {}, "every punishment": everyPunishment}
+	screens := make(map[string]settingsScreen)
+	for viewName, view := range views {
+		for statusName, status := range statuses {
+			for rowName, row := range rows {
+				for _, i := range []int{0, 3} {
+					prefix := fmt.Sprintf("member requirements %s %s %s notice %d", viewName, statusName, rowName, i)
+					screens[prefix+" page"] = renderSettingsMreqPageStatus(view, row, notices[i], status)
+					for _, rule := range memberReqRules {
+						screens[prefix+" rule "+rule.Code] = renderSettingsMreqRuleScreenStatus(view, rule, row, notices[i], status)
+					}
+				}
+			}
+		}
+	}
+	return screens
 }
 
 func TestSettingsStaffPrivacy(t *testing.T) {
@@ -212,6 +267,17 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 						}
 					}
 				}
+				// Phase 14: the page and every rule screen under every channel status and in a basic
+				// group, Main with the new rules on and the two alerts of a refused channel press.
+				views := map[string]settingsView{"group": groupView, "private admin": privateAdminView}
+				for name, screen := range settingsPrivacyMreqStatusScreens(views, notices, everyPunishment) {
+					screens[name] = screen
+				}
+				rulesOn := settingsText(tr, "settings_state_mreq_on", i18n.TranslationParams{"n": len(memberReqRules)})
+				screens["main, every rule on"] = renderSettingsMain(groupView, settingsPrivacyMainMreq(mainEntries(settingsText(tr, "settings_state_linked")), rulesOn), "")
+				screens["private admin main, every rule on"] = renderSettingsMain(privateAdminView, settingsPrivacyMainMreq(mainEntries(settingsText(tr, "settings_state_linked")), rulesOn), "")
+				screens["alert of a refused channel press"] = settingsScreen{Text: settingsMreqNoLinkAlert(tr)}
+				screens["alert could not check"] = settingsScreen{Text: settingsText(tr, "mreq_fixed_check_failed")}
 				for i, notice := range notices {
 					name := fmt.Sprintf("notice %d", i)
 					screens["linked, "+name] = renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), notice)
@@ -228,9 +294,10 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					for _, leak := range []string{
 						settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
 						"ZZ Staff", settingsStaffPrivacyDigits,
+						settingsPrivacyChannelTitle, settingsPrivacyChannelDigits, settingsPrivacyMemberName,
 					} {
 						if strings.Contains(all, leak) {
-							t.Errorf("%s: a screen that must not name the Staff Group leaks %q: %q", name, leak, all)
+							t.Errorf("%s: a screen that must not name the Staff Group, the channel or a member leaks %q: %q", name, leak, all)
 						}
 					}
 				}
@@ -284,7 +351,8 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		private("a", settingsActMreqYes, "t", "ln", "v", "4", "e", settingsCardExpiry(time.Now()))
 		private("a", "st", "p", settingsPageMreq, "t", "un", "v", "1")
 		// The photo rule's screen (with its hint), its Warn press, its Mute card and the channel rule's
-		// screen and Off press (plan 14-10 adds the channel's strict presses).
+		// screen and Off press. The channel's strict presses need a linked channel (a press in a group
+		// with none is refused), so the Phase 14 runs below make them with one.
 		private("a", settingsActMreqOpen, "t", "ph")
 		private("a", "st", "p", settingsPageMreq, "t", "ph", "v", "1")
 		private("a", "st", "p", settingsPageMreq, "t", "ph", "v", "4")
@@ -464,6 +532,18 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		}
 	})
 
+	// Phase 14: the same administrator, who is not the creator, drives the Requirements page, the photo
+	// screen and the channel screen through a linked channel the fake knows by title and ID, a held
+	// member the fake knows by name, a Warn press on each new rule, a Mute card with its Yes, a lost
+	// bot standing, a lost link with its refused press and the two switches. Nothing the bot produced
+	// names the Staff Group, the channel, the member or a count.
+	t.Run("a private Phase 14 run by an admin who is not the creator names neither the Staff Group, the channel nor a member", func(t *testing.T) {
+		settingsPrivacyPhase14Run(t, true)
+	})
+	t.Run("a group menu Phase 14 run by an admin who is not the creator names neither the Staff Group, the channel nor a member", func(t *testing.T) {
+		settingsPrivacyPhase14Run(t, false)
+	})
+
 	t.Run("a group menu run never names a Staff Group", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		titles := []string{"ZZ Zero & <Ö>", "ZZ One & <Ö>", "ZZ Two & <Ö>"}
@@ -546,4 +626,133 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 			t.Errorf("the second Staff Group got %d link notices, want 1", got)
 		}
 	})
+}
+
+// settingsPrivacyPhase14Run is the Phase 14 run of an administrator who is not the creator, in the
+// private menu or in a menu opened in the group, over a group linked to a Staff Group, a channel
+// whose title and ID the fake knows and a held member whose name the fake knows.
+func settingsPrivacyPhase14Run(t *testing.T, private bool) {
+	t.Helper()
+	env := newSettingsEnv(t)
+	editCleanup(t, env.chat.Id)
+	staffChat := settingsStaffTestOwnedStaffGroup(env, settingsStaffPrivacyTitle)
+	linkLockdownGroupTo(env.lockdownEnv, staffChat)
+
+	withFastLookupPacer(t)
+	state := newMreqLookupState()
+	mreqInstallLookupFake(&memberReqEnv{settingsEnv: env}, state)
+	channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+	state.setTitle(channel, settingsPrivacyChannelTitle)
+
+	moderator := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Moderator"}
+	held := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: settingsPrivacyMemberName, Username: "zzmarkeruser"}
+	memberReqCleanup(t, []int64{env.chat.Id}, []int64{moderator.Id, held.Id})
+	env.fake.setMember(env.chat.Id, moderator.Id, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true,
+	})
+	env.fake.setProfile(held.Id, held.FirstName, "", held.Username)
+	if err := db.DB.Create(&models.User{UserId: held.Id, Name: held.FirstName, UserName: held.Username}).Error; err != nil {
+		t.Fatalf("create the held member's users row: %v", err)
+	}
+	created := time.Now().Add(-time.Hour)
+	won, err := memberreq.ClaimHold(context.Background(), &models.ChatRequirementHold{
+		ChatID: env.chat.Id, UserID: held.Id, Rules: mreqBitOf(t, "ph"), Action: models.RequirementActionMute,
+		CreatedAt: created, PunishedAt: &created, MuteUntil: memberReqMuteUntil(created),
+	})
+	if err != nil || !won {
+		t.Fatalf("seed the held member's hold: won = %t, error = %v", won, err)
+	}
+
+	var (
+		msgID  int64
+		press  func(kv ...string)
+		chatID = env.chat.Id
+	)
+	if private {
+		msgID, chatID = 4747, moderator.Id
+		press = func(kv ...string) { env.pressPrivate(moderator, msgID, env.privateFields(env.chat.Id, kv...)) }
+	} else {
+		msgID = env.openMenu(moderator)
+		press = func(kv ...string) { env.press(moderator, msgID, env.groupFields(moderator, kv...)) }
+	}
+	forgetLink := func() {
+		memberReqDeleteRedisKeys([]int64{env.chat.Id})
+		dbcache.ResetLocalForTest()
+	}
+
+	// The page and the photo screen with every rule still Off, then a Warn on the photo rule and its
+	// Mute card.
+	press("a", "op", "p", settingsPageMreq)
+	press("a", settingsActMreqOpen, "t", "ph")
+	press("a", "st", "p", settingsPageMreq, "t", "ph", "v", "1")
+	press("a", "st", "p", settingsPageMreq, "t", "ph", "v", "4")
+	// The channel screen (a fresh read), a Warn press (the link is checked live and holds), a Mute
+	// card and its Yes.
+	press("a", settingsActMreqOpen, "t", "ch")
+	press(settingsMreqChannelStrictKV(models.RequirementActionWarn)...)
+	press(settingsMreqChannelStrictKV(models.RequirementActionMute)...)
+	press("a", settingsActMreqYes, "t", "ch", "v", "4", "e", settingsCardExpiry(time.Now()))
+	// The bot loses its standing in the channel: the page and the channel screen say so.
+	state.setMember(channel, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+	forgetLink()
+	press("a", "op", "p", settingsPageMreq)
+	press("a", settingsActMreqOpen, "t", "ch")
+	// The group loses its link: the page says so, and a strict press is refused with the alert.
+	state.link(env.chat.Id, 0)
+	forgetLink()
+	press("a", "op", "p", settingsPageMreq)
+	press(settingsMreqChannelStrictKV(models.RequirementActionBan)...)
+	press(settingsMreqChannelStrictKV(models.RequirementActionWarn)...)
+	if !private {
+		// An unreadable link, in the menu opened in the group (a private press's own getChat of the group
+		// would use the scripted error first).
+		state.link(env.chat.Id, channel)
+		forgetLink()
+		state.scriptChat(env.chat.Id, staffFakeError(500, mreqLogDescription))
+		press("a", "op", "p", settingsPageMreq)
+	}
+	press("a", "tg", "p", settingsPageMreq, "t", settingsMreqControlJoin, "v", "1")
+	press("a", "tg", "p", settingsPageMreq, "t", settingsMreqControlDelete, "v", "1")
+	press("a", "st", "p", settingsPageMreq, "t", "ch", "v", "0")
+
+	var seen []string
+	for _, edit := range env.edits(chatID, msgID) {
+		seen = append(seen, fmt.Sprint(edit.Params["text"]))
+		for _, button := range settingsAllButtons(staffKeyboardOf(edit.Params["reply_markup"])) {
+			seen = append(seen, button.Text, button.CallbackData, button.Url)
+		}
+	}
+	for _, sent := range env.fake.sentTo(chatID) {
+		seen = append(seen, fmt.Sprint(sent.Params["text"]))
+	}
+	for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+		seen = append(seen, fmt.Sprint(answer.Params["text"]))
+	}
+	everything := strings.Join(seen, "\n")
+
+	if n := len(env.edits(chatID, msgID)); n < 12 {
+		t.Fatalf("the run edited the menu only %d times", n)
+	}
+	for _, wanted := range []string{"settings_mreq_here_notadmin", "settings_mreq_here_nolink"} {
+		if !containsMarker(everything, wanted) {
+			t.Errorf("the run never produced %s: %q", wanted, everything)
+		}
+	}
+	if !private && !containsMarker(everything, "settings_mreq_here_unknown") {
+		t.Errorf("the group menu run never produced settings_mreq_here_unknown: %q", everything)
+	}
+	if stored, ok := settingsMreqStored(t, env.chat.Id); !ok || stored.PhotoAction != models.RequirementActionWarn ||
+		stored.ChannelAction != models.RequirementActionOff || !stored.CheckOnJoin || !stored.DeleteMessages {
+		t.Errorf("stored settings = %+v (found %t), want the photo rule on Warn (its Mute card was never confirmed), the channel rule Off and both switches on", stored, ok)
+	}
+	for _, leak := range []string{
+		"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+		strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"),
+		settingsPrivacyChannelTitle, strings.TrimPrefix(strconv.FormatInt(channel, 10), "-"),
+		settingsPrivacyMemberName, "zzmarkeruser", strconv.FormatInt(held.Id, 10), mreqLogDescription,
+	} {
+		if strings.Contains(everything, leak) {
+			t.Errorf("a Phase 14 run of an admin who is not the creator received %q: %q", leak, everything)
+		}
+	}
 }
