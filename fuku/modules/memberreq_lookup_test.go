@@ -37,6 +37,15 @@ func mreqLookupUser(t *testing.T) int64 {
 	return id
 }
 
+// mreqSetKey stores the value 1 under key in the environment's Redis with a TTL.
+func mreqSetKey(t *testing.T, e *memberReqEnv, key string, ttl time.Duration) {
+	t.Helper()
+	if err := e.redis.Set(key, "1"); err != nil {
+		t.Fatalf("set %s: %v", key, err)
+	}
+	e.redis.SetTTL(key, ttl)
+}
+
 // mreqPhoto runs the photo rule for userID with a 5 s caller deadline.
 func mreqPhoto(e *memberReqEnv, userID int64, mode memberReqLookupMode) memberReqVerdict {
 	e.t.Helper()
@@ -174,9 +183,8 @@ func TestMemberReqPhotoRule(t *testing.T) {
 			mreqSwap(t, &memberReqLookupFlightTimeout, 60*time.Millisecond)
 			t.Cleanup(s.hold(u))
 		}, 1},
-		{"a pacer shed behind a long shared block", func(_ *testing.T, e *memberReqEnv, _ *mreqLookupState, _ int64) {
-			e.redis.Set("fuku:memberreq:lkp:pace:block", "1")
-			e.redis.SetTTL("fuku:memberreq:lkp:pace:block", time.Minute)
+		{"a pacer shed behind a long shared block", func(t *testing.T, e *memberReqEnv, _ *mreqLookupState, _ int64) {
+			mreqSetKey(t, e, "fuku:memberreq:lkp:pace:block", time.Minute)
 		}, 0},
 	}
 	for _, tc := range failures {
@@ -221,8 +229,7 @@ func TestMemberReqPhotoRule(t *testing.T) {
 		// A stale positive for the member with no photo, a short-lived one for the other.
 		for _, user := range []int64{withPhoto, without} {
 			key := memberReqPhotoKey(user)
-			env.redis.Set(key, "1")
-			env.redis.SetTTL(key, time.Minute)
+			mreqSetKey(t, env, key, time.Minute)
 		}
 		if got := mreqPhoto(env, without, memberReqLookupMode{}); got != memberReqPass {
 			t.Fatalf("a cached positive without Fresh = %d, want pass", got)
@@ -579,8 +586,7 @@ func TestMemberReqLookupPacer(t *testing.T) {
 	t.Run("a slot more than MaxWait away is shed as rate limited with no request and no slot taken", func(t *testing.T) {
 		env, state := mreqLookupEnv(t)
 		user := mreqLookupUser(t)
-		env.redis.Set(blockKey, "1")
-		env.redis.SetTTL(blockKey, 30*time.Second)
+		mreqSetKey(t, env, blockKey, 30*time.Second)
 		t.Cleanup(func() { env.redis.Del(blockKey) })
 
 		err := memberReqLookupPaced(context.Background(), func(ctx context.Context) error {
