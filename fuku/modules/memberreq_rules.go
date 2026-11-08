@@ -232,16 +232,36 @@ func memberReqDisplayName(u gotgbot.User) (string, bool) {
 	return "", false
 }
 
+// memberReqStripBidi drops the bidirectional controls U+061C, U+200E, U+200F, U+202A to
+// U+202E and U+2066 to U+2069 from s and keeps every other character (a zero-width joiner and
+// every letter stay). A name that carried U+2069 could close the isolate memberReqMention
+// opens, and a U+202E after it would reorder the rest of the notice line.
+func memberReqStripBidi(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == 0x061c, r == 0x200e, r == 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069:
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // memberReqMention names u in a group notice as a link to the user (so the member is
-// notified), with the chosen name, or fallback when there is none, cut to 64 runes and
-// wrapped in the isolates U+2068 and U+2069 so a right-to-left name cannot reorder the
-// sentence around it. formatting.MentionHtml escapes the text. The result is spliced into
-// a notice after translation; a member's name never passes through the translator. It
-// logs nothing.
+// notified), with the chosen name, or fallback when there is none, stripped of its
+// bidirectional controls (memberReqStripBidi), cut to 64 runes and wrapped in the isolates
+// U+2068 and U+2069 so a right-to-left name cannot reorder the sentence around it and cannot
+// close the isolate itself. A name that is empty after the strip shows the fallback.
+// formatting.MentionHtml escapes the text. Only the display is stripped: the rules judge the
+// original name. The result is spliced into a notice after translation; a member's name never
+// passes through the translator. It logs nothing.
 func memberReqMention(u gotgbot.User, fallback string) string {
 	name, ok := memberReqDisplayName(u)
 	if !ok {
 		name = fallback
+	}
+	name = memberReqStripBidi(name)
+	if name == "" {
+		name = memberReqStripBidi(fallback)
 	}
 	if runes := []rune(name); len(runes) > memberReqNameCap {
 		name = string(runes[:memberReqNameCap])

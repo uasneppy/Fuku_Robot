@@ -1265,13 +1265,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   applied, absent backs off, an unreadable record leaves the hold pending, and a kick or ban with an unknown answer
   leaves it pending with no notice. A reclaimed pending mute hold whose old marker is still live on the member adopts it
   (`memberReqLiveMarker`) instead of muting twice. One notice per episode is a new message in the group's language,
-  sent after the punishment took effect, with the member's mention (`memberReqMention`) spliced in after translation and
+  sent after the punishment took effect, with the member's mention (`memberReqMention`, the one helper of the notices and
+  of the "I fixed it" edit, which strips the bidirectional controls U+061C, U+200E, U+200F, U+202A to U+202E and U+2066 to
+  U+2069 from the name before it is cut to 64 runes and wrapped in its own isolate, so a name cannot close the isolate and
+  reorder the line; the rules still judge the original name) spliced in after translation and
   every broken rule whose punishment is not Off in rule order; only a mute carries the `mreq|v1` "I fixed it" button
   (`a=f`, `h`, `u`). A mute notice is never dropped by pacing: `memberReqPostNotice` waits
   `memberReqNoticeRateLimitWait` and sends again whenever the pacer gives up on it, until its context or
   `memberReqMuteNoticeBudget` ends, and every notice whose send failed otherwise is retried once (a notice without a
   button is not retried after `ErrRateLimited`). A mute whose notice still cannot be delivered is never left in place
-  without its button: `memberReqUndeliveredMute` lifts it through `memberReqUnmutePermissions` (one paced `getChat`, then
+  without its button: `memberReqUndeliveredMute` first makes one paced live `getChatMember` (`memberReqLiveMember`) and
+  lifts only while `isMemberReqMute` still holds for the hold's marker, because a notice that waits out a rate limit can
+  take up to 5 minutes and an admin may have restricted, unmuted or banned the member, or the member left, meanwhile:
+  when the live record does not carry the marker nothing is lifted and no `restrictChatMember` is sent, the hold still
+  goes back to pending and one Warn (IDs only) says so, and when the read itself fails the lift goes ahead anyway (a
+  failed read on top of a failed notice is a double fault, and a member left under a 330 day mute with no button is the
+  worse outcome, so this fails toward lifting). The lift goes through `memberReqUnmutePermissions` (one paced `getChat`, then
   `resolveUnmutePermissionsWithLockdown`, so an active lockdown's stored permissions apply) and `memberReqLiftMute` (one
   paced `restrictChatMember`, no end date), on a context that survives the run's cancellation, and turns the hold back
   into a pending backoff row with `memberreq.RevertHoldToPending` (`punished_at` NULL, `created_at` now), so the
