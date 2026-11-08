@@ -1134,8 +1134,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   predicate, clear all, take before a join) are fresh database statements too. The hold is read fresh, never cached (so no
   `DeleteCache` applies), never touches Redis and works without it, and is never part of backup, export, import or reset.
   A detected leave (`leftMember`) deletes every hold of the member in the chat (`ClearHolds`); a rejoin deletes only the
-  holds created before the join's own date (`TakeHoldsBefore`) and lifts a live marker mute of a punished mute hold first
-  (restoring the hold on failure), and a leave that Telegram does not report (restricted to restricted) is settled the same
+  holds created before the join's own date (`TakeHoldsBefore`) and lifts a live marker mute of a mute hold first, punished or
+  still pending (WR-03: the restrict may have taken effect before the hold was marked; restoring the hold on failure), and a leave that Telegram does not report (restricted to restricted) is settled the same
   way at the rejoin, never by deleting a mute hold at the leave.
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
@@ -1312,8 +1312,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   date as now) and fill `Reset` with `memberReqJoinReset`. A requirement-muted member's leave and rejoin are invisible to
   the `chat_member` handlers (`ExtractJoinLeftStatusChange` reads restricted to restricted as neither a leave nor a join),
   so the rejoin's service message is what ends that episode: the reset deletes the member's holds created before the join
-  date (`memberreq.TakeHoldsBefore`, so a hold the watcher created for this very membership survives) and, for a punished
-  mute hold, reads the live record and lifts the mute only while it still carries the hold's marker (`isMemberReqMute`; an
+  date (`memberreq.TakeHoldsBefore`, so a hold the watcher created for this very membership survives) and, for a mute hold
+  (punished or still pending, because a restrict whose mark failed or never ran leaves a pending hold with a live marker),
+  reads the live record and lifts the mute only while it still carries the hold's marker (`isMemberReqMute`; an
   admin's, staff's or captcha's mute is never lifted), only with permissions from
   `resolveUnmutePermissionsWithLockdown` (`memberReqUnmutePermissions`, `memberReqLiftMute`), and puts the hold back with its
   ID and notice ID (`memberreq.RestoreHold`) when any step of the lift fails, so the next join retries; the member is then

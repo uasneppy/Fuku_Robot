@@ -179,7 +179,8 @@ func memberReqJoinDate(unix int64) time.Time {
 //
 // It deletes only the holds created before joinDate (memberreq.TakeHoldsBefore), so a hold the
 // watcher created for this very membership, because the member posted before their join was
-// processed, survives. For a punished mute hold it reads the member's live record and lifts the
+// processed, survives. For a mute hold, punished or still pending (the restrict may have taken
+// effect before the hold was marked), it reads the member's live record and lifts the
 // mute only while that record still carries the hold's marker (isMemberReqMute): an admin's,
 // staff's or captcha's mute replaced the end date and is never ours to lift. The lift uses only
 // memberReqUnmutePermissions (the group's live defaults, or an active lockdown's stored
@@ -198,7 +199,10 @@ func memberReqJoinReset(bot *gotgbot.Bot, chat *gotgbot.Chat, user gotgbot.User,
 		return
 	}
 	for i := range holds {
-		if !memberReqPunishedMute(&holds[i]) {
+		// A pending mute hold too (WR-03): the restrict may have taken effect before the hold was
+		// marked punished, and this reset deletes the only record of its marker. The lift checks the
+		// live marker, so a pending hold whose restrict never landed is a no-op.
+		if holds[i].Action != models.RequirementActionMute {
 			continue
 		}
 		liftErr := memberReqLiftOldMute(ctx, bot, chat.Id, user.Id, &holds[i])
@@ -215,7 +219,7 @@ func memberReqJoinReset(bot *gotgbot.Bot, chat *gotgbot.Chat, user gotgbot.User,
 	}
 }
 
-// memberReqLiftOldMute lifts a punished requirement mute at the rejoin, only while the member's
+// memberReqLiftOldMute lifts a requirement mute at the rejoin, only while the member's
 // live record still carries the hold's marker. A record that does not carry it (an admin's mute,
 // no restriction left) is nothing to lift and no error.
 func memberReqLiftOldMute(ctx context.Context, bot *gotgbot.Bot, chatID, userID int64, hold *models.ChatRequirementHold) error {
