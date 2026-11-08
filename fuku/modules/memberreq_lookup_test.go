@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -736,6 +737,109 @@ func TestMemberReqLinkedChannel(t *testing.T) {
 			t.Error("an error was cached")
 		}
 	})
+
+	t.Run("a null answer is not known and writes nothing", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		state.nullGetChat(env.chat.Id)
+		if got, known := mreqLinked(env, memberReqLookupMode{}); known || got != 0 {
+			t.Fatalf("linked channel = (%d, %v), want (0, false)", got, known)
+		}
+		if env.redis.Exists(memberReqLinkedKey(env.chat.Id)) {
+			t.Error("a null answer was cached")
+		}
+	})
+
+	t.Run("a positive linked_chat_id reads as none and is not cached", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		state.link(env.chat.Id, 424242)
+		mreqLookupCleanup(t, nil, []int64{env.chat.Id})
+		if got, known := mreqLinked(env, memberReqLookupMode{}); !known || got != 0 {
+			t.Fatalf("linked channel = (%d, %v), want (0, true)", got, known)
+		}
+		if env.redis.Exists(memberReqLinkedKey(env.chat.Id)) {
+			t.Error("a positive linked_chat_id was cached")
+		}
+	})
+
+	failures := []struct {
+		name  string
+		setup func(t *testing.T, env *memberReqEnv, state *mreqLookupState)
+	}{
+		{"a 403", func(_ *testing.T, e *memberReqEnv, s *mreqLookupState) {
+			s.scriptChat(e.chat.Id, staffFakeError(403, "Forbidden"))
+		}},
+		{"a 429 that keeps coming", func(_ *testing.T, e *memberReqEnv, s *mreqLookupState) {
+			s.scriptChat(e.chat.Id, staffFake429(1), staffFake429(1))
+		}},
+		{"a timeout", func(t *testing.T, e *memberReqEnv, s *mreqLookupState) {
+			mreqSwap(t, &memberReqLookupFlightTimeout, 60*time.Millisecond)
+			t.Cleanup(s.holdKey(mreqChannelKey("getChat", e.chat.Id, 0)))
+		}},
+		{"a pacer shed", func(t *testing.T, e *memberReqEnv, _ *mreqLookupState) {
+			mreqSetKey(t, e, "fuku:memberreq:lkp:pace:block", time.Minute)
+			t.Cleanup(func() { e.redis.Del("fuku:memberreq:lkp:pace:block") })
+		}},
+	}
+	for _, tc := range failures {
+		t.Run(tc.name+" is not known and writes nothing", func(t *testing.T) {
+			env, state := mreqLookupEnv(t)
+			mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			tc.setup(t, env, state)
+			if got, known := mreqLinked(env, memberReqLookupMode{}); known || got != 0 {
+				t.Fatalf("linked channel = (%d, %v), want (0, false)", got, known)
+			}
+			if env.redis.Exists(memberReqLinkedKey(env.chat.Id)) {
+				t.Error("a failure was cached")
+			}
+		})
+	}
+
+	t.Run("a cancelled context is not known and asks nobody", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, known := memberReqLinkedChannel(ctx, env.bot, env.chat.Id, memberReqLookupMode{}); known {
+			t.Fatal("a cancelled context was known")
+		}
+		if n := mreqChatCalls(env, env.chat.Id); n != 0 {
+			t.Errorf("getChat requests = %d, want 0", n)
+		}
+	})
+
+	t.Run("Fresh bypasses a cached link and refreshes it, and an unreadable cached value is a miss", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		key := memberReqLinkedKey(env.chat.Id)
+		if err := env.redis.Set(key, "0"); err != nil {
+			t.Fatal(err)
+		}
+		if got, known := mreqLinked(env, memberReqLookupMode{}); !known || got != 0 {
+			t.Fatalf("cached none = (%d, %v), want (0, true)", got, known)
+		}
+		if n := mreqChatCalls(env, env.chat.Id); n != 0 {
+			t.Fatalf("getChat requests from the cache = %d, want 0", n)
+		}
+		if got, known := mreqLinked(env, memberReqLookupMode{Fresh: true}); !known || got != channel {
+			t.Fatalf("Fresh = (%d, %v), want (%d, true)", got, known, channel)
+		}
+		if value, err := env.redis.Get(key); err != nil || value != strconv.FormatInt(channel, 10) {
+			t.Errorf("refreshed value = %q (%v), want the channel ID", value, err)
+		}
+		for _, junk := range []string{"abc", "7"} {
+			if err := env.redis.Set(key, junk); err != nil {
+				t.Fatal(err)
+			}
+			before := mreqChatCalls(env, env.chat.Id)
+			if got, known := mreqLinked(env, memberReqLookupMode{}); !known || got != channel {
+				t.Fatalf("junk %q = (%d, %v), want (%d, true)", junk, got, known, channel)
+			}
+			if mreqChatCalls(env, env.chat.Id) != before+1 {
+				t.Errorf("junk %q was served from the cache, want a miss", junk)
+			}
+		}
+	})
 }
 
 func TestMemberReqChannelRule(t *testing.T) {
@@ -802,6 +906,529 @@ func TestMemberReqChannelRule(t *testing.T) {
 		}
 		if n := len(env.fake.callsFor("getChatMember")); n != 0 {
 			t.Errorf("getChatMember requests = %d, want 0", n)
+		}
+	})
+
+	t.Run("a subscribed answer passes and anything else that says not subscribed is a breach only with an administrator bot", func(t *testing.T) {
+		answers := []struct {
+			name   string
+			answer mreqChannelMember
+			want   memberReqVerdict // with an administrator bot
+		}{
+			{"creator", mreqChannelMember{Status: gotgbot.ChatMemberStatusCreator}, memberReqPass},
+			{"administrator", mreqChannelMember{Status: gotgbot.ChatMemberStatusAdministrator}, memberReqPass},
+			{"member", mreqChannelMember{Status: gotgbot.ChatMemberStatusMember}, memberReqPass},
+			{"restricted with is_member", mreqChannelMember{Status: gotgbot.ChatMemberStatusRestricted, IsMember: true}, memberReqPass},
+			{"restricted without is_member", mreqChannelMember{Status: gotgbot.ChatMemberStatusRestricted}, memberReqBreach},
+			{"left", mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft}, memberReqBreach},
+			{"kicked", mreqChannelMember{Status: gotgbot.ChatMemberStatusKicked}, memberReqBreach},
+		}
+		for _, tc := range answers {
+			env, state := mreqLookupEnv(t)
+			channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			user := mreqLookupUser(t)
+			state.setMember(channel, user, tc.answer)
+			if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != tc.want {
+				t.Errorf("%s with an administrator bot: verdict = %d, want %d", tc.name, got, tc.want)
+			}
+			if cached := env.redis.Exists(memberReqSubKey(channel, user)); cached != (tc.want == memberReqPass) {
+				t.Errorf("%s: subscription key cached = %v, want %v (a pass only)", tc.name, cached, tc.want == memberReqPass)
+			}
+
+			// The same answer to a bot that is not an administrator is never a breach.
+			state.setMember(channel, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+			env.redis.Del(memberReqBotAdminKey(channel))
+			env.redis.Del(memberReqSubKey(channel, user))
+			wantInert := tc.want
+			if tc.want == memberReqBreach {
+				wantInert = memberReqInert
+			}
+			if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != wantInert {
+				t.Errorf("%s with a member bot: verdict = %d, want %d", tc.name, got, wantInert)
+			}
+		}
+	})
+
+	// Every member-lookup failure is unknown, caches nothing and never asks about the bot's
+	// standing: the bot here is an administrator, so a candidate would be a breach.
+	failures := []struct {
+		name  string
+		setup func(t *testing.T, env *memberReqEnv, state *mreqLookupState, channel, user int64)
+	}{
+		{"a plain error", func(_ *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			s.scriptMember(c, u, errors.New("boom"))
+		}},
+		{"a 400", func(_ *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			s.scriptMember(c, u, staffFakeError(400, "Bad Request: PARTICIPANT_ID_INVALID"))
+		}},
+		{"a 403", func(_ *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			s.scriptMember(c, u, staffFakeError(403, "Forbidden: bot was kicked from the channel chat"))
+		}},
+		{"a 429 that keeps coming", func(_ *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			s.scriptMember(c, u, staffFake429(1), staffFake429(1))
+		}},
+		{"a 500", func(_ *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			s.scriptMember(c, u, staffFakeError(500, "Internal Server Error"))
+		}},
+		{"a timeout", func(t *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			mreqSwap(t, &memberReqLookupFlightTimeout, 60*time.Millisecond)
+			t.Cleanup(s.holdKey(mreqChannelKey("getChatMember", c, u)))
+		}},
+		{"a pacer shed", func(t *testing.T, e *memberReqEnv, _ *mreqLookupState, _, _ int64) {
+			// The link is cached first, so the shed hits the member lookup.
+			if _, known := mreqLinked(e, memberReqLookupMode{}); !known {
+				t.Fatal("the linked channel was not read")
+			}
+			mreqSetKey(t, e, "fuku:memberreq:lkp:pace:block", time.Minute)
+			t.Cleanup(func() { e.redis.Del("fuku:memberreq:lkp:pace:block") })
+		}},
+		{"a null answer", func(_ *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			s.setMember(c, u, mreqChannelMember{Null: true})
+		}},
+		{"an unrecognised status", func(_ *testing.T, _ *memberReqEnv, s *mreqLookupState, c, u int64) {
+			s.setMember(c, u, mreqChannelMember{Status: "something_new"})
+		}},
+	}
+	for _, tc := range failures {
+		t.Run(tc.name+" is unknown, caches nothing and never reads the bot's status", func(t *testing.T) {
+			env, state := mreqLookupEnv(t)
+			channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			user := mreqLookupUser(t)
+			tc.setup(t, env, state, channel, user)
+
+			if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqUnknown {
+				t.Fatalf("verdict = %d, want unknown", got)
+			}
+			if env.redis.Exists(memberReqSubKey(channel, user)) || env.redis.Exists(memberReqBotAdminKey(channel)) {
+				t.Error("an unknown answer wrote a cache key")
+			}
+			if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
+				t.Errorf("bot status requests = %d, want 0 (no extra call without Classify)", n)
+			}
+		})
+	}
+
+	t.Run("a cancelled context is unknown and asks nobody", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		user := mreqLookupUser(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if got := memberReqChannelRule(ctx, env.bot, env.chat.Id, user, memberReqLookupMode{}); got != memberReqUnknown {
+			t.Fatalf("verdict = %d, want unknown", got)
+		}
+		if n := len(env.fake.callsFor("getChat")) + mreqMemberCalls(env, channel, user); n != 0 {
+			t.Errorf("requests = %d, want 0", n)
+		}
+	})
+
+	t.Run("an unreadable link is unknown and asks about no member", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		user := mreqLookupUser(t)
+		state.scriptChat(env.chat.Id, staffFakeError(500, "Internal Server Error"))
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqUnknown {
+			t.Fatalf("verdict = %d, want unknown", got)
+		}
+		if n := mreqMemberCalls(env, channel, user); n != 0 {
+			t.Errorf("member requests = %d, want 0", n)
+		}
+	})
+
+	t.Run("the bot's status is read only for a candidate", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		passing, leaving := mreqLookupUser(t), mreqLookupUser(t)
+		state.setMember(channel, passing, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+		state.setMember(channel, leaving, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+		mreqChannelVerdict(env, passing, memberReqLookupMode{})
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
+			t.Fatalf("bot status requests after a pass = %d, want 0", n)
+		}
+		mreqChannelVerdict(env, leaving, memberReqLookupMode{})
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 1 {
+			t.Errorf("bot status requests after a candidate = %d, want 1", n)
+		}
+	})
+
+	t.Run("Classify makes a lost lookup inert for a bot that is no administrator and nothing else", func(t *testing.T) {
+		unanswerable := []struct {
+			name  string
+			setup func(s *mreqLookupState, c, u int64)
+		}{
+			{"a plain error", func(s *mreqLookupState, c, u int64) { s.scriptMember(c, u, errors.New("boom")) }},
+			{"a null answer", func(s *mreqLookupState, c, u int64) { s.setMember(c, u, mreqChannelMember{Null: true}) }},
+			{"an unrecognised status", func(s *mreqLookupState, c, u int64) { s.setMember(c, u, mreqChannelMember{Status: "something_new"}) }},
+		}
+		bots := []struct {
+			name string
+			set  func(t *testing.T, s *mreqLookupState, c int64)
+			want memberReqVerdict
+		}{
+			{"member", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+			}, memberReqInert},
+			{"left", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+			}, memberReqInert},
+			{"kicked", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusKicked})
+			}, memberReqInert},
+			{"restricted", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusRestricted})
+			}, memberReqInert},
+			{"a 400", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFakeError(400, "Bad Request: chat not found"))
+			}, memberReqInert},
+			{"a 403", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFakeError(403, "Forbidden: bot was kicked"))
+			}, memberReqInert},
+			{"an administrator", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusAdministrator})
+			}, memberReqUnknown},
+			{"a 429", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFake429(1), staffFake429(1))
+			}, memberReqUnknown},
+			{"a 500", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFakeError(500, "Internal"))
+			}, memberReqUnknown},
+			{"a timeout", func(t *testing.T, s *mreqLookupState, c int64) {
+				mreqSwap(t, &memberReqLookupFlightTimeout, 60*time.Millisecond)
+				t.Cleanup(s.holdKey(mreqChannelKey("getChatMember", c, staffTestBotID)))
+			}, memberReqUnknown},
+		}
+		for _, lost := range unanswerable {
+			for _, bot := range bots {
+				t.Run(lost.name+" with a bot that is "+bot.name, func(t *testing.T) {
+					env, state := mreqLookupEnv(t)
+					channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+					user := mreqLookupUser(t)
+					lost.setup(state, channel, user)
+					bot.set(t, state, channel)
+					if got := mreqChannelVerdict(env, user, memberReqLookupMode{Classify: true}); got != bot.want {
+						t.Fatalf("verdict = %d, want %d", got, bot.want)
+					}
+					if env.redis.Exists(memberReqSubKey(channel, user)) {
+						t.Error("a lost lookup wrote the subscription key")
+					}
+				})
+			}
+		}
+	})
+
+	t.Run("without Classify the same lost lookup makes no bot status request", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+		user := mreqLookupUser(t)
+		state.scriptMember(channel, user, errors.New("boom"))
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqUnknown {
+			t.Fatalf("verdict = %d, want unknown", got)
+		}
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
+			t.Errorf("bot status requests = %d, want 0", n)
+		}
+	})
+
+	t.Run("Classify does not touch a pass or a candidate", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+		passing, leaving := mreqLookupUser(t), mreqLookupUser(t)
+		state.setMember(channel, passing, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+		state.setMember(channel, leaving, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+		if got := mreqChannelVerdict(env, passing, memberReqLookupMode{Classify: true}); got != memberReqPass {
+			t.Errorf("a subscribed member = %d, want pass", got)
+		}
+		if got := mreqChannelVerdict(env, leaving, memberReqLookupMode{Classify: true}); got != memberReqInert {
+			t.Errorf("a leaving member of a channel the bot does not administer = %d, want inert", got)
+		}
+	})
+}
+
+// mreqBotStatus runs the bot-status lookup of channel with a 5 s deadline.
+func mreqBotStatus(e *memberReqEnv, channel int64, mode memberReqLookupMode) memberReqBotStatus {
+	e.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return memberReqBotChannelStatus(ctx, e.bot, channel, mode)
+}
+
+func TestMemberReqBotStatusClassifier(t *testing.T) {
+	merged := func(status string) gotgbot.MergedChatMember { return gotgbot.MergedChatMember{Status: status} }
+	wrapped := func(err error) error { return fmt.Errorf("lookup failed: %w", err) }
+
+	t.Run("pure: the status without an error", func(t *testing.T) {
+		cases := []struct {
+			status string
+			want   memberReqBotStatus
+		}{
+			{gotgbot.ChatMemberStatusAdministrator, memberReqBotAdmin},
+			{gotgbot.ChatMemberStatusCreator, memberReqBotAdmin},
+			{gotgbot.ChatMemberStatusMember, memberReqBotNotAdmin},
+			{gotgbot.ChatMemberStatusRestricted, memberReqBotNotAdmin},
+			{gotgbot.ChatMemberStatusLeft, memberReqBotNotAdmin},
+			{gotgbot.ChatMemberStatusKicked, memberReqBotNotAdmin},
+			{"", memberReqBotUnknown},
+			{"something_new", memberReqBotUnknown},
+		}
+		for _, tc := range cases {
+			if got := memberReqClassifyBot(merged(tc.status), nil); got != tc.want {
+				t.Errorf("status %q = %d, want %d", tc.status, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("pure: an error is classified by its code alone", func(t *testing.T) {
+		cases := []struct {
+			name string
+			err  error
+			want memberReqBotStatus
+		}{
+			{"400", staffFakeError(400, "Bad Request: CHAT_ADMIN_REQUIRED"), memberReqBotNotAdmin},
+			{"400 chat not found", staffFakeError(400, "Bad Request: chat not found"), memberReqBotNotAdmin},
+			{"400 wrapped", wrapped(staffFakeError(400, "anything")), memberReqBotNotAdmin},
+			{"400 with no description", staffFakeError(400, ""), memberReqBotNotAdmin},
+			{"403", staffFakeError(403, "Forbidden: bot was kicked from the channel chat"), memberReqBotNotAdmin},
+			{"403 wrapped", wrapped(staffFakeError(403, "Forbidden")), memberReqBotNotAdmin},
+			{"429", staffFake429(1), memberReqBotUnknown},
+			{"429 wrapped", wrapped(staffFake429(1)), memberReqBotUnknown},
+			{"shed", fmt.Errorf("%w: next slot is 1m away", ratelimit.ErrRateLimited), memberReqBotUnknown},
+			{"401", staffFakeError(401, "Unauthorized"), memberReqBotUnknown},
+			{"404", staffFakeError(404, "Not Found"), memberReqBotUnknown},
+			{"409", staffFakeError(409, "Conflict"), memberReqBotUnknown},
+			{"500", staffFakeError(500, "Internal Server Error"), memberReqBotUnknown},
+			{"500 whose text says chat not found", staffFakeError(500, "Bad Request: chat not found"), memberReqBotUnknown},
+			{"502", staffFakeError(502, "Bad Gateway"), memberReqBotUnknown},
+			{"a transport error", errors.New("connection reset by peer"), memberReqBotUnknown},
+			{"a transport error that says chat not found", errors.New("chat not found"), memberReqBotUnknown},
+			{"a deadline", context.DeadlineExceeded, memberReqBotUnknown},
+			{"a cancelled context", context.Canceled, memberReqBotUnknown},
+		}
+		for _, tc := range cases {
+			// An error wins over a status, so even an administrator-looking answer that came
+			// with an error is judged by the error alone.
+			if got := memberReqClassifyBot(merged(gotgbot.ChatMemberStatusAdministrator), tc.err); got != tc.want {
+				t.Errorf("%s = %d, want %d", tc.name, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("the lookup classifies what the fake answers and caches only an administrator", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			setup func(t *testing.T, s *mreqLookupState, c int64)
+			want  memberReqBotStatus
+		}{
+			{"administrator", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusAdministrator})
+			}, memberReqBotAdmin},
+			{"creator", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusCreator})
+			}, memberReqBotAdmin},
+			{"member", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+			}, memberReqBotNotAdmin},
+			{"left", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+			}, memberReqBotNotAdmin},
+			{"a null answer", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Null: true})
+			}, memberReqBotUnknown},
+			{"an unrecognised status", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: "something_new"})
+			}, memberReqBotUnknown},
+			{"a 400", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFakeError(400, "Bad Request: chat not found"))
+			}, memberReqBotNotAdmin},
+			{"a 403", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFakeError(403, "Forbidden"))
+			}, memberReqBotNotAdmin},
+			{"a 429 that keeps coming", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFake429(1), staffFake429(1))
+			}, memberReqBotUnknown},
+			{"a 500 whose text says chat not found", func(_ *testing.T, s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFakeError(500, "Bad Request: chat not found"))
+			}, memberReqBotUnknown},
+			{"a plain error", func(_ *testing.T, s *mreqLookupState, c int64) { s.scriptMember(c, staffTestBotID, errors.New("boom")) }, memberReqBotUnknown},
+			{"a timeout", func(t *testing.T, s *mreqLookupState, c int64) {
+				mreqSwap(t, &memberReqLookupFlightTimeout, 60*time.Millisecond)
+				t.Cleanup(s.holdKey(mreqChannelKey("getChatMember", c, staffTestBotID)))
+			}, memberReqBotUnknown},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				env, state := mreqLookupEnv(t)
+				channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+				tc.setup(t, state, channel)
+				if got := mreqBotStatus(env, channel, memberReqLookupMode{}); got != tc.want {
+					t.Fatalf("status = %d, want %d", got, tc.want)
+				}
+				if cached := env.redis.Exists(memberReqBotAdminKey(channel)); cached != (tc.want == memberReqBotAdmin) {
+					t.Errorf("ba key cached = %v, want %v (an administrator only)", cached, tc.want == memberReqBotAdmin)
+				}
+			})
+		}
+	})
+
+	t.Run("a cancelled context and a pacer shed are unknown", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if got := memberReqBotChannelStatus(ctx, env.bot, channel, memberReqLookupMode{}); got != memberReqBotUnknown {
+			t.Errorf("a cancelled context = %d, want unknown", got)
+		}
+		mreqSetKey(t, env, "fuku:memberreq:lkp:pace:block", time.Minute)
+		t.Cleanup(func() { env.redis.Del("fuku:memberreq:lkp:pace:block") })
+		if got := mreqBotStatus(env, channel, memberReqLookupMode{}); got != memberReqBotUnknown {
+			t.Errorf("a pacer shed = %d, want unknown", got)
+		}
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
+			t.Errorf("bot status requests = %d, want 0", n)
+		}
+	})
+}
+
+func TestMemberReqChannelBreachNeedsBotAdmin(t *testing.T) {
+	// The fake answers "left" for every member of the channel, as a bot that cannot see the
+	// member list might (spike S2): whatever the bot's own standing says, nobody is a breach
+	// unless the bot is an administrator.
+	t.Run("a left answer is never a breach unless the bot is an administrator", func(t *testing.T) {
+		bots := []struct {
+			name string
+			set  func(s *mreqLookupState, c int64)
+			want memberReqVerdict
+		}{
+			{"member", func(s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+			}, memberReqInert},
+			{"left", func(s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+			}, memberReqInert},
+			{"kicked", func(s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusKicked})
+			}, memberReqInert},
+			{"restricted", func(s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusRestricted})
+			}, memberReqInert},
+			{"a 403", func(s *mreqLookupState, c int64) { s.scriptMember(c, staffTestBotID, staffFakeError(403, "Forbidden")) }, memberReqInert},
+			{"a 400", func(s *mreqLookupState, c int64) {
+				s.scriptMember(c, staffTestBotID, staffFakeError(400, "Bad Request"))
+			}, memberReqInert},
+			{"a 500", func(s *mreqLookupState, c int64) { s.scriptMember(c, staffTestBotID, staffFakeError(500, "Internal")) }, memberReqUnknown},
+			{"a null answer", func(s *mreqLookupState, c int64) { s.setMember(c, staffTestBotID, mreqChannelMember{Null: true}) }, memberReqUnknown},
+			{"an administrator", func(s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusAdministrator})
+			}, memberReqBreach},
+			{"the creator", func(s *mreqLookupState, c int64) {
+				s.setMember(c, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusCreator})
+			}, memberReqBreach},
+		}
+		for _, bot := range bots {
+			t.Run("bot is "+bot.name, func(t *testing.T) {
+				env, state := mreqLookupEnv(t)
+				channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+				bot.set(state, channel)
+				// Only the first lookup reads the scripted error; the cache of an
+				// administrator answers the second member.
+				for i := 0; i < 2; i++ {
+					user := mreqLookupUser(t)
+					state.setMember(channel, user, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+					got := mreqChannelVerdict(env, user, memberReqLookupMode{})
+					want := bot.want
+					if i == 1 && (bot.name == "a 403" || bot.name == "a 400" || bot.name == "a 500") {
+						// The scripted error is spent; the fake's own answer for the bot
+						// (a plain member) is what the second lookup reads.
+						want = memberReqInert
+					}
+					if got != want {
+						t.Errorf("member %d: verdict = %d, want %d", i, got, want)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("an administrator bot is cached for 2 minutes and the second breach asks nothing about the bot", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		first, second := mreqLookupUser(t), mreqLookupUser(t)
+		state.setMember(channel, first, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+		state.setMember(channel, second, mreqChannelMember{Status: gotgbot.ChatMemberStatusKicked})
+
+		if got := mreqChannelVerdict(env, first, memberReqLookupMode{}); got != memberReqBreach {
+			t.Fatalf("first verdict = %d, want breach", got)
+		}
+		key := memberReqBotAdminKey(channel)
+		if key != "fuku:memberreq:ba:"+strconv.FormatInt(channel, 10) {
+			t.Fatalf("key = %q", key)
+		}
+		if ttl := env.redis.TTL(key); ttl < time.Minute || ttl > 2*time.Minute {
+			t.Errorf("TTL = %s, want about 2 minutes", ttl)
+		}
+		if got := mreqChannelVerdict(env, second, memberReqLookupMode{}); got != memberReqBreach {
+			t.Fatalf("second verdict = %d, want breach", got)
+		}
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 1 {
+			t.Errorf("bot status requests = %d, want 1", n)
+		}
+	})
+
+	t.Run("a not-administrator and an unknown bot status are never cached", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+		user := mreqLookupUser(t)
+		state.setMember(channel, user, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+		mreqChannelVerdict(env, user, memberReqLookupMode{})
+		if env.redis.Exists(memberReqBotAdminKey(channel)) {
+			t.Error("a not-administrator was cached")
+		}
+		state.scriptMember(channel, staffTestBotID, staffFakeError(500, "Internal"))
+		mreqChannelVerdict(env, user, memberReqLookupMode{})
+		if env.redis.Exists(memberReqBotAdminKey(channel)) {
+			t.Error("an unknown status was cached")
+		}
+	})
+
+	t.Run("Fresh bypasses the ba cache and drops a stale positive on a definite not-administrator", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+		user := mreqLookupUser(t)
+		state.setMember(channel, user, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+		key := memberReqBotAdminKey(channel)
+		mreqSetKey(t, env, key, 2*time.Minute)
+
+		// The stale positive is believed without Fresh (that is the 2 minute bound) ...
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqBreach {
+			t.Fatalf("verdict from the stale positive = %d, want breach", got)
+		}
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
+			t.Fatalf("bot status requests = %d, want 0 (served from the cache)", n)
+		}
+		// ... and not with Fresh, which reads the demotion and removes the key.
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{Fresh: true}); got != memberReqInert {
+			t.Fatalf("Fresh verdict = %d, want inert", got)
+		}
+		if env.redis.Exists(key) {
+			t.Error("a Fresh read left the stale positive")
+		}
+	})
+
+	t.Run("Fresh on a definite breach drops a stale subscription pass", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		user := mreqLookupUser(t)
+		state.setMember(channel, user, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+		key := memberReqSubKey(channel, user)
+		mreqSetKey(t, env, key, time.Minute)
+
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqPass {
+			t.Fatalf("verdict from the stale pass = %d, want pass", got)
+		}
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{Fresh: true}); got != memberReqBreach {
+			t.Fatalf("Fresh verdict = %d, want breach", got)
+		}
+		if env.redis.Exists(key) {
+			t.Error("a Fresh breach left the stale pass")
 		}
 	})
 }

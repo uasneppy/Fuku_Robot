@@ -94,6 +94,13 @@ func (s *mreqLookupState) link(group, channel int64) {
 	s.links[group] = channel
 }
 
+// nullGetChat makes getChat of group answer a body of null.
+func (s *mreqLookupState) nullGetChat(group int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nullChat[group] = true
+}
+
 // setMember sets the getChatMember answer for user in chat.
 func (s *mreqLookupState) setMember(chat, user int64, answer mreqChannelMember) {
 	s.mu.Lock()
@@ -128,43 +135,58 @@ func (s *mreqLookupState) holdKey(key string) (release func()) {
 	return func() { once.Do(func() { close(gate) }) }
 }
 
-// beginChannel returns what a channel-half request must do: whether the fake answers it at
-// all, the gate to wait on, a scripted error and the member answer.
-func (s *mreqLookupState) beginChannel(method string, chat, user int64) (handled bool, gate chan struct{}, scripted error, member mreqChannelMember, linked int64, null bool) {
+// mreqChannelStep is what a channel-half request must do.
+type mreqChannelStep struct {
+	// Handled is false when the request is not for a chat of this fake.
+	Handled bool
+	// Gate is the hold to wait on, nil for none.
+	Gate chan struct{}
+	// Err is a scripted error, returned instead of an answer.
+	Err error
+	// Member is the getChatMember answer.
+	Member mreqChannelMember
+	// Linked is the linked_chat_id of a getChat answer, Null a body of null.
+	Linked int64
+	Null   bool
+}
+
+// beginChannel decides what a getChat of chat or a getChatMember of user in chat does.
+func (s *mreqLookupState) beginChannel(method string, chat, user int64) mreqChannelStep {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	key := mreqChannelKey(method, chat, user)
-	switch method {
-	case "getChat":
-		var ok bool
-		linked, ok = s.links[chat]
+	step := mreqChannelStep{}
+	if method == "getChat" {
+		linked, ok := s.links[chat]
 		if !ok {
-			return false, nil, nil, member, 0, false
+			return step
 		}
-		null = s.nullChat[chat]
-	default:
-		var ok bool
-		member, ok = s.members[[2]int64{chat, user}]
+		step.Linked, step.Null = linked, s.nullChat[chat]
+	} else {
+		member, ok := s.members[[2]int64{chat, user}]
 		if !ok {
 			// A chat the fake knows no member of is not a channel of this fake.
-			known := false
 			for k := range s.members {
 				if k[0] == chat {
-					known = true
+					ok = true
 					break
 				}
 			}
-			if !known {
-				return false, nil, nil, member, 0, false
+			if !ok {
+				return step
 			}
 			member = mreqChannelMember{Status: "left"}
 		}
+		step.Member = member
 	}
+	step.Handled = true
+	key := mreqChannelKey(method, chat, user)
 	if queue := s.chanErrs[key]; len(queue) > 0 {
 		s.chanErrs[key] = queue[1:]
-		return true, nil, queue[0], member, linked, null
+		step.Err = queue[0]
+		return step
 	}
-	return true, s.chanGates[key], nil, member, linked, null
+	step.Gate = s.chanGates[key]
+	return step
 }
 
 // set stores the answer for userID.
@@ -232,18 +254,18 @@ func (f *mreqLookupFake) RequestWithContext(
 	case "getChat", "getChatMember":
 		chat := staffParamInt(params, "chat_id")
 		user := staffParamInt(params, "user_id")
-		handled, gate, scripted, member, linked, null := f.state.beginChannel(method, chat, user)
-		if !handled {
+		step := f.state.beginChannel(method, chat, user)
+		if !step.Handled {
 			return f.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
 		}
 		f.record(method, params)
-		if scripted != nil {
-			return nil, scripted
+		if step.Err != nil {
+			return nil, step.Err
 		}
-		if err := mreqAwaitGate(ctx, gate); err != nil {
+		if err := mreqAwaitGate(ctx, step.Gate); err != nil {
 			return nil, err
 		}
-		return mreqChannelAnswer(method, chat, user, member, linked, null), nil
+		return mreqChannelAnswer(method, chat, user, step), nil
 	}
 	return f.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
 }
@@ -262,16 +284,17 @@ func mreqAwaitGate(ctx context.Context, gate chan struct{}) error {
 }
 
 // mreqChannelAnswer builds the JSON the fake answers a channel-half request with.
-func mreqChannelAnswer(method string, chat, user int64, member mreqChannelMember, linked int64, null bool) json.RawMessage {
+func mreqChannelAnswer(method string, chat, user int64, step mreqChannelStep) json.RawMessage {
 	if method == "getChat" {
-		if null {
+		if step.Null {
 			return json.RawMessage(`null`)
 		}
-		if linked == 0 {
+		if step.Linked == 0 {
 			return json.RawMessage(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Test Chat"}`, chat))
 		}
-		return json.RawMessage(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Test Chat","linked_chat_id":%d}`, chat, linked))
+		return json.RawMessage(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Test Chat","linked_chat_id":%d}`, chat, step.Linked))
 	}
+	member := step.Member
 	if member.Null {
 		return json.RawMessage(`null`)
 	}
