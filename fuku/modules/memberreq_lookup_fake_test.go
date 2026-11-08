@@ -35,7 +35,13 @@ type mreqLookupState struct {
 	answers map[int64]mreqPhotoAnswer
 	errs    map[int64][]error
 	gates   map[int64]chan struct{}
-	times   []time.Time
+	times   []mreqArrival
+}
+
+// mreqArrival is one request that reached the fake: who it asked about and when.
+type mreqArrival struct {
+	User int64
+	At   time.Time
 }
 
 func newMreqLookupState() *mreqLookupState {
@@ -72,10 +78,10 @@ func (s *mreqLookupState) hold(userID int64) (release func()) {
 }
 
 // arrivals returns when each request arrived, in order.
-func (s *mreqLookupState) arrivals() []time.Time {
+func (s *mreqLookupState) arrivals() []mreqArrival {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]time.Time(nil), s.times...)
+	return append([]mreqArrival(nil), s.times...)
 }
 
 // begin records an arrival and returns what the request must do: the gate to wait on, the
@@ -83,7 +89,7 @@ func (s *mreqLookupState) arrivals() []time.Time {
 func (s *mreqLookupState) begin(userID int64) (gate chan struct{}, answer mreqPhotoAnswer, scripted error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.times = append(s.times, time.Now())
+	s.times = append(s.times, mreqArrival{User: userID, At: time.Now()})
 	if queue := s.errs[userID]; len(queue) > 0 {
 		s.errs[userID] = queue[1:]
 		return nil, mreqPhotoAnswer{}, queue[0]
