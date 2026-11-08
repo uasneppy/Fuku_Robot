@@ -251,9 +251,11 @@ func TestMemberReqPacersAreIndependent(t *testing.T) {
 		}
 	})
 
+	// The channel rule is a Mute here, weaker than the last name Kick: a stricter channel rule whose
+	// lookup was shed defers the claim by design (WR-02, TestMemberReqPartialEpisode).
 	t.Run("a block on the lookup budget does not delay the punishment of a name breach", func(t *testing.T) {
 		env, state := mreqLookupEnv(t)
-		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionKick, memberreq.RuleChannel: models.RequirementActionBan})
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionKick, memberreq.RuleChannel: models.RequirementActionMute})
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
 		member := env.mreqMember("Alex", "", "alex")
 		mreqLookupCleanup(t, []int64{member.Id}, nil)
@@ -270,8 +272,8 @@ func TestMemberReqPacersAreIndependent(t *testing.T) {
 		if n := len(env.calls("unbanChatMember")); n != 1 {
 			t.Errorf("kick calls = %d, want 1", n)
 		}
-		if n := len(env.calls("banChatMember")); n != 0 {
-			t.Errorf("ban calls = %d, want none (the channel lookup was shed as unknown)", n)
+		if n := env.mreqCallCount("banChatMember", "restrictChatMember"); n != 0 {
+			t.Errorf("ban and restrict calls = %d, want none (the channel lookup was shed as unknown)", n)
 		}
 	})
 }

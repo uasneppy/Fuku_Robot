@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -200,6 +201,25 @@ func memberReqFlight(ctx context.Context, key string, fn func(context.Context) m
 	return verdict
 }
 
+// memberReqLookupTouch records, for one executor run, that a lookup went beyond the cache: some
+// flight was started or joined, which means a Telegram request was made or waited for. The
+// executor reads it to decide whether the live record it read before the lookup phase can have
+// gone stale (WR-03). It is carried in the caller's context, because the flight itself runs on
+// another context.
+type memberReqLookupTouch struct {
+	touched atomic.Bool
+}
+
+// memberReqLookupTouchKey is the context key of a *memberReqLookupTouch.
+type memberReqLookupTouchKey struct{}
+
+// memberReqNoteFlight marks the run behind ctx as having gone beyond the cache.
+func memberReqNoteFlight(ctx context.Context) {
+	if touch, ok := ctx.Value(memberReqLookupTouchKey{}).(*memberReqLookupTouch); ok {
+		touch.touched.Store(true)
+	}
+}
+
 // memberReqFlightValue runs fn once for every concurrent caller of key and returns its
 // value, and false when the caller got no value: its own context ended, or fn panicked.
 //
@@ -218,6 +238,7 @@ func memberReqFlightValue[T any](ctx context.Context, key string, fn func(contex
 	if ctx.Err() != nil {
 		return zero, false
 	}
+	memberReqNoteFlight(ctx)
 	results := memberReqLookupFlight.DoChan(key, func() (any, error) {
 		defer error_handling.RecoverFromPanic("memberReqFlight", "MemberReq")
 		flightCtx, cancel := context.WithTimeout(memberReqContext(), memberReqLookupFlightTimeout)

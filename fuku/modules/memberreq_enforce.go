@@ -51,6 +51,9 @@ var (
 	// of them for the entry's 15 s; a joiner whose lookup does not finish is welcomed and is
 	// checked again at their first message. A variable so a test can shorten it.
 	memberReqLookupJoinBudget = 4 * time.Second
+	// memberReqLookupStaleAfter is how long a lookup phase may take, with every lookup answered from
+	// the cache, before the live member record read ahead of it is read again (WR-03).
+	memberReqLookupStaleAfter = time.Second
 )
 
 // memberReqRecordTimeout bounds one database record write that must not be cancelled with
@@ -246,9 +249,12 @@ func memberReqPriorHold(ctx context.Context, c memberReqCase) (stale, held *mode
 // record and the mask of rules the live names break. It then reads the group's settings again
 // and judges the names against that fresh row, storing it in c.Settings, so a rule switched Off
 // or changed, or Delete messages turned off, after the watcher's snapshot is honoured by the
-// job that snapshot started (D-20); the snapshot stays the watcher's cheap pre-filter only. ok
-// is false when the lookup failed, the member is exempt by the live record, the settings could
-// not be read (an unreadable setting punishes nobody) or nothing is broken any more.
+// job that snapshot started (D-20); the snapshot stays the watcher's cheap pre-filter only. When
+// the lookup phase made a request or took long and something is broken, the live record is read
+// once more and the returned record is that one (WR-03). ok is false when the lookup failed, the
+// member is exempt by the live record (read again included), the settings could not be read (an
+// unreadable setting punishes nobody), a stricter rule is unanswered (WR-02) or nothing is broken
+// any more.
 func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCase) (member gotgbot.MergedChatMember, broken int, ok bool) {
 	member, err := memberReqLiveMember(ctx, b, c.Chat.Id, c.User.Id)
 	if err != nil {
@@ -275,8 +281,29 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	// broken". The claim, the cap and the mute-over-restriction check all follow this step.
 	lookupCtx, cancel := context.WithTimeout(ctx, memberReqLookupBudget(c.Source))
 	defer cancel()
+	touch := &memberReqLookupTouch{}
+	lookupCtx = context.WithValue(lookupCtx, memberReqLookupTouchKey{}, touch)
+	lookupStart := time.Now()
 	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{})
 	broken |= lookupMask
+	// WR-03: the record above was read before the lookup phase, which can take seconds under a
+	// loaded pacer. When the phase went beyond the cache (a request was made or waited for) or took
+	// over memberReqLookupStaleAfter, and something is broken, the record is read once more and
+	// every decision below (eligibility, the names, the mute-over-restriction check, the marker
+	// adoption) rests on that one. A phase of cache hits costs no extra request.
+	if broken != 0 && (touch.touched.Load() || time.Since(lookupStart) > memberReqLookupStaleAfter) {
+		fresh, err := memberReqLiveMember(ctx, b, c.Chat.Id, c.User.Id)
+		if err != nil {
+			log.Warnf("[MemberReq] live record of user %d in chat %d could not be read again after the lookups, so nobody is punished: %s",
+				c.User.Id, c.Chat.Id, memberReqErrText(err))
+			return member, 0, false
+		}
+		member = fresh
+		if !memberReqLiveEligible(member) {
+			return member, 0, false
+		}
+		broken = memberReqBroken(c.Settings, memberReqNamesOf(member.User)) | lookupMask
+	}
 	// WR-02: a stricter rule that could not be answered must not be silently dropped behind a weaker
 	// punishment and its hold (the held path makes no lookup, so the stricter rule would never be
 	// judged). Nothing is claimed now; the member is judged again at their next message.

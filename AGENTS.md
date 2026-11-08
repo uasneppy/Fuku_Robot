@@ -1463,7 +1463,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   no administrator is inert through the `cna` fact and defers nothing after the first message) holds the weaker name
   punishment back for as long as it stays unanswerable, which is the safe direction: nobody is punished on a guess. The lookups sit after the exemptions, the hold read, the pause and the live
   `getChatMember` (a held, exempt or paused member makes none) and before the mute-over-restriction check, the cap and the claim,
-  so a lookup cut off by a crash or a shutdown leaves no hold and no cap count; then, when that strictest punishment is a Mute and the live record is `restricted` with no
+  so a lookup cut off by a crash or a shutdown leaves no hold and no cap count. Phase 14 review WR-03: the live record was
+  read before a lookup phase that can take seconds under a loaded pacer (up to 20 s for a job, 4 s for the join entry), so
+  when something is broken and the phase went beyond the cache (some flight was started or joined, carried through
+  `memberReqLookupTouch` in the lookup context) or took longer than `memberReqLookupStaleAfter` (1 s), the record is read once
+  more through `memberReqLiveMember` and the eligibility check (a member promoted to administrator or gone meanwhile is never
+  punished; approvals and the pending captcha are not read again), the names, the mute-over-restriction check and the marker adoption all
+  rest on that record; a re-read that fails punishes nobody. A phase of cache hits that was fast makes no extra request.
+  Then, when that strictest punishment is a Mute and the live record is `restricted` with no
   marker of this episode (the stale hold's marker that `memberReqLiveMarker` adopts is the one exception), the one
   paced `getChat` of `memberReqUnmutePermissions` reads the group's defaults and `memberReqRestrictedBelow` asks whether
   the member lacks a right the group grants: if so the restriction is someone else's (an admin's `/mute`, a partial
