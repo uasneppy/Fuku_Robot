@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
 status: executing
-stopped_at: Completed 15-04-PLAN.md
-last_updated: "2026-11-08T16:47:03.819Z"
+stopped_at: Completed 15-05-PLAN.md
+last_updated: "2026-11-08T17:12:28.368Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 11 execution started
-state_head: 159513feb0e694ad0c7c730e46e6ff887a4b65b1
+state_head: 4dcfa2882f019d278f9ba3ea30d3665c3a0e83e3
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 78
-  completed_plans: 70
+  completed_plans: 71
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 5 of 11
-Status: Executing Phase 15 (15-04 done: the eighth rule row `ai` (bit 128), the names in the lookup mode, `memberReqAIConfigured`, the minimal `memberReqAIRule` with the 24 h probability cache and one flight, the Anthropic stand-in and six tracer tests, and every suite counts eight rules; no baseline, guards, notice tail or page status yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
-Last activity: 2026-11-08 — Plan 15-04 complete
+Plan: 6 of 11
+Status: Executing Phase 15 (15-05 done: the rule's full order with the baseline `nm` and the new-member marker `nu`, `Joining`, the join entry's marker write, the watcher's three extra GETs with the recorded baseline-equal gap, and the held release with names; no cost guards, notice tail or page status yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
+Last activity: 2026-11-08 — Plan 15-05 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -144,6 +144,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P02 | 40min | 3 tasks | 7 files |
 | Phase 15 P03 | 30min | 3 tasks | 11 files |
 | Phase 15 P04 | 31min | 3 tasks | 13 files |
+| Phase 15 P05 | 70min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -310,8 +311,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T16:47:02.688Z
-Stopped at: Completed 15-04-PLAN.md
+Last session: 2026-11-08T17:12:27.176Z
+Stopped at: Completed 15-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
