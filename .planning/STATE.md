@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 14
 current_phase_name: Profile Photo and Channel Rules
 status: executing
-stopped_at: Completed 14-07-PLAN.md
-last_updated: "2026-11-08T08:49:59.910Z"
+stopped_at: Completed 14-08-PLAN.md
+last_updated: "2026-11-08T09:15:34.333Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 11 execution started
-state_head: 260c09a448ade4999e0780ff03b6b69ab3210f2f
+state_head: 8457b56fc591158fa2c425d2e1a38cbe5377a9f8
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 67
-  completed_plans: 61
+  completed_plans: 62
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 14 (Profile Photo and Channel Rules) — IN PROGRESS (Phase 13 is built and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 8 of 12
-Status: Executing Phase 14 (14-07 done: the watcher checks the lookup rules from cached positives, exempt members cost no job, and the job releases a held member who fixed the photo, the subscription or the name)
-Last activity: 2026-11-08 — Plan 14-07 complete
+Plan: 9 of 12
+Status: Executing Phase 14 (14-08 done: the notice names the photo remedy, and "I fixed it" frees an approved member and a member whose fresh photo and channel lookups pass, tells a member exactly what is still broken, and changes nothing on an unanswered lookup)
+Last activity: 2026-11-08 — Plan 14-08 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -135,6 +135,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 14 P05 | 55min | 3 tasks | 8 files |
 | Phase 14 P06 | 95min | 3 tasks | 5 files |
 | Phase 14 P07 | 130min | 3 tasks | 7 files |
+| Phase 14 P08 | 95min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,7 @@ Recent decisions affecting current work:
 - [Phase 14]: 14-06: an unknown lookup never blocks an established name breach (research S-02); the lookup phase runs after the live check and names and before the mute-over-restriction check, the cap and the claim
 - [Phase 14]: 14-07: a hold with name bits only is released when the names are clean, so a name hold cannot outlive a fix in a group that also has a lookup rule on
 - [Phase 14]: 14-07: the photo and subscription flights read their cache once more inside the flight, so messages that arrive together make one lookup request
+- [Phase 14]: 14-08: I fixed it asks the photo and channel lookups even when a name rule is already broken, so one answer lists everything still broken; an unanswered lookup alone changes nothing
 
 ### Pending Todos
 
@@ -295,8 +297,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T08:49:58.949Z
-Stopped at: Completed 14-07-PLAN.md
+Last session: 2026-11-08T09:15:33.528Z
+Stopped at: Completed 14-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
