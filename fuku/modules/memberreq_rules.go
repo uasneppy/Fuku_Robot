@@ -169,6 +169,34 @@ func memberReqBroken(settings *models.ChatRequirements, names memberReqNames) in
 	return mask
 }
 
+// memberReqLookupBroken folds the verdicts of the lookup rules into a broken mask, in table
+// order (photo, then channel). It skips a row with no Lookup (a name rule) and a row whose stored
+// action is Off, and asks the others with the chat, the member and the mode it was given. A
+// memberReqBreach sets the rule's bit; a memberReqUnknown (also the zero verdict) sets the
+// returned unknown flag and no bit; memberReqPass and memberReqInert add nothing. A lookup can
+// therefore add a bit only through an explicit breach, so a failed or unanswered lookup never
+// leads to a punishment (D-02, MREQ-10). It calls no network function itself and judges no rule
+// by its identity; where it is called is the executor's decision.
+func memberReqLookupBroken(
+	ctx context.Context, b *gotgbot.Bot, settings *models.ChatRequirements, chatID, userID int64, mode memberReqLookupMode,
+) (mask int, unknown bool) {
+	if settings == nil {
+		return 0, false
+	}
+	for _, rule := range memberReqRules {
+		if rule.Lookup == nil || memberreq.ActionOf(settings, rule.Store) == models.RequirementActionOff {
+			continue
+		}
+		switch rule.Lookup(ctx, b, chatID, userID, mode) {
+		case memberReqBreach:
+			mask |= rule.Bit
+		case memberReqUnknown:
+			unknown = true
+		}
+	}
+	return mask, unknown
+}
+
 // memberReqSeverity ranks a punishment: ban 4, kick 3, mute 2, warn 1, off (and any value
 // it does not know) 0. The stored values are warn 1, kick 2, ban 3, mute 4, which are not
 // in order of severity, so a comparison never uses them directly (D-04).

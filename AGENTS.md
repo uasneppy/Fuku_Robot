@@ -488,19 +488,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Access) registers from its own file through `registerSettingsPage`, so `settings_pages.go` is not edited. It reads
   through `memberReqSettingsLookup` (`memberreq.GetSettings`, the cached `member_requirements:<chat>` key, the one read
   that the page, Main and the message watcher share; the key is in `skipLocal`).
-  Main's state is Off when every rule is Off (whatever the two switches say), `{n} on` for the n rules that are not Off,
-  and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
+  Main's state is Off when every rule is Off (whatever the two switches say), `{n} on` for the n rules that are not Off
+  (n up to 7), and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
   creates nothing. The body is the intro, the all-off line while every rule is Off, one line per rule of `memberReqRules`
   in table order (icon from `memberReqActionIcon` plus the option word), the Check on join and Delete messages lines and
   the five hints; a failed read is the cannot-open edit. The keyboard is the rule grid, the switch row and the navigation
-  row, five rows in a private and in a group menu and no Open in private row (`TestSettingsMreqRowBudget`). The rule grid
-  is one cell per rule of `memberReqRules` in rule order, two per row with an odd last cell alone, each the rule's
+  row, six rows in a private and in a group menu (the rule grid's four rows of widths 2, 2, 2, 1, the switch row and the
+  navigation row, `TestSettingsMreqRowBudget`) and no Open in private row. The rule grid
+  is one cell per rule of `memberReqRules` in rule order, seven cells (`ln un ru ar zh ph ch`), two per row with an odd
+  last cell alone, each the rule's
   punishment icon (`memberReqActionIcon`) and short name (the `CellKey` of the table); a cell presses `a=mo&t=<code>`
-  (`ln un ru ar zh`), the page action `mo` (exactly `t`, a rule code, right `settingsRightAdmin`), which opens the rule
-  screen (`renderSettingsMreqRuleScreen`, pure): the rule's name, what breaks it (plus the blank last name hint on the
-  last-name rule only), `Punishment: icon word`, the two hints and the choice rows `[Off | Warn]` and
+  (`ln un ru ar zh ph ch`; the new codes are two letters like the old ones, so no callback grows: settings buttons stay at
+  most 53 bytes), the page action `mo` (exactly `t`, a rule code, right `settingsRightAdmin`), which opens the rule
+  screen (`renderSettingsMreqRuleScreen`, pure): the rule's name, what breaks it, the rule's own hint right after it when its
+  table row has a `HintKey` (the blank last name hint on the last-name rule, `settings_mreq_hint_photo` on the photo rule,
+  which recommends Warn or Mute and hides no punishment; no renderer branches on a rule's identity for it, and the channel
+  rule's screen is the Phase 13 shape until its status reads arrive), `Punishment: icon word`, the two hints and the choice rows `[Off | Warn]` and
   `[Kick | Ban | Mute]` with `✅ ` on the stored value, then Back to the page (`a=op&p=m`, the one Back that does not
-  open Main) and Close. The rule controls `ln un ru ar zh` accept `st` only (`Actions: []string{"st"}`, so a `tg` on one
+  open Main) and Close. The rule controls `ln un ru ar zh ph ch` accept `st` only (`Actions: []string{"st"}`, so a `tg` on one
   is an invalid request in step 1) with `v` exactly one digit 0..4 and right `settingsRightRestrict`. Off and Warn are
   written at once through `applyMemberReqAction(ctx, chatID, rule, action)` (in `memberreq_settings.go`: the rule and the
   value 0..4 are checked before any write, then the `memberReqWrites.Action` column-targeted write, a Go 0 written, the
@@ -1283,6 +1288,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   be answered is then inert when the bot is definitely not a channel administrator and stays unknown otherwise; the
   punishing path and the watcher never set it and make no extra call. Positives only are cached (the keys above) and no
   lookup has a new drain: the flights end with `memberReqContext()`.
+- Member requirements, the rule table (`memberreq_rules.go`): `memberReqRules` has seven rows in the order of
+  `memberreq.Rules` (`ln un ru ar zh ph ch`, bits 1 to 64; the next free bit is 128). The five name rows have a pure `Broken`
+  test and no `Lookup`; the photo and channel rows have a `Lookup` function (`memberReqPhotoRule`, `memberReqChannelRule`) and
+  no `Broken`, and exactly one of the two is set on every row (`TestMemberReqRuleTable`). `memberReqBroken` judges the name
+  rules only: it skips a row with no `Broken`, so it never reports a lookup bit and a nil function is never called.
+  `memberReqLookupBroken` folds the lookup verdicts into the same mask in table order (photo, then channel): it skips a row
+  with no `Lookup` and a row whose action is Off, a `memberReqBreach` sets the row's bit, a `memberReqUnknown` sets only the
+  returned unknown flag, and `memberReqPass` and `memberReqInert` add nothing, so a lookup row can add a bit only through an
+  explicit breach. `memberReqPassValue` fingerprints the seven rule actions. A row's `HintKey` is the hint its settings screen
+  shows after the description.
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry
   `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on (it is, by default, since the `mreq|` handler exists). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
@@ -2337,8 +2352,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   both Phase 13 tables, their warns, the `member_requirements` settings key, the approvals keys and the `fuku:memberreq:*`
   keys, then calls `ResetLocalForTest`. The size and privacy sweep is `TestMemberReqScreensFitEveryLocale` (every notice,
   every "I fixed it" answer at 200 code points and the two notices that button edits in, in all 8 languages, none naming the
-  chat, the Staff Group or the admin who set the rule) and the Phase 13 part of `TestSettingsStaffPrivacy` (page `m`, five rule
-  screens and fifteen cards in every language, and a private run by an administrator who is not the creator through the page,
+  chat, the Staff Group or the admin who set the rule) and the Phase 13 part of `TestSettingsStaffPrivacy` (page `m`, seven rule
+  screens and twenty-one cards in every language, and a private run by an administrator who is not the creator through the page,
   a rule screen, a Mute card and its Yes and both switches). `TestMemberRequirementsStayOutOfBackup` (`fuku/db/backup`,
   SQLite, so not in the PostgreSQL list) proves that neither `chat_requirements` nor `chat_requirement_holds` is exported,
   imported or reset.
