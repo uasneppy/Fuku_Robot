@@ -587,6 +587,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   chat but is not reused (one code path for both menus), so a private draw makes one more `getChat` than a group draw.
   `TestSettingsMreqChannelStatus`, `TestSettingsMreqChannelStatusScreen`, `TestSettingsMreqBasicGroup`,
   `TestSettingsMreqOpenCost` and `TestSettingsMreqRedrawKeepsStatus` hold it.
+  The live link check of a punishing channel press (Phase 14, MREQ-12, D-05, D-06, D-08, `settingsMreqChannelGate`): the
+  screen offers a punishment only to a group that can be linked, and this check enforces it against a stale screen, a
+  stale card and a forged button. It applies to the channel rule alone and to a value other than Off (an `st` with `v` 1 to
+  4 and the card's Yes `my`), and runs after every other step, in this order: the whole press pipeline (strict decode,
+  service identity, opener, live `getChatMember`, owner gate, right), for a Yes the expiry check (an expired Yes redraws
+  the rule screen with `settings_card_expired` and makes no link check), for `st` the fresh same-value database read (a
+  press of the stored value writes nothing, draws no card and makes no link check), then one fresh `getChat` of the group
+  through the lookup pacer under `settingsMreqHereTimeout` (3 s), which refreshes `fuku:memberreq:lc:<chat>`. It runs
+  before any answer, because its alert is the press's one answer. A basic group (read from `p.group.Type`, no lookup) or a
+  `getChat` that carries no linked channel answers the alert `settings_mreq_here_nolink` (the status line's own key, with
+  `{rule}`, no icon), writes nothing, draws no card (a Yes replaces its card) and redraws the channel screen as the
+  Off-only form, so the stale screen is repaired. A link that cannot be read (an error, a timeout, a shed pacer, a null
+  answer) answers `mreq_fixed_check_failed`, writes nothing and edits nothing (fail closed, UI-SPEC P14-A4). A linked
+  channel proceeds exactly as for the other rules: Warn writes, Kick, Ban and Mute draw the card, a Yes writes. The bot not
+  being an administrator of the linked channel never refuses a press (the punishment can be set and the check fails open),
+  Off (`v=0`) never makes the check so an administrator can always clear a stored value, and the link is only ever the
+  live `getChat` answer, never callback data or the update. The photo rule and the five name rules have no link check.
+  `TestSettingsMreqChannelRefusal` and `TestSettingsMreqForgedFields` hold it, and the table-driven page `m` tests
+  (`TestSettingsMreqCard`, `TestSettingsAuthorityMreq`, `TestSettingsDriftMreq`, `TestSettingsControlActionAllowList`,
+  `TestSettingsMreqRuleScreen`) cover the channel rule's punishing values through a linked-channel fixture
+  (`settingsMreqLinkChannel`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -762,7 +783,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settingsRightOwner` needs the creator from the press's own member record (no extra call) and refuses with the alert
   `settings_access_owner_only`; only the Access page's control and action declare it. On the Member requirements page
   (`m`) opening the page and a rule screen needs `settingsRightAdmin`, and every punishment choice (any `v`, so the card is
-  not even drawn without the right), the card's Yes and both switches need `settingsRightRestrict`.
+  not even drawn without the right), the card's Yes and both switches need `settingsRightRestrict`; this holds for the photo
+  (`ph`) and channel (`ch`) rules too, the rights are judged on a fresh member record on every press, and the channel
+  rule's live link check comes after the right, so a presser demoted before a Yes is refused with `settings_no_restrict`
+  and no link is looked up.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
   `/cleangoodbye` refuse through `CanUserChangeInfo`). `settingsRightRefusalFor` is the one pure judgement of a right's
@@ -2288,6 +2312,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Always pass `-tags testtools`; without it, test files and the helpers in production packages that carry that build tag drop out silently.
 - Postgres tests need both `DATABASE_URL` and `FUKU_TEST_DATABASE=true`; otherwise they run on SQLite.
 - Use real fixtures: `internal/testdb.Run` (SQLite), miniredis, hand-written `gotgbot.BotClient` fakes. No mock libraries.
+- A test never calls `t.Skip` to dodge a case: restructure so the case is not registered (a field on the case table and a
+  `continue` in the loop). CI's skip gate (`scripts/check_test_results`) fails any unexpected skip; the only allowed ones are the
+  PostgreSQL-only migration tests when no database is configured.
 - No test calls a real AI provider (TypeSafe or Anthropic): the Claude client, the raid AI image path and the
   `scripts/claude-spike` tool are tested against `httptest` servers or a fake transport, with no `t.Skip`, so they run
   in `make test`. The live Claude spike (`go run ./scripts/claude-spike`, needs `ANTHROPIC_API_KEY`) is a manual owner
