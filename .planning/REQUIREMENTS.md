@@ -78,7 +78,7 @@ Requirements for this milestone. Each maps to one roadmap phase.
 ### Platform
 
 - [x] **PLAT-05**: Every new message and button label exists in all 8 locales (en, es, fr, hi, id, pt, ru, uk), and `AGENTS.md` reflects the 8-locale set.
-- [ ] **PLAT-06**: New background work (deletion queue, name checks, requirement lookups) shares Telegram rate budgets across replicas, recovers from crashes, and is drained within the existing shutdown budget.
+- [x] **PLAT-06**: New background work (deletion queue, name checks, requirement lookups) shares Telegram rate budgets across replicas, recovers from crashes, and is drained within the existing shutdown budget.
 
 ## Future Requirements
 
@@ -185,7 +185,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | PAGE-09 | Phase 19 | Pending |
 | PAGE-10 | Phase 18 | Pending |
 | PLAT-05 | Phase 10 | Complete |
-| PLAT-06 | Phase 14 | Pending |
+| PLAT-06 | Phase 14 | Complete |
 
 PLAT-05 and PLAT-06 are cross-cutting: they are mapped to the first phase where they matter and bind every later phase (see Cross-Cutting Constraints in `ROADMAP.md`).
 
