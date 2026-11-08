@@ -168,6 +168,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   verdict of any kind (it never caches anything about a member, and the lookups cache only a pass, never an inert or
   unknown verdict; the one other thing they cache is the channel-level `cna` fact below, a fact about the channel and the
   bot and never about a member) and never classifies; a group with name rules only keeps its single `GET` exactly as before.
+  While the AI spam-name rule is live (`memberReqAILive`: its action is not Off and the process is configured; an
+  unconfigured stored value counts as Off there, or every message of every member would start a job for ever) the same
+  round also reads `fuku:memberreq:nv:<verdict key hash>`, `fuku:memberreq:nm:<user>` and `fuku:memberreq:nu:<chat>:<user>`
+  (`memberReqAIWatchQueue`: the canonical names and the verdict key come from pure Go, with `config.AppConfig.AnthropicModel`),
+  and the AI part is satisfied when the verdict parses and is below the bar, or when the marker is absent and the baseline
+  equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity and any
+  Redis error are not satisfied); names that are not judgeable are satisfied with no key read, and everything else is one job
+  after `memberReqMissExempt`. `memberReqLookupCached` takes the names for this and its complexity is held at 18 or less by
+  keeping the AI part in those two small functions. The watcher writes no verdict, baseline or marker and calls nobody. Known
+  watcher gap, recorded for the owner and pinned by `TestMemberReqWatcherAI`: a member whose baseline equals their names and
+  who has no marker stays satisfied even when another account's judgement of the same string has since cached a breach,
+  because the baseline is the bot's record that these names were accepted for this member (it errs toward not punishing); a
+  job that runs for that member for another reason breaches them, because the rule's own order puts the verdict first.
   The enforcement switch `memberReqEnforcementLive` is an `atomic.Bool` read only through `memberReqLive()`. It is true by
   default since the "I fixed it" handler exists (the `mreq|v1` bullet under Callbacks): `memberreq.go`'s `init()` stores
   true, and that store is the only production write of it (`LoadMemberRequirements` does not write it, because a test loads
@@ -1246,7 +1259,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the rules, and a violation is never cached. A Redis error or no Redis is a miss and the predicate runs on every message
   (correct, slower). In a group with a lookup rule on the key is read in the same pipelined round as the lookup positives
   but is never consulted without them and never stands in for a lookup verdict: a pass hit with no photo positive still
-  hands the member to a job, so a pass can never hide a missing photo or subscription (R2). It sits in the
+  hands the member to a job, so a pass can never hide a missing photo or subscription (R2); the same holds for the AI
+  rule: the pass key never stands in for the AI positive (a verdict below the bar, or a baseline equal to the names with no
+  marker). It sits in the
   `fuku:memberreq:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps it.
 - `fuku:memberreq:photo:<user>` is the positive-only profile photo verdict of the lookup layer (`memberreq_lookup.go`,
   `memberReqPhotoRule`): the value is `1`, `SET EX` 30 minutes (`memberReqPositiveTTL`), written inside the flight only when
@@ -1303,6 +1318,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   serves an old verdict; it holds a hash and a probability and never a name, and it sits outside the `fuku:cache:` prefix, so
   `CLEAR_CACHE_ON_STARTUP` keeps it. It amends Phase 14's "positive only" rule for this one string-level fact: a verdict about
   a member is still never cached, only one about a string of names.
+- `fuku:memberreq:nm:<user>` is the AI spam-name rule's baseline (`memberreq_ai.go`, `memberReqAIBaselineKey`): the names hash
+  (32 hex characters, never a name) of the names the bot last accepted for this account, `SET EX` 30 days
+  (`memberReqAIStateTTL`). A name belongs to the account, so the key has no chat. Only the rule writes it, never the watcher:
+  `SET NX` for an established member's first sighting (which makes no call), and overwritten by every definite pass together
+  with the deletion of the marker below, in one transaction. A baseline that differs from the current names hash is a rename
+  and is judged. It sits outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps it; Redis only.
+- `fuku:memberreq:nu:<chat>:<user>` is the AI spam-name rule's new-member marker (`memberReqAIMarkerKey`): the value is the
+  digit `1`, `SET EX` 30 days. A membership belongs to a group, so the key has the chat. The join entry sets it before its
+  Check-on-join branch while the rule is live (`memberReqAIMarkJoin`, whatever the raid settings and Check on join say), and
+  the rule sets it on every breach, also one read from the verdict cache; every definite pass deletes it together with
+  `nm = h`, and an unknown writes nothing. It exists because "no baseline" is two different members: an established one the
+  rule has never seen, and a new joiner whose join call was unanswered. Without the marker that joiner would be baselined at
+  their first message and never judged, and a baseline that expired during a long hold would launder a member whose names were
+  judged spam (a breach keeps the marker, so the member is judged again instead). Like `nm` it is Redis only, outside the
+  cache prefix and kept by `CLEAR_CACHE_ON_STARTUP`. The pass key never stands in for the AI positive.
 - `fuku:memberreq:lkp:pace:next` and `fuku:memberreq:lkp:pace:block` are the fleet-wide pacing of photo and channel
   lookups (`memberReqLookupPaced`, `memberReqLookupPacer`, built from `memberReqLookupPacerOptions`): the staff pacer's
   slot-plus-block design (`ratelimit.NewTelegramPacer`) with Interval 100 ms, MaxRetries 1 and MaxWait 5 s. A slot, or a
@@ -1490,7 +1520,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   channel rows, only after the exemptions, the hold read, the pause and the live eligibility check. The provider key travels in
   the `x-api-key` header only and no name, hash, probability, instruction or key is logged: a failure is one Warn line with the
   chat and user IDs, the HTTP status and the error type (`claude.HTTPError`), a refusal one Info line. Later plans of Phase 15
-  extend this bullet (the baseline and the new-member marker, the cost guards, the notice, the button and the page status).
+  extend this bullet (the cost guards, the notice, the button and the page status).
+  The full order of `memberReqAIRule` (plan 15-05; D-02, D-21): after the checks above one pipelined round reads the verdict,
+  the baseline `nm` and the marker `nu` (`memberReqAIReadState`; any error other than a miss is unknown), then
+  `memberReqAIDecide`: (1) a readable verdict decides first, below the bar records a pass and passes, at or above it sets the
+  marker and breaches, answered before any provider call; (2) not joining, no marker and a baseline equal to the current names
+  hash is a pass with no write; (3) not joining, no marker and no baseline records `nm` with `SET NX` and passes with no call;
+  (4) otherwise (a joiner, a marker, a baseline that differs) the flight judges and the caller records the answer (a pass
+  writes `nm = h` and deletes `nu`, a breach sets `nu`, an unknown writes nothing). The flight is shared by callers with
+  different user IDs and the same string, so it does only the call and the verdict write. `memberReqLookupMode.Joining` is
+  set only for the join entry's executor run (`Source == memberReqFromJoin`): a joiner is judged and the baseline is ignored,
+  because a rejoiner is a new membership. "New" means "recorded as joining while the rule is live", written by the join entry
+  for every joiner it reaches and by nothing else. The accepted limit: with no Redis, a failed marker write or a join the
+  entry never saw, a real new member is baselined at their first message and unjudged until they rename (the safe
+  direction); a joiner who never reaches the entry (a captcha failure, a lockdown ban) gets no marker. A member who renames
+  and never writes costs nothing: no update arrives. D-03's "a held member's message makes no lookup" is amended for holds
+  that carry bit 128: the held release asks the rule with the sender's current names (`memberReqHeldLookupsClear` passes
+  `Names`), bounded by the same verdict cache, breaker, gate and budgets, and only for a member the exemptions (approved,
+  pending captcha) and the watcher's known-administrator skip did not stop; every other held member's message still makes
+  no lookup (a hold with a name bit or the photo bit makes no AI request). An administrator whose list entry is unknown can
+  cost one call and a released hold, never a punishment (the executor's live eligibility check comes after the hold read,
+  exactly as for the photo and channel rules).
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry
   `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on (it is, by default, since the `mreq|` handler exists). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
@@ -1629,8 +1679,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every rule off. With a rule on it reads the member's hold fresh through `memberReqHoldRead` (the one hold read of the
   entry and the guard, a test seam): a punished requirement mute, which is the D-08 race of a member who posted before
   their captcha attempt existed, records `welcome_held` through `memberreq.SetHoldWelcomeHeld` and sends no welcome,
-  whatever Check on join says. With Check on join off the member is welcomed with no further read and no
-  `getChatMember`. Otherwise `memberReqEnforce` runs synchronously (`memberReqJoinTimeout`, 15 s, `memberReqFromJoin`) with
+  whatever Check on join says. Next, while the AI rule is live (`memberReqAILive`), the entry sets the member's new-member
+  marker `fuku:memberreq:nu:<chat>:<user>` (`memberReqAIMarkJoin`: one `SET` under `raidRedisTimeout`, no-op without Redis, an
+  error only logged at debug by IDs) before its Check-on-join branch, so the marker is the join record whether or not Check
+  on join is on: a joiner whose call was unanswered keeps it and is judged at their first message, and a member who joined
+  with Check on join off is judged at that first message with no call at join (a member whose hold read failed returned to
+  the plain welcome before it and gets no marker, the safe direction). With Check on join off the member is welcomed with no
+  further read and no `getChatMember`. Otherwise `memberReqEnforce` runs synchronously (`memberReqJoinTimeout`, 15 s, `memberReqFromJoin`) with
   its one live `getChatMember` and, for a rule of the photo or channel kind, the same lookups through the same executor under the 4 s
   `memberReqLookupJoinBudget` (a joiner whose lookup does not finish in 4 s is welcomed, leaves no hold, and is caught at their first
   message, so a raid of joins never parks a dispatcher goroutine for the entry's 15 s; `memberReqJoinThenWelcome` itself is unchanged,
@@ -1682,8 +1737,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   when all of these hold: the case is a message with a message ID and a date (a join is never released); the settings read
   again through `memberReqSettingsLookup` without an error (an unreadable one keeps the hold); the sender's names break no
   rule that is on (a member who still breaks a name rule stays held and no lookup is spent on them); every lookup rule the
-  hold carries a bit of and that is still on answers pass or inert when run with `memberReqLookupMode{Classify: true}`
-  under `memberReqLookupJobBudget` (an unknown, a breach, a cut-off lookup keep the hold; a rule now Off counts as
+  hold carries a bit of and that is still on answers pass or inert when run with `memberReqLookupMode{Classify: true, Names: ...}`
+  (the sender's current names, which only the AI rule reads; a hold carrying bit 128 is released after the member renames to
+  an ordinary name: the rule judges the new names, a pass writes `nm = h` and deletes the marker, and the predicate then
+  deletes the hold) under `memberReqLookupJobBudget` (an unknown, a breach, a cut-off lookup keep the hold; a rule now Off counts as
   released, and only the hold's own lookup bits are asked); and `memberreq.ClearHoldOnClean` with its two second margin
   deleted the row. A hold with name bits only needs no lookup, so a member who fixed their name is released by the same
   call, which keeps the Phase 13 behaviour (a clean message ends a warn hold) true in a group that also has a lookup rule
@@ -1711,6 +1768,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the watcher and the executor with no job and no Telegram call, so the cost is bounded by that cache after the first message.
   A standing that cannot be established (a 429, a 5xx, a timeout, a shed) writes nothing and the per-message job stays until
   it can, bounded by the 32 jobs and the lookup pacer.
+  Switching the AI spam-name rule on in a large group costs one baseline-only job per distinct poster once and zero provider
+  calls: the first message of an established member is a job that records `nm` with `SET NX` and passes with no Claude call
+  (`TestMemberReqWatcherAIBurst`), and their next message is satisfied in the watcher and costs no job.
   A basic group is never screened (mute and kick are supergroup methods): the watcher's filter is supergroups only, and the
   page says so with its basic-group line (`settings_mreq_here_basic`, one line while any rule is not Off), so it is a stated
   limit and no longer a silent one.
