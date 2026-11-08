@@ -49,19 +49,10 @@ func settingsMreqChannelOn() [7]int {
 // private one, and returns the message's text and keyboard afterwards.
 func (e *settingsMreqHereEnv) press(private bool, msgID int64, kv ...string) (string, [][]gotgbot.InlineKeyboardButton) {
 	e.t.Helper()
+	e.press0(private, msgID, kv...)
 	if private {
-		e.pressPrivate(e.owner, msgID, e.privateFields(e.chat.Id, kv...))
 		return e.lastEdit(e.owner.Id, msgID)
 	}
-	chat := e.chat
-	if e.basic {
-		chat.Type = "group"
-	}
-	data := encodeCallbackData(settingsCallbackNamespace, e.groupFields(e.owner, kv...))
-	if data == "" {
-		e.t.Fatalf("settings callback data %v did not encode", kv)
-	}
-	e.pressRaw(chat, e.owner, msgID, data)
 	return e.lastEdit(e.chat.Id, msgID)
 }
 
@@ -736,5 +727,153 @@ func TestSettingsMreqRedrawKeepsStatus(t *testing.T) {
 		if got := mreqChatCalls(env.memberReqEnv, env.chat.Id); got != 1 {
 			t.Errorf("getChat requests in all = %d, want the one fresh read of the opening", got)
 		}
+	})
+}
+
+// settingsMreqRefusalMenus runs body once in a group menu and once in a private one.
+func settingsMreqRefusalMenus(t *testing.T, body func(t *testing.T, private bool)) {
+	t.Helper()
+	for _, private := range []bool{false, true} {
+		name := map[bool]string{false: "group menu", true: "private menu"}[private]
+		t.Run(name, func(t *testing.T) { body(t, private) })
+	}
+}
+
+// settingsMreqPressed is what one press of a refusal test left behind: the answers and edits it
+// made and the last answer.
+type settingsMreqPressed struct {
+	Answers, Edits int
+	Answer         string
+	Alert          bool
+}
+
+// strictPress presses a button of the opened menu and reports what it answered and edited. The
+// edits are counted on the message the press was made on.
+func (e *settingsMreqHereEnv) strictPress(private bool, msgID int64, kv ...string) settingsMreqPressed {
+	e.t.Helper()
+	chatID := e.chat.Id
+	if private {
+		chatID = e.owner.Id
+	}
+	answers, edits := e.answerCount(), len(e.edits(chatID, msgID))
+	e.press0(private, msgID, kv...)
+	out := settingsMreqPressed{Answers: e.answerCount() - answers, Edits: len(e.edits(chatID, msgID)) - edits}
+	if out.Answers > 0 {
+		out.Answer, out.Alert = e.lastAnswer()
+	}
+	return out
+}
+
+// press0 presses like press but does not read the edit back, so a press that edits nothing is
+// not a test failure.
+func (e *settingsMreqHereEnv) press0(private bool, msgID int64, kv ...string) {
+	e.t.Helper()
+	if private {
+		e.pressPrivate(e.owner, msgID, e.privateFields(e.chat.Id, kv...))
+		return
+	}
+	chat := e.chat
+	if e.basic {
+		chat.Type = "group"
+	}
+	data := encodeCallbackData(settingsCallbackNamespace, e.groupFields(e.owner, kv...))
+	if data == "" {
+		e.t.Fatalf("settings callback data %v did not encode", kv)
+	}
+	e.pressRaw(chat, e.owner, msgID, data)
+}
+
+// settingsMreqChannelStrictKV is the st press of the channel rule with the absolute value v.
+func settingsMreqChannelStrictKV(v int) []string {
+	return []string{"a", "st", "p", settingsPageMreq, "t", "ch", "v", strconv.Itoa(v)}
+}
+
+// settingsMreqWantRefusedNoLink fails the test unless the press was refused as "no linked channel":
+// one alert with the status line's own key, one edit that is the Off-only channel screen, and
+// nothing written.
+func settingsMreqWantRefusedNoLink(t *testing.T, env *settingsMreqHereEnv, private bool, msgID int64, got settingsMreqPressed, stored int) {
+	t.Helper()
+	if got.Answers != 1 || !got.Alert || got.Answer != settingsMreqHereLine("", "settings_mreq_here_nolink") {
+		t.Errorf("answers = %d, last = %q (alert %v), want one alert of settings_mreq_here_nolink", got.Answers, got.Answer, got.Alert)
+	}
+	if got.Edits != 1 {
+		t.Fatalf("the press edited the message %d times, want once (the Off-only screen)", got.Edits)
+	}
+	chatID := env.chat.Id
+	if private {
+		chatID = env.owner.Id
+	}
+	text, keyboard := env.lastEdit(chatID, msgID)
+	settingsMreqWantChannelScreen(t, text, settingsMreqHereLine("🚫 ", "settings_mreq_here_nolink"), stored, true)
+	if strings.Contains(text, staffMarker("settings_mreq_confirm")) {
+		t.Errorf("the refusal drew a card: %q", text)
+	}
+	if rows := settingsMreqRowWidths(keyboard); !settingsMreqSameInts(rows, []int{1, 2}) {
+		t.Errorf("rows = %v, want the Off-only [1 2]", rows)
+	}
+}
+
+// settingsMreqWantRefusedUnknown fails the test unless the press was refused as "could not
+// check": one alert of mreq_fixed_check_failed and no edit.
+func settingsMreqWantRefusedUnknown(t *testing.T, got settingsMreqPressed) {
+	t.Helper()
+	if got.Answers != 1 || !got.Alert || got.Answer != staffMarker("mreq_fixed_check_failed") {
+		t.Errorf("answers = %d, last = %q (alert %v), want one alert of mreq_fixed_check_failed", got.Answers, got.Answer, got.Alert)
+	}
+	if got.Edits != 0 {
+		t.Errorf("the refused press edited the message %d times, want none", got.Edits)
+	}
+}
+
+func TestSettingsMreqChannelRefusal(t *testing.T) {
+	settingsMreqRefusalMenus(t, func(t *testing.T, private bool) {
+		t.Run("Warn with no linked channel is refused and the Off-only screen is redrawn", func(t *testing.T) {
+			env := newSettingsMreqHereEnv(t)
+			env.state.link(env.chat.Id, 0)
+			env.seed([7]int{}, false, false)
+			msgID := env.openMenuOf(private)
+			got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionWarn)...)
+			settingsMreqWantRefusedNoLink(t, env, private, msgID, got, 0)
+			if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+				t.Errorf("a refused press wrote %v", stored)
+			}
+		})
+
+		t.Run("Warn with a linked channel writes", func(t *testing.T) {
+			env := newSettingsMreqHereEnv(t)
+			mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			env.seed([7]int{}, false, false)
+			msgID := env.openMenuOf(private)
+			got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionWarn)...)
+			if got.Answers != 1 || got.Edits != 1 {
+				t.Fatalf("answers = %d, edits = %d, want one each", got.Answers, got.Edits)
+			}
+			if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{6: models.RequirementActionWarn} {
+				t.Errorf("stored %v, want only the channel rule on Warn", stored)
+			}
+			chatID := env.chat.Id
+			if private {
+				chatID = env.owner.Id
+			}
+			text, _ := env.lastEdit(chatID, msgID)
+			settingsMreqWantChannelScreen(t, text, "", models.RequirementActionWarn, false)
+		})
+
+		t.Run("Warn with an unreadable link answers could-not-check and changes nothing", func(t *testing.T) {
+			env := newSettingsMreqHereEnv(t)
+			mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			// A shed pacer is the unreadable answer both menu kinds can script: a private press's own
+			// getChat is not behind the lookup pacer, so it still passes.
+			blockKey := memberReqLookupPacerOptions.BlockKey
+			mreqSetKey(t, env.memberReqEnv, blockKey, 30*time.Second)
+			t.Cleanup(func() { env.redis.Del(blockKey) })
+			env.seed([7]int{}, false, false)
+			msgID := env.openMenuOf(private)
+			got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionWarn)...)
+			settingsMreqWantRefusedUnknown(t, got)
+			if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+				t.Errorf("an unreadable link wrote %v", stored)
+			}
+		})
 	})
 }
