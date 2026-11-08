@@ -38,8 +38,8 @@ type namesBody struct {
 	} `json:"messages"`
 }
 
-// namesUser is the object the user block must decode to.
-type namesUser struct {
+// namesSeen is the object the user block must decode to.
+type namesSeen struct {
 	First    string `json:"first_name"`
 	Last     string `json:"last_name"`
 	Username string `json:"username"`
@@ -70,9 +70,9 @@ func decodeNamesBody(t *testing.T, rec *recorder) namesBody {
 	return body
 }
 
-// namesUserOf decodes the single text block of the request into the object the
+// namesSeenOf decodes the single text block of the request into the object the
 // model is shown, failing on any other shape.
-func namesUserOf(t *testing.T, body namesBody) namesUser {
+func namesSeenOf(t *testing.T, body namesBody) namesSeen {
 	t.Helper()
 	if len(body.Messages) != 1 || body.Messages[0].Role != "user" {
 		t.Fatalf("messages = %+v, want exactly one user message", body.Messages)
@@ -93,7 +93,7 @@ func namesUserOf(t *testing.T, body namesBody) namesUser {
 			t.Fatalf("user object lacks %q: %v", key, keys)
 		}
 	}
-	return namesUser{First: keys["first_name"], Last: keys["last_name"], Username: keys["username"]}
+	return namesSeen{First: keys["first_name"], Last: keys["last_name"], Username: keys["username"]}
 }
 
 func TestClassifyNames(t *testing.T) {
@@ -133,7 +133,7 @@ func TestClassifyNames(t *testing.T) {
 		if body.ToolChoice.Type != "tool" || body.ToolChoice.Name != ToolName || !body.ToolChoice.DisableParallelToolUse {
 			t.Fatalf("tool_choice = %+v", body.ToolChoice)
 		}
-		if got := namesUserOf(t, body); got != (namesUser{First: "Anna", Username: "anna_k"}) {
+		if got := namesSeenOf(t, body); got != (namesSeen{First: "Anna", Username: "anna_k"}) {
 			t.Fatalf("user object = %+v", got)
 		}
 		for _, block := range body.Messages[0].Content {
