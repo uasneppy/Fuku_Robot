@@ -55,8 +55,24 @@ findings:
     severity: Info
     disposition: deferred
     title: "Fix pass: the lookup touch marker is set by any flight start or join, including a flight whose in-flight cache re-read hits, which only costs an extra safe live read"
+  - id: SEC-01
+    severity: Info
+    disposition: deferred
+    title: "Security audit: the linked channel's numeric ID is written to three Debug log lines (D-18 allows IDs; the log test forbids titles, names and texts, not the ID)"
+  - id: SEC-02
+    severity: Info
+    disposition: fixed
+    title: "Security audit: the approved and captcha-pending exemptions are read once before the lookup phase and not again before the claim"
+  - id: SEC-03
+    severity: Info
+    disposition: fixed
+    title: "Security audit: a demoted bot is still read as a channel administrator for up to 2 minutes through the ba positive cache"
+  - id: SEC-04
+    severity: Info
+    disposition: deferred
+    title: "Security audit: nothing limits a person's presses of the channel screen or I fixed it, and one 32-job runner serves every chat of a replica"
 open: 0
-total: 13
+total: 17
 ---
 
 # Phase 14: Code Review Disposition
@@ -65,7 +81,9 @@ Findings WR-01 to IN-05 come from `14-REVIEW.md` (deep review of 11 production f
 to NEW-03 are the concerns the fix pass reported (`14-REVIEW-FIX.md`) and are dispositioned once here. The six fixes went
 through one single-writer fix pass, each as a RED test commit followed by a GREEN fix, and the pass was proved through CI's
 own gate (`go test -json` into `scripts/check_test_results`, exit 0, no unexpected skip). The security audit
-(`14-SECURITY.md`) and the verifier add their own entries below if they find any.
+(`14-SECURITY.md`, 0 open threats) registered four more items (SEC-01 to SEC-04); the two that concern a destructive
+punishment were fixed in a second small pass (`14-SECURITY-FIX.md`), and the verifier adds its own entries below if it
+finds any.
 
 ## Fixed
 
@@ -112,3 +130,21 @@ own gate (`go test -json` into `scripts/check_test_results`, exit 0, no unexpect
   punishment is refused or backed off repeats it per attempt. A subscribed member costs none.
 - **NEW-03.** The touch marker is set by any flight start or join, so the live record may be read once more when it was not
   strictly needed; that only costs a safe extra paced call.
+
+## Security audit items (`14-SECURITY.md`)
+
+- **SEC-02** (`ec6f839` RED, `7f7b0c7` GREEN, fixed). After a slow lookup phase (one that made or waited for a request, or took
+  over 1 s) the executor reads the approvals and pending-captcha exemptions again before the claim
+  (`memberReqRereadAfterLookups`); an exempt result or a read error punishes nobody, and an all-cache phase costs no extra read.
+- **SEC-03** (same commits, fixed). A left, kicked or restricted-not-member candidate becomes a channel breach only on a FRESH
+  definite administrator answer of the bot's standing (the coalesced `f:b:<channel>` flight behind the lookup pacer); a
+  non-administrator or bot-gone answer makes it inert, writes `cna` and drops the stale `ba`; an unanswerable answer is
+  unknown. Only breach candidates pay the extra call.
+- **SEC-01** (accepted, AR-10). The linked channel's numeric ID appears in three Debug log lines. D-18 allows IDs in logs
+  (chat, channel and user IDs and outcomes only, never a name, title or text); production runs at Info unless `DEBUG=true`.
+  To make the stricter 'no channel ID in any log' property hold, pass the group's ID in those calls and add the channel ID
+  to the log test's forbidden list.
+- **SEC-04** (accepted). The pressing of the channel screen or "I fixed it" is not rate limited beyond the lookup pacer and
+  the rights each press needs, and one 32-job runner serves every chat of a replica. Nobody is punished wrongly under load
+  (a shed lookup is unknown); the cost is that a sustained storm sheds other groups' jobs on that replica until it drops,
+  and every shed message is judged again at its sender's next message. Phase 13 documented the same shared runner.
