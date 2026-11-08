@@ -26,7 +26,7 @@
     {
       "number": "14",
       "name": "Profile Photo and Channel Rules",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "15",
@@ -56,8 +56,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 4 of 10 · 0% · ready to verify"
+    "label": "Advance to the next step",
+    "reason": "Phase 5 of 10 · 0% · executing"
   },
-  "updated_at": "2026-11-08T00:13:40.886Z"
+  "updated_at": "2026-11-08T06:54:09.381Z"
 }
