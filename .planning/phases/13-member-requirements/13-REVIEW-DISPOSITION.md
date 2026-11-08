@@ -59,16 +59,41 @@ findings:
     severity: Info
     disposition: deferred
     title: "Fix pass: ReclaimStaleHold clears notice_msg_id, so the hold of an adopted warn no longer records the first notice's message ID"
+  - id: SEC-NEW-01
+    severity: Info
+    disposition: fixed
+    title: "Security audit: a bidi control inside a name is not stripped, so a name can close its own isolate and reorder the notice line"
+  - id: SEC-NEW-02
+    severity: Info
+    disposition: fixed
+    title: "Security audit: the undelivered-notice lift does not re-check the marker, so an admin's restriction placed during the notice retry can be overwritten"
+  - id: SEC-NEW-03
+    severity: Info
+    disposition: deferred
+    title: "Security audit: a pending mute hold whose punished mark failed three times is not re-muted by the captcha guard until a reclaim"
+  - id: SEC-NEW-04
+    severity: Info
+    disposition: deferred
+    title: "Security audit: the warn module's limit action is neither paced nor bounded by the job context (the HTTP client's 30 s timeout and the per-chat cap bound it)"
+  - id: SEC-NEW-05
+    severity: Info
+    disposition: deferred
+    title: "Security audit: a raider with more than 10 violating accounts in a minute can pause punishments for 10 minutes (the cost of the brake)"
+  - id: SEC-NEW-06
+    severity: Info
+    disposition: deferred
+    title: "Security audit: held and paused deletes still read the watcher's settings snapshot"
 open: 0
-total: 14
+total: 20
 ---
 
 # Phase 13: Code Review Disposition
 
 Findings CR-01 to IN-06 come from `13-REVIEW.md` (deep review of 27 files: 1 critical, 3 warnings, 6 info). NEW-01 to
 NEW-04 are the concerns the fix pass reported (`13-REVIEW-FIX.md`) and are dispositioned once here. The four fixes went
-through one single-writer fix pass, each as a RED test commit followed by a GREEN fix; the security audit
-(`13-SECURITY.md`) and the verifier add their own entries below if they find any.
+through one single-writer fix pass, each as a RED test commit followed by a GREEN fix. The security audit
+(`13-SECURITY.md`, 0 open threats) registered six more items (SEC-NEW-01 to SEC-NEW-06); the two low ones were fixed in a
+second small pass (`13-SECURITY-FIX.md`) and the verifier adds its own entries below if it finds any.
 
 ## Fixed
 
@@ -126,3 +151,21 @@ through one single-writer fix pass, each as a RED test commit followed by a GREE
   `restrictChatMember` call is overwritten. The window is the milliseconds between two calls of one job.
 - **NEW-04.** `ReclaimStaleHold` clears `notice_msg_id`, so an adopted warn's hold no longer records the first notice's
   message ID. The "I fixed it" button edits the message it sits on and never reads that column, so nothing depends on it.
+
+## Security audit items (`13-SECURITY.md`)
+
+- **SEC-NEW-01** (`ac75ae7` RED, `44a20b2` GREEN, fixed). `memberReqStripBidi` removes U+061C, U+200E, U+200F, U+202A to
+  U+202E and U+2066 to U+2069 from a name before it is cut to 64 runes and wrapped in the U+2068/U+2069 isolate, so a name
+  can no longer close its own isolate; an all-control name uses the fallback. The name rules still judge the original name.
+- **SEC-NEW-02** (same commits, fixed). `memberReqUndeliveredMute` makes one paced `getChatMember` and lifts only while the
+  live record carries the hold's marker; a restriction someone else placed during the notice retry is left alone (the hold
+  is still reverted to pending). When the read itself fails it still lifts (a double fault; a button-less 330-day mute is
+  the worse outcome), documented in the function comment and AGENTS.md.
+- **SEC-NEW-03** (AR-15). A pending mute hold whose mark failed three times is not re-muted by the captcha guard; the reclaim
+  after `StaleClaim` mutes again. A triple database failure plus a captcha pass inside two minutes.
+- **SEC-NEW-04** (AR-16). The warn module's limit action (kick or ban at the limit) is not paced through `memberReqPaced` and
+  not bounded by the job context; it is bounded by the HTTP client's 30 s timeout and the per-chat cap. The AGENTS.md
+  wording ("every Telegram call is paced") is imprecise for this one call and is left for a docs pass.
+- **SEC-NEW-05** (AR-10). A raider with more than 10 violating accounts a minute can trip the cap and pause punishments for
+  10 minutes. This is the brake working as designed: the held members' messages are still deleted.
+- **SEC-NEW-06** (AR-17). Held and paused deletes read the watcher's settings snapshot (WR-02 fixed the punishing path).
