@@ -337,14 +337,28 @@ func TestShutdownEndsMemberReqLookups(t *testing.T) {
 	// The flight goroutine of the cancelled lookup has ended: a fresh flight of its key runs
 	// its own function at once. A flight still stuck in the held request would be joined, and
 	// its result would come back shared and late.
-	fresh := memberReqLookupFlight.DoChan("p:"+strconv.FormatInt(inFlight.Id, 10), func() (any, error) { return "fresh", nil })
-	select {
-	case result := <-fresh:
-		if result.Val != "fresh" || result.Shared {
-			t.Errorf("flight result = %+v, want a fresh flight of its own (the cancelled one has ended)", result)
+	// StopMemberReqJobs returns when the job has left its lookup, which can be a moment before the
+	// flight's goroutine has unwound after its own cancel (under a loaded machine CI saw a shared
+	// result at once), so the fresh flight is asked again until it is no longer joined: a flight
+	// stuck in the held request would stay joined for the whole two seconds and fail.
+	key := "p:" + strconv.FormatInt(inFlight.Id, 10)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		fresh := memberReqLookupFlight.DoChan(key, func() (any, error) { return "fresh", nil })
+		select {
+		case result := <-fresh:
+			if result.Val == "fresh" && !result.Shared {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("flight result = %+v, want a fresh flight of its own (the cancelled one has ended)", result)
+			}
+			time.Sleep(10 * time.Millisecond)
+			continue
+		case <-time.After(2 * time.Second):
+			t.Fatal("the flight of the cancelled lookup is still running")
 		}
-	case <-time.After(2 * time.Second):
-		t.Error("the flight of the cancelled lookup is still running")
+		break
 	}
 
 	// With the runner restored, the second member's lookup is answered.
