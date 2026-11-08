@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -379,6 +380,96 @@ func TestMemberReqRuleKeysExist(t *testing.T) {
 			}
 		}
 	}
+}
+
+// lookupStubTable replaces the lookup rows of memberReqRules with recording stubs for one test and
+// restores the table in t.Cleanup. verdicts maps a rule code to the verdict its stub answers; a code
+// with no entry answers the zero verdict. The returned slice records every call as "code:chat:user:fresh:classify".
+func lookupStubTable(t *testing.T, verdicts map[string]memberReqVerdict) *[]string {
+	t.Helper()
+	saved := memberReqRules
+	t.Cleanup(func() { memberReqRules = saved })
+	calls := &[]string{}
+	stubbed := make([]memberReqRule, len(saved))
+	copy(stubbed, saved)
+	for i := range stubbed {
+		if stubbed[i].Lookup == nil {
+			continue
+		}
+		code := stubbed[i].Code
+		stubbed[i].Lookup = func(_ context.Context, _ *gotgbot.Bot, chatID, userID int64, mode memberReqLookupMode) memberReqVerdict {
+			*calls = append(*calls, fmt.Sprintf("%s:%d:%d:%v:%v", code, chatID, userID, mode.Fresh, mode.Classify))
+			return verdicts[code]
+		}
+	}
+	memberReqRules = stubbed
+	return calls
+}
+
+// TestMemberReqLookupBroken proves the fold of lookup verdicts into a mask: table order, rows with
+// no Lookup and rows that are Off skipped, only memberReqBreach adds a bit, memberReqUnknown sets
+// the flag and no bit, memberReqPass and memberReqInert add nothing (D-02, MREQ-10). It is the only
+// caller of memberReqLookupBroken until plan 14-06 folds it into the executor.
+func TestMemberReqLookupBroken(t *testing.T) {
+	ctx := context.Background()
+	const chatID, userID int64 = -100777, 4711
+	mode := memberReqLookupMode{Fresh: true, Classify: true}
+	on := requirementsOf(1, 1, 1, 1, 1, models.RequirementActionWarn, models.RequirementActionMute)
+
+	t.Run("every lookup breaching sets both bits, called in table order with the arguments given", func(t *testing.T) {
+		calls := lookupStubTable(t, map[string]memberReqVerdict{"ph": memberReqBreach, "ch": memberReqBreach})
+		mask, unknown := memberReqLookupBroken(ctx, nil, on, chatID, userID, mode)
+		if mask != 32|64 || unknown {
+			t.Errorf("mask = %d, unknown = %v, want 96 and false", mask, unknown)
+		}
+		want := []string{fmt.Sprintf("ph:%d:%d:true:true", chatID, userID), fmt.Sprintf("ch:%d:%d:true:true", chatID, userID)}
+		if fmt.Sprint(*calls) != fmt.Sprint(want) {
+			t.Errorf("calls = %v, want %v (photo first, then channel, name rules never)", *calls, want)
+		}
+	})
+
+	t.Run("one verdict per rule", func(t *testing.T) {
+		for _, c := range []struct {
+			name         string
+			photo, chann memberReqVerdict
+			wantMask     int
+			wantUnknown  bool
+		}{
+			{"photo breach only", memberReqBreach, memberReqPass, 32, false},
+			{"channel breach only", memberReqPass, memberReqBreach, 64, false},
+			{"pass and inert add nothing", memberReqPass, memberReqInert, 0, false},
+			{"inert and inert add nothing", memberReqInert, memberReqInert, 0, false},
+			{"unknown sets the flag and no bit", memberReqUnknown, memberReqPass, 0, true},
+			{"a breach beside an unknown keeps the bit and the flag", memberReqBreach, memberReqUnknown, 32, true},
+			{"the zero verdict is unknown", memberReqVerdict(0), memberReqVerdict(0), 0, true},
+		} {
+			lookupStubTable(t, map[string]memberReqVerdict{"ph": c.photo, "ch": c.chann})
+			mask, unknown := memberReqLookupBroken(ctx, nil, on, chatID, userID, mode)
+			if mask != c.wantMask || unknown != c.wantUnknown {
+				t.Errorf("%s: mask = %d, unknown = %v, want %d and %v", c.name, mask, unknown, c.wantMask, c.wantUnknown)
+			}
+		}
+	})
+
+	t.Run("a rule that is Off is never called", func(t *testing.T) {
+		calls := lookupStubTable(t, map[string]memberReqVerdict{"ph": memberReqBreach, "ch": memberReqBreach})
+		photoOff := requirementsOf(1, 1, 1, 1, 1, models.RequirementActionOff, models.RequirementActionKick)
+		mask, unknown := memberReqLookupBroken(ctx, nil, photoOff, chatID, userID, mode)
+		if mask != 64 || unknown || len(*calls) != 1 || (*calls)[0][:2] != "ch" {
+			t.Errorf("mask = %d, unknown = %v, calls = %v, want only the channel rule asked", mask, unknown, *calls)
+		}
+		*calls = nil
+		if mask, unknown = memberReqLookupBroken(ctx, nil, requirementsOf(1, 1, 1, 1, 1), chatID, userID, mode); mask != 0 || unknown || len(*calls) != 0 {
+			t.Errorf("both lookup rules Off: mask = %d, unknown = %v, calls = %v, want nothing asked", mask, unknown, *calls)
+		}
+	})
+
+	t.Run("nil settings ask nothing", func(t *testing.T) {
+		calls := lookupStubTable(t, map[string]memberReqVerdict{"ph": memberReqBreach, "ch": memberReqBreach})
+		if mask, unknown := memberReqLookupBroken(ctx, nil, nil, chatID, userID, mode); mask != 0 || unknown || len(*calls) != 0 {
+			t.Errorf("nil settings: mask = %d, unknown = %v, calls = %v, want 0, false and no call", mask, unknown, *calls)
+		}
+	})
 }
 
 // requirementsOf builds settings with one action per rule, in rule order: up to seven actions
