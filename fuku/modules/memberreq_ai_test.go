@@ -93,6 +93,14 @@ func mreqAIKeyOf(t *testing.T, names *memberReqNames) string {
 	return memberReqAIVerdictKey(raidAITestModel, mreqAICanon(t, names.First, names.Last, names.Username))
 }
 
+// mreqAIPlant stores value under a verdict key by hand, as a planted or stale entry.
+func mreqAIPlant(t *testing.T, env *memberReqEnv, key, value string) {
+	t.Helper()
+	if err := env.redis.Set(key, value); err != nil {
+		t.Fatalf("plant %s: %v", key, err)
+	}
+}
+
 // mreqAIFullwidth writes ASCII letters and digits as their fullwidth forms, which NFKC folds back.
 func mreqAIFullwidth(s string) string {
 	return strings.Map(func(r rune) rune {
@@ -127,7 +135,7 @@ func TestMemberReqAIRule(t *testing.T) {
 	t.Run("names that cannot be judged are inert and ask nobody", func(t *testing.T) {
 		for name, names := range map[string]*memberReqNames{
 			"all empty":          {},
-			"only invisible":     {First: "​", Last: "​", Username: ""},
+			"only invisible":     {First: "\u200b", Last: "\u200b", Username: ""},
 			"a lone Deleted Acc": {First: "Deleted Account"},
 		} {
 			env, ai := direct(t)
@@ -201,8 +209,8 @@ func TestMemberReqAIRule(t *testing.T) {
 	t.Run("a cached probability is judged by the bar without a request", func(t *testing.T) {
 		env, ai := direct(t)
 		high, low := mreqAIUniqueNames(), mreqAIUniqueNames()
-		env.redis.Set(mreqAIKeyOf(t, high), "0.95")
-		env.redis.Set(mreqAIKeyOf(t, low), "0.2")
+		mreqAIPlant(t, env, mreqAIKeyOf(t, high), "0.95")
+		mreqAIPlant(t, env, mreqAIKeyOf(t, low), "0.2")
 		if got := mreqAIAsk(env, high, memberReqLookupMode{}); got != memberReqBreach {
 			t.Errorf("cached 0.95: verdict = %v, want breach", got)
 		}
@@ -219,7 +227,7 @@ func TestMemberReqAIRule(t *testing.T) {
 			env, ai := direct(t)
 			names := mreqAIUniqueNames()
 			key := mreqAIKeyOf(t, names)
-			env.redis.Set(key, planted)
+			mreqAIPlant(t, env, key, planted)
 			if got := mreqAIAsk(env, names, memberReqLookupMode{}); got != memberReqPass {
 				t.Errorf("planted %q: verdict = %v, want the provider's pass", planted, got)
 			}
@@ -546,7 +554,7 @@ func TestMemberReqAINotConfigured(t *testing.T) {
 				clean := mreqAIMember(env, "Casino")
 				planted := &memberReqNames{First: clean.FirstName, Last: clean.LastName, Username: clean.Username}
 				plantedKey := mreqAIKeyOf(t, planted)
-				env.redis.Set(plantedKey, "0.99")
+				mreqAIPlant(t, env, plantedKey, "0.99")
 
 				env.mreqJoin(clean)
 				if got := mreqAIWelcomes(env); got != 1 {

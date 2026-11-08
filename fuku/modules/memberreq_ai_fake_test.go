@@ -90,13 +90,11 @@ type mreqAIRequest struct {
 	Body []byte
 }
 
-// mreqAIState is the stand-in's script and record. Steps queued with queue are used first, one
-// per request; when the queue is empty the default step answers. The default is a 0.1
-// probability until a test sets another.
+// mreqAIState is the stand-in's script and record. The default step answers every request; it is
+// a 0.1 probability until a test sets another.
 type mreqAIState struct {
 	mu        sync.Mutex
 	def       mreqAIStep
-	queued    []mreqAIStep
 	requests  []mreqAIRequest
 	onRequest func()
 	release   chan struct{}
@@ -108,13 +106,6 @@ func (s *mreqAIState) setDefault(step mreqAIStep) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.def = step
-}
-
-// queue adds answers for the next requests, one each, in order.
-func (s *mreqAIState) queue(steps ...mreqAIStep) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.queued = append(s.queued, steps...)
 }
 
 // setOnRequest installs a hook that runs when a request arrives, before it is answered.
@@ -148,9 +139,6 @@ func (s *mreqAIState) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.requests = append(s.requests, mreqAIRequest{Key: r.Header.Get("x-api-key"), Body: body})
 	step := s.def
-	if len(s.queued) > 0 {
-		step, s.queued = s.queued[0], s.queued[1:]
-	}
 	hook := s.onRequest
 	s.mu.Unlock()
 	if hook != nil {
