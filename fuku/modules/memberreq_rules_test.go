@@ -599,4 +599,69 @@ func TestMemberReqMention(t *testing.T) {
 			t.Errorf("mention %q has more than the link's own two tags", mention)
 		}
 	})
+
+	t.Run("bidirectional controls in a name are stripped (NEW-01)", func(t *testing.T) {
+		controls := []rune{'\u061c', '\u200e', '\u200f', '\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u2066', '\u2067', '\u2068', '\u2069'}
+		for _, control := range controls {
+			u := gotgbot.User{Id: id, FirstName: "a" + string(control) + "b"}
+			if text := mentionLinkText(t, memberReqMention(u, fallback)); text != "\u2068ab\u2069" {
+				t.Errorf("name with U+%04X: link text = %q, want the controls dropped and only the wrapper kept", control, text)
+			}
+		}
+	})
+
+	t.Run("a name cannot close its own isolate and reorder the line (NEW-01)", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: "x\u2069\u202eevil\u2066\u2067z"}
+		mention := memberReqMention(u, fallback)
+		text := mentionLinkText(t, mention)
+		if text != "\u2068xevilz\u2069" {
+			t.Errorf("link text = %q, want only the letters inside the wrapper", text)
+		}
+		if n := strings.Count(mention, "\u2068"); n != 1 {
+			t.Errorf("mention has %d U+2068, want the wrapper's one", n)
+		}
+		if n := strings.Count(mention, "\u2069"); n != 1 {
+			t.Errorf("mention has %d U+2069, want the wrapper's one", n)
+		}
+		for _, control := range []rune{'\u061c', '\u200e', '\u200f', '\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u2066', '\u2067'} {
+			if strings.ContainsRune(mention, control) {
+				t.Errorf("mention holds U+%04X", control)
+			}
+		}
+	})
+
+	t.Run("the controls go before the cut to 64 runes (NEW-01)", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: strings.Repeat("\u202e", 30) + strings.Repeat("Ж", 70)}
+		text := mentionLinkText(t, memberReqMention(u, fallback))
+		if inner := strings.TrimSuffix(strings.TrimPrefix(text, "\u2068"), "\u2069"); inner != strings.Repeat("Ж", 64) {
+			t.Errorf("inner name = %q, want 64 letters with no control counted in the cut", inner)
+		}
+	})
+
+	t.Run("escaping survives the strip (NEW-01)", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: "<b>\u202e&"}
+		mention := memberReqMention(u, fallback)
+		if strings.Contains(mention, "<b>") || !strings.Contains(mention, "&lt;b&gt;&amp;") {
+			t.Errorf("mention %q is not escaped", mention)
+		}
+	})
+
+	t.Run("a name made only of controls falls back (NEW-01)", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: "\u202e\u2069\u2066\u061c\u200f"}
+		mention := memberReqMention(u, fallback)
+		if text := mentionLinkText(t, mention); text != "\u2068"+fallback+"\u2069" {
+			t.Errorf("link text = %q, want the fallback", text)
+		}
+		// Even a caller's fallback that carries a control is stripped.
+		if text := mentionLinkText(t, memberReqMention(u, "user\u202e 7")); text != "\u2068user 7\u2069" {
+			t.Errorf("link text = %q, want the fallback stripped too", text)
+		}
+	})
+
+	t.Run("an ordinary Arabic name is unchanged (NEW-01)", func(t *testing.T) {
+		u := gotgbot.User{Id: id, FirstName: "محمد\u200d علي"}
+		if text := mentionLinkText(t, memberReqMention(u, fallback)); text != "\u2068محمد\u200d علي\u2069" {
+			t.Errorf("link text = %q, want the name with its joiner kept", text)
+		}
+	})
 }

@@ -800,3 +800,118 @@ func TestMemberReqMuteNoticeUndeliverable(t *testing.T) {
 		})
 	}
 }
+
+// mreqDeliveredMute is a group where a member was muted for the last-name rule and the notice
+// was delivered, so the hold is punished with its marker. The test then calls
+// memberReqUndeliveredMute itself, as the executor does after a notice that was rate limited
+// for minutes: whatever the member's record became in that window is set by the test first.
+func mreqDeliveredMute(t *testing.T) (*memberReqEnv, memberReqCase, *models.ChatRequirementHold, *logrustest.Hook) {
+	t.Helper()
+	hook := logrustest.NewGlobal()
+	t.Cleanup(hook.Reset)
+	env := newMemberReqEnv(t)
+	member := env.mreqMember("Alex", "", "alex")
+	env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+	env.fake.setChatPermsRaw(env.chat.Id, `{"can_send_messages":true,"can_pin_messages":true}`)
+	c := env.mreqCase(member)
+	if got := env.mreqEnforce(c); got.Outcome != memberReqMuted {
+		t.Fatalf("outcome = %+v, want Muted", got)
+	}
+	hold := env.mreqHold(member.Id)
+	if hold == nil || hold.PunishedAt == nil || hold.MuteUntil == 0 {
+		t.Fatalf("hold = %+v, want punished with a marker", hold)
+	}
+	if n := len(env.calls("restrictChatMember")); n != 1 {
+		t.Fatalf("restrictChatMember calls = %d, want the mute alone", n)
+	}
+	return env, c, hold, hook
+}
+
+func TestMemberReqUndeliveredMuteChecksMarker(t *testing.T) {
+	t.Run("the marker still live: the mute is lifted after one paced live read", func(t *testing.T) {
+		env, c, hold, _ := mreqDeliveredMute(t)
+		lookups := env.mreqCallCount("getChatMember")
+
+		memberReqUndeliveredMute(context.Background(), env.bot, c, hold)
+
+		if n := env.mreqCallCount("getChatMember") - lookups; n != 1 {
+			t.Errorf("getChatMember calls = %d, want one live read before the lift", n)
+		}
+		if n := len(env.calls("restrictChatMember")); n != 2 {
+			t.Fatalf("restrictChatMember calls = %d, want the mute and its lift", n)
+		}
+		if rec := env.fake.member(env.chat.Id, c.User.Id); rec == nil || rec.UntilDate != 0 || !rec.CanSendMessages {
+			t.Errorf("member after the lift = %+v, want the group's defaults with no end date", rec)
+		}
+		if got := env.mreqHold(c.User.Id); got == nil || got.PunishedAt != nil {
+			t.Errorf("hold = %+v, want a pending backoff row", got)
+		}
+	})
+
+	replaced := []struct {
+		name   string
+		record staffFakeMember
+	}{
+		{"an admin restricted the member with no end date", staffFakeMember{Status: gotgbot.ChatMemberStatusRestricted, IsMember: true}},
+		{"an admin restricted the member with an end date of their own", staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, UntilDate: time.Now().Add(48 * time.Hour).Unix(),
+		}},
+		{"the restriction was lifted and the member is a plain member", staffFakeMember{
+			Status: gotgbot.ChatMemberStatusMember, IsMember: true, CanSendMessages: true,
+		}},
+		{"the member left", staffFakeMember{Status: gotgbot.ChatMemberStatusLeft}},
+		{"the member was banned", staffFakeMember{Status: gotgbot.ChatMemberStatusKicked, UntilDate: 1}},
+	}
+	for _, tc := range replaced {
+		t.Run("the record is left alone when "+tc.name, func(t *testing.T) {
+			env, c, hold, hook := mreqDeliveredMute(t)
+			env.fake.setMember(env.chat.Id, c.User.Id, tc.record)
+			hook.Reset()
+
+			memberReqUndeliveredMute(context.Background(), env.bot, c, hold)
+
+			if n := len(env.calls("restrictChatMember")); n != 1 {
+				t.Errorf("restrictChatMember calls = %d, want only the mute and no lift", n)
+			}
+			rec := env.fake.member(env.chat.Id, c.User.Id)
+			if rec == nil || *rec != tc.record {
+				t.Errorf("member record = %+v, want %+v untouched", rec, tc.record)
+			}
+			got := env.mreqHold(c.User.Id)
+			if got == nil || got.PunishedAt != nil {
+				t.Errorf("hold = %+v, want a pending backoff row", got)
+			}
+			lines := mreqWarnLines(hook)
+			if len(lines) != 1 {
+				t.Fatalf("Warn lines = %q, want exactly one", lines)
+			}
+			for _, want := range []string{fmt.Sprint(env.chat.Id), fmt.Sprint(c.User.Id)} {
+				if !strings.Contains(lines[0], want) {
+					t.Errorf("Warn line %q does not hold %s", lines[0], want)
+				}
+			}
+			for _, secret := range []string{"Alex", "alex"} {
+				if strings.Contains(lines[0], secret) {
+					t.Errorf("Warn line %q holds the member's name", lines[0])
+				}
+			}
+		})
+	}
+
+	t.Run("a live read that fails still lifts the mute", func(t *testing.T) {
+		env, c, hold, _ := mreqDeliveredMute(t)
+		env.fake.script("getChatMember", env.chat.Id, mreqRefusals(1)...)
+
+		memberReqUndeliveredMute(context.Background(), env.bot, c, hold)
+
+		if n := len(env.calls("restrictChatMember")); n != 2 {
+			t.Fatalf("restrictChatMember calls = %d, want the mute and its lift", n)
+		}
+		if rec := env.fake.member(env.chat.Id, c.User.Id); rec == nil || rec.UntilDate != 0 {
+			t.Errorf("member after the lift = %+v, want no end date", rec)
+		}
+		if got := env.mreqHold(c.User.Id); got == nil || got.PunishedAt != nil {
+			t.Errorf("hold = %+v, want a pending backoff row", got)
+		}
+	})
+}
