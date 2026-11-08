@@ -285,7 +285,7 @@ func TestChatRequirementsSettings(t *testing.T) {
 		// The SQLite harness builds its table from the model, which has no column defaults,
 		// so a row holding only chat_id can be inserted on PostgreSQL alone, where the
 		// migration-built schema carries the DEFAULT 0 that makes an old row read as off.
-		if db.DB.Dialector.Name() == "postgres" {
+		if db.DB.Name() == "postgres" {
 			if err := db.DB.Exec("INSERT INTO chat_requirements (chat_id) VALUES (?)", chatID).Error; err != nil {
 				t.Fatalf("insert an old-style row: %v", err)
 			}
