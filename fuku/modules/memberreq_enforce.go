@@ -275,8 +275,16 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	// broken". The claim, the cap and the mute-over-restriction check all follow this step.
 	lookupCtx, cancel := context.WithTimeout(ctx, memberReqLookupBudget(c.Source))
 	defer cancel()
-	lookupMask, _ := memberReqLookupBroken(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{})
+	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{})
 	broken |= lookupMask
+	// WR-02: a stricter rule that could not be answered must not be silently dropped behind a weaker
+	// punishment and its hold (the held path makes no lookup, so the stricter rule would never be
+	// judged). Nothing is claimed now; the member is judged again at their next message.
+	if memberReqUnknownDefers(c.Settings, broken, unknownMask) {
+		log.Infof("[MemberReq] a stricter rule could not be answered for user %d in chat %d, so nothing is claimed yet and the member is judged again at their next message",
+			c.User.Id, c.Chat.Id)
+		return member, 0, false
+	}
 	return member, broken, broken != 0
 }
 
@@ -541,8 +549,11 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //     while its action is not Off, under memberReqLookupJobBudget (a job) or
 //     memberReqLookupJoinBudget (the join entry): only an explicit breach adds its bit, an
 //     unknown or inert verdict adds none, and so an unanswerable lookup punishes nobody and never
-//     blocks a name breach already established. The claim (9) follows every lookup, so a lookup
-//     cut off by a crash or a shutdown leaves no hold;
+//     blocks a name breach already established, unless the rule that could not be answered has a
+//     stricter punishment than the broken ones (memberReqUnknownDefers, WR-02): then nothing is
+//     claimed and the member is judged again at their next message, so a stricter rule is never
+//     dropped behind a weaker punishment and its hold. The claim (9) follows every lookup, so a
+//     lookup cut off by a crash or a shutdown leaves no hold;
 //  7. a Mute over a restriction someone else placed (the member is restricted below the group's
 //     defaults and carries no marker of this episode) places no mute, creates no hold, posts
 //     nothing and deletes nothing; the other punishments still apply;

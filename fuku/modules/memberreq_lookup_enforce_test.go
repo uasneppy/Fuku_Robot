@@ -505,9 +505,11 @@ func TestMemberReqLookupDoesNotBlockNameBreach(t *testing.T) {
 		}
 	})
 
+	// The channel rule is a Mute here, weaker than the last name Kick: a stricter channel rule that
+	// could not be answered defers the claim instead (WR-02, TestMemberReqPartialEpisode).
 	t.Run("an unanswerable channel lookup leaves the name breach punished", func(t *testing.T) {
 		env, state := mreqLookupEnv(t)
-		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionKick, memberreq.RuleChannel: models.RequirementActionBan})
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionKick, memberreq.RuleChannel: models.RequirementActionMute})
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
 		member := noLastName(t, env, state, mreqHasPhoto)
 		state.setMember(channel, member.Id, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
@@ -515,13 +517,13 @@ func TestMemberReqLookupDoesNotBlockNameBreach(t *testing.T) {
 
 		got := env.mreqEnforce(env.mreqCase(member))
 		if got.Outcome != memberReqRemoved {
-			t.Fatalf("outcome = %+v, want Removed (kick) for the last name rule, not the channel ban", got)
+			t.Fatalf("outcome = %+v, want Removed (kick) for the last name rule, not the channel mute", got)
 		}
 		if hold := env.mreqHold(member.Id); hold == nil || hold.Rules != mreqBitOf(t, "ln") || hold.Action != models.RequirementActionKick {
 			t.Errorf("hold = %+v, want a kick hold with the last name bit only", hold)
 		}
-		if n := env.mreqCallCount("banChatMember"); n != 0 {
-			t.Errorf("ban calls = %d, want none", n)
+		if n := env.mreqCallCount("banChatMember", "restrictChatMember"); n != 0 {
+			t.Errorf("ban and restrict calls = %d, want none", n)
 		}
 	})
 

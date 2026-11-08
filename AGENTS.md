@@ -1448,10 +1448,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupJoinBudget` (4 s) for the join entry, both variables), whose mask is OR-ed into the name mask before the strictest
   punishment is chosen: a `memberReqBreach` adds its bit and an unknown or inert verdict adds none, so an unanswerable lookup (an
   error, a 429 past the retry, a timeout, a pacer shed, the root cancelled by `StopMemberReqJobs`, a null body, an unrecognised
-  status) punishes nobody, leaves no hold, notice or write, and never blocks a name breach already established: the member is
-  punished for the names, and the hold and the notice name only the rules that were established (a partial episode: the hold's
-  mask lacks the unknown rule, which is judged again once the hold clears; research S-02, decided here so that Phase 13's name
-  rules never depend on the lookup pacer's health). The lookups sit after the exemptions, the hold read, the pause and the live
+  status) punishes nobody, leaves no hold, notice or write, and never blocks a name breach already established when the
+  rule it could not answer is equal or weaker: the member is punished for the names, and the hold and the notice name only the
+  rules that were established (a partial episode: the hold's mask lacks the unknown rule, which is judged again once the hold
+  clears; research S-02, decided here so that Phase 13's name rules never depend on the lookup pacer's health). Phase 14
+  review WR-02 closes the one case where that partial episode did harm: when a rule that could not be answered
+  (`memberReqLookupMasks`' unknown mask) is switched on with a punishment stricter by `memberReqSeverity` than the strictest
+  punishment of the rules found broken (`memberReqUnknownDefers`), the executor makes no claim and returns `memberReqNone` with
+  one Info line (chat and user IDs only): a Warn hold for a blank last name would otherwise stand while a Ban channel rule
+  stayed unjudged, because a held member's messages make no lookup. The member is judged again at their next message, so a
+  stricter rule is never silently dropped behind a weaker punishment and its hold, and an unknown with no established breach
+  is simply not broken as before. An unknown that is equal or weaker than the punishment chosen defers nothing. The cost is
+  that a stricter lookup rule that stays unanswerable for a member (a persistent 5xx or timeout on the channel; a bot that is
+  no administrator is inert through the `cna` fact and defers nothing after the first message) holds the weaker name
+  punishment back for as long as it stays unanswerable, which is the safe direction: nobody is punished on a guess. The lookups sit after the exemptions, the hold read, the pause and the live
   `getChatMember` (a held, exempt or paused member makes none) and before the mute-over-restriction check, the cap and the claim,
   so a lookup cut off by a crash or a shutdown leaves no hold and no cap count; then, when that strictest punishment is a Mute and the live record is `restricted` with no
   marker of this episode (the stale hold's marker that `memberReqLiveMarker` adopts is the one exception), the one

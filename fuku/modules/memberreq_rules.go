@@ -180,8 +180,18 @@ func memberReqBroken(settings *models.ChatRequirements, names memberReqNames) in
 func memberReqLookupBroken(
 	ctx context.Context, b *gotgbot.Bot, settings *models.ChatRequirements, chatID, userID int64, mode memberReqLookupMode,
 ) (mask int, unknown bool) {
+	mask, unknownMask := memberReqLookupMasks(ctx, b, settings, chatID, userID, mode)
+	return mask, unknownMask != 0
+}
+
+// memberReqLookupMasks is memberReqLookupBroken with the unknown verdicts as a mask of the rules
+// that could not be answered (bit per rule), not a flag, so the executor can tell which rules
+// are still unjudged (WR-02). The broken mask is the same: a bit only through an explicit breach.
+func memberReqLookupMasks(
+	ctx context.Context, b *gotgbot.Bot, settings *models.ChatRequirements, chatID, userID int64, mode memberReqLookupMode,
+) (broken, unknown int) {
 	if settings == nil {
-		return 0, false
+		return 0, 0
 	}
 	for _, rule := range memberReqRules {
 		if rule.Lookup == nil || memberreq.ActionOf(settings, rule.Store) == models.RequirementActionOff {
@@ -189,12 +199,32 @@ func memberReqLookupBroken(
 		}
 		switch rule.Lookup(ctx, b, chatID, userID, mode) {
 		case memberReqBreach:
-			mask |= rule.Bit
+			broken |= rule.Bit
 		case memberReqUnknown:
-			unknown = true
+			unknown |= rule.Bit
 		}
 	}
-	return mask, unknown
+	return broken, unknown
+}
+
+// memberReqUnknownDefers reports whether the rules that could not be answered (the unknown mask)
+// include one whose punishment is stricter, by memberReqSeverity, than the strictest punishment
+// of the rules found broken (WR-02). With a breach established and such a rule unjudged, claiming
+// the hold now would let the weaker punishment and its hold stand and keep the stricter rule from
+// ever being judged (a held member's messages make no lookup), so the executor claims nothing and
+// the member is judged again at their next message. An unknown rule that is equal or weaker than
+// the punishment chosen defers nothing, and with no breach at all there is nothing to defer.
+func memberReqUnknownDefers(settings *models.ChatRequirements, broken, unknown int) bool {
+	if settings == nil || broken == 0 || unknown == 0 {
+		return false
+	}
+	chosen := memberReqSeverity(memberReqStrictest(settings, broken))
+	for _, rule := range memberReqRules {
+		if unknown&rule.Bit != 0 && memberReqSeverity(memberreq.ActionOf(settings, rule.Store)) > chosen {
+			return true
+		}
+	}
+	return false
 }
 
 // memberReqSeverity ranks a punishment: ban 4, kick 3, mute 2, warn 1, off (and any value
