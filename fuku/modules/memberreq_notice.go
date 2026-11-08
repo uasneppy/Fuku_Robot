@@ -67,6 +67,27 @@ func memberReqRulesText(tr *i18n.Translator, broken int) string {
 	return strings.Join(phrases, memberReqRulesSeparator)
 }
 
+// memberReqStillBrokenText is the answer of "I fixed it" to a member who still breaks rules in
+// the mask: one to four rules are named (mreq_fixed_still_broken, the phrases in rule order),
+// five or more are counted (mreq_fixed_still_broken_many), so the answer always fits Telegram's
+// 200 code points. The mask holds only rules whose punishment is not Off. It counts the set
+// bits of the table's rows and names no rule by its identity.
+func memberReqStillBrokenText(tr *i18n.Translator, broken int) string {
+	count := 0
+	for _, rule := range memberReqRules {
+		if broken&rule.Bit != 0 {
+			count++
+		}
+	}
+	if count > memberReqStillBrokenListMax {
+		return memberReqText(tr, "mreq_fixed_still_broken_many", i18n.TranslationParams{"n": strconv.Itoa(count)})
+	}
+	return memberReqText(tr, "mreq_fixed_still_broken", i18n.TranslationParams{"rules": memberReqRulesText(tr, broken)})
+}
+
+// memberReqStillBrokenListMax is the most broken rules an answer names; more are counted.
+const memberReqStillBrokenListMax = 4
+
 // memberReqNoticeParams are the template parameters of a notice. The name is the token; the
 // numbers are the warn count and limit when a warn was recorded.
 func memberReqNoticeParams(tr *i18n.Translator, broken int, warn *warnApplyResult) i18n.TranslationParams {
@@ -105,10 +126,32 @@ func memberReqNoticeKey(action int, warn *warnApplyResult) string {
 
 // memberReqNoticeText builds the notice of a punishment: the template of the punishment
 // translated with the broken rules and the warn numbers, then the member's mention spliced in.
+//
+// A warn, kick or mute notice ends with the photo remedy (mreq_remedy_photo, one space after the
+// translated template) while the photo rule is among the broken rules, so the member learns what
+// to do about a photo the bot cannot see. The ban notice and the warn-limit notices never carry
+// it: a banned or already removed member has nothing to fix there.
 func memberReqNoticeText(tr *i18n.Translator, user gotgbot.User, broken, action int, warn *warnApplyResult) string {
-	text := memberReqText(tr, memberReqNoticeKey(action, warn), memberReqNoticeParams(tr, broken, warn))
+	key := memberReqNoticeKey(action, warn)
+	text := memberReqText(tr, key, memberReqNoticeParams(tr, broken, warn))
+	if memberReqNoticeHasRemedy(key, broken) {
+		text += " " + memberReqText(tr, "mreq_remedy_photo")
+	}
 	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(user.Id, 10)})
 	return lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(user, fallback))
+}
+
+// memberReqNoticeHasRemedy reports whether the notice with this template key carries the photo
+// remedy: only the plain warn, kick and mute notices, and only while the photo rule (found
+// through its table row, never a literal bit) is among the broken rules.
+func memberReqNoticeHasRemedy(key string, broken int) bool {
+	switch key {
+	case "mreq_notice_warn", "mreq_notice_kick", "mreq_notice_mute":
+	default:
+		return false
+	}
+	photo, ok := memberReqRuleByCode("ph")
+	return ok && broken&photo.Bit != 0
 }
 
 // memberReqPostNotice sends the notice as a new message (never a reply: the member's message

@@ -28,6 +28,12 @@ import (
 // query can still be answered.
 const memberReqFixedTimeout = 10 * time.Second
 
+// memberReqFixedLookupBudget is the part of the press's memberReqFixedTimeout the fresh photo and
+// channel lookups of step 5 may use together, so at least half of the press remains for the
+// permissions, the unmute and the edit. A lookup that uses it up is unknown and the press changes
+// nothing. It is a variable so a test can shorten it.
+var memberReqFixedLookupBudget = 5 * time.Second
+
 // memberReqFixedResult is what a press ends with: the answer, whether it is an alert (else a
 // toast), and, for a join hold that was freed, the member whose held welcome is still to send.
 type memberReqFixedResult struct {
@@ -140,18 +146,10 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 		return refuse("mreq_fixed_not_ours")
 	}
 
-	// The rules are judged again on the live names against the group's current settings: a rule
-	// now set to Off is not checked, and a member who fixed only one of several rules stays held.
-	settings, err := memberReqSettingsLookup(ctx, chat.Id)
-	if err != nil {
-		log.Warnf("[MemberReq] the requirements of chat %d could not be read for the fix of user %d: %s", chat.Id, userID, memberReqErrText(err))
-		return refuse("mreq_fixed_check_failed")
-	}
-	if broken := memberReqBroken(settings, memberReqNamesOf(live.User)); broken != 0 {
-		return memberReqFixedResult{
-			Text:  memberReqText(tr, "mreq_fixed_still_broken", i18n.TranslationParams{"rules": memberReqRulesText(tr, broken)}),
-			Alert: true,
-		}
+	// Every enabled rule is judged again against the group's current settings: the name rules on
+	// the live record and the lookup rules with fresh lookups.
+	if refused := memberReqFixedJudge(ctx, b, tr, chat.Id, userID, live); refused != nil {
+		return *refused
 	}
 
 	perms, lockedDown, err := memberReqUnmutePermissions(ctx, b, chat.Id)
@@ -187,6 +185,37 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 		result.Welcome = &member
 	}
 	return result
+}
+
+// memberReqFixedJudge is step 5 of a press: it judges every enabled rule of the group against
+// the member as they are now and returns the answer that ends the press, or nil when the member
+// breaks nothing and can be freed. A rule now set to Off is not checked, and a member who fixed
+// only some of several rules stays held. The name rules are judged on the live record; the photo
+// and channel rules ask Telegram again with fresh lookups that bypass the positive caches, under
+// memberReqFixedLookupBudget of the press's own time. A definite broken rule is the answer even
+// when another lookup could not be answered (it tells the member something true), and an
+// unanswered lookup with nothing broken is mreq_fixed_check_failed and changes nothing, exactly
+// like an unreadable setting. A channel the bot cannot judge in this group is inert, so it is
+// neither broken nor unknown (the lookup layer classifies it).
+func memberReqFixedJudge(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator, chatID, userID int64, live gotgbot.MergedChatMember) *memberReqFixedResult {
+	settings, err := memberReqSettingsLookup(ctx, chatID)
+	if err != nil {
+		log.Warnf("[MemberReq] the requirements of chat %d could not be read for the fix of user %d: %s", chatID, userID, memberReqErrText(err))
+		return &memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_check_failed"), Alert: true}
+	}
+	broken := memberReqBroken(settings, memberReqNamesOf(live.User))
+	lookupCtx, cancel := context.WithTimeout(ctx, memberReqFixedLookupBudget)
+	defer cancel()
+	lookupBroken, unknown := memberReqLookupBroken(lookupCtx, b, settings, chatID, userID, memberReqLookupMode{Fresh: true, Classify: true})
+	broken |= lookupBroken
+	if broken != 0 {
+		return &memberReqFixedResult{Text: memberReqStillBrokenText(tr, broken), Alert: true}
+	}
+	if unknown {
+		log.Warnf("[MemberReq] a lookup for the fix of user %d in chat %d could not be answered, so nothing changed", userID, chatID)
+		return &memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_check_failed"), Alert: true}
+	}
+	return nil
 }
 
 // memberReqFixedTake deletes the hold by its ID, chat and member in one conditional statement,
