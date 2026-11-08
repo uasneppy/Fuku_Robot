@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 14
 current_phase_name: Profile Photo and Channel Rules
 status: executing
-stopped_at: Completed 14-06-PLAN.md
-last_updated: "2026-11-08T08:20:46.726Z"
+stopped_at: Completed 14-07-PLAN.md
+last_updated: "2026-11-08T08:49:59.910Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 11 execution started
-state_head: 64f68606e998dbdabdb2e4ecf1faa02c4f7ba588
+state_head: 260c09a448ade4999e0780ff03b6b69ab3210f2f
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 67
-  completed_plans: 60
+  completed_plans: 61
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 14 (Profile Photo and Channel Rules) — IN PROGRESS (Phase 13 is built and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 7 of 12
-Status: Executing Phase 14 (14-06 done: the photo and channel lookups are folded into the executor and the join entry as step 6b)
-Last activity: 2026-11-08 — Plan 14-06 complete
+Plan: 8 of 12
+Status: Executing Phase 14 (14-07 done: the watcher checks the lookup rules from cached positives, exempt members cost no job, and the job releases a held member who fixed the photo, the subscription or the name)
+Last activity: 2026-11-08 — Plan 14-07 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -134,6 +134,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 14 P04 | 60min | 3 tasks | 4 files |
 | Phase 14 P05 | 55min | 3 tasks | 8 files |
 | Phase 14 P06 | 95min | 3 tasks | 5 files |
+| Phase 14 P07 | 130min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -220,6 +221,8 @@ Recent decisions affecting current work:
 - [Phase 13]: 13-12: the rejoin reset deletes holds first (one winner) and lifts only a live marker mute, restoring the hold on failure; the leave hook and the reset are not behind the kill switch
 - [Phase 13]: 13-13: enforcement is on by default, stored in memberreq.go init() only after the mreq| handler's registration commit; the button edits the pressed message and never reads the hold's notice ID
 - [Phase 14]: 14-06: an unknown lookup never blocks an established name breach (research S-02); the lookup phase runs after the live check and names and before the mute-over-restriction check, the cap and the claim
+- [Phase 14]: 14-07: a hold with name bits only is released when the names are clean, so a name hold cannot outlive a fix in a group that also has a lookup rule on
+- [Phase 14]: 14-07: the photo and subscription flights read their cache once more inside the flight, so messages that arrive together make one lookup request
 
 ### Pending Todos
 
@@ -292,8 +295,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T08:20:45.882Z
-Stopped at: Completed 14-06-PLAN.md
+Last session: 2026-11-08T08:49:58.949Z
+Stopped at: Completed 14-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
