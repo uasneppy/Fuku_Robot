@@ -1109,10 +1109,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `claimRecentJoinProcessing`, so it holds across replicas and with no Redis. The switch is written by
   `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), the one write path of the Welcome page's Greet once switch (control
   `o`, no command).
-- `chat_requirements` (migration 20261106120000) is the member requirements setting, one row per chat: five `SMALLINT`
-  action columns (`last_name_action`, `username_action`, `russian_action`, `arabic_action`, `chinese_action`, 0 off, 1 warn,
-  2 kick, 3 ban, 4 mute, each under its own named CHECK `chk_chat_requirements_<rule>` for 0..4) and the `check_on_join`
-  and `delete_messages` switches. A chat without a row means every rule off and both switches off. It is read through
+- `chat_requirements` (migration 20261106120000) is the member requirements setting, one row per chat: seven `SMALLINT`
+  action columns (`last_name_action`, `username_action`, `russian_action`, `arabic_action`, `chinese_action`, `photo_action`,
+  `channel_action`, 0 off, 1 warn, 2 kick, 3 ban, 4 mute, each under its own named CHECK `chk_chat_requirements_<rule>` for
+  0..4, the last two `chk_chat_requirements_photo` and `chk_chat_requirements_channel`) and the `check_on_join`
+  and `delete_messages` switches. Migration 20261108120000 added `photo_action` and `channel_action` (the profile photo rule
+  and the channel subscription rule, rule IDs `photo` and `channel` in `memberreq.Rules` after the five name rules) with two
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements, each `NOT NULL DEFAULT 0` with its CHECK inline (no top-level
+  `ADD CONSTRAINT`, so both appliers run it unchanged), so a row written before it, and a cached value the previous build wrote
+  (msgpack decodes the two missing fields as 0), reads both rules off. A chat without a row means every rule off and both
+  switches off. It is read through
   `cache.GetFromCacheOrLoad` under `cache.CacheKey("member_requirements", chat)` (`memberreq.GetSettings`; `GetSettingsFresh`
   is the same query without the cache) and creates no row. `memberreq.SetRuleAction`, `SetCheckOnJoin` and
   `SetDeleteMessages` are three column-targeted `INSERT ... ON CONFLICT (chat_id) DO UPDATE` of their own column plus
@@ -1122,7 +1128,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every supergroup message and a rule switched off must stop punishing on every replica at the next message, not after
   `CACHE_LOCAL_TTL` (D-20). It is never part of backup, export, import or reset.
 - `fuku:memberreq:pass:<chat>:<user>` is the member requirements watcher's clean verdict (`memberreq_watch.go`): positive
-  only, a 16 hex fingerprint (`memberReqPassValue`, a SHA-256 of the five rule actions and the three names, so no name is in
+  only, a 16 hex fingerprint (`memberReqPassValue`, a SHA-256 of the rule actions (every rule of `memberreq.Rules`, seven since migration 20261108120000, which changed every member's fingerprint once: one harmless pass-cache miss) and the three names, so no name is in
   the key or the value and a rename or any settings change is a miss), `SET EX` 30 minutes (`memberReqPassTTL`), written only
   after a clean verdict and a successful clean predicate (`ClearHoldOnClean`) for a message not older than 2 minutes
   (`memberReqPassMaxAge`, so a backlog message cannot hide a later hold from the predicate). It saves the clean `DELETE`, not
@@ -2160,11 +2166,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestImportGreetingsOmittedBlocks` (`./fuku/db/backup`: a greetings import whose payload omits `welcome_settings` or
   `goodbye_settings` imports and writes the three NOT NULL switch columns as false, because `importGreetings` fills a missing
   block with an empty one; without it the nil embedded block inserts NULL and PostgreSQL answers SQLSTATE 23502).
-  The Phase 13 guarantees are `TestChatRequirementsSettings` (`./fuku/db/memberreq`: the five action CHECKs refuse 5 and -1
+  The Phase 13 guarantees are `TestChatRequirementsSettings` (`./fuku/db/memberreq`: the action CHECKs refuse 5 and -1
   with SQLSTATE 23514, column-targeted upserts of two rules at once never clobber each other, a Go 0 and `false` are
   written), `TestRequirementHoldClaimConcurrent` (of 16 concurrent claims of one `(chat_id, user_id)` exactly one wins, and of
   16 concurrent reclaims of one stale pending hold exactly one wins) and `TestRequirementHolds` (the take, restore, clean and
   clear semantics); all three also run on SQLite in `make test`, and `fuku/db/memberreq/testmain_test.go` migrates both models.
+  `TestChatRequirementsSettings` covers seven columns since Phase 14 (photo and channel included, CHECKs refusing 5 and -1 on
+  every rule's column, writes of different rules never clobbering each other, an old row or previous-build cached value
+  reading the new rules off). The Phase 14 guarantee is `TestMemberRequirementLookupMigrationDefaults`
+  (`./fuku/db/migrations`: the migration's statements run twice without error, a row with only `chat_id` reads both new
+  columns 0, both named constraints exist in `pg_constraint`, a direct update to 5 fails with SQLSTATE 23514 naming the
+  constraint; PostgreSQL only, it skips locally; `TestMemberRequirementLookupMigrationStatements` is its database-free half
+  and runs in `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
