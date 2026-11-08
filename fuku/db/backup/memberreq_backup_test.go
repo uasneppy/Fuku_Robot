@@ -35,6 +35,8 @@ func TestMemberRequirementsStayOutOfBackup(t *testing.T) {
 		ChatID: srcChat, LastNameAction: models.RequirementActionMute, CheckOnJoin: true, DeleteMessages: true,
 		// The Phase 14 lookup rules: their columns stay out of a backup like the rest of the row.
 		PhotoAction: models.RequirementActionKick, ChannelAction: models.RequirementActionMute,
+		// The Phase 15 AI spam-name rule: its column stays out of a backup too.
+		AIAction: models.RequirementActionBan,
 	}).Error)
 	require.NoError(t, db.DB.Create(&models.ChatRequirementHold{
 		ChatID: srcChat, UserID: 7001, Rules: 1, Action: models.RequirementActionWarn, CreatedAt: time.Now(),
@@ -64,7 +66,7 @@ func TestMemberRequirementsStayOutOfBackup(t *testing.T) {
 	require.NoError(t, err)
 	decoded, err := BackupFormatFromJSON(raw)
 	require.NoError(t, err)
-	for _, column := range []string{"photo_action", "channel_action", "last_name_action", "chat_requirements"} {
+	for _, column := range []string{"ai_action", "photo_action", "channel_action", "last_name_action", "chat_requirements"} {
 		assert.NotContains(t, string(raw), column, "the export file names no requirement column or table (%s)", column)
 	}
 	require.NoError(t, ImportChatData(dstChat, decoded, nil))
@@ -78,4 +80,5 @@ func TestMemberRequirementsStayOutOfBackup(t *testing.T) {
 	require.NoError(t, db.DB.Where("chat_id = ?", srcChat).First(&kept).Error)
 	assert.Equal(t, models.RequirementActionKick, kept.PhotoAction, "a reset leaves the photo rule as it was")
 	assert.Equal(t, models.RequirementActionMute, kept.ChannelAction, "a reset leaves the channel rule as it was")
+	assert.Equal(t, models.RequirementActionBan, kept.AIAction, "a reset leaves the AI rule as it was")
 }

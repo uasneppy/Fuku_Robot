@@ -1212,15 +1212,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `claimRecentJoinProcessing`, so it holds across replicas and with no Redis. The switch is written by
   `applyWelcomeOnce` (`greetingWrites.WelcomeOnce`), the one write path of the Welcome page's Greet once switch (control
   `o`, no command).
-- `chat_requirements` (migration 20261106120000) is the member requirements setting, one row per chat: seven `SMALLINT`
+- `chat_requirements` (migration 20261106120000) is the member requirements setting, one row per chat: eight `SMALLINT`
   action columns (`last_name_action`, `username_action`, `russian_action`, `arabic_action`, `chinese_action`, `photo_action`,
-  `channel_action`, 0 off, 1 warn, 2 kick, 3 ban, 4 mute, each under its own named CHECK `chk_chat_requirements_<rule>` for
-  0..4, the last two `chk_chat_requirements_photo` and `chk_chat_requirements_channel`) and the `check_on_join`
+  `channel_action`, `ai_action`, 0 off, 1 warn, 2 kick, 3 ban, 4 mute, each under its own named CHECK
+  `chk_chat_requirements_<rule>` for 0..4, the last three `chk_chat_requirements_photo`, `chk_chat_requirements_channel` and
+  `chk_chat_requirements_ai`) and the `check_on_join`
   and `delete_messages` switches. Migration 20261108120000 added `photo_action` and `channel_action` (the profile photo rule
   and the channel subscription rule, rule IDs `photo` and `channel` in `memberreq.Rules` after the five name rules) with two
   `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements, each `NOT NULL DEFAULT 0` with its CHECK inline (no top-level
   `ADD CONSTRAINT`, so both appliers run it unchanged), so a row written before it, and a cached value the previous build wrote
-  (msgpack decodes the two missing fields as 0), reads both rules off. A chat without a row means every rule off and both
+  (msgpack decodes the two missing fields as 0), reads both rules off. Migration 20261109120000 added `ai_action` (the AI spam-name rule, rule ID `ai`,
+  `memberreq.RuleAI`, appended to `memberreq.Rules` after `channel`) with one `ADD COLUMN IF NOT EXISTS` statement, `NOT NULL
+  DEFAULT 0` with its CHECK inline, so a row written before it, and a cached value the previous build wrote, reads the rule
+  off. A chat without a row means every rule off and both
   switches off. It is read through
   `cache.GetFromCacheOrLoad` under `cache.CacheKey("member_requirements", chat)` (`memberreq.GetSettings`; `GetSettingsFresh`
   is the same query without the cache) and creates no row. `memberreq.SetRuleAction`, `SetCheckOnJoin` and
@@ -1231,7 +1235,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every supergroup message and a rule switched off must stop punishing on every replica at the next message, not after
   `CACHE_LOCAL_TTL` (D-20). It is never part of backup, export, import or reset.
 - `fuku:memberreq:pass:<chat>:<user>` is the member requirements watcher's clean verdict (`memberreq_watch.go`): positive
-  only, a 16 hex fingerprint (`memberReqPassValue`, a SHA-256 of the rule actions (every rule of `memberreq.Rules`, seven since migration 20261108120000, which changed every member's fingerprint once: one harmless pass-cache miss) and the three names, so no name is in
+  only, a 16 hex fingerprint (`memberReqPassValue`, a SHA-256 of the rule actions (every rule of `memberreq.Rules`, eight since migration 20261109120000, which changed every member's fingerprint once more: one more harmless pass-cache miss) and the three names, so no name is in
   the key or the value and a rename or any settings change is a miss), `SET EX` 30 minutes (`memberReqPassTTL`), written only
   after a clean verdict and a successful clean predicate (`ClearHoldOnClean`) for a message not older than 2 minutes
   (`memberReqPassMaxAge`, so a backlog message cannot hide a later hold from the predicate). It saves the clean `DELETE`, not
@@ -1598,7 +1602,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   its one live `getChatMember` and, for a rule of the photo or channel kind, the same lookups through the same executor under the 4 s
   `memberReqLookupJoinBudget` (a joiner whose lookup does not finish in 4 s is welcomed, leaves no hold, and is caught at their first
   message, so a raid of joins never parks a dispatcher goroutine for the entry's 15 s; `memberReqJoinThenWelcome` itself is unchanged,
-  because `memberreq.AnyRuleOn` reads the seven-rule table, so a group with only the photo rule on is screened at join): a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
+  because `memberreq.AnyRuleOn` reads the eight-rule table, so a group with only the photo rule on is screened at join): a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
   at the claim, a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
   removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot), a check that could
   not be answered, and a joiner whose Mute is refused because an administrator's restriction is on them (CR-01: a rejoiner
@@ -2491,6 +2495,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   columns 0, both named constraints exist in `pg_constraint`, a direct update to 5 fails with SQLSTATE 23514 naming the
   constraint; PostgreSQL only, it skips locally; `TestMemberRequirementLookupMigrationStatements` is its database-free half
   and runs in `make test`).
+  The Phase 15 guarantee is `TestMemberRequirementAIMigrationDefaults` (`./fuku/db/migrations`: the statement runs twice
+  without error, a row with only `chat_id` reads the new column 0, the named constraint `chk_chat_requirements_ai` exists, a
+  direct update to 5 fails with SQLSTATE 23514 naming it; PostgreSQL only, it skips locally;
+  `TestMemberRequirementAIMigrationStatements` is its database-free half and runs in `make test`), and
+  `TestChatRequirementsSettings` now covers eight columns (the AI rule included).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
