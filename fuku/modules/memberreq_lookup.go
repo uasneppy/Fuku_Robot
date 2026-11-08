@@ -92,8 +92,19 @@ var memberReqLookupPacer = ratelimit.NewTelegramPacer(memberReqLookupPacerOption
 
 // memberReqLookupFlight coalesces the lookups of one key: p:<user> for the photo, l:<chat>
 // for a group's linked channel, s:<channel>:<user> for a subscription and b:<channel> for the
-// bot's status in a channel.
+// bot's status in a channel. A Fresh lookup uses the same key behind an f: prefix
+// (memberReqFlightKey), so a Fresh caller never joins a non-Fresh flight, whose answer can
+// come from a stale positive cache read, and the other way round.
 var memberReqLookupFlight singleflight.Group
+
+// memberReqFlightKey is the flight key of a lookup: base for a non-Fresh lookup and "f:"+base
+// for a Fresh one. Callers of one mode still share one flight; the two modes never do.
+func memberReqFlightKey(base string, mode memberReqLookupMode) string {
+	if mode.Fresh {
+		return "f:" + base
+	}
+	return base
+}
 
 // memberReqLookupPaced runs one lookup call under the lookup pacer: it waits for its slot,
 // bounds the call by memberReqCallTimeout and, on a 429, waits out a short retry_after once.
@@ -196,7 +207,8 @@ func memberReqFlight(ctx context.Context, key string, fn func(context.Context) m
 // fn is wrapped in its own panic recovery. A panic in a singleflight DoChan leader is
 // re-raised by the library in a goroutine nothing can recover, which would crash the
 // process, so the recovery has to be inside the function. A recovered panic returns no value.
-// Keys of different value types must differ (the p:, l:, s: and b: families do).
+// Keys of different value types must differ (the p:, l:, s: and b: families do, each with and
+// without the f: prefix of a Fresh lookup).
 func memberReqFlightValue[T any](ctx context.Context, key string, fn func(context.Context) T) (T, bool) {
 	var zero T
 	if ctx.Err() != nil {
@@ -246,7 +258,7 @@ func memberReqPhotoRule(ctx context.Context, b *gotgbot.Bot, chatID, userID int6
 	if !mode.Fresh && memberReqCacheHas(ctx, key) {
 		return memberReqPass
 	}
-	return memberReqFlight(ctx, "p:"+strconv.FormatInt(userID, 10), func(flightCtx context.Context) memberReqVerdict {
+	return memberReqFlight(ctx, memberReqFlightKey("p:"+strconv.FormatInt(userID, 10), mode), func(flightCtx context.Context) memberReqVerdict {
 		// A caller whose cache read missed a moment before the previous flight wrote its positive
 		// and ended starts a new flight: the cache is read once more inside it, so a member's
 		// messages that arrive together make one request, not one per flight generation.
@@ -320,7 +332,7 @@ func memberReqLinkedChannel(ctx context.Context, b *gotgbot.Bot, chatID int64, m
 			}
 		}
 	}
-	answer, ok := memberReqFlightValue(ctx, "l:"+strconv.FormatInt(chatID, 10), func(flightCtx context.Context) memberReqLinkAnswer {
+	answer, ok := memberReqFlightValue(ctx, memberReqFlightKey("l:"+strconv.FormatInt(chatID, 10), mode), func(flightCtx context.Context) memberReqLinkAnswer {
 		var info *gotgbot.ChatFullInfo
 		err := memberReqLookupPaced(flightCtx, func(callCtx context.Context) error {
 			var callErr error
@@ -417,7 +429,7 @@ func memberReqBotChannelStatus(ctx context.Context, b *gotgbot.Bot, channelID in
 	if !mode.Fresh && memberReqCacheHas(ctx, key) {
 		return memberReqBotAdmin
 	}
-	status, ok := memberReqFlightValue(ctx, "b:"+strconv.FormatInt(channelID, 10), func(flightCtx context.Context) memberReqBotStatus {
+	status, ok := memberReqFlightValue(ctx, memberReqFlightKey("b:"+strconv.FormatInt(channelID, 10), mode), func(flightCtx context.Context) memberReqBotStatus {
 		var answer gotgbot.ChatMember
 		err := memberReqLookupPaced(flightCtx, func(callCtx context.Context) error {
 			var callErr error
@@ -475,7 +487,7 @@ func memberReqChannelRule(ctx context.Context, b *gotgbot.Bot, chatID, userID in
 	if !mode.Fresh && memberReqCacheHas(ctx, key) {
 		return memberReqPass
 	}
-	flightKey := "s:" + strconv.FormatInt(channel, 10) + ":" + strconv.FormatInt(userID, 10)
+	flightKey := memberReqFlightKey("s:"+strconv.FormatInt(channel, 10)+":"+strconv.FormatInt(userID, 10), mode)
 	verdict := memberReqFlight(ctx, flightKey, func(flightCtx context.Context) memberReqVerdict {
 		// The cache is read once more inside the flight, for the same reason as the photo's.
 		if !mode.Fresh && memberReqCacheHas(flightCtx, key) {

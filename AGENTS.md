@@ -1209,7 +1209,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The lookup flights (`memberReqFlight` over the generic `memberReqFlightValue`, `memberReqLookupFlight`, a
   `singleflight.Group`) make every concurrent lookup of one key one Telegram call: the key is `p:<user>` for the photo,
   `l:<chat>` for a group's linked channel, `s:<channel>:<user>` for a subscription and `b:<channel>` for the bot's status in
-  a channel (the families differ, because their values have different types). The flight
+  a channel (the families differ, because their values have different types). A Fresh lookup (`mode.Fresh`: "I fixed it",
+  the channel screen's reads) uses the same key behind an `f:` prefix (`memberReqFlightKey`), so a Fresh caller never joins
+  a running non-Fresh flight, which can answer from a stale positive cache read, and a non-Fresh caller never joins a Fresh
+  one, while a hundred callers of one mode still make one request (`TestMemberReqLookupFlightsKeepModesApart`). The flight
   function runs the paced call and the cache write on a context derived from `memberReqContext()` and bounded by
   `memberReqLookupFlightTimeout` (15 s), never from a caller, so `StopMemberReqJobs` ends every flight and one caller's
   short deadline never cancels a lookup that others share; every caller waits with `select` on its own deadline and gets
