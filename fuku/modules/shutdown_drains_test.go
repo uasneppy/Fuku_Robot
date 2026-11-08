@@ -3,6 +3,8 @@
 package modules
 
 import (
+	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -279,5 +281,78 @@ func mreqAwait(t *testing.T, ch <-chan struct{}, failure string) {
 	case <-ch:
 	case <-time.After(5 * time.Second):
 		t.Fatal(failure)
+	}
+}
+
+// TestShutdownEndsMemberReqLookups: a job that is inside a hung photo lookup when
+// StopMemberReqJobs runs is ended by the drain's own cancel of the root context, inside the
+// drain's existing wait. The lookups add no drain and no pool: the job leaves no hold, no
+// notice and no write, a later message starts no job, and the lookup's flight goroutine has
+// ended (a fresh flight of the same key runs at once instead of joining a stuck one).
+func TestShutdownEndsMemberReqLookups(t *testing.T) {
+	restoreMemberReqRunner(t)
+	env, state := mreqLookupEnv(t)
+	env.mreqRules(map[memberreq.Rule]int{memberreq.RulePhoto: models.RequirementActionMute})
+	inFlight := mreqLookupMember(t, env, state, mreqPhotoAnswer{})
+	late := mreqLookupMember(t, env, state, mreqPhotoAnswer{})
+	mreqSwap(t, &memberReqStopWait, 3*time.Second)
+
+	// The lookup is held open and is never released: only the drain's cancel can end it.
+	release := state.hold(inFlight.Id)
+	t.Cleanup(release)
+	var reached sync.Once
+	started := make(chan struct{})
+	state.setOnPhoto(func(int64) { reached.Do(func() { close(started) }) })
+
+	if !memberReqRunAsync(env.bot, env.mreqCase(inFlight)) {
+		t.Fatal("the job was not started")
+	}
+	mreqAwait(t, started, "the job never reached its photo lookup")
+
+	begun := time.Now()
+	if !StopMemberReqJobs() {
+		t.Fatal("StopMemberReqJobs reported a job still running: a lookup must end when the root is cancelled")
+	}
+	if elapsed := time.Since(begun); elapsed > memberReqStopWait {
+		t.Errorf("StopMemberReqJobs took %s, want inside memberReqStopWait (%s)", elapsed, memberReqStopWait)
+	}
+	if n := env.mreqCallCount("restrictChatMember", "banChatMember", "unbanChatMember", "sendMessage"); n != 0 {
+		t.Errorf("the cancelled job made %d writes or messages, want none", n)
+	}
+	if hold := env.mreqHold(inFlight.Id); hold != nil {
+		t.Errorf("the cancelled job left a hold %+v", hold)
+	}
+	if row := env.mreqWarnRow(inFlight.Id); row != nil {
+		t.Errorf("the cancelled job left a warns row %+v", row)
+	}
+
+	// A message after the drain starts no job, so nothing asks about the late member.
+	if memberReqRunAsync(env.bot, env.mreqCase(late)) {
+		t.Error("a job started after the drain")
+	}
+	if n := mreqLookupPhotoCalls(env); n != 1 {
+		t.Errorf("photo requests = %d, want only the in-flight job's", n)
+	}
+
+	// The flight goroutine of the cancelled lookup has ended: a fresh flight of its key runs
+	// its own function at once. A flight still stuck in the held request would be joined, and
+	// its result would come back shared and late.
+	fresh := memberReqLookupFlight.DoChan("p:"+strconv.FormatInt(inFlight.Id, 10), func() (any, error) { return "fresh", nil })
+	select {
+	case result := <-fresh:
+		if result.Val != "fresh" || result.Shared {
+			t.Errorf("flight result = %+v, want a fresh flight of its own (the cancelled one has ended)", result)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("the flight of the cancelled lookup is still running")
+	}
+
+	// With the runner restored, the second member's lookup is answered.
+	memberReqDraining.Store(false)
+	memberReqRoot.mu.Lock()
+	memberReqRoot.ctx, memberReqRoot.cancel = context.WithCancel(context.Background())
+	memberReqRoot.mu.Unlock()
+	if got := mreqPhoto(env, late.Id, memberReqLookupMode{}); got != memberReqBreach {
+		t.Errorf("a lookup after the runner was restored = %d, want a breach", got)
 	}
 }

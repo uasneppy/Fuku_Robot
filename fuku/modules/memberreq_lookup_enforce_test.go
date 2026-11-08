@@ -895,3 +895,208 @@ func TestMemberReqLookupCapAndPause(t *testing.T) {
 		t.Error("a member during the pause was held")
 	}
 }
+
+// mreqLookupJoinEnv is a join environment (Check on join on, a recognisable welcome) whose bot
+// answers the lookups from a fresh shared state, with the lookup pacer made fast.
+func mreqLookupJoinEnv(t *testing.T, rules map[memberreq.Rule]int) (*memberReqEnv, *mreqLookupState) {
+	t.Helper()
+	env := mreqJoinEnv(t, rules, true)
+	withFastLookupPacer(t)
+	state := newMreqLookupState()
+	mreqInstallLookupFake(env, state)
+	return env, state
+}
+
+func TestMemberReqJoinLookups(t *testing.T) {
+	t.Run("a joiner with no photo is muted, the welcome is held and the hold records it", func(t *testing.T) {
+		env, state := mreqLookupJoinEnv(t, map[memberreq.Rule]int{memberreq.RulePhoto: models.RequirementActionMute})
+		member := mreqLookupMember(t, env, state, mreqPhotoAnswer{})
+
+		env.mreqJoin(member)
+
+		texts := env.mreqSentTexts()
+		if got := mreqCountText(texts, mreqWelcomeWord); got != 0 {
+			t.Fatalf("welcomes = %d, want none for a muted joiner (texts %v)", got, texts)
+		}
+		if got := mreqCountText(texts, staffMarker("mreq_notice_mute")); got != 1 {
+			t.Fatalf("mute notices = %d, want exactly one (texts %v)", got, texts)
+		}
+		hold := env.mreqHold(member.Id)
+		if hold == nil || hold.Action != models.RequirementActionMute || hold.PunishedAt == nil || !hold.WelcomeHeld || hold.Rules != mreqBitOf(t, "ph") {
+			t.Fatalf("hold = %+v, want a punished mute hold with welcome_held true and the photo bit", hold)
+		}
+	})
+
+	t.Run("a joiner with a photo is welcomed", func(t *testing.T) {
+		env, state := mreqLookupJoinEnv(t, map[memberreq.Rule]int{memberreq.RulePhoto: models.RequirementActionBan})
+		member := mreqLookupMember(t, env, state, mreqHasPhoto)
+
+		env.mreqJoin(member)
+
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 1 {
+			t.Fatalf("welcomes = %d, want 1", got)
+		}
+		mreqWantNothing(t, env, member, memberReqResult{})
+	})
+
+	t.Run("a Warn rule warns the joiner and the usual welcome follows", func(t *testing.T) {
+		env, state := mreqLookupJoinEnv(t, map[memberreq.Rule]int{memberreq.RulePhoto: models.RequirementActionWarn})
+		member := mreqLookupMember(t, env, state, mreqPhotoAnswer{})
+
+		env.mreqJoin(member)
+
+		texts := env.mreqSentTexts()
+		notice, welcome := mreqIndexOfText(texts, staffMarker("mreq_notice_warn")), mreqIndexOfText(texts, mreqWelcomeWord)
+		if notice < 0 || welcome < 0 || notice > welcome {
+			t.Fatalf("notice at %d, welcome at %d, want the warn notice first and then the welcome (texts %v)", notice, welcome, texts)
+		}
+		if row := env.mreqWarnRow(member.Id); row == nil || row.NumWarns != 1 {
+			t.Fatalf("warns row = %+v, want one warn", row)
+		}
+	})
+
+	for _, tc := range []struct {
+		name    string
+		action  int
+		method  string
+		welcome int
+	}{
+		{"Kick", models.RequirementActionKick, "unbanChatMember", 0},
+		{"Ban", models.RequirementActionBan, "banChatMember", 0},
+		{"Mute", models.RequirementActionMute, "restrictChatMember", 0},
+	} {
+		t.Run("a joiner not subscribed to the linked channel is handled by "+tc.name, func(t *testing.T) {
+			env, state := mreqLookupJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleChannel: tc.action})
+			member, _ := mreqChannelUser(t, env, state, gotgbot.ChatMemberStatusAdministrator, gotgbot.ChatMemberStatusLeft)
+
+			env.mreqJoin(member)
+
+			if got := env.mreqCallsAbout(member.Id, tc.method); got != 1 {
+				t.Fatalf("%s calls = %d, want 1", tc.method, got)
+			}
+			if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != tc.welcome {
+				t.Errorf("welcomes = %d, want %d", got, tc.welcome)
+			}
+			if hold := env.mreqHold(member.Id); hold == nil || hold.Rules != mreqBitOf(t, "ch") {
+				t.Errorf("hold = %+v, want the channel bit", hold)
+			}
+		})
+	}
+
+	t.Run("a joiner subscribed to the channel is welcomed", func(t *testing.T) {
+		env, state := mreqLookupJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleChannel: models.RequirementActionBan})
+		member, _ := mreqChannelUser(t, env, state, gotgbot.ChatMemberStatusAdministrator, gotgbot.ChatMemberStatusMember)
+
+		env.mreqJoin(member)
+
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 1 {
+			t.Fatalf("welcomes = %d, want 1", got)
+		}
+		mreqWantNothing(t, env, member, memberReqResult{})
+	})
+
+	t.Run("a hung photo lookup is cut at the join budget, the joiner is welcomed and the first message is still checked", func(t *testing.T) {
+		env, state := mreqLookupJoinEnv(t, map[memberreq.Rule]int{memberreq.RulePhoto: models.RequirementActionMute})
+		member := mreqLookupMember(t, env, state, mreqPhotoAnswer{})
+		mreqSwap(t, &memberReqLookupJoinBudget, 300*time.Millisecond)
+		release := state.hold(member.Id)
+		t.Cleanup(release)
+
+		started := time.Now()
+		env.mreqJoin(member)
+		took := time.Since(started)
+		if took < 250*time.Millisecond || took > 3*time.Second {
+			t.Errorf("the join took %s, want about the 300 ms budget", took)
+		}
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 1 {
+			t.Fatalf("welcomes = %d, want 1 (a joiner whose lookup did not finish is welcomed)", got)
+		}
+		if hold := env.mreqHold(member.Id); hold != nil {
+			t.Fatalf("hold = %+v, want none after a cut-off lookup", hold)
+		}
+		if n := env.mreqCallCount("restrictChatMember", "banChatMember", "unbanChatMember"); n != 0 {
+			t.Errorf("writes = %d, want none", n)
+		}
+
+		// The lookup answers now. The watcher starts no job for a member whose names are clean
+		// until plan 14-07, so the member's first message is the executor run directly, dated
+		// now, with the job budget.
+		release()
+		later := env.mreqCase(member)
+		if got := env.mreqEnforce(later); got.Outcome != memberReqMuted {
+			t.Fatalf("the first message after the join = %+v, want Muted (the member is caught then)", got)
+		}
+	})
+}
+
+func TestMemberReqLookupOnePunishmentAcrossReplicas(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		action int
+		method string
+		notice string
+	}{
+		{"Mute", models.RequirementActionMute, "restrictChatMember", "mreq_notice_mute"},
+		{"Kick", models.RequirementActionKick, "unbanChatMember", "mreq_notice_kick"},
+	} {
+		t.Run("a photo-less member enforced at once on three processes is punished once with "+tc.name, func(t *testing.T) {
+			env, state := mreqLookupEnv(t)
+			env.mreqRules(map[memberreq.Rule]int{memberreq.RulePhoto: tc.action})
+			member := mreqLookupMember(t, env, state, mreqPhotoAnswer{})
+			first, second := env.mreqReplica(member), env.mreqReplica(member)
+			mreqInstallLookupFake(first, state)
+			mreqInstallLookupFake(second, state)
+			processes := []*memberReqEnv{env, first, second}
+
+			// Hold the one shared lookup open until every caller has joined it, so all of them
+			// get the breach together and race to claim.
+			release := state.hold(member.Id)
+			t.Cleanup(release)
+			const callers = 9
+			c := env.mreqCase(member)
+			results := make(chan memberReqResult, callers)
+			var wg sync.WaitGroup
+			for i := 0; i < callers; i++ {
+				wg.Add(1)
+				go func(p *memberReqEnv) {
+					defer wg.Done()
+					results <- memberReqEnforce(context.Background(), p.bot, c)
+				}(processes[i%len(processes)])
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for len(state.arrivals()) < 1 {
+				if time.Now().After(deadline) {
+					t.Fatal("no lookup request arrived")
+				}
+				time.Sleep(2 * time.Millisecond)
+			}
+			time.Sleep(150 * time.Millisecond)
+			release()
+			wg.Wait()
+			close(results)
+
+			punished := 0
+			for result := range results {
+				if result.Outcome == memberReqMuted || result.Outcome == memberReqRemoved {
+					punished++
+				}
+			}
+			if punished != 1 {
+				t.Errorf("callers that punished = %d, want exactly 1", punished)
+			}
+			total := 0
+			for _, p := range processes {
+				total += p.mreqCallsAbout(member.Id, tc.method)
+			}
+			if total != 1 {
+				t.Errorf("%s requests in all three processes = %d, want exactly 1", tc.method, total)
+			}
+			if n := mreqNoticeCount(staffMarker(tc.notice), processes...); n != 1 {
+				t.Errorf("notices in all three processes = %d, want exactly 1", n)
+			}
+			if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt == nil || hold.Rules != mreqBitOf(t, "ph") {
+				t.Errorf("hold = %+v, want one punished hold with the photo bit", hold)
+			}
+		})
+	}
+}

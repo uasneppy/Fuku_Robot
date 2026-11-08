@@ -56,8 +56,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (the member is punished once and their notice comes late at worst). The pause latch of the per-chat punishment cap
   (`fuku:memberreq:{<chat>}:paused`) is a Redis key with its own expiry, so a shutdown cut short neither ends a pause nor
   starts one. The lookups of
-  the photo and channel rules derive from `memberReqContext()`, so `StopMemberReqJobs` ends them too, they read and write only
-  Redis and Telegram and never PostgreSQL, and they added no drain and no second: the 65 s worst case is unchanged.
+  the photo and channel rules derive from `memberReqContext()`, so `StopMemberReqJobs` ends them too (a job inside a lookup returns at once when the root is cancelled, leaving no hold, notice
+  or write, because the claim follows every lookup, and the flight goroutine of the cancelled lookup ends with it), they read and write only
+  Redis and Telegram and never PostgreSQL, and they added no drain and no second: the 65 s worst case is unchanged
+  (`TestShutdownEndsMemberReqLookups`).
 - `StopLockdownWorker` is another drain registered after DB-close, through `RegisterLockdownWorkerDrain`
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
@@ -1296,7 +1298,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupBroken` folds the lookup verdicts into the same mask in table order (photo, then channel): it skips a row
   with no `Lookup` and a row whose action is Off, a `memberReqBreach` sets the row's bit, a `memberReqUnknown` sets only the
   returned unknown flag, and `memberReqPass` and `memberReqInert` add nothing, so a lookup row can add a bit only through an
-  explicit breach. `memberReqPassValue` fingerprints the seven rule actions. A row's `HintKey` is the hint its settings screen
+  explicit breach; its one production caller is `memberReqLiveViolation` (the executor bullet below). `memberReqPassValue` fingerprints the seven rule actions. A row's `HintKey` is the hint its settings screen
   shows after the description.
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry
@@ -1312,7 +1314,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   whose punishment is not Off and the Delete messages switch all come from that fresh row, not from the snapshot the
   watcher or the join entry handed in (WR-02, D-20: a rule switched Off, changed or a Delete messages turned off while the
   job waited behind the pacer is honoured, and an unreadable setting punishes nobody; the snapshot is only the cheap
-  pre-filter, and the held and paused paths before the live lookup still use it for their deletes); then, when that strictest punishment is a Mute and the live record is `restricted` with no
+  pre-filter, and the held and paused paths before the live lookup still use it for their deletes); then the lookups (`memberReqLookupBroken`,
+  photo then channel, each only while its action is not Off in that fresh row, under `memberReqLookupJobBudget` (20 s) for a job or
+  `memberReqLookupJoinBudget` (4 s) for the join entry, both variables), whose mask is OR-ed into the name mask before the strictest
+  punishment is chosen: a `memberReqBreach` adds its bit and an unknown or inert verdict adds none, so an unanswerable lookup (an
+  error, a 429 past the retry, a timeout, a pacer shed, the root cancelled by `StopMemberReqJobs`, a null body, an unrecognised
+  status) punishes nobody, leaves no hold, notice or write, and never blocks a name breach already established: the member is
+  punished for the names, and the hold and the notice name only the rules that were established (a partial episode: the hold's
+  mask lacks the unknown rule, which is judged again once the hold clears; research S-02, decided here so that Phase 13's name
+  rules never depend on the lookup pacer's health). The lookups sit after the exemptions, the hold read, the pause and the live
+  `getChatMember` (a held, exempt or paused member makes none) and before the mute-over-restriction check, the cap and the claim,
+  so a lookup cut off by a crash or a shutdown leaves no hold and no cap count; then, when that strictest punishment is a Mute and the live record is `restricted` with no
   marker of this episode (the stale hold's marker that `memberReqLiveMarker` adopts is the one exception), the one
   paced `getChat` of `memberReqUnmutePermissions` reads the group's defaults and `memberReqRestrictedBelow` asks whether
   the member lacks a right the group grants: if so the restriction is someone else's (an admin's `/mute`, a partial
@@ -1404,7 +1416,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   their captcha attempt existed, records `welcome_held` through `memberreq.SetHoldWelcomeHeld` and sends no welcome,
   whatever Check on join says. With Check on join off the member is welcomed with no further read and no
   `getChatMember`. Otherwise `memberReqEnforce` runs synchronously (`memberReqJoinTimeout`, 15 s, `memberReqFromJoin`) with
-  its one live `getChatMember`: a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
+  its one live `getChatMember` and, for a rule of the photo or channel kind, the same lookups through the same executor under the 4 s
+  `memberReqLookupJoinBudget` (a joiner whose lookup does not finish in 4 s is welcomed, leaves no hold, and is caught at their first
+  message, so a raid of joins never parks a dispatcher goroutine for the entry's 15 s; `memberReqJoinThenWelcome` itself is unchanged,
+  because `memberreq.AnyRuleOn` reads the seven-rule table, so a group with only the photo rule on is screened at join): a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
   at the claim, a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
   removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot), a check that could
   not be answered, and a joiner whose Mute is refused because an administrator's restriction is on them (CR-01: a rejoiner
