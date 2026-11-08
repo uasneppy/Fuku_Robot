@@ -1379,7 +1379,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   breach. `memberReqLookupMode.Classify` is set only by the held release and "I fixed it": a member lookup that could not
   be answered is then inert when the bot is definitely not a channel administrator and stays unknown otherwise; the
   punishing path and the watcher never set it and make no extra call. Positives only are cached (the keys above) and no
-  lookup has a new drain: the flights end with `memberReqContext()`.
+  lookup has a new drain: the flights end with `memberReqContext()`. The cost to know: because an inert or unknown verdict
+  is never cached, a group whose linked channel the bot cannot read (the bot is no administrator there, or Telegram will not
+  answer for its members) costs one runner job and one paced lookup per message of every non-exempt member until the owner
+  fixes the bot's standing or turns the channel rule Off (the watcher and the runner bullets under Subsystem traps give the
+  cap and the shed). Logs of every lookup path carry chat, channel and user IDs and a Telegram error by its code only
+  (`memberReqLookupLogFailure`, `memberReqErrText`); a transport error text is gotgbot's own, whose URL is already scrubbed of
+  the bot credential, and `TestMemberReqLookupLogsCarryIDsOnly` holds it.
 - Member requirements, the rule table (`memberreq_rules.go`): `memberReqRules` has seven rows in the order of
   `memberreq.Rules` (`ln un ru ar zh ph ch`, bits 1 to 64; the next free bit is 128). The five name rows have a pure `Broken`
   test and no `Lookup`; the photo and channel rows have a `Lookup` function (`memberReqPhotoRule`, `memberReqChannelRule`) and
@@ -2500,7 +2506,48 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   screens and twenty-one cards in every language, and a private run by an administrator who is not the creator through the page,
   a rule screen, a Mute card and its Yes and both switches). `TestMemberRequirementsStayOutOfBackup` (`fuku/db/backup`,
   SQLite, so not in the PostgreSQL list) proves that neither `chat_requirements` nor `chat_requirement_holds` is exported,
-  imported or reset.
+  imported or reset, and since Phase 14 that the export file names no requirement column or table and a reset leaves the
+  photo and channel columns as they were.
+- Phase 14 (the photo and channel rules) test families, all in `fuku/modules` unless a package is named, each in a file of its
+  own prefix: `TestMemberReqPhotoRule`, `TestMemberReqLinkedChannel`, `TestMemberReqChannelRule`,
+  `TestMemberReqChannelBreachNeedsBotAdmin`, `TestMemberReqBotStatusClassifier` and the `TestMemberReqLookup*` family
+  (`memberreq_lookup_test.go`, `memberreq_lookup_enforce_test.go`: the flights, the pacer, the cache keys, punishments,
+  unanswerable shapes, order, the cap and one punishment across replicas); the watcher's `TestMemberReqWatcherLookup*` and
+  `TestMemberReqPassCacheWithLookups` and the held path's `TestMemberReqLookupHeldPath` and `TestMemberReqHeldRelease*`;
+  the notices' `TestMemberReqNoticePhotoRemedy` and `TestMemberReqStillBrokenText`; "I fixed it" with lookups
+  `TestMemberReqFixedApproved`, `TestMemberReqFixedLookups` and `TestMemberReqChannelInert`; the page's
+  `TestSettingsMreqChannelStatus`, `TestSettingsMreqOpenCost`, `TestSettingsMreqBasicGroup`,
+  `TestSettingsMreqChannelRefusal` and `TestSettingsMreqForgedFields`; the shutdown's `TestShutdownEndsMemberReqLookups`; the
+  key hygiene `TestMemberReqNoProfileInReworkedKeys`; and the cross-cutting three of plan 14-11
+  (`memberreq_lookup_budget_test.go`): `TestMemberReqPacersAreIndependent` (a 30 s block on one pacer's keys sheds the other
+  entries' lookups or leaves them alone at all four entries: the job, the join entry, "I fixed it" and the page, and a lookup
+  block delays no notice or removal), `TestMemberReqLookupLogsCarryIDsOnly` (a logrus hook at debug level over every failure
+  shape of the photo, channel, bot status, held release, status reader and gate paths, plus a real `gotgbot.BaseBotClient`
+  over a failing transport and over a server that refuses with a description: no file ID, name, title, description, notice
+  text or bot credential in any line, and a recovered flight panic is one line naming no ID) and
+  `TestMemberReqLookupAlertsFitEveryLocale` (the refused-press alert, built by `settingsMreqNoLinkAlert` as the gate sends it,
+  and `mreq_fixed_check_failed`, at most 200 code points in 8 languages, naming no ID, Staff Group or member).
+  `TestSettingsStaffPrivacy` also renders the page and every rule screen under every channel status (unread, ok, notadmin,
+  nolink, unknown) and in a basic group, Main with every rule on and both alerts, and runs a private and a group-menu Phase 14
+  run of an administrator who is not the creator over a linked channel whose title and ID the fake knows and a held member
+  whose name it knows; none may name the Staff Group, the channel, the member or a count. The lookup toolkit is
+  `fuku/modules/memberreq_lookup_fake_test.go`: `mreqLookupFake` wraps the shared lockdown fake and answers
+  `getUserProfilePhotos`, the group's `getChat` (its linked channel) and `getChatMember` of a channel from an
+  `mreqLookupState` (scripted errors, holds, null bodies, a photo file ID, a channel title), `mreqInstallLookupFake` installs
+  it, `mreqChannel` links a fresh channel and registers its ID (`settingsMreqLinkChannel` does it for a plain settings
+  environment), `withFastLookupPacer` swaps in a 1 ms lookup pacer and `mreqLookupCleanup` deletes what a lookup
+  test wrote. Its hygiene: fresh IDs from `uniqueLinkOwnerID()` and `uniqueModuleChatID()`; a channel is registered as a chat
+  ID with `memberReqCleanup` (`mreqChannel` does it) so its `sub:`, `lc:` and `ba:` keys go, and `fuku:memberreq:photo:<user>`
+  is deleted by `mreqLookupCleanup`; the singleflight group and the lookup pacer are package globals, so a test that swaps
+  one restores it in `t.Cleanup` (`withFastLookupPacer`, `mreqSwap`); a flight a test holds open with `hold` or `holdKey` is
+  released in `t.Cleanup`; a test that calls `StopMemberReqJobs` also calls `restoreMemberReqRunner`; a test that runs many
+  goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
+  a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
+  `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
+  there). The locale files now hold 247 `settings_` keys and 29 `mreq_` keys, each `settings_` key one row of the limits table
+  of `fuku/i18n/settings_locale_test.go`. The two PostgreSQL facts of Phase 14 are `TestMemberRequirementLookupMigrationDefaults`
+  (in the list above) and that the `fuku/modules` harness does not run on PostgreSQL (its AutoMigrate fails on
+  `uni_users_user_id` against the migration-built schema), so Phase 14's module tests run on SQLite.
 
 ## Commits
 
