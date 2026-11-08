@@ -139,11 +139,11 @@ func TestMemberReqChannelNotAdminCache(t *testing.T) {
 		member := mreqLookupMember(t, env, state, mreqHasPhoto)
 		mreqSetValue(t, env, memberReqLinkedKey(env.chat.Id), strconv.FormatInt(channel, 10), time.Minute)
 
-		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, member.Id, "x"); satisfied {
+		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, member.Id, "x", memberReqNames{}); satisfied {
 			t.Fatal("satisfied with the link cached and neither the subscription nor the fact: want a job")
 		}
 		mreqSetKey(t, env, mreqCnaKey(channel), 50*time.Second)
-		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, member.Id, "x"); !satisfied {
+		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, member.Id, "x", memberReqNames{}); !satisfied {
 			t.Error("not satisfied while the not-administrator fact is set: want no job")
 		}
 

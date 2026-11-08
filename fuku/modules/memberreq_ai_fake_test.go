@@ -5,12 +5,15 @@ package modules
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
@@ -177,14 +180,16 @@ func withAIConfigured(t *testing.T) {
 }
 
 // mreqAICleanup deletes every fuku:memberreq:nv:* key (a verdict key holds a hash, not an ID, so
-// it cannot be found by ID) now and when the test ends, then empties the in-process cache layer.
-// userIDs and chatIDs are the test's members and chats: their rows and Redis keys go through
-// memberReqCleanup's helpers when the test ends (the chats' keys only then, so the settings a
-// test stored a moment ago are not deleted before it runs).
+// it cannot be found by ID) and the baselines fuku:memberreq:nm:<user> of userIDs now and when
+// the test ends, then empties the in-process cache layer. userIDs and chatIDs are the test's
+// members and chats: their rows and Redis keys go through memberReqCleanup's helpers when the
+// test ends (the chats' keys, the markers fuku:memberreq:nu:<chat>:<user> among them, only then,
+// so the settings a test stored a moment ago are not deleted before it runs).
 func mreqAICleanup(t *testing.T, chatIDs, userIDs []int64) {
 	t.Helper()
 	clean := func() {
 		mreqAIDeleteVerdicts()
+		mreqAIDeleteBaselines(userIDs)
 	}
 	clean()
 	t.Cleanup(clean)
@@ -210,6 +215,60 @@ func mreqAIDeleteVerdicts() {
 	for _, key := range keys {
 		client.Del(ctx, key)
 	}
+}
+
+// mreqAIDeleteBaselines removes the baselines of the given users from Redis.
+func mreqAIDeleteBaselines(userIDs []int64) {
+	client := memberReqRedisClient()
+	if client == nil {
+		return
+	}
+	for _, id := range userIDs {
+		client.Del(context.Background(), memberReqAIBaselineKey(id))
+	}
+}
+
+// mreqAIMarkNew records the member as joining the chat, the way the join entry does: it sets the
+// marker fuku:memberreq:nu:<chat>:<user>, so the rule judges the member at their next message
+// instead of only baselining them. The chat's keys are deleted by memberReqCleanup.
+func mreqAIMarkNew(t *testing.T, chatID, userID int64) {
+	t.Helper()
+	if memberReqRedisClient() == nil {
+		t.Fatal("no Redis client")
+	}
+	memberReqAIMarkJoin(context.Background(), chatID, userID)
+	if _, _, ok := mreqAIMarkerOf(t, chatID, userID); !ok {
+		t.Fatalf("the marker of user %d in chat %d was not written", userID, chatID)
+	}
+}
+
+// mreqAIBaselineOf reads a user's baseline and its remaining life; ok is false when there is none.
+func mreqAIBaselineOf(t *testing.T, userID int64) (value string, ttl time.Duration, ok bool) {
+	t.Helper()
+	return mreqAIKeyState(t, memberReqAIBaselineKey(userID))
+}
+
+// mreqAIMarkerOf reads a member's marker in a chat and its remaining life; ok is false when absent.
+func mreqAIMarkerOf(t *testing.T, chatID, userID int64) (value string, ttl time.Duration, ok bool) {
+	t.Helper()
+	return mreqAIKeyState(t, memberReqAIMarkerKey(chatID, userID))
+}
+
+func mreqAIKeyState(t *testing.T, key string) (value string, ttl time.Duration, ok bool) {
+	t.Helper()
+	client := memberReqRedisClient()
+	if client == nil {
+		t.Fatal("no Redis client")
+	}
+	ctx := context.Background()
+	value, err := client.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", 0, false
+	}
+	if err != nil {
+		t.Fatalf("read %s: %v", key, err)
+	}
+	return value, client.TTL(ctx, key).Val(), true
 }
 
 // mreqAIVerdictKeys lists the verdict keys now in Redis.

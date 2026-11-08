@@ -65,10 +65,18 @@ func mreqAIUniqueNames() *memberReqNames {
 	return &memberReqNames{First: fmt.Sprintf("Promo%d", id), Last: "Casino", Username: fmt.Sprintf("promo%d", id)}
 }
 
-// mreqAIAsk calls the AI rule directly with names in the mode.
+// mreqAIAsk calls the AI rule directly, as a joiner (Joining set, so the baseline is ignored and
+// the names are judged) with a fresh user ID, with names in the mode. A test of the baseline calls
+// mreqAIAskAs instead.
 func mreqAIAsk(env *memberReqEnv, names *memberReqNames, mode memberReqLookupMode) memberReqVerdict {
+	mode.Joining = true
+	return mreqAIAskAs(env, uniqueLinkOwnerID(), names, mode)
+}
+
+// mreqAIAskAs calls the AI rule directly for one user with names in the mode, exactly as given.
+func mreqAIAskAs(env *memberReqEnv, userID int64, names *memberReqNames, mode memberReqLookupMode) memberReqVerdict {
 	mode.Names = names
-	return memberReqAIRule(context.Background(), env.bot, env.chat.Id, uniqueLinkOwnerID(), mode)
+	return memberReqAIRule(context.Background(), env.bot, env.chat.Id, userID, mode)
 }
 
 // mreqAIWantNothing is mreqWantNothing and no verdict written: nothing was punished, held,
@@ -479,6 +487,7 @@ func TestMemberReqAIEnforcePunishes(t *testing.T) {
 		env, ai := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleAI: models.RequirementActionMute}, false)
 		ai.setDefault(mreqAIProbability(0.97))
 		member := mreqAIMember(env, "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id) // an established member would only be baselined
 
 		got := env.mreqEnforce(env.mreqCase(member))
 		if got.Outcome != memberReqMuted || got.Hold == nil {
@@ -696,6 +705,7 @@ func TestMemberReqAILookupOrder(t *testing.T) {
 		ai.setDefault(mreqAIProbability(0.97))
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
 		member := mreqAIRename(env, mreqLookupMember(t, env, state, mreqPhotoAnswer{}), "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
 		state.setMember(channel, member.Id, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
 		probe := mreqProbeLookups(env, state)
 		ai.setOnRequest(func() { probe.add("ai") })
@@ -730,6 +740,7 @@ func TestMemberReqAILookupOrder(t *testing.T) {
 		}, false)
 		ai.setDefault(mreqAIStatus(400, "invalid_request_error", ""))
 		member := mreqAIMember(env, "")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
 
 		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqMuted {
 			t.Fatalf("outcome = %+v, want Muted for the name breach", got)
@@ -752,6 +763,7 @@ func TestMemberReqAILookupOrder(t *testing.T) {
 		}, false)
 		ai.setDefault(mreqAIStatus(400, "invalid_request_error", ""))
 		member := mreqAIMember(env, "")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
 
 		mreqAIWantNothing(t, env, member, env.mreqEnforce(env.mreqCase(member)))
 
@@ -835,6 +847,7 @@ func TestMemberReqAIUnanswerable(t *testing.T) {
 		action := actions[i%len(actions)]
 		t.Run("job: "+shape.name, func(t *testing.T) {
 			env, ai, member := mreqAIShapeEnv(t, shape, action, false)
+			mreqAIMarkNew(t, env.chat.Id, member.Id) // a member the rule has never seen would only be baselined
 			started := time.Now()
 			got := env.mreqEnforce(env.mreqCase(member))
 			if shape.hangs {

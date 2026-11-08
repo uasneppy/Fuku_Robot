@@ -548,19 +548,19 @@ func TestMemberReqPassCacheWithLookups(t *testing.T) {
 		set(memberReqSubKey(channelX, alice), "1", memberReqPositiveTTL)
 		set(env.mreqPassKeyOf(alice), "value", memberReqPassTTL)
 
-		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, alice, "value"); !satisfied {
+		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, alice, "value", memberReqNames{}); !satisfied {
 			t.Fatal("alice has every positive and was not satisfied")
 		}
-		if satisfied, hit := memberReqLookupCached(settings, env.chat.Id, bob, "value"); satisfied || hit {
+		if satisfied, hit := memberReqLookupCached(settings, env.chat.Id, bob, "value", memberReqNames{}); satisfied || hit {
 			t.Errorf("bob read as satisfied=%t passHit=%t from alice's keys, want neither", satisfied, hit)
 		}
 		set(memberReqLinkedKey(env.chat.Id), strconv.FormatInt(channelY, 10), memberReqLinkedTTL)
-		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, alice, "value"); satisfied {
+		if satisfied, _ := memberReqLookupCached(settings, env.chat.Id, alice, "value", memberReqNames{}); satisfied {
 			t.Error("a subscription of another channel satisfied the channel the group is linked to")
 		}
 		set(memberReqLinkedKey(otherChat), "0", memberReqLinkedTTL)
 		set(memberReqPhotoKey(bob), "1", memberReqPositiveTTL)
-		if _, hit := memberReqLookupCached(settings, otherChat, alice, "value"); hit {
+		if _, hit := memberReqLookupCached(settings, otherChat, alice, "value", memberReqNames{}); hit {
 			t.Error("alice's pass key of one chat was read as a pass in another chat")
 		}
 	})
