@@ -768,9 +768,31 @@ func TestSettingsAuthorityMreq(t *testing.T) {
 	})
 }
 
+// settingsMreqStatuses are the statuses a draw can carry, by name: nothing read (the Phase 13
+// shape), a linked channel with an administrator bot, a bot that is not an administrator, no linked
+// channel, a read that could not be answered, and a basic group.
+var settingsMreqStatuses = []struct {
+	Name   string
+	Status settingsMreqStatus
+}{
+	{"unread", settingsMreqStatus{}},
+	{"ok", settingsMreqStatus{Channel: settingsMreqChannelOK}},
+	{"notadmin", settingsMreqStatus{Channel: settingsMreqChannelNotAdmin}},
+	{"nolink", settingsMreqStatus{Channel: settingsMreqChannelNoLink}},
+	{"unknown", settingsMreqStatus{Channel: settingsMreqChannelUnknown}},
+	{"basic", settingsMreqStatus{Basic: true}},
+}
+
+// settingsMreqOffOnlyScreen reports whether a rule's screen under a status is the Off-only channel
+// screen (two rows).
+func settingsMreqOffOnlyScreen(rule memberReqRule, status settingsMreqStatus) bool {
+	return rule.Code == "ch" && (status.Basic || status.Channel == settingsMreqChannelNoLink)
+}
+
 // settingsMreqScreens renders the page in the states that matter for size: every rule off, and
 // every punishment used once with both switches on, each without a notice and under the notices a
-// press can put on it, then every rule screen and every card.
+// press can put on it and under every status, then every rule screen under every status and every
+// card.
 func settingsMreqScreens(tr *i18n.Translator, view settingsView) map[string]settingsScreen {
 	states := map[string]*models.ChatRequirements{
 		"all off": {},
@@ -789,14 +811,18 @@ func settingsMreqScreens(tr *i18n.Translator, view settingsView) map[string]sett
 	screens := map[string]settingsScreen{}
 	for stateName, row := range states {
 		for noticeName, notice := range notices {
-			screens[stateName+", "+noticeName] = renderSettingsMreqPage(view, row, notice)
+			for _, st := range settingsMreqStatuses {
+				screens[stateName+", "+noticeName+", "+st.Name] = renderSettingsMreqPageStatus(view, row, notice, st.Status)
+			}
 		}
 	}
-	// The seven rule screens (every punishment used once, each under every notice) and the
-	// twenty-one cards.
+	// The seven rule screens (every punishment used once, each under every notice and every
+	// status) and the twenty-one cards.
 	for _, rule := range memberReqRules {
 		for noticeName, notice := range notices {
-			screens["rule "+rule.Code+", "+noticeName] = renderSettingsMreqRuleScreen(view, rule, states["every punishment"], notice)
+			for _, st := range settingsMreqStatuses {
+				screens["rule "+rule.Code+", "+noticeName+", "+st.Name] = renderSettingsMreqRuleScreenStatus(view, rule, states["every punishment"], notice, st.Status)
+			}
 		}
 		for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
 			screens[fmt.Sprintf("card %s %d", rule.Code, action)] = renderSettingsMreqCard(view, rule, action)
@@ -820,8 +846,8 @@ func TestSettingsMreqPageFitsEveryLocale(t *testing.T) {
 					view := settingsEditView(tr, private)
 					view.GroupTitle, view.OpenerName = title, title
 					screens := settingsMreqScreens(tr, view)
-					if len(screens) != 6+21+21 {
-						t.Fatalf("%s %s: %d screens were rendered, want 6 page states, 21 rule screens and 21 cards", code, titleName, len(screens))
+					if want := 2*3*6 + 7*3*6 + 21; len(screens) != want {
+						t.Fatalf("%s %s: %d screens were rendered, want %d (36 page states, 126 rule screens, 21 cards)", code, titleName, len(screens), want)
 					}
 					for name, screen := range screens {
 						label := fmt.Sprintf("%s %s private=%v %s", code, titleName, private, name)
@@ -930,6 +956,26 @@ func TestSettingsMreqCallbackBytes(t *testing.T) {
 			}
 		}
 		checkBytes("rule cell", screen, settingsAllButtons(screen.Keyboard.InlineKeyboard[:4]), wantCell)
+		// The status screens add body lines and, for the channel rule, drop a choice row: no
+		// button grows, and the single [Off] of the Off-only screen is a choice button like the rest.
+		channelRule, _ := memberReqRuleByCode("ch")
+		for _, st := range settingsMreqStatuses {
+			for _, rule := range memberReqRules {
+				rs := renderSettingsMreqRuleScreenStatus(view, rule, &models.ChatRequirements{}, "", st.Status)
+				choiceRows := 2
+				if settingsMreqOffOnlyScreen(rule, st.Status) {
+					choiceRows = 1
+				}
+				checkBytes("choice under "+st.Name, rs, settingsAllButtons(rs.Keyboard.InlineKeyboard[:choiceRows]), wantChoice)
+				checkBytes("Back under "+st.Name, rs, rs.Keyboard.InlineKeyboard[choiceRows][:1], wantMain)
+			}
+			checkBytes("page cell under "+st.Name, renderSettingsMreqPageStatus(view, &models.ChatRequirements{}, "", st.Status),
+				settingsAllButtons(renderSettingsMreqPageStatus(view, &models.ChatRequirements{}, "", st.Status).Keyboard.InlineKeyboard[:4]), wantCell)
+		}
+		offOnly := renderSettingsMreqRuleScreenStatus(view, channelRule, &models.ChatRequirements{}, "", settingsMreqStatus{Channel: settingsMreqChannelNoLink})
+		if len(offOnly.Keyboard.InlineKeyboard) != 2 || len(offOnly.Keyboard.InlineKeyboard[0]) != 1 {
+			t.Errorf("%s: the Off-only screen keyboard = %+v, want [Off] and [Back | Close]", label, offOnly.Keyboard.InlineKeyboard)
+		}
 		for _, rule := range memberReqRules {
 			rs := renderSettingsMreqRuleScreen(view, rule, &models.ChatRequirements{}, "")
 			checkBytes("choice", rs, settingsAllButtons(rs.Keyboard.InlineKeyboard[:2]), wantChoice)
@@ -1339,24 +1385,32 @@ func TestSettingsMreqRowBudget(t *testing.T) {
 		view := settingsEditView(tr, private)
 		label := fmt.Sprintf("private=%v", private)
 
-		page := renderSettingsMreqPage(view, everyPunishment, "")
-		if rows := len(page.Keyboard.InlineKeyboard); rows != 6 {
-			t.Errorf("%s: the page has %d rows, want 6 (the four grid rows, the switches, the navigation)", label, rows)
-		}
-		for r, widths := range []int{2, 2, 2, 1, 2, 2} {
-			if got := len(page.Keyboard.InlineKeyboard[r]); got != widths {
-				t.Errorf("%s: page row %d has %d buttons, want %d", label, r, got, widths)
+		for _, st := range settingsMreqStatuses {
+			page := renderSettingsMreqPageStatus(view, everyPunishment, "", st.Status)
+			if rows := len(page.Keyboard.InlineKeyboard); rows != 6 {
+				t.Errorf("%s %s: the page has %d rows, want 6 (the four grid rows, the switches, the navigation)", label, st.Name, rows)
 			}
-		}
-		for _, button := range settingsAllButtons(page.Keyboard.InlineKeyboard) {
-			if button.Url != "" {
-				t.Errorf("%s: the page has a URL button %q, want no Open in private row", label, button.Text)
+			for r, widths := range []int{2, 2, 2, 1, 2, 2} {
+				if got := len(page.Keyboard.InlineKeyboard[r]); got != widths {
+					t.Errorf("%s %s: page row %d has %d buttons, want %d", label, st.Name, r, got, widths)
+				}
+			}
+			for _, button := range settingsAllButtons(page.Keyboard.InlineKeyboard) {
+				if button.Url != "" {
+					t.Errorf("%s %s: the page has a URL button %q, want no Open in private row", label, st.Name, button.Text)
+				}
+			}
+			for _, rule := range memberReqRules {
+				want := 3
+				if settingsMreqOffOnlyScreen(rule, st.Status) {
+					want = 2
+				}
+				if rows := len(renderSettingsMreqRuleScreenStatus(view, rule, everyPunishment, "", st.Status).Keyboard.InlineKeyboard); rows != want {
+					t.Errorf("%s %s: the %s rule screen has %d rows, want %d", label, st.Name, rule.Code, rows, want)
+				}
 			}
 		}
 		for _, rule := range memberReqRules {
-			if rows := len(renderSettingsMreqRuleScreen(view, rule, everyPunishment, "").Keyboard.InlineKeyboard); rows != 3 {
-				t.Errorf("%s: the %s rule screen has %d rows, want 3", label, rule.Code, rows)
-			}
 			for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
 				if rows := len(renderSettingsMreqCard(view, rule, action).Keyboard.InlineKeyboard); rows != 2 {
 					t.Errorf("%s: the %s card has %d rows, want 2", label, rule.Code, rows)

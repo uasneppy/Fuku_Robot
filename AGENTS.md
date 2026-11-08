@@ -519,8 +519,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Main's state is Off when every rule is Off (whatever the two switches say), `{n} on` for the n rules that are not Off
   (n up to 7), and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
   creates nothing. The body is the intro, the all-off line while every rule is Off, one line per rule of `memberReqRules`
-  in table order (icon from `memberReqActionIcon` plus the option word), the Check on join and Delete messages lines and
-  the five hints; a failed read is the cannot-open edit. The keyboard is the rule grid, the switch row and the navigation
+  in table order (icon from `memberReqActionIcon` plus the option word), the Check on join and Delete messages lines, the
+  cannot-work block (below) and the six hints (`settings_mreq_hint_lookup` follows the blank-name hint); a failed read is
+  the cannot-open edit. The keyboard is the rule grid, the switch row and the navigation
   row, six rows in a private and in a group menu (the rule grid's four rows of widths 2, 2, 2, 1, the switch row and the
   navigation row, `TestSettingsMreqRowBudget`) and no Open in private row. The rule grid
   is one cell per rule of `memberReqRules` in rule order, seven cells (`ln un ru ar zh ph ch`), two per row with an odd
@@ -530,8 +531,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   most 53 bytes), the page action `mo` (exactly `t`, a rule code, right `settingsRightAdmin`), which opens the rule
   screen (`renderSettingsMreqRuleScreen`, pure): the rule's name, what breaks it, the rule's own hint right after it when its
   table row has a `HintKey` (the blank last name hint on the last-name rule, `settings_mreq_hint_photo` on the photo rule,
-  which recommends Warn or Mute and hides no punishment; no renderer branches on a rule's identity for it, and the channel
-  rule's screen is the Phase 13 shape until its status reads arrive), `Punishment: icon word`, the two hints and the choice rows `[Off | Warn]` and
+  which recommends Warn or Mute and hides no punishment; no renderer branches on a rule's identity for it), the status slot
+  (below), `Punishment: icon word`, the two hints and the choice rows `[Off | Warn]` and
   `[Kick | Ban | Mute]` with `✅ ` on the stored value, then Back to the page (`a=op&p=m`, the one Back that does not
   open Main) and Close. The rule controls `ln un ru ar zh ph ch` accept `st` only (`Actions: []string{"st"}`, so a `tg` on one
   is an invalid request in step 1) with `v` exactly one digit 0..4 and right `settingsRightRestrict`. Off and Warn are
@@ -556,6 +557,36 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `common_settings_save_failed`. Drift and authority tests stand in for a parity test (`TestSettingsDriftMreq`,
   `TestSettingsAuthorityMreq`). No screen of the page names the Staff Group, a member or a count of held members
   (`TestSettingsStaffPrivacy` renders it in 8 languages).
+  The status block (Phase 14, MREQ-10, D-15, D-08): the page says in words when a rule cannot work here, and never draws an
+  error. The page body's cannot-work block is a list of lines between the switch lines and the hints, omitted together
+  with its blank line when it has no line (`settingsMreqHereLines`, so a later rule appends its line with no renderer
+  change): the basic-group line (`settings_mreq_here_basic`, `🚫 `, one line, never one per rule) while at least one rule is
+  not Off and the group is a basic group, else in a supergroup, while the channel rule is not Off, the no-linked-channel
+  line (`🚫 `), the bot-not-an-administrator line (`🚫 `) or the could-not-check line (the page's unknown mark), each with
+  `{rule}` the translated channel rule name; the icon is a code-side prefix, never inside a template, and no line names the
+  linked channel's title or ID, the Staff Group or a member. Each rule screen has a status slot, one line between its
+  description (and hint) and the blank before `Punishment:`: the basic-group line on every rule, the channel rule's line on
+  its own screen (always, whatever the stored value), nothing for the other rules and nothing for a linked channel whose bot is
+  an administrator. While the channel rule cannot be linked (a basic group, or no linked channel found) its screen is
+  `[Off]` alone, two rows, the choose and actions hints omitted, and a stored non-Off value stays visible and inert
+  (`settingsMreqOffOnly`); every other state keeps the three-row shape (the could-not-check state keeps both choice rows).
+  The one reader is `settingsMreqReadStatus(p, row, scope, fresh)`, and every draw of the page and of a rule screen goes
+  through `settingsMreqDrawPage` or `settingsMreqDrawRule`: the database is read first (a failed read is the cannot-open
+  edit), the press is answered empty, then the status is read, then the edit is made, so a redraw after a switch, a
+  choice, a card Yes or an expired Yes keeps its line and the callback is answered exactly once on every path. The read
+  makes no call for Main, for every rule screen but the channel's (they need only the basic-group flag, read from
+  `p.group.Type`, which both menus already hold), for a page whose channel rule is Off and for a basic group; otherwise it
+  makes at most two calls under one `settingsMreqHereTimeout` (3 s, a variable) through the lookup pacer and never the
+  Phase 13 pacer: `memberReqLinkedChannel` (a cached link costs none) and, for a linked channel only,
+  `memberReqBotChannelStatus` (a cached administrator costs none). The page and a redraw read through the caches, so an
+  owner who has just linked a channel can see "no linked channel" on the page for up to 10 minutes; opening the channel
+  screen (`mo`) reads fresh and refreshes `lc` and `ba`. The status is judged by the one classifier of the lookup layer: a
+  definite non-administrator status of the bot, or a 400 or 403, is "not an administrator", and everything else (a shed
+  pacer, a timeout, a 429, a 5xx, an unreadable or null answer) is unknown and drawn as the unknown mark, never as an error
+  text, a refusal or the cannot-open edit. Known and accepted: the private press's own `getChat` already carries the linked
+  chat but is not reused (one code path for both menus), so a private draw makes one more `getChat` than a group draw.
+  `TestSettingsMreqChannelStatus`, `TestSettingsMreqChannelStatusScreen`, `TestSettingsMreqBasicGroup`,
+  `TestSettingsMreqOpenCost` and `TestSettingsMreqRedrawKeepsStatus` hold it.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
