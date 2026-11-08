@@ -273,8 +273,8 @@ Plans:
   2. The channel rule is offered only in a group linked to a channel, and it punishes a member who is not subscribed to that channel.
   3. A check that cannot be answered (a Telegram error, a lookup that times out, the bot not being an admin of the linked channel) never punishes anyone. The page shows when a rule cannot work in that group (no linked channel, the bot not admin there). The "AI not configured" line arrives with the AI rule in Phase 15.
   4. During a burst of joins or messages, photo and channel lookups share one Telegram rate budget across replicas and never hold up the rest of the bot. A lookup cut off by a crash or a shutdown punishes nobody and leaves nothing stuck, and lookups in flight end within the existing shutdown budget.
-**Plans:** 0/12 plans executed
-- [ ] 14-01-PLAN.md — migration, model fields and repository rules for the photo and channel columns, the PostgreSQL guarantee (wave 1)
+**Plans:** 1/12 plans executed
+- [x] 14-01-PLAN.md — migration, model fields and repository rules for the photo and channel columns, the PostgreSQL guarantee (wave 1)
 - [ ] 14-02-PLAN.md — the 16 new and 7 reworded locale keys in all 8 files and the test constants they move (wave 2)
 - [ ] 14-03-PLAN.md — the lookup layer (verdict type, lookup pacer, singleflight with panic recovery, positive-only caches) and the photo lookup (wave 3)
 - [ ] 14-04-PLAN.md — the linked channel, subscription and bot-status lookups, the classifier and the D-22 breach gate (wave 4)
@@ -377,7 +377,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 11. Message Editor | 14/14 | In Progress | - |
 | 12. Rules Media, Media Under Text and Greet Once | 15/16 | In Progress | - |
 | 13. Member Requirements | 14/14 | In Progress | - |
-| 14. Profile Photo and Channel Rules | 0/12 | Not started | - |
+| 14. Profile Photo and Channel Rules | 1/12 | In Progress | - |
 | 15. AI Spam-Name Check | 0/TBD | Not started | - |
 | 16. Scheduled Deletion of Service and Bot Messages | 0/TBD | Not started | - |
 | 17. Command, Edit and Self-Destruct Deletion | 0/TBD | Not started | - |
