@@ -669,7 +669,8 @@ func renderSettingsMreqCard(v settingsView, rule memberReqRule, action int) sett
 
 // settingsMreqYes serves the card's Yes. The press already ran the whole pipeline again, so a
 // presser who lost the restrict right since the first tap never gets here. An expired Yes writes
-// nothing and redraws the rule screen with the expiry note; a live one writes v through
+// nothing, makes no link check and redraws the rule screen with the expiry note; a live one passes
+// the channel rule's live link check (settingsMreqChannelGate), then writes v through
 // applyMemberReqAction and redraws the rule screen from the read-back.
 func settingsMreqYes(p *settingsPress) *settingsScreen {
 	rule, ok := memberReqRuleByCode(p.fields["t"])
@@ -687,7 +688,12 @@ func settingsMreqYes(p *settingsPress) *settingsScreen {
 		}
 		return settingsMreqRedrawRule(p, rule, row, settingsNoticeWarn(settingsText(p.tr, "settings_card_expired")))
 	}
-	return settingsMreqApplyRule(p, rule, int(p.fields["v"][0]-'0'))
+	action := int(p.fields["v"][0] - '0')
+	// The card binds nothing about the link: a Yes checks it again, after the right and the expiry.
+	if !settingsMreqChannelGate(p, rule, nil, action) {
+		return nil
+	}
+	return settingsMreqApplyRule(p, rule, action)
 }
 
 // settingsMreqApplyRule writes the punishment through applyMemberReqAction and redraws the rule
