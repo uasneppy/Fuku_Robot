@@ -31,7 +31,7 @@
     {
       "number": "15",
       "name": "AI Spam-Name Check",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "16",
@@ -56,8 +56,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 5 of 10 · 0% · ready to verify"
+    "label": "Advance to the next step",
+    "reason": "Phase 6 of 10 · 0% · executing"
   },
-  "updated_at": "2026-11-08T12:01:04.285Z"
+  "updated_at": "2026-11-08T16:05:47.476Z"
 }

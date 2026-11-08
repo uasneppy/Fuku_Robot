@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
-status: planning
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-11-08T15:56:03.510Z"
+status: executing
+stopped_at: Completed 15-02-PLAN.md
+last_updated: "2026-11-08T16:05:53.142Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 11 execution started
-state_head: a114a718f30da5b83ccdf70d418d62f3f7c0aa6a
+state_head: 1e3137e1a4d86a89afe349ea298b6a80c462f86a
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 78
-  completed_plans: 67
+  completed_plans: 68
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 2 of 11
-Status: Executing Phase 15 (15-01 done: the ai_action column, model field and memberreq.RuleAI; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
-Last activity: 2026-11-08 — Plan 15-01 complete
+Plan: 3 of 11
+Status: Executing Phase 15 (15-02 done: ClassifyNames in the Claude client and the namecanon leaf package; nothing calls them yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
+Last activity: 2026-11-08 — Plan 15-02 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -141,6 +141,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 14 P11 | 150min | 3 tasks | 6 files |
 | Phase 14 P12 | 65min | 3 tasks | 7 files |
 | Phase 15 P01 | 25min | 3 tasks | 8 files |
+| Phase 15 P02 | 40min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -231,6 +232,7 @@ Recent decisions affecting current work:
 - [Phase 14]: 14-07: the photo and subscription flights read their cache once more inside the flight, so messages that arrive together make one lookup request
 - [Phase 14]: 14-08: I fixed it asks the photo and channel lookups even when a name rule is already broken, so one answer lists everything still broken; an unanswered lookup alone changes nothing
 - [Phase 14]: 14-09: the status reader takes a scope (basic, page, channel screen) instead of a channelScreen bool; the channel screen reads fresh on its opening and redraws read the caches
+- [Phase 15]: 15-02: invisible and default-ignorable runes are dropped before NFKC (marks kept); namecanon exports Canon, Of and VerdictKey only, version tags mrn1 and mrv1 unexported
 
 ### Pending Todos
 
@@ -306,8 +308,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T15:56:02.380Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-11-08T16:05:51.942Z
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
