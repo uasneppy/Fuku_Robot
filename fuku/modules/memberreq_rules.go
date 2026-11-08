@@ -32,9 +32,9 @@ func memberReqNamesOf(u gotgbot.User) memberReqNames {
 // broken-rule mask, the stored rule ID, the locale keys the page and the notices read, and
 // how the rule is judged. Exactly one of Broken and Lookup is set on every row. A name rule has
 // a pure Broken test of the member's names; it judges the first and the last name and never the
-// username. A lookup rule (the photo and the channel) has a Lookup function that asks Telegram
-// and answers a verdict, and no Broken: only memberReqLookupBroken calls it, and only an
-// explicit memberReqBreach adds the rule's bit. HintKey, when set, is a locale key the rule's
+// username. A lookup rule (the photo, the channel and the AI rule) has a Lookup function that
+// asks Telegram or the AI provider and answers a verdict, and no Broken: only
+// memberReqLookupBroken calls it, and only an explicit memberReqBreach adds the rule's bit. HintKey, when set, is a locale key the rule's
 // settings screen shows right after the description (the blank last name hint, the photo rule's
 // Warn or Mute recommendation); it is the one field a renderer reads in place of a test of the
 // rule's identity.
@@ -97,8 +97,8 @@ func memberReqHasHan(s string) bool {
 }
 
 // memberReqRules is the rule table in rule order: last name, username, Russian, Arabic,
-// Chinese, profile photo, channel subscription. A later phase appends rows (the next free bit is
-// 128); the order is the order of the settings page and of the {rules} list in a notice, and it
+// Chinese, profile photo, channel subscription, AI spam names. A later phase appends rows (the
+// next free bit is 256); the order is the order of the settings page and of the {rules} list in a notice, and it
 // equals memberreq.Rules.
 var memberReqRules = []memberReqRule{
 	{Code: "ln", Bit: 1, Store: memberreq.RuleLastName, LineKey: "settings_mreq_rule_lastname", CellKey: "settings_btn_mreq_lastname", DescKey: "settings_mreq_desc_lastname", PhraseKey: "mreq_rule_lastname", HintKey: "settings_mreq_hint_blank",
@@ -115,9 +115,11 @@ var memberReqRules = []memberReqRule{
 		Lookup: memberReqPhotoRule, HintKey: "settings_mreq_hint_photo"},
 	{Code: "ch", Bit: 64, Store: memberreq.RuleChannel, LineKey: "settings_mreq_rule_channel", CellKey: "settings_btn_mreq_channel", DescKey: "settings_mreq_desc_channel", PhraseKey: "mreq_rule_channel",
 		Lookup: memberReqChannelRule},
+	{Code: "ai", Bit: 128, Store: memberreq.RuleAI, LineKey: "settings_mreq_rule_ai", CellKey: "settings_btn_mreq_ai", DescKey: "settings_mreq_desc_ai", PhraseKey: "mreq_rule_ai",
+		Lookup: memberReqAIRule, HintKey: "settings_mreq_hint_ai"},
 }
 
-// memberReqRuleByCode finds a rule by its callback code (ln un ru ar zh ph ch).
+// memberReqRuleByCode finds a rule by its callback code (ln un ru ar zh ph ch ai).
 func memberReqRuleByCode(code string) (memberReqRule, bool) {
 	for _, rule := range memberReqRules {
 		if rule.Code == code {
@@ -170,7 +172,7 @@ func memberReqBroken(settings *models.ChatRequirements, names memberReqNames) in
 }
 
 // memberReqLookupBroken folds the verdicts of the lookup rules into a broken mask, in table
-// order (photo, then channel). It skips a row with no Lookup (a name rule) and a row whose stored
+// order (photo, channel, then the AI rule). It skips a row with no Lookup (a name rule) and a row whose stored
 // action is Off, and asks the others with the chat, the member and the mode it was given. A
 // memberReqBreach sets the rule's bit; a memberReqUnknown (also the zero verdict) sets the
 // returned unknown flag and no bit; memberReqPass and memberReqInert add nothing. A lookup can
@@ -265,7 +267,7 @@ func memberReqStrictest(settings *models.ChatRequirements, broken int) int {
 }
 
 // memberReqPassValue is a fingerprint of everything that decides whether a member is
-// clean in a chat: the seven actions in rule order and the three names. It is the first 16
+// clean in a chat: the eight actions in rule order and the three names. It is the first 16
 // hex characters of a SHA-256, not a secret. The watcher stores it per member so it can
 // skip the clean-path DELETE while nothing changed, and any rename or settings change
 // gives another value (D-12, D-20). Each field is length-prefixed, so no name can slide

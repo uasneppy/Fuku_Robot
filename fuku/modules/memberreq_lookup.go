@@ -50,6 +50,10 @@ type memberReqLookupMode struct {
 	// inert when the bot is shown to be no administrator of the channel (the held release
 	// and "I fixed it" set it; the punishing path never does, so it makes no extra call).
 	Classify bool
+	// Names are the member's three profile names as the live record shows them, for the rule that
+	// judges names (the AI rule; the photo and channel rules ignore them). A nil value means the
+	// caller has no names to give, and the AI rule is then unknown, never a breach.
+	Names *memberReqNames
 }
 
 const (

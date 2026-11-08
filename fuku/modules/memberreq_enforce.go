@@ -274,8 +274,9 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 		return member, 0, false
 	}
 	c.Settings = fresh
-	broken = memberReqBroken(c.Settings, memberReqNamesOf(member.User))
-	// The lookup rules (photo, then channel) come after the names, so an unanswerable lookup can
+	names := memberReqNamesOf(member.User)
+	broken = memberReqBroken(c.Settings, names)
+	// The lookup rules (photo, channel, then the AI rule, which judges the live names) come after the names, so an unanswerable lookup can
 	// never hide an established name breach. Each runs only while its action is not Off in the
 	// fresh row, and only an explicit breach adds a bit: an unknown or inert verdict is "not
 	// broken". The claim, the cap and the mute-over-restriction check all follow this step.
@@ -284,7 +285,7 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	touch := &memberReqLookupTouch{}
 	lookupCtx = context.WithValue(lookupCtx, memberReqLookupTouchKey{}, touch)
 	lookupStart := time.Now()
-	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{})
+	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{Names: &names})
 	broken |= lookupMask
 	// WR-03 and SEC-02: the record and the exemptions above were read before the lookup phase, which
 	// can take seconds under a loaded pacer. When the phase went beyond the cache (a request was made
