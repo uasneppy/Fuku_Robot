@@ -22,50 +22,63 @@ type memberReqLimit struct {
 }
 
 // memberReqLocaleLimits is the "Max EN" and "Max other" columns of the UI-SPEC "New mreq_
-// keys" table (rows 1 to 25). The test fails when it does not cover exactly the mreq_ keys
+// keys" table (rows 1 to 29). The test fails when it does not cover exactly the mreq_ keys
 // of every locale file, so a plan that adds a key adds its row.
 var memberReqLocaleLimits = map[string]memberReqLimit{
-	"mreq_rule_lastname":          {18, 24},
-	"mreq_rule_username":          {18, 24},
-	"mreq_rule_russian":           {20, 27},
-	"mreq_rule_arabic":            {20, 27},
-	"mreq_rule_chinese":           {20, 27},
-	"mreq_name_unknown":           {16, 24},
-	"mreq_notice_warn":            {110, 154},
-	"mreq_notice_warn_limit_kick": {120, 168},
-	"mreq_notice_warn_limit_ban":  {120, 168},
-	"mreq_notice_warn_limit_mute": {140, 170},
-	"mreq_notice_kick":            {100, 140},
-	"mreq_notice_ban":             {80, 112},
-	"mreq_notice_mute":            {110, 154},
-	"mreq_btn_fixed":              {20, 28},
-	"mreq_notice_fixed":           {70, 98},
-	"mreq_notice_fixed_lockdown":  {130, 182},
-	"mreq_fixed_done":             {50, 70},
-	"mreq_fixed_done_lockdown":    {110, 160},
-	"mreq_fixed_still_broken":     {60, 70},
-	"mreq_fixed_not_yours":        {80, 112},
-	"mreq_fixed_not_ours":         {120, 160},
-	"mreq_fixed_check_failed":     {90, 126},
-	"mreq_fixed_stale":            {70, 98},
-	"mreq_warn_reason":            {40, 56},
-	"mreq_notice_paused":          {190, 266},
+	"mreq_rule_lastname":           {18, 24},
+	"mreq_rule_username":           {18, 24},
+	"mreq_rule_russian":            {20, 27},
+	"mreq_rule_arabic":             {20, 27},
+	"mreq_rule_chinese":            {20, 27},
+	"mreq_rule_photo":              {26, 32},
+	"mreq_rule_channel":            {30, 38},
+	"mreq_name_unknown":            {16, 24},
+	"mreq_notice_warn":             {110, 154},
+	"mreq_notice_warn_limit_kick":  {120, 168},
+	"mreq_notice_warn_limit_ban":   {120, 168},
+	"mreq_notice_warn_limit_mute":  {140, 170},
+	"mreq_notice_kick":             {100, 140},
+	"mreq_notice_ban":              {80, 112},
+	"mreq_notice_mute":             {110, 154},
+	"mreq_btn_fixed":               {20, 28},
+	"mreq_notice_fixed":            {70, 98},
+	"mreq_notice_fixed_lockdown":   {130, 182},
+	"mreq_fixed_done":              {50, 70},
+	"mreq_fixed_done_lockdown":     {110, 160},
+	"mreq_remedy_photo":            {62, 84},
+	"mreq_fixed_still_broken":      {60, 70},
+	"mreq_fixed_still_broken_many": {80, 112},
+	"mreq_fixed_not_yours":         {80, 112},
+	"mreq_fixed_not_ours":          {120, 160},
+	"mreq_fixed_check_failed":      {90, 126},
+	"mreq_fixed_stale":             {70, 98},
+	"mreq_warn_reason":             {40, 56},
+	"mreq_notice_paused":           {190, 266},
 }
 
-// memberReqRulePhrases are the five rule phrases that fill {rules}, in rule order.
+// memberReqRulePhrases are the seven rule phrases that fill {rules}, in rule order.
 var memberReqRulePhrases = []string{
 	"mreq_rule_lastname", "mreq_rule_username", "mreq_rule_russian", "mreq_rule_arabic", "mreq_rule_chinese",
+	"mreq_rule_photo", "mreq_rule_channel",
 }
+
+// memberReqRemedyNoticeKeys are the notices that carry the photo remedy sentence after one
+// space when the photo rule is among the broken ones.
+var memberReqRemedyNoticeKeys = []string{"mreq_notice_warn", "mreq_notice_kick", "mreq_notice_mute"}
+
+// memberReqStillBrokenPhrases is how many phrases the still-broken alert lists before it
+// names the count instead (five or more rules use mreq_fixed_still_broken_many).
+const memberReqStillBrokenPhrases = 4
 
 // memberReqAnswerKeys are shown as answerCallbackQuery text (the toast and the alerts):
 // plain text, at most 160 code points as templates (UI-SPEC "Rules for this family").
 var memberReqAnswerKeys = []string{
 	"mreq_fixed_done", "mreq_fixed_done_lockdown", "mreq_fixed_still_broken", "mreq_fixed_not_yours",
-	"mreq_fixed_not_ours", "mreq_fixed_check_failed", "mreq_fixed_stale",
+	"mreq_fixed_not_ours", "mreq_fixed_check_failed", "mreq_fixed_stale", "mreq_fixed_still_broken_many",
 }
 
 // memberReqNoticeKeys are the group notices and their edits: one paragraph each, at most
-// 400 code points of visible text once rendered with the worst case name.
+// 520 code points of visible text once rendered with the worst case name (amendment M10).
 var memberReqNoticeKeys = []string{
 	"mreq_notice_warn", "mreq_notice_warn_limit_kick", "mreq_notice_warn_limit_ban",
 	"mreq_notice_warn_limit_mute", "mreq_notice_kick", "mreq_notice_ban", "mreq_notice_mute",
@@ -76,7 +89,7 @@ const (
 	memberReqAnswerMax        = 160
 	memberReqStillBrokenEn    = 160
 	memberReqStillBrokenOther = 200
-	memberReqNoticeMax        = 400
+	memberReqNoticeMax        = 520
 	memberReqFixedPrefix      = "✅ "
 	// memberReqNameRunes is the longest name a notice carries: 64 runes plus the two
 	// Unicode isolates U+2068 and U+2069 the mention adds around it.
@@ -95,13 +108,23 @@ func memberReqKeys(data map[string]any) map[string]struct{} {
 }
 
 // memberReqRender splices the worst case values into a template the way the bot does after
-// translation: a 66 code point name, two digit numbers and the five rule phrases of the
-// language joined by ", ".
-func memberReqRender(t *testing.T, lang string, data map[string]any, key string) string {
+// translation: a 66 code point name, two digit numbers and the seven rule phrases of the
+// language joined by ", ". A non-empty tail is appended after one space before the splice,
+// as memberReqNoticeText does for the photo remedy.
+func memberReqRender(t *testing.T, lang string, data map[string]any, key, tail string) string {
 	t.Helper()
 	phrases := make([]string, 0, len(memberReqRulePhrases))
 	for _, phrase := range memberReqRulePhrases {
 		phrases = append(phrases, settingsLocaleString(t, lang, data, phrase))
+	}
+	return memberReqSplice(settingsLocaleString(t, lang, data, key), tail, phrases)
+}
+
+// memberReqSplice fills the placeholders of one template with the worst case values and the
+// given phrases.
+func memberReqSplice(template, tail string, phrases []string) string {
+	if tail != "" {
+		template += " " + tail
 	}
 	replacer := strings.NewReplacer(
 		"{name}", strings.Repeat("W", memberReqNameRunes),
@@ -111,7 +134,20 @@ func memberReqRender(t *testing.T, lang string, data map[string]any, key string)
 		"{minutes}", "99",
 		"{id}", "9007199254740991",
 	)
-	return replacer.Replace(settingsLocaleString(t, lang, data, key))
+	return replacer.Replace(template)
+}
+
+// memberReqLongestPhrases returns the count longest rule phrases of a language.
+func memberReqLongestPhrases(t *testing.T, lang string, data map[string]any, count int) []string {
+	t.Helper()
+	phrases := make([]string, 0, len(memberReqRulePhrases))
+	for _, phrase := range memberReqRulePhrases {
+		phrases = append(phrases, settingsLocaleString(t, lang, data, phrase))
+	}
+	sort.SliceStable(phrases, func(i, j int) bool {
+		return utf8.RuneCountInString(phrases[i]) > utf8.RuneCountInString(phrases[j])
+	})
+	return phrases[:count]
 }
 
 // TestMemberReqLocaleKeys guards every mreq_ string across all 8 locales. make
@@ -197,17 +233,16 @@ func TestMemberReqLocaleKeys(t *testing.T) {
 }
 
 // memberReqRenderedFailures runs the binding rendered-length checks of one language: the
-// still-broken alert with all five phrases, and every notice with a 66 code point name.
+// still-broken alert with the four longest phrases, the count answer at n 99, and every
+// notice with a 66 code point name and all seven phrases, the three remedy notices also
+// with the photo remedy after one space.
 func memberReqRenderedFailures(t *testing.T, lang string, data map[string]any) []string {
 	t.Helper()
-	for _, key := range append([]string{"mreq_fixed_still_broken"}, memberReqNoticeKeys...) {
+	required := append([]string{"mreq_fixed_still_broken", "mreq_fixed_still_broken_many", "mreq_remedy_photo"}, memberReqNoticeKeys...)
+	required = append(required, memberReqRulePhrases...)
+	for _, key := range required {
 		if _, ok := data[key].(string); !ok {
 			// A missing key is already reported by the coverage check.
-			return nil
-		}
-	}
-	for _, key := range memberReqRulePhrases {
-		if _, ok := data[key].(string); !ok {
 			return nil
 		}
 	}
@@ -217,12 +252,24 @@ func memberReqRenderedFailures(t *testing.T, lang string, data map[string]any) [
 	if lang == "en" {
 		stillBrokenMax = memberReqStillBrokenEn
 	}
-	if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, "mreq_fixed_still_broken")); runes > stillBrokenMax {
-		failures = append(failures, fmt.Sprintf("%s: mreq_fixed_still_broken rendered with five phrases has %d characters, ceiling %d", lang, runes, stillBrokenMax))
+	longest := memberReqLongestPhrases(t, lang, data, memberReqStillBrokenPhrases)
+	stillBroken := memberReqSplice(settingsLocaleString(t, lang, data, "mreq_fixed_still_broken"), "", longest)
+	if runes := utf8.RuneCountInString(stillBroken); runes > stillBrokenMax {
+		failures = append(failures, fmt.Sprintf("%s: mreq_fixed_still_broken rendered with the four longest phrases has %d characters, ceiling %d", lang, runes, stillBrokenMax))
 	}
+	many := memberReqSplice(settingsLocaleString(t, lang, data, "mreq_fixed_still_broken_many"), "", nil)
+	if runes := utf8.RuneCountInString(many); runes > memberReqAnswerMax {
+		failures = append(failures, fmt.Sprintf("%s: mreq_fixed_still_broken_many rendered at n 99 has %d characters, ceiling %d", lang, runes, memberReqAnswerMax))
+	}
+	remedy := settingsLocaleString(t, lang, data, "mreq_remedy_photo")
 	for _, key := range memberReqNoticeKeys {
-		if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key)); runes > memberReqNoticeMax {
+		if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key, "")); runes > memberReqNoticeMax {
 			failures = append(failures, fmt.Sprintf("%s: %s rendered with the worst case has %d characters, ceiling %d", lang, key, runes, memberReqNoticeMax))
+		}
+	}
+	for _, key := range memberReqRemedyNoticeKeys {
+		if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key, remedy)); runes > memberReqNoticeMax {
+			failures = append(failures, fmt.Sprintf("%s: %s rendered with the worst case and the photo remedy has %d characters, ceiling %d", lang, key, runes, memberReqNoticeMax))
 		}
 	}
 	return failures
