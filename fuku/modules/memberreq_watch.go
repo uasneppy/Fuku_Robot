@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -154,6 +156,116 @@ func memberReqCleanMember(ctx context.Context, chatID, userID, msgDate int64, se
 	memberReqClean(ctx, chatID, userID, time.Unix(msgDate, 0), value)
 }
 
+// memberReqLookupRulesOn reports which lookup rules the group has on (their action is not Off).
+func memberReqLookupRulesOn(settings *models.ChatRequirements) (photo, channel bool) {
+	return memberreq.ActionOf(settings, memberreq.RulePhoto) != models.RequirementActionOff,
+		memberreq.ActionOf(settings, memberreq.RuleChannel) != models.RequirementActionOff
+}
+
+// memberReqLookupCached is the watcher's whole read for a member whose names are clean in a
+// group with a lookup rule on. It never calls Telegram: one pipelined round of single-key GETs
+// reads the pass key, fuku:memberreq:photo:<user> when the photo rule is on and
+// fuku:memberreq:lc:<chat> when the channel rule is on, and a second read of
+// fuku:memberreq:sub:<channel>:<user> follows only when lc holds a channel ID. satisfied is true
+// only when every lookup rule that is on has a cached positive: the photo key exists, and the
+// channel is either known to be none (lc reads 0, nothing to verify) or the subscription key
+// exists. passHit reports whether the pass key held passValue, read in the same round. A missing
+// client, any Redis error, a miss, an unreadable lc and a positive lc (never written) are all
+// "not satisfied": the caller then hands the member to a job, which is correct and only slower.
+// It writes nothing, and the pass hit never stands in for a lookup positive (R2).
+func memberReqLookupCached(settings *models.ChatRequirements, chatID, userID int64, passValue string) (satisfied, passHit bool) {
+	client := memberReqRedisClient()
+	if client == nil {
+		return false, false
+	}
+	photoOn, channelOn := memberReqLookupRulesOn(settings)
+	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
+	defer cancel()
+	pipe := client.Pipeline()
+	passCmd := pipe.Get(ctx, memberReqPassKey(chatID, userID))
+	var photoCmd, linkedCmd *redis.StringCmd
+	if photoOn {
+		photoCmd = pipe.Get(ctx, memberReqPhotoKey(userID))
+	}
+	if channelOn {
+		linkedCmd = pipe.Get(ctx, memberReqLinkedKey(chatID))
+	}
+	// Exec reports the first command's error, a miss included, so every command is read on its own.
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return false, false
+	}
+	stored, err := passCmd.Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return false, false
+	}
+	passHit = err == nil && stored == passValue
+	if photoOn {
+		if _, err := photoCmd.Result(); err != nil {
+			return false, passHit
+		}
+	}
+	if channelOn {
+		channel, ok := memberReqCachedChannel(linkedCmd)
+		if !ok {
+			return false, passHit
+		}
+		if channel != 0 && !memberReqCacheHas(ctx, memberReqSubKey(channel, userID)) {
+			return false, passHit
+		}
+	}
+	return true, passHit
+}
+
+// memberReqCachedChannel reads the linked channel out of the lc command: 0 for no linked channel,
+// a negative chat ID for a channel, and false for a miss, an error or a value that is neither
+// (a channel ID is never positive, and none is ever written as one).
+func memberReqCachedChannel(cmd *redis.StringCmd) (int64, bool) {
+	value, err := cmd.Result()
+	if err != nil {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id > 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+// memberReqStartJob hands the member to the executor on the runner, with a snapshot of the
+// settings the watcher read as the cheap pre-filter.
+func memberReqStartJob(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message, settings *models.ChatRequirements) {
+	snapshot := *settings
+	memberReqRunAsync(b, memberReqCase{
+		Chat:        *chat,
+		User:        *msg.From,
+		Source:      memberReqFromMessage,
+		MessageID:   msg.MessageId,
+		MessageDate: msg.Date,
+		Settings:    &snapshot,
+	})
+}
+
+// memberReqWatchClean is the watcher's path for a member whose names break no rule. With no
+// lookup rule on it is the Phase 13 clean path exactly. With one on, the member is clean only
+// when every lookup rule has a cached positive (memberReqLookupCached); the pass key's clean
+// predicate then runs as before. Otherwise the member is handed to one job, which asks Telegram:
+// the watcher never does, never classifies and never writes a verdict of any kind.
+func memberReqWatchClean(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message, userID int64, settings *models.ChatRequirements, names memberReqNames) {
+	if photoOn, channelOn := memberReqLookupRulesOn(settings); !photoOn && !channelOn {
+		memberReqCleanMember(ctx, chat.Id, userID, msg.Date, settings, names)
+		return
+	}
+	value := memberReqPassValue(settings, names)
+	satisfied, passHit := memberReqLookupCached(settings, chat.Id, userID, value)
+	if satisfied {
+		if !passHit {
+			memberReqClean(ctx, chat.Id, userID, time.Unix(msg.Date, 0), value)
+		}
+		return
+	}
+	memberReqStartJob(b, chat, msg, settings)
+}
+
 // memberReqRunAsync hands a violating member to the executor on its own goroutine, so the
 // update goroutine goes on to the commands without waiting on a pacer slot or a Telegram
 // call. The job is counted before the draining flag is read (a drain that gives up cannot
@@ -183,8 +295,11 @@ func memberReqRunAsync(b *gotgbot.Bot, c memberReqCase) bool {
 // memberReqWatcher is the group -2 message watcher. Checks run cheapest first, because it
 // sees every supergroup message: the switch, the item and the sender's shape (pure Go), the
 // chat's cached settings, then the pure name rules and the cached admin list; only a
-// violation costs more, and that runs on a job. It makes no Telegram call and no database
-// write for a clean member, never caches a violation and never ends or skips an update.
+// violation costs more, and that runs on a job. For a member with clean names in a group with
+// a lookup rule on it also reads the cached lookup positives (memberReqLookupCached, Redis
+// only) and hands a miss to a job. It makes no Telegram call and no database write for a clean
+// member beyond the pass-guarded clean predicate, never caches a violation or a lookup verdict
+// and never ends or skips an update.
 //
 // The result is named and preset: a panic the deferred recover swallows would otherwise
 // return nil, which the dispatcher reads as "leave the group".
@@ -212,21 +327,13 @@ func (m moduleStruct) memberReqWatcher(b *gotgbot.Bot, ctx *ext.Context) (err er
 	}
 	names := memberReqNamesOf(*msg.From)
 	if memberReqBroken(settings, names) == 0 {
-		memberReqCleanMember(updateCtx, chat.Id, userID, msg.Date, settings, names)
+		memberReqWatchClean(updateCtx, b, chat, msg, userID, settings, names)
 		return ext.ContinueGroups
 	}
 	if known, isAdmin := cachedAdminStatus(chat.Id, userID); known && isAdmin {
 		return ext.ContinueGroups
 	}
-	snapshot := *settings
-	memberReqRunAsync(b, memberReqCase{
-		Chat:        *chat,
-		User:        *msg.From,
-		Source:      memberReqFromMessage,
-		MessageID:   msg.MessageId,
-		MessageDate: msg.Date,
-		Settings:    &snapshot,
-	})
+	memberReqStartJob(b, chat, msg, settings)
 	return ext.ContinueGroups
 }
 
