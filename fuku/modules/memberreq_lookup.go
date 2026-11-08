@@ -61,6 +61,10 @@ const (
 	// memberReqBotAdminTTL is how long the bot's definite administrator status in a channel
 	// stays cached. It bounds how long a demoted bot is still read as an administrator.
 	memberReqBotAdminTTL = 2 * time.Minute
+	// memberReqChanNotAdminTTL is how long the channel-level fact "the bot is not an administrator
+	// of this channel" stays cached (WR-01). It is short on purpose: an owner who fixes the bot's
+	// rights is believed again within a minute, and a Fresh lookup drops it at once.
+	memberReqChanNotAdminTTL = 60 * time.Second
 )
 
 var (
@@ -307,6 +311,15 @@ func memberReqBotAdminKey(channelID int64) string {
 	return "fuku:memberreq:ba:" + strconv.FormatInt(channelID, 10)
 }
 
+// memberReqChanNotAdminKey is the Redis key of the channel-level fact that the bot is not an
+// administrator of a channel (WR-01). It names the channel only, holds the fixed marker 1 and is
+// never a verdict about a member: it can only turn a lookup that could not be answered into an
+// inert rule, never into a breach. It sits in the fuku:memberreq:* family, outside the cache
+// prefix.
+func memberReqChanNotAdminKey(channelID int64) string {
+	return "fuku:memberreq:cna:" + strconv.FormatInt(channelID, 10)
+}
+
 // memberReqLinkAnswer is the value of the linked channel flight.
 type memberReqLinkAnswer struct {
 	// ID is the channel's chat ID, 0 for none.
@@ -421,9 +434,12 @@ func memberReqClassifyBot(member gotgbot.MergedChatMember, err error) memberReqB
 
 // memberReqBotChannelStatus establishes whether the bot administers channelID, with one
 // getChatMember(channel, bot) through the lookup pacer in one flight per channel. Only an
-// administrator is cached (fuku:memberreq:ba:<channel>, 2 minutes); a not-administrator and
-// an unknown answer never are. With mode.Fresh the cache is not read and a definite
-// not-administrator drops a stale positive, so a demoted bot is not hidden by it.
+// administrator is cached per member of the rule (fuku:memberreq:ba:<channel>, 2 minutes), and a
+// definite not-administrator is cached for the channel only as the fixed fact
+// fuku:memberreq:cna:<channel> (60 seconds, WR-01, never a user verdict); an unknown answer
+// never is. A definite administrator drops a stale fact. With mode.Fresh the positive cache is
+// not read and a definite not-administrator drops a stale positive, so a demoted bot is not
+// hidden by it.
 func memberReqBotChannelStatus(ctx context.Context, b *gotgbot.Bot, channelID int64, mode memberReqLookupMode) memberReqBotStatus {
 	key := memberReqBotAdminKey(channelID)
 	if !mode.Fresh && memberReqCacheHas(ctx, key) {
@@ -447,10 +463,12 @@ func memberReqBotChannelStatus(ctx context.Context, b *gotgbot.Bot, channelID in
 		switch status {
 		case memberReqBotAdmin:
 			memberReqCacheSet(flightCtx, key, memberReqBotAdminTTL)
+			memberReqCacheDel(flightCtx, memberReqChanNotAdminKey(channelID))
 		case memberReqBotNotAdmin:
 			if mode.Fresh {
 				memberReqCacheDel(flightCtx, key)
 			}
+			memberReqCacheSet(flightCtx, memberReqChanNotAdminKey(channelID), memberReqChanNotAdminTTL)
 		case memberReqBotUnknown:
 		}
 		return status
@@ -471,16 +489,25 @@ func memberReqBotChannelStatus(ctx context.Context, b *gotgbot.Bot, channelID in
 // is never inspected for a breach. A not-subscribed answer is only a candidate (D-22): it is
 // a breach when the bot is established as an administrator of the channel, inert when the
 // bot is not (a bot that cannot see a channel's members may be told left about everyone),
-// and unknown when that cannot be read. With mode.Classify an unanswerable member lookup is
-// inert when the bot is definitely no channel administrator, and stays unknown when the bot
-// administers the channel or its standing is unknown. Nothing but a pass is cached under
-// the subscription key, and with mode.Fresh a definite breach drops a stale pass.
+// and unknown when that cannot be read. An unanswerable member lookup asks the same question
+// about the bot (WR-01): with mode.Classify it is inert when the bot is definitely no channel
+// administrator, and without it it stays unknown for that one call but leaves the channel-level
+// fact fuku:memberreq:cna:<channel> behind, so the next lookups of the minute are inert at the
+// top of this function with no Telegram call. An unanswerable member lookup stays unknown when
+// the bot administers the channel or its standing is unknown, and writes nothing then. Nothing
+// but a pass is cached under the subscription key, and with mode.Fresh a definite breach drops
+// a stale pass and the cached fact is not read.
 func memberReqChannelRule(ctx context.Context, b *gotgbot.Bot, chatID, userID int64, mode memberReqLookupMode) memberReqVerdict {
 	channel, known := memberReqLinkedChannel(ctx, b, chatID, mode)
 	if !known {
 		return memberReqUnknown
 	}
 	if channel == 0 {
+		return memberReqInert
+	}
+	// A cached "the bot is not an administrator of this channel" makes the rule inert with no
+	// request, never a breach: a bot that cannot read the channel's members must not judge them.
+	if !mode.Fresh && memberReqCacheHas(ctx, memberReqChanNotAdminKey(channel)) {
 		return memberReqInert
 	}
 	key := memberReqSubKey(channel, userID)
@@ -521,7 +548,9 @@ func memberReqChannelRule(ctx context.Context, b *gotgbot.Bot, chatID, userID in
 		}
 		return verdict
 	case memberReqUnknown:
-		if mode.Classify && memberReqBotChannelStatus(ctx, b, channel, mode) == memberReqBotNotAdmin {
+		// The standing is asked for on every path, so a channel the bot cannot read leaves its
+		// channel-level fact after one flight; only Classify callers read the answer as inert now.
+		if memberReqBotChannelStatus(ctx, b, channel, mode) == memberReqBotNotAdmin && mode.Classify {
 			return memberReqInert
 		}
 	}

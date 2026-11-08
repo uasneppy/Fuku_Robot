@@ -1030,8 +1030,10 @@ func TestMemberReqChannelRule(t *testing.T) {
 		}
 	})
 
-	// Every member-lookup failure is unknown, caches nothing and never asks about the bot's
-	// standing: the bot here is an administrator, so a candidate would be a breach.
+	// Every member-lookup failure is unknown and caches no verdict: the bot here is an
+	// administrator, so a candidate would be a breach. Since WR-01 the unknown also asks about the
+	// bot's standing once (a shed pacer cannot make that request either), which can only cache the
+	// bot's own administrator status (ba) and never a fact about the member.
 	failures := []struct {
 		name  string
 		setup func(t *testing.T, env *memberReqEnv, state *mreqLookupState, channel, user int64)
@@ -1071,7 +1073,7 @@ func TestMemberReqChannelRule(t *testing.T) {
 		}},
 	}
 	for _, tc := range failures {
-		t.Run(tc.name+" is unknown, caches nothing and never reads the bot's status", func(t *testing.T) {
+		t.Run(tc.name+" is unknown, caches no verdict and reads the bot's status at most once", func(t *testing.T) {
 			env, state := mreqLookupEnv(t)
 			channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
 			user := mreqLookupUser(t)
@@ -1080,11 +1082,20 @@ func TestMemberReqChannelRule(t *testing.T) {
 			if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqUnknown {
 				t.Fatalf("verdict = %d, want unknown", got)
 			}
-			if env.redis.Exists(memberReqSubKey(channel, user)) || env.redis.Exists(memberReqBotAdminKey(channel)) {
-				t.Error("an unknown answer wrote a cache key")
+			if env.redis.Exists(memberReqSubKey(channel, user)) || env.redis.Exists(mreqCnaKey(channel)) {
+				t.Error("an unknown answer wrote a subscription or not-administrator key")
 			}
-			if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
-				t.Errorf("bot status requests = %d, want 0 (no extra call without Classify)", n)
+			// One request to see whether the channel is one the bot cannot read (WR-01); a pacer shed
+			// makes no request at all.
+			wantStatusCalls := 1
+			if tc.name == "a pacer shed" {
+				wantStatusCalls = 0
+			}
+			if n := mreqMemberCalls(env, channel, staffTestBotID); n != wantStatusCalls {
+				t.Errorf("bot status requests = %d, want %d", n, wantStatusCalls)
+			}
+			if got := env.redis.Exists(memberReqBotAdminKey(channel)); got != (wantStatusCalls == 1) {
+				t.Errorf("the bot's administrator status cached = %v, want %v", got, wantStatusCalls == 1)
 			}
 		})
 	}
@@ -1197,7 +1208,7 @@ func TestMemberReqChannelRule(t *testing.T) {
 		}
 	})
 
-	t.Run("without Classify the same lost lookup makes no bot status request", func(t *testing.T) {
+	t.Run("without Classify the same lost lookup stays unknown for that call but leaves the channel fact", func(t *testing.T) {
 		env, state := mreqLookupEnv(t)
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
 		user := mreqLookupUser(t)
@@ -1205,8 +1216,11 @@ func TestMemberReqChannelRule(t *testing.T) {
 		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqUnknown {
 			t.Fatalf("verdict = %d, want unknown", got)
 		}
-		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
-			t.Errorf("bot status requests = %d, want 0", n)
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 1 {
+			t.Errorf("bot status requests = %d, want 1 (WR-01)", n)
+		}
+		if !env.redis.Exists(mreqCnaKey(channel)) {
+			t.Error("the channel-level not-administrator fact was not written")
 		}
 	})
 
@@ -1606,6 +1620,12 @@ func TestMemberReqLookupCacheKeys(t *testing.T) {
 		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqInert {
 			t.Fatalf("plain-member bot = %d, want inert", got)
 		}
+		// The inert answer left the channel-level fact (WR-01, the bot is a plain member); it is dropped
+		// here so the next call reaches the member lookup that is lost.
+		if !env.redis.Exists(mreqCnaKey(channel)) {
+			t.Fatal("the not-administrator answer did not leave the channel-level fact")
+		}
+		env.redis.Del(mreqCnaKey(channel))
 		state.scriptMember(channel, user, errors.New("boom"))
 		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqUnknown {
 			t.Fatalf("lost lookup = %d, want unknown", got)

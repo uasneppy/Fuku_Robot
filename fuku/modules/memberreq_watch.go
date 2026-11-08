@@ -166,10 +166,12 @@ func memberReqLookupRulesOn(settings *models.ChatRequirements) (photo, channel b
 // group with a lookup rule on. It never calls Telegram: one pipelined round of single-key GETs
 // reads the pass key, fuku:memberreq:photo:<user> when the photo rule is on and
 // fuku:memberreq:lc:<chat> when the channel rule is on, and a second read of
-// fuku:memberreq:sub:<channel>:<user> follows only when lc holds a channel ID. satisfied is true
+// fuku:memberreq:sub:<channel>:<user> follows only when lc holds a channel ID, and
+// fuku:memberreq:cna:<channel> after it when the subscription is missing. satisfied is true
 // only when every lookup rule that is on has a cached positive: the photo key exists, and the
-// channel is either known to be none (lc reads 0, nothing to verify) or the subscription key
-// exists. passHit reports whether the pass key held passValue, read in the same round. A missing
+// channel is either known to be none (lc reads 0, nothing to verify), or the subscription key
+// exists, or the channel-level not-administrator fact exists (the rule is inert there). passHit
+// reports whether the pass key held passValue, read in the same round. A missing
 // client, any Redis error, a miss, an unreadable lc and a positive lc (never written) are all
 // "not satisfied": the caller then hands the member to a job, which is correct and only slower.
 // It writes nothing, and the pass hit never stands in for a lookup positive (R2).
@@ -209,7 +211,11 @@ func memberReqLookupCached(settings *models.ChatRequirements, chatID, userID int
 		if !ok {
 			return false, passHit
 		}
-		if channel != 0 && !memberReqCacheHas(ctx, memberReqSubKey(channel, userID)) {
+		// A cached subscription is a positive of this member; a cached "the bot is not an
+		// administrator of the channel" (WR-01) is a fact about the channel that makes the rule
+		// inert for everybody, so either one means the channel part needs no job.
+		if channel != 0 && !memberReqCacheHas(ctx, memberReqSubKey(channel, userID)) &&
+			!memberReqCacheHas(ctx, memberReqChanNotAdminKey(channel)) {
 			return false, passHit
 		}
 	}
@@ -296,7 +302,8 @@ func memberReqMissExempt(ctx context.Context, chatID, userID int64) bool {
 // It reports whether a job was started.
 func memberReqRunAsync(b *gotgbot.Bot, c memberReqCase) bool {
 	if !memberReqJobs.startBelow(memberReqMaxInFlight) {
-		log.Warnf("[MemberReq] the runner is full, so the check of user %d in chat %d was shed; their next message is checked again", c.User.Id, c.Chat.Id)
+		// Debug, not Warn: a busy group with a lookup rule on can shed many checks a second.
+		log.Debugf("[MemberReq] the runner is full, so the check of user %d in chat %d was shed; their next message is checked again", c.User.Id, c.Chat.Id)
 		return false
 	}
 	if memberReqDraining.Load() {

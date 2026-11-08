@@ -14,7 +14,6 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/redis/go-redis/v9"
-	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
@@ -680,7 +679,7 @@ func TestMemberReqRunnerSheds(t *testing.T) {
 		first := env.mreqMember("Alex", "", "alex")
 		second := env.mreqMember("Bea", "", "bea")
 		mreqSwap(t, &memberReqMaxInFlight, 1)
-		hook := logrustest.NewGlobal()
+		hook := mreqShedHook(t)
 		t.Cleanup(hook.Reset)
 
 		started, release := make(chan struct{}), make(chan struct{})

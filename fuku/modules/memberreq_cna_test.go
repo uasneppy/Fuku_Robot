@@ -159,6 +159,22 @@ func TestMemberReqChannelNotAdminCache(t *testing.T) {
 	})
 }
 
+// mreqShedHook captures the log at debug level for the test and returns the hook with nothing
+// captured yet. A shed is logged at debug (WR-01), so a test that counts or reads shed lines
+// needs the level raised, and the level goes back when the test ends.
+func mreqShedHook(t *testing.T) *logrustest.Hook {
+	t.Helper()
+	previous := log.GetLevel()
+	log.SetLevel(log.DebugLevel)
+	hook := logrustest.NewGlobal()
+	hook.Reset()
+	t.Cleanup(func() {
+		hook.Reset()
+		log.SetLevel(previous)
+	})
+	return hook
+}
+
 // mreqSetValue stores value under key in the environment's Redis with a TTL.
 func mreqSetValue(t *testing.T, e *memberReqEnv, key, value string, ttl time.Duration) {
 	t.Helper()

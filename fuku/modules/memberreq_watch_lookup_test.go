@@ -15,7 +15,6 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/redis/go-redis/v9"
-	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -50,7 +49,7 @@ func mreqStorePass(t *testing.T, env *memberReqEnv, member gotgbot.User, setting
 func mreqCountJobStarts(t *testing.T) func() int {
 	t.Helper()
 	mreqSwap(t, &memberReqMaxInFlight, 0)
-	hook := logrustest.NewGlobal()
+	hook := mreqShedHook(t)
 	t.Cleanup(hook.Reset)
 	return func() int {
 		n := 0
@@ -382,7 +381,7 @@ func TestMemberReqWatcherLookupRules(t *testing.T) {
 		second := mreqLookupMember(t, env, state, mreqHasPhoto)
 		mreqSwap(t, &memberReqRedisClient, func() *redis.Client { return nil })
 		mreqSwap(t, &memberReqMaxInFlight, 1)
-		hook := logrustest.NewGlobal()
+		hook := mreqShedHook(t)
 		t.Cleanup(hook.Reset)
 		started, release := make(chan struct{}), make(chan struct{})
 		var startOnce, freeOnce sync.Once
@@ -426,7 +425,7 @@ func TestMemberReqWatcherLookupSingleflight(t *testing.T) {
 	env, state := mreqWatchLookupEnv(t)
 	env.mreqRules(map[memberreq.Rule]int{memberreq.RulePhoto: models.RequirementActionMute})
 	member := mreqLookupMember(t, env, state, mreqHasPhoto)
-	hook := logrustest.NewGlobal()
+	hook := mreqShedHook(t)
 	t.Cleanup(hook.Reset)
 
 	// The first photo request is held open for about 50 ms while the member's messages arrive.

@@ -153,15 +153,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   watcher reads the cached lookup verdicts first (`memberReqLookupCached`, Redis only and still no Telegram call): one
   pipelined round of single-key `GET`s of the pass key, `fuku:memberreq:photo:<user>` (photo rule on) and
   `fuku:memberreq:lc:<chat>` (channel rule on), then `fuku:memberreq:sub:<channel>:<user>` only when `lc` holds a channel
-  ID (`lc` reading `0`, a group with no linked channel, is nothing to verify). The member is clean only when every lookup
-  rule that is on has its cached positive, and then the Phase 13 clean path runs with the pass answer already read; the
+  ID (`lc` reading `0`, a group with no linked channel, is nothing to verify), and `fuku:memberreq:cna:<channel>` after it
+  only when the subscription key is missing (the channel-level not-administrator fact below: the rule is inert while it is
+  set, so the channel part counts as satisfied). The member is clean only when every lookup
+  rule that is on has its cached positive (or the channel is inert), and then the Phase 13 clean path runs with the pass answer already read; the
   pass key is read in that same round but is never consulted without the lookup positives and never stands in for one.
   A miss, a Redis error, no Redis and an `lc` it cannot read are all "not satisfied", and then the watcher starts no job
   for a member the cached admin list knows as an administrator, for an approved member or when the approvals read fails
   (`memberReqMissExempt`, D-25: an exempt member is exempt inside the job and so never gets a positive cached, and would
   cost a job per message for ever), and otherwise hands exactly one job to the runner (below). The watcher writes no
-  verdict of any kind (an inert or unknown lookup is never cached by it or by the lookups, only a pass is) and never
-  classifies; a group with name rules only keeps its single `GET` exactly as before.
+  verdict of any kind (it never caches anything about a member, and the lookups cache only a pass, never an inert or
+  unknown verdict; the one other thing they cache is the channel-level `cna` fact below, a fact about the channel and the
+  bot and never about a member) and never classifies; a group with name rules only keeps its single `GET` exactly as before.
   The enforcement switch `memberReqEnforcementLive` is an `atomic.Bool` read only through `memberReqLive()`. It is true by
   default since the "I fixed it" handler exists (the `mreq|v1` bullet under Callbacks): `memberreq.go`'s `init()` stores
   true, and that store is the only production write of it (`LoadMemberRequirements` does not write it, because a test loads
@@ -1252,8 +1255,26 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `fuku:memberreq:ba:<channel>` is the bot's definite administrator status in a channel (`memberReqBotChannelStatus`,
   `memberReqBotAdminKey`): the value is `1`, `SET EX` 2 minutes (`memberReqBotAdminTTL`), written only when the bot's own
   `getChatMember(channel, bot)` answered administrator or creator. The breach gate below and the settings page's status
-  line read it; a not-administrator and an unknown status are never cached, so it bounds how long a demoted bot is still
-  read as an administrator. A `Fresh` read bypasses it and drops a stale one on a definite not-administrator.
+  line read it; a not-administrator is cached only as the channel-level `cna` fact below and an unknown status is never
+  cached, so `ba` bounds how long a demoted bot is still read as an administrator. A `Fresh` read bypasses it and drops a
+  stale one on a definite not-administrator.
+- `fuku:memberreq:cna:<channel>` is the channel-level "the bot is not an administrator of this channel" fact
+  (`memberReqChanNotAdminKey`, WR-01): the value is the fixed marker `1`, `SET EX` 60 seconds (`memberReqChanNotAdminTTL`),
+  keyed by the channel ID alone, never by a user, and never a verdict about a member or a breach. The bot-status flight
+  (`memberReqBotChannelStatus`) writes it whenever the bot's own `getChatMember(channel, bot)` establishes a definite
+  not-administrator (a member, restricted, left or kicked status, or a Telegram 400 or 403 by `cache.IsBotGoneError`, the
+  classifier of the `ba` key), whether the question came from a breach candidate (the D-22 gate), from an unanswerable member
+  lookup (the punishing path asks the bot's standing too, once per channel per flight, and stays unknown for that one call;
+  only a `Classify` caller reads it as inert) or from the settings page's fresh read. A 429, a shed, a 5xx, a transport
+  error, a timeout and a null or unrecognised answer are still unknown and write nothing. It is read in two places: at the top
+  of `memberReqChannelRule`, once the link is known, where a set key makes the rule inert at once with no Telegram call (never
+  a breach, never an unknown), and in the watcher's cached read (`memberReqLookupCached`), where it makes the channel part
+  satisfied so no job starts. A definite administrator answer deletes it, and a `Fresh` lookup ("I fixed it", the page)
+  bypasses it. This amends D-24 for this one channel-level fact only: D-24's rule that no verdict about a user is ever
+  cached (a missing photo, a missing subscription, an unknown answer) stands. It bounds the cost of a group linked to a
+  channel the bot cannot read (below): after the first message the group costs one `getChatMember` of the bot per channel
+  per minute, not a runner job and paced calls per message. It sits in the `fuku:memberreq:*` family, outside the cache
+  prefix.
 - `fuku:memberreq:lkp:pace:next` and `fuku:memberreq:lkp:pace:block` are the fleet-wide pacing of photo and channel
   lookups (`memberReqLookupPaced`, `memberReqLookupPacer`, built from `memberReqLookupPacerOptions`): the staff pacer's
   slot-plus-block design (`ratelimit.NewTelegramPacer`) with Interval 100 ms, MaxRetries 1 and MaxWait 5 s. A slot, or a
@@ -1378,12 +1399,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   calls `chat_status.IsBotMissingError`, whose markers read "chat not found" as the bot being missing; it never produces a
   breach. `memberReqLookupMode.Classify` is set only by the held release and "I fixed it": a member lookup that could not
   be answered is then inert when the bot is definitely not a channel administrator and stays unknown otherwise; the
-  punishing path and the watcher never set it and make no extra call. Positives only are cached (the keys above) and no
-  lookup has a new drain: the flights end with `memberReqContext()`. The cost to know: because an inert or unknown verdict
-  is never cached, a group whose linked channel the bot cannot read (the bot is no administrator there, or Telegram will not
-  answer for its members) costs one runner job and one paced lookup per message of every non-exempt member until the owner
-  fixes the bot's standing or turns the channel rule Off (the watcher and the runner bullets under Subsystem traps give the
-  cap and the shed). Logs of every lookup path carry chat, channel and user IDs and a Telegram error by its code only
+  punishing path and the watcher never set it, and the punishing path's unknown stays unknown for that call, though it asks
+  the bot's standing too and leaves the `cna` fact behind (WR-01). Positives are cached (the keys above), plus the
+  channel-level `cna` fact, and no
+  lookup has a new drain: the flights end with `memberReqContext()`. The cost to know: a verdict about a member that is
+  inert or unknown is never cached, so a group whose linked channel the bot cannot read (the bot is no administrator there,
+  or Telegram will not answer for its members) costs one runner job and the lookups of one message, then, once the bot's
+  standing is known not to be an administrator, one `getChatMember` of the bot per channel per minute (the `cna` key, 60 s):
+  while it stands the watcher starts no job and the executor makes no channel call. The expensive window is therefore the
+  first message after the key expires (and a standing that cannot be established, a 429 or 5xx, writes nothing and costs the
+  per-message job as before until it can) until the owner fixes the bot's standing or turns the channel rule Off (the
+  watcher and the runner bullets under Subsystem traps give the cap and the shed). Logs of every lookup path carry chat, channel and user IDs and a Telegram error by its code only
   (`memberReqLookupLogFailure`, `memberReqErrText`); a transport error text is gotgbot's own, whose URL is already scrubbed of
   the bot credential, and `TestMemberReqLookupLogsCarryIDsOnly` holds it (a log of a non-gotgbot client's transport errors would
   need its own scrubbing: none exists, and the test relies on gotgbot's). A member can be stuck behind "I fixed it" only while a
@@ -1589,7 +1615,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The member requirements runner (`memberReqRunAsync`, `memberreq_watch.go`): a violating message is handed to a job on its
   own goroutine, counted in `memberReqJobs` (a `raidPostTracker`) before `memberReqDraining` is read, capped at
   `memberReqMaxInFlight` (32) by `startBelow` (check and increment in one step), recovering from panics. A full runner sheds
-  the job with one log line carrying the chat and user IDs only, and the member's next message is checked again: an
+  the job with one Debug-level line (not Warn: a busy group can shed many a second) carrying the chat and user IDs only, and the member's next message is checked again: an
   accepted, logged limit, so under overload a violator's message can stay undeleted until their next message. A lookup
   miss (a member with clean names and no cached lookup positive, after the D-25 skip) is handed to the runner exactly like
   a violator, so it is capped at the same 32, counted in `memberReqJobs`, refused while `memberReqDraining` is set and shed
@@ -1598,9 +1624,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   it returns. With Redis down every message of a member in a group with a lookup rule on is a job (nothing is cached and
   the watcher cannot say the member is clean), by design (D-12): it costs at most 32 jobs, the lookup pacer's one-replica
   fallback interval and shedding, and never a punishment, because a lookup that cannot be answered is never a breach.
-  The same cost applies, for the same reason, to a group whose linked channel the bot cannot read (an inert or unknown
-  channel verdict is never cached, so such a group's non-exempt members are a job per message until the owner fixes the
-  bot's standing in the channel or turns the channel rule Off).
+  The same cost applies, for the same reason, to a group whose linked channel the bot cannot read only until the bot's
+  standing is established as not an administrator: the channel-level `cna` fact (60 s) then makes the channel rule inert for
+  the watcher and the executor with no job and no Telegram call, so the cost is bounded by that cache after the first message.
+  A standing that cannot be established (a 429, a 5xx, a timeout, a shed) writes nothing and the per-message job stays until
+  it can, bounded by the 32 jobs and the lookup pacer.
   A basic group is never screened (mute and kick are supergroup methods): the watcher's filter is supergroups only, and the
   page says so with its basic-group line (`settings_mreq_here_basic`, one line while any rule is not Off), so it is a stated
   limit and no longer a silent one.
