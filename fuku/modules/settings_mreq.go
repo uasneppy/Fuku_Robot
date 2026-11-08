@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -15,8 +16,10 @@ import (
 
 // The Member requirements page shows what each rule does to a member who breaks it and holds the
 // two switches that apply to every rule (Check on join, Delete messages). It reads through
-// memberReqSettingsLookup, the cached loader the message watcher reads, makes no Telegram call and
-// creates no row (D-06, D-16). It never reads or names the Staff Group.
+// memberReqSettingsLookup, the cached loader the message watcher reads, and creates no row (D-06,
+// D-16). It never reads or names the Staff Group. Main makes no Telegram call; the page and the rule
+// screens add one status read (settingsMreqReadStatus) that says in words when a rule cannot work
+// here, costs at most two paced calls and is never an error (D-15, D-08).
 
 const (
 	// settingsPageMreq is the p value of the Member requirements page.
@@ -143,7 +146,140 @@ func settingsMreqOpen(p *settingsPress, notice string) (settingsScreen, error) {
 	if err != nil {
 		return settingsScreen{}, err
 	}
-	return renderSettingsMreqPage(p.view(), row, notice), nil
+	return settingsMreqDrawPage(p, row, notice), nil
+}
+
+// settingsMreqChannelState is what the status read found about the channel rule in this group. Its
+// zero value is unread: nothing was read, so nothing is claimed.
+type settingsMreqChannelState int
+
+const (
+	// settingsMreqChannelUnread means no read was made (or the screen is a plain Phase 13 draw).
+	settingsMreqChannelUnread settingsMreqChannelState = iota
+	// settingsMreqChannelOK means a linked channel whose bot is an administrator.
+	settingsMreqChannelOK
+	// settingsMreqChannelNotAdmin means a linked channel the bot is definitely no administrator of.
+	settingsMreqChannelNotAdmin
+	// settingsMreqChannelNoLink means no linked channel was found for the group.
+	settingsMreqChannelNoLink
+	// settingsMreqChannelUnknown means the read could not be answered: it draws the unknown mark.
+	settingsMreqChannelUnknown
+)
+
+// settingsMreqStatus is what a draw knows about whether the rules can work in this group. Basic is
+// read from the chat object the press already holds, Channel from the status read. The zero value
+// is "nothing known", which draws the Phase 13 shape.
+type settingsMreqStatus struct {
+	Basic   bool
+	Channel settingsMreqChannelState
+}
+
+// settingsMreqScope says which part of the status a draw needs.
+type settingsMreqScope int
+
+const (
+	// settingsMreqScopeBasic needs only the basic-group flag (every rule screen but the channel's).
+	settingsMreqScopeBasic settingsMreqScope = iota
+	// settingsMreqScopePage reads the channel only while the channel rule is not Off.
+	settingsMreqScopePage
+	// settingsMreqScopeChannel reads the channel whatever the stored value is (its own screen).
+	settingsMreqScopeChannel
+)
+
+// settingsMreqHereTimeout bounds the whole status read of one draw. A variable so a test can
+// shorten it.
+var settingsMreqHereTimeout = 3 * time.Second
+
+// settingsMreqReadStatus reads the status a draw of the page or of a rule screen shows (D-15). A
+// basic group is read from p.group.Type and returns at once: no call. The photo and name rules'
+// screens and a page whose channel rule is Off need nothing more and make no call. Otherwise one
+// context of settingsMreqHereTimeout covers memberReqLinkedChannel and, only for a linked channel,
+// memberReqBotChannelStatus, both through the lookup pacer, so a draw costs at most two calls. fresh
+// bypasses the caches on read and refreshes them (the channel screen's opening); a page or a redraw
+// reads through them. Every answer that is not definite is unknown, never an error.
+func settingsMreqReadStatus(p *settingsPress, row *models.ChatRequirements, scope settingsMreqScope, fresh bool) settingsMreqStatus {
+	if p.group.Type == "group" {
+		return settingsMreqStatus{Basic: true}
+	}
+	switch scope {
+	case settingsMreqScopeBasic:
+		return settingsMreqStatus{}
+	case settingsMreqScopePage:
+		if memberreq.ActionOf(row, memberreq.RuleChannel) == models.RequirementActionOff {
+			return settingsMreqStatus{}
+		}
+	case settingsMreqScopeChannel:
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsMreqHereTimeout)
+	defer cancel()
+	mode := memberReqLookupMode{Fresh: fresh}
+	channel, known := memberReqLinkedChannel(ctx, p.b, p.group.Id, mode)
+	if !known {
+		return settingsMreqStatus{Channel: settingsMreqChannelUnknown}
+	}
+	if channel == 0 {
+		return settingsMreqStatus{Channel: settingsMreqChannelNoLink}
+	}
+	switch memberReqBotChannelStatus(ctx, p.b, channel, mode) {
+	case memberReqBotAdmin:
+		return settingsMreqStatus{Channel: settingsMreqChannelOK}
+	case memberReqBotNotAdmin:
+		return settingsMreqStatus{Channel: settingsMreqChannelNotAdmin}
+	case memberReqBotUnknown:
+	}
+	return settingsMreqStatus{Channel: settingsMreqChannelUnknown}
+}
+
+// settingsMreqDrawPage is the one draw of the page: the caller has read the database, the press is
+// answered empty now (the status read can take a moment and must not keep the spinner), then the
+// status is read and the page drawn.
+func settingsMreqDrawPage(p *settingsPress, row *models.ChatRequirements, notice string) settingsScreen {
+	p.answer("", false)
+	status := settingsMreqReadStatus(p, row, settingsMreqScopePage, false)
+	return renderSettingsMreqPageStatus(p.view(), row, notice, status)
+}
+
+// settingsMreqChannelLine is the status line of the channel rule for a state, with its icon as a
+// code-side prefix, or "" when the state needs no line (nothing read, or an administrator bot). It
+// names no channel, group or member: {rule} is the translated rule name only.
+func settingsMreqChannelLine(tr *i18n.Translator, state settingsMreqChannelState) string {
+	var icon, key string
+	switch state {
+	case settingsMreqChannelNoLink:
+		icon, key = "🚫 ", "settings_mreq_here_nolink"
+	case settingsMreqChannelNotAdmin:
+		icon, key = "🚫 ", "settings_mreq_here_notadmin"
+	case settingsMreqChannelUnknown:
+		icon, key = settingsUnknownState+" ", "settings_mreq_here_unknown"
+	case settingsMreqChannelUnread, settingsMreqChannelOK:
+		return ""
+	}
+	return icon + settingsText(tr, key, i18n.TranslationParams{"rule": settingsText(tr, "settings_mreq_rule_channel")})
+}
+
+// settingsMreqBasicLine is the one rule-agnostic line of a basic group.
+func settingsMreqBasicLine(tr *i18n.Translator) string {
+	return "🚫 " + settingsText(tr, "settings_mreq_here_basic")
+}
+
+// settingsMreqHereLines is the cannot-work block of the page: a list of lines, empty when nothing
+// needs saying. The page lists a problem only for a rule that is not Off: the basic-group line while
+// some rule is on, else in a supergroup the channel rule's line while that rule is on. A later rule
+// appends its own line here with no renderer change.
+func settingsMreqHereLines(tr *i18n.Translator, row *models.ChatRequirements, status settingsMreqStatus) []string {
+	if status.Basic {
+		if memberreq.AnyRuleOn(row) {
+			return []string{settingsMreqBasicLine(tr)}
+		}
+		return nil
+	}
+	var lines []string
+	if memberreq.ActionOf(row, memberreq.RuleChannel) != models.RequirementActionOff {
+		if line := settingsMreqChannelLine(tr, status.Channel); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 // settingsMreqResult unpacks an apply result for a redraw: the row to draw (the read-back, or a
@@ -180,7 +316,7 @@ func settingsMreqSetSwitch(
 	if !ok {
 		return nil
 	}
-	screen := renderSettingsMreqPage(p.view(), row, notice)
+	screen := settingsMreqDrawPage(p, row, notice)
 	return &screen
 }
 
@@ -195,8 +331,9 @@ func settingsMreqSetDelete(p *settingsPress, value string) *settingsScreen {
 }
 
 // settingsMreqBody is the body of the page: the intro, the all-off line while every rule is off,
-// one line per rule in rule order, the two switch lines and the hints.
-func settingsMreqBody(v settingsView, row *models.ChatRequirements) []string {
+// one line per rule in rule order, the two switch lines, the cannot-work block (omitted with its
+// blank line when it has no line) and the hints.
+func settingsMreqBody(v settingsView, row *models.ChatRequirements, status settingsMreqStatus) []string {
 	tr := v.Tr
 	body := []string{settingsText(tr, "settings_mreq_intro")}
 	if !memberreq.AnyRuleOn(row) {
@@ -214,9 +351,13 @@ func settingsMreqBody(v settingsView, row *models.ChatRequirements) []string {
 		settingsText(tr, "settings_mreq_line_join", i18n.TranslationParams{"state": settingsStateWord(tr, row.CheckOnJoin)}),
 		settingsText(tr, "settings_mreq_line_delete", i18n.TranslationParams{"state": settingsStateWord(tr, row.DeleteMessages)}),
 	)
+	if lines := settingsMreqHereLines(tr, row, status); len(lines) > 0 {
+		body = append(body, "")
+		body = append(body, lines...)
+	}
 	for _, hint := range []string{
-		"settings_mreq_hint_letters", "settings_mreq_hint_blank", "settings_mreq_hint_join",
-		"settings_mreq_hint_delete", "settings_mreq_hint_mute",
+		"settings_mreq_hint_letters", "settings_mreq_hint_blank", "settings_mreq_hint_lookup",
+		"settings_mreq_hint_join", "settings_mreq_hint_delete", "settings_mreq_hint_mute",
 	} {
 		body = append(body, "", settingsText(tr, hint))
 	}
@@ -241,9 +382,16 @@ func settingsMreqRuleGrid(k *settingsKeyboard, row *models.ChatRequirements) {
 	}
 }
 
-// renderSettingsMreqPage draws the page. It is pure. A nil row draws everything off. The keyboard
-// is the rule grid, the switch row and the navigation row.
+// renderSettingsMreqPage draws the page with no status read (the zero status): the shape the page
+// had before any lookup. It is pure.
 func renderSettingsMreqPage(v settingsView, row *models.ChatRequirements, notice string) settingsScreen {
+	return renderSettingsMreqPageStatus(v, row, notice, settingsMreqStatus{})
+}
+
+// renderSettingsMreqPageStatus draws the page for a status. It is pure. A nil row draws everything
+// off. The keyboard is the rule grid, the switch row and the navigation row: the status is body
+// lines only, never a row.
+func renderSettingsMreqPageStatus(v settingsView, row *models.ChatRequirements, notice string, status settingsMreqStatus) settingsScreen {
 	if row == nil {
 		row = &models.ChatRequirements{}
 	}
@@ -262,7 +410,7 @@ func renderSettingsMreqPage(v settingsView, row *models.ChatRequirements, notice
 	}
 	k.row(cells...)
 	k.navRow(false)
-	return k.screen(settingsCompose(v, "settings_page_mreq", settingsMreqBody(v, row), notice, false))
+	return k.screen(settingsCompose(v, "settings_page_mreq", settingsMreqBody(v, row, status), notice, false))
 }
 
 // settingsMreqActionValue is the Validate of a rule control: v is exactly one ASCII digit 0 to 4
