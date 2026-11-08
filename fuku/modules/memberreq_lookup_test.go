@@ -1626,3 +1626,181 @@ func TestMemberReqLookupCacheKeys(t *testing.T) {
 		}
 	})
 }
+
+// TestMemberReqLookupFlightsKeepModesApart proves that a Fresh caller never joins a running
+// non-Fresh flight (whose answer can come from a stale positive cache read) and the other way
+// round, while callers of one mode still share one request.
+func TestMemberReqLookupFlightsKeepModesApart(t *testing.T) {
+	t.Run("a fresh photo caller makes its own request during a held non-fresh flight and ignores a stale pass", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		user := mreqLookupUser(t)
+		state.set(user, mreqPhotoAnswer{})
+		release := state.hold(user)
+		t.Cleanup(release)
+
+		leader := mreqLookupGo(env, user, 5*time.Second, memberReqLookupMode{})
+		mreqLookupAwaitCalls(t, env, 1)
+		// The member's photo was removed after the pass was cached: a stale positive appears.
+		mreqSetKey(t, env, memberReqPhotoKey(user), time.Minute)
+
+		fresh := mreqLookupGo(env, user, 5*time.Second, memberReqLookupMode{Fresh: true})
+		mreqLookupAwaitCalls(t, env, 2)
+		release()
+		if got := mreqVerdictWithin(t, fresh, 5*time.Second, "the fresh caller"); got != memberReqBreach {
+			t.Fatalf("fresh verdict = %d, want breach (the stale pass must be ignored)", got)
+		}
+		if got := mreqVerdictWithin(t, leader, 5*time.Second, "the non-fresh caller"); got != memberReqBreach {
+			t.Fatalf("non-fresh verdict = %d, want breach", got)
+		}
+		if n := mreqLookupPhotoCalls(env); n != 2 {
+			t.Errorf("Telegram requests = %d, want 2 (one per mode)", n)
+		}
+		if env.redis.Exists(memberReqPhotoKey(user)) {
+			t.Error("the fresh breach left the stale pass in the cache")
+		}
+	})
+
+	t.Run("a non-fresh photo caller does not join a held fresh flight either", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		user := mreqLookupUser(t)
+		state.set(user, mreqPhotoAnswer{Total: 1})
+		release := state.hold(user)
+		t.Cleanup(release)
+
+		fresh := mreqLookupGo(env, user, 5*time.Second, memberReqLookupMode{Fresh: true})
+		mreqLookupAwaitCalls(t, env, 1)
+		plain := mreqLookupGo(env, user, 5*time.Second, memberReqLookupMode{})
+		mreqLookupAwaitCalls(t, env, 2)
+		release()
+		for name, ch := range map[string]<-chan memberReqVerdict{"fresh": fresh, "non-fresh": plain} {
+			if got := mreqVerdictWithin(t, ch, 5*time.Second, name); got != memberReqPass {
+				t.Errorf("%s verdict = %d, want pass", name, got)
+			}
+		}
+	})
+
+	t.Run("a hundred fresh callers still make one request", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		user := mreqLookupUser(t)
+		state.set(user, mreqPhotoAnswer{})
+		release := state.hold(user)
+		t.Cleanup(release)
+
+		start := make(chan struct{})
+		results := make(chan memberReqVerdict, 100)
+		for i := 0; i < 100; i++ {
+			go func() {
+				<-start
+				results <- mreqPhoto(env, user, memberReqLookupMode{Fresh: true})
+			}()
+		}
+		close(start)
+		mreqLookupAwaitCalls(t, env, 1)
+		time.Sleep(150 * time.Millisecond)
+		release()
+		for i := 0; i < 100; i++ {
+			select {
+			case got := <-results:
+				if got != memberReqBreach {
+					t.Fatalf("caller %d got verdict %d, want breach", i, got)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("only %d of 100 callers returned", i)
+			}
+		}
+		if n := mreqLookupPhotoCalls(env); n != 1 {
+			t.Fatalf("Telegram requests for 100 fresh callers = %d, want 1", n)
+		}
+	})
+
+	t.Run("a fresh bot status caller makes its own request during a held non-fresh flight", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		release := state.holdKey(mreqChannelKey("getChatMember", channel, staffTestBotID))
+		t.Cleanup(release)
+
+		leader := make(chan memberReqBotStatus, 1)
+		go func() { leader <- mreqBotStatus(env, channel, memberReqLookupMode{}) }()
+		mreqAwaitMemberCalls(t, env, channel, staffTestBotID, 1)
+		// The bot was demoted after the leader's request was answered by "administrator".
+		state.setMember(channel, staffTestBotID, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+
+		fresh := make(chan memberReqBotStatus, 1)
+		go func() { fresh <- mreqBotStatus(env, channel, memberReqLookupMode{Fresh: true}) }()
+		mreqAwaitMemberCalls(t, env, channel, staffTestBotID, 2)
+		release()
+		select {
+		case got := <-fresh:
+			if got != memberReqBotNotAdmin {
+				t.Errorf("fresh bot status = %d, want not an administrator", got)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the fresh bot status caller got no answer")
+		}
+		select {
+		case got := <-leader:
+			if got != memberReqBotAdmin {
+				t.Errorf("non-fresh bot status = %d, want administrator", got)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the non-fresh bot status caller got no answer")
+		}
+	})
+
+	t.Run("a fresh linked channel read makes its own request during a held non-fresh flight", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		release := state.holdKey(mreqChannelKey("getChat", env.chat.Id, 0))
+		t.Cleanup(release)
+
+		leader := make(chan int64, 1)
+		go func() { id, _ := mreqLinked(env, memberReqLookupMode{}); leader <- id }()
+		mreqAwaitChatCalls(t, env, env.chat.Id, 1)
+		state.link(env.chat.Id, 0)
+
+		fresh := make(chan int64, 1)
+		go func() { id, _ := mreqLinked(env, memberReqLookupMode{Fresh: true}); fresh <- id }()
+		mreqAwaitChatCalls(t, env, env.chat.Id, 2)
+		release()
+		select {
+		case got := <-fresh:
+			if got != 0 {
+				t.Errorf("fresh linked channel = %d, want 0 (the group was unlinked)", got)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the fresh caller got no answer")
+		}
+		select {
+		case got := <-leader:
+			if got != channel {
+				t.Errorf("non-fresh linked channel = %d, want %d", got, channel)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the non-fresh caller got no answer")
+		}
+	})
+}
+
+// mreqAwaitMemberCalls waits until the fake has seen want getChatMember requests for user in chat.
+func mreqAwaitMemberCalls(t *testing.T, e *memberReqEnv, chat, user int64, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for mreqMemberCalls(e, chat, user) < want {
+		if time.Now().After(deadline) {
+			t.Fatalf("the fake saw %d getChatMember requests, want %d", mreqMemberCalls(e, chat, user), want)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// mreqAwaitChatCalls waits until the fake has seen want getChat requests for chat.
+func mreqAwaitChatCalls(t *testing.T, e *memberReqEnv, chat int64, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for mreqChatCalls(e, chat) < want {
+		if time.Now().After(deadline) {
+			t.Fatalf("the fake saw %d getChat requests, want %d", mreqChatCalls(e, chat), want)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
