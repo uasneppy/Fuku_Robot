@@ -545,3 +545,81 @@ func TestMemberReqJoinAndMessageOnce(t *testing.T) {
 		}
 	})
 }
+
+// mreqPendingMuteHold stores a PENDING mute hold of member (punished_at NULL, an aged
+// created_at) carrying a fresh marker, as a mute whose restrict was applied but whose mark
+// failed or never ran leaves it, and returns it.
+func mreqPendingMuteHold(t *testing.T, env *memberReqEnv, member gotgbot.User) *models.ChatRequirementHold {
+	t.Helper()
+	hold := &models.ChatRequirementHold{
+		ChatID: env.chat.Id, UserID: member.Id, Rules: 1, Action: models.RequirementActionMute,
+		MuteUntil: memberReqMuteUntil(time.Now()), CreatedAt: time.Now(),
+	}
+	if won, err := memberreq.ClaimHold(context.Background(), hold); err != nil || !won {
+		t.Fatalf("ClaimHold = %v, %v", won, err)
+	}
+	env.mreqAgeHold(hold.ID)
+	return env.mreqHold(member.Id)
+}
+
+// TestMemberReqRejoinResetsPendingMuteHold is WR-03: the rejoin reset lifts the live marker of
+// a PENDING mute hold too, because the restrict may have taken effect before the hold was marked
+// punished, and the reset is about to delete the only record of that marker.
+func TestMemberReqRejoinResetsPendingMuteHold(t *testing.T) {
+	t.Run("a pending hold whose marker is live is lifted", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		old := mreqPendingMuteHold(t, env, member)
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, UntilDate: old.MuteUntil, Perms: &gotgbot.ChatPermissions{},
+		})
+
+		memberReqJoinReset(env.bot, &env.chat, member, time.Now())
+
+		restricts := env.mreqRestricts(member.Id)
+		if len(restricts) != 1 {
+			t.Fatalf("restrictChatMember calls = %d, want the one lift", len(restricts))
+		}
+		mreqWantUnmute(t, restricts[0])
+		if hold := env.mreqHold(member.Id); hold != nil {
+			t.Errorf("hold = %+v, want it deleted", hold)
+		}
+	})
+
+	t.Run("a pending hold with no live marker is no Telegram write", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		mreqPendingMuteHold(t, env, member)
+		// The member is a plain member: the restrict never took effect.
+
+		memberReqJoinReset(env.bot, &env.chat, member, time.Now())
+
+		if writes := env.mreqWrites(); len(writes) != 0 {
+			t.Fatalf("ban, restrict or unban calls = %v, want none", writes)
+		}
+		if hold := env.mreqHold(member.Id); hold != nil {
+			t.Errorf("hold = %+v, want it deleted", hold)
+		}
+	})
+
+	t.Run("a failed lift restores the pending hold with its ID", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		old := mreqPendingMuteHold(t, env, member)
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, UntilDate: old.MuteUntil, Perms: &gotgbot.ChatPermissions{},
+		})
+		env.fake.script("restrictChatMember", env.chat.Id, mreqRefusals(1)...)
+
+		memberReqJoinReset(env.bot, &env.chat, member, time.Now())
+
+		hold := env.mreqHold(member.Id)
+		if hold == nil || hold.ID != old.ID || hold.MuteUntil != old.MuteUntil || hold.PunishedAt != nil {
+			t.Fatalf("hold = %+v, want the old pending hold %+v restored", hold, old)
+		}
+		live := env.fake.member(env.chat.Id, member.Id)
+		if live == nil || live.Status != gotgbot.ChatMemberStatusRestricted || live.UntilDate != old.MuteUntil {
+			t.Errorf("member record = %+v, want the marker mute untouched", live)
+		}
+	})
+}
