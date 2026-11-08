@@ -301,6 +301,7 @@ func memberReqRenderedFailures(t *testing.T, lang string, data map[string]any) [
 // so the text never names a button the member cannot find (UI-SPEC check 11).
 var memberReqQuotingKeys = []string{
 	"mreq_notice_mute", "settings_mreq_actions_hint", "settings_mreq_hint_mute", "settings_mreq_confirm_mute",
+	"settings_mreq_confirm_ai_mute",
 }
 
 // memberReqLetterKeys are the texts that show the four Russian letters literally, in every

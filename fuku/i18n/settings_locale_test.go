@@ -296,6 +296,18 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_mreq_here_nolink":   {90, 126},
 	"settings_mreq_here_notadmin": {100, 140},
 	"settings_mreq_here_unknown":  {90, 126},
+
+	// Phase 15 (plan 15-03), the AI spam-name rule (rows 1 to 8 of the UI-SPEC "New settings_
+	// keys" table, 255 rows in all). The cell row counts the template as written; the binding
+	// ceiling is the rendered 20 of TestSettingsLabelLengths. The here row is also an alert.
+	"settings_mreq_rule_ai":         {32, 44},
+	"settings_btn_mreq_ai":          {26, 26},
+	"settings_mreq_desc_ai":         {280, 392},
+	"settings_mreq_hint_ai":         {190, 266},
+	"settings_mreq_here_ai":         {90, 126},
+	"settings_mreq_confirm_ai_kick": {190, 266},
+	"settings_mreq_confirm_ai_ban":  {180, 252},
+	"settings_mreq_confirm_ai_mute": {200, 280},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -320,6 +332,7 @@ var settingsAlertKeys = []string{
 	"settings_edit_preview_failed",
 	"settings_no_change_info",
 	"settings_mreq_here_nolink",
+	"settings_mreq_here_ai",
 }
 
 // settingsAlertMaxRunes is the length Telegram allows an alert.
@@ -428,12 +441,38 @@ func TestSettingsLocaleKeys(t *testing.T) {
 				}
 			}
 
+			failures = append(failures, settingsAIAlertFailures(t, lang, data)...)
+
 			sort.Strings(failures)
 			for _, failure := range failures {
 				t.Error(failure)
 			}
 		})
 	}
+}
+
+// settingsAIAlertFailures renders the AI rule's refused-press alert the way the gate sends it,
+// with the longest translated rule name of the language as {rule}, and holds it to Telegram's
+// 200 (the template check alone would not count the name).
+func settingsAIAlertFailures(t *testing.T, lang string, data map[string]any) []string {
+	t.Helper()
+	template, ok := data["settings_mreq_here_ai"].(string)
+	if !ok {
+		// A missing key is already reported by the coverage check.
+		return nil
+	}
+	longest := ""
+	for key, value := range data {
+		name, _ := value.(string)
+		if strings.HasPrefix(key, "settings_mreq_rule_") && utf8.RuneCountInString(name) > utf8.RuneCountInString(longest) {
+			longest = name
+		}
+	}
+	rendered := strings.ReplaceAll(template, "{rule}", longest)
+	if runes := utf8.RuneCountInString(rendered); runes > settingsAlertMaxRunes {
+		return []string{fmt.Sprintf("%s: settings_mreq_here_ai rendered with the longest rule name has %d characters, Telegram allows %d", lang, runes, settingsAlertMaxRunes)}
+	}
+	return nil
 }
 
 // settingsLocaleString reads one string value of a locale and fails the test when it is
@@ -506,7 +545,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 	mreqRuleCells := []string{
 		"settings_btn_mreq_lastname", "settings_btn_mreq_username", "settings_btn_mreq_russian",
 		"settings_btn_mreq_arabic", "settings_btn_mreq_chinese", "settings_btn_mreq_photo",
-		"settings_btn_mreq_channel",
+		"settings_btn_mreq_channel", "settings_btn_mreq_ai",
 	}
 	mreqRuleIcons := []string{"❌", "❗", "👢", "⛔", "🔇"}
 	mreqSwitchCells := []string{"settings_btn_mreq_switch_join", "settings_btn_mreq_switch_delete"}
