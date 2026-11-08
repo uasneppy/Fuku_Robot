@@ -67,8 +67,8 @@ func settingsMreqWantCard(t *testing.T, text string, keyboard [][]gotgbot.Inline
 	return yes, no, back
 }
 
-// settingsMreqStoredActions is the seven stored punishments of chatID (all off when it has no row).
-func settingsMreqStoredActions(t *testing.T, chatID int64) [7]int {
+// settingsMreqStoredActions is the eight stored punishments of chatID (all off when it has no row).
+func settingsMreqStoredActions(t *testing.T, chatID int64) [8]int {
 	t.Helper()
 	stored, _ := settingsMreqStored(t, chatID)
 	return settingsMreqActionsOf(stored)
@@ -94,17 +94,17 @@ func TestSettingsMreqCard(t *testing.T) {
 	for i, code := range settingsMreqRuleCodes {
 		for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
 			t.Run(fmt.Sprintf("%s to %s asks first and Yes writes", code, settingsMreqWordKeys[action]), func(t *testing.T) {
-				settingsMreqSeed(t, env.chat.Id, [7]int{}, false, false)
+				settingsMreqSeed(t, env.chat.Id, [8]int{}, false, false)
 				before := *writes
 				choose(owner, code, action)
 				text, keyboard := env.lastEdit(env.chat.Id, msgID)
 				yes, _, _ := settingsMreqWantCard(t, text, keyboard, i, action)
-				if *writes != before || settingsMreqStoredActions(t, env.chat.Id) != [7]int{} {
+				if *writes != before || settingsMreqStoredActions(t, env.chat.Id) != [8]int{} {
 					t.Fatalf("drawing the card wrote (%d writes, stored %v)", *writes-before, settingsMreqStoredActions(t, env.chat.Id))
 				}
 
 				env.pressRaw(env.chat, owner, msgID, yes.CallbackData)
-				var want [7]int
+				var want [8]int
 				want[i] = action
 				if got := settingsMreqStoredActions(t, env.chat.Id); got != want {
 					t.Fatalf("after Yes stored %v, want %v", got, want)
@@ -120,7 +120,7 @@ func TestSettingsMreqCard(t *testing.T) {
 	}
 
 	t.Run("Off and Warn draw no card", func(t *testing.T) {
-		settingsMreqSeed(t, env.chat.Id, [7]int{models.RequirementActionMute}, false, false)
+		settingsMreqSeed(t, env.chat.Id, [8]int{models.RequirementActionMute}, false, false)
 		for _, action := range []int{models.RequirementActionWarn, models.RequirementActionOff} {
 			choose(owner, "ln", action)
 			text, _ := env.lastEdit(env.chat.Id, msgID)
@@ -134,7 +134,7 @@ func TestSettingsMreqCard(t *testing.T) {
 	})
 
 	t.Run("the four exits are asymmetric", func(t *testing.T) {
-		settingsMreqSeed(t, env.chat.Id, [7]int{}, false, false)
+		settingsMreqSeed(t, env.chat.Id, [8]int{}, false, false)
 		choose(owner, "ar", models.RequirementActionBan)
 		text, keyboard := env.lastEdit(env.chat.Id, msgID)
 		yes, no, back := settingsMreqWantCard(t, text, keyboard, 3, models.RequirementActionBan)
@@ -142,7 +142,7 @@ func TestSettingsMreqCard(t *testing.T) {
 		// No redraws the page, nothing written.
 		env.pressRaw(env.chat, owner, msgID, no.CallbackData)
 		text, keyboard = env.lastEdit(env.chat.Id, msgID)
-		settingsMreqWantPage(t, text, [7]int{}, false, false)
+		settingsMreqWantPage(t, text, [8]int{}, false, false)
 		settingsMreqWantSwitchRow(t, keyboard, false, false)
 
 		// An expired Yes redraws the rule screen with the expiry note and writes nothing.
@@ -160,7 +160,7 @@ func TestSettingsMreqCard(t *testing.T) {
 		if want := settingsNoticeWarnMarker("settings_card_expired"); !strings.Contains(text, want) {
 			t.Errorf("the expired Yes redraw %q lacks the notice %q", text, want)
 		}
-		if got := settingsMreqStoredActions(t, env.chat.Id); got != [7]int{} {
+		if got := settingsMreqStoredActions(t, env.chat.Id); got != [8]int{} {
 			t.Errorf("an expired Yes wrote %v", got)
 		}
 
@@ -179,7 +179,7 @@ func TestSettingsMreqCard(t *testing.T) {
 	})
 
 	t.Run("a presser demoted between the two taps is refused at Yes", func(t *testing.T) {
-		settingsMreqSeed(t, env.chat.Id, [7]int{}, false, false)
+		settingsMreqSeed(t, env.chat.Id, [8]int{}, false, false)
 		helper := env.newOutsider()
 		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true})
 		helperMsg := settingsMreqOpenPage(t, env, helper)
@@ -199,13 +199,13 @@ func TestSettingsMreqCard(t *testing.T) {
 		if got := len(env.edits(env.chat.Id, helperMsg)); got != edits {
 			t.Error("a refused Yes edited the card")
 		}
-		if got := settingsMreqStoredActions(t, env.chat.Id); got != [7]int{} {
+		if got := settingsMreqStoredActions(t, env.chat.Id); got != [8]int{} {
 			t.Errorf("a refused Yes wrote %v", got)
 		}
 	})
 
 	t.Run("a Yes whose write fails redraws the rule screen with the save-failed notice", func(t *testing.T) {
-		settingsMreqSeed(t, env.chat.Id, [7]int{}, false, false)
+		settingsMreqSeed(t, env.chat.Id, [8]int{}, false, false)
 		choose(owner, "un", models.RequirementActionKick)
 		text, keyboard := env.lastEdit(env.chat.Id, msgID)
 		yes, _, _ := settingsMreqWantCard(t, text, keyboard, 1, models.RequirementActionKick)
@@ -218,13 +218,13 @@ func TestSettingsMreqCard(t *testing.T) {
 		if want := settingsNoticeWarnMarker("common_settings_save_failed"); !strings.Contains(text, want) {
 			t.Errorf("the redraw %q lacks the notice %q", text, want)
 		}
-		if got := settingsMreqStoredActions(t, env.chat.Id); got != [7]int{} {
+		if got := settingsMreqStoredActions(t, env.chat.Id); got != [8]int{} {
 			t.Errorf("a failed write changed the rules to %v", got)
 		}
 	})
 
 	t.Run("same value is judged by a fresh read, never the cache", func(t *testing.T) {
-		settingsMreqSeed(t, env.chat.Id, [7]int{}, false, false)
+		settingsMreqSeed(t, env.chat.Id, [8]int{}, false, false)
 		if _, err := memberreq.GetSettings(context.Background(), env.chat.Id); err != nil {
 			t.Fatalf("GetSettings: %v", err)
 		}
@@ -270,7 +270,7 @@ func TestSettingsMreqCard(t *testing.T) {
 	})
 
 	t.Run("a forged my is refused before any lookup", func(t *testing.T) {
-		settingsMreqSeed(t, env.chat.Id, [7]int{}, false, false)
+		settingsMreqSeed(t, env.chat.Id, [8]int{}, false, false)
 		e := settingsMreqExpiryMinute()
 		for name, fields := range map[string]map[string]string{
 			"v=1":           env.groupFields(owner, "a", "my", "t", "ln", "v", "1", "e", e),
@@ -300,7 +300,7 @@ func TestSettingsMreqCard(t *testing.T) {
 			if got := len(env.edits(env.chat.Id, msgID)); got != edits {
 				t.Errorf("%s edited the message", name)
 			}
-			if got := settingsMreqStoredActions(t, env.chat.Id); got != [7]int{} {
+			if got := settingsMreqStoredActions(t, env.chat.Id); got != [8]int{} {
 				t.Errorf("%s wrote %v", name, got)
 			}
 		}

@@ -256,7 +256,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					for i, notice := range notices {
 						screens[fmt.Sprintf("member requirements %s all off notice %d", viewName, i)] = renderSettingsMreqPage(view, allOff, notice)
 						screens[fmt.Sprintf("member requirements %s every punishment notice %d", viewName, i)] = renderSettingsMreqPage(view, everyPunishment, notice)
-						// The seven rule screens (each under every notice) and the twenty-one cards.
+						// The eight rule screens (each under every notice) and the twenty-four cards.
 						for _, rule := range memberReqRules {
 							screens[fmt.Sprintf("member requirements rule %s %s notice %d", rule.Code, viewName, i)] = renderSettingsMreqRuleScreen(view, rule, everyPunishment, notice)
 						}

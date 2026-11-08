@@ -14,7 +14,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
-// mreqE2ERuleIndex is the position of the rule with this callback code in the page's seven stored
+// mreqE2ERuleIndex is the position of the rule with this callback code in the page's eight stored
 // punishments.
 func mreqE2ERuleIndex(t *testing.T, code string) int {
 	t.Helper()
@@ -83,7 +83,7 @@ func TestMemberReqLookupEndToEnd(t *testing.T) {
 		member := mreqLookupMember(t, env, state, mreqPhotoAnswer{})
 		msgID := settingsMreqOpenPage(t, env.settingsEnv, owner)
 		mreqE2ESetRule(t, env, owner, msgID, "ph", models.RequirementActionMute)
-		if got := settingsMreqStoredActions(t, env.chat.Id); got != [7]int{5: models.RequirementActionMute} {
+		if got := settingsMreqStoredActions(t, env.chat.Id); got != [8]int{5: models.RequirementActionMute} {
 			t.Fatalf("stored punishments = %v, want only the photo rule on Mute", got)
 		}
 

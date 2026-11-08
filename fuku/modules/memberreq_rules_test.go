@@ -295,7 +295,7 @@ func TestMemberReqUsernameRule(t *testing.T) {
 }
 
 func TestMemberReqRuleTable(t *testing.T) {
-	wantCodes := []string{"ln", "un", "ru", "ar", "zh", "ph", "ch"}
+	wantCodes := []string{"ln", "un", "ru", "ar", "zh", "ph", "ch", "ai"}
 	if len(memberReqRules) != len(wantCodes) {
 		t.Fatalf("%d rules, want %d", len(memberReqRules), len(wantCodes))
 	}
@@ -328,12 +328,12 @@ func TestMemberReqRuleTable(t *testing.T) {
 			}
 		}
 		// Exactly one of the two judges the rule: a name rule has a pure Broken test, a lookup rule
-		// (the photo and the channel) has a Lookup function and no Broken (D-13).
+		// (the photo, the channel and the AI rule) has a Lookup function and no Broken (D-13).
 		if (rule.Broken == nil) == (rule.Lookup == nil) {
 			t.Errorf("rule %q has Broken %v and Lookup %v, want exactly one of them", rule.Code, rule.Broken != nil, rule.Lookup != nil)
 		}
 		if wantLookup := i >= 5; (rule.Lookup != nil) != wantLookup {
-			t.Errorf("rule %q Lookup set = %v, want %v (only photo and channel look up)", rule.Code, rule.Lookup != nil, wantLookup)
+			t.Errorf("rule %q Lookup set = %v, want %v (only photo, channel and AI look up)", rule.Code, rule.Lookup != nil, wantLookup)
 		}
 
 		found, ok := memberReqRuleByCode(rule.Code)
@@ -345,8 +345,11 @@ func TestMemberReqRuleTable(t *testing.T) {
 	if memberReqRules[5].Bit != 32 || memberReqRules[6].Bit != 64 {
 		t.Errorf("the lookup rules have bits %d and %d, want 32 and 64", memberReqRules[5].Bit, memberReqRules[6].Bit)
 	}
-	if memberReqRules[0].HintKey == "" || memberReqRules[5].HintKey == "" {
-		t.Error("the last-name and photo rules must carry a hint key")
+	if memberReqRules[7].Bit != 128 {
+		t.Errorf("the AI rule has bit %d, want 128 (the next free bit is 256)", memberReqRules[7].Bit)
+	}
+	if memberReqRules[0].HintKey == "" || memberReqRules[5].HintKey == "" || memberReqRules[7].HintKey == "" {
+		t.Error("the last-name, photo and AI rules must carry a hint key")
 	}
 	for _, code := range []string{"xx", "", "LN", "last_name"} {
 		if _, ok := memberReqRuleByCode(code); ok {
@@ -472,10 +475,10 @@ func TestMemberReqLookupBroken(t *testing.T) {
 	})
 }
 
-// requirementsOf builds settings with one action per rule, in rule order: up to seven actions
-// (last name, username, Russian, Arabic, Chinese, photo, channel); a missing trailing one is 0.
+// requirementsOf builds settings with one action per rule, in rule order: up to eight actions
+// (last name, username, Russian, Arabic, Chinese, photo, channel, AI); a missing trailing one is 0.
 func requirementsOf(actions ...int) *models.ChatRequirements {
-	var all [7]int
+	var all [8]int
 	copy(all[:], actions)
 	return &models.ChatRequirements{
 		LastNameAction: all[0],
@@ -485,6 +488,7 @@ func requirementsOf(actions ...int) *models.ChatRequirements {
 		ChineseAction:  all[4],
 		PhotoAction:    all[5],
 		ChannelAction:  all[6],
+		AIAction:       all[7],
 	}
 }
 
@@ -658,20 +662,20 @@ func TestMemberReqStrictestLookupBits(t *testing.T) {
 }
 
 func TestMemberReqPassValue(t *testing.T) {
-	base := requirementsOf(1, 2, 3, 4, 0, 1, 2)
+	base := requirementsOf(1, 2, 3, 4, 0, 1, 2, 3)
 	names := memberReqNames{First: "Олена", Last: "Пчілка", Username: "olena"}
 
 	got := memberReqPassValue(base, names)
 	if !regexp.MustCompile(`^[0-9a-f]{16}$`).MatchString(got) {
 		t.Fatalf("pass value %q is not 16 lowercase hex characters", got)
 	}
-	if again := memberReqPassValue(requirementsOf(1, 2, 3, 4, 0, 1, 2), names); again != got {
+	if again := memberReqPassValue(requirementsOf(1, 2, 3, 4, 0, 1, 2, 3), names); again != got {
 		t.Errorf("same settings and names gave %q then %q", got, again)
 	}
 
-	// Any one of the seven actions, the photo and the channel included, changes the value.
-	for i := 0; i < 7; i++ {
-		actions := []int{1, 2, 3, 4, 0, 1, 2}
+	// Any one of the eight actions, the photo, the channel and the AI rule included, changes the value.
+	for i := 0; i < 8; i++ {
+		actions := []int{1, 2, 3, 4, 0, 1, 2, 3}
 		actions[i] = (actions[i] + 1) % 5
 		if memberReqPassValue(requirementsOf(actions...), names) == got {
 			t.Errorf("changing the action of rule %d did not change the pass value", i)
