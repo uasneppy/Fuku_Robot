@@ -900,3 +900,97 @@ func TestMemberReqMuteNeverReplacesRestriction(t *testing.T) {
 		}
 	})
 }
+
+// TestMemberReqEnforceReadsSettingsAfterLookup is WR-02 (D-20): a job holds the settings its
+// watcher read, but a rule switched off, a rule changed or Delete messages turned off before the
+// job's live lookup is honoured, because the executor reads the settings again before the claim.
+func TestMemberReqEnforceReadsSettingsAfterLookup(t *testing.T) {
+	t.Run("a rule switched Off after the message punishes nobody", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		env.mreqDeleteMessages(true)
+		member := env.mreqMember("Alex", "", "alex")
+		c := env.mreqCase(member)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionOff})
+
+		got := env.mreqEnforce(c)
+		if got.Outcome != memberReqNone || got.Hold != nil {
+			t.Fatalf("outcome = %+v, want None with no hold", got)
+		}
+		if n := env.mreqCallCount("restrictChatMember", "banChatMember", "unbanChatMember", "deleteMessage", "sendMessage"); n != 0 {
+			t.Errorf("writes, deletes and messages = %d, want none", n)
+		}
+		if hold := env.mreqHold(member.Id); hold != nil {
+			t.Errorf("hold = %+v, want none", hold)
+		}
+	})
+
+	t.Run("Delete messages switched off after the message deletes nothing", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		env.mreqDeleteMessages(true)
+		member := env.mreqMember("Alex", "", "alex")
+		c := env.mreqCase(member)
+		env.mreqDeleteMessages(false)
+
+		if got := env.mreqEnforce(c); got.Outcome != memberReqWarned {
+			t.Fatalf("outcome = %+v, want Warned (only the delete switch changed)", got)
+		}
+		if ids := env.mreqDeleted(); len(ids) != 0 {
+			t.Errorf("deleted messages = %v, want none", ids)
+		}
+	})
+
+	t.Run("a rule changed from Mute to Warn punishes with the fresh action", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		member := env.mreqMember("Alex", "", "alex")
+		c := env.mreqCase(member)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+
+		got := env.mreqEnforce(c)
+		if got.Outcome != memberReqWarned || got.Hold == nil || got.Hold.Action != models.RequirementActionWarn {
+			t.Fatalf("outcome = %+v, want a Warn hold", got)
+		}
+		if n := env.mreqCallCount("restrictChatMember"); n != 0 {
+			t.Errorf("restrict calls = %d, want none", n)
+		}
+	})
+
+	t.Run("Delete messages switched on after the message deletes the message", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		member := env.mreqMember("Alex", "", "alex")
+		c := env.mreqCase(member)
+		env.mreqDeleteMessages(true)
+
+		if got := env.mreqEnforce(c); got.Outcome != memberReqWarned {
+			t.Fatalf("outcome = %+v, want Warned", got)
+		}
+		if ids := env.mreqDeleted(); len(ids) != 1 || ids[0] != c.MessageID {
+			t.Errorf("deleted messages = %v, want only %d", ids, c.MessageID)
+		}
+	})
+
+	t.Run("an unreadable setting punishes nobody", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionBan})
+		env.mreqDeleteMessages(true)
+		member := env.mreqMember("Alex", "", "alex")
+		c := env.mreqCase(member)
+		mreqSwap(t, &memberReqSettingsLookup, func(context.Context, int64) (*models.ChatRequirements, error) {
+			return nil, fmt.Errorf("settings unreadable")
+		})
+
+		got := env.mreqEnforce(c)
+		if got.Outcome != memberReqNone || got.Hold != nil {
+			t.Fatalf("outcome = %+v, want None with no hold", got)
+		}
+		if n := env.mreqCallCount("restrictChatMember", "banChatMember", "unbanChatMember", "deleteMessage", "sendMessage"); n != 0 {
+			t.Errorf("writes, deletes and messages = %d, want none", n)
+		}
+		if hold := env.mreqHold(member.Id); hold != nil {
+			t.Errorf("hold = %+v, want none", hold)
+		}
+	})
+}

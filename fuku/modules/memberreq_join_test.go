@@ -707,3 +707,38 @@ func TestMemberReqJoinNeverReplacesRestriction(t *testing.T) {
 		t.Errorf("member after the join = %+v, want the admin's restriction left as it was", rec)
 	}
 }
+
+// TestMemberReqJoinReadsSettingsAgain is WR-02 on the join path: the join entry's synchronous
+// call reads the settings again before its claim, so a rule that went Off after the entry's own
+// read punishes nobody and the member is welcomed.
+func TestMemberReqJoinReadsSettingsAgain(t *testing.T) {
+	env := mreqJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute}, true)
+	member := env.mreqMember("Alex", "", "alex")
+
+	var reads atomic.Int64
+	lookup := memberReqSettingsLookup
+	mreqSwap(t, &memberReqSettingsLookup, func(ctx context.Context, chatID int64) (*models.ChatRequirements, error) {
+		row, err := lookup(ctx, chatID)
+		if err != nil || row == nil || reads.Add(1) == 1 {
+			return row, err
+		}
+		off := *row
+		off.LastNameAction = models.RequirementActionOff
+		return &off, nil
+	})
+
+	env.mreqServiceJoinNow(member)
+
+	if reads.Load() < 2 {
+		t.Fatalf("settings reads = %d, want the entry's and the executor's", reads.Load())
+	}
+	if n := env.mreqCallsAbout(member.Id, "restrictChatMember", "banChatMember", "unbanChatMember"); n != 0 {
+		t.Errorf("restriction calls about the member = %d, want none", n)
+	}
+	if hold := env.mreqHold(member.Id); hold != nil {
+		t.Errorf("hold = %+v, want none", hold)
+	}
+	if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 1 {
+		t.Errorf("welcomes = %d, want one (nobody was punished)", got)
+	}
+}
