@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"strconv"
@@ -29,8 +30,11 @@ func memberReqNamesOf(u gotgbot.User) memberReqNames {
 
 // memberReqRule is one row of the rule table: the rule's callback code, its bit in a
 // broken-rule mask, the stored rule ID, the locale keys the page and the notices read, and
-// the test of a member's names. The name rules judge the first and the last name and never
-// the username.
+// how the rule is judged. Exactly one of Broken and Lookup is set on every row. A name rule has
+// a pure Broken test of the member's names; it judges the first and the last name and never the
+// username. A lookup rule (the photo and the channel) has a Lookup function that asks Telegram
+// and answers a verdict, and no Broken: only memberReqLookupBroken calls it, and only an
+// explicit memberReqBreach adds the rule's bit.
 type memberReqRule struct {
 	Code      string
 	Bit       int
@@ -40,6 +44,7 @@ type memberReqRule struct {
 	DescKey   string
 	PhraseKey string
 	Broken    func(memberReqNames) bool
+	Lookup    func(ctx context.Context, b *gotgbot.Bot, chatID, userID int64, mode memberReqLookupMode) memberReqVerdict
 }
 
 // memberReqRussianLetters are the four letters that Russian uses and Ukrainian does not:
@@ -88,8 +93,9 @@ func memberReqHasHan(s string) bool {
 }
 
 // memberReqRules is the rule table in rule order: last name, username, Russian, Arabic,
-// Chinese. A later phase appends rows (the next free bit is 32); the order is the order of
-// the settings page and of the {rules} list in a notice.
+// Chinese, profile photo, channel subscription. A later phase appends rows (the next free bit is
+// 128); the order is the order of the settings page and of the {rules} list in a notice, and it
+// equals memberreq.Rules.
 var memberReqRules = []memberReqRule{
 	{Code: "ln", Bit: 1, Store: memberreq.RuleLastName, LineKey: "settings_mreq_rule_lastname", CellKey: "settings_btn_mreq_lastname", DescKey: "settings_mreq_desc_lastname", PhraseKey: "mreq_rule_lastname",
 		Broken: func(n memberReqNames) bool { return memberReqBlank(n.Last) }},
@@ -101,9 +107,13 @@ var memberReqRules = []memberReqRule{
 		Broken: func(n memberReqNames) bool { return memberReqHasArabic(n.First) || memberReqHasArabic(n.Last) }},
 	{Code: "zh", Bit: 16, Store: memberreq.RuleChinese, LineKey: "settings_mreq_rule_chinese", CellKey: "settings_btn_mreq_chinese", DescKey: "settings_mreq_desc_chinese", PhraseKey: "mreq_rule_chinese",
 		Broken: func(n memberReqNames) bool { return memberReqHasHan(n.First) || memberReqHasHan(n.Last) }},
+	{Code: "ph", Bit: 32, Store: memberreq.RulePhoto, LineKey: "settings_mreq_rule_photo", CellKey: "settings_btn_mreq_photo", DescKey: "settings_mreq_desc_photo", PhraseKey: "mreq_rule_photo",
+		Lookup: memberReqPhotoRule},
+	{Code: "ch", Bit: 64, Store: memberreq.RuleChannel, LineKey: "settings_mreq_rule_channel", CellKey: "settings_btn_mreq_channel", DescKey: "settings_mreq_desc_channel", PhraseKey: "mreq_rule_channel",
+		Lookup: memberReqChannelRule},
 }
 
-// memberReqRuleByCode finds a rule by its callback code (ln un ru ar zh).
+// memberReqRuleByCode finds a rule by its callback code (ln un ru ar zh ph ch).
 func memberReqRuleByCode(code string) (memberReqRule, bool) {
 	for _, rule := range memberReqRules {
 		if rule.Code == code {
@@ -136,8 +146,9 @@ func memberReqBlank(s string) bool {
 }
 
 // memberReqBroken returns the mask of the rules that are on for this chat (action not
-// Off) and that the member's names break. Rules that are off are never listed, so a
-// caller sees only what it may act on.
+// Off) and that the member's names break. It judges the name rules only: a row with no Broken
+// function (the lookup rules) is skipped, so it adds no bit and a nil function is never called.
+// Rules that are off are never listed, so a caller sees only what it may act on.
 func memberReqBroken(settings *models.ChatRequirements, names memberReqNames) int {
 	if settings == nil {
 		return 0
@@ -147,7 +158,7 @@ func memberReqBroken(settings *models.ChatRequirements, names memberReqNames) in
 		if memberreq.ActionOf(settings, rule.Store) == models.RequirementActionOff {
 			continue
 		}
-		if rule.Broken(names) {
+		if rule.Broken != nil && rule.Broken(names) {
 			mask |= rule.Bit
 		}
 	}
@@ -192,7 +203,7 @@ func memberReqStrictest(settings *models.ChatRequirements, broken int) int {
 }
 
 // memberReqPassValue is a fingerprint of everything that decides whether a member is
-// clean in a chat: the five actions in rule order and the three names. It is the first 16
+// clean in a chat: the seven actions in rule order and the three names. It is the first 16
 // hex characters of a SHA-256, not a secret. The watcher stores it per member so it can
 // skip the clean-path DELETE while nothing changed, and any rename or settings change
 // gives another value (D-12, D-20). Each field is length-prefixed, so no name can slide
