@@ -1,0 +1,132 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-08T17:07:35Z",
+  "phase": "15",
+  "phase_name": "AI Spam-Name Check",
+  "phase_dir": ".planning/phases/15-ai-spam-name-check",
+  "plan": 5,
+  "task": 2,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": "15-01",
+      "name": "data layer (migration, model, RuleAI)",
+      "status": "done",
+      "commit": "6ba62ad"
+    },
+    {
+      "id": "15-02",
+      "name": "claude names request and namecanon",
+      "status": "done",
+      "commit": "e21d237"
+    },
+    {
+      "id": "15-03",
+      "name": "ten locale keys in 8 files",
+      "status": "done",
+      "commit": "b523d62"
+    },
+    {
+      "id": "15-04",
+      "name": "eighth rule row and the AI tracer",
+      "status": "done",
+      "commit": "3dac5a1"
+    },
+    {
+      "id": "15-05/1",
+      "name": "baseline and marker (tracer task)",
+      "status": "done",
+      "commit": "409edbb"
+    },
+    {
+      "id": "15-05/2",
+      "name": "watcher AI read and held release with names",
+      "status": "in_progress",
+      "progress": "executor a6a5170b0ec1df59c was running; AGENTS.md modified uncommitted"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": "15-05/3",
+      "name": "rulebook and Phase 13/14 guarantees re-run",
+      "status": "not_started"
+    },
+    {
+      "id": "15-06",
+      "name": "cost guards",
+      "status": "not_started"
+    },
+    {
+      "id": "15-07",
+      "name": "notice and I fixed it",
+      "status": "not_started"
+    },
+    {
+      "id": "15-08",
+      "name": "settings page",
+      "status": "not_started"
+    },
+    {
+      "id": "15-09",
+      "name": "spike tool",
+      "status": "not_started"
+    },
+    {
+      "id": "15-10",
+      "name": "sweeps",
+      "status": "not_started"
+    },
+    {
+      "id": "15-11",
+      "name": "closing, ticks MREQ-14/10/01",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "live Telegram checks and owner confirmations for Phases 10 to 15 (SPIKE files)",
+      "context": "deferred by the owner's standing choice",
+      "blocking": false
+    },
+    {
+      "action": "native-speaker reads of new locale keys (Phase 13: 61, Phase 14: 23, Phase 15: 10)",
+      "context": "wording quality is human",
+      "blocking": false
+    },
+    {
+      "action": "live Haiku spike with the owner's ANTHROPIC_API_KEY (15-SPIKE.md after 15-09)",
+      "context": "accuracy, latency, cost on labelled names; retune the 0.9 bar",
+      "blocking": false
+    },
+    {
+      "action": "owner confirmation of D-21, D-22, D-23 and the D-26 type-based breaker",
+      "context": "orchestrator amendments to accepted decisions",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "D-21 per-chat nu marker marks a new member",
+      "rationale": "raid :joined is not written when join/flood triggers are off",
+      "phase": "15"
+    },
+    {
+      "decision": "D-22 sticky unknowns do not defer weaker punishments",
+      "rationale": "an AI outage or exhausted budget must not suspend other rules",
+      "phase": "15"
+    },
+    {
+      "decision": "D-23 I fixed it reads the verdict cache",
+      "rationale": "a bypass re-rolls a non-deterministic model and could overwrite a cached breach",
+      "phase": "15"
+    }
+  ],
+  "uncommitted_files": [
+    "M AGENTS.md"
+  ],
+  "next_action": "/gsd-resume-work; ListAgents; git status; git log origin/claude/ecstatic-goldberg-qsss05..HEAD; if 15-05-SUMMARY.md exists verify and push the tip by exact SHA, then spawn the executor for 15-06 (brief: .planning/phases/15-ai-spam-name-check/handoff/executor-brief-15.md)",
+  "context_notes": "Sequential gsd-executor per plan, orchestrator verifies (build, vet, focused tests, lint stand-in, go.mod, skip grep) before every push. Constraints are in the .continue-here.md blocking section."
+}
