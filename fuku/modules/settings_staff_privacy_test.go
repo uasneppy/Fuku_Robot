@@ -194,13 +194,14 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				everyPunishment := &models.ChatRequirements{
 					LastNameAction: models.RequirementActionWarn, UsernameAction: models.RequirementActionKick,
 					RussianAction: models.RequirementActionBan, ArabicAction: models.RequirementActionMute,
-					ChineseAction: models.RequirementActionOff, CheckOnJoin: true, DeleteMessages: true,
+					ChineseAction: models.RequirementActionOff, PhotoAction: models.RequirementActionWarn,
+					ChannelAction: models.RequirementActionMute, CheckOnJoin: true, DeleteMessages: true,
 				}
 				for viewName, view := range map[string]settingsView{"group": groupView, "private admin": privateAdminView} {
 					for i, notice := range notices {
 						screens[fmt.Sprintf("member requirements %s all off notice %d", viewName, i)] = renderSettingsMreqPage(view, allOff, notice)
 						screens[fmt.Sprintf("member requirements %s every punishment notice %d", viewName, i)] = renderSettingsMreqPage(view, everyPunishment, notice)
-						// The five rule screens (each under every notice) and the fifteen cards.
+						// The seven rule screens (each under every notice) and the twenty-one cards.
 						for _, rule := range memberReqRules {
 							screens[fmt.Sprintf("member requirements rule %s %s notice %d", rule.Code, viewName, i)] = renderSettingsMreqRuleScreen(view, rule, everyPunishment, notice)
 						}
@@ -282,6 +283,13 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		private("a", "st", "p", settingsPageMreq, "t", "ln", "v", "4")
 		private("a", settingsActMreqYes, "t", "ln", "v", "4", "e", settingsCardExpiry(time.Now()))
 		private("a", "st", "p", settingsPageMreq, "t", "un", "v", "1")
+		// The photo rule's screen (with its hint), its Warn press, its Mute card and the channel rule's
+		// screen and Off press (plan 14-10 adds the channel's strict presses).
+		private("a", settingsActMreqOpen, "t", "ph")
+		private("a", "st", "p", settingsPageMreq, "t", "ph", "v", "1")
+		private("a", "st", "p", settingsPageMreq, "t", "ph", "v", "4")
+		private("a", settingsActMreqOpen, "t", "ch")
+		private("a", "st", "p", settingsPageMreq, "t", "ch", "v", "0")
 
 		var seen []string
 		for _, edit := range env.edits(moderator.Id, menuMsgID) {

@@ -951,8 +951,8 @@ var settingsMreqDescKeys = []string{
 }
 
 // settingsMreqHintKeys is the hint a rule's screen carries right after its description, by rule
-// order: the blank last name hint.
-var settingsMreqHintKeys = []string{"settings_mreq_hint_blank", "", "", "", "", "", ""}
+// order: the blank last name hint, and the photo rule's Warn or Mute recommendation (D-04).
+var settingsMreqHintKeys = []string{"settings_mreq_hint_blank", "", "", "", "", "settings_mreq_hint_photo", ""}
 
 // settingsMreqWantRuleScreen fails the test unless text is the rule screen of rule i with the given
 // stored punishment: the rule's name, what breaks it, the blank hint on the last-name rule only,
@@ -1053,6 +1053,44 @@ func settingsMreqCountWrites(t *testing.T) *int {
 		return real(ctx, chatID, rule, action)
 	}
 	return &calls
+}
+
+// TestSettingsMreqPhotoScreen proves the photo rule's screen text and keyboard (D-01, D-04): the
+// rule name, the description, the Warn-or-Mute hint right after it with no blank line between, a
+// blank line, the Punishment line, a blank line and the two Phase 13 hints; no other rule shows the
+// hint, the last-name rule keeps the blank-name hint in the same slot, and opening the screen makes
+// no Telegram request beyond the press pipeline's own member lookup.
+func TestSettingsMreqPhotoScreen(t *testing.T) {
+	env := newSettingsEnv(t)
+	owner := env.newOwner(env.chat)
+	msgID := settingsMreqOpenPage(t, env, owner)
+
+	env.press(owner, msgID, settingsMreqRuleFields(env, owner, "mo", "ph"))
+	text, keyboard := env.lastEdit(env.chat.Id, msgID)
+	settingsMreqWantRuleScreen(t, text, 5, 0)
+	settingsMreqWantRuleKeyboard(t, keyboard, 5, 0)
+	exact := staffMarker("settings_mreq_desc_photo") + "\n" + staffMarker("settings_mreq_hint_photo") + "\n\n" +
+		staffMarker("settings_mreq_now") + " " + settingsMreqIcons[0] + " " + staffMarker(settingsMreqWordKeys[0]) + "\n\n" +
+		staffMarker("settings_mreq_choose_hint") + "\n" + staffMarker("settings_mreq_actions_hint")
+	if !strings.Contains(text, exact) {
+		t.Errorf("the photo screen %q lacks the exact tail %q", text, exact)
+	}
+
+	for _, calls := range []string{"getUserProfilePhotos", "getChat", "getChatAdministrators", "getUserChatBoosts"} {
+		if got := len(env.fake.callsFor(calls)); got != 0 {
+			t.Errorf("opening the photo screen made %d %s calls, want none", got, calls)
+		}
+	}
+
+	// The check mark follows the stored value, and the last-name rule keeps its own hint.
+	settingsMreqSeed(t, env.chat.Id, [7]int{0, 0, 0, 0, 0, models.RequirementActionMute}, false, false)
+	env.press(owner, msgID, settingsMreqRuleFields(env, owner, "mo", "ph"))
+	text, keyboard = env.lastEdit(env.chat.Id, msgID)
+	settingsMreqWantRuleScreen(t, text, 5, models.RequirementActionMute)
+	settingsMreqWantRuleKeyboard(t, keyboard, 5, models.RequirementActionMute)
+	env.press(owner, msgID, settingsMreqRuleFields(env, owner, "mo", "ln"))
+	text, _ = env.lastEdit(env.chat.Id, msgID)
+	settingsMreqWantRuleScreen(t, text, 0, 0)
 }
 
 func TestSettingsMreqRuleScreen(t *testing.T) {

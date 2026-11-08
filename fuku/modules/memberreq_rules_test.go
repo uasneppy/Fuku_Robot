@@ -12,6 +12,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // corpusRow is one member of the Unicode corpus (research S-08, probe-verified): the first
@@ -343,9 +344,39 @@ func TestMemberReqRuleTable(t *testing.T) {
 	if memberReqRules[5].Bit != 32 || memberReqRules[6].Bit != 64 {
 		t.Errorf("the lookup rules have bits %d and %d, want 32 and 64", memberReqRules[5].Bit, memberReqRules[6].Bit)
 	}
+	if memberReqRules[0].HintKey == "" || memberReqRules[5].HintKey == "" {
+		t.Error("the last-name and photo rules must carry a hint key")
+	}
 	for _, code := range []string{"xx", "", "LN", "last_name"} {
 		if _, ok := memberReqRuleByCode(code); ok {
 			t.Errorf("memberReqRuleByCode(%q) found a rule", code)
+		}
+	}
+}
+
+// TestMemberReqRuleKeysExist translates every key the rule table names in all 8 real locales: the
+// keys are table fields and not literals, so make check-translations cannot see them and a typo
+// would ship an empty message.
+func TestMemberReqRuleKeysExist(t *testing.T) {
+	withRealLocales(t)
+	for _, code := range memberReqScreenLanguages {
+		tr := i18n.MustNewTranslator(code)
+		for _, rule := range memberReqRules {
+			for name, key := range map[string]string{
+				"LineKey": rule.LineKey, "CellKey": rule.CellKey, "DescKey": rule.DescKey,
+				"PhraseKey": rule.PhraseKey, "HintKey": rule.HintKey,
+			} {
+				if key == "" {
+					if name != "HintKey" {
+						t.Errorf("%s: rule %s has an empty %s", code, rule.Code, name)
+					}
+					continue
+				}
+				text, err := tr.GetString(key, i18n.TranslationParams{"state": "x"})
+				if err != nil || strings.TrimSpace(text) == "" {
+					t.Errorf("%s: rule %s %s %q does not translate: %q, %v", code, rule.Code, name, key, text, err)
+				}
+			}
 		}
 	}
 }
