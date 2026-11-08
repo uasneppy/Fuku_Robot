@@ -1144,3 +1144,75 @@ func settingsMreqMenuChat(env *settingsMreqHereEnv, private bool) int64 {
 func settingsMreqBasicLineMarker() string {
 	return "🚫 " + staffMarker("settings_mreq_here_basic")
 }
+
+func TestSettingsMreqForgedFields(t *testing.T) {
+	t.Run("malformed fields of the new rules are refused in step 1, before any lookup", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsMreqLinkChannel(t, env)
+		owner := env.newOwner(env.chat)
+		msgID := settingsMreqOpenPage(t, env, owner)
+		e := settingsMreqExpiryMinute()
+		cases := map[string]map[string]string{
+			"mo with an unknown t":       env.groupFields(owner, "a", "mo", "t", "xx"),
+			"mo without t":               env.groupFields(owner, "a", "mo"),
+			"mo with an extra key":       env.groupFields(owner, "a", "mo", "t", "ch", "v", "1"),
+			"st ph v=5":                  env.groupFields(owner, "a", "st", "p", settingsPageMreq, "t", "ph", "v", "5"),
+			"st ch v=04":                 env.groupFields(owner, "a", "st", "p", settingsPageMreq, "t", "ch", "v", "04"),
+			"st ph v=x":                  env.groupFields(owner, "a", "st", "p", settingsPageMreq, "t", "ph", "v", "x"),
+			"st ch v=-1":                 env.groupFields(owner, "a", "st", "p", settingsPageMreq, "t", "ch", "v", "-1"),
+			"tg on ph":                   env.groupFields(owner, "a", "tg", "p", settingsPageMreq, "t", "ph", "v", "1"),
+			"tg on ch":                   env.groupFields(owner, "a", "tg", "p", settingsPageMreq, "t", "ch", "v", "1"),
+			"my ph with v=1":             env.groupFields(owner, "a", "my", "t", "ph", "v", "1", "e", e),
+			"my ph with v=0":             env.groupFields(owner, "a", "my", "t", "ph", "v", "0", "e", e),
+			"my ch with v=1":             env.groupFields(owner, "a", "my", "t", "ch", "v", "1", "e", e),
+			"my ch with v=0":             env.groupFields(owner, "a", "my", "t", "ch", "v", "0", "e", e),
+			"my ch with v=5":             env.groupFields(owner, "a", "my", "t", "ch", "v", "5", "e", e),
+			"my ch with e=0":             env.groupFields(owner, "a", "my", "t", "ch", "v", "3", "e", "0"),
+			"my ch with a signed e":      env.groupFields(owner, "a", "my", "t", "ch", "v", "3", "e", "-"+e),
+			"my ch with a non-digit e":   env.groupFields(owner, "a", "my", "t", "ch", "v", "3", "e", "12x"),
+			"my ch with a 20-digit e":    env.groupFields(owner, "a", "my", "t", "ch", "v", "3", "e", "12345678901234567890"),
+			"my ph with an extra key":    env.groupFields(owner, "a", "my", "t", "ph", "v", "4", "e", e, "p", settingsPageMreq),
+			"my ch without e":            env.groupFields(owner, "a", "my", "t", "ch", "v", "3"),
+			"my ph with an unknown rule": env.groupFields(owner, "a", "my", "t", "pp", "v", "3", "e", e),
+		}
+		for name, fields := range cases {
+			lookups, edits, answers := env.memberLookupsOf(env.chat.Id, owner.Id), len(env.edits(env.chat.Id, msgID)), env.answerCount()
+			env.press(owner, msgID, fields)
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("common_callback_invalid_request")) {
+				t.Errorf("%s answered %q (alert %v), want the invalid request alert", name, answer, alert)
+			}
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("%s answered %d times, want once", name, got)
+			}
+			if got := env.memberLookupsOf(env.chat.Id, owner.Id); got != lookups {
+				t.Errorf("%s made %d getChatMember calls, want none", name, got-lookups)
+			}
+			if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+				t.Errorf("%s edited the message", name)
+			}
+			if got := settingsMreqStoredActions(t, env.chat.Id); got != [7]int{} {
+				t.Errorf("%s wrote %v", name, got)
+			}
+		}
+	})
+
+	t.Run("well-formed channel presses forged for a group with no linked channel write nothing", func(t *testing.T) {
+		env := newSettingsMreqHereEnv(t)
+		env.state.link(env.chat.Id, 0)
+		env.seed([7]int{}, false, false)
+		msgID := env.openMenuOf(false)
+		e := settingsMreqExpiryMinute()
+		for name, kv := range map[string][]string{
+			"st ch v=1": {"a", "st", "p", settingsPageMreq, "t", "ch", "v", "1"},
+			"st ch v=3": {"a", "st", "p", settingsPageMreq, "t", "ch", "v", "3"},
+			"my ch v=3": {"a", "my", "t", "ch", "v", "3", "e", e},
+			"my ch v=4": {"a", "my", "t", "ch", "v", "4", "e", e},
+		} {
+			got := env.strictPress(false, msgID, kv...)
+			settingsMreqWantRefusedNoLink(t, env, false, msgID, got, 0)
+			if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+				t.Errorf("%s wrote %v", name, stored)
+			}
+		}
+	})
+}

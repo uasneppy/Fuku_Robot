@@ -626,6 +626,37 @@ func TestSettingsDriftMreq(t *testing.T) {
 		settingsMreqWantPage(t, text, seeded, true, false)
 	})
 
+	t.Run("the photo and channel presses change only their own columns and drop the cached key", func(t *testing.T) {
+		linked := newSettingsEnv(t)
+		settingsMreqLinkChannel(t, linked)
+		linkedOwner := linked.newOwner(linked.chat)
+		base := [7]int{1, 2, 3, 4, 0, 0, 0}
+		settingsMreqSeed(t, linked.chat.Id, base, true, false)
+		msgID := settingsMreqOpenPage(t, linked, linkedOwner)
+		if _, err := memberreq.GetSettings(context.Background(), linked.chat.Id); err != nil {
+			t.Fatalf("GetSettings: %v", err)
+		}
+		want := base
+		for _, c := range []struct {
+			code string
+			slot int
+		}{{"ph", 5}, {"ch", 6}} {
+			linked.press(linkedOwner, msgID, settingsMreqRuleFields(linked, linkedOwner, "st", c.code, "p", settingsPageMreq, "v", "1"))
+			want[c.slot] = models.RequirementActionWarn
+			stored, _ := settingsMreqStored(t, linked.chat.Id)
+			if got := settingsMreqActionsOf(stored); got != want || !stored.CheckOnJoin || stored.DeleteMessages {
+				t.Errorf("after st %s: %+v, want the actions %v and the switches untouched", c.code, stored, want)
+			}
+			cached, err := memberreq.GetSettings(context.Background(), linked.chat.Id)
+			if err != nil || settingsMreqActionsOf(*cached) != want {
+				t.Errorf("the cached read after st %s = %+v, %v, want %v (the key was dropped)", c.code, cached, err, want)
+			}
+		}
+		linked.press(linkedOwner, msgID, linked.groupFields(linkedOwner, "a", "op", "p", settingsPageMreq))
+		text, _ := linked.lastEdit(linked.chat.Id, msgID)
+		settingsMreqWantPage(t, text, want, true, false)
+	})
+
 	t.Run("opening the page and Main creates no row", func(t *testing.T) {
 		fresh := newSettingsEnv(t)
 		freshOwner := fresh.newOwner(fresh.chat)
@@ -1286,6 +1317,33 @@ func TestSettingsControlActionAllowList(t *testing.T) {
 			refused("st ln v="+bad, settingsMreqSwitchFields(env, owner, "st", "ln", bad))
 		}
 		if got := storedActions(); got != [7]int{1, 0, 0, 0, 0} {
+			t.Errorf("a refused value changed the rules to %v", got)
+		}
+	})
+
+	t.Run("tg on every rule control, the photo and channel rules included, is refused in step 1", func(t *testing.T) {
+		for _, code := range settingsMreqRuleCodes {
+			refused("tg "+code, settingsMreqSwitchFields(env, owner, "tg", code, "1"))
+		}
+		if got := storedActions(); got != [7]int{1, 0, 0, 0, 0} {
+			t.Errorf("a refused tg changed the rules to %v", got)
+		}
+	})
+
+	t.Run("st on the photo and channel rules is accepted and a bad value is not", func(t *testing.T) {
+		settingsMreqLinkChannel(t, env)
+		for _, code := range []string{"ph", "ch"} {
+			env.press(owner, msgID, settingsMreqSwitchFields(env, owner, "st", code, "1"))
+		}
+		if got := storedActions(); got != [7]int{1, 0, 0, 0, 0, 1, 1} {
+			t.Fatalf("st ph and ch v=1 stored %v, want both new rules on Warn", got)
+		}
+		for _, code := range []string{"ph", "ch"} {
+			for _, bad := range []string{"5", "04", "x", "", "-1"} {
+				refused("st "+code+" v="+bad, settingsMreqSwitchFields(env, owner, "st", code, bad))
+			}
+		}
+		if got := storedActions(); got != [7]int{1, 0, 0, 0, 0, 1, 1} {
 			t.Errorf("a refused value changed the rules to %v", got)
 		}
 	})

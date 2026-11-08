@@ -81,6 +81,8 @@ func settingsMreqExpiryMinute() string {
 
 func TestSettingsMreqCard(t *testing.T) {
 	env := newSettingsEnv(t)
+	// The channel rule's punishing presses pass the live link check only in a linked group.
+	settingsMreqLinkChannel(t, env)
 	owner := env.newOwner(env.chat)
 	writes := settingsMreqCountWrites(t)
 	msgID := settingsMreqOpenPage(t, env, owner)
@@ -90,11 +92,6 @@ func TestSettingsMreqCard(t *testing.T) {
 	}
 
 	for i, code := range settingsMreqRuleCodes {
-		if code == "ch" {
-			// The channel rule's Kick, Ban and Mute presses join this loop in plan 14-10, together
-			// with its linked-channel fixture and the live link check that precedes the card.
-			continue
-		}
 		for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
 			t.Run(fmt.Sprintf("%s to %s asks first and Yes writes", code, settingsMreqWordKeys[action]), func(t *testing.T) {
 				settingsMreqSeed(t, env.chat.Id, [7]int{}, false, false)
