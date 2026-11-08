@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -36,6 +37,28 @@ type mreqLookupState struct {
 	errs    map[int64][]error
 	gates   map[int64]chan struct{}
 	times   []mreqArrival
+
+	// The channel half of the fake. links is the linked_chat_id getChat reports for a group
+	// (0 for none); a group in it is answered by the fake, every other getChat goes to the
+	// wrapped fake. members is the getChatMember answer per (chat, user), the bot's own
+	// status included (user staffTestBotID). chanErrs are scripted errors and chanGates
+	// are holds, both keyed by mreqChannelKey.
+	links     map[int64]int64
+	nullChat  map[int64]bool
+	members   map[[2]int64]mreqChannelMember
+	chanErrs  map[string][]error
+	chanGates map[string]chan struct{}
+}
+
+// mreqChannelMember is what the fake answers for getChatMember of one (chat, user).
+type mreqChannelMember struct {
+	// Status is the answer's status: creator, administrator, member, restricted, left,
+	// kicked, or any other text for an unrecognised type.
+	Status string
+	// IsMember is is_member of a restricted answer.
+	IsMember bool
+	// Null answers a body of null.
+	Null bool
 }
 
 // mreqArrival is one request that reached the fake: who it asked about and when.
@@ -49,7 +72,99 @@ func newMreqLookupState() *mreqLookupState {
 		answers: make(map[int64]mreqPhotoAnswer),
 		errs:    make(map[int64][]error),
 		gates:   make(map[int64]chan struct{}),
+
+		links:     make(map[int64]int64),
+		nullChat:  make(map[int64]bool),
+		members:   make(map[[2]int64]mreqChannelMember),
+		chanErrs:  make(map[string][]error),
+		chanGates: make(map[string]chan struct{}),
 	}
+}
+
+// mreqChannelKey names one fake call for scripting and holding: a getChat of chat (user 0)
+// or a getChatMember of user in chat.
+func mreqChannelKey(method string, chat, user int64) string {
+	return fmt.Sprintf("%s:%d:%d", method, chat, user)
+}
+
+// link makes getChat of group report channel as its linked chat; 0 reports none.
+func (s *mreqLookupState) link(group, channel int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.links[group] = channel
+}
+
+// setMember sets the getChatMember answer for user in chat.
+func (s *mreqLookupState) setMember(chat, user int64, answer mreqChannelMember) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.members[[2]int64{chat, user}] = answer
+}
+
+// scriptChat queues errors for the next getChat requests of group.
+func (s *mreqLookupState) scriptChat(group int64, errs ...error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := mreqChannelKey("getChat", group, 0)
+	s.chanErrs[key] = append(s.chanErrs[key], errs...)
+}
+
+// scriptMember queues errors for the next getChatMember requests of user in chat.
+func (s *mreqLookupState) scriptMember(chat, user int64, errs ...error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := mreqChannelKey("getChatMember", chat, user)
+	s.chanErrs[key] = append(s.chanErrs[key], errs...)
+}
+
+// holdKey makes every request named by key wait, honouring its context, until the returned
+// function runs.
+func (s *mreqLookupState) holdKey(key string) (release func()) {
+	gate := make(chan struct{})
+	s.mu.Lock()
+	s.chanGates[key] = gate
+	s.mu.Unlock()
+	var once sync.Once
+	return func() { once.Do(func() { close(gate) }) }
+}
+
+// beginChannel returns what a channel-half request must do: whether the fake answers it at
+// all, the gate to wait on, a scripted error and the member answer.
+func (s *mreqLookupState) beginChannel(method string, chat, user int64) (handled bool, gate chan struct{}, scripted error, member mreqChannelMember, linked int64, null bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := mreqChannelKey(method, chat, user)
+	switch method {
+	case "getChat":
+		var ok bool
+		linked, ok = s.links[chat]
+		if !ok {
+			return false, nil, nil, member, 0, false
+		}
+		null = s.nullChat[chat]
+	default:
+		var ok bool
+		member, ok = s.members[[2]int64{chat, user}]
+		if !ok {
+			// A chat the fake knows no member of is not a channel of this fake.
+			known := false
+			for k := range s.members {
+				if k[0] == chat {
+					known = true
+					break
+				}
+			}
+			if !known {
+				return false, nil, nil, member, 0, false
+			}
+			member = mreqChannelMember{Status: "left"}
+		}
+	}
+	if queue := s.chanErrs[key]; len(queue) > 0 {
+		s.chanErrs[key] = queue[1:]
+		return true, nil, queue[0], member, linked, null
+	}
+	return true, s.chanGates[key], nil, member, linked, null
 }
 
 // set stores the answer for userID.
@@ -111,20 +226,71 @@ func (f *mreqLookupFake) RequestWithContext(
 	params map[string]any,
 	opts *gotgbot.RequestOpts,
 ) (json.RawMessage, error) {
-	if method != "getUserProfilePhotos" {
-		return f.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
+	switch method {
+	case "getUserProfilePhotos":
+		return f.photos(ctx, method, params)
+	case "getChat", "getChatMember":
+		chat := staffParamInt(params, "chat_id")
+		user := staffParamInt(params, "user_id")
+		handled, gate, scripted, member, linked, null := f.state.beginChannel(method, chat, user)
+		if !handled {
+			return f.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
+		}
+		f.record(method, params)
+		if scripted != nil {
+			return nil, scripted
+		}
+		if err := mreqAwaitGate(ctx, gate); err != nil {
+			return nil, err
+		}
+		return mreqChannelAnswer(method, chat, user, member, linked, null), nil
 	}
+	return f.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
+}
+
+// mreqAwaitGate waits for gate to close or ctx to end; a nil gate does not wait.
+func mreqAwaitGate(ctx context.Context, gate chan struct{}) error {
+	if gate == nil {
+		return nil
+	}
+	select {
+	case <-gate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// mreqChannelAnswer builds the JSON the fake answers a channel-half request with.
+func mreqChannelAnswer(method string, chat, user int64, member mreqChannelMember, linked int64, null bool) json.RawMessage {
+	if method == "getChat" {
+		if null {
+			return json.RawMessage(`null`)
+		}
+		if linked == 0 {
+			return json.RawMessage(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Test Chat"}`, chat))
+		}
+		return json.RawMessage(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Test Chat","linked_chat_id":%d}`, chat, linked))
+	}
+	if member.Null {
+		return json.RawMessage(`null`)
+	}
+	var extra strings.Builder
+	if member.Status == gotgbot.ChatMemberStatusRestricted {
+		fmt.Fprintf(&extra, `,"is_member":%t`, member.IsMember)
+	}
+	return json.RawMessage(fmt.Sprintf(`{"status":%q,"user":{"id":%d,"is_bot":false,"first_name":"U"}%s}`, member.Status, user, extra.String()))
+}
+
+// photos answers getUserProfilePhotos from the photo answers.
+func (f *mreqLookupFake) photos(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
 	f.record(method, params)
 	gate, answer, scripted := f.state.begin(staffParamInt(params, "user_id"))
 	if scripted != nil {
 		return nil, scripted
 	}
-	if gate != nil {
-		select {
-		case <-gate:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	if err := mreqAwaitGate(ctx, gate); err != nil {
+		return nil, err
 	}
 	if answer.Null {
 		return json.RawMessage(`null`), nil
@@ -147,6 +313,41 @@ func mreqInstallLookupFake(e *memberReqEnv, state *mreqLookupState) *mreqLookupF
 // mreqLookupPhotoCalls counts the getUserProfilePhotos requests the environment's fake saw.
 func mreqLookupPhotoCalls(e *memberReqEnv) int {
 	return len(e.fake.callsFor("getUserProfilePhotos"))
+}
+
+// mreqChannel links a fresh channel to group in the fake, gives the bot botStatus there
+// (administrator, member, left, kicked, restricted) and registers the channel ID, so the
+// sub: and ba: keys it makes are deleted when the test ends. It returns the channel ID.
+func mreqChannel(t *testing.T, state *mreqLookupState, group int64, botStatus string) int64 {
+	t.Helper()
+	channel := uniqueModuleChatID()
+	state.link(group, channel)
+	state.setMember(channel, staffTestBotID, mreqChannelMember{Status: botStatus})
+	mreqLookupCleanup(t, nil, []int64{channel, group})
+	return channel
+}
+
+// mreqChatCalls counts the getChat requests the environment's fake saw for chat.
+func mreqChatCalls(e *memberReqEnv, chat int64) int {
+	n := 0
+	for _, call := range e.fake.callsFor("getChat") {
+		if staffParamInt(call.Params, "chat_id") == chat {
+			n++
+		}
+	}
+	return n
+}
+
+// mreqMemberCalls counts the getChatMember requests the fake saw for user in chat; the bot's
+// own lookup is user staffTestBotID.
+func mreqMemberCalls(e *memberReqEnv, chat, user int64) int {
+	n := 0
+	for _, call := range e.fake.callsFor("getChatMember") {
+		if staffParamInt(call.Params, "chat_id") == chat && staffParamInt(call.Params, "user_id") == user {
+			n++
+		}
+	}
+	return n
 }
 
 // withFastLookupPacer installs a lookup pacer built from the production options with a 1 ms

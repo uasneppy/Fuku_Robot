@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
@@ -645,4 +647,161 @@ func TestMemberReqLookupRedisDown(t *testing.T) {
 			t.Errorf("requests %d and %d arrived %s apart, want the local interval of about 40 ms", i-1, i, gap)
 		}
 	}
+}
+
+// mreqLinked runs the linked-channel lookup of the environment's group with a 5 s deadline.
+func mreqLinked(e *memberReqEnv, mode memberReqLookupMode) (int64, bool) {
+	e.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return memberReqLinkedChannel(ctx, e.bot, e.chat.Id, mode)
+}
+
+// mreqChannelVerdict runs the channel rule for userID in the environment's group with a 5 s
+// deadline.
+func mreqChannelVerdict(e *memberReqEnv, userID int64, mode memberReqLookupMode) memberReqVerdict {
+	e.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return memberReqChannelRule(ctx, e.bot, e.chat.Id, userID, mode)
+}
+
+func TestMemberReqLinkedChannel(t *testing.T) {
+	t.Run("the link is read from getChat of the group, cached for 10 minutes and served from the cache", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+
+		got, known := mreqLinked(env, memberReqLookupMode{})
+		if !known || got != channel {
+			t.Fatalf("linked channel = (%d, %v), want (%d, true)", got, known, channel)
+		}
+		key := memberReqLinkedKey(env.chat.Id)
+		if key != "fuku:memberreq:lc:"+strconv.FormatInt(env.chat.Id, 10) {
+			t.Fatalf("key = %q, want fuku:memberreq:lc:<chat>", key)
+		}
+		if value, err := env.redis.Get(key); err != nil || value != strconv.FormatInt(channel, 10) {
+			t.Fatalf("cached value = %q (%v), want the decimal channel ID", value, err)
+		}
+		if ttl := env.redis.TTL(key); ttl < 9*time.Minute || ttl > 10*time.Minute {
+			t.Errorf("TTL = %s, want about 10 minutes", ttl)
+		}
+		if again, ok := mreqLinked(env, memberReqLookupMode{}); !ok || again != channel {
+			t.Fatalf("second answer = (%d, %v), want (%d, true)", again, ok, channel)
+		}
+		if n := mreqChatCalls(env, env.chat.Id); n != 1 {
+			t.Errorf("getChat requests = %d, want 1 (the second call is served from the cache)", n)
+		}
+	})
+
+	t.Run("the request is getChat for the group's own ID and carries nothing else", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		mreqLinked(env, memberReqLookupMode{})
+		calls := env.fake.callsFor("getChat")
+		if len(calls) != 1 {
+			t.Fatalf("getChat requests = %d, want 1", len(calls))
+		}
+		if len(calls[0].Params) != 1 || staffParamInt(calls[0].Params, "chat_id") != env.chat.Id {
+			t.Errorf("request = %v, want exactly chat_id %d", calls[0].Params, env.chat.Id)
+		}
+	})
+
+	t.Run("a group with no linked channel is none, cached as 0 and served from the cache", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		state.link(env.chat.Id, 0)
+		mreqLookupCleanup(t, nil, []int64{env.chat.Id})
+
+		got, known := mreqLinked(env, memberReqLookupMode{})
+		if !known || got != 0 {
+			t.Fatalf("linked channel = (%d, %v), want (0, true)", got, known)
+		}
+		key := memberReqLinkedKey(env.chat.Id)
+		if value, err := env.redis.Get(key); err != nil || value != "0" {
+			t.Fatalf("cached value = %q (%v), want 0", value, err)
+		}
+		mreqLinked(env, memberReqLookupMode{})
+		if n := mreqChatCalls(env, env.chat.Id); n != 1 {
+			t.Errorf("getChat requests = %d, want 1", n)
+		}
+	})
+
+	t.Run("a getChat error is not known and writes nothing", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		state.scriptChat(env.chat.Id, errors.New("boom"))
+		if got, known := mreqLinked(env, memberReqLookupMode{}); known || got != 0 {
+			t.Fatalf("linked channel = (%d, %v), want (0, false)", got, known)
+		}
+		if env.redis.Exists(memberReqLinkedKey(env.chat.Id)) {
+			t.Error("an error was cached")
+		}
+	})
+}
+
+func TestMemberReqChannelRule(t *testing.T) {
+	t.Run("a subscribed member passes, is cached for 30 minutes and the second call asks nobody", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		user := mreqLookupUser(t)
+		state.setMember(channel, user, mreqChannelMember{Status: gotgbot.ChatMemberStatusMember})
+
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqPass {
+			t.Fatalf("verdict = %d, want pass", got)
+		}
+		key := memberReqSubKey(channel, user)
+		if !env.redis.Exists(key) {
+			t.Fatalf("key %s was not written for a pass", key)
+		}
+		if ttl := env.redis.TTL(key); ttl < 29*time.Minute || ttl > 30*time.Minute {
+			t.Errorf("TTL = %s, want about 30 minutes", ttl)
+		}
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqPass {
+			t.Fatalf("second verdict = %d, want pass", got)
+		}
+		if n := mreqMemberCalls(env, channel, user); n != 1 {
+			t.Errorf("member requests = %d, want 1 (the second call is served from the cache)", n)
+		}
+	})
+
+	t.Run("a member who left is a breach when the bot administers the channel, and nothing is cached for them", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		user := mreqLookupUser(t)
+		state.setMember(channel, user, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqBreach {
+			t.Fatalf("verdict = %d, want breach", got)
+		}
+		if env.redis.Exists(memberReqSubKey(channel, user)) {
+			t.Error("a breach was cached as a subscription")
+		}
+	})
+
+	t.Run("the same left answer is inert when the bot is not an administrator of the channel", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
+		user := mreqLookupUser(t)
+		state.setMember(channel, user, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
+
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqInert {
+			t.Fatalf("verdict = %d, want inert", got)
+		}
+		if env.redis.Exists(memberReqSubKey(channel, user)) || env.redis.Exists(memberReqBotAdminKey(channel)) {
+			t.Error("an inert verdict wrote a cache key")
+		}
+	})
+
+	t.Run("a group with no linked channel is inert and makes no member request at all", func(t *testing.T) {
+		env, state := mreqLookupEnv(t)
+		state.link(env.chat.Id, 0)
+		mreqLookupCleanup(t, nil, []int64{env.chat.Id})
+		user := mreqLookupUser(t)
+
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqInert {
+			t.Fatalf("verdict = %d, want inert", got)
+		}
+		if n := len(env.fake.callsFor("getChatMember")); n != 0 {
+			t.Errorf("getChatMember requests = %d, want 0", n)
+		}
+	})
 }
