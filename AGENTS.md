@@ -1264,8 +1264,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   one paced lookup (D-24). A `Fresh` lookup bypasses it and drops it on a definite breach.
 - `fuku:memberreq:ba:<channel>` is the bot's definite administrator status in a channel (`memberReqBotChannelStatus`,
   `memberReqBotAdminKey`): the value is `1`, `SET EX` 2 minutes (`memberReqBotAdminTTL`), written only when the bot's own
-  `getChatMember(channel, bot)` answered administrator or creator. The breach gate below and the settings page's status
-  line read it; a not-administrator is cached only as the channel-level `cna` fact below and an unknown status is never
+  `getChatMember(channel, bot)` answered administrator or creator. The settings page's status line and an unanswerable
+  member lookup read it (the breach gate below does not, see SEC-03); a not-administrator is cached only as the channel-level `cna` fact below and an unknown status is never
   cached, so `ba` bounds how long a demoted bot is still read as an administrator by the settings page's status line and
   by an unanswerable member lookup, but never by the breach gate: that reads the standing fresh (SEC-03, below). A `Fresh`
   read bypasses it and drops a stale one on a definite not-administrator.
@@ -1453,7 +1453,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupBroken` folds the lookup verdicts into the same mask in table order (photo, then channel): it skips a row
   with no `Lookup` and a row whose action is Off, a `memberReqBreach` sets the row's bit, a `memberReqUnknown` sets only the
   returned unknown flag, and `memberReqPass` and `memberReqInert` add nothing, so a lookup row can add a bit only through an
-  explicit breach; its one production caller is `memberReqLiveViolation` (the executor bullet below). `memberReqPassValue` fingerprints the seven rule actions. A row's `HintKey` is the hint its settings screen
+  explicit breach; its one production caller is `memberReqFixedJudge` ("I fixed it", with `Fresh` and `Classify`), and the executor's `memberReqLiveViolation` (the executor bullet below) calls the same fold through `memberReqLookupMasks`, which also returns the unknown mask. `memberReqPassValue` fingerprints the seven rule actions. A row's `HintKey` is the hint its settings screen
   shows after the description.
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry

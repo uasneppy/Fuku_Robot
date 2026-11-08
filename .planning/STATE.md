@@ -2,9 +2,9 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
-current_phase: 14
-current_phase_name: Profile Photo and Channel Rules
-status: verifying
+current_phase: 15
+current_phase_name: AI Spam-Name Check
+status: planning
 stopped_at: Completed 14-12-PLAN.md
 last_updated: "2026-11-08T12:01:07.394Z"
 last_activity: 2026-11-08
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 14 — Profile Photo and Channel Rules
+**Current focus:** Phase 15 — AI Spam-Name Check
 
 ## Current Position
 
-Phase: 14 (Profile Photo and Channel Rules) — IN PROGRESS (Phase 13 is built and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 12 of 12
-Status: All 12 plans of Phase 14 are built and the gate has run (14-12: the end-to-end test, the rulebook and docs, 14-SPIKE.md with the owner's live checks); ready for phase verification. MREQ-01 stays Pending at seven of the eight rules and MREQ-10 stays Pending until Phase 15's AI line; Phase 14 is not yet marked Complete
-Last activity: 2026-11-08 — Plan 14-12 complete
+Phase: 15 (AI Spam-Name Check) — not started (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items; it is not marked Complete in ROADMAP by the milestone convention)
+Plan: —
+Status: Ready to discuss Phase 15. It must also complete MREQ-10 (the `settings_mreq_here_ai` "AI not configured" line) and MREQ-14, and MREQ-01 completes with the AI rule
+Last activity: 2026-11-08 — Phase 14 verified (`human_needed`)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -287,6 +287,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| verification | Phase 14 live Telegram checks and owner review (`phases/14-profile-photo-and-channel-rules/14-SPIKE.md`, `14-VERIFICATION.md` status `human_needed`): BEFORE any group sets the photo rule to Mute, Kick or Ban run SPIKE check S1 (what `getUserProfilePhotos` returns for an account that hides its photo, and the public-photo fallback); BEFORE a channel punishment run S2 (what `getChatMember(channel, user)` and `(channel, bot)` answer when the bot is not the channel's administrator) and S3 (`getChat(group).linked_chat_id` reaches a plain-member bot), the channel member statuses and a channel linked and unlinked while a rule is set; Warn does not depend on them. Also the phone-width read of the two new grid cells and the Off-only channel screen in hi, ru and uk (M10 to M13), the native-speaker read of the 16 new and 7 reworded keys (hi most of all, the ru and uk `{rules}` phrases and the count answer), two live replicas over one PostgreSQL and Redis, a raid with the lookup pacer shedding, a restart during a burst of lookups, and `make lint` plus `make test-postgres-integrity` in CI; follow-up decisions: UI-SPEC assumptions A3, A4 and A7, review items IN-01, IN-02, IN-04, IN-05 and NEW-01 to NEW-03 (`14-REVIEW-DISPOSITION.md`), audit items SEC-01 (the channel ID in three Debug log lines) and SEC-04 (no rate limit on the channel screen presses beyond the lookup pacer) with accepted risks in `14-SECURITY.md`, the two documented deviations (the channel-level `cna` negative cache; a stricter unanswerable lookup rule holds a weaker name punishment back) and the PLAT-06 cross-cutting tick; MREQ-01 stays Pending until Phase 15 delivers the AI rule and MREQ-10 until Phase 15's "AI not configured" line | deferred; the owner's standing choice (defer the live checks and keep going) applies; enforcement is ON in code by default but every rule defaults Off, so nothing is screened until an owner sets a rule; code verified 16/16, security 0 open threats (49 of 49 closed), validation 71 named tests green through CI's gate, review findings WR-01 to WR-05, IN-03 and the two audit items SEC-02 and SEC-03 fixed | 2026-11-08 | v1.1 |
 | verification | Phase 13 live Telegram checks and owner review (`phases/13-member-requirements/13-SPIKE.md`, `13-VERIFICATION.md` status `human_needed`): BEFORE any group sets a rule to Mute run SPIKE checks 2 (the 330-day marker `until_date` read back by `getChatMember`), 3 (a muted member's leave and rejoin), 4 (a restricted member's readback), 5 (answer time of the button) and 8 (the unmute during a lockdown) and 14 (a member lifted to the group's defaults reads back with the group's rights, which the CR-01 rule "restricted below the defaults" rests on); Warn, Kick and Ban do not depend on them. Also checks 1 (the group message limit against the cap of 10 a minute), 6 and 7 (a collectible-username account, names after a rename), 9 and 10 (bidi isolates with an Arabic name, hi, ru and uk cells at phone width), 11 (native-speaker read of the 61 new strings), 12 (two live replicas over one PostgreSQL), 13 (`make lint` on a Go 1.26 golangci-lint, `make test-postgres-integrity` in CI); follow-up decisions: UI-SPEC assumptions A1, A4, A8, A14, A15, A17 and A18, review items IN-01 to IN-06 and NEW-02 to NEW-04 (`13-REVIEW-DISPOSITION.md`), audit items SEC-NEW-03 to SEC-NEW-06 and accepted risks AR-01 to AR-18 (`13-SECURITY.md`); MREQ-01 stays Pending until Phases 14 and 15 deliver the other three rules | deferred; the owner's standing choice (defer the live checks and keep going) applies; enforcement is ON in code by default but every rule defaults Off, so nothing is screened until an owner sets a rule; code verified 17/17, security 0 open threats (59 of 59 closed), validation 10/10 covered, review findings CR-01, WR-01, WR-02, WR-03 and the two low audit items fixed | 2026-11-08 | v1.1 |
 | verification | Phase 12 live Telegram checks and owner review (`phases/12-rules-media-media-under-text-and-greet-once/12-SPIKE.md`, `12-VERIFICATION.md` status `human_needed`): the caption above a photo, video and GIF on Android, iOS, Desktop and Web (A1), an older client's layout (A6), a new GIF looping through `sendAnimation` and the EDIT-07 limit that a GIF saved before Phase 12 has no Media under text switch until it is set again (A7), Telegram's real 1024-unit caption limit and the member-path text fallback (A3), Greet once on two live replicas, `/rules` with media and buttons and the Full preview language (A12), hi, ru and uk switch labels at phone width, native-speaker read of the 13 new strings, `make lint` on a Go 1.26 golangci-lint; follow-up decisions: UI-SPEC assumptions A1, A2, A3, A4 and A12, the 429 clause of the Greet once give-back, the member-path text fallback (a deliberate deviation from D-03), the `/setrules` note when media is set (review IN-02), the whitespace-only rules text and the `{rules}` button, the owner-only backup import caveat (audit NEW-03), the Delete-last race left by the dropped plan 12-15, the full reset that fails on PostgreSQL at warns (pre-existing, review IN-03), accepted limits AR-01 to AR-04 in `12-SECURITY.md` | deferred; the owner's standing choice (defer the live checks and keep going) applies; code verified 10/10, security 0 open threats, validation passed, review findings WR-01, WR-02 and IN-01 fixed | 2026-11-05 | v1.1 |
 | verification | Phase 11 live Telegram checks and owner review (`phases/11-message-editor/11-SPIKE.md`, `11-VERIFICATION.md` status `human_needed`): GIF as welcome media (A3), album order (A4), the 403 alert for an admin who never started the bot (A5), fast taps and rate limits (A6), Telegram's real length and button limits (A1, A2, A7, A8), typed text sent as `rich_message` (A9), tap-to-copy on the code examples and label truncation in hi, ru and uk, two live replicas, a real 10-minute expiry, native-speaker read of the 83 new strings, `make lint` on a Go 1.26 golangci-lint; follow-up decisions: the `/rules` double escaping and Goodbye On by default, accepted limits AR-04 in `11-SECURITY.md` | deferred; the owner re-ran the autonomous run after the Phase 11 verification, so the Phase 10 choice (defer and keep going) stands; code verified 13/13, security 0 open | 2026-11-05 | v1.1 |
@@ -299,6 +300,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 | 10 | verification_deferred_human | /gsd-verify-work 10 |
 | 11 | verification_deferred_human | /gsd-verify-work 11 |
 | 12 | verification_deferred_human | /gsd-verify-work 12 |
+| 13 | verification_deferred_human | /gsd-verify-work 13 |
+| 14 | verification_deferred_human | /gsd-verify-work 14 |
 
 ## Session Continuity
 
