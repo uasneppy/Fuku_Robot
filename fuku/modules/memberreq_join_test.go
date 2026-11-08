@@ -682,3 +682,28 @@ func TestMemberReqJoinExemptions(t *testing.T) {
 		wantWelcomedNotPunished(t, env, member)
 	})
 }
+
+// TestMemberReqJoinNeverReplacesRestriction is CR-01 on the join path: a member an admin muted
+// for good, who leaves and rejoins (restricted to restricted, so only the service message
+// arrives), is not muted again by a Mute rule, and no notice or hold is made.
+func TestMemberReqJoinNeverReplacesRestriction(t *testing.T) {
+	env := mreqJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute}, true)
+	member := env.mreqMember("Alex", "", "alex")
+	env.mreqRestrictedBySomeoneElse(member, 0)
+
+	env.mreqServiceJoinNow(member)
+
+	if n := env.mreqCallsAbout(member.Id, "restrictChatMember", "banChatMember", "unbanChatMember"); n != 0 {
+		t.Errorf("restriction calls about the member = %d, want none", n)
+	}
+	if got := mreqCountText(env.mreqSentTexts(), staffMarker("mreq_notice_mute")); got != 0 {
+		t.Errorf("mute notices = %d, want none", got)
+	}
+	if hold := env.mreqHold(member.Id); hold != nil {
+		t.Errorf("hold = %+v, want none", hold)
+	}
+	rec := env.fake.member(env.chat.Id, member.Id)
+	if rec == nil || rec.Status != gotgbot.ChatMemberStatusRestricted || rec.UntilDate != 0 {
+		t.Errorf("member after the join = %+v, want the admin's restriction left as it was", rec)
+	}
+}

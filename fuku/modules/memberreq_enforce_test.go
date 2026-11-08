@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
@@ -719,5 +721,129 @@ func TestMemberReqEnforceExemptions(t *testing.T) {
 		stale := env.mreqCase(member)
 		env.fake.setProfile(member.Id, "Alex", "Smith", "alex")
 		wantNobody(t, member, env.mreqEnforce(stale))
+	})
+}
+
+// mreqRestrictedBySomeoneElse puts the member in the fake group as an admin's restriction left
+// them: still in the group, restricted, with the given end date and no requirement marker.
+func (e *memberReqEnv) mreqRestrictedBySomeoneElse(user gotgbot.User, until int64) {
+	e.t.Helper()
+	e.fake.setMember(e.chat.Id, user.Id, staffFakeMember{
+		Status:          gotgbot.ChatMemberStatusRestricted,
+		IsMember:        true,
+		CanSendMessages: true,
+		UntilDate:       until,
+	})
+}
+
+// TestMemberReqMuteNeverReplacesRestriction is CR-01: a requirement Mute never replaces a
+// restriction someone else placed, while Warn, Kick and Ban still act on a restricted member.
+func TestMemberReqMuteNeverReplacesRestriction(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		until int64
+	}{
+		{"a partial restriction with no end date", 0},
+		{"a restriction an admin gave an end date", time.Now().Add(48 * time.Hour).Unix()},
+	} {
+		t.Run("a Mute rule places no mute over "+tc.name, func(t *testing.T) {
+			hook := logrustest.NewGlobal()
+			t.Cleanup(hook.Reset)
+			env := newMemberReqEnv(t)
+			env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+			env.mreqDeleteMessages(true)
+			member := env.mreqMember("Alex", "", "alex")
+			env.mreqRestrictedBySomeoneElse(member, tc.until)
+
+			got := env.mreqEnforce(env.mreqCase(member))
+			if got.Outcome != memberReqNone || got.Hold != nil {
+				t.Fatalf("outcome = %+v, want None with no hold", got)
+			}
+			if n := env.mreqCallCount("restrictChatMember", "banChatMember", "unbanChatMember", "deleteMessage", "sendMessage"); n != 0 {
+				t.Errorf("writes, deletes and messages = %d, want none", n)
+			}
+			if hold := env.mreqHold(member.Id); hold != nil {
+				t.Errorf("hold = %+v, want none", hold)
+			}
+			rec := env.fake.member(env.chat.Id, member.Id)
+			if rec == nil || rec.Status != gotgbot.ChatMemberStatusRestricted || rec.UntilDate != tc.until {
+				t.Errorf("member after the case = %+v, want the restriction left as it was (until %d)", rec, tc.until)
+			}
+
+			var infos []string
+			for _, entry := range hook.AllEntries() {
+				if entry.Level == log.InfoLevel && strings.Contains(entry.Message, "[MemberReq]") {
+					infos = append(infos, entry.Message)
+				}
+			}
+			if len(infos) != 1 {
+				t.Fatalf("Info lines = %q, want exactly one", infos)
+			}
+			for _, want := range []string{fmt.Sprint(env.chat.Id), fmt.Sprint(member.Id)} {
+				if !strings.Contains(infos[0], want) {
+					t.Errorf("Info line %q does not hold %s", infos[0], want)
+				}
+			}
+			for _, secret := range []string{"Alex", "alex"} {
+				if strings.Contains(infos[0], secret) {
+					t.Errorf("Info line %q holds the member's name", infos[0])
+				}
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name    string
+		action  int
+		outcome memberReqOutcome
+	}{
+		{"Warn", models.RequirementActionWarn, memberReqWarned},
+		{"Kick", models.RequirementActionKick, memberReqRemoved},
+		{"Ban", models.RequirementActionBan, memberReqRemoved},
+	} {
+		t.Run(tc.name+" still acts on a restricted member", func(t *testing.T) {
+			env := newMemberReqEnv(t)
+			env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: tc.action})
+			member := env.mreqMember("Alex", "", "alex")
+			env.mreqRestrictedBySomeoneElse(member, 0)
+
+			got := env.mreqEnforce(env.mreqCase(member))
+			if got.Outcome != tc.outcome || got.Hold == nil {
+				t.Fatalf("outcome = %+v, want %d with a hold", got, tc.outcome)
+			}
+			if n := len(env.mreqNotices()); n != 1 {
+				t.Errorf("notices = %d, want one", n)
+			}
+			if tc.action == models.RequirementActionWarn {
+				if n := env.mreqCallCount("restrictChatMember", "banChatMember", "unbanChatMember"); n != 0 {
+					t.Errorf("a warn made %d restriction calls, want none (the restriction stays)", n)
+				}
+			}
+		})
+	}
+
+	t.Run("a stale mute hold whose marker is live on the member is adopted", func(t *testing.T) {
+		mreqShortenStale(t, 50*time.Millisecond)
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		env.loseAnswers("restrictChatMember", 1)
+		env.fake.script("getChatMember", env.chat.Id, nil, staffFakeError(502, "Bad Gateway"))
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqNotApplied {
+			t.Fatalf("first case = %+v, want NotApplied", got)
+		}
+		first := env.mreqHold(member.Id)
+		time.Sleep(80 * time.Millisecond)
+
+		got := env.mreqEnforce(env.mreqCase(member))
+		if got.Outcome != memberReqMuted {
+			t.Fatalf("reclaim = %+v, want the live marker adopted (Muted)", got)
+		}
+		if n := len(env.calls("restrictChatMember")); n != 1 {
+			t.Errorf("restrict calls = %d, want only the first", n)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt == nil || hold.MuteUntil != first.MuteUntil {
+			t.Errorf("hold = %+v, want punished with marker %d", hold, first.MuteUntil)
+		}
 	})
 }
