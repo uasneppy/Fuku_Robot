@@ -37,6 +37,19 @@ func memberRequirementLookupStatements(t *testing.T) []string {
 	return run
 }
 
+// stripSQLComments drops the "--" comment lines the runner leaves in front of the first
+// statement of a file, so the checks below judge the SQL and not the header's prose.
+func stripSQLComments(stmt string) string {
+	var kept []string
+	for _, line := range strings.Split(stmt, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "--") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
 // TestMemberRequirementLookupMigrationStatements proves, without a database, what the Go
 // runner hands to PostgreSQL for the lookup rules migration: two idempotent column
 // additions to chat_requirements, each SMALLINT NOT NULL DEFAULT 0 with its named CHECK
@@ -45,6 +58,9 @@ func memberRequirementLookupStatements(t *testing.T) []string {
 // and a file name that sorts after the member requirements migration.
 func TestMemberRequirementLookupMigrationStatements(t *testing.T) {
 	run := memberRequirementLookupStatements(t)
+	for i, stmt := range run {
+		run[i] = stripSQLComments(stmt)
+	}
 	if len(run) != 2 {
 		t.Fatalf("%s gives %d statements, want 2 (two columns):\n%s",
 			memberRequirementLookupMigration, len(run), strings.Join(run, "\n---\n"))
