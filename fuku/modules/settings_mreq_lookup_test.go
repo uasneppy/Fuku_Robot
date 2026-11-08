@@ -751,12 +751,18 @@ type settingsMreqPressed struct {
 // edits are counted on the message the press was made on.
 func (e *settingsMreqHereEnv) strictPress(private bool, msgID int64, kv ...string) settingsMreqPressed {
 	e.t.Helper()
+	return e.measure(private, msgID, func() { e.press0(private, msgID, kv...) })
+}
+
+// measure runs one press and reports the answers and edits it made.
+func (e *settingsMreqHereEnv) measure(private bool, msgID int64, press func()) settingsMreqPressed {
+	e.t.Helper()
 	chatID := e.chat.Id
 	if private {
 		chatID = e.owner.Id
 	}
 	answers, edits := e.answerCount(), len(e.edits(chatID, msgID))
-	e.press0(private, msgID, kv...)
+	press()
 	out := settingsMreqPressed{Answers: e.answerCount() - answers, Edits: len(e.edits(chatID, msgID)) - edits}
 	if out.Answers > 0 {
 		out.Answer, out.Alert = e.lastAnswer()
@@ -768,19 +774,36 @@ func (e *settingsMreqHereEnv) strictPress(private bool, msgID int64, kv ...strin
 // not a test failure.
 func (e *settingsMreqHereEnv) press0(private bool, msgID int64, kv ...string) {
 	e.t.Helper()
+	var fields map[string]string
 	if private {
-		e.pressPrivate(e.owner, msgID, e.privateFields(e.chat.Id, kv...))
-		return
+		fields = e.privateFields(e.chat.Id, kv...)
+	} else {
+		fields = e.groupFields(e.owner, kv...)
 	}
+	data := encodeCallbackData(settingsCallbackNamespace, fields)
+	if data == "" {
+		e.t.Fatalf("settings callback data %v did not encode", kv)
+	}
+	e.pressData(private, msgID, data)
+}
+
+// pressData presses a button carrying data, as the owner, in the menu of the given kind.
+func (e *settingsMreqHereEnv) pressData(private bool, msgID int64, data string) {
+	e.t.Helper()
 	chat := e.chat
 	if e.basic {
 		chat.Type = "group"
 	}
-	data := encodeCallbackData(settingsCallbackNamespace, e.groupFields(e.owner, kv...))
-	if data == "" {
-		e.t.Fatalf("settings callback data %v did not encode", kv)
+	if private {
+		chat = gotgbot.Chat{Id: e.owner.Id, Type: "private", FirstName: e.owner.FirstName}
 	}
 	e.pressRaw(chat, e.owner, msgID, data)
+}
+
+// strictPressData is strictPress for a button whose data is already encoded (a card's Yes).
+func (e *settingsMreqHereEnv) strictPressData(private bool, msgID int64, data string) settingsMreqPressed {
+	e.t.Helper()
+	return e.measure(private, msgID, func() { e.pressData(private, msgID, data) })
 }
 
 // settingsMreqChannelStrictKV is the st press of the channel rule with the absolute value v.
@@ -875,5 +898,249 @@ func TestSettingsMreqChannelRefusal(t *testing.T) {
 				t.Errorf("an unreadable link wrote %v", stored)
 			}
 		})
+
+		t.Run("Kick, Ban and Mute with no linked channel are refused with no card", func(t *testing.T) {
+			for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
+				env := newSettingsMreqHereEnv(t)
+				env.state.link(env.chat.Id, 0)
+				env.seed([7]int{}, false, false)
+				msgID := env.openMenuOf(private)
+				got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(action)...)
+				settingsMreqWantRefusedNoLink(t, env, private, msgID, got, 0)
+				if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+					t.Errorf("a refused %s wrote %v", settingsMreqWordKeys[action], stored)
+				}
+			}
+		})
+
+		for _, botStatus := range []string{gotgbot.ChatMemberStatusAdministrator, gotgbot.ChatMemberStatusMember} {
+			t.Run("with a linked channel and the bot "+botStatus+" Kick, Ban and Mute ask first and Yes writes", func(t *testing.T) {
+				for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
+					env := newSettingsMreqHereEnv(t)
+					mreqChannel(t, env.state, env.chat.Id, botStatus)
+					env.seed([7]int{}, false, false)
+					msgID := env.openMenuOf(private)
+					got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(action)...)
+					if got.Answers != 1 || got.Edits != 1 || got.Alert {
+						t.Fatalf("%s: %+v, want one empty answer and one edit", settingsMreqWordKeys[action], got)
+					}
+					text, keyboard := env.lastEdit(settingsMreqMenuChat(env, private), msgID)
+					yes, _, _ := settingsMreqWantCard(t, text, keyboard, 6, action)
+					if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+						t.Fatalf("drawing the card wrote %v", stored)
+					}
+					got = env.strictPressData(private, msgID, yes.CallbackData)
+					if got.Answers != 1 || got.Alert || got.Edits != 1 {
+						t.Errorf("Yes: %+v, want one empty answer and one edit", got)
+					}
+					if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{6: action} {
+						t.Errorf("after Yes stored %v, want the channel rule on %s", stored, settingsMreqWordKeys[action])
+					}
+				}
+			})
+		}
+
+		t.Run("the card's Yes checks the link again", func(t *testing.T) {
+			for name, lose := range map[string]func(env *settingsMreqHereEnv){
+				"the link was lost": func(env *settingsMreqHereEnv) { env.state.link(env.chat.Id, 0) },
+				"the pacer sheds": func(env *settingsMreqHereEnv) {
+					blockKey := memberReqLookupPacerOptions.BlockKey
+					mreqSetKey(env.t, env.memberReqEnv, blockKey, 30*time.Second)
+					env.t.Cleanup(func() { env.redis.Del(blockKey) })
+				},
+			} {
+				env := newSettingsMreqHereEnv(t)
+				mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+				env.seed([7]int{}, false, false)
+				msgID := env.openMenuOf(private)
+				env.press0(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionBan)...)
+				text, keyboard := env.lastEdit(settingsMreqMenuChat(env, private), msgID)
+				yes, _, _ := settingsMreqWantCard(t, text, keyboard, 6, models.RequirementActionBan)
+
+				lose(env)
+				got := env.strictPressData(private, msgID, yes.CallbackData)
+				if name == "the link was lost" {
+					settingsMreqWantRefusedNoLink(t, env, private, msgID, got, 0)
+				} else {
+					settingsMreqWantRefusedUnknown(t, got)
+				}
+				if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+					t.Errorf("%s: a refused Yes wrote %v", name, stored)
+				}
+			}
+		})
+
+		t.Run("an unreadable link refuses Kick, Ban and Mute and edits nothing", func(t *testing.T) {
+			kinds := map[string]func(env *settingsMreqHereEnv){
+				"a shed pacer": func(env *settingsMreqHereEnv) {
+					blockKey := memberReqLookupPacerOptions.BlockKey
+					mreqSetKey(env.t, env.memberReqEnv, blockKey, 30*time.Second)
+					env.t.Cleanup(func() { env.redis.Del(blockKey) })
+				},
+			}
+			if !private {
+				// A private press's own getChat of the group would meet these first.
+				kinds["a 500"] = func(env *settingsMreqHereEnv) {
+					env.state.scriptChat(env.chat.Id, staffFakeError(500, "Internal Server Error"))
+				}
+				kinds["a null answer"] = func(env *settingsMreqHereEnv) { env.state.nullGetChat(env.chat.Id) }
+				kinds["a timeout"] = func(env *settingsMreqHereEnv) {
+					release := env.state.holdKey(mreqChannelKey("getChat", env.chat.Id, 0))
+					env.t.Cleanup(release)
+					mreqSwap(env.t, &settingsMreqHereTimeout, 200*time.Millisecond)
+				}
+			}
+			for name, arrange := range kinds {
+				for _, action := range []int{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute} {
+					env := newSettingsMreqHereEnv(t)
+					mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+					env.seed([7]int{}, false, false)
+					msgID := env.openMenuOf(private)
+					arrange(env)
+					got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(action)...)
+					settingsMreqWantRefusedUnknown(t, got)
+					if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+						t.Errorf("%s, %s: wrote %v", name, settingsMreqWordKeys[action], stored)
+					}
+				}
+			}
+		})
+
+		t.Run("Off never checks the link", func(t *testing.T) {
+			for name, arrange := range map[string]func(env *settingsMreqHereEnv){
+				"no linked channel": func(env *settingsMreqHereEnv) { env.state.link(env.chat.Id, 0) },
+				"a shed pacer": func(env *settingsMreqHereEnv) {
+					blockKey := memberReqLookupPacerOptions.BlockKey
+					mreqSetKey(env.t, env.memberReqEnv, blockKey, 30*time.Second)
+					env.t.Cleanup(func() { env.redis.Del(blockKey) })
+				},
+			} {
+				env := newSettingsMreqHereEnv(t)
+				mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+				env.seed([7]int{6: models.RequirementActionBan}, false, false)
+				msgID := env.openMenuOf(private)
+				arrange(env)
+				got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionOff)...)
+				if got.Answers != 1 || got.Alert || got.Answer != "" || got.Edits != 1 {
+					t.Errorf("%s: Off answered %+v, want one empty answer and one edit", name, got)
+				}
+				if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+					t.Errorf("%s: Off left %v stored, want every rule off", name, stored)
+				}
+			}
+		})
+
+		t.Run("a press of the stored value makes no link check", func(t *testing.T) {
+			env := newSettingsMreqHereEnv(t)
+			env.state.link(env.chat.Id, 0)
+			env.seed([7]int{6: models.RequirementActionBan}, false, false)
+			msgID := env.openMenuOf(private)
+			got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionBan)...)
+			if got.Answers != 1 || got.Alert || got.Answer != "" || got.Edits != 1 {
+				t.Errorf("a press of the stored Ban answered %+v, want one empty answer and one edit (no refusal alert)", got)
+			}
+			if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{6: models.RequirementActionBan} {
+				t.Errorf("stored %v, want the Ban untouched", stored)
+			}
+		})
+
+		t.Run("an expired Yes redraws with the expiry note and makes no link check", func(t *testing.T) {
+			env := newSettingsMreqHereEnv(t)
+			mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+			env.seed([7]int{}, false, false)
+			msgID := env.openMenuOf(private)
+			saved := settingsCardLifetime
+			settingsCardLifetime = -2 * time.Minute
+			t.Cleanup(func() { settingsCardLifetime = saved })
+			env.press0(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionMute)...)
+			text, keyboard := env.lastEdit(settingsMreqMenuChat(env, private), msgID)
+			yes, _, _ := settingsMreqWantCard(t, text, keyboard, 6, models.RequirementActionMute)
+			settingsCardLifetime = saved
+
+			// Were the link check made, a lost link would turn the expiry note into a refusal.
+			env.state.link(env.chat.Id, 0)
+			got := env.strictPressData(private, msgID, yes.CallbackData)
+			if got.Answers != 1 || got.Alert || got.Answer != "" || got.Edits != 1 {
+				t.Errorf("an expired Yes answered %+v, want one empty answer and one edit", got)
+			}
+			text, _ = env.lastEdit(settingsMreqMenuChat(env, private), msgID)
+			if want := settingsNoticeWarnMarker("settings_card_expired"); !strings.Contains(text, want) {
+				t.Errorf("the expired Yes redraw %q lacks the notice %q", text, want)
+			}
+			if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+				t.Errorf("an expired Yes wrote %v", stored)
+			}
+		})
 	})
+
+	t.Run("a presser demoted before the Yes is refused before the link check", func(t *testing.T) {
+		env := newSettingsMreqHereEnv(t)
+		mreqChannel(t, env.state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+		env.seed([7]int{}, false, false)
+		helper := env.newOutsider()
+		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true})
+		msgID := env.openMenu(helper)
+		env.memberReqEnv.settingsEnv.press(helper, msgID, env.groupFields(helper, settingsMreqChannelStrictKV(models.RequirementActionBan)...))
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		yes, _, _ := settingsMreqWantCard(t, text, keyboard, 6, models.RequirementActionBan)
+
+		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: false})
+		chats, answers, edits := mreqChatCalls(env.memberReqEnv, env.chat.Id), env.answerCount(), len(env.edits(env.chat.Id, msgID))
+		env.pressRaw(env.chat, helper, msgID, yes.CallbackData)
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_no_restrict")) {
+			t.Errorf("answer = %q (alert %v), want the settings_no_restrict alert", answer, alert)
+		}
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("Yes answered %d times, want once", got)
+		}
+		if got := mreqChatCalls(env.memberReqEnv, env.chat.Id) - chats; got != 0 {
+			t.Errorf("a refused Yes made %d getChat requests of the group, want none (the right comes first)", got)
+		}
+		if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+			t.Error("a refused Yes edited the card")
+		}
+		if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+			t.Errorf("a refused Yes wrote %v", stored)
+		}
+	})
+
+	t.Run("a basic group is refused as having no linked channel with no lookup", func(t *testing.T) {
+		for _, private := range []bool{false, true} {
+			env := settingsMreqBasicEnv(t, private)
+			env.seed([7]int{}, false, false)
+			msgID := env.openMenuOf(private)
+			chats := mreqChatCalls(env.memberReqEnv, env.chat.Id)
+			got := env.strictPress(private, msgID, settingsMreqChannelStrictKV(models.RequirementActionWarn)...)
+			if got.Answers != 1 || !got.Alert || got.Answer != settingsMreqHereLine("", "settings_mreq_here_nolink") || got.Edits != 1 {
+				t.Errorf("private=%v: %+v, want one nolink alert and one edit", private, got)
+			}
+			wantChats := 0
+			if private {
+				wantChats = 1
+			}
+			if n := mreqChatCalls(env.memberReqEnv, env.chat.Id) - chats; n != wantChats {
+				t.Errorf("private=%v: %d getChat requests, want %d (the pipeline's own only)", private, n, wantChats)
+			}
+			text, keyboard := env.lastEdit(settingsMreqMenuChat(env, private), msgID)
+			if !strings.Contains(text, settingsMreqBasicLineMarker()) || settingsMreqRowWidths(keyboard)[0] != 1 {
+				t.Errorf("private=%v: the redraw %q is not the Off-only basic screen", private, text)
+			}
+			if stored := settingsMreqStoredActions(t, env.chat.Id); stored != [7]int{} {
+				t.Errorf("private=%v: wrote %v", private, stored)
+			}
+		}
+	})
+}
+
+// settingsMreqMenuChat is the chat the menu message of the given kind sits in.
+func settingsMreqMenuChat(env *settingsMreqHereEnv, private bool) int64 {
+	if private {
+		return env.owner.Id
+	}
+	return env.chat.Id
+}
+
+// settingsMreqBasicLineMarker is the basic-group status line of the marker locale.
+func settingsMreqBasicLineMarker() string {
+	return "🚫 " + staffMarker("settings_mreq_here_basic")
 }
