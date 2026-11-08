@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
 status: executing
-stopped_at: Completed 15-02-PLAN.md
-last_updated: "2026-11-08T16:05:53.142Z"
+stopped_at: Completed 15-03-PLAN.md
+last_updated: "2026-11-08T16:12:49.321Z"
 last_activity: 2026-11-08
 last_activity_desc: Phase 11 execution started
-state_head: 1e3137e1a4d86a89afe349ea298b6a80c462f86a
+state_head: f10efdf0df0db2d4f798500f8de152be5f17ead4
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 78
-  completed_plans: 68
+  completed_plans: 69
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 3 of 11
-Status: Executing Phase 15 (15-02 done: ClassifyNames in the Claude client and the namecanon leaf package; nothing calls them yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
-Last activity: 2026-11-08 — Plan 15-02 complete
+Plan: 4 of 11
+Status: Executing Phase 15 (15-03 done: the ten AI rule locale keys in 8 languages, 255 settings_ and 31 mreq_ keys, the limits tables and rendered checks; nothing reads them yet; owner's native read listed in 15-03-SUMMARY; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
+Last activity: 2026-11-08 — Plan 15-03 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -142,6 +142,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 14 P12 | 65min | 3 tasks | 7 files |
 | Phase 15 P01 | 25min | 3 tasks | 8 files |
 | Phase 15 P02 | 40min | 3 tasks | 7 files |
+| Phase 15 P03 | 30min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -308,8 +309,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T16:05:51.942Z
-Stopped at: Completed 15-02-PLAN.md
+Last session: 2026-11-08T16:12:48.112Z
+Stopped at: Completed 15-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
