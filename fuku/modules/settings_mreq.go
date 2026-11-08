@@ -576,12 +576,58 @@ func settingsMreqChoose(p *settingsPress, rule memberReqRule, action int) *setti
 	if memberreq.ActionOf(stored, rule.Store) == action {
 		return settingsMreqRedrawRule(p, rule, stored, "")
 	}
+	if !settingsMreqChannelGate(p, rule, stored, action) {
+		return nil
+	}
 	if action >= models.RequirementActionKick {
 		// Kick, Ban and Mute write nothing before the card's Yes: they ask first (D-05).
 		screen := renderSettingsMreqCard(p.view(), rule, action)
 		return &screen
 	}
 	return settingsMreqApplyRule(p, rule, action)
+}
+
+// settingsMreqChannelGate is the live link check of a punishing press of the channel rule (D-05,
+// D-06, D-08). Every other rule, and Off, proceed without a look. Otherwise one fresh getChat of
+// the group through the lookup pacer, bounded by settingsMreqHereTimeout, decides, and it runs before
+// any answer because its alert is the press's one answer: a basic group or a group with no linked
+// channel is refused with the status line's own text, writes and draws no card, and the screen is
+// redrawn as the Off-only form from stored (read when nil) so a stale screen is repaired; a link that
+// cannot be read answers could-not-check and edits nothing; a linked channel proceeds, whatever the
+// bot's standing there (the check then fails open). The link comes only from this live read, never
+// from callback data. It returns false when it refused, having answered and edited.
+func settingsMreqChannelGate(p *settingsPress, rule memberReqRule, stored *models.ChatRequirements, action int) bool {
+	if rule.Store != memberreq.RuleChannel || action == models.RequirementActionOff {
+		return true
+	}
+	status := settingsMreqStatus{Channel: settingsMreqChannelNoLink}
+	if p.group.Type == "group" {
+		status = settingsMreqStatus{Basic: true}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), settingsMreqHereTimeout)
+		channel, known := memberReqLinkedChannel(ctx, p.b, p.group.Id, memberReqLookupMode{Fresh: true})
+		cancel()
+		if !known {
+			p.answer(settingsText(p.tr, "mreq_fixed_check_failed"), true)
+			return false
+		}
+		if channel != 0 {
+			return true
+		}
+	}
+	p.answer(settingsText(p.tr, "settings_mreq_here_nolink", i18n.TranslationParams{
+		"rule": settingsText(p.tr, "settings_mreq_rule_channel"),
+	}), true)
+	if stored == nil {
+		var err error
+		if stored, err = settingsMreqRead(p.group.Id); err != nil {
+			log.Warnf("[Settings] the channel screen of chat %d could not be read after a refused press: %v", p.group.Id, err)
+			p.cannotOpen()
+			return false
+		}
+	}
+	p.edit(renderSettingsMreqRuleScreenStatus(p.view(), rule, stored, "", status))
+	return false
 }
 
 // settingsMreqYesFields is the Validate of the my action: exactly t, v and e, t a rule code, v one
