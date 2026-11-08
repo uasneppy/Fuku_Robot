@@ -314,3 +314,85 @@ func memberReqCrossFamilyFailures(lang string, data map[string]any) []string {
 	}
 	return failures
 }
+
+// memberReqReworkedKeys are the seven existing texts that amendment M12 rewrote so that a
+// member who broke only the channel rule is never told to fix a profile.
+var memberReqReworkedKeys = []string{
+	"mreq_notice_warn", "mreq_notice_kick", "mreq_notice_mute", "mreq_notice_fixed",
+	"mreq_notice_fixed_lockdown", "mreq_fixed_still_broken", "settings_mreq_hint_mute",
+}
+
+// memberReqProfileStems is each language's stem for "profile", read from the texts the
+// seven keys had before M12 (hi has two spellings).
+var memberReqProfileStems = map[string][]string{
+	"en": {"profile"},
+	"es": {"perfil"},
+	"fr": {"profil"},
+	"hi": {"प्रोफ़ाइल", "प्रोफाइल"},
+	"id": {"profil"},
+	"pt": {"perfil"},
+	"ru": {"профил"},
+	"uk": {"профіл"},
+}
+
+// memberReqPhotoProfileKeys are the only keys of the mreq_, settings_mreq_ and
+// settings_btn_mreq_ families whose English text may say "profile" (R4).
+var memberReqPhotoProfileKeys = []string{
+	"mreq_rule_photo", "settings_mreq_rule_photo", "settings_btn_mreq_photo", "settings_mreq_desc_photo",
+}
+
+// TestMemberReqNoProfileInReworkedKeys proves the M12 rewording holds in every language,
+// that exactly the four photo keys of the three families say "profile" in English, and that
+// the privacy sentence of the photo rule lives on its description alone (R1).
+func TestMemberReqNoProfileInReworkedKeys(t *testing.T) {
+	for _, lang := range staffLocales {
+		t.Run(lang, func(t *testing.T) {
+			data := loadStaffLocale(t, lang)
+			stems := memberReqProfileStems[lang]
+			if len(stems) == 0 {
+				t.Fatalf("%s: no profile stem in memberReqProfileStems", lang)
+			}
+			for _, key := range memberReqReworkedKeys {
+				text, _ := data[key].(string)
+				if strings.TrimSpace(text) == "" {
+					t.Errorf("%s: %s is missing or empty", lang, key)
+					continue
+				}
+				lower := strings.ToLower(text)
+				for _, stem := range stems {
+					if strings.Contains(lower, stem) {
+						t.Errorf("%s: %s names a profile (%q): %q", lang, key, stem, text)
+					}
+				}
+			}
+		})
+	}
+
+	english := loadStaffLocale(t, "en")
+	var got []string
+	for key, value := range english {
+		text, _ := value.(string)
+		inFamily := strings.HasPrefix(key, "mreq_") || strings.HasPrefix(key, "settings_mreq_") ||
+			strings.HasPrefix(key, "settings_btn_mreq_")
+		if inFamily && strings.Contains(strings.ToLower(text), "profile") {
+			got = append(got, key)
+		}
+	}
+	sort.Strings(got)
+	want := slices.Clone(memberReqPhotoProfileKeys)
+	sort.Strings(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("en.yml keys of the mreq families that say profile = %v, want %v", got, want)
+	}
+
+	for key, value := range english {
+		text, _ := value.(string)
+		if strings.HasPrefix(key, "settings_mreq_") && key != "settings_mreq_desc_photo" &&
+			strings.Contains(text, "counts as missing") {
+			t.Errorf("%s repeats the privacy sentence of settings_mreq_desc_photo (R1)", key)
+		}
+	}
+	if desc, _ := english["settings_mreq_desc_photo"].(string); !strings.Contains(desc, "counts as missing") {
+		t.Errorf("settings_mreq_desc_photo does not say a hidden photo counts as missing")
+	}
+}

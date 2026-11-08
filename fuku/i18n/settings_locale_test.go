@@ -280,6 +280,22 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_mreq_confirm_kick":      {170, 238},
 	"settings_mreq_confirm_ban":       {170, 238},
 	"settings_mreq_confirm_mute":      {180, 252},
+
+	// Phase 14 (plan 14-02), the photo and channel rules. The two cell rows count the template
+	// as written; the binding ceiling is the rendered 20 of TestSettingsLabelLengths. The
+	// three here rows with {rule} are line templates, a translated rule name is spliced in.
+	"settings_mreq_rule_photo":    {32, 44},
+	"settings_mreq_rule_channel":  {32, 44},
+	"settings_btn_mreq_photo":     {26, 26},
+	"settings_btn_mreq_channel":   {26, 26},
+	"settings_mreq_desc_photo":    {200, 280},
+	"settings_mreq_desc_channel":  {160, 224},
+	"settings_mreq_hint_photo":    {140, 196},
+	"settings_mreq_hint_lookup":   {170, 238},
+	"settings_mreq_here_basic":    {110, 154},
+	"settings_mreq_here_nolink":   {90, 126},
+	"settings_mreq_here_notadmin": {100, 140},
+	"settings_mreq_here_unknown":  {90, 126},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -303,6 +319,7 @@ var settingsAlertKeys = []string{
 	"settings_edit_preview_need_start",
 	"settings_edit_preview_failed",
 	"settings_no_change_info",
+	"settings_mreq_here_nolink",
 }
 
 // settingsAlertMaxRunes is the length Telegram allows an alert.
@@ -488,7 +505,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 	// (Phase 13, UI-SPEC check 2); the two switch cells carry the check mark or the cross.
 	mreqRuleCells := []string{
 		"settings_btn_mreq_lastname", "settings_btn_mreq_username", "settings_btn_mreq_russian",
-		"settings_btn_mreq_arabic", "settings_btn_mreq_chinese",
+		"settings_btn_mreq_arabic", "settings_btn_mreq_chinese", "settings_btn_mreq_photo",
+		"settings_btn_mreq_channel",
 	}
 	mreqRuleIcons := []string{"❌", "❗", "👢", "⛔", "🔇"}
 	mreqSwitchCells := []string{"settings_btn_mreq_switch_join", "settings_btn_mreq_switch_delete"}
