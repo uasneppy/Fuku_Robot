@@ -279,7 +279,8 @@ func settingsMreqOpenFields(fields map[string]string) bool {
 }
 
 // renderSettingsMreqRuleScreen draws one rule's screen. It is pure: the rule's name and what breaks
-// it, the blank last name hint on that rule only, the stored punishment, the two hints, the choice
+// it, the rule's own hint (its HintKey: the blank last name hint, the photo rule's Warn or Mute
+// recommendation) right after the description, the stored punishment, the two hints, the choice
 // rows [Off | Warn] and [Kick | Ban | Mute] with the check mark on the stored value, and Back to the
 // page (not Main, UI-SPEC amendment M5) with Close. A nil row draws the rule off.
 func renderSettingsMreqRuleScreen(v settingsView, rule memberReqRule, row *models.ChatRequirements, notice string) settingsScreen {
@@ -289,8 +290,8 @@ func renderSettingsMreqRuleScreen(v settingsView, rule memberReqRule, row *model
 	tr := v.Tr
 	action := memberreq.ActionOf(row, rule.Store)
 	body := []string{settingsText(tr, rule.LineKey), settingsText(tr, rule.DescKey)}
-	if rule.Store == memberreq.RuleLastName {
-		body = append(body, settingsText(tr, "settings_mreq_hint_blank"))
+	if rule.HintKey != "" {
+		body = append(body, settingsText(tr, rule.HintKey))
 	}
 	body = append(body, "",
 		settingsText(tr, "settings_mreq_now", i18n.TranslationParams{

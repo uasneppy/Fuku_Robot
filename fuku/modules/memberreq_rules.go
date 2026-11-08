@@ -34,7 +34,10 @@ func memberReqNamesOf(u gotgbot.User) memberReqNames {
 // a pure Broken test of the member's names; it judges the first and the last name and never the
 // username. A lookup rule (the photo and the channel) has a Lookup function that asks Telegram
 // and answers a verdict, and no Broken: only memberReqLookupBroken calls it, and only an
-// explicit memberReqBreach adds the rule's bit.
+// explicit memberReqBreach adds the rule's bit. HintKey, when set, is a locale key the rule's
+// settings screen shows right after the description (the blank last name hint, the photo rule's
+// Warn or Mute recommendation); it is the one field a renderer reads in place of a test of the
+// rule's identity.
 type memberReqRule struct {
 	Code      string
 	Bit       int
@@ -45,6 +48,7 @@ type memberReqRule struct {
 	PhraseKey string
 	Broken    func(memberReqNames) bool
 	Lookup    func(ctx context.Context, b *gotgbot.Bot, chatID, userID int64, mode memberReqLookupMode) memberReqVerdict
+	HintKey   string
 }
 
 // memberReqRussianLetters are the four letters that Russian uses and Ukrainian does not:
@@ -97,7 +101,7 @@ func memberReqHasHan(s string) bool {
 // 128); the order is the order of the settings page and of the {rules} list in a notice, and it
 // equals memberreq.Rules.
 var memberReqRules = []memberReqRule{
-	{Code: "ln", Bit: 1, Store: memberreq.RuleLastName, LineKey: "settings_mreq_rule_lastname", CellKey: "settings_btn_mreq_lastname", DescKey: "settings_mreq_desc_lastname", PhraseKey: "mreq_rule_lastname",
+	{Code: "ln", Bit: 1, Store: memberreq.RuleLastName, LineKey: "settings_mreq_rule_lastname", CellKey: "settings_btn_mreq_lastname", DescKey: "settings_mreq_desc_lastname", PhraseKey: "mreq_rule_lastname", HintKey: "settings_mreq_hint_blank",
 		Broken: func(n memberReqNames) bool { return memberReqBlank(n.Last) }},
 	{Code: "un", Bit: 2, Store: memberreq.RuleUsername, LineKey: "settings_mreq_rule_username", CellKey: "settings_btn_mreq_username", DescKey: "settings_mreq_desc_username", PhraseKey: "mreq_rule_username",
 		Broken: func(n memberReqNames) bool { return n.Username == "" }},
@@ -108,7 +112,7 @@ var memberReqRules = []memberReqRule{
 	{Code: "zh", Bit: 16, Store: memberreq.RuleChinese, LineKey: "settings_mreq_rule_chinese", CellKey: "settings_btn_mreq_chinese", DescKey: "settings_mreq_desc_chinese", PhraseKey: "mreq_rule_chinese",
 		Broken: func(n memberReqNames) bool { return memberReqHasHan(n.First) || memberReqHasHan(n.Last) }},
 	{Code: "ph", Bit: 32, Store: memberreq.RulePhoto, LineKey: "settings_mreq_rule_photo", CellKey: "settings_btn_mreq_photo", DescKey: "settings_mreq_desc_photo", PhraseKey: "mreq_rule_photo",
-		Lookup: memberReqPhotoRule},
+		Lookup: memberReqPhotoRule, HintKey: "settings_mreq_hint_photo"},
 	{Code: "ch", Bit: 64, Store: memberreq.RuleChannel, LineKey: "settings_mreq_rule_channel", CellKey: "settings_btn_mreq_channel", DescKey: "settings_mreq_desc_channel", PhraseKey: "mreq_rule_channel",
 		Lookup: memberReqChannelRule},
 }

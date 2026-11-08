@@ -1065,21 +1065,32 @@ func TestSettingsMreqPhotoScreen(t *testing.T) {
 	owner := env.newOwner(env.chat)
 	msgID := settingsMreqOpenPage(t, env, owner)
 
+	methods := []string{"getUserProfilePhotos", "getChat", "getChatAdministrators", "getChatMemberCount"}
+	callCounts := func() map[string]int {
+		counts := map[string]int{}
+		for _, method := range methods {
+			counts[method] = len(env.fake.callsFor(method))
+		}
+		return counts
+	}
+	before, lookups := callCounts(), env.memberLookupsOf(env.chat.Id, owner.Id)
 	env.press(owner, msgID, settingsMreqRuleFields(env, owner, "mo", "ph"))
 	text, keyboard := env.lastEdit(env.chat.Id, msgID)
 	settingsMreqWantRuleScreen(t, text, 5, 0)
 	settingsMreqWantRuleKeyboard(t, keyboard, 5, 0)
+	for method, count := range callCounts() {
+		if count != before[method] {
+			t.Errorf("opening the photo screen made %d %s calls, want none", count-before[method], method)
+		}
+	}
+	if got := env.memberLookupsOf(env.chat.Id, owner.Id) - lookups; got != 1 {
+		t.Errorf("opening the photo screen made %d getChatMember calls of the presser, want the pipeline's one", got)
+	}
 	exact := staffMarker("settings_mreq_desc_photo") + "\n" + staffMarker("settings_mreq_hint_photo") + "\n\n" +
 		staffMarker("settings_mreq_now") + " " + settingsMreqIcons[0] + " " + staffMarker(settingsMreqWordKeys[0]) + "\n\n" +
 		staffMarker("settings_mreq_choose_hint") + "\n" + staffMarker("settings_mreq_actions_hint")
 	if !strings.Contains(text, exact) {
 		t.Errorf("the photo screen %q lacks the exact tail %q", text, exact)
-	}
-
-	for _, calls := range []string{"getUserProfilePhotos", "getChat", "getChatAdministrators", "getUserChatBoosts"} {
-		if got := len(env.fake.callsFor(calls)); got != 0 {
-			t.Errorf("opening the photo screen made %d %s calls, want none", got, calls)
-		}
 	}
 
 	// The check mark follows the stored value, and the last-name rule keeps its own hint.
