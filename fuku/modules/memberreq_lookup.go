@@ -634,8 +634,14 @@ func memberReqLinkUnchanged(ctx context.Context, b *gotgbot.Bot, chatID, channel
 
 // memberReqGateBreach is the D-22 gate: a not-subscribed candidate of the channel is a breach
 // only while the bot is established as an administrator of channelID, inert while it is not
-// and unknown while that cannot be read.
+// and unknown while that cannot be read. The standing is always read fresh here (SEC-03): a
+// cached administrator standing can be up to memberReqBotAdminTTL old, and a bot demoted since
+// may be told "left" about everyone, so a candidate never becomes a breach on a cached positive.
+// The fresh read is the coalesced b: flight behind the lookup pacer; a definite non-administrator
+// drops the stale positive and leaves the channel-level fact, and an answer that cannot be
+// established is unknown. Only a breach candidate pays for it: a pass never reaches this gate.
 func memberReqGateBreach(ctx context.Context, b *gotgbot.Bot, channelID int64, mode memberReqLookupMode) memberReqVerdict {
+	mode.Fresh = true
 	switch memberReqBotChannelStatus(ctx, b, channelID, mode) {
 	case memberReqBotAdmin:
 		return memberReqBreach

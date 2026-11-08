@@ -1266,8 +1266,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqBotAdminKey`): the value is `1`, `SET EX` 2 minutes (`memberReqBotAdminTTL`), written only when the bot's own
   `getChatMember(channel, bot)` answered administrator or creator. The breach gate below and the settings page's status
   line read it; a not-administrator is cached only as the channel-level `cna` fact below and an unknown status is never
-  cached, so `ba` bounds how long a demoted bot is still read as an administrator. A `Fresh` read bypasses it and drops a
-  stale one on a definite not-administrator.
+  cached, so `ba` bounds how long a demoted bot is still read as an administrator by the settings page's status line and
+  by an unanswerable member lookup, but never by the breach gate: that reads the standing fresh (SEC-03, below). A `Fresh`
+  read bypasses it and drops a stale one on a definite not-administrator.
 - `fuku:memberreq:cna:<channel>` is the channel-level "the bot is not an administrator of this channel" fact
   (`memberReqChanNotAdminKey`, WR-01): the value is the fixed marker `1`, `SET EX` 60 seconds (`memberReqChanNotAdminTTL`),
   keyed by the channel ID alone, never by a user, and never a verdict about a member or a breach. The bot-status flight
@@ -1407,10 +1408,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the lookup pacer in the flight `f:l:<chat>`, bounded, and not for a `Fresh` caller, which just read it fresh): a link that
   changed, was removed or cannot be read makes the verdict unknown, never a breach, and the fresh read refreshes `lc`, so a
   punishment never rests on a link older than one request and the next message judges the channel the group is linked to
-  now. A subscribed member (a pass) costs no extra call. The D-22 gate: a candidate is a breach only while
-  `memberReqBotChannelStatus` shows the bot as an administrator of the
-  channel (the `ba` key above), inert when the bot is definitely not one, and unknown when that cannot be read, so a bot
-  that cannot see a channel's members and is told "left" about everyone punishes nobody. The classifier
+  now. A subscribed member (a pass) costs no extra call. The D-22 gate (`memberReqGateBreach`): a candidate is a breach only
+  while `memberReqBotChannelStatus` shows the bot as an administrator of the channel, inert when the bot is definitely not
+  one, and unknown when that cannot be read, so a bot that cannot see a channel's members and is told "left" about everyone
+  punishes nobody. SEC-03: the gate always reads the bot's standing fresh, never from the `ba` positive (a bot demoted
+  within the last 2 minutes would still be believed an administrator, and a non-administrator bot may be told "left"
+  about everyone): one coalesced `Fresh` bot-status flight (`f:b:<channel>`) through the lookup pacer, bounded, so only a
+  breach candidate pays one extra request (a pass and a `Fresh` caller, which already reads fresh, pay none). A fresh
+  answer that is not a definite administrator makes the candidate inert and writes the `cna` fact and drops the stale `ba`;
+  an answer that cannot be established (a 429, a shed, a 5xx, a timeout, a null or unrecognised answer) is unknown, never a
+  breach; a definite administrator caches `ba` again and the breach stands. The classifier
   `memberReqClassifyBot` reads the bot's own answer by status and by Telegram error code only: administrator and creator
   are an administrator; member, restricted, left, kicked and any Telegram 400 or 403 (`cache.IsBotGoneError`, also
   wrapped) are not; a 429, a shed, a 5xx, a transport error, a timeout, a null answer and an unrecognised status are
@@ -1487,8 +1494,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   when something is broken and the phase went beyond the cache (some flight was started or joined, carried through
   `memberReqLookupTouch` in the lookup context) or took longer than `memberReqLookupStaleAfter` (1 s), the record is read once
   more through `memberReqLiveMember` and the eligibility check (a member promoted to administrator or gone meanwhile is never
-  punished; approvals and the pending captcha are not read again), the names, the mute-over-restriction check and the marker adoption all
-  rest on that record; a re-read that fails punishes nobody. A phase of cache hits that was fast makes no extra request.
+  punished), the names, the mute-over-restriction check and the marker adoption all
+  rest on that record; a re-read that fails punishes nobody. SEC-02: in that same branch (`memberReqRereadAfterLookups`) the
+  exemptions are judged again first, through `memberReqExempt`: a member an admin approved, or whose captcha attempt started,
+  during the lookup phase, and an approvals or captcha read that fails then (an unknown is exempt) are punished by nobody.
+  A phase of cache hits that was fast makes no extra request and no extra approvals read.
   Then, when that strictest punishment is a Mute and the live record is `restricted` with no
   marker of this episode (the stale hold's marker that `memberReqLiveMarker` adopts is the one exception), the one
   paced `getChat` of `memberReqUnmutePermissions` reads the group's defaults and `memberReqRestrictedBelow` asks whether

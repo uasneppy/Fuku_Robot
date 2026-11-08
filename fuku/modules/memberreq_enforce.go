@@ -286,23 +286,16 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	lookupStart := time.Now()
 	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{})
 	broken |= lookupMask
-	// WR-03: the record above was read before the lookup phase, which can take seconds under a
-	// loaded pacer. When the phase went beyond the cache (a request was made or waited for) or took
-	// over memberReqLookupStaleAfter, and something is broken, the record is read once more and
-	// every decision below (eligibility, the names, the mute-over-restriction check, the marker
-	// adoption) rests on that one. A phase of cache hits costs no extra request.
+	// WR-03 and SEC-02: the record and the exemptions above were read before the lookup phase, which
+	// can take seconds under a loaded pacer. When the phase went beyond the cache (a request was made
+	// or waited for) or took over memberReqLookupStaleAfter, and something is broken, both are read
+	// once more (memberReqRereadAfterLookups). A phase of cache hits costs neither.
 	if broken != 0 && (touch.touched.Load() || time.Since(lookupStart) > memberReqLookupStaleAfter) {
-		fresh, err := memberReqLiveMember(ctx, b, c.Chat.Id, c.User.Id)
-		if err != nil {
-			log.Warnf("[MemberReq] live record of user %d in chat %d could not be read again after the lookups, so nobody is punished: %s",
-				c.User.Id, c.Chat.Id, memberReqErrText(err))
+		fresh, freshBroken, ok := memberReqRereadAfterLookups(ctx, b, c, lookupMask)
+		if !ok {
 			return member, 0, false
 		}
-		member = fresh
-		if !memberReqLiveEligible(member) {
-			return member, 0, false
-		}
-		broken = memberReqBroken(c.Settings, memberReqNamesOf(member.User)) | lookupMask
+		member, broken = fresh, freshBroken
 	}
 	// WR-02: a stricter rule that could not be answered must not be silently dropped behind a weaker
 	// punishment and its hold (the held path makes no lookup, so the stricter rule would never be
@@ -313,6 +306,27 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 		return member, 0, false
 	}
 	return member, broken, broken != 0
+}
+
+// memberReqRereadAfterLookups settles the two facts a slow lookup phase can have changed before the
+// claim. SEC-02: the approved and pending-captcha exemptions are judged again (memberReqExempt: an
+// approval or a captcha attempt that appeared meanwhile, or a read that fails, punishes nobody).
+// WR-03: the live record is read again, and eligibility, the names and the mask of broken rules rest
+// on that one. ok is false when either read says nobody is punished now.
+func memberReqRereadAfterLookups(ctx context.Context, b *gotgbot.Bot, c *memberReqCase, lookupMask int) (member gotgbot.MergedChatMember, broken int, ok bool) {
+	if memberReqExempt(ctx, *c) {
+		return member, 0, false
+	}
+	member, err := memberReqLiveMember(ctx, b, c.Chat.Id, c.User.Id)
+	if err != nil {
+		log.Warnf("[MemberReq] live record of user %d in chat %d could not be read again after the lookups, so nobody is punished: %s",
+			c.User.Id, c.Chat.Id, memberReqErrText(err))
+		return member, 0, false
+	}
+	if !memberReqLiveEligible(member) {
+		return member, 0, false
+	}
+	return member, memberReqBroken(c.Settings, memberReqNamesOf(member.User)) | lookupMask, true
 }
 
 // memberReqLookupBudget is the time the lookup phase of one executor run may take: the short

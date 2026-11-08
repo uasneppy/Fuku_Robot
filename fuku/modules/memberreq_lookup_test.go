@@ -1443,7 +1443,7 @@ func TestMemberReqChannelBreachNeedsBotAdmin(t *testing.T) {
 		}
 	})
 
-	t.Run("an administrator bot is cached for 2 minutes and the second breach asks nothing about the bot", func(t *testing.T) {
+	t.Run("an administrator bot is cached for 2 minutes and every breach candidate still reads its standing fresh (SEC-03)", func(t *testing.T) {
 		env, state := mreqLookupEnv(t)
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
 		first, second := mreqLookupUser(t), mreqLookupUser(t)
@@ -1463,8 +1463,10 @@ func TestMemberReqChannelBreachNeedsBotAdmin(t *testing.T) {
 		if got := mreqChannelVerdict(env, second, memberReqLookupMode{}); got != memberReqBreach {
 			t.Fatalf("second verdict = %d, want breach", got)
 		}
-		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 1 {
-			t.Errorf("bot status requests = %d, want 1", n)
+		// SEC-03: the cached standing is never believed for a breach, so each candidate costs one fresh
+		// request (it was one in all before the fix).
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 2 {
+			t.Errorf("bot status requests = %d, want 2 (one fresh read per breach candidate)", n)
 		}
 	})
 
@@ -1484,7 +1486,7 @@ func TestMemberReqChannelBreachNeedsBotAdmin(t *testing.T) {
 		}
 	})
 
-	t.Run("Fresh bypasses the ba cache and drops a stale positive on a definite not-administrator", func(t *testing.T) {
+	t.Run("a stale positive is never believed for a breach (SEC-03) and a Fresh read drops it on a definite not-administrator", func(t *testing.T) {
 		env, state := mreqLookupEnv(t)
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusMember)
 		user := mreqLookupUser(t)
@@ -1492,14 +1494,20 @@ func TestMemberReqChannelBreachNeedsBotAdmin(t *testing.T) {
 		key := memberReqBotAdminKey(channel)
 		mreqSetKey(t, env, key, 2*time.Minute)
 
-		// The stale positive is believed without Fresh (that is the 2 minute bound) ...
-		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqBreach {
-			t.Fatalf("verdict from the stale positive = %d, want breach", got)
+		// The stale positive is not believed for a breach, even without Fresh (SEC-03): the gate reads
+		// the demotion fresh and removes the key ...
+		if got := mreqChannelVerdict(env, user, memberReqLookupMode{}); got != memberReqInert {
+			t.Fatalf("verdict behind the stale positive = %d, want inert", got)
 		}
-		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 0 {
-			t.Fatalf("bot status requests = %d, want 0 (served from the cache)", n)
+		if n := mreqMemberCalls(env, channel, staffTestBotID); n != 1 {
+			t.Fatalf("bot status requests = %d, want 1 (the fresh read)", n)
 		}
-		// ... and not with Fresh, which reads the demotion and removes the key.
+		if env.redis.Exists(key) {
+			t.Error("the gate's fresh read left the stale positive")
+		}
+		// ... and a Fresh caller reads it too.
+		mreqSetKey(t, env, key, 2*time.Minute)
+		env.redis.Del(mreqCnaKey(channel))
 		if got := mreqChannelVerdict(env, user, memberReqLookupMode{Fresh: true}); got != memberReqInert {
 			t.Fatalf("Fresh verdict = %d, want inert", got)
 		}
