@@ -1143,6 +1143,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   because a photo is the user's, and no name or file ID. `CLEAR_CACHE_ON_STARTUP` keeps it and no Redis is a miss. The
   cost is one paced lookup per message of a member who stays without a photo (D-24). A `Fresh` lookup ("I fixed it", the
   page) bypasses it and drops a stale one on a definite breach.
+- `fuku:memberreq:lc:<chat>` is the group's linked channel (`memberReqLinkedChannel`, `memberReqLinkedKey`): the decimal
+  channel ID (a negative number) or `0` for a group with none, `SET EX` 10 minutes (`memberReqLinkedTTL`), a positive
+  answer and a none alike. The channel comes only from `getChat(group).LinkedChatId`, asked through the lookup pacer in the
+  flight `l:<chat>`, and never from callback data or an update, so nobody can point the rule at a channel of their own. An
+  error, a shed, a timeout and a null answer are not known and write nothing, a `linked_chat_id` that is positive (no
+  channel has one) reads as none and is not cached, and a cached value that is not zero or negative is a miss. A `Fresh`
+  read bypasses it and refreshes it on a definite answer. It sits outside the `fuku:cache:` prefix.
+- `fuku:memberreq:sub:<channel>:<user>` is the positive-only subscription verdict (`memberReqChannelRule`,
+  `memberReqSubKey`): the value is `1`, `SET EX` 30 minutes (`memberReqPositiveTTL`), written only when
+  `getChatMember(channel, user)` answered creator, administrator, member, or restricted with `is_member`. A not-subscribed
+  answer, an inert verdict and every unknown one are never cached, so each message of a member who stays unsubscribed costs
+  one paced lookup (D-24). A `Fresh` lookup bypasses it and drops it on a definite breach.
+- `fuku:memberreq:ba:<channel>` is the bot's definite administrator status in a channel (`memberReqBotChannelStatus`,
+  `memberReqBotAdminKey`): the value is `1`, `SET EX` 2 minutes (`memberReqBotAdminTTL`), written only when the bot's own
+  `getChatMember(channel, bot)` answered administrator or creator. The breach gate below and the settings page's status
+  line read it; a not-administrator and an unknown status are never cached, so it bounds how long a demoted bot is still
+  read as an administrator. A `Fresh` read bypasses it and drops a stale one on a definite not-administrator.
 - `fuku:memberreq:lkp:pace:next` and `fuku:memberreq:lkp:pace:block` are the fleet-wide pacing of photo and channel
   lookups (`memberReqLookupPaced`, `memberReqLookupPacer`, built from `memberReqLookupPacerOptions`): the staff pacer's
   slot-plus-block design (`ratelimit.NewTelegramPacer`) with Interval 100 ms, MaxRetries 1 and MaxWait 5 s. A slot, or a
@@ -1150,13 +1167,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   separate from `fuku:memberreq:pace:*`, so a burst of lookups never delays a mute notice, and only lookups use them: the
   settings page and "I fixed it" go through the same lookup layer, while the live `getChatMember`, a punishment, a notice
   and a delete stay on the requirement pacer.
-- The lookup flights (`memberReqFlight`, `memberReqLookupFlight`, a `singleflight.Group`) make every concurrent lookup of
-  one key one Telegram call: the key is `p:<user>` for the photo (channel keys come with the channel lookups). The flight
+- The lookup flights (`memberReqFlight` over the generic `memberReqFlightValue`, `memberReqLookupFlight`, a
+  `singleflight.Group`) make every concurrent lookup of one key one Telegram call: the key is `p:<user>` for the photo,
+  `l:<chat>` for a group's linked channel, `s:<channel>:<user>` for a subscription and `b:<channel>` for the bot's status in
+  a channel (the families differ, because their values have different types). The flight
   function runs the paced call and the cache write on a context derived from `memberReqContext()` and bounded by
   `memberReqLookupFlightTimeout` (15 s), never from a caller, so `StopMemberReqJobs` ends every flight and one caller's
   short deadline never cancels a lookup that others share; every caller waits with `select` on its own deadline and gets
-  unknown when it runs out. A lookup returns a `memberReqVerdict` whose zero value is `memberReqUnknown`, so a missing
-  verdict, a recovered panic and a shed all do nothing; only `memberReqBreach` can lead to a punishment.
+  unknown (no value) when it runs out. A lookup returns a `memberReqVerdict` whose zero value is `memberReqUnknown`, so a
+  missing verdict, a recovered panic and a shed all do nothing; only `memberReqBreach` can lead to a punishment.
 - `fuku:memberreq:warned:<chat>:<user>` is the recorded-warn note of the member requirements executor
   (`memberreq_warned.go`, WR-01): the value is the decimal ID of the hold whose warn was just stored, `SET EX` for
   `memberreq.StaleClaim` plus 10 minutes (`memberReqWarnedGrace`), written inside the warn lock before the hold is marked
@@ -1243,6 +1262,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and are welcomed once when it is back on; bots that join are claimed like any member; rows are kept for good. A 429
   counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
   flood limit is welcomed on their next join.
+- Member requirements, the lookups (`memberreq_lookup.go`): the photo rule and the channel rule answer one
+  `memberReqVerdict` whose zero value is unknown. Unknown and inert both mean "not broken": a lookup that failed, was shed,
+  timed out, was cancelled, came back null or with an unrecognised status is unknown, and a rule that cannot be judged here
+  (a group with no linked channel, or a channel the bot does not administer) is inert; only `memberReqBreach` can lead to
+  a punishment. The photo rule is a total of zero from `getUserProfilePhotos` (limit 1), a pass is a total above zero or a
+  non-empty list. The channel rule (`memberReqChannelRule`) runs in a fixed order: the linked channel (unreadable is
+  unknown, none is inert with no member request), the subscription cache, then one `getChatMember(channel, user)` in the
+  flight `s:<channel>:<user>` judged by `memberReqSubscribed` (creator, administrator, member and restricted with
+  `is_member` pass; left, kicked and restricted without `is_member` are only a breach candidate; anything else is unknown).
+  The D-22 gate: a candidate is a breach only while `memberReqBotChannelStatus` shows the bot as an administrator of the
+  channel (the `ba` key above), inert when the bot is definitely not one, and unknown when that cannot be read, so a bot
+  that cannot see a channel's members and is told "left" about everyone punishes nobody. The classifier
+  `memberReqClassifyBot` reads the bot's own answer by status and by Telegram error code only: administrator and creator
+  are an administrator; member, restricted, left, kicked and any Telegram 400 or 403 (`cache.IsBotGoneError`, also
+  wrapped) are not; a 429, a shed, a 5xx, a transport error, a timeout, a null answer and an unrecognised status are
+  unknown. It never reads a description (a 500 whose text says "chat not found" is unknown) and the channel path never
+  calls `chat_status.IsBotMissingError`, whose markers read "chat not found" as the bot being missing; it never produces a
+  breach. `memberReqLookupMode.Classify` is set only by the held release and "I fixed it": a member lookup that could not
+  be answered is then inert when the bot is definitely not a channel administrator and stays unknown otherwise; the
+  punishing path and the watcher never set it and make no extra call. Positives only are cached (the keys above) and no
+  lookup has a new drain: the flights end with `memberReqContext()`.
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry
   `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on (it is, by default, since the `mreq|` handler exists). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
@@ -2076,8 +2116,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   join the WaitGroup drained by `DrainUsersAsyncWrites`.
 - Register every new secret with `logredact.RegisterSecret` (≥6 chars), or it is logged verbatim.
 - A `singleflight` `DoChan` leader that panics crashes the process (the library re-raises the panic in a goroutine nothing can
-  recover), so the function handed to `DoChan` recovers internally (`memberReqFlight` starts with
-  `defer error_handling.RecoverFromPanic`) and returns the zero verdict.
+  recover), so the function handed to `DoChan` recovers internally (`memberReqFlightValue` starts with
+  `defer error_handling.RecoverFromPanic`) and returns no value, which `memberReqFlight` reads as the zero verdict.
 - SQL log lines carry no parameters: the GORM logger in `fuku/db/conn.go` sets `ParameterizedQueries: true`, so a failed or
   slow (over 1 s) statement is logged with its placeholders and never the welcome, goodbye or rules text, button links or
   other values it wrote. Do not add a logger that prints bound values.
