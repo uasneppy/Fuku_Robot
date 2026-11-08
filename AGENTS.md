@@ -1310,8 +1310,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `getChatMember`. Otherwise `memberReqEnforce` runs synchronously (`memberReqJoinTimeout`, 15 s, `memberReqFromJoin`) with
   its one live `getChatMember`: a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
   at the claim, a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
-  removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot) and a check that could
-  not be answered are welcomed. A captcha-failed joiner and a joiner the lockdown guard records for a ban never reach the
+  removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot), a check that could
+  not be answered, and a joiner whose Mute is refused because an administrator's restriction is on them (CR-01: a rejoiner
+  restricted for good, say; `memberReqNone`, no hold) are welcomed. The settings the entry read are only the pre-filter:
+  `memberReqEnforce` reads them again before its claim (WR-02), so a rule that went Off in between punishes nobody. A captcha-failed joiner and a joiner the lockdown guard records for a ban never reach the
   entry. The captcha guard (`memberReqCaptchaGuard`) is the first statement of `unmuteCaptchaUser`, the one choke point of
   every captcha unmute (the pass, `restoreCaptchaPermissions`, restart recovery and the `captcha_muted_users` retry
   worker). While `memberReqLive()` is false it reads nothing and changes no captcha unmute: no hold read, no Telegram call,

@@ -20,8 +20,9 @@ Before you set any rule to **Mute** in a real group, run these live checks on a 
   own mute only through that marker.
 - **A3** (check 3) and **A4** (check 4): what Telegram reports when a muted member leaves and rejoins. The rejoin reset
   depends on it.
-- **A4 for restricted members** (check 4, second half): how a restricted member who is still in the group is read, because
-  the executor lets such a member through (see "Accepted limits" below).
+- **A4 for restricted members** (check 4, second half, and check 14): how a restricted member who is still in the group is
+  read, because a Mute is refused for a member restricted below the group's defaults (see "Accepted limits" below) and a
+  member lifted to the defaults of a restrictive group must read as the same.
 - **A8** (check 8): how long a callback stays answerable. The button's flow is bounded to 10 seconds.
 - **A5** (check 5): the lockdown unmute path, a member unmuted during a lockdown must still be unable to send.
 
@@ -107,8 +108,8 @@ account by hand as an administrator (for example mute it for a day with `/mute`)
 send a message.
 
 Pass looks like: both updates are restricted to restricted (so `leftMember` and `newMember` do not run), the rejoin still
-sends a service message, and the reset lifts only a mute that carries the hold's marker. For the hand-restricted account the
-requirement behaves as documented under "Accepted limits".
+sends a service message, and the reset lifts only a mute that carries the hold's marker. For the hand-restricted account a Mute rule
+places no mute (it never replaces the administrator's restriction, check 14); Warn, Kick and Ban still act.
 
 If not: if no service message follows a muted member's rejoin, the reset never runs for them and the member stays muted until
 "I fixed it" or an admin's `/unmute`. Record which groups behave so.
@@ -221,6 +222,25 @@ PostgreSQL for the integrity target, so CI is the authority for both.
 
 If not: fix what the log names; a `dupl`, `gocyclo` or `godox` finding is on lines the phase added.
 
+### 14. CR-01: a restricted member is not muted, and a member lifted to the defaults still is
+
+- [ ] done
+
+Steps: in the test supergroup set Last name to Mute and make the group's default permissions restrictive (for example no
+media, links or polls, messages allowed). (a) As an administrator restrict a test account with no last name by hand (`/mute`
+for a day, then separately restrict only its media) and have it send a message while it is restricted. (b) Take a second test
+account with no last name through the captcha (or `/unmute` it after a mute) so it is restored to the group's defaults, then
+have it send a message and, separately, rejoin.
+
+Pass looks like: (a) the account stays restricted exactly as the administrator left it, no new restriction, no notice and no
+hold; the log has one Info line `already restricted by someone else` with chat and user IDs only. (b) The account is muted
+with the requirement mute and gets the notice with "I fixed it": Telegram reads a member restored to the group's defaults
+back as having the group's rights, so the bot does not take it for someone else's restriction.
+
+If not: if (b) is not muted, Telegram reads a restored member with fewer rights than `getChat` reports (compare the
+`getChatMember` flags with the group's `permissions` and tell the owner), and `memberReqRestrictedBelow` needs a looser
+comparison. If (a) is muted, record the member's `getChatMember` answer: it did not read as restricted below the defaults.
+
 ## Follow-ups: decisions for the owner
 
 These are not checks. They are the UI contract's open confirmations (13-UI-SPEC "Assumptions and open questions"), each with
@@ -247,10 +267,18 @@ The code and the rulebook state these; none blocks the phase.
   so on the page.
 - **MREQ-01 is five of the eight rules.** Phase 13 delivers last name, username, Russian, Arabic and Chinese. The profile
   photo, channel subscription and AI spam-name rules arrive through MREQ-11, MREQ-12 and MREQ-14 of Phases 14 and 15.
-- **A restricted member who is still in the group is let through by `memberReqLiveEligible`.** So a requirement Mute can
-  replace a partial administrator restriction (a member an admin had restricted from sending media only, say), and "I fixed
-  it" would then restore the group's default permissions instead of the admin's partial restriction. Flagged for the Phase 13
-  code review; check 4's second half is the live probe.
+- **A Mute never replaces a restriction someone else placed (CR-01, fixed in the review pass).** `memberReqLiveEligible`
+  still lets a restricted member who is still in the group through, but when the strictest broken rule is a Mute and the
+  live record is `restricted` with no marker of this episode, `memberReqMuteOverRestriction` reads the group's defaults (one
+  paced `getChat`) and refuses the mute when the member lacks a right the group grants: no mute, no hold, no notice, no
+  delete, one Info line with IDs. `restrictChatMember` replaces a whole restriction, so a mute there would have overwritten
+  an administrator's `/mute` or partial media restriction, and "I fixed it" would then have freed the member of it. The
+  member's restriction stays. A stale hold whose own marker is live is still adopted. Warn, Kick and Ban still act on a
+  restricted member (a warn leaves the restriction alone, the other two remove the member). So a partially restricted member
+  who breaks a Mute rule is not muted, and the owner should use Warn, Kick or Ban in groups where administrators restrict
+  members by hand. A member restricted only to the group's own defaults (what the captcha, `/unmute` and the requirement
+  lifts leave behind) lacks nothing and is muted as before; that comparison rests on Telegram reading such a member back
+  with the group's rights, which check 14 confirms live. A `getChat` that fails refuses the mute (nothing is replaced on a guess).
 - **An unknown-status violator's message is kept during a pause.** When the cached admin list cannot say whether the sender
   is an administrator and a pause forbids the live lookup, the message is not deleted.
 - **Two Telegram refusals in a row leave a mute with no button.** When the notice could not be delivered and the lift of the
