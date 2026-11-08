@@ -302,12 +302,19 @@ func memberReqRecordCtx(ctx context.Context) (context.Context, context.CancelFun
 	return context.WithTimeout(context.WithoutCancel(ctx), memberReqRecordTimeout)
 }
 
+// memberReqMarkHold stamps a hold punished, a variable so a test can make the write fail.
+var memberReqMarkHold = memberreq.MarkHoldPunished
+
+// memberReqMarkRetryWait is the pause between two attempts to mark a hold punished, a variable
+// so a test can shorten it.
+var memberReqMarkRetryWait = 100 * time.Millisecond
+
 // memberReqMarkPunished stamps the hold punished. A failure is logged and leaves the hold
 // pending, which the two-minute reclaim retries.
 func memberReqMarkPunished(ctx context.Context, c memberReqCase, hold *models.ChatRequirementHold) {
 	recordCtx, cancel := memberReqRecordCtx(ctx)
 	defer cancel()
-	if _, err := memberreq.MarkHoldPunished(recordCtx, hold.ID); err != nil {
+	if _, err := memberReqMarkHold(recordCtx, hold.ID); err != nil {
 		log.Errorf("[MemberReq] marking the hold of user %d in chat %d punished failed: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
 	}
 }

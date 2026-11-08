@@ -4,10 +4,12 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -991,6 +993,127 @@ func TestMemberReqEnforceReadsSettingsAfterLookup(t *testing.T) {
 		}
 		if hold := env.mreqHold(member.Id); hold != nil {
 			t.Errorf("hold = %+v, want none", hold)
+		}
+	})
+}
+
+// TestMemberReqWarnRecovery is WR-01: a warn that is recorded is never punished twice. The mark
+// that makes the hold punished is retried, a hold whose mark still fails is adopted by the reclaim
+// instead of warning again, and a warn that was recorded but failed a later step is announced.
+func TestMemberReqWarnRecovery(t *testing.T) {
+	failingMark := func(t *testing.T, failures int) *atomic.Int64 {
+		t.Helper()
+		var calls atomic.Int64
+		real := memberReqMarkHold
+		mreqSwap(t, &memberReqMarkHold, func(ctx context.Context, id int64) (bool, error) {
+			if calls.Add(1) <= int64(failures) {
+				return false, errors.New("database blip")
+			}
+			return real(ctx, id)
+		})
+		mreqSwap(t, &memberReqMarkRetryWait, time.Millisecond)
+		return &calls
+	}
+
+	t.Run("a mark that fails once is retried and the hold is punished", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		member := env.mreqMember("Alex", "", "alex")
+		calls := failingMark(t, 1)
+
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqWarned {
+			t.Fatalf("outcome = %+v, want Warned", got)
+		}
+		if n := calls.Load(); n != 2 {
+			t.Errorf("mark attempts = %d, want the failed one and its retry", n)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt == nil {
+			t.Errorf("hold = %+v, want punished", hold)
+		}
+		if row := env.mreqWarnRow(member.Id); row == nil || row.NumWarns != 1 {
+			t.Errorf("warns = %+v, want one", row)
+		}
+	})
+
+	t.Run("a mark that keeps failing is adopted by the reclaim, with no second warn or notice", func(t *testing.T) {
+		mreqShortenStale(t, 50*time.Millisecond)
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		member := env.mreqMember("Alex", "", "alex")
+		calls := failingMark(t, 3)
+
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqWarned {
+			t.Fatalf("first case = %+v, want Warned (the warn and its notice are out)", got)
+		}
+		if n := calls.Load(); n != 3 {
+			t.Errorf("mark attempts = %d, want exactly three before giving up", n)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt != nil {
+			t.Fatalf("hold = %+v, want it pending after three failed marks", hold)
+		}
+
+		time.Sleep(80 * time.Millisecond)
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqHeld {
+			t.Fatalf("reclaim = %+v, want Held (the recorded warn is adopted)", got)
+		}
+		if row := env.mreqWarnRow(member.Id); row == nil || row.NumWarns != 1 {
+			t.Errorf("warns = %+v, want still one", row)
+		}
+		if n := len(env.mreqNotices()); n != 1 {
+			t.Errorf("notices = %d, want still one", n)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt == nil {
+			t.Errorf("hold after the reclaim = %+v, want punished", hold)
+		}
+		if again := env.mreqEnforce(env.mreqCase(member)); again.Outcome != memberReqHeld {
+			t.Errorf("next case = %+v, want Held", again)
+		}
+	})
+
+	t.Run("a warn recorded then failed in a later step is still announced and marked", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			limit   int
+			mode    string
+			outcome memberReqOutcome
+			key     string
+		}{
+			{"below the limit", 3, "kick", memberReqWarned, "mreq_notice_warn"},
+			{"the limit action ran", 1, "kick", memberReqRemoved, "mreq_notice_warn_limit_kick"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				env := newMemberReqEnv(t)
+				env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+				if err := warns.SetWarnLimit(env.chat.Id, tc.limit); err != nil {
+					t.Fatal(err)
+				}
+				if err := warns.SetWarnMode(env.chat.Id, tc.mode); err != nil {
+					t.Fatal(err)
+				}
+				member := env.mreqMember("Alex", "", "alex")
+				// applyWarn returns the warn it stored with the reset's error when the reset fails, and
+				// then LimitApplied is false although the limit action ran.
+				mreqSwap(t, &memberReqApplyWarn, func(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID int64, reason string, afterRecord func()) (warnApplyResult, error) {
+					res, err := applyWarn(ctx, b, chat, userID, reason, afterRecord)
+					res.LimitApplied = false
+					if err == nil {
+						err = errors.New("the reset failed")
+					}
+					return res, err
+				})
+
+				got := env.mreqEnforce(env.mreqCase(member))
+				if got.Outcome != tc.outcome {
+					t.Fatalf("outcome = %+v, want %d", got, tc.outcome)
+				}
+				notices := env.mreqNotices()
+				if len(notices) != 1 || !strings.Contains(mreqText(notices[0]), staffMarker(tc.key)) {
+					t.Fatalf("notices = %+v, want one %s", notices, tc.key)
+				}
+				if hold := env.mreqHold(member.Id); hold == nil || hold.PunishedAt == nil || hold.NoticeMsgID != notices[0].MessageID {
+					t.Errorf("hold = %+v, want punished with the notice stored", hold)
+				}
+			})
 		}
 	})
 }
