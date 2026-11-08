@@ -154,10 +154,12 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 		log.Warnf("[MemberReq] the approvals of chat %d could not be read for the fix of user %d: %s", chat.Id, userID, memberReqErrText(err))
 		return refuse("mreq_fixed_check_failed")
 	}
+	lookedUp := false
 	if !approved {
 		// Every enabled rule is judged again against the group's current settings: the name rules
 		// on the live record and the lookup rules with fresh lookups.
-		if refused := memberReqFixedJudge(ctx, b, tr, chat.Id, userID, live); refused != nil {
+		var refused *memberReqFixedResult
+		if refused, lookedUp = memberReqFixedJudge(ctx, b, tr, chat.Id, userID, live); refused != nil {
 			return *refused
 		}
 	}
@@ -166,6 +168,25 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 	if err != nil {
 		log.Warnf("[MemberReq] the unmute permissions of chat %d could not be resolved for user %d: %s", chat.Id, userID, memberReqErrText(err))
 		return refuse("mreq_fixed_check_failed")
+	}
+
+	// WR-04: the marker was proved at step 4, and the fresh lookups of step 5 may have taken seconds
+	// since. When they made a request, the live record is read once more, right before the take,
+	// and the press frees the member only while the marker is still on them: an admin's /mute that
+	// landed meanwhile replaced it and is never undone here. Worst case of the press, in paced
+	// requests: the live record (1), the unmute permissions (1), this read (1), the lift (1) and
+	// the notice edit (1), plus the lookups of step 5, which sit under memberReqFixedLookupBudget
+	// (5 s), so everything before the take fits the 10 s of memberReqFixedTimeout with the budget to
+	// spare, and a press that runs out of time here changes nothing.
+	if lookedUp {
+		again, err := memberReqLiveMember(ctx, b, chat.Id, userID)
+		if err != nil {
+			log.Warnf("[MemberReq] the live record of user %d in chat %d could not be read again before the fix: %s", userID, chat.Id, memberReqErrText(err))
+			return refuse("mreq_fixed_check_failed")
+		}
+		if !isMemberReqMute(again, hold.MuteUntil) {
+			return refuse("mreq_fixed_not_ours")
+		}
 	}
 
 	taken, err := memberReqFixedTake(ctx, holdID, chat.Id, userID)
@@ -206,26 +227,31 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 // when another lookup could not be answered (it tells the member something true), and an
 // unanswered lookup with nothing broken is mreq_fixed_check_failed and changes nothing, exactly
 // like an unreadable setting. A channel the bot cannot judge in this group is inert, so it is
-// neither broken nor unknown (the lookup layer classifies it).
-func memberReqFixedJudge(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator, chatID, userID int64, live gotgbot.MergedChatMember) *memberReqFixedResult {
+// neither broken nor unknown (the lookup layer classifies it). lookedUp reports whether a lookup
+// went beyond the cache, that is made or waited for a Telegram request, so the caller knows the
+// live record it proved at step 4 may be stale (WR-04).
+func memberReqFixedJudge(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator, chatID, userID int64, live gotgbot.MergedChatMember) (refused *memberReqFixedResult, lookedUp bool) {
 	settings, err := memberReqSettingsLookup(ctx, chatID)
 	if err != nil {
 		log.Warnf("[MemberReq] the requirements of chat %d could not be read for the fix of user %d: %s", chatID, userID, memberReqErrText(err))
-		return &memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_check_failed"), Alert: true}
+		return &memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_check_failed"), Alert: true}, false
 	}
 	broken := memberReqBroken(settings, memberReqNamesOf(live.User))
 	lookupCtx, cancel := context.WithTimeout(ctx, memberReqFixedLookupBudget)
 	defer cancel()
+	touch := &memberReqLookupTouch{}
+	lookupCtx = context.WithValue(lookupCtx, memberReqLookupTouchKey{}, touch)
 	lookupBroken, unknown := memberReqLookupBroken(lookupCtx, b, settings, chatID, userID, memberReqLookupMode{Fresh: true, Classify: true})
 	broken |= lookupBroken
+	lookedUp = touch.touched.Load()
 	if broken != 0 {
-		return &memberReqFixedResult{Text: memberReqStillBrokenText(tr, broken), Alert: true}
+		return &memberReqFixedResult{Text: memberReqStillBrokenText(tr, broken), Alert: true}, lookedUp
 	}
 	if unknown {
 		log.Warnf("[MemberReq] a lookup for the fix of user %d in chat %d could not be answered, so nothing changed", userID, chatID)
-		return &memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_check_failed"), Alert: true}
+		return &memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_check_failed"), Alert: true}, lookedUp
 	}
-	return nil
+	return nil, lookedUp
 }
 
 // memberReqFixedTake deletes the hold by its ID, chat and member in one conditional statement,

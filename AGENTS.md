@@ -358,7 +358,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `getChatMember(channel, bot)`: a definite non-administrator status or a 400 or 403 makes the channel rule inert (not broken,
   no answer of its own), and a 429, a shed, a 5xx, a transport error, a timeout or an administrator bot stays unknown;
   (6) and (7) `getChat` and `resolveUnmutePermissionsWithLockdown` through `memberReqUnmutePermissions`,
-  both before the hold is touched, any error being `mreq_fixed_check_failed` with nothing changed; (8) the conditional delete
+  both before the hold is touched, any error being `mreq_fixed_check_failed` with nothing changed; (7b) Phase 14 review
+  WR-04: when the fresh lookups of step 5 went beyond the cache (a flight was started or joined, `memberReqFixedJudge`'s second
+  result), the live record is read once more through `memberReqLiveMember` right before the take and must still show the marker
+  (`isMemberReqMute` against the hold's `mute_until`: an admin's `/mute` that landed during the lookups replaced it and is
+  answered `mreq_fixed_not_ours`, never lifted; a read that fails is `mreq_fixed_check_failed`), with nothing changed either way
+  and no extra request when step 5 made none (an approved member, a name-only group, all-cached lookups). The press's worst
+  case is the hold read, the live record, the lookups (capped at 5 s), the permissions, this read, the lift and the edit, inside
+  its 10 s; (8) the conditional delete
   `memberreq.TakeHoldByID`, on a context that survives the press's deadline, so of two taps on two replicas one wins and the
   other gets `mreq_fixed_stale`; (9) `memberReqLiftMute` with exactly those permissions, never `MutedPermissions`, and when it
   fails `memberreq.RestoreHold` puts the row back with the same ID, notice ID and every other column and the answer is
