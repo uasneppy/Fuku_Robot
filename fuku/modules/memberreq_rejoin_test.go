@@ -506,9 +506,13 @@ func TestMemberReqJoinAndMessageOnce(t *testing.T) {
 		member := env.mreqMember("Alex", "", "alex")
 		replica := env.mreqReplica(member)
 
+		// The join's date is taken before the message is sent, as Telegram dates a join that the
+		// bot processes after the member's first message: a second boundary between the hold's
+		// claim and a join dated "now" would make the reset read the hold as an earlier membership's.
+		joinDate := time.Now().Unix()
 		replica.mreqSend(member, "hello")
 		memberReqJobs.wait()
-		env.mreqJoinNow(member)
+		env.mreqJoinAt(member, joinDate)
 
 		if row := env.mreqWarnRow(member.Id); row == nil || row.NumWarns != 1 {
 			t.Fatalf("warns row = %+v, want one warn", row)
@@ -524,12 +528,13 @@ func TestMemberReqJoinAndMessageOnce(t *testing.T) {
 		member := env.mreqMember("Alex", "", "alex")
 		replica := env.mreqReplica(member)
 
+		joinDate := time.Now().Unix() // taken before either delivery, see the subtest above
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 			replica.mreqSend(member, "hello")
 		}()
-		env.mreqJoinNow(member)
+		env.mreqJoinAt(member, joinDate)
 		<-done
 		memberReqJobs.wait()
 
