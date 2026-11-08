@@ -13,10 +13,12 @@ import (
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/error_handling"
+	"github.com/uasneppy/fuku_robot/fuku/utils/namecanon"
 	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
 
@@ -156,41 +158,127 @@ func memberReqCleanMember(ctx context.Context, chatID, userID, msgDate int64, se
 	memberReqClean(ctx, chatID, userID, time.Unix(msgDate, 0), value)
 }
 
-// memberReqLookupRulesOn reports which lookup rules the group has on (their action is not Off).
-func memberReqLookupRulesOn(settings *models.ChatRequirements) (photo, channel bool) {
-	return memberreq.ActionOf(settings, memberreq.RulePhoto) != models.RequirementActionOff,
-		memberreq.ActionOf(settings, memberreq.RuleChannel) != models.RequirementActionOff
+// memberReqLookupRules says which lookup rules the watcher has to read for a group: the photo and
+// channel rules when their action is not Off, and the AI rule only while it is live (its action
+// is not Off and the process is configured: an unconfigured stored value counts as Off here, or
+// every message of every member would start a job for ever).
+type memberReqLookupRules struct {
+	Photo, Channel, AI bool
+}
+
+// any reports whether at least one lookup rule is on.
+func (r memberReqLookupRules) any() bool {
+	return r.Photo || r.Channel || r.AI
+}
+
+// memberReqLookupRulesOf reads the lookup rules that are on for settings.
+func memberReqLookupRulesOf(settings *models.ChatRequirements) memberReqLookupRules {
+	return memberReqLookupRules{
+		Photo:   memberreq.ActionOf(settings, memberreq.RulePhoto) != models.RequirementActionOff,
+		Channel: memberreq.ActionOf(settings, memberreq.RuleChannel) != models.RequirementActionOff,
+		AI:      memberReqAILive(settings),
+	}
+}
+
+// memberReqAIWatchRead is the three commands the watcher queued for the AI rule on its pipeline
+// and the names hash the decision compares with. A zero value (no commands) is the AI rule not
+// being read, or a member whose names cannot be judged: it is satisfied.
+type memberReqAIWatchRead struct {
+	verdict, baseline, marker *redis.StringCmd
+	hash                      string
+}
+
+// memberReqAIWatchQueue adds the AI rule's three single-key GETs to the watcher's pipeline:
+// fuku:memberreq:nv:<verdict key hash>, fuku:memberreq:nm:<user> and fuku:memberreq:nu:<chat>:<user>.
+// The canonical names and the verdict key are computed by pure Go (namecanon, with the configured
+// model). For names the rule never judges nothing is queued and the zero value is returned,
+// which is satisfied with no key read. It queues reads only; it writes nothing and calls nobody.
+func memberReqAIWatchQueue(ctx context.Context, pipe redis.Pipeliner, chatID, userID int64, names memberReqNames) memberReqAIWatchRead {
+	canon, ok := namecanon.Of(names.First, names.Last, names.Username)
+	if !ok {
+		return memberReqAIWatchRead{}
+	}
+	return memberReqAIWatchRead{
+		verdict:  pipe.Get(ctx, memberReqAIVerdictKey(config.AppConfig.AnthropicModel, canon)),
+		baseline: pipe.Get(ctx, memberReqAIBaselineKey(userID)),
+		marker:   pipe.Get(ctx, memberReqAIMarkerKey(chatID, userID)),
+		hash:     canon.Hash,
+	}
+}
+
+// satisfied reads the queued commands after the pipeline ran: nothing queued is satisfied, any
+// error other than a miss is not (the caller hands the member to a job), otherwise
+// memberReqAIWatchSatisfied decides.
+func (r memberReqAIWatchRead) satisfied() bool {
+	if r.verdict == nil {
+		return true
+	}
+	verdict, _, err := memberReqAIReadCmd(r.verdict)
+	if err != nil {
+		return false
+	}
+	baseline, _, err := memberReqAIReadCmd(r.baseline)
+	if err != nil {
+		return false
+	}
+	_, marker, err := memberReqAIReadCmd(r.marker)
+	if err != nil {
+		return false
+	}
+	return memberReqAIWatchSatisfied(verdict, baseline, marker, r.hash)
+}
+
+// memberReqAIWatchSatisfied is the watcher's decision for the AI rule (D-21), pure: no Redis and
+// no clock. The member needs no job when the cached verdict of their names parses and is below
+// the bar, or when they have no marker and their baseline equals the current names hash. A miss
+// (empty value), a text that does not parse, NaN, an infinity and a value out of range are not a
+// verdict. Known gap, kept on purpose: a member whose baseline equals their names and who has no
+// marker stays satisfied even when another account's judgement of the same string has since
+// cached a breach, because the baseline is the bot's record that these names were accepted for
+// this member (it errs toward not punishing); a job that runs for that member for another reason
+// breaches them through the rule's own order, where the verdict comes first.
+func memberReqAIWatchSatisfied(verdictValue, baseline string, marker bool, hash string) bool {
+	if probability, ok := memberReqAIParseProbability(verdictValue); ok && probability < memberReqAIBar {
+		return true
+	}
+	return !marker && baseline != "" && baseline == hash
 }
 
 // memberReqLookupCached is the watcher's whole read for a member whose names are clean in a
-// group with a lookup rule on. It never calls Telegram: one pipelined round of single-key GETs
-// reads the pass key, fuku:memberreq:photo:<user> when the photo rule is on and
-// fuku:memberreq:lc:<chat> when the channel rule is on, and a second read of
+// group with a lookup rule on. It never calls Telegram or the provider: one pipelined round of
+// single-key GETs reads the pass key, fuku:memberreq:photo:<user> when the photo rule is on,
+// fuku:memberreq:lc:<chat> when the channel rule is on, and the AI rule's verdict, baseline and
+// marker keys while the AI rule is live (memberReqAIWatchQueue), and a second read of
 // fuku:memberreq:sub:<channel>:<user> follows only when lc holds a channel ID, and
 // fuku:memberreq:cna:<channel> after it when the subscription is missing. satisfied is true
-// only when every lookup rule that is on has a cached positive: the photo key exists, and the
-// channel is either known to be none (lc reads 0, nothing to verify), or the subscription key
-// exists, or the channel-level not-administrator fact exists (the rule is inert there). passHit
-// reports whether the pass key held passValue, read in the same round. A missing
-// client, any Redis error, a miss, an unreadable lc and a positive lc (never written) are all
-// "not satisfied": the caller then hands the member to a job, which is correct and only slower.
-// It writes nothing, and the pass hit never stands in for a lookup positive (R2).
-func memberReqLookupCached(settings *models.ChatRequirements, chatID, userID int64, passValue string) (satisfied, passHit bool) {
+// only when every lookup rule that is on is satisfied: the photo key exists; the channel is
+// either known to be none (lc reads 0, nothing to verify), or the subscription key exists, or
+// the channel-level not-administrator fact exists (the rule is inert there); and the AI rule's
+// names are not judgeable or pass memberReqAIWatchSatisfied. passHit reports whether the pass key
+// held passValue, read in the same round. A missing client, any Redis error, a miss, an unreadable
+// lc and a positive lc (never written) are all "not satisfied": the caller then hands the member
+// to a job, which is correct and only slower. It writes nothing, and the pass hit never stands in
+// for a lookup positive (R2).
+func memberReqLookupCached(settings *models.ChatRequirements, chatID, userID int64, passValue string, names memberReqNames) (satisfied, passHit bool) {
 	client := memberReqRedisClient()
 	if client == nil {
 		return false, false
 	}
-	photoOn, channelOn := memberReqLookupRulesOn(settings)
+	rules := memberReqLookupRulesOf(settings)
 	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
 	defer cancel()
 	pipe := client.Pipeline()
 	passCmd := pipe.Get(ctx, memberReqPassKey(chatID, userID))
 	var photoCmd, linkedCmd *redis.StringCmd
-	if photoOn {
+	if rules.Photo {
 		photoCmd = pipe.Get(ctx, memberReqPhotoKey(userID))
 	}
-	if channelOn {
+	if rules.Channel {
 		linkedCmd = pipe.Get(ctx, memberReqLinkedKey(chatID))
+	}
+	var aiRead memberReqAIWatchRead
+	if rules.AI {
+		aiRead = memberReqAIWatchQueue(ctx, pipe, chatID, userID, names)
 	}
 	// Exec reports the first command's error, a miss included, so every command is read on its own.
 	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
@@ -201,12 +289,15 @@ func memberReqLookupCached(settings *models.ChatRequirements, chatID, userID int
 		return false, false
 	}
 	passHit = err == nil && stored == passValue
-	if photoOn {
+	if !aiRead.satisfied() {
+		return false, passHit
+	}
+	if rules.Photo {
 		if _, err := photoCmd.Result(); err != nil {
 			return false, passHit
 		}
 	}
-	if channelOn {
+	if rules.Channel {
 		channel, ok := memberReqCachedChannel(linkedCmd)
 		if !ok {
 			return false, passHit
@@ -257,12 +348,12 @@ func memberReqStartJob(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message,
 // predicate then runs as before. Otherwise the member is handed to one job, which asks Telegram:
 // the watcher never does, never classifies and never writes a verdict of any kind.
 func memberReqWatchClean(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message, userID int64, settings *models.ChatRequirements, names memberReqNames) {
-	if photoOn, channelOn := memberReqLookupRulesOn(settings); !photoOn && !channelOn {
+	if !memberReqLookupRulesOf(settings).any() {
 		memberReqCleanMember(ctx, chat.Id, userID, msg.Date, settings, names)
 		return
 	}
 	value := memberReqPassValue(settings, names)
-	satisfied, passHit := memberReqLookupCached(settings, chat.Id, userID, value)
+	satisfied, passHit := memberReqLookupCached(settings, chat.Id, userID, value, names)
 	if satisfied {
 		if !passHit {
 			memberReqClean(ctx, chat.Id, userID, time.Unix(msg.Date, 0), value)

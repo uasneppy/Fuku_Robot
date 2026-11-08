@@ -285,7 +285,7 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	touch := &memberReqLookupTouch{}
 	lookupCtx = context.WithValue(lookupCtx, memberReqLookupTouchKey{}, touch)
 	lookupStart := time.Now()
-	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{Names: &names})
+	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{Names: &names, Joining: c.Source == memberReqFromJoin})
 	broken |= lookupMask
 	// WR-03 and SEC-02: the record and the exemptions above were read before the lookup phase, which
 	// can take seconds under a loaded pacer. When the phase went beyond the cache (a request was made

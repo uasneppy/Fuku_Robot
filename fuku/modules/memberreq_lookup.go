@@ -54,6 +54,11 @@ type memberReqLookupMode struct {
 	// judges names (the AI rule; the photo and channel rules ignore them). A nil value means the
 	// caller has no names to give, and the AI rule is then unknown, never a breach.
 	Names *memberReqNames
+	// Joining is true only for the synchronous join entry's executor run. A joiner is a new
+	// membership, so the AI rule judges them at once and ignores the baseline (a rejoiner's old
+	// baseline says nothing about this membership); every other caller is judged by the marker and
+	// the baseline.
+	Joining bool
 }
 
 const (

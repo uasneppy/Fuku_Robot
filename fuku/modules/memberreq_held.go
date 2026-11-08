@@ -30,8 +30,10 @@ import (
 // A hold with name bits only needs no lookup, so a member who fixed their name is released here
 // exactly as the watcher's clean path released them before the lookup rules existed.
 //
-// The lookups run with memberReqLookupMode{Classify: true} (an unanswerable channel lookup is
-// inert when the bot is shown to be no administrator of the channel), under
+// The lookups run with memberReqLookupMode{Classify: true, Names: ...} (an unanswerable channel
+// lookup is inert when the bot is shown to be no administrator of the channel; the names are the
+// sender's current ones, which the AI rule judges, so a Warn hold carrying bit 128 is released
+// once the member renames to an ordinary name, and no other hold ever makes an AI request), under
 // memberReqLookupJobBudget, and a pass is cached by the lookup itself; a missing photo or
 // subscription is never cached, so a held member still lacking one costs one paced lookup per
 // message (D-24, accepted).
@@ -74,11 +76,14 @@ func memberReqHeldReleased(ctx context.Context, b *gotgbot.Bot, c memberReqCase,
 func memberReqHeldLookupsClear(ctx context.Context, b *gotgbot.Bot, c memberReqCase, settings *models.ChatRequirements, holdRules int) bool {
 	lookupCtx, cancel := context.WithTimeout(ctx, memberReqLookupJobBudget)
 	defer cancel()
+	// The sender's current names (Telegram stamps them on every message) are what the AI rule
+	// judges; the photo and channel rules ignore them. Only a hold that carries bit 128 asks it.
+	names := memberReqNamesOf(c.User)
 	for _, rule := range memberReqRules {
 		if rule.Lookup == nil || holdRules&rule.Bit == 0 || memberreq.ActionOf(settings, rule.Store) == models.RequirementActionOff {
 			continue
 		}
-		switch rule.Lookup(lookupCtx, b, c.Chat.Id, c.User.Id, memberReqLookupMode{Classify: true}) {
+		switch rule.Lookup(lookupCtx, b, c.Chat.Id, c.User.Id, memberReqLookupMode{Classify: true, Names: &names}) {
 		case memberReqPass, memberReqInert:
 		default:
 			return false

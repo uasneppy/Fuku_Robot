@@ -64,7 +64,10 @@ func memberReqHoldWelcome(ctx context.Context, chatID, userID int64, hold *model
 // With a rule on, the member's hold is read fresh first: a punished requirement mute (a member
 // who posted before their captcha attempt existed, the D-08 race) records the held welcome and
 // sends none, whatever Check on join says. With Check on join off the member is welcomed with no
-// further read. Otherwise memberReqEnforce runs synchronously with one live getChatMember: a kick
+// further read, except that while the AI rule is live (memberReqAILive) the join entry first sets
+// the member's new-member marker, so the rule judges a joiner whose join call was unanswered, or
+// who joined with Check on join off, at their first message instead of baselining them (D-21).
+// Otherwise memberReqEnforce runs synchronously with one live getChatMember: a kick
 // or ban sends no welcome, a mute sends none and has stored welcome_held on its hold, a warn posts
 // its notice and the usual welcome follows, and a clean, exempt or unanswerable member is welcomed.
 // Logs carry IDs and outcomes only.
@@ -96,6 +99,11 @@ func memberReqJoinThenWelcome(bot *gotgbot.Bot, ctx *ext.Context, user gotgbot.U
 	if memberReqPunishedMute(hold) {
 		memberReqHoldWelcome(runCtx, chat.Id, user.Id, hold)
 		return nil
+	}
+	// A joiner is new whether or not Check on join is on: the marker makes the AI rule judge them at
+	// this join or, when no answer came, at their first message, never baseline them (D-21).
+	if memberReqAILive(settings) {
+		memberReqAIMarkJoin(runCtx, chat.Id, user.Id)
 	}
 	if !settings.CheckOnJoin {
 		return welcome()
