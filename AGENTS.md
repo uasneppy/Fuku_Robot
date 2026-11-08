@@ -1213,7 +1213,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   there with nothing punished or posted; one live
   `getChatMember` through `memberReqPaced`, which is the admin check (creator, administrator, left, kicked, a restricted
   non-member and bots are never punished) and the source of the names the rules judge; the strictest of the broken rules
-  whose punishment is not Off; the chat's per-minute cap, counted before the claim; the claim of the hold before any punishment (`memberreq.ClaimHold`, or
+  whose punishment is not Off; then, when that strictest punishment is a Mute and the live record is `restricted` with no
+  marker of this episode (the stale hold's marker that `memberReqLiveMarker` adopts is the one exception), the one
+  paced `getChat` of `memberReqUnmutePermissions` reads the group's defaults and `memberReqRestrictedBelow` asks whether
+  the member lacks a right the group grants: if so the restriction is someone else's (an admin's `/mute`, a partial
+  media restriction, a staff mute) and `memberReqMuteOverRestriction` refuses the mute (CR-01), because
+  `restrictChatMember` replaces the whole restriction and the later lift ("I fixed it", the rejoin reset, the undelivered
+  notice lift) would free the member of it. The refusal returns `memberReqNone` with no hold, no notice, no delete and no
+  further Telegram call and logs one Info line with the chat and user IDs; a `getChat` that fails refuses too (nothing is
+  replaced on a guess). A member restricted only to the group's own defaults (what the captcha, `/unmute` and the
+  requirement lifts leave in a group whose defaults are restrictive) lacks nothing and is muted as before. Only Mute is
+  refused: Warn leaves the restriction intact, Kick and Ban remove the member, so all three still act on a restricted
+  member, and a partially restricted member who breaks a Mute rule is not muted (the owner uses Warn, Kick or Ban for
+  such groups); the chat's per-minute cap, counted before the claim; the claim of the hold before any punishment (`memberreq.ClaimHold`, or
   `ReclaimStaleHold` for a pending hold older than two minutes); then the punishment and one notice. Never use
   `IsUserAdmin`, `IsUserApproved` or `aispamCarvedOut` there. A warn goes through `applyWarn` with the hold marked
   punished in its `afterRecord` hook, inside the warn lock right after the warn is stored, so a recorded warn and a

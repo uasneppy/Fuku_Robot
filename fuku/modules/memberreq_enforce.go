@@ -451,12 +451,15 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //     only when the cached admin list knows the sender as a non-admin, with no Telegram call;
 //  5. one live getChatMember through the pacer, the admin check and the source of the names;
 //  6. the rules on the live names, the strictest punishment of the broken ones;
-//  7. the chat's per-minute cap, counted before the claim (memberReqCapAllow): over it nothing
+//  7. a Mute over a restriction someone else placed (the member is restricted below the group's
+//     defaults and carries no marker of this episode) places no mute, creates no hold, posts
+//     nothing and deletes nothing; the other punishments still apply;
+//  8. the chat's per-minute cap, counted before the claim (memberReqCapAllow): over it nothing
 //     is punished, the pause starts and the message is deleted (the live lookup showed a
 //     non-admin);
-//  8. the claim of the hold, before any punishment (one winner across replicas); a reclaimed
+//  9. the claim of the hold, before any punishment (one winner across replicas); a reclaimed
 //     mute whose marker is already live is adopted, not applied again;
-//  9. the punishment, then the one notice. A punishment Telegram refuses backs the hold off
+//  10. the punishment, then the one notice. A punishment Telegram refuses backs the hold off
 //     and posts nothing (memberReqSendFailed). Then, with Delete messages on, the message is
 //     deleted whatever became of the punishment.
 func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memberReqResult {
@@ -484,12 +487,15 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	if !ok {
 		return memberReqResult{}
 	}
+	action := memberReqStrictest(c.Settings, broken)
+	keepUntil := memberReqLiveMarker(stale, member, action)
+	if memberReqMuteOverRestriction(ctx, b, c, member, action, keepUntil) {
+		return memberReqResult{}
+	}
 	if !memberReqCapAllow(ctx, b, c.Chat.Id) {
 		memberReqDeleteMessage(ctx, b, c)
 		return memberReqResult{}
 	}
-	action := memberReqStrictest(c.Settings, broken)
-	keepUntil := memberReqLiveMarker(stale, member, action)
 	hold, won := memberReqTakeHold(ctx, c, stale, broken, action, keepUntil)
 	var result memberReqResult
 	switch {
@@ -578,6 +584,62 @@ func memberReqLiveMarker(stale *models.ChatRequirementHold, live gotgbot.MergedC
 		return stale.MuteUntil
 	}
 	return 0
+}
+
+// memberReqRestrictedBelow reports whether a restricted member lacks a right that perms grants,
+// that is, whether their restriction takes something away from what the group gives everyone.
+// A member lifted to the group's own defaults (by the captcha, an admin's /unmute or a
+// requirement lift) is still read as restricted in a group whose defaults are themselves
+// restrictive, yet nothing is restricted beyond the defaults, so that is not a restriction
+// someone placed. The rights compared are the plain ones both records carry.
+func memberReqRestrictedBelow(live gotgbot.MergedChatMember, perms gotgbot.ChatPermissions) bool {
+	for _, right := range [][2]bool{
+		{perms.CanSendMessages, live.CanSendMessages},
+		{perms.CanSendAudios, live.CanSendAudios},
+		{perms.CanSendDocuments, live.CanSendDocuments},
+		{perms.CanSendPhotos, live.CanSendPhotos},
+		{perms.CanSendVideos, live.CanSendVideos},
+		{perms.CanSendVideoNotes, live.CanSendVideoNotes},
+		{perms.CanSendVoiceNotes, live.CanSendVoiceNotes},
+		{perms.CanSendPolls, live.CanSendPolls},
+		{perms.CanSendOtherMessages, live.CanSendOtherMessages},
+		{perms.CanAddWebPagePreviews, live.CanAddWebPagePreviews},
+		{perms.CanChangeInfo, live.CanChangeInfo},
+		{perms.CanInviteUsers, live.CanInviteUsers},
+		{perms.CanPinMessages, live.CanPinMessages},
+	} {
+		if right[0] && !right[1] {
+			return true
+		}
+	}
+	return false
+}
+
+// memberReqMuteOverRestriction reports whether a mute of the live member would replace a
+// restriction the requirements did not place (CR-01): the action is a mute, the member is
+// restricted, no marker of this episode is live on them (keepUntil is zero: the stale hold's
+// marker, adopted through memberReqLiveMarker, is ours) and the restriction takes a right away
+// from the group's defaults. restrictChatMember replaces the whole restriction, so the mute
+// would overwrite an admin's or staff member's, and the lift (the button, the rejoin reset)
+// would then free the member of it. The group's defaults are one paced getChat, read only on
+// this path; when they cannot be read the answer is true, so nothing is replaced on a guess.
+// Warn, kick and ban never reach this: a warn leaves the restriction alone and the other two
+// remove the member.
+func memberReqMuteOverRestriction(ctx context.Context, b *gotgbot.Bot, c memberReqCase, live gotgbot.MergedChatMember, action int, keepUntil int64) bool {
+	if action != models.RequirementActionMute || live.Status != gotgbot.ChatMemberStatusRestricted || keepUntil != 0 {
+		return false
+	}
+	perms, _, err := memberReqUnmutePermissions(ctx, b, c.Chat.Id)
+	if err != nil {
+		log.Warnf("[MemberReq] the group defaults of chat %d are unknown, so no requirement mute is placed over the restriction of user %d: %s",
+			c.Chat.Id, c.User.Id, memberReqErrText(err))
+		return true
+	}
+	if !memberReqRestrictedBelow(live, perms) {
+		return false
+	}
+	log.Infof("[MemberReq] user %d in chat %d is already restricted by someone else, so no requirement mute is placed", c.User.Id, c.Chat.Id)
+	return true
 }
 
 // memberReqUntilMatches reports whether a live restriction end date is the stored marker,

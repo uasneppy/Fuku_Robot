@@ -822,6 +822,59 @@ func TestMemberReqMuteNeverReplacesRestriction(t *testing.T) {
 		})
 	}
 
+	t.Run("a restriction that only equals the group's defaults is not someone else's", func(t *testing.T) {
+		// A group whose defaults are restrictive keeps a member the captcha, an admin's /unmute or a
+		// requirement lift restored to those defaults as "restricted", yet nothing is taken away.
+		env := newMemberReqEnv(t)
+		env.fake.setChatPermsRaw(env.chat.Id, `{"can_send_messages":true,"can_pin_messages":true}`)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		member := env.mreqMember("Alex", "", "alex")
+		defaults := gotgbot.ChatPermissions{CanSendMessages: true, CanPinMessages: true}
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true, Perms: &defaults,
+		})
+
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqMuted {
+			t.Fatalf("outcome = %+v, want Muted (a member at the group's defaults loses nothing to the mute)", got)
+		}
+	})
+
+	t.Run("a restriction below the group's defaults is someone else's", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.fake.setChatPermsRaw(env.chat.Id, `{"can_send_messages":true,"can_pin_messages":true}`)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		member := env.mreqMember("Alex", "", "alex")
+		partial := gotgbot.ChatPermissions{CanSendMessages: true}
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true, Perms: &partial,
+		})
+
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqNone {
+			t.Fatalf("outcome = %+v, want None (the pin right the admin took away is theirs)", got)
+		}
+		if n := env.mreqCallCount("restrictChatMember"); n != 0 {
+			t.Errorf("restrict calls = %d, want none", n)
+		}
+	})
+
+	t.Run("a group whose defaults cannot be read gets no mute over a restriction", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+		member := env.mreqMember("Alex", "", "alex")
+		env.mreqRestrictedBySomeoneElse(member, 0)
+		env.fake.script("getChat", env.chat.Id, staffFakeError(502, "Bad Gateway"))
+
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqNone {
+			t.Fatalf("outcome = %+v, want None (an unknown default fails closed)", got)
+		}
+		if n := env.mreqCallCount("restrictChatMember"); n != 0 {
+			t.Errorf("restrict calls = %d, want none", n)
+		}
+		if hold := env.mreqHold(member.Id); hold != nil {
+			t.Errorf("hold = %+v, want none", hold)
+		}
+	})
+
 	t.Run("a stale mute hold whose marker is live on the member is adopted", func(t *testing.T) {
 		mreqShortenStale(t, 50*time.Millisecond)
 		env := newMemberReqEnv(t)
