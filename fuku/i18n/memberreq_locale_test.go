@@ -22,7 +22,7 @@ type memberReqLimit struct {
 }
 
 // memberReqLocaleLimits is the "Max EN" and "Max other" columns of the UI-SPEC "New mreq_
-// keys" table (rows 1 to 29). The test fails when it does not cover exactly the mreq_ keys
+// keys" table (rows 1 to 31). The test fails when it does not cover exactly the mreq_ keys
 // of every locale file, so a plan that adds a key adds its row.
 var memberReqLocaleLimits = map[string]memberReqLimit{
 	"mreq_rule_lastname":           {18, 24},
@@ -32,6 +32,7 @@ var memberReqLocaleLimits = map[string]memberReqLimit{
 	"mreq_rule_chinese":            {20, 27},
 	"mreq_rule_photo":              {26, 32},
 	"mreq_rule_channel":            {30, 38},
+	"mreq_rule_ai":                 {22, 30},
 	"mreq_name_unknown":            {16, 24},
 	"mreq_notice_warn":             {110, 154},
 	"mreq_notice_warn_limit_kick":  {120, 168},
@@ -46,6 +47,7 @@ var memberReqLocaleLimits = map[string]memberReqLimit{
 	"mreq_fixed_done":              {50, 70},
 	"mreq_fixed_done_lockdown":     {110, 160},
 	"mreq_remedy_photo":            {62, 84},
+	"mreq_remedy_ai":               {72, 100},
 	"mreq_fixed_still_broken":      {60, 70},
 	"mreq_fixed_still_broken_many": {80, 112},
 	"mreq_fixed_not_yours":         {80, 112},
@@ -56,14 +58,15 @@ var memberReqLocaleLimits = map[string]memberReqLimit{
 	"mreq_notice_paused":           {190, 266},
 }
 
-// memberReqRulePhrases are the seven rule phrases that fill {rules}, in rule order.
+// memberReqRulePhrases are the eight rule phrases that fill {rules}, in rule order.
 var memberReqRulePhrases = []string{
 	"mreq_rule_lastname", "mreq_rule_username", "mreq_rule_russian", "mreq_rule_arabic", "mreq_rule_chinese",
-	"mreq_rule_photo", "mreq_rule_channel",
+	"mreq_rule_photo", "mreq_rule_channel", "mreq_rule_ai",
 }
 
-// memberReqRemedyNoticeKeys are the notices that carry the photo remedy sentence after one
-// space when the photo rule is among the broken ones.
+// memberReqRemedyNoticeKeys are the notices that carry the remedy sentences (the photo one,
+// the AI one, or both in rule order) after one space each when those rules are among the
+// broken ones.
 var memberReqRemedyNoticeKeys = []string{"mreq_notice_warn", "mreq_notice_kick", "mreq_notice_mute"}
 
 // memberReqStillBrokenPhrases is how many phrases the still-broken alert lists before it
@@ -78,7 +81,9 @@ var memberReqAnswerKeys = []string{
 }
 
 // memberReqNoticeKeys are the group notices and their edits: one paragraph each, at most
-// 520 code points of visible text once rendered with the worst case name (amendment M10).
+// 520 code points of visible text once rendered with the worst case name and every tail. The
+// ceilings no longer prove that cap (at every ceiling the sum is 636): the rendered check over
+// the real translations does (amendments M10, M18).
 var memberReqNoticeKeys = []string{
 	"mreq_notice_warn", "mreq_notice_warn_limit_kick", "mreq_notice_warn_limit_ban",
 	"mreq_notice_warn_limit_mute", "mreq_notice_kick", "mreq_notice_ban", "mreq_notice_mute",
@@ -90,6 +95,7 @@ const (
 	memberReqStillBrokenEn    = 160
 	memberReqStillBrokenOther = 200
 	memberReqNoticeMax        = 520
+	memberReqWarnReasonMax    = 300
 	memberReqFixedPrefix      = "✅ "
 	// memberReqNameRunes is the longest name a notice carries: 64 runes plus the two
 	// Unicode isolates U+2068 and U+2069 the mention adds around it.
@@ -108,22 +114,22 @@ func memberReqKeys(data map[string]any) map[string]struct{} {
 }
 
 // memberReqRender splices the worst case values into a template the way the bot does after
-// translation: a 66 code point name, two digit numbers and the seven rule phrases of the
-// language joined by ", ". A non-empty tail is appended after one space before the splice,
-// as memberReqNoticeText does for the photo remedy.
-func memberReqRender(t *testing.T, lang string, data map[string]any, key, tail string) string {
+// translation: a 66 code point name, two digit numbers and the eight rule phrases of the
+// language joined by ", ". Each tail is appended after one space, in the order given, before
+// the splice, as memberReqNoticeText does for the remedy sentences (photo, then AI).
+func memberReqRender(t *testing.T, lang string, data map[string]any, key string, tails []string) string {
 	t.Helper()
 	phrases := make([]string, 0, len(memberReqRulePhrases))
 	for _, phrase := range memberReqRulePhrases {
 		phrases = append(phrases, settingsLocaleString(t, lang, data, phrase))
 	}
-	return memberReqSplice(settingsLocaleString(t, lang, data, key), tail, phrases)
+	return memberReqSplice(settingsLocaleString(t, lang, data, key), tails, phrases)
 }
 
 // memberReqSplice fills the placeholders of one template with the worst case values and the
-// given phrases.
-func memberReqSplice(template, tail string, phrases []string) string {
-	if tail != "" {
+// given phrases, after appending every tail behind one space.
+func memberReqSplice(template string, tails, phrases []string) string {
+	for _, tail := range tails {
 		template += " " + tail
 	}
 	replacer := strings.NewReplacer(
@@ -154,7 +160,8 @@ func memberReqLongestPhrases(t *testing.T, lang string, data map[string]any, cou
 // check-translations only sees keys that are literal GetString arguments, and these keys
 // have no Go reader until the notice and button plans, so it cannot catch a key that is
 // missing, empty, over its ceiling, carrying markup or a renamed placeholder. The rendered
-// checks are the binding ones: the ceilings only make them satisfiable.
+// checks over the real translations are the binding ones: the ceilings no longer prove the
+// 520 cap, because at every ceiling the sum is 636.
 func TestMemberReqLocaleKeys(t *testing.T) {
 	english := loadStaffLocale(t, "en")
 
@@ -233,12 +240,15 @@ func TestMemberReqLocaleKeys(t *testing.T) {
 }
 
 // memberReqRenderedFailures runs the binding rendered-length checks of one language: the
-// still-broken alert with the four longest phrases, the count answer at n 99, and every
-// notice with a 66 code point name and all seven phrases, the three remedy notices also
-// with the photo remedy after one space.
+// still-broken alert with the four longest phrases, the count answer at n 99, the warn
+// reason with all eight phrases, and every notice with a 66 code point name and all eight
+// phrases, the three remedy notices also with the photo remedy, the AI remedy and both, each
+// after one space and in rule order.
 func memberReqRenderedFailures(t *testing.T, lang string, data map[string]any) []string {
 	t.Helper()
-	required := append([]string{"mreq_fixed_still_broken", "mreq_fixed_still_broken_many", "mreq_remedy_photo"}, memberReqNoticeKeys...)
+	required := append([]string{
+		"mreq_fixed_still_broken", "mreq_fixed_still_broken_many", "mreq_remedy_photo", "mreq_remedy_ai", "mreq_warn_reason",
+	}, memberReqNoticeKeys...)
 	required = append(required, memberReqRulePhrases...)
 	for _, key := range required {
 		if _, ok := data[key].(string); !ok {
@@ -253,23 +263,34 @@ func memberReqRenderedFailures(t *testing.T, lang string, data map[string]any) [
 		stillBrokenMax = memberReqStillBrokenEn
 	}
 	longest := memberReqLongestPhrases(t, lang, data, memberReqStillBrokenPhrases)
-	stillBroken := memberReqSplice(settingsLocaleString(t, lang, data, "mreq_fixed_still_broken"), "", longest)
+	stillBroken := memberReqSplice(settingsLocaleString(t, lang, data, "mreq_fixed_still_broken"), nil, longest)
 	if runes := utf8.RuneCountInString(stillBroken); runes > stillBrokenMax {
 		failures = append(failures, fmt.Sprintf("%s: mreq_fixed_still_broken rendered with the four longest phrases has %d characters, ceiling %d", lang, runes, stillBrokenMax))
 	}
-	many := memberReqSplice(settingsLocaleString(t, lang, data, "mreq_fixed_still_broken_many"), "", nil)
+	many := memberReqSplice(settingsLocaleString(t, lang, data, "mreq_fixed_still_broken_many"), nil, nil)
 	if runes := utf8.RuneCountInString(many); runes > memberReqAnswerMax {
 		failures = append(failures, fmt.Sprintf("%s: mreq_fixed_still_broken_many rendered at n 99 has %d characters, ceiling %d", lang, runes, memberReqAnswerMax))
 	}
-	remedy := settingsLocaleString(t, lang, data, "mreq_remedy_photo")
+	reason := memberReqRender(t, lang, data, "mreq_warn_reason", nil)
+	if runes := utf8.RuneCountInString(reason); runes > memberReqWarnReasonMax {
+		failures = append(failures, fmt.Sprintf("%s: mreq_warn_reason rendered with all eight phrases has %d characters, ceiling %d", lang, runes, memberReqWarnReasonMax))
+	}
+	photo := settingsLocaleString(t, lang, data, "mreq_remedy_photo")
+	ai := settingsLocaleString(t, lang, data, "mreq_remedy_ai")
 	for _, key := range memberReqNoticeKeys {
-		if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key, "")); runes > memberReqNoticeMax {
+		if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key, nil)); runes > memberReqNoticeMax {
 			failures = append(failures, fmt.Sprintf("%s: %s rendered with the worst case has %d characters, ceiling %d", lang, key, runes, memberReqNoticeMax))
 		}
 	}
+	tails := []struct {
+		name  string
+		tails []string
+	}{{"the photo remedy", []string{photo}}, {"the AI remedy", []string{ai}}, {"the photo and AI remedies", []string{photo, ai}}}
 	for _, key := range memberReqRemedyNoticeKeys {
-		if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key, remedy)); runes > memberReqNoticeMax {
-			failures = append(failures, fmt.Sprintf("%s: %s rendered with the worst case and the photo remedy has %d characters, ceiling %d", lang, key, runes, memberReqNoticeMax))
+		for _, tail := range tails {
+			if runes := utf8.RuneCountInString(memberReqRender(t, lang, data, key, tail.tails)); runes > memberReqNoticeMax {
+				failures = append(failures, fmt.Sprintf("%s: %s rendered with the worst case and %s has %d characters, ceiling %d", lang, key, tail.name, runes, memberReqNoticeMax))
+			}
 		}
 	}
 	return failures
