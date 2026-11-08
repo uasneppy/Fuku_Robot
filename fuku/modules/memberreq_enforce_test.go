@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
@@ -1067,6 +1068,51 @@ func TestMemberReqWarnRecovery(t *testing.T) {
 		}
 		if again := env.mreqEnforce(env.mreqCase(member)); again.Outcome != memberReqHeld {
 			t.Errorf("next case = %+v, want Held", again)
+		}
+	})
+
+	t.Run("the note is dropped once the hold is punished and never matches another hold", func(t *testing.T) {
+		mreqShortenStale(t, 50*time.Millisecond)
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		member := env.mreqMember("Alex", "", "alex")
+		failingMark(t, 3)
+		env.mreqEnforce(env.mreqCase(member))
+		key := memberReqWarnedKey(env.chat.Id, member.Id)
+		client := memberReqRedisClient()
+		if client == nil {
+			t.Fatal("no Redis in the test environment")
+		}
+		if n, err := client.Exists(context.Background(), key).Result(); err != nil || n != 1 {
+			t.Fatalf("warn note after the failed marks = %d, %v, want it kept", n, err)
+		}
+		pending := env.mreqHold(member.Id)
+		if memberReqWarnedNoted(context.Background(), memberReqCase{Chat: env.chat, User: member}, &models.ChatRequirementHold{ID: pending.ID + 1}) {
+			t.Error("the note names another hold's ID and still matched")
+		}
+
+		time.Sleep(80 * time.Millisecond)
+		env.mreqEnforce(env.mreqCase(member))
+		if n, err := client.Exists(context.Background(), key).Result(); err != nil || n != 0 {
+			t.Errorf("warn note after the adoption = %d, %v, want it dropped", n, err)
+		}
+	})
+
+	t.Run("without Redis the reclaim warns again, which is accepted", func(t *testing.T) {
+		mreqShortenStale(t, 50*time.Millisecond)
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		member := env.mreqMember("Alex", "", "alex")
+		mreqSwap(t, &memberReqRedisClient, func() *redis.Client { return nil })
+		failingMark(t, 3)
+
+		env.mreqEnforce(env.mreqCase(member))
+		time.Sleep(80 * time.Millisecond)
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqWarned {
+			t.Fatalf("reclaim = %+v, want Warned again (no note to find)", got)
+		}
+		if row := env.mreqWarnRow(member.Id); row == nil || row.NumWarns != 2 {
+			t.Errorf("warns = %+v, want two", row)
 		}
 	})
 

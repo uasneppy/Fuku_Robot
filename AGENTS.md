@@ -1125,6 +1125,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`memberReqPassMaxAge`, so a backlog message cannot hide a later hold from the predicate). It saves the clean `DELETE`, not
   the rules, and a violation is never cached. A Redis error or no Redis is a miss and the predicate runs on every message
   (correct, slower). It sits in the `fuku:memberreq:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps it.
+- `fuku:memberreq:warned:<chat>:<user>` is the recorded-warn note of the member requirements executor
+  (`memberreq_warned.go`, WR-01): the value is the decimal ID of the hold whose warn was just stored, `SET EX` for
+  `memberreq.StaleClaim` plus 10 minutes (`memberReqWarnedGrace`), written inside the warn lock before the hold is marked
+  punished and deleted once the mark landed, so it survives only when the mark failed three times (or the process stopped
+  between the two). `memberReqAdoptRecordedWarn` reads it when a stale pending Warn hold is reclaimed for another Warn and
+  compares the value with the hold's ID, so a note an earlier episode left never matches a later hold. Redis only and best
+  effort (no Redis or a Redis error is "no note", so the reclaim warns again, accepted); it sits in the `fuku:memberreq:*`
+  family, so `CLEAR_CACHE_ON_STARTUP` keeps it.
 - `chat_requirement_holds` (same migration) is one member's requirement episode in one chat, unique on `(chat_id, user_id)`
   (`uk_chat_requirement_holds_chat_user`): both the latch that makes a violation punished once across replicas and the
   record of a mute the bot placed. `memberreq.ClaimHold` is one `INSERT ... ON CONFLICT DO NOTHING` and only the caller whose
@@ -1233,7 +1241,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ReclaimStaleHold` for a pending hold older than two minutes); then the punishment and one notice. Never use
   `IsUserAdmin`, `IsUserApproved` or `aispamCarvedOut` there. A warn goes through `applyWarn` with the hold marked
   punished in its `afterRecord` hook, inside the warn lock right after the warn is stored, so a recorded warn and a
-  punished hold cannot be separated by a reclaim, and the warn module's own reply and Remove warn button are never sent.
+  punished hold are not separated in the normal case, and the warn module's own reply and Remove warn button are never sent.
+  Marking a hold punished (`memberReqMarkPunished`) is tried 3 times (`memberReqMarkAttempts`, `memberReqMarkRetryWait`
+  apart, one detached 5 s record context, the write behind the `memberReqMarkHold` seam). A warn whose mark still fails
+  must never be punished twice (WR-01): `afterRecord` first writes `fuku:memberreq:warned:<chat>:<user>` (value the hold's ID,
+  `StaleClaim` plus 10 minutes, best effort and Redis only: no Redis or a Redis error writes and finds nothing and the
+  reclaim then warns again, accepted) and drops it once the mark landed; the reclaim of a stale pending hold that was a Warn
+  with a Warn action now (`memberReqAdoptRecordedWarn`, after the claim was won) finds the note naming that hold, marks the
+  hold punished (a failure leaves it pending and the next reclaim adopts it again), warns and announces nothing and returns
+  `memberReqHeld`. Kick and ban recover through the leave update and a mute through its live marker, so only the warn
+  needs the note. An `applyWarn` error with `Recorded` true (the limit action ran and the reset failed) is not a failed warn:
+  the hold is marked, `LimitApplied` is set from `LimitReached` and no `LimitErr`, the notice is posted and the outcome is
+  `memberReqWarned` or `memberReqRemoved`; an error before the warn was stored is the backoff below.
   Kick is `kickMemberContext`, ban a `banChatMember` with no end date, mute a `restrictChatMember` with
   `MutedPermissions` and the marker `until_date` (now plus 330 days, `lockdownBanSpan`) stored on the hold before the
   call. The requirement mute is owned by its marker alone (`isMemberReqMute`: restricted, still a member, `until_date`
@@ -2205,6 +2224,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `cache.InvalidateAdminCache`, as the promotion's own update does), drop the chat's admin cache entry in `t.Cleanup`, stop
   the minute clock with `mreqFixedClock` (a swap of `raidNow`) so a window never straddles a minute, and restore
   `memberReqCapPerMinute` and `memberReqRedisClient` with `mreqSwap`.
+  The review fix pass added `TestMemberReqMuteNeverReplacesRestriction` and `TestMemberReqJoinNeverReplacesRestriction`
+  (CR-01, `memberreq_enforce_test.go`, `memberreq_join_test.go`; `mreqRestrictedBySomeoneElse` sets a restricted member
+  record), `TestMemberReqEnforceReadsSettingsAfterLookup` and `TestMemberReqJoinReadsSettingsAgain` (WR-02: a case built
+  from an old snapshot, then the stored row changed, or `memberReqSettingsLookup` swapped), `TestMemberReqWarnRecovery`
+  (WR-01: `memberReqMarkHold` and `memberReqMarkRetryWait` swapped, the Redis note, `memberReqApplyWarn` wrapped to return
+  the reset's error) and `TestMemberReqRejoinResetsPendingMuteHold` (WR-03, `mreqPendingMuteHold`).
   The Phase 13 families in one place. Every `TestMemberReq*` test of `fuku/modules` lives in a `memberreq_*_test.go` file
   (rules and corpus, the executor, the watcher, the join and the captcha guard, the rejoin reset, the notices, the limits,
   the deletes, the failures and the "I fixed it" button: `TestMemberReqFixedUnmutes`, `TestMemberReqFixedRefusals`,

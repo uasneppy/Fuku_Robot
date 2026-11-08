@@ -309,29 +309,59 @@ var memberReqMarkHold = memberreq.MarkHoldPunished
 // so a test can shorten it.
 var memberReqMarkRetryWait = 100 * time.Millisecond
 
-// memberReqMarkPunished stamps the hold punished. A failure is logged and leaves the hold
-// pending, which the two-minute reclaim retries.
-func memberReqMarkPunished(ctx context.Context, c memberReqCase, hold *models.ChatRequirementHold) {
+// memberReqMarkAttempts is how many times a hold is marked punished before it is left pending.
+const memberReqMarkAttempts = 3
+
+// memberReqMarkPunished stamps the hold punished, trying memberReqMarkAttempts times on one
+// detached record context and reporting whether it landed. A final failure is logged and leaves
+// the hold pending, which the two-minute reclaim settles (a warn through its noted marker, a mute
+// through its live marker, a kick or ban through the leave update).
+func memberReqMarkPunished(ctx context.Context, c memberReqCase, hold *models.ChatRequirementHold) bool {
 	recordCtx, cancel := memberReqRecordCtx(ctx)
 	defer cancel()
-	if _, err := memberReqMarkHold(recordCtx, hold.ID); err != nil {
-		log.Errorf("[MemberReq] marking the hold of user %d in chat %d punished failed: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
+	var err error
+	for attempt := 1; attempt <= memberReqMarkAttempts; attempt++ {
+		if _, err = memberReqMarkHold(recordCtx, hold.ID); err == nil {
+			return true
+		}
+		if attempt < memberReqMarkAttempts && !memberReqSleep(recordCtx, memberReqMarkRetryWait) {
+			break
+		}
 	}
+	log.Errorf("[MemberReq] marking the hold of user %d in chat %d punished failed: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
+	return false
 }
 
 // memberReqWarnStep records the warn through the warn module's own path (so it counts toward
 // the group's limit and its action) with the hold marked punished inside the warn lock, right
-// after the warn is stored. It sends no message of the warn module's.
+// after the warn is stored. It sends no message of the warn module's. The warn is noted in Redis
+// first (memberReqNoteWarned), so a hold whose mark fails is never warned a second time by the
+// reclaim. An error with the warn recorded (the limit action ran and a later step failed) is not
+// a failed warn: the hold is marked and the notice still goes out, because the member was warned
+// and may have been removed. Only an error before the warn was stored backs the hold off.
 func memberReqWarnStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, hold *models.ChatRequirementHold) (memberReqOutcome, *warnApplyResult) {
 	reason := memberReqText(tr, "mreq_warn_reason", i18n.TranslationParams{"rules": memberReqRulesText(tr, hold.Rules)})
 	chat := c.Chat
+	marked := false
 	res, err := memberReqApplyWarn(ctx, b, &chat, c.User.Id, reason, func() {
-		memberReqMarkPunished(ctx, c, hold)
+		memberReqNoteWarned(ctx, c, hold)
+		marked = memberReqMarkPunished(ctx, c, hold)
+		if marked {
+			memberReqClearWarned(ctx, c)
+		}
 	})
 	if err != nil {
 		log.Errorf("[MemberReq] warn of user %d in chat %d did not complete (recorded %t): %s", c.User.Id, c.Chat.Id, res.Recorded, memberReqErrText(err))
-		memberReqBackoff(ctx, c, hold)
-		return memberReqNotApplied, nil
+		if !res.Recorded {
+			memberReqBackoff(ctx, c, hold)
+			return memberReqNotApplied, nil
+		}
+		if !marked && memberReqMarkPunished(ctx, c, hold) {
+			memberReqClearWarned(ctx, c)
+		}
+		// applyWarn returns the reset's error after the limit action took effect, with LimitApplied
+		// still false: the removal or mute happened, so the notice says it.
+		res.LimitApplied = res.LimitReached && res.LimitErr == nil
 	}
 	if res.LimitApplied && (res.Mode == "kick" || res.Mode == "ban") {
 		return memberReqRemoved, &res
@@ -523,6 +553,9 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	hold, won := memberReqTakeHold(ctx, c, stale, broken, action, keepUntil)
 	var result memberReqResult
 	switch {
+	case won && memberReqAdoptRecordedWarn(ctx, c, stale, hold, action):
+		// The reclaimed hold's warn was already stored and only its mark failed: nothing is repeated.
+		result = memberReqResult{Outcome: memberReqHeld, Hold: hold}
 	case won:
 		result = memberReqPunish(ctx, b, c, member.User, hold, keepUntil != 0)
 	case hold != nil:
