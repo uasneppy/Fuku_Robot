@@ -906,7 +906,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `fuku:memberreq:pace:next` and `fuku:memberreq:pace:block` are the fleet-wide Telegram pacing of the member
   requirements executor (`memberReqPaced`, `memberReqPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block
   design with its own keys, so screening, a staff fan-out and a lockdown each keep their own budget. Every Telegram call
-  of `memberReqEnforce` (the live `getChatMember`, the punishment, the notice, the delete) goes through it, each bounded by 10 s.
+  of `memberReqEnforce` (the live `getChatMember`, the punishment, the notice, the delete) goes through it, each bounded by 10 s,
+  except the limit action the warn module takes when a warn reaches the limit (`applyWarn`'s kick or ban): that one call is
+  neither paced here nor bounded by the job context, and is bounded instead by the HTTP client's 30 s timeout and the
+  per-chat cap.
 - `fuku:memberreq:{<chat>}:cap:<unix minute>` and `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat
   brake (`memberreq_limits.go`, the chat ID a hash tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them).
   The counter is a fixed 60 s window (`raidNow().Unix()/60`, so a test can stop the clock) of punishment attempts,

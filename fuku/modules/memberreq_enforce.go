@@ -20,7 +20,7 @@ import (
 
 // The member requirements executor. memberReqEnforce is the one place that decides whether a
 // member who may be breaking a rule is punished, punishes once and posts the one notice. The
-// message watcher and the join check call it; nothing here is reached by a handler yet.
+// message watcher (memberreq_watch.go) and the join check (memberreq_join.go) call it.
 //
 // Everything that cannot be answered punishes nobody: an unreadable setting, an approvals or
 // captcha read that failed, a getChatMember that failed. Logs carry chat and user IDs and the
