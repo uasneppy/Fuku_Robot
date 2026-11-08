@@ -57,8 +57,13 @@ const (
 	memberReqLookupFlightTimeoutDefault = 15 * time.Second
 	// memberReqPositiveTTLDefault is how long a pass stays cached.
 	memberReqPositiveTTLDefault = 30 * time.Minute
-	// memberReqLinkedTTL is how long a group's linked channel (or "none") stays cached.
+	// memberReqLinkedTTL is how long a group with no linked channel ("none") stays cached. A stale
+	// "none" only errs toward an inert rule.
 	memberReqLinkedTTL = 10 * time.Minute
+	// memberReqLinkedChannelTTL is how long a group's linked channel stays cached. It is short
+	// because a stale positive is the dangerous direction: a punishment would rest on a channel the
+	// group may no longer be linked to (WR-05). The breach path also re-reads the link fresh.
+	memberReqLinkedChannelTTL = 60 * time.Second
 	// memberReqBotAdminTTL is how long the bot's definite administrator status in a channel
 	// stays cached. It bounds how long a demoted bot is still read as an administrator.
 	memberReqBotAdminTTL = 2 * time.Minute
@@ -349,10 +354,25 @@ type memberReqLinkAnswer struct {
 	Known bool
 }
 
+// memberReqCachedLink reads the cached link of a group: 0 for none, a negative chat ID for a
+// channel, and false for a miss, an error or a value that is neither (a channel ID is never
+// positive, and none is never written as one).
+func memberReqCachedLink(ctx context.Context, key string) (int64, bool) {
+	value, ok := memberReqCacheGet(ctx, key)
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id > 0 {
+		return 0, false
+	}
+	return id, true
+}
+
 // memberReqLinkedChannel returns the channel linked to chatID and whether that is known. The
 // channel comes only from getChat(chatID).LinkedChatId, asked through the lookup pacer in
-// one flight per group and cached as fuku:memberreq:lc:<chat> (the channel's decimal ID,
-// or 0 for none): never from callback data or the update, so nobody can point the rule at a
+// one flight per group and cached as fuku:memberreq:lc:<chat> (the channel's decimal ID for
+// 60 seconds, or 0 for none for 10 minutes): never from callback data or the update, so nobody can point the rule at a
 // channel of their own. An error, a shed, a timeout and a null answer are not known and
 // write nothing. A linked_chat_id of zero (Telegram omits it for a group with none) is
 // none and is cached; a positive one is no chat ID of a channel, so it reads as none and is
@@ -360,13 +380,17 @@ type memberReqLinkAnswer struct {
 func memberReqLinkedChannel(ctx context.Context, b *gotgbot.Bot, chatID int64, mode memberReqLookupMode) (int64, bool) {
 	key := memberReqLinkedKey(chatID)
 	if !mode.Fresh {
-		if value, ok := memberReqCacheGet(ctx, key); ok {
-			if id, err := strconv.ParseInt(value, 10, 64); err == nil && id <= 0 {
-				return id, true
-			}
+		if id, ok := memberReqCachedLink(ctx, key); ok {
+			return id, true
 		}
 	}
 	answer, ok := memberReqFlightValue(ctx, memberReqFlightKey("l:"+strconv.FormatInt(chatID, 10), mode), func(flightCtx context.Context) memberReqLinkAnswer {
+		// The cache is read once more inside the flight, like the photo's (IN-03).
+		if !mode.Fresh {
+			if id, cached := memberReqCachedLink(flightCtx, key); cached {
+				return memberReqLinkAnswer{ID: id, Known: true}
+			}
+		}
 		var info *gotgbot.ChatFullInfo
 		err := memberReqLookupPaced(flightCtx, func(callCtx context.Context) error {
 			var callErr error
@@ -384,7 +408,11 @@ func memberReqLinkedChannel(ctx context.Context, b *gotgbot.Bot, chatID int64, m
 		if info.LinkedChatId > 0 {
 			return memberReqLinkAnswer{Known: true}
 		}
-		memberReqCacheSetValue(flightCtx, key, strconv.FormatInt(info.LinkedChatId, 10), memberReqLinkedTTL)
+		ttl := memberReqLinkedTTL
+		if info.LinkedChatId != 0 {
+			ttl = memberReqLinkedChannelTTL
+		}
+		memberReqCacheSetValue(flightCtx, key, strconv.FormatInt(info.LinkedChatId, 10), ttl)
 		return memberReqLinkAnswer{ID: info.LinkedChatId, Known: true}
 	})
 	if !ok || !answer.Known {
@@ -467,6 +495,10 @@ func memberReqBotChannelStatus(ctx context.Context, b *gotgbot.Bot, channelID in
 		return memberReqBotAdmin
 	}
 	status, ok := memberReqFlightValue(ctx, memberReqFlightKey("b:"+strconv.FormatInt(channelID, 10), mode), func(flightCtx context.Context) memberReqBotStatus {
+		// The cache is read once more inside the flight, like the photo's (IN-03).
+		if !mode.Fresh && memberReqCacheHas(flightCtx, key) {
+			return memberReqBotAdmin
+		}
 		var answer gotgbot.ChatMember
 		err := memberReqLookupPaced(flightCtx, func(callCtx context.Context) error {
 			var callErr error
@@ -561,21 +593,43 @@ func memberReqChannelRule(ctx context.Context, b *gotgbot.Bot, chatID, userID in
 		}
 		return judged
 	})
+	return memberReqChannelOutcome(ctx, b, chatID, channel, key, mode, verdict)
+}
+
+// memberReqChannelOutcome turns the verdict of the subscription flight into the rule's verdict.
+// A not-subscribed candidate is only a candidate: the link is read fresh first (WR-05: a
+// punishment never rests on a link older than one request; the cached link can be up to 60 s old,
+// so a link that changed or cannot be read is unknown, and the fresh read also refreshes the
+// cache, so the next message judges the channel the group is linked to now; a Fresh caller just
+// read it fresh), then the D-22 gate decides. An unknown asks about the bot's standing on every
+// path, so a channel the bot cannot read leaves its channel-level fact after one flight; only
+// Classify callers read that answer as inert now. A pass and an inert verdict are returned as
+// they are.
+func memberReqChannelOutcome(ctx context.Context, b *gotgbot.Bot, chatID, channel int64, key string, mode memberReqLookupMode, verdict memberReqVerdict) memberReqVerdict {
 	switch verdict {
 	case memberReqBreach:
+		if !mode.Fresh && !memberReqLinkUnchanged(ctx, b, chatID, channel) {
+			return memberReqUnknown
+		}
 		verdict = memberReqGateBreach(ctx, b, channel, mode)
 		if verdict == memberReqBreach && mode.Fresh {
 			memberReqCacheDel(ctx, key)
 		}
 		return verdict
 	case memberReqUnknown:
-		// The standing is asked for on every path, so a channel the bot cannot read leaves its
-		// channel-level fact after one flight; only Classify callers read the answer as inert now.
 		if memberReqBotChannelStatus(ctx, b, channel, mode) == memberReqBotNotAdmin && mode.Classify {
 			return memberReqInert
 		}
 	}
 	return verdict
+}
+
+// memberReqLinkUnchanged re-reads the link of chatID fresh (through the lookup pacer, in the
+// bounded flight f:l:<chat>) and reports whether it is still channel. A changed, unlinked or
+// unreadable link is false.
+func memberReqLinkUnchanged(ctx context.Context, b *gotgbot.Bot, chatID, channel int64) bool {
+	current, known := memberReqLinkedChannel(ctx, b, chatID, memberReqLookupMode{Fresh: true})
+	return known && current == channel
 }
 
 // memberReqGateBreach is the D-22 gate: a not-subscribed candidate of the channel is a breach

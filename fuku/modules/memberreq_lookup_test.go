@@ -749,7 +749,7 @@ func mreqChannelVerdict(e *memberReqEnv, userID int64, mode memberReqLookupMode)
 }
 
 func TestMemberReqLinkedChannel(t *testing.T) {
-	t.Run("the link is read from getChat of the group, cached for 10 minutes and served from the cache", func(t *testing.T) {
+	t.Run("the link is read from getChat of the group, cached for 60 seconds and served from the cache", func(t *testing.T) {
 		env, state := mreqLookupEnv(t)
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
 
@@ -764,8 +764,8 @@ func TestMemberReqLinkedChannel(t *testing.T) {
 		if value, err := env.redis.Get(key); err != nil || value != strconv.FormatInt(channel, 10) {
 			t.Fatalf("cached value = %q (%v), want the decimal channel ID", value, err)
 		}
-		if ttl := env.redis.TTL(key); ttl < 9*time.Minute || ttl > 10*time.Minute {
-			t.Errorf("TTL = %s, want about 10 minutes", ttl)
+		if ttl := env.redis.TTL(key); ttl < 50*time.Second || ttl > time.Minute {
+			t.Errorf("TTL = %s, want about 60 seconds (WR-05: a stale positive link is the dangerous direction)", ttl)
 		}
 		if again, ok := mreqLinked(env, memberReqLookupMode{}); !ok || again != channel {
 			t.Fatalf("second answer = (%d, %v), want (%d, true)", again, ok, channel)
@@ -1581,7 +1581,7 @@ func TestMemberReqLookupCacheKeys(t *testing.T) {
 			value    string
 			low, top time.Duration
 		}{
-			"fuku:memberreq:lc:" + chat: {chanID, 9 * time.Minute, 10 * time.Minute},
+			"fuku:memberreq:lc:" + chat: {chanID, 50 * time.Second, time.Minute},
 			"fuku:memberreq:sub:" + chanID + ":" + strconv.FormatInt(subscribed, 10): {"1", 29 * time.Minute, 30 * time.Minute},
 			"fuku:memberreq:ba:" + chanID:                                            {"1", time.Minute, 2 * time.Minute},
 		}

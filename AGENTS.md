@@ -1248,8 +1248,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cost is one paced lookup per message of a member who stays without a photo (D-24). A `Fresh` lookup ("I fixed it", the
   page) bypasses it and drops a stale one on a definite breach.
 - `fuku:memberreq:lc:<chat>` is the group's linked channel (`memberReqLinkedChannel`, `memberReqLinkedKey`): the decimal
-  channel ID (a negative number) or `0` for a group with none, `SET EX` 10 minutes (`memberReqLinkedTTL`), a positive
-  answer and a none alike. The channel comes only from `getChat(group).LinkedChatId`, asked through the lookup pacer in the
+  channel ID (a negative number) or `0` for a group with none. A positive channel is `SET EX` 60 seconds
+  (`memberReqLinkedChannelTTL`) and a none 10 minutes (`memberReqLinkedTTL`): a stale none only makes the rule inert, but a
+  stale channel ID is the dangerous direction (Phase 14 review WR-05: an owner who unlinks or relinks the group would
+  otherwise see members punished for a channel the group is no longer linked to for up to ten minutes), so it is short and
+  the breach path also reads the link fresh (below). The channel comes only from `getChat(group).LinkedChatId`, asked through the lookup pacer in the
   flight `l:<chat>`, and never from callback data or an update, so nobody can point the rule at a channel of their own. An
   error, a shed, a timeout and a null answer are not known and write nothing, a `linked_chat_id` that is positive (no
   channel has one) reads as none and is not cached, and a cached value that is not zero or negative is a miss. A `Fresh`
@@ -1295,7 +1298,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a channel (the families differ, because their values have different types). A Fresh lookup (`mode.Fresh`: "I fixed it",
   the channel screen's reads) uses the same key behind an `f:` prefix (`memberReqFlightKey`), so a Fresh caller never joins
   a running non-Fresh flight, which can answer from a stale positive cache read, and a non-Fresh caller never joins a Fresh
-  one, while a hundred callers of one mode still make one request (`TestMemberReqLookupFlightsKeepModesApart`). The flight
+  one, while a hundred callers of one mode still make one request (`TestMemberReqLookupFlightsKeepModesApart`). Every
+  non-Fresh flight (the photo, the link, the subscription and the bot's status) reads its cache once more inside the
+  flight, so a caller that missed the cache just before the previous flight wrote it makes no second request
+  (`TestMemberReqFlightsReadCacheAgain`). The flight
   function runs the paced call and the cache write on a context derived from `memberReqContext()` and bounded by
   `memberReqLookupFlightTimeout` (15 s), never from a caller, so `StopMemberReqJobs` ends every flight and one caller's
   short deadline never cancels a lookup that others share; every caller waits with `select` on its own deadline and gets
@@ -1393,10 +1399,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (a group with no linked channel, or a channel the bot does not administer) is inert; only `memberReqBreach` can lead to
   a punishment. The photo rule is a total of zero from `getUserProfilePhotos` (limit 1), a pass is a total above zero or a
   non-empty list. The channel rule (`memberReqChannelRule`) runs in a fixed order: the linked channel (unreadable is
-  unknown, none is inert with no member request), the subscription cache, then one `getChatMember(channel, user)` in the
+  unknown, none is inert with no member request), the `cna` fact (inert at once), the subscription cache, then one
+  `getChatMember(channel, user)` in the
   flight `s:<channel>:<user>` judged by `memberReqSubscribed` (creator, administrator, member and restricted with
   `is_member` pass; left, kicked and restricted without `is_member` are only a breach candidate; anything else is unknown).
-  The D-22 gate: a candidate is a breach only while `memberReqBotChannelStatus` shows the bot as an administrator of the
+  A not-subscribed candidate first re-reads the link fresh (Phase 14 review WR-05, `memberReqLinkUnchanged`: `getChat` through
+  the lookup pacer in the flight `f:l:<chat>`, bounded, and not for a `Fresh` caller, which just read it fresh): a link that
+  changed, was removed or cannot be read makes the verdict unknown, never a breach, and the fresh read refreshes `lc`, so a
+  punishment never rests on a link older than one request and the next message judges the channel the group is linked to
+  now. A subscribed member (a pass) costs no extra call. The D-22 gate: a candidate is a breach only while
+  `memberReqBotChannelStatus` shows the bot as an administrator of the
   channel (the `ba` key above), inert when the bot is definitely not one, and unknown when that cannot be read, so a bot
   that cannot see a channel's members and is told "left" about everyone punishes nobody. The classifier
   `memberReqClassifyBot` reads the bot's own answer by status and by Telegram error code only: administrator and creator
