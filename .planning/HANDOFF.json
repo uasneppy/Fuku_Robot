@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "timestamp": "2026-11-08T17:07:35Z",
+  "timestamp": "2026-11-08T17:25:00Z",
   "phase": "15",
   "phase_name": "AI Spam-Name Check",
   "phase_dir": ".planning/phases/15-ai-spam-name-check",
-  "plan": 5,
-  "task": 2,
+  "plan": 6,
+  "task": 0,
   "total_tasks": 3,
   "status": "paused",
   "completed_tasks": [
@@ -34,24 +34,13 @@
       "commit": "3dac5a1"
     },
     {
-      "id": "15-05/1",
-      "name": "baseline and marker (tracer task)",
+      "id": "15-05",
+      "name": "baseline, marker, watcher AI read, held release with names",
       "status": "done",
-      "commit": "409edbb"
-    },
-    {
-      "id": "15-05/2",
-      "name": "watcher AI read and held release with names",
-      "status": "in_progress",
-      "progress": "executor a6a5170b0ec1df59c was running; AGENTS.md modified uncommitted"
+      "commit": "3792936"
     }
   ],
   "remaining_tasks": [
-    {
-      "id": "15-05/3",
-      "name": "rulebook and Phase 13/14 guarantees re-run",
-      "status": "not_started"
-    },
     {
       "id": "15-06",
       "name": "cost guards",
@@ -124,9 +113,8 @@
       "phase": "15"
     }
   ],
-  "uncommitted_files": [
-    "M AGENTS.md"
-  ],
-  "next_action": "/gsd-resume-work; ListAgents; git status; git log origin/claude/ecstatic-goldberg-qsss05..HEAD; if 15-05-SUMMARY.md exists verify and push the tip by exact SHA, then spawn the executor for 15-06 (brief: .planning/phases/15-ai-spam-name-check/handoff/executor-brief-15.md)",
-  "context_notes": "Sequential gsd-executor per plan, orchestrator verifies (build, vet, focused tests, lint stand-in, go.mod, skip grep) before every push. Constraints are in the .continue-here.md blocking section."
+  "uncommitted_files": [],
+  "next_action": "/gsd-resume-work; git status (clean) and git log origin/claude/ecstatic-goldberg-qsss05..HEAD (empty); spawn the gsd-executor for 15-06 (brief: .planning/phases/15-ai-spam-name-check/handoff/executor-brief-15.md, plan: .planning/phases/15-ai-spam-name-check/15-06-PLAN.md); verify its hand-back yourself before pushing",
+  "context_notes": "No executor is running; paused at the 15-05 plan boundary with a clean tree. Sequential gsd-executor per plan, orchestrator verifies (build, vet, focused tests, gocyclo, lint stand-in, go.mod, skip grep) before every push. Constraints are in the .continue-here.md blocking section.",
+  "phase_task_note": "plan numbers are 15-NN; plan 5 of 11 complete"
 }
