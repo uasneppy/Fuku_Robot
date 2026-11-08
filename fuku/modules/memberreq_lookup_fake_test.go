@@ -48,6 +48,12 @@ type mreqLookupState struct {
 	members   map[[2]int64]mreqChannelMember
 	chanErrs  map[string][]error
 	chanGates map[string]chan struct{}
+
+	// onPhoto and onChannel run when a request arrives, before it is scripted, held or
+	// answered, on the request's own goroutine and outside the state's lock, so a test can look
+	// at what exists at that moment (a hold row, a cap counter) or log the order of requests.
+	onPhoto   func(user int64)
+	onChannel func(method string, chat, user int64)
 }
 
 // mreqChannelMember is what the fake answers for getChatMember of one (chat, user).
@@ -79,6 +85,28 @@ func newMreqLookupState() *mreqLookupState {
 		chanErrs:  make(map[string][]error),
 		chanGates: make(map[string]chan struct{}),
 	}
+}
+
+// setOnPhoto installs the hook that runs when a getUserProfilePhotos request arrives.
+func (s *mreqLookupState) setOnPhoto(hook func(user int64)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onPhoto = hook
+}
+
+// setOnChannel installs the hook that runs when a channel-half getChat or getChatMember
+// request (one for a chat of this fake) arrives.
+func (s *mreqLookupState) setOnChannel(hook func(method string, chat, user int64)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onChannel = hook
+}
+
+// hooks returns the two arrival hooks (nil for none).
+func (s *mreqLookupState) hooks() (func(user int64), func(method string, chat, user int64)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.onPhoto, s.onChannel
 }
 
 // mreqChannelKey names one fake call for scripting and holding: a getChat of chat (user 0)
@@ -259,6 +287,9 @@ func (f *mreqLookupFake) RequestWithContext(
 			return f.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
 		}
 		f.record(method, params)
+		if _, onChannel := f.state.hooks(); onChannel != nil {
+			onChannel(method, chat, user)
+		}
 		if step.Err != nil {
 			return nil, step.Err
 		}
@@ -308,6 +339,9 @@ func mreqChannelAnswer(method string, chat, user int64, step mreqChannelStep) js
 // photos answers getUserProfilePhotos from the photo answers.
 func (f *mreqLookupFake) photos(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
 	f.record(method, params)
+	if onPhoto, _ := f.state.hooks(); onPhoto != nil {
+		onPhoto(staffParamInt(params, "user_id"))
+	}
 	gate, answer, scripted := f.state.begin(staffParamInt(params, "user_id"))
 	if scripted != nil {
 		return nil, scripted
@@ -346,7 +380,11 @@ func mreqChannel(t *testing.T, state *mreqLookupState, group int64, botStatus st
 	channel := uniqueModuleChatID()
 	state.link(group, channel)
 	state.setMember(channel, staffTestBotID, mreqChannelMember{Status: botStatus})
-	mreqLookupCleanup(t, nil, []int64{channel, group})
+	// The channel is cleaned before and after the test; the group only after it, because a
+	// cleanup before the test would delete the requirement settings and greetings the test stored
+	// for its group a moment earlier. The group's lc: key is a Redis key naming the group.
+	mreqLookupCleanup(t, nil, []int64{channel})
+	t.Cleanup(func() { memberReqDeleteRedisKeys([]int64{group}) })
 	return channel
 }
 
