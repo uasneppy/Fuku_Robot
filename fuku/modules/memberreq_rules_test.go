@@ -293,7 +293,7 @@ func TestMemberReqUsernameRule(t *testing.T) {
 }
 
 func TestMemberReqRuleTable(t *testing.T) {
-	wantCodes := []string{"ln", "un", "ru", "ar", "zh"}
+	wantCodes := []string{"ln", "un", "ru", "ar", "zh", "ph", "ch"}
 	if len(memberReqRules) != len(wantCodes) {
 		t.Fatalf("%d rules, want %d", len(memberReqRules), len(wantCodes))
 	}
@@ -325,8 +325,13 @@ func TestMemberReqRuleTable(t *testing.T) {
 				t.Errorf("rule %q has an empty %s", rule.Code, name)
 			}
 		}
-		if rule.Broken == nil {
-			t.Errorf("rule %q has no Broken test", rule.Code)
+		// Exactly one of the two judges the rule: a name rule has a pure Broken test, a lookup rule
+		// (the photo and the channel) has a Lookup function and no Broken (D-13).
+		if (rule.Broken == nil) == (rule.Lookup == nil) {
+			t.Errorf("rule %q has Broken %v and Lookup %v, want exactly one of them", rule.Code, rule.Broken != nil, rule.Lookup != nil)
+		}
+		if wantLookup := i >= 5; (rule.Lookup != nil) != wantLookup {
+			t.Errorf("rule %q Lookup set = %v, want %v (only photo and channel look up)", rule.Code, rule.Lookup != nil, wantLookup)
 		}
 
 		found, ok := memberReqRuleByCode(rule.Code)
@@ -335,6 +340,9 @@ func TestMemberReqRuleTable(t *testing.T) {
 		}
 	}
 
+	if memberReqRules[5].Bit != 32 || memberReqRules[6].Bit != 64 {
+		t.Errorf("the lookup rules have bits %d and %d, want 32 and 64", memberReqRules[5].Bit, memberReqRules[6].Bit)
+	}
 	for _, code := range []string{"xx", "", "LN", "last_name"} {
 		if _, ok := memberReqRuleByCode(code); ok {
 			t.Errorf("memberReqRuleByCode(%q) found a rule", code)
@@ -342,14 +350,19 @@ func TestMemberReqRuleTable(t *testing.T) {
 	}
 }
 
-// requirementsOf builds settings with one action per rule, in rule order.
+// requirementsOf builds settings with one action per rule, in rule order: up to seven actions
+// (last name, username, Russian, Arabic, Chinese, photo, channel); a missing trailing one is 0.
 func requirementsOf(actions ...int) *models.ChatRequirements {
+	var all [7]int
+	copy(all[:], actions)
 	return &models.ChatRequirements{
-		LastNameAction: actions[0],
-		UsernameAction: actions[1],
-		RussianAction:  actions[2],
-		ArabicAction:   actions[3],
-		ChineseAction:  actions[4],
+		LastNameAction: all[0],
+		UsernameAction: all[1],
+		RussianAction:  all[2],
+		ArabicAction:   all[3],
+		ChineseAction:  all[4],
+		PhotoAction:    all[5],
+		ChannelAction:  all[6],
 	}
 }
 
@@ -377,18 +390,25 @@ func TestMemberReqStrictest(t *testing.T) {
 	// A member who breaks every rule: no last name, no username, a Russian letter, an
 	// Arabic letter and a Han character.
 	everything := memberReqNames{First: "Эдуард محمد 王", Last: "\u200b"}
+	// memberReqBroken judges the name rules only, so its full mask is the five name bits (31);
+	// the photo and channel bits (32 and 64) come from memberReqLookupBroken.
 	allBits := 0
 	for _, rule := range memberReqRules {
-		allBits |= rule.Bit
+		if rule.Broken != nil {
+			allBits |= rule.Bit
+		}
+	}
+	if allBits != 31 {
+		t.Fatalf("the name rules' mask = %d, want 31", allBits)
 	}
 
-	if got := memberReqBroken(requirementsOf(0, 0, 0, 0, 0), everything); got != 0 {
+	if got := memberReqBroken(requirementsOf(0, 0, 0, 0, 0, 0, 0), everything); got != 0 {
 		t.Errorf("broken with every rule off = %d, want 0", got)
 	}
 	if got := memberReqBroken(nil, everything); got != 0 {
 		t.Errorf("broken with nil settings = %d, want 0", got)
 	}
-	if got := memberReqBroken(requirementsOf(1, 1, 1, 1, 1), everything); got != allBits {
+	if got := memberReqBroken(requirementsOf(1, 1, 1, 1, 1, 1, 1), everything); got != allBits {
 		t.Errorf("broken with every rule on = %d, want %d", got, allBits)
 	}
 	// A broken rule set to Off is absent from the mask.
@@ -401,7 +421,7 @@ func TestMemberReqStrictest(t *testing.T) {
 	}
 
 	// No broken rule gives Off.
-	if got := memberReqStrictest(requirementsOf(1, 2, 3, 4, 1), 0); got != models.RequirementActionOff {
+	if got := memberReqStrictest(requirementsOf(1, 2, 3, 4, 1, 2, 3), 0); got != models.RequirementActionOff {
 		t.Errorf("strictest of no broken rule = %d, want Off", got)
 	}
 
@@ -450,11 +470,14 @@ func TestMemberReqStrictest(t *testing.T) {
 				}
 			}
 			settings := requirementsOf(actions...)
+			// memberReqBroken reports the name bits of the subset only; the whole subset (the
+			// photo and channel bits too) goes to memberReqStrictest, so the precedence is
+			// checked for every rule including bits 32 and 64.
 			broken := memberReqBroken(settings, everything)
-			if broken != subset {
-				t.Fatalf("subset %b actions %v: broken = %b", subset, actions, broken)
+			if nameBits := subset & allBits; broken != nameBits {
+				t.Fatalf("subset %b actions %v: broken = %b, want the name bits %b", subset, actions, broken, nameBits)
 			}
-			if got := memberReqStrictest(settings, broken); got != want {
+			if got := memberReqStrictest(settings, subset); got != want {
 				t.Fatalf("subset %b actions %v: strictest = %d, want %d", subset, actions, got, want)
 			}
 			checked++
@@ -465,21 +488,68 @@ func TestMemberReqStrictest(t *testing.T) {
 	}
 }
 
+// TestMemberReqBrokenIgnoresLookupRules proves memberReqBroken judges the name rules only: the
+// photo and channel rows have no Broken function, so they are skipped (a nil call would panic) and
+// never add a bit, whatever their stored actions say (D-13, T-14-17).
+func TestMemberReqBrokenIgnoresLookupRules(t *testing.T) {
+	lookupOn := requirementsOf(0, 0, 0, 0, 0, models.RequirementActionBan, models.RequirementActionKick)
+	clean := memberReqNames{First: "Alex", Last: "Ivanov", Username: "alex"}
+	if got := memberReqBroken(lookupOn, clean); got != 0 {
+		t.Errorf("broken with only the lookup rules on = %d, want 0", got)
+	}
+	if got := memberReqBroken(lookupOn, memberReqNames{}); got != 0 {
+		t.Errorf("broken for empty names with only the lookup rules on = %d, want 0", got)
+	}
+
+	mixed := requirementsOf(models.RequirementActionWarn, 0, 0, 0, 0, models.RequirementActionMute, models.RequirementActionBan)
+	if got := memberReqBroken(mixed, memberReqNames{First: "Alex", Username: "alex"}); got != 1 {
+		t.Errorf("broken = %d, want the last-name bit (1) alone", got)
+	}
+}
+
+// TestMemberReqStrictestLookupBits proves the lookup bits take part in the precedence: 32 alone,
+// 64 alone and 32|64 give the strictest of the stored photo and channel actions.
+func TestMemberReqStrictestLookupBits(t *testing.T) {
+	const photo, channel = 32, 64
+	actions := []int{models.RequirementActionWarn, models.RequirementActionMute, models.RequirementActionKick, models.RequirementActionBan}
+	for _, p := range actions {
+		for _, c := range actions {
+			settings := requirementsOf(0, 0, 0, 0, 0, p, c)
+			if got := memberReqStrictest(settings, photo); got != p {
+				t.Errorf("photo alone with photo %d channel %d: strictest = %d, want %d", p, c, got, p)
+			}
+			if got := memberReqStrictest(settings, channel); got != c {
+				t.Errorf("channel alone with photo %d channel %d: strictest = %d, want %d", p, c, got, c)
+			}
+			want := p
+			if memberReqSeverity(c) > memberReqSeverity(p) {
+				want = c
+			}
+			if got := memberReqStrictest(settings, photo|channel); got != want {
+				t.Errorf("both with photo %d channel %d: strictest = %d, want %d", p, c, got, want)
+			}
+		}
+	}
+	if got := memberReqStrictest(requirementsOf(0, 0, 0, 0, 0, models.RequirementActionBan, models.RequirementActionBan), 0); got != models.RequirementActionOff {
+		t.Errorf("strictest of an empty mask = %d, want Off", got)
+	}
+}
+
 func TestMemberReqPassValue(t *testing.T) {
-	base := requirementsOf(1, 2, 3, 4, 0)
+	base := requirementsOf(1, 2, 3, 4, 0, 1, 2)
 	names := memberReqNames{First: "Олена", Last: "Пчілка", Username: "olena"}
 
 	got := memberReqPassValue(base, names)
 	if !regexp.MustCompile(`^[0-9a-f]{16}$`).MatchString(got) {
 		t.Fatalf("pass value %q is not 16 lowercase hex characters", got)
 	}
-	if again := memberReqPassValue(requirementsOf(1, 2, 3, 4, 0), names); again != got {
+	if again := memberReqPassValue(requirementsOf(1, 2, 3, 4, 0, 1, 2), names); again != got {
 		t.Errorf("same settings and names gave %q then %q", got, again)
 	}
 
-	// Any one of the five actions changes the value.
-	for i := 0; i < 5; i++ {
-		actions := []int{1, 2, 3, 4, 0}
+	// Any one of the seven actions, the photo and the channel included, changes the value.
+	for i := 0; i < 7; i++ {
+		actions := []int{1, 2, 3, 4, 0, 1, 2}
 		actions[i] = (actions[i] + 1) % 5
 		if memberReqPassValue(requirementsOf(actions...), names) == got {
 			t.Errorf("changing the action of rule %d did not change the pass value", i)
@@ -514,7 +584,7 @@ func TestMemberReqPassValue(t *testing.T) {
 	}
 
 	// No settings reads as every rule off.
-	if memberReqPassValue(nil, names) != memberReqPassValue(requirementsOf(0, 0, 0, 0, 0), names) {
+	if memberReqPassValue(nil, names) != memberReqPassValue(requirementsOf(0, 0, 0, 0, 0, 0, 0), names) {
 		t.Error("nil settings must fingerprint like every rule off")
 	}
 }

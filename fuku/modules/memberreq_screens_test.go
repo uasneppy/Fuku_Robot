@@ -18,6 +18,11 @@ import (
 
 var memberReqTagRe = regexp.MustCompile(`<[^>]*>`)
 
+// memberReqNoticeCap is the most visible code points a notice or an edited notice may have. With
+// seven rule phrases (the photo and channel phrases join the five name phrases) the cap is 520,
+// raised from the Phase 13 400 (UI contract section 3).
+const memberReqNoticeCap = 520
+
 // memberReqVisibleLength is the code points a member reads of an HTML notice: the tags go, the
 // entities become characters, and the mention's link text stays (isolates included).
 func memberReqVisibleLength(text string) int {
@@ -28,7 +33,7 @@ func memberReqVisibleLength(text string) int {
 var memberReqScreenLanguages = []string{"en", "es", "fr", "hi", "id", "pt", "ru", "uk"}
 
 // TestMemberReqScreensFitEveryLocale is the rendered-size check of the requirement screens.
-// It renders every group notice with the real locales, a 64-rune name, all five rules and
+// It renders every group notice with the real locales, a 64-rune name, all seven rules and
 // two-digit numbers, then every "I fixed it" answer and the two notices that button edits in.
 func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 	withRealLocales(t)
@@ -36,6 +41,15 @@ func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 	allRules := 0
 	for _, rule := range memberReqRules {
 		allRules |= rule.Bit
+	}
+	// The "still broken" answer is measured over the five name phrases (the rows with a pure
+	// Broken test): the count-aware seven-rule answers are measured with their builder (plan
+	// 14-08), and a member can fail the lookup rules only through the executor.
+	nameRules := 0
+	for _, rule := range memberReqRules {
+		if rule.Broken != nil {
+			nameRules |= rule.Bit
+		}
 	}
 	user := gotgbot.User{Id: 9007199254740991, FirstName: strings.Repeat("Ж", memberReqNameCap)}
 
@@ -64,8 +78,8 @@ func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 				t.Errorf("%s %s: empty notice", code, sc.name)
 				continue
 			}
-			if got := memberReqVisibleLength(text); got > 400 {
-				t.Errorf("%s %s: %d visible code points, want at most 400", code, sc.name, got)
+			if got := memberReqVisibleLength(text); got > memberReqNoticeCap {
+				t.Errorf("%s %s: %d visible code points, want at most %d", code, sc.name, got, memberReqNoticeCap)
 			}
 			if strings.Contains(text, strconv.FormatInt(-chatID, 10)) || strings.Contains(strings.ToLower(text), "staff") {
 				t.Errorf("%s %s: the notice names a chat ID or the Staff Group: %q", code, sc.name, text)
@@ -87,7 +101,7 @@ func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 				t.Errorf("%s %s: keyboard %+v, want %d button", code, sc.name, keyboard.InlineKeyboard, wantButtons)
 			}
 		}
-		assertMemberReqFixedAnswers(t, code, tr, allRules, user, chatID)
+		assertMemberReqFixedAnswers(t, code, tr, nameRules, user, chatID)
 	}
 }
 
@@ -99,12 +113,12 @@ const memberReqFixedAdminName = "ZZ Rule Setter"
 // builds it (memberreq_fixed.go): each is an alert or a toast of at most 200 code points, which
 // is Telegram's limit for an answer, and none holds the chat ID, the Staff Group, the admin who
 // set the rule or an unfilled token. The two notices the button edits in follow the notice limit.
-func assertMemberReqFixedAnswers(t *testing.T, code string, tr *i18n.Translator, allRules int, user gotgbot.User, chatID int64) {
+func assertMemberReqFixedAnswers(t *testing.T, code string, tr *i18n.Translator, nameRules int, user gotgbot.User, chatID int64) {
 	t.Helper()
 	answers := map[string]string{
 		"done":             memberReqText(tr, "mreq_fixed_done"),
 		"done lockdown":    memberReqText(tr, "mreq_fixed_done_lockdown"),
-		"still broken all": memberReqText(tr, "mreq_fixed_still_broken", i18n.TranslationParams{"rules": memberReqRulesText(tr, allRules)}),
+		"still broken all": memberReqText(tr, "mreq_fixed_still_broken", i18n.TranslationParams{"rules": memberReqRulesText(tr, nameRules)}),
 		"not yours":        memberReqText(tr, "mreq_fixed_not_yours"),
 		"not ours":         memberReqText(tr, "mreq_fixed_not_ours"),
 		"check failed":     memberReqText(tr, "mreq_fixed_check_failed"),
@@ -129,8 +143,8 @@ func assertMemberReqFixedAnswers(t *testing.T, code string, tr *i18n.Translator,
 	for _, key := range []string{"mreq_notice_fixed", "mreq_notice_fixed_lockdown"} {
 		text := memberReqText(tr, key, i18n.TranslationParams{"name": memberReqNamePlaceholder})
 		text = lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(user, fallback))
-		if got := memberReqVisibleLength(text); got > 400 {
-			t.Errorf("%s %s: %d visible code points, want at most 400", code, key, got)
+		if got := memberReqVisibleLength(text); got > memberReqNoticeCap {
+			t.Errorf("%s %s: %d visible code points, want at most %d", code, key, got, memberReqNoticeCap)
 		}
 		assertMemberReqNoLeak(t, code+" "+key, text, chatID)
 	}
