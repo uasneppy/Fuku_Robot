@@ -338,10 +338,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `mreq_fixed_stale`; (4) one live `getChatMember` through `memberReqPaced` that must show the requirement marker
   (`isMemberReqMute` against the hold's `mute_until`: an error is `mreq_fixed_check_failed`, anything else, including an
   admin's, staff, captcha, antiflood or warn-limit mute and a member no longer restricted, is `mreq_fixed_not_ours` with no
-  write, the same on every repeat); (5) the live names judged again against the current settings
-  (`memberReqSettingsLookup`, `memberReqBroken`: a rule now Off is not checked, an unreadable setting is
-  `mreq_fixed_check_failed`, and a member who fixed only some of several rules stays held and gets `mreq_fixed_still_broken`
-  naming the rest); (6) and (7) `getChat` and `resolveUnmutePermissionsWithLockdown` through `memberReqUnmutePermissions`,
+  write, the same on every repeat); (4b) the approvals, read through the cached `memberReqApprovedLookup` seam (the tri-state
+  `approvals.IsUserApprovedContext`, never a fresh database read) only after the live marker check, so only a mute the
+  requirements placed can be freed this way: an error is `mreq_fixed_check_failed` with nothing changed, and an approved
+  member is judged clean for every rule, the name rules included, so the order continues at the permissions step (6) with no
+  settings read and no lookup; (5) every enabled rule judged again against the current settings (`memberReqFixedJudge`,
+  `memberReqSettingsLookup`; a rule now Off is not checked, an unreadable setting is `mreq_fixed_check_failed`): the name
+  rules (`memberReqBroken`) on the live record, and the photo and channel rules with fresh lookups
+  (`memberReqLookupBroken` with `memberReqLookupMode{Fresh: true, Classify: true}`) that bypass both positive caches
+  (a stale positive is deleted on a definite breach and a positive refreshes the cache) through the lookup pacer under
+  `memberReqFixedLookupBudget` (5 s) of the press's 10 s, so at least 5 s remain for the unmute. A rule still broken is the
+  definite answer and beats an unknown lookup: one to four broken rules are `mreq_fixed_still_broken` naming exactly them, and
+  five or more are `mreq_fixed_still_broken_many` with the count of broken rules whose punishment is not Off
+  (`memberReqStillBrokenText`); with nothing broken, an unknown lookup is `mreq_fixed_check_failed` and changes nothing,
+  like an unreadable setting. A channel lookup for the member that cannot be answered is classified by one paced
+  `getChatMember(channel, bot)`: a definite non-administrator status or a 400 or 403 makes the channel rule inert (not broken,
+  no answer of its own), and a 429, a shed, a 5xx, a transport error, a timeout or an administrator bot stays unknown;
+  (6) and (7) `getChat` and `resolveUnmutePermissionsWithLockdown` through `memberReqUnmutePermissions`,
   both before the hold is touched, any error being `mreq_fixed_check_failed` with nothing changed; (8) the conditional delete
   `memberreq.TakeHoldByID`, on a context that survives the press's deadline, so of two taps on two replicas one wins and the
   other gets `mreq_fixed_stale`; (9) `memberReqLiftMute` with exactly those permissions, never `MutedPermissions`, and when it
@@ -663,7 +676,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - "I fixed it" (`mreq|v1`, `memberReqFixedCallback`) is for the held member only, with no admin override: the presser must be
   the member `u` of the button, an admin who presses it is refused, and admins lift a mute with `/unmute`. It lifts only a
   mute the requirements placed, proved by the live marker (`isMemberReqMute`), never an admin's, a staff, the captcha's,
-  antiflood's or a warn-limit mute (MREQ-07), and only with permissions from `resolveUnmutePermissionsWithLockdown`.
+  antiflood's or a warn-limit mute (MREQ-07), and only with permissions from `resolveUnmutePermissionsWithLockdown`. An
+  approved member is freed at the tap (step 4b above) once the marker proves the mute is the requirements', so the remedy
+  "ask an admin to approve you" is true for a mute: an admin approves the member and the member taps "I fixed it" (an
+  approval does not lift the mute by itself).
 - `/captchamode turnstile` keeps `captchaAdminGate` (a per-group admin check, first and unchanged) and then refuses,
   writing nothing, in this order (`captchaWebModeRefusal`): no web captcha runtime (the four settings are not all set,
   or the bot has no username, `captcha_web_refuse_not_configured`), no Redis `PING` within 250 ms (a fresh probe, not the
@@ -1384,8 +1400,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   of the "I fixed it" edit, which strips the bidirectional controls U+061C, U+200E, U+200F, U+202A to U+202E and U+2066 to
   U+2069 from the name before it is cut to 64 runes and wrapped in its own isolate, so a name cannot close the isolate and
   reorder the line; the rules still judge the original name) spliced in after translation and
-  every broken rule whose punishment is not Off in rule order; only a mute carries the `mreq|v1` "I fixed it" button
-  (`a=f`, `h`, `u`). A mute notice is never dropped by pacing: `memberReqPostNotice` waits
+  every broken rule whose punishment is not Off in rule order (the two lookup phrases after the five name phrases); the plain
+  warn, kick and mute notices (`memberReqNoticeHasRemedy`, never the warn-limit notices, the ban notice or an answer) end
+  with `mreq_remedy_photo` after one space, appended after translation and before the name is spliced, whenever the photo
+  rule is among the broken rules (found through the table row with code `ph`, never a literal bit); a notice, the remedy
+  included, is at most 520 code points of visible text in every language (`TestMemberReqScreensFitEveryLocale`); only a
+  mute carries the `mreq|v1` "I fixed it" button (`a=f`, `h`, `u`). A mute notice is never dropped by pacing: `memberReqPostNotice` waits
   `memberReqNoticeRateLimitWait` and sends again whenever the pacer gives up on it, until its context or
   `memberReqMuteNoticeBudget` ends, and every notice whose send failed otherwise is retried once (a notice without a
   button is not retried after `ErrRateLimited`). A mute whose notice still cannot be delivered is never left in place
