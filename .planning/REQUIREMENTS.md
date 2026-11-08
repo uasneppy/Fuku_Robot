@@ -151,7 +151,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | EDIT-09 | Phase 12 | Complete |
 | EDIT-10 | Phase 11 | Complete |
 | EDIT-11 | Phase 11 | Complete |
-| MREQ-01 | Phase 13 (five of the eight rules; the other three through MREQ-11, MREQ-12, MREQ-14 in Phases 14 and 15) | Pending |
+| MREQ-01 | Phase 13 (five of the eight rules), Phase 14 (the profile-photo and channel rules through MREQ-11 and MREQ-12: seven of the eight); the AI spam-name rule through MREQ-14 in Phase 15 | Pending |
 | MREQ-02 | Phase 13 | Complete |
 | MREQ-03 | Phase 13 | Complete |
 | MREQ-04 | Phase 13 | Complete |
@@ -160,7 +160,7 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | MREQ-07 | Phase 13 | Complete |
 | MREQ-08 | Phase 13 | Complete |
 | MREQ-09 | Phase 13 | Complete |
-| MREQ-10 | Phase 14 | Pending |
+| MREQ-10 | Phase 14 (AI line through MREQ-14 in Phase 15) | Pending |
 | MREQ-11 | Phase 14 | Complete |
 | MREQ-12 | Phase 14 | Complete |
 | MREQ-13 | Phase 13 | Complete |

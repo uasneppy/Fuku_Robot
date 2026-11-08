@@ -1385,7 +1385,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   fixes the bot's standing or turns the channel rule Off (the watcher and the runner bullets under Subsystem traps give the
   cap and the shed). Logs of every lookup path carry chat, channel and user IDs and a Telegram error by its code only
   (`memberReqLookupLogFailure`, `memberReqErrText`); a transport error text is gotgbot's own, whose URL is already scrubbed of
-  the bot credential, and `TestMemberReqLookupLogsCarryIDsOnly` holds it.
+  the bot credential, and `TestMemberReqLookupLogsCarryIDsOnly` holds it (a log of a non-gotgbot client's transport errors would
+  need its own scrubbing: none exists, and the test relies on gotgbot's). A member can be stuck behind "I fixed it" only while a
+  channel lookup for them stays unanswerable AND the bot is neither a definite non-administrator nor bot-gone (the classifier
+  then keeps the rule unknown): an administrator's `/unmute` is the fallback, and the 330 day marker mute is the worst case.
+  Two facts rest on live Telegram behaviour that no fake proves (a member who hides their photo reads as a total of zero,
+  what a bot that is not a channel's administrator is answered, and whether `getChat` of a group reaches a plain-member bot
+  with `linked_chat_id`); `.planning/phases/14-profile-photo-and-channel-rules/14-SPIKE.md` lists the owner's checks, and the
+  code is safe under every outcome (an unknown never punishes, D-22 makes a status answer to a non-administrator bot inert).
 - Member requirements, the rule table (`memberreq_rules.go`): `memberReqRules` has seven rows in the order of
   `memberreq.Rules` (`ln un ru ar zh ph ch`, bits 1 to 64; the next free bit is 128). The five name rows have a pure `Broken`
   test and no `Lookup`; the photo and channel rows have a `Lookup` function (`memberReqPhotoRule`, `memberReqChannelRule`) and
@@ -1594,8 +1601,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The same cost applies, for the same reason, to a group whose linked channel the bot cannot read (an inert or unknown
   channel verdict is never cached, so such a group's non-exempt members are a job per message until the owner fixes the
   bot's standing in the channel or turns the channel rule Off).
-  A basic group is never screened in this phase (mute and kick are supergroup methods): the watcher's filter is supergroups
-  only, and Phase 14's "cannot work here" line will say so on the page.
+  A basic group is never screened (mute and kick are supergroup methods): the watcher's filter is supergroups only, and the
+  page says so with its basic-group line (`settings_mreq_here_basic`, one line while any rule is not Off), so it is a stated
+  limit and no longer a silent one.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -2526,7 +2534,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   over a failing transport and over a server that refuses with a description: no file ID, name, title, description, notice
   text or bot credential in any line, and a recovered flight panic is one line naming no ID) and
   `TestMemberReqLookupAlertsFitEveryLocale` (the refused-press alert, built by `settingsMreqNoLinkAlert` as the gate sends it,
-  and `mreq_fixed_check_failed`, at most 200 code points in 8 languages, naming no ID, Staff Group or member).
+  and `mreq_fixed_check_failed`, at most 200 code points in 8 languages, naming no ID, Staff Group or member). The closing
+  plan 14-12 adds `TestMemberReqLookupEndToEnd` (`memberreq_lookup_e2e_test.go`): the owner's page press and card Yes, the real
+  dispatcher, the executor and the "I fixed it" button for both rules, including the cases that must punish nobody (the bot not
+  an administrator, the group unlinked); the group's `getChat` answered by the lookup fake carries no `permissions`, so a channel
+  unmute is asserted against `defaultUnmutePermissions()` and a photo one, whose group `getChat` the base fake answers, against
+  `lockdownSnapshotPermissions`.
   `TestSettingsStaffPrivacy` also renders the page and every rule screen under every channel status (unread, ok, notadmin,
   nolink, unknown) and in a basic group, Main with every rule on and both alerts, and runs a private and a group-menu Phase 14
   run of an administrator who is not the creator over a linked channel whose title and ID the fake knows and a held member

@@ -436,9 +436,10 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Media under text: Rules | Admin, and the bot an admin | no command |
 | Greet once (Welcome) | Admin | no command; the on/off switch of `/welcome` |
 | Welcome and Goodbye on/off switch, every Preview and Full preview, Cancel | Admin | `/welcome`, `/goodbye` |
-| Member requirements: open the page and a rule screen | Admin (and the owner gate above) | no command |
-| Member requirements: every punishment choice, the card's Yes, Check on join, Delete messages | Creator, or an admin who can restrict members | no command |
-| Member requirements: I fixed it | Only the held member; an administrator who presses it is refused and uses `/unmute` | no command |
+| Member requirements: open the page and a rule screen (the profile photo and channel rules included) | Admin (and the owner gate above) | no command |
+| Member requirements: every punishment choice, the card's Yes, Check on join, Delete messages (the profile photo and channel rules included) | Creator, or an admin who can restrict members | no command |
+| Member requirements: a punishing value for the channel rule | The same, and the group must have a linked channel (a live check at the press) | no command |
+| Member requirements: I fixed it | Only the held member; an administrator who presses it is refused and uses `/unmute`. An approved member is freed at the tap, once the live marker proves the mute is the requirements' own | no command |
 
 ### Typing a message into the editor
 
