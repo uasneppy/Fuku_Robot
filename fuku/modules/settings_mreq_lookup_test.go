@@ -385,6 +385,18 @@ func TestSettingsMreqChannelStatusScreen(t *testing.T) {
 	}
 }
 
+// settingsMreqLinkChannel makes a plain settings environment's group linked to a channel whose
+// administrator is the bot, so the channel rule's screen keeps its three-row shape (without a
+// link it is Off alone, D-05), and returns the channel's ID. The environment's bot answers the
+// lookup half of the fake from then on.
+func settingsMreqLinkChannel(t *testing.T, env *settingsEnv) int64 {
+	t.Helper()
+	withFastLookupPacer(t)
+	state := newMreqLookupState()
+	mreqInstallLookupFake(&memberReqEnv{settingsEnv: env}, state)
+	return mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+}
+
 // settingsMreqCostEnv builds the environment of the call-count tests.
 func settingsMreqCostEnv(t *testing.T) (*settingsMreqHereEnv, int64) {
 	t.Helper()
@@ -586,6 +598,7 @@ func TestSettingsMreqBasicGroup(t *testing.T) {
 			env := settingsMreqBasicEnv(t, private)
 			env.seed([7]int{0, 0, 0, 0, 0, models.RequirementActionMute, models.RequirementActionBan}, false, false)
 			msgID := env.openMenuOf(private)
+			asked := len(env.fake.callsFor("getChatMember"))
 			for i, code := range settingsMreqRuleCodes {
 				chats := mreqChatCalls(env.memberReqEnv, env.chat.Id)
 				text, keyboard := env.press(private, msgID, "a", "mo", "t", code)
@@ -616,8 +629,10 @@ func TestSettingsMreqBasicGroup(t *testing.T) {
 					t.Errorf("rule %s (%d): getChat requests = %d, want %d", code, i, got, wantChats)
 				}
 			}
-			if n := len(env.fake.callsFor("getChatMember")); n > len(settingsMreqRuleCodes)+2 {
-				t.Errorf("getChatMember requests = %d, want only the presser's own per press", n)
+			for _, call := range env.fake.callsFor("getChatMember")[asked:] {
+				if user := staffParamInt(call.Params, "user_id"); user == staffTestBotID {
+					t.Errorf("a basic group's screens asked about the bot in chat %d", staffParamInt(call.Params, "chat_id"))
+				}
 			}
 		})
 	}

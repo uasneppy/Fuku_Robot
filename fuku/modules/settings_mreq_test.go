@@ -290,6 +290,8 @@ func TestSettingsMreqOpensFromMain(t *testing.T) {
 // then Yes), and sets the channel rule Off, which never draws a card. Nothing here looks a member up.
 func TestSettingsMreqLookupRulesStore(t *testing.T) {
 	env := newSettingsEnv(t)
+	// The channel rule's screen draws all three rows only for a group linked to a channel.
+	settingsMreqLinkChannel(t, env)
 	owner := env.newOwner(env.chat)
 	env.sendPrivate(owner, fmt.Sprintf("/start settings_%d", env.chat.Id))
 	msgID := settingsPrivateOnlySent(t, env, owner).MessageID
@@ -670,6 +672,7 @@ func TestSettingsAuthorityMreq(t *testing.T) {
 
 	t.Run("an administrator without can_restrict_members opens every rule screen and is refused every choice and Yes", func(t *testing.T) {
 		env := newSettingsEnv(t)
+		settingsMreqLinkChannel(t, env)
 		writes := settingsMreqCountWrites(t)
 		helper := env.newOutsider()
 		env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{
@@ -1106,6 +1109,7 @@ func TestSettingsMreqPhotoScreen(t *testing.T) {
 
 func TestSettingsMreqRuleScreen(t *testing.T) {
 	env := newSettingsEnv(t)
+	settingsMreqLinkChannel(t, env)
 	owner := env.newOwner(env.chat)
 	writes := settingsMreqCountWrites(t)
 	msgID := settingsMreqOpenPage(t, env, owner)

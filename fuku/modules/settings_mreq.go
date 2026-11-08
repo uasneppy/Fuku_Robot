@@ -239,6 +239,20 @@ func settingsMreqDrawPage(p *settingsPress, row *models.ChatRequirements, notice
 	return renderSettingsMreqPageStatus(p.view(), row, notice, status)
 }
 
+// settingsMreqDrawRule is the one draw of a rule's screen, in the same order as the page's: the
+// press is answered empty, the status read follows (the channel screen's own read, fresh on its
+// opening and from the caches on a redraw; every other rule only the basic-group flag) and the
+// screen is drawn.
+func settingsMreqDrawRule(p *settingsPress, rule memberReqRule, row *models.ChatRequirements, notice string, fresh bool) settingsScreen {
+	p.answer("", false)
+	scope := settingsMreqScopeBasic
+	if rule.Store == memberreq.RuleChannel {
+		scope = settingsMreqScopeChannel
+	}
+	status := settingsMreqReadStatus(p, row, scope, fresh)
+	return renderSettingsMreqRuleScreenStatus(p.view(), rule, row, notice, status)
+}
+
 // settingsMreqChannelLine is the status line of the channel rule for a state, with its icon as a
 // code-side prefix, or "" when the state needs no line (nothing read, or an administrator bot). It
 // names no channel, group or member: {rule} is the translated rule name only.
@@ -426,34 +440,70 @@ func settingsMreqOpenFields(fields map[string]string) bool {
 	return ok
 }
 
-// renderSettingsMreqRuleScreen draws one rule's screen. It is pure: the rule's name and what breaks
-// it, the rule's own hint (its HintKey: the blank last name hint, the photo rule's Warn or Mute
-// recommendation) right after the description, the stored punishment, the two hints, the choice
-// rows [Off | Warn] and [Kick | Ban | Mute] with the check mark on the stored value, and Back to the
-// page (not Main, UI-SPEC amendment M5) with Close. A nil row draws the rule off.
+// renderSettingsMreqRuleScreen draws one rule's screen with no status read (the zero status): the
+// shape the screen had before any lookup. It is pure.
 func renderSettingsMreqRuleScreen(v settingsView, rule memberReqRule, row *models.ChatRequirements, notice string) settingsScreen {
+	return renderSettingsMreqRuleScreenStatus(v, rule, row, notice, settingsMreqStatus{})
+}
+
+// settingsMreqRuleSlot is the one status line of a rule's screen: the basic-group line on every
+// rule, the channel rule's own line on the channel screen, and nothing for the others. A rule
+// screen always shows the line for its rule, because the screen exists to explain.
+func settingsMreqRuleSlot(tr *i18n.Translator, rule memberReqRule, status settingsMreqStatus) string {
+	if status.Basic {
+		return settingsMreqBasicLine(tr)
+	}
+	if rule.Store == memberreq.RuleChannel {
+		return settingsMreqChannelLine(tr, status.Channel)
+	}
+	return ""
+}
+
+// settingsMreqOffOnly reports whether the rule's screen offers Off alone: the channel rule in a group
+// that cannot be linked to a channel (no linked channel found, or a basic group). A stored value
+// stays visible and inert there, and Off clears it (D-05, UI-SPEC amendment M7).
+func settingsMreqOffOnly(rule memberReqRule, status settingsMreqStatus) bool {
+	return rule.Store == memberreq.RuleChannel && (status.Basic || status.Channel == settingsMreqChannelNoLink)
+}
+
+// renderSettingsMreqRuleScreenStatus draws one rule's screen for a status. It is pure: the rule's
+// name and what breaks it, the rule's own hint (its HintKey: the blank last name hint, the photo
+// rule's Warn or Mute recommendation) right after the description, the status slot (one line, none
+// when nothing needs saying), the stored punishment, the two hints, the choice rows [Off | Warn] and
+// [Kick | Ban | Mute] with the check mark on the stored value, and Back to the page (not Main,
+// UI-SPEC amendment M5) with Close. While the rule cannot be linked (settingsMreqOffOnly) the choice
+// is [Off] alone and the two hints, which describe options it does not offer, are omitted. A nil row
+// draws the rule off.
+func renderSettingsMreqRuleScreenStatus(v settingsView, rule memberReqRule, row *models.ChatRequirements, notice string, status settingsMreqStatus) settingsScreen {
 	if row == nil {
 		row = &models.ChatRequirements{}
 	}
 	tr := v.Tr
 	action := memberreq.ActionOf(row, rule.Store)
+	offOnly := settingsMreqOffOnly(rule, status)
 	body := []string{settingsText(tr, rule.LineKey), settingsText(tr, rule.DescKey)}
 	if rule.HintKey != "" {
 		body = append(body, settingsText(tr, rule.HintKey))
+	}
+	if slot := settingsMreqRuleSlot(tr, rule, status); slot != "" {
+		body = append(body, slot)
 	}
 	body = append(body, "",
 		settingsText(tr, "settings_mreq_now", i18n.TranslationParams{
 			"action": memberReqActionIcon(action) + " " + settingsMreqActionWord(tr, action),
 		}),
-		"",
-		settingsText(tr, "settings_mreq_choose_hint"),
-		settingsText(tr, "settings_mreq_actions_hint"),
 	)
+	choices := [][]int{{models.RequirementActionOff, models.RequirementActionWarn},
+		{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute}}
+	if offOnly {
+		choices = [][]int{{models.RequirementActionOff}}
+	} else {
+		body = append(body, "", settingsText(tr, "settings_mreq_choose_hint"), settingsText(tr, "settings_mreq_actions_hint"))
+	}
 
 	k := newSettingsKeyboard(v)
 	selected := strconv.Itoa(action)
-	for _, values := range [][]int{{models.RequirementActionOff, models.RequirementActionWarn},
-		{models.RequirementActionKick, models.RequirementActionBan, models.RequirementActionMute}} {
+	for _, values := range choices {
 		options := make([]settingsOption, 0, len(values))
 		for _, value := range values {
 			options = append(options, settingsOption{Value: strconv.Itoa(value), Label: settingsMreqActionWord(tr, value)})
@@ -485,7 +535,9 @@ func settingsMreqOpenRule(p *settingsPress) *settingsScreen {
 		p.cannotOpen()
 		return nil
 	}
-	screen := renderSettingsMreqRuleScreen(p.view(), rule, row, "")
+	// The channel screen reads its status fresh on its opening and refreshes the link and
+	// administrator caches; every other rule only needs the basic-group flag.
+	screen := settingsMreqDrawRule(p, rule, row, "", true)
 	return &screen
 }
 
@@ -497,9 +549,10 @@ func settingsMreqRuleSet(rule memberReqRule) func(p *settingsPress, value string
 	}
 }
 
-// settingsMreqRedrawRule draws a rule's screen from row with the given notice.
+// settingsMreqRedrawRule draws a rule's screen from row with the given notice, reading its status
+// from the caches.
 func settingsMreqRedrawRule(p *settingsPress, rule memberReqRule, row *models.ChatRequirements, notice string) *settingsScreen {
-	screen := renderSettingsMreqRuleScreen(p.view(), rule, row, notice)
+	screen := settingsMreqDrawRule(p, rule, row, notice, false)
 	return &screen
 }
 
