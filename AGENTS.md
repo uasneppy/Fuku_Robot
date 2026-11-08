@@ -59,7 +59,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the photo and channel rules derive from `memberReqContext()`, so `StopMemberReqJobs` ends them too (a job inside a lookup returns at once when the root is cancelled, leaving no hold, notice
   or write, because the claim follows every lookup, and the flight goroutine of the cancelled lookup ends with it), they read and write only
   Redis and Telegram and never PostgreSQL, and they added no drain and no second: the 65 s worst case is unchanged
-  (`TestShutdownEndsMemberReqLookups`).
+  (`TestShutdownEndsMemberReqLookups`). The provider call of the AI spam-name rule (`memberReqAIRule`, Phase 15) derives
+  from `memberReqContext()` too, inside its flight, so `StopMemberReqJobs` ends it (a job cut off leaves no hold, notice or
+  cached verdict); it reads and writes only Redis and Anthropic, never PostgreSQL or Telegram, and no drain or second was
+  added: the 65 s worst case is unchanged (the shutdown test of the phase is plan 15-10's).
 - `StopLockdownWorker` is another drain registered after DB-close, through `RegisterLockdownWorkerDrain`
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
@@ -527,24 +530,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   through `memberReqSettingsLookup` (`memberreq.GetSettings`, the cached `member_requirements:<chat>` key, the one read
   that the page, Main and the message watcher share; the key is in `skipLocal`).
   Main's state is Off when every rule is Off (whatever the two switches say), `{n} on` for the n rules that are not Off
-  (n up to 7), and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
+  (n up to 8), and the unknown mark when the read failed; a chat with no row draws every rule Off and both switches Off, and a read
   creates nothing. The body is the intro, the all-off line while every rule is Off, one line per rule of `memberReqRules`
   in table order (icon from `memberReqActionIcon` plus the option word), the Check on join and Delete messages lines, the
   cannot-work block (below) and the six hints (`settings_mreq_hint_lookup` follows the blank-name hint); a failed read is
   the cannot-open edit. The keyboard is the rule grid, the switch row and the navigation
-  row, six rows in a private and in a group menu (the rule grid's four rows of widths 2, 2, 2, 1, the switch row and the
+  row, six rows in a private and in a group menu (the rule grid's four rows of widths 2, 2, 2, 2, the switch row and the
   navigation row, `TestSettingsMreqRowBudget`) and no Open in private row. The rule grid
-  is one cell per rule of `memberReqRules` in rule order, seven cells (`ln un ru ar zh ph ch`), two per row with an odd
-  last cell alone, each the rule's
+  is one cell per rule of `memberReqRules` in rule order, eight cells (`ln un ru ar zh ph ch ai`), two per row (four full
+  rows, no odd last cell), each the rule's
   punishment icon (`memberReqActionIcon`) and short name (the `CellKey` of the table); a cell presses `a=mo&t=<code>`
-  (`ln un ru ar zh ph ch`; the new codes are two letters like the old ones, so no callback grows: settings buttons stay at
+  (`ln un ru ar zh ph ch ai`; the new codes are two letters like the old ones, so no callback grows: settings buttons stay at
   most 53 bytes), the page action `mo` (exactly `t`, a rule code, right `settingsRightAdmin`), which opens the rule
   screen (`renderSettingsMreqRuleScreen`, pure): the rule's name, what breaks it, the rule's own hint right after it when its
   table row has a `HintKey` (the blank last name hint on the last-name rule, `settings_mreq_hint_photo` on the photo rule,
   which recommends Warn or Mute and hides no punishment; no renderer branches on a rule's identity for it), the status slot
   (below), `Punishment: icon word`, the two hints and the choice rows `[Off | Warn]` and
   `[Kick | Ban | Mute]` with `✅ ` on the stored value, then Back to the page (`a=op&p=m`, the one Back that does not
-  open Main) and Close. The rule controls `ln un ru ar zh ph ch` accept `st` only (`Actions: []string{"st"}`, so a `tg` on one
+  open Main) and Close. The rule controls `ln un ru ar zh ph ch ai` accept `st` only (`Actions: []string{"st"}`, so a `tg` on one
   is an invalid request in step 1) with `v` exactly one digit 0..4 and right `settingsRightRestrict`. Off and Warn are
   written at once through `applyMemberReqAction(ctx, chatID, rule, action)` (in `memberreq_settings.go`: the rule and the
   value 0..4 are checked before any write, then the `memberReqWrites.Action` column-targeted write, a Go 0 written, the
@@ -725,7 +728,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `lockdown_auto_ai_unavailable` ("AI checks are not set up") when `raidAIConfigured()` is false, that is when
   neither the text checks (`ENABLE_AISPAM` with `TYPESAFE_API_KEY`) nor the image checks (`ENABLE_AISPAM` with
   `ANTHROPIC_API_KEY`) are available; a server with one of the two shows no notice. `ENABLE_AISPAM=false` is the global AI
-  kill switch for the whole raid AI path: `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
+  kill switch for the whole raid AI path (it also turns the AI spam-name rule of the member requirements off: the rule is
+  then inert): `raidAITextConfigured` and `raidAIImageConfigured` both require it, the
   watcher enqueues nothing, and a job already queued is dropped by `raidAIProcessJob` / `raidAIProcessImage` without
   a `getFile` or any provider call. The `/lockdown` help says what the AI trigger sends to
   TypeSafe and to Anthropic Claude (`lockdown_help_msg`, all 8 locales, D-15), and its length is held by
@@ -1290,6 +1294,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   channel the bot cannot read (below): after the first message the group costs one `getChatMember` of the bot per channel
   per minute, not a runner job and paced calls per message. It sits in the `fuku:memberreq:*` family, outside the cache
   prefix.
+- `fuku:memberreq:nv:<verdict key hash>` is the AI spam-name rule's verdict cache (`memberreq_ai.go`, `memberReqAIVerdictKey`):
+  the value is the spam probability as a decimal string (`memberReqAIParseProbability` is the one place it is parsed: a
+  finite number from 0 to 1, else a miss, `math.IsNaN` and `math.IsInf` before the range test), `SET EX` 24 hours
+  (`memberReqAIVerdictTTL`), written by the flight only after a definite answer, a pass and a breach alike and never an
+  unknown, so a retuned bar applies to cached verdicts at once. The key is the first 16 bytes of the SHA-256 of the prompt
+  version tag `mrv1`, the model and the names hash (`namecanon.VerdictKey`), so a model change or a changed instruction never
+  serves an old verdict; it holds a hash and a probability and never a name, and it sits outside the `fuku:cache:` prefix, so
+  `CLEAR_CACHE_ON_STARTUP` keeps it. It amends Phase 14's "positive only" rule for this one string-level fact: a verdict about
+  a member is still never cached, only one about a string of names.
 - `fuku:memberreq:lkp:pace:next` and `fuku:memberreq:lkp:pace:block` are the fleet-wide pacing of photo and channel
   lookups (`memberReqLookupPaced`, `memberReqLookupPacer`, built from `memberReqLookupPacerOptions`): the staff pacer's
   slot-plus-block design (`ratelimit.NewTelegramPacer`) with Interval 100 ms, MaxRetries 1 and MaxWait 5 s. A slot, or a
@@ -1311,7 +1324,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupFlightTimeout` (15 s), never from a caller, so `StopMemberReqJobs` ends every flight and one caller's
   short deadline never cancels a lookup that others share; every caller waits with `select` on its own deadline and gets
   unknown (no value) when it runs out. A lookup returns a `memberReqVerdict` whose zero value is `memberReqUnknown`, so a
-  missing verdict, a recovered panic and a shed all do nothing; only `memberReqBreach` can lead to a punishment.
+  missing verdict, a recovered panic and a shed all do nothing; only `memberReqBreach` can lead to a punishment. The AI row
+  adds the family `n:<verdict key hash>`, so every concurrent judgement of one string of names is one provider call, and,
+  unlike the lookups above, it ignores `mode.Fresh` and `mode.Classify` (the AI row answers from the cache whatever the mode).
 - `fuku:memberreq:warned:<chat>:<user>` is the recorded-warn note of the member requirements executor
   (`memberreq_warned.go`, WR-01): the value is the decimal ID of the hold whose warn was just stored, `SET EX` for
   `memberreq.StaleClaim` plus 10 minutes (`memberReqWarnedGrace`), written inside the warn lock before the hold is marked
@@ -1449,16 +1464,33 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   what a bot that is not a channel's administrator is answered, and whether `getChat` of a group reaches a plain-member bot
   with `linked_chat_id`); `.planning/phases/14-profile-photo-and-channel-rules/14-SPIKE.md` lists the owner's checks, and the
   code is safe under every outcome (an unknown never punishes, D-22 makes a status answer to a non-administrator bot inert).
-- Member requirements, the rule table (`memberreq_rules.go`): `memberReqRules` has seven rows in the order of
-  `memberreq.Rules` (`ln un ru ar zh ph ch`, bits 1 to 64; the next free bit is 128). The five name rows have a pure `Broken`
-  test and no `Lookup`; the photo and channel rows have a `Lookup` function (`memberReqPhotoRule`, `memberReqChannelRule`) and
-  no `Broken`, and exactly one of the two is set on every row (`TestMemberReqRuleTable`). `memberReqBroken` judges the name
+- Member requirements, the rule table (`memberreq_rules.go`): `memberReqRules` has eight rows in the order of
+  `memberreq.Rules` (`ln un ru ar zh ph ch ai`, bits 1 to 128; the next free bit is 256). The five name rows have a pure `Broken`
+  test and no `Lookup`; the photo, channel and AI rows have a `Lookup` function (`memberReqPhotoRule`, `memberReqChannelRule`,
+  `memberReqAIRule`) and no `Broken`, so the lookup rules are three and `memberReqLookupMode` gains `Names` (the live record's
+  names, read only by the AI row), and exactly one of the two is set on every row (`TestMemberReqRuleTable`). `memberReqBroken` judges the name
   rules only: it skips a row with no `Broken`, so it never reports a lookup bit and a nil function is never called.
-  `memberReqLookupBroken` folds the lookup verdicts into the same mask in table order (photo, then channel): it skips a row
+  `memberReqLookupBroken` folds the lookup verdicts into the same mask in table order (photo, channel, then the AI rule): it skips a row
   with no `Lookup` and a row whose action is Off, a `memberReqBreach` sets the row's bit, a `memberReqUnknown` sets only the
   returned unknown flag, and `memberReqPass` and `memberReqInert` add nothing, so a lookup row can add a bit only through an
-  explicit breach; its one production caller is `memberReqFixedJudge` ("I fixed it", with `Fresh` and `Classify`), and the executor's `memberReqLiveViolation` (the executor bullet below) calls the same fold through `memberReqLookupMasks`, which also returns the unknown mask. `memberReqPassValue` fingerprints the seven rule actions. A row's `HintKey` is the hint its settings screen
+  explicit breach; its one production caller is `memberReqFixedJudge` ("I fixed it", with `Fresh` and `Classify`), and the executor's `memberReqLiveViolation` (the executor bullet below) calls the same fold through `memberReqLookupMasks`, which also returns the unknown mask. `memberReqPassValue` fingerprints the eight rule actions. A row's `HintKey` is the hint its settings screen
   shows after the description.
+- Member requirements, the AI spam-name rule (`memberreq_ai.go`): the eighth rule (`ai`, bit 128). It is judged only when
+  `memberReqAIConfigured()` holds: `ENABLE_AISPAM` on and an Anthropic key set, never Redis and never the raid `ai_enabled`
+  switch (they are other facts). `memberReqAIRule` runs in this order: no names in the mode is unknown, an AI that is not
+  configured is inert, names that are not judgeable (`namecanon.Of`: all empty, or a lone "Deleted Account") are inert, no Redis
+  or a Redis read error is unknown (the provider is not asked while the cache cannot be read), a cached probability is the
+  answer, and otherwise one `claude.Client.ClassifyNames` call of the three canonical strings inside one flight per verdict
+  key, on a context derived from `memberReqContext()` and bounded by `memberReqLookupFlightTimeout`. A probability at or above
+  `memberReqAIBar` (0.9) is a breach and a lower one a pass, and the probability is cached; unknown and inert both mean "not
+  broken", and every answer the process cannot turn into a probability (an HTTP error, a refusal stop, a missing tool call, a
+  value outside 0 to 1, an unreadable body, a transport failure, a cancelled context) is unknown, leaves no hold, notice or
+  cached verdict and punishes nobody. The names come from the executor's live `getChatMember` record (`memberReqLiveViolation`
+  passes `Names`), exactly as the name rules judge them, so the rules never disagree, and the row is asked after the photo and
+  channel rows, only after the exemptions, the hold read, the pause and the live eligibility check. The provider key travels in
+  the `x-api-key` header only and no name, hash, probability, instruction or key is logged: a failure is one Warn line with the
+  chat and user IDs, the HTTP status and the error type (`claude.HTTPError`), a refusal one Info line. Later plans of Phase 15
+  extend this bullet (the baseline and the new-member marker, the cost guards, the notice, the button and the page status).
 - Member requirements, the executor (`memberreq_enforce.go`, `memberreq_notice.go`, `memberreq_unmute.go`): `memberReqEnforce` is the one
   place that punishes a member for a broken rule; its production callers are the message watcher's job and the join entry
   `memberReqJoinThenWelcome` (below), and only while the enforcement switch is on (it is, by default, since the `mreq|` handler exists). Its order is fixed and every step that cannot be answered returns `memberReqNone` with no hold: the bot
@@ -2411,7 +2443,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
 - Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text and images; inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
-  means no raid image check and no image leaves the server, and `ANTHROPIC_MODEL` falls back to `claude.DefaultModel`
+  means no raid image check, no AI name check and no image or name leaves the server, and `ANTHROPIC_MODEL` must be a model that
+  accepts a forced tool call (a Haiku-class model: the names request and the image request both force the call) and falls back to `claude.DefaultModel`
   (with a warning) when empty or not a valid model name; because the bot reads the standard `ANTHROPIC_API_KEY` name, a
   key exported for another tool on the same host turns the image checks on; perf monitoring and
   background stats are on only when `DEBUG=false`; `HTTP_PORT` falls back to `PORT` then 8080. Integer env parsing is
@@ -2611,8 +2644,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   both Phase 13 tables, their warns, the `member_requirements` settings key, the approvals keys and the `fuku:memberreq:*`
   keys, then calls `ResetLocalForTest`. The size and privacy sweep is `TestMemberReqScreensFitEveryLocale` (every notice,
   every "I fixed it" answer at 200 code points and the two notices that button edits in, in all 8 languages, none naming the
-  chat, the Staff Group or the admin who set the rule) and the Phase 13 part of `TestSettingsStaffPrivacy` (page `m`, seven rule
-  screens and twenty-one cards in every language, and a private run by an administrator who is not the creator through the page,
+  chat, the Staff Group or the admin who set the rule) and the Phase 13 part of `TestSettingsStaffPrivacy` (page `m`, eight rule
+  screens and twenty-four cards in every language, and a private run by an administrator who is not the creator through the page,
   a rule screen, a Mute card and its Yes and both switches). `TestMemberRequirementsStayOutOfBackup` (`fuku/db/backup`,
   SQLite, so not in the PostgreSQL list) proves that neither `chat_requirements` nor `chat_requirement_holds` is exported,
   imported or reset, and since Phase 14 that the export file names no requirement column or table and a reset leaves the
