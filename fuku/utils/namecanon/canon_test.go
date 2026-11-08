@@ -74,12 +74,12 @@ func TestCanonForm(t *testing.T) {
 
 	t.Run("NFKC folds look-alikes and composes", func(t *testing.T) {
 		cases := map[string]string{
-			"Ａｎｎａ":                                 "Anna",
-			"\U0001D400\U0001D427\U0001D427\U0001D41A":                 "Anna",
-			"ﬁsh":                                                 "fish",
-			"é":                                                  "é",
-			"① free":                                              "1 free",
-			"नमस्ते": "नमस्ते",
+			"\uFF21\uFF4E\uFF4E\uFF41":                 "Anna",
+			"\U0001D400\U0001D427\U0001D427\U0001D41A": "Anna",
+			"\uFB01sh":                             "fish",
+			"e\u0301":                              "\u00E9",
+			"\u2460 free":                          "1 free",
+			"\u0928\u092E\u0938\u094D\u0924\u0947": "\u0928\u092E\u0938\u094D\u0924\u0947",
 		}
 		for in, want := range cases {
 			if got := canonOf(t, in, "", "").First; got != want {
@@ -89,7 +89,7 @@ func TestCanonForm(t *testing.T) {
 	})
 
 	t.Run("whitespace runs collapse to one space and the result is trimmed", func(t *testing.T) {
-		in := " \t a \n　  b  c \r\n"
+		in := " \t\u00A0a \n\u3000\u2028 b\u00A0\u2003c \r\n"
 		if got := canonOf(t, in, "", "").First; got != "a b c" {
 			t.Errorf("First = %q, want %q", got, "a b c")
 		}
@@ -101,8 +101,8 @@ func TestCanonForm(t *testing.T) {
 			"Anna_K":        "anna_k",
 			"@@x":           "@x",
 			"  @X":          "x",
-			"​@Anna":   "anna",
-			"＠Anna":    "anna",
+			"\u200B@Anna":   "anna",
+			"\uFF20Anna":    "anna",
 			"@ SPACED  OUT": "spaced out",
 		}
 		for in, want := range cases {
@@ -122,7 +122,7 @@ func TestCanonForm(t *testing.T) {
 
 func TestCanonBounds(t *testing.T) {
 	t.Run("first and last are cut at 64 runes and the username at 32", func(t *testing.T) {
-		c := canonOf(t, strings.Repeat("é", 70), strings.Repeat("x", 65), strings.Repeat("u", 40))
+		c := canonOf(t, strings.Repeat("\u00E9", 70), strings.Repeat("x", 65), strings.Repeat("u", 40))
 		if n := utf8.RuneCountInString(c.First); n != 64 {
 			t.Errorf("first has %d runes, want 64", n)
 		}
@@ -135,7 +135,7 @@ func TestCanonBounds(t *testing.T) {
 	})
 
 	t.Run("a cut never splits a multibyte character", func(t *testing.T) {
-		c := canonOf(t, strings.Repeat("日", 65), strings.Repeat("\U0001F600", 65), strings.Repeat("ü", 40))
+		c := canonOf(t, strings.Repeat("\u65E5", 65), strings.Repeat("\U0001F600", 65), strings.Repeat("\u00FC", 40))
 		for name, s := range map[string]string{"first": c.First, "last": c.Last, "username": c.Username} {
 			if !utf8.ValidString(s) {
 				t.Errorf("%s is not valid UTF-8 after the cut", name)
@@ -151,7 +151,7 @@ func TestCanonBounds(t *testing.T) {
 	})
 
 	t.Run("invisible padding does not push the visible part out", func(t *testing.T) {
-		pad := strings.Repeat("​ㅤ⠀", 100)
+		pad := strings.Repeat("\u200B\u3164\u2800", 100)
 		c := canonOf(t, pad+"visible"+pad, pad+"last"+pad, pad+"user"+pad)
 		if c.First != "visible" || c.Last != "last" || c.Username != "user" {
 			t.Errorf("got %q %q %q", c.First, c.Last, c.Username)
@@ -175,7 +175,7 @@ func TestCanonHash(t *testing.T) {
 
 	t.Run("equal canonical names give equal hashes whatever the input form", func(t *testing.T) {
 		a := canonOf(t, "Anna", "K", "annak")
-		b := canonOf(t, "Ａnna​", " K ", "@AnnaK")
+		b := canonOf(t, "\uFF21nna\u200B", " K ", "@AnnaK")
 		if a.Hash != b.Hash {
 			t.Errorf("hashes differ: %s %s", a.Hash, b.Hash)
 		}
@@ -231,7 +231,7 @@ func TestCanonHash(t *testing.T) {
 			t.Errorf("Hash = %s", got)
 		}
 		// Lengths are bytes: "привет" is 12 bytes, 6 runes.
-		if got := canonOf(t, "Привет", "", "").Hash; got != "13cb65eda63d1609961b5ee8f6b4c4b7" {
+		if got := canonOf(t, "\u041F\u0440\u0438\u0432\u0435\u0442", "", "").Hash; got != "13cb65eda63d1609961b5ee8f6b4c4b7" {
 			t.Errorf("Hash = %s", got)
 		}
 	})
@@ -240,14 +240,14 @@ func TestCanonHash(t *testing.T) {
 func TestCanonJudgeable(t *testing.T) {
 	notJudgeable := map[string][3]string{
 		"all empty":                {"", "", ""},
-		"only whitespace":          {" \t ", "\n", " "},
-		"only invisible runes":     {"​‍﻿", "‮", "⁦⁩"},
-		"only fillers":             {"ㅤ", "⠀", "ᅟᅠﾠ"},
+		"only whitespace":          {" \t ", "\n", "\u00A0"},
+		"only invisible runes":     {"\u200B\u200D\uFEFF", "\u202E", "\u2066\u2069"},
+		"only fillers":             {"\u3164", "\u2800", "\u115F\u1160\uFFA0"},
 		"lone at sign":             {"", "", "@"},
 		"deleted account":          {"Deleted Account", "", ""},
 		"deleted account any case": {"dELETED aCCOUNT", "", ""},
-		"deleted account padded":   {" Deleted  Account​ ", "", ""},
-		"deleted account, blanks":  {"Deleted Account", "ㅤ", "@​"},
+		"deleted account padded":   {" Deleted\u00A0 Account\u200B ", "", ""},
+		"deleted account, blanks":  {"Deleted Account", "\u3164", "@\u200B"},
 	}
 	for name, in := range notJudgeable {
 		c, ok := Of(in[0], in[1], in[2])
@@ -260,16 +260,16 @@ func TestCanonJudgeable(t *testing.T) {
 	}
 
 	judgeable := map[string][3]string{
-		"only a username":                       {"", "", "spamchannel"},
-		"filler first name with a username":     {"ㅤ", "", "ad_bot"},
-		"braille first name with a username":    {"⠀", "", "ad_bot"},
-		"deleted account with a last name":      {"Deleted Account", "Smith", ""},
-		"deleted account with a username":       {"Deleted Account", "", "someone"},
-		"deleted account as a last name":        {"", "Deleted Account", ""},
-		"a name that only starts like it":       {"Deleted Accounts", "", ""},
-		"an ordinary name":                      {"Anna", "", ""},
-		"a name that is only a symbol":          {"❤", "", ""},
-		"a name that is only a decorated mark":  {"नम", "", ""},
+		"only a username":                      {"", "", "spamchannel"},
+		"filler first name with a username":    {"\u3164", "", "ad_bot"},
+		"braille first name with a username":   {"\u2800", "", "ad_bot"},
+		"deleted account with a last name":     {"Deleted Account", "Smith", ""},
+		"deleted account with a username":      {"Deleted Account", "", "someone"},
+		"deleted account as a last name":       {"", "Deleted Account", ""},
+		"a name that only starts like it":      {"Deleted Accounts", "", ""},
+		"an ordinary name":                     {"Anna", "", ""},
+		"a name that is only a symbol":         {"\u2764", "", ""},
+		"a name that is only a decorated mark": {"\u0928\u092E", "", ""},
 	}
 	for name, in := range judgeable {
 		c, ok := Of(in[0], in[1], in[2])
