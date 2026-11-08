@@ -2377,7 +2377,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   database connection of `fuku/config` and `fuku/db`. The Anthropic key travels only in the `x-api-key` header, never
   in a URL, and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is
   ever sent, because the default model rejects them with a 400. `claude.Options` and `GetModel` exist for the spike tool
-  only; its zero value is the production request, and the bot never sets it.
+  only; its zero value is the production request, and the bot never sets it. The package also holds the names request
+  (`Client.ClassifyNames`, Phase 15): one strict forced tool call (`ToolName`, `thinking` disabled, `max_tokens` 128),
+  the code-owned `NamesInstruction` as the system text, the three canonical strings as one JSON object in one user block
+  (`first_name`, `last_name`, `username`, a defensive rune cut of 64, 64 and 32) and nothing else about the account or
+  the group, and the same strict `parseVerdict` as the image path (a refusal is `ErrBlocked`, any other unreadable answer
+  wraps `ErrNoVerdict`, only a finite 0..1 number from a tool call that stopped with `tool_use` is a verdict). Both
+  requests are assembled by one `newRequest`, which alone applies `Options`. The model must accept a forced tool call,
+  so a Haiku-class model: Opus 5.5, Sonnet 5.5 and the Fable 5.1 family answer 400 to it, which the breaker reads as a
+  provider failure. The package never imports the canonical form (`fuku/utils/namecanon`): `ClassifyNames` takes names
+  that are already canonical and logs nothing.
+- `fuku/utils/namecanon` (standard library plus `golang.org/x/text/unicode/norm`, no `fuku/config` or `fuku/db` import,
+  asserted by `TestCanonPackageIsLeaf`) is the one definition of a member's canonical names (`Of`: per field it drops
+  control, format and default-ignorable runes and U+2800, applies NFKC, collapses whitespace, cuts by runes to 64, 64
+  and 32, strips one leading `@` from the lower-cased username, and keeps the case of the first and last name in the
+  text that is sent), of the names hash (tag `mrn1`, length-prefixed, first and last lower-cased inside the hash only)
+  and of the verdict key (`VerdictKey`, tag `mrv1`, includes the model). The bot and `scripts/claude-spike` share it.
+  A change to the canonical form bumps `mrn1` and `mrv1`, and a change to `claude.NamesInstruction` bumps `mrv1`, in the
+  same commit, so no old baseline or cached verdict is read under a new meaning; `TestCanonHash` and
+  `TestCanonVerdictKey` pin one vector each for that reason.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in

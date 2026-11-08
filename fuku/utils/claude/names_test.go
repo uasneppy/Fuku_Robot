@@ -265,7 +265,7 @@ func TestClassifyNamesInjection(t *testing.T) {
 		t.Fatalf("ClassifyNames: %v", err)
 	}
 	body := decodeNamesBody(t, rec)
-	if got := namesSeenOf(t, body); got != (namesSeen{First: hostile.First, Last: hostile.Last, Username: hostile.Username}) {
+	if got := namesSeenOf(t, body); got != namesSeen(hostile) {
 		t.Fatalf("the names did not arrive as written: %+v", got)
 	}
 	if body.System != NamesInstruction {
