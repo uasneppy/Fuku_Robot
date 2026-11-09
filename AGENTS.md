@@ -180,7 +180,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity and any
   Redis error are not satisfied); names that are not judgeable are satisfied with no key read, and everything else is one job
   after `memberReqMissExempt`. `memberReqLookupCached` takes the names for this and its complexity is held at 18 or less by
-  keeping the AI part in those two small functions. The watcher writes no verdict, baseline or marker and calls nobody. Known
+  keeping the AI part in those two small functions. The watcher writes no verdict, baseline or marker and calls nobody.
+  While the AI breaker is paused for the chat (`memberReqAIPaused`: in memory and pure, the provider-wide pause or the group's
+  own) the watcher consults it (Phase 15 review WR-04, `memberReqAIOnlyPaused`): when the AI part is the ONLY reason the member
+  is not satisfied (one more Redis-only read, `memberReqLookupCachedWith` with the AI rule left out, only while paused) it
+  starts no job and runs no clean path and returns `ext.ContinueGroups` having done nothing, so a marker holder costs no job
+  and no paced live `getChatMember` per message during a pause, and the marker stays, so the first message after the pause is
+  judged. It must not treat the AI part as "satisfied": that would take the clean path (`ClearHoldOnClean`) and delete the hold
+  of a member held for an AI breach. Any other open reason (a name rule, the photo or channel rule) still hands a job as
+  before (`TestMemberReqWatcherAIPaused`). Known
   watcher gap, recorded for the owner and pinned by `TestMemberReqWatcherAI`: a member whose baseline equals their names and
   who has no marker stays satisfied even when another account's judgement of the same string has since cached a breach,
   because the baseline is the bot's record that these names were accepted for this member (it errs toward not punishing); a

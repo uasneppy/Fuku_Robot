@@ -260,11 +260,21 @@ func memberReqAIWatchSatisfied(verdictValue, baseline string, marker bool, hash 
 // to a job, which is correct and only slower. It writes nothing, and the pass hit never stands in
 // for a lookup positive (R2).
 func memberReqLookupCached(settings *models.ChatRequirements, chatID, userID int64, passValue string, names memberReqNames) (satisfied, passHit bool) {
+	return memberReqLookupCachedWith(settings, chatID, userID, passValue, names, false)
+}
+
+// memberReqLookupCachedWith is memberReqLookupCached with the AI rule optionally left out (ignoreAI:
+// its keys are not queued and its part counts as satisfied), so the watcher can ask whether the AI
+// rule is the only reason a member is not satisfied (memberReqAIOnlyPaused, WR-04).
+func memberReqLookupCachedWith(settings *models.ChatRequirements, chatID, userID int64, passValue string, names memberReqNames, ignoreAI bool) (satisfied, passHit bool) {
 	client := memberReqRedisClient()
 	if client == nil {
 		return false, false
 	}
 	rules := memberReqLookupRulesOf(settings)
+	if ignoreAI {
+		rules.AI = false
+	}
 	ctx, cancel := context.WithTimeout(cache.Context, raidRedisTimeout)
 	defer cancel()
 	pipe := client.Pipeline()
@@ -313,6 +323,24 @@ func memberReqLookupCached(settings *models.ChatRequirements, chatID, userID int
 	return true, passHit
 }
 
+// memberReqAIOnlyPaused reports whether a member the cached read could not call satisfied is open
+// only because of the AI rule, which is paused for the chat (the provider-wide pause or the group's
+// own, memberReqAIPaused: in memory and pure). While the breaker is paused nothing can be judged, so
+// a job would make a paced live lookup and end in nothing for every message of every member who
+// still has a join marker (WR-04). The watcher then does nothing at all: it starts no job and does
+// NOT take the clean path, because "satisfied" would run ClearHoldOnClean and delete the hold of a
+// member held for an AI breach; the marker stays and the first message after the pause is judged.
+// The cheap tests come first, so an unpaused group costs nothing extra; during a pause one more
+// Redis-only read asks whether every other lookup rule is satisfied (it never calls Telegram or the
+// provider and writes nothing). Any other open reason is false and the member is handed to a job.
+func memberReqAIOnlyPaused(settings *models.ChatRequirements, chatID, userID int64, passValue string, names memberReqNames) bool {
+	if !memberReqLookupRulesOf(settings).AI || !memberReqAIPaused(chatID) {
+		return false
+	}
+	othersSatisfied, _ := memberReqLookupCachedWith(settings, chatID, userID, passValue, names, true)
+	return othersSatisfied
+}
+
 // memberReqCachedChannel reads the linked channel out of the lc command: 0 for no linked channel,
 // a negative chat ID for a channel, and false for a miss, an error or a value that is neither
 // (a channel ID is never positive, and none is ever written as one).
@@ -346,7 +374,9 @@ func memberReqStartJob(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message,
 // lookup rule on it is the Phase 13 clean path exactly. With one on, the member is clean only
 // when every lookup rule has a cached positive (memberReqLookupCached); the pass key's clean
 // predicate then runs as before. Otherwise the member is handed to one job, which asks Telegram:
-// the watcher never does, never classifies and never writes a verdict of any kind.
+// the watcher never does, never classifies and never writes a verdict of any kind, except that a
+// member open only because of a paused AI rule gets neither a job nor the clean path
+// (memberReqAIOnlyPaused, WR-04).
 func memberReqWatchClean(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message, userID int64, settings *models.ChatRequirements, names memberReqNames) {
 	if !memberReqLookupRulesOf(settings).any() {
 		memberReqCleanMember(ctx, chat.Id, userID, msg.Date, settings, names)
@@ -358,6 +388,9 @@ func memberReqWatchClean(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat
 		if !passHit {
 			memberReqClean(ctx, chat.Id, userID, time.Unix(msg.Date, 0), value)
 		}
+		return
+	}
+	if memberReqAIOnlyPaused(settings, chat.Id, userID, value, names) {
 		return
 	}
 	if memberReqMissExempt(ctx, chat.Id, userID) {
