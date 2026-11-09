@@ -300,7 +300,7 @@ Plans:
   1. With the AI spam-name rule on, a member whose names the AI judges as spam gets the rule's punishment when they join or change their names. Only the first name, last name and username are sent, never message text.
   2. An established member's names are first recorded without a call, so switching the rule on in a large group causes no burst of calls. Names already judged are answered from the cache, and hourly budgets cap the cost.
   3. With `ENABLE_AISPAM=false` or no Anthropic key the rule is off, and the page says AI is not configured. A slow, failing, rate-limited or over-budget AI gives no verdict and punishes nobody.
-**Plans:** 8/11 plans executed
+**Plans:** 9/11 plans executed
 - [x] 15-01-PLAN.md — migration, model field and repository rule for the AI column, the PostgreSQL guarantee (wave 1)
 - [x] 15-02-PLAN.md — the names request in the Claude client and the canonical form of names in a leaf package (wave 2)
 - [x] 15-03-PLAN.md — the ten new locale keys in all 8 files and the limit tests they move (wave 3)
@@ -309,7 +309,7 @@ Plans:
 - [x] 15-06-PLAN.md — hourly budgets, the four-call gate, the name check's own breaker, sticky unknowns and the stale-names guard (wave 6)
 - [x] 15-07-PLAN.md — the AI remedy tail of the notice and "I fixed it" with the AI rule (wave 7)
 - [x] 15-08-PLAN.md — the page's AI status line, the Off-only form, the press gate and the AI confirm card (wave 8)
-- [ ] 15-09-PLAN.md — the names mode of the spike tool and the owner's live checklist (wave 9)
+- [x] 15-09-PLAN.md — the names mode of the spike tool and the owner's live checklist (wave 9)
 - [ ] 15-10-PLAN.md — shutdown, join budget, log, request and independence proofs (wave 10)
 - [ ] 15-11-PLAN.md — the end-to-end slice, rulebook and docs, the phase gate and the requirement ticks (wave 11)
 **UI hint**: yes
@@ -389,7 +389,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 12. Rules Media, Media Under Text and Greet Once | 15/16 | In Progress | - |
 | 13. Member Requirements | 14/14 | In Progress | - |
 | 14. Profile Photo and Channel Rules | 12/12 | In Progress | - |
-| 15. AI Spam-Name Check | 8/11 | In Progress | - |
+| 15. AI Spam-Name Check | 9/11 | In Progress | - |
 | 16. Scheduled Deletion of Service and Bot Messages | 0/TBD | Not started | - |
 | 17. Command, Edit and Self-Destruct Deletion | 0/TBD | Not started | - |
 | 18. Remaining Settings Pages | 0/TBD | Not started | - |

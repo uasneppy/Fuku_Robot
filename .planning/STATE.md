@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
 status: executing
-stopped_at: Completed 15-08-PLAN.md
-last_updated: "2026-11-09T21:16:07.040Z"
+stopped_at: Completed 15-09-PLAN.md
+last_updated: "2026-11-09T21:27:14.043Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 11 execution started
-state_head: 4e6ccf2353e51384ca7bec1d0853880f98bac078
+state_head: 0416aac4f9dacd3dee90a0cb852c50cd7b04dec2
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 78
-  completed_plans: 74
+  completed_plans: 75
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 9 of 11
-Status: Executing Phase 15 (15-08 done: the Requirements page's AI line (AINotConfigured, set at every return of the status read, process fact only), the AI screen's Off-only form while the AI is not configured, the pure press gate settingsMreqAIGate and the AI card's own consequence keys, all through memberReqRule table fields (Configured, UnconfiguredKey, ConfirmKeys); the settings family passed (366.7 s); requirements stay Pending until 15-11)
-Last activity: 2026-11-09 — Plan 15-07 complete
+Plan: 10 of 11
+Status: Executing Phase 15 (15-09 done: scripts/claude-spike names mode (-names, -repeat; the bot's own namecanon.Of and ClassifyNames, bar 0.9, the false-positive rate, a sweep, the repeat stability report; names only in the owner's CSV, the key never printed) with six tests, and 15-SPIKE.md, the owner's non-blocking checklist; the live Haiku spike needs the owner's key and was not run; requirements stay Pending until 15-11)
+Last activity: 2026-11-09 — Plan 15-09 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -148,6 +148,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P06 | 1h | 3 tasks | 10 files |
 | Phase 15 P07 | 50min | 3 tasks | 9 files |
 | Phase 15 P08 | 70min | 3 tasks | 9 files |
+| Phase 15 P09 | 45min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -242,6 +243,7 @@ Recent decisions affecting current work:
 - [Phase 15]: 15-06: the name check's breaker is a type with its own state (memberReqAIBreaker), not a copy of the image breaker, so dupl finds no clone; the generic-helper fallback was not needed
 - [Phase 15]: 15-06: a sticky unknown (paused breaker, used-up budget, full gate) is cleared from the unknown mask before memberReqUnknownDefers, so an outage or an empty hour never suspends a weaker name punishment (D-22)
 - [Phase 15]: [15-08] A rule's process-level precondition is a memberReqRule table field (Configured, UnconfiguredKey, ConfirmKeys), so the status, slot, Off-only test, gate and card never test the AI rule's identity; settingsMreqAIGate has no unknown branch and makes no network call
+- [Phase 15]: 15-09: validate split into validateBasics, validateModes and validateOptions (it was over the gocyclo limit at HEAD); names-mode summary uses the first judgement of each row, latency and cost count every request
 
 ### Pending Todos
 
@@ -317,8 +319,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T21:16:06.074Z
-Stopped at: Completed 15-08-PLAN.md
+Last session: 2026-11-09T21:27:13.085Z
+Stopped at: Completed 15-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
