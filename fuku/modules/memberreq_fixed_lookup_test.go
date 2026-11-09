@@ -353,34 +353,50 @@ func mreqFixedLookupsBrokenFirst(t *testing.T) {
 		mreqWantHeld(t, env, hold)
 	})
 
-	t.Run("five or more broken rules answer with the count and a rule that is Off is not counted", func(t *testing.T) {
+	t.Run("five or more broken rules answer with the count, up to eight, and a rule that is Off is not counted", func(t *testing.T) {
+		withAIConfigured(t)
+		mreqInstallAIFake(t)
+		mreqAICleanup(t, nil, nil)
 		env, state := mreqWatchLookupEnv(t)
 		env.mreqRules(map[memberreq.Rule]int{
 			memberreq.RuleLastName: models.RequirementActionMute,
 			memberreq.RuleUsername: models.RequirementActionMute,
 			memberreq.RuleRussian:  models.RequirementActionMute,
 			memberreq.RuleArabic:   models.RequirementActionMute,
+			memberreq.RuleChinese:  models.RequirementActionMute,
 			memberreq.RulePhoto:    models.RequirementActionMute,
 			memberreq.RuleChannel:  models.RequirementActionMute,
-			memberreq.RuleChinese:  models.RequirementActionOff,
+			memberreq.RuleAI:       models.RequirementActionMute,
 		})
 		channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
-		// The first name breaks the Russian, Arabic and (Off) Chinese rules; no last name, no username.
-		member := env.mreqMember("\u042b\u0627\u4e2d", "", "")
+		// The first name breaks the Russian, Arabic and Chinese rules; no last name, no username.
+		// The user ID in it makes the names this test's own, and the AI rule's verdict for them is a
+		// cached breach, so the press itself asks no provider.
+		member := env.mreqMember("x", "", "")
+		member.FirstName = fmt.Sprintf("\u042b\u0627\u4e2d%d", member.Id)
+		env.fake.setProfile(member.Id, member.FirstName, member.LastName, member.Username)
 		mreqLookupCleanup(t, []int64{member.Id}, nil)
+		mreqAICleanup(t, []int64{env.chat.Id}, []int64{member.Id})
+		mreqAIPlant(t, env, mreqAIKeyOf(t, mreqAINamesOfUser(member)), "0.97")
 		state.set(member.Id, mreqPhotoAnswer{})
 		state.setMember(channel, member.Id, mreqChannelMember{Status: gotgbot.ChatMemberStatusLeft})
 		notice := env.mreqMuteByMessage(member)
 		hold := env.mreqHold(member.Id)
 		data := env.mreqFixedData(notice)
 
-		mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_still_broken_many", " 6")
+		mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_still_broken_many", " 8")
 		mreqWantHeld(t, env, hold)
 
-		// Adding a last name leaves five.
+		// Adding a last name leaves seven (the AI rule's verdict for these names is cached too).
 		member.LastName = "Smith"
 		env.fake.setProfile(member.Id, member.FirstName, member.LastName, member.Username)
-		mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_still_broken_many", " 5")
+		mreqAIPlant(t, env, mreqAIKeyOf(t, mreqAINamesOfUser(member)), "0.97")
+		mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_still_broken_many", " 7")
+		mreqWantHeld(t, env, hold)
+
+		// A rule switched Off is not counted.
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleChinese: models.RequirementActionOff})
+		mreqPressRefused(t, env, member, member, notice.MessageID, data, "mreq_fixed_still_broken_many", " 6")
 		mreqWantHeld(t, env, hold)
 	})
 

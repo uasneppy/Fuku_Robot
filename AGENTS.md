@@ -364,12 +364,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   settings read and no lookup; (5) every enabled rule judged again against the current settings (`memberReqFixedJudge`,
   `memberReqSettingsLookup`; a rule now Off is not checked, an unreadable setting is `mreq_fixed_check_failed`): the name
   rules (`memberReqBroken`) on the live record, and the photo and channel rules with fresh lookups
-  (`memberReqLookupBroken` with `memberReqLookupMode{Fresh: true, Classify: true}`) that bypass both positive caches
-  (a stale positive is deleted on a definite breach and a positive refreshes the cache) through the lookup pacer under
-  `memberReqFixedLookupBudget` (5 s) of the press's 10 s, so at least 5 s remain for the unmute. A rule still broken is the
-  definite answer and beats an unknown lookup: one to four broken rules are `mreq_fixed_still_broken` naming exactly them, and
-  five or more are `mreq_fixed_still_broken_many` with the count of broken rules whose punishment is not Off
-  (`memberReqStillBrokenText`); with nothing broken, an unknown lookup is `mreq_fixed_check_failed` and changes nothing,
+  (`memberReqLookupBroken` with `memberReqLookupMode{Fresh: true, Classify: true, Names: &liveNames}`) that bypass both
+  positive caches (a stale positive is deleted on a definite breach and a positive refreshes the cache) through the lookup
+  pacer under `memberReqFixedLookupBudget` (5 s) of the press's 10 s, so at least 5 s remain for the unmute. The AI rule
+  (Phase 15, D-23) is judged with the live record's names and ignores `Fresh`: it answers from the verdict cache, so the press
+  is deterministic for unchanged names (the cached verdict, a breach or a pass, with no request, however often the button is
+  tapped) and makes one provider call only for names with no verdict (a rename), through the breaker, the gate and the
+  member's per-account budget inside that 5 s; a pass writes the baseline and deletes the marker exactly as a job does, a
+  breach sets the marker, and an unknown (an error, a 429, a timeout, a shed, a paused check, any budget spent, a refusal, no
+  tool call, a value outside 0 to 1) is `mreq_fixed_check_failed` with nothing changed; an AI that is not configured is inert,
+  not broken and not unknown. The AI row never bypasses the cache for a press: a bypass would turn the button into a re-roll of
+  a model whose sampling cannot be fixed, and one lucky pass would overwrite a cached breach for every group for 24 hours. A rule
+  still broken is the definite answer and beats an unknown lookup: one to four broken rules are `mreq_fixed_still_broken` naming
+  exactly them, and five or more (up to eight) are `mreq_fixed_still_broken_many` with the count of broken rules whose
+  punishment is not Off (`memberReqStillBrokenText`); with nothing broken, an unknown lookup is `mreq_fixed_check_failed` and changes nothing,
   like an unreadable setting. A channel lookup for the member that cannot be answered is classified by one paced
   `getChatMember(channel, bot)`: a definite non-administrator status or a 400 or 403 makes the channel rule inert (not broken,
   no answer of its own), and a 429, a shed, a 5xx, a transport error, a timeout or an administrator bot stays unknown;
@@ -758,7 +766,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   antiflood's or a warn-limit mute (MREQ-07), and only with permissions from `resolveUnmutePermissionsWithLockdown`. An
   approved member is freed at the tap (step 4b above) once the marker proves the mute is the requirements', so the remedy
   "ask an admin to approve you" is true for a mute: an admin approves the member and the member taps "I fixed it" (an
-  approval does not lift the mute by itself).
+  approval does not lift the mute by itself). A member held for a spam-like name (the AI rule) gets out by changing their name
+  (the button judges the new string, one provider call at most) or by an admin's approval (freed at the tap by step 4b); an
+  admin who thinks the verdict is wrong approves the member, because the button for unchanged names reads the same cached
+  verdict every time (D-23).
 - `/captchamode turnstile` keeps `captchaAdminGate` (a per-group admin check, first and unchanged) and then refuses,
   writing nothing, in this order (`captchaWebModeRefusal`): no web captcha runtime (the four settings are not all set,
   or the bot has no username, `captcha_web_refuse_not_configured`), no Redis `PING` within 250 ms (a fresh probe, not the
@@ -1675,11 +1686,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   of the "I fixed it" edit, which strips the bidirectional controls U+061C, U+200E, U+200F, U+202A to U+202E and U+2066 to
   U+2069 from the name before it is cut to 64 runes and wrapped in its own isolate, so a name cannot close the isolate and
   reorder the line; the rules still judge the original name) spliced in after translation and
-  every broken rule whose punishment is not Off in rule order (the two lookup phrases after the five name phrases); the plain
-  warn, kick and mute notices (`memberReqNoticeHasRemedy`, never the warn-limit notices, the ban notice or an answer) end
-  with `mreq_remedy_photo` after one space, appended after translation and before the name is spliced, whenever the photo
-  rule is among the broken rules (found through the table row with code `ph`, never a literal bit); a notice, the remedy
-  included, is at most 520 code points of visible text in every language (`TestMemberReqScreensFitEveryLocale`); only a
+  every broken rule whose punishment is not Off in rule order (the three lookup phrases after the five name phrases); the plain
+  warn, kick and mute notices (`memberReqNoticeRemedies`, never the warn-limit notices, the ban notice or an answer) end
+  with one trailing sentence per remedy-bearing broken rule, each after one space, in rule order, appended after translation
+  and before the name is spliced: the `RemedyKey` of the rule's table row (`mreq_remedy_photo` for the photo rule, then
+  `mreq_remedy_ai` for the AI rule), so a rule with a remedy is one table field and no code names a rule's code or bit for it;
+  a notice, the remedies included, is at most 520 code points of visible text in every language
+  (`TestMemberReqScreensFitEveryLocale`, `TestMemberReqNoticeAIRemedy`). The cap is proved by that rendered check over the real
+  translations and not by the key ceilings (at every ceiling the sum is 636; the worst real case is French mute at 506), and
+  `mreq_warn_reason` with all eight phrases is at most 300; a translation that breaks the cap is shortened, never the cap
+  raised; only a
   mute carries the `mreq|v1` "I fixed it" button (`a=f`, `h`, `u`). A mute notice is never dropped by pacing: `memberReqPostNotice` waits
   `memberReqNoticeRateLimitWait` and sends again whenever the pacer gives up on it, until its context or
   `memberReqMuteNoticeBudget` ends, and every notice whose send failed otherwise is retried once (a notice without a
