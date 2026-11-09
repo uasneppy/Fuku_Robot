@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
 status: executing
-stopped_at: Completed 15-06-PLAN.md
-last_updated: "2026-11-09T20:17:12.809Z"
+stopped_at: Completed 15-07-PLAN.md
+last_updated: "2026-11-09T20:40:59.016Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 11 execution started
-state_head: 1c9486442e7e18c01b23480aba4c78f5e10ab41a
+state_head: cdd4051afe43aebb0d787eb1c52f794c101f13c0
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 78
-  completed_plans: 72
+  completed_plans: 73
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 7 of 11
-Status: Executing Phase 15 (15-06 done: the three hourly budgets, the four-call gate, the name check's own breaker, the sticky unknown that defers nothing and the stale-names guard; no notice tail, button or page status yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
-Last activity: 2026-11-09 — Plan 15-06 complete
+Plan: 8 of 11
+Status: Executing Phase 15 (15-07 done: the table-driven remedy tails on the plain warn, kick and mute notices (photo, then AI) and "I fixed it" judging the AI rule with the live names from the verdict cache (D-23); no page status yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
+Last activity: 2026-11-09 — Plan 15-07 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -146,6 +146,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P04 | 31min | 3 tasks | 13 files |
 | Phase 15 P05 | 70min | 3 tasks | 13 files |
 | Phase 15 P06 | 1h | 3 tasks | 10 files |
+| Phase 15 P07 | 50min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -314,8 +315,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T20:17:02.671Z
-Stopped at: Completed 15-06-PLAN.md
+Last session: 2026-11-09T20:40:58.091Z
+Stopped at: Completed 15-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
