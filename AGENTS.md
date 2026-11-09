@@ -1622,7 +1622,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   writes `nm = h` and deletes `nu`, a breach sets `nu`, an unknown writes nothing). The flight is shared by callers with
   different user IDs and the same string, so it does only the call and the verdict write. `memberReqLookupMode.Joining` is
   set only for the join entry's executor run (`Source == memberReqFromJoin`): a joiner is judged and the baseline is ignored,
-  because a rejoiner is a new membership. "New" means "recorded as joining while the rule is live", written by the join entry
+  because a rejoiner is a new membership. `memberReqLookupMode.IgnoreBaseline` (Phase 15 review WR-01) skips the baseline
+  step the same way without saying the member is joining: the held release (`memberReqHeldLookupsClear`) and "I fixed it"
+  (`memberReqFixedJudge`) set it, so a hold that carries bit 128, the durable record that the names were judged spam, is
+  never released and a mute never freed by a baseline-only pass when Redis has lost `nv`, `nm` and `nu` (a flush, an
+  eviction); only the verdict cache or one real call may pass such a member (cost: one call per held member after a Redis
+  loss, bounded by the budgets). The baseline-only pass stays for the watcher's and the job's first sight of an established
+  member who has no hold. "New" means "recorded as joining while the rule is live", written by the join entry
   for every joiner it reaches and by nothing else. The accepted limit: with no Redis, a failed marker write or a join the
   entry never saw, a real new member is baselined at their first message and unjudged until they rename (the safe
   direction); a joiner who never reaches the entry (a captcha failure, a lockdown ban) gets no marker. A member who renames
@@ -1842,7 +1848,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   again through `memberReqSettingsLookup` without an error (an unreadable one keeps the hold); the sender's names break no
   rule that is on (a member who still breaks a name rule stays held and no lookup is spent on them); every lookup rule the
   hold carries a bit of and that is still on answers pass or inert when run with `memberReqLookupMode{Classify: true, Names: ...}`
-  (the sender's current names, which only the AI rule reads; a hold carrying bit 128 is released after the member renames to
+  (the sender's current names, which only the AI rule reads, with `IgnoreBaseline` set so no baseline-only pass can release a
+  hold carrying bit 128; a hold carrying bit 128 is released after the member renames to
   an ordinary name: the rule judges the new names, a pass writes `nm = h` and deletes the marker, and the predicate then
   deletes the hold) under `memberReqLookupJobBudget` (an unknown, a breach, a cut-off lookup keep the hold; a rule now Off counts as
   released, and only the hold's own lookup bits are asked); and `memberreq.ClearHoldOnClean` with its two second margin

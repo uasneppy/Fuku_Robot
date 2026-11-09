@@ -59,6 +59,12 @@ type memberReqLookupMode struct {
 	// baseline says nothing about this membership); every other caller is judged by the marker and
 	// the baseline.
 	Joining bool
+	// IgnoreBaseline makes the AI rule skip its baseline step, like Joining, without saying the
+	// member is joining. The held release and "I fixed it" set it: a hold that carries bit 128
+	// is the durable record that the member's names were judged spam, so a Redis that lost the
+	// verdict, the baseline and the marker must never turn into a baseline-only pass for them (a
+	// pass with no call). Only the verdict cache or one real call may pass such a member.
+	IgnoreBaseline bool
 }
 
 const (

@@ -72,7 +72,9 @@ func memberReqHeldReleased(ctx context.Context, b *gotgbot.Bot, c memberReqCase,
 // memberReqHeldLookupsClear reports whether every lookup rule that the hold's mask carries a bit
 // of, and that is still on in settings, now answers pass or inert. Only the hold's own lookup bits
 // are asked (a lookup rule the member broke nothing of is never spent on a held member), in table
-// order, and the first answer that is not a pass or inert ends it.
+// order, and the first answer that is not a pass or inert ends it. The AI row is asked with
+// IgnoreBaseline: a hold with bit 128 is the durable proof that the names were judged spam, so a
+// baseline-only pass (a Redis that lost every AI key) must never release it (WR-01).
 func memberReqHeldLookupsClear(ctx context.Context, b *gotgbot.Bot, c memberReqCase, settings *models.ChatRequirements, holdRules int) bool {
 	lookupCtx, cancel := context.WithTimeout(ctx, memberReqLookupJobBudget)
 	defer cancel()
@@ -83,7 +85,7 @@ func memberReqHeldLookupsClear(ctx context.Context, b *gotgbot.Bot, c memberReqC
 		if rule.Lookup == nil || holdRules&rule.Bit == 0 || memberreq.ActionOf(settings, rule.Store) == models.RequirementActionOff {
 			continue
 		}
-		switch rule.Lookup(lookupCtx, b, c.Chat.Id, c.User.Id, memberReqLookupMode{Classify: true, Names: &names}) {
+		switch rule.Lookup(lookupCtx, b, c.Chat.Id, c.User.Id, memberReqLookupMode{Classify: true, Names: &names, IgnoreBaseline: true}) {
 		case memberReqPass, memberReqInert:
 		default:
 			return false

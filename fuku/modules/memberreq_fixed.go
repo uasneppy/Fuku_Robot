@@ -246,7 +246,9 @@ func memberReqFixedJudge(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translato
 	// The AI row reads the live record's names and answers from the verdict cache whatever Fresh says
 	// (D-23): a press is deterministic for unchanged names, and one call is made only for names the
 	// cache has no verdict for. The photo and channel rows bypass their positive caches as before.
-	mode := memberReqLookupMode{Fresh: true, Classify: true, Names: &liveNames}
+	// IgnoreBaseline: the press frees a mute the hold proves was placed, so a baseline-only pass (a
+	// Redis that lost every AI key) must never stand in for a judgement (WR-01).
+	mode := memberReqLookupMode{Fresh: true, Classify: true, Names: &liveNames, IgnoreBaseline: true}
 	lookupBroken, unknown := memberReqLookupBroken(lookupCtx, b, settings, chatID, userID, mode)
 	broken |= lookupBroken
 	lookedUp = touch.touched.Load()

@@ -296,7 +296,7 @@ func memberReqAIFinal(verdict memberReqVerdict) memberReqAIPlan {
 // configured and names that are not judgeable are inert, no Redis or a Redis read error is
 // unknown (the cost guard: with the cache unreadable the provider is not asked), and the state
 // is read in one round. mode.Fresh and mode.Classify are ignored: the AI row answers from the
-// cache whatever the mode (D-23).
+// cache whatever the mode (D-23). mode.Joining and mode.IgnoreBaseline both skip the baseline step.
 func memberReqAIPrepare(ctx context.Context, chatID, userID int64, mode memberReqLookupMode) memberReqAIPlan {
 	if mode.Names == nil {
 		return memberReqAIFinal(memberReqUnknown)
@@ -313,18 +313,20 @@ func memberReqAIPrepare(ctx context.Context, chatID, userID int64, mode memberRe
 	if err != nil {
 		return memberReqAIFinal(memberReqUnknown)
 	}
-	return memberReqAIDecide(canon, key, state, mode.Joining)
+	return memberReqAIDecide(canon, key, state, mode.Joining || mode.IgnoreBaseline)
 }
 
 // memberReqAIDecide is the decide step, on what the round read. A readable verdict decides
 // first. Otherwise a member who is not joining and has no marker passes with no call: with a
 // baseline equal to the current names hash nothing is written, with none the baseline is
-// recorded. A joiner, a member with a marker and a baseline that differs (a rename) are judged.
-func memberReqAIDecide(canon namecanon.Canon, key string, state memberReqAIState, joining bool) memberReqAIPlan {
+// recorded. A joiner, a member with a marker and a baseline that differs (a rename) are judged,
+// and so is a caller that ignores the baseline (skipBaseline: a joiner, or a held member or a
+// button press, for whom a baseline-only pass must never stand in for a judgement, WR-01).
+func memberReqAIDecide(canon namecanon.Canon, key string, state memberReqAIState, skipBaseline bool) memberReqAIPlan {
 	if probability, hit := memberReqAIParseProbability(state.verdict); hit {
 		return memberReqAIPlan{canon: canon, key: key, verdict: memberReqAIVerdictOf(probability), cached: true}
 	}
-	if !joining && !state.marker {
+	if !skipBaseline && !state.marker {
 		switch state.baseline {
 		case canon.Hash:
 			return memberReqAIFinal(memberReqPass)
