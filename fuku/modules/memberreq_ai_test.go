@@ -4,6 +4,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -785,6 +786,63 @@ type mreqAIShape struct {
 	hangs bool
 	// stops cancels the jobs' root context before the member is seen.
 	stops bool
+	// setup puts the environment in the state the shape names (a paused breaker, a used-up budget,
+	// a full gate, a failing counter, a panicking call), after the environment is built.
+	setup func(t *testing.T, chatID int64)
+	// cure ends that state, so the second sighting finds a working provider.
+	cure func(t *testing.T)
+}
+
+// mreqAIStateShapes are the shapes that are a state of the guards and not an answer of the
+// provider: the stand-in answers a 0.97 probability in every one, so a member is punished unless a
+// guard stops the call.
+func mreqAIStateShapes() []mreqAIShape {
+	spam := mreqAIProbability(0.97)
+	return []mreqAIShape{
+		{name: "a paused group breaker", step: spam,
+			setup: func(_ *testing.T, chatID int64) { mreqAITripGroup(chatID) },
+			cure:  func(t *testing.T) { mreqAIFreshBreaker(t) }},
+		{name: "a paused provider", step: spam,
+			setup: func(_ *testing.T, chatID int64) {
+				memberReqAIRecordFailure(chatID, mreqAIFailure(401, "authentication_error"))
+			},
+			cure: func(t *testing.T) { mreqAIFreshBreaker(t) }},
+		{name: "an account over its budget", step: spam,
+			setup: func(t *testing.T, _ int64) { withAIBudgets(t, 0, 100, 400) },
+			cure:  func(*testing.T) { memberReqAIUserHourlyBudget = 5 }},
+		{name: "a group over its budget", step: spam,
+			setup: func(t *testing.T, _ int64) { withAIBudgets(t, 5, 0, 400) },
+			cure:  func(*testing.T) { memberReqAIChatHourlyBudget = 100 }},
+		{name: "the fleet over its budget", step: spam,
+			setup: func(t *testing.T, _ int64) { withAIBudgets(t, 5, 100, 0) },
+			cure:  func(*testing.T) { memberReqAIGlobalHourlyBudget = 400 }},
+		{name: "a Redis error on a budget key", step: spam,
+			setup: func(t *testing.T, _ int64) {
+				mreqSwap(t, &memberReqAITake, func(*redis.Client, string, int64) (bool, error) {
+					return false, errors.New("redis is down")
+				})
+			},
+			cure: func(*testing.T) { memberReqAITake = raidAIBudgetTake }},
+		{name: "a full gate", step: spam,
+			setup: func(t *testing.T, _ int64) {
+				withAIGate(t, 1, 100*time.Millisecond)
+				if err := memberReqAIGate.Acquire(context.Background(), 1); err != nil {
+					t.Fatalf("take the only slot: %v", err)
+				}
+			},
+			cure: func(*testing.T) { memberReqAIGate.Release(1) }},
+		{name: "a recovered panic in the call", step: spam,
+			setup: func(t *testing.T, _ int64) {
+				mreqSwap(t, &memberReqAICall, func(context.Context, *claude.Client, claude.Names) (*claude.Verdict, error) {
+					panic("the call blew up")
+				})
+			},
+			cure: func(*testing.T) {
+				memberReqAICall = func(ctx context.Context, client *claude.Client, names claude.Names) (*claude.Verdict, error) {
+					return client.ClassifyNames(ctx, names)
+				}
+			}},
+	}
 }
 
 func mreqAIShapes() []mreqAIShape {
@@ -825,6 +883,9 @@ func mreqAIShapeEnv(t *testing.T, shape mreqAIShape, action int, join bool) (*me
 		restoreMemberReqRunner(t)
 		StopMemberReqJobs()
 	}
+	if shape.setup != nil {
+		shape.setup(t, env.chat.Id)
+	}
 	return env, ai, mreqAIMember(env, "Casino")
 }
 
@@ -833,6 +894,12 @@ func TestMemberReqAIUnanswerable(t *testing.T) {
 	secondSighting := func(t *testing.T, shape mreqAIShape, env *memberReqEnv, ai *mreqAIState, member gotgbot.User) {
 		t.Helper()
 		ai.setDefault(mreqAIProbability(0.97))
+		// The cause ends: a rejected key or a paused group is a state the next hour or a restart
+		// clears, so the second sighting meets a breaker with nothing in it.
+		mreqAIFreshBreaker(t)
+		if shape.cure != nil {
+			shape.cure(t)
+		}
 		if shape.hangs {
 			time.Sleep(700 * time.Millisecond)
 		}
@@ -843,7 +910,7 @@ func TestMemberReqAIUnanswerable(t *testing.T) {
 			t.Errorf("second sighting with a working answer: outcome = %+v, want a punishment (the member is judged again)", got)
 		}
 	}
-	for i, shape := range mreqAIShapes() {
+	for i, shape := range append(mreqAIShapes(), mreqAIStateShapes()...) {
 		action := actions[i%len(actions)]
 		t.Run("job: "+shape.name, func(t *testing.T) {
 			env, ai, member := mreqAIShapeEnv(t, shape, action, false)

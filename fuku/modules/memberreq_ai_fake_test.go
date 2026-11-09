@@ -133,6 +133,14 @@ type mreqAIState struct {
 	once      sync.Once
 	inflight  int
 	maxFlight int
+	queue     []mreqAIStep
+}
+
+// enqueue adds answers that are given, one per request in order, before the default one.
+func (s *mreqAIState) enqueue(steps ...mreqAIStep) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.queue = append(s.queue, steps...)
 }
 
 // setDefault sets the answer given when nothing is queued.
@@ -177,6 +185,10 @@ func (s *mreqAIState) serve(w http.ResponseWriter, r *http.Request) {
 		s.maxFlight = s.inflight
 	}
 	step := s.def
+	if len(s.queue) > 0 {
+		step = s.queue[0]
+		s.queue = s.queue[1:]
+	}
 	hook := s.onRequest
 	s.mu.Unlock()
 	defer func() {
@@ -224,9 +236,12 @@ func mreqInstallAIFake(t *testing.T) *mreqAIState {
 }
 
 // withAIConfigured turns the AI name check on for the test: ENABLE_AISPAM, the fake key and the
-// fake model, all put back when it ends.
+// fake model, all put back when it ends. It also installs a fresh breaker of the name check, whose
+// state is process-wide: a test that trips it (a rejected key pauses every group) must not pause the
+// tests after it.
 func withAIConfigured(t *testing.T) {
 	t.Helper()
+	mreqAIFreshBreaker(t)
 	previousSwitch, previousKey, previousModel := config.AppConfig.EnableAISpam, config.AppConfig.AnthropicAPIKey, config.AppConfig.AnthropicModel
 	config.AppConfig.EnableAISpam = true
 	config.AppConfig.AnthropicAPIKey = raidAITestKey
@@ -275,6 +290,13 @@ func mreqAIDeleteVerdicts() {
 	for _, key := range keys {
 		client.Del(ctx, key)
 	}
+}
+
+// mreqAIFreshBreaker replaces the name check's breaker with an empty one for the test, and puts the
+// previous one back when it ends.
+func mreqAIFreshBreaker(t *testing.T) {
+	t.Helper()
+	mreqSwap(t, &memberReqAIBreakers, newMemberReqAIBreaker())
 }
 
 // mreqAIDeleteBudgets removes every hourly budget key of the name check from Redis.

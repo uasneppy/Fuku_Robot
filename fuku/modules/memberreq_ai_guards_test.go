@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -505,6 +507,392 @@ func TestMemberReqAIFlight(t *testing.T) {
 		}
 		if got := ai.maxInFlight(); got > 4 {
 			t.Errorf("most requests in flight = %d, want at most 4", got)
+		}
+	})
+}
+
+// mreqAIFailure is a provider failure the way the Claude client reports it.
+func mreqAIFailure(status int, errType string) error {
+	return &claude.HTTPError{Status: status, Type: errType}
+}
+
+// mreqAIPauseWarnings counts the warnings that announce a pause of the name check whose text
+// contains marker ("this group" for a group's, "every group" for the provider-wide one).
+func mreqAIPauseWarnings(hook interface{ AllEntries() []*log.Entry }, marker string) int {
+	count := 0
+	for _, entry := range hook.AllEntries() {
+		if entry.Level == log.WarnLevel && strings.Contains(entry.Message, "AI name checks paused") && strings.Contains(entry.Message, marker) {
+			count++
+		}
+	}
+	return count
+}
+
+// mreqAITripGroup makes five provider failures count against a group, directly.
+func mreqAITripGroup(chatID int64) {
+	for i := 0; i < memberReqAIFailures; i++ {
+		memberReqAIRecordFailure(chatID, mreqAIFailure(400, "invalid_request_error"))
+	}
+}
+
+func TestMemberReqAIBreaker(t *testing.T) {
+	// asker returns a function that judges a new string of a new member of the group and says what
+	// the stand-in answered with step first.
+	asker := func(t *testing.T, env *memberReqEnv, ai *mreqAIState, chatID int64, total int) func(steps ...mreqAIStep) memberReqVerdict {
+		t.Helper()
+		users := mreqAIUsers(t, env, total)
+		next := 0
+		return func(steps ...mreqAIStep) memberReqVerdict {
+			t.Helper()
+			ai.enqueue(steps...)
+			user := users[next]
+			next++
+			return mreqAIAskIn(env, chatID, user, mreqAIUniqueNames())
+		}
+	}
+	fourHundred := mreqAIStatus(400, "invalid_request_error", "")
+
+	t.Run("five failures pause the group, nothing is spent while paused, another group is unaffected and the pause ends", func(t *testing.T) {
+		clock := mreqAIInstallClock(t)
+		env, ai := mreqAIGuardEnv(t)
+		ask := asker(t, env, ai, env.chat.Id, 10)
+		otherChat := uniqueModuleChatID()
+		t.Cleanup(func() { memberReqDeleteRedisKeys([]int64{otherChat}) })
+		// A 500 is retried once by the client (two requests), a 400 and a dropped connection are final:
+		// each kind counts one failure.
+		kinds := [][]mreqAIStep{
+			{mreqAIStatus(500, "api_error", ""), mreqAIStatus(500, "api_error", "")},
+			{fourHundred}, {mreqAIDrop()}, {fourHundred}, {fourHundred},
+		}
+		for i, steps := range kinds {
+			if paused := memberReqAIPaused(env.chat.Id); paused {
+				t.Fatalf("the group is paused before failure %d", i+1)
+			}
+			mreqAIWantVerdict(t, fmt.Sprintf("failure %d", i+1), ask(steps...), memberReqUnknown)
+		}
+		if !memberReqAIPaused(env.chat.Id) {
+			t.Fatal("the group is not paused after five failures")
+		}
+		requests, stamp := ai.count(), mreqAIStamp()
+		chatUnits := mreqAICounter(t, mreqAIChatKey(env.chat.Id, stamp))
+		before := memberReqAIStatsSnapshot()
+		mreqAIWantVerdict(t, "a check while paused", ask(), memberReqUnknown)
+		if got := ai.count(); got != requests {
+			t.Errorf("requests while paused = %d, want %d", got, requests)
+		}
+		if got := mreqAICounter(t, mreqAIChatKey(env.chat.Id, stamp)); got != chatUnits {
+			t.Errorf("the group's counter moved from %d to %d while paused: a paused check spends no unit", chatUnits, got)
+		}
+		if got := memberReqAIStatsSnapshot().Shed - before.Shed; got != 1 {
+			t.Errorf("shed counter moved by %d, want 1", got)
+		}
+		if memberReqAIPaused(otherChat) {
+			t.Error("another group is paused by this group's failures")
+		}
+		mreqAIWantVerdict(t, "another group", mreqAIAskIn(env, otherChat, mreqAIUsers(t, env, 1)[0], mreqAIUniqueNames()), memberReqPass)
+		clock.advance(memberReqAICooldown + time.Second)
+		if memberReqAIPaused(env.chat.Id) {
+			t.Error("the group is still paused after the cooldown")
+		}
+		mreqAIWantVerdict(t, "a check after the cooldown", ask(), memberReqPass)
+	})
+
+	t.Run("a success between failures clears the count and a refusal stop counts as an answer", func(t *testing.T) {
+		for name, answer := range map[string]mreqAIStep{
+			"a success":      mreqAIProbability(0.1),
+			"a refusal stop": mreqAIBody(raidAIClaudeRefusal()),
+		} {
+			t.Run(name, func(t *testing.T) {
+				env, ai := mreqAIGuardEnv(t)
+				ask := asker(t, env, ai, env.chat.Id, 12)
+				for i := 0; i < memberReqAIFailures-1; i++ {
+					ask(fourHundred)
+				}
+				ask(answer)
+				for i := 0; i < memberReqAIFailures-1; i++ {
+					ask(fourHundred)
+				}
+				if memberReqAIPaused(env.chat.Id) {
+					t.Fatal("the group is paused: the answer between the failures should have cleared the count")
+				}
+				ask(fourHundred)
+				if !memberReqAIPaused(env.chat.Id) {
+					t.Error("the group is not paused after five failures in a row")
+				}
+			})
+		}
+	})
+
+	t.Run("a cancelled context is neither a failure nor a success", func(t *testing.T) {
+		mreqSwap(t, &memberReqLookupFlightTimeout, 150*time.Millisecond)
+		env, ai := mreqAIGuardEnv(t)
+		ask := asker(t, env, ai, env.chat.Id, 8)
+		for i := 0; i < memberReqAIFailures-1; i++ {
+			ask(fourHundred)
+		}
+		mreqAIWantVerdict(t, "a request that outlives the flight", ask(mreqAIHang()), memberReqUnknown)
+		time.Sleep(100 * time.Millisecond)
+		if memberReqAIPaused(env.chat.Id) {
+			t.Fatal("the cancelled call was counted as a failure")
+		}
+		ask(fourHundred)
+		if !memberReqAIPaused(env.chat.Id) {
+			t.Error("the group is not paused: the cancelled call cleared the count as a success")
+		}
+	})
+
+	t.Run("a rejected key or account pauses every group", func(t *testing.T) {
+		for _, failure := range []struct {
+			status  int
+			errType string
+		}{{401, "authentication_error"}, {402, "billing_error"}, {403, "permission_error"}} {
+			t.Run(fmt.Sprint(failure.status), func(t *testing.T) {
+				clock := mreqAIInstallClock(t)
+				hook := mreqLogCapture(t)
+				env, ai := mreqAIGuardEnv(t)
+				ask := asker(t, env, ai, env.chat.Id, 2)
+				mreqAIWantVerdict(t, "the rejected call", ask(mreqAIStatus(failure.status, failure.errType, "")), memberReqUnknown)
+				otherChat := uniqueModuleChatID()
+				if !memberReqAIPaused(otherChat) {
+					t.Error("another group is not paused by a rejected key")
+				}
+				requests := ai.count()
+				mreqAIWantVerdict(t, "a check in another group", mreqAIAskIn(env, otherChat, mreqAIUsers(t, env, 1)[0], mreqAIUniqueNames()), memberReqUnknown)
+				if got := ai.count(); got != requests {
+					t.Errorf("requests while the provider is paused = %d, want %d", got, requests)
+				}
+				clock.advance(memberReqAIKeyPause - time.Second)
+				if !memberReqAIPaused(otherChat) {
+					t.Error("the provider-wide pause ended early")
+				}
+				clock.advance(2 * time.Second)
+				if memberReqAIPaused(otherChat) {
+					t.Error("the provider-wide pause outlived its span")
+				}
+				if got := mreqAIPauseWarnings(hook, "every group"); got != 1 {
+					t.Errorf("provider-wide pause warnings = %d, want exactly one", got)
+				}
+				mreqWantCleanLogs(t, hook, append([]string{raidAITestKey, "Promo"}, mreqLogForbidden...),
+					fmt.Sprintf("HTTP %d %s", failure.status, failure.errType))
+			})
+		}
+	})
+
+	t.Run("a 429 pauses every group only for a retry-after over two seconds, for at most five minutes", func(t *testing.T) {
+		for _, tc := range []struct {
+			retryAfter string
+			span       time.Duration
+		}{{"30", 30 * time.Second}, {"900", memberReqAIMaxPause}} {
+			t.Run("retry-after "+tc.retryAfter, func(t *testing.T) {
+				clock := mreqAIInstallClock(t)
+				env, ai := mreqAIGuardEnv(t)
+				ask := asker(t, env, ai, env.chat.Id, 1)
+				ask(mreqAIStatus(429, "rate_limit_error", tc.retryAfter))
+				otherChat := uniqueModuleChatID()
+				clock.advance(tc.span - time.Second)
+				if !memberReqAIPaused(otherChat) {
+					t.Errorf("another group is not paused %v into a %v pause", tc.span-time.Second, tc.span)
+				}
+				clock.advance(2 * time.Second)
+				if memberReqAIPaused(otherChat) {
+					t.Errorf("the pause outlived %v", tc.span)
+				}
+			})
+		}
+		t.Run("a short retry-after only counts toward its group", func(t *testing.T) {
+			env, ai := mreqAIGuardEnv(t)
+			ask := asker(t, env, ai, env.chat.Id, 6)
+			// The client waits the one second and retries once, so two answers make one failure.
+			ask(mreqAIStatus(429, "rate_limit_error", "1"), mreqAIStatus(429, "rate_limit_error", "1"))
+			if memberReqAIPaused(uniqueModuleChatID()) {
+				t.Fatal("a short rate limit paused every group")
+			}
+			for i := 0; i < memberReqAIFailures-1; i++ {
+				ask(fourHundred)
+			}
+			if !memberReqAIPaused(env.chat.Id) {
+				t.Error("the short rate limit did not count toward its group")
+			}
+		})
+	})
+
+	t.Run("a pause that is running is not extended or logged again by checks still in flight", func(t *testing.T) {
+		clock := mreqAIInstallClock(t)
+		hook := mreqLogCapture(t)
+		mreqAIFreshBreaker(t)
+		chat := uniqueModuleChatID()
+		mreqAITripGroup(chat)
+		if !memberReqAIPaused(chat) {
+			t.Fatal("the group is not paused after five failures")
+		}
+		clock.advance(memberReqAICooldown - time.Minute)
+		for i := 0; i < 3; i++ {
+			memberReqAIRecordFailure(chat, mreqAIFailure(500, "api_error"))
+		}
+		clock.advance(time.Minute + time.Second)
+		if memberReqAIPaused(chat) {
+			t.Error("late failures extended a pause that was running")
+		}
+		if got := mreqAIPauseWarnings(hook, "this group"); got != 1 {
+			t.Errorf("group pause warnings = %d, want exactly one", got)
+		}
+		memberReqAIRecordFailure(chat, mreqAIFailure(401, "authentication_error"))
+		clock.advance(time.Minute)
+		memberReqAIRecordFailure(chat, mreqAIFailure(401, "authentication_error"))
+		if got := mreqAIPauseWarnings(hook, "every group"); got != 1 {
+			t.Errorf("provider pause warnings = %d, want exactly one: a running pause is not logged again", got)
+		}
+	})
+
+	t.Run("the group map is bounded at 10,000 and an idle breaker is pruned to make room", func(t *testing.T) {
+		hook := mreqLogCapture(t)
+		full := newMemberReqAIBreaker()
+		for id := int64(1); id <= memberReqAIBreakerMaxChats; id++ {
+			full.groups[id] = &memberReqAIGroup{failures: 1}
+		}
+		mreqSwap(t, &memberReqAIBreakers, full)
+		stranger := int64(memberReqAIBreakerMaxChats + 1)
+		for i := 0; i < 2*memberReqAIFailures; i++ {
+			memberReqAIRecordFailure(stranger, mreqAIFailure(400, "invalid_request_error"))
+		}
+		if memberReqAIPaused(stranger) {
+			t.Error("a group that is not tracked was paused")
+		}
+		if got := len(full.groups); got != memberReqAIBreakerMaxChats {
+			t.Errorf("tracked groups = %d, want the bound %d", got, memberReqAIBreakerMaxChats)
+		}
+		warnings := 0
+		for _, entry := range hook.AllEntries() {
+			if entry.Level == log.WarnLevel && strings.Contains(entry.Message, "breaker map is full") {
+				warnings++
+			}
+		}
+		if warnings != 1 {
+			t.Errorf("map-full warnings = %d, want exactly one per process", warnings)
+		}
+
+		idle := newMemberReqAIBreaker()
+		for id := int64(1); id <= memberReqAIBreakerMaxChats; id++ {
+			idle.groups[id] = &memberReqAIGroup{}
+		}
+		mreqSwap(t, &memberReqAIBreakers, idle)
+		mreqAITripGroup(stranger)
+		if !memberReqAIPaused(stranger) {
+			t.Error("an idle breaker was not pruned to make room for a failing group")
+		}
+	})
+
+	t.Run("the image check and the name check share no breaker", func(t *testing.T) {
+		resetRaidAIImageBreakers(t)
+		mreqAIFreshBreaker(t)
+		chat := uniqueModuleChatID()
+		for i := 0; i < memberReqAIFailures; i++ {
+			memberReqAIRecordFailure(chat, mreqAIFailure(500, "api_error"))
+		}
+		memberReqAIRecordFailure(chat, mreqAIFailure(401, "authentication_error"))
+		if raidAIImagePaused(chat) || raidAIImagePaused(uniqueModuleChatID()) {
+			t.Error("name check failures paused the image check")
+		}
+		mreqAIFreshBreaker(t)
+		for i := 0; i < raidAIImageFailures; i++ {
+			raidAIImageRecordFailure(chat, mreqAIFailure(500, "api_error"))
+		}
+		raidAIImageRecordFailure(chat, mreqAIFailure(401, "authentication_error"))
+		if !raidAIImagePaused(chat) {
+			t.Fatal("the image breaker did not pause: the test does not prove isolation")
+		}
+		if memberReqAIPaused(chat) || memberReqAIPaused(uniqueModuleChatID()) {
+			t.Error("image check failures paused the name check")
+		}
+	})
+}
+
+func TestMemberReqAIUnknownDefers(t *testing.T) {
+	type cause struct {
+		name   string
+		sticky bool
+		arm    func(t *testing.T, env *memberReqEnv, ai *mreqAIState)
+	}
+	causes := []cause{
+		{"a 400", false, func(_ *testing.T, _ *memberReqEnv, ai *mreqAIState) {
+			ai.setDefault(mreqAIStatus(400, "invalid_request_error", ""))
+		}},
+		{"a timeout", false, func(t *testing.T, _ *memberReqEnv, ai *mreqAIState) {
+			mreqSwap(t, &memberReqLookupFlightTimeout, 100*time.Millisecond)
+			ai.setDefault(mreqAIHang())
+		}},
+		{"a paused breaker", true, func(_ *testing.T, env *memberReqEnv, _ *mreqAIState) { mreqAITripGroup(env.chat.Id) }},
+		{"a used-up budget", true, func(t *testing.T, _ *memberReqEnv, _ *mreqAIState) { withAIBudgets(t, 0, 100, 400) }},
+		{"a full gate", true, func(t *testing.T, _ *memberReqEnv, _ *mreqAIState) {
+			withAIGate(t, 1, 100*time.Millisecond)
+			if err := memberReqAIGate.Acquire(context.Background(), 1); err != nil {
+				t.Fatalf("take the only slot: %v", err)
+			}
+		}},
+	}
+	rows := []struct{ name, ai int }{
+		{models.RequirementActionWarn, models.RequirementActionBan},
+		{models.RequirementActionWarn, models.RequirementActionMute},
+		{models.RequirementActionWarn, models.RequirementActionWarn},
+		{models.RequirementActionMute, models.RequirementActionMute},
+		{models.RequirementActionKick, models.RequirementActionKick},
+		{models.RequirementActionKick, models.RequirementActionWarn},
+		{models.RequirementActionMute, models.RequirementActionBan},
+	}
+	for _, row := range rows {
+		for _, c := range causes {
+			// The AI rule is asked after the name rules, and a stricter one that could not be answered
+			// defers the claim (WR-02) unless its unknown is sticky (D-22).
+			deferred := memberReqSeverity(row.ai) > memberReqSeverity(row.name) && !c.sticky
+			t.Run(fmt.Sprintf("name rule %d, AI rule %d, %s", row.name, row.ai, c.name), func(t *testing.T) {
+				env, ai := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleLastName: row.name, memberreq.RuleAI: row.ai}, false)
+				member := mreqAIMember(env, "")
+				mreqAIMarkNew(t, env.chat.Id, member.Id)
+				c.arm(t, env, ai)
+				got := env.mreqEnforce(env.mreqCase(member))
+				if deferred {
+					mreqAIWantNothing(t, env, member, got)
+					return
+				}
+				if got.Outcome == memberReqNone {
+					t.Fatalf("outcome = %+v, want the name rule's punishment to stand", got)
+				}
+				if hold := env.mreqHold(member.Id); hold == nil || hold.Rules != mreqBitOf(t, "ln") || hold.Action != row.name {
+					t.Errorf("hold = %+v, want one with the last name bit only and the name rule's action", hold)
+				}
+			})
+		}
+	}
+
+	t.Run("a sticky unknown stays unknown in the lookup fold, which the held release and I fixed it read", func(t *testing.T) {
+		env, _ := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleAI: models.RequirementActionBan}, false)
+		withAIBudgets(t, 0, 100, 400)
+		member := mreqAIMember(env, "Casino")
+		settings := env.mreqRules(map[memberreq.Rule]int{memberreq.RuleAI: models.RequirementActionBan})
+		names := mreqAINamesOfUser(member)
+		broken, unknown := memberReqLookupBroken(context.Background(), env.bot, settings, env.chat.Id, member.Id,
+			memberReqLookupMode{Names: names, Joining: true, Fresh: true, Classify: true})
+		if broken != 0 || !unknown {
+			t.Errorf("fold = broken %d unknown %v, want an unknown that is not a pass or a breach", broken, unknown)
+		}
+	})
+
+	t.Run("a held member with a hold carrying the AI bit is not released while the answer is a sticky unknown", func(t *testing.T) {
+		env, ai := mreqAIWatchEnv(t, models.RequirementActionWarn)
+		withAIBudgets(t, 0, 100, 400)
+		member := mreqAIMember(env, "Casino")
+		mreqSeedHeld(t, env, member, mreqBitOf(t, "ai"), models.RequirementActionWarn, 10*time.Minute)
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		renamed := mreqAIOrdinary(env)
+		env.fake.setProfile(member.Id, renamed.FirstName, renamed.LastName, renamed.Username)
+		member.FirstName, member.LastName, member.Username = renamed.FirstName, renamed.LastName, renamed.Username
+		env.mreqSend(member, "I changed my name")
+		memberReqJobs.wait()
+		if n := ai.count(); n != 0 {
+			t.Errorf("provider requests = %d, want none: the budget is used up", n)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil {
+			t.Error("the hold was released on a sticky unknown")
 		}
 	})
 }
