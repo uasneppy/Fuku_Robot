@@ -253,6 +253,36 @@ func withAIConfigured(t *testing.T) {
 	})
 }
 
+// mreqAIOff says how withAINotConfigured makes the AI name check not configured.
+type mreqAIOff int
+
+const (
+	// mreqAINoKey leaves ENABLE_AISPAM on and removes the Anthropic key.
+	mreqAINoKey mreqAIOff = iota
+	// mreqAISwitchOff keeps the key and turns ENABLE_AISPAM off (the global AI kill switch).
+	mreqAISwitchOff
+)
+
+// withAINotConfigured makes the AI name check not configured for the test, one of the two ways the
+// process can lack it, and puts config.AppConfig back when the test ends. It installs no fake and
+// no breaker: a not configured rule never reaches either.
+func withAINotConfigured(t *testing.T, how mreqAIOff) {
+	t.Helper()
+	previousSwitch, previousKey := config.AppConfig.EnableAISpam, config.AppConfig.AnthropicAPIKey
+	switch how {
+	case mreqAINoKey:
+		config.AppConfig.EnableAISpam = true
+		config.AppConfig.AnthropicAPIKey = ""
+	case mreqAISwitchOff:
+		config.AppConfig.EnableAISpam = false
+		config.AppConfig.AnthropicAPIKey = raidAITestKey
+	}
+	t.Cleanup(func() {
+		config.AppConfig.EnableAISpam = previousSwitch
+		config.AppConfig.AnthropicAPIKey = previousKey
+	})
+}
+
 // mreqAICleanup deletes every fuku:memberreq:nv:* key (a verdict key holds a hash, not an ID, so
 // it cannot be found by ID) and the baselines fuku:memberreq:nm:<user> of userIDs now and when
 // the test ends, then empties the in-process cache layer. userIDs and chatIDs are the test's
