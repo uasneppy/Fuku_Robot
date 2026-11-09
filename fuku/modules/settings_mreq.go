@@ -299,11 +299,17 @@ func settingsMreqRuleUnconfigured(rule memberReqRule, status settingsMreqStatus)
 	return rule.Configured != nil && status.AINotConfigured
 }
 
+// settingsMreqUnconfiguredText is the words of the status line of a rule that cannot work on this
+// bot, and the alert of a refused punishing press of it. It names no setting, key, model, group or
+// member: {rule} is the translated rule name only.
+func settingsMreqUnconfiguredText(tr *i18n.Translator, rule memberReqRule) string {
+	return settingsText(tr, rule.UnconfiguredKey, i18n.TranslationParams{"rule": settingsText(tr, rule.LineKey)})
+}
+
 // settingsMreqUnconfiguredLine is the status line of a rule that cannot work on this bot, with its
-// icon as a code-side prefix. It names no setting, key, model, group or member: {rule} is the
-// translated rule name only.
+// icon as a code-side prefix.
 func settingsMreqUnconfiguredLine(tr *i18n.Translator, rule memberReqRule) string {
-	return "🚫 " + settingsText(tr, rule.UnconfiguredKey, i18n.TranslationParams{"rule": settingsText(tr, rule.LineKey)})
+	return "🚫 " + settingsMreqUnconfiguredText(tr, rule)
 }
 
 // settingsMreqHereLines is the cannot-work block of the page: a list of lines, empty when nothing
@@ -621,7 +627,7 @@ func settingsMreqChoose(p *settingsPress, rule memberReqRule, action int) *setti
 	if memberreq.ActionOf(stored, rule.Store) == action {
 		return settingsMreqRedrawRule(p, rule, stored, "")
 	}
-	if !settingsMreqChannelGate(p, rule, stored, action) {
+	if !settingsMreqChannelGate(p, rule, stored, action) || !settingsMreqAIGate(p, rule, stored, action) {
 		return nil
 	}
 	if action >= models.RequirementActionKick {
@@ -661,16 +667,41 @@ func settingsMreqChannelGate(p *settingsPress, rule memberReqRule, stored *model
 		}
 	}
 	p.answer(settingsMreqNoLinkAlert(p.tr), true)
+	settingsMreqRedrawRefused(p, rule, stored, status)
+	return false
+}
+
+// settingsMreqAIGate is the press gate of a rule that cannot work on this bot (the AI rule while the AI
+// is not configured, D-14). A rule with no Configured test, an Off press and a configured rule proceed
+// without a look. Otherwise a punishing press (Warn, or the card's Yes for Kick, Ban or Mute) is
+// refused with the status line's own words as the alert, no icon: nothing is written, no card is drawn
+// (a Yes replaces its card) and the rule's screen is redrawn as the Off-only form from stored (read
+// when nil), so a stale screen is repaired. It is pure: the fact is process-level and always decided,
+// so there is no unknown branch, and it reads no Redis, no group type and makes no network call. It
+// runs after the whole press pipeline, the expiry check and the fresh same-value read, and returns
+// false when it refused, having answered and edited.
+func settingsMreqAIGate(p *settingsPress, rule memberReqRule, stored *models.ChatRequirements, action int) bool {
+	if rule.Configured == nil || rule.Configured() || action == models.RequirementActionOff {
+		return true
+	}
+	p.answer(settingsMreqUnconfiguredText(p.tr, rule), true)
+	settingsMreqRedrawRefused(p, rule, stored, settingsMreqStatus{AINotConfigured: true})
+	return false
+}
+
+// settingsMreqRedrawRefused repairs the screen after a refused press: it redraws the rule's screen
+// for status from stored, read when nil (a failed read is the cannot-open edit). No notice is added,
+// because the screen's own status line already says why.
+func settingsMreqRedrawRefused(p *settingsPress, rule memberReqRule, stored *models.ChatRequirements, status settingsMreqStatus) {
 	if stored == nil {
 		var err error
 		if stored, err = settingsMreqRead(p.group.Id); err != nil {
-			log.Warnf("[Settings] the channel screen of chat %d could not be read after a refused press: %v", p.group.Id, err)
+			log.Warnf("[Settings] the %s screen of chat %d could not be read after a refused press: %v", rule.Code, p.group.Id, err)
 			p.cannotOpen()
-			return false
+			return
 		}
 	}
 	p.edit(renderSettingsMreqRuleScreenStatus(p.view(), rule, stored, "", status))
-	return false
 }
 
 // settingsMreqNoLinkAlert is the alert of a refused channel press: the no-link line with the
@@ -696,8 +727,9 @@ func settingsMreqYesFields(fields map[string]string) bool {
 
 // renderSettingsMreqCard draws the shared two-tap card for setting rule to a strict action (Kick, Ban
 // or Mute): the question with the rule's name and the plain option word, a blank line and what
-// happens (every member at their next message, members already in the group included), then
-// [Yes | No] and [Back | Close]. It is pure and writes nothing; Yes carries only the strict value.
+// happens (every member at their next message, members already in the group included; a rule with its
+// own ConfirmKeys, the AI rule, says its own scope instead), then [Yes | No] and [Back | Close]. It is
+// pure and writes nothing; Yes carries only the strict value.
 func renderSettingsMreqCard(v settingsView, rule memberReqRule, action int) settingsScreen {
 	tr := v.Tr
 	consequence := map[int]string{
@@ -705,6 +737,9 @@ func renderSettingsMreqCard(v settingsView, rule memberReqRule, action int) sett
 		models.RequirementActionBan:  "settings_mreq_confirm_ban",
 		models.RequirementActionMute: "settings_mreq_confirm_mute",
 	}[action]
+	if own := rule.ConfirmKeys[action]; own != "" {
+		consequence = own
+	}
 	body := []string{
 		settingsText(tr, "settings_mreq_confirm", i18n.TranslationParams{
 			"rule":   settingsText(tr, rule.LineKey),
@@ -720,9 +755,10 @@ func renderSettingsMreqCard(v settingsView, rule memberReqRule, action int) sett
 
 // settingsMreqYes serves the card's Yes. The press already ran the whole pipeline again, so a
 // presser who lost the restrict right since the first tap never gets here. An expired Yes writes
-// nothing, makes no link check and redraws the rule screen with the expiry note; a live one passes
-// the channel rule's live link check (settingsMreqChannelGate), then writes v through
-// applyMemberReqAction and redraws the rule screen from the read-back.
+// nothing, makes no link or configuration check and redraws the rule screen with the expiry note; a
+// live one passes the channel rule's live link check (settingsMreqChannelGate) and the AI rule's
+// configuration check (settingsMreqAIGate), then writes v through applyMemberReqAction and redraws
+// the rule screen from the read-back.
 func settingsMreqYes(p *settingsPress) *settingsScreen {
 	rule, ok := memberReqRuleByCode(p.fields["t"])
 	expired, validExpiry := settingsCardExpired(p.fields)
@@ -741,7 +777,7 @@ func settingsMreqYes(p *settingsPress) *settingsScreen {
 	}
 	action := int(p.fields["v"][0] - '0')
 	// The card binds nothing about the link: a Yes checks it again, after the right and the expiry.
-	if !settingsMreqChannelGate(p, rule, nil, action) {
+	if !settingsMreqChannelGate(p, rule, nil, action) || !settingsMreqAIGate(p, rule, nil, action) {
 		return nil
 	}
 	return settingsMreqApplyRule(p, rule, action)

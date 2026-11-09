@@ -66,6 +66,10 @@ type memberReqRule struct {
 	// UnconfiguredKey is the locale key of the status line (and of the refusal alert) of a rule
 	// whose Configured test is false; it takes {rule}. Empty when Configured is nil.
 	UnconfiguredKey string
+	// ConfirmKeys are the locale keys of the confirm card's consequence sentence by action (Kick,
+	// Ban, Mute), for a rule whose consequence differs from the generic one (the AI rule judges
+	// established members only after a name change). Nil: the generic settings_mreq_confirm_* keys.
+	ConfirmKeys map[int]string
 }
 
 // memberReqRussianLetters are the four letters that Russian uses and Ukrainian does not:
@@ -134,7 +138,12 @@ var memberReqRules = []memberReqRule{
 		Lookup: memberReqChannelRule},
 	{Code: "ai", Bit: 128, Store: memberreq.RuleAI, LineKey: "settings_mreq_rule_ai", CellKey: "settings_btn_mreq_ai", DescKey: "settings_mreq_desc_ai", PhraseKey: "mreq_rule_ai",
 		Lookup: memberReqAIRule, HintKey: "settings_mreq_hint_ai", NamesBound: true, RemedyKey: "mreq_remedy_ai",
-		Configured: memberReqAIConfigured, UnconfiguredKey: "settings_mreq_here_ai"},
+		Configured: memberReqAIConfigured, UnconfiguredKey: "settings_mreq_here_ai",
+		ConfirmKeys: map[int]string{
+			models.RequirementActionKick: "settings_mreq_confirm_ai_kick",
+			models.RequirementActionBan:  "settings_mreq_confirm_ai_ban",
+			models.RequirementActionMute: "settings_mreq_confirm_ai_mute",
+		}},
 }
 
 // memberReqNamesBoundMask is the mask of the rules whose verdict is bound to the names they judged
