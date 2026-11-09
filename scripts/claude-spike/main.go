@@ -84,7 +84,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer, tr
 
 	key := getenv(envKey)
 	if key == "" && cfg.probe && cfg.fakeKey {
-		key = fakeAPIKey
+		key = probePlaceholder
 	}
 	if key == "" {
 		_, _ = fmt.Fprintf(stderr, "%s is not set, so nothing was sent.\n\n", envKey)
@@ -558,15 +558,16 @@ func withCSVOut(cfg *config, stdout, stderr io.Writer, write func(io.Writer) err
 	return exitOK
 }
 
-// fakeAPIKey is the obviously fake key -probe uses with -fake-key.
-const fakeAPIKey = "spike-fake-key-not-a-real-key"
+// probePlaceholder is the obviously fake value -probe sends as its key with -fake-key. It is named
+// a placeholder, not a key, because gosec's G101 flags a string constant whose name looks like a credential.
+const probePlaceholder = "spike-fake-key-not-a-real-key"
 
 // runProbe sends one tiny request per probe variant and prints how the API
 // answered each. It exits 1 when the API rejected a field, because that means
 // a request spelling in fuku/utils/claude needs a fix.
 func runProbe(client *claude.Client, cfg *config, key string, stdout, stderr io.Writer) int {
 	variants := probeVariants()
-	if key == fakeAPIKey {
+	if key == probePlaceholder {
 		_, _ = fmt.Fprintln(stderr, "Probing with the built-in fake key: no image of yours is sent, and the API should answer 'key refused' to every variant.")
 	} else {
 		_, _ = fmt.Fprintf(stderr, "Probing with your key: %d tiny 1x1 images go to Anthropic and may be billed.\n", len(variants))
