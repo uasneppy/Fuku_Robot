@@ -1333,6 +1333,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   their first message and never judged, and a baseline that expired during a long hold would launder a member whose names were
   judged spam (a breach keeps the marker, so the member is judged again instead). Like `nm` it is Redis only, outside the
   cache prefix and kept by `CLEAR_CACHE_ON_STARTUP`. The pass key never stands in for the AI positive.
+- `fuku:memberreq:aib:u:<user>:<yyyymmddhh>`, `fuku:memberreq:aib:c:<chat>:<yyyymmddhh>` and `fuku:memberreq:aib:g:<yyyymmddhh>`
+  are the AI spam-name check's hourly budgets (`memberreq_ai_budget.go`): 5 provider calls per account (fleet-wide: a name
+  belongs to the account, not to a group, and renaming is the attack), 100 per group and 400 in all
+  (`memberReqAIUserHourlyBudget`, `memberReqAIChatHourlyBudget`, `memberReqAIGlobalHourlyBudget`, package variables only so a
+  test can shrink them). Each unit is one `INCR` plus a 2 hour expiry in one transaction through the stateless
+  `raidAIBudgetTake` (the seam `memberReqAITake`) on the UTC hour of `raidNow` (`raidAIHourStamp`). `memberReqAIReserve` takes
+  the account's unit first, then the group's, then the fleet's, and a refusal or an error stops the chain, so an account over
+  its own budget spends neither shared unit and a group over its own never spends the fleet's. The unit is reserved before the
+  call, so a failed call still spends it. A verdict served from the cache is answered before any budget and spends none. A
+  used-up allowance is a sticky unknown and a Redis error on a counter a plain unknown: either way no call is made, never an
+  unbounded one. The family is the name check's own, separate from the raid image budgets (`fuku:raid:*`): a name burst never
+  spends the image allowance and the reverse, and only the stateless helpers are shared. Every key is used in single-key
+  commands, so there is no hash tag; they sit in the `fuku:memberreq:*` family, outside the cache prefix, so
+  `CLEAR_CACHE_ON_STARTUP` keeps them.
 - `fuku:memberreq:lkp:pace:next` and `fuku:memberreq:lkp:pace:block` are the fleet-wide pacing of photo and channel
   lookups (`memberReqLookupPaced`, `memberReqLookupPacer`, built from `memberReqLookupPacerOptions`): the staff pacer's
   slot-plus-block design (`ratelimit.NewTelegramPacer`) with Interval 100 ms, MaxRetries 1 and MaxWait 5 s. A slot, or a
@@ -1520,7 +1534,32 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   channel rows, only after the exemptions, the hold read, the pause and the live eligibility check. The provider key travels in
   the `x-api-key` header only and no name, hash, probability, instruction or key is logged: a failure is one Warn line with the
   chat and user IDs, the HTTP status and the error type (`claude.HTTPError`), a refusal one Info line. Later plans of Phase 15
-  extend this bullet (the cost guards, the notice, the button and the page status).
+  extend this bullet (the notice, the button and the page status).
+  The cost guards (plan 15-06; D-10, D-12, D-22, D-24, D-26, D-29). Inside the flight, after the cache is read once more, the
+  order is: the breaker, the in-flight gate, the three hourly budgets, the call, the breaker's record, the cache write. The gate
+  (`memberReqAIGate`, `semaphore.NewWeighted(4)`) allows four provider calls at once per replica and is waited for at most
+  `memberReqAIGateWait` (3 s) under the flight's own context; the slot is released by `defer` on every path, a recovered panic
+  and a cancel included, and it is taken before the budget, so a flight that cannot get a slot spends no unit. The flight's
+  value is `memberReqAIAnswer{Verdict, Sticky}`. A paused breaker, a used-up budget and a gate that could not be had while the
+  flight's context is live are a sticky unknown (a state of the system); a counter that failed, no Redis and a cancelled context
+  are a plain unknown (a fault of the moment, shutdown is not a state). The name check has its own breaker
+  (`memberReqAIBreaker`, `memberreq_ai_breaker.go`, state of its own, never shared with `raid_ai_breaker.go`): five provider
+  failures in one group pause that group's checks for 5 minutes (`memberReqAICooldown`), a rejected key or account (401, 402,
+  403, or an authentication, billing or permission error type) pauses every group for 5 minutes (`memberReqAIKeyPause`), and a
+  429 whose retry delay is over 2 s pauses every group for that delay, at most 5 minutes, while a shorter one only counts
+  toward its group. A refusal stop is an answer (it clears the count), a cancelled context is neither a failure nor a success,
+  a pause that is running is not extended or logged again by checks still in flight, the map is bounded at 10,000 groups (an
+  idle breaker is pruned to make room, and when every tracked group is failing or paused a new one stays untracked, with one
+  warning per process), and each pause is one warning naming the status and the error type only. An image failure never
+  pauses name checks and the reverse (`TestMemberReqAIBreaker`). The sticky bit reaches the executor without the executor
+  naming the rule: `memberReqLookupMasks` stamps each row's bit into the context of its `Lookup`, `memberReqNoteSticky` ORs it
+  into the run's `memberReqLookupTouch.sticky`, and the held release and "I fixed it" (no touch) still see an unknown. The
+  stale-names guard is the table field `memberReqRule.NamesBound` (true on the AI row only, `memberReqNamesBoundMask`): after
+  the post-lookup re-read the executor compares the canonical names hash (`memberReqAINamesHash`: the empty string when not
+  judgeable, so an invisible character is no change and a change from judgeable to not is one) of the record the lookups judged
+  with the hash of the re-read record, and drops the names-bound bit when they differ. The counters (`memberReqAIStatsSnapshot`:
+  checked, passed, breached, cached, capped, shed, failed, blocked) are in memory, belong to the process that answers and start at
+  zero on every restart; there is no `/stats` section for them.
   The full order of `memberReqAIRule` (plan 15-05; D-02, D-21): after the checks above one pipelined round reads the verdict,
   the baseline `nm` and the marker `nu` (`memberReqAIReadState`; any error other than a miss is unknown), then
   `memberReqAIDecide`: (1) a readable verdict decides first, below the bar records a pass and passes, at or above it sets the
@@ -1570,7 +1609,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   one Info line (chat and user IDs only): a Warn hold for a blank last name would otherwise stand while a Ban channel rule
   stayed unjudged, because a held member's messages make no lookup. The member is judged again at their next message, so a
   stricter rule is never silently dropped behind a weaker punishment and its hold, and an unknown with no established breach
-  is simply not broken as before. An unknown that is equal or weaker than the punishment chosen defers nothing. The cost is
+  is simply not broken as before. An unknown that is equal or weaker than the punishment chosen defers nothing, and so does an
+  unknown that is a sticky state of the AI rule (a paused breaker, a used-up budget or a full gate, D-22): `memberReqLiveViolation`
+  removes the run's `touch.sticky` bits from the unknown mask before `memberReqUnknownDefers`, so an outage, an exhausted hour or
+  an attacker spending the fleet's budget never switches off the weaker name punishments of every group, while every other
+  unknown (a timeout, a 5xx, a 429, a refusal, an unreadable answer) still defers as before. The cost is
   that a stricter lookup rule that stays unanswerable for a member (a persistent 5xx or timeout on the channel; a bot that is
   no administrator is inert through the `cna` fact and defers nothing after the first message) holds the weaker name
   punishment back for as long as it stays unanswerable, which is the safe direction: nobody is punished on a guess. The lookups sit after the exemptions, the hold read, the pause and the live
@@ -1581,7 +1624,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupTouch` in the lookup context) or took longer than `memberReqLookupStaleAfter` (1 s), the record is read once
   more through `memberReqLiveMember` and the eligibility check (a member promoted to administrator or gone meanwhile is never
   punished), the names, the mute-over-restriction check and the marker adoption all
-  rest on that record; a re-read that fails punishes nobody. SEC-02: in that same branch (`memberReqRereadAfterLookups`) the
+  rest on that record; a re-read that fails punishes nobody. D-29: the AI rule's bit is dropped in that branch when the
+  re-read record's canonical names hash differs from the one the lookups judged (`NamesBound`,
+  `memberReqNamesBoundMask`), so a member who renamed during the provider call is never punished for the old string and is judged
+  again at their next message (the old string's verdict stays cached). SEC-02: in that same branch (`memberReqRereadAfterLookups`) the
   exemptions are judged again first, through `memberReqExempt`: a member an admin approved, or whose captcha attempt started,
   during the lookup phase, and an approvals or captcha read that fails then (an unknown is exempt) are punished by nobody.
   A phase of cache hits that was fast makes no extra request and no extra approvals read.
