@@ -80,6 +80,9 @@ func settingsMreqExpiryMinute() string {
 }
 
 func TestSettingsMreqCard(t *testing.T) {
+	// The AI is configured: with it not configured a punishing AI press is refused and no card is
+	// drawn, which TestSettingsMreqAIGate proves.
+	withAIConfigured(t)
 	env := newSettingsEnv(t)
 	// The channel rule's punishing presses pass the live link check only in a linked group.
 	settingsMreqLinkChannel(t, env)

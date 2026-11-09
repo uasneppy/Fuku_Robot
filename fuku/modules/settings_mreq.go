@@ -172,6 +172,11 @@ const (
 type settingsMreqStatus struct {
 	Basic   bool
 	Channel settingsMreqChannelState
+	// AINotConfigured is the process fact that the AI name check cannot run on this bot (a rule
+	// whose Configured test is false). It is read from config.AppConfig alone, with no call, and
+	// is set by settingsMreqReadStatus at every return, a basic group's included. A later rule with
+	// a process-level precondition adds its own field and one line to settingsMreqRuleUnconfigured.
+	AINotConfigured bool
 }
 
 // settingsMreqScope says which part of the status a draw needs.
@@ -198,6 +203,18 @@ var settingsMreqHereTimeout = 3 * time.Second
 // bypasses the caches on read and refreshes them (the channel screen's opening); a page or a redraw
 // reads through them. Every answer that is not definite is unknown, never an error.
 func settingsMreqReadStatus(p *settingsPress, row *models.ChatRequirements, scope settingsMreqScope, fresh bool) settingsMreqStatus {
+	status := settingsMreqReadChannelStatus(p, row, scope, fresh)
+	for _, rule := range memberReqRules {
+		if rule.Configured != nil && !rule.Configured() {
+			status.AINotConfigured = true
+		}
+	}
+	return status
+}
+
+// settingsMreqReadChannelStatus is the group-level and channel part of the status read: the
+// settingsMreqReadStatus wrapper adds the process fact to every answer it returns.
+func settingsMreqReadChannelStatus(p *settingsPress, row *models.ChatRequirements, scope settingsMreqScope, fresh bool) settingsMreqStatus {
 	if p.group.Type == "group" {
 		return settingsMreqStatus{Basic: true}
 	}
@@ -276,21 +293,40 @@ func settingsMreqBasicLine(tr *i18n.Translator) string {
 	return "🚫 " + settingsText(tr, "settings_mreq_here_basic")
 }
 
+// settingsMreqRuleUnconfigured reports whether the status says the rule cannot work on this bot at
+// all: the rule has a process-level precondition (its Configured field) and it does not hold.
+func settingsMreqRuleUnconfigured(rule memberReqRule, status settingsMreqStatus) bool {
+	return rule.Configured != nil && status.AINotConfigured
+}
+
+// settingsMreqUnconfiguredLine is the status line of a rule that cannot work on this bot, with its
+// icon as a code-side prefix. It names no setting, key, model, group or member: {rule} is the
+// translated rule name only.
+func settingsMreqUnconfiguredLine(tr *i18n.Translator, rule memberReqRule) string {
+	return "🚫 " + settingsText(tr, rule.UnconfiguredKey, i18n.TranslationParams{"rule": settingsText(tr, rule.LineKey)})
+}
+
 // settingsMreqHereLines is the cannot-work block of the page: a list of lines, empty when nothing
-// needs saying. The page lists a problem only for a rule that is not Off: the basic-group line while
-// some rule is on, else in a supergroup the channel rule's line while that rule is on. A later rule
-// appends its own line here with no renderer change.
+// needs saying. The page lists a problem only for a rule that is not Off. The group-level line comes
+// first (the basic-group line while some rule is on, else in a supergroup the channel rule's line
+// while that rule is on), then the line of every rule that cannot work on this bot (the AI rule while
+// the AI is not configured) in table order. A later rule appends its own line here with no renderer
+// change.
 func settingsMreqHereLines(tr *i18n.Translator, row *models.ChatRequirements, status settingsMreqStatus) []string {
-	if status.Basic {
-		if memberreq.AnyRuleOn(row) {
-			return []string{settingsMreqBasicLine(tr)}
-		}
-		return nil
-	}
 	var lines []string
-	if memberreq.ActionOf(row, memberreq.RuleChannel) != models.RequirementActionOff {
+	switch {
+	case status.Basic:
+		if memberreq.AnyRuleOn(row) {
+			lines = append(lines, settingsMreqBasicLine(tr))
+		}
+	case memberreq.ActionOf(row, memberreq.RuleChannel) != models.RequirementActionOff:
 		if line := settingsMreqChannelLine(tr, status.Channel); line != "" {
 			lines = append(lines, line)
+		}
+	}
+	for _, rule := range memberReqRules {
+		if settingsMreqRuleUnconfigured(rule, status) && memberreq.ActionOf(row, rule.Store) != models.RequirementActionOff {
+			lines = append(lines, settingsMreqUnconfiguredLine(tr, rule))
 		}
 	}
 	return lines
@@ -446,10 +482,14 @@ func renderSettingsMreqRuleScreen(v settingsView, rule memberReqRule, row *model
 	return renderSettingsMreqRuleScreenStatus(v, rule, row, notice, settingsMreqStatus{})
 }
 
-// settingsMreqRuleSlot is the one status line of a rule's screen: the basic-group line on every
-// rule, the channel rule's own line on the channel screen, and nothing for the others. A rule
-// screen always shows the line for its rule, because the screen exists to explain.
+// settingsMreqRuleSlot is the one status line of a rule's screen: the rule's own line while it cannot
+// work on this bot (it explains the Off-only form, so it wins over the basic-group line), else the
+// basic-group line on every rule, the channel rule's own line on the channel screen, and nothing for
+// the others. A rule screen always shows the line for its rule, because the screen exists to explain.
 func settingsMreqRuleSlot(tr *i18n.Translator, rule memberReqRule, status settingsMreqStatus) string {
+	if settingsMreqRuleUnconfigured(rule, status) {
+		return settingsMreqUnconfiguredLine(tr, rule)
+	}
 	if status.Basic {
 		return settingsMreqBasicLine(tr)
 	}
@@ -460,9 +500,14 @@ func settingsMreqRuleSlot(tr *i18n.Translator, rule memberReqRule, status settin
 }
 
 // settingsMreqOffOnly reports whether the rule's screen offers Off alone: the channel rule in a group
-// that cannot be linked to a channel (no linked channel found, or a basic group). A stored value
-// stays visible and inert there, and Off clears it (D-05, UI-SPEC amendment M7).
+// that cannot be linked to a channel (no linked channel found, or a basic group), and a rule that
+// cannot work on this bot at all (the AI rule while the AI is not configured, in any group type). A
+// stored value stays visible and inert there, and Off clears it (D-05, D-14, UI-SPEC amendments M7
+// and M15).
 func settingsMreqOffOnly(rule memberReqRule, status settingsMreqStatus) bool {
+	if settingsMreqRuleUnconfigured(rule, status) {
+		return true
+	}
 	return rule.Store == memberreq.RuleChannel && (status.Basic || status.Channel == settingsMreqChannelNoLink)
 }
 

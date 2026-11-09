@@ -703,6 +703,7 @@ func TestSettingsAuthorityMreq(t *testing.T) {
 	})
 
 	t.Run("an administrator without can_restrict_members opens every rule screen and is refused every choice and Yes", func(t *testing.T) {
+		withAIConfigured(t) // the AI screen has the usual shape; the gate after the right is TestSettingsMreqAIGate's
 		env := newSettingsEnv(t)
 		settingsMreqLinkChannel(t, env)
 		writes := settingsMreqCountWrites(t)
@@ -802,7 +803,8 @@ func TestSettingsAuthorityMreq(t *testing.T) {
 
 // settingsMreqStatuses are the statuses a draw can carry, by name: nothing read (the Phase 13
 // shape), a linked channel with an administrator bot, a bot that is not an administrator, no linked
-// channel, a read that could not be answered, and a basic group.
+// channel, a read that could not be answered, a basic group, the AI not configured alone and the AI
+// not configured in a basic group.
 var settingsMreqStatuses = []struct {
 	Name   string
 	Status settingsMreqStatus
@@ -813,11 +815,17 @@ var settingsMreqStatuses = []struct {
 	{"nolink", settingsMreqStatus{Channel: settingsMreqChannelNoLink}},
 	{"unknown", settingsMreqStatus{Channel: settingsMreqChannelUnknown}},
 	{"basic", settingsMreqStatus{Basic: true}},
+	{"ai not configured", settingsMreqStatus{AINotConfigured: true}},
+	{"ai not configured in a basic group", settingsMreqStatus{Basic: true, AINotConfigured: true}},
 }
 
-// settingsMreqOffOnlyScreen reports whether a rule's screen under a status is the Off-only channel
-// screen (two rows).
+// settingsMreqOffOnlyScreen reports whether a rule's screen under a status is an Off-only screen
+// (two rows): the channel screen of a group that cannot be linked, and the AI screen while the AI is
+// not configured, in any group type.
 func settingsMreqOffOnlyScreen(rule memberReqRule, status settingsMreqStatus) bool {
+	if rule.Code == "ai" && status.AINotConfigured {
+		return true
+	}
 	return rule.Code == "ch" && (status.Basic || status.Channel == settingsMreqChannelNoLink)
 }
 
@@ -832,7 +840,7 @@ func settingsMreqScreens(tr *i18n.Translator, view settingsView) map[string]sett
 			LastNameAction: models.RequirementActionWarn, UsernameAction: models.RequirementActionKick,
 			RussianAction: models.RequirementActionBan, ArabicAction: models.RequirementActionMute,
 			ChineseAction: models.RequirementActionMute, PhotoAction: models.RequirementActionWarn,
-			ChannelAction: models.RequirementActionKick, CheckOnJoin: true, DeleteMessages: true,
+			ChannelAction: models.RequirementActionKick, AIAction: models.RequirementActionMute, CheckOnJoin: true, DeleteMessages: true,
 		},
 	}
 	notices := map[string]string{
@@ -878,8 +886,8 @@ func TestSettingsMreqPageFitsEveryLocale(t *testing.T) {
 					view := settingsEditView(tr, private)
 					view.GroupTitle, view.OpenerName = title, title
 					screens := settingsMreqScreens(tr, view)
-					if want := 2*3*6 + 8*3*6 + 24; len(screens) != want {
-						t.Fatalf("%s %s: %d screens were rendered, want %d (36 page states, 144 rule screens, 24 cards)", code, titleName, len(screens), want)
+					if want := 2*3*len(settingsMreqStatuses) + 8*3*len(settingsMreqStatuses) + 24; len(screens) != want {
+						t.Fatalf("%s %s: %d screens were rendered, want %d (every page state and rule screen under every status, 24 cards)", code, titleName, len(screens), want)
 					}
 					for name, screen := range screens {
 						label := fmt.Sprintf("%s %s private=%v %s", code, titleName, private, name)
@@ -1187,6 +1195,9 @@ func TestSettingsMreqPhotoScreen(t *testing.T) {
 }
 
 func TestSettingsMreqRuleScreen(t *testing.T) {
+	// The AI is configured so the AI rule's screen has the shape of every rule's; with it not
+	// configured the screen is the Off-only form, which TestSettingsMreqAIStatus proves.
+	withAIConfigured(t)
 	env := newSettingsEnv(t)
 	settingsMreqLinkChannel(t, env)
 	owner := env.newOwner(env.chat)
@@ -1439,7 +1450,7 @@ func TestSettingsMreqRowBudget(t *testing.T) {
 		LastNameAction: models.RequirementActionWarn, UsernameAction: models.RequirementActionKick,
 		RussianAction: models.RequirementActionBan, ArabicAction: models.RequirementActionMute,
 		ChineseAction: models.RequirementActionOff, PhotoAction: models.RequirementActionWarn,
-		ChannelAction: models.RequirementActionMute, CheckOnJoin: true, DeleteMessages: true,
+		ChannelAction: models.RequirementActionMute, AIAction: models.RequirementActionWarn, CheckOnJoin: true, DeleteMessages: true,
 	}
 	for _, private := range []bool{true, false} {
 		view := settingsEditView(tr, private)

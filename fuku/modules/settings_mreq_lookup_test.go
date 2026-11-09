@@ -587,6 +587,9 @@ func TestSettingsMreqBasicGroup(t *testing.T) {
 		})
 
 		t.Run(menu+": every rule screen says so and makes no lookup", func(t *testing.T) {
+			// The AI is configured here, so the AI screen is the usual basic-group one; the AI not
+			// configured, which turns it into the Off-only form, is TestSettingsMreqAIStatus's.
+			withAIConfigured(t)
 			env := settingsMreqBasicEnv(t, private)
 			env.seed([8]int{0, 0, 0, 0, 0, models.RequirementActionMute, models.RequirementActionBan}, false, false)
 			msgID := env.openMenuOf(private)
