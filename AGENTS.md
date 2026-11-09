@@ -2659,7 +2659,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   straddle the bar). The bar is 0.9 in that mode unless `-bar` is given. Each row goes through `namecanon.Of` and
   `claude.Client.ClassifyNames`, the two calls the bot makes, so the spike measures what the bot sends; the summary, sweep,
   latency and cost are the image mode's functions. Names appear only in the owner's CSV (stdout or `-csv`), never on
-  stderr, and the key never appears anywhere; it is tested against `httptest` with no real provider
+  stderr, and the key never appears anywhere. A name cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is
+  written with a single quote in front (`csvSafe`, `TestNamesCSVNeutralisesFormulas`, review IN-03), because the names are
+  attacker-controlled and would run as a formula when the file is opened in a spreadsheet; the input file's parsing is
+  unchanged. It is tested against `httptest` with no real provider
   (`TestRunNamesMode`, `TestNamesFileParse`, `TestNamesSummaryAtBar`, `TestNamesRepeatStability`,
   `TestNamesModeKeyNeverPrinted`, `TestNamesModeExclusiveFlags`). The tool imports only the `claude` and `namecanon`
   packages of the repository. `.planning/phases/15-ai-spam-name-check/15-SPIKE.md` is the owner's non-blocking checklist

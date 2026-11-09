@@ -281,7 +281,7 @@ var namesCSVHeader = []string{"row", "label", "first_name", "last_name", "userna
 var namesRepeatHeader = []string{"min", "max", "spread"}
 
 // writeNamesCSV writes the header and one row per name: the names as the owner
-// wrote them (the one place they are printed), and the probability, finish, ms
+// wrote them (the one place they are printed, each through csvSafe), and the probability, finish, ms
 // and tokens of the name's first judgement. With repeats it adds the minimum,
 // maximum and spread over all judgements, empty when one of them failed or was
 // refused.
@@ -301,7 +301,7 @@ func writeNamesCSV(w io.Writer, outcomes []nameOutcome, repeats bool) error {
 			probability = strconv.FormatFloat(first.Probability, 'f', 4, 64)
 		}
 		row := []string{
-			strconv.Itoa(o.Row.Num), o.Row.Label, o.Row.First, o.Row.Last, o.Row.Username,
+			strconv.Itoa(o.Row.Num), o.Row.Label, csvSafe(o.Row.First), csvSafe(o.Row.Last), csvSafe(o.Row.Username),
 			probability, first.Finish,
 			strconv.FormatInt(first.Duration.Milliseconds(), 10),
 			strconv.Itoa(first.InputTokens), strconv.Itoa(first.OutputTokens),
@@ -315,6 +315,17 @@ func writeNamesCSV(w io.Writer, outcomes []nameOutcome, repeats bool) error {
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// csvSafe neutralises a name for a spreadsheet: a cell that starts with =, +, -, @, a tab or a
+// carriage return is a formula when the file is opened, and the names are the one attacker-controlled
+// text the tool writes, so such a cell gets a single quote in front (the standard mitigation). Every
+// other cell is returned as it was. The input file's parsing is not touched.
+func csvSafe(cell string) string {
+	if cell != "" && strings.ContainsRune("=+-@\t\r", rune(cell[0])) {
+		return "'" + cell
+	}
+	return cell
 }
 
 // spreadCells are the min, max and spread cells of one row, or three empty
