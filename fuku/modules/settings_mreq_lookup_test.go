@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -479,6 +481,82 @@ func TestSettingsMreqOpenCost(t *testing.T) {
 		}
 	}
 
+	// The AI status is a process fact: drawing the AI rule's screen, in both forms and in a basic
+	// group, costs exactly what a name rule's screen costs (no Telegram request and no Redis
+	// command for the status), and the page costs the same whatever the AI state.
+	for _, private := range []bool{false, true} {
+		for _, basic := range []bool{false, true} {
+			for _, configured := range []bool{true, false} {
+				name := fmt.Sprintf("the AI screen costs what a name rule's screen costs: private=%v basic=%v configured=%v", private, basic, configured)
+				t.Run(name, func(t *testing.T) {
+					if configured {
+						withAIConfigured(t)
+					} else {
+						withAINotConfigured(t, mreqAINoKey)
+					}
+					env := settingsMreqBasicEnvOrPlain(t, private, basic)
+					env.seed([8]int{7: models.RequirementActionBan}, false, false)
+					msgID := env.openMenuOf(private)
+					cost := func(kv ...string) [3]int {
+						chats, members, commands := mreqChatCalls(env.memberReqEnv, env.chat.Id), len(env.fake.callsFor("getChatMember")), env.redis.CommandCount()
+						env.press(private, msgID, kv...)
+						return [3]int{
+							mreqChatCalls(env.memberReqEnv, env.chat.Id) - chats,
+							len(env.fake.callsFor("getChatMember")) - members,
+							env.redis.CommandCount() - commands,
+						}
+					}
+					// The first press of a private menu warms the press pipeline's own state (it reads a few
+					// Redis keys once), so it is made before anything is measured.
+					env.press(private, msgID, "a", "mo", "t", "un")
+					plain, ai := cost("a", "mo", "t", "ln"), cost("a", "mo", "t", "ai")
+					if plain != ai {
+						t.Errorf("the AI screen cost (getChat, getChatMember, Redis) = %v, a name rule's screen %v, want equal", ai, plain)
+					}
+					if page := cost("a", "op", "p", settingsPageMreq); page[0] != plain[0] || page[1] != plain[1] {
+						t.Errorf("the page's Telegram cost = %v, want the pipeline's own %v (the channel rule is Off)", page[:2], plain[:2])
+					}
+					if main := cost("a", "bk"); main[0] > plain[0] || main[1] > plain[1] {
+						t.Errorf("Main's Telegram cost = %v, want at most the pipeline's own %v", main[:2], plain[:2])
+					}
+				})
+			}
+		}
+	}
+
+	t.Run("the page with the channel rule on costs the same under both AI states", func(t *testing.T) {
+		var costs [2][2]int
+		for i, configured := range []bool{true, false} {
+			if configured {
+				withAIConfigured(t)
+			} else {
+				withAINotConfigured(t, mreqAINoKey)
+			}
+			env, channel := settingsMreqCostEnv(t)
+			env.seed([8]int{6: models.RequirementActionWarn, 7: models.RequirementActionMute}, false, false)
+			msgID := env.openMenuOf(false)
+			chats, members := mreqChatCalls(env.memberReqEnv, env.chat.Id), mreqMemberCalls(env.memberReqEnv, channel, staffTestBotID)
+			env.press(false, msgID, "a", "op", "p", settingsPageMreq)
+			costs[i] = [2]int{mreqChatCalls(env.memberReqEnv, env.chat.Id) - chats, mreqMemberCalls(env.memberReqEnv, channel, staffTestBotID) - members}
+		}
+		if costs[0] != costs[1] || costs[0] != [2]int{1, 1} {
+			t.Errorf("page cost (getChat, getChatMember of the bot) = configured %v, not configured %v, want {1 1} for both", costs[0], costs[1])
+		}
+	})
+
+	t.Run("the AI status is the same with Redis down", func(t *testing.T) {
+		withAINotConfigured(t, mreqAINoKey)
+		env := newSettingsMreqHereEnv(t)
+		env.seed([8]int{7: models.RequirementActionWarn}, false, false)
+		msgID := env.openMenuOf(false)
+		withRedis, _ := env.press(false, msgID, "a", "mo", "t", "ai")
+		mreqSwap(t, &memberReqRedisClient, func() *redis.Client { return nil })
+		withoutRedis, keyboard := env.press(false, msgID, "a", "mo", "t", "ai")
+		if withRedis != withoutRedis || len(keyboard) != 2 {
+			t.Errorf("the AI screen with Redis down = %q (%d rows), want the same as with it (%q)", withoutRedis, len(keyboard), withRedis)
+		}
+	})
+
 	t.Run("a fresh channel screen refreshes the link and the administrator caches", func(t *testing.T) {
 		env, channel := settingsMreqCostEnv(t)
 		env.seed(settingsMreqChannelOn(), false, false)
@@ -545,6 +623,15 @@ func settingsMreqBasicEnv(t *testing.T, private bool) *settingsMreqHereEnv {
 		env.basic = true
 	}
 	return env
+}
+
+// settingsMreqBasicEnvOrPlain is a basic group's environment when basic, else the plain one.
+func settingsMreqBasicEnvOrPlain(t *testing.T, private, basic bool) *settingsMreqHereEnv {
+	t.Helper()
+	if basic {
+		return settingsMreqBasicEnv(t, private)
+	}
+	return newSettingsMreqHereEnv(t)
 }
 
 func TestSettingsMreqBasicGroup(t *testing.T) {

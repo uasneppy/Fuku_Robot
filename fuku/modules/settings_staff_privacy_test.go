@@ -92,6 +92,9 @@ func settingsPrivacyMreqStatusScreens(views map[string]settingsView, notices []s
 		"nolink":   {Channel: settingsMreqChannelNoLink},
 		"unknown":  {Channel: settingsMreqChannelUnknown},
 		"basic":    {Basic: true},
+		// The AI not configured, alone and in a basic group (Phase 15).
+		"ai not configured":                  {AINotConfigured: true},
+		"ai not configured in a basic group": {Basic: true, AINotConfigured: true},
 	}
 	rows := map[string]*models.ChatRequirements{"all off": {}, "every punishment": everyPunishment}
 	screens := make(map[string]settingsScreen)
@@ -250,7 +253,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					LastNameAction: models.RequirementActionWarn, UsernameAction: models.RequirementActionKick,
 					RussianAction: models.RequirementActionBan, ArabicAction: models.RequirementActionMute,
 					ChineseAction: models.RequirementActionOff, PhotoAction: models.RequirementActionWarn,
-					ChannelAction: models.RequirementActionMute, CheckOnJoin: true, DeleteMessages: true,
+					ChannelAction: models.RequirementActionMute, AIAction: models.RequirementActionBan, CheckOnJoin: true, DeleteMessages: true,
 				}
 				for viewName, view := range map[string]settingsView{"group": groupView, "private admin": privateAdminView} {
 					for i, notice := range notices {
@@ -278,6 +281,8 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				screens["private admin main, every rule on"] = renderSettingsMain(privateAdminView, settingsPrivacyMainMreq(mainEntries(settingsText(tr, "settings_state_linked")), rulesOn), "")
 				screens["alert of a refused channel press"] = settingsScreen{Text: settingsMreqNoLinkAlert(tr)}
 				screens["alert could not check"] = settingsScreen{Text: settingsText(tr, "mreq_fixed_check_failed")}
+				aiRule, _ := memberReqRuleByCode("ai")
+				screens["alert of a refused AI press"] = settingsScreen{Text: settingsMreqUnconfiguredText(tr, aiRule)}
 				for i, notice := range notices {
 					name := fmt.Sprintf("notice %d", i)
 					screens["linked, "+name] = renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), notice)
@@ -544,6 +549,16 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 		settingsPrivacyPhase14Run(t, false)
 	})
 
+	// Phase 15: the same administrator drives the AI rule's screen in both forms (the AI configured
+	// and not), a refused punishing press, a Warn, a Mute card with its Yes and the page with the AI
+	// line, over a group linked to a Staff Group, a channel and a held member the fake knows.
+	t.Run("a private Phase 15 run by an admin who is not the creator names neither the Staff Group, the channel nor a member", func(t *testing.T) {
+		settingsPrivacyPhase15Run(t, true)
+	})
+	t.Run("a group menu Phase 15 run by an admin who is not the creator names neither the Staff Group, the channel nor a member", func(t *testing.T) {
+		settingsPrivacyPhase15Run(t, false)
+	})
+
 	t.Run("a group menu run never names a Staff Group", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		titles := []string{"ZZ Zero & <Ö>", "ZZ One & <Ö>", "ZZ Two & <Ö>"}
@@ -753,6 +768,117 @@ func settingsPrivacyPhase14Run(t *testing.T, private bool) {
 	} {
 		if strings.Contains(everything, leak) {
 			t.Errorf("a Phase 14 run of an admin who is not the creator received %q: %q", leak, everything)
+		}
+	}
+}
+
+// settingsPrivacyPhase15Run is the Phase 15 run of an administrator who is not the creator, in the
+// private menu or in a menu opened in the group, over a group linked to a Staff Group, a channel
+// whose title and ID the fake knows and a held member whose name the fake knows. It opens the AI
+// rule's screen with the AI not configured (the Off-only form) and configured (three rows), is
+// refused a punishing press while it is not, and sets Warn and a Mute through the card while it is.
+func settingsPrivacyPhase15Run(t *testing.T, private bool) {
+	t.Helper()
+	withAINotConfigured(t, mreqAINoKey)
+	env := newSettingsEnv(t)
+	editCleanup(t, env.chat.Id)
+	staffChat := settingsStaffTestOwnedStaffGroup(env, settingsStaffPrivacyTitle)
+	linkLockdownGroupTo(env.lockdownEnv, staffChat)
+
+	withFastLookupPacer(t)
+	state := newMreqLookupState()
+	mreqInstallLookupFake(&memberReqEnv{settingsEnv: env}, state)
+	channel := mreqChannel(t, state, env.chat.Id, gotgbot.ChatMemberStatusAdministrator)
+	state.setTitle(channel, settingsPrivacyChannelTitle)
+	ai := mreqInstallAIFake(t)
+
+	moderator := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Moderator"}
+	held := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: settingsPrivacyMemberName, Username: "zzmarkeruser"}
+	memberReqCleanup(t, []int64{env.chat.Id}, []int64{moderator.Id, held.Id})
+	env.fake.setMember(env.chat.Id, moderator.Id, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true,
+	})
+	env.fake.setProfile(held.Id, held.FirstName, "", held.Username)
+	if err := db.DB.Create(&models.User{UserId: held.Id, Name: held.FirstName, UserName: held.Username}).Error; err != nil {
+		t.Fatalf("create the held member's users row: %v", err)
+	}
+	created := time.Now().Add(-time.Hour)
+	won, err := memberreq.ClaimHold(context.Background(), &models.ChatRequirementHold{
+		ChatID: env.chat.Id, UserID: held.Id, Rules: mreqBitOf(t, "ai"), Action: models.RequirementActionMute,
+		CreatedAt: created, PunishedAt: &created, MuteUntil: memberReqMuteUntil(created),
+	})
+	if err != nil || !won {
+		t.Fatalf("seed the held member's hold: won = %t, error = %v", won, err)
+	}
+
+	var (
+		msgID  int64
+		press  func(kv ...string)
+		chatID = env.chat.Id
+	)
+	if private {
+		msgID, chatID = 4747, moderator.Id
+		press = func(kv ...string) { env.pressPrivate(moderator, msgID, env.privateFields(env.chat.Id, kv...)) }
+	} else {
+		msgID = env.openMenu(moderator)
+		press = func(kv ...string) { env.press(moderator, msgID, env.groupFields(moderator, kv...)) }
+	}
+
+	// Not configured: the page, the Off-only screen, the refused Warn and Mute and the Off press.
+	press("a", "op", "p", settingsPageMreq)
+	press("a", settingsActMreqOpen, "t", "ai")
+	press(settingsMreqAIStrictKV(models.RequirementActionWarn)...)
+	press(settingsMreqAIStrictKV(models.RequirementActionMute)...)
+	press("a", settingsActMreqYes, "t", "ai", "v", "4", "e", settingsCardExpiry(time.Now()))
+	press(settingsMreqAIStrictKV(models.RequirementActionOff)...)
+	// Configured: the same screen with three rows, a Warn, a Mute card and its Yes, and the page.
+	withAIConfigured(t)
+	press("a", settingsActMreqOpen, "t", "ai")
+	press(settingsMreqAIStrictKV(models.RequirementActionWarn)...)
+	press(settingsMreqAIStrictKV(models.RequirementActionMute)...)
+	press("a", settingsActMreqYes, "t", "ai", "v", "4", "e", settingsCardExpiry(time.Now()))
+	press("a", "op", "p", settingsPageMreq)
+	withAINotConfigured(t, mreqAISwitchOff)
+	press("a", "op", "p", settingsPageMreq)
+
+	var seen []string
+	for _, edit := range env.edits(chatID, msgID) {
+		seen = append(seen, fmt.Sprint(edit.Params["text"]))
+		for _, button := range settingsAllButtons(staffKeyboardOf(edit.Params["reply_markup"])) {
+			seen = append(seen, button.Text, button.CallbackData, button.Url)
+		}
+	}
+	for _, sent := range env.fake.sentTo(chatID) {
+		seen = append(seen, fmt.Sprint(sent.Params["text"]))
+	}
+	for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+		seen = append(seen, fmt.Sprint(answer.Params["text"]))
+	}
+	everything := strings.Join(seen, "\n")
+
+	if n := len(env.edits(chatID, msgID)); n < 10 {
+		t.Fatalf("the run edited the menu only %d times", n)
+	}
+	if !containsMarker(everything, "settings_mreq_here_ai") {
+		t.Errorf("the run never produced settings_mreq_here_ai: %q", everything)
+	}
+	if !containsMarker(everything, "settings_mreq_confirm_ai_mute") {
+		t.Errorf("the run never drew the AI Mute card: %q", everything)
+	}
+	if stored, ok := settingsMreqStored(t, env.chat.Id); !ok || stored.AIAction != models.RequirementActionMute {
+		t.Errorf("stored settings = %+v (found %t), want the AI rule on Mute (set while configured, after the refused presses)", stored, ok)
+	}
+	if n := ai.count(); n != 0 {
+		t.Errorf("the menu made %d provider requests", n)
+	}
+	for _, leak := range []string{
+		"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+		strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"),
+		settingsPrivacyChannelTitle, strings.TrimPrefix(strconv.FormatInt(channel, 10), "-"),
+		settingsPrivacyMemberName, "zzmarkeruser", strconv.FormatInt(held.Id, 10), mreqLogDescription,
+	} {
+		if strings.Contains(everything, leak) {
+			t.Errorf("a Phase 15 run of an admin who is not the creator received %q: %q", leak, everything)
 		}
 	}
 }

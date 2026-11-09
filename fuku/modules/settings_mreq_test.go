@@ -425,6 +425,22 @@ func TestSettingsMreqMainState(t *testing.T) {
 		})
 	}
 
+	t.Run("an AI value stored while the AI is not configured counts as on and Main asks nobody", func(t *testing.T) {
+		withAINotConfigured(t, mreqAINoKey)
+		settingsMreqSeed(t, env.chat.Id, [8]int{7: models.RequirementActionMute}, false, false)
+		chats, members := len(env.fake.callsFor("getChat")), len(env.fake.callsFor("getChatMember"))
+		want := fmt.Sprintf("%s %d", staffMarker("settings_state_mreq_on"), 1)
+		if line := redrawMain(); !strings.Contains(line, want) {
+			t.Errorf("line = %q, want %q (an inert stored value is still a rule that is on)", line, want)
+		}
+		if got := len(env.fake.callsFor("getChat")) - chats; got != 0 {
+			t.Errorf("Main made %d getChat requests, want none", got)
+		}
+		if got := len(env.fake.callsFor("getChatMember")) - members; got != 1 {
+			t.Errorf("Main made %d getChatMember requests, want the pipeline's one", got)
+		}
+	})
+
 	t.Run("an unreadable setting is the unknown mark and the cannot-open edit", func(t *testing.T) {
 		settingsMreqSeams(t)
 		settingsMreqSeed(t, env.chat.Id, [8]int{1}, false, false)
