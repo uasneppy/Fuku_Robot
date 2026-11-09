@@ -51,7 +51,9 @@ checks regardless of its per-chat setting, and the AI raid trigger sends nothing
 to either provider: no text goes to TypeSafe and no image goes to Anthropic,
 even when `ANTHROPIC_API_KEY` is set. `/autolockdown` then shows the "AI checks are
 not set up" notice. The text checks are inert without `TYPESAFE_API_KEY` either
-way.
+way. It also switches off the AI spam-name check of the Member requirements page: with
+`false` no name goes to Anthropic, the rule is inert in every group and its page says
+"AI not configured".
 
 | Property | Value |
 |----------|-------|
@@ -80,6 +82,16 @@ its own. When it is unset, no image is sent anywhere and the text checks
 (through `TYPESAFE_API_KEY`) are unchanged. Setting `ENABLE_AISPAM` to `false`
 also stops the image checks.
 
+The same key also enables the AI spam-name check of the Member requirements page (the
+AI rule, off in every group until its owner picks a punishment). For that check only a
+member's first name, last name and username are sent to Anthropic, once per distinct
+set of names and never message text, when a new member joins or writes for the first
+time and when any member changes their name; the verdict is cached for 24 hours and
+the calls are capped per account, per group and for the whole bot each hour. Without
+the key, or with `ENABLE_AISPAM` set to `false`, the name check is off and the page
+says "AI not configured". A name check that cannot be answered (an error, a rejected
+key, a rate limit, a spent budget) never punishes anyone.
+
 Every check sends that image to Anthropic under the terms of the owner's API
 account, so the owner decides before setting the key. The key is a secret: it is
 registered with the log redactor at startup, and any string shaped like an
@@ -95,8 +107,10 @@ host turns the checks on.
 
 ### `ANTHROPIC_MODEL`
 
-Claude model used for the image checks. Only used when `ANTHROPIC_API_KEY` is
-set. The name must be a plain model id of 1 to 64 letters, digits, dots,
+Claude model used for the image checks and for the AI spam-name check. Only used when
+`ANTHROPIC_API_KEY` is set. Both requests force a tool call, so the model must accept
+one (a Haiku-class model such as the default): other models answer HTTP 400, which the
+checks read as a provider failure and pause on. The name must be a plain model id of 1 to 64 letters, digits, dots,
 underscores or hyphens, starting with a letter or digit. Any other value is
 replaced by the default with a warning in the log, so a bad name never reaches a
 request URL.
@@ -641,8 +655,8 @@ OWNER_ID=
 
 ```bash
 ACTIVITY_CHECK_INTERVAL=# hours between activity checks (default: 1)
-ANTHROPIC_API_KEY=# Anthropic key for the image checks of the AI raid trigger (off when unset)
-ANTHROPIC_MODEL=# Claude model for those checks (default: claude-haiku-5-5)
+ANTHROPIC_API_KEY=# Anthropic key for the image checks of the AI raid trigger and the AI spam-name check (both off when unset)
+ANTHROPIC_MODEL=# Claude model for those checks, must accept a forced tool call (default: claude-haiku-5-5)
 API_SERVER=# custom API server URL (default: https://api.telegram.org)
 AUTO_MIGRATE=# enable automatic database migrations (default: false)
 AUTO_MIGRATE_SILENT_FAIL=# continue even if migrations fail (default: false)
@@ -656,7 +670,7 @@ DB_MAX_OPEN_CONNS=# (default: 200)
 DEBUG=# enable debug logging (default: false)
 DISPATCHER_MAX_ROUTINES=# (default: 200)
 DROP_PENDING_UPDATES=# (default: false)
-ENABLE_AISPAM=# global kill switch for every AI check, text and images (default: true)
+ENABLE_AISPAM=# global kill switch for every AI check, text, images and names (default: true)
 ENABLE_AUTO_CLEANUP=# (default: true)
 ENABLE_BACKGROUND_STATS=# (default: true in prod, false in debug)
 ENABLE_DB_MONITORING=# (default: false)

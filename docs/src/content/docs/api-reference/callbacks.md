@@ -210,9 +210,12 @@ The order of a press is fixed and each step refuses before the next runs. After 
 step 4b: the approvals are read, and an approved member is judged clean for every rule, so they are freed without a
 settings read or a lookup (an unreadable approval is a "could not check" answer and changes nothing). Otherwise step 5
 judges every enabled rule again: the name rules on the live record, and the profile photo and channel rules with fresh
-lookups that bypass the positive caches, under a 5 second budget of the press's 10 seconds. A rule still broken beats a
-lookup that cannot be answered: one to four broken rules are named in the answer, five or more are counted, and with
-nothing broken an unknown lookup answers "could not check" and changes nothing. A channel lookup that cannot be answered
+lookups that bypass the positive caches, under a 5 second budget of the press's 10 seconds. The AI rule is judged with
+the live names too but always answers from its verdict cache: for unchanged names the press gives the same answer every
+time with no request, and only a renamed member costs one request, through the rule's breaker, gate and hourly budgets. An
+AI that is not configured is inert, and an answer the AI cannot give is "could not check". A rule still broken beats a
+lookup that cannot be answered: one to four broken rules are named in the answer, five or more (up to eight) are counted,
+and with nothing broken an unknown lookup answers "could not check" and changes nothing. A channel lookup that cannot be answered
 for a bot that is definitely not an administrator of the channel makes the channel rule inert (not broken).
 
 ### Notes
@@ -285,21 +288,31 @@ The Member requirements page (`m`, the Requirements page of the menu) has these 
 
 | Item | Code | Fields | Notes |
 |------|------|--------|-------|
-| Rule screen | `a=mo` | `t` a rule code (`ln` last name, `un` username, `ru` Russian, `ar` Arabic, `zh` Chinese, `ph` profile photo, `ch` channel) | opens the screen of one rule |
-| Rule controls | `ln` `un` `ru` `ar` `zh` `ph` `ch` | `a=st`, `t`, `v` one digit `0` to `4` | `st` only (a `tg` on one is an invalid request); `0` Off, `1` Warn, `2` Kick, `3` Ban, `4` Mute |
+| Rule screen | `a=mo` | `t` a rule code (`ln` last name, `un` username, `ru` Russian, `ar` Arabic, `zh` Chinese, `ph` profile photo, `ch` channel, `ai` AI spam name) | opens the screen of one rule |
+| Rule controls | `ln` `un` `ru` `ar` `zh` `ph` `ch` `ai` | `a=st`, `t`, `v` one digit `0` to `4` | `st` only (a `tg` on one is an invalid request); `0` Off, `1` Warn, `2` Kick, `3` Ban, `4` Mute |
 | Confirm card | `a=my` | `t`, `v` (`2` to `4`), `e` expiry in unix minutes | the Yes of the card a Kick, Ban or Mute press draws; Off and Warn are written at once |
 | Switches | `j` Check on join, `d` Delete messages | `a=tg` or `a=st`, `t`, `v` `0` or `1` | any other `v` is an invalid request |
 
 Each control declares the actions it accepts (the `Actions` allow-list of the control), and a press with any other code is
 refused before any lookup.
 
-The page has seven rule cells in four rows, a switch row and the navigation row. Its body ends with a status block, a
+The page has eight rule cells in four rows, a switch row and the navigation row. Its body ends with a status block, a
 list of lines saying when a rule cannot work in this group: a basic group (rules act on supergroups only), a channel rule
-with no linked channel, or a linked channel whose bot is not an administrator; a check that could not be made shows the
+with no linked channel, or a linked channel whose bot is not an administrator, and an AI rule while the AI is not
+configured (`ENABLE_AISPAM` off or no Anthropic key on the server); a check that could not be made shows the
 unknown mark and never an error. The channel rule's screen offers `Off` alone while the group has no linked channel. A
 punishing press of the channel rule (`a=st` with `v` `1` to `4`, and the card's Yes `a=my`) makes one live link check
 after every other step: a group with no linked channel answers an alert, writes nothing and redraws the Off-only screen, and
 a link that cannot be read answers a "could not check" alert and changes nothing. `Off` never makes the check.
+
+The AI rule (`ai`) has a gate of its own, a pure check of the server's configuration that runs after the same steps: while
+the AI is not configured its screen offers `Off` alone (with the AI line in the status slot and the stored value still
+shown), and a punishing press (`a=st` with `v` `1` to `4`, or the card's Yes `a=my`) is refused with an alert that names
+the rule, writes nothing and redraws the Off-only screen. `Off` is always accepted, so an administrator can clear a stored
+value. The AI card says its own consequence for Kick, Ban and Mute: the rule judges a member when they join or write for
+the first time and again after a name change, and members who are already in the group are judged only when they
+rename, so it does not claim to act on every member at their next message. Only the first name, last name and username
+are sent to Anthropic's Claude, never messages.
 
 A switch is pressed with the toggle action `tg`: its `t` must be a control of the page (`e`, `d`, `o` or `u` as the table
 lists them) and its `v` the absolute target, `0` or `1`; anything else is an invalid request, refused before any lookup.

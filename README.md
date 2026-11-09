@@ -383,7 +383,7 @@ You can also set the welcome, the goodbye and the rules from `/settings` in the 
 
 The rules can carry one media item (a photo, video, GIF or file) and URL buttons, set from `/settings` in private; `/rules` shows them in the group and as private rules. Media under text puts a photo, video or GIF below its text, for the welcome, the goodbye and the rules. Greet once welcomes each member only the first time they join.
 
-Member requirements, in `/settings` on the Requirements page, give each of seven rules (must have a last name, must have a username, no Russian, Arabic or Chinese name, judged by letters, must have a profile photo, and must be subscribed to the group's linked channel) its own punishment: off, warn, kick, ban or mute. Every rule is off by default. The photo rule counts a photo the bot cannot see (hidden by the member's privacy settings) as missing, so a member who hides their photo can be asked to show it or be approved by an admin. The channel rule works only in a group that is linked to a channel and only while the bot is an administrator of that channel; the page says when a rule cannot work in the group. A check that cannot be answered (a Telegram error, a timeout, a busy lookup) punishes nobody. Members are checked at their next message and, with Check on join, right after the captcha; Delete messages removes a held member's messages. A muted member gets an I fixed it button that frees only them, and only from a mute the requirements placed. Supergroups only.
+Member requirements, in `/settings` on the Requirements page, give each of eight rules (must have a last name, must have a username, no Russian, Arabic or Chinese name, judged by letters, must have a profile photo, must be subscribed to the group's linked channel, and no spam-like name as judged by AI) its own punishment: off, warn, kick, ban or mute. Every rule is off by default. The photo rule counts a photo the bot cannot see (hidden by the member's privacy settings) as missing, so a member who hides their photo can be asked to show it or be approved by an admin. The channel rule works only in a group that is linked to a channel and only while the bot is an administrator of that channel; the page says when a rule cannot work in the group. The AI spam-name rule sends only a member's first name, last name and username to Anthropic's Claude, never messages: new members are checked when they join or at their first message, any member is checked again after a name change, and members already in the group are checked only after one. It is off when `ENABLE_AISPAM` is false or no `ANTHROPIC_API_KEY` is set, and the page says so; because the AI can be wrong, Warn or Mute is the recommended punishment. A check that cannot be answered (a Telegram error, a timeout, a busy lookup, an AI error or spent budget) punishes nobody. Members are checked at their next message and, with Check on join, right after the captcha; Delete messages removes a held member's messages. A muted member gets an I fixed it button that frees only them, and only from a mute the requirements placed. Supergroups only.
 
 </details>
 
@@ -801,7 +801,9 @@ parse falls back to its default, with only a warning in the log.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | — | TypeSafe API key ([typesafe.ai](https://typesafe.ai)). Without it the filter does nothing. |
-| `ENABLE_AISPAM` | `true` | Global kill switch. Chats still have to opt in with `/aispam on`. |
+| `ENABLE_AISPAM` | `true` | Global kill switch for every AI check (text, images and names). Chats still have to opt in with `/aispam on`. |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key for the raid image checks and the AI spam-name rule of the Member requirements page (only names are sent for the rule). Without it neither runs. |
+| `ANTHROPIC_MODEL` | `claude-haiku-5-5` | Claude model for those checks. It must accept a forced tool call (a Haiku-class model). |
 
 </details>
 

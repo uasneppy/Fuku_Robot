@@ -155,7 +155,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`memberReqSettingsLookup`; an error or no rule on ends it, so an unreadable setting punishes nobody), the pure name
   rules, then for a clean member the pass value and the clean predicate and for a violator the cached admin list
   (`cachedAdminStatus`: a known admin ends it; an unknown cache goes to the job, whose live `getChatMember` decides).
-  For a member with clean names in a group with a lookup rule on (the photo or the channel rule, action not Off) the
+  For a member with clean names in a group with a lookup rule on (the photo or the channel rule, action not Off; the AI
+  rule's part is described after this one) the
   watcher reads the cached lookup verdicts first (`memberReqLookupCached`, Redis only and still no Telegram call): one
   pipelined round of single-key `GET`s of the pass key, `fuku:memberreq:photo:<user>` (photo rule on) and
   `fuku:memberreq:lc:<chat>` (channel rule on), then `fuku:memberreq:sub:<channel>:<user>` only when `lc` holds a channel
@@ -1509,7 +1510,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   counts as a definite refusal (Telegram answered without processing the request), so a member whose first welcome hit a
   flood limit is welcomed on their next join.
 - Member requirements, the lookups (`memberreq_lookup.go`): the photo rule and the channel rule answer one
-  `memberReqVerdict` whose zero value is unknown. Unknown and inert both mean "not broken": a lookup that failed, was shed,
+  `memberReqVerdict` whose zero value is unknown (the AI spam-name rule answers the same type and is described in its own
+  bullet below). Unknown and inert both mean "not broken": a lookup that failed, was shed,
   timed out, was cancelled, came back null or with an unrecognised status is unknown, and a rule that cannot be judged here
   (a group with no linked channel, or a channel the bot does not administer) is inert; only `memberReqBreach` can lead to
   a punishment. The photo rule is a total of zero from `getUserProfilePhotos` (limit 1), a pass is a total above zero or a
@@ -1584,8 +1586,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   passes `Names`), exactly as the name rules judge them, so the rules never disagree, and the row is asked after the photo and
   channel rows, only after the exemptions, the hold read, the pause and the live eligibility check. The provider key travels in
   the `x-api-key` header only and no name, hash, probability, instruction or key is logged: a failure is one Warn line with the
-  chat and user IDs, the HTTP status and the error type (`claude.HTTPError`), a refusal one Info line. Later plans of Phase 15
-  extend this bullet (the notice, the button and the page status).
+  chat and user IDs, the HTTP status and the error type (`claude.HTTPError`), a refusal one Info line. The notice's remedy, the
+  button and the page status of the rule are in the executor bullet, the `mreq|v1` bullet and the page `m` bullet.
   The cost guards (plan 15-06; D-10, D-12, D-22, D-24, D-26, D-29). Inside the flight, after the cache is read once more, the
   order is: the breaker, the in-flight gate, the three hourly budgets, the call, the breaker's record, the cache write. The gate
   (`memberReqAIGate`, `semaphore.NewWeighted(4)`) allows four provider calls at once per replica and is waited for at most
@@ -1646,7 +1648,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   watcher or the join entry handed in (WR-02, D-20: a rule switched Off, changed or a Delete messages turned off while the
   job waited behind the pacer is honoured, and an unreadable setting punishes nobody; the snapshot is only the cheap
   pre-filter, and the held and paused paths before the live lookup still use it for their deletes); then the lookups (`memberReqLookupBroken`,
-  photo then channel, each only while its action is not Off in that fresh row, under `memberReqLookupJobBudget` (20 s) for a job or
+  photo, then channel, then the AI rule, each only while its action is not Off in that fresh row, under `memberReqLookupJobBudget` (20 s) for a job or
   `memberReqLookupJoinBudget` (4 s) for the join entry, both variables), whose mask is OR-ed into the name mask before the strictest
   punishment is chosen: a `memberReqBreach` adds its bit and an unknown or inert verdict adds none, so an unanswerable lookup (an
   error, a 429 past the retry, a timeout, a pacer shed, the root cancelled by `StopMemberReqJobs`, a null body, an unrecognised
@@ -1788,7 +1790,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   with Check on join off is judged at that first message with no call at join (a member whose hold read failed returned to
   the plain welcome before it and gets no marker, the safe direction). With Check on join off the member is welcomed with no
   further read and no `getChatMember`. Otherwise `memberReqEnforce` runs synchronously (`memberReqJoinTimeout`, 15 s, `memberReqFromJoin`) with
-  its one live `getChatMember` and, for a rule of the photo or channel kind, the same lookups through the same executor under the 4 s
+  its one live `getChatMember` and, for a rule of the photo, channel or AI kind, the same lookups through the same executor under the 4 s
   `memberReqLookupJoinBudget` (a joiner whose lookup does not finish in 4 s is welcomed, leaves no hold, and is caught at their first
   message, so a raid of joins never parks a dispatcher goroutine for the entry's 15 s; `memberReqJoinThenWelcome` itself is unchanged,
   because `memberreq.AnyRuleOn` reads the eight-rule table, so a group with only the photo rule on is screened at join): a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
@@ -2157,7 +2159,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   or video sticker; a missing thumbnail, a custom emoji or mask sticker, a video note, a document, a voice note, a
   declared size over `claude.MaxImageBytes` (5 MiB), a body over it, or bytes that `http.DetectContentType` does not call
   JPEG, PNG or WebP give nothing. Only the image bytes and the code-owned instruction go to Anthropic, never the caption,
-  names, chat or user data. A verdict of at least `raidAIImageBar` (0.85, a code constant) counts as one spam item for
+  names, chat or user data (the separate AI spam-name rule sends the three names and nothing else). A verdict of at least `raidAIImageBar` (0.85, a code constant) counts as one spam item for
   the AI burst counter, anything below it is kept; a refusal stop counts in `RaidAIStats.Blocked` and every other
   failure (`getFile`, download, provider) in `Failed`, and both are no verdict. A retired or unknown model answers 404
   `not_found_error`, a failure logged at Warn with its status and error type (there is no model-stage warning: a Messages
@@ -2608,7 +2610,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   means no raid image check, no AI name check and no image or name leaves the server, and `ANTHROPIC_MODEL` must be a model that
   accepts a forced tool call (a Haiku-class model: the names request and the image request both force the call) and falls back to `claude.DefaultModel`
   (with a warning) when empty or not a valid model name; because the bot reads the standard `ANTHROPIC_API_KEY` name, a
-  key exported for another tool on the same host turns the image checks on; perf monitoring and
+  key exported for another tool on the same host turns the image checks on, and the AI name check too, wherever the AI rule is
+  already set to a punishment (the page then also stops saying it is not configured and offers every choice); perf monitoring and
   background stats are on only when `DEBUG=false`; `HTTP_PORT` falls back to `PORT` then 8080. Integer env parsing is
   lenient, so a typo silently becomes the default.
 
@@ -2712,9 +2715,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   written), `TestRequirementHoldClaimConcurrent` (of 16 concurrent claims of one `(chat_id, user_id)` exactly one wins, and of
   16 concurrent reclaims of one stale pending hold exactly one wins) and `TestRequirementHolds` (the take, restore, clean and
   clear semantics); all three also run on SQLite in `make test`, and `fuku/db/memberreq/testmain_test.go` migrates both models.
-  `TestChatRequirementsSettings` covers seven columns since Phase 14 (photo and channel included, CHECKs refusing 5 and -1 on
-  every rule's column, writes of different rules never clobbering each other, an old row or previous-build cached value
-  reading the new rules off). The Phase 14 guarantee is `TestMemberRequirementLookupMigrationDefaults`
+  `TestChatRequirementsSettings` covers every rule column (the photo and channel since Phase 14, the AI rule since Phase 15:
+  eight in all, CHECKs refusing 5 and -1 on every rule's column, writes of different rules never clobbering each other, an
+  old row or previous-build cached value reading the new rules off). The Phase 14 guarantee is `TestMemberRequirementLookupMigrationDefaults`
   (`./fuku/db/migrations`: the migration's statements run twice without error, a row with only `chat_id` reads both new
   columns 0, both named constraints exist in `pg_constraint`, a direct update to 5 fails with SQLSTATE 23514 naming the
   constraint; PostgreSQL only, it skips locally; `TestMemberRequirementLookupMigrationStatements` is its database-free half
@@ -2910,7 +2913,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   join, held release and button paths, a transport error and a recovered flight panic: no name, names hash, verdict key,
   probability, instruction fragment or key in any line, and each expected status or error type must appear) and
   `TestMemberReqLookupAlertsFitEveryLocale` (the refused punishing AI press built with `settingsMreqUnconfiguredText`, at
-  most 200 code points in 8 languages). The closing plan adds `TestMemberReqAIEndToEnd`. The global log redactor (`logredact`,
+  most 200 code points in 8 languages). The closing plan 15-11 adds `TestMemberReqAIEndToEnd` (`memberreq_ai_e2e_test.go`), the
+  vertical slice through the real dispatcher with only Telegram and the provider faked: the owner sets the AI rule to Mute
+  from the page (the AI cell, Mute, the card's Yes), a joiner rated 0.97 is muted once with one notice that ends with the AI
+  remedy and carries the button (a second delivery of the join punishes nobody again), the member renames and taps the
+  button and is freed by one provider call for the new string, an established member is recorded with no call and judged
+  when they rename (a Warn with the remedy, released by a rename back), approved members and administrators are never
+  judged, the AI not configured (no key, or `ENABLE_AISPAM` off) shows the page's AI line and the Off-only screen, refuses
+  every punishing press and a forged Yes and welcomes joiners with no request, and a rejected key punishes nobody, pauses
+  every group's checks until the clock passes the pause and a 500 at join leaves the marker so the first message is judged.
+  The global log redactor (`logredact`,
   installed by `fuku/config`'s `init`, so before a test hook) already replaces an Anthropic key in a line before the sweep
   sees it, which means the sweep cannot catch a key leak on its own (checked by mutation): the key is held by that
   redactor and `memberReqAILogFailure`'s own scrub, while the names and hashes have no such net and are held by the
