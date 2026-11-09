@@ -560,7 +560,7 @@ func settingsNoticeWarnMarker(key string) string {
 func TestSettingsDriftMreq(t *testing.T) {
 	env := newSettingsEnv(t)
 	owner := env.newOwner(env.chat)
-	seeded := [8]int{1, 2, 3, 4, 0, 1, 4}
+	seeded := [8]int{1, 2, 3, 4, 0, 1, 4, 2}
 
 	t.Run("the page and Main read through the cached loader", func(t *testing.T) {
 		settingsMreqSeed(t, env.chat.Id, seeded, false, true)
@@ -656,6 +656,29 @@ func TestSettingsDriftMreq(t *testing.T) {
 		linked.press(linkedOwner, msgID, linked.groupFields(linkedOwner, "a", "op", "p", settingsPageMreq))
 		text, _ := linked.lastEdit(linked.chat.Id, msgID)
 		settingsMreqWantPage(t, text, want, true, false)
+	})
+
+	t.Run("the AI press changes only its own column and drops the cached key", func(t *testing.T) {
+		withAIConfigured(t)
+		ai := newSettingsEnv(t)
+		aiOwner := ai.newOwner(ai.chat)
+		base := [8]int{1, 2, 3, 4, 0, 0, 0, 0}
+		settingsMreqSeed(t, ai.chat.Id, base, true, false)
+		msgID := settingsMreqOpenPage(t, ai, aiOwner)
+		if _, err := memberreq.GetSettings(context.Background(), ai.chat.Id); err != nil {
+			t.Fatalf("GetSettings: %v", err)
+		}
+		ai.press(aiOwner, msgID, settingsMreqRuleFields(ai, aiOwner, "st", "ai", "p", settingsPageMreq, "v", "1"))
+		want := base
+		want[7] = models.RequirementActionWarn
+		stored, _ := settingsMreqStored(t, ai.chat.Id)
+		if got := settingsMreqActionsOf(stored); got != want || !stored.CheckOnJoin || stored.DeleteMessages {
+			t.Errorf("after st ai: %+v, want the actions %v and the switches untouched", stored, want)
+		}
+		cached, err := memberreq.GetSettings(context.Background(), ai.chat.Id)
+		if err != nil || settingsMreqActionsOf(*cached) != want {
+			t.Errorf("the cached read after st ai = %+v, %v, want %v (the key was dropped)", cached, err, want)
+		}
 	})
 
 	t.Run("opening the page and Main creates no row", func(t *testing.T) {
@@ -1361,6 +1384,20 @@ func TestSettingsControlActionAllowList(t *testing.T) {
 		}
 	})
 
+	t.Run("st on the AI rule is accepted and a bad value is not", func(t *testing.T) {
+		withAIConfigured(t)
+		env.press(owner, msgID, settingsMreqSwitchFields(env, owner, "st", "ai", "1"))
+		if got := storedActions(); got != [8]int{1, 0, 0, 0, 0, 1, 1, 1} {
+			t.Fatalf("st ai v=1 stored %v, want the AI rule on Warn as well", got)
+		}
+		for _, bad := range []string{"5", "04", "x", "", "-1"} {
+			refused("st ai v="+bad, settingsMreqSwitchFields(env, owner, "st", "ai", bad))
+		}
+		if got := storedActions(); got != [8]int{1, 0, 0, 0, 0, 1, 1, 1} {
+			t.Errorf("a refused value changed the rules to %v", got)
+		}
+	})
+
 	t.Run("tg and st stay accepted on the two switches", func(t *testing.T) {
 		for _, action := range []string{"tg", "st"} {
 			for _, control := range []string{"j", "d"} {
@@ -1415,6 +1452,8 @@ func TestApplyMemberReqAction(t *testing.T) {
 		{"an action above 4", memberreq.RuleArabic, 5},
 		{"a negative action", memberreq.RuleArabic, -1},
 		{"an unknown rule", memberreq.Rule("profile_photo"), 1},
+		{"the AI rule above 4", memberreq.RuleAI, 5},
+		{"the AI rule negative", memberreq.RuleAI, -1},
 	} {
 		result := applyMemberReqAction(ctx, chatID, bad.rule, bad.action)
 		if result.Outcome != memberReqSaveFailed || result.Key != "common_settings_save_failed" || result.Err == nil {
@@ -1441,6 +1480,18 @@ func TestApplyMemberReqAction(t *testing.T) {
 	}
 	if result = applyMemberReqAction(ctx, chatID, memberreq.RuleChinese, models.RequirementActionOff); result.Row == nil || result.Row.ChineseAction != 0 {
 		t.Errorf("Off result = %+v, want a Go zero written and read back", result)
+	}
+
+	// The AI rule: written to its own column, the key dropped, and a Go 0 written back.
+	result = applyMemberReqAction(ctx, chatID, memberreq.RuleAI, models.RequirementActionMute)
+	if result.Outcome != memberReqApplied || result.Row == nil || result.Row.AIAction != models.RequirementActionMute || result.Row.ChineseAction != 0 {
+		t.Fatalf("AI result = %+v, want applied with only the AI rule on Mute read back", result)
+	}
+	if cached, err := memberreq.GetSettings(ctx, chatID); err != nil || cached.AIAction != models.RequirementActionMute {
+		t.Errorf("the cached read after the AI write = %+v, %v, want the new value (the key was dropped)", cached, err)
+	}
+	if result = applyMemberReqAction(ctx, chatID, memberreq.RuleAI, models.RequirementActionOff); result.Row == nil || result.Row.AIAction != 0 {
+		t.Errorf("AI Off result = %+v, want a Go zero written and read back", result)
 	}
 }
 

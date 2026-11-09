@@ -1183,6 +1183,15 @@ func TestSettingsMreqForgedFields(t *testing.T) {
 			"my ph with an extra key":    env.groupFields(owner, "a", "my", "t", "ph", "v", "4", "e", e, "p", settingsPageMreq),
 			"my ch without e":            env.groupFields(owner, "a", "my", "t", "ch", "v", "3"),
 			"my ph with an unknown rule": env.groupFields(owner, "a", "my", "t", "pp", "v", "3", "e", e),
+			"mo ai with an extra key":    env.groupFields(owner, "a", "mo", "t", "ai", "v", "1"),
+			"st ai v=5":                  env.groupFields(owner, "a", "st", "p", settingsPageMreq, "t", "ai", "v", "5"),
+			"st ai v=04":                 env.groupFields(owner, "a", "st", "p", settingsPageMreq, "t", "ai", "v", "04"),
+			"tg on ai":                   env.groupFields(owner, "a", "tg", "p", settingsPageMreq, "t", "ai", "v", "1"),
+			"my ai with v=1":             env.groupFields(owner, "a", "my", "t", "ai", "v", "1", "e", e),
+			"my ai with v=0":             env.groupFields(owner, "a", "my", "t", "ai", "v", "0", "e", e),
+			"my ai with a bad e":         env.groupFields(owner, "a", "my", "t", "ai", "v", "3", "e", "12x"),
+			"my ai without e":            env.groupFields(owner, "a", "my", "t", "ai", "v", "3"),
+			"my ai with an extra key":    env.groupFields(owner, "a", "my", "t", "ai", "v", "4", "e", e, "p", settingsPageMreq),
 		}
 		for name, fields := range cases {
 			lookups, edits, answers := env.memberLookupsOf(env.chat.Id, owner.Id), len(env.edits(env.chat.Id, msgID)), env.answerCount()

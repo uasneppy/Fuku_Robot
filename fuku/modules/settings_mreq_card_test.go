@@ -18,11 +18,29 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
-// settingsMreqConfirmKeys are the contract's consequence lines of the card by strict action 2..4.
-var settingsMreqConfirmKeys = map[int]string{
-	models.RequirementActionKick: "settings_mreq_confirm_kick",
-	models.RequirementActionBan:  "settings_mreq_confirm_ban",
-	models.RequirementActionMute: "settings_mreq_confirm_mute",
+// settingsMreqConfirmKeys are the contract's consequence lines of the card by strict action 2..4,
+// and settingsMreqAIConfirmKeys the AI rule's own (amendment M19: the generic sentence says members
+// already in the group are included, which is false for the AI rule).
+var (
+	settingsMreqConfirmKeys = map[int]string{
+		models.RequirementActionKick: "settings_mreq_confirm_kick",
+		models.RequirementActionBan:  "settings_mreq_confirm_ban",
+		models.RequirementActionMute: "settings_mreq_confirm_mute",
+	}
+	settingsMreqAIConfirmKeys = map[int]string{
+		models.RequirementActionKick: "settings_mreq_confirm_ai_kick",
+		models.RequirementActionBan:  "settings_mreq_confirm_ai_ban",
+		models.RequirementActionMute: "settings_mreq_confirm_ai_mute",
+	}
+)
+
+// settingsMreqConfirmKeyOf is the consequence key of rule i's card for a strict action: the AI
+// rule's (the last rule) own, the generic one for every other rule.
+func settingsMreqConfirmKeyOf(i, action int) string {
+	if settingsMreqRuleCodes[i] == "ai" {
+		return settingsMreqAIConfirmKeys[action]
+	}
+	return settingsMreqConfirmKeys[action]
 }
 
 // settingsMreqWantCard fails the test unless the edit is the card of rule i set to action: the
@@ -33,7 +51,7 @@ func settingsMreqWantCard(t *testing.T, text string, keyboard [][]gotgbot.Inline
 	markers := []string{
 		staffMarker("settings_header") + " " + staffMarker("settings_page_mreq"),
 		staffMarker("settings_mreq_confirm") + " " + staffMarker(settingsMreqRuleKeys[i]) + " " + staffMarker(settingsMreqWordKeys[action]),
-		staffMarker(settingsMreqConfirmKeys[action]),
+		staffMarker(settingsMreqConfirmKeyOf(i, action)),
 	}
 	at := 0
 	for _, marker := range markers {
@@ -46,6 +64,16 @@ func settingsMreqWantCard(t *testing.T, text string, keyboard [][]gotgbot.Inline
 	for _, leak := range []string{"settings_mreq_choose_hint", "settings_mreq_now", "settings_mreq_intro"} {
 		if strings.Contains(text, staffMarker(leak)) {
 			t.Errorf("the card carries %s: %q", leak, text)
+		}
+	}
+	// Only the rule's own consequence: no other rule's sentence, and never the generic one on the AI
+	// card (it would promise that members already in the group are judged).
+	for other, key := range settingsMreqConfirmKeys {
+		if wrong := settingsMreqConfirmKeyOf(i, other); wrong != key && strings.Contains(text, staffMarker(key)) {
+			t.Errorf("the %s card carries the generic %s: %q", settingsMreqRuleCodes[i], key, text)
+		}
+		if aiKey := settingsMreqAIConfirmKeys[other]; settingsMreqConfirmKeyOf(i, other) != aiKey && strings.Contains(text, staffMarker(aiKey)) {
+			t.Errorf("the %s card carries the AI sentence %s: %q", settingsMreqRuleCodes[i], aiKey, text)
 		}
 	}
 	if len(keyboard) != 2 || len(keyboard[0]) != 2 || len(keyboard[1]) != 2 {
