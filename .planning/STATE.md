@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
 status: executing
-stopped_at: Completed 15-05-PLAN.md
-last_updated: "2026-11-08T17:12:28.368Z"
-last_activity: 2026-11-08
+stopped_at: Completed 15-06-PLAN.md
+last_updated: "2026-11-09T20:17:12.809Z"
+last_activity: 2026-11-09
 last_activity_desc: Phase 11 execution started
-state_head: 4dcfa2882f019d278f9ba3ea30d3665c3a0e83e3
+state_head: 1c9486442e7e18c01b23480aba4c78f5e10ab41a
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 78
-  completed_plans: 71
+  completed_plans: 72
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
-Plan: 6 of 11
-Status: Executing Phase 15 (15-05 done: the rule's full order with the baseline `nm` and the new-member marker `nu`, `Joining`, the join entry's marker write, the watcher's three extra GETs with the recorded baseline-equal gap, and the held release with names; no cost guards, notice tail or page status yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
-Last activity: 2026-11-08 — Plan 15-05 complete
+Plan: 7 of 11
+Status: Executing Phase 15 (15-06 done: the three hourly budgets, the four-call gate, the name check's own breaker, the sticky unknown that defers nothing and the stale-names guard; no notice tail, button or page status yet; MREQ-10, MREQ-14 and MREQ-01 complete only in 15-11)
+Last activity: 2026-11-09 — Plan 15-06 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -145,6 +145,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P03 | 30min | 3 tasks | 11 files |
 | Phase 15 P04 | 31min | 3 tasks | 13 files |
 | Phase 15 P05 | 70min | 3 tasks | 13 files |
+| Phase 15 P06 | 1h | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -236,6 +237,8 @@ Recent decisions affecting current work:
 - [Phase 14]: 14-08: I fixed it asks the photo and channel lookups even when a name rule is already broken, so one answer lists everything still broken; an unanswered lookup alone changes nothing
 - [Phase 14]: 14-09: the status reader takes a scope (basic, page, channel screen) instead of a channelScreen bool; the channel screen reads fresh on its opening and redraws read the caches
 - [Phase 15]: 15-02: invisible and default-ignorable runes are dropped before NFKC (marks kept); namecanon exports Canon, Of and VerdictKey only, version tags mrn1 and mrv1 unexported
+- [Phase 15]: 15-06: the name check's breaker is a type with its own state (memberReqAIBreaker), not a copy of the image breaker, so dupl finds no clone; the generic-helper fallback was not needed
+- [Phase 15]: 15-06: a sticky unknown (paused breaker, used-up budget, full gate) is cleared from the unknown mask before memberReqUnknownDefers, so an outage or an empty hour never suspends a weaker name punishment (D-22)
 
 ### Pending Todos
 
@@ -311,8 +314,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09 (resumed from the pause at the 15-05 plan boundary)
-Stopped at: Session resumed, proceeding to plan 15-06 (cost guards)
+Last session: 2026-11-09T20:17:02.671Z
+Stopped at: Completed 15-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
