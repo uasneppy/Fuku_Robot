@@ -370,3 +370,99 @@ func TestShutdownEndsMemberReqLookups(t *testing.T) {
 		t.Errorf("a lookup after the runner was restored = %d, want a breach", got)
 	}
 }
+
+// TestShutdownEndsMemberReqAI: a job that is inside a hung provider call of the AI spam-name rule
+// when StopMemberReqJobs runs is ended by the drain's own cancel of the root context, inside the
+// drain's existing wait. The AI call adds no drain, pool or queue (the 65 s worst case of the drain
+// list is unchanged): the job leaves no hold, notice, write or warn row, the cancel is not a provider
+// failure for the breaker, nothing is cached, a later message starts no job, and neither the flight
+// goroutine nor the gate slot of the cancelled call remains.
+func TestShutdownEndsMemberReqAI(t *testing.T) {
+	restoreMemberReqRunner(t)
+	withAIGate(t, 1, 3*time.Second)
+	env, ai := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleAI: models.RequirementActionMute}, false)
+	inFlight := mreqAIMember(env, "Casino")
+	late := mreqAIMember(env, "Casino")
+	mreqAIMarkNew(t, env.chat.Id, inFlight.Id)
+	mreqAIMarkNew(t, env.chat.Id, late.Id)
+	mreqSwap(t, &memberReqStopWait, 3*time.Second)
+
+	// The provider stand-in holds the request and is only released by the test's cleanup: nothing
+	// but the drain's cancel can end the call.
+	ai.setDefault(mreqAIHang())
+
+	if !memberReqRunAsync(env.bot, env.mreqCase(inFlight)) {
+		t.Fatal("the job was not started")
+	}
+	ai.waitCount(t, 1)
+
+	begun := time.Now()
+	if !StopMemberReqJobs() {
+		t.Fatal("StopMemberReqJobs reported a job still running: a provider call must end when the root is cancelled")
+	}
+	if elapsed := time.Since(begun); elapsed > memberReqStopWait {
+		t.Errorf("StopMemberReqJobs took %s, want inside memberReqStopWait (%s)", elapsed, memberReqStopWait)
+	}
+	if n := env.mreqCallCount("restrictChatMember", "banChatMember", "unbanChatMember", "sendMessage"); n != 0 {
+		t.Errorf("the cancelled job made %d writes or messages, want none", n)
+	}
+	if hold := env.mreqHold(inFlight.Id); hold != nil {
+		t.Errorf("the cancelled job left a hold %+v", hold)
+	}
+	if row := env.mreqWarnRow(inFlight.Id); row != nil {
+		t.Errorf("the cancelled job left a warns row %+v", row)
+	}
+	if keys := mreqAIVerdictKeys(t); len(keys) != 0 {
+		t.Errorf("verdict keys = %v, want none: a cancelled call caches nothing", keys)
+	}
+	memberReqAIBreakers.mu.Lock()
+	group := memberReqAIBreakers.groups[env.chat.Id]
+	memberReqAIBreakers.mu.Unlock()
+	if group != nil && (group.failures != 0 || !group.pausedTill.IsZero()) {
+		t.Errorf("breaker state after the cancel = %+v, want no failure counted: a shutdown is not a provider fault", *group)
+	}
+
+	// A message after the drain starts no job, so the provider is never asked about the late member.
+	if memberReqRunAsync(env.bot, env.mreqCase(late)) {
+		t.Error("a job started after the drain")
+	}
+	if n := ai.count(); n != 1 {
+		t.Errorf("provider requests = %d, want only the in-flight job's", n)
+	}
+
+	// The flight goroutine of the cancelled call has ended: a fresh flight of its key runs its own
+	// function at once. A flight still stuck in the held request would be joined and come back
+	// shared. The goroutine can unwind a moment after the job has left, so it is asked again until
+	// it is no longer joined.
+	key := "n:" + mreqAIKeyOf(t, mreqAINamesOfUser(inFlight))
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		fresh := memberReqLookupFlight.DoChan(key, func() (any, error) { return "fresh", nil })
+		var result struct {
+			val    any
+			shared bool
+		}
+		select {
+		case r := <-fresh:
+			result.val, result.shared = r.Val, r.Shared
+		case <-time.After(2 * time.Second):
+			t.Fatal("the flight of the cancelled call is still running")
+		}
+		if result.val == "fresh" && !result.shared {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("flight result = %+v, want a fresh flight of its own (the cancelled one has ended)", result)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// The gate slot is free again (the gate here has one slot), asked again for the same reason.
+	for !memberReqAIGate.TryAcquire(1) {
+		if time.Now().After(deadline.Add(2 * time.Second)) {
+			t.Fatal("the gate slot of the cancelled call was never released")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	memberReqAIGate.Release(1)
+}
