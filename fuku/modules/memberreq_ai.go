@@ -11,6 +11,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -51,8 +52,14 @@ import (
 // provider call runs inside the flight, on a context derived from memberReqContext(), so
 // StopMemberReqJobs ends it; it reads and writes only Redis and Anthropic. No name, hash,
 // probability, instruction text or key is ever logged or put in an error: logs carry chat and
-// user IDs, outcome names, a provider status and an error type. The names-bound gate, the hourly
-// budgets and the breaker come with plan 15-06.
+// user IDs, outcome names, a provider status and an error type.
+//
+// The flight's order (D-24, research S-04), after the cache re-read: the in-flight gate (four calls at
+// once per replica, a bounded wait; a gate that cannot be had is a sticky unknown and spends no
+// unit, because it is taken before the budget), the three hourly budgets (a used-up allowance is a
+// sticky unknown, a counter that failed a plain one), the call, the breaker's record and the cache
+// write. A sticky unknown is a state of the system, not a fault of the moment: the executor does
+// not let it keep a weaker name punishment from standing (D-22).
 
 // memberReqAIBar is the spam probability at or above which the AI rule is a breach (D-09). The
 // verdict cache holds the probability itself, not the verdict, so a retuned bar applies to
@@ -95,7 +102,24 @@ var (
 	// memberReqAIHTTP is the transport of the names request; nil is the client's own, which has
 	// the call timeout and follows no redirect. A variable only for tests.
 	memberReqAIHTTP *http.Client
+
+	// memberReqAIGate bounds the provider calls that run at once on this replica (D-24). A variable
+	// only so a test can resize it; production code never reassigns it.
+	memberReqAIGate = semaphore.NewWeighted(memberReqAIGateSize)
+	// memberReqAIGateWait is how long a flight waits for a gate slot before it gives up as a sticky
+	// unknown. A variable only so a test can shorten it.
+	memberReqAIGateWait = 3 * time.Second
+
+	// memberReqAICall makes the names request. Its default is ClassifyNames; a test replaces it to
+	// make a call panic, because a recovered panic cannot be provoked through the HTTP client.
+	// Production code never reassigns it.
+	memberReqAICall = func(ctx context.Context, client *claude.Client, names claude.Names) (*claude.Verdict, error) {
+		return client.ClassifyNames(ctx, names)
+	}
 )
+
+// memberReqAIGateSize is how many names requests one replica makes at once.
+const memberReqAIGateSize = 4
 
 // memberReqAIConfigured reports whether the AI name check can run: the ENABLE_AISPAM kill
 // switch is on and an Anthropic key is set. It is its own function, not raidAIImageConfigured,
@@ -316,10 +340,13 @@ func memberReqAIRule(ctx context.Context, _ *gotgbot.Bot, chatID, userID int64, 
 		return plan.verdict
 	}
 	verdict := plan.verdict
-	if !plan.cached {
-		verdict = memberReqFlight(ctx, "n:"+plan.key, func(flightCtx context.Context) memberReqVerdict {
+	if plan.cached {
+		memberReqAIStats.cached.Add(1)
+	} else {
+		answer, _ := memberReqFlightValue(ctx, "n:"+plan.key, func(flightCtx context.Context) memberReqAIAnswer {
 			return memberReqAIJudge(flightCtx, chatID, userID, plan)
 		})
+		verdict = answer.Verdict
 	}
 	memberReqAIRecord(ctx, chatID, userID, plan.canon.Hash, verdict)
 	return verdict
@@ -394,30 +421,112 @@ func memberReqAIBaseline(ctx context.Context, userID int64, hash string) {
 	}
 }
 
+// memberReqAIAnswer is the value of a flight: the verdict and whether an unknown verdict is sticky,
+// a state of the system (a paused breaker, a used-up budget, a gate that could not be had) and not a
+// fault of the moment. The zero value is an unknown that is not sticky.
+type memberReqAIAnswer struct {
+	Verdict memberReqVerdict
+	Sticky  bool
+}
+
+// memberReqAIStickyUnknown is an unknown that the executor does not let defer a weaker punishment.
+var memberReqAIStickyUnknown = memberReqAIAnswer{Verdict: memberReqUnknown, Sticky: true}
+
 // memberReqAIJudge is the flight body. It reads the cache once more (a caller whose read missed
 // a moment before the previous flight wrote its verdict starts a new flight and must not make a
-// second call), builds the client, asks the model for the canonical strings and, on a verdict,
-// stores the probability before it answers pass or breach by the bar. Every failure is unknown
-// and caches nothing.
-func memberReqAIJudge(ctx context.Context, chatID, userID int64, plan memberReqAIPlan) memberReqVerdict {
+// second call), then passes the guards in order (the gate, the budgets), asks the model for the
+// canonical strings and, on a verdict, stores the probability before it answers pass or breach by
+// the bar. Every failure is unknown and caches nothing, and the gate slot is released by defer on
+// every path, a panic and a cancel included.
+func memberReqAIJudge(ctx context.Context, chatID, userID int64, plan memberReqAIPlan) memberReqAIAnswer {
 	probability, hit, err := memberReqAIRead(ctx, plan.key)
 	if err != nil {
-		return memberReqUnknown
+		return memberReqAIAnswer{}
 	}
 	if hit {
-		return memberReqAIVerdictOf(probability)
+		memberReqAIStats.cached.Add(1)
+		return memberReqAIAnswer{Verdict: memberReqAIVerdictOf(probability)}
 	}
 	client := memberReqAIClient()
 	if client == nil {
-		return memberReqUnknown
+		return memberReqAIAnswer{}
 	}
-	answer, err := client.ClassifyNames(ctx, claude.Names{First: plan.canon.First, Last: plan.canon.Last, Username: plan.canon.Username})
+	if refusal, ok := memberReqAIAcquire(ctx); !ok {
+		return refusal
+	}
+	defer memberReqAIGate.Release(1)
+	if refusal, ok := memberReqAIReserveUnit(chatID, userID); !ok {
+		return refusal
+	}
+	names := claude.Names{First: plan.canon.First, Last: plan.canon.Last, Username: plan.canon.Username}
+	answer, err := memberReqAICall(ctx, client, names)
 	if err != nil {
-		memberReqAILogFailure(ctx, chatID, userID, client.APIKey, err)
-		return memberReqUnknown
+		memberReqAIAfterFailure(ctx, chatID, userID, client.APIKey, err)
+		return memberReqAIAnswer{}
 	}
+	memberReqAIStats.checked.Add(1)
 	memberReqCacheSetValue(ctx, plan.key, strconv.FormatFloat(answer.SpamProbability, 'f', -1, 64), memberReqAIVerdictTTL)
-	return memberReqAIVerdictOf(answer.SpamProbability)
+	verdict := memberReqAIVerdictOf(answer.SpamProbability)
+	if verdict == memberReqBreach {
+		memberReqAIStats.breached.Add(1)
+	} else {
+		memberReqAIStats.passed.Add(1)
+	}
+	return memberReqAIAnswer{Verdict: verdict}
+}
+
+// memberReqAIAcquire takes a gate slot, waiting at most memberReqAIGateWait. The gate comes before
+// the budget, so a flight that cannot get a slot spends no unit. When ok is false refusal is the
+// answer: sticky when the wait ran out while the flight's context is live (a state: the replica is
+// saturated), plain when the context itself ended (shutdown is not a state). On success the caller
+// owns the slot and releases it by defer, so a panic and a cancel release it too.
+func memberReqAIAcquire(ctx context.Context) (refusal memberReqAIAnswer, ok bool) {
+	gateCtx, cancel := context.WithTimeout(ctx, memberReqAIGateWait)
+	defer cancel()
+	if err := memberReqAIGate.Acquire(gateCtx, 1); err != nil {
+		memberReqAIStats.shed.Add(1)
+		if ctx.Err() != nil {
+			return memberReqAIAnswer{}, false
+		}
+		return memberReqAIStickyUnknown, false
+	}
+	return memberReqAIAnswer{}, true
+}
+
+// memberReqAIReserveUnit reserves the call's three budget units. A used-up allowance is a sticky
+// unknown (a state); a counter that failed, or no Redis, is a plain one (a fault of the moment).
+// The call is never made without a unit.
+func memberReqAIReserveUnit(chatID, userID int64) (refusal memberReqAIAnswer, ok bool) {
+	client := memberReqRedisClient()
+	if client == nil {
+		memberReqAIStats.shed.Add(1)
+		return memberReqAIAnswer{}, false
+	}
+	switch memberReqAIReserve(client, chatID, userID) {
+	case memberReqAICapped:
+		memberReqAIStats.capped.Add(1)
+		return memberReqAIStickyUnknown, false
+	case memberReqAIBudgetFault:
+		memberReqAIStats.shed.Add(1)
+		return memberReqAIAnswer{}, false
+	}
+	return memberReqAIAnswer{}, true
+}
+
+// memberReqAIAfterFailure settles a names request that gave no verdict. A cancelled flight (the
+// shutdown, or the flight's own timeout) is neither a failure nor a success of the provider; a
+// refusal stop is the provider's answer (a success for the breaker); anything else is a failure.
+// The client and its key are only used to scrub the log line.
+func memberReqAIAfterFailure(ctx context.Context, chatID, userID int64, key string, err error) {
+	switch {
+	case ctx.Err() != nil:
+		memberReqAIStats.shed.Add(1)
+	case errors.Is(err, claude.ErrBlocked):
+		memberReqAIStats.blocked.Add(1)
+	default:
+		memberReqAIStats.failed.Add(1)
+	}
+	memberReqAILogFailure(ctx, chatID, userID, key, err)
 }
 
 // memberReqAILogFailure logs a names request that gave no verdict by the chat and user IDs and
