@@ -53,7 +53,10 @@ a spent budget, a shed call and a shutdown punish nobody and leave no hold, noti
 names costs one provider call across callers and replicas, that a rename is judged once and a baseline never judges, that
 the held release and "I fixed it" read the cache and never re-roll, that the Requirements page and the press gate refuse a
 punishment while the AI is not configured, and that every screen fits 3800 UTF-16 units and 64-byte buttons in 8
-languages with no member name, count or Staff Group in them. It **cannot** prove what the live model says about a real
+languages with no member name, count or Staff Group in them. One test, `TestMemberReqAIEndToEnd`, walks the whole slice
+through the real dispatcher with only Telegram and the provider faked (the owner's page press and card Yes, a muted
+joiner who renames and taps the button, an established member recorded and then judged on a rename, the AI not
+configured, a rejected key and the pause), which is the automatic twin of check 6. It **cannot** prove what the live model says about a real
 name, how often it changes its mind, how long and how dear a call is, whether the configured model accepts the request,
 how a screen renders on a phone, whether a native speaker finds a translation natural, or how two real processes share
 the budgets. Those are the checks below.
@@ -313,5 +316,6 @@ or a clone are the usual ones. Fix in place.
 - Rolling-deploy caveats, accepted like the others in AGENTS.md: a replica on the previous code answers a `t=ai` press as
   an invalid request and ignores the new column until it is replaced.
 
-**None of these checks blocks the phase.** Plan 15-11 reads this file once more against the finished code and corrects it if
-anything changed.
+**None of these checks blocks the phase.** Plan 15-11 read this file against the finished code: the keys, the meaning of
+"new member", the budgets (5, 100 and 400 an hour), the 5 minute pauses, the notice and confirmation texts and the model
+rule all match the code, and the end-to-end test agrees with the steps of check 6. Nothing needed correcting.
