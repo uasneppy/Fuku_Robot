@@ -311,8 +311,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-08T17:12:27.176Z
-Stopped at: Completed 15-05-PLAN.md
+Last session: 2026-11-09 (resumed from the pause at the 15-05 plan boundary)
+Stopped at: Session resumed, proceeding to plan 15-06 (cost guards)
 Resume file: None
 
 ## Operator Next Steps
