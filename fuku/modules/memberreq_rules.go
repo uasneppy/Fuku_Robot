@@ -120,7 +120,19 @@ var memberReqRules = []memberReqRule{
 	{Code: "ch", Bit: 64, Store: memberreq.RuleChannel, LineKey: "settings_mreq_rule_channel", CellKey: "settings_btn_mreq_channel", DescKey: "settings_mreq_desc_channel", PhraseKey: "mreq_rule_channel",
 		Lookup: memberReqChannelRule},
 	{Code: "ai", Bit: 128, Store: memberreq.RuleAI, LineKey: "settings_mreq_rule_ai", CellKey: "settings_btn_mreq_ai", DescKey: "settings_mreq_desc_ai", PhraseKey: "mreq_rule_ai",
-		Lookup: memberReqAIRule, HintKey: "settings_mreq_hint_ai"},
+		Lookup: memberReqAIRule, HintKey: "settings_mreq_hint_ai", NamesBound: true},
+}
+
+// memberReqNamesBoundMask is the mask of the rules whose verdict is bound to the names they judged
+// (the rows with NamesBound).
+func memberReqNamesBoundMask() int {
+	mask := 0
+	for _, rule := range memberReqRules {
+		if rule.NamesBound {
+			mask |= rule.Bit
+		}
+	}
+	return mask
 }
 
 // memberReqRuleByCode finds a rule by its callback code (ln un ru ar zh ph ch ai).

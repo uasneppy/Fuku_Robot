@@ -285,6 +285,7 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	touch := &memberReqLookupTouch{}
 	lookupCtx = context.WithValue(lookupCtx, memberReqLookupTouchKey{}, touch)
 	lookupStart := time.Now()
+	judged := memberReqAINamesHash(names)
 	lookupMask, unknownMask := memberReqLookupMasks(lookupCtx, b, c.Settings, c.Chat.Id, c.User.Id, memberReqLookupMode{Names: &names, Joining: c.Source == memberReqFromJoin})
 	broken |= lookupMask
 	// WR-03 and SEC-02: the record and the exemptions above were read before the lookup phase, which
@@ -292,7 +293,7 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	// or waited for) or took over memberReqLookupStaleAfter, and something is broken, both are read
 	// once more (memberReqRereadAfterLookups). A phase of cache hits costs neither.
 	if broken != 0 && (touch.touched.Load() || time.Since(lookupStart) > memberReqLookupStaleAfter) {
-		fresh, freshBroken, ok := memberReqRereadAfterLookups(ctx, b, c, lookupMask)
+		fresh, freshBroken, ok := memberReqRereadAfterLookups(ctx, b, c, lookupMask, judged)
 		if !ok {
 			return member, 0, false
 		}
@@ -318,8 +319,12 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 // claim. SEC-02: the approved and pending-captcha exemptions are judged again (memberReqExempt: an
 // approval or a captcha attempt that appeared meanwhile, or a read that fails, punishes nobody).
 // WR-03: the live record is read again, and eligibility, the names and the mask of broken rules rest
-// on that one. ok is false when either read says nobody is punished now.
-func memberReqRereadAfterLookups(ctx context.Context, b *gotgbot.Bot, c *memberReqCase, lookupMask int) (member gotgbot.MergedChatMember, broken int, ok bool) {
+// on that one. D-29: judged is the canonical names hash the lookups judged with; when the re-read
+// record's names hash differs (a rename, a change from judgeable to not or back; an invisible
+// character is no change) the bits of the rules bound to the names they judged are dropped from
+// lookupMask, so a member is never punished for a string they no longer carry, and is judged again
+// at their next message. ok is false when either read says nobody is punished now.
+func memberReqRereadAfterLookups(ctx context.Context, b *gotgbot.Bot, c *memberReqCase, lookupMask int, judged string) (member gotgbot.MergedChatMember, broken int, ok bool) {
 	if memberReqExempt(ctx, *c) {
 		return member, 0, false
 	}
@@ -332,7 +337,11 @@ func memberReqRereadAfterLookups(ctx context.Context, b *gotgbot.Bot, c *memberR
 	if !memberReqLiveEligible(member) {
 		return member, 0, false
 	}
-	return member, memberReqBroken(c.Settings, memberReqNamesOf(member.User)) | lookupMask, true
+	names := memberReqNamesOf(member.User)
+	if memberReqAINamesHash(names) != judged {
+		lookupMask &^= memberReqNamesBoundMask()
+	}
+	return member, memberReqBroken(c.Settings, names) | lookupMask, true
 }
 
 // memberReqLookupBudget is the time the lookup phase of one executor run may take: the short

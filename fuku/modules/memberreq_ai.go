@@ -166,6 +166,17 @@ func memberReqAIParseProbability(text string) (float64, bool) {
 	return p, true
 }
 
+// memberReqAINamesHash is the canonical names hash of a member's names, the empty string when the
+// names are not judgeable. Two spellings that canonicalise to one string have one hash, so an
+// invisible-character change is not a rename, and a change from judgeable to not judgeable is one.
+func memberReqAINamesHash(names memberReqNames) string {
+	canon, ok := namecanon.Of(names.First, names.Last, names.Username)
+	if !ok {
+		return ""
+	}
+	return canon.Hash
+}
+
 // memberReqAIVerdictOf judges a probability by the bar: a breach at or above it, else a pass.
 func memberReqAIVerdictOf(probability float64) memberReqVerdict {
 	if probability >= memberReqAIBar {
