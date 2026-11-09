@@ -49,6 +49,10 @@ type memberReqRule struct {
 	Broken    func(memberReqNames) bool
 	Lookup    func(ctx context.Context, b *gotgbot.Bot, chatID, userID int64, mode memberReqLookupMode) memberReqVerdict
 	HintKey   string
+	// NamesBound is true on a rule whose verdict is about the names the lookups judged (the AI rule):
+	// the executor drops its bit when the member's names changed between the lookup and the claim
+	// (D-29), so a member is never punished for a string they no longer carry.
+	NamesBound bool
 }
 
 // memberReqRussianLetters are the four letters that Russian uses and Ukrainian does not:
@@ -199,7 +203,7 @@ func memberReqLookupMasks(
 		if rule.Lookup == nil || memberreq.ActionOf(settings, rule.Store) == models.RequirementActionOff {
 			continue
 		}
-		switch rule.Lookup(ctx, b, chatID, userID, mode) {
+		switch rule.Lookup(context.WithValue(ctx, memberReqLookupBitKey{}, rule.Bit), b, chatID, userID, mode) {
 		case memberReqBreach:
 			broken |= rule.Bit
 		case memberReqUnknown:

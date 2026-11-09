@@ -301,6 +301,11 @@ func memberReqLiveViolation(ctx context.Context, b *gotgbot.Bot, c *memberReqCas
 	// WR-02: a stricter rule that could not be answered must not be silently dropped behind a weaker
 	// punishment and its hold (the held path makes no lookup, so the stricter rule would never be
 	// judged). Nothing is claimed now; the member is judged again at their next message.
+	// D-22: an unknown that is a sticky state of the system (a paused breaker, a used-up budget, a
+	// full gate: touch.sticky) is removed from the mask first and defers nothing, because an outage
+	// or an empty hour must never switch off the weaker name punishments of every group. The
+	// verdict itself stays unknown, which the held release and "I fixed it" still see.
+	unknownMask &^= int(touch.sticky.Load())
 	if memberReqUnknownDefers(c.Settings, broken, unknownMask) {
 		log.Infof("[MemberReq] a stricter rule could not be answered for user %d in chat %d, so nothing is claimed yet and the member is judged again at their next message",
 			c.User.Id, c.Chat.Id)

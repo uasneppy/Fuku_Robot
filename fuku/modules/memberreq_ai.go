@@ -54,7 +54,8 @@ import (
 // probability, instruction text or key is ever logged or put in an error: logs carry chat and
 // user IDs, outcome names, a provider status and an error type.
 //
-// The flight's order (D-24, research S-04), after the cache re-read: the in-flight gate (four calls at
+// The flight's order (D-24, research S-04), after the cache re-read: the breaker (a paused
+// group or provider is a sticky unknown that spends nothing), the in-flight gate (four calls at
 // once per replica, a bounded wait; a gate that cannot be had is a sticky unknown and spends no
 // unit, because it is taken before the budget), the three hourly budgets (a used-up allowance is a
 // sticky unknown, a counter that failed a plain one), the call, the breaker's record and the cache
@@ -347,6 +348,9 @@ func memberReqAIRule(ctx context.Context, _ *gotgbot.Bot, chatID, userID int64, 
 			return memberReqAIJudge(flightCtx, chatID, userID, plan)
 		})
 		verdict = answer.Verdict
+		if answer.Sticky {
+			memberReqNoteSticky(ctx)
+		}
 	}
 	memberReqAIRecord(ctx, chatID, userID, plan.canon.Hash, verdict)
 	return verdict
@@ -434,7 +438,7 @@ var memberReqAIStickyUnknown = memberReqAIAnswer{Verdict: memberReqUnknown, Stic
 
 // memberReqAIJudge is the flight body. It reads the cache once more (a caller whose read missed
 // a moment before the previous flight wrote its verdict starts a new flight and must not make a
-// second call), then passes the guards in order (the gate, the budgets), asks the model for the
+// second call), then passes the guards in order (the breaker, the gate, the budgets), asks the model for the
 // canonical strings and, on a verdict, stores the probability before it answers pass or breach by
 // the bar. Every failure is unknown and caches nothing, and the gate slot is released by defer on
 // every path, a panic and a cancel included.
@@ -451,7 +455,7 @@ func memberReqAIJudge(ctx context.Context, chatID, userID int64, plan memberReqA
 	if client == nil {
 		return memberReqAIAnswer{}
 	}
-	if refusal, ok := memberReqAIAcquire(ctx); !ok {
+	if refusal, ok := memberReqAIAcquire(ctx, chatID); !ok {
 		return refusal
 	}
 	defer memberReqAIGate.Release(1)
@@ -464,6 +468,7 @@ func memberReqAIJudge(ctx context.Context, chatID, userID int64, plan memberReqA
 		memberReqAIAfterFailure(ctx, chatID, userID, client.APIKey, err)
 		return memberReqAIAnswer{}
 	}
+	memberReqAIRecordSuccess(chatID)
 	memberReqAIStats.checked.Add(1)
 	memberReqCacheSetValue(ctx, plan.key, strconv.FormatFloat(answer.SpamProbability, 'f', -1, 64), memberReqAIVerdictTTL)
 	verdict := memberReqAIVerdictOf(answer.SpamProbability)
@@ -475,12 +480,17 @@ func memberReqAIJudge(ctx context.Context, chatID, userID int64, plan memberReqA
 	return memberReqAIAnswer{Verdict: verdict}
 }
 
-// memberReqAIAcquire takes a gate slot, waiting at most memberReqAIGateWait. The gate comes before
-// the budget, so a flight that cannot get a slot spends no unit. When ok is false refusal is the
-// answer: sticky when the wait ran out while the flight's context is live (a state: the replica is
+// memberReqAIAcquire checks the breaker and takes a gate slot, waiting at most memberReqAIGateWait.
+// Both come before the budget, so a paused check and a flight that cannot get a slot spend no unit.
+// When ok is false refusal is the answer: sticky for a paused group or provider and when the wait
+// ran out while the flight's context is live (states: the provider is failing, the replica is
 // saturated), plain when the context itself ended (shutdown is not a state). On success the caller
 // owns the slot and releases it by defer, so a panic and a cancel release it too.
-func memberReqAIAcquire(ctx context.Context) (refusal memberReqAIAnswer, ok bool) {
+func memberReqAIAcquire(ctx context.Context, chatID int64) (refusal memberReqAIAnswer, ok bool) {
+	if memberReqAIPaused(chatID) {
+		memberReqAIStats.shed.Add(1)
+		return memberReqAIStickyUnknown, false
+	}
 	gateCtx, cancel := context.WithTimeout(ctx, memberReqAIGateWait)
 	defer cancel()
 	if err := memberReqAIGate.Acquire(gateCtx, 1); err != nil {
@@ -522,8 +532,10 @@ func memberReqAIAfterFailure(ctx context.Context, chatID, userID int64, key stri
 	case ctx.Err() != nil:
 		memberReqAIStats.shed.Add(1)
 	case errors.Is(err, claude.ErrBlocked):
+		memberReqAIRecordSuccess(chatID)
 		memberReqAIStats.blocked.Add(1)
 	default:
+		memberReqAIRecordFailure(chatID, err)
 		memberReqAIStats.failed.Add(1)
 	}
 	memberReqAILogFailure(ctx, chatID, userID, key, err)

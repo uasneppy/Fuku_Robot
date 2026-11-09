@@ -222,6 +222,28 @@ func memberReqFlight(ctx context.Context, key string, fn func(context.Context) m
 // another context.
 type memberReqLookupTouch struct {
 	touched atomic.Bool
+	// sticky is the mask of the rules whose lookup answered a sticky unknown in this run (a paused
+	// breaker, a used-up budget, a full gate: a state of the system and not a fault of the moment).
+	// The executor removes it from the unknown mask before it asks whether an unknown rule defers a
+	// weaker punishment (D-22).
+	sticky atomic.Int64
+}
+
+// memberReqLookupBitKey is the context key of the bit of the rule a lookup is being asked for.
+// memberReqLookupMasks stamps it into the context of each row's Lookup call, so a lookup can say
+// which rule's unknown is sticky without the executor knowing which rule it is.
+type memberReqLookupBitKey struct{}
+
+// memberReqNoteSticky records, in the run behind ctx, that the rule being asked answered a sticky
+// unknown. It is a no-op without a run's touch (a press, the held release) or without a rule bit.
+func memberReqNoteSticky(ctx context.Context) {
+	touch, ok := ctx.Value(memberReqLookupTouchKey{}).(*memberReqLookupTouch)
+	if !ok {
+		return
+	}
+	if bit, ok := ctx.Value(memberReqLookupBitKey{}).(int); ok {
+		touch.sticky.Or(int64(bit))
+	}
 }
 
 // memberReqLookupTouchKey is the context key of a *memberReqLookupTouch.
