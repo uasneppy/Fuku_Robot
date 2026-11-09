@@ -1,14 +1,16 @@
-// Command claude-spike is the owner's spike tool for the raid AI image checks.
-// It sends labelled sample images through the same fuku/utils/claude client
-// the bot uses and prints accuracy, latency, tokens and an estimated cost, so
-// the owner can check the request shape and the 0.85 bar against the live
-// Anthropic API before relying on it.
+// Command claude-spike is the owner's spike tool for the AI checks of the raid
+// path and the member requirements. It sends labelled sample images (-dir), or a
+// labelled list of account names (-names), through the same fuku/utils/claude
+// client the bot uses and prints accuracy, latency, tokens and an estimated
+// cost, so the owner can check the request shape and the bars (0.85 for images,
+// 0.9 for names) against the live Anthropic API before relying on them.
 //
 // It reads ANTHROPIC_API_KEY from the environment only, never from a flag, and
-// never prints it. Every sample image is sent to Anthropic during a run. The
-// tool is not part of the bot and imports nothing from the repository except
-// the standard-library-only claude package, so it never triggers the database
-// connection that fuku/config and fuku/db make before main.
+// never prints it. Every sample image and every name in a run is sent to
+// Anthropic. The tool is not part of the bot and imports nothing from the
+// repository except the standard-library-only claude package and the leaf
+// namecanon package (the bot's canonical form of a name), so it never triggers
+// the database connection that fuku/config and fuku/db make before main.
 package main
 
 import (
@@ -48,6 +50,8 @@ func main() {
 // config is the parsed command line.
 type config struct {
 	dir         string
+	names       string
+	repeat      int
 	model       string
 	endpoint    string
 	csvPath     string
@@ -112,6 +116,8 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer, tr
 		return runProbe(client, cfg, key, stdout, stderr)
 	case cfg.modelsGet:
 		return runModelsGet(client, key, stdout, stderr)
+	case cfg.names != "":
+		return runNames(client, cfg, key, stdout, stderr)
 	}
 	return runLabelled(client, cfg, key, stdout, stderr)
 }
@@ -128,7 +134,9 @@ func parseFlags(args []string, stderr io.Writer) (*config, *flag.FlagSet, rawFla
 	flags.StringVar(&cfg.dir, "dir", "", "folder of labelled sample images (spam/ and ham/ subfolders, or spam_ and ham_ file prefixes)")
 	flags.StringVar(&cfg.model, "model", claude.DefaultModel, "Claude model id")
 	flags.StringVar(&cfg.endpoint, "endpoint", claude.DefaultEndpoint, "API host")
-	flags.Float64Var(&cfg.bar, "bar", 0.85, "spam probability at or above which an image counts as flagged")
+	flags.StringVar(&cfg.names, "names", "", "CSV of labelled account names (header label,first_name,last_name,username and an optional note column)")
+	flags.IntVar(&cfg.repeat, "repeat", 1, "with -names: judge every name this many times (1 to 10) and report how much the verdicts vary")
+	flags.Float64Var(&cfg.bar, "bar", 0.85, "spam probability at or above which an image or name counts as flagged (default 0.9 with -names)")
 	flags.IntVar(&cfg.concurrency, "concurrency", 2, "requests in flight at once (1 to 8)")
 	flags.IntVar(&cfg.limit, "limit", 0, "stop after this many labelled images (0 means all)")
 	flags.StringVar(&cfg.csvPath, "csv", "", "write the per-image CSV to this file (default: standard output)")
@@ -151,6 +159,11 @@ func parseFlags(args []string, stderr io.Writer) (*config, *flag.FlagSet, rawFla
 	if flags.NArg() > 0 {
 		_, _ = fmt.Fprintf(stderr, "claude-spike: unexpected argument %q\n", flags.Arg(0))
 		return nil, flags, raw, exitUsage
+	}
+	barGiven := false
+	flags.Visit(func(f *flag.Flag) { barGiven = barGiven || f.Name == "bar" })
+	if cfg.names != "" && !barGiven {
+		cfg.bar = namesDefaultBar
 	}
 	return cfg, flags, raw, -1
 }
@@ -179,6 +192,16 @@ func validEndpoint(endpoint string) string {
 // validate checks the parsed flags and fills cfg.options from the raw ones.
 // It returns a message for the first problem, or "".
 func validate(cfg *config, raw rawFlags) string {
+	for _, msg := range []string{validateBasics(cfg), validateModes(cfg), validateOptions(cfg, raw)} {
+		if msg != "" {
+			return msg
+		}
+	}
+	return ""
+}
+
+// validateBasics checks the flags every mode shares.
+func validateBasics(cfg *config) string {
 	if !claude.ValidModel(cfg.model) {
 		return "-model must be 1 to 64 letters, digits, dots, underscores or hyphens, starting with a letter or digit"
 	}
@@ -197,9 +220,33 @@ func validate(cfg *config, raw rawFlags) string {
 	if cfg.priceIn < 0 || cfg.priceOut < 0 {
 		return "-price-in and -price-out must not be negative"
 	}
-	if cfg.probe && cfg.modelsGet {
-		return "-probe and -models-get are separate modes"
+	return ""
+}
+
+// validateModes requires exactly one of -dir, -names, -probe and -models-get,
+// and -repeat only with -names, from 1 to maxRepeat.
+func validateModes(cfg *config) string {
+	modes := 0
+	for _, on := range []bool{cfg.dir != "", cfg.names != "", cfg.probe, cfg.modelsGet} {
+		if on {
+			modes++
+		}
 	}
+	switch {
+	case modes == 0:
+		return "-dir or -names is required for a labelled run (or use -probe or -models-get)"
+	case modes > 1:
+		return "-dir, -names, -probe and -models-get are separate modes"
+	case cfg.repeat < 1 || cfg.repeat > maxRepeat:
+		return fmt.Sprintf("-repeat must be 1 to %d", maxRepeat)
+	case cfg.repeat != 1 && cfg.names == "":
+		return "-repeat needs -names"
+	}
+	return ""
+}
+
+// validateOptions checks the request-shape flags and fills cfg.options.
+func validateOptions(cfg *config, raw rawFlags) string {
 	if cfg.options.MaxTokens < 0 || cfg.options.MaxTokens > maxTokensLimit {
 		return fmt.Sprintf("-max-tokens must be 1 to %d, or 0 for the default", maxTokensLimit)
 	}
@@ -229,28 +276,37 @@ func validate(cfg *config, raw rawFlags) string {
 	default:
 		return "-effort must be low, medium, high, xhigh or max"
 	}
-
-	if !cfg.probe && !cfg.modelsGet && cfg.dir == "" {
-		return "-dir is required for a labelled run"
-	}
 	return ""
 }
 
 // usage prints the three modes, the key rule and the data warning.
 func usage(w io.Writer, flags *flag.FlagSet) {
-	_, _ = fmt.Fprintf(w, `claude-spike measures Claude's spam verdicts on your own labelled images.
+	_, _ = fmt.Fprintf(w, `claude-spike measures Claude's spam verdicts on your own labelled images and names.
 
 The API key is read from the %[1]s environment variable only. It is never a
 flag and is never printed. Without it the tool sends nothing and exits 2.
 
-WARNING: every image in a run is sent to Anthropic and billed to the account of
-that key. Use samples you are happy to share.
+WARNING: every image and every name in a run is sent to Anthropic and billed to
+the account of that key. Use samples you are happy to share.
 
 Modes:
   claude-spike -dir <folder>     labelled run: send each image in spam/ and ham/
                                  (or spam_* and ham_* files), then print a CSV row
                                  per image and a summary of accuracy, precision,
                                  recall, a sweep of bars, latency, tokens and cost.
+  claude-spike -names <file.csv> labelled run on account names: a UTF-8 CSV with the
+                                 header label,first_name,last_name,username (any
+                                 order, plus an optional note column), label spam or
+                                 ham, at most 5000 rows. Each row goes through the
+                                 bot's own canonical form and names request. Prints
+                                 a CSV row per name (the names appear only there, in
+                                 standard output or the -csv file) and a summary of
+                                 accuracy, precision, recall, the false-positive
+                                 rate, a sweep of bars (default bar 0.9), latency,
+                                 tokens and cost per 1000 names. -repeat N (1 to 10)
+                                 judges every name N times and reports how much the
+                                 probability varies and how many names straddle the
+                                 bar.
   claude-spike -probe            send one tiny request per image type and option
                                  variant and report how the API answers each.
                                  With -fake-key and no key it uses a fake key; the
@@ -372,30 +428,43 @@ func classifyOne(client *claude.Client, s sample, key string) result {
 	verdict, err := client.Classify(context.Background(), claude.Image{MIMEType: mime, Data: data})
 	r.Duration = time.Since(started)
 
+	return finishResult(r, verdict, err, key)
+}
+
+// finishResult fills the outcome of one answered or failed request into r.
+func finishResult(r result, verdict *claude.Verdict, err error, key string) result {
 	if err != nil {
-		var httpErr *claude.HTTPError
-		switch {
-		case errors.Is(err, claude.ErrBlocked):
-			r.Blocked, r.Finish = true, "blocked"
-		case errors.As(err, &httpErr):
-			r.Failed = true
-			r.Finish = strings.TrimSpace(fmt.Sprintf("failed HTTP %d %s", httpErr.Status, httpErr.Type))
-		case errors.Is(err, claude.ErrNoVerdict):
-			r.Failed, r.Finish = true, "failed no verdict"
-		case errors.Is(err, claude.ErrUnsupportedImage):
-			r.Failed, r.Finish = true, "failed unsupported image"
-		default:
-			r.Failed, r.Finish = true, "failed request error"
-		}
-		r.Finish = strings.ReplaceAll(r.Finish, key, "[REDACTED]")
+		r.Blocked, r.Finish = describeError(err, key)
+		r.Failed = !r.Blocked
 		return r
 	}
-
 	r.Probability = verdict.SpamProbability
 	r.Finish = "ok"
 	r.InputTokens = verdict.InputTokens
 	r.OutputTokens = verdict.OutputTokens
 	return r
+}
+
+// describeError turns a failed request into its finish text and whether the
+// model refused (blocked) rather than failed. The text carries a status and
+// error type at most, never a server message, and never the key.
+func describeError(err error, key string) (blocked bool, finish string) {
+	var httpErr *claude.HTTPError
+	switch {
+	case errors.Is(err, claude.ErrBlocked):
+		blocked, finish = true, "blocked"
+	case errors.As(err, &httpErr):
+		finish = strings.TrimSpace(fmt.Sprintf("failed HTTP %d %s", httpErr.Status, httpErr.Type))
+	case errors.Is(err, claude.ErrNoVerdict):
+		finish = "failed no verdict"
+	case errors.Is(err, claude.ErrUnsupportedImage):
+		finish = "failed unsupported image"
+	case errors.Is(err, claude.ErrUnsupportedNames):
+		finish = "failed unsupported names"
+	default:
+		finish = "failed request error"
+	}
+	return blocked, strings.ReplaceAll(finish, key, "[REDACTED]")
 }
 
 // runLabelled is the default mode: scan, classify, then write the CSV and the
@@ -414,22 +483,9 @@ func runLabelled(client *claude.Client, cfg *config, key string, stdout, stderr 
 		len(samples), cfg.model, cfg.concurrency, skip)
 
 	results := make([]result, len(samples))
-	jobs := make(chan int)
-	var wg sync.WaitGroup
-	for w := 0; w < cfg.concurrency; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range jobs {
-				results[i] = classifyOne(client, samples[i], key)
-			}
-		}()
-	}
-	for i := range samples {
-		jobs <- i
-	}
-	close(jobs)
-	wg.Wait()
+	forEachParallel(len(samples), cfg.concurrency, func(i int) {
+		results[i] = classifyOne(client, samples[i], key)
+	})
 
 	if code := writeOutputs(cfg, results, stdout, stderr); code != exitOK {
 		return code
@@ -448,8 +504,40 @@ func runLabelled(client *claude.Client, cfg *config, key string, stdout, stderr 
 	return exitOK
 }
 
+// forEachParallel calls fn(0) .. fn(n-1) on up to workers goroutines and waits
+// for all of them. Each index is handled once, so fn may write slot i of a
+// slice without a lock.
+func forEachParallel(n, workers int, fn func(i int)) {
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				fn(i)
+			}
+		}()
+	}
+	for i := 0; i < n; i++ {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+}
+
 // writeOutputs writes the CSV to its file or to stdout, then the summary.
 func writeOutputs(cfg *config, results []result, stdout, stderr io.Writer) int {
+	if code := withCSVOut(cfg, stdout, stderr, func(w io.Writer) error { return writeCSV(w, results) }); code != exitOK {
+		return code
+	}
+	writeSummary(stdout, summarize(results, cfg.bar), sweep(results, defaultBars()), totalsOf(results, cfg.priceIn, cfg.priceOut))
+	return exitOK
+}
+
+// withCSVOut gives write the -csv file, or standard output (followed by a blank
+// line) when there is none. It prints a file or write error to stderr.
+func withCSVOut(cfg *config, stdout, stderr io.Writer, write func(io.Writer) error) int {
 	csvOut := stdout
 	if cfg.csvPath != "" {
 		f, err := os.Create(cfg.csvPath) // #nosec G304 -- the owner names the file
@@ -460,15 +548,13 @@ func writeOutputs(cfg *config, results []result, stdout, stderr io.Writer) int {
 		defer func() { _ = f.Close() }()
 		csvOut = f
 	}
-	if err := writeCSV(csvOut, results); err != nil {
+	if err := write(csvOut); err != nil {
 		_, _ = fmt.Fprintf(stderr, "claude-spike: cannot write the CSV: %v\n", err)
 		return exitFailure
 	}
 	if cfg.csvPath == "" {
 		_, _ = fmt.Fprintln(stdout)
 	}
-
-	writeSummary(stdout, summarize(results, cfg.bar), sweep(results, defaultBars()), totalsOf(results, cfg.priceIn, cfg.priceOut))
 	return exitOK
 }
 
