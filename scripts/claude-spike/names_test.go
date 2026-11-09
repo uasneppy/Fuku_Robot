@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -517,5 +518,52 @@ func TestNamesModeExclusiveFlags(t *testing.T) {
 		if cfg.bar != c.bar {
 			t.Errorf("parseFlags(%v): bar = %v, want %v", c.args, cfg.bar, c.bar)
 		}
+	}
+}
+
+// A name that starts with = + - @, a tab or a carriage return is a formula when the owner opens the
+// names CSV in a spreadsheet, and the names are the one attacker-controlled text the tool writes
+// (review IN-03). Such a cell is written with a single quote in front; every other cell is as it was.
+func TestNamesCSVNeutralisesFormulas(t *testing.T) {
+	hostile := []string{
+		`=HYPERLINK("http://x.invalid","click")`, "+1+1", "-2+3", "@SUM(A1)", "\t=1+1", "\r=1+1",
+	}
+	var outcomes []nameOutcome
+	for i, name := range hostile {
+		outcomes = append(outcomes, nameOutcome{
+			Row:      nameRow{Num: i + 1, Label: "spam", First: name, Last: name, Username: name},
+			Attempts: []result{{Probability: 0.9, Finish: "tool_use"}},
+		})
+	}
+	outcomes = append(outcomes, nameOutcome{
+		Row:      nameRow{Num: 99, Label: "ham", First: "Alex", Last: "a=b", Username: "x-y@z"},
+		Attempts: []result{{Probability: 0.1, Finish: "tool_use"}},
+	})
+
+	var out bytes.Buffer
+	if err := writeNamesCSV(&out, outcomes, false); err != nil {
+		t.Fatal(err)
+	}
+	records, err := csv.NewReader(&out).ReadAll()
+	if err != nil {
+		t.Fatalf("the output is not valid CSV: %v", err)
+	}
+	if len(records) != len(hostile)+2 {
+		t.Fatalf("records = %d, want %d", len(records), len(hostile)+2)
+	}
+	for i, name := range hostile {
+		row := records[i+1]
+		for col := 2; col <= 4; col++ {
+			if row[col] != "'"+name {
+				t.Errorf("row %d column %d = %q, want %q", i+1, col, row[col], "'"+name)
+			}
+		}
+	}
+	plain := records[len(records)-1]
+	if plain[2] != "Alex" || plain[3] != "a=b" || plain[4] != "x-y@z" {
+		t.Errorf("an ordinary row = %q, want the names exactly as written", plain[2:5])
+	}
+	if plain[0] != "99" || plain[1] != "ham" || plain[5] != "0.1000" {
+		t.Errorf("the other cells of an ordinary row changed: %q", plain)
 	}
 }
