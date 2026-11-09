@@ -1371,8 +1371,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `CLEAR_CACHE_ON_STARTUP` keeps it. It amends Phase 14's "positive only" rule for this one string-level fact: a verdict about
   a member is still never cached, only one about a string of names.
 - `fuku:memberreq:nm:<user>` is the AI spam-name rule's baseline (`memberreq_ai.go`, `memberReqAIBaselineKey`): the names hash
-  (32 hex characters, never a name) of the names the bot last accepted for this account, `SET EX` 30 days
-  (`memberReqAIStateTTL`). A name belongs to the account, so the key has no chat. Only the rule writes it, never the watcher:
+  (32 hex characters, never a name) of the names the bot last accepted for this account, `SET EX` 180 days
+  (`memberReqAIBaselineTTL`; the marker below keeps `memberReqAIStateTTL`, 30 days). The TTL is absolute and nothing
+  refreshes it (the watcher is read-only and an equal baseline is a no-write pass), so a member dormant for over 180 days
+  is first-sighted again and baselined with no call, whatever names they carry then (accepted, the same D-02 limit as an
+  established member who was in the group when the rule was switched on; Phase 15 review WR-02 raised it from 30 days,
+  which reopened that hole for every member every month). A name belongs to the account, so the key has no chat. Only the rule writes it, never the watcher:
   `SET NX` for an established member's first sighting (which makes no call), and overwritten by every definite pass together
   with the deletion of the marker below, in one transaction. A baseline that differs from the current names hash is a rename
   and is judged. It sits outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps it; Redis only.
@@ -1631,7 +1635,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member who has no hold. "New" means "recorded as joining while the rule is live", written by the join entry
   for every joiner it reaches and by nothing else. The accepted limit: with no Redis, a failed marker write or a join the
   entry never saw, a real new member is baselined at their first message and unjudged until they rename (the safe
-  direction); a joiner who never reaches the entry (a captcha failure, a lockdown ban) gets no marker. A member who renames
+  direction); a joiner who never reaches the entry (a captcha failure, a lockdown ban) gets no marker. The baseline lives
+  180 days and is never refreshed, so a member dormant for over 180 days is first-sighted again and baselined with no call
+  (accepted, the same D-02 limit). A member who renames
   and never writes costs nothing: no update arrives. D-03's "a held member's message makes no lookup" is amended for holds
   that carry bit 128: the held release asks the rule with the sender's current names (`memberReqHeldLookupsClear` passes
   `Names`), bounded by the same verdict cache, breaker, gate and budgets, and only for a member the exemptions (approved,

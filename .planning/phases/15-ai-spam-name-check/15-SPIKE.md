@@ -307,6 +307,10 @@ or a clone are the usual ones. Fix in place.
 - A spammer **already in the group** when the rule was switched on is judged only when they rename; a new member is the one
   recorded as joining while the rule is on (flag F-b). With no Redis, a failed marker write or a join the bot never saw, a
   real new member gets a free pass until they rename.
+- The **baseline lives 180 days** (absolute, nothing refreshes it: the watcher is read-only and an equal baseline is a
+  no-write pass; the marker lives 30). A member **dormant for over 180 days** is first-sighted again and baselined with no
+  call, whatever names they carry then. Accepted, the same D-02 limit as a spammer already in the group when the rule was
+  switched on (review WR-02 raised it from 30 days, which reopened the hole for every member every month).
 - A stale verdict stays for **24 hours** (the verdict cache), bounded; a retuned bar applies to it at once.
 - **The AI can be wrong.** A false positive is freed by a rename or an approval (and "I fixed it" for a mute).
 - One call costs about a hundredth of a cent; the budgets (5 per account per hour, 100 per group, 400 in all) are abuse

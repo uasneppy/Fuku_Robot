@@ -46,7 +46,8 @@ func mreqAIHashOfUser(t *testing.T, user gotgbot.User) string {
 	return mreqAICanon(t, user.FirstName, user.LastName, user.Username).Hash
 }
 
-// mreqAIWantBaseline fails the test unless the user's baseline holds want and lives about 30 days.
+// mreqAIWantBaseline fails the test unless the user's baseline holds want and lives about 180 days
+// (memberReqAIBaselineTTL, WR-02).
 func mreqAIWantBaseline(t *testing.T, userID int64, want string) {
 	t.Helper()
 	value, ttl, ok := mreqAIBaselineOf(t, userID)
@@ -56,8 +57,8 @@ func mreqAIWantBaseline(t *testing.T, userID int64, want string) {
 	if !mreqAIHashPattern.MatchString(value) {
 		t.Errorf("baseline %q is not a 32 hex hash", value)
 	}
-	if ttl <= memberReqAIStateTTL-time.Hour || ttl > memberReqAIStateTTL {
-		t.Errorf("baseline ttl = %v, want about %v", ttl, memberReqAIStateTTL)
+	if ttl <= memberReqAIBaselineTTL-time.Hour || ttl > memberReqAIBaselineTTL {
+		t.Errorf("baseline ttl = %v, want about %v", ttl, memberReqAIBaselineTTL)
 	}
 }
 

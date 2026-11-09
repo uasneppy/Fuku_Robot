@@ -45,7 +45,8 @@ import (
 // marker for every joiner, a breach sets it again, and only a definite pass clears it, so a
 // baseline that expired during a long hold can never launder a member whose names were judged
 // spam. The baseline and the marker are written by the rule only (the job, the join entry's call,
-// the held release, "I fixed it"), never by the watcher.
+// the held release, "I fixed it"), never by the watcher. The baseline lives 180 days and the marker
+// 30; a member dormant for over 180 days is first-sighted again and baselined with no call (accepted).
 //
 // Like every lookup row, an answer that is not a probability punishes nobody: the verdict's
 // zero value is unknown and only a probability at or above memberReqAIBar is a breach. The
@@ -83,8 +84,16 @@ const memberReqAIBaselinePrefix = "fuku:memberreq:nm:"
 // has the chat. Outside the fuku:cache: prefix, so CLEAR_CACHE_ON_STARTUP keeps it.
 const memberReqAIMarkerPrefix = "fuku:memberreq:nu:"
 
-// memberReqAIStateTTLDefault is how long the baseline and the marker live.
+// memberReqAIStateTTLDefault is how long the marker lives.
 const memberReqAIStateTTLDefault = 30 * 24 * time.Hour
+
+// memberReqAIBaselineTTLDefault is how long the baseline lives. The baseline is an absolute TTL
+// that nothing refreshes (the watcher is read-only and an equal baseline is a no-write pass), so
+// when it lapses the next sighting is a first sighting again and is baselined with no call, whatever
+// names the member carries then. 30 days made that hole reopen for every member every month, so
+// it lives 180 days: only an account dormant for longer than that is first-sighted again, the same
+// D-02 limit as an established member who was in the group when the rule was switched on (WR-02).
+const memberReqAIBaselineTTLDefault = 180 * 24 * time.Hour
 
 // memberReqAIVerdictTTLDefault is how long a verdict stays cached (D-11).
 const memberReqAIVerdictTTLDefault = 24 * time.Hour
@@ -93,9 +102,11 @@ var (
 	// memberReqAIVerdictTTL is the life of a cached verdict. A variable so a test can shorten it.
 	memberReqAIVerdictTTL = memberReqAIVerdictTTLDefault
 
-	// memberReqAIStateTTL is the life of the baseline and of the marker. A variable so a test can
-	// shorten it.
+	// memberReqAIStateTTL is the life of the marker. A variable so a test can shorten it.
 	memberReqAIStateTTL = memberReqAIStateTTLDefault
+
+	// memberReqAIBaselineTTL is the life of the baseline. A variable so a test can shorten it.
+	memberReqAIBaselineTTL = memberReqAIBaselineTTLDefault
 
 	// memberReqAIEndpoint is the Anthropic API host of the names request. A variable only so a
 	// test points it at an httptest server; production code never reassigns it.
@@ -392,7 +403,7 @@ func memberReqAIRecordPass(ctx context.Context, chatID, userID int64, hash strin
 	writeCtx, cancel := context.WithTimeout(ctx, raidRedisTimeout)
 	defer cancel()
 	pipe := client.TxPipeline()
-	pipe.Set(writeCtx, memberReqAIBaselineKey(userID), hash, memberReqAIStateTTL)
+	pipe.Set(writeCtx, memberReqAIBaselineKey(userID), hash, memberReqAIBaselineTTL)
 	pipe.Del(writeCtx, memberReqAIMarkerKey(chatID, userID))
 	if _, err := pipe.Exec(writeCtx); err != nil {
 		log.Debugf("[MemberReq] the AI baseline of user %d in chat %d was not recorded: %s", userID, chatID, memberReqErrText(err))
@@ -433,7 +444,7 @@ func memberReqAIBaseline(ctx context.Context, userID int64, hash string) {
 	}
 	writeCtx, cancel := context.WithTimeout(ctx, raidRedisTimeout)
 	defer cancel()
-	if err := client.SetNX(writeCtx, memberReqAIBaselineKey(userID), hash, memberReqAIStateTTL).Err(); err != nil {
+	if err := client.SetNX(writeCtx, memberReqAIBaselineKey(userID), hash, memberReqAIBaselineTTL).Err(); err != nil {
 		log.Debugf("[MemberReq] the AI baseline of user %d was not recorded: %s", userID, memberReqErrText(err))
 	}
 }
