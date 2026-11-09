@@ -62,7 +62,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`TestShutdownEndsMemberReqLookups`). The provider call of the AI spam-name rule (`memberReqAIRule`, Phase 15) derives
   from `memberReqContext()` too, inside its flight, so `StopMemberReqJobs` ends it (a job cut off leaves no hold, notice or
   cached verdict); it reads and writes only Redis and Anthropic, never PostgreSQL or Telegram, and no drain or second was
-  added: the 65 s worst case is unchanged (the shutdown test of the phase is plan 15-10's).
+  added: the 65 s worst case is unchanged. `TestShutdownEndsMemberReqAI` proves it: a job inside a hung provider call is
+  ended by the drain's own cancel inside `memberReqStopWait`, leaves no hold, notice, write, warn row or cached verdict, is
+  not counted as a provider failure by the breaker, releases its gate slot, and its flight goroutine ends (a fresh flight of
+  the same `n:` key is not joined), and a later message starts no job.
 - `StopLockdownWorker` is another drain registered after DB-close, through `RegisterLockdownWorkerDrain`
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
@@ -2874,6 +2877,44 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   of the ceilings, which at 636 no longer proves it. The two PostgreSQL facts of Phase 14 are `TestMemberRequirementLookupMigrationDefaults`
   (in the list above) and that the `fuku/modules` harness does not run on PostgreSQL (its AutoMigrate fails on
   `uni_users_user_id` against the migration-built schema), so Phase 14's module tests run on SQLite.
+- Phase 15 (the AI spam-name rule) test families, all in `fuku/modules` unless a package is named. The toolkit is
+  `memberreq_ai_fake_test.go` on top of the Phase 13 and 14 ones: `mreqInstallAIFake` starts the Anthropic stand-in (an
+  `httptest` server driven by an `mreqAIState`: scripted steps `mreqAIProbability`, `mreqAIStatus`, `mreqAIHang`,
+  `mreqAIGated`, `mreqAIDelayed`, `mreqAIDrop`, the recorded request bodies and the count) and points `memberReqAIEndpoint`
+  and `memberReqAIHTTP` at it; `withAIConfigured` and `withAINotConfigured` set `config.AppConfig` and install a fresh
+  breaker; `withAIGate` and `withAIBudgets` resize the gate and the three hourly budgets; `mreqAIMarkNew` records a member as
+  joining the way the join entry does; `mreqAICleanup` deletes the verdict, baseline, marker and budget keys; `mreqAIUnique`
+  is a counter that names a member without the member's ID digits (the sweeps give a member `mreqAINameSentinel` plus the
+  counter, so an ID and a name can each be looked for in a body or a log line), and `mreqAIStaticForbidden` with
+  `mreqAIForbiddenOf` is the list of what no log line of an AI path may hold. Hygiene: fresh IDs from `uniqueLinkOwnerID()`
+  and `uniqueModuleChatID()`; names that carry the member's ID (`mreqAIMember`) or a counter, so no two tests share a verdict
+  key; `mreqAICleanup` in every test that judges; every swapped variable (the gate, the budgets, the endpoint, the HTTP
+  client, `memberReqAICall`, the breaker, the join and flight budgets) restored in `t.Cleanup` through `mreqSwap`; a test that
+  calls `StopMemberReqJobs` calls `restoreMemberReqRunner`; no real provider, no key, no `t.Skip` and no `t.Parallel`, and a
+  test that runs many goroutines uses Mute or Kick and never Warn. The families by name: `TestMemberReqAIRule`,
+  `TestMemberReqAIEnforcePunishes`, `TestMemberReqAINotConfigured`, `TestMemberReqAISparesExempt`,
+  `TestMemberReqAILookupOrder`, `TestMemberReqAIUnanswerable`, `TestMemberReqAIBaseline`, `TestMemberReqAINewMember`,
+  `TestMemberReqAIRename`, `TestMemberReqAICheckOnJoinOff`, `TestMemberReqAIMarkerSurvivesLongHold`,
+  `TestMemberReqAIBudget`, `TestMemberReqAIGate`, `TestMemberReqAIFlight`, `TestMemberReqAIBreaker`,
+  `TestMemberReqAIUnknownDefers`, `TestMemberReqAINamesChangedDuringLookup`, `TestMemberReqAIVerdictCache`,
+  `TestMemberReqWatcherAI`, `TestMemberReqWatcherAIBurst`, `TestMemberReqPassCacheWithAI`, `TestMemberReqHeldReleaseAI`,
+  `TestMemberReqNoticeAIRemedy`, `TestMemberReqFixedAI`, `TestSettingsMreqAIStatus` and `TestSettingsMreqAIGate`; the
+  cross-cutting sweeps of plan 15-10 are `TestShutdownEndsMemberReqAI` (the drain, above), `TestMemberReqAIJoinBudget` (the
+  join returns at `memberReqLookupJoinBudget` while the flight finishes and caches, the first message then judges from the
+  cache, a photo lookup that spends the budget leaves the AI row unasked, a hung job never delays the update),
+  `TestMemberReqAIRequestIsMinimal` (the body is exactly the fixed shape, the three canonical names and
+  `claude.NamesInstruction`: no title, message, chat or user ID, no field beyond the shape, the key in its header alone),
+  `TestMemberReqAIPacersAreIndependent` (a block on the lookup pacer's keys leaves the AI call alone, a burst of name checks
+  writes no key of `fuku:memberreq:pace:*` or `fuku:memberreq:lkp:pace:*`, a saturated gate delays no name-rule punishment
+  or notice), and the extended `TestMemberReqLookupLogsCarryIDsOnly` (every provider and guard failure shape on the job,
+  join, held release and button paths, a transport error and a recovered flight panic: no name, names hash, verdict key,
+  probability, instruction fragment or key in any line, and each expected status or error type must appear) and
+  `TestMemberReqLookupAlertsFitEveryLocale` (the refused punishing AI press built with `settingsMreqUnconfiguredText`, at
+  most 200 code points in 8 languages). The closing plan adds `TestMemberReqAIEndToEnd`. The global log redactor (`logredact`,
+  installed by `fuku/config`'s `init`, so before a test hook) already replaces an Anthropic key in a line before the sweep
+  sees it, which means the sweep cannot catch a key leak on its own (checked by mutation): the key is held by that
+  redactor and `memberReqAILogFailure`'s own scrub, while the names and hashes have no such net and are held by the
+  sweep alone.
 
 ## Commits
 
