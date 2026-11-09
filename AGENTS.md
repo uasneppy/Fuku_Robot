@@ -2564,8 +2564,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
   follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
   (`raidAIDownload` is the pattern).
-- `fuku/utils/claude` imports the standard library only, so `scripts/claude-spike` can use it without the pre-main
-  database connection of `fuku/config` and `fuku/db`. The Anthropic key travels only in the `x-api-key` header, never
+- `fuku/utils/claude` imports the standard library only, so `scripts/claude-spike` can use it (and the leaf
+  `fuku/utils/namecanon`, see below) without the pre-main database connection of `fuku/config` and `fuku/db`. The Anthropic key travels only in the `x-api-key` header, never
   in a URL, and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is
   ever sent, because the default model rejects them with a 400. `claude.Options` and `GetModel` exist for the spike tool
   only; its zero value is the production request, and the bot never sets it. The package also holds the names request
@@ -2622,6 +2622,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   in `make test`. The live Claude spike (`go run ./scripts/claude-spike`, needs `ANTHROPIC_API_KEY`) is a manual owner
   step, never part of CI. It refuses an `-endpoint` that is not https (plain http is accepted only for `localhost`,
   `127.0.0.1` and `::1`), because the key goes there in a header, and it exits 1 when every request failed.
+  The tool has a names mode for the AI spam-name rule: `-names <csv>` (header `label,first_name,last_name,username`, an
+  optional `note`, `label` spam or ham, at most 5000 rows; exclusive with `-dir`, `-probe` and `-models-get`) and `-repeat N`
+  (1 to 10, only with `-names`; judges every name N times and reports the spread of the probability and how many names
+  straddle the bar). The bar is 0.9 in that mode unless `-bar` is given. Each row goes through `namecanon.Of` and
+  `claude.Client.ClassifyNames`, the two calls the bot makes, so the spike measures what the bot sends; the summary, sweep,
+  latency and cost are the image mode's functions. Names appear only in the owner's CSV (stdout or `-csv`), never on
+  stderr, and the key never appears anywhere; it is tested against `httptest` with no real provider
+  (`TestRunNamesMode`, `TestNamesFileParse`, `TestNamesSummaryAtBar`, `TestNamesRepeatStability`,
+  `TestNamesModeKeyNeverPrinted`, `TestNamesModeExclusiveFlags`). The tool imports only the `claude` and `namecanon`
+  packages of the repository. `.planning/phases/15-ai-spam-name-check/15-SPIKE.md` is the owner's non-blocking checklist
+  for the live Haiku spike and the test-group walk-through.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The Turnstile page's script test is `node --test scripts/captcha-page/*.test.mjs` (the directory form does not work on
