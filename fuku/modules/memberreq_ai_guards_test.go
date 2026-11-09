@@ -6,12 +6,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
@@ -893,6 +896,190 @@ func TestMemberReqAIUnknownDefers(t *testing.T) {
 		}
 		if hold := env.mreqHold(member.Id); hold == nil {
 			t.Error("the hold was released on a sticky unknown")
+		}
+	})
+}
+
+func TestMemberReqAINamesChangedDuringLookup(t *testing.T) {
+	// changing makes the stand-in change the member's profile at the fake when the first request
+	// arrives, then answer 0.97 for the string it was asked about; every later request is a 0.1.
+	changing := func(env *memberReqEnv, ai *mreqAIState, member gotgbot.User, first, last string) {
+		var once sync.Once
+		ai.setOnRequest(func() {
+			once.Do(func() { env.fake.setProfile(member.Id, first, last, member.Username) })
+		})
+		ai.enqueue(mreqAIProbability(0.97))
+	}
+
+	t.Run("a member who renamed during the call is not punished for the old string and is judged again at their next message", func(t *testing.T) {
+		env, ai := mreqAIGuardEnv(t)
+		member := mreqAIMember(env, "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		oldNames := mreqAINamesOfUser(member)
+		other := mreqAIUsers(t, env, 1)[0] // minted now: mreqAIUsers also empties the verdict cache
+		renamed := member
+		renamed.FirstName = fmt.Sprintf("Fresh%d", member.Id)
+		changing(env, ai, member, renamed.FirstName, renamed.LastName)
+
+		got := env.mreqEnforce(env.mreqCase(member))
+		mreqWantNothing(t, env, member, got)
+		if n := ai.count(); n != 1 {
+			t.Fatalf("requests = %d, want 1 (the old string was judged)", n)
+		}
+		// The verdict of the old string is a fact about that string and stays cached for anyone who has it.
+		mreqAIWantVerdict(t, "another member with the old string", mreqAIAskIn(env, env.chat.Id, other, oldNames), memberReqBreach)
+		if n := ai.count(); n != 1 {
+			t.Errorf("requests = %d, want 1: the old string's verdict is cached", n)
+		}
+
+		got = env.mreqEnforce(env.mreqCase(renamed))
+		mreqWantNothing(t, env, renamed, got)
+		if n := ai.count(); n != 2 {
+			t.Errorf("requests = %d, want 2: the new names are judged at the next message", n)
+		}
+		mreqAIWantBaseline(t, member.Id, mreqAIHashOfUser(t, renamed))
+		mreqAIWantMarker(t, env.chat.Id, member.Id, false)
+	})
+
+	t.Run("the control case with an unchanged profile punishes", func(t *testing.T) {
+		env, ai := mreqAIGuardEnv(t)
+		member := mreqAIMember(env, "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		ai.enqueue(mreqAIProbability(0.97))
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqRemoved {
+			t.Errorf("outcome = %+v, want Removed (ban)", got)
+		}
+	})
+
+	t.Run("a change that canonicalisation removes does not drop the bit", func(t *testing.T) {
+		env, ai := mreqAIGuardEnv(t)
+		member := mreqAIMember(env, "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		changing(env, ai, member, member.FirstName+"\u200b", member.LastName)
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqRemoved {
+			t.Errorf("outcome = %+v, want Removed: a zero-width character is not a rename", got)
+		}
+	})
+
+	t.Run("a name rule broken by the new names is still punished on the re-read record", func(t *testing.T) {
+		env, ai := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn, memberreq.RuleAI: models.RequirementActionBan}, false)
+		member := mreqAIMember(env, "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		changing(env, ai, member, member.FirstName, "")
+		got := env.mreqEnforce(env.mreqCase(member))
+		if got.Outcome != memberReqWarned {
+			t.Fatalf("outcome = %+v, want Warned for the last name rule the new names break", got)
+		}
+		if hold := env.mreqHold(member.Id); hold == nil || hold.Rules != mreqBitOf(t, "ln") {
+			t.Errorf("hold = %+v, want one with the last name bit only", hold)
+		}
+	})
+
+	t.Run("a change from judgeable to not judgeable drops the bit", func(t *testing.T) {
+		env, ai := mreqAIGuardEnv(t)
+		member := mreqAIMember(env, "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		var once sync.Once
+		ai.setOnRequest(func() {
+			once.Do(func() { env.fake.setProfile(member.Id, "\u200b", "", "") })
+		})
+		ai.enqueue(mreqAIProbability(0.97))
+		mreqWantNothing(t, env, member, env.mreqEnforce(env.mreqCase(member)))
+	})
+}
+
+func TestMemberReqAIVerdictCache(t *testing.T) {
+	t.Run("the value is the probability as a decimal string and it expires", func(t *testing.T) {
+		env, ai := mreqAIGuardEnv(t)
+		names := mreqAIUniqueNames()
+		ai.setDefault(mreqAIProbability(0.97))
+		mreqAIWantVerdict(t, "first", mreqAIAsk(env, names, memberReqLookupMode{}), memberReqBreach)
+		key := mreqAIKeyOf(t, names)
+		value, ttl, ok := mreqAIKeyState(t, key)
+		if !ok || value != "0.97" {
+			t.Fatalf("stored value = %q (found %v), want the decimal string 0.97", value, ok)
+		}
+		if ttl <= 23*time.Hour || ttl > 24*time.Hour {
+			t.Errorf("TTL = %v, want the 24 hour expiry", ttl)
+		}
+		mreqAIWantVerdict(t, "second, cached", mreqAIAsk(env, names, memberReqLookupMode{}), memberReqBreach)
+		if n := ai.count(); n != 1 {
+			t.Fatalf("requests = %d, want 1", n)
+		}
+		env.redis.FastForward(24*time.Hour + time.Minute)
+		ai.setDefault(mreqAIProbability(0.1))
+		mreqAIWantVerdict(t, "after the expiry", mreqAIAsk(env, names, memberReqLookupMode{}), memberReqPass)
+		if n := ai.count(); n != 2 {
+			t.Errorf("requests = %d, want 2: the string is judged again after the expiry", n)
+		}
+	})
+
+	t.Run("a value that is not a finite probability from 0 to 1 is a miss in the rule's read and the watcher's", func(t *testing.T) {
+		const hash = "0123456789abcdef0123456789abcdef"
+		for _, planted := range []string{"", "abc", "0.5x", "-0.1", "1.5", "NaN", "+Inf", "Inf", "-Inf"} {
+			t.Run(fmt.Sprintf("%q", planted), func(t *testing.T) {
+				env, ai := mreqAIGuardEnv(t)
+				names := mreqAIUniqueNames()
+				mreqAIPlant(t, env, mreqAIKeyOf(t, names), planted)
+				got := mreqAIAsk(env, names, memberReqLookupMode{})
+				if got != memberReqPass {
+					t.Errorf("verdict = %v, want a pass from a fresh 0.1 judgement: a planted %q is no cached verdict", got, planted)
+				}
+				if n := ai.count(); n != 1 {
+					t.Errorf("requests = %d, want 1: the value is a miss", n)
+				}
+				if value, _, _ := mreqAIKeyState(t, mreqAIKeyOf(t, names)); value != "0.1" {
+					t.Errorf("stored value = %q, want it overwritten by the answer 0.1", value)
+				}
+				if memberReqAIWatchSatisfied(planted, "", false, hash) || memberReqAIWatchSatisfied(planted, hash, true, hash) {
+					t.Errorf("the watcher took %q for a verdict below the bar", planted)
+				}
+				if _, ok := memberReqAIParseProbability(planted); ok {
+					t.Errorf("memberReqAIParseProbability accepted %q", planted)
+				}
+			})
+		}
+		if _, ok := memberReqAIParseProbability(strconv.FormatFloat(math.NaN(), 'f', -1, 64)); ok {
+			t.Error("a formatted NaN parsed as a probability")
+		}
+	})
+
+	t.Run("an unknown never writes a key", func(t *testing.T) {
+		for _, shape := range mreqAIShapes() {
+			if shape.hangs || shape.stops {
+				continue
+			}
+			t.Run(shape.name, func(t *testing.T) {
+				env, ai := mreqAIGuardEnv(t)
+				ai.setDefault(shape.step)
+				mreqAIWantVerdict(t, shape.name, mreqAIAsk(env, mreqAIUniqueNames(), memberReqLookupMode{}), memberReqUnknown)
+				if keys := mreqAIVerdictKeys(t); len(keys) != 0 {
+					t.Errorf("verdict keys = %v, want none after %s", keys, shape.name)
+				}
+			})
+		}
+	})
+
+	t.Run("a pass and a breach are both cached and the bar applies when the value is read", func(t *testing.T) {
+		env, ai := mreqAIGuardEnv(t)
+		for _, tc := range []struct {
+			planted string
+			want    memberReqVerdict
+		}{{"0.85", memberReqPass}, {"0.95", memberReqBreach}, {"0.9", memberReqBreach}, {"0", memberReqPass}, {"1", memberReqBreach}} {
+			names := mreqAIUniqueNames()
+			mreqAIPlant(t, env, mreqAIKeyOf(t, names), tc.planted)
+			mreqAIWantVerdict(t, "cached "+tc.planted, mreqAIAsk(env, names, memberReqLookupMode{}), tc.want)
+		}
+		if n := ai.count(); n != 0 {
+			t.Errorf("requests = %d, want none: every value was cached", n)
+		}
+		for _, answer := range []float64{0.1, 0.97} {
+			names := mreqAIUniqueNames()
+			ai.setDefault(mreqAIProbability(answer))
+			mreqAIAsk(env, names, memberReqLookupMode{})
+			if value, _, ok := mreqAIKeyState(t, mreqAIKeyOf(t, names)); !ok || value != strconv.FormatFloat(answer, 'f', -1, 64) {
+				t.Errorf("stored value for an answer of %v = %q (found %v)", answer, value, ok)
+			}
 		}
 	})
 }
