@@ -19,6 +19,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
 )
 
 // The two Telegram budgets of the member requirements, as Redis keys: the lookups' (photo and
@@ -546,6 +547,76 @@ func TestMemberReqLookupLogsCarryIDsOnly(t *testing.T) {
 			}
 		}
 		mreqWantCleanLogs(t, hook, []string{mreqLogBotCredential, "AAHSentinel", mreqLogDescription}, "not answered")
+	})
+
+	// The AI spam-name rule (plan 15-10, T-15-28): no line of any AI path holds a member's name, the
+	// names hash or verdict key, a probability, the instruction, the request or the API key, under any
+	// failure shape. The lines that name a provider status or an error type must show them, so a shape
+	// that logged nothing fails.
+	t.Run("the AI name check under every failure shape, on every path that calls the rule", func(t *testing.T) {
+		hook := mreqLogCapture(t)
+		forbidden := append(append([]string{}, mreqLogForbidden...), mreqAIStaticForbidden...)
+		for i, shape := range append(mreqAIShapes(), mreqAIStateShapes()...) {
+			action := actions[i%len(actions)]
+			t.Run("job: "+shape.name, func(t *testing.T) {
+				forbidden = append(forbidden, mreqAILogJob(t, shape, action)...)
+			})
+			t.Run("join: "+shape.name, func(t *testing.T) {
+				forbidden = append(forbidden, mreqAILogJoin(t, shape, action)...)
+			})
+			t.Run("held release: "+shape.name, func(t *testing.T) {
+				forbidden = append(forbidden, mreqAILogHeld(t, shape)...)
+			})
+			t.Run("button: "+shape.name, func(t *testing.T) {
+				forbidden = append(forbidden, mreqAILogButton(t, shape)...)
+			})
+		}
+		mreqWantCleanLogs(t, hook, forbidden,
+			"status=401", "status=429", "status=500", "error_type=authentication_error", "error_type=rate_limit_error", "error_type=api_error",
+			"was refused by the provider", "the AI name check failed", "AI name checks paused", "is used up", "could not be counted")
+	})
+
+	t.Run("a transport error of the names request never puts a name or the key in a line", func(t *testing.T) {
+		hook := mreqLogCapture(t)
+		env, _ := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleAI: models.RequirementActionMute}, false)
+		mreqSwap(t, &memberReqAIHTTP, &http.Client{Transport: mreqFailingTransport{}, Timeout: 5 * time.Second})
+		member := mreqAISentinelMember(env)
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+
+		mreqWantNothing(t, env, member, env.mreqEnforce(env.mreqCase(member)))
+
+		forbidden := append(append(append([]string{}, mreqLogForbidden...), mreqAIStaticForbidden...), mreqAIForbiddenOf(t, member)...)
+		mreqWantCleanLogs(t, hook, forbidden, "the AI name check failed")
+	})
+
+	t.Run("a panic in the AI call is recovered with one line that names no ID and no name", func(t *testing.T) {
+		hook := mreqLogCapture(t)
+		env, _ := mreqAIGuardEnv(t)
+		user := mreqAIUsers(t, env, 1)[0]
+		names := &memberReqNames{First: mreqAINameSentinel + "Panic" + mreqAIUnique(), Username: strings.ToLower(mreqAINameSentinel) + "panic"}
+		mreqSwap(t, &memberReqAICall, func(context.Context, *claude.Client, claude.Names) (*claude.Verdict, error) {
+			panic("the call blew up")
+		})
+
+		if got := mreqAIAskIn(env, env.chat.Id, user, names); got != memberReqUnknown {
+			t.Errorf("verdict after a panic = %d, want unknown (%d): a crash punishes nobody", got, memberReqUnknown)
+		}
+		recovered := 0
+		for _, line := range mreqLogLines(hook) {
+			if !strings.Contains(line, "Recovered from panic") {
+				continue
+			}
+			recovered++
+			if strings.Contains(line, fmt.Sprint(user)) || strings.Contains(line, fmt.Sprint(-env.chat.Id)) || !strings.Contains(line, "[MemberReq][memberReqFlight]") {
+				t.Errorf("the recovery line %q must name the flight and no chat or user ID", line)
+			}
+		}
+		if recovered != 1 {
+			t.Errorf("recovery lines = %d, want exactly 1", recovered)
+		}
+		canon := mreqAICanon(t, names.First, names.Last, names.Username)
+		forbidden := append(append(append([]string{}, mreqLogForbidden...), mreqAIStaticForbidden...), canon.Hash, mreqAIKeyOf(t, names))
+		mreqWantCleanLogs(t, hook, forbidden)
 	})
 }
 

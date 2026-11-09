@@ -9,10 +9,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/semaphore"
 
@@ -509,4 +513,36 @@ func mreqAIRestartRoot() {
 	memberReqRoot.mu.Lock()
 	defer memberReqRoot.mu.Unlock()
 	memberReqRoot.ctx, memberReqRoot.cancel = context.WithCancel(context.Background())
+}
+
+// mreqAINameSentinel opens every name the sweeps give a member. It is not a word of any language or
+// of any log line, so a line that carries it carries a member's name.
+const mreqAINameSentinel = "ZZAISentinel"
+
+// mreqAIUniqueSeq numbers the names of mreqAIUnique.
+var mreqAIUniqueSeq atomic.Int64
+
+// mreqAIUnique is a counter that names a member without using the member's ID digits: a sweep that
+// asserts the ID digits absent from a request body or a log line cannot have them inside a name.
+func mreqAIUnique() string {
+	return strconv.FormatInt(mreqAIUniqueSeq.Add(1), 10)
+}
+
+// mreqAIStaticForbidden is what no log line of an AI path may hold whatever the shape: the sentinel
+// names of the sweeps and the ordinary names of the AI tests (in both cases), the API key, the opening
+// words of the code-owned instruction, the probabilities the stand-in answers in the failure shapes
+// and the three Redis key families of the rule (a key shows a hash, and a hash is derived from a name).
+var mreqAIStaticForbidden = []string{
+	mreqAINameSentinel, strings.ToLower(mreqAINameSentinel), "Promo", "promo", "Casino", "casino", "Maria", "maria",
+	raidAITestKey, claude.NamesInstruction[:32],
+	"0.97", "1.5", "-0.1",
+	memberReqAIVerdictPrefix, memberReqAIBaselinePrefix, memberReqAIMarkerPrefix,
+}
+
+// mreqAIForbiddenOf is what a log line must not hold about one member: the names hash and the verdict
+// key hash of their names. A hash of a name is derived from the name, so it is as private as the name.
+func mreqAIForbiddenOf(t *testing.T, user gotgbot.User) []string {
+	t.Helper()
+	canon := mreqAICanon(t, user.FirstName, user.LastName, user.Username)
+	return []string{canon.Hash, namecanon.VerdictKey(raidAITestModel, canon)}
 }
