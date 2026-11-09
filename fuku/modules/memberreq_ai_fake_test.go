@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
@@ -71,6 +72,34 @@ func mreqAIHang() mreqAIStep {
 	}
 }
 
+// mreqAIGated holds every request until open is closed (or the request's context ends), then
+// answers with then. A test closes open to let the held requests go; a closed channel lets later
+// requests straight through.
+func mreqAIGated(open <-chan struct{}, then mreqAIStep) mreqAIStep {
+	return func(w http.ResponseWriter, r *http.Request, release <-chan struct{}) {
+		select {
+		case <-open:
+		case <-r.Context().Done():
+			return
+		case <-release:
+			return
+		}
+		then(w, r, release)
+	}
+}
+
+// mreqAIDelayed waits d before it answers with then, so requests overlap.
+func mreqAIDelayed(d time.Duration, then mreqAIStep) mreqAIStep {
+	return func(w http.ResponseWriter, r *http.Request, release <-chan struct{}) {
+		select {
+		case <-time.After(d):
+		case <-r.Context().Done():
+			return
+		}
+		then(w, r, release)
+	}
+}
+
 // mreqAIDrop closes the connection without an answer: a transport failure.
 func mreqAIDrop() mreqAIStep {
 	return func(w http.ResponseWriter, _ *http.Request, _ <-chan struct{}) {
@@ -102,6 +131,8 @@ type mreqAIState struct {
 	onRequest func()
 	release   chan struct{}
 	once      sync.Once
+	inflight  int
+	maxFlight int
 }
 
 // setDefault sets the answer given when nothing is queued.
@@ -141,13 +172,41 @@ func (s *mreqAIState) serve(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	s.mu.Lock()
 	s.requests = append(s.requests, mreqAIRequest{Key: r.Header.Get("x-api-key"), Body: body})
+	s.inflight++
+	if s.inflight > s.maxFlight {
+		s.maxFlight = s.inflight
+	}
 	step := s.def
 	hook := s.onRequest
 	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.inflight--
+		s.mu.Unlock()
+	}()
 	if hook != nil {
 		hook()
 	}
 	step(w, r, s.release)
+}
+
+// maxInFlight is the most requests the stand-in served at the same time.
+func (s *mreqAIState) maxInFlight() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.maxFlight
+}
+
+// waitCount waits until the stand-in has received n requests and fails the test after 5 seconds.
+func (s *mreqAIState) waitCount(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for s.count() < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("the stand-in received %d requests, want %d", s.count(), n)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 }
 
 // mreqInstallAIFake starts the stand-in, points the names request at it and restores both seams
@@ -189,6 +248,7 @@ func mreqAICleanup(t *testing.T, chatIDs, userIDs []int64) {
 	t.Helper()
 	clean := func() {
 		mreqAIDeleteVerdicts()
+		mreqAIDeleteBudgets()
 		mreqAIDeleteBaselines(userIDs)
 	}
 	clean()
@@ -215,6 +275,37 @@ func mreqAIDeleteVerdicts() {
 	for _, key := range keys {
 		client.Del(ctx, key)
 	}
+}
+
+// mreqAIDeleteBudgets removes every hourly budget key of the name check from Redis.
+func mreqAIDeleteBudgets() {
+	client := memberReqRedisClient()
+	if client == nil {
+		return
+	}
+	ctx := context.Background()
+	keys, err := client.Keys(ctx, memberReqAIBudgetPrefix+"*").Result()
+	if err != nil {
+		return
+	}
+	for _, key := range keys {
+		client.Del(ctx, key)
+	}
+}
+
+// withAIGate replaces the in-flight gate and its wait for the test.
+func withAIGate(t *testing.T, size int64, wait time.Duration) {
+	t.Helper()
+	mreqSwap(t, &memberReqAIGate, semaphore.NewWeighted(size))
+	mreqSwap(t, &memberReqAIGateWait, wait)
+}
+
+// withAIBudgets replaces the three hourly budgets (account, group, fleet) for the test.
+func withAIBudgets(t *testing.T, user, chat, global int64) {
+	t.Helper()
+	mreqSwap(t, &memberReqAIUserHourlyBudget, user)
+	mreqSwap(t, &memberReqAIChatHourlyBudget, chat)
+	mreqSwap(t, &memberReqAIGlobalHourlyBudget, global)
 }
 
 // mreqAIDeleteBaselines removes the baselines of the given users from Redis.
