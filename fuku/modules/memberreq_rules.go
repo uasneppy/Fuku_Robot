@@ -53,6 +53,11 @@ type memberReqRule struct {
 	// the executor drops its bit when the member's names changed between the lookup and the claim
 	// (D-29), so a member is never punished for a string they no longer carry.
 	NamesBound bool
+	// RemedyKey is the locale key of a sentence appended to the plain warn, kick and mute notices
+	// while the rule is among the broken rules, so the member learns what to do about it (the
+	// photo rule: a photo the bot cannot see; the AI rule: a name that reads as spam). Empty for a
+	// rule with none. A notice appends one sentence per such rule, in table order.
+	RemedyKey string
 }
 
 // memberReqRussianLetters are the four letters that Russian uses and Ukrainian does not:
@@ -116,11 +121,11 @@ var memberReqRules = []memberReqRule{
 	{Code: "zh", Bit: 16, Store: memberreq.RuleChinese, LineKey: "settings_mreq_rule_chinese", CellKey: "settings_btn_mreq_chinese", DescKey: "settings_mreq_desc_chinese", PhraseKey: "mreq_rule_chinese",
 		Broken: func(n memberReqNames) bool { return memberReqHasHan(n.First) || memberReqHasHan(n.Last) }},
 	{Code: "ph", Bit: 32, Store: memberreq.RulePhoto, LineKey: "settings_mreq_rule_photo", CellKey: "settings_btn_mreq_photo", DescKey: "settings_mreq_desc_photo", PhraseKey: "mreq_rule_photo",
-		Lookup: memberReqPhotoRule, HintKey: "settings_mreq_hint_photo"},
+		Lookup: memberReqPhotoRule, HintKey: "settings_mreq_hint_photo", RemedyKey: "mreq_remedy_photo"},
 	{Code: "ch", Bit: 64, Store: memberreq.RuleChannel, LineKey: "settings_mreq_rule_channel", CellKey: "settings_btn_mreq_channel", DescKey: "settings_mreq_desc_channel", PhraseKey: "mreq_rule_channel",
 		Lookup: memberReqChannelRule},
 	{Code: "ai", Bit: 128, Store: memberreq.RuleAI, LineKey: "settings_mreq_rule_ai", CellKey: "settings_btn_mreq_ai", DescKey: "settings_mreq_desc_ai", PhraseKey: "mreq_rule_ai",
-		Lookup: memberReqAIRule, HintKey: "settings_mreq_hint_ai", NamesBound: true},
+		Lookup: memberReqAIRule, HintKey: "settings_mreq_hint_ai", NamesBound: true, RemedyKey: "mreq_remedy_ai"},
 }
 
 // memberReqNamesBoundMask is the mask of the rules whose verdict is bound to the names they judged

@@ -127,31 +127,38 @@ func memberReqNoticeKey(action int, warn *warnApplyResult) string {
 // memberReqNoticeText builds the notice of a punishment: the template of the punishment
 // translated with the broken rules and the warn numbers, then the member's mention spliced in.
 //
-// A warn, kick or mute notice ends with the photo remedy (mreq_remedy_photo, one space after the
-// translated template) while the photo rule is among the broken rules, so the member learns what
-// to do about a photo the bot cannot see. The ban notice and the warn-limit notices never carry
-// it: a banned or already removed member has nothing to fix there.
+// A warn, kick or mute notice ends with one trailing sentence per remedy-bearing broken rule (the
+// RemedyKey of the rule's table row: the photo remedy, then the AI remedy), in rule order and each
+// after one space, appended after translation, so the member learns what to do about a photo the
+// bot cannot see or a name that reads as spam. The ban notice and the warn-limit notices never
+// carry one: a banned or already removed member has nothing to fix there.
 func memberReqNoticeText(tr *i18n.Translator, user gotgbot.User, broken, action int, warn *warnApplyResult) string {
 	key := memberReqNoticeKey(action, warn)
 	text := memberReqText(tr, key, memberReqNoticeParams(tr, broken, warn))
-	if memberReqNoticeHasRemedy(key, broken) {
-		text += " " + memberReqText(tr, "mreq_remedy_photo")
+	for _, remedy := range memberReqNoticeRemedies(key, broken) {
+		text += " " + memberReqText(tr, remedy)
 	}
 	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(user.Id, 10)})
 	return lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(user, fallback))
 }
 
-// memberReqNoticeHasRemedy reports whether the notice with this template key carries the photo
-// remedy: only the plain warn, kick and mute notices, and only while the photo rule (found
-// through its table row, never a literal bit) is among the broken rules.
-func memberReqNoticeHasRemedy(key string, broken int) bool {
+// memberReqNoticeRemedies returns the locale keys of the remedy sentences the notice with this
+// template key carries for the broken rules, in table order: only the plain warn, kick and mute
+// notices carry any, and only for a broken rule whose row has a RemedyKey. It names no rule by its
+// code, so a later rule with a remedy is one table field.
+func memberReqNoticeRemedies(key string, broken int) []string {
 	switch key {
 	case "mreq_notice_warn", "mreq_notice_kick", "mreq_notice_mute":
 	default:
-		return false
+		return nil
 	}
-	photo, ok := memberReqRuleByCode("ph")
-	return ok && broken&photo.Bit != 0
+	var keys []string
+	for _, rule := range memberReqRules {
+		if rule.RemedyKey != "" && broken&rule.Bit != 0 {
+			keys = append(keys, rule.RemedyKey)
+		}
+	}
+	return keys
 }
 
 // memberReqPostNotice sends the notice as a new message (never a reply: the member's message

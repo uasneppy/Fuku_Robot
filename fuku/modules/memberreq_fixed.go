@@ -222,8 +222,9 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 // the member as they are now and returns the answer that ends the press, or nil when the member
 // breaks nothing and can be freed. A rule now set to Off is not checked, and a member who fixed
 // only some of several rules stays held. The name rules are judged on the live record; the photo
-// and channel rules ask Telegram again with fresh lookups that bypass the positive caches, under
-// memberReqFixedLookupBudget of the press's own time. A definite broken rule is the answer even
+// and channel rules ask Telegram again with fresh lookups that bypass the positive caches, and the
+// AI rule judges the live record's names from the verdict cache (one call only for names with no
+// verdict, D-23), all under memberReqFixedLookupBudget of the press's own time. A definite broken rule is the answer even
 // when another lookup could not be answered (it tells the member something true), and an
 // unanswered lookup with nothing broken is mreq_fixed_check_failed and changes nothing, exactly
 // like an unreadable setting. A channel the bot cannot judge in this group is inert, so it is
@@ -236,12 +237,17 @@ func memberReqFixedJudge(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translato
 		log.Warnf("[MemberReq] the requirements of chat %d could not be read for the fix of user %d: %s", chatID, userID, memberReqErrText(err))
 		return &memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_check_failed"), Alert: true}, false
 	}
-	broken := memberReqBroken(settings, memberReqNamesOf(live.User))
+	liveNames := memberReqNamesOf(live.User)
+	broken := memberReqBroken(settings, liveNames)
 	lookupCtx, cancel := context.WithTimeout(ctx, memberReqFixedLookupBudget)
 	defer cancel()
 	touch := &memberReqLookupTouch{}
 	lookupCtx = context.WithValue(lookupCtx, memberReqLookupTouchKey{}, touch)
-	lookupBroken, unknown := memberReqLookupBroken(lookupCtx, b, settings, chatID, userID, memberReqLookupMode{Fresh: true, Classify: true})
+	// The AI row reads the live record's names and answers from the verdict cache whatever Fresh says
+	// (D-23): a press is deterministic for unchanged names, and one call is made only for names the
+	// cache has no verdict for. The photo and channel rows bypass their positive caches as before.
+	mode := memberReqLookupMode{Fresh: true, Classify: true, Names: &liveNames}
+	lookupBroken, unknown := memberReqLookupBroken(lookupCtx, b, settings, chatID, userID, mode)
 	broken |= lookupBroken
 	lookedUp = touch.touched.Load()
 	if broken != 0 {

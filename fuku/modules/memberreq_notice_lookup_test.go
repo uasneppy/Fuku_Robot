@@ -75,7 +75,7 @@ func TestMemberReqNoticePhotoRemedy(t *testing.T) {
 	})
 
 	t.Run("no notice carries the remedy while the photo rule is not broken", func(t *testing.T) {
-		for _, codes := range [][]string{{"ch"}, {"ln", "ch"}, {"ln", "un", "ru", "ar", "zh", "ch"}} {
+		for _, codes := range [][]string{{"ch"}, {"ln", "ch"}, {"ln", "un", "ru", "ar", "zh", "ch"}, {"ai"}, {"ln", "ch", "ai"}} {
 			for _, n := range notices {
 				text := memberReqNoticeText(tr, user, mreqRuleMask(t, codes...), n.action, n.warn)
 				if strings.Contains(text, staffMarker("mreq_remedy_photo")) {
@@ -85,7 +85,7 @@ func TestMemberReqNoticePhotoRemedy(t *testing.T) {
 		}
 	})
 
-	t.Run("the photo alone, a lone channel and all seven rules name their phrases in rule order", func(t *testing.T) {
+	t.Run("the photo alone, a lone channel and all eight rules name their phrases in rule order", func(t *testing.T) {
 		text := memberReqNoticeText(tr, user, mreqAllRulesMask(), models.RequirementActionMute, nil)
 		last := -1
 		for _, rule := range memberReqRules {
@@ -95,8 +95,8 @@ func TestMemberReqNoticePhotoRemedy(t *testing.T) {
 			}
 			last = at
 		}
-		if !strings.HasSuffix(text, remedy) {
-			t.Errorf("mute notice for all rules %q does not end with the remedy", text)
+		if !strings.HasSuffix(text, remedy+" "+staffMarker("mreq_remedy_ai")) {
+			t.Errorf("mute notice for all rules %q does not end with the photo remedy directly before the AI remedy", text)
 		}
 	})
 
@@ -167,7 +167,7 @@ func TestMemberReqStillBrokenText(t *testing.T) {
 			if got := utf8.RuneCountInString(memberReqStillBrokenText(tr, mask)); got == 0 || got > limit {
 				t.Errorf("%s: four longest phrases answer has %d code points, want 1 to %d", code, got, limit)
 			}
-			for _, n := range []int{5, 6, 7} {
+			for _, n := range []int{5, 6, 7, 8} {
 				text := memberReqStillBrokenText(tr, maskOfFirst(n))
 				if got := utf8.RuneCountInString(text); got == 0 || got > 160 {
 					t.Errorf("%s: count answer for %d has %d code points, want 1 to 160", code, n, got)

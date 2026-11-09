@@ -20,8 +20,8 @@ import (
 var memberReqTagRe = regexp.MustCompile(`<[^>]*>`)
 
 // memberReqNoticeCap is the most visible code points a notice or an edited notice may have. With
-// seven rule phrases (the photo and channel phrases join the five name phrases) the cap is 520,
-// raised from the Phase 13 400 (UI contract section 3).
+// eight rule phrases (the photo, channel and AI phrases join the five name phrases) and the photo
+// and AI remedy tails the cap is 520, raised from the Phase 13 400 (UI contract section 3, M18).
 const memberReqNoticeCap = 520
 
 // memberReqScreenChannelID is the ID of a linked channel no notice or answer may name.
@@ -37,8 +37,8 @@ func memberReqVisibleLength(text string) int {
 var memberReqScreenLanguages = []string{"en", "es", "fr", "hi", "id", "pt", "ru", "uk"}
 
 // TestMemberReqScreensFitEveryLocale is the rendered-size check of the requirement screens.
-// It renders every group notice with the real locales, a 64-rune name, all seven rules and
-// two-digit numbers, then every "I fixed it" answer and the two notices that button edits in.
+// It renders every group notice with the real locales, a 64-rune name, all eight rules (both
+// remedy tails among them) and two-digit numbers, then every "I fixed it" answer and the two notices that button edits in.
 func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 	withRealLocales(t)
 	const chatID int64 = -1001234567890
@@ -85,13 +85,16 @@ func TestMemberReqScreensFitEveryLocale(t *testing.T) {
 			if strings.Contains(text, strconv.FormatInt(-memberReqScreenChannelID, 10)) {
 				t.Errorf("%s %s: the notice names the linked channel: %q", code, sc.name, text)
 			}
-			// The photo remedy ends the warn, kick and mute notices, and no other (all seven rules
-			// are broken here, the photo rule included).
-			remedy := memberReqText(tr, "mreq_remedy_photo")
+			// The remedy tails end the warn, kick and mute notices, and no other (all eight rules
+			// are broken here): the AI remedy last, with the photo remedy directly before it (M20).
+			photoRemedy, aiRemedy := memberReqText(tr, "mreq_remedy_photo"), memberReqText(tr, "mreq_remedy_ai")
 			wantRemedy := sc.action == models.RequirementActionKick || sc.action == models.RequirementActionMute ||
 				(sc.action == models.RequirementActionWarn && sc.name == "warn")
-			if got := strings.HasSuffix(text, " "+remedy); got != wantRemedy {
-				t.Errorf("%s %s: ends with the photo remedy = %t, want %t", code, sc.name, got, wantRemedy)
+			if got := strings.HasSuffix(text, " "+photoRemedy+" "+aiRemedy); got != wantRemedy {
+				t.Errorf("%s %s: ends with the photo remedy then the AI remedy = %t, want %t", code, sc.name, got, wantRemedy)
+			}
+			if got := strings.Contains(text, aiRemedy) || strings.Contains(text, photoRemedy); got != wantRemedy {
+				t.Errorf("%s %s: carries a remedy = %t, want %t", code, sc.name, got, wantRemedy)
 			}
 
 			keyboard := memberReqNoticeKeyboard(tr, sc.action, 123, user.Id)
@@ -154,7 +157,7 @@ func assertMemberReqFixedAnswers(t *testing.T, code string, tr *i18n.Translator,
 		fourLongest |= rule.Bit
 	}
 	addStillBroken("still broken four longest", fourLongest, listLimit)
-	// Five, six and seven rules are the count answer, whatever the phrases are.
+	// Five to eight rules are the count answer, whatever the phrases are.
 	for n := memberReqStillBrokenListMax + 1; n <= len(memberReqRules); n++ {
 		addStillBroken("still broken "+strconv.Itoa(n), maskOfFirst(n), 160)
 	}
