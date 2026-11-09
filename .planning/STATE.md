@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 15
 current_phase_name: AI Spam-Name Check
-status: executing
-stopped_at: Completed 15-10-PLAN.md
-last_updated: "2026-11-09T21:49:46.384Z"
+status: verifying
+stopped_at: Completed 15-11-PLAN.md
+last_updated: "2026-11-09T22:51:10.795Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 11 execution started
-state_head: b3638fa51c97c5ee827183e27317c0f869d03113
+state_head: 2b58a7cfcb68446bcec5593a8e1f7b3d80819ec4
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 78
-  completed_plans: 76
+  completed_plans: 77
   percent: 0
 ---
 
@@ -31,8 +31,8 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 Phase: 15 (AI Spam-Name Check) — IN PROGRESS (Phase 14 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items)
 Plan: 11 of 11
-Status: Executing Phase 15 (15-10 done: the cross-cutting sweeps, tests and an AGENTS.md paragraph only, no production change: TestShutdownEndsMemberReqAI, TestMemberReqAIJoinBudget, TestMemberReqAIRequestIsMinimal, TestMemberReqAIPacersAreIndependent, the AI shapes in TestMemberReqLookupLogsCarryIDsOnly and the refused AI press in TestMemberReqLookupAlertsFitEveryLocale; requirements stay Pending until 15-11)
-Last activity: 2026-11-09 — Plan 15-10 complete
+Status: All 11 plans of Phase 15 executed and summarised (15-11 done: TestMemberReqAIEndToEnd, AGENTS.md read whole and corrected, docs and README, the phase gate, MREQ-01, MREQ-10 and MREQ-14 completed); ready for verification, the phase is not marked Complete here
+Last activity: 2026-11-09 — Plan 15-11 complete
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -150,6 +150,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P08 | 70min | 3 tasks | 9 files |
 | Phase 15 P09 | 45min | 3 tasks | 6 files |
 | Phase 15 P10 | 50min | 3 tasks | 5 files |
+| Phase 15 P11 | 130min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -246,6 +247,7 @@ Recent decisions affecting current work:
 - [Phase 15]: [15-08] A rule's process-level precondition is a memberReqRule table field (Configured, UnconfiguredKey, ConfirmKeys), so the status, slot, Off-only test, gate and card never test the AI rule's identity; settingsMreqAIGate has no unknown branch and makes no network call
 - [Phase 15]: 15-09: validate split into validateBasics, validateModes and validateOptions (it was over the gocyclo limit at HEAD); names-mode summary uses the first judgement of each row, latency and cost count every request
 - [Phase 15]: 15-10: the AI sweeps changed no production code; the log sweep cannot catch an Anthropic key leak because logredact redacts it first, so names and hashes are what it holds
+- [Phase 15]: AI spam-name rule closed by an end-to-end test through the real dispatcher with only Telegram and the provider faked; the rulebook was read whole and eight stale sentences corrected
 
 ### Pending Todos
 
@@ -321,8 +323,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T21:49:45.441Z
-Stopped at: Completed 15-10-PLAN.md
+Last session: 2026-11-09T22:51:09.880Z
+Stopped at: Completed 15-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
