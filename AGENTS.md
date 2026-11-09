@@ -574,7 +574,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   value 0..4 are checked before any write, then the `memberReqWrites.Action` column-targeted write, a Go 0 written, the
   cache key dropped by the repository, the row read back); Kick, Ban and Mute write nothing and draw the shared card
   (`renderSettingsMreqCard`, `settingsCardRows`: the question with the rule's name, a line saying the rule acts on every
-  member at their next message, members already in the group included, `[Yes | No]`, then Back to Main and Close). Yes is
+  member at their next message, members already in the group included, `[Yes | No]`, then Back to Main and Close; a rule
+  with `ConfirmKeys` in its table row, the AI rule, says its own scope instead, below). Yes is
   the page action `my` (`settingsActMreqYes`, `a=my&t&v&e`: exactly `t`, `v` 2..4 and `e`, right `settingsRightRestrict`, so a Yes runs the whole press
   pipeline again and a presser demoted since the first tap is refused with `settings_no_restrict`; a Yes can never carry
   Off or Warn), an expired Yes writes nothing, and the four exits are asymmetric on purpose: Yes and an expired Yes redraw
@@ -604,6 +605,28 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   an administrator. While the channel rule cannot be linked (a basic group, or no linked channel found) its screen is
   `[Off]` alone, two rows, the choose and actions hints omitted, and a stored non-Off value stays visible and inert
   (`settingsMreqOffOnly`); every other state keeps the three-row shape (the could-not-check state keeps both choice rows).
+  The AI line (Phase 15, MREQ-10, D-14, UI-SPEC M15 to M17): `settingsMreqStatus.AINotConfigured` is the process fact that
+  the AI name check cannot run (`memberReqAIConfigured` false: `ENABLE_AISPAM` off or no Anthropic key), read through the
+  table field `memberReqRule.Configured` from `config.AppConfig` alone, so it makes no Telegram call, no Redis command and
+  no network call in any group type, and `settingsMreqReadStatus` sets it at every return (a wrapper over
+  `settingsMreqReadChannelStatus`, so the basic-group return and the page-scope return carry it too); its zero value claims
+  nothing. A rule's table row also carries `UnconfiguredKey` (the line's key, taking `{rule}`) and `ConfirmKeys`, so no
+  renderer or gate tests the AI rule's identity (`settingsMreqRuleUnconfigured(rule, status)` is true when the row has a
+  `Configured` test and the status says it fails; a later rule with a process-level precondition adds its own field and one
+  line there). The line is the code-side `🚫 ` plus `settings_mreq_here_ai` with the translated rule name, never an error
+  text, a key, a variable, a model or a provider. `settingsMreqHereLines` builds the group-level lines first (the
+  basic-group line, or in a supergroup the channel rule's line) and then appends the line of each rule that cannot work
+  while its action is not Off, so the page body can hold two lines; the basic-group line is still one line. The AI rule's
+  screen has one status slot with exactly one line: while the AI is not configured the AI line, whatever the stored value
+  is, and it wins over the basic-group line (it explains the Off-only form); every other rule's screen keeps the basic-group
+  line. While the AI is not configured the AI screen is the Off-only form in every group type (`[Off]` alone, two rows,
+  the choose and actions hints omitted, a stored non-Off value visible and inert, the rule's own hint
+  `settings_mreq_hint_ai` still shown: its Warn or Mute advice is intentionally not actionable there until the AI is
+  configured); configured, it keeps the three-row shape. A Redis outage, a paused breaker and a failing provider are never
+  a line (D-04, M22). The AI card says its own consequence (`settings_mreq_confirm_ai_kick`, `_ban`, `_mute`, from
+  `ConfirmKeys`): the generic sentence "members already in the group included" would be false, because the AI rule judges an
+  established member only after a name change. `TestSettingsMreqAIStatus` proves the six combinations of the contract's
+  composition table in both menus, and `TestSettingsMreqOpenCost` that the AI screen costs what a name rule's screen costs.
   The one reader is `settingsMreqReadStatus(p, row, scope, fresh)`, and every draw of the page and of a rule screen goes
   through `settingsMreqDrawPage` or `settingsMreqDrawRule`: the database is read first (a failed read is the cannot-open
   edit), the press is answered empty, then the status is read, then the edit is made, so a redraw after a switch, a
@@ -638,6 +661,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   being an administrator of the linked channel never refuses a press (the punishment can be set and the check fails open),
   Off (`v=0`) never makes the check so an administrator can always clear a stored value, and the link is only ever the
   live `getChat` answer, never callback data or the update. The photo rule and the five name rules have no link check.
+  The press gate of the AI rule (Phase 15, MREQ-10, D-14, `settingsMreqAIGate`): the Off-only form offers Off alone, so a
+  punishing press reaches the bot only from a stale screen, a stale card or a forged button, and it is refused by a pure
+  check on a rule whose table row has a `Configured` test (the AI rule only) and an action other than Off (`st` with `v` 1 to
+  4 and the card's Yes). It is called where `settingsMreqChannelGate` is, after the whole press pipeline, for a Yes the
+  expiry check (an expired Yes redraws with `settings_card_expired` and makes no check) and for `st` the fresh same-value
+  read (a press of the stored value makes no check); `Configured()` is read live, so a press has no status. Not configured
+  answers the alert `settings_mreq_here_ai` (the status line's own key with `{rule}`, no icon) as the press's one answer,
+  writes nothing (no repository call, no cache write), draws no card (a Yes replaces its card) and redraws the rule screen as
+  the Off-only form from the stored row (`settingsMreqRedrawRefused`, shared with the channel gate; no notice line, the
+  redrawn 🚫 line already says it). There is no unknown branch (the fact is process-level and always decided), no Redis
+  read, no group-type read and no network call, and Off (`v=0`) never makes the check, so an administrator can always clear a
+  stored value. A screen drawn Off-only still takes its single `[Off]` once the AI is configured and the next draw shows three
+  rows. `TestSettingsMreqAIGate` holds it, with the stale-screen cases in both directions.
   `TestSettingsMreqChannelRefusal` and `TestSettingsMreqForgedFields` hold it, and the table-driven page `m` tests
   (`TestSettingsMreqCard`, `TestSettingsAuthorityMreq`, `TestSettingsDriftMreq`, `TestSettingsControlActionAllowList`,
   `TestSettingsMreqRuleScreen`) cover the channel rule's punishing values through a linked-channel fixture
@@ -822,9 +858,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_access_owner_only`; only the Access page's control and action declare it. On the Member requirements page
   (`m`) opening the page and a rule screen needs `settingsRightAdmin`, and every punishment choice (any `v`, so the card is
   not even drawn without the right), the card's Yes and both switches need `settingsRightRestrict`; this holds for the photo
-  (`ph`) and channel (`ch`) rules too, the rights are judged on a fresh member record on every press, and the channel
-  rule's live link check comes after the right, so a presser demoted before a Yes is refused with `settings_no_restrict`
-  and no link is looked up.
+  (`ph`), channel (`ch`) and AI (`ai`) rules too, the rights are judged on a fresh member record on every press, and the
+  channel rule's live link check and the AI rule's configuration check (`settingsMreqAIGate`) come after the right, so a
+  presser demoted before a Yes is refused with `settings_no_restrict`, no link is looked up and the configuration check
+  never runs.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
   `/cleangoodbye` refuse through `CanUserChangeInfo`). `settingsRightRefusalFor` is the one pure judgement of a right's
@@ -2726,7 +2763,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsMreqRowBudget`, `TestSettingsMreqPageFitsEveryLocale`, `TestSettingsMreqCallbackBytes`),
   `TestApplyMemberReqAction`, `TestSettingsDriftMreq` and `TestSettingsAuthorityMreq` (`settings_mreq_test.go`) and
   `TestSettingsMreqCard` (`settings_mreq_card_test.go`: the card's four exits, the demotion between the taps, the stale
-  cache and the forged `my` fields). The module harness carries both Phase
+  cache and the forged `my` fields; the AI rule's card expects its own consequence keys). Phase 15's page families are
+  `TestSettingsMreqAIStatus` and `TestSettingsMreqAIGate` (`settings_mreq_ai_test.go`), with the helpers
+  `withAINotConfigured(t, how)` (no key, or the switch off) and `withAIConfigured(t)`, which put `config.AppConfig` back in
+  `t.Cleanup`: the Phase 13 and 14 page tests that open the AI screen and expect its usual shape (`TestSettingsMreqRuleScreen`,
+  `TestSettingsMreqCard`, the basic-group screens) say `withAIConfigured` because the test process has no key. The module harness carries both Phase
   13 tables (`ChatRequirements`, `ChatRequirementHold` in the `AutoMigrate` list of `test_harness_test.go`), and
   `settingsCleanup` deletes their rows of its chats and the `member_requirements` cache key.
   The watcher families are `TestMemberReqWatcher*`, `TestMemberReqPassCache`, `TestMemberReqCleanEndsWarnHold`,
