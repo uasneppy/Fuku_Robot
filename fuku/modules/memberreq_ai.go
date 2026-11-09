@@ -59,9 +59,10 @@ import (
 // group or provider is a sticky unknown that spends nothing), the in-flight gate (four calls at
 // once per replica, a bounded wait; a gate that cannot be had is a sticky unknown and spends no
 // unit, because it is taken before the budget), the three hourly budgets (a used-up allowance is a
-// sticky unknown, a counter that failed a plain one), the call, the breaker's record and the cache
+// sticky unknown, and so is a counter that failed), the call, the breaker's record and the cache
 // write. A sticky unknown is a state of the system, not a fault of the moment: the executor does
-// not let it keep a weaker name punishment from standing (D-22).
+// not let it keep a weaker name punishment from standing (D-22). A Redis outage, no Redis client, a
+// failed state read, a failed cache re-read and a budget counter fault are such states too (WR-03).
 
 // memberReqAIBar is the spam probability at or above which the AI rule is a breach (D-09). The
 // verdict cache holds the probability itself, not the verdict, so a retuned bar applies to
@@ -296,6 +297,9 @@ type memberReqAIPlan struct {
 	done         bool
 	cached       bool
 	baselineOnly bool
+	// sticky marks a decided unknown that is a state of the system (Redis is unreachable), not a fault
+	// of one member's answer: memberReqAIRule notes it so the executor defers nothing for it (WR-03).
+	sticky bool
 }
 
 // memberReqAIFinal is a plan that is already decided, with nothing to record.
@@ -305,8 +309,9 @@ func memberReqAIFinal(verdict memberReqVerdict) memberReqAIPlan {
 
 // memberReqAIPrepare is the read step of the rule: no names is unknown, an AI that is not
 // configured and names that are not judgeable are inert, no Redis or a Redis read error is
-// unknown (the cost guard: with the cache unreadable the provider is not asked), and the state
-// is read in one round. mode.Fresh and mode.Classify are ignored: the AI row answers from the
+// a sticky unknown (the cost guard: with the cache unreadable the provider is not asked; a Redis
+// outage is a state of the system, so it must not defer a weaker name punishment, WR-03), and the
+// state is read in one round. mode.Fresh and mode.Classify are ignored: the AI row answers from the
 // cache whatever the mode (D-23). mode.Joining and mode.IgnoreBaseline both skip the baseline step.
 func memberReqAIPrepare(ctx context.Context, chatID, userID int64, mode memberReqLookupMode) memberReqAIPlan {
 	if mode.Names == nil {
@@ -322,7 +327,7 @@ func memberReqAIPrepare(ctx context.Context, chatID, userID int64, mode memberRe
 	key := memberReqAIVerdictKey(config.AppConfig.AnthropicModel, canon)
 	state, err := memberReqAIReadState(ctx, key, chatID, userID)
 	if err != nil {
-		return memberReqAIFinal(memberReqUnknown)
+		return memberReqAIPlan{verdict: memberReqUnknown, done: true, sticky: true}
 	}
 	return memberReqAIDecide(canon, key, state, mode.Joining || mode.IgnoreBaseline)
 }
@@ -358,6 +363,9 @@ func memberReqAIDecide(canon namecanon.Canon, key string, state memberReqAIState
 func memberReqAIRule(ctx context.Context, _ *gotgbot.Bot, chatID, userID int64, mode memberReqLookupMode) memberReqVerdict {
 	plan := memberReqAIPrepare(ctx, chatID, userID, mode)
 	if plan.done {
+		if plan.sticky {
+			memberReqNoteSticky(ctx)
+		}
 		return plan.verdict
 	}
 	if plan.baselineOnly {
@@ -450,8 +458,8 @@ func memberReqAIBaseline(ctx context.Context, userID int64, hash string) {
 }
 
 // memberReqAIAnswer is the value of a flight: the verdict and whether an unknown verdict is sticky,
-// a state of the system (a paused breaker, a used-up budget, a gate that could not be had) and not a
-// fault of the moment. The zero value is an unknown that is not sticky.
+// a state of the system (a paused breaker, a used-up budget, a gate that could not be had, an
+// unreachable Redis) and not a fault of the moment. The zero value is an unknown that is not sticky.
 type memberReqAIAnswer struct {
 	Verdict memberReqVerdict
 	Sticky  bool
@@ -469,7 +477,8 @@ var memberReqAIStickyUnknown = memberReqAIAnswer{Verdict: memberReqUnknown, Stic
 func memberReqAIJudge(ctx context.Context, chatID, userID int64, plan memberReqAIPlan) memberReqAIAnswer {
 	probability, hit, err := memberReqAIRead(ctx, plan.key)
 	if err != nil {
-		return memberReqAIAnswer{}
+		// The cache cannot be read (no Redis, an error): a state of the system, not a fault of this answer.
+		return memberReqAIStickyUnknown
 	}
 	if hit {
 		memberReqAIStats.cached.Add(1)
@@ -527,14 +536,14 @@ func memberReqAIAcquire(ctx context.Context, chatID int64) (refusal memberReqAIA
 	return memberReqAIAnswer{}, true
 }
 
-// memberReqAIReserveUnit reserves the call's three budget units. A used-up allowance is a sticky
-// unknown (a state); a counter that failed, or no Redis, is a plain one (a fault of the moment).
-// The call is never made without a unit.
+// memberReqAIReserveUnit reserves the call's three budget units. A used-up allowance, a counter
+// that failed and no Redis are all sticky unknowns: states of the system, not faults of one
+// member's answer (WR-03). The call is never made without a unit.
 func memberReqAIReserveUnit(chatID, userID int64) (refusal memberReqAIAnswer, ok bool) {
 	client := memberReqRedisClient()
 	if client == nil {
 		memberReqAIStats.shed.Add(1)
-		return memberReqAIAnswer{}, false
+		return memberReqAIStickyUnknown, false
 	}
 	switch memberReqAIReserve(client, chatID, userID) {
 	case memberReqAICapped:
@@ -542,7 +551,7 @@ func memberReqAIReserveUnit(chatID, userID int64) (refusal memberReqAIAnswer, ok
 		return memberReqAIStickyUnknown, false
 	case memberReqAIBudgetFault:
 		memberReqAIStats.shed.Add(1)
-		return memberReqAIAnswer{}, false
+		return memberReqAIStickyUnknown, false
 	}
 	return memberReqAIAnswer{}, true
 }

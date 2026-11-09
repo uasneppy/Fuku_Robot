@@ -1398,8 +1398,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the account's unit first, then the group's, then the fleet's, and a refusal or an error stops the chain, so an account over
   its own budget spends neither shared unit and a group over its own never spends the fleet's. The unit is reserved before the
   call, so a failed call still spends it. A verdict served from the cache is answered before any budget and spends none. A
-  used-up allowance is a sticky unknown and a Redis error on a counter a plain unknown: either way no call is made, never an
-  unbounded one. The family is the name check's own, separate from the raid image budgets (`fuku:raid:*`): a name burst never
+  used-up allowance and a Redis error on a counter (and no Redis client) are both sticky unknowns (WR-03: states of the
+  system, not faults of one answer): either way no call is made, never an unbounded one. The family is the name check's own, separate from the raid image budgets (`fuku:raid:*`): a name burst never
   spends the image allowance and the reverse, and only the stateless helpers are shared. Every key is used in single-key
   commands, so there is no hash tag; they sit in the `fuku:memberreq:*` family, outside the cache prefix, so
   `CLEAR_CACHE_ON_STARTUP` keeps them.
@@ -1598,8 +1598,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqAIGateWait` (3 s) under the flight's own context; the slot is released by `defer` on every path, a recovered panic
   and a cancel included, and it is taken before the budget, so a flight that cannot get a slot spends no unit. The flight's
   value is `memberReqAIAnswer{Verdict, Sticky}`. A paused breaker, a used-up budget and a gate that could not be had while the
-  flight's context is live are a sticky unknown (a state of the system); a counter that failed, no Redis and a cancelled context
-  are a plain unknown (a fault of the moment, shutdown is not a state). The name check has its own breaker
+  flight's context is live are a sticky unknown (a state of the system), and so are no Redis client, a failed state read
+  (`memberReqAIPrepare`, noted by `memberReqAIRule` through the plan's `sticky` field, because the prepare step runs before the
+  flight), a failed cache re-read inside the flight and a budget counter that failed (Phase 15 review WR-03: a Redis outage
+  would otherwise defer every weaker name punishment in every group whose AI action is stricter); a cancelled context is a
+  plain unknown (shutdown is not a state), and so is every provider answer that is not a probability (a 5xx, a timeout, a 400). The name check has its own breaker
   (`memberReqAIBreaker`, `memberreq_ai_breaker.go`, state of its own, never shared with `raid_ai_breaker.go`): five provider
   failures in one group pause that group's checks for 5 minutes (`memberReqAICooldown`), a rejected key or account (401, 402,
   403, or an authentication, billing or permission error type) pauses every group for 5 minutes (`memberReqAIKeyPause`), and a
@@ -1675,7 +1678,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stayed unjudged, because a held member's messages make no lookup. The member is judged again at their next message, so a
   stricter rule is never silently dropped behind a weaker punishment and its hold, and an unknown with no established breach
   is simply not broken as before. An unknown that is equal or weaker than the punishment chosen defers nothing, and so does an
-  unknown that is a sticky state of the AI rule (a paused breaker, a used-up budget or a full gate, D-22): `memberReqLiveViolation`
+  unknown that is a sticky state of the AI rule (a paused breaker, a used-up budget, a full gate, D-22, or a Redis outage or
+  counter fault, WR-03): `memberReqLiveViolation`
   removes the run's `touch.sticky` bits from the unknown mask before `memberReqUnknownDefers`, so an outage, an exhausted hour or
   an attacker spending the fleet's budget never switches off the weaker name punishments of every group, while every other
   unknown (a timeout, a 5xx, a 429, a refusal, an unreadable answer) still defers as before. The cost is
