@@ -4,6 +4,7 @@ package modules
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -243,6 +244,96 @@ func TestMemberReqAIRequestIsMinimal(t *testing.T) {
 	if got.First != canon.First || got.Last != canon.Last || got.Username != canon.Username {
 		t.Errorf("the names sent = %+v, want exactly the canonical %+v", got, canon)
 	}
+}
+
+// TestMemberReqAIPacersAreIndependent: the AI call shares nothing it can starve or be starved by. A
+// 30 s block on the lookup pacer's keys does not touch it, a burst of name checks writes no key of the
+// requirement or the lookup pacer, and a gate saturated by held calls delays neither a name-rule
+// punishment nor its notice for another member (PLAT-06).
+func TestMemberReqAIPacersAreIndependent(t *testing.T) {
+	t.Run("a 30 s block on the lookup pacer does not delay or shed an AI judgement", func(t *testing.T) {
+		env, ai := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleAI: models.RequirementActionMute}, false)
+		ai.setDefault(mreqAIProbability(0.97))
+		member := mreqAIMember(env, "Casino")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		mreqBlockPacer(t, env, mreqLookupPaceBlock)
+
+		started := time.Now()
+		got := env.mreqEnforce(env.mreqCase(member))
+
+		mreqWantQuick(t, "the AI judgement", started)
+		if got.Outcome != memberReqMuted {
+			t.Errorf("outcome = %+v, want Muted: the lookup block must not shed the AI call", got)
+		}
+		if n := ai.count(); n != 1 {
+			t.Errorf("provider requests = %d, want 1", n)
+		}
+		if env.redis.Exists(mreqLookupPaceNext) {
+			t.Errorf("the AI judgement wrote %s", mreqLookupPaceNext)
+		}
+		if got, err := env.redis.Get(mreqLookupPaceBlock); err != nil || got != "1" {
+			t.Errorf("%s = %q (%v), want the block this test wrote, untouched", mreqLookupPaceBlock, got, err)
+		}
+	})
+
+	t.Run("a burst of name checks writes no key of the requirement or lookup pacer", func(t *testing.T) {
+		env, ai := mreqAIGuardEnv(t)
+		for i := 0; i < 10; i++ {
+			mreqAIWantVerdict(t, fmt.Sprintf("judgement %d", i), mreqAIAsk(env, mreqAIUniqueNames(), memberReqLookupMode{}), memberReqPass)
+		}
+		if n := ai.count(); n != 10 {
+			t.Fatalf("provider requests = %d, want 10 (ten different strings)", n)
+		}
+		for _, key := range env.redis.Keys() {
+			if strings.HasPrefix(key, "fuku:memberreq:pace:") || strings.HasPrefix(key, "fuku:memberreq:lkp:pace:") {
+				t.Errorf("a burst of name checks wrote the pacer key %s", key)
+			}
+		}
+	})
+
+	t.Run("a gate saturated by held calls delays no name-rule punishment or notice", func(t *testing.T) {
+		withAIGate(t, 1, 1500*time.Millisecond)
+		env, ai := mreqAIEnvOf(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute}, false)
+		open := make(chan struct{})
+		ai.setDefault(mreqAIGated(open, mreqAIProbability(0.1)))
+		users := mreqAIUsers(t, env, 2)
+		otherChat := uniqueModuleChatID()
+		mreqAICleanup(t, []int64{otherChat}, nil)
+
+		holder := make(chan memberReqVerdict, 1)
+		go func() { holder <- mreqAIAskIn(env, otherChat, users[0], mreqAIUniqueNames()) }()
+		ai.waitCount(t, 1)
+		waiter := make(chan memberReqVerdict, 1)
+		go func() { waiter <- mreqAIAskIn(env, otherChat, users[1], mreqAIUniqueNames()) }()
+
+		// With the only slot held and a caller waiting for it, a member who breaks the last name
+		// rule is muted and their notice delivered at once, far inside the gate's 1.5 s wait.
+		member := env.mreqMember("Alex", "", "alex")
+		started := time.Now()
+		got := env.mreqEnforce(env.mreqCase(member))
+		if took := time.Since(started); took > 1200*time.Millisecond {
+			t.Errorf("the name-rule punishment took %s with the gate saturated, want it far below the gate's wait", took)
+		}
+		if got.Outcome != memberReqMuted {
+			t.Errorf("outcome = %+v, want Muted for the last name rule", got)
+		}
+		if n := len(env.mreqNotices()); n != 1 {
+			t.Errorf("notices = %d, want the one mute notice", n)
+		}
+
+		// The caller whose call waited for the slot is unknown after the gate's wait and asked nobody.
+		select {
+		case verdict := <-waiter:
+			mreqAIWantVerdict(t, "the caller that waited for the gate", verdict, memberReqUnknown)
+		case <-time.After(5 * time.Second):
+			t.Fatal("the caller that waited for the gate never returned")
+		}
+		if n := ai.count(); n != 1 {
+			t.Errorf("provider requests = %d, want only the holder's", n)
+		}
+		close(open)
+		mreqAIWantVerdict(t, "the holder", <-holder, memberReqPass)
+	})
 }
 
 // The paths of the AI log sweep. Each runs one failure shape of the provider (mreqAIShapes) or of the

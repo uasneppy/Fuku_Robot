@@ -623,10 +623,15 @@ func TestMemberReqLookupLogsCarryIDsOnly(t *testing.T) {
 func TestMemberReqLookupAlertsFitEveryLocale(t *testing.T) {
 	withRealLocales(t)
 	const chatDigits, channelDigits = "1001234567890", "1002468013579"
+	aiRule, ok := memberReqRuleByCode("ai")
+	if !ok {
+		t.Fatal("the rule table has no AI rule")
+	}
 	for _, code := range memberReqScreenLanguages {
 		tr := i18n.MustNewTranslator(code)
 		alerts := map[string]string{
 			"refused channel press": settingsMreqNoLinkAlert(tr),
+			"refused AI press":      settingsMreqUnconfiguredText(tr, aiRule),
 			"could not check":       memberReqText(tr, "mreq_fixed_check_failed"),
 		}
 		for name, text := range alerts {
@@ -649,6 +654,10 @@ func TestMemberReqLookupAlertsFitEveryLocale(t *testing.T) {
 		rule := settingsText(tr, "settings_mreq_rule_channel")
 		if !strings.Contains(alerts["refused channel press"], rule) {
 			t.Errorf("%s: the refused-press alert %q does not name the channel rule %q", code, alerts["refused channel press"], rule)
+		}
+		aiName := settingsText(tr, "settings_mreq_rule_ai")
+		if !strings.Contains(alerts["refused AI press"], aiName) {
+			t.Errorf("%s: the refused AI press alert %q does not name the AI rule %q", code, alerts["refused AI press"], aiName)
 		}
 	}
 }
