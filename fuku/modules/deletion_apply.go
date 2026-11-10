@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/utils/errors"
 )
 
@@ -16,6 +17,11 @@ import (
 // (the key is in skipLocal, so no replica serves it from process memory); it is a variable only
 // so a test can make it fail.
 var deletionRulesLookup = deletion.GetRules
+
+// deletionFlagLookup reads the shared /cleanservice flag of a chat's greetings row. Its default
+// is the reader that creates nothing and returns its error; it is a variable only so a test can
+// make it fail.
+var deletionFlagLookup = greetings.LoadSettingsContext
 
 // deletionRuleWriter holds the repository writes of one rule. Each drops the rules cache key.
 type deletionRuleWriter struct {
@@ -55,11 +61,16 @@ const (
 
 // deletionApplyResult is what an apply function returns: the outcome, the rules read back
 // through the cached loader (nil when the call failed or the read-back did, in which case the
-// caller reloads) and the error behind a refusal or a failure.
+// caller reloads) and the error behind a refusal or a failure. applyCleanServiceRule also fills
+// CleanService (the shared flag read back) and the effective state of the kind it was called
+// for (Delay and On, as deletionEffectiveDelay reads it); all three are zero when Rules is nil.
 type deletionApplyResult struct {
-	Outcome deletionApplyOutcome
-	Rules   *deletion.Rules
-	Err     error
+	Outcome      deletionApplyOutcome
+	Rules        *deletion.Rules
+	CleanService bool
+	Delay        int
+	On           bool
+	Err          error
 }
 
 // deletionTarget is the absolute value an apply function stores: a delay, or no rule. It is
@@ -144,4 +155,89 @@ func deletionReadBack(ctx context.Context, chatID int64) *deletion.Rules {
 		return nil
 	}
 	return rules
+}
+
+// applyCleanServiceRule is the one write path of the joined and left rows, which share the
+// /cleanservice flag (D-02): Keep turns the flag off and removes both delay rows, Now turns it
+// on and removes this kind's row, After N turns it on and stores this kind's row, all in one
+// transaction (deletion.ApplyJoinLeftRule). It refuses a kind that is not joined or left, a mode
+// that is not one of the three and a delay outside 1..86400 before any read or write, reads the
+// effective state (the flag fresh, the rules through the cached loader; a failed read is a save
+// failure with no write), writes nothing when the state already equals the request, and reads
+// the effective state back after a write. Because both kinds share one flag, turning one on
+// makes the other read Delete now unless it has its own row: that coupling is D-02, not a choice.
+func applyCleanServiceRule(ctx context.Context, chatID int64, kind string, state deletion.JoinLeftState) deletionApplyResult {
+	if err := deletionValidateJoinLeft(kind, state); err != nil {
+		return deletionApplyResult{Outcome: deletionRefused,
+			Err: errors.Wrapf(err, "refuse joined or left rule of chat %d", chatID)}
+	}
+	flag, rules, err := deletionJoinLeftRead(ctx, chatID)
+	if err != nil {
+		log.Errorf("[Deletion] read the joined and left state of chat %d before a write: %v", chatID, err)
+		return deletionApplyResult{Outcome: deletionSaveFailed, Err: err}
+	}
+	if deletionJoinLeftHolds(kind, state, flag, rules) {
+		return deletionJoinLeftResult(deletionUnchanged, kind, flag, rules)
+	}
+	if err := deletion.ApplyJoinLeftRule(ctx, chatID, kind, state); err != nil {
+		log.Errorf("[Deletion] write the joined or left rule of chat %d: %v", chatID, err)
+		return deletionApplyResult{Outcome: deletionSaveFailed, Err: err}
+	}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deletionApplyTimeout)
+	defer cancel()
+	flag, rules, err = deletionJoinLeftRead(readCtx, chatID)
+	if err != nil {
+		log.Warnf("[Deletion] read back the joined and left state of chat %d: %v", chatID, err)
+		return deletionApplyResult{Outcome: deletionApplied}
+	}
+	return deletionJoinLeftResult(deletionApplied, kind, flag, rules)
+}
+
+// deletionValidateJoinLeft refuses what applyCleanServiceRule never writes.
+func deletionValidateJoinLeft(kind string, state deletion.JoinLeftState) error {
+	switch {
+	case !deletion.SharesCleanServiceFlag(kind):
+		return deletion.ErrNotJoinLeft
+	case state.Mode != deletion.JoinLeftKeep && state.Mode != deletion.JoinLeftNow && state.Mode != deletion.JoinLeftAfter:
+		return deletion.ErrInvalidJoinLeftState
+	case state.Mode == deletion.JoinLeftAfter && (state.DelaySecs < 1 || state.DelaySecs > deletion.MaxDelaySecs):
+		return deletion.ErrDelayOutOfRange
+	}
+	return nil
+}
+
+// deletionJoinLeftRead reads the shared flag and the rules of a chat.
+func deletionJoinLeftRead(ctx context.Context, chatID int64) (flag bool, rules *deletion.Rules, err error) {
+	settings, err := deletionFlagLookup(ctx, chatID)
+	if err != nil {
+		return false, nil, err
+	}
+	rules, err = deletionRulesLookup(ctx, chatID)
+	if err != nil {
+		return false, nil, err
+	}
+	return settings.ShouldCleanService, rules, nil
+}
+
+// deletionJoinLeftHolds reports whether the stored state already is the requested one. Keep also
+// needs both delay rows gone: with the flag off they mean nothing, but a stale one must not be
+// left to come back at a later Now (D-26).
+func deletionJoinLeftHolds(kind string, state deletion.JoinLeftState, flag bool, rules *deletion.Rules) bool {
+	delay, on := deletionEffectiveDelay(kind, rules, flag)
+	switch state.Mode {
+	case deletion.JoinLeftKeep:
+		_, joined := rules.Delays[deletion.KindJoined]
+		_, left := rules.Delays[deletion.KindLeft]
+		return !on && !joined && !left
+	case deletion.JoinLeftNow:
+		return on && delay == 0
+	default:
+		return on && delay == state.DelaySecs
+	}
+}
+
+// deletionJoinLeftResult builds the result of applyCleanServiceRule from the state read.
+func deletionJoinLeftResult(outcome deletionApplyOutcome, kind string, flag bool, rules *deletion.Rules) deletionApplyResult {
+	delay, on := deletionEffectiveDelay(kind, rules, flag)
+	return deletionApplyResult{Outcome: outcome, Rules: rules, CleanService: flag, Delay: delay, On: on}
 }

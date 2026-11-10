@@ -20,6 +20,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
@@ -344,6 +345,14 @@ func applyCleanWelcome(ctx context.Context, chatID int64, on bool) greetingApply
 // applyCleanGoodbye stores the "delete the last goodbye" switch.
 func applyCleanGoodbye(ctx context.Context, chatID int64, on bool) greetingApplyResult {
 	return finishGreetingApply(ctx, chatID, "SetCleanGoodbyeSetting", greetingWrites.CleanGoodbye(chatID, on))
+}
+
+// applyCleanService stores the shared /cleanservice flag, the on/off switch of the joined and
+// left service messages, and removes both of their delay rows in one transaction, so a delay
+// chosen before an off and on never comes back (D-26). It is the one write path of /cleanservice
+// on and off, and drops the greetings and delete_rules cache keys.
+func applyCleanService(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "ApplyCleanServiceFlag", deletion.ApplyCleanServiceFlag(ctx, chatID, on))
 }
 
 // applyGreetingText stores one greeting's text (the HTML the editor keeps) and nothing
@@ -782,8 +791,12 @@ var delJoinedToggleConfig = greetingToggleConfig{
 	getPref: func(chatID int64) bool {
 		return greetings.GetGreetingSettings(chatID).ShouldCleanService
 	},
-	setPref:              greetings.SetShouldCleanService,
-	saveErrLog:           "SetShouldCleanService",
+	setPref: func(chatID int64, val bool) error {
+		ctx, cancel := greetingApplyContext()
+		defer cancel()
+		return applyCleanService(ctx, chatID, val).Err
+	},
+	saveErrLog:           "ApplyCleanServiceFlag",
 	connectBotAdmin:      true,
 	showEnabled:          "greetings_clean_service_should",
 	showDisabled:         "greetings_clean_service_not",

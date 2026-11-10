@@ -221,12 +221,18 @@ func deletionServiceKindOf(msg *gotgbot.Message) (deletionRow, bool) {
 
 // deletionEffectiveDelay is the effective rule of one kind: whether a rule is on and the delay
 // in seconds (0 deletes at once). For every kind but the two that share the /cleanservice flag
-// it is the stored row alone: on when the rules hold the kind, with the delay as stored.
+// it is the stored row alone: on when the rules hold the kind, with the delay as stored. For
+// joined and left the shared flag is the on/off switch and the row only holds the delay (D-02):
+// with the flag off both read Keep whatever a row says, otherwise the row's delay or 0 (delete
+// now) when the kind has none.
 func deletionEffectiveDelay(kind string, rules *deletion.Rules, cleanServiceOn bool) (delay int, on bool) {
-	_ = cleanServiceOn
-	if rules == nil {
+	if deletion.SharesCleanServiceFlag(kind) && !cleanServiceOn {
 		return 0, false
 	}
-	delay, on = rules.Delays[kind]
-	return delay, on
+	if rules != nil {
+		if stored, present := rules.Delays[kind]; present {
+			return stored, true
+		}
+	}
+	return 0, deletion.SharesCleanServiceFlag(kind)
 }
