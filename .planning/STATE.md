@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
-status: planning
-stopped_at: Phase 15 verified human_needed; Phase 16 next (discuss)
+status: ready_to_execute
+stopped_at: Phase 16 planned (9 plans, checked); next is execute 16-01
 last_updated: "2026-11-09T22:51:10.795Z"
 last_activity: 2026-11-09
 last_activity_desc: Phase 11 execution started
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — NOT STARTED (Phase 15 is built, reviewed, hardened, validated and verified, `human_needed`: its live checks are deferred, see Deferred Items; it is not marked Complete in ROADMAP)
-Plan: not planned yet
-Status: Phase 15 closed on automated evidence: 11 plans executed, review fix pass (WR-01 to WR-04, IN-03), security audit SECURED 33 of 33 with the hardening pass (SEC-01 to SEC-04 fixed, SEC-05 and AR-18 accepted), validation `nyquist_compliant` (77 named tests, 851 test events through CI's gate), verification 13/13 with 11 human items. Next: discuss Phase 16
-Last activity: 2026-11-10 — Phase 15 validated and verified
+Phase: 16 (Scheduled Deletion of Service and Bot Messages) — PLANNED (discussed, UI contract approved, researched, nine plans written and checked twice; execution starts at 16-01)
+Plan: 0 of 9
+Status: Ready to execute Phase 16. Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Last activity: 2026-11-10 — Phase 16 planned
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
