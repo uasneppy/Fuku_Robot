@@ -93,7 +93,9 @@ says "AI not configured". A name check that cannot be answered (an error, a reje
 key, a rate limit, a spent budget) never punishes anyone.
 
 Every check sends that image to Anthropic under the terms of the owner's API
-account, so the owner decides before setting the key. The key is a secret: it is
+account, and so does every name check (a member's first name, last name and
+username are personal data, and retention is that account's, not the bot's), so
+the owner decides before setting the key. The key is a secret: it is
 registered with the log redactor at startup, and any string shaped like an
 Anthropic key (`sk-ant-...`) is scrubbed from log lines even when it was never
 registered. It is sent only in the `x-api-key` request header, never in a URL.
