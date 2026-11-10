@@ -146,7 +146,7 @@ never left believing their chat is protected when it is not.
 | Variable | Meaning |
 |----------|---------|
 | `TYPESAFE_API_KEY` | TypeSafe API key used for every check. One credential for the whole bot; chats cannot bring their own. Empty disables the feature. |
-| `ENABLE_AISPAM` | Global kill switch for every AI check, `/aispam` and the raid checks, text and images. Default `true`; `/aispam` still stays off in chats that never enabled it. Set to `false`, nothing goes to TypeSafe or Anthropic even with the keys set. |
+| `ENABLE_AISPAM` | Global kill switch for every AI check, `/aispam`, the raid checks (text and images) and the AI spam-name rule of the Member requirements page. Default `true`; `/aispam` still stays off in chats that never enabled it, and the name rule stays off until an owner sets it to a punishment. Set to `false`, nothing goes to TypeSafe or Anthropic even with the keys set. |
 | `ANTHROPIC_API_KEY` | Anthropic key for the raid protection's image checks. Empty means no image is ever sent. Every check sends that image to Anthropic under the terms of the owner's API account. The same key serves the AI spam-name rule of the Member requirements page, which sends only a member's names. |
 
 The key is registered with `logredact`, so it never appears in logs.

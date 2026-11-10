@@ -801,7 +801,7 @@ parse falls back to its default, with only a warning in the log.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | — | TypeSafe API key ([typesafe.ai](https://typesafe.ai)). Without it the filter does nothing. |
-| `ENABLE_AISPAM` | `true` | Global kill switch for every AI check (text, images and names). Chats still have to opt in with `/aispam on`. |
+| `ENABLE_AISPAM` | `true` | Global kill switch for every AI check (text, images and names). `/aispam` still has to be turned on per chat, and the AI spam-name rule stays off until an owner sets it to a punishment. |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key for the raid image checks and the AI spam-name rule of the Member requirements page (only names are sent for the rule, under the terms and retention of the owner's Anthropic account). Without it neither runs. |
 | `ANTHROPIC_MODEL` | `claude-haiku-5-5` | Claude model for those checks. It must accept a forced tool call (a Haiku-class model). |
 
