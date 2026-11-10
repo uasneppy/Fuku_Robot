@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,8 +13,11 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 )
@@ -1270,5 +1274,68 @@ func TestJoinRequestHandlerReportsRequestsHandledElsewhere(t *testing.T) {
 				t.Fatalf("answerCallbackQuery calls = %d, want 1", len(calls))
 			}
 		})
+	}
+}
+
+// TestCleanServiceCommandResetsDelayRows pins D-26: /cleanservice off and on both remove the
+// joined and left delay rows, so a delay chosen on the settings page never comes back at a later
+// on. The replies and rights are the existing tests'.
+func TestCleanServiceCommandResetsDelayRows(t *testing.T) {
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Greeting Chat"}
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	clean := func() {
+		db.DB.Where("chat_id = ?", chat.Id).Delete(&models.DeleteRule{})
+		db.DB.Where("chat_id = ?", chat.Id).Delete(&models.GreetingSettings{})
+		db.DB.Where("chat_id = ?", chat.Id).Delete(&models.Chat{})
+		dbcache.DeleteCache(dbcache.CacheKey("delete_rules", chat.Id))
+		dbcache.DeleteCache(dbcache.CacheKey("greetings", chat.Id))
+		dbcache.ResetLocalForTest()
+	}
+	clean()
+	t.Cleanup(clean)
+
+	if err := greetings.SetShouldCleanService(chat.Id, true); err != nil {
+		t.Fatalf("seed the flag: %v", err)
+	}
+	if err := deletion.SetRule(context.Background(), chat.Id, deletion.KindJoined, 600); err != nil {
+		t.Fatalf("seed the joined rule: %v", err)
+	}
+	rulesLeft := func() int {
+		rules, err := deletion.GetRulesFresh(context.Background(), chat.Id)
+		if err != nil {
+			t.Fatalf("read the rules: %v", err)
+		}
+		return len(rules.Delays)
+	}
+
+	if err := greetingsModule.delJoined(bot, newGreetingMessageContext(bot, chat, admin, "/cleanservice off")); err != ext.EndGroups {
+		t.Fatalf("/cleanservice off error = %v, want EndGroups", err)
+	}
+	if greetings.GetGreetingSettings(chat.Id).ShouldCleanService {
+		t.Error("the flag is still on after /cleanservice off")
+	}
+	if n := rulesLeft(); n != 0 {
+		t.Errorf("%d delay rows after /cleanservice off, want none", n)
+	}
+
+	if err := greetingsModule.delJoined(bot, newGreetingMessageContext(bot, chat, admin, "/cleanservice on")); err != ext.EndGroups {
+		t.Fatalf("/cleanservice on error = %v, want EndGroups", err)
+	}
+	if !greetings.GetGreetingSettings(chat.Id).ShouldCleanService {
+		t.Error("the flag is off after /cleanservice on")
+	}
+	rules, err := deletion.GetRules(context.Background(), chat.Id)
+	if err != nil || len(rules.Delays) != 0 {
+		t.Fatalf("rules after /cleanservice on = %+v, %v, want no rows (the old 600 must not come back)", rules, err)
+	}
+	for _, kind := range []string{deletion.KindJoined, deletion.KindLeft} {
+		if delay, on := deletionEffectiveDelay(kind, rules, true); delay != 0 || !on {
+			t.Errorf("%s reads (%d, %v) after /cleanservice on, want Delete now", kind, delay, on)
+		}
+	}
+	if calls := client.callsFor("sendMessage"); len(calls) != 2 {
+		t.Errorf("sendMessage calls = %d, want one reply per command", len(calls))
 	}
 }

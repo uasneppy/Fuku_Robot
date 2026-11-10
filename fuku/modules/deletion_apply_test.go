@@ -13,6 +13,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
@@ -248,6 +249,241 @@ func TestApplyDeleteRule(t *testing.T) {
 		result := applyDeleteRule(ctx, chatID, deletion.KindPinned, deletionSet(60))
 		if result.Outcome != deletionSaveFailed || !errors.Is(result.Err, boom) || writes != 0 {
 			t.Errorf("result = %+v with %d writes, want a save failure and no write", result, writes)
+		}
+	})
+}
+
+// deletionSeedJoinLeft stores the shared flag and the two delay rows directly, as a chat that was
+// configured earlier would have them. A negative delay stores no row.
+func deletionSeedJoinLeft(t *testing.T, chatID int64, flag bool, joined, left int) {
+	t.Helper()
+	if err := greetings.SetShouldCleanService(chatID, flag); err != nil {
+		t.Fatalf("seed the flag: %v", err)
+	}
+	for kind, delay := range map[string]int{deletion.KindJoined: joined, deletion.KindLeft: left} {
+		if delay < 0 {
+			continue
+		}
+		if err := deletion.SetRule(context.Background(), chatID, kind, delay); err != nil {
+			t.Fatalf("seed the %s rule: %v", kind, err)
+		}
+	}
+}
+
+// deletionStoredFlag reads the shared /cleanservice flag straight from the database.
+func deletionStoredFlag(t *testing.T, chatID int64) bool {
+	t.Helper()
+	var row models.GreetingSettings
+	if err := db.DB.Where("chat_id = ?", chatID).First(&row).Error; err != nil {
+		t.Fatalf("read the greetings row: %v", err)
+	}
+	return row.ShouldCleanService
+}
+
+// deletionCountHook counts how often the transaction of ApplyJoinLeftRule and
+// ApplyCleanServiceFlag ran, so a test can prove a call wrote nothing (no transaction opened).
+func deletionCountHook(t *testing.T, fail error) *int {
+	t.Helper()
+	calls := 0
+	t.Cleanup(deletion.SetApplyHookForTest(func() error { calls++; return fail }))
+	return &calls
+}
+
+func TestApplyCleanServiceRule(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("keep removes both rows and turns the flag off", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		deletionSeedJoinLeft(t, chatID, true, 600, 30)
+		result := applyCleanServiceRule(ctx, chatID, deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftKeep})
+		if result.Outcome != deletionApplied || result.Err != nil || result.Rules == nil {
+			t.Fatalf("result = %+v, want applied with the rules read back", result)
+		}
+		if deletionStoredFlag(t, chatID) || result.CleanService {
+			t.Error("the flag is still on after Keep")
+		}
+		if len(result.Rules.Delays) != 0 {
+			t.Errorf("rules read back = %v, want both rows gone", result.Rules.Delays)
+		}
+		if result.On || result.Delay != 0 {
+			t.Errorf("effective state = (%d, %v), want Keep", result.Delay, result.On)
+		}
+		for _, kind := range []string{deletion.KindJoined, deletion.KindLeft} {
+			if _, has := deletionStoredRow(t, chatID, kind); has {
+				t.Errorf("the %s row survived Keep", kind)
+			}
+		}
+	})
+
+	t.Run("now removes only this kind's row", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		deletionSeedJoinLeft(t, chatID, false, 600, 30)
+		result := applyCleanServiceRule(ctx, chatID, deletion.KindLeft, deletion.JoinLeftState{Mode: deletion.JoinLeftNow})
+		if result.Outcome != deletionApplied || result.Rules == nil {
+			t.Fatalf("result = %+v, want applied", result)
+		}
+		if !deletionStoredFlag(t, chatID) || !result.CleanService {
+			t.Error("the flag is off after Now")
+		}
+		if _, has := deletionStoredRow(t, chatID, deletion.KindLeft); has {
+			t.Error("the left row survived Now")
+		}
+		if row, has := deletionStoredRow(t, chatID, deletion.KindJoined); !has || row.DelaySecs != 600 {
+			t.Errorf("joined row = %+v (%v), want the stored 600 to stay", row, has)
+		}
+		if result.Delay != 0 || !result.On {
+			t.Errorf("effective left = (%d, %v), want Delete now", result.Delay, result.On)
+		}
+	})
+
+	t.Run("after turns the flag on and the other kind reads Delete now", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		deletionSeedJoinLeft(t, chatID, false, -1, -1)
+		result := applyCleanServiceRule(ctx, chatID, deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 600})
+		if result.Outcome != deletionApplied || result.Rules == nil || result.Delay != 600 || !result.On {
+			t.Fatalf("result = %+v, want applied with joined at 600", result)
+		}
+		if row, has := deletionStoredRow(t, chatID, deletion.KindJoined); !has || row.DelaySecs != 600 || !deletionStoredFlag(t, chatID) {
+			t.Errorf("joined row = %+v (%v) or the flag is off", row, has)
+		}
+		// The documented coupling (D-02): the left kind has no row and the shared flag is on now.
+		if delay, on := deletionEffectiveDelay(deletion.KindLeft, result.Rules, result.CleanService); delay != 0 || !on {
+			t.Errorf("effective left = (%d, %v), want Delete now through the shared flag", delay, on)
+		}
+	})
+
+	t.Run("a repeated press writes nothing", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		deletionSeedJoinLeft(t, chatID, true, 600, -1)
+		calls := deletionCountHook(t, nil)
+		for _, c := range []struct {
+			name  string
+			kind  string
+			state deletion.JoinLeftState
+		}{
+			{"After 600 on joined", deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 600}},
+			{"Now on left", deletion.KindLeft, deletion.JoinLeftState{Mode: deletion.JoinLeftNow}},
+		} {
+			result := applyCleanServiceRule(ctx, chatID, c.kind, c.state)
+			if result.Outcome != deletionUnchanged || result.Rules == nil {
+				t.Errorf("%s: result = %+v, want unchanged with the stored state", c.name, result)
+			}
+		}
+		if *calls != 0 {
+			t.Errorf("an unchanged press opened %d transactions", *calls)
+		}
+
+		// Keep on a chat that is already Keep with no rows is unchanged too, but a stale row makes it a write.
+		other := uniqueModuleChatID()
+		deletionCleanup(t, other)
+		deletionSeedJoinLeft(t, other, false, -1, -1)
+		keep := deletion.JoinLeftState{Mode: deletion.JoinLeftKeep}
+		if r := applyCleanServiceRule(ctx, other, deletion.KindJoined, keep); r.Outcome != deletionUnchanged {
+			t.Errorf("Keep on a clean Keep chat = %+v, want unchanged", r)
+		}
+		deletionSeedJoinLeft(t, other, false, -1, 30)
+		if r := applyCleanServiceRule(ctx, other, deletion.KindJoined, keep); r.Outcome != deletionApplied {
+			t.Errorf("Keep with a stale left row = %+v, want applied (the row is removed)", r)
+		}
+		if _, has := deletionStoredRow(t, other, deletion.KindLeft); has {
+			t.Error("a stale row survived Keep")
+		}
+	})
+
+	t.Run("refused before any write", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		deletionSeedJoinLeft(t, chatID, false, -1, 30)
+		calls := deletionCountHook(t, nil)
+		lookups := 0
+		mreqSwap(t, &deletionFlagLookup, func(context.Context, int64) (*models.GreetingSettings, error) {
+			lookups++
+			return &models.GreetingSettings{}, nil
+		})
+		for _, c := range []struct {
+			name  string
+			kind  string
+			state deletion.JoinLeftState
+		}{
+			{"a delay of 0", deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 0}},
+			{"a negative delay", deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: -5}},
+			{"a delay of 86401", deletion.KindLeft, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 86401}},
+			{"a kind that is not joined or left", deletion.KindPinned, deletion.JoinLeftState{Mode: deletion.JoinLeftNow}},
+			{"a bot kind", deletion.KindBotRules, deletion.JoinLeftState{Mode: deletion.JoinLeftKeep}},
+			{"no mode", deletion.KindJoined, deletion.JoinLeftState{}},
+		} {
+			if result := applyCleanServiceRule(ctx, chatID, c.kind, c.state); result.Outcome != deletionRefused || result.Err == nil {
+				t.Errorf("%s: result = %+v, want refused with an error", c.name, result)
+			}
+		}
+		if *calls != 0 || lookups != 0 {
+			t.Errorf("a refused call reached a seam: %d transactions, %d reads", *calls, lookups)
+		}
+		if deletionStoredFlag(t, chatID) {
+			t.Error("a refused call turned the flag on")
+		}
+	})
+
+	t.Run("both caches are dropped", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		deletionSeedJoinLeft(t, chatID, false, -1, -1)
+		// Cached reads first: the apply must drop both keys.
+		if rules, err := deletion.GetRules(ctx, chatID); err != nil || len(rules.Delays) != 0 {
+			t.Fatalf("GetRules before = %+v, %v", rules, err)
+		}
+		if greetings.GetGreetingSettings(chatID).ShouldCleanService {
+			t.Fatal("the flag reads on before the write")
+		}
+		result := applyCleanServiceRule(ctx, chatID, deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 60})
+		if result.Outcome != deletionApplied {
+			t.Fatalf("result = %+v", result)
+		}
+		if rules, err := deletion.GetRules(ctx, chatID); err != nil || rules.Delays[deletion.KindJoined] != 60 {
+			t.Errorf("cached rules after = %+v, %v, want joined 60", rules, err)
+		}
+		if !greetings.GetGreetingSettings(chatID).ShouldCleanService {
+			t.Error("the cached greetings read after the write still has the flag off")
+		}
+	})
+
+	t.Run("a failed transaction changes nothing", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		deletionSeedJoinLeft(t, chatID, false, -1, 30)
+		boom := errors.New("second step failed")
+		calls := deletionCountHook(t, boom)
+		result := applyCleanServiceRule(ctx, chatID, deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 600})
+		if result.Outcome != deletionSaveFailed || !errors.Is(result.Err, boom) {
+			t.Fatalf("result = %+v, want save failed carrying the error", result)
+		}
+		if *calls != 1 {
+			t.Errorf("hook ran %d times, want once", *calls)
+		}
+		if deletionStoredFlag(t, chatID) {
+			t.Error("the flag changed although the transaction failed")
+		}
+		if _, has := deletionStoredRow(t, chatID, deletion.KindJoined); has {
+			t.Error("a joined row was written although the transaction failed")
+		}
+		if row, has := deletionStoredRow(t, chatID, deletion.KindLeft); !has || row.DelaySecs != 30 {
+			t.Errorf("left row = %+v (%v), want the old 30", row, has)
+		}
+	})
+
+	t.Run("an unreadable state writes nothing", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		calls := deletionCountHook(t, nil)
+		boom := errors.New("read refused")
+		mreqSwap(t, &deletionFlagLookup, func(context.Context, int64) (*models.GreetingSettings, error) { return nil, boom })
+		result := applyCleanServiceRule(ctx, chatID, deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftNow})
+		if result.Outcome != deletionSaveFailed || !errors.Is(result.Err, boom) || *calls != 0 {
+			t.Errorf("result = %+v with %d transactions, want a save failure and no write", result, *calls)
 		}
 	})
 }

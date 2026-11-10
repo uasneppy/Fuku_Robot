@@ -44,6 +44,33 @@ func TestDeletionEffectiveRule(t *testing.T) {
 		}
 	})
 
+	t.Run("joined and left", func(t *testing.T) {
+		for _, kind := range []string{deletion.KindJoined, deletion.KindLeft} {
+			other := deletion.KindLeft
+			if kind == deletion.KindLeft {
+				other = deletion.KindJoined
+			}
+			for _, c := range []struct {
+				name  string
+				rules *deletion.Rules
+				flag  bool
+				delay int
+				on    bool
+			}{
+				{"the flag off with a stale row is Keep", &deletion.Rules{Delays: map[string]int{kind: 600}}, false, 0, false},
+				{"the flag off with no row is Keep", &deletion.Rules{Delays: map[string]int{}}, false, 0, false},
+				{"the flag on with no row is Delete now", &deletion.Rules{Delays: map[string]int{}}, true, 0, true},
+				{"the flag on with a row is that delay", &deletion.Rules{Delays: map[string]int{kind: 600}}, true, 600, true},
+				{"the other kind's row never counts", &deletion.Rules{Delays: map[string]int{other: 600}}, true, 0, true},
+				{"nil rules with the flag on is Delete now", nil, true, 0, true},
+			} {
+				if delay, on := deletionEffectiveDelay(kind, c.rules, c.flag); delay != c.delay || on != c.on {
+					t.Errorf("%s: %s got (%d, %v), want (%d, %v)", kind, c.name, delay, on, c.delay, c.on)
+				}
+			}
+		}
+	})
+
 	t.Run("a pinned notice gets the stored delay", func(t *testing.T) {
 		msg := &gotgbot.Message{PinnedMessage: gotgbot.Message{MessageId: 7}}
 		row, ok := deletionServiceKindOf(msg)
