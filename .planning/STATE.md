@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
-status: ready_to_execute
+status: executing
 stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-11-10T09:25:42.034Z"
+last_updated: "2026-11-10T09:37:27.570Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 11 execution started
-state_head: e0989bd285ddcec4cb3012c59d58c299e302beac
+state_head: 4041fd9da2061eef3831b4f3c38564e5a920cbf0
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 87
-  completed_plans: 78
+  completed_plans: 79
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 done: migration, models, rules and queue repository; next is 16-02)
-Plan: 1 of 9
-Status: Executing Phase 16 (1 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
-Last activity: 2026-11-10 — Plan 16-01 executed
+Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 and 16-02 done: storage, then the kind tables and apply functions; next is 16-03)
+Plan: 2 of 9
+Status: Executing Phase 16 (2 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Last activity: 2026-11-10 — Plan 16-02 executed
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -327,7 +327,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-10T09:25:40.233Z
-Stopped at: Completed 16-01-PLAN.md
+Stopped at: Completed 16-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
