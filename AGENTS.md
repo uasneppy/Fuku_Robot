@@ -641,7 +641,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   configured); configured, it keeps the three-row shape. A Redis outage, a paused breaker and a failing provider are never
   a line (D-04, M22). The AI card says its own consequence (`settings_mreq_confirm_ai_kick`, `_ban`, `_mute`, from
   `ConfirmKeys`): the generic sentence "members already in the group included" would be false, because the AI rule judges an
-  established member only after a name change. `TestSettingsMreqAIStatus` proves the six combinations of the contract's
+  established member only after a name change; it also says a new member is checked "when they join or at their first
+  message" (security SEC-04: with Check on join off a new member is judged at their first message), in all 8 locales.
+  `TestSettingsMreqAIStatus` proves the six combinations of the contract's
   composition table in both menus, and `TestSettingsMreqOpenCost` that the AI screen costs what a name rule's screen costs.
   The one reader is `settingsMreqReadStatus(p, row, scope, fresh)`, and every draw of the page and of a rule screen goes
   through `settingsMreqDrawPage` or `settingsMreqDrawRule`: the database is read first (a failed read is the cannot-open
