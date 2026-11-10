@@ -1,0 +1,83 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-10T09:40:00.000Z",
+  "phase": "16",
+  "phase_name": "Scheduled Deletion of Service and Bot Messages",
+  "phase_dir": ".planning/phases/16-scheduled-deletion-of-service-and-bot-messages",
+  "plan": 3,
+  "task": 0,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": "16-01",
+      "name": "data layer: migration, models, rules and queue repository, PostgreSQL guarantees",
+      "status": "done",
+      "commit": "d49ee3b"
+    },
+    {
+      "id": "16-02",
+      "name": "kind tables, effective rule, apply functions, /cleanservice apply",
+      "status": "done",
+      "commit": "bd2741c"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": "16-03",
+      "name": "tracer: pacer, inline delete, service watcher at group -5, cleanService rewiring",
+      "status": "not_started"
+    },
+    {
+      "id": "16-04",
+      "name": "worker, delete-right reader, scoped latch, StopDeletionWorker",
+      "status": "not_started"
+    },
+    {
+      "id": "16-05",
+      "name": "scheduleBotMessage and welcome/goodbye/rules/manual-punishment hooks",
+      "status": "not_started"
+    },
+    {
+      "id": "16-06",
+      "name": "requirement notices, mute notice at the 24 h cap, antiflood/blacklist/aispam notices",
+      "status": "not_started"
+    },
+    {
+      "id": "16-07",
+      "name": "57 locale keys in 8 files and limits tests",
+      "status": "not_started"
+    },
+    {
+      "id": "16-08",
+      "name": "Deletion page with the Hidden field",
+      "status": "not_started"
+    },
+    {
+      "id": "16-09",
+      "name": "closing e2e, AGENTS.md, docs, 16-SPIKE.md, gate, requirement ticks",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Owner live checks and confirmations deferred by standing choice (Phases 10 to 15 SPIKE files; Phase 16 A16-A2, A16-A3, A16-A4, A16-A6, A16-A8 and D-20..D-28)",
+      "context": "No Telegram test group or Anthropic key in this environment",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Phase 16 D-01..D-19 accepted by the owner; D-20..D-28 are orchestrator amendments from research and UI check",
+      "rationale": "see 16-CONTEXT.md",
+      "phase": "16"
+    }
+  ],
+  "uncommitted_files": [
+    "?? .planning/phases/16-scheduled-deletion-of-service-and-bot-messages/.continue-here.md"
+  ],
+  "next_action": "Run the guardrail checks (git status, CI state of the newest head), then spawn the sequential executor for plan 16-03; re-run its gates yourself and push by SHA",
+  "context_notes": "HEAD bd2741c pushed, tree clean at the pause. No subagent running. Read .continue-here.md in the phase directory and handoff/orchestrator-guardrails.md first. The one uncommitted file measured at write time was the handoff's own .continue-here.md; both handoff files are committed and pushed right after this write, so the tree is clean on resume."
+}
