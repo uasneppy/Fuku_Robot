@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"slices"
+
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
@@ -40,11 +42,111 @@ var deletionBotPresets = []int{60, 600, 3600, 21600, 86400}
 // are never deleted and never offered (D-21).
 var deletionServiceRows = []deletionRow{
 	{
+		Code: "sj", Kind: deletion.KindJoined,
+		NameKey: "settings_del_svc_joined", DescKey: "settings_del_desc_joined",
+		HintKey: "settings_del_hint_cleanservice",
+		Presets: deletionServicePresets,
+		Match:   func(m *gotgbot.Message) bool { return len(m.NewChatMembers) > 0 },
+	},
+	{
+		Code: "sl", Kind: deletion.KindLeft,
+		NameKey: "settings_del_svc_left", DescKey: "settings_del_desc_left",
+		HintKey: "settings_del_hint_cleanservice",
+		Presets: deletionServicePresets,
+		Match:   func(m *gotgbot.Message) bool { return m.LeftChatMember != nil },
+	},
+	{
+		Code: "sp", Kind: deletion.KindPhoto,
+		NameKey: "settings_del_svc_photo", DescKey: "settings_del_desc_photo",
+		Presets: deletionServicePresets,
+		Match:   func(m *gotgbot.Message) bool { return deletionAnyOf(len(m.NewChatPhoto) > 0, m.DeleteChatPhoto) },
+	},
+	{
+		Code: "sh", Kind: deletion.KindTitle,
+		NameKey: "settings_del_svc_title", DescKey: "settings_del_desc_title",
+		Presets: deletionServicePresets,
+		Match:   func(m *gotgbot.Message) bool { return m.NewChatTitle != "" },
+	},
+	{
 		Code: "sn", Kind: deletion.KindPinned,
 		NameKey: "settings_del_svc_pinned", DescKey: "settings_del_desc_pinned",
 		Presets: deletionServicePresets,
 		Match:   func(m *gotgbot.Message) bool { return m.PinnedMessage != nil },
 	},
+	{
+		Code: "sv", Kind: deletion.KindVideo,
+		NameKey: "settings_del_svc_video", DescKey: "settings_del_desc_video",
+		Presets: deletionServicePresets,
+		Match: func(m *gotgbot.Message) bool {
+			return deletionAnyOf(m.VideoChatScheduled != nil, m.VideoChatStarted != nil,
+				m.VideoChatEnded != nil, m.VideoChatParticipantsInvited != nil)
+		},
+	},
+	{
+		Code: "sf", Kind: deletion.KindForum,
+		NameKey: "settings_del_svc_forum", DescKey: "settings_del_desc_forum",
+		Presets: deletionServicePresets,
+		Match: func(m *gotgbot.Message) bool {
+			return deletionAnyOf(m.ForumTopicEdited != nil, m.ForumTopicClosed != nil, m.ForumTopicReopened != nil,
+				m.GeneralForumTopicHidden != nil, m.GeneralForumTopicUnhidden != nil)
+		},
+	},
+	{
+		Code: "sb", Kind: deletion.KindBoost,
+		NameKey: "settings_del_svc_boost", DescKey: "settings_del_desc_boost",
+		Presets: deletionServicePresets,
+		Match:   func(m *gotgbot.Message) bool { return m.BoostAdded != nil },
+	},
+	{
+		Code: "sa", Kind: deletion.KindTimer,
+		NameKey: "settings_del_svc_timer", DescKey: "settings_del_desc_timer",
+		Presets: deletionServicePresets,
+		Match:   func(m *gotgbot.Message) bool { return m.MessageAutoDeleteTimerChanged != nil },
+	},
+	{
+		Code: "sk", Kind: deletion.KindBackground,
+		NameKey: "settings_del_svc_background", DescKey: "settings_del_desc_background",
+		Presets: deletionServicePresets,
+		Match:   func(m *gotgbot.Message) bool { return m.ChatBackgroundSet != nil },
+	},
+	{
+		Code: "sg", Kind: deletion.KindGiveaway,
+		NameKey: "settings_del_svc_gifts", DescKey: "settings_del_desc_gifts",
+		Presets: deletionServicePresets,
+		Match: func(m *gotgbot.Message) bool {
+			return deletionAnyOf(m.GiveawayCreated != nil, m.GiveawayWinners != nil, m.GiveawayCompleted != nil,
+				m.Gift != nil, m.UniqueGift != nil, m.GiftUpgradeSent != nil)
+		},
+	},
+	{
+		Code: "so", Kind: deletion.KindOther,
+		NameKey: "settings_del_svc_other", DescKey: "settings_del_desc_other",
+		Presets: deletionServicePresets,
+		Match:   deletionOtherService,
+	},
+}
+
+// deletionAnyOf reports whether any of the presence tests is true. The predicates are written
+// as one call over plain comparisons, so a row with many fields has no branch of its own.
+func deletionAnyOf(present ...bool) bool {
+	return slices.Contains(present, true)
+}
+
+// deletionOtherService is the predicate of the "other" row: every deletable service field of
+// the pinned gotgbot version that has no row of its own. TestServiceKindsCoverMessageFields
+// fails when a gotgbot upgrade adds a field that is in neither this list nor one of the others.
+func deletionOtherService(m *gotgbot.Message) bool {
+	return deletionAnyOf(
+		m.UsersShared != nil, m.ChatShared != nil, m.WriteAccessAllowed != nil, m.WebAppData != nil,
+		m.ProximityAlertTriggered != nil, m.ChecklistTasksDone != nil, m.ChecklistTasksAdded != nil,
+		m.SuggestedPostApproved != nil, m.SuggestedPostApprovalFailed != nil, m.SuggestedPostDeclined != nil,
+		m.SuggestedPostPaid != nil, m.SuggestedPostRefunded != nil,
+		m.SuccessfulPayment != nil, m.RefundedPayment != nil, m.PassportData != nil, m.ConnectedWebsite != "",
+		m.ChatOwnerLeft != nil, m.ChatOwnerChanged != nil,
+		m.CommunityChatAdded != nil, m.CommunityChatJoined != nil, m.CommunityChatRemoved != nil,
+		m.DirectMessagePriceChanged != nil, m.PaidMessagePriceChanged != nil, m.ManagedBotCreated != nil,
+		m.PollOptionAdded != nil, m.PollOptionDeleted != nil,
+	)
 }
 
 // deletionBotRows are the five kinds of the bot's own messages that can be scheduled, in page
