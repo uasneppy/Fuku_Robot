@@ -36,7 +36,7 @@
     {
       "number": "16",
       "name": "Scheduled Deletion of Service and Bot Messages",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "17",
@@ -55,9 +55,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 6 of 10 · 0% · ready to verify"
+    "command": "/gsd-progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-11-09T22:51:00.044Z"
+  "updated_at": "2026-11-10T09:25:35.876Z"
 }

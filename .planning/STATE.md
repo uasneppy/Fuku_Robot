@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
 status: ready_to_execute
-stopped_at: Phase 16 planned (9 plans, checked); next is execute 16-01
-last_updated: "2026-11-09T22:51:10.795Z"
-last_activity: 2026-11-09
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-11-10T09:25:42.034Z"
+last_activity: 2026-11-10
 last_activity_desc: Phase 11 execution started
-state_head: 2b58a7cfcb68446bcec5593a8e1f7b3d80819ec4
+state_head: e0989bd285ddcec4cb3012c59d58c299e302beac
 progress:
   total_phases: 10
   completed_phases: 0
-  total_plans: 78
-  completed_plans: 77
+  total_plans: 87
+  completed_plans: 78
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — PLANNED (discussed, UI contract approved, researched, nine plans written and checked twice; execution starts at 16-01)
-Plan: 0 of 9
-Status: Ready to execute Phase 16. Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
-Last activity: 2026-11-10 — Phase 16 planned
+Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 done: migration, models, rules and queue repository; next is 16-02)
+Plan: 1 of 9
+Status: Executing Phase 16 (1 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Last activity: 2026-11-10 — Plan 16-01 executed
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -151,6 +151,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P09 | 45min | 3 tasks | 6 files |
 | Phase 15 P10 | 50min | 3 tasks | 5 files |
 | Phase 15 P11 | 130min | 3 tasks | 9 files |
+| Phase 16 P01 | 15min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -325,8 +326,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-09T22:51:09.880Z
-Stopped at: Completed 15-11-PLAN.md
+Last session: 2026-11-10T09:25:40.233Z
+Stopped at: Completed 16-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
