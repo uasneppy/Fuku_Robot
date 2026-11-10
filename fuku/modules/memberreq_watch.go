@@ -337,7 +337,10 @@ func memberReqLookupCachedWith(settings *models.ChatRequirements, chatID, userID
 // lookup rule is satisfied (it never calls Telegram or the provider and writes nothing). Any other
 // open reason is false and the member is handed to a job.
 func memberReqAIOnlyPaused(settings *models.ChatRequirements, chatID, userID int64, passValue string, names memberReqNames) bool {
-	if !memberReqLookupRulesOf(settings).AI || !(memberReqAIPaused(chatID) || memberReqAILatched(chatID)) {
+	if !memberReqLookupRulesOf(settings).AI {
+		return false
+	}
+	if !memberReqAIPaused(chatID) && !memberReqAILatched(chatID) {
 		return false
 	}
 	othersSatisfied, _ := memberReqLookupCachedWith(settings, chatID, userID, passValue, names, true)
