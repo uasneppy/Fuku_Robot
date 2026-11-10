@@ -48,7 +48,10 @@ func TestMemberReqAIEstablishedMemberIgnoresCachedBreach(t *testing.T) {
 			t.Errorf("verdict keys = %v, want the planted one only", after)
 		}
 		mreqAIWantMarker(t, env.chat.Id, member.Id, false)
-		mreqAIWantBaseline(t, member.Id, mreqAIHashOfUser(t, member))
+		// The planted baseline has no expiry, so a rewrite would give it one: the pass writes nothing.
+		if value, ttl, ok := mreqAIBaselineOf(t, member.Id); !ok || value != mreqAIHashOfUser(t, member) || ttl > 0 {
+			t.Errorf("baseline = %q ttl %v present %t, want it untouched", value, ttl, ok)
+		}
 	})
 
 	t.Run("the rule itself answers pass for an equal baseline and no marker", func(t *testing.T) {

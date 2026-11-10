@@ -100,7 +100,7 @@ func TestMemberReqWatcherAI(t *testing.T) {
 		{"a baseline equal to the names and no marker", func(t *testing.T, env *memberReqEnv, member gotgbot.User) {
 			mreqAIPlant(t, env, memberReqAIBaselineKey(member.Id), mreqAIHashOfUser(t, member))
 		}},
-		{"the recorded gap: a baseline equal to the names, no marker and another account's cached breach", func(t *testing.T, env *memberReqEnv, member gotgbot.User) {
+		{"the rule (SEC-01): a baseline equal to the names, no marker and another account's cached breach", func(t *testing.T, env *memberReqEnv, member gotgbot.User) {
 			mreqAIPlant(t, env, memberReqAIBaselineKey(member.Id), mreqAIHashOfUser(t, member))
 			mreqAIPlant(t, env, mreqAIKeyOf(t, mreqAINamesOfUser(member)), "0.95")
 		}},
@@ -311,7 +311,7 @@ func TestMemberReqWatcherAI(t *testing.T) {
 			{"zero", "0", "", false, true},
 			{"at the bar, nothing else", "0.9", "", false, false},
 			{"above the bar, nothing else", "0.97", "", false, false},
-			{"above the bar with the equal baseline and no marker (the recorded gap)", "0.97", hash, false, true},
+			{"above the bar with the equal baseline and no marker (the rule, SEC-01)", "0.97", hash, false, true},
 			{"above the bar with the equal baseline and a marker", "0.97", hash, true, false},
 			{"NaN", "NaN", "", false, false},
 			{"infinity", "+Inf", "", false, false},

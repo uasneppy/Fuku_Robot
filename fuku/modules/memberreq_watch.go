@@ -232,11 +232,11 @@ func (r memberReqAIWatchRead) satisfied() bool {
 // no clock. The member needs no job when the cached verdict of their names parses and is below
 // the bar, or when they have no marker and their baseline equals the current names hash. A miss
 // (empty value), a text that does not parse, NaN, an infinity and a value out of range are not a
-// verdict. Known gap, kept on purpose: a member whose baseline equals their names and who has no
-// marker stays satisfied even when another account's judgement of the same string has since
-// cached a breach, because the baseline is the bot's record that these names were accepted for
-// this member (it errs toward not punishing); a job that runs for that member for another reason
-// breaches them through the rule's own order, where the verdict comes first.
+// verdict. The baseline half is the rule, not a gap (SEC-01): a member whose baseline equals their
+// names and who has no marker stays satisfied even when another account's judgement of the same
+// string has since cached a breach, because the baseline is the bot's record that these names were
+// accepted for this member (it errs toward not punishing); the job answers the same way, because
+// memberReqAIDecide puts the baseline step before the verdict cache.
 func memberReqAIWatchSatisfied(verdictValue, baseline string, marker bool, hash string) bool {
 	if probability, ok := memberReqAIParseProbability(verdictValue); ok && probability < memberReqAIBar {
 		return true

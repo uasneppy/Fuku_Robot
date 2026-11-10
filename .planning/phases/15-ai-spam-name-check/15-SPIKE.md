@@ -286,9 +286,9 @@ or a clone are the usual ones. Fix in place.
   changed name or an admin's approval. The alternative (a Fresh read bypasses the cache) turns the button into a re-roll of
   a model that cannot be made deterministic; check 2 tells you how much that matters.
 - **The baseline in the watcher or in the job.** The watcher reads the baseline and the marker and writes nothing; the job
-  writes them (the research's Open Question 2). The recorded gap: a member whose baseline equals their names and who has no
-  marker stays satisfied in the watcher even when another account's judgement of the same string has since cached a breach;
-  a job that runs for that member for another reason breaches them. It errs toward not punishing.
+  writes them (the research's Open Question 2). The rule (security SEC-01): a member whose baseline equals their names and who has no
+  marker stays satisfied in the watcher, and the job passes them before it reads the verdict cache, even when another account's
+  judgement of the same string has since cached a breach. It errs toward not punishing.
 - **A15-A4: the hourly-budget wording.** An "I fixed it" tap answered `mreq_fixed_check_failed` ("Try again in a moment")
   because the member's hourly unit (5 per account) is spent is worded for a moment, not up to an hour. An admin's `/unmute`
   is the fallback. One new key would fix it.

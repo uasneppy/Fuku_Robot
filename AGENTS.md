@@ -188,11 +188,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and no paced live `getChatMember` per message during a pause, and the marker stays, so the first message after the pause is
   judged. It must not treat the AI part as "satisfied": that would take the clean path (`ClearHoldOnClean`) and delete the hold
   of a member held for an AI breach. Any other open reason (a name rule, the photo or channel rule) still hands a job as
-  before (`TestMemberReqWatcherAIPaused`). Known
-  watcher gap, recorded for the owner and pinned by `TestMemberReqWatcherAI`: a member whose baseline equals their names and
-  who has no marker stays satisfied even when another account's judgement of the same string has since cached a breach,
-  because the baseline is the bot's record that these names were accepted for this member (it errs toward not punishing); a
-  job that runs for that member for another reason breaches them, because the rule's own order puts the verdict first.
+  before (`TestMemberReqWatcherAIPaused`). The
+  baseline rule is the same in both halves (SEC-01): a member whose baseline equals their names and who has no marker is
+  satisfied in the watcher and passes in the job even when another account's judgement of the same string has since cached a
+  breach, because the baseline is the bot's record that these names were accepted for this member (it errs toward not
+  punishing, and members already in the group are checked only after a name change, as the page says); a joiner, a marker
+  holder, a renamer, the held release and "I fixed it" still read the cached breach.
   The enforcement switch `memberReqEnforcementLive` is an `atomic.Bool` read only through `memberReqLive()`. It is true by
   default since the "I fixed it" handler exists (the `mreq|v1` bullet under Callbacks): `memberreq.go`'s `init()` stores
   true, and that store is the only production write of it (`LoadMemberRequirements` does not write it, because a test loads
@@ -1630,11 +1631,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   zero on every restart; there is no `/stats` section for them.
   The full order of `memberReqAIRule` (plan 15-05; D-02, D-21): after the checks above one pipelined round reads the verdict,
   the baseline `nm` and the marker `nu` (`memberReqAIReadState`; any error other than a miss is unknown), then
-  `memberReqAIDecide`: (1) a readable verdict decides first, below the bar records a pass and passes, at or above it sets the
-  marker and breaches, answered before any provider call; (2) not joining, no marker and a baseline equal to the current names
-  hash is a pass with no write; (3) not joining, no marker and no baseline records `nm` with `SET NX` and passes with no call;
-  (4) otherwise (a joiner, a marker, a baseline that differs) the flight judges and the caller records the answer (a pass
-  writes `nm = h` and deletes `nu`, a breach sets `nu`, an unknown writes nothing). The flight is shared by callers with
+  `memberReqAIDecide` (security SEC-01 moved the baseline step first): (1) not joining (and not `IgnoreBaseline`), no marker and
+  a baseline equal to the current names hash is a pass with no write, answered before the verdict cache is looked at, so
+  another account's cached breach of an identical canonical string (the cache is global to the fleet) can never reach a
+  member who never renamed, in the job exactly as in the watcher (`TestMemberReqAIEstablishedMemberIgnoresCachedBreach`);
+  (2) a readable verdict decides next, below the bar records a pass and passes, at or above it sets the marker and breaches,
+  answered before any provider call, and it applies to a joiner, a marker holder, a renamer, a member with no baseline and
+  every `IgnoreBaseline` caller; (3) not joining, no marker and no baseline records `nm` with `SET NX` and passes with no
+  call; (4) otherwise (a joiner, a marker, a baseline that differs) the flight judges and the caller records the answer (a
+  pass writes `nm = h` and deletes `nu`, a breach sets `nu`, an unknown writes nothing). The flight is shared by callers with
   different user IDs and the same string, so it does only the call and the verdict write. `memberReqLookupMode.Joining` is
   set only for the join entry's executor run (`Source == memberReqFromJoin`): a joiner is judged and the baseline is ignored,
   because a rejoiner is a new membership. `memberReqLookupMode.IgnoreBaseline` (Phase 15 review WR-01) skips the baseline

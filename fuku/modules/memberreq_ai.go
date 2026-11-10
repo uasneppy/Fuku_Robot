@@ -332,23 +332,26 @@ func memberReqAIPrepare(ctx context.Context, chatID, userID int64, mode memberRe
 	return memberReqAIDecide(canon, key, state, mode.Joining || mode.IgnoreBaseline)
 }
 
-// memberReqAIDecide is the decide step, on what the round read. A readable verdict decides
-// first. Otherwise a member who is not joining and has no marker passes with no call: with a
-// baseline equal to the current names hash nothing is written, with none the baseline is
-// recorded. A joiner, a member with a marker and a baseline that differs (a rename) are judged,
-// and so is a caller that ignores the baseline (skipBaseline: a joiner, or a held member or a
-// button press, for whom a baseline-only pass must never stand in for a judgement, WR-01).
+// memberReqAIDecide is the decide step, on what the round read. A member who is not joining, has
+// no marker and has a baseline equal to the current names hash passes first, with nothing written
+// and whatever the verdict cache holds (SEC-01): the baseline is the bot's record that these names
+// were accepted for this account, and the cache is keyed by the canonical string, which is global
+// to the fleet, so another account's breach of an identical string must not reach a member who
+// never renamed (the watcher answers the same way, memberReqAIWatchSatisfied). Otherwise a
+// readable verdict decides, and a member with no baseline and no marker passes with no call and
+// has the baseline recorded. A joiner, a member with a marker and a baseline that differs (a
+// rename) are judged, and so is a caller that ignores the baseline (skipBaseline: a joiner, or a
+// held member or a button press, for whom a baseline-only pass must never stand in for a
+// judgement, WR-01): for all of them the cached verdict still applies.
 func memberReqAIDecide(canon namecanon.Canon, key string, state memberReqAIState, skipBaseline bool) memberReqAIPlan {
+	if !skipBaseline && !state.marker && state.baseline == canon.Hash {
+		return memberReqAIFinal(memberReqPass)
+	}
 	if probability, hit := memberReqAIParseProbability(state.verdict); hit {
 		return memberReqAIPlan{canon: canon, key: key, verdict: memberReqAIVerdictOf(probability), cached: true}
 	}
-	if !skipBaseline && !state.marker {
-		switch state.baseline {
-		case canon.Hash:
-			return memberReqAIFinal(memberReqPass)
-		case "":
-			return memberReqAIPlan{canon: canon, key: key, verdict: memberReqPass, baselineOnly: true}
-		}
+	if !skipBaseline && !state.marker && state.baseline == "" {
+		return memberReqAIPlan{canon: canon, key: key, verdict: memberReqPass, baselineOnly: true}
 	}
 	return memberReqAIPlan{canon: canon, key: key}
 }
