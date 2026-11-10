@@ -94,3 +94,31 @@ the next step and adds its own entries below if it finds any.
   after. A member who renames during a breaker pause stays held until the pause ends, at most 5 minutes per pause.
 - **NEW-03.** The WR-04 check makes one extra Redis-only read per unsatisfied message, only while a pause is on and the group's AI
   rule is live; an unpaused group pays nothing extra.
+
+## Security audit items (`15-SECURITY.md`, hardening pass `15-SECURITY-FIX.md`)
+
+The security audit of 2026-11-10 found five items, none at or above `high`. The hardening pass fixed four test first (RED then GREEN)
+and the orchestrator accepted the fifth. The orchestrator also accepted AR-18, the residual of SEC-02. Nothing is open.
+
+- **SEC-01, fixed** (`894ae8e` RED, `82e14e1` GREEN). An established member who never renamed (baseline equal to their names, no
+  marker) passes before the cached verdict is read, in the job as in the watcher, so another account's cached breach of an
+  identical string cannot reach them. Joiners, marker holders, renamers, members with no baseline and the `IgnoreBaseline` callers
+  (held release, "I fixed it") keep verdict-first.
+- **SEC-02, fixed** (`9a3f7cb` RED, `27bb07e` GREEN, `6f1ae21` QF cleanup). A per-chat in-memory refusal latch
+  (`memberreq_ai_latch.go`) stops the watcher starting a job per marker holder while the group or fleet allowance is spent (until
+  the end of the UTC hour), the gate stayed full or the counter failed (60 s). It is the same third outcome as the breaker pause
+  (no job, no clean path), so a hold for an AI breach is never deleted by it.
+- **SEC-03, fixed** (`5c44ace`, docs only). `sample.env`, the README row and `environment.md` say that the Anthropic key also
+  carries a member's three names when the AI spam-name rule is set to a punishment.
+- **SEC-04, fixed** (`87988d9` RED, `9743cd8` GREEN, `32e2484` docs). The three AI card keys say "when they join or at their first
+  message, or after a name change" in all 8 locales. The seven translations join the native-reader list (`15-SPIKE.md` check 10).
+- **SEC-05, accepted** as AR-17. The AI keys' Redis cardinality is bounded by population, not by a budget; single-owner
+  deployment.
+- **AR-18, accepted by the orchestrator.** An account's own hourly allowance latches nothing (the watcher cannot key a latch on one
+  member), and the group and fleet latch is per chat and per replica, so a fleet refusal latches only the chat whose call met it.
+  The cost is bounded by that member's own messages and the 32-job runner. While latched, a cached breach is not acted on either
+  (judged at the first message after the latch), the safe direction.
+
+Gates on the hardening tip: build, vet, `go.mod` and `go.sum` unchanged, gocyclo, lint stand-in, gosec (baseline `warns.go:36 G115`
+only), `make check-translations`, `make check-docs` and the focused families all pass; the full suite on the hardening commits runs
+in CI.
