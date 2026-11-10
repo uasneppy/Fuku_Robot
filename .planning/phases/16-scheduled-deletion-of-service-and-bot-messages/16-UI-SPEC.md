@@ -319,11 +319,11 @@ state in the Main status line only (a hub, list or row read that fails is the ca
 | `sh` | `service:chat_title` | `settings_del_svc_title` | `NewChatTitle` | none |
 | `sn` | `service:pinned_message` | `settings_del_svc_pinned` | `PinnedMessage` | none |
 | `sv` | `service:video_chat` | `settings_del_svc_video` | `VideoChatScheduled`, `Started`, `Ended`, `ParticipantsInvited` | none |
-| `sf` | `service:forum_topic` | `settings_del_svc_forum` | `ForumTopicCreated`, `Edited`, `Closed`, `Reopened`, `GeneralForumTopicHidden`, `Unhidden` | none |
+| `sf` | `service:forum_topic` | `settings_del_svc_forum` | `ForumTopicEdited`, `ForumTopicClosed`, `ForumTopicReopened`, `GeneralForumTopicHidden`, `GeneralForumTopicUnhidden` (never `ForumTopicCreated`: Telegram refuses to delete it, research C-02) | none |
 | `sb` | `service:boost` | `settings_del_svc_boost` | `BoostAdded` | none |
 | `sa` | `service:auto_delete_timer` | `settings_del_svc_timer` | `MessageAutoDeleteTimerChanged` | none |
 | `sk` | `service:chat_background` | `settings_del_svc_background` | `ChatBackgroundSet` | none |
-| `sg` | `service:giveaway` | `settings_del_svc_gifts` | `Giveaway*`, `Gift`, `UniqueGift` | none |
+| `sg` | `service:giveaway` | `settings_del_svc_gifts` | `GiveawayCreated`, `GiveawayWinners`, `GiveawayCompleted`, `Gift`, `UniqueGift`, `GiftUpgradeSent` (never the giveaway post `Giveaway` itself, which is content, research C-03) | none |
 | `so` | `service:other` | `settings_del_svc_other` | every remaining deletable service field of the pinned gotgbot version (D-03) | none |
 
 Never offered, never deleted (D-03): the group, supergroup and channel creation messages and both migrate messages.
@@ -762,7 +762,7 @@ lengths are counted with a script (the column "EN"); every EN length is within i
 | 39 | `settings_del_desc_title` | The notice that the group name was changed. | 43 | 50 | 70 | D-03 |
 | 40 | `settings_del_desc_pinned` | The notice that a message was pinned. The pinned message itself stays. | 70 | 85 | 120 | D-03 |
 | 41 | `settings_del_desc_video` | Notices about video chats: scheduled, started, ended, or members invited. | 73 | 85 | 120 | D-03 |
-| 42 | `settings_del_desc_forum` | Notices about forum topics: created, edited, closed, reopened, or the General topic hidden or shown. | 100 | 115 | 162 | D-03 |
+| 42 | `settings_del_desc_forum` | Notices about forum topics: edited, closed, reopened, or the General topic hidden or shown. | 91 | 115 | 162 | D-03 |
 | 43 | `settings_del_desc_boost` | The notice that a member boosted the group. | 43 | 50 | 70 | D-03 |
 | 44 | `settings_del_desc_timer` | The notice that the timer for auto-deleting messages was changed. | 65 | 75 | 106 | D-03 |
 | 45 | `settings_del_desc_background` | The notice that the group background was changed. | 49 | 60 | 84 | D-03 |
