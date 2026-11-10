@@ -63,7 +63,7 @@ covered_files:
   - "scripts/claude-spike/main.go"
   - "scripts/claude-spike/names.go"
   - "scripts/claude-spike/report.go"
-covered_digest: "v4:sha256:59c9843ba5db71ef0915db3d55a765fa7417c0dc23a74ffeeb45776eef697efe"
+covered_digest: "v4:sha256:44b6db45b61f1694adc8e12494e098aff252e08aaaf31bfa7389003d51b07547"
 behavior_unverified: 0
 overrides_applied: 0
 unverified_prohibitions: 13
@@ -249,7 +249,7 @@ No stub, hollow prop, empty implementation, debt marker or console-only handler 
 | `README.md` | 804 | `ENABLE_AISPAM`: "Global kill switch for every AI check (text, images and names). Chats still have to opt in with `/aispam on`." The opt-in sentence is false for names (the opt-in is the owner choosing a punishment for the AI rule, not `/aispam on`) | Info | Could lead an owner to think `/aispam on` is needed for the name rule |
 | `docs/src/content/docs/commands/aispam/index.md` | 149 (and `fuku/config/config.go:198-206`, comment) | The `ENABLE_AISPAM` row says "every AI check, `/aispam` and the raid checks, text and images", and the `config.go` comments on `EnableAISpam` and the Anthropic fields mention text and images only | Info | Same omission as above; the paragraph at lines 108-113 of the same page does say names are covered |
 
-**Corrected after this verification (orchestrator, wording only, no behaviour change):** all four Info items now name the AI spam-name rule next to text and images: the `AGENTS.md` defaults line, the `sample.env` `ENABLE_AISPAM` and `ANTHROPIC_MODEL` comments, the README `ENABLE_AISPAM` row (the `/aispam on` opt-in no longer claims to cover the name rule, whose opt-in is the owner choosing a punishment), the `aispam/index.md` row and the two `config.go` comments (comment-only). `make check-docs`, `make check-translations`, `go build` and `gofmt` are clean.
+**Corrected after this verification (orchestrator, wording only, no behaviour change):** all four Info items now name the AI spam-name rule next to text and images: the `AGENTS.md` defaults line, the `sample.env` `ENABLE_AISPAM` and `ANTHROPIC_MODEL` comments, the README `ENABLE_AISPAM` row (the `/aispam on` opt-in no longer claims to cover the name rule, whose opt-in is the owner choosing a punishment), the `aispam/index.md` row and the two `config.go` comments (comment-only). `make check-docs`, `make check-translations`, `go build` and `gofmt` are clean. The `covered_digest` was refreshed once for these five files (`AGENTS.md`, `README.md`, `sample.env`, `docs/.../aispam/index.md`, `fuku/config/config.go`): the verifier's digest `59c9843b...` was reproduced exactly at commit 7e420fe in a throwaway worktree, so these wording edits are the only difference between what the verifier read and the digest now recorded, and the verifier was not re-run for them.
 
 ### Human Verification Required
 
