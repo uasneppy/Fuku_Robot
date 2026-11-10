@@ -11,6 +11,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	utilsCache "github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
@@ -244,4 +245,190 @@ func TestKindRegistry(t *testing.T) {
 			t.Errorf("SharesCleanServiceFlag(%q) = %v, want %v", kind, !want, want)
 		}
 	}
+}
+
+// cleanServiceFlag reads the shared /cleanservice flag of a chat straight from the database.
+func cleanServiceFlag(t *testing.T, chatID int64) bool {
+	t.Helper()
+	settings, err := greetings.LoadSettingsContext(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("read the greetings row: %v", err)
+	}
+	return settings.ShouldCleanService
+}
+
+func TestApplyJoinLeftRule(t *testing.T) {
+	ctx := context.Background()
+
+	seed := func(t *testing.T, flag bool, joined, left int) int64 {
+		t.Helper()
+		chatID := deletionChat(t)
+		if err := greetings.SetShouldCleanService(chatID, flag); err != nil {
+			t.Fatalf("seed the flag: %v", err)
+		}
+		if joined >= 0 {
+			if err := SetRule(ctx, chatID, KindJoined, joined); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if left >= 0 {
+			if err := SetRule(ctx, chatID, KindLeft, left); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return chatID
+	}
+
+	t.Run("keep", func(t *testing.T) {
+		chatID := seed(t, true, 600, 30)
+		if err := ApplyJoinLeftRule(ctx, chatID, KindJoined, JoinLeftState{Mode: JoinLeftKeep}); err != nil {
+			t.Fatal(err)
+		}
+		if cleanServiceFlag(t, chatID) {
+			t.Error("the flag is still on after Keep")
+		}
+		if rules := storedRules(t, chatID); len(rules) != 0 {
+			t.Errorf("rows = %v, want both joined and left removed", rules)
+		}
+	})
+
+	t.Run("now", func(t *testing.T) {
+		chatID := seed(t, false, 600, 30)
+		if err := ApplyJoinLeftRule(ctx, chatID, KindJoined, JoinLeftState{Mode: JoinLeftNow}); err != nil {
+			t.Fatal(err)
+		}
+		if !cleanServiceFlag(t, chatID) {
+			t.Error("the flag is off after Now")
+		}
+		rules := storedRules(t, chatID)
+		if _, ok := rules[KindJoined]; ok || rules[KindLeft] != 30 || len(rules) != 1 {
+			t.Errorf("rows = %v, want only the left row at 30", rules)
+		}
+	})
+
+	t.Run("after N", func(t *testing.T) {
+		chatID := seed(t, false, -1, 30)
+		if err := ApplyJoinLeftRule(ctx, chatID, KindJoined, JoinLeftState{Mode: JoinLeftAfter, DelaySecs: 600}); err != nil {
+			t.Fatal(err)
+		}
+		if !cleanServiceFlag(t, chatID) {
+			t.Error("the flag is off after After N")
+		}
+		rules := storedRules(t, chatID)
+		if rules[KindJoined] != 600 || rules[KindLeft] != 30 || len(rules) != 2 {
+			t.Errorf("rows = %v, want joined 600 and the left row untouched at 30", rules)
+		}
+		if err := ApplyJoinLeftRule(ctx, chatID, KindJoined, JoinLeftState{Mode: JoinLeftAfter, DelaySecs: 90}); err != nil {
+			t.Fatal(err)
+		}
+		if storedRules(t, chatID)[KindJoined] != 90 {
+			t.Error("a second After N did not replace the delay")
+		}
+	})
+
+	t.Run("works on a chat with no rows at all", func(t *testing.T) {
+		chatID := deletionChat(t)
+		if err := ApplyJoinLeftRule(ctx, chatID, KindLeft, JoinLeftState{Mode: JoinLeftNow}); err != nil {
+			t.Fatal(err)
+		}
+		if !cleanServiceFlag(t, chatID) {
+			t.Error("the flag is off after Now on a fresh chat")
+		}
+	})
+
+	t.Run("refused before any write", func(t *testing.T) {
+		chatID := seed(t, false, 600, -1)
+		refused := []struct {
+			name  string
+			kind  string
+			state JoinLeftState
+			want  error
+		}{
+			{"a kind that does not share the flag", KindPinned, JoinLeftState{Mode: JoinLeftNow}, ErrNotJoinLeft},
+			{"an unknown kind", "service:nope", JoinLeftState{Mode: JoinLeftNow}, ErrNotJoinLeft},
+			{"zero delay after N", KindJoined, JoinLeftState{Mode: JoinLeftAfter, DelaySecs: 0}, ErrDelayOutOfRange},
+			{"delay over a day", KindJoined, JoinLeftState{Mode: JoinLeftAfter, DelaySecs: MaxDelaySecs + 1}, ErrDelayOutOfRange},
+			{"an unknown mode", KindJoined, JoinLeftState{Mode: 99}, ErrInvalidJoinLeftState},
+		}
+		for _, tc := range refused {
+			if err := ApplyJoinLeftRule(ctx, chatID, tc.kind, tc.state); !errors.Is(err, tc.want) {
+				t.Errorf("%s: error = %v, want %v", tc.name, err, tc.want)
+			}
+		}
+		if cleanServiceFlag(t, chatID) {
+			t.Error("a refused call changed the flag")
+		}
+		if rules := storedRules(t, chatID); rules[KindJoined] != 600 || len(rules) != 1 {
+			t.Errorf("rows = %v, a refused call changed them", rules)
+		}
+	})
+
+	t.Run("a failure inside the transaction changes nothing", func(t *testing.T) {
+		chatID := seed(t, true, 600, 30)
+		boom := errors.New("injected failure")
+		restore := SetApplyHookForTest(func() error { return boom })
+		t.Cleanup(restore)
+		cases := []func() error{
+			func() error { return ApplyJoinLeftRule(ctx, chatID, KindJoined, JoinLeftState{Mode: JoinLeftKeep}) },
+			func() error {
+				return ApplyJoinLeftRule(ctx, chatID, KindLeft, JoinLeftState{Mode: JoinLeftAfter, DelaySecs: 5})
+			},
+			func() error { return ApplyCleanServiceFlag(ctx, chatID, false) },
+		}
+		for i, call := range cases {
+			if err := call(); !errors.Is(err, boom) {
+				t.Fatalf("case %d: error = %v, want the injected failure", i, err)
+			}
+			if !cleanServiceFlag(t, chatID) {
+				t.Errorf("case %d: the flag changed although the transaction failed", i)
+			}
+			if rules := storedRules(t, chatID); rules[KindJoined] != 600 || rules[KindLeft] != 30 || len(rules) != 2 {
+				t.Errorf("case %d: rows = %v, want them as they were", i, rules)
+			}
+		}
+	})
+
+	t.Run("the cache keys are dropped", func(t *testing.T) {
+		chatID := seed(t, true, 600, 30)
+		before, err := GetRules(ctx, chatID)
+		if err != nil || before.Delays[KindJoined] != 600 {
+			t.Fatalf("priming read = %+v, %v", before, err)
+		}
+		greetingsKey := cache.CacheKey("greetings", chatID)
+		load := func(value string) func(context.Context) (string, error) {
+			return func(context.Context) (string, error) { return value, nil }
+		}
+		if got, err := cache.GetFromCacheOrLoad(ctx, greetingsKey, cache.DefaultCacheTTL, load("stale")); err != nil || got != "stale" {
+			t.Fatalf("priming the greetings key = %q, %v", got, err)
+		}
+		if err := ApplyJoinLeftRule(ctx, chatID, KindJoined, JoinLeftState{Mode: JoinLeftAfter, DelaySecs: 90}); err != nil {
+			t.Fatal(err)
+		}
+		after, err := GetRules(ctx, chatID)
+		if err != nil || after.Delays[KindJoined] != 90 {
+			t.Fatalf("read after the write = %+v, %v, want 90 (the delete_rules key must be dropped)", after, err)
+		}
+		if got, err := cache.GetFromCacheOrLoad(ctx, greetingsKey, cache.DefaultCacheTTL, load("fresh")); err != nil || got != "fresh" {
+			t.Fatalf("greetings key read = %q, %v, want fresh (the key must be dropped)", got, err)
+		}
+	})
+
+	t.Run("the command's write", func(t *testing.T) {
+		for _, on := range []bool{true, false} {
+			chatID := seed(t, !on, 600, 30)
+			if err := ApplyCleanServiceFlag(ctx, chatID, on); err != nil {
+				t.Fatal(err)
+			}
+			if cleanServiceFlag(t, chatID) != on {
+				t.Errorf("flag after ApplyCleanServiceFlag(%v) = %v", on, !on)
+			}
+			if rules := storedRules(t, chatID); len(rules) != 0 {
+				t.Errorf("on=%v: rows = %v, want both removed", on, rules)
+			}
+			got, err := GetRules(ctx, chatID)
+			if err != nil || len(got.Delays) != 0 {
+				t.Errorf("on=%v: cached read = %+v, %v, want no rules (the key must be dropped)", on, got, err)
+			}
+		}
+	})
 }
