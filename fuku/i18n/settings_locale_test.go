@@ -305,9 +305,9 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_mreq_desc_ai":         {280, 392},
 	"settings_mreq_hint_ai":         {190, 266},
 	"settings_mreq_here_ai":         {90, 126},
-	"settings_mreq_confirm_ai_kick": {190, 266},
-	"settings_mreq_confirm_ai_ban":  {180, 252},
-	"settings_mreq_confirm_ai_mute": {200, 280},
+	"settings_mreq_confirm_ai_kick": {216, 302},
+	"settings_mreq_confirm_ai_ban":  {206, 288},
+	"settings_mreq_confirm_ai_mute": {226, 316},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
