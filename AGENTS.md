@@ -182,13 +182,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   after `memberReqMissExempt`. `memberReqLookupCached` takes the names for this and its complexity is held at 18 or less by
   keeping the AI part in those two small functions. The watcher writes no verdict, baseline or marker and calls nobody.
   While the AI breaker is paused for the chat (`memberReqAIPaused`: in memory and pure, the provider-wide pause or the group's
-  own) the watcher consults it (Phase 15 review WR-04, `memberReqAIOnlyPaused`): when the AI part is the ONLY reason the member
-  is not satisfied (one more Redis-only read, `memberReqLookupCachedWith` with the AI rule left out, only while paused) it
-  starts no job and runs no clean path and returns `ext.ContinueGroups` having done nothing, so a marker holder costs no job
-  and no paced live `getChatMember` per message during a pause, and the marker stays, so the first message after the pause is
-  judged. It must not treat the AI part as "satisfied": that would take the clean path (`ClearHoldOnClean`) and delete the hold
-  of a member held for an AI breach. Any other open reason (a name rule, the photo or channel rule) still hands a job as
-  before (`TestMemberReqWatcherAIPaused`). The
+  own) or the chat is latched (`memberReqAILatched`: the refusal latch below, in memory and pure) the watcher consults them
+  (Phase 15 review WR-04 and security SEC-02, `memberReqAIOnlyPaused`): when the AI part is the ONLY reason the member
+  is not satisfied (one more Redis-only read, `memberReqLookupCachedWith` with the AI rule left out, only while paused or
+  latched) it starts no job and runs no clean path and returns `ext.ContinueGroups` having done nothing, so a marker holder
+  costs no job and no paced live `getChatMember` per message during a pause or a latch, and the marker stays, so the first
+  message after it is judged. It must not treat the AI part as "satisfied": that would take the clean path
+  (`ClearHoldOnClean`) and delete the hold of a member held for an AI breach. Any other open reason (a name rule, the photo or
+  channel rule) still hands a job as before (`TestMemberReqWatcherAIPaused`, `TestMemberReqWatcherAILatch`). While paused or
+  latched a member whose string has a cached breach is not acted on either (the job that would punish from the cache is not
+  started), and is judged by the first message after the pause or latch: the safe direction, as for the pause. The
   baseline rule is the same in both halves (SEC-01): a member whose baseline equals their names and who has no marker is
   satisfied in the watcher and passes in the job even when another account's judgement of the same string has since cached a
   breach, because the baseline is the bot's record that these names were accepted for this member (it errs toward not
@@ -1620,7 +1623,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a pause that is running is not extended or logged again by checks still in flight, the map is bounded at 10,000 groups (an
   idle breaker is pruned to make room, and when every tracked group is failing or paused a new one stays untracked, with one
   warning per process), and each pause is one warning naming the status and the error type only. An image failure never
-  pauses name checks and the reverse (`TestMemberReqAIBreaker`). The sticky bit reaches the executor without the executor
+  pauses name checks and the reverse (`TestMemberReqAIBreaker`). The refusal latch (security SEC-02, `memberreq_ai_latch.go`,
+  `memberReqAILatches`, state of its own, in memory and per replica) covers the sticky states the watcher cannot see, so
+  that a marker holder's every message is not a runner job plus a paced live `getChatMember` that ends in nothing (an
+  attacker can cause that: 20 accounts spend one group's 100 units): the AI row latches the chat when the budget reserve is
+  refused for the GROUP's or the FLEET's allowance (`memberReqAICappedGroup`, `memberReqAICappedFleet`) until the end of the
+  current UTC hour (`memberReqAILatchHour`, from `raidNow`), and for 60 s (`memberReqAILatchCooldown`,
+  `memberReqAILatchBriefly`) when the gate stayed full while the flight's context was live or the budget counter failed. An
+  ACCOUNT's own allowance (`memberReqAICapped`) latches nothing: it is that member's limit and the watcher cannot key on it
+  (accepted, AR-18, one job per message of that member until their hour ends, at most their own messages). A fleet refusal
+  latches only the chat whose call met it, so each other chat pays one job when it meets the refusal itself. The map is
+  bounded at 10,000 chats like the breaker's (an ended latch is forgotten on read and pruned to make room, and when every
+  tracked chat is still latched a new one stays untracked, with one warning per process), a latch never shortens a longer one,
+  and a restart or a second replica starts with none. It changes nothing of what the executor, the join entry, the held
+  release or "I fixed it" decide (they ignore it). The sticky bit reaches the executor without the executor
   naming the rule: `memberReqLookupMasks` stamps each row's bit into the context of its `Lookup`, `memberReqNoteSticky` ORs it
   into the run's `memberReqLookupTouch.sticky`, and the held release and "I fixed it" (no touch) still see an unknown. The
   stale-names guard is the table field `memberReqRule.NamesBound` (true on the AI row only, `memberReqNamesBoundMask`): after
@@ -2919,19 +2935,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `mreqAIGated`, `mreqAIDelayed`, `mreqAIDrop`, the recorded request bodies and the count) and points `memberReqAIEndpoint`
   and `memberReqAIHTTP` at it; `withAIConfigured` and `withAINotConfigured` set `config.AppConfig` and install a fresh
   breaker; `withAIGate` and `withAIBudgets` resize the gate and the three hourly budgets; `mreqAIMarkNew` records a member as
-  joining the way the join entry does; `mreqAICleanup` deletes the verdict, baseline, marker and budget keys; `mreqAIUnique`
+  joining the way the join entry does; `mreqAICleanup` deletes the verdict, baseline, marker and budget keys and installs an empty refusal latch (`memberReqAILatches`, restored by `mreqSwap`), so a test that latches a chat never leaves it latched for another; `mreqAIUnique`
   is a counter that names a member without the member's ID digits (the sweeps give a member `mreqAINameSentinel` plus the
   counter, so an ID and a name can each be looked for in a body or a log line), and `mreqAIStaticForbidden` with
   `mreqAIForbiddenOf` is the list of what no log line of an AI path may hold. Hygiene: fresh IDs from `uniqueLinkOwnerID()`
   and `uniqueModuleChatID()`; names that carry the member's ID (`mreqAIMember`) or a counter, so no two tests share a verdict
   key; `mreqAICleanup` in every test that judges; every swapped variable (the gate, the budgets, the endpoint, the HTTP
-  client, `memberReqAICall`, the breaker, the join and flight budgets) restored in `t.Cleanup` through `mreqSwap`; a test that
+  client, `memberReqAICall`, the breaker, the latch, the join and flight budgets) restored in `t.Cleanup` through `mreqSwap`; a test that
   calls `StopMemberReqJobs` calls `restoreMemberReqRunner`; no real provider, no key, no `t.Skip` and no `t.Parallel`, and a
   test that runs many goroutines uses Mute or Kick and never Warn. The families by name: `TestMemberReqAIRule`,
   `TestMemberReqAIEnforcePunishes`, `TestMemberReqAINotConfigured`, `TestMemberReqAISparesExempt`,
   `TestMemberReqAILookupOrder`, `TestMemberReqAIUnanswerable`, `TestMemberReqAIBaseline`, `TestMemberReqAINewMember`,
   `TestMemberReqAIRename`, `TestMemberReqAICheckOnJoinOff`, `TestMemberReqAIMarkerSurvivesLongHold`,
-  `TestMemberReqAIBudget`, `TestMemberReqAIGate`, `TestMemberReqAIFlight`, `TestMemberReqAIBreaker`,
+  `TestMemberReqAIBudget`, `TestMemberReqAIGate`, `TestMemberReqAIFlight`, `TestMemberReqAIBreaker`, `TestMemberReqAILatch`,
+  `TestMemberReqWatcherAILatch`, `TestMemberReqAIEstablishedMemberIgnoresCachedBreach`,
   `TestMemberReqAIUnknownDefers`, `TestMemberReqAINamesChangedDuringLookup`, `TestMemberReqAIVerdictCache`,
   `TestMemberReqWatcherAI`, `TestMemberReqWatcherAIBurst`, `TestMemberReqPassCacheWithAI`, `TestMemberReqHeldReleaseAI`,
   `TestMemberReqNoticeAIRemedy`, `TestMemberReqFixedAI`, `TestSettingsMreqAIStatus` and `TestSettingsMreqAIGate`; the

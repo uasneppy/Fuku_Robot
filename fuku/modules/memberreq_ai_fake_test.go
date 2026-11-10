@@ -295,6 +295,9 @@ func withAINotConfigured(t *testing.T, how mreqAIOff) {
 // so the settings a test stored a moment ago are not deleted before it runs).
 func mreqAICleanup(t *testing.T, chatIDs, userIDs []int64) {
 	t.Helper()
+	// The refusal latch (SEC-02) is process state like the breaker: every test starts with an empty
+	// one and puts the previous one back, so a latch a test set never reaches another.
+	mreqSwap(t, &memberReqAILatches, newMemberReqAILatch())
 	clean := func() {
 		mreqAIDeleteVerdicts()
 		mreqAIDeleteBudgets()

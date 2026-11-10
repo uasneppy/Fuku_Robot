@@ -208,3 +208,82 @@ func TestMemberReqWatcherAILatch(t *testing.T) {
 		mreqAIWantMarker(t, env.chat.Id, member.Id, false)
 	})
 }
+
+func TestMemberReqAILatch(t *testing.T) {
+	now := time.Date(2026, 11, 10, 12, 30, 0, 0, time.UTC)
+
+	t.Run("a latch holds until its end and is then forgotten", func(t *testing.T) {
+		latch := newMemberReqAILatch()
+		latch.hold(1, now, now.Add(time.Minute))
+		if !latch.latched(1, now.Add(59*time.Second)) {
+			t.Error("not latched before the end")
+		}
+		if latch.latched(1, now.Add(time.Minute)) {
+			t.Error("still latched at the end")
+		}
+		if len(latch.till) != 0 {
+			t.Errorf("tracked chats = %d, want the ended one forgotten", len(latch.till))
+		}
+		if latch.latched(2, now) {
+			t.Error("a chat that was never latched reads as latched")
+		}
+	})
+
+	t.Run("a second hold never shortens a longer one", func(t *testing.T) {
+		latch := newMemberReqAILatch()
+		latch.hold(1, now, now.Add(time.Hour))
+		latch.hold(1, now, now.Add(time.Minute))
+		if !latch.latched(1, now.Add(30*time.Minute)) {
+			t.Error("a short latch shortened the hour's")
+		}
+		latch.hold(1, now, now.Add(2*time.Hour))
+		if !latch.latched(1, now.Add(90*time.Minute)) {
+			t.Error("a longer latch did not extend")
+		}
+	})
+
+	t.Run("a spent allowance latches until the end of the UTC hour, a fault for a minute", func(t *testing.T) {
+		clock := mreqAIInstallClock(t)
+		mreqSwap(t, &memberReqAILatches, newMemberReqAILatch())
+		const group, fault = int64(-1001), int64(-1002)
+		memberReqAILatchHour(group)
+		memberReqAILatchBriefly(fault)
+		if !memberReqAILatched(group) || !memberReqAILatched(fault) {
+			t.Fatal("not latched right after")
+		}
+		clock.advance(61 * time.Second)
+		if !memberReqAILatched(group) {
+			t.Error("the hour's latch ended after a minute")
+		}
+		if memberReqAILatched(fault) {
+			t.Error("the minute's latch outlived its minute")
+		}
+		clock.advance(50 * time.Minute)
+		if memberReqAILatched(group) {
+			t.Error("the hour's latch outlived the hour")
+		}
+	})
+
+	t.Run("the map is bounded: ended latches make room and a full map leaves the new chat untracked", func(t *testing.T) {
+		latch := newMemberReqAILatch()
+		for i := 0; i < memberReqAILatchMaxChats; i++ {
+			latch.till[int64(-i-1)] = now.Add(time.Minute)
+		}
+		if warn := latch.hold(-999999, now, now.Add(time.Minute)); !warn {
+			t.Error("the first untracked chat did not warn")
+		}
+		if latch.latched(-999999, now) {
+			t.Error("a chat was tracked beyond the bound")
+		}
+		if warn := latch.hold(-999998, now, now.Add(time.Minute)); warn {
+			t.Error("a second untracked chat warned again")
+		}
+		if len(latch.till) != memberReqAILatchMaxChats {
+			t.Errorf("tracked chats = %d, want the bound", len(latch.till))
+		}
+		later := now.Add(2 * time.Minute)
+		if warn := latch.hold(-999999, later, later.Add(time.Minute)); warn || !latch.latched(-999999, later) {
+			t.Error("ended latches did not make room for a new chat")
+		}
+	})
+}

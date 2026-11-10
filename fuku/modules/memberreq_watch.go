@@ -324,17 +324,20 @@ func memberReqLookupCachedWith(settings *models.ChatRequirements, chatID, userID
 }
 
 // memberReqAIOnlyPaused reports whether a member the cached read could not call satisfied is open
-// only because of the AI rule, which is paused for the chat (the provider-wide pause or the group's
-// own, memberReqAIPaused: in memory and pure). While the breaker is paused nothing can be judged, so
-// a job would make a paced live lookup and end in nothing for every message of every member who
-// still has a join marker (WR-04). The watcher then does nothing at all: it starts no job and does
-// NOT take the clean path, because "satisfied" would run ClearHoldOnClean and delete the hold of a
-// member held for an AI breach; the marker stays and the first message after the pause is judged.
-// The cheap tests come first, so an unpaused group costs nothing extra; during a pause one more
-// Redis-only read asks whether every other lookup rule is satisfied (it never calls Telegram or the
-// provider and writes nothing). Any other open reason is false and the member is handed to a job.
+// only because of the AI rule, which cannot be judged for the chat right now: the breaker is paused
+// (the provider-wide pause or the group's own, memberReqAIPaused) or the refusal latch holds
+// (SEC-02, memberReqAILatched: the group's or the fleet's hourly allowance is spent, or the gate was
+// full or the budget counter failed within the last minute). Both are in memory and pure. While
+// either holds nothing can be judged, so a job would make a paced live lookup and end in nothing
+// for every message of every member who still has a join marker (WR-04, SEC-02). The watcher then
+// does nothing at all: it starts no job and does NOT take the clean path, because "satisfied" would
+// run ClearHoldOnClean and delete the hold of a member held for an AI breach; the marker stays and
+// the first message after the pause or latch is judged. The cheap tests come first, so an unpaused,
+// unlatched group costs nothing extra; otherwise one more Redis-only read asks whether every other
+// lookup rule is satisfied (it never calls Telegram or the provider and writes nothing). Any other
+// open reason is false and the member is handed to a job.
 func memberReqAIOnlyPaused(settings *models.ChatRequirements, chatID, userID int64, passValue string, names memberReqNames) bool {
-	if !memberReqLookupRulesOf(settings).AI || !memberReqAIPaused(chatID) {
+	if !memberReqLookupRulesOf(settings).AI || !(memberReqAIPaused(chatID) || memberReqAILatched(chatID)) {
 		return false
 	}
 	othersSatisfied, _ := memberReqLookupCachedWith(settings, chatID, userID, passValue, names, true)

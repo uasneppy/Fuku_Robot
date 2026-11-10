@@ -520,7 +520,8 @@ func memberReqAIJudge(ctx context.Context, chatID, userID int64, plan memberReqA
 // Both come before the budget, so a paused check and a flight that cannot get a slot spend no unit.
 // When ok is false refusal is the answer: sticky for a paused group or provider and when the wait
 // ran out while the flight's context is live (states: the provider is failing, the replica is
-// saturated), plain when the context itself ended (shutdown is not a state). On success the caller
+// saturated; a full gate also latches the group for a minute, SEC-02), plain when the context
+// itself ended (shutdown is not a state). On success the caller
 // owns the slot and releases it by defer, so a panic and a cancel release it too.
 func memberReqAIAcquire(ctx context.Context, chatID int64) (refusal memberReqAIAnswer, ok bool) {
 	if memberReqAIPaused(chatID) {
@@ -534,6 +535,7 @@ func memberReqAIAcquire(ctx context.Context, chatID int64) (refusal memberReqAIA
 		if ctx.Err() != nil {
 			return memberReqAIAnswer{}, false
 		}
+		memberReqAILatchBriefly(chatID)
 		return memberReqAIStickyUnknown, false
 	}
 	return memberReqAIAnswer{}, true
@@ -541,7 +543,10 @@ func memberReqAIAcquire(ctx context.Context, chatID int64) (refusal memberReqAIA
 
 // memberReqAIReserveUnit reserves the call's three budget units. A used-up allowance, a counter
 // that failed and no Redis are all sticky unknowns: states of the system, not faults of one
-// member's answer (WR-03). The call is never made without a unit.
+// member's answer (WR-03). The call is never made without a unit. A spent group or fleet allowance
+// latches the group until the end of the UTC hour and a failed counter for a minute, so the watcher
+// stops handing jobs for a check that cannot be made (SEC-02); the account's own allowance latches
+// nothing.
 func memberReqAIReserveUnit(chatID, userID int64) (refusal memberReqAIAnswer, ok bool) {
 	client := memberReqRedisClient()
 	if client == nil {
@@ -552,8 +557,13 @@ func memberReqAIReserveUnit(chatID, userID int64) (refusal memberReqAIAnswer, ok
 	case memberReqAICapped:
 		memberReqAIStats.capped.Add(1)
 		return memberReqAIStickyUnknown, false
+	case memberReqAICappedGroup, memberReqAICappedFleet:
+		memberReqAIStats.capped.Add(1)
+		memberReqAILatchHour(chatID)
+		return memberReqAIStickyUnknown, false
 	case memberReqAIBudgetFault:
 		memberReqAIStats.shed.Add(1)
+		memberReqAILatchBriefly(chatID)
 		return memberReqAIStickyUnknown, false
 	}
 	return memberReqAIAnswer{}, true

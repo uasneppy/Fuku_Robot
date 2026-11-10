@@ -59,8 +59,15 @@ type memberReqAIBudgetResult int
 const (
 	// memberReqAIReserved means all three units were taken and the call may be made.
 	memberReqAIReserved memberReqAIBudgetResult = iota
-	// memberReqAICapped means an allowance is used up. It is a state: the caller's unknown is sticky.
+	// memberReqAICapped means the account's own allowance is used up. It is a state: the caller's
+	// unknown is sticky. It latches nothing, because it is one member's limit (SEC-02, AR-18).
 	memberReqAICapped
+	// memberReqAICappedGroup means the group's allowance is used up: the caller's unknown is sticky
+	// and the group is latched until the end of the UTC hour (SEC-02).
+	memberReqAICappedGroup
+	// memberReqAICappedFleet means the fleet's allowance is used up: the caller's unknown is sticky
+	// and the group is latched until the end of the UTC hour (SEC-02).
+	memberReqAICappedFleet
 	// memberReqAIBudgetFault means a counter could not be read. It is a fault of the moment: the
 	// caller's unknown is plain, and the call is never made without a unit.
 	memberReqAIBudgetFault
@@ -70,17 +77,19 @@ const (
 // memberReqAITake on the UTC hour of raidNow. The first refusal or error stops the chain, so an
 // account over its own budget spends neither shared unit and a group over its own never spends the
 // fleet's. A unit is reserved before the call, so a call that fails still spends it (the
-// conservative side).
+// conservative side). The result names which allowance refused, because the group's and the
+// fleet's latch the group in the watcher and the account's does not (SEC-02).
 func memberReqAIReserve(client *redis.Client, chatID, userID int64) memberReqAIBudgetResult {
 	stamp := raidAIHourStamp(raidNow())
 	steps := [...]struct {
-		key   string
-		limit int64
-		scope string
+		key    string
+		limit  int64
+		scope  string
+		capped memberReqAIBudgetResult
 	}{
-		{memberReqAIUserBudgetKey(userID, stamp), memberReqAIUserHourlyBudget, "account"},
-		{memberReqAIChatBudgetKey(chatID, stamp), memberReqAIChatHourlyBudget, "group"},
-		{memberReqAIGlobalBudgetKey(stamp), memberReqAIGlobalHourlyBudget, "fleet"},
+		{memberReqAIUserBudgetKey(userID, stamp), memberReqAIUserHourlyBudget, "account", memberReqAICapped},
+		{memberReqAIChatBudgetKey(chatID, stamp), memberReqAIChatHourlyBudget, "group", memberReqAICappedGroup},
+		{memberReqAIGlobalBudgetKey(stamp), memberReqAIGlobalHourlyBudget, "fleet", memberReqAICappedFleet},
 	}
 	for _, step := range steps {
 		allowed, err := memberReqAITake(client, step.key, step.limit)
@@ -90,7 +99,7 @@ func memberReqAIReserve(client *redis.Client, chatID, userID int64) memberReqAIB
 		}
 		if !allowed {
 			log.Debugf("[MemberReq] the AI name budget of the %s is used up for user %d in chat %d, no verdict", step.scope, userID, chatID)
-			return memberReqAICapped
+			return step.capped
 		}
 	}
 	return memberReqAIReserved
