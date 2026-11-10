@@ -142,7 +142,7 @@ func deletionMessageWith(t *testing.T, fields ...string) *gotgbot.Message {
 			t.Fatalf("gotgbot.Message has no field %q", name)
 		}
 		switch field.Kind() {
-		case reflect.Ptr:
+		case reflect.Pointer:
 			field.Set(reflect.New(field.Type().Elem()))
 		case reflect.Bool:
 			field.SetBool(true)
