@@ -582,7 +582,7 @@ func deletionDeleteNow(chatID, messageID int64) {
 | A6 | `staffActionFake`'s `date:1` is the only date source the new hooked tests meet; other fakes (`moduleBotClient`) return their own dates | S-04, C-09 | A test that asserts a row would see 1970 and fail loudly (no silent pass) |
 | A7 | Telegram error text for a 429 on `deleteMessages` carries `retry_after` like other methods, so `ratelimit.RetryAfterSeconds` applies | S-05 | The pacer treats a 429 without it as a plain failure and the row is retried (counted); low |
 
-## Open Questions
+## Open Questions (RESOLVED: question 1 by D-26, which resets the delay and reverses the research's default; question 2 by D-27)
 
 1. **A stale delay row after `/cleanservice off` then `on`.**
    - Known: D-02 says the row counts only while the flag is true, so `off` then `on` re-activates an old `After 1 h` instead of Delete now.
