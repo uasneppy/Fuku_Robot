@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
 )
@@ -100,5 +102,127 @@ func RemoveRule(ctx context.Context, chatID int64, kind string) error {
 		return fukuerrors.Wrapf(err, "remove deletion rule of chat %d", chatID)
 	}
 	cache.DeleteCache(rulesKey(chatID))
+	return nil
+}
+
+// JoinLeftMode is what a group chose for the joined or the left service message.
+type JoinLeftMode int
+
+// The three choices of the joined and left service messages.
+const (
+	// JoinLeftKeep keeps the message: the shared flag is off and both delay rows are gone.
+	JoinLeftKeep JoinLeftMode = iota + 1
+	// JoinLeftNow deletes the message at once: the flag is on and this kind has no row.
+	JoinLeftNow
+	// JoinLeftAfter deletes the message after DelaySecs: the flag is on and this kind has a row.
+	JoinLeftAfter
+)
+
+// JoinLeftState is the choice for one joined or left kind. DelaySecs is read only for
+// JoinLeftAfter and must then be 1..MaxDelaySecs.
+type JoinLeftState struct {
+	Mode      JoinLeftMode
+	DelaySecs int
+}
+
+var (
+	// ErrNotJoinLeft is returned when a kind is not the joined or the left service message.
+	ErrNotJoinLeft = errors.New("kind does not share the clean service flag")
+	// ErrInvalidJoinLeftState is returned for a JoinLeftMode that is not one of the three.
+	ErrInvalidJoinLeftState = errors.New("invalid joined or left state")
+)
+
+// applyHook is called inside the transaction of ApplyJoinLeftRule and ApplyCleanServiceFlag
+// between the flag write and the rule writes. It is nil in production; a test installs one
+// with SetApplyHookForTest (testtools builds only) to fail the second step.
+var applyHook func() error
+
+// runApplyHook calls the hook, if any.
+func runApplyHook() error {
+	if applyHook == nil {
+		return nil
+	}
+	return applyHook()
+}
+
+// dropSharedCaches drops the greetings and the delete_rules cache keys of a chat after a
+// transaction that wrote both stores.
+func dropSharedCaches(chatID int64) {
+	cache.DeleteCache(cache.CacheKey("greetings", chatID))
+	cache.DeleteCache(rulesKey(chatID))
+}
+
+// ApplyJoinLeftRule applies a group's choice for the joined or the left service message.
+// The shared /cleanservice flag and the delay rows are written in ONE transaction, so a
+// failure leaves both as they were: Keep writes the flag false and removes both the joined
+// and the left rows (with the flag off both read Keep, and a stale delay must never come
+// back); Now writes the flag true and removes this kind's row; After N writes the flag true
+// and upserts this kind's row. The kind, the mode and the delay are validated before any
+// write. After the commit it drops the greetings and the delete_rules cache keys.
+func ApplyJoinLeftRule(ctx context.Context, chatID int64, kind string, state JoinLeftState) error {
+	if !SharesCleanServiceFlag(kind) {
+		return ErrNotJoinLeft
+	}
+	switch state.Mode {
+	case JoinLeftKeep, JoinLeftNow:
+	case JoinLeftAfter:
+		if state.DelaySecs < 1 || state.DelaySecs > MaxDelaySecs {
+			return ErrDelayOutOfRange
+		}
+	default:
+		return ErrInvalidJoinLeftState
+	}
+	if db.DB == nil {
+		return fukuerrors.Wrap(errNoDatabase, "apply joined or left rule")
+	}
+	err := db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := greetings.SetCleanServiceTx(tx, chatID, state.Mode != JoinLeftKeep); err != nil {
+			return err
+		}
+		if err := runApplyHook(); err != nil {
+			return err
+		}
+		switch state.Mode {
+		case JoinLeftKeep:
+			return tx.Where("chat_id = ? AND kind IN ?", chatID, []string{KindJoined, KindLeft}).
+				Delete(&models.DeleteRule{}).Error
+		case JoinLeftNow:
+			return tx.Where("chat_id = ? AND kind = ?", chatID, kind).Delete(&models.DeleteRule{}).Error
+		default:
+			return tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "chat_id"}, {Name: "kind"}},
+				DoUpdates: clause.AssignmentColumns([]string{"delay_secs", "updated_at"}),
+			}).Create(&models.DeleteRule{ChatID: chatID, Kind: kind, DelaySecs: state.DelaySecs}).Error
+		}
+	})
+	if err != nil {
+		return fukuerrors.Wrapf(err, "apply joined or left rule of chat %d", chatID)
+	}
+	dropSharedCaches(chatID)
+	return nil
+}
+
+// ApplyCleanServiceFlag is the /cleanservice command's write: it sets the shared flag and
+// removes BOTH the joined and the left delay rows in one transaction, so a delay chosen
+// before an off and on never comes back, then drops the greetings and delete_rules cache
+// keys.
+func ApplyCleanServiceFlag(ctx context.Context, chatID int64, on bool) error {
+	if db.DB == nil {
+		return fukuerrors.Wrap(errNoDatabase, "apply clean service flag")
+	}
+	err := db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := greetings.SetCleanServiceTx(tx, chatID, on); err != nil {
+			return err
+		}
+		if err := runApplyHook(); err != nil {
+			return err
+		}
+		return tx.Where("chat_id = ? AND kind IN ?", chatID, []string{KindJoined, KindLeft}).
+			Delete(&models.DeleteRule{}).Error
+	})
+	if err != nil {
+		return fukuerrors.Wrapf(err, "apply clean service flag of chat %d", chatID)
+	}
+	dropSharedCaches(chatID)
 	return nil
 }

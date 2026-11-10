@@ -423,6 +423,33 @@ func SetShouldCleanService(chatID int64, pref bool) error {
 	return nil
 }
 
+// SetCleanServiceTx writes the /cleanservice flag of a chat on tx, so a caller can change it
+// together with other rows in one transaction. It guarantees the chat and greetings rows
+// first (the chat row through the global handle, before the transaction writes anything, as
+// upsertGreetingSettings does) and then writes the flag with a column-targeted update: the
+// model's default:false tag on the column would turn a Go false back into the default on a
+// plain Create. It does not drop the greetings cache key; its caller does that after the
+// transaction commits.
+func SetCleanServiceTx(tx *gorm.DB, chatID int64, on bool) error {
+	if !db.ChatExists(chatID) {
+		if err := chats.EnsureChatInDb(chatID, ""); err != nil {
+			return fukuerrors.Wrapf(err, "ensure chat %d in db", chatID)
+		}
+	}
+	settings := models.GreetingSettings{}
+	if err := tx.Where("chat_id = ?", chatID).
+		Attrs(defaultGreetingSettingsAttrs(chatID)).
+		FirstOrCreate(&settings).Error; err != nil {
+		return fukuerrors.Wrapf(err, "first-or-create greeting settings for chat %d", chatID)
+	}
+	if err := tx.Model(&models.GreetingSettings{}).
+		Where("chat_id = ?", chatID).
+		Updates(map[string]any{"clean_service_settings": on, "updated_at": time.Now()}).Error; err != nil {
+		return fukuerrors.Wrapf(err, "update the clean service flag of chat %d", chatID)
+	}
+	return nil
+}
+
 func SetShouldAutoApprove(chatID int64, pref bool) error {
 	updates := map[string]any{
 		"auto_approve": pref,
