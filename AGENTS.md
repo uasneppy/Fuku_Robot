@@ -1461,6 +1461,43 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   holds created before the join's own date (`TakeHoldsBefore`) and lifts a live marker mute of a mute hold first, punished or
   still pending (WR-03: the restrict may have taken effect before the hold was marked; restoring the hold on failure), and a leave that Telegram does not report (restricted to restricted) is settled the same
   way at the rejoin, never by deleting a mute hold at the leave.
+- `chat_delete_rules` (migration 20261110120000, with `scheduled_deletions` below) is one chat's delay for one kind of
+  message, one row per `(chat_id, kind)`: `kind` is `service:<type>` or `bot:<kind>` (`fuku/db/deletion/kinds.go`, 17 kinds,
+  validated in Go by `deletion.ValidKind` and never by a CHECK, so a later type needs no migration) and `delay_secs` is 0
+  for "delete now" and 1..86400 for "delete after N seconds" under the named CHECK `chk_chat_delete_rules_delay` (0..86400).
+  A chat with no row for a kind means Keep (Off for a bot kind), and a read creates nothing. It is read through
+  `cache.GetFromCacheOrLoad` under `cache.CacheKey("delete_rules", chat)` (`deletion.GetRules`, one `Rules` struct whose
+  `Delays` map holds only the kinds that have a row: a stored 0 is present, an absent kind has no rule; `GetRulesFresh` is
+  the same query without the cache), the key `delete_rules:*` is listed in `skipLocal` (the watcher and every send site
+  read it, so a rule switched off must stop acting on every replica at the next message), and every write drops it
+  (`SetRule` is a column-targeted `INSERT ... ON CONFLICT (chat_id, kind) DO UPDATE` of `delay_secs` and `updated_at`, a Go 0
+  written, the kind and the range checked before any write; `RemoveRule` deletes the row). The model carries no `default:`
+  tag. The `service:new_chat_members` and `service:left_chat_member` rows only hold the delay: whether those two kinds act at
+  all is the shared `/cleanservice` flag (`greetings.clean_service_settings`), written together with the rows in ONE
+  transaction by `deletion.ApplyJoinLeftRule` (Keep: flag false and both rows removed; Now: flag true and this kind's row
+  removed; After N: flag true and this kind's row upserted) and, for the `/cleanservice` command, by
+  `deletion.ApplyCleanServiceFlag` (the flag on or off and BOTH rows removed, so a stale delay never comes back); both
+  drop the `greetings` and `delete_rules` keys after the commit, and `greetings.SetCleanServiceTx` guarantees the chat and
+  greetings rows and writes the flag with a column-targeted update (the column's `default:false` tag would swallow a Go
+  false on a plain Create). The table is never part of backup, export, import or reset
+  (`TestDeletionTablesStayOutOfBackup`).
+- `scheduled_deletions` (same migration) is the durable queue of messages waiting to be deleted: `id`, `chat_id`,
+  `message_id`, `kind`, `sent_at` (the message's own date, which the worker uses to drop a row Telegram can no longer
+  delete) and `delete_at` (`sent_at` plus the delay), `state` (`pending` or `acting` under `chk_scheduled_deletions_state`),
+  `claim_token`, `claimed_at`, `attempts` (`chk_scheduled_deletions_attempts`) and `created_at`, unique on `(chat_id,
+  message_id)` (`uk_scheduled_deletions_message`), with the partial indexes `idx_scheduled_deletions_due` (`delete_at` where
+  pending) and `idx_scheduled_deletions_acting` (`claimed_at` where acting). Times are stored as UTC at second precision
+  (SQLite compares them as text). `deletion.Schedule` is the one writer: it validates the kind and the delay, refuses a
+  Staff Group chat after a fresh `staff.GetStaffGroupFresh` read (a read error writes nothing) and upserts so that
+  scheduling one message twice keeps the earlier `delete_at` (`LEAST(scheduled_deletions.delete_at, EXCLUDED.delete_at)` on
+  PostgreSQL, `MIN(scheduled_deletions.delete_at, excluded.delete_at)` on SQLite, the table-qualified column being
+  required because an unqualified one is ambiguous on PostgreSQL) and never rewrites the kind or `sent_at`. `ClaimDue`
+  claims due pending rows with one conditional `UPDATE` (state acting, a `crypto/rand` token, `claimed_at`, re-checking
+  `state = 'pending'`) and reads them back by token, so among concurrent callers each row has one winner; `Complete` and
+  `Release` touch only rows that still carry the caller's token (a late completion of a stale claim removes nothing, and an
+  empty token is refused), the third counted `Release` deletes the row instead, and `ReleaseStale` returns old acting rows to
+  pending with no attempt. The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
+  never part of backup, export, import or reset.
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
   (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
@@ -2778,6 +2815,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   direct update to 5 fails with SQLSTATE 23514 naming it; PostgreSQL only, it skips locally;
   `TestMemberRequirementAIMigrationStatements` is its database-free half and runs in `make test`), and
   `TestChatRequirementsSettings` now covers eight columns (the AI rule included).
+  The Phase 16 guarantees are `TestScheduleKeepsEarliest` (`./fuku/db/deletion`: scheduling one `(chat, message)` again keeps
+  the earliest `delete_at` with the table-qualified `LEAST`, also under concurrent callers) and `TestClaimBatchOneWinner`
+  (`./fuku/db/deletion`: eight concurrent `ClaimDue` callers each win a disjoint set of rows and drain the queue exactly
+  once), both of which also run on SQLite in `make test`, and `TestScheduledDeletionMigrationDefaults`
+  (`./fuku/db/migrations`: the statements run twice without error, a row with only its required columns reads pending, an
+  empty token, 0 attempts and no claim time, the named constraints refuse a delay of 86401, a duplicate `(chat, message)`, a
+  state of `x` and negative attempts, and the due index keeps its pending predicate; PostgreSQL only, it skips locally;
+  `TestScheduledDeletionMigrationStatements` is its database-free half and runs in `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
