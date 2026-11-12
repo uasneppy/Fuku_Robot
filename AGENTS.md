@@ -2295,9 +2295,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberDeleteCountPending` seam: a count that fails sheds the chat's entries, because unknown never deletes, D-33), the entries
   past the ceiling shed latest first, and then one `memberDeleteBatchWrite` (`deletion.ScheduleBatch`: statements of at most 100
   rows, the Staff Group refused inside it, so the flush makes no second read) over every kept entry of every chat. A write that
-  returns an error sheds what it did not write and is logged once an hour by chat count. Each flush runs on
+  returns an error sheds what it did not write and is logged once an hour by chat count. Each flush's screening runs on
   `context.WithTimeout(context.WithoutCancel(deletionContext()), deletionRecordTimeout)`, never the cancelled run context, and
-  wakes the worker only when a written entry is already due. Shed reasons are counted separately in atomic counters (full,
+  its batch write runs on a context of its own (`memberDeleteWriteContext`: `context.WithoutCancel` of the flush's context under
+  `memberDeleteWriteTimeout`, 5 s), so a slow screening that used up the flush's budget cannot make the write of the entries it
+  already screened fail (IN-02); the final flush of a stop keeps its one 2 s context for the write too
+  (`TestMemberDeleteFlushWriteOwnContext`). A flush wakes the worker only when a written entry is already due. Shed reasons are counted separately in atomic counters (full,
   stopping, ceiling, rules unreadable, count unreadable, write failed, no delete right) and a shed logs at most one Warn per chat per hour with the
   chat ID and the reason name only, never a message ID (`memberDeleteShedWarn`, a map of at most 10,000 chats that forgets
   entries older than an hour and, when none can be forgotten, logs nothing more for a new chat after one process-wide line).

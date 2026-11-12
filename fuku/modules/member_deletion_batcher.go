@@ -273,9 +273,28 @@ func memberDeleteScreenChat(ctx context.Context, chatID int64, entries []deletio
 	return entries[:room]
 }
 
+// memberDeleteWriteTimeout bounds the batch write of one flush on its own context (IN-02). It is a
+// variable only so a test can shorten it.
+var memberDeleteWriteTimeout = deletionRecordTimeout
+
+// memberDeleteWriteContext gives the write of a flush its own bounded context: detached from the
+// flush's deadline, so a slow screening that used up the flush's budget cannot make the write of the
+// entries it already screened fail, and from its cancellation (the periodic flush's context is
+// already detached from the cancelled deletion root).
+func memberDeleteWriteContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), memberDeleteWriteTimeout)
+}
+
 // memberDeleteFlush writes what is buffered and returns how many entries the writer reported
-// written. Every entry that is not written is shed, and its message stays.
+// written. Every entry that is not written is shed, and its message stays. The screening runs under
+// ctx and the write under a context of its own (memberDeleteWriteContext).
 func memberDeleteFlush(ctx context.Context) int {
+	return memberDeleteFlushWith(ctx, memberDeleteWriteContext)
+}
+
+// memberDeleteFlushWith is memberDeleteFlush with the write's context chosen by the caller: the
+// final flush of a stop keeps its one bounded context for the write too.
+func memberDeleteFlushWith(ctx context.Context, writeContext func(context.Context) (context.Context, context.CancelFunc)) int {
 	entries := memberDeleteTake()
 	if len(entries) == 0 {
 		return 0
@@ -290,7 +309,13 @@ func memberDeleteFlush(ctx context.Context) int {
 		kept = append(kept, memberDeleteScreenChat(ctx, entries[start].ChatID, entries[start:end])...)
 		start = end
 	}
-	return memberDeleteWriteKept(ctx, memberDeleteDropPinnedEntries(kept))
+	kept = memberDeleteDropPinnedEntries(kept)
+	if len(kept) == 0 {
+		return 0
+	}
+	writeCtx, cancel := writeContext(ctx)
+	defer cancel()
+	return memberDeleteWriteKept(writeCtx, kept)
 }
 
 // memberDeleteDropPinnedEntries drops the entries whose message was pinned within memberPinnedTTL
@@ -356,13 +381,15 @@ func memberDeleteFlushOnce(wait time.Duration) {
 }
 
 // memberDeleteFinalFlush is the flush a stop asks for: it repeats until the buffer is empty or the
-// final wait is over.
+// final wait is over, and its write keeps that one bounded context, so the stop never waits longer
+// than memberDeleteFinalFlushWait.
 func memberDeleteFinalFlush() {
 	defer error_handling.RecoverFromPanic("memberDeleteFinalFlush", "Deletion")
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(deletionContext()), memberDeleteFinalFlushWait)
 	defer cancel()
+	keepContext := func(c context.Context) (context.Context, context.CancelFunc) { return c, func() {} }
 	for len(memberDeleteQueue) > 0 && ctx.Err() == nil {
-		memberDeleteFlush(ctx)
+		memberDeleteFlushWith(ctx, keepContext)
 	}
 }
 
