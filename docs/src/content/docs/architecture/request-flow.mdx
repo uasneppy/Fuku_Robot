@@ -251,9 +251,9 @@ func LoadBans(dispatcher *ext.Dispatcher) {
     DefaultHelpRegistry().AbleMap[bansModule.moduleName] = true
 
     // Command handlers
-    dispatcher.AddHandler(handlers.NewCommand("ban", bansModule.ban))
-    dispatcher.AddHandler(handlers.NewCommand("kick", bansModule.kick))
-    dispatcher.AddHandler(handlers.NewCommand("unban", bansModule.unban))
+    dispatcher.AddHandler(helpers.NewBotCommand("ban", bansModule.ban))
+    dispatcher.AddHandler(helpers.NewBotCommand("kick", bansModule.kick))
+    dispatcher.AddHandler(helpers.NewBotCommand("unban", bansModule.unban))
 
     // Callback query handlers
     dispatcher.AddHandler(handlers.NewCallback(
@@ -267,7 +267,7 @@ func LoadBans(dispatcher *ext.Dispatcher) {
 
 | Type | Registration | Trigger |
 |------|--------------|---------|
-| Command | `handlers.NewCommand("cmd", fn)` | `/cmd` messages |
+| Command | `helpers.NewBotCommand("cmd", fn)` | `/cmd` messages |
 | Callback | `handlers.NewCallback(filter, fn)` | Button presses |
 | Message | `handlers.NewMessage(filter, fn)` | Text messages |
 | ChatMember | `handlers.NewChatMemberUpdated(filter, fn)` | Member updates |

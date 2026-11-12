@@ -589,7 +589,7 @@ flowchart TD
   private chats, and posts a "Started Bot!" message to `MESSAGE_DUMP`.
 - **Handler groups.** Watchers (captcha, antiflood, locks and so on) pass the update on to the next group. Commands
   end it. A module registers itself in `init()`. Newer commands go through `helpers.WrapCommand`, a pipeline that
-  runs the permission and disable checks; older ones register `handlers.NewCommand` directly. See
+  runs the permission and disable checks; older ones register through `helpers.NewBotCommand`, the recording shim. See
   [handler groups](docs/src/content/docs/architecture/handler-groups.md) and [AGENTS.md](AGENTS.md).
 - **Data.** Each domain has a repository package in `fuku/db/<domain>/`. Reads go through a cache loader (process
   memory, then Redis, then PostgreSQL), and every write invalidates the keys it affects.

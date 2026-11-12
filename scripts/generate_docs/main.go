@@ -305,7 +305,7 @@ func generateInventory(projectRoot string) error {
 		}
 
 		for _, cmd := range modCmds {
-			regPattern := "NewCommand"
+			regPattern := "NewBotCommand"
 			if len(cmd.Aliases) > 0 {
 				regPattern = "MultiCommand"
 			}

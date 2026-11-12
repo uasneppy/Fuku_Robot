@@ -146,7 +146,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Modules register in `init()` via `RegisterLegacyModule(name, priority, load)`. Use a unique name; duplicates are
   dropped silently. Priority sets load order and group-0 precedence; `LoadHelp` loads last.
 - New commands use `helpers.WrapCommand(dispatcher, CommandDescriptor{...}, handler)`. Set `Disableable: true` for any
-  command chats may disable. Do not add replies for failed checks; the pipeline sends them.
+  command chats may disable. Do not add replies for failed checks; the pipeline sends them. Every command handler,
+  wrapped or raw, is built by `helpers.NewBotCommand` (`fuku/utils/helpers/command_registry.go`), which records the
+  lower-cased name and returns the library's own command handler unchanged (so routing is the library's). Command
+  deletion reads the registry through `helpers.IsBotCommand`, so only a command this bot registers is ever deleted.
+  `WrapCommand`'s `register` and `MultiCommand` go through it, and `TestNoRawNewCommand` (a `go/parser` walk of `fuku/`
+  and `main.go`, tests excluded) fails on any other construction of the library's command handler. Never call
+  `handlers.NewCommand` or build a `handlers.Command` literal outside that file.
 - Anonymous admins bypass `WrapCommand`. Admin commands that must work for them also need
   `RegisterAnonymousAdminHandler` + `anonPipelineHandler`. After the proof tap, `verifyAnonymousAdmin` swaps the callback
   update for a message update carrying the cached command and points `EffectiveChat` at that command's chat, so the
@@ -154,7 +160,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   command's chat as if the admin had sent it, with the tapper as the sender. `verifyAnonymousAdmin` refuses the tap as
   an invalid request, deleting and running nothing, unless the callback's `c`, the proof button's chat and the cached
   command's chat are the same chat.
-- The `StaffActions` module (priority 65) registers raw `handlers.NewCommand` interceptors at group 0 ahead of Bans (70)
+- The `StaffActions` module (priority 65) registers raw interceptors, built through `helpers.NewBotCommand`, at group 0 ahead of Bans (70)
   and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
@@ -255,7 +261,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   replies; it is not `Disableable`) and the typed-reply door (below). A `/cancel` sent anywhere but the bot's private
   chat is not the bot's command and is never ended: `settingsCancelPassOn`, a raw handler registered at group 0 just
   before the pipeline's `/cancel` (a second documented exception to the `WrapCommand` rule, beside the StaffActions
-  interceptors; it matches through `handlers.NewCommand`'s own `CheckUpdate`), takes it first, replies and writes nothing,
+  interceptors; it matches through the `CheckUpdate` of the command handler `helpers.NewBotCommand` builds), takes it first, replies and writes nothing,
   makes no Telegram call and returns `nil`. In this gotgbot `nil` leaves the group and moves on to group 1 and later, while
   `ext.ContinueGroups` would only try the next handler of group 0, which is the pipeline's `/cancel` that ends the update
   (so a member's `/cancel <spam link>` would skip aispam, antiflood, locks, blacklists, filters, the log channel and the
@@ -2907,6 +2913,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestCanonVerdictKey` pin one vector each for that reason.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
+- The docs generator finds raw commands in the module source by the shim's call, `helpers.NewBotCommand("name", ...)`
+  (`scripts/generate_docs/parsers.go`); a command registered another way is not listed, and the guard test rejects it.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
   their first 512 bytes are frozen; `api-reference/lock-types.md` ignores the marker.
 - Imports: stdlib, third-party, internal, separated by blank lines. Use `helpers.Ptr[T]` for option pointers.
