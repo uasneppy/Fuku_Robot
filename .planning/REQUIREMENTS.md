@@ -55,9 +55,9 @@ Requirements for this milestone. Each maps to one roadmap phase.
 
 - [x] **DEL-01**: A Service messages page sets each Telegram service-message type (member joined, member left, new photo, new title, pinned message, forum topics, boosts, video chats, auto-delete timer changes and the other types Telegram sends) to keep, delete immediately, or delete after N seconds. Joined and left share storage with the existing `/cleanservice` setting.
 - [x] **DEL-02**: A Bot messages page sets each kind of the bot's own message (welcome, goodbye, rules, automatic punishments, manual punishment replies to `/ban`, `/mute`, `/kick`, `/warn` and the like) to keep or delete after N minutes.
-- [ ] **DEL-03**: With "Delete commands" on, every member's command in the group (admins' included) is deleted after the bot has answered it.
-- [ ] **DEL-04**: With "Delete edited messages" on, a member's message edited after a grace period (1 minute by default, adjustable on the page) is deleted. Admins and approved users are exempt.
-- [ ] **DEL-05**: With "Self-destruct" on, every member message is deleted N minutes after it was sent. Admins, approved users and pinned messages are exempt.
+- [x] **DEL-03**: With "Delete commands" on, every member's command in the group (admins' included) is deleted after the bot has answered it.
+- [x] **DEL-04**: With "Delete edited messages" on, a member's message edited after a grace period (1 minute by default, adjustable on the page) is deleted. Admins and approved users are exempt.
+- [x] **DEL-05**: With "Self-destruct" on, every member message is deleted N minutes after it was sent. Admins, approved users and pinned messages are exempt.
 - [x] **DEL-06**: Scheduled deletions survive restarts and run once across replicas. Delays are capped below Telegram's 48-hour limit, and a deletion too old for Telegram is dropped quietly.
 - [x] **DEL-07**: Deletion never touches Staff Group summaries and cards, lockdown alerts, captcha challenges, log-channel posts or anything in a Staff Group.
 - [x] **DEL-08**: When the bot lacks the right to delete messages, every deletion page says so instead of failing silently.
@@ -168,9 +168,9 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | MREQ-15 | Phase 16 | Complete |
 | DEL-01 | Phase 16 | Complete |
 | DEL-02 | Phase 16 | Complete |
-| DEL-03 | Phase 17 | Pending |
-| DEL-04 | Phase 17 | Pending |
-| DEL-05 | Phase 17 | Pending |
+| DEL-03 | Phase 17 | Complete |
+| DEL-04 | Phase 17 | Complete |
+| DEL-05 | Phase 17 | Complete |
 | DEL-06 | Phase 16 | Complete |
 | DEL-07 | Phase 16 | Complete |
 | DEL-08 | Phase 16 | Complete |
