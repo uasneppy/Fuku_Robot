@@ -1,7 +1,7 @@
 ---
 phase: "17"
 slug: "command-edit-and-self-destruct-deletion"
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: "2026-11-12"
@@ -1014,12 +1014,12 @@ A17-A16; the rest are planner-level or live checks.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS (no colour exists; status icons substitute)
-- [ ] Dimension 4 Typography: PASS (HTML tags substitute)
-- [ ] Dimension 5 Spacing: PASS (message layout and row budget substitute)
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS (no colour exists; status icons substitute)
+- [x] Dimension 4 Typography: PASS (HTML tags substitute)
+- [x] Dimension 5 Spacing: PASS (message layout and row budget substitute)
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
 
-**Approval:** pending
+**Approval:** approved 2026-11-12 by the UI checker (7/7 PASS, two non-blocking FLAGs applied: the Commands copy no longer implies an answer exists, and the M33 key cross-reference reads 72 to 74)
