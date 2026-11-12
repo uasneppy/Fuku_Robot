@@ -378,7 +378,7 @@ func TestBotManualRepliesNotCovered(t *testing.T) {
 		{name: "mute without a target", text: "/mute", call: mutesModule.mute, wantSends: 1},
 		{name: "tmute with a bad duration", text: "/tmute 99x", reply: true, call: mutesModule.tMute, wantSends: 1},
 		{name: "unmute without a target", text: "/unmute", call: mutesModule.unmute, wantSends: 1},
-		{name: "warn of an admin", text: "/warn 777000 spam", call: warnsModule.warnUser, wantSends: 1},
+		{name: "warn without a target", text: "/warn", call: warnsModule.warnUser, wantSends: 1},
 		{name: "warn list", text: "/warns", reply: true, call: warnsModule.warns, wantSends: 1},
 		{name: "warn count", text: "/warnings", call: warnsModule.warnings, wantSends: 1},
 		{name: "resetwarns", text: "/resetwarns", reply: true, call: warnsModule.resetWarns, wantSends: 1},

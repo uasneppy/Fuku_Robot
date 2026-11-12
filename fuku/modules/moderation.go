@@ -7,6 +7,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/actionlog"
@@ -26,6 +27,18 @@ type moderationCtx struct {
 	Ctx    *ext.Context
 	Tr     *i18n.Translator
 	Module *moduleStruct
+}
+
+// replySuccess sends the success reply of a punishment command as a reply to the command and, when
+// it was sent, queues it for deletion under the manual punishment kind (D-13). Validation and error
+// replies, lists and question cards never go through it. The error is exactly what Msg.Reply returned.
+func (c *moderationCtx) replySuccess(text string, opts *gotgbot.SendMessageOpts) error {
+	sent, err := c.Msg.Reply(c.Bot, text, opts)
+	if err != nil {
+		return err
+	}
+	scheduleBotMessage(sent, deletion.KindBotManual)
+	return nil
 }
 
 // gateFn is a permission gate. Returns true if the gate passes.

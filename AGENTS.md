@@ -2046,6 +2046,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   right never stops `bot:*` rows, because a plain-member bot can delete its own messages. The settings page reads the right
   through the same `deletionReadBotRight`, trusting the flag outside basic groups. After the stop cancels the root, a
   delete-now starts no goroutine and takes the durable path (a row due now), so it resumes after a restart.
+- Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
+  (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
+  reply and the click-to-read message of a group with private rules (`bot:rules`), the success replies of the manual
+  punishment commands through `moderationCtx.replySuccess` (`bot:punish_manual`: `/ban`, `/dban`, `/tban`, `/kick`,
+  `/dkick`, `/unban`, `/mute`, `/dmute`, `/tmute`, `/unmute`, five sites in `bans.go` and three in `mute.go`), and the one
+  warn send of `warnThisUser`, whose final `source` argument (`warnSourceManual` for `/warn`, `/dwarn` and `/swarn`,
+  `warnSourceAuto` for the blacklist's warn action) picks `bot:punish_manual` or `bot:punish_auto`. Nothing hooks
+  `helpers.SendMessageWithErrorHandling`, `media.Send`, `media.SendGreeting` or the bot client, so a captcha challenge, a
+  staff, lockdown, log or raid message, a preview and the private rules message are never reached (D-18, DEL-07; a
+  grep over `fuku/utils` for the helper finds nothing). The helper returns at once for a nil message and for a chat that is
+  not a `group` or `supergroup` (the type comes from the sent message Telegram answered, so a `/rules` from a private chat
+  connected to a group, and the deep link's private message, are refused), reads the chat's cached rules through
+  `deletionRulesLookup` (an unreadable read, a nil answer and a kind with no row schedule nothing), computes `sent_at` from
+  the message's own date (`deletionSentAt`: zero, negative or future means now, a past date is never stretched) and writes
+  through `deletionSchedule`, so the latch and the Staff Group refusal apply. It has no result: every failure is one Warn
+  with the chat ID and kind (never a message ID, text or member), it runs a 3 s synchronous write on its own context and
+  starts no goroutine. A stored delay of 0 for a bot kind (the page offers none, but the repository allows it) is a row due
+  now. The body is `scheduleBotRow`, which takes an optional delay override so the member requirements' notices can share
+  it later. `sendRulesMessage` returns the sent message (its requests are unchanged, the Phase 12 goldens pass unedited);
+  only `/rules` schedules it, the deep link and the settings preview discard it. The manual kind covers success replies
+  only: validation and error replies, warn lists, `/resetwarns`, `/rmwarn`, the `/restrict` and `/unrestrict` question cards,
+  `/kickme`, `/banme` and the silent variants (which send no reply) are never scheduled
+  (`TestBotManualRepliesNotCovered`). Anonymous-admin re-entry runs the same command, so the hooks need no special case.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -3107,6 +3130,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   sees it, which means the sweep cannot catch a key leak on its own (checked by mutation): the key is held by that
   redactor and `memberReqAILogFailure`'s own scrub, while the names and hashes have no such net and are held by the
   sweep alone.
+- Phase 16 plan 05 (scheduling the bot's own messages) test families: `TestScheduleBotMessage` and
+  `TestScheduleBotMessageClampsDate` (the helper's table: nil, private, channel, no rule, latch, Staff Group, failed read,
+  failed write, the date clamp), `TestBotWelcomeScheduled` and `TestBotGoodbyeScheduled` (`deletion_bot_test.go`, through the
+  real dispatcher of `newDeletionEnv`), and `TestBotRulesScheduled`, `TestBotRulesPrivateNeverScheduled`,
+  `TestBotManualPunishmentReplies`, `TestBotManualRepliesNotCovered` and `TestWarnThisUserSource`
+  (`deletion_bot_sites_test.go`, on the `botSite` helper: a scripted `moduleBotClient` whose send answers carry the chat's
+  own ID and type and the fixed clock's date, because the helper reads the chat from the answer). The shared staff fake gains
+  `staffActionFake.sendDate` (nil means 1, so every earlier test is unchanged); the deletion environment sets it from
+  `deletionNow()`, so no queued row lands in 1970.
 
 ## Commits
 

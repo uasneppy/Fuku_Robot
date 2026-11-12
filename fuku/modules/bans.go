@@ -61,7 +61,7 @@ func kickReply(c *moderationCtx, t *target) error {
 		}
 	}
 
-	_, err = c.Msg.Reply(c.Bot,
+	err = c.replySuccess(
 		fmt.Sprintf(baseStr, formatting.MentionHtml(kickuser.Id, kickuser.FirstName)),
 		formatting.Shtml(),
 	)
@@ -126,7 +126,7 @@ func moderationTban(m *moduleStruct) *moderationCommand {
 				}
 			}
 
-			_, err = c.Msg.Reply(c.Bot, baseStr, formatting.Shtml())
+			err = c.replySuccess(baseStr, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err
@@ -152,7 +152,7 @@ func banReplyWithButton(c *moderationCtx, t *target) error {
 
 	text := fmt.Sprintf(baseStr, formatting.MentionHtml(banUser.Id, banUser.FirstName))
 
-	_, err = c.Msg.Reply(c.Bot, text,
+	err = c.replySuccess(text,
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
 			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
@@ -228,7 +228,7 @@ func moderationBan(m *moduleStruct) *moderationCommand {
 			} else {
 				return banReplyWithButton(c, t)
 			}
-			_, err := c.Msg.Reply(c.Bot, text, sendMsgOptns)
+			err := c.replySuccess(text, sendMsgOptns)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -417,7 +417,7 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 				temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_unban_unbanned_user")
 				text = fmt.Sprintf(temp, formatting.MentionHtml(banUser.Id, banUser.FirstName))
 			}
-			_, err := c.Msg.Reply(c.Bot, text, formatting.Shtml())
+			err := c.replySuccess(text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err

@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/db/warns"
@@ -179,7 +180,26 @@ func applyWarnLimitAction(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Cha
 	return true, nil
 }
 
-func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64, reason, warnType string) (err error) {
+// warnSource says who started a warn, so the deletion rules tell a moderator's /warn from an
+// automatic one (the blacklist's warn action): each is its own kind (D-13).
+type warnSource int
+
+const (
+	// warnSourceManual is a moderator's /warn, /dwarn or /swarn.
+	warnSourceManual warnSource = iota
+	// warnSourceAuto is a warn an automatic rule issued, such as the blacklist's warn action.
+	warnSourceAuto
+)
+
+// deletionKind is the bot kind the warn message of this source is queued under.
+func (s warnSource) deletionKind() string {
+	if s == warnSourceAuto {
+		return deletion.KindBotAuto
+	}
+	return deletion.KindBotManual
+}
+
+func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64, reason, warnType string, source warnSource) (err error) {
 	var (
 		reply    string
 		keyboard gotgbot.InlineKeyboardMarkup
@@ -287,7 +307,7 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 			reply += fmt.Sprintf(temp, html.EscapeString(reason))
 		}
 	}
-	_, err = b.SendMessage(chat.Id, reply,
+	sent, err := b.SendMessage(chat.Id, reply,
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
 			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{
@@ -304,6 +324,7 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 		log.Errorf("[warn] sendMessage (%d) - %s", userId, err)
 		return err
 	}
+	scheduleBotMessage(sent, source.deletionKind())
 
 	return ext.EndGroups
 }
@@ -352,7 +373,7 @@ func (m moduleStruct) dispatchWarn(b *gotgbot.Bot, ctx *ext.Context, warnType st
 		warnusr = userId
 	}
 
-	return m.warnThisUser(b, ctx, warnusr, reason, warnType)
+	return m.warnThisUser(b, ctx, warnusr, reason, warnType, warnSourceManual)
 }
 
 func (m moduleStruct) warnUser(b *gotgbot.Bot, ctx *ext.Context) error {

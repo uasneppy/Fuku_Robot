@@ -32,7 +32,7 @@ func muteReplyWithButton(c *moderationCtx, t *target) error {
 		baseStr += fmt.Sprintf(temp, t.reason)
 	}
 
-	_, err = c.Msg.Reply(c.Bot,
+	err = c.replySuccess(
 		fmt.Sprintf(baseStr, formatting.MentionHtml(muteUser.Id, muteUser.FirstName)),
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
@@ -112,7 +112,7 @@ func moderationTmute(m *moduleStruct) *moderationCommand {
 				baseStr += fmt.Sprintf(temp, t.reason)
 			}
 
-			_, err = c.Msg.Reply(c.Bot, baseStr, formatting.Shtml())
+			err = c.replySuccess(baseStr, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err
@@ -251,7 +251,7 @@ func moderationUnmute(m *moduleStruct) *moderationCommand {
 				note, _ := c.Tr.GetString("mutes_unmute_lockdown_note")
 				text += "\n" + note
 			}
-			_, err = c.Msg.Reply(c.Bot, text, formatting.Shtml())
+			err = c.replySuccess(text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err
