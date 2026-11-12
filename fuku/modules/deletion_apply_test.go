@@ -24,6 +24,7 @@ func deletionCleanup(t *testing.T, chatIDs ...int64) {
 	t.Helper()
 	clean := func() {
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.DeleteRule{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ScheduledDeletion{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.GreetingSettings{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.Chat{})
 		for _, id := range chatIDs {
