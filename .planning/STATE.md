@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 18
 current_phase_name: Remaining Settings Pages
 status: executing
-stopped_at: Completed 18-03-PLAN.md
-last_updated: "2026-11-12T18:05:12.908Z"
+stopped_at: Completed 18-04-PLAN.md
+last_updated: "2026-11-12T18:53:45.283Z"
 last_activity: 2026-11-12
 last_activity_desc: Completed 18-03-PLAN.md
-state_head: ed52b0552fc63680e14ea2077fa8cb6e881f98b4
+state_head: 5af09bc698b7b2709047a7e6806418e5d8c64424
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 114
-  completed_plans: 101
+  completed_plans: 102
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 18 (Remaining Settings Pages) — executing, plan 3 of 15 done (18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
-Plan: 4 of 15
-Status: Ready to execute plan 18-04. Phases 10 to 17 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Completed 18-03-PLAN.md
+Phase: 18 (Remaining Settings Pages) — executing, plan 4 of 15 done (18-04 `/reports` and `/autoapprove` goldens recorded first, `applyReportsEnabled` and `applyAutoApprove`, `reports.LoadChatStatusContext`, and the two composite rights `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, the only framework edit of the phase; 18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
+Plan: 5 of 15
+Status: Ready to execute plan 18-05. Phases 10 to 17 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Completed 18-04-PLAN.md
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -174,6 +174,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 18 P01 | ~65min | 3 tasks | 22 files |
 | Phase 18 P02 | 45min | 2 tasks | 10 files |
 | Phase 18 P03 | 95min | 3 tasks | 8 files |
+| Phase 18 P04 | n/a | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -273,6 +274,7 @@ Recent decisions affecting current work:
 - [Phase 15]: AI spam-name rule closed by an end-to-end test through the real dispatcher with only Telegram and the provider faked; the rulebook was read whole and eight stale sentences corrected
 - [Phase 16]: 16-09: the closing plan changes no production code; TestDeletionEndToEnd, the exclusion test, the log sweep and the Deletion privacy cases prove the slice and DEL-01, DEL-02, DEL-06, DEL-07, DEL-08 and MREQ-15 are complete
 - [Phase 17]: 17-10: a member row whose stored delay its rule does not accept reads as Off on the Deletion page (settingsDelEffective), matching the three producers
+- [Phase 18]: 18-04: the owner right refuses a non-owner with the alert chat_status_owner_button_error (a press is a callback); the two composite rights judge the bot first, the six older rights keep their order
 
 ### Pending Todos
 
@@ -354,8 +356,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T18:05:10.238Z
-Stopped at: Completed 18-03-PLAN.md
+Last session: 2026-11-12T18:53:42.875Z
+Stopped at: Completed 18-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
