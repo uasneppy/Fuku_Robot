@@ -119,7 +119,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Handlers
 
 - Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
-  before it reads the lockdown) · `-6` fed-ban · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
+  before it reads the lockdown) · `-6` fed-ban · `-5` service message deletion watcher (the only handler of the group, never ends an update, `SetAllowBot`; a deletable service type is deleted now or queued by the group's stored rule) · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache (`my_chat_member` only) and the member requirements watcher (supergroup messages only, the only message handler of the group, `ext.ContinueGroups` on every path; never add another message handler to group -2) ·
   `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
   `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
@@ -144,6 +144,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
+- The `ServiceDeletion` module (priority 242, `deletion_service.go`) registers the service message deletion watcher
+  at group `-5` (`serviceDeleteGroup`) through `handlers.NewMessage` with `SetAllowBot(true)`, the only handler of that
+  group, so never add a second message handler there that ends an update. The watcher's result is a named value preset to
+  `ext.ContinueGroups` (a recovered panic cannot return `nil`) and it returns it on every path. Its order, cheapest first:
+  a message in a group or supergroup, `deletionServiceKindOf` (one of the deletable service types), for joined and left only
+  a bot sender (`ctx.EffectiveSender.IsBot()`: `cleanService` accepts no bot, so a join or leave a bot caused is the
+  watcher's and every other sender's is `cleanService`'s, never both; an anonymous admin has `sender_chat` set and is not a
+  bot, a message with no sender is handled by neither path), then `deletionRuleFor` (the cached rules read; joined and left
+  also the shared flag through `deletionFlagLookup`; an error deletes nothing) and `deletionAct`. `cleanService` (group 0)
+  keeps join processing and deletes only after it, with the same effective rule of D-02 (flag off is Keep even with a stale
+  row, flag on with no row is delete now, flag on with a row is a queue row at the message date plus the delay), never
+  returns a delete error and always ends with `ext.EndGroups`.
 - The `MemberRequirements` module (priority 241, `memberreq.go`, `memberreq_watch.go`) registers one message watcher at
   group `-2` (`memberReqWatchGroup`), through `handlers.NewMessage` with a supergroup-only filter and no `SetAllow*`
   (new messages only: no edits, channel posts or bot senders), the only message handler of that group. The member
@@ -1498,6 +1510,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   empty token is refused), the third counted `Release` deletes the row instead, and `ReleaseStale` returns old acting rows to
   pending with no attempt. The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
   never part of backup, export, import or reset.
+- `fuku:delete:pace:next` and `fuku:delete:pace:block` are the fleet-wide Telegram pacing of the deletion code
+  (`deletionPaced`, `deletionPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block design with its own keys, so
+  deletions, member requirements, lockdown and staff fan-outs each keep their own budget (`TestDeletionPacerIsIndependent`).
+- `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
+  `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
+  keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
+  every kind, set from the classifier, overwriting) or `service` (stops only `service:*` kinds, set only after a live right
+  check, `SET NX`, so it never downgrades `gone`). A message-level answer (`message to delete not found`, `message can't be
+  deleted`) never sets a latch, because a plain-member bot can still delete its own messages. No Redis and a Redis error read
+  as "not latched": the latch only saves calls.
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
   (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
@@ -1963,6 +1985,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   A basic group is never screened (mute and kick are supergroup methods): the watcher's filter is supergroups only, and the
   page says so with its basic-group line (`settings_mreq_here_basic`, one line while any rule is not Off), so it is a stated
   limit and no longer a silent one.
+- Scheduled deletion core (`deletion_schedule.go`): `deletionAct` is the one place that decides what happens to a message with
+  a delay: a latched chat returns, a chat that is a Staff Group or cannot be told apart from one (`deletionStaffLookup`, the
+  fresh read with `staff.GetStaffGroupFresh` as its default, an error counts as a Staff Group) returns, delay 0 is an inline
+  delete and any other delay a queue row at `deletionSentAt(msg.Date)` plus the delay (the message's own date, or now when
+  the date is zero, negative or in the future). The Staff Group is refused in three places: the watcher and `cleanService`
+  through `deletionAct`, and `deletion.Schedule` itself. `deletionSchedule` is the only caller of the queue writer (through
+  the `deletionQueueWrite` seam): it refuses a delay outside 0..86400, writes nothing for a latched chat and wakes the
+  worker for a row due now. The inline delete (`deletionDeleteNow`) runs on a goroutine that starts with
+  `defer error_handling.RecoverFromPanic`, derives its context from `deletionContext()` (cancelled by the worker's stop) and
+  is counted in `deletionInline` with a cap of `deletionInlineMax` (64): a call beyond the cap, or a delete the pacer shed
+  (`ratelimit.ErrRateLimited`), becomes a queue row due now plus a wake instead of parking goroutines; a `gone` answer sets the
+  `gone` latch, a refused one is dropped with no log line and any other failure loses that one message. `deletionClassify` is a
+  table of predicates (retryFree, gone, refused, else retry) that matches on lower-cased fragments and codes, never one string.
+  Logs carry the chat ID only, never a message ID, text or member.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -2295,7 +2331,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`autoantiraidDesc`) is kept as an alias of the join-surge threshold: with words it runs `autolockdownApply` with
   `joins` in front, alone it shows the triggers, and it has exactly `/autolockdown`'s checks
   (`requireAutoLockdownAuthority`, a live `getChatMember`) and anonymous-admin re-entry, so it is stricter than the old
-  command, which any cached admin could use. There is no join handler at group `-5` and no expiry poller: nobody is
+  command, which any cached admin could use. There is no join handler at group `-5` (the group now hosts the service message deletion watcher, which is not a join handler) and no expiry poller: nobody is
   temp-banned by the raid mode, whatever an old `fuku:antiraid:*` key says. The keys are removed by
   `sweepRetiredAntiRaidKeys` (`SCAN` with `COUNT 100` and `UNLINK`, started once per process from `LoadAntiRaid` in a
   recover-protected goroutine, bounded to 30 s, a no-op without Redis). During a rolling deploy an old replica can still

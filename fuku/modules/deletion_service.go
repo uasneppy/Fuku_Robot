@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"context"
+
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
@@ -32,28 +34,64 @@ func serviceDeleteFilter(msg *gotgbot.Message) bool {
 }
 
 // serviceDeleteCandidate returns the row of a message the watcher may act on: a service message
-// of a group or supergroup, other than joined and left, which cleanService handles after join
-// processing.
-func serviceDeleteCandidate(msg *gotgbot.Message) (deletionRow, bool) {
+// of a group or supergroup. Joined and left are the watcher's only when a bot caused them
+// (the sender is a bot, so cleanService, which does not accept bot senders, never sees them);
+// for every other sender cleanService handles them after join processing, so no message is
+// handled twice. A message with no sender is not a bot's and is handled by neither path.
+func serviceDeleteCandidate(ctx *ext.Context, msg *gotgbot.Message) (deletionRow, bool) {
 	if msg == nil || (msg.Chat.Type != "group" && msg.Chat.Type != "supergroup") {
 		return deletionRow{}, false
 	}
 	row, ok := deletionServiceKindOf(msg)
-	if !ok || deletion.SharesCleanServiceFlag(row.Kind) {
+	if !ok {
+		return deletionRow{}, false
+	}
+	if deletion.SharesCleanServiceFlag(row.Kind) && (ctx.EffectiveSender == nil || !ctx.EffectiveSender.IsBot()) {
 		return deletionRow{}, false
 	}
 	return row, true
 }
 
-// serviceDeleteDelay reads the group's rules and returns the effective delay of the row, and
-// whether a rule is on. An unreadable rule is no rule: nothing is deleted on a guess.
-func serviceDeleteDelay(ctx *ext.Context, chatID int64, row deletionRow) (int, bool) {
-	rules, err := deletionRulesLookup(tracing.UpdateContext(ctx), chatID)
+// deletionRuleFor reads the effective rule of a kind in a chat: whether a rule is on and its
+// delay in seconds. Joined and left read the shared /cleanservice flag through
+// deletionFlagLookup (D-02); every other kind is the stored row alone. A read that fails is an
+// error, never a guess: the callers delete nothing then.
+func deletionRuleFor(ctx context.Context, chatID int64, kind string) (delay int, on bool, err error) {
+	rules, err := deletionRulesLookup(ctx, chatID)
 	if err != nil {
-		log.Warnf("[ServiceDeletion] could not read the deletion rules of chat %d: %v", chatID, err)
-		return 0, false
+		return 0, false, err
 	}
-	return deletionEffectiveDelay(row.Kind, rules, false)
+	flagOn := false
+	if deletion.SharesCleanServiceFlag(kind) {
+		settings, flagErr := deletionFlagLookup(ctx, chatID)
+		if flagErr != nil {
+			return 0, false, flagErr
+		}
+		flagOn = settings != nil && settings.ShouldCleanService
+	}
+	delay, on = deletionEffectiveDelay(kind, rules, flagOn)
+	return delay, on, nil
+}
+
+// deletionApplyMessage deletes or queues one service message by the group's effective rule for
+// its kind. An unreadable rule or flag deletes nothing. It is the tail of the watcher and of
+// cleanService, which call it after their own checks, and it logs the chat ID only.
+func deletionApplyMessage(ctx context.Context, b *gotgbot.Bot, msg *gotgbot.Message, row deletionRow) {
+	delay, on, err := deletionRuleFor(ctx, msg.Chat.Id, row.Kind)
+	if err != nil {
+		log.Warnf("[ServiceDeletion] could not read the deletion rule of chat %d: %v", msg.Chat.Id, err)
+		return
+	}
+	if !on {
+		return
+	}
+	deletionAct(b, deletionAction{
+		ChatID:    msg.Chat.Id,
+		MessageID: msg.MessageId,
+		Kind:      row.Kind,
+		SentAt:    deletionSentAt(msg.Date),
+		Delay:     delay,
+	})
 }
 
 // serviceDeleteWatcher deletes a service message by the group's stored rule. It never ends an
@@ -64,21 +102,9 @@ func (m moduleStruct) serviceDeleteWatcher(b *gotgbot.Bot, ctx *ext.Context) (re
 	defer error_handling.RecoverFromPanic("serviceDeleteWatcher", "ServiceDeletion")
 
 	msg := ctx.EffectiveMessage
-	row, ok := serviceDeleteCandidate(msg)
-	if !ok {
-		return result
+	if row, ok := serviceDeleteCandidate(ctx, msg); ok {
+		deletionApplyMessage(tracing.UpdateContext(ctx), b, msg, row)
 	}
-	delay, on := serviceDeleteDelay(ctx, msg.Chat.Id, row)
-	if !on {
-		return result
-	}
-	deletionAct(b, deletionAction{
-		ChatID:    msg.Chat.Id,
-		MessageID: msg.MessageId,
-		Kind:      row.Kind,
-		SentAt:    deletionSentAt(msg.Date),
-		Delay:     delay,
-	})
 	return result
 }
 

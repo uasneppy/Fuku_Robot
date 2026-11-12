@@ -209,7 +209,9 @@ func TestDeletionInlineShedFallsBackToQueue(t *testing.T) {
 	env := newDeletionEnv(t)
 	deletionSetRule(t, env.chat.Id, deletion.KindPinned, 0)
 	// A block longer than the pacer's MaxWait sheds the call at once, with no Telegram request.
-	env.redis.Set("fuku:delete:pace:block", "1")
+	if err := env.redis.Set("fuku:delete:pace:block", "1"); err != nil {
+		t.Fatalf("set the pacer block: %v", err)
+	}
 	env.redis.SetTTL("fuku:delete:pace:block", 120*time.Second)
 	t.Cleanup(func() { env.redis.Del("fuku:delete:pace:block") })
 
@@ -236,7 +238,9 @@ func TestDeletionPacerIsIndependent(t *testing.T) {
 		{"staff", "fuku:staff:pace:block", staffPaced},
 	}
 	block := func(key string) {
-		env.redis.Set(key, "1")
+		if err := env.redis.Set(key, "1"); err != nil {
+			t.Fatalf("set the pacer block %s: %v", key, err)
+		}
 		env.redis.SetTTL(key, 30*time.Second)
 		t.Cleanup(func() { env.redis.Del(key) })
 	}

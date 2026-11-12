@@ -1155,14 +1155,11 @@ func (moduleStruct) cleanService(bot *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 
-	greetPrefs := greetings.GetGreetingSettings(chat.Id)
-
-	if greetPrefs.ShouldCleanService {
-		_, err := msg.Delete(bot, nil)
-		if err != nil {
-			log.Error(err)
-			return err
-		}
+	// The service message is deleted only now, after the join was processed, by the group's
+	// effective rule (the shared /cleanservice flag and the stored delay). The delete never
+	// fails the handler: an inline goroutine or a queue row carries it out.
+	if row, ok := deletionServiceKindOf(msg); ok && deletion.SharesCleanServiceFlag(row.Kind) {
+		deletionApplyMessage(tracing.UpdateContext(ctx), bot, msg, row)
 	}
 	return ext.EndGroups
 }
