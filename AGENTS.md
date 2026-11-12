@@ -170,7 +170,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   also the shared flag through `deletionFlagLookup`; an error deletes nothing) and `deletionAct`. `cleanService` (group 0)
   keeps join processing and deletes only after it, with the same effective rule of D-02 (flag off is Keep even with a stale
   row, flag on with no row is delete now, flag on with a row is a queue row at the message date plus the delay), never
-  returns a delete error and always ends with `ext.EndGroups`.
+  returns a delete error and always ends with `ext.EndGroups`. Join and leave cleaning (`/cleanservice`) does nothing inside a
+  Staff Group, because `deletionAct` refuses every deletion there (D-18, DEL-07): a Staff Group with the flag on keeps its join
+  and leave service messages, which is a change from before Phase 16.
 - The `MemberRequirements` module (priority 241, `memberreq.go`, `memberreq_watch.go`) registers one message watcher at
   group `-2` (`memberReqWatchGroup`), through `handlers.NewMessage` with a supergroup-only filter and no `SetAllow*`
   (new messages only: no edits, channel posts or bot senders), the only message handler of that group. The member
