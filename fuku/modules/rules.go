@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
@@ -121,8 +122,9 @@ func buildRulesMessage(tr *i18n.Translator, title string, row *models.RulesSetti
 // it is one media message: the text as its caption, the buttons under it, and the caption above the media when
 // Media under text is on and the kind allows it. With degrade true (/rules and the deep link, never the Full
 // preview) a media send Telegram definitely refuses (a 4xx other than 429) is retried once as the text with the
-// buttons, a deliberate exception to the one-message rule.
-func sendRulesMessage(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgbot.SendMessageOpts, degrade bool) error {
+// buttons, a deliberate exception to the one-message rule. It returns the message Telegram sent, nil when the
+// send failed; only the caller that sends into a group schedules it for deletion.
+func sendRulesMessage(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgbot.SendMessageOpts, degrade bool) (*gotgbot.Message, error) {
 	if m.FileID == "" {
 		return sendRulesText(b, chatID, m, textOpts)
 	}
@@ -134,7 +136,7 @@ func sendRulesMessage(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *go
 		replyMsgID = textOpts.ReplyParameters.MessageId
 		allowWithoutReply = textOpts.ReplyParameters.AllowSendingWithoutReply
 	}
-	_, err := media.Send(b, media.Content{
+	sent, err := media.Send(b, media.Content{
 		Text:         m.Text,
 		FileID:       m.FileID,
 		MsgType:      m.MsgType,
@@ -152,12 +154,15 @@ func sendRulesMessage(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *go
 		log.Warnf("[Rules] the rules media of chat %d was refused, sending the text alone: %v", chatID, err)
 		return sendRulesText(b, chatID, m, textOpts)
 	}
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return sent, nil
 }
 
 // sendRulesText sends the rules as a text message with the caller's options. The rules keyboard replaces the
 // options' ReplyMarkup only when the rules have buttons.
-func sendRulesText(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgbot.SendMessageOpts) error {
+func sendRulesText(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgbot.SendMessageOpts) (*gotgbot.Message, error) {
 	var opts gotgbot.SendMessageOpts
 	if textOpts != nil {
 		opts = *textOpts
@@ -165,8 +170,11 @@ func sendRulesText(b *gotgbot.Bot, chatID int64, m rulesMessage, textOpts *gotgb
 	if m.Keyboard != nil {
 		opts.ReplyMarkup = *m.Keyboard
 	}
-	_, err := b.SendMessage(chatID, m.Text, &opts)
-	return err
+	sent, err := b.SendMessage(chatID, m.Text, &opts)
+	if err != nil {
+		return nil, err
+	}
+	return sent, nil
 }
 
 // rulesApplyResult is what the rules apply functions return. Row is the whole rules row read back after
@@ -359,20 +367,24 @@ func (m moduleStruct) sendRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 				},
 			},
 		}
-		if _, err := msg.Reply(bot, text, opts); err != nil {
+		sent, err := msg.Reply(bot, text, opts)
+		if err != nil {
 			log.Error(err)
 			return err
 		}
+		scheduleBotMessage(sent, deletion.KindBotRules)
 		return ext.EndGroups
 	}
 
 	// The zero-value markup is what /rules has always sent for a rules message with no buttons.
 	opts.ReplyMarkup = gotgbot.InlineKeyboardMarkup{}
 	rm := buildRulesMessage(tr, chat.Title, row, rulesFormGroup)
-	if err := sendRulesMessage(bot, msg.Chat.Id, rm, opts, true); err != nil {
+	sent, err := sendRulesMessage(bot, msg.Chat.Id, rm, opts, true)
+	if err != nil {
 		log.Error(err)
 		return err
 	}
+	scheduleBotMessage(sent, deletion.KindBotRules)
 
 	return ext.EndGroups
 }
@@ -565,7 +577,7 @@ func rulesDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, 
 	rm := buildRulesMessage(tr, chatinfo.Title, rules.GetChatRulesInfo(chatID), rulesFormPrivate)
 	opts := formatting.Shtml()
 	opts.ReplyParameters.MessageId = msg.MessageId
-	if err := sendRulesMessage(b, msg.Chat.Id, rm, opts, true); err != nil {
+	if _, err := sendRulesMessage(b, msg.Chat.Id, rm, opts, true); err != nil {
 		log.Error(err)
 		return err
 	}

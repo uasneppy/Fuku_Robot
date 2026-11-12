@@ -90,7 +90,8 @@ func settingsEditPreviewRules(p *settingsPress, st settingsEditState, part strin
 			Rules: st.Text, FileID: st.FileID, MediaType: st.MediaType, Buttons: st.Buttons, MediaBelow: st.MediaBelow,
 		}
 		m := buildRulesMessage(i18n.MustNewTranslator(lang.GetGroupLanguage(ctx, p.group.Id)), p.group.Title, &row, rulesFormGroup)
-		return sendRulesMessage(p.b, target, m, opts, false)
+		_, err := sendRulesMessage(p.b, target, m, opts, false)
+		return err
 	case settingsEditPartText:
 		_, err := p.b.SendMessage(target, normalizeRulesForHTML(st.Text), opts)
 		return err

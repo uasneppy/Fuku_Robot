@@ -1062,6 +1062,7 @@ func (moduleStruct) leftMember(bot *gotgbot.Bot, ctx *ext.Context) error {
 			logJoinOperationError("[Greetings][leftMember] Failed to send goodbye message", err)
 			return err
 		}
+		scheduleBotMessage(sent, deletion.KindBotGoodbye)
 
 		if greetPrefs.GoodbyeSettings.CleanGoodbye {
 			_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, greetPrefs.GoodbyeSettings.LastMsgId)
