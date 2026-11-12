@@ -327,7 +327,7 @@ Plans:
   3. Scheduled deletions survive a restart and run once across replicas. Delays are capped below Telegram's 48-hour limit, and a message too old to delete is dropped quietly.
   4. Deletion never touches Staff Group summaries and cards, lockdown alerts, captcha challenges, log-channel posts or anything in a Staff Group.
   5. When the bot lacks the right to delete messages, every deletion page says so instead of failing silently.
-**Plans:** 7/9 plans executed
+**Plans:** 8/9 plans executed
 - [x] 16-01-PLAN.md — the data layer: migration, models, rules and queue repository, the cache key, backup exclusion and the PostgreSQL guarantees (wave 1)
 - [x] 16-02-PLAN.md — the kind tables and the service-type table, the effective rule, and the apply functions including `/cleanservice` (wave 2)
 - [x] 16-03-PLAN.md — the tracer: the pacer, the inline delete, the service watcher at group -5, the `cleanService` rewiring and the Staff Group refusal (wave 3)
@@ -335,7 +335,7 @@ Plans:
 - [x] 16-05-PLAN.md — `scheduleBotMessage` and the welcome, goodbye, rules and manual-punishment hooks (wave 5)
 - [x] 16-06-PLAN.md — the requirement notices (the mute notice at the 24 h cap), the "I fixed it" reschedule and the antiflood, blacklist and aispam notices (wave 6)
 - [x] 16-07-PLAN.md — the 57 locale keys in all 8 files and the limits tests they move (wave 7)
-- [ ] 16-08-PLAN.md — the Deletion page: hub, lists, row screens, the delete-right line and the `Hidden` field (wave 8)
+- [x] 16-08-PLAN.md — the Deletion page: hub, lists, row screens, the delete-right line and the `Hidden` field (wave 8)
 - [ ] 16-09-PLAN.md — the end-to-end test, the exclusion and privacy sweeps, the rulebook and docs, `16-SPIKE.md`, the phase gate and the requirement ticks (wave 9)
 **UI hint**: yes
 
@@ -399,7 +399,7 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 13. Member Requirements | 14/14 | In Progress | - |
 | 14. Profile Photo and Channel Rules | 12/12 | In Progress | - |
 | 15. AI Spam-Name Check | 11/11 | In Progress | - |
-| 16. Scheduled Deletion of Service and Bot Messages | 7/9 | In Progress | - |
+| 16. Scheduled Deletion of Service and Bot Messages | 8/9 | In Progress | - |
 | 17. Command, Edit and Self-Destruct Deletion | 0/TBD | Not started | - |
 | 18. Remaining Settings Pages | 0/TBD | Not started | - |
 | 19. Blacklist, Filter and Note Pages | 0/TBD | Not started | - |
