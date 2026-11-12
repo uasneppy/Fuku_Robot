@@ -5,11 +5,11 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
 status: executing
-stopped_at: Completed 16-08-PLAN.md
-last_updated: "2026-11-12T02:51:26.192Z"
+stopped_at: Completed 16-09-PLAN.md
+last_updated: "2026-11-12T04:09:45.821Z"
 last_activity: 2026-11-12
 last_activity_desc: Phase 11 execution started
-state_head: ea7acac1d6158ab6fd780094d3e25a7f4fb3443e
+state_head: "0b5f694970882d37ab954c365ece8f581743235e"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 to 16-08 done: storage, the kind tables and apply functions, the deletion core with the service watcher at group -5, the queue worker with the delete-right reader and the 68 s shutdown arithmetic, `scheduleBotMessage` with the welcome, goodbye, rules and manual-punishment hooks, then the requirement notices at the 24 h cap, the "I fixed it" reschedule and the antiflood, blacklist and aispam notices, the 57 locale keys, then the Deletion page of the settings menu with the delete-right line and the `Hidden` field; next is 16-09, the end-to-end test, the sweeps, the docs and the phase gate)
-Plan: 8 of 9
-Status: Executing Phase 16 (8 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Plan 16-08 executed
+Phase: 16 (Scheduled Deletion of Service and Bot Messages) — all 9 plans executed (16-01 to 16-09: storage, kind tables and apply functions, the deletion core with the service watcher at group -5, the queue worker and the 68 s shutdown arithmetic, the bot-message hooks and requirement notices, the 57 locale keys, the Deletion page, then the closing plan: the end-to-end, exclusion and log tests, the Deletion privacy sweep, the rulebook, README and docs, `16-SPIKE.md` and the phase gate). DEL-01, DEL-02, DEL-06, DEL-07, DEL-08 and MREQ-15 are complete; DEL-03 to DEL-05 are Phase 17's. The phase is NOT marked Complete: review, security and verification come next, and the orchestrator does the phase transition
+Plan: 9 of 9
+Status: Phase 16 executed (9 of 9 plans done); awaiting review, security and verification. Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Plan 16-09 executed
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -158,6 +158,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 16 P06 | interrupted; finished in a second session | 3 tasks | 9 files |
 | Phase 16 P07 | 40min | 3 tasks | 11 files |
 | Phase 16 P08 | about 3h | 3 tasks | 11 files |
+| Phase 16 P09 | 55min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,7 @@ Recent decisions affecting current work:
 - [Phase 15]: 15-09: validate split into validateBasics, validateModes and validateOptions (it was over the gocyclo limit at HEAD); names-mode summary uses the first judgement of each row, latency and cost count every request
 - [Phase 15]: 15-10: the AI sweeps changed no production code; the log sweep cannot catch an Anthropic key leak because logredact redacts it first, so names and hashes are what it holds
 - [Phase 15]: AI spam-name rule closed by an end-to-end test through the real dispatcher with only Telegram and the provider faked; the rulebook was read whole and eight stale sentences corrected
+- [Phase 16]: 16-09: the closing plan changes no production code; TestDeletionEndToEnd, the exclusion test, the log sweep and the Deletion privacy cases prove the slice and DEL-01, DEL-02, DEL-06, DEL-07, DEL-08 and MREQ-15 are complete
 
 ### Pending Todos
 
@@ -332,8 +334,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T02:51:24.731Z
-Stopped at: Completed 16-08-PLAN.md
+Last session: 2026-11-12T04:09:43.928Z
+Stopped at: Completed 16-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
