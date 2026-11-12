@@ -329,6 +329,8 @@ func TestMemberDeletionEndToEnd(t *testing.T) {
 			env.del.setRule(deletion.KindMemberEdited, 60)
 			env.del.setRule(deletion.KindMemberSelfDestruct, 600)
 			memberE2EFailLookup(env, member.Id, memberDeletionTelegramError(429))
+			// The list cannot be loaded either (the warm is a no-op), so only the live read could say.
+			mreqSwap(t, &memberDeletionAdminWarm, func(*gotgbot.Bot, int64) {})
 			cache.InvalidateAdminCache(env.chat.Id)
 
 			id := memberE2EEdit(t, env, member, 5*time.Minute, 90)
@@ -721,7 +723,13 @@ func TestMemberDeletionLogsCarryIDsOnly(t *testing.T) {
 			t.Fatalf("LoadAdminCache() = %+v, want a cached list", got)
 		}
 	}
-	cold := func() { cache.InvalidateAdminCache(env.chat.Id) }
+	// cold empties the admin cache and keeps it empty: the shared loader's warm is a no-op, so the
+	// handler has to ask Telegram about the member (a cache that can be warmed is
+	// TestMemberDeletionAdminWarm's case).
+	cold := func() {
+		cache.InvalidateAdminCache(env.chat.Id)
+		mreqSwap(t, &memberDeletionAdminWarm, func(*gotgbot.Bot, int64) {})
+	}
 
 	t.Run("the approvals read fails", func(t *testing.T) {
 		mreqSwap(t, &memberDeletionApprovedLookup,

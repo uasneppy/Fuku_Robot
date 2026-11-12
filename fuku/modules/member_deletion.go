@@ -60,15 +60,28 @@ var (
 	memberDeletionAdminWarm = func(b *gotgbot.Bot, chatID int64) { cache.LoadAdminCache(b, chatID) }
 )
 
-// memberDeletionWarnGate lets one failure line per chat per hour through (WR-01, SEC-17-01): the
-// failure paths of this file (a saturated admin check, an unknown admin status, approvals or
-// captcha state) run per message, and a Telegram or database incident in a busy group would
-// otherwise write one Warn per message. The lines carry IDs and the error class only.
-var memberDeletionWarnGate = memberDeleteWarnGate{label: "the member deletion failure log"}
+// The failure lines of this file (WR-01, SEC-17-01) run per message, so a Telegram or database
+// incident in a busy group would write one Warn per message. Each kind of line has its own hourly
+// per-chat gate (the batcher's gate type), so one kind never hides another. The lines carry IDs
+// and the error class only.
+const (
+	memberDeletionWarnSaturated = iota
+	memberDeletionWarnAdminUnknown
+	memberDeletionWarnApprovalsUnknown
+	memberDeletionWarnCaptchaChat
+	memberDeletionWarnCaptchaUser
+	memberDeletionWarnKinds
+)
 
-// memberDeletionWarnf logs a failure line for chatID through the hourly gate.
-func memberDeletionWarnf(chatID int64, format string, args ...any) {
-	if memberDeletionWarnGate.allow(chatID, deletionNow()) {
+var memberDeletionWarnGates = [memberDeletionWarnKinds]memberDeleteWarnGate{
+	{label: "the member deletion failure log"}, {label: "the member deletion failure log"},
+	{label: "the member deletion failure log"}, {label: "the member deletion failure log"},
+	{label: "the member deletion failure log"},
+}
+
+// memberDeletionWarnf logs a failure line of one kind for chatID through that kind's hourly gate.
+func memberDeletionWarnf(kind int, chatID int64, format string, args ...any) {
+	if memberDeletionWarnGates[kind].allow(chatID, deletionNow()) {
 		log.Warnf(format, args...)
 	}
 }
@@ -208,7 +221,7 @@ func memberDeletionAdminStatus(b *gotgbot.Bot, chatID, userID int64) memberDelet
 	case memberDeletionAdminSlots <- struct{}{}:
 		defer func() { <-memberDeletionAdminSlots }()
 	default:
-		memberDeletionWarnf(chatID, "[MemberDeletion] the admin check of chat %d is saturated: the message is kept", chatID)
+		memberDeletionWarnf(memberDeletionWarnSaturated, chatID, "[MemberDeletion] the admin check of chat %d is saturated: the message is kept", chatID)
 		return memberDeletionAdminUnknown
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), memberDeletionAdminTimeout)
@@ -222,7 +235,7 @@ func memberDeletionAdminStatus(b *gotgbot.Bot, chatID, userID int64) memberDelet
 	}
 	member, err := memberDeletionMemberLookup(ctx, b, chatID, userID)
 	if err != nil {
-		memberDeletionWarnf(chatID, "[MemberDeletion] the admin status of user %d in chat %d is unknown: %s",
+		memberDeletionWarnf(memberDeletionWarnAdminUnknown, chatID, "[MemberDeletion] the admin status of user %d in chat %d is unknown: %s",
 			userID, chatID, memberReqErrText(err))
 		return memberDeletionAdminUnknown
 	}
@@ -246,7 +259,7 @@ func memberDeletionExempt(b *gotgbot.Bot, chatID, userID int64) bool {
 	defer cancel()
 	approved, err := memberDeletionApprovedLookup(ctx, chatID, userID)
 	if err != nil {
-		memberDeletionWarnf(chatID, "[MemberDeletion] approval of user %d in chat %d is unknown: %s",
+		memberDeletionWarnf(memberDeletionWarnApprovalsUnknown, chatID, "[MemberDeletion] approval of user %d in chat %d is unknown: %s",
 			userID, chatID, memberReqErrText(err))
 		return true
 	}
@@ -264,7 +277,7 @@ func memberEditPendingCaptcha(chatID, userID int64) bool {
 	defer cancel()
 	anyPending, err := memberReqCaptchaPendingLookup(ctx, chatID)
 	if err != nil {
-		memberDeletionWarnf(chatID, "[MemberDeletion] captcha state of chat %d is unknown: %s", chatID, memberReqErrText(err))
+		memberDeletionWarnf(memberDeletionWarnCaptchaChat, chatID, "[MemberDeletion] captcha state of chat %d is unknown: %s", chatID, memberReqErrText(err))
 		return true
 	}
 	if !anyPending {
@@ -272,7 +285,7 @@ func memberEditPendingCaptcha(chatID, userID int64) bool {
 	}
 	attempt, err := memberReqCaptchaAttemptLookup(userID, chatID)
 	if err != nil {
-		memberDeletionWarnf(chatID, "[MemberDeletion] captcha state of user %d in chat %d is unknown: %s",
+		memberDeletionWarnf(memberDeletionWarnCaptchaUser, chatID, "[MemberDeletion] captcha state of user %d in chat %d is unknown: %s",
 			userID, chatID, memberReqErrText(err))
 		return true
 	}

@@ -244,8 +244,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   costs one load per chat per window and never one per message; creator and administrator are admins, member, restricted,
   left and kicked are not, and an error, a 429, a 5xx, a timeout, an empty or unrecognised answer or a full semaphore is
   unknown, which is exempt). The failure lines of this file (a saturated admin check, an unknown admin status, approvals or
-  captcha state) go through `memberDeletionWarnf` and its hourly per-chat gate (`memberDeletionWarnGate`, the batcher's
-  `memberDeleteWarnGate` type), so a busy group in an incident logs one line per chat per hour, and the pending captcha explicitly for edits (`memberEditPendingCaptcha` through the member requirements' two
+  captcha state) go through `memberDeletionWarnf` and one hourly per-chat gate per kind of line (`memberDeletionWarnGates`, the batcher's
+  `memberDeleteWarnGate` type, so one kind never hides another), so a busy group in an incident logs one line of each kind per
+  chat per hour, and the pending captcha explicitly for edits (`memberEditPendingCaptcha` through the member requirements' two
   captcha seams: an attempt or any read error is pending). It never uses `antifloodModule.userIsFloodExempt`,
   `chat_status.IsUserAdmin` or `IsApprovedForUpdate` as its answer, because each reads a failed lookup as "not an admin" or
   "not approved". The self-destruct watcher reuses `memberDeletionExempt` unchanged. The handler logs by chat and user

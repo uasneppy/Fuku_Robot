@@ -80,10 +80,12 @@ func (e *memberDeletionEnv) warmableAdminCache() {
 func resetMemberDeletionFailureState(t *testing.T) {
 	t.Helper()
 	reset := func() {
-		memberDeletionWarnGate.mu.Lock()
-		memberDeletionWarnGate.last = nil
-		memberDeletionWarnGate.capWarned = false
-		memberDeletionWarnGate.mu.Unlock()
+		for i := range memberDeletionWarnGates {
+			memberDeletionWarnGates[i].mu.Lock()
+			memberDeletionWarnGates[i].last = nil
+			memberDeletionWarnGates[i].capWarned = false
+			memberDeletionWarnGates[i].mu.Unlock()
+		}
 		memberDeletionWarmBackoff.mu.Lock()
 		memberDeletionWarmBackoff.until = nil
 		memberDeletionWarmBackoff.mu.Unlock()
