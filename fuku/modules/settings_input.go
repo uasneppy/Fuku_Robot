@@ -599,7 +599,7 @@ func (m moduleStruct) settingsCancel(b *gotgbot.Bot, ctx *ext.Context) error {
 // the door that reads the reply.
 func LoadSettingsInput(dispatcher *ext.Dispatcher) {
 	// The pass-on handler comes first in group 0, so it is tried before the pipeline's /cancel.
-	dispatcher.AddHandler(settingsCancelPassOn{command: handlers.NewCommand(settingsCancelDesc.Name, nil)})
+	dispatcher.AddHandler(settingsCancelPassOn{command: helpers.NewBotCommand(settingsCancelDesc.Name, nil)})
 	helpers.WrapCommand(dispatcher, settingsCancelDesc, pipelineHandler(settingsModule.settingsCancel))
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(settingsInputIsPrivate, settingsModule.settingsInput), settingsInputGroup)
 }

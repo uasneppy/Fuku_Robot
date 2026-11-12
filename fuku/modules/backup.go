@@ -756,9 +756,9 @@ func buildResetKeyboard(tr *i18n.Translator, chatID int64, token string) gotgbot
 func LoadBackup(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(backupModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("export", backupModule.exportHandler))
-	dispatcher.AddHandler(handlers.NewCommand("import", backupModule.importHandler))
-	dispatcher.AddHandler(handlers.NewCommand("reset", backupModule.resetHandler))
+	dispatcher.AddHandler(helpers.NewBotCommand("export", backupModule.exportHandler))
+	dispatcher.AddHandler(helpers.NewBotCommand("import", backupModule.importHandler))
+	dispatcher.AddHandler(helpers.NewBotCommand("reset", backupModule.resetHandler))
 
 	dispatcher.AddHandler(handlers.NewCallback(
 		callbackquery.Prefix("backup"),

@@ -9,7 +9,6 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/disabling"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
@@ -262,12 +261,12 @@ func (moduleStruct) disabledel(b *gotgbot.Bot, ctx *ext.Context) error {
 func LoadDisabling(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(disablingModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("disable", disablingModule.disable))
-	dispatcher.AddHandler(handlers.NewCommand("disableable", disablingModule.disableable))
-	dispatcher.AddHandler(handlers.NewCommand("disabled", disablingModule.disabled))
+	dispatcher.AddHandler(helpers.NewBotCommand("disable", disablingModule.disable))
+	dispatcher.AddHandler(helpers.NewBotCommand("disableable", disablingModule.disableable))
+	dispatcher.AddHandler(helpers.NewBotCommand("disabled", disablingModule.disabled))
 	helpers.AddCmdToDisableable("disabled")
-	dispatcher.AddHandler(handlers.NewCommand("disabledel", disablingModule.disabledel))
-	dispatcher.AddHandler(handlers.NewCommand("enable", disablingModule.enable))
+	dispatcher.AddHandler(helpers.NewBotCommand("disabledel", disablingModule.disabledel))
+	dispatcher.AddHandler(helpers.NewBotCommand("enable", disablingModule.enable))
 }
 
 func init() {

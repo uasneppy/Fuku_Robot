@@ -7,7 +7,6 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/admin"
@@ -808,7 +807,7 @@ func LoadAdmin(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, setGPicDesc, adminModule.setGPic)
 	helpers.WrapCommand(dispatcher, setGDescDesc, adminModule.setGDesc)
 
-	dispatcher.AddHandler(handlers.NewCommand("admincache", func(b *gotgbot.Bot, ctx *ext.Context) error {
+	dispatcher.AddHandler(helpers.NewBotCommand("admincache", func(b *gotgbot.Bot, ctx *ext.Context) error {
 		defer error_handling.RecoverFromPanic("admincache", "admin")
 		c, err := helpers.BuildCommandContext(b, ctx)
 		if err != nil {

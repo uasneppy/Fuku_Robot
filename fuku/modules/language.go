@@ -14,6 +14,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
 )
 
@@ -171,7 +172,7 @@ func LoadLanguage(dispatcher *ext.Dispatcher) {
 	SetModuleHelp(languagesModule.moduleName, languagesModule.genFullLanguageKb())
 
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("change_language"), languagesModule.langBtnHandler))
-	dispatcher.AddHandler(handlers.NewCommand("lang", languagesModule.changeLanguage))
+	dispatcher.AddHandler(helpers.NewBotCommand("lang", languagesModule.changeLanguage))
 }
 
 func init() {

@@ -18,6 +18,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/extraction"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
 )
 
@@ -349,11 +350,11 @@ func (m moduleStruct) reconnect(b *gotgbot.Bot, ctx *ext.Context) error {
 func LoadConnections(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(ConnectionsModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("connect", ConnectionsModule.connect))
-	dispatcher.AddHandler(handlers.NewCommand("disconnect", ConnectionsModule.disconnect))
-	dispatcher.AddHandler(handlers.NewCommand("connection", ConnectionsModule.connection))
-	dispatcher.AddHandler(handlers.NewCommand("reconnect", ConnectionsModule.reconnect))
-	dispatcher.AddHandler(handlers.NewCommand("allowconnect", ConnectionsModule.allowConnect))
+	dispatcher.AddHandler(helpers.NewBotCommand("connect", ConnectionsModule.connect))
+	dispatcher.AddHandler(helpers.NewBotCommand("disconnect", ConnectionsModule.disconnect))
+	dispatcher.AddHandler(helpers.NewBotCommand("connection", ConnectionsModule.connection))
+	dispatcher.AddHandler(helpers.NewBotCommand("reconnect", ConnectionsModule.reconnect))
+	dispatcher.AddHandler(helpers.NewBotCommand("allowconnect", ConnectionsModule.allowConnect))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("connbtns"), ConnectionsModule.connectionButtons))
 }
 

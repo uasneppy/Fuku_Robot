@@ -568,9 +568,9 @@ func LoadReports(dispatcher *ext.Dispatcher) {
 		reportsModule.handlerGroup,
 	)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("report"), reportsModule.markResolvedButtonHandler))
-	dispatcher.AddHandler(handlers.NewCommand("report", reportsModule.report))
+	dispatcher.AddHandler(helpers.NewBotCommand("report", reportsModule.report))
 	helpers.AddCmdToDisableable("report")
-	dispatcher.AddHandler(handlers.NewCommand("reports", reportsModule.reports))
+	dispatcher.AddHandler(helpers.NewBotCommand("reports", reportsModule.reports))
 }
 
 func init() {

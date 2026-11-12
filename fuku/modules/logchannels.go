@@ -19,6 +19,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/actionlog"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
 
@@ -261,12 +262,12 @@ func (moduleStruct) captureSetLogForward(b *gotgbot.Bot, ctx *ext.Context) error
 func LoadLogChannels(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(logChannelsModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("setlog", logChannelsModule.setLog))
-	dispatcher.AddHandler(handlers.NewCommand("unsetlog", logChannelsModule.unsetLog))
-	dispatcher.AddHandler(handlers.NewCommand("logchannel", logChannelsModule.logChannel))
-	dispatcher.AddHandler(handlers.NewCommand("logcategories", logChannelsModule.logCategories))
-	dispatcher.AddHandler(handlers.NewCommand("log", logChannelsModule.enableLog))
-	dispatcher.AddHandler(handlers.NewCommand("nolog", logChannelsModule.disableLog))
+	dispatcher.AddHandler(helpers.NewBotCommand("setlog", logChannelsModule.setLog))
+	dispatcher.AddHandler(helpers.NewBotCommand("unsetlog", logChannelsModule.unsetLog))
+	dispatcher.AddHandler(helpers.NewBotCommand("logchannel", logChannelsModule.logChannel))
+	dispatcher.AddHandler(helpers.NewBotCommand("logcategories", logChannelsModule.logCategories))
+	dispatcher.AddHandler(helpers.NewBotCommand("log", logChannelsModule.enableLog))
+	dispatcher.AddHandler(helpers.NewBotCommand("nolog", logChannelsModule.disableLog))
 
 	dispatcher.AddHandlerToGroup(
 		handlers.NewMessage(message.All, logChannelsModule.captureSetLogForward),

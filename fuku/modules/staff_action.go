@@ -81,7 +81,7 @@ var staffActionCommands = []staffCommandSpec{
 // Help stays under the Staff module, so SetModuleEnabled is not called.
 func LoadStaffActions(dispatcher *ext.Dispatcher) {
 	for _, spec := range staffActionCommands {
-		dispatcher.AddHandler(handlers.NewCommand(spec.Name, staffActionEntry(spec)))
+		dispatcher.AddHandler(helpers.NewBotCommand(spec.Name, staffActionEntry(spec)))
 	}
 }
 

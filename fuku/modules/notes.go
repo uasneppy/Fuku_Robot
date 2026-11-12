@@ -940,14 +940,14 @@ func LoadNotes(dispatcher *ext.Dispatcher) {
 			},
 		},
 	})
-	dispatcher.AddHandler(handlers.NewCommand("save", notesModule.addNote))
-	dispatcher.AddHandler(handlers.NewCommand("addnote", notesModule.addNote))
-	dispatcher.AddHandler(handlers.NewCommand("clear", notesModule.rmNote))
-	dispatcher.AddHandler(handlers.NewCommand("rmnote", notesModule.rmNote))
-	dispatcher.AddHandler(handlers.NewCommand("notes", notesModule.notesList))
-	dispatcher.AddHandler(handlers.NewCommand("saved", notesModule.notesList))
+	dispatcher.AddHandler(helpers.NewBotCommand("save", notesModule.addNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("addnote", notesModule.addNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("clear", notesModule.rmNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("rmnote", notesModule.rmNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("notes", notesModule.notesList))
+	dispatcher.AddHandler(helpers.NewBotCommand("saved", notesModule.notesList))
 	helpers.AddCmdToDisableable("notes")
-	dispatcher.AddHandler(handlers.NewCommand("clearall", notesModule.rmAllNotes))
+	dispatcher.AddHandler(helpers.NewBotCommand("clearall", notesModule.rmAllNotes))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("rmAllNotes"), notesModule.notesButtonHandler))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("notes.overwrite"), notesModule.noteOverWriteHandler))
 	dispatcher.AddHandler(
@@ -959,7 +959,7 @@ func LoadNotes(dispatcher *ext.Dispatcher) {
 		),
 	)
 	helpers.MultiCommand(dispatcher, []string{"privnote", "privatenotes"}, notesModule.privNote)
-	dispatcher.AddHandler(handlers.NewCommand("get", notesModule.getNotes))
+	dispatcher.AddHandler(helpers.NewBotCommand("get", notesModule.getNotes))
 	helpers.AddCmdToDisableable("get")
 }
 

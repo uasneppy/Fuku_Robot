@@ -692,14 +692,14 @@ func LoadFilters(dispatcher *ext.Dispatcher) {
 			},
 		},
 	})
-	dispatcher.AddHandler(handlers.NewCommand("filter", filtersModule.addFilter))
-	dispatcher.AddHandler(handlers.NewCommand("addfilter", filtersModule.addFilter))
-	dispatcher.AddHandler(handlers.NewCommand("stop", filtersModule.rmFilter))
-	dispatcher.AddHandler(handlers.NewCommand("rmfilter", filtersModule.rmFilter))
-	dispatcher.AddHandler(handlers.NewCommand("removefilter", filtersModule.rmFilter))
-	dispatcher.AddHandler(handlers.NewCommand("filters", filtersModule.filtersList))
+	dispatcher.AddHandler(helpers.NewBotCommand("filter", filtersModule.addFilter))
+	dispatcher.AddHandler(helpers.NewBotCommand("addfilter", filtersModule.addFilter))
+	dispatcher.AddHandler(helpers.NewBotCommand("stop", filtersModule.rmFilter))
+	dispatcher.AddHandler(helpers.NewBotCommand("rmfilter", filtersModule.rmFilter))
+	dispatcher.AddHandler(helpers.NewBotCommand("removefilter", filtersModule.rmFilter))
+	dispatcher.AddHandler(helpers.NewBotCommand("filters", filtersModule.filtersList))
 	helpers.AddCmdToDisableable("filters")
-	dispatcher.AddHandler(handlers.NewCommand("stopall", filtersModule.rmAllFilters))
+	dispatcher.AddHandler(helpers.NewBotCommand("stopall", filtersModule.rmAllFilters))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("rmAllFilters"), filtersModule.filtersButtonHandler))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("filters_overwrite"), filtersModule.filterOverWriteHandler))
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(func(msg *gotgbot.Message) bool {

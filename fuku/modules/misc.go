@@ -23,7 +23,6 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 
 	"github.com/uasneppy/fuku_robot/fuku/utils/extraction"
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
@@ -485,18 +484,18 @@ func (moduleStruct) stat(b *gotgbot.Bot, ctx *ext.Context) error {
 func LoadMisc(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(miscModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("stat", miscModule.stat))
+	dispatcher.AddHandler(helpers.NewBotCommand("stat", miscModule.stat))
 	helpers.AddCmdToDisableable("stat")
-	dispatcher.AddHandler(handlers.NewCommand("id", miscModule.getId))
+	dispatcher.AddHandler(helpers.NewBotCommand("id", miscModule.getId))
 	helpers.AddCmdToDisableable("id")
-	dispatcher.AddHandler(handlers.NewCommand("tell", miscModule.echomsg))
-	dispatcher.AddHandler(handlers.NewCommand("ping", miscModule.ping))
+	dispatcher.AddHandler(helpers.NewBotCommand("tell", miscModule.echomsg))
+	dispatcher.AddHandler(helpers.NewBotCommand("ping", miscModule.ping))
 	helpers.AddCmdToDisableable("ping")
-	dispatcher.AddHandler(handlers.NewCommand("info", miscModule.info))
+	dispatcher.AddHandler(helpers.NewBotCommand("info", miscModule.info))
 	helpers.AddCmdToDisableable("info")
-	dispatcher.AddHandler(handlers.NewCommand("tr", miscModule.translate))
+	dispatcher.AddHandler(helpers.NewBotCommand("tr", miscModule.translate))
 	helpers.AddCmdToDisableable("tr")
-	dispatcher.AddHandler(handlers.NewCommand("removebotkeyboard", miscModule.removeBotKeyboard))
+	dispatcher.AddHandler(helpers.NewBotCommand("removebotkeyboard", miscModule.removeBotKeyboard))
 	registerMiscExtras(dispatcher)
 }
 

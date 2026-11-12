@@ -691,11 +691,11 @@ func (m *moduleStruct) setFloodDeleter(b *gotgbot.Bot, ctx *ext.Context) error {
 func LoadAntiflood(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(antifloodModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("setflood", antifloodModule.setFlood))
-	dispatcher.AddHandler(handlers.NewCommand("setfloodmode", antifloodModule.setFloodMode))
-	dispatcher.AddHandler(handlers.NewCommand("delflood", antifloodModule.setFloodDeleter))
-	dispatcher.AddHandler(handlers.NewCommand("clearflood", antifloodModule.setFloodDeleter))
-	dispatcher.AddHandler(handlers.NewCommand("flood", antifloodModule.flood))
+	dispatcher.AddHandler(helpers.NewBotCommand("setflood", antifloodModule.setFlood))
+	dispatcher.AddHandler(helpers.NewBotCommand("setfloodmode", antifloodModule.setFloodMode))
+	dispatcher.AddHandler(helpers.NewBotCommand("delflood", antifloodModule.setFloodDeleter))
+	dispatcher.AddHandler(helpers.NewBotCommand("clearflood", antifloodModule.setFloodDeleter))
+	dispatcher.AddHandler(helpers.NewBotCommand("flood", antifloodModule.flood))
 	helpers.AddCmdToDisableable("flood")
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, antifloodModule.checkFlood), antifloodModule.handlerGroup)
 }
