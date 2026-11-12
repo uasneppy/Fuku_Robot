@@ -512,6 +512,11 @@ func (p *settingsPress) openPage(pg settingsPage, notice string) {
 		p.answer(settingsText(p.tr, "settings_access_owner_only"), true)
 		return
 	}
+	// A hidden page (the Deletion page in a Staff Group) is refused whatever route reached it.
+	if pg.Hidden != nil && pg.Hidden(p.group) {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return
+	}
 	screen, err := pg.Open(p, notice)
 	if err != nil {
 		log.Warnf("[Settings] page %q of chat %d could not be read: %v", pg.Key, p.group.Id, err)

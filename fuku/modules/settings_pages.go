@@ -370,6 +370,9 @@ type settingsPage struct {
 	// leaves it out for anyone else without reading its state, and openPage refuses it with
 	// settings_access_owner_only. Main gives such a page its own full-width row after the grid.
 	OwnerOnly bool
+	// Hidden, when set, is true for a group in which the page does not exist: Main leaves it out
+	// without calling MainState and openPage refuses it. Nil keeps the page in every group.
+	Hidden func(group *gotgbot.Chat) bool
 }
 
 // settingsControl is one toggle or setting of a page.
@@ -481,6 +484,9 @@ func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Cha
 	entries := make([]settingsMainEntry, 0, len(pages))
 	for _, pg := range pages {
 		if pg.OwnerOnly && !viewerIsOwner {
+			continue
+		}
+		if pg.Hidden != nil && pg.Hidden(group) {
 			continue
 		}
 		entry := settingsMainEntry{Key: pg.Key, Icon: pg.Icon, Title: settingsText(tr, pg.TitleKey), OwnerOnly: pg.OwnerOnly}
