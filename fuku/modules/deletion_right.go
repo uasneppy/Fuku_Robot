@@ -33,6 +33,10 @@ const (
 // deletionServicePrefix is the prefix of every service kind, for dropping a chat's service rows.
 const deletionServicePrefix = "service:"
 
+// deletionMemberPrefix is the prefix of every member kind, for dropping a chat's member rows
+// together with its service rows when the delete-right latch is set.
+const deletionMemberPrefix = "member:"
+
 // deletionClassifyBotRight maps the bot's own getChatMember answer (or the error) to its right,
 // by status and by Telegram error code only, never by a description. With an error: a Telegram 400
 // or 403 (cache.IsBotGoneError, never a shed pacer) is cannot and everything else (a 429, a 5xx, a
@@ -93,12 +97,13 @@ func deletionTrustAdminFlag(chatID int64) bool {
 	return chatID <= deletionSupergroupMaxID
 }
 
-// deletionDecideServiceLatch makes the one live right check behind a service latch. The worker has
+// deletionDecideServiceLatch makes the one live right check behind the delete-right latch (stored
+// as the service scope, which now means the bot cannot delete other people's messages). The worker has
 // no chat type, so the administrator flag is trusted by the chat ID's range alone
 // (deletionTrustAdminFlag): an administrator without the delete right is latched in a supergroup,
 // and never in a basic group, which avoids a false latch there. A bot that definitely cannot delete
-// latches the chat for service kinds only (10 minutes) and drops the chat's pending service rows;
-// any other answer only returns, and the caller drops the one refused row. The writes run on a
+// latches the chat for the kinds that need the right, service and member, and never for a bot kind
+// (10 minutes), and drops the chat's pending service and member rows; any other answer only returns, and the caller drops the one refused row. The writes run on a
 // context detached from the run, so a shutdown never strands a half-made decision.
 func deletionDecideServiceLatch(ctx context.Context, b *gotgbot.Bot, chatID int64) deletionRight {
 	right := deletionReadBotRight(ctx, b, chatID, deletionCallTimeout, deletionTrustAdminFlag(chatID))
@@ -108,8 +113,10 @@ func deletionDecideServiceLatch(ctx context.Context, b *gotgbot.Bot, chatID int6
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deletionRecordTimeout)
 	defer cancel()
 	deletionSetLatch(writeCtx, chatID, deletionScopeService)
-	if _, err := deletion.DropChatPending(writeCtx, chatID, deletionServicePrefix); err != nil {
-		log.Warnf("[Deletion] could not drop the pending service rows of chat %d: %v", chatID, err)
+	for _, prefix := range []string{deletionServicePrefix, deletionMemberPrefix} {
+		if _, err := deletion.DropChatPending(writeCtx, chatID, prefix); err != nil {
+			log.Warnf("[Deletion] could not drop the pending %s* rows of chat %d: %v", prefix, chatID, err)
+		}
 	}
 	return right
 }

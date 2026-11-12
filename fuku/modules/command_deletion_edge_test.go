@@ -136,7 +136,7 @@ func TestCommandDeletionAnonymousAdmin(t *testing.T) {
 		if proof < 0 || ban < 0 || reply < 0 || cmd < 0 {
 			t.Fatalf("call log %v lacks the proof delete (%d), the ban (%d), the reply (%d) or the command delete (%d)", log, proof, ban, reply, cmd)
 		}
-		if !(proof < ban && ban < reply && reply < cmd) {
+		if proof >= ban || ban >= reply || reply >= cmd {
 			t.Fatalf("order proof %d, ban %d, reply %d, command delete %d, want strictly increasing: %v", proof, ban, reply, cmd, log)
 		}
 		if n := strings.Count(strings.Join(log, ","), fmt.Sprintf("deleteMessage:%d", cmdID)); n != 1 {

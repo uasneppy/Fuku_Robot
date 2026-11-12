@@ -212,8 +212,9 @@ const (
 	deletionLatchTTL = 10 * time.Minute
 	// deletionScopeGone is the latch value that stops every kind: the bot is not in the chat.
 	deletionScopeGone = "gone"
-	// deletionScopeService is the latch value that stops only service:* kinds: the bot cannot
-	// delete other people's messages there. It is set only after a live right check, never from
+	// deletionScopeService is the latch value that stops the kinds that need the delete right
+	// (service:* and member:*, never bot:*): the bot cannot delete other people's messages there.
+	// The value keeps its name from Phase 16. It is set only after a live right check, never from
 	// a description (a message-level refusal says nothing about the right).
 	deletionScopeService = "service"
 )
@@ -228,7 +229,9 @@ func deletionLatchKey(chatID int64) string {
 	return "fuku:delete:norights:" + strconv.FormatInt(chatID, 10)
 }
 
-// deletionLatched reports whether deletions of the kind are stopped in the chat. One Redis read;
+// deletionLatched reports whether deletions of the kind are stopped in the chat. The service scope
+// means "the bot cannot delete other people's messages", so it stops the kinds that need that right
+// (service and member kinds, deletion.NeedsDeleteRight) and never a bot kind. One Redis read;
 // no Redis and a Redis error are "not latched": the latch only saves calls, correctness never
 // depends on it.
 func deletionLatched(ctx context.Context, chatID int64, kind string) bool {
@@ -246,7 +249,7 @@ func deletionLatched(ctx context.Context, chatID int64, kind string) bool {
 	case deletionScopeGone:
 		return true
 	case deletionScopeService:
-		return deletion.IsServiceKind(kind)
+		return deletion.NeedsDeleteRight(kind)
 	}
 	return false
 }
@@ -439,16 +442,16 @@ func deletionTakeCheck(ctx context.Context, chatID int64) bool {
 	return err == nil && taken
 }
 
-// deletionInlineDecideLatch decides the service latch after an inline service delete was refused
-// with a message-level answer, which says nothing about the right on its own (SEC-02): through the
-// same live check the worker makes (deletionDecideServiceLatch), at most once per chat per
-// deletionCheckTTL, so a group where the bot can never delete costs one read and then no calls. A
-// bot kind never decides it (a plain-member bot can delete its own messages). It runs inside the
+// deletionInlineDecideLatch decides the service latch after an inline delete of a kind that needs the
+// delete right (service and member kinds) was refused with a message-level answer, which says
+// nothing about the right on its own (SEC-02): through the same live check the worker makes
+// (deletionDecideServiceLatch), at most once per chat per deletionCheckTTL, so a group where the
+// bot can never delete costs one read and then no calls. A bot kind never decides it (a plain-member bot can delete its own messages). It runs inside the
 // inline delete's goroutine, which already recovers from a panic, on a context derived from the
 // deletion root, so the worker's stop cancels it; only the classifier's live cannot answer writes
 // the latch.
 func deletionInlineDecideLatch(b *gotgbot.Bot, a deletionAction) {
-	if !deletion.IsServiceKind(a.Kind) {
+	if !deletion.NeedsDeleteRight(a.Kind) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(deletionContext(), deletionInlineTimeout)

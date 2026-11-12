@@ -416,24 +416,25 @@ func (r *deletionChatRun) settleOne(row models.ScheduledDeletion, err error) {
 	}
 }
 
-// maybeLatchService decides the service latch after a service message was refused: at most once
-// per chat per cycle, and never for a bot kind, whose own messages a plain member bot can delete.
-// When the live check shows the bot cannot delete, the chat's other claimed service rows go too.
+// maybeLatchService decides the service latch after a message of a kind that needs the delete right
+// (service or member, deletion.NeedsDeleteRight) was refused: at most once per chat per cycle, and
+// never for a bot kind, whose own messages a plain member bot can delete. When the live check shows
+// the bot cannot delete, the chat's other claimed rows of those kinds go too.
 func (r *deletionChatRun) maybeLatchService(row models.ScheduledDeletion) {
-	if r.decided || !deletion.IsServiceKind(row.Kind) {
+	if r.decided || !deletion.NeedsDeleteRight(row.Kind) {
 		return
 	}
 	r.decided = true
 	if deletionDecideServiceLatch(r.cycle.ctx, r.cycle.bot, r.chatID) != deletionRightCannot {
 		return
 	}
-	var service []models.ScheduledDeletion
+	var stopped []models.ScheduledDeletion
 	for _, other := range r.cycle.unsettled() {
-		if other.ChatID == r.chatID && deletion.IsServiceKind(other.Kind) {
-			service = append(service, other)
+		if other.ChatID == r.chatID && deletion.NeedsDeleteRight(other.Kind) {
+			stopped = append(stopped, other)
 		}
 	}
-	r.drop(service...)
+	r.drop(stopped...)
 }
 
 // gone latches a chat the bot cannot act in at all and drops its claimed and pending rows.

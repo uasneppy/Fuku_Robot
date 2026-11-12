@@ -192,7 +192,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   in polling mode), deletes through `deletionAct` with delay 0 (so the delete-right latch, the Staff Group refusal, the
   deletion pacer and the due-now fallback apply) and has no defer around `Inner`: a handler panic that reaches the
   dispatcher skips the delete. No reply path is edited (handlers reply inside the update, the delete follows it) and it
-  adds no handler group; it is the one documented place that acts after the dispatcher's groups.
+  adds no handler group; it is the one documented place that acts after the dispatcher's groups. Its limits (plan 17-04,
+  `TestCommandDeletionAnonymousAdmin`, `TestCommandDeletionSenders`, `TestCommandDeletionRefusedAndFailed`,
+  `TestCommandDeletionStaffGroupNeverTouched`): an anonymous admin's command is deleted only from the re-entered update
+  after the proof tap, in the order proof message deleted, the command's own effect and reply, the command message
+  deleted, and it stays when nobody taps; one that needs no proof stays because its sender is the group, and in a group
+  whose AnonAdmin setting is on an anonymous admin's command runs at its first update with `sender_chat` set, so the wrapper
+  skips it and that command message stays: the stated limit of D-34 and owner confirmation A17-2, deferred because the
+  wrapper cannot tell a fully handled anonymous command from a proof prompt. A command refused by a check (not an admin,
+  disabled, wrong chat type, bot not an administrator) or failed with an error is deleted after its answer, `/cancel` in
+  the group too. A held member's command (deleted at group -10) or a fed-banned user's, and a command a handler already
+  deleted (`/del`), cost one refused delete call that is dropped quietly with no row and no message ID in the log. A Staff
+  Group is never touched, and a failing Staff Group read deletes nothing (`deletionAct`). The bare-name race with another
+  bot that handles the same word is accepted and is a live check. `TestCommandRepliesStayInsideTheHandler` guards that no
+  goroutine in `fuku/modules` replies, so no handler can reply to a command after the wrapper deleted it.
 - The `MemberRequirements` module (priority 241, `memberreq.go`, `memberreq_watch.go`) registers one message watcher at
   group `-2` (`memberReqWatchGroup`), through `handlers.NewMessage` with a supergroup-only filter and no `SetAllow*`
   (new messages only: no edits, channel posts or bot senders), the only message handler of that group. The member
@@ -1619,13 +1632,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
   `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
-  every kind, set from the classifier, overwriting) or `service` (stops only `service:*` kinds, set only after a live right
-  check, `SET NX`, so it never downgrades `gone`). A message-level answer (`message to delete not found`, `message can't be
-  deleted`) never sets a latch by itself, because a plain-member bot can still delete its own messages; for a `service:*` kind
-  it only leads to the live right check (below), and only that check's `cannot` answer sets the `service` scope. No Redis and
+  every kind, set from the classifier, overwriting) or `service` (stops every kind that needs the right to delete other people's messages, the `service:*` and the `member:*`
+  kinds, `deletion.NeedsDeleteRight`, and never a `bot:*` kind; Phase 17 widened its meaning from service kinds only, the stored
+  value and the key are unchanged; set only after a live right check, `SET NX`, so it never downgrades `gone`). A
+  message-level answer (`message to delete not found`, `message can't be deleted`) never sets a latch by itself, because a
+  plain-member bot can still delete its own messages; for a `service:*` or `member:*` kind it only leads to the live right
+  check (below), and only that check's `cannot` answer sets the `service` scope. No Redis and
   a Redis error read as "not latched": the latch only saves calls.
 - `fuku:delete:chk:<chat>` is the guard of the inline latch decision (`deletionCheckKey`, `deletionTakeCheck`,
-  `deletionCheckTTL`, SEC-02): `SET NX EX 600` with the value `1`, taken after an inline `service:*` delete was refused with a
+  `deletionCheckTTL`, SEC-02): `SET NX EX 600` with the value `1`, taken after an inline `service:*` or `member:*` delete was refused with a
   message-level answer, so the live right check (`deletionDecideServiceLatch`) of a chat runs at most once per chat per 10
   minutes across replicas. It sits in the `fuku:delete:*` family, outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP`
   keeps it. No Redis, a Redis error and a lost `SET NX` all mean no guard and no check (the latch only saves calls, so this
@@ -2113,7 +2128,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   pacer's wait while the deletion root is still live (a flood-control block longer than that, under the pacer's `MaxWait`;
   `deletionInlineShed`) become a queue row due now plus a wake instead of parking goroutines or losing the message; a delete
   cut off by a cancelled root (shutdown) writes nothing and is lost; a `gone` answer sets the
-  `gone` latch, a refused one is dropped with no log line (a refused `service:*` one first decides the service latch through
+  `gone` latch, a refused one is dropped with no log line (a refused `service:*` or `member:*` one first decides the service latch through
   the live right check of `deletionDecideServiceLatch`, in the same goroutine and on a context derived from the deletion root,
   at most once per chat per 10 minutes behind the `fuku:delete:chk:<chat>` guard (SEC-02); a bot kind never asks, and only a
   live `cannot` answer writes the latch) and any other failure loses that one message. `deletionClassify` is a
@@ -2123,8 +2138,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `deletionWorkerTick` (1 s) or wake, a pass being cycles back to back until one settles nothing; `runDeletionCycle` starts with
   `defer error_handling.RecoverFromPanic`. The cycle order is fixed (research S-05): release stale claims, claim up to 200
   rows with one conditional update read by token, drop the rows whose message is over 47 hours old, then per chat in
-  ascending chat ID order: the latch (a `gone` value drops every kind of the chat, a `service` value drops its `service:*`
-  rows and lets `bot:*` through), a fresh Staff Group read through `deletionStaffLookup` (a row drops the chat's rows with no
+  ascending chat ID order: the latch (a `gone` value drops every kind of the chat, a `service` value drops its `service:*` and
+  `member:*` rows (`deletion.NeedsDeleteRight`) and lets `bot:*` through), a fresh Staff Group read through `deletionStaffLookup` (a row drops the chat's rows with no
   call, an error releases them free), then one paced `deleteMessages` call per chunk of at most 100 IDs. A success
   completes the chunk. A failure is read by `deletionClassify`: retry-free (a 429 past the pacer's retries, a shed pacer, a
   cancelled context) releases every unsettled row free and ends the cycle, so the next cycle's first call fails at once
@@ -2134,13 +2149,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `DropChatPending`, the latch) runs on `context.WithoutCancel` with its own 5 s bound through `deletionCycle.writeContext`,
   never the run context a shutdown cancels. The cycle logs one debug line per chat batch with counts and the chat ID, and
   never a message ID, a claim token or text (`TestDeletionWorkerLogsNoMessageIDs`); a dropped row has no line.
-  The service latch is set only after a live check: when a `service:*` message is refused with a message-level answer, once
+  The service latch is set only after a live check: when a `service:*` or `member:*` message is refused with a message-level answer, once
   per chat per cycle `deletionDecideServiceLatch` reads the bot's own member record through the pacer
   (`deletionReadBotRight`, classified by `deletionClassifyBotRight` from status and error code only, never a description:
   creator can; an administrator can when it has the delete right or the flag is not trusted; member, restricted, left, kicked,
   a 400 and a 403 cannot; a 429, a 5xx, a transport error, a timeout, a shed pacer and a null or unrecognised answer are
-  unknown). Only `cannot` latches the chat for `service` kinds and drops its pending `service:*` rows; `can` and unknown only
-  drop the one refused row. The worker has no chat type, so it decides whether to trust the administrator flag by the chat ID
+  unknown). Only `cannot` latches the chat for the kinds that need the right (`service:*` and `member:*`) and drops its pending
+  rows of both prefixes (`deletionServicePrefix`, `deletionMemberPrefix`, one `DropChatPending` each); `can` and unknown only
+  drop the one refused row. The worker's claimed-row drop after a `cannot` covers the same kinds (`maybeLatchService`). The worker has no chat type, so it decides whether to trust the administrator flag by the chat ID
   alone (`deletionTrustAdminFlag`, SEC-02): for a supergroup or channel ID (at or below -1000000000000, the Bot API ranges)
   the flag is reliable, so an administrator without `can_delete_messages` reads as cannot and the chat is latched for service
   kinds; for a basic group's ID (-1 to -999999999999) and for any other ID the flag is not trusted and an administrator is
