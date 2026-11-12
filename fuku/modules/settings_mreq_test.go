@@ -228,7 +228,7 @@ func TestSettingsMreqOpensFromMain(t *testing.T) {
 		msgID := env.openMenu(owner)
 		mainText, mainKeyboard := env.lastEdit(env.chat.Id, msgID)
 
-		if got, want := settingsMainShape(t, mainKeyboard), "s|l / c|f / w|g / r|m / d / a / close"; got != want {
+		if got, want := settingsMainShape(t, mainKeyboard), settingsMainShapeGroup; got != want {
 			t.Errorf("the owner's group Main = %q, want %q", got, want)
 		}
 		line, found := settingsMainStateLine(mainText, "settings_page_mreq")
@@ -264,7 +264,7 @@ func TestSettingsMreqOpensFromMain(t *testing.T) {
 		mainKeyboard := staffKeyboardOf(sentMain.Params["reply_markup"])
 		private := settingsPrivateChat(owner)
 
-		if got, want := settingsMainShape(t, mainKeyboard), "s|l / c|f / w|g / r|m / d / a / groups|close"; got != want {
+		if got, want := settingsMainShape(t, mainKeyboard), settingsMainShapePrivate; got != want {
 			t.Errorf("the owner's private Main = %q, want %q", got, want)
 		}
 		button, ok := settingsPageButton(t, mainKeyboard, settingsPageMreq)
@@ -1422,6 +1422,22 @@ func TestSettingsControlActionAllowList(t *testing.T) {
 		}
 	})
 
+	t.Run("the Warnings limit control accepts st only", func(t *testing.T) {
+		for _, v := range []string{"1", "5", "50", "100"} {
+			refused("tg l v="+v, env.groupFields(owner, "a", "tg", "p", settingsPageWarns, "t", settingsWarnsLimitKey, "v", v))
+			ok := map[string]string{"p": settingsPageWarns, "t": settingsWarnsLimitKey, "v": v}
+			if !settingsControlFieldsValid("st", ok) || settingsControlFieldsValid("tg", ok) {
+				t.Errorf("Warnings limit v=%s: st accepted %v, tg accepted %v, want st only", v, settingsControlFieldsValid("st", ok), settingsControlFieldsValid("tg", ok))
+			}
+		}
+		for _, bad := range []string{"", "x", "-1", "1000", "05x"} {
+			fields := map[string]string{"p": settingsPageWarns, "t": settingsWarnsLimitKey, "v": bad}
+			if settingsControlFieldsValid("st", fields) {
+				t.Errorf("Warnings limit st with v=%q was accepted in step 1", bad)
+			}
+		}
+	})
+
 	t.Run("tg and st stay accepted on the two switches", func(t *testing.T) {
 		for _, action := range []string{"tg", "st"} {
 			for _, control := range []string{"j", "d"} {
@@ -1441,7 +1457,13 @@ func TestSettingsControlActionAllowList(t *testing.T) {
 			if pg.Key == settingsPageMreq {
 				continue
 			}
-			for code := range pg.Controls {
+			for code, control := range pg.Controls {
+				// A control with an allow-list whose Validate accepts v=1 (the Phase 18 limit and
+				// toggles, deviation note 1 of plan 18-01) is st or tg only by design: each has its
+				// own forged-press test. Every control checked before Phase 18 is still checked.
+				if len(control.Actions) > 0 && control.Validate != nil && control.Validate("1") {
+					continue
+				}
 				fields := map[string]string{"p": pg.Key, "t": code, "v": "1"}
 				tg, st := settingsControlFieldsValid("tg", fields), settingsControlFieldsValid("st", fields)
 				if tg != st {

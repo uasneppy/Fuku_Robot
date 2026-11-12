@@ -3296,6 +3296,10 @@ settings_del_delay_30s: "30 s"
 settings_del_delay_5m: "5 min"
 settings_del_delay_15m: "15 min"
 settings_del_confirm_self: "Apagar toda mensagem que os membros enviarem a partir de agora, {delay} depois do envio?\n\nAs mensagens já enviadas não são tocadas. Admins, membros aprovados e mensagens fixadas ficam de fora. Você pode desativar quando quiser."
+settings_page_warns: "Avisos"
+settings_state_warns: "Limite {n}, {action}"
+settings_warns_limit: "Limite de avisos: <b>{n}</b>"
+settings_warns_hint: "No limite, aplico a ação ao membro e depois apago os avisos dele."
 settings_help_msg: |
   Gerencie este grupo a partir de um único menu de botões.
 

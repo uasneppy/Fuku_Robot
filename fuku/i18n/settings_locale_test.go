@@ -309,6 +309,14 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_mreq_confirm_ai_ban":  {206, 288},
 	"settings_mreq_confirm_ai_mute": {226, 316},
 
+	// Phase 18 (plan 18-01), the Warnings page (rows 1, 7, 10 and 13 of the UI-SPEC "New settings_
+	// keys" table). The page name is a grid cell whose binding ceiling is the rendered 20 of
+	// TestSettingsLabelLengths.
+	"settings_page_warns":  {18, 18},
+	"settings_state_warns": {35, 40},
+	"settings_warns_limit": {30, 35},
+	"settings_warns_hint":  {85, 110},
+
 	// Phase 16 (plan 16-07), the Deletion page: the Main cell's name and state word. The page
 	// name is a grid cell whose binding ceiling is the rendered 20 of TestSettingsLabelLengths.
 	"settings_page_del":     {14, 18},
@@ -602,6 +610,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"📜", "settings_page_rules"},
 		{"🛂", "settings_page_mreq"},
 		{"🧹", "settings_page_del"},
+		{"🚩", "settings_page_warns"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",

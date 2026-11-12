@@ -109,15 +109,15 @@ func settingsDelWantBack(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton
 
 func TestSettingsDeletionOpensFromMain(t *testing.T) {
 	settingsDelMenus(t, func(t *testing.T, m *settingsDelMenu) {
-		wantShape := "s|l / c|f / w|g / r|m / d / a / close"
+		wantShape := settingsMainShapeGroup
 		if m.private {
-			wantShape = "s|l / c|f / w|g / r|m / d / a / groups|close"
+			wantShape = settingsMainShapePrivate
 		}
 		if got := settingsMainShape(t, m.mainKeyboard); got != wantShape {
 			t.Errorf("the owner's Main = %q, want %q", got, wantShape)
 		}
-		if rows := len(m.mainKeyboard); rows != 7 {
-			t.Errorf("Main has %d rows, want 7", rows)
+		if rows := len(m.mainKeyboard); rows != settingsMainOwnerRows {
+			t.Errorf("Main has %d rows, want %d", rows, settingsMainOwnerRows)
 		}
 		settingsDelWantLine(t, m.mainText, "settings_page_del", "🧹", staffMarker("settings_state_off_plain"))
 		cell, ok := settingsPageButton(t, m.mainKeyboard, "d")

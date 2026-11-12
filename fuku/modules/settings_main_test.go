@@ -25,6 +25,16 @@ func settingsMainStateLine(text, titleKey string) (string, bool) {
 	return "", false
 }
 
+// The real Main's shape for the owner, as every plan that registers a page leaves it (Phase 18:
+// the tests that read the real Main compare with these, so a later plan edits only here). The
+// private shape ends with the Groups and Close row; the hand-built subtests of
+// TestSettingsMainGrid keep their own literals.
+const (
+	settingsMainShapeGroup   = "s|l / c|f / n|w / g|r / m|d / a / close"
+	settingsMainShapePrivate = "s|l / c|f / n|w / g|r / m|d / a / groups|close"
+	settingsMainOwnerRows    = 7
+)
+
 // settingsMainShape writes a Main keyboard as its rows of short names: a page button is its p
 // value, the Groups button "groups" and Close "close", the buttons of a row joined by "|".
 func settingsMainShape(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton) string {

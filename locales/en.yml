@@ -3362,6 +3362,10 @@ settings_del_delay_30s: "30 s"
 settings_del_delay_5m: "5 min"
 settings_del_delay_15m: "15 min"
 settings_del_confirm_self: "Delete every message members send from now on, {delay} after it was sent?\n\nMessages already sent are not touched. Admins, approved members and pinned messages stay. You can switch it off at any time."
+settings_page_warns: "Warnings"
+settings_state_warns: "Limit {n}, {action}"
+settings_warns_limit: "Warn limit: <b>{n}</b>"
+settings_warns_hint: "At the limit I apply the action to the member and then clear their warns."
 settings_help_msg: |
   Manage this group from one button menu.
 

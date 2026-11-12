@@ -545,7 +545,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -882,6 +882,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsDeletion*`, `TestSettingsAuthorityDeletion`, `TestSettingsDriftDeletion` and `TestSettingsParityCleanService`
   hold it (`settings_deletion_test.go`, `settings_deletion_right_test.go`, `settings_deletion_screens_test.go`,
   `settings_deletion_golden_test.go`, `settings_deletion_member_test.go`, toolkit `settings_deletion_env_test.go`).
+- The Warnings page (`settings_warns.go`, page `n`, `Order` 42, icon 🚩, `settings_page_warns`, between Antiflood and Welcome,
+  Phase 18, plan 18-01) registers from its own file through `registerSettingsPage`, so `settings_pages.go` is not edited,
+  and has no `Hidden`, so a Staff Group's own menu shows it too. It reads through `settingsWarnsRead`
+  (`warns.LoadWarnSettingsContext`, the key `/setwarnlimit` and the warn module read: no row means limit 3 and mode `mute`,
+  nothing is created or cached for it, and a failed read is the cannot-open edit and the unknown mark on Main). Main's state
+  is `settings_state_warns` (`Limit {n}, {action}`, the action's word through `settingsFloodActionWord`, an empty stored mode
+  `settings_state_not_set`). The body is the limit line (`settings_warns_limit`) and the hint (`settings_warns_hint`); the
+  action line, the action choice row and the inert line arrive in plan 18-03. The one control is the limit stepper `l`
+  (`settingsWarnsLimitKey`): `st` only (`Actions`), `v` one to three digits (`settingsParseNumber(v, 3)`, step 1), right
+  `settingsRightAdminFloodBot` (the right `/setflood` uses, because `/setwarnlimit`'s `IsUserConnected(true, true)` asks for
+  an admin and for the bot as an administrator), steps -10, -1, +1 and +10 clamped to 1..100 and sent as absolute targets. A
+  press whose target equals the stored limit at 1 or 100 answers the toast `settings_min_value` or `settings_max_value` and
+  writes nothing. Every other press writes through `applyWarnLimit`, the function `/setwarnlimit` calls, and redraws from the
+  row it read back; the apply function's refusal (`warns_limit_range_error`) and a failed save
+  (`common_settings_save_failed`) redraw the stored state under a warn notice.
+  `TestSettingsWarnsOpens` and `TestSettingsParityWarnLimit` hold it (`settings_warns_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -921,7 +937,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / w|g / r|m / d`, then Access for the owner, so seven rows in a private and in a group menu; `m` is the Member requirements page and `d` the Deletion page below) with
+  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d`, then Access for the owner, so seven rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page and `d` the Deletion page; later Phase 18 plans add the rest of the grid) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
@@ -3337,6 +3353,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsOwnerAuthorityAccess` instead of a parity test, and `TestSettingsAccessAcrossReplicas` proves the fresh
   read across two replicas (a flip on one is seen by the very next press on the other, a memoised owner never hides a
   flip to ON, D-12).
+  The tests that read the real Main's shape compare it with three constants in `settings_main_test.go`
+  (`settingsMainShapeGroup`, `settingsMainShapePrivate`, `settingsMainOwnerRows`), so a plan that registers a page edits only
+  those; the hand-built subtests of `TestSettingsMainGrid` keep their own literals. Since Phase 18 the "every control of the
+  other pages still accepts tg and st alike" subtest of `TestSettingsControlActionAllowList` skips a control that declares an
+  `Actions` list whose `Validate` accepts `v=1` (the Warnings limit and the later toggles: each is `st` or `tg` only by the
+  UI-SPEC and has its own forged-press test) and still checks every other control.
   The Member requirements page has `TestSettingsMreq*` (`TestSettingsMreqOpensFromMain`, `TestSettingsMreqMainState`,
   `TestSettingsMreqSwitches`, `TestSettingsMreqRuleScreen`, `TestSettingsControlActionAllowList`,
   `TestSettingsMreqRowBudget`, `TestSettingsMreqPageFitsEveryLocale`, `TestSettingsMreqCallbackBytes`),

@@ -138,8 +138,8 @@ func TestSettingsDeletionRowBudget(t *testing.T) {
 			}
 			m.env.setJoinLeft(deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftNow})
 			m.press("a", "bk")
-			if _, keyboard := m.last(); len(keyboard) != 7 {
-				t.Errorf("Main has %d rows, want 7", len(keyboard))
+			if _, keyboard := m.last(); len(keyboard) != settingsMainOwnerRows {
+				t.Errorf("Main has %d rows, want %d", len(keyboard), settingsMainOwnerRows)
 			}
 		})
 	})
