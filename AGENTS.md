@@ -3237,7 +3237,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `fuku/db/backup/testmain_test.go`. The Phase 12 characterization tests record what the code did before the phase and
   must never be re-recorded to make a change pass: `TestRulesLegacyRowSendsTodaysRequest` (a Rules row with no media sends
   today's request) and `TestLegacyGreetingsRequestsUnchanged` (an old greetings row sends today's request), both in
-  `rules_legacy_request_test.go`. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
+  `rules_legacy_request_test.go`. Phase 18's goldens follow the same rule: `TestLegacyWarnSettingsRequests`
+  (`warns_legacy_request_test.go`, every request and stored row of `/setwarnlimit` and `/setwarnmode`, committed before the
+  extraction into `applyWarnLimit` and `applyWarnMode`) is never re-recorded, and every `TestLegacy*Requests` golden of Phase 18
+  joins that rule as its plan records it. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
   `TestGreetingsMediaBelow*` (`greetings_media_below_test.go`), `TestRules*` in `rules_media_send_test.go`,
   `TestSettingsEditMediaBelow*`, `TestSettings*MediaBelow`, `TestSettings*Once`, `TestSettingsEditSwitchGrid` and
   `TestSettingsEditRules*` (`settings_edit_switch_test.go`, `settings_edit_rules_test.go`, `settings_input_rules_test.go`),
