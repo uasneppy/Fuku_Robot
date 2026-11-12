@@ -337,6 +337,18 @@ lists them) and its `v` the absolute target, `0` or `1`; anything else is an inv
 Media under text (`u`) is drawn only while the stored media is a photo, a video or a GIF; a press on a switch that is no
 longer drawn writes nothing and redraws the page with a notice.
 
+The Warnings page (`n`, between the Antiflood and Welcome pages of Main) has two controls, both `st` only (a `tg` is an invalid
+request, refused before any lookup):
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| Warn limit | `l` | 1 to 3 digits | the stepper sends the absolute target, clamped to 1 to 100; a step at 1 or 100 answers a toast and writes nothing; 0 and over 100 are refused with the command's own text |
+| Action at the limit | `m` | 1 to 10 lower-case letters | `ban`, `kick` or `mute`; any other word of that shape is refused with `/setwarnmode`'s own text as a notice and writes nothing |
+
+A stored `tban`, `tmute` or empty action is drawn as stored (or Not set) with a line saying the bot does not act on it and no
+choice marked; pressing Mute, Ban or Kick replaces it. The page writes through the same functions as `/setwarnlimit` and
+`/setwarnmode`. The largest button of the page is 48 bytes in a private menu and 44 in a group menu.
+
 ### Warns
 
 #### `rmAllChatWarns`

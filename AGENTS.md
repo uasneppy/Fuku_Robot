@@ -883,21 +883,42 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   hold it (`settings_deletion_test.go`, `settings_deletion_right_test.go`, `settings_deletion_screens_test.go`,
   `settings_deletion_golden_test.go`, `settings_deletion_member_test.go`, toolkit `settings_deletion_env_test.go`).
 - The Warnings page (`settings_warns.go`, page `n`, `Order` 42, icon 🚩, `settings_page_warns`, between Antiflood and Welcome,
-  Phase 18, plan 18-01) registers from its own file through `registerSettingsPage`, so `settings_pages.go` is not edited,
-  and has no `Hidden`, so a Staff Group's own menu shows it too. It reads through `settingsWarnsRead`
-  (`warns.LoadWarnSettingsContext`, the key `/setwarnlimit` and the warn module read: no row means limit 3 and mode `mute`,
-  nothing is created or cached for it, and a failed read is the cannot-open edit and the unknown mark on Main). Main's state
-  is `settings_state_warns` (`Limit {n}, {action}`, the action's word through `settingsFloodActionWord`, an empty stored mode
-  `settings_state_not_set`). The body is the limit line (`settings_warns_limit`) and the hint (`settings_warns_hint`); the
-  action line, the action choice row and the inert line arrive in plan 18-03. The one control is the limit stepper `l`
-  (`settingsWarnsLimitKey`): `st` only (`Actions`), `v` one to three digits (`settingsParseNumber(v, 3)`, step 1), right
-  `settingsRightAdminFloodBot` (the right `/setflood` uses, because `/setwarnlimit`'s `IsUserConnected(true, true)` asks for
-  an admin and for the bot as an administrator), steps -10, -1, +1 and +10 clamped to 1..100 and sent as absolute targets. A
-  press whose target equals the stored limit at 1 or 100 answers the toast `settings_min_value` or `settings_max_value` and
-  writes nothing. Every other press writes through `applyWarnLimit`, the function `/setwarnlimit` calls, and redraws from the
-  row it read back; the apply function's refusal (`warns_limit_range_error`) and a failed save
-  (`common_settings_save_failed`) redraw the stored state under a warn notice.
-  `TestSettingsWarnsOpens` and `TestSettingsParityWarnLimit` hold it (`settings_warns_test.go`).
+  Phase 18, plans 18-01 and 18-03) registers from its own file through `registerSettingsPage`, so `settings_pages.go` is not
+  edited, and has no `Hidden`, so a Staff Group's own menu shows it too. It reads through `settingsWarnsRead`
+  (`warns.LoadWarnSettingsContext`, the key `/setwarnlimit`, `/setwarnmode` and `/warnings` and the warn module read: no row
+  means limit 3 and mode `mute`, nothing is created or cached for it, and a failed read is the cannot-open edit and the
+  unknown mark on Main). Main's state is `settings_state_warns` (`Limit {n}, {action}`, the action's word through
+  `settingsWarnsActionWord`: the Antiflood words of `settingsFloodActionWord`, the stored text escaped for a value outside
+  them, `settings_state_not_set` for an empty mode). The body is the limit line (`settings_warns_limit`), the action line
+  (`settings_warns_action`), the inert line while the stored action is not one the bot acts on, a blank line and the hint
+  (`settings_warns_hint`); the keyboard is the stepper, the choice row `[Mute | Ban | Kick]` and Back and Close, widths 5, 3
+  and 2 in a group menu and in a private one, the largest button 48 bytes (private) and 44 (group). There are two controls,
+  both `st` only (`Actions`, so a `tg` is an invalid request before any I/O) and both with right `settingsRightAdminFloodBot`
+  (the right `/setflood` uses, because `/setwarnlimit`'s and `/setwarnmode`'s `IsUserConnected(true, true)` ask for an admin
+  and for the bot as an administrator; the cached `RequireUserAdmin` of the commands is replaced by the live check every
+  press makes, the documented carve-out). `l` is the limit stepper (`settingsWarnsLimitKey`): `v` one to three digits
+  (`settingsParseNumber(v, 3)`), steps -10, -1, +1 and +10 clamped to 1..100 and sent as absolute targets, so a stored limit
+  above 100 (a database edit) is drawn as stored and every step lands on 100; a press whose target equals the stored limit at 1
+  or 100 answers the toast `settings_min_value` or `settings_max_value` and writes nothing; every other press writes through
+  `applyWarnLimit`, the function `/setwarnlimit` calls. `m` is the action (`settingsWarnsModeKey`): `v` one to ten
+  lower-case ASCII letters (`settingsFloodModeWord`, the Antiflood shape, so a long, upper-case or non-letter word is an
+  invalid request before any I/O) and the write goes through `applyWarnMode`, the function `/setwarnmode` calls, which accepts
+  exactly `warnSettingsModes` (ban, kick, mute): any other lower-case word, `tban`, `tmute` and `warn` included, is refused
+  with the command's own `warns_mode_unknown` (the word escaped, because the locale text is the command's printf template and
+  the page is HTML) as a warn notice over the stored state, and writes nothing. A stored `tban`, `tmute` or empty action
+  (the table's CHECK allows them) applies nothing at the limit, so the page draws the stored word or Not set, adds
+  `settings_warns_action_inert` and marks no choice; a press of Mute, Ban or Kick replaces it. The Antiflood note
+  `settings_antiflood_action_note` is not reused, because "cannot be set from the menu" would be false here. Neither write
+  changes the other value the page shows: a first limit write stores mode `mute` and a first action write stores limit 3 (the
+  repository's upserts). Every press redraws from the row the apply function read back (a refusal or a failed save,
+  `common_settings_save_failed`, from the row read before), and a press of the stored value writes the same row again (the
+  command's upsert is idempotent) and shows no notice. Known and left to the owner: `/reset warnings` stores an empty mode
+  (`backup.go`), which the page shows as Not set with the inert line and the warn module does not act on; the fix is one
+  line in the reset and a backup test, outside this phase (`18-SPIKE.md`, check 3). `TestSettingsWarnsOpens`,
+  `TestSettingsParityWarnLimit`, `TestSettingsParityWarnMode`, `TestSettingsWarnsInertAction`, `TestSettingsWarnsBounds`,
+  `TestSettingsWarnsForged`, `TestSettingsDriftWarns`, `TestSettingsAuthorityParityWarns`, `TestSettingsWarnsCallbackBytes`,
+  `TestSettingsWarnsPageFitsEveryLocale` and `TestSettingsWarnsReadsCreateNothing` hold it (`settings_warns_test.go`,
+  `settings_warns_screens_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
