@@ -407,16 +407,85 @@ func memberSelfDestructDelay(chatID int64) (delay int, on bool) {
 	return delay, true
 }
 
-// memberDeletePinned drops the pending self-destruct row of one message, because a pinned message
-// stays (D-11). It runs on a fresh bounded context and logs a failure by chat ID only; the only
-// cost of a failure is that the pinned message is still deleted when its time comes.
-func memberDeletePinned(chatID, messageID int64) {
-	ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
-	defer cancel()
-	if _, err := deletion.DropPendingMessage(ctx, chatID, messageID, deletion.KindMemberSelfDestruct); err != nil {
-		log.Warnf("[MemberDeletion] a pinned message of chat %d could not be taken off the self-destruct queue: %s",
-			chatID, memberReqErrText(err))
+// memberPinnedTTL is how long a pin is remembered in process (WR-03). It only has to outlive the
+// time an offered entry can wait in the batcher's buffer and its screening (a flush is bounded by
+// deletionRecordTimeout, 5 s), with margin.
+const memberPinnedTTL = 10 * time.Second
+
+// memberPinnedMax bounds the set of remembered pins; it is a variable only so a test can shrink it.
+var memberPinnedMax = 4096
+
+type memberPinKey struct{ chat, message int64 }
+
+// memberPinnedNotes holds the (chat, message) keys of recently pinned messages on this replica. It
+// is a bounded in-process set: expired notes are pruned on every write, and when the set is still
+// full the oldest note is evicted, so the newest pin is always remembered.
+var memberPinnedNotes struct {
+	mu sync.Mutex
+	at map[memberPinKey]time.Time
+}
+
+// memberPinnedNote remembers that the message was pinned at now.
+func memberPinnedNote(chatID, messageID int64, now time.Time) {
+	memberPinnedNotes.mu.Lock()
+	defer memberPinnedNotes.mu.Unlock()
+	if memberPinnedNotes.at == nil {
+		memberPinnedNotes.at = make(map[memberPinKey]time.Time)
 	}
+	for key, at := range memberPinnedNotes.at {
+		if now.Sub(at) > memberPinnedTTL {
+			delete(memberPinnedNotes.at, key)
+		}
+	}
+	key := memberPinKey{chatID, messageID}
+	if _, known := memberPinnedNotes.at[key]; !known {
+		for len(memberPinnedNotes.at) >= max(memberPinnedMax, 1) {
+			var oldest memberPinKey
+			var oldestAt time.Time
+			first := true
+			for k, at := range memberPinnedNotes.at {
+				if first || at.Before(oldestAt) {
+					oldest, oldestAt, first = k, at, false
+				}
+			}
+			delete(memberPinnedNotes.at, oldest)
+		}
+	}
+	memberPinnedNotes.at[key] = now
+}
+
+// memberPinnedRecently reports whether the message was pinned within memberPinnedTTL of now.
+func memberPinnedRecently(chatID, messageID int64, now time.Time) bool {
+	memberPinnedNotes.mu.Lock()
+	defer memberPinnedNotes.mu.Unlock()
+	at, known := memberPinnedNotes.at[memberPinKey{chatID, messageID}]
+	return known && now.Sub(at) <= memberPinnedTTL
+}
+
+// memberDeleteDropPinned drops one pending self-destruct row; it is a variable only so a test can
+// make it fail.
+var memberDeleteDropPinned = deletion.DropPendingMessage
+
+// memberDeletePinned keeps a pinned message out of the self-destruct queue (D-11). It first
+// remembers the pin in process, so a flush that holds the message in its buffer, or is already
+// screening it, drops it instead of writing it (WR-03: this closes that window on this replica only;
+// a pin handled by another replica stays the accepted limit AR-5), and then drops the message's
+// pending row, retrying the database drop once because the pin event is never delivered again. Each
+// attempt runs on a fresh bounded context and a failure is logged by chat ID only; the only cost of
+// a drop that fails twice is that the pinned message is still deleted when its time comes.
+func memberDeletePinned(chatID, messageID int64) {
+	memberPinnedNote(chatID, messageID, deletionNow())
+	var err error
+	for range 2 {
+		ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
+		_, err = memberDeleteDropPinned(ctx, chatID, messageID, deletion.KindMemberSelfDestruct)
+		cancel()
+		if err == nil {
+			return
+		}
+	}
+	log.Warnf("[MemberDeletion] a pinned message of chat %d could not be taken off the self-destruct queue: %s",
+		chatID, memberReqErrText(err))
 }
 
 // memberSelfDestructWatch offers every message of a real member to the batcher when the group's

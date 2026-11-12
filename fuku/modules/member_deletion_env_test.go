@@ -209,6 +209,10 @@ func resetMemberDeleteState() {
 	}
 	memberDeleteWritten.Store(0)
 	memberDeleteDroppedOff.Store(0)
+	memberDeletePinnedDropped.Store(0)
+	memberPinnedNotes.mu.Lock()
+	memberPinnedNotes.at = nil
+	memberPinnedNotes.mu.Unlock()
 	memberDeleteShedWarn.mu.Lock()
 	memberDeleteShedWarn.last = nil
 	memberDeleteShedWarn.capWarned = false

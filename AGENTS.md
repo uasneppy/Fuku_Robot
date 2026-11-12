@@ -2317,11 +2317,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   service message drops the pending row of the message it names (exactly its chat, message, kind and the pending state: an
   acting row is left to the worker), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
   `pinChatMessage`, because the pin service message the bot causes has a bot sender that a watcher without `SetAllowBot` never
-  sees; unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
+  sees. `memberDeletePinned` first notes the pin in a small bounded in-process set (`memberPinnedNotes`: `memberPinnedTTL` 10 s,
+  `memberPinnedMax` 4096, expired notes pruned on every write, the oldest evicted when full, on the replica that handled the
+  pin) which the flush consults right before its write (`memberDeleteDropPinnedEntries`, counted in `memberDeletePinnedDropped`,
+  correct and not a shed), so a message pinned while it sat in the buffer or in the flush's screening is dropped instead of
+  written; it then drops the pending row through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
+  pin event is never delivered again (`TestMemberSelfDestructPinRace`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
   Off drops the chat's pending self-destruct rows in the same write (`RemoveRule`), and turning it on or changing the delay
   drops nothing: rows queued under the old delay keep their time (D-12). Accepted limits, stated and not tested as wanted
-  behaviour: a pin that lands while the message is still in the batcher's buffer (about 300 ms) or after the worker claimed its
-  row still deletes it; a pin by another bot is never seen; exemptions are judged at send time, so a member approved or
+  behaviour: a pin that lands after the worker claimed its row still deletes it, and a pin handled by another replica while the
+  message sits in this replica's buffer is not seen here (the in-process pin set below closes the buffer window on the replica
+  that handles the pin only); a pin by another bot is never seen; exemptions are judged at send time, so a member approved or
   promoted later still loses messages already queued; a command message deleted by command deletion leaves a self-destruct row
   whose later delete is refused quietly. A busy group keeps pace: the burst is offered with no write, the worker claims
   `deletionBatch` (1000) rows a cycle and makes at most one `deleteMessages` call per 100 rows of a chat, so 3000 messages are 30

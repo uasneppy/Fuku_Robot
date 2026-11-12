@@ -105,6 +105,9 @@ var (
 	// memberDeleteDroppedOff counts the entries a flush dropped because the rule is no longer on:
 	// correct, not a shed.
 	memberDeleteDroppedOff atomic.Int64
+	// memberDeletePinnedDropped counts the entries a flush dropped because the message was pinned
+	// while it waited: correct, not a shed.
+	memberDeletePinnedDropped atomic.Int64
 )
 
 // memberDeleteWarnGate lets one line per chat per window through, with a bounded map. The zero
@@ -287,7 +290,25 @@ func memberDeleteFlush(ctx context.Context) int {
 		kept = append(kept, memberDeleteScreenChat(ctx, entries[start].ChatID, entries[start:end])...)
 		start = end
 	}
-	return memberDeleteWriteKept(ctx, kept)
+	return memberDeleteWriteKept(ctx, memberDeleteDropPinnedEntries(kept))
+}
+
+// memberDeleteDropPinnedEntries drops the entries whose message was pinned within memberPinnedTTL
+// (WR-03). It runs right before the write, the latest point at which this replica can still keep a
+// pinned message out of the queue: a pin that landed while the entry sat in the buffer or in the
+// screening above is dropped here, and one that lands after the write is dropped by the pin's own
+// database drop.
+func memberDeleteDropPinnedEntries(kept []deletion.Entry) []deletion.Entry {
+	now := deletionNow()
+	out := kept[:0:0]
+	for _, e := range kept {
+		if memberPinnedRecently(e.ChatID, e.MessageID, now) {
+			memberDeletePinnedDropped.Add(1)
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // memberDeleteWriteKept writes the screened entries in one call of the batch writer. A returned
