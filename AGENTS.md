@@ -1554,14 +1554,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   claims due pending rows with one conditional `UPDATE` (state acting, a `crypto/rand` token, `claimed_at`, re-checking
   `state = 'pending'`) and reads them back by token, so among concurrent callers each row has one winner; `Complete` and
   `Release` touch only rows that still carry the caller's token (a late completion of a stale claim removes nothing, and an
-  empty token is refused), the third counted `Release` deletes the row instead, and `ReleaseStale` returns old acting rows to
-  pending with no attempt. The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
+  empty token is refused), a counted `Release` adds an attempt and moves `delete_at` to the retry time the caller passes (UTC,
+  whole seconds, a Go-computed time so SQLite and PostgreSQL run one statement; a counted release with no retry time is
+  `ErrInvalidRetryAt`), the third counted `Release` deletes the row instead, an uncounted `Release` (a 429, a shutdown) leaves
+  `delete_at` alone, and `ReleaseStale` returns old acting rows to pending with no attempt. The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
   never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 200 due rows per cycle
   (`deletionBatch`), releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
   90 s after its claim (`deletionCycleGuard`, under the stale release, so a live cycle's rows are never handed to a second
   replica: what it has not finished is released free before it returns), drops a row whose `sent_at` is more than 47 hours
-  old (`deletionDropAge`) with no call, and gives a row three counted tries (`deletionMaxAttempts`, a 5xx or a timeout; a 429
-  and a shutdown cost none).
+  old (`deletionDropAge`) with no call, and gives a row three counted tries (`deletionMaxAttempts`, a 5xx, a transport error or a per-call timeout; a 429
+  and a shutdown cost none) spaced by `deletionRetryBackoff` (60 s, WR-02): a counted failure moves the row's `delete_at` to
+  the cycle clock (`deletionNow()`) plus the backoff, so the tries are not re-claimed on consecutive 1 s ticks and a few
+  seconds of Telegram trouble no longer drops a row (the 47 hour drop still bounds a row's life).
 - `fuku:delete:pace:next` and `fuku:delete:pace:block` are the fleet-wide Telegram pacing of the deletion code
   (`deletionPaced`, `deletionPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block design with its own keys, so
   deletions, member requirements, lockdown and staff fan-outs each keep their own budget (`TestDeletionPacerIsIndependent`).
@@ -2067,7 +2071,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cancelled context) releases every unsettled row free and ends the cycle, so the next cycle's first call fails at once
   under the shared block with no request; gone sets the `gone` latch and drops the chat's claimed and pending rows;
   anything else falls back to one `deleteMessage` per ID, each classified alone: done and refused (not found, can't be
-  deleted, any other 4xx) drop the row quietly, a 5xx or timeout releases it counted. Every row write (`Complete`, `Release`,
+  deleted, any other 4xx) drop the row quietly, a 5xx or timeout releases it counted (an attempt and a 60 s backoff on `delete_at`). Every row write (`Complete`, `Release`,
   `DropChatPending`, the latch) runs on `context.WithoutCancel` with its own 5 s bound through `deletionCycle.writeContext`,
   never the run context a shutdown cancels. The cycle logs one debug line per chat batch with counts and the chat ID, and
   never a message ID, a claim token or text (`TestDeletionWorkerLogsNoMessageIDs`); a dropped row has no line.

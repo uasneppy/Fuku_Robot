@@ -211,6 +211,9 @@ func Release(ctx context.Context, token string, ids []int64, countAttempt bool, 
 	if countAttempt && maxAttempts <= 0 {
 		return ErrInvalidBatch
 	}
+	if countAttempt && retryAt.IsZero() {
+		return ErrInvalidRetryAt
+	}
 	if len(ids) == 0 {
 		return nil
 	}
@@ -233,6 +236,7 @@ func Release(ctx context.Context, token string, ids []int64, countAttempt bool, 
 				return err
 			}
 			updates["attempts"] = gorm.Expr("attempts + 1")
+			updates["delete_at"] = utcSecond(retryAt)
 		}
 		return held(tx.Model(&models.ScheduledDeletion{})).Updates(updates).Error
 	})
