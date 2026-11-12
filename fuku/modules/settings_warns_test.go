@@ -65,12 +65,20 @@ func settingsWarnsPress(t *testing.T, env *settingsEnv, chat gotgbot.Chat, msgID
 	env.pressRaw(chat, env.admin, msgID, data)
 }
 
-// settingsWarnsCommand runs /setwarnlimit as the env's administrator in chat, through the
-// command's own handler (the settings environment does not load the Warns module).
+// settingsWarnsCommand runs /setwarnlimit, /setwarnmode or /warnings as the env's
+// administrator in chat, through the command's own handler (the settings environment does not
+// load the Warns module).
 func settingsWarnsCommand(env *settingsEnv, chat gotgbot.Chat, text string) {
 	env.t.Helper()
+	handler := warnsModule.setWarnLimit
+	switch {
+	case strings.HasPrefix(text, "/setwarnmode"):
+		handler = warnsModule.setWarnMode
+	case strings.HasPrefix(text, "/warnings"):
+		handler = warnsModule.warnings
+	}
 	ctx := newModuleMessageContext(env.bot, chat, env.admin, text)
-	if err := warnsModule.setWarnLimit(env.bot, ctx); !errors.Is(err, ext.EndGroups) {
+	if err := handler(env.bot, ctx); !errors.Is(err, ext.EndGroups) {
 		env.t.Fatalf("%s: error = %v, want EndGroups", text, err)
 	}
 }
@@ -88,14 +96,23 @@ func settingsWarnsCached(env *settingsEnv, chatID int64) (limit int, mode string
 }
 
 // settingsWarnsStepper returns the five buttons of the limit stepper on the current page of
-// msgID.
+// msgID, after checking the page's layout: the stepper, the three actions, Back and Close.
 func settingsWarnsStepper(t *testing.T, env *settingsEnv, msgID int64) []gotgbot.InlineKeyboardButton {
 	t.Helper()
 	_, keyboard := env.lastEdit(env.chat.Id, msgID)
-	if len(keyboard) != 2 || len(keyboard[0]) != 5 {
-		t.Fatalf("Warnings page keyboard = %d rows (first %d buttons), want the stepper of 5 and the navigation row", len(keyboard), len(keyboard[0]))
+	if len(keyboard) != 3 || len(keyboard[0]) != 5 || len(keyboard[1]) != 3 || len(keyboard[2]) != 2 {
+		t.Fatalf("Warnings page keyboard = %v, want rows of 5, 3 and 2 buttons", settingsWarnsWidths(keyboard))
 	}
 	return keyboard[0]
+}
+
+// settingsWarnsWidths is the button count of every keyboard row.
+func settingsWarnsWidths(keyboard [][]gotgbot.InlineKeyboardButton) []int {
+	widths := make([]int, len(keyboard))
+	for i, row := range keyboard {
+		widths[i] = len(row)
+	}
+	return widths
 }
 
 func TestSettingsWarnsOpens(t *testing.T) {
@@ -131,8 +148,14 @@ func TestSettingsWarnsOpens(t *testing.T) {
 				t.Errorf("stepper button %d = %q, want %q", i, stepper[i].Text, wantLabel)
 			}
 		}
-		if len(keyboard[1]) != 2 {
-			t.Errorf("navigation row has %d buttons, want Back and Close", len(keyboard[1]))
+		if len(keyboard[2]) != 2 {
+			t.Errorf("navigation row has %d buttons, want Back and Close", len(keyboard[2]))
+		}
+		if !strings.Contains(text, staffMarker("settings_warns_action")+" "+staffMarker("settings_opt_mute")) {
+			t.Errorf("Warnings page %q does not show the default action Mute", text)
+		}
+		if mute := keyboard[1][0]; !strings.HasPrefix(mute.Text, "✅ ") || !containsMarker(mute.Text, "settings_opt_mute") {
+			t.Errorf("first choice = %q, want Mute marked", mute.Text)
 		}
 		if _, has := settingsWarnsRow(t, env.chat.Id); has {
 			t.Error("opening Main and the page created a warns_settings row")
@@ -154,7 +177,7 @@ func TestSettingsWarnsOpens(t *testing.T) {
 		}
 		env.pressRaw(settingsPrivateChat(owner), owner, msgID, button.CallbackData)
 		text, keyboard := env.lastEdit(owner.Id, msgID)
-		if !strings.Contains(text, staffMarker("settings_warns_limit")+" 3") || len(keyboard) != 2 || len(keyboard[0]) != 5 {
+		if !strings.Contains(text, staffMarker("settings_warns_limit")+" 3") || len(keyboard) != 3 || len(keyboard[0]) != 5 {
 			t.Errorf("private Warnings page = %q with %d rows, want the limit line and the stepper", text, len(keyboard))
 		}
 		fields := settingsButtonFields(t, keyboard[0][3])
@@ -329,6 +352,143 @@ func TestSettingsParityWarnLimit(t *testing.T) {
 		}
 		if _, has := settingsWarnsRow(t, chat.Id); has {
 			t.Error("a refused press or command wrote a row")
+		}
+	})
+}
+
+func TestSettingsParityWarnMode(t *testing.T) {
+	const menuMsgID = 6262
+
+	// run sets the same action on two chats, one through /setwarnmode and one through the
+	// page, and requires the same stored row and the same cached state.
+	run := func(t *testing.T, seedLimit int, mode string, taps int) {
+		t.Helper()
+		env := newSettingsEnv(t)
+		commandChat := env.chat
+		menuChat := env.addChat()
+		settingsWarnsCleanup(t, commandChat.Id, menuChat.Id)
+		wantLimit := 3
+		if seedLimit != 0 {
+			settingsWarnsSeed(t, commandChat.Id, seedLimit, "mute")
+			settingsWarnsSeed(t, menuChat.Id, seedLimit, "mute")
+			wantLimit = seedLimit
+		}
+
+		settingsWarnsCommand(env, commandChat, "/setwarnmode "+mode)
+		for range taps {
+			settingsWarnsPress(t, env, menuChat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", mode)
+		}
+
+		commandRow, ok := settingsWarnsRow(t, commandChat.Id)
+		if !ok {
+			t.Fatal("/setwarnmode stored no row")
+		}
+		menuRow, ok := settingsWarnsRow(t, menuChat.Id)
+		if !ok {
+			t.Fatal("the page's action choice stored no row")
+		}
+		if commandRow.WarnLimit != wantLimit || commandRow.WarnMode != mode {
+			t.Errorf("/setwarnmode stored limit %d mode %q, want %d and %q", commandRow.WarnLimit, commandRow.WarnMode, wantLimit, mode)
+		}
+		if menuRow.WarnLimit != commandRow.WarnLimit || menuRow.WarnMode != commandRow.WarnMode {
+			t.Errorf("the page stored limit %d mode %q, the command limit %d mode %q, want the same row",
+				menuRow.WarnLimit, menuRow.WarnMode, commandRow.WarnLimit, commandRow.WarnMode)
+		}
+		cl, cm, ck := settingsWarnsCached(env, commandChat.Id)
+		ml, mm, mk := settingsWarnsCached(env, menuChat.Id)
+		if cl != ml || cm != mm || ck != mk {
+			t.Errorf("cache state differs: command (%d, %q, key %v), page (%d, %q, key %v)", cl, cm, ck, ml, mm, mk)
+		}
+
+		text, keyboard := env.lastEdit(menuChat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("settings_warns_action")+" "+staffMarker("settings_opt_"+mode)) {
+			t.Errorf("the page redrew %q, want the action %s from the read-back", text, mode)
+		}
+		if strings.Contains(text, "⚠️") {
+			t.Errorf("the page redrew %q with a notice, want none", text)
+		}
+		marked := 0
+		for _, button := range keyboard[1] {
+			if strings.HasPrefix(button.Text, "✅ ") {
+				marked++
+				if !containsMarker(button.Text, "settings_opt_"+mode) {
+					t.Errorf("marked choice = %q, want %s", button.Text, mode)
+				}
+			}
+		}
+		if marked != 1 {
+			t.Errorf("%d choices are marked, want exactly the stored one", marked)
+		}
+
+		// /warnings and Main read the same row the page wrote.
+		settingsWarnsCommand(env, menuChat, "/warnings")
+		shown := false
+		for _, sent := range env.fake.sentTo(menuChat.Id) {
+			if text := fmt.Sprint(sent.Params["text"]); strings.Contains(text, staffMarker("warns_settings_display")) &&
+				strings.Contains(text, mode) {
+				shown = true
+			}
+		}
+		if !shown {
+			t.Errorf("/warnings in the menu's chat does not show the action %s", mode)
+		}
+		settingsWarnsPress(t, env, menuChat, menuMsgID, "a", "bk")
+		mainText, _ := env.lastEdit(menuChat.Id, menuMsgID)
+		line, found := settingsMainStateLine(mainText, "settings_page_warns")
+		if !found || !strings.Contains(line, staffMarker("settings_opt_"+mode)) {
+			t.Errorf("Main status line = %q (found %v), want the action %s", line, found, mode)
+		}
+	}
+
+	t.Run("a chat with no row", func(t *testing.T) { run(t, 0, "ban", 1) })
+	t.Run("a chat with a row", func(t *testing.T) { run(t, 7, "kick", 1) })
+	t.Run("a double tap leaves the same state", func(t *testing.T) { run(t, 7, "ban", 2) })
+
+	t.Run("a press of the stored value writes the same row and no notice", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		settingsWarnsSeed(t, env.chat.Id, 7, "ban")
+		settingsWarnsPress(t, env, env.chat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", "ban")
+		if row, _ := settingsWarnsRow(t, env.chat.Id); row.WarnLimit != 7 || row.WarnMode != "ban" {
+			t.Errorf("row = %+v, want limit 7 mode ban", row)
+		}
+		text, _ := env.lastEdit(env.chat.Id, menuMsgID)
+		if strings.Contains(text, "⚠️") || !strings.Contains(text, staffMarker("settings_warns_limit")+" 7") {
+			t.Errorf("the page redrew %q, want the stored state with no notice", text)
+		}
+	})
+
+	t.Run("a failed write redraws the stored state with the save-failed notice", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		settingsWarnsSeed(t, env.chat.Id, 7, "ban")
+		previous := warnSettingsWrites
+		warnSettingsWrites.Mode = func(int64, string) error { return errors.New("write refused") }
+		t.Cleanup(func() { warnSettingsWrites = previous })
+
+		settingsWarnsPress(t, env, env.chat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", "kick")
+		text, _ := env.lastEdit(env.chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("common_settings_save_failed")) ||
+			!strings.Contains(text, staffMarker("settings_warns_action")+" "+staffMarker("settings_opt_ban")) {
+			t.Errorf("the page redrew %q, want the save-failed notice over the stored action Ban", text)
+		}
+		if row, _ := settingsWarnsRow(t, env.chat.Id); row.WarnMode != "ban" {
+			t.Errorf("stored mode = %q after a failed write, want ban", row.WarnMode)
+		}
+	})
+
+	t.Run("the first limit write and the first action write store the other value's default", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		limitChat := env.chat
+		modeChat := env.addChat()
+		settingsWarnsCleanup(t, limitChat.Id, modeChat.Id)
+		settingsWarnsPress(t, env, limitChat, menuMsgID, "a", "st", "p", "n", "t", "l", "v", "9")
+		settingsWarnsPress(t, env, modeChat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", "kick")
+		if row, _ := settingsWarnsRow(t, limitChat.Id); row.WarnLimit != 9 || row.WarnMode != "mute" {
+			t.Errorf("first limit write stored %+v, want limit 9 and mode mute", row)
+		}
+		if row, _ := settingsWarnsRow(t, modeChat.Id); row.WarnLimit != 3 || row.WarnMode != "kick" {
+			t.Errorf("first action write stored %+v, want limit 3 and mode kick", row)
 		}
 	})
 }
