@@ -1678,7 +1678,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `claim_token`, `claimed_at`, `attempts` (`chk_scheduled_deletions_attempts`) and `created_at`, unique on `(chat_id,
   message_id)` (`uk_scheduled_deletions_message`), with the partial indexes `idx_scheduled_deletions_due` (`delete_at` where
   pending) and `idx_scheduled_deletions_acting` (`claimed_at` where acting). Times are stored as UTC at second precision
-  (SQLite compares them as text). `deletion.Schedule` is the one writer: it validates the kind, the delay and the IDs (a chat ID
+  (SQLite compares them as text). `deletion.Schedule` is the writer of every queue row but the self-destruct batch's (`ScheduleBatch`, below): it validates the kind, the delay and the IDs (a chat ID
   that is not negative is `ErrInvalidEntry` before any read, so a private chat is never queued, whatever a caller checked),
   refuses a Staff Group chat after a fresh `staff.GetStaffGroupFresh` read (a read error writes nothing) and upserts so that
   scheduling one message twice keeps the earlier `delete_at` (`LEAST(scheduled_deletions.delete_at, EXCLUDED.delete_at)` on
@@ -2214,9 +2214,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   inline branch as well as the queue branch (SEC-05, symmetric with `deletion.Schedule`'s own refusal); a latched chat returns, a chat that is a Staff Group or cannot be told apart from one (`deletionStaffLookup`, the
   fresh read with `staff.GetStaffGroupFresh` as its default, an error counts as a Staff Group) returns, delay 0 is an inline
   delete and any other delay a queue row at `deletionSentAt(msg.Date)` plus the delay (the message's own date, or now when
-  the date is zero, negative or in the future). The Staff Group is refused in three places: the watcher and `cleanService`
-  through `deletionAct`, and `deletion.Schedule` itself. `deletionSchedule` is the only caller of the queue writer (through
-  the `deletionQueueWrite` seam): it refuses a delay outside 0..86400, writes nothing for a latched chat and wakes the
+  the date is zero, negative or in the future). The Staff Group is refused by the core and by both writers: the watcher, `cleanService`, command deletion and the edit handler
+  through `deletionAct`, and `deletion.Schedule` and `deletion.ScheduleBatch` themselves. `deletionSchedule` is the only caller of
+  `deletion.Schedule` (through the `deletionQueueWrite` seam; the self-destruct batcher's `memberDeleteBatchWrite` is the only
+  caller of `ScheduleBatch`): it refuses a delay outside 0..86400, writes nothing for a latched chat and wakes the
   worker for a row due now. The inline delete (`deletionDeleteNow`) runs on a goroutine that starts with
   `defer error_handling.RecoverFromPanic`, derives its context from `deletionContext()` (cancelled by the worker's stop) and
   is counted in `deletionInline` with a cap of `deletionInlineMax` (64): a call beyond the cap, a delete the pacer shed
@@ -3510,6 +3511,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `commandDeletionEnv` (the e2e environment with the Processor wrapper), `drainMemberDeleteQueue` and
   `restoreMemberDeleteBatcher` for the batcher, `settingsDelDriftEnv`, `settingsDelDriftEdit` and `settingsDelDriftFlush` for
   the drift test.
+- Phase 17 plan 11 (the closing plan) adds `fuku/modules/member_deletion_e2e_test.go`: `TestMemberDeletionEndToEnd` (the whole
+  phase through the real dispatcher with only Telegram and the clock faked, one environment per subtest: the owner sets
+  Commands, Edited messages and Self-destruct from the page and each rule acts, an admin's and a member's command, an
+  anonymous admin's command after the proof tap and with AnonAdmin on (D-34, it stays), the edit grace and every exemption,
+  self-destruct with its pin drop and Off, "unknown never deletes" (D-33: a failed approvals read and a cold admin cache
+  behind a 429), a bot that cannot delete (one refused call and one live check, then the shared latch), a Staff Group, and a
+  restart with two replicas), `TestMemberDeletionExcludedMessages` (DEL-07 for the member rules: a Staff Group card and summary,
+  a lockdown alert copy, a captcha challenge and a log post leave no row and no delete request, plus a file scan that no
+  never-delete family names a member-deletion producer) and `TestMemberDeletionLogsCarryIDsOnly` (a logrus hook over every
+  failing seam: no text, name, username, claim token or message ID). The other Phase 17 families, by file prefix:
+  `TestBotCommand*`, `TestNoRawNewCommand`, `TestModulesRecordTheirCommands` and `TestNewDispatcherWrapsCommandDeletion` (the
+  shim and the wrapper's wiring), `TestCommandDeletion*` and `TestCommandRepliesStayInsideTheHandler`
+  (`command_deletion_*_test.go`, `command_replies_guard_test.go`), `TestMemberKind*` and `TestMemberRowPresetsMatchRuleDelays`,
+  `TestMemberEdited*` and `TestMemberDeletionExemptTriState` (`member_edited_test.go`), `TestMemberSelfDestruct*`,
+  `TestMemberContentMessageExcludesServiceFields` and `TestSelfDestructBusyGroup` (`member_selfdestruct_test.go`,
+  `member_selfdestruct_busy_test.go`), `TestMemberSelfDestructBatcher*` and `TestShutdownEndsMemberDeletionBatcher`
+  (`member_deletion_batcher_test.go`), `TestDeletionWorkerScreensSelfDestructOff` and `TestDeletionWorkerManyChats`
+  (`deletion_worker_member_test.go`), `TestSettingsDeletionMember*` and the plan 10 safeguards above. A test that drives a
+  member rule uses the `memberDeletionEnv` toolkit (`member_deletion_env_test.go`: `newMemberDeletionEnv`, `newSelfDestructEnv`), mints fresh member and chat IDs, drains
+  the batcher with `drainMemberDeleteQueue` and restores it with `restoreMemberDeleteBatcher`, and never writes a member
+  rule's stored value by hand except to prove that a value a rule does not accept is Off.
 
 ## Commits
 

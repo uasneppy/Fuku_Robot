@@ -442,6 +442,8 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Member requirements: a punishing value for the AI spam-name rule | The same, and the bot's AI must be configured (`ENABLE_AISPAM` on and an Anthropic key set; a check of the server, made after the right) | no command |
 | Deletion: open the hub, a list and a row screen | Admin (and the owner gate above); the page does not exist in a Staff Group | no command |
 | Deletion: every choice (Keep, Off, Delete now, a delay) | Creator, or an admin who can change info | `/cleanservice` (joined and left) |
+| Member messages: open the section, a list and a row screen | Admin (and the owner gate above); the section does not exist in a Staff Group | no command |
+| Member messages: every choice of Commands, Edited messages and Self-destruct (Off included) and the Self-destruct card's Yes | Creator, or an admin who can change info (judged again at the Yes) | no command |
 | Member requirements: I fixed it | Only the held member; an administrator who presses it is refused and uses `/unmute`. An approved member is freed at the tap, once the live marker proves the mute is the requirements' own. A member held for a spam-like name frees themselves by renaming (the button judges the new name once) or by an admin's approval | no command |
 
 ### Typing a message into the editor
