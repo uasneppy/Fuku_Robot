@@ -3134,6 +3134,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   through `lang.LoadGroupLanguageContext`, the `chat_lang` key and loader the bot's own group updates read, with its error
   returned and no row created (a missing row or an empty value reads `uk`). None of the three keys is in `skipLocal`: another
   replica can answer in the old language for up to `CACHE_LOCAL_TTL`, exactly as after `/lang`.
+  The log categories (Phase 18) are written by `applyLogCategory` in `logchannels.go`, through the `logCategoryWrites` seam
+  (default `logchannels.SetCategory`, which drops `log_channel:<chat>` after a write), and it handles exactly one category:
+  a name `logchannels.IsValidCategory` refuses (it lower-cases and trims, so `Settings` is valid and `bogus` is not) is
+  `logUnknownCategory` with no write, a chat with no linked channel `logNotSet`, any other write error `logSaveFailed`,
+  otherwise `logApplied` (the zero value) with the row read back through the reader, and it sends nothing. `/log` and
+  `/nolog` (`setLogCategories`) keep their own loop, their group, admin and not-linked checks, their `#SETTINGS` audit post
+  to the log channel and their quirk, and call it once per category: a failed save is logged and the loop goes on, so when
+  every save fails the reply is `logs_enabled` (or `logs_disabled`) with an empty list and the audit post carries the same
+  empty list (`TestLegacyLogCategoryRequests` pins every request and stored row, never to be re-recorded). The audit post is
+  the commands' (a page posts the same entry itself after a change). The page reads through `logchannels.LoadContext`, the
+  `log_channel:<chat>` key and loader `GetContext` uses (they share one function), which returns `(nil, nil)` for a chat with
+  no linked channel, returns a failed read as an error, creates nothing and caches nothing for a miss. `log_channel` is not in
+  `skipLocal`: another replica can show an old category state for up to `CACHE_LOCAL_TTL`, exactly as the commands can.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
