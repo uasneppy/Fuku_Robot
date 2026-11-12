@@ -1,7 +1,7 @@
 # Phase 18: Remaining Settings Pages - Context
 
 **Gathered:** 2026-11-12
-**Status:** Ready for planning (decisions D-01 to D-14 are the recommended defaults; the owner has not confirmed them, see "Provisional status")
+**Status:** Ready for planning (decisions D-01 to D-24 are the recommended defaults; the owner has not confirmed them, see "Provisional status")
 
 <domain>
 ## Phase Boundary
@@ -55,6 +55,18 @@ As in Phase 17, the owner was not asked these grey areas in this window: an earl
 - **D-13:** Plans are sequential and small (a tracer slice first: one apply function extracted with its characterization golden and one page press that writes through it, then the rest). Order: the characterization goldens and apply-function extractions first (one plan per module: warns, reports, aispam, autoapprove, language, log channels, anonadmin, locks, grouped sensibly), then the pages and their strings, then the Main grid and privacy sweeps, then the closing plan (docs, AGENTS.md, README, `18-SPIKE.md`, the gate, PAGE-01 to PAGE-06 and PAGE-10 ticked). Whole-package runs are required at each plan boundary that changes a module (the lesson of Phase 17).
 - **D-14:** No migration, no new Redis key family, no new handler group and no shutdown change are expected; a command's cache keys are the ones its apply function already drops. `AGENTS.md`, the README, the generated docs and `18-SPIKE.md` are updated in the same commits as the code.
 
+### Amendments from research (orchestrator, planning level; the owner confirms them with the phase)
+- **D-15:** (research C-01, amends D-08 and A18-1) `/anonadmin` already needs the live creator for every change (`RequireUserOwner`, `admin.go`) plus the bot as administrator (`RequireBotAdmin`); only its status view is open. "The same rights" is therefore the owner right with the bot-admin check. The Anonymous admins page is not `OwnerOnly` (it opens for any admin and its toggle is refused to a non-owner with a plain owner refusal); the key the refusal uses is the planner's choice between `chat_status_owner_cmd_error` (the UI-SPEC's) and `chat_status_owner_button_error` (the research's, because a press is a callback), checked against what the press pipeline already uses.
+- **D-16:** (research C-02, amends D-02 "no new right is invented") Two composite rights are unavoidable because no existing right combines them: `/autoapprove` needs change-info plus bot-admin (`IsUserConnected(true, true)`) and `/anonadmin` needs owner plus bot-admin. `settings_menu.go` gains `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, appended after `settingsRightChangeInfo`, checking the bot part first (the commands' order) with existing refusal keys. Every other control reuses an existing right: warns, reports and locks `settingsRightAdminFloodBot` (their `IsUserConnected(true, true)` fires first), `/aispam`, `/lang`, `/log` and `/nolog` `settingsRightAdmin`. This is the only framework edit (the rights live in `settings_menu.go`; `settings_pages.go` stays untouched).
+- **D-17:** (research C-03, amends D-04 and A18-2) There is no warn duration. `/setwarnmode` accepts exactly `ban`, `kick` and `mute` (mute is permanent); the table's CHECK also allows `tban`, `tmute` and the empty string, and a stored one of those makes the limit apply nothing. The Warnings page offers Mute, Ban and Kick and shows any other stored mode read-only with an inert line. That `/reset warnings` stores the empty mode (`backup.go`) is a pre-existing defect and out of scope (a follow-up, recorded in the deferred items).
+- **D-18:** (research C-04 and the UI-SPEC, amends D-09) There are 22 lock types (16 in `lockMap`, 6 in `restrMap`), none refused per type, and a lock write makes no Telegram call. The lock's own name fits the callback (the longest, `anonchannel`, gives 55 bytes) so it can be the control key; a test asserts the page table equals `getLockMapAsArray()`. Paging follows the approved UI-SPEC (12 locks a page, two pages, pager action `kg`), not the research's alternative of 8 a page and `kp`; the UI-SPEC wins on every discretion item (page keys `n t u o y k`, `Order` values).
+- **D-19:** (research C-05, amends D-01) Every getter the commands use either hides read errors or creates a row, so six new non-creating, error-returning readers sharing the commands' cache keys are added (warns, reports, aispam, admin settings, log channels, language); `locks.GetChatLocksCachedContext` and `greetings.LoadSettingsContext` already fit. A page never uses a hiding getter.
+- **D-20:** (research C-06, amends D-07) `/log` and `/nolog` take several categories per call and continue after a failed write, and they post a `#SETTINGS` audit line to the log channel. `applyLogCategory` handles one category and the commands keep their loops; the page posts the same audit entry after a successful change (A18-7).
+- **D-21:** (research C-07, amends D-06) The group language write lives in the `change_language` callback, not in `/lang`, and the same callback in a private chat writes the user's language, which the page must never reach. The callback hard-codes 8 codes while the keyboard follows `ENABLED_LOCALES`. After a write in a group menu the press's translator is swapped using the code just written; a private menu leaves it alone. No extra cache key is needed.
+- **D-22:** (research C-08 to C-10) AI spam availability is `TypeSafeAPIKey` set and `EnableAISpam` on (`aispamEnableRefusal`), not the Anthropic key: one cause-free status line and Off-only. Auto-approve creates the whole greetings row on a first write: a full-row snapshot test pins it. Reports writes both `enabled` and `status`, is uncached, and has a private-chat branch that stays in the command.
+- **D-23:** (research C-11, amends D-10) No second hub screen: Main becomes 15 cells, 8 grid rows plus the owner row and the navigation row (10 rows for the owner, 9 for an admin, 18 buttons), worst-case text about 1.1 to 1.4 thousand UTF-16 units. The 8/9 row budget of the content pages does not apply to Main. The tests that pin the Main shape change legitimately where the contract changes them (listed in the research), and a new control must either declare no `Actions` allow-list or reject `v=1` (`TestSettingsControlActionAllowList`).
+- **D-24:** (research C-13, amends D-13) The plan order is the research's S-10: 13 sequential plans with a warn-limit tracer first (golden, extraction, reader and a one-control page), then the other modules and pages, then the Main grid and privacy sweeps, then the closing plan; the planner may reshape it.
+
 ### Claude's Discretion
 - The page keys, `Order` values, icons and labels, the lock page size, the exact warn modes shown, the order of the apply-function extraction plans, locale key names, and whether Switches and the Warnings page share a screen helper.
 
@@ -95,11 +107,14 @@ As in Phase 17, the owner was not asked these grey areas in this window: an earl
 <owner_confirmations>
 ## Owner confirmations carried to the phase (not yet answered)
 
-- **A18-1** (D-08) The Anonymous admins page uses the rights `/anonadmin` needs today, not owner-only.
-- **A18-2** (D-04) A warn mode that needs a duration shows it read-only and is changed through the command.
+- **A18-1** (D-08, D-15) The Anonymous admins page uses the rights `/anonadmin` needs today, which is the live creator plus the bot as administrator (so a non-owner administrator sees the page and is refused the toggle).
+- **A18-2** (D-04, D-17) The warn action is Mute, Ban or Kick; a stored mode outside those is shown read-only and inert.
 - **A18-3** (D-07) The log channel's title and ID are never shown on the page; linking stays a command.
 - **A18-4** (D-06) In a private menu the language stays the opener's own and the group's language is shown in it.
 - **A18-5** (D-10) The six pages join the main grid in the two-column layout (a second hub only if forced).
 - **A18-6** (D-11) The pages are shown in a Staff Group like the existing pages.
 
+- **A18-7** (D-20) The page posts the same `#SETTINGS` audit line to the log channel that `/log` and `/nolog` post.
+- **A18-8** (research) No confirmation card for the `all` and `messages` locks or for turning Anonymous admins on.
+- **A18-9** (D-16) Two composite rights are added to the menu (change-info plus bot-admin, owner plus bot-admin) so the menu refuses exactly what `/autoapprove` and `/anonadmin` refuse.
 </owner_confirmations>
