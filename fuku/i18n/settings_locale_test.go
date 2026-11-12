@@ -308,6 +308,11 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_mreq_confirm_ai_kick": {216, 302},
 	"settings_mreq_confirm_ai_ban":  {206, 288},
 	"settings_mreq_confirm_ai_mute": {226, 316},
+
+	// Phase 16 (plan 16-07), the Deletion page. Task 1 adds the Main cell's two keys; the page
+	// name is a grid cell whose binding ceiling is the rendered 20 of TestSettingsLabelLengths.
+	"settings_page_del":     {14, 18},
+	"settings_state_del_on": {14, 20},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -519,6 +524,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"👋", "settings_page_goodbye"},
 		{"📜", "settings_page_rules"},
 		{"🛂", "settings_page_mreq"},
+		{"🧹", "settings_page_del"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
