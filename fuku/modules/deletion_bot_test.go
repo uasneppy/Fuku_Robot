@@ -335,3 +335,41 @@ func TestBotWelcomeScheduled(t *testing.T) {
 		t.Fatalf("queue rows of a Staff Group = %+v, want none", rows)
 	}
 }
+
+func TestBotGoodbyeScheduled(t *testing.T) {
+	env := newDeletionEnv(t)
+	chat := env.newGreetingChat("Goodbye Chat")
+	env.setBotRule(chat.Id, deletion.KindBotGoodbye, 3600)
+
+	env.leaveMember(chat, env.member("Alice"))
+	ids := env.sentMessageIDs(chat.Id, "Goodbye")
+	if len(ids) != 1 {
+		t.Fatalf("goodbyes sent = %v, want exactly one", ids)
+	}
+	env.wantOneRow(chat.Id, ids[0], deletion.KindBotGoodbye, 3600*time.Second)
+
+	// With cleangoodbye on as well the goodbye is still queued: the clean-old bookkeeping deletes the
+	// previous goodbye, and the queue keeps the earlier time when one message has two.
+	if err := greetings.SetCleanGoodbyeSetting(chat.Id, true); err != nil {
+		t.Fatalf("SetCleanGoodbyeSetting error = %v", err)
+	}
+	env.leaveMember(chat, env.member("Bob"))
+	ids = env.sentMessageIDs(chat.Id, "Goodbye")
+	if len(ids) != 2 {
+		t.Fatalf("goodbyes sent = %v, want two", ids)
+	}
+	rows := env.queued(chat.Id)
+	if len(rows) != 2 || rows[1].MessageID != ids[1] || rows[1].Kind != deletion.KindBotGoodbye {
+		t.Fatalf("queue rows with cleangoodbye on = %+v, want a second bot:goodbye row for message %d", rows, ids[1])
+	}
+
+	// With the kind off the goodbye is sent and nothing more is queued.
+	env.removeBotRule(chat.Id, deletion.KindBotGoodbye)
+	env.leaveMember(chat, env.member("Carol"))
+	if got := env.sentMessageIDs(chat.Id, "Goodbye"); len(got) != 3 {
+		t.Fatalf("goodbyes sent with the kind off = %v, want three", got)
+	}
+	if rows := env.queued(chat.Id); len(rows) != 2 {
+		t.Fatalf("queue rows with the kind off = %+v, want still two", rows)
+	}
+}
