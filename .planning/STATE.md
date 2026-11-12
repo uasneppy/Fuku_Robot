@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
 status: executing
-stopped_at: Completed 16-06-PLAN.md
-last_updated: "2026-11-12T02:01:07.248Z"
+stopped_at: Completed 16-07-PLAN.md
+last_updated: "2026-11-12T02:10:20.940Z"
 last_activity: 2026-11-12
 last_activity_desc: Phase 11 execution started
-state_head: 929abdf81aa92404a50036fba37c454734ad32f6
+state_head: 554a3cdc5883b3eaac3c533d8ce89d3e49f97fe7
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 87
-  completed_plans: 83
+  completed_plans: 84
   percent: 0
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 to 16-06 done: storage, the kind tables and apply functions, the deletion core with the service watcher at group -5, the queue worker with the delete-right reader and the 68 s shutdown arithmetic, `scheduleBotMessage` with the welcome, goodbye, rules and manual-punishment hooks, then the requirement notices at the 24 h cap, the "I fixed it" reschedule and the antiflood, blacklist and aispam notices; next is 16-07, the locale keys)
-Plan: 6 of 9
-Status: Executing Phase 16 (6 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Plan: 7 of 9
+Status: Executing Phase 16 (7 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
 Last activity: 2026-11-12 — Plan 16-06 executed
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
@@ -156,6 +156,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 16 P04 | 20min | 3 tasks | 9 files |
 | Phase 16 P05 | 25min | 3 tasks | 15 files |
 | Phase 16 P06 | interrupted; finished in a second session | 3 tasks | 9 files |
+| Phase 16 P07 | 40min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -330,8 +331,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T02:01:03.948Z
-Stopped at: Completed 16-06-PLAN.md
+Last session: 2026-11-12T02:10:19.378Z
+Stopped at: Completed 16-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
