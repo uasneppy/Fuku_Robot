@@ -349,6 +349,18 @@ A stored `tban`, `tmute` or empty action is drawn as stored (or Not set) with a 
 choice marked; pressing Mute, Ban or Kick replaces it. The page writes through the same functions as `/setwarnlimit` and
 `/setwarnmode`. The largest button of the page is 48 bytes in a private menu and 44 in a group menu.
 
+The Switches page (`t`, between the Deletion and Access pages of Main) has three toggles, each `tg` only (an `st` is an
+invalid request, refused before any lookup) with `v` exactly `0` or `1`, the absolute target:
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| Reports | `r` | `0` or `1` | writes through the function `/reports on` and `/reports off` call, the report status the report path reads |
+| AI spam filter | `a` | `0` or `1` | `1` is refused with an alert, writing nothing, while the filter cannot run on this bot; `0` always works; the toggle is not drawn while the filter is unavailable and off |
+| Auto-approve joins | `j` | `0` or `1` | writes through the function `/autoapprove on` and `off` call |
+
+Each press needs the right of its command (see the permissions reference) and is refused with that command's own text. The
+largest button of the page is 45 bytes in a private menu and 41 in a group menu.
+
 ### Warns
 
 #### `rmAllChatWarns`

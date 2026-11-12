@@ -63,3 +63,44 @@ inert line. Pick Mute and confirm it is stored.
 
 **Follow-up to decide:** store `mute` in the reset instead of the empty string (one line in `backup.go` and a backup test),
 outside this phase. **Record:** your decision: _____
+
+### 4. The AI line of the Switches page in each configuration, and a stale On press
+
+**Why:** the page decides whether the AI spam filter can run from the bot's configuration alone (a provider value and the
+global switch), never from a call. Only a live bot shows the three states in a real group and what a stale button does.
+
+**Steps:** (a) with `TYPESAFE_API_KEY` set and `ENABLE_AISPAM=true`, open `/settings`, Switches in a test group. Check the AI
+block shows the state sentence followed by the data notice and the AI toggle is drawn. Turn it on and off with the button and
+compare `/aispam` after each. (b) Restart the bot with `TYPESAFE_API_KEY` empty. Open Switches again: the AI block must show
+the state sentence and a line starting with a stop sign saying the filter is not available on this bot, with no data notice
+and no name of a variable or provider; with the filter stored off the AI toggle must be gone. (c) With the filter stored on,
+the toggle must still be there and Off must work. (d) Repeat (b) with the key set and `ENABLE_AISPAM=false`. (e) Keep an
+older Switches message open from step (a), restart as in (b), and press its On button: the bot must answer an alert saying
+the filter is not available and the message must redraw without the AI toggle, with nothing stored.
+
+**Record:** (a) the notice and toggle shown: yes / no. (b) the unavailable line and no notice, toggle gone: yes / no.
+(c) Off worked with the toggle shown: yes / no. (d) same as (b): yes / no. (e) alert, redraw, nothing stored: yes / no.
+
+### 5. Auto-approve's first press on a group with no greetings row, on PostgreSQL
+
+**Why:** the first write of Auto-approve creates the whole greetings row (Welcome and Goodbye on), exactly as
+`/autoapprove on` does. The Welcome and Goodbye pages read a missing row as those same defaults for a group the bot knows,
+which the tests prove on SQLite. A group the bot has not met reads Goodbye as off before the first write and on after it,
+for any first greetings write; every group the bot serves is known, so only a fresh database shows it.
+
+**Steps:** on a PostgreSQL deployment, pick a group that has no `greetings` row (`SELECT 1 FROM greetings WHERE chat_id =
+<group>;` returns nothing). Open Welcome and Goodbye and note the Welcome, Goodbye and Delete last lines. Open Switches and
+press Auto-approve. Open Welcome and Goodbye again.
+
+**Record:** the Welcome and Goodbye lines unchanged by the press: yes / no. The row now exists with `auto_approve` true:
+yes / no.
+
+### 6. Reports on and off from the page and the `/report` path
+
+**Why:** the page writes `enabled` and `status` through `/reports`' own function, and the report path reads `status`.
+
+**Steps:** in a test group with an admin and a plain member, open Switches and turn Reports off. As the member reply to a
+message with `/report` and check no admin is notified. Turn Reports on from the page and repeat: the admins must be
+notified. Compare `/reports` after each change.
+
+**Record:** off: nobody notified: yes / no. On: admins notified: yes / no. `/reports` agrees with the page: yes / no.

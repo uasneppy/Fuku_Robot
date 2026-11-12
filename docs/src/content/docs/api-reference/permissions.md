@@ -429,6 +429,9 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Captcha mode, time limit and failure action | Admin | `/captchamode`, `/captchatime`, `/captchaaction` |
 | Antiflood limit, action and delete switch | Admin, and the bot an admin | `/setflood`, `/setfloodmode`, `/delflood` |
 | Warnings: limit and action at the limit | Admin, and the bot an admin | `/setwarnlimit`, `/setwarnmode` |
+| Switches: Reports | Admin, and the bot an admin | `/reports` |
+| Switches: AI spam filter | Admin | `/aispam` |
+| Switches: Auto-approve joins | Creator, or an admin who can change info, and the bot an admin | `/autoapprove` |
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
 | Welcome and Goodbye: Set text, media or buttons, Remove, Delete last | Creator, or an admin who can change info | `/setwelcome`, `/setgoodbye`, `/resetwelcome`, `/resetgoodbye`, `/cleanwelcome`, `/cleangoodbye` |
