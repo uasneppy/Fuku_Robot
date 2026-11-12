@@ -211,7 +211,11 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 	if lockedDown {
 		noticeKey, result = "mreq_notice_fixed_lockdown", memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_done_lockdown"), Alert: true}
 	}
-	memberReqFixedEdit(ctx, b, tr, chat.Id, chat.Type, query.Message.GetMessageId(), live.User, noticeKey)
+	// SEC-01: callback data is not authenticated, so the same button can sit on another message of the
+	// chat. The edit stays as it always was, but only the hold's own stored notice is rescheduled: a
+	// notice ID never stored (zero) or another message queues nothing.
+	pressedID := query.Message.GetMessageId()
+	memberReqFixedEdit(ctx, b, tr, chat.Id, chat.Type, pressedID, live.User, noticeKey, taken.NoticeMsgID > 0 && taken.NoticeMsgID == pressedID)
 	if taken.WelcomeHeld {
 		member := live.User
 		result.Welcome = &member
@@ -292,9 +296,10 @@ func memberReqFixedRestore(ctx context.Context, hold *models.ChatRequirementHold
 // template is translated with the name token and the member's mention is spliced in after.
 // A failed or rate-limited edit is logged once by its code and changes no outcome and schedules
 // nothing: the notice then keeps the 24 hour deletion time it was queued at. After a successful
-// edit the confirmation follows the automatic-punishments timer counted from this moment (D-14,
-// D-25), which moves the notice's 24 hour row up and never later.
-func memberReqFixedEdit(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator, chatID int64, chatType string, messageID int64, member gotgbot.User, key string) {
+// edit of the hold's own notice (reschedule, SEC-01) the confirmation follows the
+// automatic-punishments timer counted from this moment (D-14, D-25), which moves the notice's 24
+// hour row up and never later; an edit of any other message schedules nothing.
+func memberReqFixedEdit(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator, chatID int64, chatType string, messageID int64, member gotgbot.User, key string, reschedule bool) {
 	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(member.Id, 10)})
 	text := memberReqText(tr, key, i18n.TranslationParams{"name": memberReqNamePlaceholder})
 	text = lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(member, fallback))
@@ -312,5 +317,7 @@ func memberReqFixedEdit(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator
 		log.Warnf("[MemberReq] editing the notice %d in chat %d after I fixed it failed: %s", messageID, chatID, memberReqErrText(err))
 		return
 	}
-	scheduleBotMessageFromNow(chatID, chatType, messageID, deletion.KindBotAuto)
+	if reschedule {
+		scheduleBotMessageFromNow(chatID, chatType, messageID, deletion.KindBotAuto)
+	}
 }

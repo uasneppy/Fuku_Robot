@@ -440,7 +440,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   fails `memberreq.RestoreHold` puts the row back with the same ID, notice ID and every other column and the answer is
   `mreq_fixed_check_failed`, so the same button works on the next tap; (10) the toast `mreq_fixed_done` and the notice edited
   to `mreq_notice_fixed` with no keyboard, or, when the permissions came from an active lockdown, the alert
-  `mreq_fixed_done_lockdown` and `mreq_notice_fixed_lockdown`. Only a hold with `welcome_held` (a join mute) then sends the held
+  `mreq_fixed_done_lockdown` and `mreq_notice_fixed_lockdown`; the edited message is rescheduled for deletion only when it is
+  the hold's own stored notice (the notice ID is compared for that alone, never for the unmute: SEC-01). Only a hold with `welcome_held` (a join mute) then sends the held
   welcome, once, through `SendWelcomeMessage` after the query is answered, so Greet once claims the member only then; a
   message hold sends none. The query is answered exactly once on every path, in the group's language (`ctxTr` of the group
   callback): `memberReqFixedCallback` recovers from a panic and defers a single answer, as `settingsCallback` does. Every
@@ -2128,7 +2129,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`memberReqScheduleNotice`; a notice without a button follows the timer directly, a failed send writes nothing); the
   mute notice, which carries the "I fixed it" button, is queued at the 24 hour cap (86400 s) whatever the timer says, so a
   short timer never removes the member's only self-service way out, and with the kind Off no row is written (D-14, D-25);
-  after the member taps the button, `memberReqFixedEdit` (which now takes the chat type) reschedules the edited
+  after the member taps the button, `memberReqFixedEdit` (which takes the chat type and a `reschedule` flag, SEC-01: true
+  only when the hold's stored `notice_msg_id` is positive and equals the pressed message's ID, so the same button attached
+  to any other message of the chat is edited as before but queues nothing for it, and a hold whose notice ID was never
+  stored reschedules nothing, the 24 hour row staying) reschedules the edited
   confirmation with `scheduleBotMessageFromNow`, whose base is the moment of the tap and never `sent_at` (that plus the
   delay can already be in the past and the confirmation would vanish at once), and the queue keeps the earlier time, so a
   shorter timer moves the 24 hour row up and a longer one changes nothing; a failed edit schedules nothing and the 24
