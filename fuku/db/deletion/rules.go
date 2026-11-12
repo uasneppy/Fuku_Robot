@@ -62,14 +62,15 @@ func GetRulesFresh(ctx context.Context, chatID int64) (*Rules, error) {
 }
 
 // SetRule stores the delay of one kind: 0 deletes at once, 1..MaxDelaySecs after that many
-// seconds. An unknown kind returns ErrUnknownKind and a delay outside the range
+// seconds. An unknown kind returns ErrUnknownKind and a delay the kind does not accept
+// (ValidateRuleDelay: the range for a service or bot kind, the presets for a member kind)
 // ErrDelayOutOfRange, both before any write. A Go 0 is written, and the cached read is
 // dropped.
 func SetRule(ctx context.Context, chatID int64, kind string, delay int) error {
 	if !ValidKind(kind) {
 		return ErrUnknownKind
 	}
-	if err := validateDelay(delay); err != nil {
+	if err := ValidateRuleDelay(kind, delay); err != nil {
 		return err
 	}
 	if db.DB == nil {

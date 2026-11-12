@@ -69,7 +69,8 @@ func leastExpr(tx *gorm.DB) clause.Expr {
 }
 
 // Schedule queues one message for deletion at SentAt plus DelaySecs and reports whether a
-// row was written. The kind, the delay (0..MaxDelaySecs) and the IDs are validated before
+// row was written. The kind, the delay (ValidateEntryDelay: the range for a service or bot kind,
+// 0 for the two immediate member kinds, the presets for self-destruct) and the IDs are validated before
 // any read or write; a chat ID that is not negative is refused with ErrInvalidEntry (group and
 // supergroup IDs are negative, so a private chat is never queued, whatever the caller checked). A chat that is a Staff Group is refused after a fresh Staff Group read:
 // the result is (false, nil) and nothing is written, and a failed read is (false, err) and
@@ -79,7 +80,7 @@ func Schedule(ctx context.Context, e Entry) (bool, error) {
 	if !ValidKind(e.Kind) {
 		return false, ErrUnknownKind
 	}
-	if err := validateDelay(e.DelaySecs); err != nil {
+	if err := ValidateEntryDelay(e.Kind, e.DelaySecs); err != nil {
 		return false, err
 	}
 	if e.ChatID >= 0 || e.MessageID <= 0 || e.SentAt.IsZero() {

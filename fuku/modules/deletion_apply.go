@@ -99,7 +99,8 @@ func (t deletionTarget) equalsStored(kind string, rules *deletion.Rules) bool {
 
 // applyDeleteRule is the one write path of every deletion rule except joined and left (those
 // share the /cleanservice flag and have applyCleanServiceRule). It refuses an unknown kind, a
-// delay outside 0..86400 and the two shared kinds before any read or write, reads the stored
+// delay the kind does not accept (deletion.ValidateRuleDelay: 0..86400 for a service or bot kind,
+// the kind's own presets for a member kind) and the two shared kinds before any read or write, reads the stored
 // state through the cached loader (a failed read is a save failure with no write), writes
 // nothing when the stored state already equals the target, and otherwise writes through the
 // repository, which drops the cache key, and reads the rules back under a timeout that outlives
@@ -129,18 +130,19 @@ func applyDeleteRule(ctx context.Context, chatID int64, kind string, target dele
 	return deletionApplyResult{Outcome: deletionApplied, Rules: deletionReadBack(ctx, chatID)}
 }
 
-// deletionValidate refuses what applyDeleteRule never writes: an unknown kind, a delay outside
-// the range and a kind that shares the /cleanservice flag.
+// deletionValidate refuses what applyDeleteRule never writes: an unknown kind, a kind that shares
+// the /cleanservice flag and a delay the kind's rule does not accept (the order is the kind, the
+// shared kind, the delay).
 func deletionValidate(kind string, target deletionTarget) error {
 	switch {
 	case !deletion.ValidKind(kind):
 		return deletion.ErrUnknownKind
 	case deletion.SharesCleanServiceFlag(kind):
 		return errDeletionSharedKind
-	case !target.Remove && (target.DelaySecs < 0 || target.DelaySecs > deletion.MaxDelaySecs):
-		return deletion.ErrDelayOutOfRange
+	case target.Remove:
+		return nil
 	}
-	return nil
+	return deletion.ValidateRuleDelay(kind, target.DelaySecs)
 }
 
 // deletionReadBack reads the rules after a write, through the cached loader, on a context that

@@ -14,7 +14,7 @@ import (
 // to it. One type serves both tables so the page draws a service row and a bot row with one
 // renderer, and nothing branches on a row's code or kind: the differences are fields.
 type deletionRow struct {
-	// Code is two letters. The first is the section ('s' service, 'b' bot).
+	// Code is two letters. The first is the section ('s' service, 'b' bot, 'm' member).
 	Code string
 	// Kind is the deletion.Kind constant a rule and a queue row carry.
 	Kind    string
@@ -178,6 +178,32 @@ var deletionBotRows = []deletionRow{
 		Code: "bm", Kind: deletion.KindBotManual,
 		NameKey: "settings_del_bot_manual", DescKey: "settings_del_desc_manual",
 		Presets: deletionBotPresets,
+	},
+}
+
+// deletionMemberRows are the three rules about members' own messages, in page order (D-14): their
+// commands, their edited messages and self-destruct. The presets are exactly the values
+// deletion.ValidateRuleDelay accepts for each kind (TestMemberRowPresetsMatchRuleDelays). Match is
+// nil: a member message is caught by its own path (the command wrapper, the edit handler and the
+// self-destruct watcher), not by a service predicate.
+var deletionMemberRows = []deletionRow{
+	{
+		Code: "mc", Kind: deletion.KindMemberCommands,
+		NameKey: "settings_del_mem_commands", DescKey: "settings_del_desc_commands",
+		HintKey: "settings_del_hint_commands",
+		Presets: []int{0},
+	},
+	{
+		Code: "me", Kind: deletion.KindMemberEdited,
+		NameKey: "settings_del_mem_edited", DescKey: "settings_del_desc_edited",
+		HintKey: "settings_del_hint_edited",
+		Presets: []int{30, 60, 300, 900, 3600},
+	},
+	{
+		Code: "ms", Kind: deletion.KindMemberSelfDestruct,
+		NameKey: "settings_del_mem_self", DescKey: "settings_del_desc_self",
+		HintKey: "settings_del_hint_self",
+		Presets: []int{60, 300, 600, 3600, 21600, 86400},
 	},
 }
 

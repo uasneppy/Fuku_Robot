@@ -326,7 +326,7 @@ func TestKindRegistry(t *testing.T) {
 			t.Errorf("SharesCleanServiceFlag(%q) = %v, want %v", kind, !want, want)
 		}
 	}
-	if IsMemberKind("member:") || IsMemberKind("service:pinned_message") || IsMemberKind("") {
+	if IsMemberKind("service:pinned_message") || IsMemberKind("bot:welcome") || IsMemberKind("") {
 		t.Error("IsMemberKind accepted a kind that is not a member kind")
 	}
 }
