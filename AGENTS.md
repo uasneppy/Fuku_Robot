@@ -1006,7 +1006,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the hint `settings_log_hint` (linking and unlinking stay `/setlog` and `/unsetlog`); the keyboard is the shared two-column
   toggle grid `settingsToggleGrid` (`settings_toggle.go`: cells "icon name", two to a row, an odd last cell alone, the icons
   passed in; the Locks page reuses it with the lock icons) then Back and Close, so the rows are `{2,2,2,2}`. Main's state is Linked
-  or Not linked. `TestSettingsLogChannelOpens` and `TestSettingsParityLogCategory` hold it (`settings_logchannel_test.go`).
+  or Not linked. With no channel linked (`settingsLogStateOf(nil)`) the six lines read Off, the cells are still drawn and a press is
+  refused with the command's own notice `logs_not_set` (a warn line over the redraw, the callback answered once): `applyLogCategory`
+  answers `logNotSet` before any write, so no row is created, and nothing is posted; a channel unlinked after the page was drawn is
+  refused the same way and the redraw reads Not linked. A failed save (`logSaveFailed`) redraws the stored state with
+  `common_settings_save_failed` and posts nothing, and an unknown name (unreachable from a button) maps to the same notice path.
+  A refused or failed press never posts: the audit post follows only `logApplied`. Linking and unlinking are not on the page
+  (`/setlog` forwarded from the channel and `/unsetlog`), which the hint says. `TestSettingsLogChannelOpens`,
+  `TestSettingsParityLogCategory` (the press and `/log` or `/nolog` leave the same row, cache state and audit post),
+  `TestSettingsLogChannelNotLinked`, `TestSettingsLogChannelPrivacy` (a group menu and a private menu of an administrator who is not
+  the creator, every kind of press, the bot's edits, answers and messages searched for the channel's title and ID),
+  `TestSettingsLogChannelForged` and `TestSettingsLogChannelFailedSave` hold it (`settings_logchannel_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye

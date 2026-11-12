@@ -3,8 +3,10 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -49,17 +51,23 @@ func newSettingsLogEnv(t *testing.T) *settingsEnv {
 func settingsLogLink(t *testing.T, chat gotgbot.Chat) int64 {
 	t.Helper()
 	channelID := uniqueModuleChatID()
+	settingsLogLinkTo(t, chat, channelID, "log channel")
+	return channelID
+}
+
+// settingsLogLinkTo links the channel with the given ID and title to chat, with every category on.
+func settingsLogLinkTo(t *testing.T, chat gotgbot.Chat, channelID int64, title string) {
+	t.Helper()
 	settingsLogCleanup(t, chat.Id, channelID)
 	if err := chats.EnsureChatInDb(chat.Id, chat.Title); err != nil {
 		t.Fatalf("ensure chat %d: %v", chat.Id, err)
 	}
-	if err := chats.EnsureChatInDb(channelID, "log channel"); err != nil {
+	if err := chats.EnsureChatInDb(channelID, title); err != nil {
 		t.Fatalf("ensure channel %d: %v", channelID, err)
 	}
 	if err := logchannels.Set(chat.Id, chat.Title, channelID); err != nil {
 		t.Fatalf("link log channel: %v", err)
 	}
-	return channelID
 }
 
 // settingsLogSeed turns the named categories of chat off (and every other one on) through the
@@ -330,4 +338,295 @@ func TestSettingsParityLogCategory(t *testing.T) {
 			t.Errorf("turning the settings category off posted %v, want nothing (Destination reads it off)", posts)
 		}
 	})
+}
+
+// settingsLogMenu is one open Log channel page: the message it sits on, the chat that message is in
+// (the group for a group menu, the presser's private chat for a private one) and the presser.
+type settingsLogMenu struct {
+	env     *settingsEnv
+	chat    gotgbot.Chat
+	user    gotgbot.User
+	msgID   int64
+	private bool
+}
+
+// settingsLogOpenGroupMenu opens the page in a group menu opened by the env's administrator.
+func settingsLogOpenGroupMenu(t *testing.T, env *settingsEnv) *settingsLogMenu {
+	t.Helper()
+	msgID, _, _ := settingsLogOpenPage(t, env)
+	return &settingsLogMenu{env: env, chat: env.chat, user: env.admin, msgID: msgID}
+}
+
+// settingsLogOpenPrivateMenu opens the page in a private menu of user, who must be an
+// administrator of the env's chat.
+func settingsLogOpenPrivateMenu(t *testing.T, env *settingsEnv, user gotgbot.User) *settingsLogMenu {
+	t.Helper()
+	env.sendPrivate(user, fmt.Sprintf("/start settings_%d", env.chat.Id))
+	sentMain := settingsPrivateOnlySent(t, env, user)
+	button, ok := settingsPageButton(t, staffKeyboardOf(sentMain.Params["reply_markup"]), settingsPageLog)
+	if !ok {
+		t.Fatal("the private Main has no Log channel button")
+	}
+	menu := &settingsLogMenu{env: env, chat: settingsPrivateChat(user), user: user, msgID: sentMain.MessageID, private: true}
+	env.pressRaw(menu.chat, user, menu.msgID, button.CallbackData)
+	return menu
+}
+
+// last is the text and keyboard of the page's last edit.
+func (m *settingsLogMenu) last() (string, [][]gotgbot.InlineKeyboardButton) {
+	m.env.t.Helper()
+	return m.env.lastEdit(m.chat.Id, m.msgID)
+}
+
+// pressCell presses the page's current cell of the named category, as drawn.
+func (m *settingsLogMenu) pressCell(name string) {
+	m.env.t.Helper()
+	_, keyboard := m.last()
+	m.env.pressRaw(m.chat, m.user, m.msgID, settingsLogCell(m.env.t, keyboard, name).CallbackData)
+}
+
+// pressRaw presses hand-built data on the page's message.
+func (m *settingsLogMenu) pressRaw(data string) {
+	m.env.t.Helper()
+	m.env.pressRaw(m.chat, m.user, m.msgID, data)
+}
+
+func TestSettingsLogChannelNotLinked(t *testing.T) {
+	t.Run("a press is refused with the command's notice and writes nothing", func(t *testing.T) {
+		env := newSettingsLogEnv(t)
+		menu := settingsLogOpenGroupMenu(t, env)
+		text, keyboard := menu.last()
+		if !strings.Contains(text, staffMarker("settings_log_status")+" "+staffMarker("settings_state_not_linked")) {
+			t.Fatalf("page %q does not say Not linked", text)
+		}
+		for _, cat := range settingsLogCategories {
+			line := staffMarker("settings_main_state_line") + " ❌ " + staffMarker(cat.NameKey) + " " + staffMarker("common_status_off")
+			if !strings.Contains(text, line) {
+				t.Errorf("page %q has no Off line %q", text, line)
+			}
+			if cell := settingsLogCell(t, keyboard, cat.Name); !strings.HasPrefix(cell.Text, "❌ ") {
+				t.Errorf("cell %s = %q, want the cross", cat.Name, cell.Text)
+			}
+		}
+
+		for _, cat := range settingsLogCategories {
+			sends := len(env.fake.callsFor("sendMessage"))
+			answers := env.answerCount()
+			menu.pressCell(cat.Name)
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("a press of %s answered %d times, want once", cat.Name, got)
+			}
+			text, keyboard = menu.last()
+			if !strings.Contains(text, "⚠️ "+staffMarker("logs_not_set")) {
+				t.Errorf("a press of %s drew %q, want the notice logs_not_set", cat.Name, text)
+			}
+			if got := len(settingsAllButtons(keyboard)); got != settingsLogCategoryCount+2 {
+				t.Errorf("the redraw has %d buttons, want the six cells plus Back and Close", got)
+			}
+			if got := len(env.fake.callsFor("sendMessage")); got != sends {
+				t.Errorf("a refused press of %s sent %d messages, want none", cat.Name, got-sends)
+			}
+			if got := logGoldenFlags(t, env.chat.Id); got != "none" {
+				t.Errorf("a refused press of %s left a row: %s", cat.Name, got)
+			}
+		}
+		// The opposite value is refused the same way.
+		settingsLogToggle(t, env, env.chat, menu.msgID, "a", "0")
+		if text, _ = menu.last(); !strings.Contains(text, staffMarker("logs_not_set")) {
+			t.Errorf("an off press drew %q, want logs_not_set", text)
+		}
+		var rows int64
+		if err := db.DB.Model(&models.LogChannel{}).Where("chat_id = ?", env.chat.Id).Count(&rows).Error; err != nil || rows != 0 {
+			t.Errorf("log_channels rows = %d (err %v), want none", rows, err)
+		}
+	})
+
+	t.Run("a channel unlinked after the page was drawn is refused and redrawn as Not linked", func(t *testing.T) {
+		env := newSettingsLogEnv(t)
+		channelID := settingsLogLink(t, env.chat)
+		menu := settingsLogOpenGroupMenu(t, env)
+		if err := logchannels.Unset(env.chat.Id); err != nil {
+			t.Fatalf("unset: %v", err)
+		}
+		menu.pressCell(logchannels.CategoryAdmin)
+		text, _ := menu.last()
+		if !strings.Contains(text, "⚠️ "+staffMarker("logs_not_set")) ||
+			!strings.Contains(text, staffMarker("settings_log_status")+" "+staffMarker("settings_state_not_linked")) {
+			t.Errorf("the press drew %q, want the notice and the Not linked state", text)
+		}
+		if posts := settingsLogPosts(env, channelID); len(posts) != 0 {
+			t.Errorf("a refused press posted %v", posts)
+		}
+	})
+}
+
+// settingsLogLeakText is everything the bot sent or answered during the test except the posts to
+// the log channel itself: every edit and its keyboard, every answer and every other message.
+func settingsLogLeakText(t *testing.T, env *settingsEnv, channelID int64) string {
+	t.Helper()
+	var sb strings.Builder
+	for _, method := range []string{"editMessageText", "answerCallbackQuery", "sendMessage", "getChat", "getChatMember"} {
+		for _, call := range env.fake.callsFor(method) {
+			if method == "sendMessage" && staffParamInt(call.Params, "chat_id") == channelID {
+				continue
+			}
+			sb.WriteString(method + " " + legacyRequestJSON(t, call) + "\n")
+		}
+	}
+	return sb.String()
+}
+
+func TestSettingsLogChannelPrivacy(t *testing.T) {
+	const (
+		channelID    = int64(-1002468013579)
+		channelTitle = "ZZ Log Channel Marker"
+		digits       = "1002468013579"
+	)
+
+	// run drives the page through every kind of press (open, a change on, a change off, a failed
+	// save, a refusal after an unlink) and then searches all the bot sent for the channel.
+	run := func(t *testing.T, open func(t *testing.T, env *settingsEnv) *settingsLogMenu) {
+		t.Helper()
+		env := newSettingsLogEnv(t)
+		settingsLogLinkTo(t, env.chat, channelID, channelTitle)
+		menu := open(t, env)
+
+		menu.pressCell(logchannels.CategoryAdmin)
+		menu.pressCell(logchannels.CategoryAdmin)
+		for _, cat := range settingsLogCategories {
+			menu.pressCell(cat.Name)
+		}
+		working := logCategoryWrites
+		t.Cleanup(func() { logCategoryWrites = working })
+		logCategoryWrites = func(int64, string, bool) error { return errors.New("disk is full") }
+		menu.pressCell(logchannels.CategoryUser)
+		logCategoryWrites = working
+		if text, _ := menu.last(); !strings.Contains(text, staffMarker("common_settings_save_failed")) {
+			t.Errorf("a failed save drew %q, want the save-failed notice", text)
+		}
+		if err := logchannels.Unset(env.chat.Id); err != nil {
+			t.Fatalf("unset: %v", err)
+		}
+		menu.pressCell(logchannels.CategoryReports)
+		if text, _ := menu.last(); !strings.Contains(text, staffMarker("logs_not_set")) {
+			t.Errorf("a press after the unlink drew %q, want logs_not_set", text)
+		}
+
+		leaked := settingsLogLeakText(t, env, channelID)
+		if !strings.Contains(leaked, staffMarker("settings_page_log")) {
+			t.Fatal("the search text holds no page, so the privacy check would prove nothing")
+		}
+		for _, secret := range []string{channelTitle, digits, strconv.FormatInt(channelID, 10)} {
+			if strings.Contains(leaked, secret) {
+				t.Errorf("something the bot sent or answered names the log channel (%q)", secret)
+			}
+		}
+	}
+
+	t.Run("a group menu", func(t *testing.T) {
+		run(t, func(t *testing.T, env *settingsEnv) *settingsLogMenu { return settingsLogOpenGroupMenu(t, env) })
+	})
+	t.Run("a private menu of an administrator who is not the creator", func(t *testing.T) {
+		run(t, func(t *testing.T, env *settingsEnv) *settingsLogMenu {
+			return settingsLogOpenPrivateMenu(t, env, env.admin)
+		})
+	})
+
+	t.Run("the search would find the channel if a screen named it", func(t *testing.T) {
+		env := newSettingsLogEnv(t)
+		settingsLogLinkTo(t, env.chat, channelID, channelTitle)
+		menu := settingsLogOpenGroupMenu(t, env)
+		menu.pressCell(logchannels.CategoryAdmin)
+		posts := settingsLogPosts(env, channelID)
+		if len(posts) != 1 {
+			t.Fatalf("the change posted %d audit messages, want 1", len(posts))
+		}
+		everything := ""
+		for _, call := range env.fake.callsFor("sendMessage") {
+			everything += legacyRequestJSON(t, call)
+		}
+		if !strings.Contains(everything, digits) {
+			t.Error("the audit post does not carry the channel's ID, so the exclusion in the leak search proves nothing")
+		}
+	})
+}
+
+func TestSettingsLogChannelForged(t *testing.T) {
+	const menuMsgID = 8383
+
+	type forgedCase struct {
+		name   string
+		fields []string
+		extra  map[string]string
+		both   bool
+	}
+	tg := func(control, v string) []string {
+		return []string{"a", "tg", "p", settingsPageLog, "t", control, "v", v}
+	}
+	var forged []forgedCase
+	for _, cat := range settingsLogCategories {
+		forged = append(forged,
+			forgedCase{name: "st on " + cat.Code, fields: []string{"a", "st", "p", settingsPageLog, "t", cat.Code, "v", "1"}},
+			forgedCase{name: "v=2 on " + cat.Code, fields: tg(cat.Code, "2")},
+			forgedCase{name: "empty v on " + cat.Code, fields: tg(cat.Code, "")},
+			forgedCase{name: "an extra key on " + cat.Code, fields: tg(cat.Code, "0"), extra: map[string]string{"x": "1"}},
+			forgedCase{name: "c and u together on " + cat.Code, fields: tg(cat.Code, "0"), both: true},
+			// The repository name is not a control code.
+			forgedCase{name: "the repository name " + cat.Name, fields: tg(cat.Name, "0")},
+		)
+	}
+	forged = append(forged, forgedCase{name: "an unknown control", fields: tg("x", "0")})
+
+	for _, tc := range forged {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsLogEnv(t)
+			channelID := settingsLogLink(t, env.chat)
+			fields := env.groupFields(env.admin, tc.fields...)
+			for k, v := range tc.extra {
+				fields[k] = v
+			}
+			if tc.both {
+				fields["c"] = "-1001"
+			}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("forged press %v did not encode", fields)
+			}
+			before := settingsMenuMarkOf(env)
+			env.pressRaw(env.chat, env.admin, menuMsgID, data)
+			settingsMenuWantRefused(t, env, before, "common_callback_invalid_request", true)
+			if got := logGoldenFlags(t, env.chat.Id); got != "111111" {
+				t.Errorf("a forged press changed the flags to %s", got)
+			}
+			if posts := settingsLogPosts(env, channelID); len(posts) != 0 {
+				t.Errorf("a forged press posted %v", posts)
+			}
+		})
+	}
+}
+
+func TestSettingsLogChannelFailedSave(t *testing.T) {
+	env := newSettingsLogEnv(t)
+	channelID := settingsLogLink(t, env.chat)
+	menu := settingsLogOpenGroupMenu(t, env)
+	mreqSwap(t, &logCategoryWrites, func(int64, string, bool) error { return errors.New("disk is full") })
+
+	answers := env.answerCount()
+	menu.pressCell(logchannels.CategoryAdmin)
+	if got := env.answerCount() - answers; got != 1 {
+		t.Errorf("the press answered %d times, want once", got)
+	}
+	text, keyboard := menu.last()
+	if !strings.Contains(text, "⚠️ "+staffMarker("common_settings_save_failed")) {
+		t.Errorf("the page drew %q, want the save-failed notice", text)
+	}
+	if cell := settingsLogCell(t, keyboard, logchannels.CategoryAdmin); !strings.HasPrefix(cell.Text, "✅ ") {
+		t.Errorf("the cell = %q, want the stored state (on) drawn", cell.Text)
+	}
+	if got := logGoldenFlags(t, env.chat.Id); got != "111111" {
+		t.Errorf("a failed save changed the flags to %s", got)
+	}
+	if posts := settingsLogPosts(env, channelID); len(posts) != 0 {
+		t.Errorf("a failed save posted %v, want nothing", posts)
+	}
 }
