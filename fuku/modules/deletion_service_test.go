@@ -16,6 +16,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
@@ -295,4 +296,252 @@ func TestServiceWatcherNeverEndsUpdate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// deletionJoinApply makes the message a "new members joined" notice naming member.
+func deletionJoinApply(member gotgbot.User) func(*gotgbot.Message) {
+	return func(m *gotgbot.Message) { m.NewChatMembers = []gotgbot.User{member} }
+}
+
+// deletionLeftApply makes the message a "member left" notice naming member.
+func deletionLeftApply(member gotgbot.User) func(*gotgbot.Message) {
+	return func(m *gotgbot.Message) { m.LeftChatMember = &member }
+}
+
+// deletionAfterCleanService registers a handler in group 0 after the greetings module's and
+// returns how many messages it saw: cleanService ends the update, so it sees none.
+func deletionAfterCleanService(env *deletionEnv) *atomic.Int64 {
+	var ran atomic.Int64
+	env.dispatcher.AddHandler(
+		handlers.NewMessage(func(*gotgbot.Message) bool { return true }, func(*gotgbot.Bot, *ext.Context) error {
+			ran.Add(1)
+			return ext.ContinueGroups
+		}).SetAllowBot(true),
+	)
+	return &ran
+}
+
+// methods returns the Telegram methods the fake saw, in the order they arrived.
+func (e *deletionEnv) methods() []string {
+	e.t.Helper()
+	deletionInline.wait()
+	e.fake.callsFor("sendMessage")
+	client := e.fake.moduleBotClient
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	order := make([]string, 0, len(client.calls))
+	for _, call := range client.calls {
+		order = append(order, call.Method)
+	}
+	return order
+}
+
+var deletionJoinLeft = []struct {
+	name  string
+	kind  string
+	apply func(gotgbot.User) func(*gotgbot.Message)
+}{
+	{"joined", deletion.KindJoined, deletionJoinApply},
+	{"left", deletion.KindLeft, deletionLeftApply},
+}
+
+// deletionSetCleanService stores the shared /cleanservice flag.
+func deletionSetCleanService(t *testing.T, chatID int64, on bool) {
+	t.Helper()
+	if err := greetings.SetShouldCleanService(chatID, on); err != nil {
+		t.Fatalf("SetShouldCleanService(%d, %v) error = %v", chatID, on, err)
+	}
+}
+
+func TestCleanServiceEffectiveRule(t *testing.T) {
+	ctx := context.Background()
+	for _, k := range deletionJoinLeft {
+		t.Run(k.name+": flag off with a stale row deletes nothing and writes no row", func(t *testing.T) {
+			env := newDeletionEnv(t)
+			ran := deletionAfterCleanService(env)
+			deletionSetCleanService(t, env.chat.Id, false)
+			if err := deletion.SetRule(ctx, env.chat.Id, k.kind, 600); err != nil {
+				t.Fatalf("SetRule error = %v", err)
+			}
+			env.sendService(&env.admin, k.apply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}))
+			if calls := env.deletes(env.chat.Id); len(calls) != 0 {
+				t.Fatalf("deleteMessage calls = %d, want 0", len(calls))
+			}
+			if rows := env.queued(env.chat.Id); len(rows) != 0 {
+				t.Fatalf("queue rows = %d, want 0", len(rows))
+			}
+			if ran.Load() != 0 {
+				t.Fatalf("a later group-0 handler ran %d times: cleanService did not end the update", ran.Load())
+			}
+		})
+
+		t.Run(k.name+": flag on with no row deletes the message once", func(t *testing.T) {
+			env := newDeletionEnv(t)
+			ran := deletionAfterCleanService(env)
+			deletionSetCleanService(t, env.chat.Id, true)
+			id := env.sendService(&env.admin, k.apply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}))
+			calls := env.deletes(env.chat.Id)
+			if len(calls) != 1 || staffParamInt(calls[0].Params, "message_id") != id {
+				t.Fatalf("deleteMessage calls = %+v, want one for message %d", calls, id)
+			}
+			if rows := env.queued(env.chat.Id); len(rows) != 0 {
+				t.Fatalf("queue rows = %d, want 0", len(rows))
+			}
+			if ran.Load() != 0 {
+				t.Fatalf("a later group-0 handler ran %d times: cleanService did not end the update", ran.Load())
+			}
+		})
+
+		t.Run(k.name+": flag on with a row of 600 queues the message at its date plus 600", func(t *testing.T) {
+			env := newDeletionEnv(t)
+			res := applyCleanServiceRule(ctx, env.chat.Id, k.kind,
+				deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 600})
+			if res.Outcome != deletionApplied {
+				t.Fatalf("applyCleanServiceRule = %+v, want applied", res)
+			}
+			id := env.sendService(&env.admin, k.apply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}))
+			if calls := env.deletes(env.chat.Id); len(calls) != 0 {
+				t.Fatalf("deleteMessage calls = %d, want 0 yet", len(calls))
+			}
+			rows := env.queued(env.chat.Id)
+			if len(rows) != 1 || rows[0].MessageID != id || rows[0].Kind != k.kind ||
+				!rows[0].DeleteAt.Equal(env.now.Add(600*time.Second)) {
+				t.Fatalf("queue rows = %+v, want one for message %d at +600 s", rows, id)
+			}
+		})
+
+		t.Run(k.name+": a failed flag read deletes nothing and still ends the update", func(t *testing.T) {
+			env := newDeletionEnv(t)
+			ran := deletionAfterCleanService(env)
+			deletionSetCleanService(t, env.chat.Id, true)
+			mreqSwap(t, &deletionFlagLookup, func(context.Context, int64) (*models.GreetingSettings, error) {
+				return nil, errors.New("flag read failed")
+			})
+			env.sendService(&env.admin, k.apply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}))
+			if calls := env.deletes(env.chat.Id); len(calls) != 0 {
+				t.Fatalf("deleteMessage calls after a failed flag read = %d, want 0", len(calls))
+			}
+			if rows := env.queued(env.chat.Id); len(rows) != 0 {
+				t.Fatalf("queue rows after a failed flag read = %d, want 0", len(rows))
+			}
+			if ran.Load() != 0 {
+				t.Fatalf("a later group-0 handler ran %d times: cleanService did not end the update", ran.Load())
+			}
+		})
+	}
+}
+
+func TestCleanServiceDeletesAfterJoin(t *testing.T) {
+	env := newDeletionEnv(t)
+	deletionSetCleanService(t, env.chat.Id, true)
+	env.sendService(&env.admin, deletionJoinApply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Newcomer"}))
+
+	order := env.methods()
+	send, del := -1, -1
+	for i, method := range order {
+		switch {
+		case method == "sendMessage" && send < 0:
+			send = i
+		case method == "deleteMessage" && del < 0:
+			del = i
+		}
+	}
+	if send < 0 || del < 0 || send > del {
+		t.Fatalf("call order = %v, want the welcome (sendMessage) before the join message's deleteMessage", order)
+	}
+	sent := env.fake.sentTo(env.chat.Id)
+	if len(sent) != 1 {
+		t.Fatalf("welcomes sent = %d, want 1", len(sent))
+	}
+	for _, key := range []string{"reply_parameters", "reply_to_message_id"} {
+		if _, replies := sent[0].Params[key]; replies {
+			t.Fatalf("the welcome carries %q: it must not depend on the join message surviving", key)
+		}
+	}
+}
+
+func TestServiceWatcherBotJoin(t *testing.T) {
+	ctx := context.Background()
+	bot := gotgbot.User{Id: uniqueLinkOwnerID(), IsBot: true, FirstName: "Adder"}
+	member := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}
+	for _, k := range deletionJoinLeft {
+		t.Run(k.name+" by a bot: flag on with no row deletes it", func(t *testing.T) {
+			env := newDeletionEnv(t)
+			deletionSetCleanService(t, env.chat.Id, true)
+			id := env.sendService(&bot, k.apply(member))
+			calls := env.deletes(env.chat.Id)
+			if len(calls) != 1 || staffParamInt(calls[0].Params, "message_id") != id {
+				t.Fatalf("deleteMessage calls = %+v, want one for message %d", calls, id)
+			}
+		})
+
+		t.Run(k.name+" by a bot: flag off with a stale row does nothing", func(t *testing.T) {
+			env := newDeletionEnv(t)
+			deletionSetCleanService(t, env.chat.Id, false)
+			if err := deletion.SetRule(ctx, env.chat.Id, k.kind, 600); err != nil {
+				t.Fatalf("SetRule error = %v", err)
+			}
+			env.sendService(&bot, k.apply(member))
+			if got := len(env.deletes(env.chat.Id)) + len(env.queued(env.chat.Id)); got != 0 {
+				t.Fatalf("a bot-caused message with the flag off acted %d times, want 0", got)
+			}
+		})
+
+		t.Run(k.name+" by a bot: a row of 600 queues it", func(t *testing.T) {
+			env := newDeletionEnv(t)
+			if res := applyCleanServiceRule(ctx, env.chat.Id, k.kind,
+				deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 600}); res.Outcome != deletionApplied {
+				t.Fatalf("applyCleanServiceRule = %+v, want applied", res)
+			}
+			id := env.sendService(&bot, k.apply(member))
+			rows := env.queued(env.chat.Id)
+			if len(rows) != 1 || rows[0].MessageID != id || !rows[0].DeleteAt.Equal(env.now.Add(600*time.Second)) {
+				t.Fatalf("queue rows = %+v, want one for message %d at +600 s", rows, id)
+			}
+		})
+	}
+
+	t.Run("a human sender is handled once, by cleanService", func(t *testing.T) {
+		env := newDeletionEnv(t)
+		deletionSetCleanService(t, env.chat.Id, true)
+		env.sendService(&env.admin, deletionJoinApply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}))
+		if calls := env.deletes(env.chat.Id); len(calls) != 1 {
+			t.Fatalf("deleteMessage calls = %d, want exactly 1 (no double handling)", len(calls))
+		}
+	})
+
+	t.Run("an anonymous admin is handled once, by cleanService", func(t *testing.T) {
+		env := newDeletionEnv(t)
+		deletionSetCleanService(t, env.chat.Id, true)
+		env.sendService(&env.admin, func(m *gotgbot.Message) {
+			deletionJoinApply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"})(m)
+			m.SenderChat = &env.chat
+		})
+		if calls := env.deletes(env.chat.Id); len(calls) != 1 {
+			t.Fatalf("deleteMessage calls = %d, want exactly 1", len(calls))
+		}
+	})
+
+	t.Run("a message with no sender is handled by neither path", func(t *testing.T) {
+		for _, k := range deletionJoinLeft {
+			env := newDeletionEnv(t)
+			deletionSetCleanService(t, env.chat.Id, true)
+			env.sendService(nil, k.apply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}))
+			if got := len(env.deletes(env.chat.Id)) + len(env.queued(env.chat.Id)); got != 0 {
+				t.Fatalf("%s: a join or leave with no sender acted %d times, want 0", k.name, got)
+			}
+		}
+	})
+
+	t.Run("a join the lockdown guard ended is handled by neither path", func(t *testing.T) {
+		env := newDeletionEnv(t)
+		LoadLockdown(env.dispatcher)
+		startPanelLockdown(t, env.chat.Id, true)
+		deletionSetCleanService(t, env.chat.Id, true)
+		stranger := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Stranger"}
+		env.sendService(&stranger, deletionJoinApply(gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Raider"}))
+		if got := len(env.deletes(env.chat.Id)) + len(env.queued(env.chat.Id)); got != 0 {
+			t.Fatalf("a join ended by the lockdown guard acted %d times, want 0", got)
+		}
+	})
 }

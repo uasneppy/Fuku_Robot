@@ -464,6 +464,7 @@ func TestCleanServiceProcessesJoinAndDeletesServiceMessage(t *testing.T) {
 	if calls := client.callsFor("sendMessage"); len(calls) != 1 {
 		t.Fatalf("sendMessage calls = %d, want welcome", len(calls))
 	}
+	deletionInline.wait()
 	if calls := client.callsFor("deleteMessage"); len(calls) != 1 {
 		t.Fatalf("deleteMessage calls = %d, want service cleanup", len(calls))
 	}
@@ -495,6 +496,7 @@ func TestCleanServiceProcessesMultipleNewMembersWithoutCaptcha(t *testing.T) {
 	if calls := client.callsFor("sendMessage"); len(calls) != len(members) {
 		t.Fatalf("sendMessage calls = %d, want one welcome per new member", len(calls))
 	}
+	deletionInline.wait()
 	if calls := client.callsFor("deleteMessage"); len(calls) != 1 {
 		t.Fatalf("deleteMessage calls = %d, want service cleanup", len(calls))
 	}
