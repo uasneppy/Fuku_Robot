@@ -70,6 +70,10 @@ func TestMemberKindsNeedDeleteRight(t *testing.T) {
 	t.Run("self-destruct rows", func(t *testing.T) {
 		env := newDeletionEnv(t)
 		env.fake.setBotMember(env.chat.Id, deletionPlainMemberBot)
+		// The worker screens claimed self-destruct rows against the stored rule and drops
+		// them with no call when the rule is absent (D-26), so the rule must exist for the
+		// cycle to reach the delete-right latch this subtest is about.
+		deletionSetRule(t, env.chat.Id, deletion.KindMemberSelfDestruct, 600)
 		rows := env.seedDue(env.chat.Id, 82000, 4, deletion.KindMemberSelfDestruct)
 		perID := make(map[int64]error, len(rows))
 		for _, id := range rows {
