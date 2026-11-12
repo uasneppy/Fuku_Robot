@@ -55,10 +55,8 @@ const (
 // Telegram's 48 hour window for deleting a message.
 const MaxDelaySecs = 86400
 
-const (
-	servicePrefix = "service:"
-	botPrefix     = "bot:"
-)
+// servicePrefix is the prefix of every service kind.
+const servicePrefix = "service:"
 
 var (
 	// ErrUnknownKind is returned for a kind that is not in Kinds. Nothing is written.
@@ -74,11 +72,6 @@ var kinds = []string{
 	KindBotWelcome, KindBotGoodbye, KindBotRules, KindBotAuto, KindBotManual,
 }
 
-// Kinds returns every kind in page order. The slice is a copy.
-func Kinds() []string {
-	return append([]string(nil), kinds...)
-}
-
 // ValidKind reports whether kind is one of the registered kinds.
 func ValidKind(kind string) bool {
 	for _, k := range kinds {
@@ -92,11 +85,6 @@ func ValidKind(kind string) bool {
 // IsServiceKind reports whether kind is a "service:" kind.
 func IsServiceKind(kind string) bool {
 	return strings.HasPrefix(kind, servicePrefix)
-}
-
-// IsBotKind reports whether kind is a "bot:" kind.
-func IsBotKind(kind string) bool {
-	return strings.HasPrefix(kind, botPrefix)
 }
 
 // SharesCleanServiceFlag reports whether kind's on/off state is the shared /cleanservice

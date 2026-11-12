@@ -181,28 +181,6 @@ var deletionBotRows = []deletionRow{
 	},
 }
 
-// deletionRowOf returns the row with the given code, from either table.
-func deletionRowOf(code string) (deletionRow, bool) {
-	return deletionFindRow(func(r deletionRow) bool { return r.Code == code })
-}
-
-// deletionRowOfKind returns the row of the given kind, from either table.
-func deletionRowOfKind(kind string) (deletionRow, bool) {
-	return deletionFindRow(func(r deletionRow) bool { return r.Kind == kind })
-}
-
-// deletionFindRow returns the first row, service rows before bot rows, that satisfies match.
-func deletionFindRow(match func(deletionRow) bool) (deletionRow, bool) {
-	for _, table := range [][]deletionRow{deletionServiceRows, deletionBotRows} {
-		for _, row := range table {
-			if match(row) {
-				return row, true
-			}
-		}
-	}
-	return deletionRow{}, false
-}
-
 // deletionServiceKindOf returns the first service row, in table order, whose predicate matches
 // the message. ok is false for a nil message, for content, and for the types that are never
 // deleted. It answers for the joined and left rows too: who handles those is the watcher's
