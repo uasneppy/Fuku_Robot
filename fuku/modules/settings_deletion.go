@@ -30,6 +30,9 @@ const (
 	settingsActDelList = "dl"
 	// settingsActDelRow is the action code that opens a row's screen (field t, a row code).
 	settingsActDelRow = "dr"
+	// settingsActDelYes is the action code of the Yes of a row's confirm card (fields t, v and e): the
+	// row's table entry has a ConfirmKey, v is one of its presets and never "no rule".
+	settingsActDelYes = "dy"
 	// settingsDelNone is the v value of "no rule": Keep on a service row, Off on a bot row.
 	settingsDelNone = "n"
 )
@@ -119,6 +122,10 @@ func init() {
 		Actions: map[string]settingsPageAction{
 			settingsActDelList: {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: settingsDelListFields, Run: settingsDelRunList},
 			settingsActDelRow:  {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: settingsDelRowFields, Run: settingsDelRunRow},
+			settingsActDelYes: {
+				Fields: []string{"t", "v", "e"}, Right: settingsRightChangeInfo,
+				Validate: settingsDelYesFields, Run: settingsDelRunYes,
+			},
 		},
 	})
 }
@@ -177,6 +184,18 @@ func settingsDelListFields(fields map[string]string) bool {
 // settingsDelRowFields is the Validate of dr: t is a row code.
 func settingsDelRowFields(fields map[string]string) bool {
 	_, _, ok := settingsDelRowByCode(fields["t"])
+	return ok
+}
+
+// settingsDelYesFields is the Validate of dy, a strict check before any I/O: t names a row whose table
+// entry has a ConfirmKey, v is one of that row's presets in canonical digits and never the "no rule"
+// value, and e is a positive 63-bit number written in digits only.
+func settingsDelYesFields(fields map[string]string) bool {
+	_, row, ok := settingsDelRowByCode(fields["t"])
+	if !ok || row.ConfirmKey == "" || fields["v"] == settingsDelNone || !settingsDelPresetValidator(row.Presets)(fields["v"]) {
+		return false
+	}
+	_, ok = settingsCardNumber(fields["e"])
 	return ok
 }
 
@@ -517,6 +536,20 @@ func renderSettingsDelRow(prep settingsDelPrepared, section settingsDelSection, 
 	return k.screen(settingsCompose(prep.View, "settings_page_del", body, notice, false))
 }
 
+// renderSettingsDelCard draws the confirm card of a row with a ConfirmKey for the chosen delay: the
+// row's question and consequence with {delay} the chosen label, the status slot, then the shared
+// [Yes | No] rows and the navigation. Yes carries the row and the absolute value; No returns to the
+// hub. It has no Currently line, no hint and no choice rows, and writes nothing. It is pure.
+func renderSettingsDelCard(prep settingsDelPrepared, row deletionRow, value, notice string) settingsScreen {
+	tr := prep.View.Tr
+	secs, _ := settingsParseNumber(value, 5)
+	body := []string{settingsText(tr, row.ConfirmKey, i18n.TranslationParams{"delay": settingsDelPresetLabel(tr, row, secs)})}
+	body = settingsDelSlot(body, prep.Right)
+	k := newSettingsKeyboard(prep.View)
+	settingsCardRows(k, map[string]string{"a": settingsActDelYes, "t": row.Code, "v": value}, settingsPageDeletion)
+	return k.screen(settingsCompose(prep.View, "settings_page_del", body, notice, false))
+}
+
 // settingsDelChoiceRows is the layout of a row's choices: the row's own, else its section's.
 func settingsDelChoiceRows(section settingsDelSection, row deletionRow) []int {
 	if len(row.ChoiceRows) > 0 {
@@ -617,24 +650,80 @@ func settingsDelApplyChoice(chatID int64, row deletionRow, value string) deletio
 	return applyDeleteRule(ctx, chatID, row.Kind, target)
 }
 
-// settingsDelSet makes the Set of a row's control. The Staff Group gate runs first, then the write,
-// then the row's screen is redrawn from the stored state: a press of the stored state writes nothing
-// and a failed write redraws the old state with the save-failed notice.
+// settingsDelSet makes the Set of a row's control. The Staff Group gate runs first. A row with a
+// ConfirmKey asks before it writes a delay (switching it off stays one tap); every other choice
+// writes at once.
 func settingsDelSet(section settingsDelSection, row deletionRow) func(*settingsPress, string) *settingsScreen {
 	return func(p *settingsPress, value string) *settingsScreen {
 		if settingsDelStaffGate(p) {
 			return nil
 		}
-		notice := ""
-		switch result := settingsDelApplyChoice(p.group.Id, row, value); result.Outcome {
-		case deletionRefused:
-			log.Warnf("[Settings] a deletion choice of chat %d was refused: %v", p.group.Id, result.Err)
-			p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
-			return nil
-		case deletionSaveFailed:
-			notice = settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed"))
-		case deletionApplied, deletionUnchanged:
+		if row.ConfirmKey != "" && value != settingsDelNone {
+			return settingsDelAsk(p, section, row, value)
 		}
-		return settingsDelDrawRow(p, section, row, notice)
+		return settingsDelWrite(p, section, row, value)
 	}
+}
+
+// settingsDelWrite stores the value, then redraws the row's screen from the stored state: a press of
+// the stored state writes nothing and a failed write redraws the old state with the save-failed notice.
+func settingsDelWrite(p *settingsPress, section settingsDelSection, row deletionRow, value string) *settingsScreen {
+	notice := ""
+	switch result := settingsDelApplyChoice(p.group.Id, row, value); result.Outcome {
+	case deletionRefused:
+		log.Warnf("[Settings] a deletion choice of chat %d was refused: %v", p.group.Id, result.Err)
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	case deletionSaveFailed:
+		notice = settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed"))
+	case deletionApplied, deletionUnchanged:
+	}
+	return settingsDelDrawRow(p, section, row, notice)
+}
+
+// settingsDelStoredDelay is the delay stored for a kind in the data a draw read, and whether one is.
+func settingsDelStoredDelay(data settingsDelData, kind string) (delay int, present bool) {
+	if data.Rules == nil {
+		return 0, false
+	}
+	delay, present = data.Rules.Delays[kind]
+	return delay, present
+}
+
+// settingsDelAsk answers a choice of a row with a ConfirmKey, writing nothing: the stored state is read
+// through the cached loader, a value equal to it redraws the row, and any other value draws the card.
+// An unreadable state is the cannot-open edit.
+func settingsDelAsk(p *settingsPress, section settingsDelSection, row deletionRow, value string) *settingsScreen {
+	prep, err := settingsDelPrepare(p, []deletionRow{row})
+	if err != nil {
+		log.Warnf("[Settings] the deletion rules of chat %d could not be read for a card: %v", p.group.Id, err)
+		p.cannotOpen()
+		return nil
+	}
+	if stored, present := settingsDelStoredDelay(prep.Data, row.Kind); present && value == strconv.Itoa(stored) {
+		screen := renderSettingsDelRow(prep, section, row, "")
+		return &screen
+	}
+	screen := renderSettingsDelCard(prep, row, value, "")
+	return &screen
+}
+
+// settingsDelRunYes serves dy, the Yes of a card, after the press pipeline judged the right again. Its
+// order is fixed, each step refusing before the next: the Staff Group gate, the expiry (an expired Yes
+// redraws the row with the expired notice and writes nothing), then the write, which writes nothing for
+// the state already stored, and the redraw of the row from the read-back.
+func settingsDelRunYes(p *settingsPress) *settingsScreen {
+	if settingsDelStaffGate(p) {
+		return nil
+	}
+	section, row, found := settingsDelRowByCode(p.fields["t"])
+	expired, validExpiry := settingsCardExpired(p.fields)
+	if !found || !validExpiry {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	if expired {
+		return settingsDelDrawRow(p, section, row, settingsNoticeWarn(settingsText(p.tr, "settings_card_expired")))
+	}
+	return settingsDelWrite(p, section, row, p.fields["v"])
 }
