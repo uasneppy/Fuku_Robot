@@ -3032,6 +3032,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   empty token, 0 attempts and no claim time, the named constraints refuse a delay of 86401, a duplicate `(chat, message)`, a
   state of `x` and negative attempts, and the due index keeps its pending predicate; PostgreSQL only, it skips locally;
   `TestScheduledDeletionMigrationStatements` is its database-free half and runs in `make test`).
+  The review fixes added three more names to the list, all in `./fuku/db/deletion` and all also run on SQLite in `make test`:
+  `TestReleaseStaleClaims` (a counted release sets `delete_at` to the caller's retry time and drops the row at its third
+  counted failure, an uncounted one leaves `delete_at` alone), `TestDeleteRules` (`RemoveRule` drops that exact kind's pending
+  rows in the same transaction) and `TestApplyJoinLeftRule` (Keep and `/cleanservice off` drop the pending joined and left rows,
+  by exact kind and never an acting row, another kind or another chat).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
