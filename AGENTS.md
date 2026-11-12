@@ -1530,12 +1530,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the same query without the cache), the key `delete_rules:*` is listed in `skipLocal` (the watcher and every send site
   read it, so a rule switched off must stop acting on every replica at the next message), and every write drops it
   (`SetRule` is a column-targeted `INSERT ... ON CONFLICT (chat_id, kind) DO UPDATE` of `delay_secs` and `updated_at`, a Go 0
-  written, the kind and the range checked before any write; `RemoveRule` deletes the row). The model carries no `default:`
-  tag. The `service:new_chat_members` and `service:left_chat_member` rows only hold the delay: whether those two kinds act at
+  written, the kind and the range checked before any write; `RemoveRule` deletes the row and, in the same transaction, the
+  chat's PENDING `scheduled_deletions` rows of exactly that kind, WR-03). Switching a rule off stops what was already queued
+  too: `dropPendingKindsTx` matches the kind exactly (never a prefix), leaves `acting` rows to the worker that claimed them
+  and never touches another chat or another kind, and a change of delay or a Now or After choice drops nothing. The model
+  carries no `default:` tag. The `service:new_chat_members` and `service:left_chat_member` rows only hold the delay: whether those two kinds act at
   all is the shared `/cleanservice` flag (`greetings.clean_service_settings`), written together with the rows in ONE
-  transaction by `deletion.ApplyJoinLeftRule` (Keep: flag false and both rows removed; Now: flag true and this kind's row
-  removed; After N: flag true and this kind's row upserted) and, for the `/cleanservice` command, by
-  `deletion.ApplyCleanServiceFlag` (the flag on or off and BOTH rows removed, so a stale delay never comes back); both
+  transaction by `deletion.ApplyJoinLeftRule` (Keep: flag false, both rows removed and the pending queue rows of both kinds dropped; Now: flag true and this kind's
+  row removed; After N: flag true and this kind's row upserted) and, for the `/cleanservice` command, by
+  `deletion.ApplyCleanServiceFlag` (the flag on or off and BOTH rows removed, so a stale delay never comes back; off also
+  drops the pending queue rows of both kinds in the same transaction, on drops none); both
   drop the `greetings` and `delete_rules` keys after the commit, and `greetings.SetCleanServiceTx` guarantees the chat and
   greetings rows and writes the flag with a column-targeted update (the column's `default:false` tag would swallow a Go
   false on a plain Create). The table is never part of backup, export, import or reset
