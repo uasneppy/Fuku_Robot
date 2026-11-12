@@ -227,3 +227,245 @@ func TestSettingsLanguageGroupRedraw(t *testing.T) {
 		t.Errorf("chats rows went from %d to %d", chatRows, got)
 	}
 }
+
+// settingsLangUserLanguage is the language of the user's users row, and whether the user has one.
+func settingsLangUserLanguage(t *testing.T, userID int64) (string, bool) {
+	t.Helper()
+	var row models.User
+	err := db.DB.Where("user_id = ?", userID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", false
+	}
+	if err != nil {
+		t.Fatalf("read users row of %d: %v", userID, err)
+	}
+	return row.Language, true
+}
+
+// settingsLangCountWrites swaps the language write seam for one that counts its calls and then
+// writes for real, and returns the counter.
+func settingsLangCountWrites(t *testing.T) *int {
+	t.Helper()
+	writes := 0
+	write := languageWrites
+	mreqSwap(t, &languageWrites, func(chatID int64, code string) error {
+		writes++
+		return write(chatID, code)
+	})
+	return &writes
+}
+
+func TestSettingsLanguagePrivate(t *testing.T) {
+	env := newSettingsLanguageEnv(t)
+	owner := env.newOwner(env.chat)
+	settingsLangCleanup(t, nil, []int64{owner.Id})
+	// The group answers in French; the opener's own language is English.
+	if err := lang.ChangeGroupLanguage(env.chat.Id, "fr"); err != nil {
+		t.Fatalf("seed the group language: %v", err)
+	}
+	if err := lang.ChangeUserLanguage(owner.Id, "en"); err != nil {
+		t.Fatalf("seed the opener's language: %v", err)
+	}
+	en := i18n.MustNewTranslator("en")
+	es := i18n.MustNewTranslator("es")
+	mustText := func(tr *i18n.Translator, key string, params ...i18n.TranslationParams) string {
+		t.Helper()
+		text, err := tr.GetString(key, params...)
+		if err != nil || text == "" {
+			t.Fatalf("locale key %s: %q, %v", key, text, err)
+		}
+		return text
+	}
+
+	env.sendPrivate(owner, fmt.Sprintf("/start settings_%d", env.chat.Id))
+	sentMain := settingsPrivateOnlySent(t, env, owner)
+	button, ok := settingsPageButton(t, staffKeyboardOf(sentMain.Params["reply_markup"]), settingsPageLang)
+	if !ok {
+		t.Fatal("the private Main has no Language button")
+	}
+	env.pressRaw(settingsPrivateChat(owner), owner, sentMain.MessageID, button.CallbackData)
+	text, kb := env.lastEdit(owner.Id, sentMain.MessageID)
+	if want := mustText(en, "settings_lang_current", i18n.TranslationParams{"lang": keyboard.GetLangFormat("fr")}); !strings.Contains(text, want) {
+		t.Errorf("private page %q does not name the group's language (%q)", text, want)
+	}
+	if cell, _ := settingsLangCell(t, kb, "fr"); cell.Text != "✅ Français" {
+		t.Errorf("the group's stored language cell = %q", cell.Text)
+	}
+	esCell, ok := settingsLangCell(t, kb, "es")
+	if !ok {
+		t.Fatal("the private page has no Spanish cell")
+	}
+	if fields := settingsButtonFields(t, esCell); fields["c"] != fmt.Sprint(env.chat.Id) || fields["u"] != "" {
+		t.Errorf("private cell fields = %v, want the group in c and no u", fields)
+	}
+
+	env.pressRaw(settingsPrivateChat(owner), owner, sentMain.MessageID, esCell.CallbackData)
+	if stored, _ := settingsLangStored(t, env.chat.Id); stored != "es" {
+		t.Errorf("chats.language = %q, want es", stored)
+	}
+	if own, has := settingsLangUserLanguage(t, owner.Id); !has || own != "en" {
+		t.Errorf("the opener's users.language = %q (row %v), want en unchanged", own, has)
+	}
+	text, kb = env.lastEdit(owner.Id, sentMain.MessageID)
+	for _, want := range []string{
+		mustText(en, "settings_header", i18n.TranslationParams{"page": mustText(en, "settings_page_lang")}),
+		mustText(en, "settings_lang_current", i18n.TranslationParams{"lang": keyboard.GetLangFormat("es")}),
+		mustText(en, "settings_lang_hint"),
+		"✅ " + mustText(en, "language_changed_group", i18n.TranslationParams{"s": keyboard.GetLangFormat("es")}),
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("private redraw %q does not contain %q", text, want)
+		}
+	}
+	if strings.Contains(text, mustText(es, "settings_lang_hint")) {
+		t.Errorf("private redraw %q switched to the group's language", text)
+	}
+	if last := kb[len(kb)-1]; len(last) != 2 || last[0].Text != mustText(en, "settings_btn_back") {
+		t.Errorf("private navigation row = %+v, want the opener's English Back", last)
+	}
+	if cell, _ := settingsLangCell(t, kb, "es"); cell.Text != "✅ Español" {
+		t.Errorf("the new language's cell = %q", cell.Text)
+	}
+}
+
+func TestSettingsLanguageSameAndUnknown(t *testing.T) {
+	const menuMsgID = 7272
+
+	t.Run("a press of the stored language writes nothing and shows no notice", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		if err := lang.ChangeGroupLanguage(env.chat.Id, "es"); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		writes := settingsLangCountWrites(t)
+		_, _, kb := settingsLangOpenPage(t, env)
+		cell, _ := settingsLangCell(t, kb, "es")
+		env.pressRaw(env.chat, env.admin, menuMsgID, cell.CallbackData)
+		if *writes != 0 {
+			t.Errorf("the write seam ran %d times for the stored language, want 0", *writes)
+		}
+		text, _ := env.lastEdit(env.chat.Id, menuMsgID)
+		es := i18n.MustNewTranslator("es")
+		changed, _ := es.GetString("language_changed_group", i18n.TranslationParams{"s": "x"})
+		if prefix, _, _ := strings.Cut(changed, "x"); strings.Contains(text, prefix) || strings.Contains(text, "⚠️") {
+			t.Errorf("a press of the stored language drew a notice: %q", text)
+		}
+		if got, _ := es.GetString("settings_lang_hint"); !strings.Contains(text, got) {
+			t.Errorf("the page was not redrawn in the stored language: %q", text)
+		}
+	})
+
+	t.Run("a stored code outside the eight is drawn as stored and marks nothing", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		if err := db.DB.Create(&models.Chat{ChatId: env.chat.Id, Language: "xx"}).Error; err != nil {
+			t.Fatalf("seed a hand-written language: %v", err)
+		}
+		_, text, kb := settingsLangOpenPage(t, env)
+		if !strings.Contains(text, "<b>xx</b>") {
+			t.Errorf("page %q does not name the stored code as stored", text)
+		}
+		for _, button := range settingsAllButtons(kb) {
+			if strings.HasPrefix(button.Text, "✅") {
+				t.Errorf("button %q is marked although the stored code is not an enabled language", button.Text)
+			}
+		}
+		for _, code := range settingsLangDefaultCodes {
+			if _, ok := settingsLangCell(t, kb, code); !ok {
+				t.Errorf("the page does not offer %s", code)
+			}
+		}
+	})
+
+	t.Run("a stored code is escaped, never spliced raw", func(t *testing.T) {
+		withRealLocales(t)
+		view := settingsView{Tr: i18n.MustNewTranslator("en"), OwnerKey: "u", OwnerValue: "1", GroupID: -1001, GroupTitle: "Group"}
+		screen := renderSettingsLanguage(view, "<i>x", "")
+		if strings.Contains(screen.Text, "<i>x") || !strings.Contains(screen.Text, "&lt;i&gt;x") {
+			t.Errorf("a stored code was not escaped: %q", screen.Text)
+		}
+	})
+
+	t.Run("a two-letter code outside the eight is refused with the callback's text and writes nothing", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		if err := lang.ChangeGroupLanguage(env.chat.Id, "en"); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		writes := settingsLangCountWrites(t)
+		settingsLangOpenPage(t, env)
+		data := encodeCallbackData(settingsCallbackNamespace, env.groupFields(env.admin, "a", "st", "p", settingsPageLang, "t", settingsLangControlKey, "v", "xx"))
+		env.pressRaw(env.chat, env.admin, menuMsgID, data)
+		text, _ := env.lastEdit(env.chat.Id, menuMsgID)
+		en := i18n.MustNewTranslator("en")
+		refusal, _ := en.GetString("language_invalid_selection")
+		if !strings.Contains(text, "⚠️ "+refusal) {
+			t.Errorf("v=xx drew %q, want the warn notice %q", text, refusal)
+		}
+		if *writes != 0 {
+			t.Errorf("the write seam ran %d times for v=xx, want 0", *writes)
+		}
+		if stored, _ := settingsLangStored(t, env.chat.Id); stored != "en" {
+			t.Errorf("stored language = %q, want en", stored)
+		}
+	})
+
+	t.Run("a narrowed ENABLED_LOCALES offers only those languages", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		settingsLangWithCodes(t, []string{"uk", "en", "es"})
+		_, _, kb := settingsLangOpenPage(t, env)
+		if got, want := settingsLangRowWidths(kb), []int{2, 1, 2}; fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("rows = %v, want %v (two grid rows and the navigation row)", got, want)
+		}
+		if _, ok := settingsLangCell(t, kb, "fr"); ok {
+			t.Error("the page offers a language that is not enabled")
+		}
+	})
+}
+
+func TestSettingsLanguageForged(t *testing.T) {
+	const menuMsgID = 7373
+
+	forged := []struct {
+		name   string
+		fields []string
+		extra  map[string]string
+		both   bool
+	}{
+		{name: "tg on the language", fields: []string{"a", "tg", "p", "u", "t", "l", "v", "es"}},
+		{name: "upper-case code", fields: []string{"a", "st", "p", "u", "t", "l", "v", "UK"}},
+		{name: "mixed-case code", fields: []string{"a", "st", "p", "u", "t", "l", "v", "Es"}},
+		{name: "three letters", fields: []string{"a", "st", "p", "u", "t", "l", "v", "ukr"}},
+		{name: "one letter", fields: []string{"a", "st", "p", "u", "t", "l", "v", "e"}},
+		{name: "the toggle shape", fields: []string{"a", "st", "p", "u", "t", "l", "v", "1"}},
+		{name: "empty code", fields: []string{"a", "st", "p", "u", "t", "l", "v", ""}},
+		{name: "a code with a digit", fields: []string{"a", "st", "p", "u", "t", "l", "v", "e1"}},
+		{name: "an extra key", fields: []string{"a", "st", "p", "u", "t", "l", "v", "es"}, extra: map[string]string{"x": "1"}},
+		{name: "an unknown control", fields: []string{"a", "st", "p", "u", "t", "x", "v", "es"}},
+		{name: "c and u together", fields: []string{"a", "st", "p", "u", "t", "l", "v", "es"}, both: true},
+	}
+	for _, tc := range forged {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsEnv(t)
+			settingsLangCleanup(t, []int64{env.chat.Id}, nil)
+			writes := settingsLangCountWrites(t)
+			fields := env.groupFields(env.admin, tc.fields...)
+			for k, v := range tc.extra {
+				fields[k] = v
+			}
+			if tc.both {
+				fields["c"] = "-1001" // short, so the pair still fits the 64-byte cap
+			}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("forged press %v did not encode", fields)
+			}
+			before := settingsMenuMarkOf(env)
+			env.pressRaw(env.chat, env.admin, menuMsgID, data)
+			settingsMenuWantRefused(t, env, before, "common_callback_invalid_request", true)
+			if *writes != 0 {
+				t.Errorf("a forged press reached the write seam %d times", *writes)
+			}
+			if rows := settingsLangChatRows(t, env.chat.Id); rows != 0 {
+				t.Errorf("a forged press created %d chats rows", rows)
+			}
+		})
+	}
+}
