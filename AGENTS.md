@@ -545,7 +545,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -1026,6 +1026,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   tests `TestSettingsLogChannelCallbackBytes` (45 bytes private, 41 group, `{2,2,2,2}` for every one of the 65 states) and
   `TestSettingsLogChannelPageFitsEveryLocale` (3800 UTF-16 units and 20-code-point cells in 8 languages)
   (`settings_logchannel_screens_test.go`).
+- The Anonymous admins page (`settings_anonadmin.go`, page `y`, `Order` 89, icon 🎭, `settings_page_anon`, between Log channel and
+  Access, Phase 18, plan 18-10) registers from its own file through `registerSettingsPage`, with no `Hidden` and not `OwnerOnly`,
+  so every administrator the owner gate admits can open it, a Staff Group's own menu included. It shows `/anonadmin`'s own
+  sentence for the mode (`admin_anon_admin_enabled` or `_disabled`, whose two paragraphs are one translated string with a `%s`
+  for the group title: `renderSettingsAnonAdmin` splices `staffDisplayTitle` (escaped, capped at 64 runes) into it with
+  `fmt.Sprintf` after translation, not the command's raw `HtmlEscape`), a blank line and the hint `settings_anon_hint` (only the
+  owner can change it and the bot must be an administrator), then the full-width toggle `settings_btn_anon_toggle` and Back and
+  Close, so the rows are `{1,2}`. Its one control `m` is `tg` only (`Actions`) with `Validate` exactly `0` or `1`
+  (`settingsEditSwitchValue`) and declares `settingsRightOwnerBotAdmin`, the only control that does: `/anonadmin` changes the
+  mode only for the live creator (`RequireUserOwner`) and only behind `RequireBotAdmin` (its descriptor runs it on every
+  invocation), so the press needs the creator from its own member record and the bot an administrator by the commands' own
+  predicate, the bot part judged first. A non-owner administrator is answered the alert `chat_status_owner_button_error` and the
+  bot not being an administrator the notice `chat_status_bot_not_admin`, each with nothing written and the callback answered
+  once. The press goes through `settingsToggleSet` and writes only through `applyAnonAdmin`; a press of the stored value writes
+  nothing and redraws with no notice (the command would say "already"), and a failed save redraws the stored state with
+  `admin_anon_admin_db_error`. There is no confirmation card for turning the mode on (UI-SPEC A18-A12: the sentence says what the
+  mode lets anonymous admins do, and Off is one tap). The page reads through `admin.LoadAnonAdminContext` (the `settingsAnonRead`
+  seam), which never creates the `admin` row that `/anonadmin`'s own read creates, so opening Main or the page leaves no row, and
+  a failed read is the cannot-open edit and the unknown mark on Main. Main's state is `common_status_on` or `common_status_off`.
+  Stated and accepted looseness: opening the page needs only the live admin check every press makes, so it opens, and shows the
+  mode, while the bot is not an administrator, whereas `/anonadmin`'s status view is refused then (`RequireBotAdmin` runs on
+  every invocation). Viewing writes nothing and the text is what any administrator sees in the group, so this is not a
+  behaviour change; the change is refused exactly as the command refuses it. `TestSettingsAnonAdminOpens`,
+  `TestSettingsParityAnonAdmin` (the press and `/anonadmin on|off` by the live creator leave the same row and the same behaviour
+  of the anonymous-admin check) and the tests that follow hold it (`settings_anonadmin_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1065,7 +1090,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t|u / o`, then Access for the owner, so nine rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page, `u` the Language page and `o` the Log channel page, which stands alone as the odd last cell; later Phase 18 plans add the rest of the grid) with
+  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t|u / o|y`, then Access for the owner, so nine rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page, `u` the Language page, `o` the Log channel page and `y` the Anonymous admins page; later Phase 18 plans add the rest of the grid) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
