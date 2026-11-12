@@ -1107,6 +1107,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
   `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
+  Two composite rights (Phase 18, the only framework edit of that phase, appended after `settingsRightChangeInfo` so the zero value
+  stays `settingsRightAdmin`) judge the bot part first, as the commands they mirror do, then the member part:
+  `settingsRightChangeInfoBotAdmin` (`/autoapprove`: `IsUserConnected` with its bot check runs before `CanUserChangeInfo`) refuses a bot
+  that `chat_status.IsUserAdmin` does not find an administrator with the notice `connections_is_user_connected_bot_not_admin`, then
+  answers what `settingsRightChangeInfo` answers (the alert `settings_no_change_info`); `settingsRightOwnerBotAdmin` (`/anonadmin`:
+  `RequireBotAdmin` runs before `RequireUserOwner`) refuses a bot that `chat_status.IsBotAdmin` does not find an administrator with the
+  notice `chat_status_bot_not_admin`, then anyone but the live creator of the press's own member record with the alert
+  `chat_status_owner_button_error`, the key the command's permission responder picks for a button (a press is a callback; the
+  Access page's `settingsRightOwner` keeps `settings_access_owner_only`). The bot parts use the commands' own cached predicates, never a
+  live bot lookup (`settingsRightBotFirstRefusal`), and the six older rights keep their order exactly. No editor part declares the
+  new rights, so the typed-reply door is unchanged (`settingsRightRefusalFor` answers their member parts for it all the same;
+  `TestSettingsRights` "mirrors /autoapprove" and "mirrors /anonadmin", `TestSettingsRightRefusalForParity`).
 
 ## Data
 

@@ -300,6 +300,17 @@ func settingsMenuCaptchaButton(t *testing.T, keyboard [][]gotgbot.InlineKeyboard
 	return button.CallbackData
 }
 
+// settingsRightsCompositeCase is one row of the two composite-right mirror tests.
+type settingsRightsCompositeCase struct {
+	name    string
+	botRole string
+	// withRight is whether the presser holds the right the command asks of the member:
+	// can_change_info for /autoapprove, being the creator for /anonadmin.
+	withRight bool
+	wantKey   string
+	wantAlert bool
+}
+
 func TestSettingsRights(t *testing.T) {
 	env := newSettingsEnv(t)
 	pressFor := func(chat gotgbot.Chat, member gotgbot.MergedChatMember) *settingsPress {
@@ -431,6 +442,101 @@ func TestSettingsRights(t *testing.T) {
 		var rows []models.ChatRaidDetection
 		if err := db.DB.Where("chat_id = ?", chat.Id).Find(&rows).Error; err != nil || len(rows) != 0 {
 			t.Errorf("the refused command wrote %d raid detection rows (err %v), want none", len(rows), err)
+		}
+	})
+
+	t.Run("settingsRightChangeInfoBotAdmin mirrors /autoapprove", func(t *testing.T) {
+		aenv := newSettingsEditEnv(t)
+		for _, tc := range []settingsRightsCompositeCase{
+			{"bot administrator, administrator with can_change_info", staffRoleAdmin, true, "", false},
+			{"bot administrator, administrator without it", staffRoleAdmin, false, "settings_no_change_info", true},
+			{"bot a member, administrator with can_change_info", staffRoleMember, true, "connections_is_user_connected_bot_not_admin", false},
+			{"bot a member, administrator without it (the bot part first)", staffRoleMember, false, "connections_is_user_connected_bot_not_admin", false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				chat := aenv.addChat()
+				editCleanup(t, chat.Id)
+				aenv.fake.setBotRole(chat.Id, tc.botRole)
+				presser := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+				listEditAdmin(aenv, chat, presser, tc.withRight)
+				member, err := lockdownLiveMember(aenv.bot, chat.Id, presser.Id)
+				if err != nil {
+					t.Fatalf("live member: %v", err)
+				}
+				key, alert := settingsRightRefusal(&settingsPress{b: aenv.bot, group: &chat, member: member}, settingsRightChangeInfoBotAdmin)
+				if key != tc.wantKey || alert != tc.wantAlert {
+					t.Errorf("menu refusal = (%q, alert %v), want (%q, alert %v)", key, alert, tc.wantKey, tc.wantAlert)
+				}
+
+				aenv.sendIn(chat, presser, "/autoapprove on")
+				row, ok := settingsEditStored(t, chat.Id)
+				wrote := ok && row.ShouldAutoApprove
+				if wrote != (tc.wantKey == "") {
+					t.Errorf("/autoapprove on wrote = %v, the menu refused with %q: they disagree", wrote, key)
+				}
+				botRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("connections_is_user_connected_bot_not_admin"))
+				infoRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_change_info_cmd_error"))
+				switch tc.wantKey {
+				case "connections_is_user_connected_bot_not_admin":
+					if !botRefused || infoRefused {
+						t.Errorf("/autoapprove on refused for the bot = %v and for can_change_info = %v, want the bot refusal alone", botRefused, infoRefused)
+					}
+				case "settings_no_change_info":
+					if botRefused || !infoRefused {
+						t.Errorf("/autoapprove on refused for the bot = %v and for can_change_info = %v, want the can_change_info refusal alone", botRefused, infoRefused)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("settingsRightOwnerBotAdmin mirrors /anonadmin", func(t *testing.T) {
+		aenv := newSettingsEnv(t)
+		LoadAdmin(aenv.dispatcher)
+		for _, tc := range []settingsRightsCompositeCase{
+			{"bot administrator, the creator", staffRoleAdmin, true, "", false},
+			{"bot administrator, an administrator who is not the creator", staffRoleAdmin, false, "chat_status_owner_button_error", true},
+			{"bot a member, the creator", staffRoleMember, true, "chat_status_bot_not_admin", false},
+			{"bot a member, a non-owner (the bot part first)", staffRoleMember, false, "chat_status_bot_not_admin", false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				chat := aenv.addChat()
+				aenv.fake.setBotRole(chat.Id, tc.botRole)
+				presser := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+				status := gotgbot.ChatMemberStatusAdministrator
+				if tc.withRight {
+					status = gotgbot.ChatMemberStatusCreator
+				}
+				aenv.fake.setMember(chat.Id, presser.Id, staffFakeMember{Status: status})
+				t.Cleanup(func() { db.DB.Where("chat_id = ?", chat.Id).Delete(&models.AdminSettings{}) })
+				member, err := lockdownLiveMember(aenv.bot, chat.Id, presser.Id)
+				if err != nil {
+					t.Fatalf("live member: %v", err)
+				}
+				key, alert := settingsRightRefusal(&settingsPress{b: aenv.bot, group: &chat, member: member}, settingsRightOwnerBotAdmin)
+				if key != tc.wantKey || alert != tc.wantAlert {
+					t.Errorf("menu refusal = (%q, alert %v), want (%q, alert %v)", key, alert, tc.wantKey, tc.wantAlert)
+				}
+
+				aenv.sendIn(chat, presser, "/anonadmin on")
+				var row models.AdminSettings
+				wrote := db.DB.Where("chat_id = ?", chat.Id).First(&row).Error == nil && row.AnonAdmin
+				if wrote != (tc.wantKey == "") {
+					t.Errorf("/anonadmin on wrote = %v, the menu refused with %q: they disagree", wrote, key)
+				}
+				botRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_bot_not_admin"))
+				ownerRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_owner_cmd_error"))
+				switch tc.wantKey {
+				case "chat_status_bot_not_admin":
+					if !botRefused || ownerRefused {
+						t.Errorf("/anonadmin on refused for the bot = %v and for the owner = %v, want the bot refusal alone", botRefused, ownerRefused)
+					}
+				case "chat_status_owner_button_error":
+					if botRefused || !ownerRefused {
+						t.Errorf("/anonadmin on refused for the bot = %v and for the owner = %v, want the owner refusal alone", botRefused, ownerRefused)
+					}
+				}
+			})
 		}
 	})
 }

@@ -71,6 +71,17 @@ const (
 	// check through CanUserChangeInfo. It is appended after settingsRightOwner so the zero
 	// value stays settingsRightAdmin.
 	settingsRightChangeInfo
+	// settingsRightChangeInfoBotAdmin needs the bot to be an administrator by the check /autoapprove makes
+	// (IsUserConnected with botAdmin: chat_status.IsUserAdmin on the bot), judged first, and then the creator or an
+	// administrator with can_change_info, as settingsRightChangeInfo. Both halves are needed because the command
+	// refuses on either, in that order. It is appended after settingsRightChangeInfo so the zero value stays
+	// settingsRightAdmin.
+	settingsRightChangeInfoBotAdmin
+	// settingsRightOwnerBotAdmin needs the bot to be an administrator by the check /anonadmin's pipeline makes
+	// (RequireBotAdmin: chat_status.IsBotAdmin), judged first, and then the live creator of the group. A press is a
+	// callback, so the non-owner refusal is the alert chat_status_owner_button_error, the key the command's own
+	// permission responder picks for a button.
+	settingsRightOwnerBotAdmin
 )
 
 // settingsRightRefusalFor judges the member-record part of a right: the one pure decision a
@@ -96,7 +107,12 @@ func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRigh
 			return "", false
 		}
 		return "settings_access_owner_only", true
-	case settingsRightChangeInfo:
+	case settingsRightOwnerBotAdmin:
+		if member.Status == gotgbot.ChatMemberStatusCreator {
+			return "", false
+		}
+		return "chat_status_owner_button_error", true
+	case settingsRightChangeInfo, settingsRightChangeInfoBotAdmin:
 		switch member.Status {
 		case gotgbot.ChatMemberStatusCreator:
 			return "", false
@@ -118,6 +134,9 @@ func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRigh
 // cached predicates, never a live bot lookup, so the menu refuses exactly what the command
 // refuses.
 func settingsRightRefusal(p *settingsPress, right settingsRight) (key string, alert bool) {
+	if key := settingsRightBotFirstRefusal(p, right); key != "" {
+		return key, false
+	}
 	if key, alert := settingsRightRefusalFor(p.member, right); key != "" {
 		return key, alert
 	}
@@ -132,6 +151,24 @@ func settingsRightRefusal(p *settingsPress, right settingsRight) (key string, al
 		}
 	}
 	return "", false
+}
+
+// settingsRightBotFirstRefusal is the bot part of the two composite rights, judged before their member part
+// because the commands they mirror check the bot first (/autoapprove's IsUserConnected and /anonadmin's
+// RequireBotAdmin run before the user right). It returns the locale key of a notice, or "" when the right has no
+// bot-first part or the bot passes. The six older rights keep their own order in settingsRightRefusal.
+func settingsRightBotFirstRefusal(p *settingsPress, right settingsRight) string {
+	switch right {
+	case settingsRightChangeInfoBotAdmin:
+		if !chat_status.IsUserAdmin(p.b, p.group.Id, p.b.Id) {
+			return "connections_is_user_connected_bot_not_admin"
+		}
+	case settingsRightOwnerBotAdmin:
+		if !chat_status.IsBotAdmin(p.b, nil, p.group) {
+			return "chat_status_bot_not_admin"
+		}
+	}
+	return ""
 }
 
 // settingsPress is one verified press of a settings button.

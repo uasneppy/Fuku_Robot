@@ -142,6 +142,8 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 		notAdmin   = "settings_not_admin"
 		noRestrict = "settings_no_restrict"
 		ownerOnly  = "settings_access_owner_only"
+		noInfo     = "settings_no_change_info"
+		ownerBtn   = "chat_status_owner_button_error"
 	)
 	type verdict struct {
 		key   string
@@ -151,6 +153,7 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 	adminRestrict := settingsHooksMember(gotgbot.ChatMemberStatusAdministrator, true, false)
 	adminPlain := settingsHooksMember(gotgbot.ChatMemberStatusAdministrator, false, false)
 	plainMember := settingsHooksMember(gotgbot.ChatMemberStatusMember, false, false)
+	adminInfo := settingsHooksMember(gotgbot.ChatMemberStatusAdministrator, false, true)
 	restricted := settingsHooksMember(gotgbot.ChatMemberStatusRestricted, true, true)
 	left := settingsHooksMember(gotgbot.ChatMemberStatusLeft, true, true)
 	kicked := settingsHooksMember(gotgbot.ChatMemberStatusKicked, true, true)
@@ -173,6 +176,20 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 		{"owner: creator", settingsRightOwner, creator, verdict{}},
 		{"owner: administrator", settingsRightOwner, adminRestrict, verdict{ownerOnly, true}},
 		{"owner: member", settingsRightOwner, plainMember, verdict{ownerOnly, true}},
+		{"change info and bot: creator", settingsRightChangeInfoBotAdmin, creator, verdict{}},
+		{"change info and bot: administrator with the right", settingsRightChangeInfoBotAdmin, adminInfo, verdict{}},
+		{"change info and bot: administrator without it", settingsRightChangeInfoBotAdmin, adminPlain, verdict{noInfo, true}},
+		{"change info and bot: member", settingsRightChangeInfoBotAdmin, plainMember, verdict{notAdmin, true}},
+		{"change info and bot: restricted", settingsRightChangeInfoBotAdmin, restricted, verdict{notAdmin, true}},
+		{"change info and bot: left", settingsRightChangeInfoBotAdmin, left, verdict{notAdmin, true}},
+		{"change info and bot: kicked", settingsRightChangeInfoBotAdmin, kicked, verdict{notAdmin, true}},
+		{"owner and bot: creator", settingsRightOwnerBotAdmin, creator, verdict{}},
+		{"owner and bot: administrator with every right", settingsRightOwnerBotAdmin, adminInfo, verdict{ownerBtn, true}},
+		{"owner and bot: administrator", settingsRightOwnerBotAdmin, adminRestrict, verdict{ownerBtn, true}},
+		{"owner and bot: member", settingsRightOwnerBotAdmin, plainMember, verdict{ownerBtn, true}},
+		{"owner and bot: restricted", settingsRightOwnerBotAdmin, restricted, verdict{ownerBtn, true}},
+		{"owner and bot: left", settingsRightOwnerBotAdmin, left, verdict{ownerBtn, true}},
+		{"owner and bot: kicked", settingsRightOwnerBotAdmin, kicked, verdict{ownerBtn, true}},
 		{"bot admin right has no member part", settingsRightAdminBotAdmin, plainMember, verdict{}},
 		{"flood bot right has no member part", settingsRightAdminFloodBot, plainMember, verdict{}},
 		{"an unknown right fails closed", settingsRight(99), creator, verdict{notAdmin, true}},
@@ -186,8 +203,10 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 				t.Errorf("settingsRightRefusalFor = (%q, %v), want (%q, %v)", key, alert, tc.want.key, tc.want.alert)
 			}
 			// The press judges the member part through the same function. The bot rights and
-			// the unknown one are left out: the former need a bot lookup of their own.
-			if tc.right == settingsRightAdminBotAdmin || tc.right == settingsRightAdminFloodBot || tc.right == settingsRight(99) {
+			// the unknown one are left out: the former need a bot lookup of their own, and so
+			// do the two composite rights, whose bot part is judged first (TestSettingsRights).
+			switch tc.right {
+			case settingsRightAdminBotAdmin, settingsRightAdminFloodBot, settingsRightChangeInfoBotAdmin, settingsRightOwnerBotAdmin, settingsRight(99):
 				return
 			}
 			press := &settingsPress{b: env.bot, group: &env.chat, member: tc.member}
