@@ -3027,6 +3027,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   row, returns its error and reads a chat with no row as on (the model default); the command's own status text still
   reads `GetChatReportSettings`, which creates the row as before (`TestLegacyReportsRequests` and
   `TestLegacyReportsPrivateRequests` hold every byte).
+  The auto-approve switch (Phase 18) is `applyAutoApprove` in `greetings.go`, written through the `greetingWrites.AutoApprove`
+  seam (default `greetings.SetShouldAutoApprove`) and `finishGreetingApply`, exactly as `applyCleanWelcome` is built; the
+  command's toggle (`autoApproveToggleConfig.setPref`) calls it. The first write on a chat with no greetings row creates the
+  whole greetings row with its defaults (`upsertGreetingSettings`: welcome on, goodbye on), as `/autoapprove on` always did,
+  and `TestLegacyAutoApproveRequests` pins that whole row. The page reads through `greetings.LoadSettingsContext`.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading

@@ -180,6 +180,7 @@ var greetingWrites = struct {
 	WelcomeMediaBelow  func(chatID int64, on bool) error
 	GoodbyeMediaBelow  func(chatID int64, on bool) error
 	WelcomeOnce        func(chatID int64, on bool) error
+	AutoApprove        func(chatID int64, on bool) error
 }{
 	WelcomeToggle:      greetings.SetWelcomeToggle,
 	GoodbyeToggle:      greetings.SetGoodbyeToggle,
@@ -196,6 +197,7 @@ var greetingWrites = struct {
 	WelcomeMediaBelow:  greetings.SetWelcomeMediaBelow,
 	GoodbyeMediaBelow:  greetings.SetGoodbyeMediaBelow,
 	WelcomeOnce:        greetings.SetWelcomeOnce,
+	AutoApprove:        greetings.SetShouldAutoApprove,
 }
 
 // greetingApplyTimeout bounds the read-back an apply function makes after its write.
@@ -345,6 +347,14 @@ func applyCleanWelcome(ctx context.Context, chatID int64, on bool) greetingApply
 // applyCleanGoodbye stores the "delete the last goodbye" switch.
 func applyCleanGoodbye(ctx context.Context, chatID int64, on bool) greetingApplyResult {
 	return finishGreetingApply(ctx, chatID, "SetCleanGoodbyeSetting", greetingWrites.CleanGoodbye(chatID, on))
+}
+
+// applyAutoApprove stores the auto-approve switch of join requests. The value is absolute, so a
+// repeated call stores the same row. It is the one write path of /autoapprove on|off and the menu.
+// On a chat with no greetings row the first write creates the whole row with its defaults
+// (greetings.SetShouldAutoApprove goes through upsertGreetingSettings), as /autoapprove on always did.
+func applyAutoApprove(ctx context.Context, chatID int64, on bool) greetingApplyResult {
+	return finishGreetingApply(ctx, chatID, "SetShouldAutoApprove", greetingWrites.AutoApprove(chatID, on))
 }
 
 // applyCleanService stores the shared /cleanservice flag, the on/off switch of the joined and
@@ -810,7 +820,11 @@ var autoApproveToggleConfig = greetingToggleConfig{
 	getPref: func(chatID int64) bool {
 		return greetings.GetGreetingSettings(chatID).ShouldAutoApprove
 	},
-	setPref:              greetings.SetShouldAutoApprove,
+	setPref: func(chatID int64, val bool) error {
+		ctx, cancel := greetingApplyContext()
+		defer cancel()
+		return applyAutoApprove(ctx, chatID, val).Err
+	},
 	saveErrLog:           "SetShouldAutoApprove",
 	connectBotAdmin:      true,
 	showEnabled:          "greetings_auto_approve_enabled",

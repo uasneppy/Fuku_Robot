@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/reports"
 )
@@ -68,6 +69,53 @@ func TestApplyReportsEnabled(t *testing.T) {
 		res := applyReportsEnabled(context.Background(), chatID, false)
 		if res.Outcome != reportsSaveFailed || !errors.Is(res.Err, boom) || res.Key != "common_settings_save_failed" {
 			t.Fatalf("applyReportsEnabled() = %+v, want a save failure carrying the write error", res)
+		}
+	})
+}
+
+func TestApplyAutoApprove(t *testing.T) {
+	t.Run("on and off write and read back", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		legacyCleanup(t, chatID)
+		for _, on := range []bool{true, false, true} {
+			res := applyAutoApprove(context.Background(), chatID, on)
+			if res.Outcome != greetingApplied || res.Err != nil || res.Settings == nil || res.Settings.ShouldAutoApprove != on {
+				t.Fatalf("applyAutoApprove(%v) = %+v, want applied with the value read back", on, res)
+			}
+			stored, err := greetings.LoadSettingsContext(context.Background(), chatID)
+			if err != nil || stored.ShouldAutoApprove != on {
+				t.Fatalf("stored auto_approve = %v, %v; want %v", stored, err, on)
+			}
+		}
+	})
+
+	t.Run("the write drops the cached greetings so the next cached read sees it", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		legacyCleanup(t, chatID)
+		if res := applyAutoApprove(context.Background(), chatID, false); res.Outcome != greetingApplied {
+			t.Fatalf("seed outcome = %v", res.Outcome)
+		}
+		if greetings.GetGreetingSettings(chatID).ShouldAutoApprove {
+			t.Fatal("cached read before the write is already on")
+		}
+		if res := applyAutoApprove(context.Background(), chatID, true); res.Outcome != greetingApplied {
+			t.Fatalf("outcome = %v", res.Outcome)
+		}
+		if !greetings.GetGreetingSettings(chatID).ShouldAutoApprove {
+			t.Fatal("the cached read still shows the old value after the write")
+		}
+	})
+
+	t.Run("a failing write is a save failure with the error", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		legacyCleanup(t, chatID)
+		boom := errors.New("database is down")
+		saved := greetingWrites
+		t.Cleanup(func() { greetingWrites = saved })
+		greetingWrites.AutoApprove = func(int64, bool) error { return boom }
+		res := applyAutoApprove(context.Background(), chatID, true)
+		if res.Outcome != greetingSaveFailed || !errors.Is(res.Err, boom) || res.Settings != nil {
+			t.Fatalf("applyAutoApprove() = %+v, want a save failure carrying the write error", res)
 		}
 	})
 }
