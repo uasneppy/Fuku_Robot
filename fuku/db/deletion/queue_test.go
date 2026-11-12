@@ -99,14 +99,28 @@ func TestScheduleRules(t *testing.T) {
 			{"delay over a day", Entry{ChatID: chatID, MessageID: 2, Kind: KindPinned, SentAt: sent, DelaySecs: MaxDelaySecs + 1}, ErrDelayOutOfRange},
 			{"unknown kind", Entry{ChatID: chatID, MessageID: 3, Kind: "service:nope", SentAt: sent, DelaySecs: 5}, ErrUnknownKind},
 			{"zero chat", Entry{ChatID: 0, MessageID: 4, Kind: KindPinned, SentAt: sent, DelaySecs: 5}, ErrInvalidEntry},
+			// IN-05: group and supergroup IDs are negative, so a user's private chat is never queued.
+			{"private chat", Entry{ChatID: 123456789, MessageID: 5, Kind: KindBotWelcome, SentAt: sent, DelaySecs: 5}, ErrInvalidEntry},
 			{"zero message", Entry{ChatID: chatID, MessageID: 0, Kind: KindPinned, SentAt: sent, DelaySecs: 5}, ErrInvalidEntry},
 			{"no sent time", Entry{ChatID: chatID, MessageID: 6, Kind: KindPinned, DelaySecs: 5}, ErrInvalidEntry},
 		}
+		t.Cleanup(func() { db.DB.Where("chat_id = ?", int64(123456789)).Delete(&models.ScheduledDeletion{}) })
+		reads := 0
+		previous := staffGroupLookup
+		staffGroupLookup = func(chatID int64) (*models.StaffGroup, error) { reads++; return previous(chatID) }
+		t.Cleanup(func() { staffGroupLookup = previous })
 		for _, tc := range cases {
 			wrote, err := Schedule(ctx, tc.e)
 			if wrote || !errors.Is(err, tc.want) {
 				t.Errorf("%s: Schedule = (%v, %v), want (false, %v)", tc.name, wrote, err, tc.want)
 			}
+		}
+		if reads != 0 {
+			t.Errorf("a refused entry made %d Staff Group reads, want 0 (validation comes before any read)", reads)
+		}
+		var private []models.ScheduledDeletion
+		if err := db.DB.Where("chat_id = ?", int64(123456789)).Find(&private).Error; err != nil || len(private) != 0 {
+			t.Errorf("rows for the private chat = %d (%v), want 0", len(private), err)
 		}
 		if n := len(storedQueue(t, chatID)); n != 0 {
 			t.Fatalf("%d rows exist after refused schedules, want 0", n)
