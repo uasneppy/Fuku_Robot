@@ -365,7 +365,7 @@ func aispamNotifyBreaker(b *gotgbot.Bot, chatID int64, language string) {
 		return
 	}
 	// The pause notice is aispam's only group message and counts as an automatic punishment
-	// message (D-27); the owner-log dump post in aispamMirrorDeletion is never scheduled.
+	// message (D-27); the owner-log dump post of a delete verdict is never scheduled.
 	scheduleBotMessage(sent, deletion.KindBotAuto)
 }
 
