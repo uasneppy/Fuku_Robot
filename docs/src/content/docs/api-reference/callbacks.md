@@ -373,6 +373,24 @@ by a check mark in place of its flag. The press writes through the function the 
 touches the user's own language. In a menu opened in the group the page is redrawn in the new language; a menu opened in
 private stays in the opener's language. The largest button of the page is 46 bytes in a private menu and 42 in a group menu.
 
+The Log channel page (`o`, between the Language and Access pages of Main) has one toggle per log category, each `tg` only (an
+`st` is an invalid request, refused before any lookup) with `v` exactly `0` or `1`, the absolute target:
+
+| Category | Code (`t`) | `v` | Notes |
+|----------|------------|-----|-------|
+| Settings | `s` | `0` or `1` | the `#SETTINGS` audit post itself; turning it off posts nothing |
+| Admin actions | `a` | `0` or `1` | |
+| User actions | `u` | `0` or `1` | |
+| Automated | `m` | `0` or `1` | |
+| Reports | `r` | `0` or `1` | |
+| Other | `o` | `0` or `1` | |
+
+A press writes exactly that category through the function `/log` and `/nolog` call and then posts the same `#SETTINGS` line to
+the log channel; with no channel linked it is refused with the notice `No log channel is set for this chat.` and writes
+nothing. The page shows whether a channel is linked, never which one. The buttons are a two-column grid of "icon name" cells
+(`✅` on, `❌` off), each sending the opposite value. The largest button of the page is 45 bytes in a private menu and 41 in a
+group menu.
+
 ### Warns
 
 #### `rmAllChatWarns`

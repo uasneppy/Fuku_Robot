@@ -150,3 +150,36 @@ letters `ID` on others; the cell length limit counts code points, not glyphs.
 marked.
 
 **Record:** the cell fits on one line on each client: yes / no. The marked cell (`✅ Bahasa Indonesia`) fits: yes / no.
+
+### 11. Which posts stop when each log category is off
+
+**Why:** the page flips one category at a time exactly as `/nolog` does, and only a real log channel shows that the bot's own
+posts (admin actions, user actions, automated, reports, other) stop for the category turned off.
+
+**Steps:** link a real log channel with `/setlog`, open `/settings`, Log channel, and turn off one category at a time. After
+each, cause an event of that category (a `/ban`, a member joining, a blacklist hit, a `/report`, a lockdown) and look at the
+channel; turn the category back on and repeat.
+
+**Record:** for each of the six categories, nothing is posted while it is off and the post returns when it is on: yes / no. Accepted (T-18-32): with the Admin actions category off the Staff Group and lockdown copies of the log channel are silent too, exactly as after `/nolog admin`; the page's hint says what it controls.
+
+### 12. The `#SETTINGS` line from the page
+
+**Why:** a change made on the page posts the same audit line as `/log` and `/nolog`, with the presser as the admin; only a real
+channel shows the line as an administrator reads it.
+
+**Steps:** with the Settings category on, turn the Admin actions category off on the page, then on. Compare with the lines
+`/nolog admin` and `/log admin` post.
+
+**Record:** the two lines from the page match the commands' (same words, the presser named): yes / no. Turning the Settings
+category off posts no line: yes / no.
+
+### 13. No channel title or ID in a group menu
+
+**Why:** a group menu is read by every member while the log channel is private to the administrators, so the page must never
+show which channel the log goes to.
+
+**Steps:** with a log channel linked, open the Log channel page in the group as an administrator and as the owner, in a group menu
+and in a private menu, and press a category. Read every line, button and toast. Then unlink with `/unsetlog` and press a cell.
+
+**Record:** no line, button or toast names the channel or its ID: yes / no. The page says Linked or Not linked and a press without
+a channel is refused with the plain notice: yes / no.
