@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 17
 current_phase_name: Command, Edit and Self-Destruct Deletion
 status: executing
-stopped_at: Completed 17-11-PLAN.md
-last_updated: "2026-11-12T11:53:12.039Z"
+stopped_at: Completed 17-12-PLAN.md
+last_updated: "2026-11-12T12:55:32.444Z"
 last_activity: 2026-11-12
-last_activity_desc: Completed 17-11-PLAN.md
-state_head: ce7aaf5bef11668bd8ebfb9f3cff40c527641b71
+last_activity_desc: Completed 17-12-PLAN.md
+state_head: 2ab174091e17eb03bc61a0c6d324fe752d84d55b
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 99
-  completed_plans: 97
+  completed_plans: 98
   percent: 0
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 17 — Command, Edit and Self-Destruct Deletion (executing, plans 17-01 to 17-11 done; Phase 16 is closed to `human_needed`, live checks deferred)
+**Current focus:** Phase 17 — Command, Edit and Self-Destruct Deletion (all 12 plans done, ready for review, security, validation and verification; Phase 16 is closed to `human_needed`, live checks deferred)
 
 ## Current Position
 
-Phase: 17 (Command, Edit and Self-Destruct Deletion) — executing, plan 11 of 12 done (17-01 member kinds and batch queue, 17-02 the command registry shim, 17-03 the command deletion tracer slice, 17-04 command deletion edges and the delete-right latch for member kinds, 17-05 the edited-message rule: the MemberDeletion module at group -8, 17-06 the self-destruct batcher joined into StopDeletionWorker and the 1000-row worker with its rule screen, 17-07 the self-destruct watcher at group -8 with the pin drop and /pin hook, the busy-group test and DEL-07 for all three rules, 17-08 the 18 Member messages strings and the changed intro in all 8 locales, 17-09 the Member messages section of the Deletion page with the row fields, the Self-destruct card and dy, 17-10 the page safeguards: rights, Staff Group exclusion, delete-right line, drift and privacy proofs, and the page reading a hand-written member value as Off, 17-11 the end-to-end test of the whole phase through the real dispatcher, the never-delete exclusion proof and log sweep for the three member rules, and the review of the reply guard). Phase 16 (Scheduled Deletion of Service and Bot Messages) is built, code-reviewed (0 critical, 3 warnings fixed), security-audited (42/42 threats closed, 2 low findings fixed), validated (nyquist compliant) and verified `human_needed` (12/12 must-haves, live checks deferred); it is not marked Complete in ROADMAP
+Phase: 17 (Command, Edit and Self-Destruct Deletion) — all 12 plans done (17-12 the rulebook reconciled, README and docs, 17-SPIKE.md with 19 live checks, the phase gate and the DEL-03 to DEL-05 ticks; 17-01 member kinds and batch queue, 17-02 the command registry shim, 17-03 the command deletion tracer slice, 17-04 command deletion edges and the delete-right latch for member kinds, 17-05 the edited-message rule: the MemberDeletion module at group -8, 17-06 the self-destruct batcher joined into StopDeletionWorker and the 1000-row worker with its rule screen, 17-07 the self-destruct watcher at group -8 with the pin drop and /pin hook, the busy-group test and DEL-07 for all three rules, 17-08 the 18 Member messages strings and the changed intro in all 8 locales, 17-09 the Member messages section of the Deletion page with the row fields, the Self-destruct card and dy, 17-10 the page safeguards: rights, Staff Group exclusion, delete-right line, drift and privacy proofs, and the page reading a hand-written member value as Off, 17-11 the end-to-end test of the whole phase through the real dispatcher, the never-delete exclusion proof and log sweep for the three member rules, and the review of the reply guard). Phase 16 (Scheduled Deletion of Service and Bot Messages) is built, code-reviewed (0 critical, 3 warnings fixed), security-audited (42/42 threats closed, 2 low findings fixed), validated (nyquist compliant) and verified `human_needed` (12/12 must-haves, live checks deferred); it is not marked Complete in ROADMAP
 Plan: 12 of 12
-Status: Ready to execute plan 17-12. Phases 10 to 16 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Completed 17-11-PLAN.md
+Status: Phase 17 plans complete (17-12 wrote 17-SPIKE.md, ran the gate and completed DEL-03, DEL-04 and DEL-05); review, security, validation and verification follow and Phase 17 is not marked Complete in ROADMAP. Phases 10 to 16 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Completed 17-12-PLAN.md
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -170,6 +170,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 17 P09 | 35min | 3 tasks | 9 files |
 | Phase 17 P10 | ~75min | 3 tasks | 8 files |
 | Phase 17 P11 | ~90min | 2 tasks | 3 files |
+| Phase 17 P12 | 1h | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -348,8 +349,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T11:53:09.795Z
-Stopped at: Completed 17-11-PLAN.md
+Last session: 2026-11-12T12:55:27.596Z
+Stopped at: Completed 17-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
