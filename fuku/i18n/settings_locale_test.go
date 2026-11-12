@@ -348,6 +348,35 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_anon_hint":          {90, 110},
 	"settings_btn_anon_toggle":    {30, 35},
 
+	// Phase 18 (plan 18-02), the Locks page (rows 31 to 55): the intro, the two state words and
+	// the 22 lock names, each name read through the table field NameKey and so a grid cell whose
+	// binding ceiling is the rendered 20 of TestSettingsLabelLengths.
+	"settings_locks_intro":      {145, 185},
+	"settings_locks_state_on":   {15, 15},
+	"settings_locks_state_off":  {15, 20},
+	"settings_lock_sticker":     {18, 18},
+	"settings_lock_gif":         {18, 18},
+	"settings_lock_photo":       {18, 18},
+	"settings_lock_video":       {18, 18},
+	"settings_lock_videonote":   {18, 18},
+	"settings_lock_voice":       {18, 18},
+	"settings_lock_audio":       {18, 18},
+	"settings_lock_document":    {18, 18},
+	"settings_lock_contact":     {18, 18},
+	"settings_lock_location":    {18, 18},
+	"settings_lock_game":        {18, 18},
+	"settings_lock_url":         {18, 18},
+	"settings_lock_forward":     {18, 18},
+	"settings_lock_rtl":         {18, 18},
+	"settings_lock_anonchannel": {18, 18},
+	"settings_lock_bots":        {18, 18},
+	"settings_lock_messages":    {18, 18},
+	"settings_lock_comments":    {18, 18},
+	"settings_lock_media":       {18, 18},
+	"settings_lock_other":       {18, 18},
+	"settings_lock_previews":    {18, 18},
+	"settings_lock_all":         {18, 18},
+
 	// Phase 16 (plan 16-07), the Deletion page: the Main cell's name and state word. The page
 	// name is a grid cell whose binding ceiling is the rendered 20 of TestSettingsLabelLengths.
 	"settings_page_del":     {14, 18},
@@ -643,6 +672,11 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🛂", "settings_page_mreq"},
 		{"🧹", "settings_page_del"},
 		{"🚩", "settings_page_warns"},
+		{"🔘", "settings_page_switches"},
+		{"🌐", "settings_page_lang"},
+		{"🧾", "settings_page_log"},
+		{"🎭", "settings_page_anon"},
+		{"🔐", "settings_page_locks"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
@@ -668,6 +702,41 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_del_sec_member", "settings_del_mem_commands", "settings_del_mem_edited", "settings_del_mem_self",
 	}
 	deletionIcons := []string{"➖", "🗑", "⏳", "💬"}
+	// The Locks page's cells (Phase 18, UI-SPEC check C18-2): the lock icon, one space and the
+	// name, so every lock name is at most 18 code points; the Log channel's six category names
+	// are drawn with the check or the cross.
+	lockNames := []string{
+		"settings_lock_sticker",
+		"settings_lock_gif",
+		"settings_lock_photo",
+		"settings_lock_video",
+		"settings_lock_videonote",
+		"settings_lock_voice",
+		"settings_lock_audio",
+		"settings_lock_document",
+		"settings_lock_contact",
+		"settings_lock_location",
+		"settings_lock_game",
+		"settings_lock_url",
+		"settings_lock_forward",
+		"settings_lock_rtl",
+		"settings_lock_anonchannel",
+		"settings_lock_bots",
+		"settings_lock_messages",
+		"settings_lock_comments",
+		"settings_lock_media",
+		"settings_lock_other",
+		"settings_lock_previews",
+		"settings_lock_all",
+	}
+	lockIcons := []string{"🔒", "🔓"}
+	logCategoryNames := []string{
+		"settings_log_cat_settings", "settings_log_cat_admin", "settings_log_cat_user",
+		"settings_log_cat_automated", "settings_log_cat_reports", "settings_log_cat_other",
+	}
+	// The full-width toggles of the Switches and Anonymous admins pages (Phase 18): each is
+	// rendered with the check or cross icon and the language's longer On or Off word.
+	phase18Toggles := []string{"settings_btn_sw_reports", "settings_btn_sw_aispam", "settings_btn_sw_approve", "settings_btn_anon_toggle"}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
 	// written, icon included.
 	editorButtons := []string{
@@ -764,6 +833,60 @@ func TestSettingsLabelLengths(t *testing.T) {
 					if runes := utf8.RuneCountInString(label); runes > gridMax {
 						t.Errorf("%s: Deletion cell %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
 					}
+				}
+			}
+
+			for _, key := range lockNames {
+				for _, icon := range lockIcons {
+					label := icon + " " + settingsLocaleString(t, lang, data, key)
+					if runes := utf8.RuneCountInString(label); runes > gridMax {
+						t.Errorf("%s: Locks cell %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
+					}
+				}
+			}
+
+			for _, key := range logCategoryNames {
+				for _, icon := range []string{"✅", "❌"} {
+					label := icon + " " + settingsLocaleString(t, lang, data, key)
+					if runes := utf8.RuneCountInString(label); runes > gridMax {
+						t.Errorf("%s: Log channel cell %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
+					}
+				}
+			}
+
+			// The Language grid shows every language in its own words, so each file's own flag and
+			// name are the cell, plain and marked (UI-SPEC M36).
+			cell := settingsLocaleString(t, lang, data, "language_flag") + " " + settingsLocaleString(t, lang, data, "language_name")
+			for _, label := range []string{cell, "✅ " + settingsLocaleString(t, lang, data, "language_name")} {
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: Language cell %q has %d characters, ceiling %d", lang, label, runes, gridMax)
+				}
+			}
+
+			for _, key := range phase18Toggles {
+				template := settingsLocaleString(t, lang, data, key)
+				for _, state := range []struct{ icon, key string }{
+					{"✅ ", "common_status_on"},
+					{"❌ ", "common_status_off"},
+				} {
+					rendered := strings.ReplaceAll(template, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
+					if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
+						t.Errorf("%s: toggle %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, accessToggle)
+					}
+				}
+			}
+
+			// The two Main state words with their largest count: three switches, 22 locks.
+			for _, state := range []struct {
+				key, n string
+				max    int
+			}{
+				{"settings_state_sw_on", "3", 15},
+				{"settings_state_locks_on", "22", 25},
+			} {
+				rendered := strings.ReplaceAll(settingsLocaleString(t, lang, data, state.key), "{n}", state.n)
+				if runes := utf8.RuneCountInString(rendered); runes > state.max {
+					t.Errorf("%s: state word %q (%s) has %d characters, ceiling %d", lang, rendered, state.key, runes, state.max)
 				}
 			}
 
