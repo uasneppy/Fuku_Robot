@@ -2259,8 +2259,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   capped at 1,000 a second by the pacer's 100 ms interval. The self-destruct rule screen (`screenSelfDestruct`, D-26b) runs after
   the Staff Group read and before the first chunk: one cached `deletionRulesLookup` per chat per cycle on the cycle context
   judges the chat's claimed `member:selfdestruct` rows, which are completed with no call when the rule is absent or holds a
-  value `deletion.ValidateRuleDelay` refuses (nothing is deleted after the owner switched it off except a call already in
-  flight) and put back free, with no attempt counted, when the rules cannot be read (unknown never deletes; an uncounted release leaves
+  value `deletion.ValidateRuleDelay` refuses (a row the cycle has not yet claimed and screened is never deleted after the owner
+  switched it off; a batch the worker had already claimed and screened before the switch can finish within its cycle, up to the
+  90 s guard, like Phase 16's accepted NEW-01: one deletion the owner just declined, SEC-17-05) and put back free, with no attempt counted, when the rules cannot be read (unknown never deletes; an uncounted release leaves
   `delete_at` alone, so the next 1 s tick claims the rows again, and the line that says so goes through an hourly per-chat gate,
   `deletionScreenWarn`, so a rules fault logs once per chat per hour and never once per cycle,
   `TestDeletionWorkerScreenLogThrottled`); the rows of every other kind pass untouched (`TestDeletionWorkerScreensSelfDestructOff`).

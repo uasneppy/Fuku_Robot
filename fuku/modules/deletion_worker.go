@@ -360,11 +360,13 @@ var deletionScreenWarn = memberDeleteWarnGate{label: "the self-destruct screen l
 
 // screenSelfDestruct re-checks the chat's claimed member:selfdestruct rows against the chat's current
 // rule, with one cached rules read per chat per cycle, and returns the rows that may be deleted.
-// Nothing is deleted after the owner turned the rule off except a call already in flight (D-26b): a
-// row queued before the switch, by a batch that raced it or by another replica, is completed
-// without a call when the rule is absent or holds a value the kind does not accept, and is put
-// back free, with no attempt counted, when the rules cannot be read (unknown never deletes, D-33).
-// Rows of every other kind pass untouched.
+// A row this cycle has not yet claimed and screened is never deleted after the owner turned the
+// rule off (D-26b): a row queued before the switch, by a batch that raced it or by another replica,
+// is completed without a call when the rule is absent or holds a value the kind does not accept,
+// and is put back free, with no attempt counted, when the rules cannot be read (unknown never
+// deletes, D-33). A batch already claimed and screened before the switch can finish within its
+// cycle, up to the 90 s guard (SEC-17-05, like Phase 16's accepted NEW-01). Rows of every other
+// kind pass untouched.
 func (r *deletionChatRun) screenSelfDestruct(rows []models.ScheduledDeletion) []models.ScheduledDeletion {
 	var selfDestruct, rest []models.ScheduledDeletion
 	for _, row := range rows {

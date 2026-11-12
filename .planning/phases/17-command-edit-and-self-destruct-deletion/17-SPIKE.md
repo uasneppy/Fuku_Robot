@@ -265,8 +265,9 @@ Each amends a decision you locked; they were accepted at planning and are in the
   meaning; the stored value and the key are unchanged). A bot kind never needs the right.
 - **D-25** Two delay validators: by value for a rule (`member:commands` 0, `member:edited` 30/60/300/900/3600,
   `member:selfdestruct` 60/300/600/3600/21600/86400) and for a queue entry; a hand-written other value reads as Off.
-- **D-26** The batcher's flush and the worker both screen self-destruct rows against the current rule, so nothing is deleted
-  after Off except a call already in flight.
+- **D-26** The batcher's flush and the worker both screen self-destruct rows against the current rule, so a row that was not yet
+  claimed and screened is never deleted after Off; a batch the worker had already claimed and screened can finish within its
+  cycle (up to the 90 s guard), like Phase 16's accepted NEW-01 (SEC-17-05).
 - **D-27, D-31** The watcher only offers to the batcher; sheds toward keeping, counted per reason, one Warn per chat per hour.
 - **D-28, D-29** One module, `MemberDeletion`, at handler group `-8` (free before), two handlers that never end an update.
 - **D-30** There is no implicit 60 s default anywhere on the page.
