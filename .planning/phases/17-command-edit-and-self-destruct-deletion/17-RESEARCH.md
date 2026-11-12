@@ -481,16 +481,16 @@ Not a rename or migration phase; omitted. (Existing state touched without change
 | A5 | GORM's `Create` of a slice with `OnConflict` is one INSERT statement | S-03 | the repository test counts statements; `CreateInBatches` is the fallback |
 | A6 | A 2 s in-process memo of the rule would be safe because of the worker-time screen | S-03 | optional; only if the busy-group test shows the Redis read matters |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Bare commands that another bot also handles (A17-1).**
+1. **Bare commands that another bot also handles (A17-1).** RESOLVED: ship D-01 as decided, owner confirmation A17-1 and spike check 2.
    - Known: the matcher cannot tell which bot a bare `/help` was meant for; deleting after our answer may beat a slow second bot's reply.
    - Unclear: how often owners run such bots together with this one, and the exact Bot API answer.
    - Recommendation: ship D-01 as decided, state the limit in AGENTS.md, run spike check 2, and only then consider a short grace (a queue delay for member commands) as a follow-up.
-2. **Ceiling versus long delays (A17-6).** C-13's table: the 24 h preset on a group above 0.23 messages a second sheds. Recommendation: keep 20,000, publish the table, offer a per-preset ceiling table later.
-3. **`deletionBatch` 1000 (C-14).** Recommendation: take it in 17-06 with the multi-chat assertion; revisit only if the live `deleteMessages` check shows a lower safe rate.
-4. **Exemptions judged at send time only.** A member approved or promoted after sending still loses queued messages. Recommendation: accept and document; a user column on the queue would need a migration and is not worth it.
-5. **Edited messages with `edit_date` equal to `date`.** Treated as within the grace (kept). Recommendation: keep.
+2. **Ceiling versus long delays (A17-6).** RESOLVED: keep 20,000 (D-31). C-13's table: the 24 h preset on a group above 0.23 messages a second sheds. Recommendation: keep 20,000, publish the table, offer a per-preset ceiling table later.
+3. **`deletionBatch` 1000 (C-14).** RESOLVED: taken in plan 17-06 (D-32). Recommendation: take it in 17-06 with the multi-chat assertion; revisit only if the live `deleteMessages` check shows a lower safe rate.
+4. **Exemptions judged at send time only.** RESOLVED: accepted and documented. A member approved or promoted after sending still loses queued messages. Recommendation: accept and document; a user column on the queue would need a migration and is not worth it.
+5. **Edited messages with `edit_date` equal to `date`.** RESOLVED: kept. Treated as within the grace (kept). Recommendation: keep.
 
 ## Environment Availability
 

@@ -1,7 +1,7 @@
 # Phase 17: Command, Edit and Self-Destruct Deletion - Context
 
 **Gathered:** 2026-11-12
-**Status:** Ready for planning (decisions D-01 to D-32 are the recommended defaults; the owner has not confirmed them, see "Provisional status")
+**Status:** Ready for planning (decisions D-01 to D-34 are the recommended defaults; the owner has not confirmed them, see "Provisional status")
 
 <domain>
 ## Phase Boundary
@@ -71,6 +71,9 @@ The owner was asked these grey areas and interrupted the question before answeri
 - **D-31:** (research C-13, amends D-09) The 20,000 ceiling supports at most `20000 / delay` messages a second per chat (1 min 333/s, 5 min 66/s, 10 min 33/s, 1 h 5.5/s, 6 h 0.9/s, 24 h 0.23/s). It stays, the table is stated in `AGENTS.md` and in owner confirmation A17-6, and a shed is one rate-limited Warn per chat per hour with the chat ID only.
 - **D-32:** (research C-14, amends D-13) The worker claims 200 rows across all chats and makes one paced call per chunk per chat per cycle, so its drain rate is about 2000 / N rows a second for N chats due together. D-13's assertion becomes "calls per cycle are at most the sum over chats of ceil(rows of the chat / 100) plus the fallbacks", and `deletionBatch` is raised from 200 to 1000 (the claim costs 0.1 ms with 520,000 pending rows and stays far under the 90 s cycle guard and the 2 minute stale claim); `AGENTS.md` restates the number in the same commit.
 
+- **D-33:** (plan check, amends D-28) A failed or unreadable exemption lookup keeps the message; unknown never deletes. Approvals are judged through the tri-state `approvals.IsUserApprovedContext` (an error means kept, as Phase 13's `memberReqExempt` does), never through `chat_status.IsApprovedForUpdate`, whose bool collapses a failed load into "not approved". The admin exemption uses a helper that reports "lookup failed" apart from "not an admin" (`userIsFloodExempt` and `IsUserAdmin` read a `getChat` or `getChatMember` error, a 429 or a 5xx on a cold cache as "not an admin"): a failed admin lookup, a timeout and a saturated fallback all mean exempt and the message is kept. Tests add failing-read rows (approvals error, cold admin cache with a `getChatMember` 429 and 500) to the edited and self-destruct "keeps" tests. A flush whose `CountPending` fails sheds and keeps the message.
+- **D-34:** (plan check) An anonymous admin's command in a group whose `AnonAdmin` setting is on runs at the first update (`checkAnonAdmin` admits it, there is no proof tap, `sender_chat` is set), so the wrapper's skip of a `sender_chat` update (D-22) leaves that command message in place. This is a stated limit, recorded in `AGENTS.md`, in owner confirmation A17-2 and as a check in `17-SPIKE.md`; handling it would need the wrapper to tell a fully handled anonymous command from a proof prompt, which is deferred.
+
 ### Claude's Discretion
 - The mechanism of D-02 (processor wrapper or per-entry hooks), the batcher's exact flush timings and channel size (D-08), the handler group numbers (D-06, D-10), the ceiling's counting method (D-09), the section and row labels, the preset button layout, locale key names, and the structure of the plans (the tracer slice first: a command deleted after its answer through the real dispatcher, then edits, then self-destruct and the batcher, then the page rows).
 
@@ -116,7 +119,7 @@ The owner was asked these grey areas and interrupted the question before answeri
 ## Owner confirmations carried to the phase (not yet answered)
 
 - **A17-1** (D-01) Commands this bot does not register, and commands for another bot, are never deleted.
-- **A17-2** (D-02) An anonymous admin's command is deleted only after the proof tap ran it.
+- **A17-2** (D-02, D-34) An anonymous admin's command is deleted only after the proof tap ran it; in a group whose AnonAdmin setting is on there is no tap and that command stays.
 - **A17-3** (D-04) An edit that changes nothing counts like any edit past the grace.
 - **A17-4** (D-05) Grace presets 30 s, 1 min, 5 min, 15 min, 1 h; default 1 min.
 - **A17-5** (D-07, D-08) Self-destruct rows in PostgreSQL with a bounded batcher that sheds toward keeping the message.
