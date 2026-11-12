@@ -5,9 +5,11 @@ package modules
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
@@ -137,3 +139,74 @@ func (e *memberDeletionEnv) wantDeletedOnce(id int64) {
 
 // memberEditedRuleDelay is the grace of the member:edited rule most tests store.
 const memberEditedRuleDelay = 60
+
+// Member deletion batcher toolkit (plan 17-06).
+
+// emptyMemberDeleteQueue drops every buffered entry and any pending kick.
+func emptyMemberDeleteQueue() {
+	for {
+		select {
+		case <-memberDeleteQueue:
+		case <-memberDeleteKick:
+		default:
+			return
+		}
+	}
+}
+
+// drainMemberDeleteQueue empties the batcher's buffer now and again when the test ends, so no entry
+// offered by one test is flushed by another. Register it before the test's row cleanup.
+func drainMemberDeleteQueue(t *testing.T) {
+	t.Helper()
+	emptyMemberDeleteQueue()
+	t.Cleanup(emptyMemberDeleteQueue)
+}
+
+// withMemberDeleteQueue swaps the buffer for one of the given size for the test. Nothing may be
+// offering or flushing while it is called, and the batcher goroutine must not be running.
+func withMemberDeleteQueue(t *testing.T, size int) {
+	t.Helper()
+	mreqSwap(t, &memberDeleteQueue, make(chan deletion.Entry, size))
+}
+
+// resetMemberDeleteState zeroes the counters, the shed log gate and the draining flag.
+func resetMemberDeleteState() {
+	memberDeleteDraining.Store(false)
+	for i := range memberDeleteShedCounts {
+		memberDeleteShedCounts[i].Store(0)
+	}
+	memberDeleteWritten.Store(0)
+	memberDeleteDroppedOff.Store(0)
+	memberDeleteShedWarn.mu.Lock()
+	memberDeleteShedWarn.last = nil
+	memberDeleteShedWarn.capWarned = false
+	memberDeleteShedWarn.mu.Unlock()
+}
+
+// restoreMemberDeleteBatcher resets the batcher's state now and when the test ends: draining off,
+// the buffer emptied, the counters and the shed log gate cleared, a running batcher stopped and
+// waited for, and a fresh deletion root in place. Register it after the test's mreqSwaps, so its
+// clean-up (the stop) runs before they are put back and no batcher goroutine reads a variable
+// while it is restored.
+func restoreMemberDeleteBatcher(t *testing.T) {
+	t.Helper()
+	resetMemberDeleteState()
+	emptyMemberDeleteQueue()
+	t.Cleanup(func() {
+		if done := stopMemberDeleteBatcher(); done != nil {
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Error("the member deletion batcher did not stop")
+			}
+		}
+		emptyMemberDeleteQueue()
+		resetMemberDeleteState()
+		freshDeletionRoot()
+	})
+}
+
+// memberDeleteShedTotal returns how many entries were shed for one reason.
+func memberDeleteShedTotal(reason int) int64 {
+	return memberDeleteShedCounts[reason].Load()
+}

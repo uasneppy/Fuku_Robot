@@ -188,6 +188,9 @@ func freshDeletionRoot() {
 	deletionRoot.mu.Lock()
 	defer deletionRoot.mu.Unlock()
 	deletionRoot.ctx, deletionRoot.cancel = context.WithCancel(context.Background())
+	// A stop of the worker also set the self-destruct batcher's draining flag; a fresh root puts
+	// both back (plan 17-06).
+	memberDeleteDraining.Store(false)
 }
 
 // restoreDeletionWorker puts a fresh root context back when the test ends, as
