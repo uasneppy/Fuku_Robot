@@ -714,3 +714,318 @@ func TestSettingsWarnsForged(t *testing.T) {
 		}
 	})
 }
+
+// settingsWarnsOpenPage opens the Warnings page in a fresh message of chat as the env's
+// administrator and returns the page's text and keyboard.
+func settingsWarnsOpenPage(env *settingsEnv, chat gotgbot.Chat, msgID int64) (string, [][]gotgbot.InlineKeyboardButton) {
+	env.t.Helper()
+	settingsWarnsPress(env.t, env, chat, msgID, "a", "op", "p", "n")
+	return env.lastEdit(chat.Id, msgID)
+}
+
+func TestSettingsDriftWarns(t *testing.T) {
+	const menuMsgID = 6666
+
+	t.Run("a command write is what the next draw shows", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		chat := env.addChat()
+		settingsWarnsCleanup(t, chat.Id)
+		settingsWarnsOpenPage(env, chat, menuMsgID)
+
+		settingsWarnsCommand(env, chat, "/setwarnlimit 9")
+		settingsWarnsCommand(env, chat, "/setwarnmode kick")
+		text, keyboard := settingsWarnsOpenPage(env, chat, menuMsgID)
+		if !strings.Contains(text, staffMarker("settings_warns_limit")+" 9") ||
+			!strings.Contains(text, staffMarker("settings_warns_action")+" "+staffMarker("settings_opt_kick")) {
+			t.Errorf("after the commands the page shows %q, want limit 9 and Kick", text)
+		}
+		if !strings.HasPrefix(keyboard[1][2].Text, "✅ ") {
+			t.Errorf("Kick = %q, want it marked", keyboard[1][2].Text)
+		}
+	})
+
+	t.Run("a page write is what /warnings and the warn module read", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		chat := env.addChat()
+		settingsWarnsCleanup(t, chat.Id)
+		settingsWarnsPress(t, env, chat, menuMsgID, "a", "st", "p", "n", "t", "l", "v", "12")
+		settingsWarnsPress(t, env, chat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", "kick")
+
+		stored := warns.GetWarnSettingContext(context.Background(), chat.Id)
+		if stored.WarnLimit != 12 || stored.WarnMode != "kick" {
+			t.Errorf("the warn module reads limit %d mode %q, want 12 and kick", stored.WarnLimit, stored.WarnMode)
+		}
+		settingsWarnsCommand(env, chat, "/warnings")
+		shown := false
+		for _, sent := range env.fake.sentTo(chat.Id) {
+			text := fmt.Sprint(sent.Params["text"])
+			if strings.Contains(text, staffMarker("warns_settings_display")) && strings.Contains(text, "12") && strings.Contains(text, "kick") {
+				shown = true
+			}
+		}
+		if !shown {
+			t.Error("/warnings does not show limit 12 and kick after the page wrote them")
+		}
+	})
+
+	t.Run("a row written directly is what the page shows", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		chat := env.addChat()
+		settingsWarnsCleanup(t, chat.Id)
+		settingsWarnsOpenPage(env, chat, menuMsgID) // fills the cache path with the defaults
+		settingsWarnsSeed(t, chat.Id, 11, "ban")
+		text, _ := settingsWarnsOpenPage(env, chat, menuMsgID)
+		if !strings.Contains(text, staffMarker("settings_warns_limit")+" 11") ||
+			!strings.Contains(text, staffMarker("settings_warns_action")+" "+staffMarker("settings_opt_ban")) {
+			t.Errorf("after a database edit the page shows %q, want limit 11 and Ban", text)
+		}
+	})
+
+	t.Run("a write on one replica is shown by the next draw on the other", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		replica := env.otherReplica()
+		const replicaMsgID = 6667
+
+		settingsWarnsOpenPage(replica, env.chat, replicaMsgID)
+		settingsWarnsPress(t, env, env.chat, menuMsgID, "a", "st", "p", "n", "t", "l", "v", "21")
+		settingsWarnsPress(t, env, env.chat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", "ban")
+		// The in-process layer of the other replica may serve the old value for
+		// CACHE_LOCAL_TTL (the accepted skew); an expired layer is what the next draw meets.
+		dbcache.ResetLocalForTest()
+		text, _ := settingsWarnsOpenPage(replica, env.chat, replicaMsgID)
+		if !strings.Contains(text, staffMarker("settings_warns_limit")+" 21") ||
+			!strings.Contains(text, staffMarker("settings_warns_action")+" "+staffMarker("settings_opt_ban")) {
+			t.Errorf("the other replica draws %q, want limit 21 and Ban", text)
+		}
+	})
+}
+
+func TestSettingsAuthorityParityWarns(t *testing.T) {
+	const menuMsgID = 6868
+
+	// controls are the two settings, each as a press and as the command it mirrors.
+	controls := []struct {
+		name    string
+		press   []string
+		command string
+		wrote   func(models.WarnSettings) bool
+	}{
+		{"limit", []string{"a", "st", "p", "n", "t", "l", "v", "6"}, "/setwarnlimit 6",
+			func(row models.WarnSettings) bool { return row.WarnLimit == 6 }},
+		{"action", []string{"a", "st", "p", "n", "t", "m", "v", "ban"}, "/setwarnmode ban",
+			func(row models.WarnSettings) bool { return row.WarnMode == "ban" }},
+	}
+
+	t.Run("a bot that is not an admin is refused like the commands", func(t *testing.T) {
+		refusal := staffMarker("connections_is_user_connected_bot_not_admin")
+		for _, control := range controls {
+			t.Run(control.name, func(t *testing.T) {
+				env := newSettingsEnv(t)
+				commandChat, menuChat := env.addChat(), env.addChat()
+				settingsWarnsCleanup(t, commandChat.Id, menuChat.Id)
+				env.fake.setBotRole(commandChat.Id, staffRoleMember)
+				env.fake.setBotRole(menuChat.Id, staffRoleMember)
+
+				settingsWarnsCommand(env, commandChat, control.command)
+				refusedByCommand := false
+				for _, sent := range env.fake.sentTo(commandChat.Id) {
+					if strings.Contains(fmt.Sprint(sent.Params["text"]), refusal) {
+						refusedByCommand = true
+					}
+				}
+				if !refusedByCommand {
+					t.Fatalf("%s was not refused for a bot that is not an admin", control.command)
+				}
+
+				// Viewing needs only the live admin.
+				text, _ := settingsWarnsOpenPage(env, menuChat, menuMsgID)
+				if !strings.Contains(text, staffMarker("settings_page_warns")) || strings.Contains(text, staffMarker("settings_cannot_open")) {
+					t.Fatalf("opening the page drew %q, want the Warnings page", text)
+				}
+				answers := env.answerCount()
+				settingsWarnsPress(t, env, menuChat, menuMsgID, control.press...)
+				text, _ = env.lastEdit(menuChat.Id, menuMsgID)
+				if !strings.Contains(text, refusal) {
+					t.Errorf("the press drew %q, want the notice %s", text, refusal)
+				}
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press answered %d times, want once", got)
+				}
+				for _, id := range []int64{commandChat.Id, menuChat.Id} {
+					if _, has := settingsWarnsRow(t, id); has {
+						t.Errorf("a refused press or command wrote a row for chat %d", id)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("a bot that is an admin lets both succeed", func(t *testing.T) {
+		for _, control := range controls {
+			t.Run(control.name, func(t *testing.T) {
+				env := newSettingsEnv(t)
+				commandChat, menuChat := env.addChat(), env.addChat()
+				settingsWarnsCleanup(t, commandChat.Id, menuChat.Id)
+
+				settingsWarnsCommand(env, commandChat, control.command)
+				settingsWarnsPress(t, env, menuChat, menuMsgID, control.press...)
+				for _, id := range []int64{commandChat.Id, menuChat.Id} {
+					if row, has := settingsWarnsRow(t, id); !has || !control.wrote(row) {
+						t.Errorf("chat %d row = %+v (row %v), want the %s written", id, row, has, control.name)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("a plain member is refused by both", func(t *testing.T) {
+		for _, control := range controls {
+			t.Run(control.name, func(t *testing.T) {
+				env := newSettingsEnv(t)
+				chat := env.addChat()
+				settingsWarnsCleanup(t, chat.Id)
+				member := gotgbot.User{Id: uniqueLinkOwnerID() + 41, FirstName: "Plain"}
+				t.Cleanup(func() {
+					db.DB.Where("user_id IN ?", []int64{member.Id}).Delete(&models.User{})
+					dbcache.DeleteCache(dbcache.CacheKey("user", member.Id))
+					dbcache.ResetLocalForTest()
+				})
+				env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+				handler := warnsModule.setWarnLimit
+				if control.name == "action" {
+					handler = warnsModule.setWarnMode
+				}
+				_ = handler(env.bot, newModuleMessageContext(env.bot, chat, member, control.command))
+
+				env.pressPrivate(member, 777, env.privateFields(chat.Id, control.press...))
+				answer, alert := env.lastAnswer()
+				if !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+					t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+				}
+				if _, has := settingsWarnsRow(t, chat.Id); has {
+					t.Error("a plain member's press or command wrote a row")
+				}
+			})
+		}
+	})
+
+	t.Run("an administrator the owner gate refuses is refused by the menu only (the documented carve-out)", func(t *testing.T) {
+		for _, control := range controls {
+			t.Run(control.name, func(t *testing.T) {
+				resetSettingsOwnerMemo(t)
+				env := newSettingsEnv(t)
+				commandChat, menuChat := env.addChat(), env.addChat()
+				settingsWarnsCleanup(t, commandChat.Id, menuChat.Id)
+				for _, chat := range []gotgbot.Chat{commandChat, menuChat} {
+					env.newOwner(chat)
+					env.setAdminsAllowed(chat.Id, false)
+				}
+
+				answers := env.answerCount()
+				settingsWarnsPress(t, env, menuChat, menuMsgID, control.press...)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the gated press answered %d times, want once", got)
+				}
+				if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_gate_owner_only")) {
+					t.Errorf("answer = %q (alert %v), want the alert settings_gate_owner_only", answer, alert)
+				}
+				if _, has := settingsWarnsRow(t, menuChat.Id); has {
+					t.Error("the gated press wrote a row")
+				}
+
+				// The commands are not tightened: the same administrator still sets it.
+				settingsWarnsCommand(env, commandChat, control.command)
+				if row, has := settingsWarnsRow(t, commandChat.Id); !has || !control.wrote(row) {
+					t.Errorf("%s row = %+v (row %v), want the command to write for an administrator the menu refuses", control.command, row, has)
+				}
+
+				// Where the menu allows the control, the command allows it too.
+				env.setAdminsAllowed(menuChat.Id, true)
+				settingsWarnsPress(t, env, menuChat, menuMsgID, control.press...)
+				if row, has := settingsWarnsRow(t, menuChat.Id); !has || !control.wrote(row) {
+					t.Errorf("with the switch on the press stored %+v (row %v), want the %s written", row, has, control.name)
+				}
+			})
+		}
+	})
+}
+
+func TestSettingsWarnsReadsCreateNothing(t *testing.T) {
+	warnKeys := func(env *settingsEnv, chatID int64) int {
+		count := 0
+		for _, key := range env.redis.Keys() {
+			if strings.Contains(key, "warn_settings") && strings.Contains(key, fmt.Sprint(chatID)) {
+				count++
+			}
+		}
+		return count
+	}
+	chatRows := func(chatID int64) int64 {
+		var n int64
+		if err := db.DB.Model(&models.Chat{}).Where("chat_id = ?", chatID).Count(&n).Error; err != nil {
+			t.Fatalf("count chats of %d: %v", chatID, err)
+		}
+		return n
+	}
+
+	t.Run("opening Main and the page leaves no row and no cache key", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		chat := env.addChat()
+		settingsWarnsCleanup(t, chat.Id)
+		chatsBefore := chatRows(chat.Id)
+
+		settingsWarnsPress(t, env, chat, 6969, "a", "op", "p", "n")
+		text, _ := env.lastEdit(chat.Id, 6969)
+		if !strings.Contains(text, staffMarker("settings_warns_limit")+" 3") {
+			t.Fatalf("the page drew %q, want the defaults", text)
+		}
+		settingsWarnsPress(t, env, chat, 6969, "a", "bk")
+		mainText, _ := env.lastEdit(chat.Id, 6969)
+		if line, found := settingsMainStateLine(mainText, "settings_page_warns"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main status line = %q (found %v), want the default state", line, found)
+		}
+
+		if _, has := settingsWarnsRow(t, chat.Id); has {
+			t.Error("a warns_settings row exists after opening Main and the page")
+		}
+		if got := chatRows(chat.Id); got != chatsBefore {
+			t.Errorf("chats rows went from %d to %d", chatsBefore, got)
+		}
+		if got := warnKeys(env, chat.Id); got != 0 {
+			t.Errorf("%d warn_settings cache keys exist after the reads, want none", got)
+		}
+	})
+
+	t.Run("a failing reader is the cannot-open edit and the unknown mark with the other lines intact", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		previous := settingsWarnsRead
+		settingsWarnsRead = func(context.Context, int64) (*models.WarnSettings, error) {
+			return nil, errors.New("database is down")
+		}
+		t.Cleanup(func() { settingsWarnsRead = previous })
+
+		msgID := env.openMenu(env.admin)
+		mainText, keyboard := env.lastEdit(env.chat.Id, msgID)
+		if line, found := settingsMainStateLine(mainText, "settings_page_warns"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Warnings status line = %q (found %v), want the unknown mark", line, found)
+		}
+		if line, found := settingsMainStateLine(mainText, "settings_page_antiflood"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Antiflood status line = %q (found %v), want its own state intact", line, found)
+		}
+		button, ok := settingsPageButton(t, keyboard, settingsPageWarns)
+		if !ok {
+			t.Fatal("Main has no Warnings button")
+		}
+		env.pressRaw(env.chat, env.admin, msgID, button.CallbackData)
+		text, kb := env.lastEdit(env.chat.Id, msgID)
+		if !strings.Contains(text, staffMarker("settings_cannot_open")) || len(kb) != 0 {
+			t.Errorf("a failed read drew %q with %d rows, want the cannot-open edit", text, len(kb))
+		}
+		if _, has := settingsWarnsRow(t, env.chat.Id); has {
+			t.Error("a failed read created a row")
+		}
+	})
+}
