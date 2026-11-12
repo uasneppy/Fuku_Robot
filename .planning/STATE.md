@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 17
 current_phase_name: Command, Edit and Self-Destruct Deletion
-status: planning
-stopped_at: Phase 16 verified (human_needed), proceeding to Phase 17 discuss
-last_updated: "2026-11-12T04:09:45.821Z"
+status: executing
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-11-12T08:16:53.875Z"
 last_activity: 2026-11-12
-last_activity_desc: Phase 16 verified (human_needed)
-state_head: "0b5f694970882d37ab954c365ece8f581743235e"
+last_activity_desc: Completed 17-01-PLAN.md
+state_head: 977f67e0cd46acb2dee8737d141186302724e1e4
 progress:
   total_phases: 10
   completed_phases: 0
-  total_plans: 87
-  completed_plans: 85
+  total_plans: 99
+  completed_plans: 87
   percent: 0
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 17 — Command, Edit and Self-Destruct Deletion (not started; Phase 16 is closed to `human_needed`, live checks deferred)
+**Current focus:** Phase 17 — Command, Edit and Self-Destruct Deletion (executing, plan 17-01 done; Phase 16 is closed to `human_needed`, live checks deferred)
 
 ## Current Position
 
-Phase: 17 (Command, Edit and Self-Destruct Deletion) — not started (next: discuss). Phase 16 (Scheduled Deletion of Service and Bot Messages) is built, code-reviewed (0 critical, 3 warnings fixed), security-audited (42/42 threats closed, 2 low findings fixed), validated (nyquist compliant) and verified `human_needed` (12/12 must-haves, live checks deferred); it is not marked Complete in ROADMAP
-Plan: not started
-Status: Ready to discuss Phase 17. Phases 10 to 16 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Phase 16 verified (human_needed)
+Phase: 17 (Command, Edit and Self-Destruct Deletion) — executing, plan 1 of 12 done (17-01 member kinds and batch queue). Phase 16 (Scheduled Deletion of Service and Bot Messages) is built, code-reviewed (0 critical, 3 warnings fixed), security-audited (42/42 threats closed, 2 low findings fixed), validated (nyquist compliant) and verified `human_needed` (12/12 must-haves, live checks deferred); it is not marked Complete in ROADMAP
+Plan: 2 of 12
+Status: Ready to execute plan 17-02. Phases 10 to 16 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Completed 17-01-PLAN.md
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -159,6 +159,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 16 P07 | 40min | 3 tasks | 11 files |
 | Phase 16 P08 | about 3h | 3 tasks | 11 files |
 | Phase 16 P09 | 55min | 3 tasks | 9 files |
+| Phase 17 P01 | 45min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -336,8 +337,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T06:03:56.000Z
-Stopped at: Phase 16 verified (human_needed), proceeding to Phase 17 discuss
+Last session: 2026-11-12T08:16:51.807Z
+Stopped at: Completed 17-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
