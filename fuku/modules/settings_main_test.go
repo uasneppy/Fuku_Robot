@@ -133,6 +133,30 @@ func TestSettingsMainGrid(t *testing.T) {
 		}
 	})
 
+	t.Run("nine grid cells keep seven rows, the odd last cell alone", func(t *testing.T) {
+		entries := []settingsMainEntry{staffE, lockE, captchaE, floodE}
+		for _, e := range []struct{ key, icon, title string }{
+			{"w", "🎉", "settings_page_welcome"}, {"g", "👋", "settings_page_goodbye"},
+			{"r", "📜", "settings_page_rules"}, {"m", "🛂", "settings_page_mreq"}, {"d", "🧹", "settings_page_del"},
+		} {
+			entries = append(entries, settingsMainTestEntry(tr, e.key, e.icon, e.title, false))
+		}
+		entries = append(entries, accessE)
+		for name, view := range map[string]settingsView{"private": privateView, "group": groupView} {
+			screen := renderSettingsMain(view, entries, "")
+			want := "s|l / c|f / w|g / r|m / d / a / close"
+			if view.Private {
+				want = "s|l / c|f / w|g / r|m / d / a / groups|close"
+			}
+			if got := settingsMainShape(t, screen.Keyboard.InlineKeyboard); got != want {
+				t.Errorf("%s keyboard = %q, want %q", name, got, want)
+			}
+			if rows := len(screen.Keyboard.InlineKeyboard); rows != 7 {
+				t.Errorf("%s Main has %d rows, want 7", name, rows)
+			}
+		}
+	})
+
 	t.Run("an allowed admin has no Access row and no Access line", func(t *testing.T) {
 		for name, view := range map[string]settingsView{"private": privateView, "group": groupView} {
 			screen := renderSettingsMain(view, []settingsMainEntry{staffE, lockE, captchaE, floodE}, "")
@@ -286,6 +310,7 @@ func settingsMainWorstState(tr *i18n.Translator) string {
 		settingsText(tr, "settings_state_lock_lifting"),
 		settingsText(tr, "settings_state_limit", i18n.TranslationParams{"n": 99999}),
 		settingsText(tr, "settings_state_off_plain"),
+		settingsText(tr, "settings_state_del_on", i18n.TranslationParams{"n": 99}),
 		settingsText(tr, "settings_state_access_on"),
 		settingsText(tr, "settings_state_access_off"),
 		settingsText(tr, "settings_state_set"),

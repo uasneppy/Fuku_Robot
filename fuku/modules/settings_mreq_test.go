@@ -228,7 +228,7 @@ func TestSettingsMreqOpensFromMain(t *testing.T) {
 		msgID := env.openMenu(owner)
 		mainText, mainKeyboard := env.lastEdit(env.chat.Id, msgID)
 
-		if got, want := settingsMainShape(t, mainKeyboard), "s|l / c|f / w|g / r|m / a / close"; got != want {
+		if got, want := settingsMainShape(t, mainKeyboard), "s|l / c|f / w|g / r|m / d / a / close"; got != want {
 			t.Errorf("the owner's group Main = %q, want %q", got, want)
 		}
 		line, found := settingsMainStateLine(mainText, "settings_page_mreq")
@@ -264,7 +264,7 @@ func TestSettingsMreqOpensFromMain(t *testing.T) {
 		mainKeyboard := staffKeyboardOf(sentMain.Params["reply_markup"])
 		private := settingsPrivateChat(owner)
 
-		if got, want := settingsMainShape(t, mainKeyboard), "s|l / c|f / w|g / r|m / a / groups|close"; got != want {
+		if got, want := settingsMainShape(t, mainKeyboard), "s|l / c|f / w|g / r|m / d / a / groups|close"; got != want {
 			t.Errorf("the owner's private Main = %q, want %q", got, want)
 		}
 		button, ok := settingsPageButton(t, mainKeyboard, settingsPageMreq)
