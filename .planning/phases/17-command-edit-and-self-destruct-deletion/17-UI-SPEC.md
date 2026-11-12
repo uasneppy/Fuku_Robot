@@ -49,7 +49,7 @@ decisions or a decision and the code meet; none reopens a decision.
 | M30 | M28 / Phase 16 section 8 / check 13: "No confirmation card on this page; `settingsActCancel` is never produced; no screen has an `e` field" | **Exactly one card, for Self-destruct** (D-15), drawn only when Self-destruct is switched on from Off or its delay is changed from a stored value, never for Off, never for Commands or Edited messages and never for any Phase 16 row. The card is the shared helper (`settingsCardRows`), so `settingsActCancel` (`no`), the `e` field and one new page action `dy` (Yes) now exist, **for rows whose table entry has a `ConfirmKey`**. Every other choice still writes at once and expires nothing. Justification (unlike Phase 16's service and bot rows): this is the first rule of the page that deletes **people's** messages in bulk and cannot be undone for a message already deleted; the card is the one safeguard D-15 adds because Off is one tap and drops what is queued |
 | M31 | Phase 16 "No identity branches": the row table carries `NameKey`, `DescKey`, `HintKey`, `Presets` and the apply function | The row table gains **optional presentation fields**, all empty-by-default so every Phase 16 row renders byte-identically: `ChoiceRows` (a row's own choice layout, overriding its section's), `LabelKeys` (a label for a preset that is not a delay, `0` on Commands), `ZeroKey` (the state word of a stored 0, default `settings_del_state_now`), `AfterKey` (the template of a stored delay, default `settings_del_state_after`), `TimeKey` and `NoTime` (the time hint a row screen shows: default `settings_del_hint_time`, an own key, or none) and `ConfirmKey` (a row that draws the card). No renderer, validator or gate branches on a row's code or kind; the differences are fields (section "Interaction Contract 1", "Notes for the planner") |
 | M32 | Phase 16 key budget: "no existing `settings_` text changes" | **One existing text changes: `settings_del_intro`** (the hub's first line says the page deletes "Telegram's service notices and some of my own messages", which is now incomplete). New text, 105 characters, inside the existing ceiling `{125, 176}`: "I can delete service notices, some of my own messages and messages from members. Tap a section to set it." All 8 locale files change it; its row in `settingsLocaleLimits` keeps its ceiling |
-| M33 | Phase 16 section 2: the delay label set is `10 s`, `1 min`, `10 min`, `1 h`, `6 h`, `24 h` (+ `Delete now`) | `settingsDelDelayKeys` gains **30 s, 5 min and 15 min** (keys 15 to 17 of the new-key list) for the grace and self-destruct presets. The six existing labels are reused for `{delay}` of `After {delay}`, `Grace {delay}` and the card. Per-row preset lists: Commands `[0]`, Edited messages `[30, 60, 300, 900, 3600]`, Self-destruct `[60, 300, 600, 3600, 21600, 86400]` (D-14, D-05, D-09); the strict canonical-digits allow-list of A16-A5 applies to each |
+| M33 | Phase 16 section 2: the delay label set is `10 s`, `1 min`, `10 min`, `1 h`, `6 h`, `24 h` (+ `Delete now`) | `settingsDelDelayKeys` gains **30 s, 5 min and 15 min** (keys 72 to 74 of the new-key list) for the grace and self-destruct presets. The six existing labels are reused for `{delay}` of `After {delay}`, `Grace {delay}` and the card. Per-row preset lists: Commands `[0]`, Edited messages `[30, 60, 300, 900, 3600]`, Self-destruct `[60, 300, 600, 3600, 21600, 86400]` (D-14, D-05, D-09); the strict canonical-digits allow-list of A16-A5 applies to each |
 
 No other earlier rule changes. Main's grid, its Deletion cell and its row budget (7 rows) are unchanged; Main's state word
 is still `Off` or `{n} on` (`settings_state_del_on`), with `n` now counting the three new rules too (at most 20), so the
@@ -529,7 +529,7 @@ With the right unreadable the line is `❔ I could not check whether I can delet
 Fuku Test Group  -1001234567890
 
 Commands
-The commands I handle, an admin's too. I delete a command after I have answered it, and my answer stays.
+The commands I handle, an admin's too. I delete a command once I have handled it, and my reply stays.
 A command for another bot, or one I don't know, is never deleted.
 
 Currently: 🗑 On
@@ -687,7 +687,7 @@ the truth table below maps every sentence to its decision)
 
 | # | Key | English | EN | Max EN | Max other | Basis |
 |---|-----|---------|----|--------|-----------|-------|
-| 63 | `settings_del_desc_commands` | The commands I handle, an admin's too. I delete a command after I have answered it, and my answer stays. | 104 | 120 | 170 | D-01, D-02, D-03 |
+| 63 | `settings_del_desc_commands` | The commands I handle, an admin's too. I delete a command once I have handled it, and my reply stays. | 101 | 120 | 170 | D-01, D-02, D-03 |
 | 64 | `settings_del_desc_edited` | I delete a member's message when they edit it more than the grace time after sending it. An edit made sooner is kept. | 117 | 130 | 185 | D-04, D-05 |
 | 65 | `settings_del_desc_self` | Every message a member sends from now on is deleted after the chosen time. Messages already sent and my own messages are not touched. | 133 | 150 | 210 | D-09, D-10 |
 | 66 | `settings_del_hint_commands` | A command for another bot, or one I don't know, is never deleted. | 65 | 75 | 105 | D-01 |
@@ -754,7 +754,7 @@ touch my replies" line on Commands (D-03 and DEL2-01: the description says "my a
 | Sentence | Behaviour it states | Decision |
 |----------|---------------------|----------|
 | "The commands I handle, an admin's too." | a command is any message whose first entity is a `bot_command` at offset 0 whose name this bot registers (bare or `/x@thisbot`); the sender may be an admin or an approved member; a command refused by a check or failed with an error is deleted too | D-01 |
-| "I delete a command after I have answered it, and my answer stays." | the delete runs after every handler of the update has run; the bot's reply is never touched | D-02, D-03, DEL2-01 |
+| "I delete a command once I have handled it, and my reply stays." | the delete runs after every handler of the update has run; the bot's reply is never touched | D-02, D-03, DEL2-01 |
 | "A command for another bot, or one I don't know, is never deleted." | `/x@otherbot` and a `/word` with no handler of this bot are skipped | D-01 |
 | "I delete a member's message when they edit it more than the grace time after sending it." | `edit_date - date` over the grace deletes at once through `deletionAct` delay 0 | D-04, D-05 |
 | "An edit made sooner is kept." | an edit within the grace of sending is kept | D-04 |
