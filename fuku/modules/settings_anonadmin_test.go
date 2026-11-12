@@ -331,3 +331,156 @@ func TestSettingsParityAnonAdmin(t *testing.T) {
 		}
 	})
 }
+
+func TestSettingsAnonAdminRights(t *testing.T) {
+	// storedAfter is true when the chat's mode reads on in the database.
+	storedAfter := func(t *testing.T, chatID int64) bool {
+		t.Helper()
+		return anonGoldenStored(t, chatID) == "on"
+	}
+
+	t.Run("an administrator who is not the creator reads the page and is refused the change", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		chat := env.addChat()
+		settingsAnonCleanup(t, chat.Id)
+
+		_, text, keyboard := settingsAnonOpenPage(t, env, chat, env.admin)
+		if !containsMarker(text, "admin_anon_admin_disabled") || !containsMarker(text, "settings_anon_hint") {
+			t.Fatalf("the administrator's page = %q, want the sentence and the hint", text)
+		}
+		if _, fields := settingsAnonToggleOf(t, keyboard); fields["v"] != "1" {
+			t.Errorf("the toggle is drawn for an administrator with v=%q, want 1", fields["v"])
+		}
+
+		before := settingsMenuMarkOf(env)
+		settingsAnonToggle(t, env, chat, env.admin, settingsAnonMenuMsgID, "1")
+		settingsMenuWantRefused(t, env, before, "chat_status_owner_button_error", false)
+		if storedAfter(t, chat.Id) {
+			t.Error("a non-owner administrator's press wrote the mode")
+		}
+		if n := settingsAnonRowCount(t, chat.Id); n != 0 {
+			t.Errorf("the refused press created %d admin rows", n)
+		}
+	})
+
+	t.Run("the creator with the bot not an administrator gets the bot notice and nothing is written", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		chat := env.addChat()
+		settingsAnonCleanup(t, chat.Id)
+		owner := settingsAnonOwnerOf(t, env, chat)
+		env.fake.setBotRole(chat.Id, staffRoleMember)
+
+		answers := env.answerCount()
+		settingsAnonToggle(t, env, chat, owner, settingsAnonMenuMsgID, "1")
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the press answered %d times, want once", got)
+		}
+		text, _ := env.lastEdit(chat.Id, settingsAnonMenuMsgID)
+		if !containsMarker(text, "chat_status_bot_not_admin") || !containsMarker(text, "admin_anon_admin_disabled") {
+			t.Errorf("the press drew %q, want the bot notice over the stored off page", text)
+		}
+		if storedAfter(t, chat.Id) {
+			t.Error("the mode was written while the bot is not an administrator")
+		}
+	})
+
+	t.Run("with both refusals the bot notice comes first", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		chat := env.addChat()
+		settingsAnonCleanup(t, chat.Id)
+		env.fake.setBotRole(chat.Id, staffRoleMember)
+
+		settingsAnonToggle(t, env, chat, env.admin, settingsAnonMenuMsgID, "1")
+		text, _ := env.lastEdit(chat.Id, settingsAnonMenuMsgID)
+		if !containsMarker(text, "chat_status_bot_not_admin") {
+			t.Errorf("the press drew %q, want the bot notice first", text)
+		}
+		if storedAfter(t, chat.Id) {
+			t.Error("the mode was written")
+		}
+	})
+
+	t.Run("the creator with the bot an administrator writes, on and off", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		chat := env.addChat()
+		settingsAnonCleanup(t, chat.Id)
+		owner := settingsAnonOwnerOf(t, env, chat)
+
+		settingsAnonToggle(t, env, chat, owner, settingsAnonMenuMsgID, "1")
+		if !storedAfter(t, chat.Id) {
+			t.Fatal("the creator's On press did not write")
+		}
+		settingsAnonToggle(t, env, chat, owner, settingsAnonMenuMsgID, "0")
+		if storedAfter(t, chat.Id) {
+			t.Fatal("the creator's Off press did not write")
+		}
+	})
+
+	t.Run("a plain member is refused before any right is judged", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		chat := env.addChat()
+		settingsAnonCleanup(t, chat.Id)
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 47, FirstName: "Plain"}
+		settingsAnonUsersCleanup(t, member.Id)
+		env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+		before := settingsMenuMarkOf(env)
+		settingsAnonToggle(t, env, chat, member, settingsAnonMenuMsgID, "1")
+		after := settingsMenuMarkOf(env)
+		if got := after.answers - before.answers; got != 1 {
+			t.Errorf("the press answered %d times, want once", got)
+		}
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+		}
+		if storedAfter(t, chat.Id) {
+			t.Error("a plain member's press wrote the mode")
+		}
+	})
+}
+
+func TestSettingsAnonAdminForged(t *testing.T) {
+	type forgedCase struct {
+		name   string
+		fields []string
+		extra  map[string]string
+		both   bool
+	}
+	tg := func(v string) []string {
+		return []string{"a", "tg", "p", settingsPageAnon, "t", settingsAnonControl, "v", v}
+	}
+	forged := []forgedCase{
+		{name: "st on m", fields: []string{"a", "st", "p", settingsPageAnon, "t", settingsAnonControl, "v", "1"}},
+		{name: "v=2", fields: tg("2")},
+		{name: "empty v", fields: tg("")},
+		{name: "v=on", fields: tg("on")},
+		{name: "an unknown control", fields: []string{"a", "tg", "p", settingsPageAnon, "t", "x", "v", "1"}},
+		{name: "an extra key", fields: tg("1"), extra: map[string]string{"x": "1"}},
+		{name: "c and u together", fields: tg("1"), both: true},
+	}
+	for _, tc := range forged {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsAnonEnv(t)
+			fields := env.groupFields(env.admin, tc.fields...)
+			for k, v := range tc.extra {
+				fields[k] = v
+			}
+			if tc.both {
+				fields["c"] = "-1001"
+			}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("forged press %v did not encode", fields)
+			}
+			before := settingsMenuMarkOf(env)
+			env.pressRaw(env.chat, env.admin, settingsAnonMenuMsgID, data)
+			settingsMenuWantRefused(t, env, before, "common_callback_invalid_request", true)
+			if n := settingsAnonRowCount(t, env.chat.Id); n != 0 {
+				t.Errorf("a forged press created %d admin rows", n)
+			}
+			if got := anonGoldenStored(t, env.chat.Id); got == "on" {
+				t.Error("a forged press switched the mode on")
+			}
+		})
+	}
+}
