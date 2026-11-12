@@ -215,12 +215,18 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 	// chat. The edit stays as it always was, but only the hold's own stored notice is rescheduled: a
 	// notice ID never stored (zero) or another message queues nothing.
 	pressedID := query.Message.GetMessageId()
-	memberReqFixedEdit(ctx, b, tr, chat.Id, chat.Type, pressedID, live.User, noticeKey, taken.NoticeMsgID > 0 && taken.NoticeMsgID == pressedID)
+	memberReqFixedEdit(ctx, b, tr, chat.Id, chat.Type, pressedID, live.User, noticeKey, memberReqIsOwnNotice(taken, pressedID))
 	if taken.WelcomeHeld {
 		member := live.User
 		result.Welcome = &member
 	}
 	return result
+}
+
+// memberReqIsOwnNotice reports whether messageID is the notice the hold stored: its notice ID is
+// known (positive) and equal. It decides the reschedule of the confirmation alone, never the unmute.
+func memberReqIsOwnNotice(hold *models.ChatRequirementHold, messageID int64) bool {
+	return hold.NoticeMsgID > 0 && hold.NoticeMsgID == messageID
 }
 
 // memberReqFixedJudge is step 5 of a press: it judges every enabled rule of the group against
