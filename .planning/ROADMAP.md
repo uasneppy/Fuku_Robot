@@ -380,12 +380,12 @@ Plans:
   3. A Log channel page shows the group's log channel and turns each log category on or off; linking a new channel stays a command. An Anonymous admins page sets the anonymous-admin mode, with the same rights `/anonadmin` needs.
   4. A Locks page turns each lock type on or off, paged.
   5. Every setting changed on these pages is stored, cached and refused exactly as by its command, and the page and the command always show the same value.
-**Plans:** 4/15 plans executed
+**Plans:** 5/15 plans executed
 - [x] 18-01-PLAN.md — the tracer: the /setwarnlimit and /setwarnmode goldens, applyWarnLimit and applyWarnMode, the warns reader and the Warnings page's limit stepper with its four strings (wave 1)
 - [x] 18-02-PLAN.md — the other 51 new settings strings in all 8 locales with their limits and cell checks (wave 2)
 - [x] 18-03-PLAN.md — the Warnings page complete: the action choice, the inert line, the bounds, drift, rights, bytes and fit (wave 3)
 - [x] 18-04-PLAN.md — the /reports and /autoapprove goldens and apply functions, the reports reader, and the two composite menu rights (wave 4)
-- [ ] 18-05-PLAN.md — the /aispam golden, aispamConfigured, applyAISpamEnabled and the AI spam reader (wave 5)
+- [x] 18-05-PLAN.md — the /aispam golden, aispamConfigured, applyAISpamEnabled and the AI spam reader (wave 5)
 - [ ] 18-06-PLAN.md — the Switches page: reports, the AI spam filter with its status line and Off-only form, auto-approve, and the shared toggle helper (wave 6)
 - [ ] 18-07-PLAN.md — the language callback golden, applyGroupLanguage, its reader and the Language page with the group-menu redraw (wave 7)
 - [ ] 18-08-PLAN.md — the /log and /nolog golden, applyLogCategory and the log channel reader (wave 8)
@@ -428,5 +428,5 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 15. AI Spam-Name Check | 11/11 | In Progress | - |
 | 16. Scheduled Deletion of Service and Bot Messages | 9/9 | In Progress | - |
 | 17. Command, Edit and Self-Destruct Deletion | 12/12 | In Progress | - |
-| 18. Remaining Settings Pages | 4/15 | In Progress | - |
+| 18. Remaining Settings Pages | 5/15 | In Progress | - |
 | 19. Blacklist, Filter and Note Pages | 0/TBD | Not started | - |

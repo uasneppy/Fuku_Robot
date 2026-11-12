@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 18
 current_phase_name: Remaining Settings Pages
 status: executing
-stopped_at: Completed 18-04-PLAN.md
-last_updated: "2026-11-12T18:53:45.283Z"
+stopped_at: Completed 18-05-PLAN.md
+last_updated: "2026-11-12T20:02:15.926Z"
 last_activity: 2026-11-12
-last_activity_desc: Completed 18-03-PLAN.md
-state_head: 5af09bc698b7b2709047a7e6806418e5d8c64424
+last_activity_desc: Completed 18-05-PLAN.md
+state_head: d4e8cadc09fd11132169556f6b3a473b85480d40
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 114
-  completed_plans: 102
+  completed_plans: 103
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 18 (Remaining Settings Pages) — executing, plan 4 of 15 done (18-04 `/reports` and `/autoapprove` goldens recorded first, `applyReportsEnabled` and `applyAutoApprove`, `reports.LoadChatStatusContext`, and the two composite rights `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, the only framework edit of the phase; 18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
-Plan: 5 of 15
-Status: Ready to execute plan 18-05. Phases 10 to 17 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Completed 18-04-PLAN.md
+Phase: 18 (Remaining Settings Pages) — executing, plan 5 of 15 done (18-05 the `/aispam` golden recorded first (27 cases, the save error returned), `aispamConfigured` (the TypeSafe value set and `ENABLE_AISPAM` on, never the Anthropic key), `applyAISpamEnabled` and `aispam.LoadEnabledContext`; 18-04 `/reports` and `/autoapprove` goldens recorded first, `applyReportsEnabled` and `applyAutoApprove`, `reports.LoadChatStatusContext`, and the two composite rights `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, the only framework edit of the phase; 18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
+Plan: 6 of 15
+Status: Ready to execute plan 18-06. Phases 10 to 17 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Completed 18-05-PLAN.md
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -175,6 +175,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 18 P02 | 45min | 2 tasks | 10 files |
 | Phase 18 P03 | 95min | 3 tasks | 8 files |
 | Phase 18 P04 | n/a | 3 tasks | 11 files |
+| Phase 18 P05 | 45min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -356,8 +357,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T18:53:42.875Z
-Stopped at: Completed 18-04-PLAN.md
+Last session: 2026-11-12T20:02:13.445Z
+Stopped at: Completed 18-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
