@@ -6,8 +6,8 @@ status: verified
 threats_open: 0
 threats_total: 48
 threats_closed: 48
-findings_open_nonblocking: 5
-findings_fixed: 0
+findings_open_nonblocking: 0
+findings_fixed: 5
 findings_accepted: 0
 asvs_level: 1
 register_authored_at_plan_time: true
@@ -161,6 +161,8 @@ of them can reopen the matching threat above.
 |------|-------|--------|
 | 2026-11-12 | `gsd-security-auditor` at `fd40ac2`, ASVS L1 with L2 traces, wider mandate | 48/48 threats CLOSED, `threats_open: 0`; SEC-17-01 to SEC-17-05 (low or info), none blocking; no unregistered flags in the SUMMARY files |
 | 2026-11-12 | evidence run | `fuku/db/deletion`, `fuku/utils/helpers`, 68 Phase 17 top-level tests in `fuku/modules` and `fuku/i18n` (`-race -count=1`), `TestDeletionTablesStayOutOfBackup`, `make check-translations`, `make check-docs`, build and vet all pass; PostgreSQL integrity, lint, the full suite and live Telegram not run by the auditor (CI and `17-SPIKE.md`) |
+
+| 2026-11-12 | fix pass (`17-REVIEW-FIX.md`, `17-REVIEW-DISPOSITION.md`) | SEC-17-01 to SEC-17-05 fixed (b53cd8b, 1ceae78, b8864e0, ccd711d, 7bdffab, 4f297a9, 62ad877); whole `fuku/modules` package, `fuku/db/deletion`, lint stand-in, docs and translations gates pass; CI result recorded below once green |
 
 | Threats found | Closed | Open |
 |---------------|--------|------|
