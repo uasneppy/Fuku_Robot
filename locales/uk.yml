@@ -2629,6 +2629,8 @@ settings_mreq_here_nolink: "{rule}: я не знайшов пов'язаного
 settings_mreq_here_notadmin: "{rule}: я не адміністратор пов'язаного каналу, тож ніхто не перевіряється."
 settings_mreq_here_unknown: "{rule}: зараз не вдалося перевірити. Спробуйте за хвилину."
 settings_mreq_here_ai: "{rule}: перевірки ШІ на цьому боті не налаштовано, тому ніхто не перевіряється."
+settings_page_del: "Видалення"
+settings_state_del_on: "увімк.: {n}"
 settings_help_msg: |
   Керуйте цією групою з одного меню кнопок.
 

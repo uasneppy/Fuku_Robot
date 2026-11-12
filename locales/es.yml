@@ -3259,6 +3259,8 @@ settings_mreq_here_nolink: "{rule}: no encontré un canal vinculado a este grupo
 settings_mreq_here_notadmin: "{rule}: no soy administrador del canal vinculado, así que no se revisa a nadie."
 settings_mreq_here_unknown: "{rule}: no pude comprobarlo ahora. Inténtalo de nuevo en un momento."
 settings_mreq_here_ai: "{rule}: las comprobaciones con IA no están configuradas en este bot, así que no se revisa a nadie."
+settings_page_del: "Borrado"
+settings_state_del_on: "{n} activas"
 settings_help_msg: |
   Gestiona este grupo desde un único menú de botones.
 

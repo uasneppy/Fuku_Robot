@@ -3175,6 +3175,8 @@ settings_mreq_here_nolink: "{rule} : je n'ai trouvé aucun canal lié à ce grou
 settings_mreq_here_notadmin: "{rule} : je ne suis pas administrateur du canal lié, donc personne n'est vérifié."
 settings_mreq_here_unknown: "{rule} : je n'ai pas pu vérifier maintenant. Réessayez dans un instant."
 settings_mreq_here_ai: "{rule} : les vérifications par IA ne sont pas configurées sur ce bot, donc personne n'est vérifié."
+settings_page_del: "Suppression"
+settings_state_del_on: "{n} actives"
 settings_help_msg: |
   Gérez ce groupe depuis un seul menu à boutons.
 

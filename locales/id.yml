@@ -3249,6 +3249,8 @@ settings_mreq_here_nolink: "{rule}: saya tidak menemukan kanal tertaut untuk gru
 settings_mreq_here_notadmin: "{rule}: saya bukan admin kanal tertaut, jadi tidak ada yang diperiksa."
 settings_mreq_here_unknown: "{rule}: saya tidak bisa memeriksanya sekarang. Coba lagi sebentar lagi."
 settings_mreq_here_ai: "{rule}: pemeriksaan AI belum diatur di bot ini, jadi tidak ada yang diperiksa."
+settings_page_del: "Penghapusan"
+settings_state_del_on: "{n} aktif"
 settings_help_msg: |
   Kelola grup ini dari satu menu tombol.
 

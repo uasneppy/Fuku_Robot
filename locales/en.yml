@@ -3287,6 +3287,8 @@ settings_mreq_here_nolink: "{rule}: I found no linked channel for this group, so
 settings_mreq_here_notadmin: "{rule}: I am not an administrator of the linked channel, so nobody is checked."
 settings_mreq_here_unknown: "{rule}: I could not check this right now. Try again in a moment."
 settings_mreq_here_ai: "{rule}: AI checks are not set up on this bot, so nobody is checked."
+settings_page_del: "Deletion"
+settings_state_del_on: "{n} on"
 settings_help_msg: |
   Manage this group from one button menu.
 

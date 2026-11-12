@@ -2936,6 +2936,8 @@ settings_mreq_here_nolink: "{rule}: मुझे इस ग्रुप से �
 settings_mreq_here_notadmin: "{rule}: मैं लिंक किए गए चैनल का एडमिन नहीं हूँ, इसलिए किसी की जाँच नहीं होती।"
 settings_mreq_here_unknown: "{rule}: मैं अभी जाँच नहीं कर सका। थोड़ी देर बाद फिर कोशिश करें।"
 settings_mreq_here_ai: "{rule}: इस बॉट पर AI जाँच सेट अप नहीं है, इसलिए किसी की जाँच नहीं होती।"
+settings_page_del: "हटाना"
+settings_state_del_on: "{n} चालू"
 settings_help_msg: |
   इस ग्रुप को एक बटन मेन्यू से मैनेज करें।
 

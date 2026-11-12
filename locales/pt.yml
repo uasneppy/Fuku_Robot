@@ -3221,6 +3221,8 @@ settings_mreq_here_nolink: "{rule}: não encontrei canal vinculado a este grupo,
 settings_mreq_here_notadmin: "{rule}: não sou administrador do canal vinculado, então ninguém é verificado."
 settings_mreq_here_unknown: "{rule}: não consegui verificar agora. Tente de novo daqui a pouco."
 settings_mreq_here_ai: "{rule}: as verificações por IA não estão configuradas neste bot, então ninguém é verificado."
+settings_page_del: "Exclusão"
+settings_state_del_on: "{n} ativas"
 settings_help_msg: |
   Gerencie este grupo a partir de um único menu de botões.
 
