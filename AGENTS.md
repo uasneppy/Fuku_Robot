@@ -545,7 +545,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -982,6 +982,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   so another replica can answer in the old language for up to `CACHE_LOCAL_TTL`, exactly as after `/lang`. Largest button 46
   bytes (private) and 42 (group). `TestSettingsLanguage*`, `TestSettingsParityLanguage`, `TestSettingsDriftLanguage` and
   `TestSettingsAuthorityParityLanguage` hold it (`settings_language_test.go`, `settings_language_screens_test.go`).
+- The Log channel page (`settings_logchannel.go`, page `o`, `Order` 88, icon 🧾, `settings_page_log`, between Language and
+  Access, Phase 18, plan 18-09) registers from its own file through `registerSettingsPage`, with no `Hidden`, so a Staff Group's
+  own menu shows it too. It turns each of the six log categories on or off as `/log` and `/nolog` do. The six come from one table
+  (`settingsLogCategories`: the control code `s a u m r o`, the repository name `settings admin user automated reports other`,
+  the `settings_log_cat_*` name key; its order is that of `logchannels.AllCategories`) and the controls, the body lines and the
+  cells are all built from it. Each control is `tg` only (`Actions`, so an `st` is an invalid request before any I/O) with
+  `Validate` exactly `0` or `1` (`settingsEditSwitchValue`) and right `settingsRightAdmin`, as `/log` and `/nolog` ask for
+  `RequireUserAdmin` and nothing more (no bot check). A press goes through `settingsToggleSet` and writes exactly its own
+  category through `applyLogCategory`, the function the commands call, so the other five categories are untouched. After a
+  stored change the page answers and redraws first and only then posts the same `#SETTINGS` audit entry the commands post,
+  `actionlog.Settings(bot, group, presser, key+" "+name)` with the apply function's `logs_enabled` or `logs_disabled` key and the
+  repository name (`settingsLogControl`; the commands inline the call, there is no shared poster). `actionlog.Destination` gates
+  it exactly as for the commands, so a change that turns the settings category off posts nothing, and a press of the stored value
+  (only a stale screen sends one, because a cell always targets the opposite of what it shows) writes the same row again and posts
+  again, as `/log admin` on an already-on category does. The page reads through `logchannels.LoadContext` (the `settingsLogRead`
+  seam: the `log_channel:<chat>` key the commands read, its error returned, a chat with no channel read as `nil`, nothing created)
+  and a failed read is the cannot-open edit and the unknown mark on Main. Privacy (D-07): the page is read by every member of
+  a group menu while the log channel is private to the administrators, so the renderer (`renderSettingsLogChannel`, pure) receives
+  only `settingsLogState` (linked or not, and the six flags) and never the row, `logs_current` is never used and no screen, notice
+  or alert names the channel's title or ID. The body is `settings_log_status` with `settings_state_linked` or
+  `settings_state_not_linked`, one `settings_main_state_line` per category (check or cross, the name, On or Off), a blank line and
+  the hint `settings_log_hint` (linking and unlinking stay `/setlog` and `/unsetlog`); the keyboard is the shared two-column
+  toggle grid `settingsToggleGrid` (`settings_toggle.go`: cells "icon name", two to a row, an odd last cell alone, the icons
+  passed in; the Locks page reuses it with the lock icons) then Back and Close, so the rows are `{2,2,2,2}`. Main's state is Linked
+  or Not linked. `TestSettingsLogChannelOpens` and `TestSettingsParityLogCategory` hold it (`settings_logchannel_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1021,7 +1046,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t|u`, then Access for the owner, so eight rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page and `u` the Language page; later Phase 18 plans add the rest of the grid) with
+  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t|u / o`, then Access for the owner, so nine rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page, `u` the Language page and `o` the Log channel page, which stands alone as the odd last cell; later Phase 18 plans add the rest of the grid) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and

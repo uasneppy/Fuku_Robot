@@ -2,7 +2,9 @@ package modules
 
 import (
 	"context"
+	"slices"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -63,4 +65,28 @@ func settingsToggleSet[S any](
 	}
 	screen := draw(state, notice)
 	return &screen
+}
+
+// settingsToggleCell is one cell of settingsToggleGrid: the control it presses, the icon and name
+// that make its label, and the state the cell shows, so a press sends the opposite.
+type settingsToggleCell struct {
+	Control string
+	Icon    string
+	Name    string
+	On      bool
+}
+
+// settingsToggleGrid appends a two-column grid of toggle cells to the keyboard: each cell is
+// "icon name" and sends the absolute target value the opposite of the state it shows (so a double
+// tap writes the same value), the cells are filled left to right and an odd last cell stands alone
+// on its row. It is pure and knows no page: the caller chooses the icons (the check and the cross
+// of a switch, the lock and the open lock of a lock) and the names.
+func settingsToggleGrid(k *settingsKeyboard, page string, cells []settingsToggleCell) {
+	var buttons []gotgbot.InlineKeyboardButton
+	for _, cell := range cells {
+		buttons = append(buttons, settingsToggleButton(k, page, cell.Control, cell.Icon+" "+cell.Name, cell.On)...)
+	}
+	for row := range slices.Chunk(buttons, 2) {
+		k.row(row...)
+	}
 }
