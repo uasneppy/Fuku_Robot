@@ -3,7 +3,10 @@
 package modules
 
 import (
+	"context"
+	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,6 +108,14 @@ func (e *deletionEnv) sendService(from *gotgbot.User, apply func(*gotgbot.Messag
 func (e *deletionEnv) sendServiceTo(chat gotgbot.Chat, from *gotgbot.User, apply func(*gotgbot.Message)) int64 {
 	e.t.Helper()
 	id := e.updateID()
+	e.deliver(id, chat, from, apply)
+	return id
+}
+
+// deliver runs the message with the given ID through the real dispatcher. Delivering one ID
+// twice is how a test replays an update.
+func (e *deletionEnv) deliver(id int64, chat gotgbot.Chat, from *gotgbot.User, apply func(*gotgbot.Message)) {
+	e.t.Helper()
 	msg := &gotgbot.Message{MessageId: id, Date: deletionNow().Unix(), Chat: chat, From: from}
 	if apply != nil {
 		apply(msg)
@@ -113,7 +124,6 @@ func (e *deletionEnv) sendServiceTo(chat gotgbot.Chat, from *gotgbot.User, apply
 	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
 		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
 	}
-	return id
 }
 
 // sendPin runs a pinned-message notice of the env chat sent by the env's administrator.
@@ -141,6 +151,14 @@ func (e *deletionEnv) deletes(chatID int64) []moduleBotCall {
 // queued returns the queue rows of chatID.
 func (e *deletionEnv) queued(chatID int64) []models.ScheduledDeletion {
 	e.t.Helper()
+	deletionInline.wait()
+	return e.queuedNoWait(chatID)
+}
+
+// queuedNoWait is queued without waiting for the inline deletes, for a test that holds some
+// of them open.
+func (e *deletionEnv) queuedNoWait(chatID int64) []models.ScheduledDeletion {
+	e.t.Helper()
 	var rows []models.ScheduledDeletion
 	if err := db.DB.Where("chat_id = ?", chatID).Order("message_id").Find(&rows).Error; err != nil {
 		e.t.Fatalf("read the queue of chat %d: %v", chatID, err)
@@ -155,4 +173,43 @@ func (e *deletionEnv) makeStaffGroup(chatID int64) {
 	if _, err := staff.CreateStaffGroup(chatID, e.admin.Id, "Staff"); err != nil {
 		e.t.Fatalf("CreateStaffGroup(%d) error = %v", chatID, err)
 	}
+}
+
+// restoreDeletionWorker puts a fresh root context back when the test ends, as
+// restoreMemberReqRunner does for the member requirements runner: a test that cancels the root
+// through cancelDeletionContext() would otherwise leave every later deletion call cancelled.
+func restoreDeletionWorker(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		deletionRoot.mu.Lock()
+		defer deletionRoot.mu.Unlock()
+		deletionRoot.ctx, deletionRoot.cancel = context.WithCancel(context.Background())
+	})
+}
+
+// deletionHangClient wraps a bot client and holds every deleteMessage request until its context
+// ends (while hang is set), so a test can park the inline deletes inside the pacer.
+type deletionHangClient struct {
+	gotgbot.BotClient
+	hang atomic.Bool
+}
+
+func (c *deletionHangClient) RequestWithContext(
+	ctx context.Context,
+	token, method string,
+	params map[string]any,
+	opts *gotgbot.RequestOpts,
+) (json.RawMessage, error) {
+	if method == "deleteMessage" && c.hang.Load() {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return c.BotClient.RequestWithContext(ctx, token, method, params, opts)
+}
+
+// deletionInlineRunning is how many inline deletes are in flight now.
+func deletionInlineRunning() int {
+	deletionInline.mu.Lock()
+	defer deletionInline.mu.Unlock()
+	return deletionInline.running
 }
