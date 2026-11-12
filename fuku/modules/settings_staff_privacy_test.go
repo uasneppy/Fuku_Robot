@@ -4,6 +4,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/adminindex"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
@@ -178,6 +180,7 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 						{Key: "g", Icon: "👋", Title: settingsText(tr, "settings_page_goodbye"), State: settingsText(tr, "common_status_off"), Known: true},
 						{Key: "r", Icon: "📜", Title: settingsText(tr, "settings_page_rules"), State: settingsText(tr, "settings_state_not_set"), Known: true},
 						{Key: "m", Icon: "🛂", Title: settingsText(tr, "settings_page_mreq"), State: settingsText(tr, "settings_state_off_plain"), Known: true},
+						{Key: "d", Icon: "🧹", Title: settingsText(tr, "settings_page_del"), State: settingsText(tr, "settings_state_del_on", i18n.TranslationParams{"n": 3}), Known: true},
 						{Key: "a", Icon: "🔑", Title: settingsText(tr, "settings_page_access"), State: settingsText(tr, "settings_state_access_off"), Known: true, OwnerOnly: true},
 					}
 				}
@@ -283,6 +286,40 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				screens["alert could not check"] = settingsScreen{Text: settingsText(tr, "mreq_fixed_check_failed")}
 				aiRule, _ := memberReqRuleByCode("ai")
 				screens["alert of a refused AI press"] = settingsScreen{Text: settingsMreqUnconfiguredText(tr, aiRule)}
+				// Phase 16: the Deletion hub, both lists and all 17 row screens, with every rule set and with
+				// none, under every right line, with no notice and with a failed write, in a group menu and
+				// in the private menu of an administrator who is not the creator; and the alerts a refused
+				// press answers.
+				for viewName, view := range map[string]settingsView{"group": groupView, "private admin": privateAdminView} {
+					rights := map[string]string{
+						"can":     "",
+						"cannot":  "🚫 " + settingsText(tr, "settings_del_no_right"),
+						"unknown": settingsUnknownState + " " + settingsText(tr, "settings_del_right_unknown"),
+					}
+					datas := map[string]settingsDelData{
+						"every rule set": settingsDelEveryRuleSet(),
+						"no rule":        {Rules: &deletion.Rules{ChatID: 1, Delays: map[string]int{}}},
+					}
+					for rightName, right := range rights {
+						for dataName, data := range datas {
+							for noticeName, delNotice := range map[string]string{
+								"no notice":    "",
+								"failed write": settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")),
+							} {
+								prep := settingsDelPrepared{View: view, Data: data, Right: right}
+								for _, named := range settingsDelEveryScreen(prep, delNotice) {
+									screens[fmt.Sprintf("deletion %s %s %s %s %s", viewName, rightName, dataName, noticeName, named.name)] = named.screen
+								}
+							}
+						}
+					}
+				}
+				for _, key := range []string{
+					"settings_no_change_info", "settings_gate_owner_only", "settings_check_failed", "settings_not_your_menu",
+					"settings_not_admin", "common_callback_invalid_request", "settings_cannot_open", "settings_cannot_open_alert",
+				} {
+					screens["deletion refusal "+key] = settingsScreen{Text: settingsText(tr, key)}
+				}
 				for i, notice := range notices {
 					name := fmt.Sprintf("notice %d", i)
 					screens["linked, "+name] = renderSettingsStaffLinked(groupView, settingsStaffViewFor(groupView, false, &staffGroup, &row), notice)
@@ -557,6 +594,16 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 	})
 	t.Run("a group menu Phase 15 run by an admin who is not the creator names neither the Staff Group, the channel nor a member", func(t *testing.T) {
 		settingsPrivacyPhase15Run(t, false)
+	})
+
+	// Phase 16: the same administrator drives the Deletion page: a change refused for want of the
+	// change-info right, then the presets with the right, every right line the bot can produce, a
+	// failed write and the lists, over a group linked to a Staff Group.
+	t.Run("a private Phase 16 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		settingsPrivacyPhase16Run(t, true)
+	})
+	t.Run("a group menu Phase 16 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		settingsPrivacyPhase16Run(t, false)
 	})
 
 	t.Run("a group menu run never names a Staff Group", func(t *testing.T) {
@@ -879,6 +926,117 @@ func settingsPrivacyPhase15Run(t *testing.T, private bool) {
 	} {
 		if strings.Contains(everything, leak) {
 			t.Errorf("a Phase 15 run of an admin who is not the creator received %q: %q", leak, everything)
+		}
+	}
+}
+
+// settingsPrivacyPhase16Run is the Phase 16 run of an administrator who is not the creator, in the
+// private menu or in a menu opened in the group, over a group linked to a Staff Group. It opens the
+// Deletion hub, both lists and rows, is refused a change for want of can_change_info, then sets the
+// presets with the right, sees every right line, a failed write and the unreadable right, and nothing
+// the bot produced names the Staff Group or the member the fake knows.
+func settingsPrivacyPhase16Run(t *testing.T, private bool) {
+	t.Helper()
+	mreqSwap(t, &settingsDelHereTimeout, 50*time.Millisecond)
+	env := newSettingsDelEnv(t)
+	editCleanup(t, env.chat.Id)
+	staffChat := settingsStaffTestOwnedStaffGroup(env.settingsEnv, settingsStaffPrivacyTitle)
+	linkLockdownGroupTo(env.lockdownEnv, staffChat)
+
+	moderator := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Moderator"}
+	// A member of the group the fake knows by name: no screen of the page may carry it.
+	held := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: settingsPrivacyMemberName, Username: "zzmarkeruser"}
+	memberReqCleanup(t, []int64{env.chat.Id}, []int64{moderator.Id, held.Id})
+	env.fake.setProfile(held.Id, held.FirstName, "", held.Username)
+	env.fake.setMemberRaw(env.chat.Id, moderator.Id, settingsHooksChangeInfoJSON(moderator.Id, false))
+
+	var (
+		msgID  int64
+		press  func(kv ...string)
+		chatID = env.chat.Id
+	)
+	if private {
+		msgID, chatID = 4747, moderator.Id
+		press = func(kv ...string) { env.pressPrivate(moderator, msgID, env.privateFields(env.chat.Id, kv...)) }
+	} else {
+		msgID = env.openMenu(moderator)
+		press = func(kv ...string) { env.press(moderator, msgID, env.groupFields(moderator, kv...)) }
+	}
+	choose := func(code, value string) { press("a", "st", "p", "d", "t", code, "v", value) }
+
+	// Without the right: every screen opens, every change is refused.
+	press("a", "op", "p", "d")
+	press("a", "dl", "t", "s")
+	press("a", "dr", "t", "sn")
+	choose("sn", "600")
+	press("a", "dl", "t", "b")
+	press("a", "dr", "t", "ba")
+	choose("ba", "3600")
+	// With the right: presets on a service row, a joined row and a bot row, then Keep.
+	env.fake.setMemberRaw(env.chat.Id, moderator.Id, settingsHooksChangeInfoJSON(moderator.Id, true))
+	press("a", "dr", "t", "sn")
+	choose("sn", "600")
+	choose("sn", "0")
+	press("a", "dr", "t", "sj")
+	choose("sj", "600")
+	press("a", "dr", "t", "bw")
+	choose("bw", "60")
+	press("a", "dr", "t", "br")
+	choose("br", "3600")
+	choose("sn", "n")
+	// Every right line the bot can produce, on a screen with a stored rule.
+	for _, raw := range []string{settingsDelBotJSON("member", false), settingsDelBotJSON("administrator", false), settingsDelBotJSON("creator", false)} {
+		env.setBot(raw)
+		press("a", "dl", "t", "s")
+		press("a", "dr", "t", "sj")
+	}
+	env.scriptBot(false, staffFakeError(500, "Internal Server Error"))
+	press("a", "dl", "t", "b")
+	press("a", "op", "p", "d")
+	// A failed write redraws with the notice.
+	mreqSwap(t, &deletionRuleWrites, deletionRuleWriter{
+		Set:    func(context.Context, int64, string, int) error { return errors.New("write failed") },
+		Remove: func(context.Context, int64, string) error { return errors.New("write failed") },
+	})
+	press("a", "dr", "t", "sn")
+	choose("sn", "3600")
+
+	var seen []string
+	for _, edit := range env.edits(chatID, msgID) {
+		seen = append(seen, fmt.Sprint(edit.Params["text"]))
+		for _, button := range settingsAllButtons(staffKeyboardOf(edit.Params["reply_markup"])) {
+			seen = append(seen, button.Text, button.CallbackData, button.Url)
+		}
+	}
+	for _, sent := range env.fake.sentTo(chatID) {
+		seen = append(seen, fmt.Sprint(sent.Params["text"]))
+	}
+	for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+		seen = append(seen, fmt.Sprint(answer.Params["text"]))
+	}
+	everything := strings.Join(seen, "\n")
+
+	if n := len(env.edits(chatID, msgID)); n < 14 {
+		t.Fatalf("the run edited the menu only %d times", n)
+	}
+	for _, want := range []string{
+		"settings_no_change_info", "settings_del_no_right", "settings_del_right_unknown", "common_settings_save_failed",
+		"settings_del_state_after", "settings_del_state_now",
+	} {
+		if !containsMarker(everything, want) {
+			t.Errorf("the run never produced %s: %q", want, everything)
+		}
+	}
+	if delay, ok := env.stored(deletion.KindBotWelcome); !ok || delay != 60 {
+		t.Errorf("stored welcome = %d (%v), want the 60 s the permitted press set", delay, ok)
+	}
+	for _, leak := range []string{
+		"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+		strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"), settingsStaffPrivacyDigits,
+		settingsPrivacyMemberName, "zzmarkeruser", strconv.FormatInt(held.Id, 10),
+	} {
+		if strings.Contains(everything, leak) {
+			t.Errorf("a Phase 16 run of an admin who is not the creator received %q: %q", leak, everything)
 		}
 	}
 }
