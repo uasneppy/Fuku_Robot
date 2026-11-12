@@ -225,6 +225,33 @@ func TestDeletionInlineShedFallsBackToQueue(t *testing.T) {
 	}
 }
 
+// TestDeletionInlineDeadlineFallsBackToQueue is the WR-01 case: a flood-control wait that outlasts
+// the inline delete's own deadline (but is under the pacer's MaxWait, so the pacer sleeps through
+// it) ends the inline context inside the pacer. The message must be queued as a row due now, with
+// no Telegram request, exactly as a shed call is; only a cancelled root context (a shutdown) loses it.
+func TestDeletionInlineDeadlineFallsBackToQueue(t *testing.T) {
+	env := newDeletionEnv(t)
+	restoreDeletionWorker(t)
+	deletionSetRule(t, env.chat.Id, deletion.KindPinned, 0)
+	mreqSwap(t, &deletionInlineTimeout, 150*time.Millisecond)
+	// A block of 30 s is under MaxWait (60 s): the pacer waits for it, and the inline deadline
+	// expires first.
+	if err := env.redis.Set("fuku:delete:pace:block", "1"); err != nil {
+		t.Fatalf("set the pacer block: %v", err)
+	}
+	env.redis.SetTTL("fuku:delete:pace:block", 30*time.Second)
+	t.Cleanup(func() { env.redis.Del("fuku:delete:pace:block") })
+
+	id := env.sendPin()
+	if calls := env.deletes(env.chat.Id); len(calls) != 0 {
+		t.Fatalf("deleteMessage calls under a long flood-control block = %d, want 0", len(calls))
+	}
+	rows := env.queued(env.chat.Id)
+	if len(rows) != 1 || rows[0].MessageID != id || !rows[0].DeleteAt.Equal(env.now) {
+		t.Fatalf("queue rows = %+v, want one due now for message %d (the inline delete timed out, it must not be lost)", rows, id)
+	}
+}
+
 func TestDeletionPacerIsIndependent(t *testing.T) {
 	env := newDeletionEnv(t)
 	ctx := context.Background()
