@@ -23,7 +23,8 @@ import (
 // mis-order them.
 
 var (
-	// ErrInvalidEntry is returned for an Entry with no chat, no message or no sent time.
+	// ErrInvalidEntry is returned for an Entry with no chat or a non-group (not negative) chat ID,
+	// no message or no sent time.
 	ErrInvalidEntry = errors.New("invalid scheduled deletion entry")
 	// ErrInvalidToken is returned for an empty or over-long claim token. An empty token would
 	// match every pending row, which carries an empty token.
@@ -69,7 +70,8 @@ func leastExpr(tx *gorm.DB) clause.Expr {
 
 // Schedule queues one message for deletion at SentAt plus DelaySecs and reports whether a
 // row was written. The kind, the delay (0..MaxDelaySecs) and the IDs are validated before
-// any read or write. A chat that is a Staff Group is refused after a fresh Staff Group read:
+// any read or write; a chat ID that is not negative is refused with ErrInvalidEntry (group and
+// supergroup IDs are negative, so a private chat is never queued, whatever the caller checked). A chat that is a Staff Group is refused after a fresh Staff Group read:
 // the result is (false, nil) and nothing is written, and a failed read is (false, err) and
 // writes nothing (fail closed). Scheduling one (chat, message) again keeps the earlier
 // delete_at and leaves the kind and sent time of the first insert as they were.
@@ -80,7 +82,7 @@ func Schedule(ctx context.Context, e Entry) (bool, error) {
 	if err := validateDelay(e.DelaySecs); err != nil {
 		return false, err
 	}
-	if e.ChatID == 0 || e.MessageID <= 0 || e.SentAt.IsZero() {
+	if e.ChatID >= 0 || e.MessageID <= 0 || e.SentAt.IsZero() {
 		return false, ErrInvalidEntry
 	}
 	if db.DB == nil {

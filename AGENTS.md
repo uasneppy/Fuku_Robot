@@ -1550,8 +1550,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `claim_token`, `claimed_at`, `attempts` (`chk_scheduled_deletions_attempts`) and `created_at`, unique on `(chat_id,
   message_id)` (`uk_scheduled_deletions_message`), with the partial indexes `idx_scheduled_deletions_due` (`delete_at` where
   pending) and `idx_scheduled_deletions_acting` (`claimed_at` where acting). Times are stored as UTC at second precision
-  (SQLite compares them as text). `deletion.Schedule` is the one writer: it validates the kind and the delay, refuses a
-  Staff Group chat after a fresh `staff.GetStaffGroupFresh` read (a read error writes nothing) and upserts so that
+  (SQLite compares them as text). `deletion.Schedule` is the one writer: it validates the kind, the delay and the IDs (a chat ID
+  that is not negative is `ErrInvalidEntry` before any read, so a private chat is never queued, whatever a caller checked),
+  refuses a Staff Group chat after a fresh `staff.GetStaffGroupFresh` read (a read error writes nothing) and upserts so that
   scheduling one message twice keeps the earlier `delete_at` (`LEAST(scheduled_deletions.delete_at, EXCLUDED.delete_at)` on
   PostgreSQL, `MIN(scheduled_deletions.delete_at, excluded.delete_at)` on SQLite, the table-qualified column being
   required because an unqualified one is ambiguous on PostgreSQL) and never rewrites the kind or `sent_at`. `ClaimDue`
