@@ -7,6 +7,8 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
@@ -244,10 +246,99 @@ func (memberEditedHandler) HandleUpdate(b *gotgbot.Bot, ctx *ext.Context) (resul
 	return result
 }
 
-// LoadMemberDeletion registers the edit handler at memberDeleteGroup. The handler arrives together
-// with every exemption it needs, never before.
+// memberContentMessage reports whether a message is a member's own content: false for every
+// message deletionServiceKindOf recognises (the service rules own those) and for the creation and
+// migration notices, which are the group's own history; true for text, media, polls, forwards and
+// everything else a member can post.
+func memberContentMessage(msg *gotgbot.Message) bool {
+	if msg == nil {
+		return false
+	}
+	if _, service := deletionServiceKindOf(msg); service {
+		return false
+	}
+	return !msg.GroupChatCreated && !msg.SupergroupChatCreated && !msg.ChannelChatCreated &&
+		msg.MigrateToChatId == 0 && msg.MigrateFromChatId == 0 && msg.ForumTopicCreated == nil
+}
+
+// memberSelfDestructDelay reads the group's stored member:selfdestruct delay. Only a value the kind
+// accepts (one of the six presets) counts: a value written by hand, such as 45, is Off, and an
+// unreadable rule queues nothing (D-10, D-28, C-05).
+func memberSelfDestructDelay(chatID int64) (delay int, on bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
+	defer cancel()
+	rules, err := deletionRulesLookup(ctx, chatID)
+	if err != nil || rules == nil {
+		return 0, false
+	}
+	delay, present := rules.Delays[deletion.KindMemberSelfDestruct]
+	if !present || deletion.ValidateRuleDelay(deletion.KindMemberSelfDestruct, delay) != nil {
+		return 0, false
+	}
+	return delay, true
+}
+
+// memberDeletePinned drops the pending self-destruct row of one message, because a pinned message
+// stays (D-11). It runs on a fresh bounded context and logs a failure by chat ID only; the only
+// cost of a failure is that the pinned message is still deleted when its time comes.
+func memberDeletePinned(chatID, messageID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
+	defer cancel()
+	if _, err := deletion.DropPendingMessage(ctx, chatID, messageID, deletion.KindMemberSelfDestruct); err != nil {
+		log.Warnf("[MemberDeletion] a pinned message of chat %d could not be taken off the self-destruct queue: %s",
+			chatID, memberReqErrText(err))
+	}
+}
+
+// memberSelfDestructWatch offers every message of a real member to the batcher when the group's
+// member:selfdestruct rule is on (D-09, D-10, D-27, D-29). It never calls deletionAct or
+// deletionSchedule, never writes to the database and never calls Telegram itself: the batcher
+// writes the queue rows and the worker deletes. It never ends an update and never returns nil: the
+// result is a named value preset to ext.ContinueGroups, so a recovered panic cannot leave group -8
+// and kill a later handler. The order is cheapest first: a pinned_message service message drops the
+// pinned message's row; the chat type; the sender's shape; member content (no service message);
+// the stored rule; the approvals and administrator exemptions, which treat an unknown as exempt
+// (D-33); the offer. There is no captcha lookup here, because group -10 ends a pending member's
+// update before this group runs.
+func (moduleStruct) memberSelfDestructWatch(b *gotgbot.Bot, ctx *ext.Context) (result error) {
+	result = ext.ContinueGroups
+	defer error_handling.RecoverFromPanic("memberSelfDestructWatch", "Deletion")
+
+	msg := ctx.EffectiveMessage
+	if msg == nil || (msg.Chat.Type != "group" && msg.Chat.Type != "supergroup") {
+		return result
+	}
+	if msg.PinnedMessage != nil {
+		memberDeletePinned(msg.Chat.Id, msg.PinnedMessage.GetMessageId())
+		return result
+	}
+	userID, ok := raidFloodSenderCounts(b, ctx)
+	if !ok || ctx.EffectiveSender.IsBot() || !memberContentMessage(msg) {
+		return result
+	}
+	delay, on := memberSelfDestructDelay(msg.Chat.Id)
+	if !on || memberDeletionExempt(b, msg.Chat.Id, userID) {
+		return result
+	}
+	memberDeleteOffer(deletion.Entry{
+		ChatID:    msg.Chat.Id,
+		MessageID: msg.MessageId,
+		Kind:      deletion.KindMemberSelfDestruct,
+		SentAt:    deletionSentAt(msg.Date),
+		DelaySecs: delay,
+	})
+	return result
+}
+
+// LoadMemberDeletion registers the edit handler and the self-destruct watcher at memberDeleteGroup.
+// The watcher is registered with no SetAllow* (no edits, channel posts or bot senders) and arrives
+// together with every exemption, the pin drop and the /pin hook, never before.
 func LoadMemberDeletion(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandlerToGroup(memberEditedHandler{}, memberDeletionModule.handlerGroup)
+	dispatcher.AddHandlerToGroup(
+		handlers.NewMessage(message.All, memberDeletionModule.memberSelfDestructWatch),
+		memberDeletionModule.handlerGroup,
+	)
 }
 
 func init() {
