@@ -3,6 +3,8 @@ package modules
 import (
 	"context"
 	"errors"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -10,9 +12,11 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/error_handling"
 )
 
@@ -50,7 +54,108 @@ var (
 	// full semaphore answers unknown at once and never waits, so a burst of edits behind a cold
 	// admin cache cannot hold dispatcher goroutines.
 	memberDeletionAdminSlots = make(chan struct{}, 8)
+	// memberDeletionAdminWarm loads a chat's administrator list into the admin cache. It is the
+	// shared singleflight loader, so concurrent messages of one chat make one getChatAdministrators
+	// call; it is a variable only so a test can keep the cache cold or count the loads.
+	memberDeletionAdminWarm = func(b *gotgbot.Bot, chatID int64) { cache.LoadAdminCache(b, chatID) }
 )
+
+// memberDeletionWarnGate lets one failure line per chat per hour through (WR-01, SEC-17-01): the
+// failure paths of this file (a saturated admin check, an unknown admin status, approvals or
+// captcha state) run per message, and a Telegram or database incident in a busy group would
+// otherwise write one Warn per message. The lines carry IDs and the error class only.
+var memberDeletionWarnGate = memberDeleteWarnGate{label: "the member deletion failure log"}
+
+// memberDeletionWarnf logs a failure line for chatID through the hourly gate.
+func memberDeletionWarnf(chatID int64, format string, args ...any) {
+	if memberDeletionWarnGate.allow(chatID, deletionNow()) {
+		log.Warnf(format, args...)
+	}
+}
+
+// memberDeletionWarmBackoffFor is how long a chat is not warmed again after a load that left the
+// admin cache without an entry (a failing getChatAdministrators stores nothing).
+const memberDeletionWarmBackoffFor = 30 * time.Second
+
+// memberDeletionWarmBackoff remembers the chats whose last warm left no cache entry, so a
+// Telegram incident costs one load per chat per window and not one per message. The map is
+// bounded: a full map forgets its expired entries and, when none expired, records nothing.
+var memberDeletionWarmBackoff struct {
+	mu    sync.Mutex
+	until map[int64]time.Time
+}
+
+// memberDeletionWarmBlocked reports whether chatID is inside its warm backoff at now.
+func memberDeletionWarmBlocked(chatID int64, now time.Time) bool {
+	memberDeletionWarmBackoff.mu.Lock()
+	defer memberDeletionWarmBackoff.mu.Unlock()
+	return now.Before(memberDeletionWarmBackoff.until[chatID])
+}
+
+// memberDeletionWarmMark starts the warm backoff of chatID at now.
+func memberDeletionWarmMark(chatID int64, now time.Time) {
+	memberDeletionWarmBackoff.mu.Lock()
+	defer memberDeletionWarmBackoff.mu.Unlock()
+	if memberDeletionWarmBackoff.until == nil {
+		memberDeletionWarmBackoff.until = make(map[int64]time.Time)
+	}
+	if _, known := memberDeletionWarmBackoff.until[chatID]; !known &&
+		len(memberDeletionWarmBackoff.until) >= memberDeleteWarnMax {
+		for id, end := range memberDeletionWarmBackoff.until {
+			if !now.Before(end) {
+				delete(memberDeletionWarmBackoff.until, id)
+			}
+		}
+		if len(memberDeletionWarmBackoff.until) >= memberDeleteWarnMax {
+			return
+		}
+	}
+	memberDeletionWarmBackoff.until[chatID] = now.Add(memberDeletionWarmBackoffFor)
+}
+
+// memberDeletionWarmFlight makes every concurrent warm of one chat one load.
+var memberDeletionWarmFlight singleflight.Group
+
+// memberDeletionHasAdminEntry reports whether the admin cache holds an entry for the chat, of any
+// kind (a list, an empty list or a negative answer).
+func memberDeletionHasAdminEntry(chatID int64) bool {
+	ok, cached := cache.GetAdminCacheList(chatID)
+	return ok && cached.Cached
+}
+
+// memberDeletionWarmAdminList loads the chat's administrator list once when the cache has no
+// entry for it, waiting at most until ctx ends (the load itself cannot be cancelled and finishes
+// on its own goroutine, so a slow answer still warms the cache for the next message). It does
+// nothing while the chat is in its backoff or when the cache already holds an entry, a negative
+// one included: those answers are stored for their own TTL, so asking again would only repeat the
+// bot's own getChatMember on every message.
+func memberDeletionWarmAdminList(ctx context.Context, b *gotgbot.Bot, chatID int64) {
+	now := deletionNow()
+	if memberDeletionWarmBlocked(chatID, now) || memberDeletionHasAdminEntry(chatID) {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// The flight re-reads the cache first: a flight that starts right after another one ended
+		// finds the list that one stored and loads nothing. The leader recovers inside the function,
+		// because a singleflight leader that panics crashes the process.
+		_, _, _ = memberDeletionWarmFlight.Do(strconv.FormatInt(chatID, 10), func() (any, error) {
+			defer error_handling.RecoverFromPanic("memberDeletionWarm", "Deletion")
+			if !memberDeletionHasAdminEntry(chatID) {
+				memberDeletionAdminWarm(b, chatID)
+			}
+			return nil, nil
+		})
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+	if !memberDeletionHasAdminEntry(chatID) {
+		memberDeletionWarmMark(chatID, now)
+	}
+}
 
 // memberDeletionAdminTimeout bounds one live administrator read. It is a variable only so a test
 // can shorten it.
@@ -84,11 +189,14 @@ func memberDeletionLiveMember(
 }
 
 // memberDeletionAdminStatus says whether the member is an administrator. The cached admin list
-// answers when it knows; otherwise one live getChatMember is made, bounded by
-// memberDeletionAdminTimeout and by the semaphore, and classified by status alone: creator and
-// administrator are admins; member, restricted, left and kicked are not; anything else, and every
-// failure, is unknown. It never uses the antiflood or chat_status checks as its answer, because
-// both read a failed lookup on a cold cache as "not an admin" (D-33).
+// answers when it knows. When it does not, the list is warmed once through the shared loader
+// (memberDeletionWarmAdminList: one getChatAdministrators per chat however many messages arrive,
+// then every later message is answered from the cache) and read again; only when the cache still
+// cannot say is one live getChatMember made for the member. Both steps run behind the same
+// semaphore and under the same memberDeletionAdminTimeout, and the answer is classified by status
+// alone: creator and administrator are admins; member, restricted, left and kicked are not;
+// anything else, and every failure, is unknown. It never uses the antiflood or chat_status checks
+// as its answer, because both read a failed lookup on a cold cache as "not an admin" (D-33).
 func memberDeletionAdminStatus(b *gotgbot.Bot, chatID, userID int64) memberDeletionAdmin {
 	if known, isAdmin := cachedAdminStatus(chatID, userID); known {
 		if isAdmin {
@@ -100,14 +208,21 @@ func memberDeletionAdminStatus(b *gotgbot.Bot, chatID, userID int64) memberDelet
 	case memberDeletionAdminSlots <- struct{}{}:
 		defer func() { <-memberDeletionAdminSlots }()
 	default:
-		log.Warnf("[MemberDeletion] the admin check of chat %d is saturated: the message is kept", chatID)
+		memberDeletionWarnf(chatID, "[MemberDeletion] the admin check of chat %d is saturated: the message is kept", chatID)
 		return memberDeletionAdminUnknown
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), memberDeletionAdminTimeout)
 	defer cancel()
+	memberDeletionWarmAdminList(ctx, b, chatID)
+	if known, isAdmin := cachedAdminStatus(chatID, userID); known {
+		if isAdmin {
+			return memberDeletionIsAdmin
+		}
+		return memberDeletionNotAdmin
+	}
 	member, err := memberDeletionMemberLookup(ctx, b, chatID, userID)
 	if err != nil {
-		log.Warnf("[MemberDeletion] the admin status of user %d in chat %d is unknown: %s",
+		memberDeletionWarnf(chatID, "[MemberDeletion] the admin status of user %d in chat %d is unknown: %s",
 			userID, chatID, memberReqErrText(err))
 		return memberDeletionAdminUnknown
 	}
@@ -131,7 +246,8 @@ func memberDeletionExempt(b *gotgbot.Bot, chatID, userID int64) bool {
 	defer cancel()
 	approved, err := memberDeletionApprovedLookup(ctx, chatID, userID)
 	if err != nil {
-		log.Warnf("[MemberDeletion] approval of user %d in chat %d is unknown: %s", userID, chatID, memberReqErrText(err))
+		memberDeletionWarnf(chatID, "[MemberDeletion] approval of user %d in chat %d is unknown: %s",
+			userID, chatID, memberReqErrText(err))
 		return true
 	}
 	if approved {
@@ -148,7 +264,7 @@ func memberEditPendingCaptcha(chatID, userID int64) bool {
 	defer cancel()
 	anyPending, err := memberReqCaptchaPendingLookup(ctx, chatID)
 	if err != nil {
-		log.Warnf("[MemberDeletion] captcha state of chat %d is unknown: %s", chatID, memberReqErrText(err))
+		memberDeletionWarnf(chatID, "[MemberDeletion] captcha state of chat %d is unknown: %s", chatID, memberReqErrText(err))
 		return true
 	}
 	if !anyPending {
@@ -156,7 +272,7 @@ func memberEditPendingCaptcha(chatID, userID int64) bool {
 	}
 	attempt, err := memberReqCaptchaAttemptLookup(userID, chatID)
 	if err != nil {
-		log.Warnf("[MemberDeletion] captcha state of user %d in chat %d is unknown: %s",
+		memberDeletionWarnf(chatID, "[MemberDeletion] captcha state of user %d in chat %d is unknown: %s",
 			userID, chatID, memberReqErrText(err))
 		return true
 	}

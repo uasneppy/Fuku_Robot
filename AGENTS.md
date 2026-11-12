@@ -235,17 +235,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   apply as for every kind). Unknown never deletes (D-33): the exemptions are tri-state and a lookup that fails keeps the
   message. Approvals go through `memberDeletionApprovedLookup` (default `approvals.IsUserApprovedContext`; approved or an
   error is exempt, never the cached predicate that turns a failed load into "not approved"), administrators through
-  `memberDeletionAdminStatus` (the cached admin list when it knows, otherwise one live `getChatMember` through the seam
-  `memberDeletionMemberLookup`, bounded by `memberDeletionAdminTimeout` (3 s) and by the semaphore `memberDeletionAdminSlots`
-  (8, a full one answers unknown at once and never waits); creator and administrator are admins, member, restricted, left and
-  kicked are not, and an error, a 429, a 5xx, a timeout, an empty or unrecognised answer or a full semaphore is unknown, which
-  is exempt), and the pending captcha explicitly for edits (`memberEditPendingCaptcha` through the member requirements' two
+  `memberDeletionAdminStatus` (the cached admin list when it knows; otherwise, behind the semaphore `memberDeletionAdminSlots`
+  (8, a full one answers unknown at once and never waits) and under `memberDeletionAdminTimeout` (3 s), the list is warmed once
+  through the shared loader `cache.LoadAdminCache` (`memberDeletionAdminWarm`, one `getChatAdministrators` per chat however many
+  messages arrive, then every later message is answered from the cache) and read again, and only when the cache still cannot say
+  is one live `getChatMember` made through the seam `memberDeletionMemberLookup`; the warm is skipped while the cache holds any
+  entry (a negative one included) and for `memberDeletionWarmBackoffFor` (30 s) after a load that stored nothing, so an incident
+  costs one load per chat per window and never one per message; creator and administrator are admins, member, restricted,
+  left and kicked are not, and an error, a 429, a 5xx, a timeout, an empty or unrecognised answer or a full semaphore is
+  unknown, which is exempt). The failure lines of this file (a saturated admin check, an unknown admin status, approvals or
+  captcha state) go through `memberDeletionWarnf` and its hourly per-chat gate (`memberDeletionWarnGate`, the batcher's
+  `memberDeleteWarnGate` type), so a busy group in an incident logs one line per chat per hour, and the pending captcha explicitly for edits (`memberEditPendingCaptcha` through the member requirements' two
   captcha seams: an attempt or any read error is pending). It never uses `antifloodModule.userIsFloodExempt`,
   `chat_status.IsUserAdmin` or `IsApprovedForUpdate` as its answer, because each reads a failed lookup as "not an admin" or
   "not approved". The self-destruct watcher reuses `memberDeletionExempt` unchanged. The handler logs by chat and user
   ID and the error class only, never a name, text or message ID. `TestMemberEditedDeletesLateEdit`, `TestMemberEditedGrace`,
   `TestMemberDeletionExemptTriState`, `TestMemberEditedKeeps`, `TestMemberEditedNeverEndsUpdate`,
-  `TestMemberEditedStaffGroupNeverTouched` and `TestMemberEditedNeedsDeleteRight` hold it.
+  `TestMemberEditedStaffGroupNeverTouched`, `TestMemberEditedNeedsDeleteRight` and `TestMemberDeletionAdminWarm` hold it.
   The self-destruct watcher, `memberSelfDestructWatch` (Phase 17, DEL-05; a value-receiver method of `moduleStruct`),
   is registered by the same `LoadMemberDeletion` with `handlers.NewMessage(message.All, ...)` at `memberDeleteGroup` and
   no setter, so it sees new messages of real users only (no edits, channel posts or bot senders), and it arrives together

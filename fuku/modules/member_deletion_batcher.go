@@ -105,11 +105,15 @@ var (
 	memberDeleteDroppedOff atomic.Int64
 )
 
-// memberDeleteWarnGate lets one Warn per chat per hour through, with a bounded map.
+// memberDeleteWarnGate lets one line per chat per window through, with a bounded map. The zero
+// window is memberDeleteWarnEvery (an hour) and the zero label names the self-destruct shed log;
+// the member deletion failure log (memberDeletionWarnGate) shares the type with its own label.
 type memberDeleteWarnGate struct {
 	mu        sync.Mutex
 	last      map[int64]time.Time
 	capWarned bool
+	every     time.Duration
+	label     string
 }
 
 var memberDeleteShedWarn memberDeleteWarnGate
@@ -120,8 +124,12 @@ var memberDeleteShedWarn memberDeleteWarnGate
 func (g *memberDeleteWarnGate) allow(chatID int64, now time.Time) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	every := g.every
+	if every <= 0 {
+		every = memberDeleteWarnEvery
+	}
 	last, known := g.last[chatID]
-	if known && now.Sub(last) < memberDeleteWarnEvery {
+	if known && now.Sub(last) < every {
 		return false
 	}
 	if g.last == nil {
@@ -129,14 +137,18 @@ func (g *memberDeleteWarnGate) allow(chatID int64, now time.Time) bool {
 	}
 	if !known && len(g.last) >= memberDeleteWarnMax {
 		for id, at := range g.last {
-			if now.Sub(at) >= memberDeleteWarnEvery {
+			if now.Sub(at) >= every {
 				delete(g.last, id)
 			}
 		}
 		if len(g.last) >= memberDeleteWarnMax {
 			if !g.capWarned {
 				g.capWarned = true
-				log.Warnf("[Deletion] the self-destruct shed log tracks %d chats; later chats are shed without a line", memberDeleteWarnMax)
+				label := g.label
+				if label == "" {
+					label = "the self-destruct shed log"
+				}
+				log.Warnf("[Deletion] %s tracks %d chats; later chats are shed without a line", label, memberDeleteWarnMax)
 			}
 			return false
 		}

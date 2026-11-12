@@ -59,11 +59,37 @@ func (e *memberDeletionEnv) primeAdminCache() {
 	}
 }
 
-// coldAdminCache empties the chat's admin cache entry, so the cache cannot say who is an administrator
-// and the handler has to ask Telegram.
+// coldAdminCache empties the chat's admin cache entry and keeps it empty (the warm of the shared loader
+// is a no-op for the test), so the cache cannot say who is an administrator and the handler has to ask
+// Telegram about the member. warmableAdminCache is the cache that can be warmed.
 func (e *memberDeletionEnv) coldAdminCache() {
 	e.t.Helper()
 	cache.InvalidateAdminCache(e.chat.Id)
+	mreqSwap(e.t, &memberDeletionAdminWarm, func(*gotgbot.Bot, int64) {})
+}
+
+// warmableAdminCache empties the chat's admin cache entry and leaves the loader as it is, so the first
+// check of a message loads the list once (WR-01).
+func (e *memberDeletionEnv) warmableAdminCache() {
+	e.t.Helper()
+	cache.InvalidateAdminCache(e.chat.Id)
+}
+
+// resetMemberDeletionFailureState clears the failure log gate and the warm backoff now and when the
+// test ends, so no line or backoff of one test is seen by another.
+func resetMemberDeletionFailureState(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		memberDeletionWarnGate.mu.Lock()
+		memberDeletionWarnGate.last = nil
+		memberDeletionWarnGate.capWarned = false
+		memberDeletionWarnGate.mu.Unlock()
+		memberDeletionWarmBackoff.mu.Lock()
+		memberDeletionWarmBackoff.until = nil
+		memberDeletionWarmBackoff.mu.Unlock()
+	}
+	reset()
+	t.Cleanup(reset)
 }
 
 // storeMemberRule stores a member rule of the env chat through the real apply function.
