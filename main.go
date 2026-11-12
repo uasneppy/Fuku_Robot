@@ -218,8 +218,20 @@ func main() {
 		modules.StopAdminIndexSweeper()
 		return nil
 	})
+	// Registered right after the admin index sweeper's stop and before the member requirements
+	// drain, so LIFO runs it after the staff actions drain and the member requirements drain and
+	// before the admin index sweeper stop and the database close. It cancels the deletion root
+	// context and waits at most 3 s; every Telegram call of a cycle and every inline delete
+	// derives from that cancelled root, so it returns as soon as the calls end. Every queued row
+	// resumes from the database: a cycle cut off leaves its rows pending, or claimed until the
+	// 2 minute stale release. The handler logs and returns nil.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping deletion worker...")
+		modules.StopDeletionWorker()
+		return nil
+	})
 	// Registered right before the staff actions drain, so LIFO runs it after that drain and
-	// before the admin index sweeper stop and the database close: the enforcement jobs of the
+	// before the deletion worker stop and the database close: the enforcement jobs of the
 	// member requirements read and write holds, warns and notices. It cancels the jobs and
 	// waits at most 2 s, plus a grace period. Every hold resumes from the database: a job cut
 	// off leaves a pending hold that a reclaim retries.
@@ -501,6 +513,7 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 	modules.StartStaffSweeper(b)
 	modules.StartAdminIndexSweeper(b)
 	modules.StartLockdownWorker(b)
+	modules.StartDeletionWorker(b)
 	log.Infof("[Modules] Loaded modules: %s", fuku.ListModules())
 
 	config.AppConfig.WorkingMode = mode

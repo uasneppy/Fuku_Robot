@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
+	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
@@ -600,4 +602,178 @@ func TestDeletionWorkerLogsNoMessageIDs(t *testing.T) {
 		t.Fatal("the worker logged nothing at debug level: the test cannot discriminate")
 	}
 	deletionWantNoMessageIDs(t, hook, all)
+}
+
+// deletionDrainWake empties the worker's wake channel, so a test starts with no pending wake.
+func deletionDrainWake() {
+	for len(deletionWake) > 0 {
+		<-deletionWake
+	}
+}
+
+// deletionRowCount counts the queue rows of chatID, in any state.
+func (e *deletionEnv) deletionRowCount(chatID int64) int {
+	e.t.Helper()
+	return len(e.queuedNoWait(chatID))
+}
+
+// deletionWorkerStopped registers the clean-up of a test that starts the real worker: the stop
+// first (it cancels the root), then the fresh root every later test needs.
+func deletionWorkerStopped(t *testing.T) {
+	t.Helper()
+	restoreDeletionWorker(t)
+	t.Cleanup(StopDeletionWorker)
+}
+
+func TestDeletionWorkerResumesAfterRestart(t *testing.T) {
+	env := newDeletionEnv(t)
+	deletionWorkerStopped(t)
+	deletionDrainWake()
+	mreqSwap(t, &deletionWorkerTick, 10*time.Millisecond)
+	ids := env.seedDue(env.chat.Id, 54000, 6, deletion.KindBotWelcome)
+
+	started := make(chan struct{}, 4)
+	env.script.set(func(ctx context.Context, method string, _ map[string]any) error {
+		if method == "deleteMessages" {
+			started <- struct{}{}
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	})
+	StartDeletionWorker(env.bot)
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the worker never reached its first call")
+	}
+
+	StopDeletionWorker()
+
+	rows := env.queuedNoWait(env.chat.Id)
+	if len(rows) != len(ids) {
+		t.Fatalf("rows after the stop = %d, want all %d still queued", len(rows), len(ids))
+	}
+	for _, row := range rows {
+		if row.State != models.ScheduledDeletionPending || row.ClaimToken != "" || row.Attempts != 0 {
+			t.Fatalf("row %+v after the stop, want pending with no token and no attempt", row)
+		}
+	}
+
+	// A crash leaves a row acting with an old claim: the first cycle of the next worker releases it.
+	claimedAt := env.now.Add(-3 * time.Minute)
+	crashed := models.ScheduledDeletion{
+		ChatID: env.chat.Id, MessageID: 54900, Kind: deletion.KindBotWelcome,
+		SentAt: env.now.Add(-time.Hour), DeleteAt: env.now.Add(-time.Minute),
+		State: models.ScheduledDeletionActing, ClaimToken: "deadbeefdeadbeefdeadbeefdeadbeef",
+		ClaimedAt: &claimedAt, CreatedAt: env.now.Add(-time.Hour),
+	}
+	if err := db.DB.Create(&crashed).Error; err != nil {
+		t.Fatalf("seed the crashed row: %v", err)
+	}
+
+	// The call the stop cut off is recorded too: only what the restarted worker sends counts.
+	cutOff := len(env.batchCalls(env.chat.Id))
+	freshDeletionRoot()
+	env.script.set(nil)
+	StartDeletionWorker(env.bot)
+	waitUntil(t, 10*time.Second, "the restarted worker to delete every row", func() bool {
+		return env.deletionRowCount(env.chat.Id) == 0
+	})
+	StopDeletionWorker()
+
+	seen := make(map[int64]int)
+	for _, batch := range env.batchCalls(env.chat.Id)[cutOff:] {
+		for _, id := range batch {
+			seen[id]++
+		}
+	}
+	for _, id := range append(ids, crashed.MessageID) {
+		if seen[id] != 1 {
+			t.Errorf("message %d was sent %d times after the restart, want exactly once", id, seen[id])
+		}
+	}
+}
+
+func TestDeletionWorkerOneDeleteAcrossReplicas(t *testing.T) {
+	env := newDeletionEnv(t)
+	second := env.replica()
+	// Small claims and chunks make the two replicas share the rows instead of one taking all.
+	mreqSwap(t, &deletionBatch, 7)
+	mreqSwap(t, &deletionChunk, 5)
+	ids := env.seedDue(env.chat.Id, 55000, 40, deletion.KindBotWelcome)
+
+	run := func(replica *deletionEnv, start <-chan struct{}, wg *sync.WaitGroup) {
+		defer wg.Done()
+		<-start
+		deadline := time.Now().Add(30 * time.Second)
+		// A cycle that met a locked SQLite database claims nothing and is simply run again.
+		for time.Now().Before(deadline) && replica.deletionRowCount(env.chat.Id) > 0 {
+			replica.cycle()
+		}
+	}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go run(env, start, &wg)
+	go run(second, start, &wg)
+	close(start)
+	wg.Wait()
+
+	if left := env.queuedNoWait(env.chat.Id); len(left) != 0 {
+		t.Fatalf("rows left = %d, want none", len(left))
+	}
+	seen := make(map[int64]int)
+	for _, replica := range []*deletionEnv{env, second} {
+		for _, batch := range replica.batchCalls(env.chat.Id) {
+			for _, id := range batch {
+				seen[id]++
+			}
+		}
+	}
+	for _, id := range ids {
+		if seen[id] != 1 {
+			t.Errorf("message %d was deleted %d times across the two replicas, want exactly once", id, seen[id])
+		}
+	}
+	if len(seen) != len(ids) {
+		t.Errorf("distinct messages deleted = %d, want %d", len(seen), len(ids))
+	}
+}
+
+func TestDeletionWorkerStartStopIdempotent(t *testing.T) {
+	env := newDeletionEnv(t)
+	deletionWorkerStopped(t)
+
+	// A stop with nothing running returns at once and cancels the root, so every later inline
+	// delete takes the durable path.
+	before := time.Now()
+	StopDeletionWorker()
+	StopDeletionWorker()
+	if elapsed := time.Since(before); elapsed > time.Second {
+		t.Fatalf("a stop with nothing running took %s, want it to return at once", elapsed)
+	}
+	if deletionContext().Err() == nil {
+		t.Fatal("the stop left the root context alive")
+	}
+
+	freshDeletionRoot()
+	StartDeletionWorker(env.bot)
+	deletionWorkerMu.Lock()
+	first := deletionWorkerDone
+	deletionWorkerMu.Unlock()
+	StartDeletionWorker(env.bot)
+	deletionWorkerMu.Lock()
+	again := deletionWorkerDone
+	deletionWorkerMu.Unlock()
+	if first == nil || first != again {
+		t.Fatal("a second StartDeletionWorker started another loop")
+	}
+	StopDeletionWorker()
+	StopDeletionWorker()
+	deletionWorkerMu.Lock()
+	defer deletionWorkerMu.Unlock()
+	if deletionWorkerCancel != nil || deletionWorkerDone != nil {
+		t.Fatal("the worker state was not cleared by the stop")
+	}
 }

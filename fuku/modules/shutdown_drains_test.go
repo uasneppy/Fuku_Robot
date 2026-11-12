@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -465,4 +466,111 @@ func TestShutdownEndsMemberReqAI(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	memberReqAIGate.Release(1)
+}
+
+// TestShutdownEndsDeletionWorker runs a real shutdown.Manager with a DB-close probe registered
+// first (so it runs last) and the worker's stop registered as a plain handler, which has only the
+// manager's 50 ms default allowance here. A cycle inside a hung deleteMessages call and an inline
+// delete inside a hung deleteMessage are both ended by the stop's root cancel, so the stop returns
+// far inside the 3 s it may wait, the rows are back to pending by the time the probe runs, a
+// delete-now after the stop takes the durable path, and a restart resumes every row.
+func TestShutdownEndsDeletionWorker(t *testing.T) {
+	env := newDeletionEnv(t)
+	deletionWorkerStopped(t)
+	deletionDrainWake()
+	mreqSwap(t, &deletionWorkerTick, 10*time.Millisecond)
+	mreqSwap(t, &deletionWorkerStopWait, 3*time.Second)
+	deletionSetRule(t, env.chat.Id, deletion.KindPinned, 0)
+	ids := env.seedDue(env.chat.Id, 56000, 5, deletion.KindBotWelcome)
+
+	cycleStarted := make(chan struct{}, 4)
+	inlineStarted := make(chan struct{}, 4)
+	env.script.set(func(ctx context.Context, method string, _ map[string]any) error {
+		switch method {
+		case "deleteMessages":
+			cycleStarted <- struct{}{}
+		case "deleteMessage":
+			inlineStarted <- struct{}{}
+		default:
+			return nil
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	// One hung inline delete, started before the worker.
+	env.sendPin()
+	select {
+	case <-inlineStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the inline delete never reached its call")
+	}
+	StartDeletionWorker(env.bot)
+	select {
+	case <-cycleStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the worker never reached its first call")
+	}
+
+	type observation struct {
+		rows []models.ScheduledDeletion
+	}
+	observed := make(chan observation, 1)
+	m := shutdown.NewManager()
+	// The probe stands for the DB-close handler and must not call t.Fatal.
+	m.RegisterHandler(func() error {
+		observed <- observation{rows: env.queuedNoWait(env.chat.Id)}
+		return nil
+	})
+	m.RegisterHandler(func() error {
+		StopDeletionWorker()
+		return nil
+	})
+	began := time.Now()
+	if code := m.RunForTest(10*time.Second, 50*time.Millisecond); code != 0 {
+		t.Fatalf("shutdown exit code = %d, want 0 (the stop must fit the default allowance)", code)
+	}
+	if elapsed := time.Since(began); elapsed > time.Second {
+		t.Fatalf("shutdown took %s, want the stop far inside deletionWorkerStopWait", elapsed)
+	}
+	select {
+	case obs := <-observed:
+		if len(obs.rows) != len(ids) {
+			t.Fatalf("rows when the database-close handler ran = %d, want all %d", len(obs.rows), len(ids))
+		}
+		for _, row := range obs.rows {
+			if row.State != models.ScheduledDeletionPending || row.ClaimToken != "" || row.Attempts != 0 {
+				t.Fatalf("row %+v when the database-close handler ran, want pending with no token and no attempt", row)
+			}
+		}
+	default:
+		t.Fatal("the database-close probe never ran")
+	}
+
+	// Every inline goroutine ended with the root.
+	select {
+	case <-deletionInline.idleChan():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%d inline deletes are still in flight after the stop", deletionInlineRunning())
+	}
+	deletionInline.wait()
+
+	// A delete-now after the stop starts no goroutine: the durable row is due now.
+	late := env.sendPin()
+	if running := deletionInlineRunning(); running != 0 {
+		t.Fatalf("inline deletes in flight after the stop = %d, want 0", running)
+	}
+	row := env.rowOf(env.chat.Id, late)
+	if row == nil || !row.DeleteAt.Equal(env.now) {
+		t.Fatalf("row of a delete-now after the stop = %+v, want one due now", row)
+	}
+
+	// A restart resumes every row.
+	freshDeletionRoot()
+	env.script.set(nil)
+	StartDeletionWorker(env.bot)
+	waitUntil(t, 10*time.Second, "the restarted worker to delete every row", func() bool {
+		return env.deletionRowCount(env.chat.Id) == 0
+	})
+	StopDeletionWorker()
 }

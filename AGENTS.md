@@ -48,7 +48,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   runs it after the staff drain and before the admin index sweeper stop, the staff sweeper stop, the captcha lifecycle
   stop, the tracer shutdown, the monitoring stops, the users async writes drain and the database close. In webhook mode
   the worst case of the drains up to and including it is 65 s (HTTP stop 10, AI spam 10, raid AI 2, raid posts 3,
-  lockdown 6, staff 31, member requirements 3) against the 60 s budget, so when every earlier drain runs to its limit
+  lockdown 6, staff 31, member requirements 3; `StopDeletionWorker`, registered right before it, runs after it in LIFO
+  order and adds 3 s, see below) against the 60 s budget, so when every earlier drain runs to its limit
   the staff drain is cut 2 s short and the member requirements drain and every handler after it in LIFO order, the
   database close included, are cut, and the process exits with code 1 inside `stop_grace_period: 75s`, before SIGKILL; in
   polling mode the updater's extra 10 s moves the cut earlier. This worst case costs no correctness, because every hold
@@ -95,6 +96,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   from it), and the one roster write in flight is bounded by that same context. A cycle cut off by the cancel releases
   its lock by compare-and-delete on its own owner token (`releaseAdminIndexSweepLock`), so a restarted replica's first
   cycle is not skipped for an hour; a finished cycle, and one ended by a second 429, keeps the lock until its TTL.
+- `StopDeletionWorker` is a plain shutdown handler (`RegisterHandler`, the 10 s default, no drain registration and no
+  `RegisterHandlerWithTimeout`) that `main.go` registers right after the admin index sweeper's stop and before
+  `RegisterMemberReqDrain`, with `StartDeletionWorker` in `postInit` right after `StartLockdownWorker`. LIFO runs it after the
+  staff actions drain and the member requirements drain and before the admin index sweeper stop and the database close. It
+  cancels the deletion root context (`cancelDeletionContext`: the loop, every Telegram call of a cycle and every inline
+  delete derive from it) and waits at most `deletionWorkerStopWait` (3 s, an internal wait under the 10 s default), logging
+  one warning when the wait runs out. It adds 3 s of allowance: in webhook mode the worst case of the drains up to and
+  including it is 68 s (HTTP stop 10, AI spam 10, raid AI 2, raid posts 3, lockdown 6, staff actions 31, member requirements
+  3, deletion worker 3) against the enforced 60 s budget, so when every earlier drain runs to its limit the staff drain is
+  cut short and the deletion stop and every handler after it in LIFO order, the database close included, are cut, and the
+  process exits with code 1 inside `stop_grace_period: 75s`, before SIGKILL; in polling mode the updater's extra 10 s moves
+  the cut earlier. This costs no correctness: every row resumes from the database, and a cycle cut off leaves its rows
+  pending (or claimed, until the 2 minute stale release), because the unfinished rows are released free on a context
+  detached from the cancelled run (`TestShutdownEndsDeletionWorker`).
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 - The Turnstile web captcha is configured in `main` (`registerCaptchaWeb`) when `config.AppConfig.CaptchaWebConfigured()`
   holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
@@ -1509,7 +1524,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `Release` touch only rows that still carry the caller's token (a late completion of a stale claim removes nothing, and an
   empty token is refused), the third counted `Release` deletes the row instead, and `ReleaseStale` returns old acting rows to
   pending with no attempt. The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
-  never part of backup, export, import or reset.
+  never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 200 due rows per cycle
+  (`deletionBatch`), releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
+  90 s after its claim (`deletionCycleGuard`, under the stale release, so a live cycle's rows are never handed to a second
+  replica: what it has not finished is released free before it returns), drops a row whose `sent_at` is more than 47 hours
+  old (`deletionDropAge`) with no call, and gives a row three counted tries (`deletionMaxAttempts`, a 5xx or a timeout; a 429
+  and a shutdown cost none).
 - `fuku:delete:pace:next` and `fuku:delete:pace:block` are the fleet-wide Telegram pacing of the deletion code
   (`deletionPaced`, `deletionPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block design with its own keys, so
   deletions, member requirements, lockdown and staff fan-outs each keep their own budget (`TestDeletionPacerIsIndependent`).
@@ -1999,6 +2019,33 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `gone` latch, a refused one is dropped with no log line and any other failure loses that one message. `deletionClassify` is a
   table of predicates (retryFree, gone, refused, else retry) that matches on lower-cased fragments and codes, never one string.
   Logs carry the chat ID only, never a message ID, text or member.
+- Deletion worker (`deletion_worker.go`, `deletion_right.go`): `StartDeletionWorker` runs a pass at start, then one per
+  `deletionWorkerTick` (1 s) or wake, a pass being cycles back to back until one settles nothing; `runDeletionCycle` starts with
+  `defer error_handling.RecoverFromPanic`. The cycle order is fixed (research S-05): release stale claims, claim up to 200
+  rows with one conditional update read by token, drop the rows whose message is over 47 hours old, then per chat in
+  ascending chat ID order: the latch (a `gone` value drops every kind of the chat, a `service` value drops its `service:*`
+  rows and lets `bot:*` through), a fresh Staff Group read through `deletionStaffLookup` (a row drops the chat's rows with no
+  call, an error releases them free), then one paced `deleteMessages` call per chunk of at most 100 IDs. A success
+  completes the chunk. A failure is read by `deletionClassify`: retry-free (a 429 past the pacer's retries, a shed pacer, a
+  cancelled context) releases every unsettled row free and ends the cycle, so the next cycle's first call fails at once
+  under the shared block with no request; gone sets the `gone` latch and drops the chat's claimed and pending rows;
+  anything else falls back to one `deleteMessage` per ID, each classified alone: done and refused (not found, can't be
+  deleted, any other 4xx) drop the row quietly, a 5xx or timeout releases it counted. Every row write (`Complete`, `Release`,
+  `DropChatPending`, the latch) runs on `context.WithoutCancel` with its own 5 s bound through `deletionCycle.writeContext`,
+  never the run context a shutdown cancels. The cycle logs one debug line per chat batch with counts and the chat ID, and
+  never a message ID, a claim token or text (`TestDeletionWorkerLogsNoMessageIDs`); a dropped row has no line.
+  The service latch is set only after a live check: when a `service:*` message is refused with a message-level answer, once
+  per chat per cycle `deletionDecideServiceLatch` reads the bot's own member record through the pacer
+  (`deletionReadBotRight`, classified by `deletionClassifyBotRight` from status and error code only, never a description:
+  creator can; an administrator can when it has the delete right or the flag is not trusted; member, restricted, left, kicked,
+  a 400 and a 403 cannot; a 429, a 5xx, a transport error, a timeout, a shed pacer and a null or unrecognised answer are
+  unknown). Only `cannot` latches the chat for `service` kinds and drops its pending `service:*` rows; `can` and unknown only
+  drop the one refused row. The worker has no chat type, so it does not trust the administrator flag: an administrator is
+  never latched, which avoids a false latch in a basic group whose administrator reads `can_delete_messages` false, at the
+  cost of one refused call per notice in a supergroup whose administrator lacks the right (bounded by the pacer). A missing
+  right never stops `bot:*` rows, because a plain-member bot can delete its own messages. The settings page reads the right
+  through the same `deletionReadBotRight`, trusting the flag outside basic groups. After the stop cancels the root, a
+  delete-now starts no goroutine and takes the durable path (a row due now), so it resumes after a restart.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
