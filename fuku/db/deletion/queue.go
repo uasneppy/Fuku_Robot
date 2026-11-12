@@ -1,10 +1,12 @@
 package deletion
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -118,6 +120,167 @@ func Schedule(ctx context.Context, e Entry) (bool, error) {
 		return false, fukuerrors.Wrapf(err, "schedule deletion in chat %d", e.ChatID)
 	}
 	return true, nil
+}
+
+// ScheduleBatchMax is the most rows ScheduleBatch writes in one INSERT statement.
+const ScheduleBatchMax = 100
+
+// batchKey identifies one queued message.
+type batchKey struct{ chat, message int64 }
+
+// ScheduleBatch queues many messages in as few statements as possible and returns how many
+// entries it wrote. Every entry is validated before any read or write exactly as Schedule
+// validates one (kind, ValidateEntryDelay, a negative chat ID, a positive message ID, a sent
+// time); the first refusal is returned wrapped with its index and nothing is written. Entries
+// naming one (chat, message) are merged in Go to the earliest delete_at (and the first entry's
+// kind and sent time), because one PostgreSQL statement that touches a key twice fails whole. The
+// Staff Group of each distinct chat is read once, fresh: the entries of a Staff Group chat are
+// dropped without an error (layer two of DEL-07), and those of a chat whose read failed are dropped
+// with that error collected, so a failed read keeps the message and the other chats are still
+// written. The rows are sorted by (chat, message), so two concurrent batches take their row locks
+// in one order, and written in chunks of at most ScheduleBatchMax rows, each one multi-row INSERT
+// that keeps the earlier delete_at of an existing row and never rewrites its kind or sent time. A
+// database error stops at that chunk and is returned, joined with the collected read errors, with
+// the number of entries written before it. The queue is read and written fresh, so no cache key
+// applies, and no message ID is logged next to a chat ID.
+func ScheduleBatch(ctx context.Context, entries []Entry) (int, error) {
+	if len(entries) == 0 {
+		return 0, nil
+	}
+	for i, e := range entries {
+		if err := validateEntry(e); err != nil {
+			return 0, fukuerrors.Wrapf(err, "schedule batch entry %d", i)
+		}
+	}
+	if db.DB == nil {
+		return 0, fukuerrors.Wrap(errNoDatabase, "schedule deletion batch")
+	}
+	rows, chats := mergeBatch(entries)
+	var errs []error
+	allowed := make(map[int64]bool, len(chats))
+	for _, chatID := range chats {
+		group, err := staffGroupLookup(chatID)
+		if err != nil {
+			errs = append(errs, fukuerrors.Wrapf(err, "check chat %d for a Staff Group before scheduling", chatID))
+			continue
+		}
+		allowed[chatID] = group == nil
+	}
+	writable := rows[:0]
+	for _, row := range rows {
+		if allowed[row.ChatID] {
+			writable = append(writable, row)
+		}
+	}
+	wrote := 0
+	for chunk := range slices.Chunk(writable, ScheduleBatchMax) {
+		err := db.DB.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "chat_id"}, {Name: "message_id"}},
+			DoUpdates: clause.Set{
+				{Column: clause.Column{Name: "delete_at"}, Value: leastExpr(db.DB)},
+			},
+		}).Create(&chunk).Error
+		if err != nil {
+			errs = append(errs, fukuerrors.Wrapf(err, "schedule deletion batch of %d rows in chat %d", len(chunk), chunk[0].ChatID))
+			return wrote, errors.Join(errs...)
+		}
+		wrote += len(chunk)
+	}
+	return wrote, errors.Join(errs...)
+}
+
+// validateEntry applies Schedule's checks to one entry.
+func validateEntry(e Entry) error {
+	if !ValidKind(e.Kind) {
+		return ErrUnknownKind
+	}
+	if err := ValidateEntryDelay(e.Kind, e.DelaySecs); err != nil {
+		return err
+	}
+	if e.ChatID >= 0 || e.MessageID <= 0 || e.SentAt.IsZero() {
+		return ErrInvalidEntry
+	}
+	return nil
+}
+
+// mergeBatch turns validated entries into queue rows, one per (chat, message), keeping the earliest
+// delete_at and the first entry's kind and sent time, sorted by (chat, message). It also returns
+// the distinct chat IDs in ascending order.
+func mergeBatch(entries []Entry) ([]models.ScheduledDeletion, []int64) {
+	created := utcSecond(time.Now())
+	byKey := make(map[batchKey]*models.ScheduledDeletion, len(entries))
+	for _, e := range entries {
+		sentAt := utcSecond(e.SentAt)
+		deleteAt := sentAt.Add(time.Duration(e.DelaySecs) * time.Second)
+		key := batchKey{e.ChatID, e.MessageID}
+		if row, ok := byKey[key]; ok {
+			if deleteAt.Before(row.DeleteAt) {
+				row.DeleteAt = deleteAt
+			}
+			continue
+		}
+		byKey[key] = &models.ScheduledDeletion{
+			ChatID: e.ChatID, MessageID: e.MessageID, Kind: e.Kind, SentAt: sentAt, DeleteAt: deleteAt,
+			State: models.ScheduledDeletionPending, ClaimToken: "", Attempts: 0, CreatedAt: created,
+		}
+	}
+	rows := make([]models.ScheduledDeletion, 0, len(byKey))
+	for _, row := range byKey {
+		rows = append(rows, *row)
+	}
+	slices.SortFunc(rows, func(a, b models.ScheduledDeletion) int {
+		if c := cmp.Compare(a.ChatID, b.ChatID); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.MessageID, b.MessageID)
+	})
+	var chats []int64
+	for _, row := range rows {
+		if len(chats) == 0 || chats[len(chats)-1] != row.ChatID {
+			chats = append(chats, row.ChatID)
+		}
+	}
+	return rows, chats
+}
+
+// CountPending counts the queued rows (pending and acting) of one chat and kind, up to limit, with
+// SELECT count(*) FROM (SELECT 1 ... LIMIT limit): the unique (chat, message) index serves it, and
+// the count never reads past the limit, so it is exact below the limit and equals it at or above
+// it. A limit of 0 or less returns 0 without a query. The queue is read fresh, so no cache key
+// applies.
+func CountPending(ctx context.Context, chatID int64, kind string, limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	if db.DB == nil {
+		return 0, fukuerrors.Wrap(errNoDatabase, "count queued deletions")
+	}
+	var n int64
+	err := db.DB.WithContext(ctx).Raw(
+		`SELECT count(*) FROM (SELECT 1 FROM scheduled_deletions WHERE chat_id = ? AND kind = ? LIMIT ?) s`,
+		chatID, kind, limit,
+	).Scan(&n).Error
+	if err != nil {
+		return 0, fukuerrors.Wrapf(err, "count queued deletions of chat %d", chatID)
+	}
+	return n, nil
+}
+
+// DropPendingMessage deletes the pending row of one (chat, message, kind) and nothing else: an
+// acting row, another kind's row of the same message and the same message ID in another chat are
+// left alone. It returns how many rows it deleted (0 or 1) and is how a pinned message leaves the
+// self-destruct queue. The queue is written fresh, so no cache key applies.
+func DropPendingMessage(ctx context.Context, chatID, messageID int64, kind string) (int64, error) {
+	if db.DB == nil {
+		return 0, fukuerrors.Wrap(errNoDatabase, "drop a queued deletion")
+	}
+	result := db.DB.WithContext(ctx).
+		Where("chat_id = ? AND message_id = ? AND kind = ? AND state = ?", chatID, messageID, kind, models.ScheduledDeletionPending).
+		Delete(&models.ScheduledDeletion{})
+	if result.Error != nil {
+		return 0, fukuerrors.Wrapf(result.Error, "drop a queued deletion of chat %d", chatID)
+	}
+	return result.RowsAffected, nil
 }
 
 // NewClaimToken returns a fresh claim token: 16 random bytes as 32 hex characters. Use one
