@@ -970,6 +970,7 @@ func SendWelcomeMessage(bot *gotgbot.Bot, ctx *ext.Context, userID int64, firstN
 			}
 			return err
 		}
+		scheduleBotMessage(sent, deletion.KindBotWelcome)
 		if greetPrefs.WelcomeSettings.CleanWelcome {
 			_ = helpers.DeleteMessageWithErrorHandling(bot, chat.Id, greetPrefs.WelcomeSettings.LastMsgId)
 			if err := greetings.SetCleanWelcomeMsgId(chat.Id, sent.MessageId); err != nil {
