@@ -933,7 +933,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the number of the three that are on) or `settings_state_off_plain` when none is. The body is the commands' own state sentences,
   `reports_status_enabled_group` or `reports_status_disabled_group`, a blank line, the AI block, a blank line and the Auto-approve
   sentence; a refusal or a failed save (`common_settings_save_failed`) redraws the stored state with the warn notice, and a
-  stored value draws no notice.
+  stored value draws no notice. `a` is the AI spam filter through `applyAISpamEnabled` (right `settingsRightAdmin`, because
+  `/aispam` has `RequireUserAdmin` and no bot check) and `j` is Auto-approve through `applyAutoApprove` (right
+  `settingsRightChangeInfoBotAdmin`, the bot part judged first, as `/autoapprove` asks for the bot and then
+  `can_change_info`); the menu refuses what each command refuses. The AI block is the state sentence (`aispam_status_enabled`,
+  or `settings_sw_ai_off`, because the command's off sentence tells the reader to type `/aispam on`) followed by the existing
+  `aispam_data_notice` while the filter can run on this bot (`aispamConfigured()`: the provider value set and `ENABLE_AISPAM` on,
+  read from `config.AppConfig` only, so no Telegram call, no Redis command and no network call), and by a code-side `🚫 ` and
+  `settings_sw_ai_unavailable` in the notice's place while it cannot, whatever the stored value, naming no cause, variable or
+  provider. While it cannot run and the stored value is off the AI toggle is not drawn (the Off-only form, keyboard widths
+  `{1,1,2}`; `{1,1,1,2}` otherwise); stored on keeps the toggle so it can be switched off, and Off always works. An On press while
+  the filter cannot run (a stale or forged one) is judged before any write: the alert `settings_sw_ai_unavailable` is the press's
+  one answer, nothing is written (no row, no cache write) and the page is redrawn from the stored rows (the Off-only form), as
+  the Member requirements page's `settingsMreqAIGate` does (UI-SPEC check C18-11; the approved mock's "nothing edited" is
+  superseded by the redraw, which repairs the stale screen). `applyAISpamEnabled`'s own refusal is unreachable behind that
+  gate and maps to the same alert. Auto-approve's first press on a chat with no greetings row writes the whole greetings row
+  with Welcome and Goodbye on, exactly as `/autoapprove on` does, and the Welcome and Goodbye pages read a missing row of a chat
+  the bot knows as those same defaults, so they draw the same before and after (`TestSettingsParityAutoApprove`); for a chat
+  missing from the chats table the Goodbye page reads off before any first greetings write and on after it, for `/welcome on`
+  and `/autoapprove on` alike, a state no served group is in. Largest button 45 bytes (private) and 41 (group).
+  `TestSettingsSwitches*`, `TestSettingsParity{Reports,AISpam,AutoApprove}`, `TestSettingsDrift{Reports,AISpam,AutoApprove}`
+  and `TestSettingsAuthorityParitySwitches` hold it (`settings_switches_test.go`, `settings_switches_screens_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1134,6 +1154,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   live bot lookup (`settingsRightBotFirstRefusal`), and the six older rights keep their order exactly. No editor part declares the
   new rights, so the typed-reply door is unchanged (`settingsRightRefusalFor` answers their member parts for it all the same;
   `TestSettingsRights` "mirrors /autoapprove" and "mirrors /anonadmin", `TestSettingsRightRefusalForParity`).
+  The Switches page declares three rights: Reports `settingsRightAdminFloodBot` (`/reports`), the AI spam filter `settingsRightAdmin`
+  (`/aispam`, no bot check) and Auto-approve `settingsRightChangeInfoBotAdmin` (`/autoapprove`), each judged on every press
+  (`TestSettingsAuthorityParitySwitches`).
 
 ## Data
 

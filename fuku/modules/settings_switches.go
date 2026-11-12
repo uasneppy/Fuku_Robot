@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -41,11 +42,14 @@ var (
 	}
 )
 
-// settingsSwState is what the page shows: the stored value of each of the three switches.
+// settingsSwState is what the page shows: the stored value of each of the three switches, and
+// whether the AI spam filter can run on this bot (config only, never stored).
 type settingsSwState struct {
 	Reports bool
 	AI      bool
 	Approve bool
+	// AIAvailable is aispamConfigured() at the time the state was read.
+	AIAvailable bool
 }
 
 // count is how many of the three switches are on.
@@ -74,13 +78,28 @@ func init() {
 				Actions:  []string{settingsActToggle},
 				Validate: settingsEditSwitchValue,
 			},
+			// /aispam has no bot check (RequireGroup and RequireUserAdmin only), so the AI switch
+			// needs only the live admin check every press makes.
+			settingsSwAIKey: {
+				Right:    settingsRightAdmin,
+				Set:      settingsSwControl(settingsSwApplyAI),
+				Actions:  []string{settingsActToggle},
+				Validate: settingsEditSwitchValue,
+			},
+			// /autoapprove asks for the bot as an administrator first, then can_change_info.
+			settingsSwApproveKey: {
+				Right:    settingsRightChangeInfoBotAdmin,
+				Set:      settingsSwControl(settingsSwApplyApprove),
+				Actions:  []string{settingsActToggle},
+				Validate: settingsEditSwitchValue,
+			},
 		},
 	})
 }
 
 // settingsSwReadState reads the three switches. Any read error is returned, never a guess.
 func settingsSwReadState(ctx context.Context, chatID int64) (settingsSwState, error) {
-	var s settingsSwState
+	s := settingsSwState{AIAvailable: aispamConfigured()}
 	var err error
 	if s.Reports, err = settingsSwReportsRead(ctx, chatID); err != nil {
 		return settingsSwState{}, err
@@ -128,17 +147,43 @@ func settingsSwToggleRow(k *settingsKeyboard, control, labelKey string, on bool)
 	k.row(settingsToggleButton(k, settingsPageSwitches, control, label, on)...)
 }
 
+// settingsSwAIBlock is the AI block of the page: the state sentence, then the data notice while
+// the filter can run on this bot, else the unavailable line (a code-side 🚫 and the key, which
+// names no cause) in the notice's place, whatever the stored value is.
+func settingsSwAIBlock(v settingsView, s settingsSwState) []string {
+	sentence := "settings_sw_ai_off"
+	if s.AI {
+		sentence = "aispam_status_enabled"
+	}
+	block := []string{settingsText(v.Tr, sentence)}
+	if s.AIAvailable {
+		return append(block, strings.TrimRight(settingsText(v.Tr, "aispam_data_notice"), "\n"))
+	}
+	return append(block, "🚫 "+settingsText(v.Tr, "settings_sw_ai_unavailable"))
+}
+
 // renderSettingsSwitches draws the Switches page: one state block per switch and one full-width
-// toggle each, then the navigation row.
+// toggle each, then the navigation row. The AI toggle is drawn while the filter is available or
+// stored on (so it can be switched off) and left out when it is unavailable and off.
 func renderSettingsSwitches(v settingsView, s settingsSwState, notice string) settingsScreen {
 	reportsKey := "reports_status_disabled_group"
 	if s.Reports {
 		reportsKey = "reports_status_enabled_group"
 	}
-	body := []string{settingsText(v.Tr, reportsKey)}
+	approveKey := "greetings_auto_approve_disabled"
+	if s.Approve {
+		approveKey = "greetings_auto_approve_enabled"
+	}
+	body := []string{settingsText(v.Tr, reportsKey), ""}
+	body = append(body, settingsSwAIBlock(v, s)...)
+	body = append(body, "", settingsText(v.Tr, approveKey))
 
 	k := newSettingsKeyboard(v)
 	settingsSwToggleRow(k, settingsSwReportsKey, "settings_btn_sw_reports", s.Reports)
+	if s.AIAvailable || s.AI {
+		settingsSwToggleRow(k, settingsSwAIKey, "settings_btn_sw_aispam", s.AI)
+	}
+	settingsSwToggleRow(k, settingsSwApproveKey, "settings_btn_sw_approve", s.Approve)
 	k.navRow(false)
 	return k.screen(settingsCompose(v, "settings_page_switches", body, notice, false))
 }
@@ -168,5 +213,43 @@ func settingsSwApplyReports(ctx context.Context, p *settingsPress, before settin
 		return settingsToggleResult[settingsSwState]{Key: result.Key}
 	}
 	before.Reports = result.Status
+	return settingsToggleResult[settingsSwState]{State: before, Stored: true}
+}
+
+// settingsSwApplyAI stores the AI spam filter through applyAISpamEnabled, the function /aispam
+// calls. A press that turns it on while the filter cannot run on this bot (a stale or forged
+// one: the Off-only form draws no toggle) is the press's one answer, the alert, and writes
+// nothing; the page is then redrawn from the stored rows. Turning it off always works.
+func settingsSwApplyAI(ctx context.Context, p *settingsPress, before settingsSwState, on bool) settingsToggleResult[settingsSwState] {
+	unavailable := settingsToggleResult[settingsSwState]{State: before, Stored: true}
+	if on && !aispamConfigured() {
+		p.answer(settingsText(p.tr, "settings_sw_ai_unavailable"), true)
+		return unavailable
+	}
+	result := applyAISpamEnabled(ctx, p.group.Id, on)
+	switch result.Outcome {
+	case aispamApplied:
+		before.AI = result.Enabled
+		return settingsToggleResult[settingsSwState]{State: before, Stored: true}
+	case aispamNoKey, aispamGloballyDisabled:
+		// The gate above makes this unreachable; the same alert if it is ever met.
+		p.answer(settingsText(p.tr, "settings_sw_ai_unavailable"), true)
+		return unavailable
+	}
+	return settingsToggleResult[settingsSwState]{Key: result.Key}
+}
+
+// settingsSwApplyApprove stores Auto-approve of join requests through applyAutoApprove, the
+// function /autoapprove calls.
+func settingsSwApplyApprove(ctx context.Context, p *settingsPress, before settingsSwState, on bool) settingsToggleResult[settingsSwState] {
+	result := applyAutoApprove(ctx, p.group.Id, on)
+	if result.Outcome != greetingApplied {
+		return settingsToggleResult[settingsSwState]{Key: "common_settings_save_failed"}
+	}
+	if result.Settings == nil {
+		// The write went through and the read-back failed: the helper reads the page again.
+		return settingsToggleResult[settingsSwState]{}
+	}
+	before.Approve = result.Settings.ShouldAutoApprove
 	return settingsToggleResult[settingsSwState]{State: before, Stored: true}
 }

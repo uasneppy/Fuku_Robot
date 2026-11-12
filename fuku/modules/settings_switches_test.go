@@ -4,15 +4,20 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/aispam"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/chats"
+	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/reports"
 )
@@ -35,12 +40,14 @@ func settingsSwCleanup(t *testing.T, chatIDs ...int64) {
 	t.Cleanup(clean)
 }
 
-// newSettingsSwitchesEnv is the settings environment plus the Reports command, so a parity test
-// can run /reports next to the page. The env's chat has no report, AI spam or greetings row.
+// newSettingsSwitchesEnv is the settings environment plus the Reports and AI spam commands (and
+// the Greetings commands, for /autoapprove), so a parity test can run each command next to the
+// page. The env's chat has no report, AI spam or greetings row.
 func newSettingsSwitchesEnv(t *testing.T) *settingsEnv {
 	t.Helper()
 	env := newSettingsEditEnv(t)
 	LoadReports(env.dispatcher)
+	LoadAISpam(env.dispatcher)
 	settingsSwCleanup(t, env.chat.Id)
 	return env
 }
@@ -336,6 +343,279 @@ func TestSettingsParityReports(t *testing.T) {
 		text, _ := env.lastEdit(chat.Id, menuMsgID)
 		if !strings.Contains(text, staffMarker("common_settings_save_failed")) || !strings.Contains(text, staffMarker("reports_status_enabled_group")) {
 			t.Errorf("the page drew %q, want the stored (enabled) sentence and the save-failed notice", text)
+		}
+	})
+}
+
+// settingsSwAIRow reads the AI spam row of chatID straight from the database. ok is false when
+// the chat has no row.
+func settingsSwAIRow(t *testing.T, chatID int64) (row models.AISpamSettings, ok bool) {
+	t.Helper()
+	if err := db.DB.Where("chat_id = ?", chatID).Limit(1).Find(&row).Error; err != nil {
+		t.Fatalf("read ai_spam_settings of %d: %v", chatID, err)
+	}
+	return row, row.ID != 0
+}
+
+// settingsSwAICached reports whether Redis holds an ai_spam_settings cache key for chatID.
+func settingsSwAICached(env *settingsEnv, chatID int64) bool {
+	for _, key := range env.redis.Keys() {
+		if strings.Contains(key, "ai_spam_settings") && strings.Contains(key, fmt.Sprint(chatID)) {
+			return true
+		}
+	}
+	return false
+}
+
+// settingsSwRowJSON is a greetings row as JSON with the fields that differ per chat and per run
+// (its ID, chat and timestamps) cleared, so two chats' rows can be compared.
+func settingsSwRowJSON(t *testing.T, row models.GreetingSettings) string {
+	t.Helper()
+	row.ID, row.ChatID = 0, 0
+	row.CreatedAt, row.UpdatedAt = time.Time{}, time.Time{}
+	raw, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("marshal greetings row: %v", err)
+	}
+	return string(raw)
+}
+
+// settingsSwEditorState opens the Welcome and Goodbye pages of chat on message msgID and returns
+// the text of both, so a test can compare what they draw before and after a write.
+func settingsSwEditorState(t *testing.T, env *settingsEnv, chat gotgbot.Chat, msgID int64) string {
+	t.Helper()
+	var drawn []string
+	for _, page := range []string{"w", "g"} {
+		settingsSwPress(t, env, chat, msgID, "a", "op", "p", page)
+		text, _ := env.lastEdit(chat.Id, msgID)
+		drawn = append(drawn, text)
+	}
+	return strings.Join(drawn, "\n---\n")
+}
+
+func TestSettingsParityAISpam(t *testing.T) {
+	const menuMsgID = 7272
+
+	// run turns the filter on or off on two chats, /aispam on one and a press of the page on
+	// the other, and requires the same stored row and the same cache state.
+	run := func(t *testing.T, seedOn bool, word string) {
+		t.Helper()
+		withAISpamConfigured(t)
+		env := newSettingsSwitchesEnv(t)
+		commandChat := env.chat
+		menuChat := env.addChat()
+		settingsSwCleanup(t, commandChat.Id, menuChat.Id)
+		if seedOn {
+			for _, id := range []int64{commandChat.Id, menuChat.Id} {
+				if err := aispam.SetAISpamEnabled(id, word == "off"); err != nil {
+					t.Fatalf("seed: %v", err)
+				}
+			}
+		}
+		value := "0"
+		if word == "on" {
+			value = "1"
+		}
+
+		env.sendIn(commandChat, env.admin, "/aispam "+word)
+		settingsSwToggle(t, env, menuChat, menuMsgID, "a", value)
+
+		commandRow, ok := settingsSwAIRow(t, commandChat.Id)
+		if !ok {
+			t.Fatal("/aispam stored no row")
+		}
+		menuRow, ok := settingsSwAIRow(t, menuChat.Id)
+		if !ok {
+			t.Fatal("the page stored no row")
+		}
+		want := word == "on"
+		if commandRow.Enabled != want || menuRow.Enabled != commandRow.Enabled {
+			t.Errorf("/aispam %s stored %v and the page %v, want both %v", word, commandRow.Enabled, menuRow.Enabled, want)
+		}
+		if c, m := settingsSwAICached(env, commandChat.Id), settingsSwAICached(env, menuChat.Id); c != m {
+			t.Errorf("cache key present: command %v, page %v, want the same", c, m)
+		}
+		if got := aispam.IsAISpamEnabled(menuChat.Id); got != want {
+			t.Errorf("the enforcing path reads %v after the page, want %v", got, want)
+		}
+		text, _ := env.lastEdit(menuChat.Id, menuMsgID)
+		sentence := "settings_sw_ai_off"
+		if want {
+			sentence = "aispam_status_enabled"
+		}
+		if !strings.Contains(text, staffMarker(sentence)) || strings.Contains(text, "⚠️") {
+			t.Errorf("the page redrew %q, want the %s sentence and no notice", text, sentence)
+		}
+	}
+
+	t.Run("on, configured, a chat with no row", func(t *testing.T) { run(t, false, "on") })
+	t.Run("off, configured, a chat with a row", func(t *testing.T) { run(t, true, "off") })
+	for _, how := range []struct {
+		name string
+		kind aispamNotConfiguredHow
+	}{{"the provider value empty", aispamProviderValueEmpty}, {"the global switch off", aispamSwitchOff}} {
+		t.Run("on refuses with "+how.name+" and stores nothing", func(t *testing.T) {
+			withAISpamNotConfigured(t, how.kind)
+			env := newSettingsSwitchesEnv(t)
+			commandChat := env.chat
+			menuChat := env.addChat()
+			settingsSwCleanup(t, commandChat.Id, menuChat.Id)
+
+			env.sendIn(commandChat, env.admin, "/aispam on")
+			settingsSwToggle(t, env, menuChat, menuMsgID, "a", "1")
+
+			if _, has := settingsSwAIRow(t, commandChat.Id); has {
+				t.Error("/aispam on stored a row while unavailable")
+			}
+			if _, has := settingsSwAIRow(t, menuChat.Id); has {
+				t.Error("the page's On press stored a row while unavailable")
+			}
+			if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_sw_ai_unavailable")) {
+				t.Errorf("answer = %q (alert %v), want the unavailable alert", answer, alert)
+			}
+		})
+	}
+}
+
+func TestSettingsParityAutoApprove(t *testing.T) {
+	const menuMsgID = 7373
+
+	// run turns Auto-approve on or off on two chats, /autoapprove on one and a press of the page
+	// on the other, and requires the same whole greetings row, and that the Welcome and Goodbye
+	// pages draw the same before and after the press.
+	run := func(t *testing.T, seeded bool, word string) {
+		t.Helper()
+		env := newSettingsSwitchesEnv(t)
+		commandChat := env.chat
+		menuChat := env.addChat()
+		settingsSwCleanup(t, commandChat.Id, menuChat.Id)
+		listEditAdmin(env, commandChat, env.admin, true)
+		listEditAdmin(env, menuChat, env.admin, true)
+		// A group the bot serves is in the chats table: the greetings pages read a missing row as
+		// Goodbye on for such a chat, which is what the first write stores (C-09).
+		for _, id := range []int64{commandChat.Id, menuChat.Id} {
+			if err := chats.EnsureChatInDb(id, "Switches Chat"); err != nil {
+				t.Fatalf("ensure chat: %v", err)
+			}
+		}
+		if seeded {
+			for _, id := range []int64{commandChat.Id, menuChat.Id} {
+				if err := greetings.SetShouldAutoApprove(id, word == "off"); err != nil {
+					t.Fatalf("seed: %v", err)
+				}
+			}
+		}
+		value := "0"
+		if word == "on" {
+			value = "1"
+		}
+		beforeState := settingsSwEditorState(t, env, menuChat, menuMsgID)
+
+		env.sendIn(commandChat, env.admin, "/autoapprove "+word)
+		settingsSwToggle(t, env, menuChat, menuMsgID, "j", value)
+
+		commandRow, ok := settingsEditStored(t, commandChat.Id)
+		if !ok {
+			t.Fatal("/autoapprove stored no row")
+		}
+		menuRow, ok := settingsEditStored(t, menuChat.Id)
+		if !ok {
+			t.Fatal("the page stored no row")
+		}
+		if commandRow.ShouldAutoApprove != (word == "on") {
+			t.Errorf("/autoapprove %s stored %v", word, commandRow.ShouldAutoApprove)
+		}
+		if c, m := settingsSwRowJSON(t, commandRow), settingsSwRowJSON(t, menuRow); c != m {
+			t.Errorf("the page stored a different row\n command %s\n    page %s", c, m)
+		}
+		if after := settingsSwEditorState(t, env, menuChat, menuMsgID); after != beforeState {
+			t.Errorf("the Welcome and Goodbye pages changed with the first write\n before %q\n  after %q", beforeState, after)
+		}
+	}
+
+	t.Run("on, a chat with no greetings row", func(t *testing.T) { run(t, false, "on") })
+	t.Run("off, a chat with no greetings row", func(t *testing.T) { run(t, false, "off") })
+	t.Run("on, a chat with a row", func(t *testing.T) { run(t, true, "on") })
+	t.Run("off, a chat with a row", func(t *testing.T) { run(t, true, "off") })
+
+	t.Run("the page redraws the state sentence from the read-back and a double tap is the same state", func(t *testing.T) {
+		env := newSettingsSwitchesEnv(t)
+		chat := env.addChat()
+		settingsSwCleanup(t, chat.Id)
+		listEditAdmin(env, chat, env.admin, true)
+		settingsSwToggle(t, env, chat, menuMsgID, "j", "1")
+		settingsSwToggle(t, env, chat, menuMsgID, "j", "1")
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("greetings_auto_approve_enabled")) || strings.Contains(text, "⚠️") {
+			t.Errorf("the page drew %q, want the enabled sentence and no notice", text)
+		}
+		settingsSwToggle(t, env, chat, menuMsgID, "j", "0")
+		text, _ = env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("greetings_auto_approve_disabled")) {
+			t.Errorf("the page drew %q, want the disabled sentence", text)
+		}
+	})
+
+	t.Run("an administrator without can_change_info is refused like the command", func(t *testing.T) {
+		env := newSettingsSwitchesEnv(t)
+		chat := env.addChat()
+		settingsSwCleanup(t, chat.Id)
+		presser := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+		listEditAdmin(env, chat, presser, false)
+
+		env.sendIn(chat, presser, "/autoapprove on")
+		if !settingsAntifloodSentHas(env, chat.Id, staffMarker("chat_status_change_info_cmd_error")) {
+			t.Fatal("/autoapprove on was not refused for an administrator without can_change_info")
+		}
+		answers := env.answerCount()
+		fields := env.groupFields(presser, "a", "tg", "p", "t", "t", "j", "v", "1")
+		data := encodeCallbackData(settingsCallbackNamespace, fields)
+		env.pressRaw(chat, presser, menuMsgID, data)
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the press answered %d times, want once", got)
+		}
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_no_change_info")) {
+			t.Errorf("answer = %q (alert %v), want the settings_no_change_info alert", answer, alert)
+		}
+		if _, has := settingsEditStored(t, chat.Id); has {
+			t.Error("a refused press or command wrote a greetings row")
+		}
+	})
+
+	t.Run("a bot that is not an admin is refused like the command", func(t *testing.T) {
+		env := newSettingsSwitchesEnv(t)
+		chat := env.addChat()
+		settingsSwCleanup(t, chat.Id)
+		env.fake.setBotRole(chat.Id, staffRoleMember)
+		refusal := staffMarker("connections_is_user_connected_bot_not_admin")
+
+		env.sendIn(chat, env.admin, "/autoapprove on")
+		if !settingsAntifloodSentHas(env, chat.Id, refusal) {
+			t.Fatal("/autoapprove on was not refused for a bot that is not an admin")
+		}
+		settingsSwToggle(t, env, chat, menuMsgID, "j", "1")
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, refusal) {
+			t.Errorf("the press drew %q, want the notice %s", text, refusal)
+		}
+		if _, has := settingsEditStored(t, chat.Id); has {
+			t.Error("a refused press or command wrote a greetings row")
+		}
+	})
+
+	t.Run("a failing write redraws the stored state with the save-failed notice", func(t *testing.T) {
+		env := newSettingsSwitchesEnv(t)
+		chat := env.addChat()
+		settingsSwCleanup(t, chat.Id)
+		listEditAdmin(env, chat, env.admin, true)
+		previous := greetingWrites
+		greetingWrites.AutoApprove = func(int64, bool) error { return errors.New("disk is full") }
+		t.Cleanup(func() { greetingWrites = previous })
+
+		settingsSwToggle(t, env, chat, menuMsgID, "j", "1")
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("common_settings_save_failed")) || !strings.Contains(text, staffMarker("greetings_auto_approve_disabled")) {
+			t.Errorf("the page drew %q, want the stored (disabled) sentence and the save-failed notice", text)
 		}
 	})
 }
