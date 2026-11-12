@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"gorm.io/gorm"
 
+	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
@@ -102,6 +103,12 @@ func languageGoldenCalls(t *testing.T, client *moduleBotClient, chatID int64) st
 // never re-recorded or weakened.
 func TestLegacyLanguageRequests(t *testing.T) {
 	withRealLocales(t)
+	// /lang's keyboard has one cell per enabled language, and the enabled set is process state: a
+	// test binary started without BOT_TOKEN has none and CI has the eight defaults. Pin the
+	// defaults, so the golden reads the same everywhere.
+	previousCodes := config.AppConfig.ValidLangCodes
+	config.AppConfig.ValidLangCodes = []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"}
+	t.Cleanup(func() { config.AppConfig.ValidLangCodes = previousCodes })
 	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
 	member := gotgbot.User{Id: 42, FirstName: "Member"}
 
@@ -260,7 +267,7 @@ var goldenLanguageRequests = map[string]string{
 	"private_existing_user":                "answerCallbackQuery {\"callback_query_id\":\"callback-1\"}\neditMessageText {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"message_id\":102,\"parse_mode\":\"HTML\",\"reply_markup\":{},\"text\":\"Votre langue a été changée en Français 🇫🇷\"}",
 	"private_unsupported_code":             "answerCallbackQuery {\"callback_query_id\":\"callback-1\",\"text\":\"Invalid language selection.\"}",
 	"private_save_failed":                  "answerCallbackQuery {\"callback_query_id\":\"callback-1\",\"text\":\"Error al guardar la configuracion. Intentalo de nuevo mas tarde.\"}",
-	"command_group_admin":                  "sendMessage {\"chat_id\":<chat>,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Допоможіть нам перекладати 🌎\",\"url\":\"https://crowdin.com/project/fuku_robot\"}]]},\"reply_parameters\":{\"message_id\":101},\"text\":\"This Group's Current Language is English 🇺🇸\\nChoose a language from keyboard below.\"}",
+	"command_group_admin":                  "sendMessage {\"chat_id\":<chat>,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Українська 🇺🇦\",\"callback_data\":\"change_language|v1|l=uk\"},{\"text\":\"English 🇺🇸\",\"callback_data\":\"change_language|v1|l=en\"}],[{\"text\":\"Español 🇪🇸\",\"callback_data\":\"change_language|v1|l=es\"},{\"text\":\"Français 🇫🇷\",\"callback_data\":\"change_language|v1|l=fr\"}],[{\"text\":\"हिन्दी 🇮🇳\",\"callback_data\":\"change_language|v1|l=hi\"},{\"text\":\"Bahasa Indonesia 🇮🇩\",\"callback_data\":\"change_language|v1|l=id\"}],[{\"text\":\"Português 🇵🇹\",\"callback_data\":\"change_language|v1|l=pt\"},{\"text\":\"Русский 🇷🇺\",\"callback_data\":\"change_language|v1|l=ru\"}],[{\"text\":\"Допоможіть нам перекладати 🌎\",\"url\":\"https://crowdin.com/project/fuku_robot\"}]]},\"reply_parameters\":{\"message_id\":101},\"text\":\"This Group's Current Language is English 🇺🇸\\nChoose a language from keyboard below.\"}",
 	"command_group_member":                 "sendMessage {\"chat_id\":<chat>,\"reply_parameters\":{\"message_id\":101},\"text\":\"Only admins can execute this command!\"}",
-	"command_private":                      "sendMessage {\"chat_id\":<chat>,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Допоможіть нам перекладати 🌎\",\"url\":\"https://crowdin.com/project/fuku_robot\"}]]},\"reply_parameters\":{\"message_id\":101},\"text\":\"Tu Idioma Actual es Español 🇪🇸\\nElige un idioma del teclado de abajo.\"}",
+	"command_private":                      "sendMessage {\"chat_id\":<chat>,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"Українська 🇺🇦\",\"callback_data\":\"change_language|v1|l=uk\"},{\"text\":\"English 🇺🇸\",\"callback_data\":\"change_language|v1|l=en\"}],[{\"text\":\"Español 🇪🇸\",\"callback_data\":\"change_language|v1|l=es\"},{\"text\":\"Français 🇫🇷\",\"callback_data\":\"change_language|v1|l=fr\"}],[{\"text\":\"हिन्दी 🇮🇳\",\"callback_data\":\"change_language|v1|l=hi\"},{\"text\":\"Bahasa Indonesia 🇮🇩\",\"callback_data\":\"change_language|v1|l=id\"}],[{\"text\":\"Português 🇵🇹\",\"callback_data\":\"change_language|v1|l=pt\"},{\"text\":\"Русский 🇷🇺\",\"callback_data\":\"change_language|v1|l=ru\"}],[{\"text\":\"Допоможіть нам перекладати 🌎\",\"url\":\"https://crowdin.com/project/fuku_robot\"}]]},\"reply_parameters\":{\"message_id\":101},\"text\":\"Tu Idioma Actual es Español 🇪🇸\\nElige un idioma del teclado de abajo.\"}",
 }
