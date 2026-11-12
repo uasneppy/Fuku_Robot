@@ -3018,6 +3018,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   old value for up to `CACHE_LOCAL_TTL`, exactly as the commands can. `/setwarnmode` accepts exactly ban, kick and mute
   (`warnSettingsModes`); the table's CHECK also allows `tban`, `tmute` and the empty string, which apply nothing at the
   limit and are never written.
+  The reports switch (Phase 18) is `applyReportsEnabled` in `reports.go`: it wraps only the group branch of `/reports on|off`
+  (`reportsWrites.ChatStatus`, default `reports.SetChatReportStatus`, which writes `enabled` and `status` together; the
+  `/report` path reads `status`) and returns a `reportsApplyResult` (outcome, the command's reply key, the status read
+  back, the error). The private-chat branch writes the user's own preference through `reports.SetUserReportSettings` and
+  stays in the command. `report_chat_settings` has no cache, so there is no key to drop and nothing is skewed across
+  replicas. The page reads through `reports.LoadChatStatusContext`, one plain `SELECT` that creates no `chats` or report
+  row, returns its error and reads a chat with no row as on (the model default); the command's own status text still
+  reads `GetChatReportSettings`, which creates the row as before (`TestLegacyReportsRequests` and
+  `TestLegacyReportsPrivateRequests` hold every byte).
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
