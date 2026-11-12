@@ -129,13 +129,15 @@ func TestSettingsDeletionOpensFromMain(t *testing.T) {
 		if containsMarker(text, "settings_del_no_right") || containsMarker(text, "settings_del_right_unknown") {
 			t.Errorf("hub of a bot that can delete carries a right line: %q", text)
 		}
-		if got := settingsDelWidths(keyboard); fmt.Sprint(got) != "[2 2]" {
-			t.Errorf("hub row widths = %v, want [2 2]", got)
+		settingsDelWantLine(t, text, "settings_del_sec_member", "💬", staffMarker("settings_state_off_plain"))
+		if got := settingsDelWidths(keyboard); fmt.Sprint(got) != "[2 1 2]" {
+			t.Errorf("hub row widths = %v, want [2 1 2]", got)
 		}
 		for i, code := range []string{"s", "b"} {
 			settingsDelWantRowFields(t, keyboard[0][i], "dl", code)
 		}
-		if fields := settingsButtonFields(t, keyboard[1][0]); fields["a"] != "bk" {
+		settingsDelWantRowFields(t, keyboard[1][0], "dl", "m")
+		if fields := settingsButtonFields(t, keyboard[2][0]); fields["a"] != "bk" {
 			t.Errorf("the hub's Back = %v, want the core Back to Main", fields)
 		}
 

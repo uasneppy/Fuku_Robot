@@ -28,6 +28,27 @@ type deletionRow struct {
 	// Match reports whether a message is one this row deletes. It is nil on a bot row, which
 	// matches no incoming update: the bot's own messages are scheduled where they are sent.
 	Match func(*gotgbot.Message) bool
+
+	// The optional presentation fields of the Member messages rows (Phase 17, M31). Each is empty
+	// for every Phase 16 row, which then renders exactly as it did before they existed, and no
+	// renderer, validator or gate reads a row's code or kind to decide anything the fields decide.
+	//
+	// ChoiceRows is the width of each choice row of the row's screen, laid over the "no rule"
+	// choice followed by the presets; empty means the section's layout.
+	ChoiceRows []int
+	// LabelKeys names a preset that is not a delay (the 0 of a switch), by preset value.
+	LabelKeys map[int]string
+	// ZeroKey is the state word of a stored 0, empty for "Delete now".
+	ZeroKey string
+	// AfterKey is the template of a stored delay, with {delay}, empty for "After {delay}".
+	AfterKey string
+	// TimeKey is the time hint of the row's screen, empty for the shared hint.
+	TimeKey string
+	// NoTime leaves the time hint out of the row's screen (a row with no delay).
+	NoTime bool
+	// ConfirmKey is the text of the card a choice of the row draws before it writes, empty for a
+	// row that writes at once.
+	ConfirmKey string
 }
 
 // deletionServicePresets are the delays a service row offers: 0 deletes at once (D-04).
@@ -190,20 +211,24 @@ var deletionMemberRows = []deletionRow{
 	{
 		Code: "mc", Kind: deletion.KindMemberCommands,
 		NameKey: "settings_del_mem_commands", DescKey: "settings_del_desc_commands",
-		HintKey: "settings_del_hint_commands",
-		Presets: []int{0},
+		HintKey:    "settings_del_hint_commands",
+		Presets:    []int{0},
+		ChoiceRows: []int{2}, LabelKeys: map[int]string{0: "settings_del_state_on"},
+		ZeroKey: "settings_del_state_on", NoTime: true,
 	},
 	{
 		Code: "me", Kind: deletion.KindMemberEdited,
 		NameKey: "settings_del_mem_edited", DescKey: "settings_del_desc_edited",
-		HintKey: "settings_del_hint_edited",
-		Presets: []int{30, 60, 300, 900, 3600},
+		HintKey:    "settings_del_hint_edited",
+		Presets:    []int{30, 60, 300, 900, 3600},
+		ChoiceRows: []int{3, 3}, AfterKey: "settings_del_state_grace", TimeKey: "settings_del_hint_grace",
 	},
 	{
 		Code: "ms", Kind: deletion.KindMemberSelfDestruct,
 		NameKey: "settings_del_mem_self", DescKey: "settings_del_desc_self",
-		HintKey: "settings_del_hint_self",
-		Presets: []int{60, 300, 600, 3600, 21600, 86400},
+		HintKey:    "settings_del_hint_self",
+		Presets:    []int{60, 300, 600, 3600, 21600, 86400},
+		ChoiceRows: []int{1, 3, 3}, ConfirmKey: "settings_del_confirm_self",
 	},
 }
 

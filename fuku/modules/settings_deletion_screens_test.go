@@ -73,7 +73,8 @@ func TestSettingsDeletionRowBudget(t *testing.T) {
 	withStaffLocale(t)
 	tr := i18n.MustNewTranslator("en")
 	wantWidths := map[string]string{
-		"hub": "[2 2]", "list s": "[2 2 2 2 2 2 2]", "list b": "[2 2 1 2]",
+		"hub": "[2 1 2]", "list s": "[2 2 2 2 2 2 2]", "list b": "[2 2 1 2]",
+		"list m": "[2 1 2]", "row mc": "[2 2]", "row me": "[3 3 2]", "row ms": "[1 3 3 2]",
 	}
 	for _, private := range []bool{false, true} {
 		prep := settingsDelPrepared{View: settingsDelPureView(tr, private, "G"), Data: settingsDelEveryRuleSet()}

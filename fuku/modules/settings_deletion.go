@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -56,7 +57,7 @@ type settingsDelSection struct {
 	// NoneKey is the word of "no rule" in this section: Keep for service messages, Off for bot messages.
 	NoneKey string
 	// ChoiceRows is the width of each choice row of a row screen, laid over the "no rule" choice
-	// followed by the row's presets.
+	// followed by the row's presets. A row that sets its own ChoiceRows overrides it.
 	ChoiceRows []int
 	Rows       []deletionRow
 }
@@ -73,6 +74,11 @@ var settingsDelSections = []settingsDelSection{
 		Code: "b", Icon: "🤖", NameKey: "settings_del_sec_bot", ListIntroKey: "settings_del_list_bot",
 		NoneKey: "settings_state_off_plain", ChoiceRows: []int{3, 3}, Rows: deletionBotRows,
 	},
+	{
+		// The member rows each set their own choice layout, so the section sets none.
+		Code: "m", Icon: "💬", NameKey: "settings_del_sec_member", ListIntroKey: "settings_del_list_mem",
+		NoneKey: "settings_state_off_plain", Rows: deletionMemberRows,
+	},
 }
 
 // settingsDelDelayKeys maps a delay in seconds to the locale key of its label, used by the choice
@@ -80,8 +86,11 @@ var settingsDelSections = []settingsDelSection{
 var settingsDelDelayKeys = map[int]string{
 	0:     "settings_del_state_now",
 	10:    "settings_del_delay_10s",
+	30:    "settings_del_delay_30s",
 	60:    "settings_del_delay_1m",
+	300:   "settings_del_delay_5m",
 	600:   "settings_del_delay_10m",
+	900:   "settings_del_delay_15m",
 	3600:  "settings_del_delay_1h",
 	21600: "settings_del_delay_6h",
 	86400: "settings_del_delay_24h",
@@ -336,20 +345,37 @@ func settingsDelDelayLabel(tr *i18n.Translator, secs int) string {
 	return settingsText(tr, "settings_del_delay_custom", i18n.TranslationParams{"n": secs})
 }
 
+// settingsDelWords are the locale keys of the words a row's states are drawn with: the "no rule"
+// word, the word of a stored 0 and the template of a stored delay (it takes {delay}).
+type settingsDelWords struct {
+	NoneKey, ZeroKey, AfterKey string
+}
+
+// settingsDelWordsOf is the words of a row: the section's "no rule" word, and the row's own zero and
+// after keys when it sets them, else Delete now and After {delay}.
+func settingsDelWordsOf(section settingsDelSection, row deletionRow) settingsDelWords {
+	return settingsDelWords{
+		NoneKey:  section.NoneKey,
+		ZeroKey:  cmp.Or(row.ZeroKey, "settings_del_state_now"),
+		AfterKey: cmp.Or(row.AfterKey, "settings_del_state_after"),
+	}
+}
+
 // settingsDelStateOf is the one function that maps a stored delay, or none, to its icon, word and
 // selected value; the list line, the cell, the Currently line and the selected mark all call it.
-// A stored 0 reads Delete now whatever the row offers, and a delay that is no preset reads After
-// {n} s and marks nothing because no choice carries its value.
-func settingsDelStateOf(tr *i18n.Translator, noneKey string, delay int, on bool) settingsDelState {
+// A stored 0 reads as the row's zero word (Delete now unless the row names one) whatever the row
+// offers, and a delay that is no preset reads as the row's after template with {n} s and marks
+// nothing because no choice carries its value.
+func settingsDelStateOf(tr *i18n.Translator, words settingsDelWords, delay int, on bool) settingsDelState {
 	switch {
 	case !on:
-		return settingsDelState{Icon: "➖", Word: settingsText(tr, noneKey), Value: settingsDelNone}
+		return settingsDelState{Icon: "➖", Word: settingsText(tr, words.NoneKey), Value: settingsDelNone}
 	case delay == 0:
-		return settingsDelState{Icon: "🗑", Word: settingsText(tr, "settings_del_state_now"), Value: "0"}
+		return settingsDelState{Icon: "🗑", Word: settingsText(tr, words.ZeroKey), Value: "0"}
 	}
 	return settingsDelState{
 		Icon:  "⏳",
-		Word:  settingsText(tr, "settings_del_state_after", i18n.TranslationParams{"delay": settingsDelDelayLabel(tr, delay)}),
+		Word:  settingsText(tr, words.AfterKey, i18n.TranslationParams{"delay": settingsDelDelayLabel(tr, delay)}),
 		Value: strconv.Itoa(delay),
 	}
 }
@@ -357,7 +383,7 @@ func settingsDelStateOf(tr *i18n.Translator, noneKey string, delay int, on bool)
 // settingsDelRowState is the drawn state of a row in a section from the data a draw read.
 func settingsDelRowState(tr *i18n.Translator, section settingsDelSection, row deletionRow, data settingsDelData) settingsDelState {
 	delay, on := deletionEffectiveDelay(row.Kind, data.Rules, data.Flag)
-	return settingsDelStateOf(tr, section.NoneKey, delay, on)
+	return settingsDelStateOf(tr, settingsDelWordsOf(section, row), delay, on)
 }
 
 // settingsDelSlot adds the status slot: one blank line and the right line, or nothing.
@@ -440,18 +466,27 @@ func renderSettingsDelList(prep settingsDelPrepared, section settingsDelSection,
 	return k.screen(settingsCompose(prep.View, "settings_page_del", body, notice, false))
 }
 
+// settingsDelPresetLabel is the label of a preset: the row's own for a preset that is not a delay,
+// else the delay's.
+func settingsDelPresetLabel(tr *i18n.Translator, row deletionRow, preset int) string {
+	if key, ok := row.LabelKeys[preset]; ok {
+		return settingsText(tr, key)
+	}
+	return settingsDelDelayLabel(tr, preset)
+}
+
 // settingsDelOptions are the choices of a row: the "no rule" choice, then one per preset.
 func settingsDelOptions(tr *i18n.Translator, section settingsDelSection, row deletionRow) []settingsOption {
 	options := []settingsOption{{Value: settingsDelNone, Label: settingsText(tr, section.NoneKey)}}
 	for _, preset := range row.Presets {
-		options = append(options, settingsOption{Value: strconv.Itoa(preset), Label: settingsDelDelayLabel(tr, preset)})
+		options = append(options, settingsOption{Value: strconv.Itoa(preset), Label: settingsDelPresetLabel(tr, row, preset)})
 	}
 	return options
 }
 
 // renderSettingsDelRow draws one row's screen: its name and description, the row's own hint, the right
-// line, the Currently line, the time hint, the choice rows laid out by the section and Back to the
-// section's list. No card, no expiry field. It is pure.
+// line, the Currently line, the time hint (the row's own, or none, when its fields say so), the choice
+// rows laid out by the row or else by the section and Back to the section's list. It is pure.
 func renderSettingsDelRow(prep settingsDelPrepared, section settingsDelSection, row deletionRow, notice string) settingsScreen {
 	tr := prep.View.Tr
 	state := settingsDelRowState(tr, section, row, prep.Data)
@@ -463,12 +498,14 @@ func renderSettingsDelRow(prep settingsDelPrepared, section settingsDelSection, 
 		body = append(body, prep.Right)
 	}
 	body = append(body, "",
-		settingsText(tr, "settings_del_currently", i18n.TranslationParams{"state": state.Icon + " " + state.Word}),
-		"", settingsText(tr, "settings_del_hint_time"))
+		settingsText(tr, "settings_del_currently", i18n.TranslationParams{"state": state.Icon + " " + state.Word}))
+	if !row.NoTime {
+		body = append(body, "", settingsText(tr, cmp.Or(row.TimeKey, "settings_del_hint_time")))
+	}
 
 	k := newSettingsKeyboard(prep.View)
 	options := settingsDelOptions(tr, section, row)
-	for _, width := range section.ChoiceRows {
+	for _, width := range settingsDelChoiceRows(section, row) {
 		if len(options) == 0 {
 			break
 		}
@@ -478,6 +515,14 @@ func renderSettingsDelRow(prep settingsDelPrepared, section settingsDelSection, 
 	}
 	settingsDelBackRow(k, map[string]string{"a": settingsActDelList, "t": section.Code})
 	return k.screen(settingsCompose(prep.View, "settings_page_del", body, notice, false))
+}
+
+// settingsDelChoiceRows is the layout of a row's choices: the row's own, else its section's.
+func settingsDelChoiceRows(section settingsDelSection, row deletionRow) []int {
+	if len(row.ChoiceRows) > 0 {
+		return row.ChoiceRows
+	}
+	return section.ChoiceRows
 }
 
 // settingsDelOpen draws the hub. A chat that is a Staff Group, or whose row cannot be read, is the

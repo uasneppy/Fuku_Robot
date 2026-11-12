@@ -33,7 +33,7 @@ type settingsDelScreen struct {
 
 var settingsDelScreens = []settingsDelScreen{
 	{"hub", func(m *settingsDelMenu) string { text, _ := m.openHub(); return text },
-		"settings_del_sec_bot", "settings_del_hint_time", "[2 2]"},
+		"settings_del_sec_member", "settings_del_hint_time", "[2 1 2]"},
 	{"service list", func(m *settingsDelMenu) string { text, _ := m.open("dl", "s"); return text },
 		"settings_del_svc_other", "settings_del_hint_cleanservice", "[2 2 2 2 2 2 2]"},
 	{"bot list", func(m *settingsDelMenu) string { text, _ := m.open("dl", "b"); return text },
