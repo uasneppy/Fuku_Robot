@@ -367,12 +367,16 @@ func deletionAct(b *gotgbot.Bot, a deletionAction) {
 }
 
 // deletionDeleteNow starts one inline delete of a message on its own goroutine and reports
-// whether it started; false means the cap of deletionInlineMax is reached and the caller takes
-// the durable path. The goroutine is counted in deletionInline, recovers from a panic and
+// whether it started; false means the cap of deletionInlineMax is reached or the root was
+// cancelled by the worker's stop, and the caller takes the durable path. The goroutine is counted in deletionInline, recovers from a panic and
 // derives its context from deletionContext(), so the worker's stop ends it. It never retries: a
 // gone answer latches the chat, a refused one is dropped quietly, a shed delete becomes a row
 // due now, and any other failure loses that one message (D-08).
 func deletionDeleteNow(b *gotgbot.Bot, a deletionAction) bool {
+	if deletionContext().Err() != nil {
+		// The worker was stopped: no goroutine starts, the durable row resumes after a restart.
+		return false
+	}
 	if !deletionInline.startBelow(deletionInlineMax) {
 		return false
 	}

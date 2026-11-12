@@ -235,12 +235,21 @@ func runDeletionCycle(ctx context.Context, b *gotgbot.Bot) bool {
 	return c.progress
 }
 
-// run settles the claimed rows chat by chat in ascending chat order.
+// run drops the rows whose message is too old, then settles the rest chat by chat in ascending
+// chat order.
 func (c *deletionCycle) run(claimed []models.ScheduledDeletion) {
+	oldest := deletionNow().Add(-deletionDropAge)
 	byChat := make(map[int64][]models.ScheduledDeletion)
+	var expired []models.ScheduledDeletion
 	for _, row := range claimed {
+		if row.SentAt.Before(oldest) {
+			expired = append(expired, row)
+			continue
+		}
 		byChat[row.ChatID] = append(byChat[row.ChatID], row)
 	}
+	// A message older than Telegram's window cannot be deleted: its row is dropped quietly.
+	c.complete(expired)
 	chats := make([]int64, 0, len(byChat))
 	for chatID := range byChat {
 		chats = append(chats, chatID)
@@ -250,28 +259,192 @@ func (c *deletionCycle) run(claimed []models.ScheduledDeletion) {
 		if c.cut || c.ctx.Err() != nil {
 			return
 		}
-		c.processChat(chatID, byChat[chatID])
+		(&deletionChatRun{cycle: c, chatID: chatID, rows: byChat[chatID]}).process()
 	}
 }
 
-// processChat deletes one chat's claimed rows in chunks of at most deletionChunk IDs.
-func (c *deletionCycle) processChat(chatID int64, rows []models.ScheduledDeletion) {
-	deleted := 0
-	for start := 0; start < len(rows) && !c.cut; start += deletionChunk {
-		end := min(start+deletionChunk, len(rows))
-		chunk := rows[start:end]
-		err := deletionPaced(c.ctx, func(callCtx context.Context) error {
-			_, callErr := c.bot.DeleteMessagesWithContext(callCtx, chatID, deletionMessageIDs(chunk), nil)
-			return callErr
-		})
-		if err != nil {
-			// Failure handling by class follows in the next task: until then a failed chunk goes
-			// back free so no row is lost.
-			c.cut = true
+// deletionChatRun is one chat's share of a cycle: its claimed rows and what has happened to them.
+type deletionChatRun struct {
+	cycle  *deletionCycle
+	chatID int64
+	rows   []models.ScheduledDeletion
+	// decided is set once the service latch was decided in this cycle: at most one live right
+	// check per chat per cycle.
+	decided bool
+	// stop is set when the chat is gone: nothing more is sent to it this cycle.
+	stop                      bool
+	deleted, dropped, putBack int
+}
+
+// halted reports whether this chat's run must send nothing more.
+func (r *deletionChatRun) halted() bool {
+	return r.stop || r.cycle.cut || r.cycle.ctx.Err() != nil
+}
+
+// done completes rows Telegram deleted.
+func (r *deletionChatRun) done(rows ...models.ScheduledDeletion) {
+	r.cycle.complete(rows)
+	r.deleted += len(rows)
+}
+
+// drop completes rows that need no call, quietly.
+func (r *deletionChatRun) drop(rows ...models.ScheduledDeletion) {
+	r.cycle.complete(rows)
+	r.dropped += len(rows)
+}
+
+// process screens the chat's rows (latch, Staff Group) and then deletes them in chunks.
+func (r *deletionChatRun) process() {
+	rows := r.screenLatch(r.rows)
+	if len(rows) == 0 {
+		return
+	}
+	group, err := deletionStaffLookup(r.chatID)
+	if err != nil {
+		// A read that fails releases the rows free and sends nothing: a chat that cannot be told
+		// apart from a Staff Group is never touched.
+		log.Warnf("[Deletion] could not check chat %d for a Staff Group: %v", r.chatID, err)
+		r.cycle.release(rows, false)
+		return
+	}
+	if group != nil {
+		r.drop(rows...)
+		return
+	}
+	for start := 0; start < len(rows) && !r.halted(); start += deletionChunk {
+		r.chunk(r.pendingOf(rows[start:min(start+deletionChunk, len(rows))]))
+	}
+	log.Debugf("[Deletion] chat %d: %d deleted, %d dropped, %d put back of %d claimed",
+		r.chatID, r.deleted, r.dropped, r.putBack, len(r.rows))
+}
+
+// screenLatch drops the rows of a kind the chat's latch stops and returns the rest.
+func (r *deletionChatRun) screenLatch(rows []models.ScheduledDeletion) []models.ScheduledDeletion {
+	latched := make(map[string]bool)
+	var keep, stopped []models.ScheduledDeletion
+	for _, row := range rows {
+		stop, known := latched[row.Kind]
+		if !known {
+			stop = deletionLatched(r.cycle.ctx, r.chatID, row.Kind)
+			latched[row.Kind] = stop
+		}
+		if stop {
+			stopped = append(stopped, row)
+		} else {
+			keep = append(keep, row)
+		}
+	}
+	r.drop(stopped...)
+	return keep
+}
+
+// pendingOf returns the rows of the chunk that nothing has settled since the chunk was cut.
+func (r *deletionChatRun) pendingOf(rows []models.ScheduledDeletion) []models.ScheduledDeletion {
+	var out []models.ScheduledDeletion
+	for _, row := range rows {
+		if !r.cycle.settled[row.ID] {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+// chunk deletes up to deletionChunk messages with one call and classifies its answer.
+func (r *deletionChatRun) chunk(rows []models.ScheduledDeletion) {
+	if len(rows) == 0 {
+		return
+	}
+	err := deletionPaced(r.cycle.ctx, func(callCtx context.Context) error {
+		_, callErr := r.cycle.bot.DeleteMessagesWithContext(callCtx, r.chatID, deletionMessageIDs(rows), nil)
+		return callErr
+	})
+	r.settleChunk(rows, err)
+}
+
+// settleChunk acts on the answer of a batch call. A batch that fails for a reason of its own falls
+// back to one call per message, so the one undeletable ID is isolated.
+func (r *deletionChatRun) settleChunk(rows []models.ScheduledDeletion, err error) {
+	switch deletionClassify(r.cycle.ctx, err) {
+	case deletionVerdictDone:
+		r.done(rows...)
+	case deletionVerdictRetryFree:
+		r.cycle.cut = true
+	case deletionVerdictGone:
+		r.gone()
+	case deletionVerdictRefused, deletionVerdictRetry:
+		r.fallBack(rows)
+	}
+}
+
+// fallBack deletes the messages one by one and classifies each answer on its own.
+func (r *deletionChatRun) fallBack(rows []models.ScheduledDeletion) {
+	for _, row := range rows {
+		if r.halted() {
 			return
 		}
-		c.complete(chunk)
-		deleted += len(chunk)
+		if r.cycle.settled[row.ID] {
+			continue
+		}
+		err := deletionPaced(r.cycle.ctx, func(callCtx context.Context) error {
+			_, callErr := r.cycle.bot.DeleteMessageWithContext(callCtx, r.chatID, row.MessageID, nil)
+			return callErr
+		})
+		r.settleOne(row, err)
 	}
-	log.Debugf("[Deletion] chat %d: %d deleted of %d claimed", chatID, deleted, len(rows))
+}
+
+// settleOne acts on the answer of one message's own call.
+func (r *deletionChatRun) settleOne(row models.ScheduledDeletion, err error) {
+	switch deletionClassify(r.cycle.ctx, err) {
+	case deletionVerdictDone:
+		r.done(row)
+	case deletionVerdictRefused:
+		r.drop(row)
+		r.maybeLatchService(row)
+	case deletionVerdictRetryFree:
+		r.cycle.cut = true
+	case deletionVerdictGone:
+		r.gone()
+	case deletionVerdictRetry:
+		r.cycle.release([]models.ScheduledDeletion{row}, true)
+		r.putBack++
+	}
+}
+
+// maybeLatchService decides the service latch after a service message was refused: at most once
+// per chat per cycle, and never for a bot kind, whose own messages a plain member bot can delete.
+// When the live check shows the bot cannot delete, the chat's other claimed service rows go too.
+func (r *deletionChatRun) maybeLatchService(row models.ScheduledDeletion) {
+	if r.decided || !deletion.IsServiceKind(row.Kind) {
+		return
+	}
+	r.decided = true
+	if deletionDecideServiceLatch(r.cycle.ctx, r.cycle.bot, r.chatID) != deletionRightCannot {
+		return
+	}
+	var service []models.ScheduledDeletion
+	for _, other := range r.cycle.unsettled() {
+		if other.ChatID == r.chatID && deletion.IsServiceKind(other.Kind) {
+			service = append(service, other)
+		}
+	}
+	r.drop(service...)
+}
+
+// gone latches a chat the bot cannot act in at all and drops its claimed and pending rows.
+func (r *deletionChatRun) gone() {
+	r.stop = true
+	ctx, cancel := r.cycle.writeContext()
+	defer cancel()
+	deletionSetLatch(ctx, r.chatID, deletionScopeGone)
+	if _, err := deletion.DropChatPending(ctx, r.chatID, ""); err != nil {
+		log.Warnf("[Deletion] could not drop the pending rows of chat %d: %v", r.chatID, err)
+	}
+	var claimed []models.ScheduledDeletion
+	for _, row := range r.cycle.unsettled() {
+		if row.ChatID == r.chatID {
+			claimed = append(claimed, row)
+		}
+	}
+	r.drop(claimed...)
 }
