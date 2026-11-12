@@ -391,6 +391,18 @@ nothing. The page shows whether a channel is linked, never which one. The button
 (`✅` on, `❌` off), each sending the opposite value. The largest button of the page is 45 bytes in a private menu and 41 in a
 group menu.
 
+The Anonymous admins page (`y`, between the Log channel and Access pages of Main) has one control, the toggle `m`, `tg` only
+(an `st` is an invalid request, refused before any lookup) with `v` exactly `0` or `1`, the absolute target:
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| AnonAdmin mode | `m` | `0` or `1` | `1` turns the mode on, `0` off; a press of the stored value writes nothing |
+
+A press writes through the function `/anonadmin on` and `off` call. Only the group's live creator may press it, and only while
+the bot is an administrator: another administrator is answered the alert `You need to be the group creator to do this!` and a bot that is not
+an administrator the notice `I'm not admin!`, each with nothing written. Any admin the owner gate admits can open the
+page and read the mode. The largest button of the page is 45 bytes in a private menu and 41 in a group menu.
+
 ### Warns
 
 #### `rmAllChatWarns`

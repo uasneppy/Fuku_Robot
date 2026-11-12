@@ -434,6 +434,7 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Switches: Auto-approve joins | Creator, or an admin who can change info, and the bot an admin | `/autoapprove` |
 | Language: the group's language | Admin | the language buttons of `/lang` |
 | Log channel: each category on or off | Admin | `/log`, `/nolog` |
+| Anonymous admins: the mode on or off | Creator, and the bot an admin; any admin may view, also while the bot is not an admin (looser than the command's view) | `/anonadmin` |
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
 | Welcome and Goodbye: Set text, media or buttons, Remove, Delete last | Creator, or an admin who can change info | `/setwelcome`, `/setgoodbye`, `/resetwelcome`, `/resetgoodbye`, `/cleanwelcome`, `/cleangoodbye` |

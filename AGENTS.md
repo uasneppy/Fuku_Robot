@@ -1254,6 +1254,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The Switches page declares three rights: Reports `settingsRightAdminFloodBot` (`/reports`), the AI spam filter `settingsRightAdmin`
   (`/aispam`, no bot check) and Auto-approve `settingsRightChangeInfoBotAdmin` (`/autoapprove`), each judged on every press
   (`TestSettingsAuthorityParitySwitches`).
+  The Anonymous admins page's toggle (control `m`) is the one control that declares `settingsRightOwnerBotAdmin`, as `/anonadmin`
+  changes the mode only for the live creator and only behind `RequireBotAdmin`; opening the page needs `settingsRightAdmin`
+  alone, which is looser than the command's status view (that view needs the bot as an administrator, the page opens without
+  it), accepted because viewing writes nothing (`TestSettingsAuthorityParityAnonAdmin`).
 
 ## Data
 

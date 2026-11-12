@@ -183,3 +183,35 @@ and in a private menu, and press a category. Read every line, button and toast. 
 
 **Record:** no line, button or toast names the channel or its ID: yes / no. The page says Linked or Not linked and a press without
 a channel is refused with the plain notice: yes / no.
+
+### 14. The creator switches anonymous-admin mode on and off from the page
+
+**Why:** the page writes the mode through the function `/anonadmin` calls, and only a real group shows that an anonymous admin's
+command then runs without the proof button.
+
+**Steps:** as the group's owner open `/settings`, Anonymous admins, and turn the mode on, then send a command as an anonymous
+admin (an admin with "Remain anonymous" on); then turn it off and send the same command again.
+
+**Record:** with the mode on the anonymous admin's command runs with no proof button and with it off the proof button appears: yes /
+no. `/anonadmin` with no argument then reads the same mode as the page: yes / no.
+
+### 15. A non-owner administrator and a demoted bot
+
+**Why:** the toggle declares the owner and the bot-an-administrator right, so each refusal and its order must read right in a real
+group.
+
+**Steps:** as an administrator who is not the owner (with the owner switch on) open the page and press the toggle. Then, as the
+owner, demote the bot to a plain member and press the toggle while the page is still open, and open the page again.
+
+**Record:** the non-owner gets the alert "You need to be the group creator to do this!" and nothing changes: yes / no. With the bot demoted the
+owner's press gets the notice that the bot is not an admin and nothing changes: yes / no. The page still opens while the bot is
+demoted (the stated looseness against `/anonadmin`'s status view, which needs the bot as an administrator): yes / no.
+
+### 16. Whether turning the mode on should ask for a confirmation
+
+**Why:** the mode is the one switch of Phase 18 that lowers a check (anonymous senders are treated as admins). The page turns it on
+with one tap and the sentence beside the button says what it does (A18-A12, A18-8); only the owner can press it.
+
+**Steps:** read the page as the owner and press the toggle on.
+
+**Record:** one tap is acceptable, or a confirmation card (as the Access page has) should guard turning it on: one tap / card.
