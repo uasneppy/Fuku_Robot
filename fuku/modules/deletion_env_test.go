@@ -66,6 +66,8 @@ func newDeletionEnv(t *testing.T) *deletionEnv {
 	mreqSwap(t, &deletionNow, func() time.Time { return now })
 
 	fake := newLockdownFake()
+	// Every message the fake sends or edits is dated by the fixed clock, so no queued row is in 1970.
+	fake.sendDate = func() int64 { return deletionNow().Unix() }
 	bot := newModuleTestBot(fake.moduleBotClient)
 	script := &deletionScriptClient{BotClient: fake, fake: fake}
 	bot.BotClient = script
@@ -265,6 +267,8 @@ func (c *deletionScriptClient) RequestWithContext(
 func (e *deletionEnv) replica() *deletionEnv {
 	e.t.Helper()
 	fake := newLockdownFake()
+	// Every message the fake sends or edits is dated by the fixed clock, so no queued row is in 1970.
+	fake.sendDate = func() int64 { return deletionNow().Unix() }
 	bot := newModuleTestBot(fake.moduleBotClient)
 	script := &deletionScriptClient{BotClient: fake, fake: fake}
 	bot.BotClient = script

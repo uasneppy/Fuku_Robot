@@ -63,6 +63,10 @@ type staffActionFake struct {
 	chatPerms map[int64]gotgbot.ChatPermissions
 	nextMsgID int64
 	sentLog   []staffSentMessage
+	// sendDate, when set, supplies the unix date of every message the fake answers a sendMessage
+	// or an edit with; nil means 1, which is what every test written before the deletion queue
+	// expects. The deletion environment sets it from deletionNow(), so no queued row lands in 1970.
+	sendDate func() int64
 
 	// gmu guards the delay, panic and in-flight bookkeeping. It is never held
 	// while a request sleeps or panics.
@@ -342,6 +346,14 @@ func staffFakeChatJSON(chatID int64) string {
 	return fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Test Chat"}`, chatID)
 }
 
+// answerDate is the date of an answered message: sendDate's value, or 1 when it is not set.
+func (f *staffActionFake) answerDate() int64 {
+	if f.sendDate == nil {
+		return 1
+	}
+	return f.sendDate()
+}
+
 // RequestWithContext implements gotgbot.BotClient. Scripted errors win. The
 // methods that change or read a member are answered from the member records; any
 // other method goes to the embedded staffBotClient, which records it. Every call
@@ -456,12 +468,12 @@ func (f *staffActionFake) RequestWithContext(
 			copied[k] = v
 		}
 		f.sentLog = append(f.sentLog, staffSentMessage{ChatID: chatID, MessageID: f.nextMsgID, Params: copied})
-		return json.RawMessage(fmt.Sprintf(`{"message_id":%d,"date":1,"chat":%s}`, f.nextMsgID, staffFakeChatJSON(chatID))), nil
+		return json.RawMessage(fmt.Sprintf(`{"message_id":%d,"date":%d,"chat":%s}`, f.nextMsgID, f.answerDate(), staffFakeChatJSON(chatID))), nil
 	case "editMessageText":
 		f.record(method, params)
 		return json.RawMessage(fmt.Sprintf(
-			`{"message_id":%d,"date":1,"chat":%s,"text":"edited"}`,
-			staffParamInt(params, "message_id"), staffFakeChatJSON(chatID))), nil
+			`{"message_id":%d,"date":%d,"chat":%s,"text":"edited"}`,
+			staffParamInt(params, "message_id"), f.answerDate(), staffFakeChatJSON(chatID))), nil
 	}
 	return f.staffBotClient.RequestWithContext(ctx, token, method, params, opts)
 }
