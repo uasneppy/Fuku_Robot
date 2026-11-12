@@ -375,6 +375,9 @@ func TestBotManualRepliesNotCovered(t *testing.T) {
 		{name: "tban with a bad duration", text: "/tban 99x", reply: true, call: bansModule.tBan, wantSends: 1},
 		{name: "kick without a target", text: "/kick", call: bansModule.kick, wantSends: 1},
 		{name: "unban without a target", text: "/unban", call: bansModule.unban, wantSends: 1},
+		// IN-01: the "reply to a message" hint for a channel target is a usage hint, not a success reply.
+		{name: "ban of a channel without a reply", text: "/ban -1001234567890", call: bansModule.ban, wantSends: 1},
+		{name: "unban of a channel without a reply", text: "/unban -1001234567890", call: bansModule.unban, wantSends: 1},
 		{name: "mute without a target", text: "/mute", call: mutesModule.mute, wantSends: 1},
 		{name: "tmute with a bad duration", text: "/tmute 99x", reply: true, call: mutesModule.tMute, wantSends: 1},
 		{name: "unmute without a target", text: "/unmute", call: mutesModule.unmute, wantSends: 1},
