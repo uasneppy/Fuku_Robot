@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
 status: executing
-stopped_at: Completed 16-03-PLAN.md
-last_updated: "2026-11-12T00:29:04.912Z"
-last_activity: 2026-11-10
+stopped_at: Completed 16-04-PLAN.md
+last_updated: "2026-11-12T00:50:10.476Z"
+last_activity: 2026-11-12
 last_activity_desc: Phase 11 execution started
-state_head: ddfa52785676a0da74b6b4c18272549b4b4fe543
+state_head: 3c40c91c7fe436bcade9add93694e2c168ade628
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 87
-  completed_plans: 80
+  completed_plans: 81
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 to 16-03 done: storage, the kind tables and apply functions, then the deletion core with the service watcher at group -5; next is 16-04, the worker)
-Plan: 3 of 9
-Status: Executing Phase 16 (3 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Plan 16-03 executed
+Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 to 16-04 done: storage, the kind tables and apply functions, the deletion core with the service watcher at group -5, then the queue worker with the delete-right reader and the 68 s shutdown arithmetic; next is 16-05, the bot-message hooks)
+Plan: 4 of 9
+Status: Executing Phase 16 (4 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Plan 16-04 executed
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -153,6 +153,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P11 | 130min | 3 tasks | 9 files |
 | Phase 16 P01 | 15min | 3 tasks | 20 files |
 | Phase 16 P03 | 22min | 3 tasks | 9 files |
+| Phase 16 P04 | 20min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
