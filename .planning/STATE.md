@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
 status: executing
-stopped_at: Completed 16-04-PLAN.md
-last_updated: "2026-11-12T00:50:10.476Z"
+stopped_at: Completed 16-05-PLAN.md
+last_updated: "2026-11-12T01:22:49.213Z"
 last_activity: 2026-11-12
 last_activity_desc: Phase 11 execution started
-state_head: 3c40c91c7fe436bcade9add93694e2c168ade628
+state_head: dc0fa5cb82390b5266ef65717877b83be6ddae04
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 87
-  completed_plans: 81
+  completed_plans: 82
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 to 16-04 done: storage, the kind tables and apply functions, the deletion core with the service watcher at group -5, then the queue worker with the delete-right reader and the 68 s shutdown arithmetic; next is 16-05, the bot-message hooks)
-Plan: 4 of 9
-Status: Executing Phase 16 (4 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Plan 16-04 executed
+Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 to 16-05 done: storage, the kind tables and apply functions, the deletion core with the service watcher at group -5, the queue worker with the delete-right reader and the 68 s shutdown arithmetic, then `scheduleBotMessage` with the welcome, goodbye, rules and manual-punishment hooks; next is 16-06, the requirement and automatic notices)
+Plan: 5 of 9
+Status: Executing Phase 16 (5 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Plan 16-05 executed
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -154,6 +154,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 16 P01 | 15min | 3 tasks | 20 files |
 | Phase 16 P03 | 22min | 3 tasks | 9 files |
 | Phase 16 P04 | 20min | 3 tasks | 9 files |
+| Phase 16 P05 | 25min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -328,8 +329,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T00:29:03.340Z
-Stopped at: Completed 16-03-PLAN.md
+Last session: 2026-11-12T01:22:47.455Z
+Stopped at: Completed 16-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
