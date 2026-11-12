@@ -34,6 +34,10 @@ type deletionEnv struct {
 	redis      *miniredis.Miniredis
 	now        time.Time
 
+	// script scripts the answers of the bot's client per method and per message; see
+	// deletionScriptClient.
+	script *deletionScriptClient
+
 	mu         sync.Mutex
 	nextUpdate int64
 }
@@ -63,13 +67,15 @@ func newDeletionEnv(t *testing.T) *deletionEnv {
 
 	fake := newLockdownFake()
 	bot := newModuleTestBot(fake.moduleBotClient)
-	bot.BotClient = fake
+	script := &deletionScriptClient{BotClient: fake, fake: fake}
+	bot.BotClient = script
 
 	env := &deletionEnv{
 		t:          t,
 		redis:      redisServer,
 		fake:       fake,
 		bot:        bot,
+		script:     script,
 		now:        now,
 		chat:       gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Deletion Chat"},
 		admin:      gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Admin"},
@@ -175,16 +181,19 @@ func (e *deletionEnv) makeStaffGroup(chatID int64) {
 	}
 }
 
+// freshDeletionRoot puts a fresh, uncancelled root context in place of the current one.
+func freshDeletionRoot() {
+	deletionRoot.mu.Lock()
+	defer deletionRoot.mu.Unlock()
+	deletionRoot.ctx, deletionRoot.cancel = context.WithCancel(context.Background())
+}
+
 // restoreDeletionWorker puts a fresh root context back when the test ends, as
 // restoreMemberReqRunner does for the member requirements runner: a test that cancels the root
 // through cancelDeletionContext() would otherwise leave every later deletion call cancelled.
 func restoreDeletionWorker(t *testing.T) {
 	t.Helper()
-	t.Cleanup(func() {
-		deletionRoot.mu.Lock()
-		defer deletionRoot.mu.Unlock()
-		deletionRoot.ctx, deletionRoot.cancel = context.WithCancel(context.Background())
-	})
+	t.Cleanup(freshDeletionRoot)
 }
 
 // deletionHangClient wraps a bot client and holds every deleteMessage request until its context
@@ -212,4 +221,136 @@ func deletionInlineRunning() int {
 	deletionInline.mu.Lock()
 	defer deletionInline.mu.Unlock()
 	return deletionInline.running
+}
+
+// deletionScriptClient wraps a bot client and lets a test script the answer of any request by
+// method and by message: the script returns the error to answer with (it may block until the
+// request context ends to model a hung call), or nil to let the request through to the fake.
+// A scripted request is recorded on the fake like any other, so the call lists stay complete.
+type deletionScriptClient struct {
+	gotgbot.BotClient
+	fake *lockdownFake
+
+	mu     sync.Mutex
+	script func(ctx context.Context, method string, params map[string]any) error
+}
+
+// set installs the script; nil removes it.
+func (c *deletionScriptClient) set(script func(ctx context.Context, method string, params map[string]any) error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.script = script
+}
+
+func (c *deletionScriptClient) RequestWithContext(
+	ctx context.Context,
+	token, method string,
+	params map[string]any,
+	opts *gotgbot.RequestOpts,
+) (json.RawMessage, error) {
+	c.mu.Lock()
+	script := c.script
+	c.mu.Unlock()
+	if script != nil {
+		if err := script(ctx, method, params); err != nil {
+			c.fake.record(method, params)
+			return nil, err
+		}
+	}
+	return c.BotClient.RequestWithContext(ctx, token, method, params, opts)
+}
+
+// replica builds a second bot process over the same database and Redis, with a fake of its
+// own: the two see the same queue and the same pacer budget but record their calls apart.
+func (e *deletionEnv) replica() *deletionEnv {
+	e.t.Helper()
+	fake := newLockdownFake()
+	bot := newModuleTestBot(fake.moduleBotClient)
+	script := &deletionScriptClient{BotClient: fake, fake: fake}
+	bot.BotClient = script
+	fake.setBotMember(e.chat.Id, lockdownBotAdminJSON(false, true, false))
+	return &deletionEnv{t: e.t, redis: e.redis, fake: fake, bot: bot, script: script, now: e.now, chat: e.chat, admin: e.admin}
+}
+
+// cycle runs one worker cycle with the env bot and reports whether it made progress.
+func (e *deletionEnv) cycle() bool {
+	e.t.Helper()
+	return runDeletionCycle(context.Background(), e.bot)
+}
+
+// pass runs cycles back to back until one makes no progress, as the worker's loop does, and
+// returns how many ran.
+func (e *deletionEnv) pass() int {
+	e.t.Helper()
+	cycles := 0
+	for e.cycle() {
+		cycles++
+		if cycles > 50 {
+			e.t.Fatal("the worker made progress for 50 cycles in a row")
+		}
+	}
+	return cycles + 1
+}
+
+// seedDeletionRow writes one pending queue row of a message sent at sentAt that is due at
+// deleteAt, directly through the model.
+func seedDeletionRow(t *testing.T, chatID, messageID int64, deleteAt, sentAt time.Time, kind string) models.ScheduledDeletion {
+	t.Helper()
+	row := models.ScheduledDeletion{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Kind:      kind,
+		SentAt:    sentAt.UTC().Truncate(time.Second),
+		DeleteAt:  deleteAt.UTC().Truncate(time.Second),
+		State:     models.ScheduledDeletionPending,
+		CreatedAt: sentAt.UTC().Truncate(time.Second),
+	}
+	if err := db.DB.Create(&row).Error; err != nil {
+		t.Fatalf("seed queue row %d of chat %d: %v", messageID, chatID, err)
+	}
+	return row
+}
+
+// seedDue seeds n rows of one kind for chatID, message IDs first..first+n-1, all due before now
+// in ascending order of their ID, and returns the IDs.
+func (e *deletionEnv) seedDue(chatID, first int64, n int, kind string) []int64 {
+	e.t.Helper()
+	ids := make([]int64, 0, n)
+	for i := 0; i < n; i++ {
+		id := first + int64(i)
+		at := e.now.Add(-time.Hour + time.Duration(i)*time.Second)
+		seedDeletionRow(e.t, chatID, id, at, e.now.Add(-2*time.Hour), kind)
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// batchCalls returns the message IDs of every deleteMessages call this env's fake answered for
+// chatID, in order.
+func (e *deletionEnv) batchCalls(chatID int64) [][]int64 {
+	e.t.Helper()
+	var out [][]int64
+	for _, call := range e.fake.callsFor("deleteMessages") {
+		if staffParamInt(call.Params, "chat_id") != chatID {
+			continue
+		}
+		ids, ok := call.Params["message_ids"].([]int64)
+		if !ok {
+			e.t.Fatalf("deleteMessages message_ids = %T, want []int64", call.Params["message_ids"])
+		}
+		out = append(out, ids)
+	}
+	return out
+}
+
+// singleCalls returns the message IDs of every deleteMessage call for chatID, in order.
+func (e *deletionEnv) singleCalls(chatID int64) []int64 {
+	e.t.Helper()
+	var out []int64
+	for _, call := range e.fake.callsFor("deleteMessage") {
+		if staffParamInt(call.Params, "chat_id") == chatID {
+			out = append(out, staffParamInt(call.Params, "message_id"))
+		}
+	}
+	return out
 }
