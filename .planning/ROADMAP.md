@@ -352,7 +352,18 @@ Plans:
   2. With "Delete edited messages" on, a member's message edited after the grace period (1 minute by default, adjustable on the page) is deleted. Edits by admins and approved users are kept.
   3. With "Self-destruct" on, every member message is deleted N minutes after it was sent. Messages from admins and approved users, and pinned messages, stay.
   4. In a busy group with self-destruct on, deletions keep pace without hitting Telegram's limits or slowing the bot's replies, and nothing on the never-delete list (Staff Group items, lockdown alerts, captcha challenges, log-channel posts) is touched.
-**Plans:** TBD
+**Plans:** 11 plans
+- [ ] 17-01-PLAN.md — the three member kinds with per-kind delays checked by value, the batch queue writer, the bounded count, the pin-row drop and their PostgreSQL guarantees (wave 1)
+- [ ] 17-02-PLAN.md — the command registry shim, the 134-site rewrite, the go/parser guard and the docs generator following it (wave 2)
+- [ ] 17-03-PLAN.md — the tracer: a command deleted after its answer through the real dispatcher, the Processor wrapper outside tracing wired in main.go (wave 3)
+- [ ] 17-04-PLAN.md — anonymous-admin, refused, failed and Staff Group commands, the reply guard, and the delete-right latch widened to member kinds (wave 4)
+- [ ] 17-05-PLAN.md — edited messages: the MemberDeletion module at group -8, the raw edit handler, the grace and the exemptions (wave 5)
+- [ ] 17-06-PLAN.md — the self-destruct write path: the bounded batcher, its shutdown inside StopDeletionWorker, the worker's 1000-row cycles and rule screen (wave 6)
+- [ ] 17-07-PLAN.md — the self-destruct watcher, pinned messages (with the /pin hook), the busy-group test and DEL-07 for all three rules (wave 7)
+- [ ] 17-08-PLAN.md — the 18 Member messages strings and the changed intro in all 8 locales with their limits (wave 8)
+- [ ] 17-09-PLAN.md — the Member messages section of the Deletion page, the row fields and the Self-destruct card (wave 9)
+- [ ] 17-10-PLAN.md — the section's rights, Staff Group exclusion, delete-right line, drift and privacy proofs (wave 10)
+- [ ] 17-11-PLAN.md — the end-to-end test, the exclusion and log sweeps, the rulebook and docs, 17-SPIKE.md, the phase gate and the requirement ticks (wave 11)
 **UI hint**: yes
 
 ### Phase 18: Remaining Settings Pages
