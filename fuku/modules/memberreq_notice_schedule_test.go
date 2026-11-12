@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
+
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -270,5 +272,117 @@ func TestMemberReqMuteNoticeAtCap(t *testing.T) {
 		if !row.SentAt.Equal(env.now().Add(-30 * time.Second)) {
 			t.Errorf("sent_at = %s, want the date of the message that went out", row.SentAt)
 		}
+	})
+}
+
+// mreqSchedMuted mutes a member through the real watcher with the automatic-punishments timer
+// stored (or left off when timer is negative) and returns the member and the mute notice. The
+// notice is queued at the 24 hour cap when the kind is on.
+func mreqSchedMuted(t *testing.T, env *mreqSchedEnv, timer int) (gotgbot.User, staffSentMessage) {
+	t.Helper()
+	if timer >= 0 {
+		env.setRule(deletion.KindBotAuto, timer)
+	}
+	member, _, notice := mreqMutedMember(t, env.memberReqEnv)
+	if timer >= 0 {
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(24*time.Hour))
+	} else {
+		env.wantNoRows()
+	}
+	return member, notice
+}
+
+func TestMemberReqFixedRescheduleMovesUp(t *testing.T) {
+	const tap = 20 * time.Minute
+
+	t.Run("the tap moves the 24 hour row up to the timer counted from the tap", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 600)
+		member = env.mreqFix(member)
+		tapped := env.now().Add(tap)
+		env.advance(tap)
+
+		env.mreqPressFixed(member, notice)
+
+		if edits := env.mreqNoticeEdits(notice.MessageID); len(edits) != 1 {
+			t.Fatalf("edits of the notice = %d, want the one confirmation", len(edits))
+		}
+		// Counted from the notice's date the row would be due 10 minutes after the notice, 10 minutes
+		// before the tap, and the confirmation would vanish at once.
+		row := env.wantRowFor(notice.MessageID, deletion.KindBotAuto, tapped.Add(600*time.Second))
+		if !row.DeleteAt.After(tapped) {
+			t.Errorf("delete_at = %s, want after the tap %s", row.DeleteAt, tapped)
+		}
+	})
+
+	t.Run("a timer longer than the cap changes nothing", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 86400)
+		member = env.mreqFix(member)
+		env.advance(tap)
+
+		env.mreqPressFixed(member, notice)
+
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
+	})
+
+	t.Run("the kind off schedules nothing", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, -1)
+		member = env.mreqFix(member)
+
+		env.mreqPressFixed(member, notice)
+
+		if edits := env.mreqNoticeEdits(notice.MessageID); len(edits) != 1 {
+			t.Fatalf("edits of the notice = %d, want the one confirmation", len(edits))
+		}
+		env.wantNoRows()
+	})
+
+	t.Run("the kind turned off after the notice leaves the 24 hour row alone", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 600)
+		member = env.mreqFix(member)
+		if err := deletion.RemoveRule(t.Context(), env.chat.Id, deletion.KindBotAuto); err != nil {
+			t.Fatalf("RemoveRule error = %v", err)
+		}
+		env.advance(tap)
+
+		env.mreqPressFixed(member, notice)
+
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
+	})
+
+	t.Run("a failed edit schedules nothing and the 24 hour row stays", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 600)
+		member = env.mreqFix(member)
+		env.fake.script("editMessageText", env.chat.Id, staffFakeError(502, "Bad Gateway"))
+		env.advance(tap)
+
+		env.mreqPressFixed(member, notice)
+
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
+	})
+
+	t.Run("a refused tap schedules nothing", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		_, notice := mreqSchedMuted(t, env, 600)
+		other := env.mreqMember("Sam", "Jones", "sam")
+		env.advance(tap)
+
+		env.mreqPressFixed(other, notice)
+
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
+	})
+
+	t.Run("a tap that finds the member still broken schedules nothing", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 600)
+		env.advance(tap)
+
+		env.mreqPressFixed(member, notice)
+
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
 	})
 }
