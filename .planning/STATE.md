@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 16
 current_phase_name: Scheduled Deletion of Service and Bot Messages
 status: executing
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-11-10T09:37:27.570Z"
+stopped_at: Completed 16-03-PLAN.md
+last_updated: "2026-11-12T00:29:04.912Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 11 execution started
-state_head: 4041fd9da2061eef3831b4f3c38564e5a920cbf0
+state_head: ddfa52785676a0da74b6b4c18272549b4b4fe543
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 87
-  completed_plans: 79
+  completed_plans: 80
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 and 16-02 done: storage, then the kind tables and apply functions; next is 16-03)
-Plan: 2 of 9
-Status: Executing Phase 16 (2 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
-Last activity: 2026-11-10 — Plan 16-02 executed
+Phase: 16 (Scheduled Deletion of Service and Bot Messages) — EXECUTING (16-01 to 16-03 done: storage, the kind tables and apply functions, then the deletion core with the service watcher at group -5; next is 16-04, the worker)
+Plan: 3 of 9
+Status: Executing Phase 16 (3 of 9 plans done). Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Plan 16-03 executed
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -152,6 +152,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 15 P10 | 50min | 3 tasks | 5 files |
 | Phase 15 P11 | 130min | 3 tasks | 9 files |
 | Phase 16 P01 | 15min | 3 tasks | 20 files |
+| Phase 16 P03 | 22min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -326,8 +327,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T00:03:20.000Z
-Stopped at: Session resumed after the pause, proceeding to plan 16-03 (tracer)
+Last session: 2026-11-12T00:29:03.340Z
+Stopped at: Completed 16-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
