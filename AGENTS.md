@@ -2289,20 +2289,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   order is fixed: take what is buffered (at most one buffer's worth), merge entries of one `(chat, message)` to the earliest
   time, then per chat in ascending chat ID one `deletionRulesLookup` (an unreadable rule sheds the chat's entries; a
   `member:selfdestruct` rule that is absent or not accepted by `deletion.ValidateRuleDelay` drops them as correct, not a shed,
-  D-26a), one exact `deletion.CountPending` bounded by the ceiling (`memberSelfDestructCeiling`, 20,000, through the
+  D-26a), one `deletionLatched` read of the chat's delete-right latch (a latched chat's entries are shed as `no delete right` and
+  their messages stay: the batcher bypasses `deletionAct`, so it reads the latch itself, WR-02; a Redis error is "not latched" and
+  never blocks a write), one exact `deletion.CountPending` bounded by the ceiling (`memberSelfDestructCeiling`, 20,000, through the
   `memberDeleteCountPending` seam: a count that fails sheds the chat's entries, because unknown never deletes, D-33), the entries
   past the ceiling shed latest first, and then one `memberDeleteBatchWrite` (`deletion.ScheduleBatch`: statements of at most 100
   rows, the Staff Group refused inside it, so the flush makes no second read) over every kept entry of every chat. A write that
   returns an error sheds what it did not write and is logged once an hour by chat count. Each flush runs on
   `context.WithTimeout(context.WithoutCancel(deletionContext()), deletionRecordTimeout)`, never the cancelled run context, and
   wakes the worker only when a written entry is already due. Shed reasons are counted separately in atomic counters (full,
-  stopping, ceiling, rules unreadable, count unreadable, write failed) and a shed logs at most one Warn per chat per hour with the
+  stopping, ceiling, rules unreadable, count unreadable, write failed, no delete right) and a shed logs at most one Warn per chat per hour with the
   chat ID and the reason name only, never a message ID (`memberDeleteShedWarn`, a map of at most 10,000 chats that forgets
   entries older than an hour and, when none can be forgotten, logs nothing more for a new chat after one process-wide line).
   The ceiling bounds the table: 20,000 queued rows support at most 20000 divided by the delay messages a second per chat (1 min
   333/s, 5 min 66/s, 10 min 33/s, 1 h 5.5/s, 6 h 0.9/s, 24 h 0.23/s), past which new messages are kept, not deleted. The
   batcher makes database writes only and never a Telegram call; it adds no Redis key. `TestMemberSelfDestructBatcherQueues`,
-  `TestMemberSelfDestructBatcherSheds`, `TestMemberSelfDestructBatcherOffRace` and `TestShutdownEndsMemberDeletionBatcher` hold it.
+  `TestMemberSelfDestructBatcherSheds`, `TestMemberSelfDestructBatcherLatch`, `TestMemberSelfDestructBatcherOffRace` and `TestShutdownEndsMemberDeletionBatcher` hold it.
 - Member deletion, self-destruct (`member_deletion.go`, Phase 17, DEL-05): with `member:selfdestruct` stored as 60 s, 5 min, 10 min,
   1 h, 6 h or 24 h (`deletion.ValidateRuleDelay`; any other stored value is Off), every message of a real member in a group or
   supergroup (text, media, stickers, polls, commands, forwards, replies, each item of an album, `via_bot` messages) is queued by

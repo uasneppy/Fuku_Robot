@@ -27,7 +27,8 @@ import (
 //   - The batcher goroutine flushes every memberDeleteFlushEvery, or at once when the buffer holds
 //     memberDeleteFlushAt entries. A flush takes what is buffered, merges entries of one message to
 //     the earliest time, and per chat (ascending) re-reads the rules once (D-26a: a rule that was
-//     switched Off since the offer drops the chat's entries), counts the chat's queued self-destruct
+//     switched Off since the offer drops the chat's entries, and a chat whose delete-right latch is
+//     set sheds them, WR-02), counts the chat's queued self-destruct
 //     rows exactly up to memberSelfDestructCeiling and sheds what would pass it (D-09, D-31), then
 //     writes every kept entry through deletion.ScheduleBatch, which writes statements of at most 100
 //     rows and refuses a Staff Group (D-17).
@@ -88,11 +89,12 @@ const (
 	memberDeleteShedRule
 	memberDeleteShedCount
 	memberDeleteShedWrite
+	memberDeleteShedLatched
 	memberDeleteShedReasons
 )
 
 var memberDeleteShedNames = [memberDeleteShedReasons]string{
-	"queue full", "stopping", "ceiling", "rules unreadable", "count unreadable", "write failed",
+	"queue full", "stopping", "ceiling", "rules unreadable", "count unreadable", "write failed", "no delete right",
 }
 
 var (
@@ -230,8 +232,9 @@ func memberDeleteTake() []deletion.Entry {
 }
 
 // memberDeleteScreenChat applies the per-chat checks to one chat's entries and returns those that
-// may be written: the rule must still be on (D-26a), and the chat's queued self-destruct rows plus
-// the entries must stay within the ceiling. Entries past the ceiling are shed latest first.
+// may be written: the rule must still be on (D-26a), the chat's delete-right latch must not be set
+// (the entries are shed and the messages stay), and the chat's queued self-destruct rows plus the
+// entries must stay within the ceiling. Entries past the ceiling are shed latest first.
 func memberDeleteScreenChat(ctx context.Context, chatID int64, entries []deletion.Entry) []deletion.Entry {
 	rules, err := deletionRulesLookup(ctx, chatID)
 	if err != nil || rules == nil {
@@ -241,6 +244,14 @@ func memberDeleteScreenChat(ctx context.Context, chatID int64, entries []deletio
 	delay, present := rules.Delays[deletion.KindMemberSelfDestruct]
 	if !present || deletion.ValidateRuleDelay(deletion.KindMemberSelfDestruct, delay) != nil {
 		memberDeleteDroppedOff.Add(int64(len(entries)))
+		return nil
+	}
+	// The watcher and the batcher bypass deletionAct and deletionSchedule on purpose (D-27), so the
+	// delete-right latch is read here, once per chat per flush (WR-02, SEC-17-02): a chat the bot
+	// cannot delete in costs no count and no queue row, and its rows would only be dropped at their
+	// due time. A failed latch read is "not latched" (deletionLatched), so it never blocks a write.
+	if deletionLatched(ctx, chatID, deletion.KindMemberSelfDestruct) {
+		memberDeleteShed(chatID, memberDeleteShedLatched, len(entries))
 		return nil
 	}
 	queued, err := memberDeleteCountPending(ctx, chatID, deletion.KindMemberSelfDestruct, memberSelfDestructCeiling)
