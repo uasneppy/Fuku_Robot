@@ -3661,6 +3661,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member rule uses the `memberDeletionEnv` toolkit (`member_deletion_env_test.go`: `newMemberDeletionEnv`, `newSelfDestructEnv`), mints fresh member and chat IDs, drains
   the batcher with `drainMemberDeleteQueue` and restores it with `restoreMemberDeleteBatcher`, and never writes a member
   rule's stored value by hand except to prove that a value a rule does not accept is Off.
+- Phase 18 AI spam switch tests (`aispam_legacy_request_test.go`, `aispam_settings_apply_test.go`, `fuku/db/aispam/load_enabled_test.go`):
+  `TestLegacyAISpamRequests` (the golden, chats from `-1009918001400`, recorded before the extraction and never
+  re-recorded), `TestApplyAISpamEnabled`, `TestAISpamConfiguredMatchesCommand` and `TestLoadEnabledContext`. The Switches
+  page tests configure the filter through `withAISpamConfigured(t)` and `withAISpamNotConfigured(t, how)` (the provider
+  value empty, `aispamProviderValueEmpty`, or the global switch off, `aispamSwitchOff`), thin wrappers over
+  `withAISpamTestConfig` that put `config.AppConfig` back in `t.Cleanup` and are never combined with `t.Parallel`; they
+  are not the member-requirement helpers `withAIConfigured` and `withAINotConfigured`, which set the Anthropic key. The
+  stand-in provider value is held in a constant named `...ProviderValue`, never one named with token, secret, password or
+  key (gosec G101).
 
 ## Commits
 
