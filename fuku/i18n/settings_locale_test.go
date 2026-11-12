@@ -309,10 +309,69 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_mreq_confirm_ai_ban":  {206, 288},
 	"settings_mreq_confirm_ai_mute": {226, 316},
 
-	// Phase 16 (plan 16-07), the Deletion page. Task 1 adds the Main cell's two keys; the page
+	// Phase 16 (plan 16-07), the Deletion page: the Main cell's name and state word. The page
 	// name is a grid cell whose binding ceiling is the rendered 20 of TestSettingsLabelLengths.
 	"settings_page_del":     {14, 18},
 	"settings_state_del_on": {14, 20},
+
+	// Phase 16 (plan 16-07), the Deletion page (rows 3 to 57 of the UI-SPEC "New settings_ keys"
+	// table, 312 rows in all with the two above). A name row counts the template, which has no
+	// placeholder, so its binding ceiling is the rendered cell of 20 in TestSettingsLabelLengths.
+	"settings_del_intro":             {125, 176},
+	"settings_del_sec_service":       {18, 18},
+	"settings_del_sec_bot":           {18, 18},
+	"settings_del_list_svc":          {125, 176},
+	"settings_del_list_bot":          {65, 92},
+	"settings_del_hint_time":         {85, 120},
+	"settings_del_hint_cleanservice": {75, 106},
+	"settings_del_hint_punish_auto":  {120, 168},
+	"settings_del_no_right":          {135, 190},
+	"settings_del_right_unknown":     {90, 126},
+	"settings_del_state_keep":        {10, 12},
+	"settings_del_state_now":         {11, 13},
+	"settings_del_state_after":       {20, 28},
+	"settings_del_delay_10s":         {6, 10},
+	"settings_del_delay_1m":          {6, 10},
+	"settings_del_delay_10m":         {6, 10},
+	"settings_del_delay_1h":          {6, 10},
+	"settings_del_delay_6h":          {6, 10},
+	"settings_del_delay_24h":         {6, 10},
+	"settings_del_delay_custom":      {10, 12},
+	"settings_del_currently":         {25, 36},
+	"settings_del_svc_joined":        {18, 18},
+	"settings_del_svc_left":          {18, 18},
+	"settings_del_svc_photo":         {18, 18},
+	"settings_del_svc_title":         {18, 18},
+	"settings_del_svc_pinned":        {18, 18},
+	"settings_del_svc_video":         {18, 18},
+	"settings_del_svc_forum":         {18, 18},
+	"settings_del_svc_boost":         {18, 18},
+	"settings_del_svc_timer":         {18, 18},
+	"settings_del_svc_background":    {18, 18},
+	"settings_del_svc_gifts":         {18, 18},
+	"settings_del_svc_other":         {18, 18},
+	"settings_del_desc_joined":       {70, 98},
+	"settings_del_desc_left":         {70, 98},
+	"settings_del_desc_photo":        {65, 92},
+	"settings_del_desc_title":        {50, 70},
+	"settings_del_desc_pinned":       {85, 120},
+	"settings_del_desc_video":        {85, 120},
+	"settings_del_desc_forum":        {115, 162},
+	"settings_del_desc_boost":        {50, 70},
+	"settings_del_desc_timer":        {75, 106},
+	"settings_del_desc_background":   {60, 84},
+	"settings_del_desc_gifts":        {45, 64},
+	"settings_del_desc_other":        {150, 210},
+	"settings_del_bot_welcome":       {18, 18},
+	"settings_del_bot_goodbye":       {18, 18},
+	"settings_del_bot_rules":         {18, 18},
+	"settings_del_bot_auto":          {18, 18},
+	"settings_del_bot_manual":        {18, 18},
+	"settings_del_desc_welcome":      {55, 78},
+	"settings_del_desc_goodbye":      {55, 78},
+	"settings_del_desc_rules":        {95, 134},
+	"settings_del_desc_auto":         {110, 154},
+	"settings_del_desc_manual":       {105, 148},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -531,7 +590,21 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_opt_kick", "settings_opt_ban", "settings_opt_mute",
 		// The Member requirements rule screen's Off and Warn choices (Phase 13).
 		"settings_state_off_plain", "settings_opt_warn",
+		// The Deletion row screens' choices (Phase 16): Keep, Delete now and the six delay labels.
+		"settings_del_state_keep", "settings_del_state_now", "settings_del_delay_10s", "settings_del_delay_1m",
+		"settings_del_delay_10m", "settings_del_delay_1h", "settings_del_delay_6h", "settings_del_delay_24h",
 	}
+	// The Deletion page's list cells (Phase 16, UI-SPEC check 2): a state icon, one space and the
+	// name, so every name is at most 18 code points whichever icon the row shows.
+	deletionNames := []string{
+		"settings_del_sec_service", "settings_del_sec_bot",
+		"settings_del_svc_joined", "settings_del_svc_left", "settings_del_svc_photo", "settings_del_svc_title",
+		"settings_del_svc_pinned", "settings_del_svc_video", "settings_del_svc_forum", "settings_del_svc_boost",
+		"settings_del_svc_timer", "settings_del_svc_background", "settings_del_svc_gifts", "settings_del_svc_other",
+		"settings_del_bot_welcome", "settings_del_bot_goodbye", "settings_del_bot_rules", "settings_del_bot_auto",
+		"settings_del_bot_manual",
+	}
+	deletionIcons := []string{"➖", "🗑", "⏳"}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
 	// written, icon included.
 	editorButtons := []string{
@@ -618,6 +691,15 @@ func TestSettingsLabelLengths(t *testing.T) {
 						if runes := utf8.RuneCountInString(rendered); runes > editorCellMax {
 							t.Errorf("%s: requirements cell %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, editorCellMax)
 						}
+					}
+				}
+			}
+
+			for _, key := range deletionNames {
+				for _, icon := range deletionIcons {
+					label := icon + " " + settingsLocaleString(t, lang, data, key)
+					if runes := utf8.RuneCountInString(label); runes > gridMax {
+						t.Errorf("%s: Deletion cell %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
 					}
 				}
 			}
