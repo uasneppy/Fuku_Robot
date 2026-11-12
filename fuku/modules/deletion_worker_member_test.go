@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,6 +161,51 @@ func TestDeletionWorkerScreensSelfDestructOff(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestDeletionWorkerScreenLogThrottled holds IN-01: with the rules unreadable the rows go back free and
+// are claimed again on every tick, and the worker's line about it is one per chat per hour, never one
+// per cycle.
+func TestDeletionWorkerScreenLogThrottled(t *testing.T) {
+	env := newDeletionEnv(t)
+	hook := captureLockdownLogs(t)
+	reset := func() {
+		deletionScreenWarn.mu.Lock()
+		deletionScreenWarn.last = nil
+		deletionScreenWarn.capWarned = false
+		deletionScreenWarn.mu.Unlock()
+	}
+	reset()
+	t.Cleanup(reset)
+	deletionSetRule(t, env.chat.Id, deletion.KindMemberSelfDestruct, 600)
+	held := env.seedDue(env.chat.Id, 94000, 3, deletion.KindMemberSelfDestruct)
+	mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) {
+		return nil, errors.New("rules unreadable")
+	})
+	lines := func() int {
+		count := 0
+		for _, line := range memberDeleteLogLines(hook, env.chat.Id) {
+			if strings.Contains(line, "could not read the rules") {
+				count++
+			}
+		}
+		return count
+	}
+
+	for range 6 {
+		env.cycle()
+	}
+	if got := lines(); got != 1 {
+		t.Fatalf("lines for six cycles with the rules unreadable = %d, want 1", got)
+	}
+	if left := env.queuedNoWait(env.chat.Id); len(left) != len(held) {
+		t.Fatalf("rows left = %d, want the %d rows put back free: the release is unchanged", len(left), len(held))
+	}
+	deletionTestAdvance(t, memberDeleteWarnEvery+time.Second)
+	env.cycle()
+	if got := lines(); got != 2 {
+		t.Fatalf("lines after the window = %d, want 2", got)
+	}
 }
 
 // callsNaming counts the Telegram delete calls of the env chat that name message id, batch or single.

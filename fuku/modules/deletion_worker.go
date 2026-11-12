@@ -355,6 +355,9 @@ func (r *deletionChatRun) process() {
 		r.chatID, r.deleted, r.dropped, r.putBack, len(r.rows))
 }
 
+// deletionScreenWarn lets the worker's "rules unreadable" line through once per chat per hour.
+var deletionScreenWarn = memberDeleteWarnGate{label: "the self-destruct screen log"}
+
 // screenSelfDestruct re-checks the chat's claimed member:selfdestruct rows against the chat's current
 // rule, with one cached rules read per chat per cycle, and returns the rows that may be deleted.
 // Nothing is deleted after the owner turned the rule off except a call already in flight (D-26b): a
@@ -376,7 +379,12 @@ func (r *deletionChatRun) screenSelfDestruct(rows []models.ScheduledDeletion) []
 	}
 	rules, err := deletionRulesLookup(r.cycle.ctx, r.chatID)
 	if err != nil || rules == nil {
-		log.Warnf("[Deletion] could not read the rules of chat %d to screen self-destruct rows: %v", r.chatID, err)
+		// An uncounted release leaves delete_at alone, so the rows are claimed again on the next tick:
+		// the line goes through an hourly per-chat gate (IN-01), or a rules fault would log once a
+		// second per chat. The release itself is unchanged.
+		if deletionScreenWarn.allow(r.chatID, deletionNow()) {
+			log.Warnf("[Deletion] could not read the rules of chat %d to screen self-destruct rows: %v", r.chatID, err)
+		}
 		r.cycle.release(selfDestruct, false)
 		return rest
 	}

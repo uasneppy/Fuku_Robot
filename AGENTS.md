@@ -2259,8 +2259,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the Staff Group read and before the first chunk: one cached `deletionRulesLookup` per chat per cycle on the cycle context
   judges the chat's claimed `member:selfdestruct` rows, which are completed with no call when the rule is absent or holds a
   value `deletion.ValidateRuleDelay` refuses (nothing is deleted after the owner switched it off except a call already in
-  flight) and put back free, with no attempt counted, when the rules cannot be read (unknown never deletes); the rows of every
-  other kind pass untouched (`TestDeletionWorkerScreensSelfDestructOff`).
+  flight) and put back free, with no attempt counted, when the rules cannot be read (unknown never deletes; an uncounted release leaves
+  `delete_at` alone, so the next 1 s tick claims the rows again, and the line that says so goes through an hourly per-chat gate,
+  `deletionScreenWarn`, so a rules fault logs once per chat per hour and never once per cycle,
+  `TestDeletionWorkerScreenLogThrottled`); the rows of every other kind pass untouched (`TestDeletionWorkerScreensSelfDestructOff`).
   The service latch is set only after a live check: when a `service:*` or `member:*` message is refused with a message-level answer, once
   per chat per cycle `deletionDecideServiceLatch` reads the bot's own member record through the pacer
   (`deletionReadBotRight`, classified by `deletionClassifyBotRight` from status and error code only, never a description:
