@@ -129,6 +129,38 @@ func TestScheduleRules(t *testing.T) {
 			t.Errorf("the largest delay: (%v, %v)", wrote, err)
 		}
 	})
+
+	t.Run("member entries follow their kind's delay rule", func(t *testing.T) {
+		chatID := deletionChat(t)
+		sentUTC := sent.UTC().Truncate(time.Second)
+		for i, kind := range []string{KindMemberCommands, KindMemberEdited} {
+			id := int64(20 + i)
+			if wrote, err := Schedule(ctx, Entry{ChatID: chatID, MessageID: id, Kind: kind, SentAt: sent, DelaySecs: 0}); err != nil || !wrote {
+				t.Fatalf("Schedule(%s, 0) = (%v, %v), want (true, nil)", kind, wrote, err)
+			}
+			if wrote, err := Schedule(ctx, Entry{ChatID: chatID, MessageID: id + 10, Kind: kind, SentAt: sent, DelaySecs: 60}); wrote || !errors.Is(err, ErrDelayOutOfRange) {
+				t.Errorf("Schedule(%s, 60) = (%v, %v), want (false, ErrDelayOutOfRange)", kind, wrote, err)
+			}
+		}
+		if wrote, err := Schedule(ctx, Entry{ChatID: chatID, MessageID: 40, Kind: KindMemberSelfDestruct, SentAt: sent, DelaySecs: 600}); err != nil || !wrote {
+			t.Fatalf("Schedule(selfdestruct, 600) = (%v, %v)", wrote, err)
+		}
+		if wrote, err := Schedule(ctx, Entry{ChatID: chatID, MessageID: 41, Kind: KindMemberSelfDestruct, SentAt: sent, DelaySecs: 45}); wrote || !errors.Is(err, ErrDelayOutOfRange) {
+			t.Errorf("Schedule(selfdestruct, 45) = (%v, %v), want (false, ErrDelayOutOfRange)", wrote, err)
+		}
+		for _, row := range storedQueue(t, chatID) {
+			want := sentUTC
+			if row.MessageID == 40 {
+				want = sentUTC.Add(600 * time.Second)
+			}
+			if !row.DeleteAt.Equal(want) {
+				t.Errorf("message %d delete_at = %v, want %v", row.MessageID, row.DeleteAt, want)
+			}
+		}
+		if n := len(storedQueue(t, chatID)); n != 3 {
+			t.Errorf("%d rows, want 3 (the refused entries write nothing)", n)
+		}
+	})
 }
 
 // TestScheduleKeepsEarliest runs on SQLite in make test and on PostgreSQL in the integrity

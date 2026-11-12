@@ -488,3 +488,72 @@ func TestApplyCleanServiceRule(t *testing.T) {
 		}
 	})
 }
+
+// TestApplyDeleteRuleMemberKinds holds the menu's one write path to the per-kind delay rule of
+// the three member kinds (D-25, C-05): a value outside a kind's presets is refused before any
+// read or write.
+func TestApplyDeleteRuleMemberKinds(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("edited grace", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		result := applyDeleteRule(ctx, chatID, deletion.KindMemberEdited, deletionSet(60))
+		if result.Outcome != deletionApplied || result.Rules == nil || result.Rules.Delays[deletion.KindMemberEdited] != 60 {
+			t.Fatalf("set 60 = %+v, want applied with 60 read back", result)
+		}
+		if row, has := deletionStoredRow(t, chatID, deletion.KindMemberEdited); !has || row.DelaySecs != 60 {
+			t.Errorf("stored row = %+v (%v), want delay 60", row, has)
+		}
+	})
+
+	t.Run("commands switch", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		if r := applyDeleteRule(ctx, chatID, deletion.KindMemberCommands, deletionSet(0)); r.Outcome != deletionApplied {
+			t.Fatalf("set 0 = %+v, want applied", r)
+		}
+		if r := applyDeleteRule(ctx, chatID, deletion.KindMemberCommands, deletionSet(0)); r.Outcome != deletionUnchanged {
+			t.Errorf("set 0 again = %+v, want unchanged", r)
+		}
+		removed := applyDeleteRule(ctx, chatID, deletion.KindMemberCommands, deletionRemove)
+		if removed.Outcome != deletionApplied || removed.Rules == nil {
+			t.Fatalf("remove = %+v, want applied", removed)
+		}
+		if _, present := removed.Rules.Delays[deletion.KindMemberCommands]; present {
+			t.Error("the commands rule is still read back after a remove")
+		}
+	})
+
+	t.Run("refused before any read or write", func(t *testing.T) {
+		chatID := uniqueModuleChatID()
+		deletionCleanup(t, chatID)
+		writes, lookups := 0, 0
+		mreqSwap(t, &deletionRuleWrites, deletionRuleWriter{
+			Set:    func(context.Context, int64, string, int) error { writes++; return nil },
+			Remove: func(context.Context, int64, string) error { writes++; return nil },
+		})
+		mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) {
+			lookups++
+			return &deletion.Rules{ChatID: chatID, Delays: map[string]int{}}, nil
+		})
+		for _, c := range []struct {
+			kind  string
+			delay int
+		}{
+			{deletion.KindMemberEdited, 45},
+			{deletion.KindMemberEdited, 0},
+			{deletion.KindMemberCommands, 60},
+			{deletion.KindMemberSelfDestruct, 30},
+			{deletion.KindMemberSelfDestruct, 0},
+		} {
+			result := applyDeleteRule(ctx, chatID, c.kind, deletionSet(c.delay))
+			if result.Outcome != deletionRefused || result.Err == nil {
+				t.Errorf("%s %d: result = %+v, want refused with an error", c.kind, c.delay, result)
+			}
+		}
+		if writes != 0 || lookups != 0 {
+			t.Errorf("a refused call reached a seam: %d writes, %d lookups", writes, lookups)
+		}
+	})
+}

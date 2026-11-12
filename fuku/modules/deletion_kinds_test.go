@@ -263,12 +263,17 @@ func TestServiceKindTable(t *testing.T) {
 
 func TestDeletionKindRegistryMatchesRepository(t *testing.T) {
 	var kinds, codes []string
-	for _, row := range append(slices.Clone(deletionServiceRows), deletionBotRows...) {
+	all := append(slices.Clone(deletionServiceRows), deletionBotRows...)
+	all = append(all, deletionMemberRows...)
+	for _, row := range all {
 		kinds = append(kinds, row.Kind)
 		codes = append(codes, row.Code)
 		section := "s"
-		if deletion.IsBotKind(row.Kind) {
+		switch {
+		case deletion.IsBotKind(row.Kind):
 			section = "b"
+		case deletion.IsMemberKind(row.Kind):
+			section = "m"
 		}
 		if len(row.Code) != 2 || !strings.HasPrefix(row.Code, section) {
 			t.Errorf("row %q (%s): code must be two letters starting with %q", row.Code, row.Kind, section)
@@ -276,7 +281,10 @@ func TestDeletionKindRegistryMatchesRepository(t *testing.T) {
 		if row.NameKey == "" || row.DescKey == "" {
 			t.Errorf("row %s has an empty name or description key", row.Code)
 		}
-		if row.HintKey != "" && row.HintKey != "settings_del_hint_cleanservice" && row.HintKey != "settings_del_hint_punish_auto" {
+		switch row.HintKey {
+		case "", "settings_del_hint_cleanservice", "settings_del_hint_punish_auto",
+			"settings_del_hint_commands", "settings_del_hint_edited", "settings_del_hint_self":
+		default:
 			t.Errorf("row %s has the unexpected hint key %q", row.Code, row.HintKey)
 		}
 		checkDeletionPresets(t, row)
@@ -305,6 +313,14 @@ func TestDeletionKindRegistryMatchesRepository(t *testing.T) {
 		}
 		if slices.Contains(row.Presets, 0) || slices.Contains(row.Presets, 10) {
 			t.Errorf("bot row %s offers a preset below a minute: %v", row.Code, row.Presets)
+		}
+	}
+	for _, row := range deletionMemberRows {
+		if row.Match != nil {
+			t.Errorf("member row %s has a predicate: a member message is caught by its own path", row.Code)
+		}
+		if !deletion.IsMemberKind(row.Kind) || row.HintKey == "" {
+			t.Errorf("member row %s has the kind %s and the hint key %q, want a member kind and a hint", row.Code, row.Kind, row.HintKey)
 		}
 	}
 	for _, code := range []string{"sj", "sl"} {
@@ -338,14 +354,14 @@ func checkDeletionPresets(t *testing.T, row deletionRow) {
 
 func TestDeletionKindsNeverStaffLockdownCaptchaLog(t *testing.T) {
 	registry := deletion.Kinds()
-	if len(registry) != 17 {
-		t.Fatalf("the repository registers %d kinds, want 17", len(registry))
+	if len(registry) != 20 {
+		t.Fatalf("the repository registers %d kinds, want 20", len(registry))
 	}
 	bot := map[string]bool{
 		deletion.KindBotWelcome: true, deletion.KindBotGoodbye: true, deletion.KindBotRules: true,
 		deletion.KindBotAuto: true, deletion.KindBotManual: true,
 	}
-	botKinds := 0
+	botKinds, memberKinds := 0, 0
 	for _, kind := range registry {
 		for _, word := range []string{"staff", "lockdown", "captcha", "log", "raid"} {
 			if strings.Contains(kind, word) {
@@ -358,6 +374,12 @@ func TestDeletionKindsNeverStaffLockdownCaptchaLog(t *testing.T) {
 				t.Errorf("bot kind %q is not one of the five of D-11", kind)
 			}
 		}
+		if deletion.IsMemberKind(kind) {
+			memberKinds++
+		}
+	}
+	if memberKinds != 3 || len(deletionMemberRows) != 3 {
+		t.Errorf("%d member kinds and %d member rows, want exactly three of each", memberKinds, len(deletionMemberRows))
 	}
 	if botKinds != 5 || len(deletionBotRows) != 5 {
 		t.Errorf("%d bot kinds and %d bot rows, want exactly five of each", botKinds, len(deletionBotRows))
@@ -365,6 +387,26 @@ func TestDeletionKindsNeverStaffLockdownCaptchaLog(t *testing.T) {
 	for _, row := range deletionBotRows {
 		if !bot[row.Kind] {
 			t.Errorf("bot row %s has the kind %s", row.Code, row.Kind)
+		}
+	}
+}
+
+// TestMemberRowPresetsMatchRuleDelays holds the page's member presets to the repository's
+// rule check: each row offers exactly the values 0..86400 that ValidateRuleDelay accepts for its
+// kind, ascending, so a button can never carry a value the write path refuses.
+func TestMemberRowPresetsMatchRuleDelays(t *testing.T) {
+	if len(deletionMemberRows) != 3 {
+		t.Fatalf("%d member rows, want 3", len(deletionMemberRows))
+	}
+	for _, row := range deletionMemberRows {
+		var accepted []int
+		for delay := 0; delay <= deletion.MaxDelaySecs; delay++ {
+			if deletion.ValidateRuleDelay(row.Kind, delay) == nil {
+				accepted = append(accepted, delay)
+			}
+		}
+		if !slices.Equal(row.Presets, accepted) {
+			t.Errorf("row %s (%s) presets = %v, want exactly the accepted delays %v", row.Code, row.Kind, row.Presets, accepted)
 		}
 	}
 }

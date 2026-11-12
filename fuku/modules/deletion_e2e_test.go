@@ -785,17 +785,21 @@ func (r *deletionE2EReplica) deleted(chatID, id int64) int {
 	return n
 }
 
-// deletionShortestRules stores the shortest delay of every kind for each chat: Delete now for the
-// service kinds (the shared joined and left rows included) and 60 s for the bot kinds. The rows are
-// removed when the test ends.
+// deletionShortestRules stores the shortest valid delay of every kind for each chat: Delete now for the
+// service kinds (the shared joined and left rows included), 60 s for the bot kinds and, for the member
+// kinds, the shortest preset each accepts (commands 0, edited 30, self-destruct 60: deletion.ValidateRuleDelay
+// refuses anything else). The rows are removed when the test ends.
 func deletionShortestRules(t *testing.T, chatIDs ...int64) {
 	t.Helper()
 	deletionCleanup(t, chatIDs...)
 	for _, chatID := range chatIDs {
 		for _, kind := range deletion.Kinds() {
 			delay := 0
-			if deletion.IsBotKind(kind) {
+			switch {
+			case deletion.IsBotKind(kind), kind == deletion.KindMemberSelfDestruct:
 				delay = 60
+			case kind == deletion.KindMemberEdited:
+				delay = 30
 			}
 			if err := deletion.SetRule(t.Context(), chatID, kind, delay); err != nil {
 				t.Fatalf("SetRule(%d, %s, %d) error = %v", chatID, kind, delay, err)

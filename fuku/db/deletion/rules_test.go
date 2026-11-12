@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/cache"
@@ -156,6 +157,65 @@ func TestDeleteRules(t *testing.T) {
 		}
 	})
 
+	t.Run("member kinds are checked by value", func(t *testing.T) {
+		chatID := deletionChat(t)
+		if err := SetRule(ctx, chatID, KindMemberEdited, 60); err != nil {
+			t.Fatalf("SetRule(edited, 60): %v", err)
+		}
+		got, err := GetRules(ctx, chatID)
+		if err != nil || got.Delays[KindMemberEdited] != 60 {
+			t.Fatalf("read back = %+v, %v, want 60", got, err)
+		}
+		for _, tc := range []struct {
+			kind  string
+			delay int
+		}{{KindMemberEdited, 45}, {KindMemberCommands, 60}, {KindMemberSelfDestruct, 30}} {
+			if err := SetRule(ctx, chatID, tc.kind, tc.delay); !errors.Is(err, ErrDelayOutOfRange) {
+				t.Errorf("SetRule(%s, %d) = %v, want ErrDelayOutOfRange", tc.kind, tc.delay, err)
+			}
+		}
+		if stored := storedRules(t, chatID); len(stored) != 1 {
+			t.Fatalf("stored rules = %v, want only the edited row (refused writes create none)", stored)
+		}
+		if err := SetRule(ctx, chatID, KindMemberCommands, 0); err != nil {
+			t.Fatalf("SetRule(commands, 0): %v", err)
+		}
+		got, err = GetRules(ctx, chatID)
+		if delay, ok := got.Delays[KindMemberCommands]; err != nil || !ok || delay != 0 {
+			t.Fatalf("commands = %d (present %v, %v), want a stored 0", delay, ok, err)
+		}
+	})
+
+	t.Run("removing a self-destruct rule drops its pending rows only", func(t *testing.T) {
+		chatID, other := deletionChat(t), deletionChat(t)
+		now := time.Now().UTC().Truncate(time.Second)
+		if err := SetRule(ctx, chatID, KindMemberSelfDestruct, 60); err != nil {
+			t.Fatal(err)
+		}
+		rows := []models.ScheduledDeletion{
+			{ChatID: chatID, MessageID: 1, Kind: KindMemberSelfDestruct, SentAt: now, DeleteAt: now.Add(time.Hour), State: models.ScheduledDeletionPending, CreatedAt: now},
+			{ChatID: chatID, MessageID: 2, Kind: KindMemberSelfDestruct, SentAt: now, DeleteAt: now.Add(time.Hour), State: models.ScheduledDeletionActing, ClaimToken: "tok", CreatedAt: now},
+			{ChatID: chatID, MessageID: 3, Kind: KindMemberEdited, SentAt: now, DeleteAt: now, State: models.ScheduledDeletionPending, CreatedAt: now},
+			{ChatID: other, MessageID: 1, Kind: KindMemberSelfDestruct, SentAt: now, DeleteAt: now.Add(time.Hour), State: models.ScheduledDeletionPending, CreatedAt: now},
+		}
+		if err := db.DB.Create(&rows).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := RemoveRule(ctx, chatID, KindMemberSelfDestruct); err != nil {
+			t.Fatal(err)
+		}
+		left := map[int64]bool{}
+		for _, row := range storedQueue(t, chatID) {
+			left[row.MessageID] = true
+		}
+		if left[1] || !left[2] || !left[3] {
+			t.Errorf("rows left = %v, want the acting row 2 and the other kind's row 3 only", left)
+		}
+		if n := len(storedQueue(t, other)); n != 1 {
+			t.Errorf("another chat has %d rows, want its 1 untouched", n)
+		}
+	})
+
 	t.Run("chats are independent", func(t *testing.T) {
 		a, b := deletionChat(t), deletionChat(t)
 		if err := SetRule(ctx, a, KindTitle, 30); err != nil {
@@ -215,10 +275,11 @@ func TestDeleteRules(t *testing.T) {
 
 func TestKindRegistry(t *testing.T) {
 	kinds := Kinds()
-	if len(kinds) != 17 {
-		t.Fatalf("Kinds() has %d entries, want 17", len(kinds))
+	if len(kinds) != 20 {
+		t.Fatalf("Kinds() has %d entries, want 20", len(kinds))
 	}
 	seen := map[string]bool{}
+	members := 0
 	for _, kind := range kinds {
 		if seen[kind] {
 			t.Errorf("kind %q is listed twice", kind)
@@ -227,14 +288,34 @@ func TestKindRegistry(t *testing.T) {
 		if !ValidKind(kind) {
 			t.Errorf("registered kind %q is not valid", kind)
 		}
-		if IsServiceKind(kind) == IsBotKind(kind) {
-			t.Errorf("kind %q must be exactly one of service and bot", kind)
+		classes := 0
+		for _, is := range []bool{IsServiceKind(kind), IsBotKind(kind), IsMemberKind(kind)} {
+			if is {
+				classes++
+			}
+		}
+		if classes != 1 {
+			t.Errorf("kind %q must be exactly one of service, bot and member", kind)
 		}
 		if len(kind) > 40 {
 			t.Errorf("kind %q does not fit VARCHAR(40)", kind)
 		}
+		if IsMemberKind(kind) {
+			members++
+		}
+		if want := !IsBotKind(kind); NeedsDeleteRight(kind) != want {
+			t.Errorf("NeedsDeleteRight(%q) = %v, want %v", kind, !want, want)
+		}
 	}
-	for _, kind := range []string{"", "service:", "bot:", "member:left", "service:new_chat_members "} {
+	if members != 3 {
+		t.Errorf("%d member kinds, want 3", members)
+	}
+	for _, kind := range []string{KindMemberCommands, KindMemberEdited, KindMemberSelfDestruct} {
+		if !IsMemberKind(kind) || !ValidKind(kind) {
+			t.Errorf("%q is not a valid member kind", kind)
+		}
+	}
+	for _, kind := range []string{"", "service:", "bot:", "member:", "member:left", "member:commands ", "service:new_chat_members "} {
 		if ValidKind(kind) {
 			t.Errorf("ValidKind(%q) = true, want false", kind)
 		}
@@ -244,6 +325,62 @@ func TestKindRegistry(t *testing.T) {
 		if SharesCleanServiceFlag(kind) != want {
 			t.Errorf("SharesCleanServiceFlag(%q) = %v, want %v", kind, !want, want)
 		}
+	}
+	if IsMemberKind("member:") || IsMemberKind("service:pinned_message") || IsMemberKind("") {
+		t.Error("IsMemberKind accepted a kind that is not a member kind")
+	}
+}
+
+// TestMemberKindDelays holds the per-kind delay rules by value: a member rule is checked against
+// its presets, not a range (C-05), so a database edit cannot create an unlisted grace.
+func TestMemberKindDelays(t *testing.T) {
+	candidates := []int{-1, 0, 10, 30, 45, 60, 300, 600, 900, 3600, 21600, 86400, 86401}
+	sets := func(values ...int) map[int]bool {
+		m := map[int]bool{}
+		for _, v := range values {
+			m[v] = true
+		}
+		return m
+	}
+	inRange := func(delay int) bool { return delay >= 0 && delay <= MaxDelaySecs }
+	for _, kind := range Kinds() {
+		for _, delay := range candidates {
+			var wantRule, wantEntry bool
+			switch kind {
+			case KindMemberCommands:
+				wantRule, wantEntry = sets(0)[delay], sets(0)[delay]
+			case KindMemberEdited:
+				wantRule, wantEntry = sets(30, 60, 300, 900, 3600)[delay], sets(0)[delay]
+			case KindMemberSelfDestruct:
+				wantRule = sets(60, 300, 600, 3600, 21600, 86400)[delay]
+				wantEntry = wantRule
+			default:
+				wantRule, wantEntry = inRange(delay), inRange(delay)
+			}
+			checkDelay(t, "ValidateRuleDelay", kind, delay, ValidateRuleDelay(kind, delay), wantRule)
+			checkDelay(t, "ValidateEntryDelay", kind, delay, ValidateEntryDelay(kind, delay), wantEntry)
+		}
+	}
+	for _, kind := range []string{"", "service:nope", "member:left"} {
+		if err := ValidateRuleDelay(kind, 0); !errors.Is(err, ErrUnknownKind) {
+			t.Errorf("ValidateRuleDelay(%q) = %v, want ErrUnknownKind", kind, err)
+		}
+		if err := ValidateEntryDelay(kind, 0); !errors.Is(err, ErrUnknownKind) {
+			t.Errorf("ValidateEntryDelay(%q) = %v, want ErrUnknownKind", kind, err)
+		}
+	}
+}
+
+func checkDelay(t *testing.T, fn, kind string, delay int, err error, want bool) {
+	t.Helper()
+	if want {
+		if err != nil {
+			t.Errorf("%s(%s, %d) = %v, want nil", fn, kind, delay, err)
+		}
+		return
+	}
+	if !errors.Is(err, ErrDelayOutOfRange) {
+		t.Errorf("%s(%s, %d) = %v, want ErrDelayOutOfRange", fn, kind, delay, err)
 	}
 }
 
