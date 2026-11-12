@@ -1,0 +1,113 @@
+# Phase 17: Command, Edit and Self-Destruct Deletion - Context
+
+**Gathered:** 2026-11-12
+**Status:** Ready for planning (decisions D-01 to D-20 are the recommended defaults; the owner has not confirmed them, see "Provisional status")
+
+<domain>
+## Phase Boundary
+
+Phase 17 adds the member-message half of deletion to the Deletion page Phase 16 built, on the same rules table, queue, worker, pacer and exclusions.
+
+- **Delete commands** (DEL-03): a member's command, an admin's included, is deleted after the bot has answered it. The answer still arrives.
+- **Delete edited messages** (DEL-04): a member's message edited after a grace period (1 minute by default, adjustable on the page) is deleted. Admins and approved users are exempt.
+- **Self-destruct** (DEL-05): with it on, every member message is deleted N minutes after it was sent. Admins, approved users and pinned messages are exempt.
+- **Busy groups and exclusions**: self-destruct on a busy group keeps pace without Telegram limits or slowing the bot's replies, and nothing on the never-delete list (Staff Group items, lockdown alerts, captcha challenges, log-channel posts, DEL-07) is touched.
+
+Out of scope: deleting the bot's own replies to commands (DEL2-01, deferred), global silence and mass deletion tools (DEL2-02), custom delay numbers, comparing an edit with the original text, and the remaining settings pages (Phase 18).
+
+**Owner decisions already closed in the roadmap:** command deletion includes admins' commands; edited-message deletion has a 1-minute default grace and exempts admins and approved users; self-destruct exempts admins, approved users and pinned messages.
+
+</domain>
+
+<provisional_status>
+## Provisional status
+
+The owner was asked these grey areas and interrupted the question before answering, then asked the run to continue without further questions. Each decision below is the default that was recommended in that question, built only from the roadmap's closed owner decisions and the existing Phase 16 design. None is recorded as confirmed. They are listed as owner confirmations A17-1 to A17-8 in the STATE deferred items, like D-20 to D-28 of Phase 16, and the owner can change any of them when confirming the phase. Every decision is reversible without a migration (rules rows and Go tables only).
+
+</provisional_status>
+
+<decisions>
+## Implementation Decisions
+
+### Delete commands (area 1, DEL-03)
+- **D-01:** A command is a message in a group or supergroup whose first entity is a `bot_command` at offset 0 and whose command name is one this bot registers, written bare (`/ban`) or addressed to this bot (`/ban@thisbot`). A command addressed to another bot (`/ban@otherbot`) and a `/word` this bot has no handler for are never deleted, because in a group with several bots a bare `/word` may belong to another bot and deleting it breaks that bot's reply. The sender may be anyone who is not a Telegram service identity: members, approved users and admins alike (closed owner decision). A command refused by a check (not an admin, command disabled, wrong chat type, bot not admin) or failed with an error is deleted too, because it was addressed to this bot and answered.
+- **D-02:** The delete happens after the answer, never before: every handler that replies to the command runs first, and the command is deleted once all groups of the update have run. The mechanism is the researcher's and planner's to settle (research flag, decision 5), against these requirements: it covers commands handled by `helpers.WrapCommand`, the raw `NewCommand` interceptors (the StaffActions table and `settingsCancelPassOn`) and the anonymous-admin re-entry, it is one place and not one hook per command, and the recommended shape is a thin wrapper of the dispatcher's `Processor` (today `tracing.TracingProcessor{}` in `main.go`) that inspects the finished update and calls the deletion core. An anonymous admin's command is deleted only after the proof tap re-entered and ran it, from the re-entered update, never at the first message (the proof prompt replies to that message) and never when the tap never comes (the message then stays, which is accepted). A Staff Group is never touched (D-17).
+- **D-03:** The command row is a switch: `member:commands` with a stored delay of 0 means On, an absent row means Off, and the delete goes through `deletionAct` with delay 0 (the inline path with the pacer, the queue fallback on a long wait and the latches of Phase 16), so a busy group's commands never park dispatcher goroutines. Replies the bot sent to a command are not touched (DEL2-01), and a bot reply that targets a deleted command still sends because the reply parameters allow sending without the reply target where they do not already (planner checks every `WrapCommand` reply path, Pitfall 13).
+
+### Delete edited messages (area 2, DEL-04)
+- **D-04:** An edit is any `edited_message` update of a group or supergroup message whose sender is a real user. There is no stored copy of the original text, so an edit that changes nothing (a link preview filling in, a caption touch) is indistinguishable from an author's edit and counts the same: a stated limit, bounded by the grace period (a preview arrives within seconds), and the live check "Edited-message noise" from the roadmap stays an owner step (deferred, like the other live checks). The rule judges `edit_date - date`: an edit made within the grace period of the message being sent is kept (usually a typo fix), a later one deletes the message at once through `deletionAct` with delay 0 (the edit time is already past the grace).
+- **D-05:** The grace is the stored delay of `member:edited` in seconds, with presets 30 s, 1 min, 5 min, 15 min and 1 h and nothing else; switching the rule on from Off stores 60 s (the 1-minute default of the roadmap). An absent row means Off. A message older than 47 hours since its own date is skipped with no call (Telegram refuses it), and no notice is posted anywhere.
+- **D-06:** Exempt: creators and administrators by the cached admin list (an unknown list bias to keep, as the member requirements watcher does), approved users, an anonymous admin or a channel (`sender_chat` set), bots, `via_bot` messages (an inline bot's edit is reported as the user's), automatic forwards, a Staff Group chat, and a member with a pending captcha (their messages are held for replay at group -10). The handler is a small raw handler for edited updates (`handlers.Handler` whose `CheckUpdate` is `ctx.EditedMessage != nil`), never `NewMessage(...).SetAllowEdited(true)`, which would also match every new message. It returns `ext.ContinueGroups` on every path with its result preset so a recovered panic cannot return `nil`; its handler group is the planner's under the AGENTS.md rules (group 1 holds the settings door, which only matches new private messages, so they never meet). This is the first handler that consumes edits: antiflood, locks, blacklists and aispam still do not see edits (an existing gap, out of scope).
+
+### Self-destruct (area 3, DEL-05)
+- **D-07:** Storage is PostgreSQL rows in the existing `scheduled_deletions` queue (kind `member:selfdestruct`), not a Redis sorted set (research decision 6, settled): a Redis flush or eviction would silently drop every pending deletion, while the table survives a restart, runs once across replicas and already has the worker, the claim, the stale release and the 47-hour drop. The accepted failure modes are database write load in a busy group and a message that stays when its row was shed (D-09); neither ever deletes something that should stay.
+- **D-08:** The write path never stalls the dispatcher. The recommended shape is a bounded in-process batcher (a channel flushed every few hundred milliseconds or at 100 rows into one `ON CONFLICT` insert that keeps the earliest time, every flush under `defer error_handling.RecoverFromPanic`), joined into `StopDeletionWorker`'s existing 3 s wait so it adds no drain and no allowance; a message that cannot be queued because the channel is full or the flush failed is simply kept (shed with a counter and one rate-limited log line, fail toward keeping). The planner and researcher may replace the batcher with a plain synchronous insert only if they show the dispatcher cost is bounded by one round trip and the busy-group test (below) passes.
+- **D-09:** `delete_at` is the message's own send time plus the stored delay (D-08 of Phase 16). Presets: 1 min, 5 min, 10 min, 1 h, 6 h and 24 h, the cap of Phase 16 (`deletion.MaxDelaySecs`) and its 47-hour age drop unchanged. A per-chat ceiling on queued self-destruct rows (20,000, a package variable only so a test can shrink it) refuses new rows beyond it, so a flood cannot grow the table without bound; the ceiling is checked cheaply (the planner chooses between a bounded count at flush and an approximate counter) and a refused message is kept. A delay change on the page changes only messages sent afterwards; rows already queued keep their time, as everywhere in Phase 16.
+- **D-10:** What counts: every message of a real user in a group or supergroup (text, media, stickers, polls, commands, forwards, replies) while the rule is on. Exempt, never queued: creators and administrators by the cached list, approved users, `sender_chat` senders (anonymous admins, channels, linked-channel automatic forwards), bots, service messages (the service rules of Phase 16 own those), any Staff Group chat, a member with a pending captcha (their held messages), and a message the bot itself sent (its own messages are the bot-message kinds' business). The watcher runs before group 0 like the other watchers so the commands and everything else are seen, never ends an update (`ext.ContinueGroups` on every path, named result preset), is registered through `handlers.NewMessage` with no `SetAllow*`, and takes a handler group number the planner chooses under the AGENTS.md rule (never a second message handler in group -2, and group 12 stays last).
+- **D-11:** Pinned messages stay. When a `pinned_message` service message names a message, the queue row of that message and kind is deleted at once (a conditional delete by chat and message ID), so a message pinned between its send and its deletion time survives. Unpinning does not queue anything again (accepted: the message stays until an admin removes it). The currently pinned message of a chat at the moment the rule is switched on is not found by a scan, because the rule only queues messages sent after it is on.
+- **D-12:** Switching self-destruct Off drops the chat's pending `member:selfdestruct` rows in the same write (the existing `dropPendingKindsTx` exact-kind drop), so nothing already queued is deleted after the owner turned it off; rows an `acting` worker already claimed are left to it. Turning it On or changing the delay drops nothing.
+- **D-13:** Throughput: the existing worker (1 s tick and wake, 200 rows a cycle, cycles back to back until nothing settles, `deleteMessages` of up to 100 IDs per call, the deletion pacer with its own keys, per-ID fallback) is the only deleter, so a busy group deletes in batches of 100 and never races the bot's replies for a pacer budget (the deletion pacer is separate from every other). The planner proves it with a busy-group test over the real worker and pacer: a few thousand queued rows are deleted inside the cycle budget with no more calls than rows/100 plus the fallbacks, the bot's reply latency in the same run is unchanged, and a 429 block delays only deletions.
+
+### Page and safeguards (area 4)
+- **D-14:** The Deletion page gains a third section, Member messages (section code `m`, the hub screen lists Service messages, Bot messages and Member messages), with three rows: Commands (`mc`), Edited messages (`me`) and Self-destruct (`ms`). They are registered from the deletion page's own tables (the section and row tables of `deletion_kinds.go`), so `settings_deletion.go` gains rows and `settings_pages.go` is not edited again. The planner checks the new callback codes against every registered code. The three kinds are added to `deletion.ValidKind` (`member:commands`, `member:edited`, `member:selfdestruct`) with a per-kind delay rule enforced in Go: commands 0 only, edited 30 to 3600 in the presets, self-destruct 60 to 86400 in the presets.
+- **D-15:** Row screens use the existing row-screen shape (`a=dr&t=<row>`, controls `st` only with the absolute value `v`): Commands offers Off and On; Edited messages offers Off and the five grace presets (the hint says "an edit made within this time of sending is kept"); Self-destruct offers Off and the six presets. Every choice writes at once except turning Self-destruct on (from Off, or from one delay to another): that draws the shared two-tap card (`settingsCardRows`, `e` the expiry minute, Yes is the page action with the stored-row check of the card helper) saying that every message members send from now on is deleted after the chosen time (messages already sent are not touched) and that admins, approved users and pinned messages stay. A press of the stored value writes nothing. The card is the only safeguard the page adds, because the rule can be switched off with one tap and Off drops what is queued (D-12).
+- **D-16:** Rights are Phase 16's: opening the page and its screens needs `settingsRightAdmin`, every choice and the card's Yes need `settingsRightChangeInfo` judged on the press's fresh member record, there is no command for these rules (so each carries a drift test and an authority test in place of a parity test), the page is hidden and refused in a Staff Group (`Hidden`, D-18 of Phase 16), and every screen of the member section carries the same live status line about the bot's right to delete (DEL-08: `deletionReadBotRight`, nothing when it can, the cannot line, the unknown mark). No screen names the Staff Group. The hub's state counts every rule that is not Off, the three new ones included.
+- **D-17:** DEL-07 stays enforced in three layers: the new watchers and the command and edit hooks refuse a Staff Group chat through `deletionAct` (which already refuses a non-negative chat ID and a Staff Group, failing closed on a read error), the queue writer refuses it in `deletion.Schedule`, and the page is not drawn in a Staff Group. A test lists the new kinds and asserts a Staff Group chat gets no row and no delete from any of the three rules, and that a lockdown alert copy, a captcha challenge, a staff card and a log post are never queued by self-destruct (they are bot messages, and D-10 excludes the bot's own messages).
+- **D-18:** Strings: every new string exists in all 8 locales with a row in the limits table of `fuku/i18n/settings_locale_test.go` and labels held to the 20-code-point cell and 64-byte callback limits; the section name, three row names, descriptions, hints (including "a command is deleted after the bot answered it", "an edit within the grace is kept", "admins, approved users and pinned messages stay"), the card text and the preset labels reuse Phase 16's delay words where they exist. `TestSettingsStaffPrivacy` renders the new screens in all 8 languages.
+- **D-19:** No new shutdown drain and no new Redis key family is expected: the batcher (D-08) is joined into `StopDeletionWorker`'s 3 s wait, the latches, guards and pacer of Phase 16 are reused, and the shutdown arithmetic of AGENTS.md (68 s allowances against the 60 s budget, `stop_grace_period: 75s`) is restated unchanged. If research finds one is needed, `AGENTS.md` restates the arithmetic in the same commit. A migration is expected to be unnecessary (`kind` is validated in Go); the planner adds one only for an index the ceiling count needs, with `scripts/migrate_psql.sh` and `runner.go` agreeing.
+- **D-20:** The documentation, the README feature list, `AGENTS.md` (the handler groups, the Deletion page bullet, the Subsystem traps for the three rules and their stated limits) and the generated docs are updated in the same commits as the code, and every deferred live check goes in a `17-SPIKE.md`: edited-message noise, a bare `/word` in a multi-bot group, the anonymous-admin command deletion, pinned messages seen by the watcher, `deleteMessages` at busy-group volume.
+
+### Claude's Discretion
+- The mechanism of D-02 (processor wrapper or per-entry hooks), the batcher's exact flush timings and channel size (D-08), the handler group numbers (D-06, D-10), the ceiling's counting method (D-09), the section and row labels, the preset button layout, locale key names, and the structure of the plans (the tracer slice first: a command deleted after its answer through the real dispatcher, then edits, then self-destruct and the batcher, then the page rows).
+
+</decisions>
+
+<code_context>
+## Existing Code Insights
+
+### Reusable assets
+- Phase 16's core: `deletionAct` (the one decision point: negative chat ID, latches, Staff Group refusal, delay 0 inline or a queue row), `deletion.Schedule`, `deletion.SetRule` and `RemoveRule` with `dropPendingKindsTx`, the worker and `StopDeletionWorker`, `deletionPaced`, the rules read `deletionRulesLookup`, the kind tables in `deletion_kinds.go`, the Deletion page (`settings_deletion.go`, `Hidden`, `settingsDelStaffGate`, `deletionReadBotRight`) and the shared card helper (`settings_card.go`).
+- `main.go` builds the dispatcher with `Processor: tracing.TracingProcessor{}`; `fuku/config/config.go` already lists `edited_message` in the allowed updates and nothing consumes it.
+- `helpers.WrapCommand` and `anonPipelineHandler` (anonymous-admin re-entry swaps the callback update for a message update carrying the cached command), the StaffActions raw interceptors and `settingsCancelPassOn`, which bypass `WrapCommand`.
+- The watcher shapes to copy: the service deletion watcher (group -5, named result preset to `ext.ContinueGroups`, `SetAllowBot`), the raid flood counter's cheap-first order, `antifloodModule.userIsFloodExempt`, `cachedAdminStatus`, `IsApprovedForUpdate` (memoised per update), the captcha pending checks of `aispamCarvedOut`.
+- `pins.go` records messages the bot pins; the `pinned_message` service message is already a row of the service kinds.
+
+### Integration points
+- The Deletion page's hub and sections (`settingsDelSections`, the row tables) take the new section as table rows; `deletion.ValidKind` and the per-kind delay rule take the three kinds; `AGENTS.md`, README, docs and the 8 locale files are touched in the same commits.
+- Tests: the Phase 16 toolkit (`deletionE2E`, `newDeletionEnv`, `deletionShortestRules`, the fixed `deletionNow` clock, the SQLite harness) and the settings toolkit, with the rules of Phase 16 for fresh IDs and cleanup.
+
+</code_context>
+
+<specifics>
+## Specific Ideas
+
+- A command deleted after its answer: the owner types `/ban` as an admin, the bot replies, and the command message disappears while the reply stays.
+- An edit at 90 seconds with a 1-minute grace deletes the message at once; an edit at 20 seconds keeps it.
+- Self-destruct at 10 minutes in a busy group: members' messages disappear in batches, admins' and the pinned rules message stay.
+
+</specifics>
+
+<deferred>
+## Deferred Ideas
+
+- DEL2-01 (deleting the bot's replies to members' commands) and DEL2-02 (global silence and mass deletion).
+- A custom delay number, a typed grace, and self-destruct per message kind (only media, only links).
+- Comparing an edit with the original text so that a no-op edit is kept (needs a stored copy of every message).
+- Deleting the messages a pin left behind when it is unpinned, and a scan of existing messages when a rule is switched on.
+- `/settings` help text naming the Deletion page (A16-A11, still open).
+
+</deferred>
+
+<owner_confirmations>
+## Owner confirmations carried to the phase (not yet answered)
+
+- **A17-1** (D-01) Commands this bot does not register, and commands for another bot, are never deleted.
+- **A17-2** (D-02) An anonymous admin's command is deleted only after the proof tap ran it.
+- **A17-3** (D-04) An edit that changes nothing counts like any edit past the grace.
+- **A17-4** (D-05) Grace presets 30 s, 1 min, 5 min, 15 min, 1 h; default 1 min.
+- **A17-5** (D-07, D-08) Self-destruct rows in PostgreSQL with a bounded batcher that sheds toward keeping the message.
+- **A17-6** (D-09) Self-destruct presets 1 min to 24 h and a 20,000 row per-chat ceiling.
+- **A17-7** (D-10, D-11) Self-destruct leaves the bot's own messages, held captcha messages and a message named by a pin service message; unpinning does not re-queue.
+- **A17-8** (D-15) Only Self-destruct draws a confirm card; Commands and Edited messages write at once.
+
+</owner_confirmations>
