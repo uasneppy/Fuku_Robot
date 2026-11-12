@@ -3098,8 +3098,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 255 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
-  of `fuku/i18n/settings_locale_test.go` and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 15's ten keys
+  there). The locale files now hold 312 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  of `fuku/i18n/settings_locale_test.go` and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 16 added 57
+  `settings_` keys (rows 1 to 57 of the Deletion page: `settings_page_del`, `settings_state_del_on` and 55 `settings_del_`
+  keys), each one row of `settingsLocaleLimits`, with label-length groups in `TestSettingsLabelLengths` for the page name,
+  the two section names, the twelve service and five bot names (rendered with each of the three state icons, at most 20)
+  and the choice labels Keep, Delete now and the six delays, and `settings_del_hint_punish_auto` in `memberReqQuotingKeys`
+  (it quotes the words of `mreq_btn_fixed`). The names, covers and hints of the rows of `deletionServiceRows` and
+  `deletionBotRows` are read through the table fields `NameKey`, `DescKey` and `HintKey`, which `make check-translations`
+  cannot see: `TestDeletionKindKeysExist` (`fuku/modules`, `deletion_kinds_locale_test.go`) proves every one of them, the two
+  section names and the delay words translate in all 8 languages. Phase 15's ten keys
   (eight `settings_`, two `mreq_`) were added before the table row that reads them: `mreq_rule_ai` is read
   through the table field `PhraseKey` and `mreq_remedy_ai` by the notice builder through a key held in a variable, which
   `make check-translations` cannot see, so the two limits tables and `TestMemberReqLocaleKeys` are their only guard. The 520 code point cap of the notices is a rendered
