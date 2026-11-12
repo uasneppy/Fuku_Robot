@@ -428,7 +428,7 @@ func resolveBotUsername(b *gotgbot.Bot) string {
 
 func newConfiguredDispatcher(maxRoutines int) *ext.Dispatcher {
 	return ext.NewDispatcher(&ext.DispatcherOpts{
-		Processor:   tracing.TracingProcessor{},
+		Processor:   modules.CommandDeletionProcessor{Inner: tracing.TracingProcessor{}},
 		Error:       dispatcherErrorHandler,
 		MaxRoutines: maxRoutines,
 	})
