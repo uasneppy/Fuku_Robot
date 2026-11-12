@@ -2,13 +2,13 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
-current_phase: 16
-current_phase_name: Scheduled Deletion of Service and Bot Messages
-status: executing
-stopped_at: Completed 16-09-PLAN.md
+current_phase: 17
+current_phase_name: Command, Edit and Self-Destruct Deletion
+status: planning
+stopped_at: Phase 16 verified (human_needed), proceeding to Phase 17 discuss
 last_updated: "2026-11-12T04:09:45.821Z"
 last_activity: 2026-11-12
-last_activity_desc: Phase 11 execution started
+last_activity_desc: Phase 16 verified (human_needed)
 state_head: "0b5f694970882d37ab954c365ece8f581743235e"
 progress:
   total_phases: 10
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 16 — Scheduled Deletion of Service and Bot Messages
+**Current focus:** Phase 17 — Command, Edit and Self-Destruct Deletion (not started; Phase 16 is closed to `human_needed`, live checks deferred)
 
 ## Current Position
 
-Phase: 16 (Scheduled Deletion of Service and Bot Messages) — all 9 plans executed (16-01 to 16-09: storage, kind tables and apply functions, the deletion core with the service watcher at group -5, the queue worker and the 68 s shutdown arithmetic, the bot-message hooks and requirement notices, the 57 locale keys, the Deletion page, then the closing plan: the end-to-end, exclusion and log tests, the Deletion privacy sweep, the rulebook, README and docs, `16-SPIKE.md` and the phase gate). DEL-01, DEL-02, DEL-06, DEL-07, DEL-08 and MREQ-15 are complete; DEL-03 to DEL-05 are Phase 17's. The phase is NOT marked Complete: review, security and verification come next, and the orchestrator does the phase transition
-Plan: 9 of 9
-Status: Phase 16 executed (9 of 9 plans done); awaiting review, security and verification. Phase 15 stays `human_needed` (live checks deferred, see Deferred Items) and is not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Plan 16-09 executed
+Phase: 17 (Command, Edit and Self-Destruct Deletion) — not started (next: discuss). Phase 16 (Scheduled Deletion of Service and Bot Messages) is built, code-reviewed (0 critical, 3 warnings fixed), security-audited (42/42 threats closed, 2 low findings fixed), validated (nyquist compliant) and verified `human_needed` (12/12 must-haves, live checks deferred); it is not marked Complete in ROADMAP
+Plan: not started
+Status: Ready to discuss Phase 17. Phases 10 to 16 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
+Last activity: 2026-11-12 — Phase 16 verified (human_needed)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -314,6 +314,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| verification | Phase 16 live Telegram checks and owner review (`phases/16-scheduled-deletion-of-service-and-bot-messages/16-SPIKE.md`, `16-VERIFICATION.md` status `human_needed`): BEFORE any group sets a deletion rule run SPIKE check 1 (a batch `deleteMessages` with one undeletable or too-old ID: does the per-ID fallback isolate it), 2 (the delete-right line for a plain-member bot, an administrator without the right and a basic group's administrator), 4 (two replicas: one deletion per message, a rule change seen at the next message), 5 (restart with queued rows, SIGTERM then `kill -9`), 9 (forum topics and giveaways), 10 (the joined and left coupling through the one `/cleanservice` flag on a real group), 11 (the real error strings of a refused delete and a 429 on `deleteMessages`) and 12 (DEL-07 live: a staff card, a lockdown alert, a captcha challenge and a log post are never deleted); owner confirmations: amendments D-20..D-28, assumptions A16-A2, A16-A3, A16-A4, A16-A6, A16-A8 (check 7 and 8), and the behaviour changes `/cleanservice` now resets the joined and left delay rows (D-26) and does nothing inside a Staff Group (D-18, review IN-02); native-speaker read of the 57 new `settings_` strings (check 6: delay labels in hi, ru, uk, the quoted "Delete messages" right names, the near-ceiling names) and phone-width cells in hi, ru and uk (check 3); the CI run of the pushed head with the six Phase 16 PostgreSQL integrity names (check 14); and the deploy checklist item that `render.yaml` sets no shutdown delay (security SEC-03, pre-existing: Render's default 30 s is shorter than the 60 s shutdown budget, set at least 75 s). Accepted limits: review IN-03, NEW-01 (a window of up to 90 s after a switch-off), NEW-02, NEW-03, NEW-05 and security AR-1..AR-7 (`16-REVIEW-DISPOSITION.md`, `16-SECURITY.md`) | deferred by the owner's choice in the autonomous run; code verified, owner checks pending | 2026-11-12 | v1.1 |
 | verification | Phase 15 live Telegram and Anthropic checks and owner review (`phases/15-ai-spam-name-check/15-SPIKE.md`, `15-VERIFICATION.md` status `human_needed`): the live Haiku spike with the owner's key BEFORE any group sets the AI rule to a punishment (`go run ./scripts/claude-spike -names names.csv -repeat 5`: false-positive rate and recall at the 0.9 bar, retune `memberReqAIBar` from the sweep, stability between repeats, latency and cost, that the configured model accepts a forced tool call, refusal behaviour on adult-content names), the six-step test-group walk-through (Warn on a joining spam-like name, a rename judged once, hold released on an ordinary name, Mute then rename then "I fixed it", key removed so the page says AI not configured and a punishing press is refused, a wrong key pauses the checks with one warning), the phone-width read of the new AI cell and the Off-only screen in hi, ru and uk, two live replicas over one PostgreSQL and Redis, a restart during a burst of joins, the native-speaker read of the 10 new keys (the three AI confirm-card keys as reworded by SEC-04 included; `mreq_rule_ai` is grammar-sensitive in ru, uk and hi), and `make lint`, `make test` and `make test-postgres-integrity` in CI; follow-up decisions: D-22 (sticky unknowns), D-23 (the button reads the cache, no re-roll), A15-A4, A15-A6 and A15-A9 of `15-SPIKE.md`, review items IN-01, IN-02, IN-04 and NEW-01 to NEW-03 (`15-REVIEW-DISPOSITION.md`), accepted risks AR-01 to AR-18 of `15-SECURITY.md` (AR-17 Redis cardinality, AR-18 account allowance and per-replica latch), the type-based breaker instead of a copy of the image breaker, and the `/stats` section for the name-check counters that was not built (optional); MREQ-01, MREQ-10 and MREQ-14 are ticked on automated and code-read evidence only | deferred; the owner's standing choice (defer the live checks and keep going) applies; the AI rule is Off by default and inert without `ANTHROPIC_API_KEY` or with `ENABLE_AISPAM=false`, so nothing leaves the server until an owner sets the key and a punishment; code verified 13/13, security 0 open threats (33 of 33 closed), validation 77 named tests green through CI's gate, review findings WR-01 to WR-04 and IN-03 and audit items SEC-01 to SEC-04 fixed | 2026-11-10 | v1.1 |
 | verification | Phase 14 live Telegram checks and owner review (`phases/14-profile-photo-and-channel-rules/14-SPIKE.md`, `14-VERIFICATION.md` status `human_needed`): BEFORE any group sets the photo rule to Mute, Kick or Ban run SPIKE check S1 (what `getUserProfilePhotos` returns for an account that hides its photo, and the public-photo fallback); BEFORE a channel punishment run S2 (what `getChatMember(channel, user)` and `(channel, bot)` answer when the bot is not the channel's administrator) and S3 (`getChat(group).linked_chat_id` reaches a plain-member bot), the channel member statuses and a channel linked and unlinked while a rule is set; Warn does not depend on them. Also the phone-width read of the two new grid cells and the Off-only channel screen in hi, ru and uk (M10 to M13), the native-speaker read of the 16 new and 7 reworded keys (hi most of all, the ru and uk `{rules}` phrases and the count answer), two live replicas over one PostgreSQL and Redis, a raid with the lookup pacer shedding, a restart during a burst of lookups, and `make lint` plus `make test-postgres-integrity` in CI; follow-up decisions: UI-SPEC assumptions A3, A4 and A7, review items IN-01, IN-02, IN-04, IN-05 and NEW-01 to NEW-03 (`14-REVIEW-DISPOSITION.md`), audit items SEC-01 (the channel ID in three Debug log lines) and SEC-04 (no rate limit on the channel screen presses beyond the lookup pacer) with accepted risks in `14-SECURITY.md`, the two documented deviations (the channel-level `cna` negative cache; a stricter unanswerable lookup rule holds a weaker name punishment back) and the PLAT-06 cross-cutting tick; MREQ-01 stays Pending until Phase 15 delivers the AI rule and MREQ-10 until Phase 15's "AI not configured" line | deferred; the owner's standing choice (defer the live checks and keep going) applies; enforcement is ON in code by default but every rule defaults Off, so nothing is screened until an owner sets a rule; code verified 16/16, security 0 open threats (49 of 49 closed), validation 71 named tests green through CI's gate, review findings WR-01 to WR-05, IN-03 and the two audit items SEC-02 and SEC-03 fixed | 2026-11-08 | v1.1 |
 | verification | Phase 13 live Telegram checks and owner review (`phases/13-member-requirements/13-SPIKE.md`, `13-VERIFICATION.md` status `human_needed`): BEFORE any group sets a rule to Mute run SPIKE checks 2 (the 330-day marker `until_date` read back by `getChatMember`), 3 (a muted member's leave and rejoin), 4 (a restricted member's readback), 5 (answer time of the button) and 8 (the unmute during a lockdown) and 14 (a member lifted to the group's defaults reads back with the group's rights, which the CR-01 rule "restricted below the defaults" rests on); Warn, Kick and Ban do not depend on them. Also checks 1 (the group message limit against the cap of 10 a minute), 6 and 7 (a collectible-username account, names after a rename), 9 and 10 (bidi isolates with an Arabic name, hi, ru and uk cells at phone width), 11 (native-speaker read of the 61 new strings), 12 (two live replicas over one PostgreSQL), 13 (`make lint` on a Go 1.26 golangci-lint, `make test-postgres-integrity` in CI); follow-up decisions: UI-SPEC assumptions A1, A4, A8, A14, A15, A17 and A18, review items IN-01 to IN-06 and NEW-02 to NEW-04 (`13-REVIEW-DISPOSITION.md`), audit items SEC-NEW-03 to SEC-NEW-06 and accepted risks AR-01 to AR-18 (`13-SECURITY.md`); MREQ-01 stays Pending until Phases 14 and 15 deliver the other three rules | deferred; the owner's standing choice (defer the live checks and keep going) applies; enforcement is ON in code by default but every rule defaults Off, so nothing is screened until an owner sets a rule; code verified 17/17, security 0 open threats (59 of 59 closed), validation 10/10 covered, review findings CR-01, WR-01, WR-02, WR-03 and the two low audit items fixed | 2026-11-08 | v1.1 |
@@ -331,11 +332,12 @@ Items acknowledged and deferred at milestone close, most recent first:
 | 13 | verification_deferred_human | /gsd-verify-work 13 |
 | 14 | verification_deferred_human | /gsd-verify-work 14 |
 | 15 | verification_deferred_human | /gsd-verify-work 15 |
+| 16 | verification_deferred_human | /gsd-verify-work 16 |
 
 ## Session Continuity
 
-Last session: 2026-11-12T04:09:43.928Z
-Stopped at: Completed 16-09-PLAN.md
+Last session: 2026-11-12T06:03:56.000Z
+Stopped at: Phase 16 verified (human_needed), proceeding to Phase 17 discuss
 Resume file: None
 
 ## Operator Next Steps
