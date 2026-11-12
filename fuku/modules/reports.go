@@ -354,12 +354,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 					replyText, _ = tr.GetString("reports_turned_on_personal")
 				}
 			} else {
-				err := reports.SetChatReportStatus(chat.Id, true)
-				if err != nil {
-					replyText, _ = tr.GetString("common_settings_save_failed")
-				} else {
-					replyText, _ = tr.GetString("reports_turned_on_group")
-				}
+				replyText, _ = tr.GetString(reportsGroupApplyKey(chat.Id, true))
 			}
 		case "off", "no", "false":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -371,12 +366,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 					replyText, _ = tr.GetString("reports_turned_off_personal")
 				}
 			} else {
-				err := reports.SetChatReportStatus(chat.Id, false)
-				if err != nil {
-					replyText, _ = tr.GetString("common_settings_save_failed")
-				} else {
-					replyText, _ = tr.GetString("reports_turned_off_group")
-				}
+				replyText, _ = tr.GetString(reportsGroupApplyKey(chat.Id, false))
 			}
 		case "block":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))

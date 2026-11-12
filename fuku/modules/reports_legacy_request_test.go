@@ -206,8 +206,14 @@ func TestLegacyReportsPrivateRequests(t *testing.T) {
 			bot := newModuleTestBot(client)
 			privateChat := gotgbot.Chat{Id: admin.Id, Type: "private", FirstName: "Telegram"}
 			client.responses["getChat"] = []byte(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Connected Report Chat"}`, connectedID))
-			connections.ConnectId(admin.Id, connectedID)
-			t.Cleanup(func() { connections.DisconnectId(admin.Id) })
+			if err := connections.ConnectId(admin.Id, connectedID); err != nil {
+				t.Fatalf("connect the user to the group: %v", err)
+			}
+			t.Cleanup(func() {
+				if err := connections.DisconnectId(admin.Id); err != nil {
+					t.Errorf("disconnect the user: %v", err)
+				}
+			})
 
 			ctx := newModuleMessageContext(bot, privateChat, admin, tc.text)
 			if err := reportsModule.reports(bot, ctx); err != ext.EndGroups {
