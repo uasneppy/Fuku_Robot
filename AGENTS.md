@@ -2971,6 +2971,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   leave, `/welcome`, `/rules` and the previews all build their message through `renderGreeting` and `buildRulesMessage`
   (which builds its text with `buildRulesText`), never a second builder, and a preview never writes and never sends to
   the group.
+  The warn settings (Phase 18) follow the same rule: `applyWarnLimit` (the limit, 1..100) and `applyWarnMode` (the action
+  at the limit) in `warns.go` hold the validation, the repository write (through the `warnSettingsWrites` seam) and its
+  `warn_settings:<chat>` cache drop, and return a `warnSettingsResult` (outcome, the command's reply key, the row read
+  back, the error) that `/setwarnlimit` and `/setwarnmode` map to their unchanged replies (`TestLegacyWarnSettingsRequests`
+  holds every byte). The page reads through `warns.LoadWarnSettingsContext`, which shares the commands' cache key and TTL,
+  returns its error, never inserts a row and caches no default for a chat with no row, so the command loader's next read
+  still finds its miss and creates the row as before. `warn_settings` is not in `skipLocal`: another replica can show an
+  old value for up to `CACHE_LOCAL_TTL`, exactly as the commands can. `/setwarnmode` accepts exactly ban, kick and mute
+  (`warnSettingsModes`); the table's CHECK also allows `tban`, `tmute` and the empty string, which apply nothing at the
+  limit and are never written.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading

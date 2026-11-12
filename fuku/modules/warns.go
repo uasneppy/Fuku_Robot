@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/db/warns"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -35,6 +37,82 @@ var warnPunishShards [32]sync.Mutex
 
 func warnPunishLock(chatID, userID int64) *sync.Mutex {
 	return &warnPunishShards[uint64(chatID*31+userID)%uint64(len(warnPunishShards))]
+}
+
+// warnSettingsModes are the only actions /setwarnmode and the settings page may write. The
+// table's CHECK also allows tban, tmute and the empty string, which apply nothing at the
+// limit, so they are never written (D-17).
+var warnSettingsModes = []string{"ban", "kick", "mute"}
+
+// warnSettingsOutcome is what an apply function did with its input.
+type warnSettingsOutcome int
+
+const (
+	// warnSettingsApplied is the zero value: the value was valid and stored.
+	warnSettingsApplied warnSettingsOutcome = iota
+	// warnSettingsOutOfRange means the limit was outside 1..100; nothing was written.
+	warnSettingsOutOfRange
+	// warnSettingsUnknownMode means the action was not ban, kick or mute; nothing was written.
+	warnSettingsUnknownMode
+	// warnSettingsSaveFailed means the repository returned an error; Err holds it.
+	warnSettingsSaveFailed
+)
+
+// warnSettingsResult is the verdict of an apply function. Key is the locale key the command
+// replies with for that outcome. Stored is the row read back after a successful write (nil
+// otherwise, or when the read-back failed), so a caller shows what is stored and never what it
+// assumes.
+type warnSettingsResult struct {
+	Outcome warnSettingsOutcome
+	Key     string
+	Stored  *models.WarnSettings
+	Err     error
+}
+
+// warnSettingsWriter holds the two repository writes of the warn settings, so a test can make
+// one fail. Each write drops its own cache key.
+type warnSettingsWriter struct {
+	Limit func(chatID int64, limit int) error
+	Mode  func(chatID int64, mode string) error
+}
+
+// warnSettingsWrites is the write seam of the warn settings; production uses the repository.
+var warnSettingsWrites = warnSettingsWriter{Limit: warns.SetWarnLimit, Mode: warns.SetWarnMode}
+
+// warnReadBack reads the chat's warn settings after a write. A failed read-back is logged and
+// returns nil; the write already happened.
+func warnReadBack(ctx context.Context, chatID int64) *models.WarnSettings {
+	stored, err := warns.LoadWarnSettingsContext(ctx, chatID)
+	if err != nil {
+		log.Warnf("[Warns] read-back after write failed for chat %d: %v", chatID, err)
+		return nil
+	}
+	return stored
+}
+
+// applyWarnLimit validates and stores the warn limit: 1..100, anything else writes nothing.
+// The repository write invalidates its own cache key.
+func applyWarnLimit(ctx context.Context, chatID int64, limit int) warnSettingsResult {
+	if limit < 1 || limit > 100 {
+		return warnSettingsResult{Outcome: warnSettingsOutOfRange, Key: "warns_limit_range_error"}
+	}
+	if err := warnSettingsWrites.Limit(chatID, limit); err != nil {
+		return warnSettingsResult{Outcome: warnSettingsSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	return warnSettingsResult{Key: "warns_limit_updated", Stored: warnReadBack(ctx, chatID)}
+}
+
+// applyWarnMode validates and stores the action at the warn limit. Only ban, kick and mute are
+// accepted, exactly as spelled; the caller lower-cases user text first. The repository write
+// invalidates its own cache key.
+func applyWarnMode(ctx context.Context, chatID int64, mode string) warnSettingsResult {
+	if !slices.Contains(warnSettingsModes, mode) {
+		return warnSettingsResult{Outcome: warnSettingsUnknownMode, Key: "warns_mode_unknown"}
+	}
+	if err := warnSettingsWrites.Mode(chatID, mode); err != nil {
+		return warnSettingsResult{Outcome: warnSettingsSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	return warnSettingsResult{Key: "warns_mode_updated_" + mode, Stored: warnReadBack(ctx, chatID)}
 }
 
 func (moduleStruct) setWarnMode(b *gotgbot.Bot, ctx *ext.Context) error {
@@ -65,22 +143,18 @@ func (moduleStruct) setWarnMode(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	if len(args) > 0 {
 		mode := strings.ToLower(args[0])
-		modeKeys := map[string]string{
-			"ban":  "warns_mode_updated_ban",
-			"kick": "warns_mode_updated_kick",
-			"mute": "warns_mode_updated_mute",
-		}
-		if key, ok := modeKeys[mode]; ok {
-			if err := warns.SetWarnMode(chat.Id, mode); err != nil {
-				log.Errorf("[Warns] SetWarnMode failed for chat %d: %v", chat.Id, err)
-				errText, _ := tr.GetString("common_settings_save_failed")
-				_, _ = msg.Reply(b, errText, formatting.Shtml())
-				return ext.EndGroups
-			}
-			replyText, _ = tr.GetString(key)
-		} else {
-			temp, _ := tr.GetString("warns_mode_unknown")
+		result := applyWarnMode(tracing.UpdateContext(ctx), chat.Id, mode)
+		switch result.Outcome {
+		case warnSettingsSaveFailed:
+			log.Errorf("[Warns] SetWarnMode failed for chat %d: %v", chat.Id, result.Err)
+			errText, _ := tr.GetString(result.Key)
+			_, _ = msg.Reply(b, errText, formatting.Shtml())
+			return ext.EndGroups
+		case warnSettingsUnknownMode:
+			temp, _ := tr.GetString(result.Key)
 			replyText = fmt.Sprintf(temp, args[0])
+		default:
+			replyText, _ = tr.GetString(result.Key)
 		}
 	} else {
 		replyText, _ = tr.GetString("warns_specify_action")
@@ -596,16 +670,17 @@ func (moduleStruct) setWarnLimit(b *gotgbot.Bot, ctx *ext.Context) error {
 			temp, _ := tr.GetString("warns_invalid_number")
 			replyText = fmt.Sprintf(temp, args[0])
 		} else {
-			if num < 1 || num > 100 {
-				replyText, _ = tr.GetString("warns_limit_range_error")
-			} else {
-				if err := warns.SetWarnLimit(chat.Id, num); err != nil {
-					log.Errorf("[Warns] SetWarnLimit failed for chat %d: %v", chat.Id, err)
-					errText, _ := tr.GetString("common_settings_save_failed")
-					_, _ = msg.Reply(b, errText, formatting.Smarkdown())
-					return ext.EndGroups
-				}
-				temp, _ := tr.GetString("warns_limit_updated")
+			result := applyWarnLimit(tracing.UpdateContext(ctx), chat.Id, num)
+			switch result.Outcome {
+			case warnSettingsSaveFailed:
+				log.Errorf("[Warns] SetWarnLimit failed for chat %d: %v", chat.Id, result.Err)
+				errText, _ := tr.GetString(result.Key)
+				_, _ = msg.Reply(b, errText, formatting.Smarkdown())
+				return ext.EndGroups
+			case warnSettingsOutOfRange:
+				replyText, _ = tr.GetString(result.Key)
+			default:
+				temp, _ := tr.GetString(result.Key)
 				replyText = fmt.Sprintf(temp, num)
 			}
 		}
