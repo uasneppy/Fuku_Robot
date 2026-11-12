@@ -2090,9 +2090,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   creator can; an administrator can when it has the delete right or the flag is not trusted; member, restricted, left, kicked,
   a 400 and a 403 cannot; a 429, a 5xx, a transport error, a timeout, a shed pacer and a null or unrecognised answer are
   unknown). Only `cannot` latches the chat for `service` kinds and drops its pending `service:*` rows; `can` and unknown only
-  drop the one refused row. The worker has no chat type, so it does not trust the administrator flag: an administrator is
+  drop the one refused row. The worker has no chat type, so it decides whether to trust the administrator flag by the chat ID
+  alone (`deletionTrustAdminFlag`, SEC-02): for a supergroup or channel ID (at or below -1000000000000, the Bot API ranges)
+  the flag is reliable, so an administrator without `can_delete_messages` reads as cannot and the chat is latched for service
+  kinds; for a basic group's ID (-1 to -999999999999) and for any other ID the flag is not trusted and an administrator is
   never latched, which avoids a false latch in a basic group whose administrator reads `can_delete_messages` false, at the
-  cost of one refused call per notice in a supergroup whose administrator lacks the right (bounded by the pacer). A missing
+  cost of one refused call per notice there (bounded by the pacer and by the inline decision's once per 10 minutes). A missing
   right never stops `bot:*` rows, because a plain-member bot can delete its own messages. The settings page reads the right
   through the same `deletionReadBotRight`, trusting the flag outside basic groups. After the stop cancels the root, a
   delete-now starts no goroutine and takes the durable path (a row due now), so it resumes after a restart.

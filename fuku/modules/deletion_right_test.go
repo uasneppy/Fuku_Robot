@@ -139,7 +139,10 @@ func TestDeletionServiceLatchNeedsLiveCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("an administrator without the right is not latched, the flag is not trusted", func(t *testing.T) {
+	// SEC-02: the worker trusts the administrator flag for a supergroup ID, so an administrator
+	// without the delete right is latched there (the basic-group cases are in
+	// TestDeletionWorkerTrustsAdminFlagInSupergroups).
+	t.Run("an administrator without the right is latched in a supergroup, the flag is trusted", func(t *testing.T) {
 		env := newDeletionEnv(t)
 		env.fake.setBotMember(env.chat.Id, lockdownBotAdminJSON(false, false, false))
 		service := env.seedDue(env.chat.Id, 51000, 3, deletion.KindPinned)
@@ -147,14 +150,14 @@ func TestDeletionServiceLatchNeedsLiveCheck(t *testing.T) {
 
 		env.pass()
 
-		if got := deletionLatchValue(t, env, env.chat.Id); got != "" {
-			t.Fatalf("latch = %q, want none", got)
+		if got := deletionLatchValue(t, env, env.chat.Id); got != deletionScopeService {
+			t.Fatalf("latch = %q, want %q", got, deletionScopeService)
 		}
 		if n := botReads(env); n != 1 {
 			t.Fatalf("live reads of the bot = %d, want 1 per chat per cycle", n)
 		}
-		if singles := env.singleCalls(env.chat.Id); len(singles) != 3 {
-			t.Fatalf("single calls = %v, want one per message (each refused row is only dropped)", singles)
+		if singles := env.singleCalls(env.chat.Id); len(singles) != 1 {
+			t.Fatalf("single calls = %v, want one (the other service rows are dropped with no call)", singles)
 		}
 		if left := env.queuedNoWait(env.chat.Id); len(left) != 0 {
 			t.Fatalf("rows left = %+v, want none", left)

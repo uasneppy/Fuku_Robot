@@ -81,14 +81,27 @@ func deletionReadBotRight(ctx context.Context, b *gotgbot.Bot, chatID int64, tim
 	return deletionClassifyBotRight(merged, err, trustAdminFlag)
 }
 
+// deletionSupergroupMaxID is the highest chat ID of a supergroup or channel: the Bot API gives
+// them IDs of -1000000000000 and below, and a basic group an ID above that (-1 to -999999999999).
+const deletionSupergroupMaxID int64 = -1000000000000
+
+// deletionTrustAdminFlag reports whether the worker may trust an administrator's can_delete_messages
+// flag in chatID. It does for a supergroup or channel ID, where the flag is reliable (SEC-02); the
+// worker has no chat type, so the ID range is the signal. A basic group's administrator may read the
+// flag false while still being able to delete, so the flag is not trusted there, nor for any other ID.
+func deletionTrustAdminFlag(chatID int64) bool {
+	return chatID <= deletionSupergroupMaxID
+}
+
 // deletionDecideServiceLatch makes the one live right check behind a service latch. The worker has
-// no chat type, so the administrator flag is not trusted: an administrator is never latched, which
-// avoids a false latch in a basic group. A bot that definitely cannot delete latches the chat for
-// service kinds only (10 minutes) and drops the chat's pending service rows; any other answer only
-// returns, and the caller drops the one refused row. The writes run on a context detached from the
-// run, so a shutdown never strands a half-made decision.
+// no chat type, so the administrator flag is trusted by the chat ID's range alone
+// (deletionTrustAdminFlag): an administrator without the delete right is latched in a supergroup,
+// and never in a basic group, which avoids a false latch there. A bot that definitely cannot delete
+// latches the chat for service kinds only (10 minutes) and drops the chat's pending service rows;
+// any other answer only returns, and the caller drops the one refused row. The writes run on a
+// context detached from the run, so a shutdown never strands a half-made decision.
 func deletionDecideServiceLatch(ctx context.Context, b *gotgbot.Bot, chatID int64) deletionRight {
-	right := deletionReadBotRight(ctx, b, chatID, deletionCallTimeout, false)
+	right := deletionReadBotRight(ctx, b, chatID, deletionCallTimeout, deletionTrustAdminFlag(chatID))
 	if right != deletionRightCannot {
 		return right
 	}
