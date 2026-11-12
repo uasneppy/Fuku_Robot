@@ -389,7 +389,7 @@ func TestReleaseStaleClaims(t *testing.T) {
 		if err != nil || len(rows) != 2 {
 			t.Fatalf("claim = %d, %v", len(rows), err)
 		}
-		if err := Release(ctx, token, rowIDs(rows), false, 3); err != nil {
+		if err := Release(ctx, token, rowIDs(rows), false, 3, now.Add(time.Minute)); err != nil {
 			t.Fatal(err)
 		}
 		for _, row := range storedQueue(t, chatID) {
@@ -402,7 +402,7 @@ func TestReleaseStaleClaims(t *testing.T) {
 		if err != nil || len(rows) != 2 {
 			t.Fatalf("second claim = %d, %v", len(rows), err)
 		}
-		if err := Release(ctx, token, rowIDs(rows), true, 3); err != nil {
+		if err := Release(ctx, token, rowIDs(rows), true, 3, now.Add(time.Minute)); err != nil {
 			t.Fatal(err)
 		}
 		for _, row := range storedQueue(t, chatID) {
@@ -417,11 +417,12 @@ func TestReleaseStaleClaims(t *testing.T) {
 		seedDue(t, chatID, 1, 1, now.Add(-time.Minute))
 		for attempt := int16(1); attempt <= 3; attempt++ {
 			token := NewClaimToken()
-			rows, err := ClaimDue(ctx, now, 10, token)
+			// A counted release pushes delete_at to now+1m, so each try claims after that.
+			rows, err := ClaimDue(ctx, now.Add(2*time.Minute), 10, token)
 			if err != nil || len(rows) != 1 {
 				t.Fatalf("claim %d = %d rows, %v", attempt, len(rows), err)
 			}
-			if err := Release(ctx, token, rowIDs(rows), true, 3); err != nil {
+			if err := Release(ctx, token, rowIDs(rows), true, 3, now.Add(time.Minute)); err != nil {
 				t.Fatal(err)
 			}
 			stored := storedQueue(t, chatID)
@@ -435,8 +436,60 @@ func TestReleaseStaleClaims(t *testing.T) {
 		}
 	})
 
+	t.Run("a counted release moves delete_at forward, an uncounted one leaves it", func(t *testing.T) {
+		chatID := deletionChat(t)
+		due := now.Add(-time.Hour)
+		seedDue(t, chatID, 1, 2, due)
+		retryAt := now.Add(90 * time.Second)
+
+		// Uncounted: back to pending, delete_at exactly as it was, due again at once.
+		token := NewClaimToken()
+		rows, err := ClaimDue(ctx, now, 10, token)
+		if err != nil || len(rows) != 2 {
+			t.Fatalf("claim = %d, %v", len(rows), err)
+		}
+		if err := Release(ctx, token, rowIDs(rows), false, 3, retryAt); err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range storedQueue(t, chatID) {
+			if !row.DeleteAt.Equal(due) {
+				t.Errorf("an uncounted release moved delete_at to %v, want %v", row.DeleteAt, due)
+			}
+		}
+
+		// Counted: delete_at is retryAt, so the rows are not due before it and are due at it.
+		token = NewClaimToken()
+		rows, err = ClaimDue(ctx, now, 10, token)
+		if err != nil || len(rows) != 2 {
+			t.Fatalf("second claim = %d, %v", len(rows), err)
+		}
+		if err := Release(ctx, token, rowIDs(rows), true, 3, retryAt.Add(500*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range storedQueue(t, chatID) {
+			if !row.DeleteAt.Equal(retryAt) {
+				t.Errorf("a counted release set delete_at to %v, want %v (UTC, whole seconds)", row.DeleteAt, retryAt)
+			}
+			if row.Attempts != 1 || row.State != models.ScheduledDeletionPending {
+				t.Errorf("counted row = %+v, want pending with 1 attempt", row)
+			}
+		}
+		if early, err := ClaimDue(ctx, retryAt.Add(-time.Second), 10, NewClaimToken()); err != nil || len(early) != 0 {
+			t.Fatalf("claim one second before the retry time = %d rows, %v, want none", len(early), err)
+		}
+		if ready, err := ClaimDue(ctx, retryAt, 10, NewClaimToken()); err != nil || len(ready) != 2 {
+			t.Fatalf("claim at the retry time = %d rows, %v, want 2", len(ready), err)
+		}
+	})
+
+	t.Run("a counted release needs a retry time", func(t *testing.T) {
+		if err := Release(ctx, NewClaimToken(), []int64{1}, true, 3, time.Time{}); !errors.Is(err, ErrInvalidRetryAt) {
+			t.Fatalf("counted Release with no retry time = %v, want ErrInvalidRetryAt", err)
+		}
+	})
+
 	t.Run("a counted release needs a positive maximum", func(t *testing.T) {
-		if err := Release(ctx, NewClaimToken(), []int64{1}, true, 0); err == nil {
+		if err := Release(ctx, NewClaimToken(), []int64{1}, true, 0, now.Add(time.Minute)); err == nil {
 			t.Fatal("Release counted with a maximum of 0 and returned no error")
 		}
 	})

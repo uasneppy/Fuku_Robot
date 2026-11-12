@@ -34,6 +34,10 @@ var (
 	deletionCycleGuard = 90 * time.Second
 	// deletionMaxAttempts is how many counted failures a row is given before it is dropped.
 	deletionMaxAttempts = 3
+	// deletionRetryBackoff is how long a row waits after a counted failure (a 5xx, a transport
+	// error or a per-call timeout) before it is due again, so the three counted tries are spaced
+	// instead of falling in three consecutive ticks (WR-02).
+	deletionRetryBackoff = 60 * time.Second
 	// deletionDropAge is how old a message may be, by its own date, before its row is dropped
 	// quietly: Telegram deletes messages for 48 hours only (D-07, D-20).
 	deletionDropAge = 47 * time.Hour
@@ -159,7 +163,8 @@ func (c *deletionCycle) release(rows []models.ScheduledDeletion, counted bool) {
 	}
 	ctx, cancel := c.writeContext()
 	defer cancel()
-	if err := deletion.Release(ctx, c.token, deletionIDs(rows), counted, deletionMaxAttempts); err != nil {
+	if err := deletion.Release(ctx, c.token, deletionIDs(rows), counted, deletionMaxAttempts,
+		deletionNow().Add(deletionRetryBackoff)); err != nil {
 		log.Warnf("[Deletion] could not release %d rows: %v", len(rows), err)
 		return
 	}

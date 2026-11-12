@@ -174,6 +174,14 @@ func deletionWantNoMessageIDs(t *testing.T, hook *logrustest.Hook, ids []int64) 
 	}
 }
 
+// deletionTestAdvance moves the deletion clock forward by d for the rest of the test, through the
+// one seam the code reads.
+func deletionTestAdvance(t *testing.T, d time.Duration) {
+	t.Helper()
+	moved := deletionNow().Add(d)
+	mreqSwap(t, &deletionNow, func() time.Time { return moved })
+}
+
 func TestDeletionWorkerClassifiesErrors(t *testing.T) {
 	migrated := &gotgbot.TelegramError{
 		Code:           400,
@@ -225,10 +233,25 @@ func TestDeletionWorkerClassifiesErrors(t *testing.T) {
 					if env.rowOf(env.chat.Id, ids[0]) != nil || env.rowOf(env.chat.Id, ids[2]) != nil {
 						t.Fatal("a deletable neighbour of the failing row was kept")
 					}
+					// WR-02: the counted release pushed delete_at forward, so the next cycle finds
+					// nothing due and makes no request; the second try comes after the backoff.
+					if row.DeleteAt.Before(env.now.Add(deletionRetryBackoff)) {
+						t.Fatalf("delete_at after a counted failure = %s, want at least now + %s", row.DeleteAt, deletionRetryBackoff)
+					}
+					requests := len(env.fake.callsFor("deleteMessages")) + len(env.fake.callsFor("deleteMessage"))
+					env.cycle()
+					if again := len(env.fake.callsFor("deleteMessages")) + len(env.fake.callsFor("deleteMessage")); again != requests {
+						t.Fatalf("Telegram requests in the cycle right after a failure = %d, want %d (the row is in its backoff)", again-requests, 0)
+					}
+					if row := env.rowOf(env.chat.Id, bad); row == nil || row.Attempts != 1 {
+						t.Fatalf("row inside its backoff = %+v, want untouched with 1 attempt", row)
+					}
+					deletionTestAdvance(t, deletionRetryBackoff+time.Second)
 					env.cycle()
 					if row := env.rowOf(env.chat.Id, bad); row == nil || row.Attempts != 2 {
 						t.Fatalf("after the second failure row = %+v, want attempts 2", row)
 					}
+					deletionTestAdvance(t, 2*deletionRetryBackoff+2*time.Second)
 					env.cycle()
 					if row := env.rowOf(env.chat.Id, bad); row != nil {
 						t.Fatalf("after the third counted failure row = %+v, want it dropped", row)
@@ -258,6 +281,9 @@ func TestDeletionWorkerRateLimitedFree(t *testing.T) {
 				total++
 				if row.State != models.ScheduledDeletionPending || row.ClaimToken != "" || row.Attempts != 0 || row.ClaimedAt != nil {
 					t.Fatalf("row %+v, want pending, no token, no attempt", row)
+				}
+				if row.DeleteAt.After(env.now) {
+					t.Fatalf("row %+v: a free release moved delete_at past now (%s), want it left as it was", row, env.now)
 				}
 			}
 		}

@@ -30,6 +30,9 @@ var (
 	ErrInvalidToken = errors.New("invalid claim token")
 	// ErrInvalidBatch is returned for a claim limit or a retry maximum that is not positive.
 	ErrInvalidBatch = errors.New("invalid batch size")
+	// ErrInvalidRetryAt is returned by a counted Release with no retry time: the counted tries
+	// must be spaced, so the caller names when the row is due again.
+	ErrInvalidRetryAt = errors.New("invalid retry time")
 )
 
 // maxTokenLen is the width of the claim_token column.
@@ -194,10 +197,14 @@ func Complete(ctx context.Context, token string, ids []int64) error {
 }
 
 // Release returns the listed rows that still carry token to pending, with the token and
-// the claim time cleared. With countAttempt it adds one attempt to each and deletes instead
-// every row whose counted attempts would reach maxAttempts, so the third counted failure
-// drops the row. Without countAttempt (a rate limit, a shutdown) no attempt is counted.
-func Release(ctx context.Context, token string, ids []int64, countAttempt bool, maxAttempts int) error {
+// the claim time cleared. With countAttempt it adds one attempt to each, moves each one's
+// delete_at forward to retryAt (UTC, whole seconds) so the counted tries are spaced instead
+// of being re-claimed on the next tick, and deletes instead every row whose counted attempts
+// would reach maxAttempts, so the third counted failure drops the row. Without countAttempt
+// (a rate limit, a shutdown) no attempt is counted, delete_at is left as it was and retryAt
+// is ignored. retryAt is computed by the caller, so SQLite and PostgreSQL run the same
+// statement and a test clock applies; a counted release needs a non-zero one.
+func Release(ctx context.Context, token string, ids []int64, countAttempt bool, maxAttempts int, retryAt time.Time) error {
 	if err := checkToken(token); err != nil {
 		return err
 	}
