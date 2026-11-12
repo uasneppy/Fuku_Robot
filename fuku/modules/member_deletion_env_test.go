@@ -10,6 +10,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
@@ -209,4 +210,54 @@ func restoreMemberDeleteBatcher(t *testing.T) {
 // memberDeleteShedTotal returns how many entries were shed for one reason.
 func memberDeleteShedTotal(reason int) int64 {
 	return memberDeleteShedCounts[reason].Load()
+}
+
+// Self-destruct toolkit (plan 17-07).
+
+// newSelfDestructEnv builds the member deletion environment with member:selfdestruct stored as
+// delay and the admin cache primed (the env's admin is listed, a member is a known non-administrator),
+// the batcher's buffer emptied now and when the test ends before the env's row cleanups run, and the
+// batcher's state restored. No batcher goroutine runs: a test flushes with memberDeleteTestFlush and
+// runs the worker with pass.
+func newSelfDestructEnv(t *testing.T, delay int) *memberDeletionEnv {
+	t.Helper()
+	env := newMemberDeletionEnv(t)
+	drainMemberDeleteQueue(t)
+	restoreMemberDeleteBatcher(t)
+	env.storeMemberRule(deletion.KindMemberSelfDestruct, delay)
+	env.primeAdminCache()
+	return env
+}
+
+// sendMember runs a new message of the env chat through the real dispatcher: from sent it, apply sets
+// the content a test wants, and its date is deletionNow(). It returns the message ID.
+func (e *memberDeletionEnv) sendMember(from *gotgbot.User, apply func(*gotgbot.Message)) int64 {
+	e.t.Helper()
+	return e.sendService(from, apply)
+}
+
+// sendMemberIn is sendMember for another chat, whose rules and state the test set up itself.
+func (e *memberDeletionEnv) sendMemberIn(chat gotgbot.Chat, from *gotgbot.User, apply func(*gotgbot.Message)) int64 {
+	e.t.Helper()
+	return e.sendServiceTo(chat, from, apply)
+}
+
+// sendPinOf runs a pinned_message service message of chat sent by from that names messageID.
+func (e *memberDeletionEnv) sendPinOf(chat gotgbot.Chat, from *gotgbot.User, messageID int64) int64 {
+	e.t.Helper()
+	return e.sendServiceTo(chat, from, func(m *gotgbot.Message) {
+		m.PinnedMessage = gotgbot.Message{MessageId: messageID, Chat: chat}
+	})
+}
+
+// selfDestructRows returns the chat's queue rows of the self-destruct kind, by message ID.
+func (e *memberDeletionEnv) selfDestructRows(chatID int64) []models.ScheduledDeletion {
+	e.t.Helper()
+	var rows []models.ScheduledDeletion
+	for _, row := range e.queuedNoWait(chatID) {
+		if row.Kind == deletion.KindMemberSelfDestruct {
+			rows = append(rows, row)
+		}
+	}
+	return rows
 }
