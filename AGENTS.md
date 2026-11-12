@@ -2052,7 +2052,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   page says so with its basic-group line (`settings_mreq_here_basic`, one line while any rule is not Off), so it is a stated
   limit and no longer a silent one.
 - Scheduled deletion core (`deletion_schedule.go`): `deletionAct` is the one place that decides what happens to a message with
-  a delay: a latched chat returns, a chat that is a Staff Group or cannot be told apart from one (`deletionStaffLookup`, the
+  a delay: a chat ID that is zero or positive (not a group's) returns first, before any read, write or Telegram call, on the
+  inline branch as well as the queue branch (SEC-05, symmetric with `deletion.Schedule`'s own refusal); a latched chat returns, a chat that is a Staff Group or cannot be told apart from one (`deletionStaffLookup`, the
   fresh read with `staff.GetStaffGroupFresh` as its default, an error counts as a Staff Group) returns, delay 0 is an inline
   delete and any other delay a queue row at `deletionSentAt(msg.Date)` plus the delay (the message's own date, or now when
   the date is zero, negative or in the future). The Staff Group is refused in three places: the watcher and `cleanService`

@@ -346,11 +346,16 @@ func deletionQueue(a deletionAction) {
 	}
 }
 
-// deletionAct is the one place that decides what happens to a message with a delay: a latched
+// deletionAct is the one place that decides what happens to a message with a delay: a chat ID that
+// is not a group's (zero or positive) is refused before any read or write, on the inline branch
+// as on the queue branch (SEC-05, symmetric with deletion.Schedule), a latched
 // chat is left alone, a Staff Group (or one that cannot be told apart from one) is never touched,
 // a delay of 0 is an inline delete, and any other delay is a queue row at the message's own time
 // plus the delay. An inline delete the cap or the pacer refuses becomes a row due now.
 func deletionAct(b *gotgbot.Bot, a deletionAction) {
+	if a.ChatID >= 0 {
+		return
+	}
 	latchCtx, cancel := context.WithTimeout(context.Background(), raidRedisTimeout)
 	latched := deletionLatched(latchCtx, a.ChatID, a.Kind)
 	cancel()
