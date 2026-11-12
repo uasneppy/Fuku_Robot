@@ -619,3 +619,403 @@ func TestSettingsParityAutoApprove(t *testing.T) {
 		}
 	})
 }
+
+// settingsSwControls are the three controls, each as the press that turns it on and the command
+// it mirrors, with the test that its write is stored.
+var settingsSwControls = []struct {
+	name    string
+	press   []string
+	command string
+	wrote   func(t *testing.T, chatID int64) bool
+}{
+	{"Reports", []string{"a", "tg", "p", "t", "t", "r", "v", "0"}, "/reports off",
+		func(t *testing.T, id int64) bool { row, ok := settingsSwReportsRow(t, id); return ok && !row.Status }},
+	{"AI spam", []string{"a", "tg", "p", "t", "t", "a", "v", "1"}, "/aispam on",
+		func(t *testing.T, id int64) bool { row, ok := settingsSwAIRow(t, id); return ok && row.Enabled }},
+	{"Auto-approve", []string{"a", "tg", "p", "t", "t", "j", "v", "1"}, "/autoapprove on",
+		func(t *testing.T, id int64) bool {
+			row, ok := settingsEditStored(t, id)
+			return ok && row.ShouldAutoApprove
+		}},
+}
+
+func TestSettingsDriftReports(t *testing.T) {
+	const menuMsgID = 7575
+	env := newSettingsSwitchesEnv(t)
+	chat := env.addChat()
+	settingsSwCleanup(t, chat.Id)
+
+	// A command write is what the next draw shows, across the cache.
+	settingsSwRunReports(env, chat, "off")
+	dbcache.ResetLocalForTest()
+	settingsSwPress(t, env, chat, menuMsgID, "a", "op", "p", "t")
+	text, keyboard := env.lastEdit(chat.Id, menuMsgID)
+	if !strings.Contains(text, staffMarker("reports_status_disabled_group")) {
+		t.Errorf("after /reports off the page drew %q, want the disabled sentence", text)
+	}
+	toggle, _ := settingsButtonByMarker(keyboard, "settings_btn_sw_reports")
+	if fields := settingsButtonFields(t, toggle); fields["v"] != "1" {
+		t.Errorf("Reports toggle target = %q after /reports off, want 1", fields["v"])
+	}
+
+	// A page press is what /reports and the report path read.
+	settingsSwToggle(t, env, chat, menuMsgID, "r", "1")
+	dbcache.ResetLocalForTest()
+	if !reports.GetChatReportSettings(chat.Id).Status {
+		t.Error("the report path reads status off after the page turned Reports on")
+	}
+	before := len(env.fake.sentTo(chat.Id))
+	settingsSwRunReports(env, chat, "")
+	sent := env.fake.sentTo(chat.Id)
+	if len(sent) != before+1 || !strings.Contains(fmt.Sprint(sent[len(sent)-1].Params["text"]), staffMarker("reports_status_enabled_group")) {
+		t.Errorf("/reports after the page's On answered %+v, want the enabled status", sent[before:])
+	}
+}
+
+func TestSettingsDriftAISpam(t *testing.T) {
+	const menuMsgID = 7676
+	withAISpamConfigured(t)
+	env := newSettingsSwitchesEnv(t)
+	chat := env.addChat()
+	settingsSwCleanup(t, chat.Id)
+
+	env.sendIn(chat, env.admin, "/aispam on")
+	dbcache.ResetLocalForTest()
+	settingsSwPress(t, env, chat, menuMsgID, "a", "op", "p", "t")
+	text, keyboard := env.lastEdit(chat.Id, menuMsgID)
+	if !strings.Contains(text, staffMarker("aispam_status_enabled")) {
+		t.Errorf("after /aispam on the page drew %q, want the on sentence", text)
+	}
+	toggle, _ := settingsButtonByMarker(keyboard, "settings_btn_sw_aispam")
+	if fields := settingsButtonFields(t, toggle); fields["v"] != "0" {
+		t.Errorf("AI toggle target = %q after /aispam on, want 0", fields["v"])
+	}
+
+	settingsSwToggle(t, env, chat, menuMsgID, "a", "0")
+	dbcache.ResetLocalForTest()
+	if aispam.IsAISpamEnabled(chat.Id) {
+		t.Error("the enforcing path reads the filter on after the page turned it off")
+	}
+	before := len(env.fake.sentTo(chat.Id))
+	env.sendIn(chat, env.admin, "/aispam")
+	sent := env.fake.sentTo(chat.Id)
+	if len(sent) != before+1 || !strings.Contains(fmt.Sprint(sent[len(sent)-1].Params["text"]), staffMarker("aispam_status_disabled")) {
+		t.Errorf("/aispam after the page's Off answered %+v, want the off status", sent[before:])
+	}
+}
+
+func TestSettingsDriftAutoApprove(t *testing.T) {
+	const menuMsgID = 7777
+	env := newSettingsSwitchesEnv(t)
+	chat := env.addChat()
+	settingsSwCleanup(t, chat.Id)
+	listEditAdmin(env, chat, env.admin, true)
+
+	env.sendIn(chat, env.admin, "/autoapprove on")
+	dbcache.ResetLocalForTest()
+	settingsSwPress(t, env, chat, menuMsgID, "a", "op", "p", "t")
+	text, keyboard := env.lastEdit(chat.Id, menuMsgID)
+	if !strings.Contains(text, staffMarker("greetings_auto_approve_enabled")) {
+		t.Errorf("after /autoapprove on the page drew %q, want the enabled sentence", text)
+	}
+	toggle, _ := settingsButtonByMarker(keyboard, "settings_btn_sw_approve")
+	if fields := settingsButtonFields(t, toggle); fields["v"] != "0" {
+		t.Errorf("Auto-approve toggle target = %q after /autoapprove on, want 0", fields["v"])
+	}
+
+	settingsSwToggle(t, env, chat, menuMsgID, "j", "0")
+	dbcache.ResetLocalForTest()
+	if greetings.GetGreetingSettings(chat.Id).ShouldAutoApprove {
+		t.Error("the join-request handler reads auto-approve on after the page turned it off")
+	}
+	before := len(env.fake.sentTo(chat.Id))
+	env.sendIn(chat, env.admin, "/autoapprove")
+	sent := env.fake.sentTo(chat.Id)
+	if len(sent) != before+1 || !strings.Contains(fmt.Sprint(sent[len(sent)-1].Params["text"]), staffMarker("greetings_auto_approve_disabled")) {
+		t.Errorf("/autoapprove after the page's Off answered %+v, want the disabled status", sent[before:])
+	}
+}
+
+func TestSettingsAuthorityParitySwitches(t *testing.T) {
+	const menuMsgID = 7878
+
+	// newChat adds a chat whose administrator list and live answers make env.admin an
+	// administrator with can_change_info, with the AI filter available.
+	newChat := func(t *testing.T, env *settingsEnv) gotgbot.Chat {
+		t.Helper()
+		chat := env.addChat()
+		settingsSwCleanup(t, chat.Id)
+		listEditAdmin(env, chat, env.admin, true)
+		return chat
+	}
+
+	t.Run("a bot that is not an admin: the menu and the commands agree", func(t *testing.T) {
+		withAISpamConfigured(t)
+		for _, control := range settingsSwControls {
+			t.Run(control.name, func(t *testing.T) {
+				env := newSettingsSwitchesEnv(t)
+				commandChat, menuChat := newChat(t, env), newChat(t, env)
+				env.fake.setBotRole(commandChat.Id, staffRoleMember)
+				env.fake.setBotRole(menuChat.Id, staffRoleMember)
+				refusal := staffMarker("connections_is_user_connected_bot_not_admin")
+
+				env.sendIn(commandChat, env.admin, control.command)
+				commandRefused := settingsAntifloodSentHas(env, commandChat.Id, refusal)
+				answers := env.answerCount()
+				settingsSwPress(t, env, menuChat, menuMsgID, control.press...)
+				text, _ := env.lastEdit(menuChat.Id, menuMsgID)
+				menuRefused := strings.Contains(text, refusal)
+				// /aispam has no bot check, so for it both write.
+				wantRefused := control.name != "AI spam"
+				if commandRefused != wantRefused || menuRefused != wantRefused {
+					t.Errorf("bot refusal: command %v, menu %v, want both %v", commandRefused, menuRefused, wantRefused)
+				}
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press answered %d times, want once", got)
+				}
+				for _, id := range []int64{commandChat.Id, menuChat.Id} {
+					if got := control.wrote(t, id); got == wantRefused {
+						t.Errorf("chat %d: write stored = %v, want %v", id, got, !wantRefused)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("an administrator without can_change_info: Auto-approve is refused by both, the others write", func(t *testing.T) {
+		withAISpamConfigured(t)
+		for _, control := range settingsSwControls {
+			t.Run(control.name, func(t *testing.T) {
+				env := newSettingsSwitchesEnv(t)
+				commandChat, menuChat := env.addChat(), env.addChat()
+				settingsSwCleanup(t, commandChat.Id, menuChat.Id)
+				listEditAdmin(env, commandChat, env.admin, false)
+				listEditAdmin(env, menuChat, env.admin, false)
+				wantRefused := control.name == "Auto-approve"
+
+				env.sendIn(commandChat, env.admin, control.command)
+				answers := env.answerCount()
+				settingsSwPress(t, env, menuChat, menuMsgID, control.press...)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press answered %d times, want once", got)
+				}
+				if wantRefused {
+					if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_no_change_info")) {
+						t.Errorf("answer = %q (alert %v), want the alert settings_no_change_info", answer, alert)
+					}
+					if !settingsAntifloodSentHas(env, commandChat.Id, staffMarker("chat_status_change_info_cmd_error")) {
+						t.Error("/autoapprove on was not refused for can_change_info")
+					}
+				}
+				for _, id := range []int64{commandChat.Id, menuChat.Id} {
+					if got := control.wrote(t, id); got == wantRefused {
+						t.Errorf("chat %d: write stored = %v, want %v", id, got, !wantRefused)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("the bot refusal comes before the change-info refusal for Auto-approve", func(t *testing.T) {
+		env := newSettingsSwitchesEnv(t)
+		chat := env.addChat()
+		settingsSwCleanup(t, chat.Id)
+		listEditAdmin(env, chat, env.admin, false)
+		env.fake.setBotRole(chat.Id, staffRoleMember)
+		settingsSwPress(t, env, chat, menuMsgID, "a", "tg", "p", "t", "t", "j", "v", "1")
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("connections_is_user_connected_bot_not_admin")) {
+			t.Errorf("the press drew %q, want the bot notice first", text)
+		}
+	})
+
+	t.Run("a plain member is refused by both", func(t *testing.T) {
+		withAISpamConfigured(t)
+		for _, control := range settingsSwControls {
+			t.Run(control.name, func(t *testing.T) {
+				env := newSettingsSwitchesEnv(t)
+				chat := newChat(t, env)
+				member := gotgbot.User{Id: uniqueLinkOwnerID() + 43, FirstName: "Plain"}
+				t.Cleanup(func() {
+					db.DB.Where("user_id IN ?", []int64{member.Id}).Delete(&models.User{})
+					dbcache.DeleteCache(dbcache.CacheKey("user", member.Id))
+					dbcache.ResetLocalForTest()
+				})
+				env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+				env.sendIn(chat, member, control.command)
+				env.pressPrivate(member, 777, env.privateFields(chat.Id, control.press...))
+				if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+					t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+				}
+				if control.wrote(t, chat.Id) {
+					t.Error("a plain member's press or command wrote")
+				}
+			})
+		}
+	})
+
+	t.Run("an administrator the owner gate refuses is refused by the menu only (the documented carve-out)", func(t *testing.T) {
+		withAISpamConfigured(t)
+		for _, control := range settingsSwControls {
+			t.Run(control.name, func(t *testing.T) {
+				resetSettingsOwnerMemo(t)
+				env := newSettingsSwitchesEnv(t)
+				commandChat, menuChat := newChat(t, env), newChat(t, env)
+				for _, chat := range []gotgbot.Chat{commandChat, menuChat} {
+					env.newOwner(chat)
+					env.setAdminsAllowed(chat.Id, false)
+				}
+
+				answers := env.answerCount()
+				settingsSwPress(t, env, menuChat, menuMsgID, control.press...)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the gated press answered %d times, want once", got)
+				}
+				if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_gate_owner_only")) {
+					t.Errorf("answer = %q (alert %v), want the alert settings_gate_owner_only", answer, alert)
+				}
+				if control.wrote(t, menuChat.Id) {
+					t.Error("the gated press wrote")
+				}
+				env.sendIn(commandChat, env.admin, control.command)
+				if !control.wrote(t, commandChat.Id) {
+					t.Errorf("%s did not write for an administrator the menu refuses", control.command)
+				}
+				env.setAdminsAllowed(menuChat.Id, true)
+				settingsSwPress(t, env, menuChat, menuMsgID, control.press...)
+				if !control.wrote(t, menuChat.Id) {
+					t.Error("with the switch on the press did not write")
+				}
+			})
+		}
+	})
+}
+
+func TestSettingsSwitchesForged(t *testing.T) {
+	const menuMsgID = 7979
+
+	type forgedCase struct {
+		name   string
+		fields []string
+		extra  map[string]string
+		both   bool
+	}
+	var forged []forgedCase
+	for _, control := range []string{"r", "a", "j"} {
+		tg := func(v string) []string { return []string{"a", "tg", "p", "t", "t", control, "v", v} }
+		forged = append(forged,
+			forgedCase{name: "st on " + control, fields: []string{"a", "st", "p", "t", "t", control, "v", "1"}},
+			forgedCase{name: "v=2 on " + control, fields: tg("2")},
+			forgedCase{name: "empty v on " + control, fields: tg("")},
+			forgedCase{name: "v=on on " + control, fields: tg("on")},
+			forgedCase{name: "an extra key on " + control, fields: tg("1"), extra: map[string]string{"x": "1"}},
+			forgedCase{name: "c and u together on " + control, fields: tg("1"), both: true},
+		)
+	}
+	forged = append(forged, forgedCase{name: "an unknown control", fields: []string{"a", "tg", "p", "t", "t", "x", "v", "1"}})
+
+	for _, tc := range forged {
+		t.Run(tc.name, func(t *testing.T) {
+			withAISpamConfigured(t)
+			env := newSettingsSwitchesEnv(t)
+			fields := env.groupFields(env.admin, tc.fields...)
+			for k, v := range tc.extra {
+				fields[k] = v
+			}
+			if tc.both {
+				fields["c"] = "-1001"
+			}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("forged press %v did not encode", fields)
+			}
+			before := settingsMenuMarkOf(env)
+			env.pressRaw(env.chat, env.admin, menuMsgID, data)
+			settingsMenuWantRefused(t, env, before, "common_callback_invalid_request", true)
+			settingsSwNoRows(t, env.chat.Id, "a forged press")
+		})
+	}
+}
+
+func TestSettingsSwitchesReadsCreateNothing(t *testing.T) {
+	const menuMsgID = 8080
+
+	t.Run("opening Main and the page leaves no row", func(t *testing.T) {
+		env := newSettingsSwitchesEnv(t)
+		chat := env.addChat()
+		settingsSwCleanup(t, chat.Id)
+		chatsBefore := settingsSwChatRows(t, chat.Id)
+
+		settingsSwPress(t, env, chat, menuMsgID, "a", "op", "p", "t")
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("reports_status_enabled_group")) || !strings.Contains(text, staffMarker("greetings_auto_approve_disabled")) {
+			t.Fatalf("the page drew %q, want the defaults (Reports on, Auto-approve off)", text)
+		}
+		settingsSwPress(t, env, chat, menuMsgID, "a", "bk")
+		mainText, _ := env.lastEdit(chat.Id, menuMsgID)
+		if line, found := settingsMainStateLine(mainText, "settings_page_switches"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main status line = %q (found %v), want the default state", line, found)
+		}
+
+		settingsSwNoRows(t, chat.Id, "opening Main and the page")
+		if got := settingsSwChatRows(t, chat.Id); got != chatsBefore {
+			t.Errorf("chats rows went from %d to %d", chatsBefore, got)
+		}
+		for _, key := range env.redis.Keys() {
+			// The AI reader uses the cached getter /aispam reads, so its key is the command's own;
+			// the other two readers are uncached and leave none.
+			if strings.Contains(key, fmt.Sprint(chat.Id)) && (strings.Contains(key, "report") || strings.Contains(key, "greeting")) {
+				t.Errorf("the reads left the cache key %s", key)
+			}
+		}
+	})
+
+	readers := []struct {
+		name string
+		fail func(t *testing.T)
+	}{
+		{"Reports", func(t *testing.T) {
+			previous := settingsSwReportsRead
+			settingsSwReportsRead = func(context.Context, int64) (bool, error) { return false, errors.New("database is down") }
+			t.Cleanup(func() { settingsSwReportsRead = previous })
+		}},
+		{"AI spam", func(t *testing.T) {
+			previous := settingsSwAIRead
+			settingsSwAIRead = func(context.Context, int64) (bool, error) { return false, errors.New("database is down") }
+			t.Cleanup(func() { settingsSwAIRead = previous })
+		}},
+		{"Auto-approve", func(t *testing.T) {
+			previous := settingsSwApproveRead
+			settingsSwApproveRead = func(context.Context, int64) (bool, error) { return false, errors.New("database is down") }
+			t.Cleanup(func() { settingsSwApproveRead = previous })
+		}},
+	}
+	for _, reader := range readers {
+		t.Run("a failing "+reader.name+" reader is the cannot-open edit and the unknown mark", func(t *testing.T) {
+			env := newSettingsSwitchesEnv(t)
+			msgID := env.openMenu(env.admin)
+			_, keyboard := env.lastEdit(env.chat.Id, msgID)
+			button, ok := settingsPageButton(t, keyboard, settingsPageSwitches)
+			if !ok {
+				t.Fatal("Main has no Switches button")
+			}
+			reader.fail(t)
+
+			msgID = env.openMenu(env.admin)
+			mainText, _ := env.lastEdit(env.chat.Id, msgID)
+			if line, found := settingsMainStateLine(mainText, "settings_page_switches"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+				t.Errorf("Switches status line = %q (found %v), want the unknown mark", line, found)
+			}
+			if line, found := settingsMainStateLine(mainText, "settings_page_antiflood"); !found || strings.HasSuffix(line, settingsUnknownState) {
+				t.Errorf("Antiflood status line = %q (found %v), want its own state intact", line, found)
+			}
+			env.pressRaw(env.chat, env.admin, msgID, button.CallbackData)
+			text, kb := env.lastEdit(env.chat.Id, msgID)
+			if !strings.Contains(text, staffMarker("settings_cannot_open")) || len(kb) != 0 {
+				t.Errorf("a failed read drew %q with %d rows, want the cannot-open edit", text, len(kb))
+			}
+			settingsSwNoRows(t, env.chat.Id, "a failed read")
+		})
+	}
+}

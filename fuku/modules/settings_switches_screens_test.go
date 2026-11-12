@@ -8,10 +8,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/aispam"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // settingsSwWidths is the button count of every row of a keyboard.
@@ -253,4 +255,110 @@ func TestSettingsSwitchesAIGate(t *testing.T) {
 			t.Errorf("redrawn page %q, want the stored off sentence and the save-failed notice", text)
 		}
 	})
+}
+
+// settingsSwStates are the eight stored combinations of the three switches, with the filter
+// available or not.
+func settingsSwStates() []settingsSwState {
+	var states []settingsSwState
+	for _, available := range []bool{true, false} {
+		for bits := range 8 {
+			states = append(states, settingsSwState{
+				Reports: bits&1 != 0, AI: bits&2 != 0, Approve: bits&4 != 0, AIAvailable: available,
+			})
+		}
+	}
+	return states
+}
+
+func TestSettingsSwitchesCallbackBytes(t *testing.T) {
+	newSettingsEnv(t) // installs the marker locale the translator reads
+	tr := i18n.MustNewTranslator("en")
+	for _, variant := range settingsWarnsViews(tr, "G") {
+		t.Run(variant.name, func(t *testing.T) {
+			largest := 0
+			for _, state := range settingsSwStates() {
+				name := fmt.Sprintf("%+v", state)
+				screen := renderSettingsSwitches(variant.view, state, "")
+				if screen.Omitted != 0 {
+					t.Errorf("%s omitted %d buttons for overflow, want none", name, screen.Omitted)
+				}
+				wantWidths := []int{1, 1, 1, 2}
+				if !state.AIAvailable && !state.AI {
+					wantWidths = []int{1, 1, 2}
+				}
+				if got := settingsSwWidths(screen.Keyboard.InlineKeyboard); !slices.Equal(got, wantWidths) {
+					t.Errorf("%s keyboard widths = %v, want %v", name, got, wantWidths)
+				}
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					n := len(button.CallbackData)
+					if n < 1 || n > 64 {
+						t.Errorf("%s button %q has %d bytes of callback data, want 1..64", name, button.Text, n)
+					}
+					largest = max(largest, n)
+				}
+			}
+			want := 45
+			if !variant.view.Private {
+				want = 41
+			}
+			if largest != want {
+				t.Errorf("the largest button is %d bytes, want %d", largest, want)
+			}
+		})
+	}
+}
+
+func TestSettingsSwitchesPageFitsEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	titles := map[string]string{
+		"ampersands": strings.Repeat("&", 64),
+		"astral":     strings.Repeat("😀", 64),
+		"multibyte":  strings.Repeat("Ж", 64),
+	}
+	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			notices := []string{
+				"",
+				settingsNoticeWarn(settingsText(tr, "connections_is_user_connected_bot_not_admin")),
+				settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")),
+				settingsNoticeWarn(settingsText(tr, "settings_no_change_info")),
+			}
+			for titleName, title := range titles {
+				for _, variant := range settingsWarnsViews(tr, title) {
+					for _, state := range settingsSwStates() {
+						for _, notice := range notices {
+							label := fmt.Sprintf("%s %s %s %+v", code, titleName, variant.name, state)
+							screen := renderSettingsSwitches(variant.view, state, notice)
+							if units := panelUTF16Len(screen.Text); units > 3800 || units == 0 {
+								t.Errorf("%s is %d UTF-16 units, want 1..3800", label, units)
+							}
+							if screen.Omitted != 0 {
+								t.Errorf("%s omitted %d buttons", label, screen.Omitted)
+							}
+							for _, placeholder := range []string{"{state}", "{n}", "%!", "%s"} {
+								if strings.Contains(screen.Text, placeholder) {
+									t.Errorf("%s page keeps the unfilled %s", label, placeholder)
+								}
+							}
+							hasNotice := strings.Contains(screen.Text, strings.TrimSpace(settingsText(tr, "aispam_data_notice"))[:20])
+							if hasNotice != state.AIAvailable {
+								t.Errorf("%s data notice shown = %v, want %v", label, hasNotice, state.AIAvailable)
+							}
+							for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+								if strings.TrimSpace(button.Text) == "" {
+									t.Errorf("%s has a button with an empty label", label)
+								}
+								if decoded, ok := decodeCallbackData(button.CallbackData, settingsCallbackNamespace); ok &&
+									decoded.Fields["a"] == settingsActToggle && utf8.RuneCountInString(button.Text) > 40 {
+									t.Errorf("%s toggle %q is %d code points, want at most 40", label, button.Text, utf8.RuneCountInString(button.Text))
+								}
+							}
+						}
+					}
+				}
+			}
+		})
+	}
 }
