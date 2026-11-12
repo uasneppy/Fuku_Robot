@@ -179,6 +179,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   returns a delete error and always ends with `ext.EndGroups`. Join and leave cleaning (`/cleanservice`) does nothing inside a
   Staff Group, because `deletionAct` refuses every deletion there (D-18, DEL-07): a Staff Group with the flag on keeps its join
   and leave service messages, which is a change from before Phase 16.
+- Command deletion (`command_deletion.go`, Phase 17, DEL-03): `modules.CommandDeletionProcessor` wraps
+  `tracing.TracingProcessor` in `newConfiguredDispatcher` (`Processor: modules.CommandDeletionProcessor{Inner:
+  tracing.TracingProcessor{}}`). After every handler group of an update has run it deletes a member's command (an admin's
+  included) when the chat stores `member:commands` as 0; a stored value other than 0 is Off. A command is a message
+  gotgbot's matcher hands to a name `helpers.IsBotCommand` knows: `botCommandName` mirrors the library's `checkMessage`
+  (bare or `@thisbot`, case-insensitive, caption and entity-less forms included; `@otherbot`, an unregistered word, an
+  edit, a private chat, a bot, a `sender_chat`, a Telegram service account and the bot itself never), and
+  `TestBotCommandNameMatchesGotgbot` proves it against the library's own `Command.CheckUpdate`. The wrapper reads
+  `ctx.Update.Message` and `ctx.EffectiveSender` after `Inner` returned (an anonymous-admin tap replaces `ctx.Update`),
+  uses a fresh context and never `tracing.UpdateContext` (the tracing processor cancels its own context when it returns
+  in polling mode), deletes through `deletionAct` with delay 0 (so the delete-right latch, the Staff Group refusal, the
+  deletion pacer and the due-now fallback apply) and has no defer around `Inner`: a handler panic that reaches the
+  dispatcher skips the delete. No reply path is edited (handlers reply inside the update, the delete follows it) and it
+  adds no handler group; it is the one documented place that acts after the dispatcher's groups.
 - The `MemberRequirements` module (priority 241, `memberreq.go`, `memberreq_watch.go`) registers one message watcher at
   group `-2` (`memberReqWatchGroup`), through `handlers.NewMessage` with a supergroup-only filter and no `SetAllow*`
   (new messages only: no edits, channel posts or bot senders), the only message handler of that group. The member

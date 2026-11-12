@@ -203,6 +203,31 @@ func TestCommandDeletionKeeps(t *testing.T) {
 	}
 }
 
+// TestCommandDeletionPollingContext proves the delete does not depend on the context the tracing
+// processor cancels when it returns: with tracing.TracingProcessor inside the wrapper and the
+// update delivered polling-style (nil data), a wrapped and a raw command are each answered and
+// deleted once.
+func TestCommandDeletionPollingContext(t *testing.T) {
+	env := newCommandDeletionEnv(t, tracing.TracingProcessor{})
+	target := env.mreqMember("Bad", "Actor", "bad")
+	member := env.mreqMember("Rae", "", "rae")
+
+	wrapped := env.deliver(&env.del.owner, commandMessage(fmt.Sprintf("/ban %d", target.Id)))
+	raw := env.deliver(&member, commandMessage("/rules"))
+
+	for name, id := range map[string]int64{"wrapped /ban": wrapped, "raw /rules": raw} {
+		if got := env.deleted(env.chat.Id, id); got != 1 {
+			t.Errorf("deletes of the %s command = %d, want exactly 1", name, got)
+		}
+		if reply, del := env.anySendIndex(env.chat.Id), env.deleteIndexOf(env.chat.Id, id); reply < 0 || del < 0 || reply >= del {
+			t.Errorf("%s: first send at %d, delete at %d, want the answer before the delete", name, reply, del)
+		}
+	}
+	if rows := env.rows(); len(rows) != 0 {
+		t.Fatalf("queue rows = %+v, want none (the inline deletes succeeded)", rows)
+	}
+}
+
 // TestBotCommandNameMatchesGotgbot is the differential proof: for every message of the table and
 // every command name of the universe, botCommandName accepts the message for that name exactly
 // when the library's own Command.CheckUpdate built for that name does, and whatever name it
