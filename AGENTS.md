@@ -2048,8 +2048,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the `deletionQueueWrite` seam): it refuses a delay outside 0..86400, writes nothing for a latched chat and wakes the
   worker for a row due now. The inline delete (`deletionDeleteNow`) runs on a goroutine that starts with
   `defer error_handling.RecoverFromPanic`, derives its context from `deletionContext()` (cancelled by the worker's stop) and
-  is counted in `deletionInline` with a cap of `deletionInlineMax` (64): a call beyond the cap, or a delete the pacer shed
-  (`ratelimit.ErrRateLimited`), becomes a queue row due now plus a wake instead of parking goroutines; a `gone` answer sets the
+  is counted in `deletionInline` with a cap of `deletionInlineMax` (64): a call beyond the cap, a delete the pacer shed
+  (`ratelimit.ErrRateLimited`) and a delete whose own `deletionInlineTimeout` (15 s, a variable only for tests) ran out inside the
+  pacer's wait while the deletion root is still live (a flood-control block longer than that, under the pacer's `MaxWait`;
+  `deletionInlineShed`) become a queue row due now plus a wake instead of parking goroutines or losing the message; a delete
+  cut off by a cancelled root (shutdown) writes nothing and is lost; a `gone` answer sets the
   `gone` latch, a refused one is dropped with no log line and any other failure loses that one message. `deletionClassify` is a
   table of predicates (retryFree, gone, refused, else retry) that matches on lower-cased fragments and codes, never one string.
   Logs carry the chat ID only, never a message ID, text or member.

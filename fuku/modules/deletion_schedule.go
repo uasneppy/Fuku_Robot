@@ -402,8 +402,21 @@ func deletionInlineSettle(ctx context.Context, a deletionAction, err error) {
 		defer cancel()
 		deletionSetLatch(recordCtx, a.ChatID, deletionScopeGone)
 	case deletionVerdictRetryFree:
-		if errors.Is(err, ratelimit.ErrRateLimited) {
+		if deletionInlineShed(ctx, err) {
 			deletionQueue(a)
 		}
 	}
+}
+
+// deletionInlineShed reports whether a retry-free inline answer means the delete never happened
+// for a reason of that moment, so the message takes the durable path as a row due now: the pacer
+// shed it, or the inline delete's own deadline ran out inside the pacer's wait while the deletion
+// root is still live (WR-01: a flood-control wait longer than deletionInlineTimeout). A cancelled
+// root is a shutdown: no row is written from a goroutine whose database may be closing, and the
+// message is lost as before.
+func deletionInlineShed(ctx context.Context, err error) bool {
+	if errors.Is(err, ratelimit.ErrRateLimited) {
+		return true
+	}
+	return errors.Is(ctx.Err(), context.DeadlineExceeded) && deletionContext().Err() == nil
 }
