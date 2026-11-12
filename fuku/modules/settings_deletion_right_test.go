@@ -42,6 +42,18 @@ var settingsDelScreens = []settingsDelScreen{
 		"settings_del_desc_pinned", "settings_del_currently", "[2 3 3 2]"},
 	{"bot row with a hint", func(m *settingsDelMenu) string { text, _ := m.open("dr", "ba"); return text },
 		"settings_del_hint_punish_auto", "settings_del_currently", "[3 3 2]"},
+	// Phase 17: the Member messages section. The Self-destruct card is drawn by choosing a delay on a row
+	// with no rule stored; it has no text after the status slot.
+	{"member list", func(m *settingsDelMenu) string { text, _ := m.open("dl", "m"); return text },
+		"settings_del_mem_self", "settings_del_hint_time", "[2 1 2]"},
+	{"commands row", func(m *settingsDelMenu) string { text, _ := m.open("dr", "mc"); return text },
+		"settings_del_hint_commands", "settings_del_currently", "[2 2]"},
+	{"edited row", func(m *settingsDelMenu) string { text, _ := m.open("dr", "me"); return text },
+		"settings_del_hint_edited", "settings_del_currently", "[3 3 2]"},
+	{"self-destruct row", func(m *settingsDelMenu) string { text, _ := m.open("dr", "ms"); return text },
+		"settings_del_hint_self", "settings_del_currently", "[1 3 3 2]"},
+	{"self-destruct card", func(m *settingsDelMenu) string { m.choose("ms", "600"); text, _ := m.last(); return text },
+		"settings_del_confirm_self", "", "[2 2]"},
 }
 
 // settingsDelRightCase is one answer of the bot's own record: a scripted record or a scripted error,
@@ -147,7 +159,7 @@ func TestSettingsDeletionRightLine(t *testing.T) {
 					if before := strings.Index(text, staffMarker(screen.before)); before < 0 || at < before {
 						t.Errorf("%s: the line is not after %s: %q", screen.name, screen.before, text)
 					}
-					if after := strings.LastIndex(text, staffMarker(screen.after)); after < 0 || at > after {
+					if after := strings.LastIndex(text, staffMarker(screen.after)); screen.after != "" && (after < 0 || at > after) {
 						t.Errorf("%s: the line is not before %s: %q", screen.name, screen.after, text)
 					}
 				}
@@ -191,6 +203,23 @@ func TestSettingsDeletionRightLine(t *testing.T) {
 			if got := strings.Count(text, noRight) + strings.Count(text, unknown); got != wantLines {
 				t.Errorf("the redraw after a write has %d right lines, want %d: %q", got, wantLines, text)
 			}
+
+			// A Self-destruct card is drawn and confirmed while the line shows: the line is on the card and
+			// on the redrawn row, the rule is stored, and the button of the card is a live Yes.
+			m.choose("ms", "3600")
+			text, _ = m.last()
+			if got := strings.Count(text, noRight) + strings.Count(text, unknown); got != wantLines {
+				t.Errorf("the card has %d right lines, want %d: %q", got, wantLines, text)
+			}
+			yes, _ := settingsDelCardOf(t, m)
+			m.pressButton(yes)
+			if delay, ok := env.stored(deletion.KindMemberSelfDestruct); !ok || delay != 3600 {
+				t.Errorf("with the line showing, a confirmed card stored %d (%v), want 3600", delay, ok)
+			}
+			text, _ = m.last()
+			if got := strings.Count(text, noRight) + strings.Count(text, unknown); got != wantLines {
+				t.Errorf("the row redrawn after the Yes has %d right lines, want %d: %q", got, wantLines, text)
+			}
 		})
 	}
 
@@ -230,6 +259,18 @@ func TestSettingsDeletionCost(t *testing.T) {
 		{"list", func() { m.press("a", "dl", "t", "s") }},
 		{"row", func() { m.press("a", "dr", "t", "sn") }},
 		{"a choice", func() { m.choose("sn", "600") }},
+		// Phase 17: every member screen is one read of the bot too, a choice and a card's draw and Yes.
+		{"member list", func() { m.press("a", "dl", "t", "m") }},
+		{"commands row", func() { m.press("a", "dr", "t", "mc") }},
+		{"edited row", func() { m.press("a", "dr", "t", "me") }},
+		{"self-destruct row", func() { m.press("a", "dr", "t", "ms") }},
+		{"a commands choice", func() { m.choose("mc", "0") }},
+		{"an edited choice", func() { m.choose("me", "60") }},
+		{"a self-destruct card", func() { m.choose("ms", "600") }},
+		{"the card's Yes", func() {
+			yes, _ := settingsDelCardOf(t, m)
+			m.pressButton(yes)
+		}},
 	} {
 		bot, presser := draw(tc.do)
 		if bot != 1 || presser != 1 {
