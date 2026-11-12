@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 18
 current_phase_name: Remaining Settings Pages
 status: executing
-stopped_at: Completed 18-07-PLAN.md
-last_updated: "2026-11-12T21:39:47.632Z"
+stopped_at: Completed 18-08-PLAN.md
+last_updated: "2026-11-12T22:20:39.667Z"
 last_activity: 2026-11-12
-last_activity_desc: Completed 18-07-PLAN.md
-state_head: 966fb80a7b53bc0d134430b7095152933765a407
+last_activity_desc: Completed 18-08-PLAN.md
+state_head: 2b9c94447e11953a021f53024098ad046649279f
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 114
-  completed_plans: 105
+  completed_plans: 106
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 18 (Remaining Settings Pages) — executing, plan 7 of 15 done (18-07 the Language page (`u`, Order 87): the `change_language` callback and `/lang` golden recorded first (21 cases, both branches), `applyGroupLanguage` behind the callback's group branch, `lang.LoadGroupLanguageContext`, control `l` (`st` only, two lower-case letters, `settingsRightAdmin`), the grid of the enabled languages with a check mark in place of the stored one's flag, and the translator swapped to the code just written in a group menu only, never reaching the user's own language; 18-06 the Switches page (`t`, Order 86): Reports, the AI spam filter and Auto-approve as `tg`-only toggles through `applyReportsEnabled`, `applyAISpamEnabled` and `applyAutoApprove` behind the commands' rights, the AI status line and Off-only form with the alert-plus-redraw gate for a stale On press, Main's `{n} on` state, and the shared `settingsToggleSet`; 18-05 the `/aispam` golden recorded first (27 cases, the save error returned), `aispamConfigured` (the TypeSafe value set and `ENABLE_AISPAM` on, never the Anthropic key), `applyAISpamEnabled` and `aispam.LoadEnabledContext`; 18-04 `/reports` and `/autoapprove` goldens recorded first, `applyReportsEnabled` and `applyAutoApprove`, `reports.LoadChatStatusContext`, and the two composite rights `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, the only framework edit of the phase; 18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
-Plan: 8 of 15
+Phase: 18 (Remaining Settings Pages) — executing, plan 8 of 15 done (18-08 `/log` and `/nolog` behind `applyLogCategory`: the golden recorded first (25 cases, every request, the `#SETTINGS` audit post and the stored flags, the continue-on-failed-save quirk pinned), `applyLogCategory` for one category with the commands keeping their loop and audit post, and `logchannels.LoadContext`, which tells a chat with no linked channel from a failed read; 18-07 the Language page (`u`, Order 87): the `change_language` callback and `/lang` golden recorded first (21 cases, both branches), `applyGroupLanguage` behind the callback's group branch, `lang.LoadGroupLanguageContext`, control `l` (`st` only, two lower-case letters, `settingsRightAdmin`), the grid of the enabled languages with a check mark in place of the stored one's flag, and the translator swapped to the code just written in a group menu only, never reaching the user's own language; 18-06 the Switches page (`t`, Order 86): Reports, the AI spam filter and Auto-approve as `tg`-only toggles through `applyReportsEnabled`, `applyAISpamEnabled` and `applyAutoApprove` behind the commands' rights, the AI status line and Off-only form with the alert-plus-redraw gate for a stale On press, Main's `{n} on` state, and the shared `settingsToggleSet`; 18-05 the `/aispam` golden recorded first (27 cases, the save error returned), `aispamConfigured` (the TypeSafe value set and `ENABLE_AISPAM` on, never the Anthropic key), `applyAISpamEnabled` and `aispam.LoadEnabledContext`; 18-04 `/reports` and `/autoapprove` goldens recorded first, `applyReportsEnabled` and `applyAutoApprove`, `reports.LoadChatStatusContext`, and the two composite rights `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, the only framework edit of the phase; 18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
+Plan: 9 of 15
 Status: Ready to execute plan 18-08. Phases 10 to 17 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Completed 18-07-PLAN.md
+Last activity: 2026-11-12 — Completed 18-08-PLAN.md
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -178,6 +178,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 18 P05 | 45min | 2 tasks | 6 files |
 | Phase 18 P06 | - | 3 tasks | 10 files |
 | Phase 18 P07 | 75 min | 4 tasks | 14 files |
+| Phase 18 P08 | 55 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -360,8 +361,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T21:39:44.950Z
-Stopped at: Completed 18-07-PLAN.md
+Last session: 2026-11-12T22:20:37.094Z
+Stopped at: Completed 18-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
