@@ -56,17 +56,6 @@ func serviceDeleteDelay(ctx *ext.Context, chatID int64, row deletionRow) (int, b
 	return deletionEffectiveDelay(row.Kind, rules, false)
 }
 
-// deletionIsStaffChat reports whether chatID is a Staff Group. A read that fails counts as one:
-// nothing is deleted or scheduled in a chat that cannot be told apart from a Staff Group.
-func deletionIsStaffChat(chatID int64) bool {
-	group, err := deletionStaffLookup(chatID)
-	if err != nil {
-		log.Warnf("[ServiceDeletion] could not check chat %d for a Staff Group: %v", chatID, err)
-		return true
-	}
-	return group != nil
-}
-
 // serviceDeleteWatcher deletes a service message by the group's stored rule. It never ends an
 // update, never replies and never returns nil: the result is a named value preset to
 // ext.ContinueGroups, so a recovered panic cannot leave group -5 and kill a later handler.
@@ -80,10 +69,16 @@ func (m moduleStruct) serviceDeleteWatcher(b *gotgbot.Bot, ctx *ext.Context) (re
 		return result
 	}
 	delay, on := serviceDeleteDelay(ctx, msg.Chat.Id, row)
-	if !on || delay != 0 || deletionIsStaffChat(msg.Chat.Id) {
+	if !on {
 		return result
 	}
-	deletionDeleteNow(b, msg.Chat.Id, msg.MessageId)
+	deletionAct(b, deletionAction{
+		ChatID:    msg.Chat.Id,
+		MessageID: msg.MessageId,
+		Kind:      row.Kind,
+		SentAt:    deletionSentAt(msg.Date),
+		Delay:     delay,
+	})
 	return result
 }
 

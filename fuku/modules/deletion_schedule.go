@@ -2,19 +2,27 @@ package modules
 
 import (
 	"context"
+	"errors"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
+	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/error_handling"
+	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
 	"github.com/uasneppy/fuku_robot/fuku/utils/ratelimit"
 )
 
 // The deletion core: the pacer every deletion Telegram call goes through, the inline delete of a
-// message whose rule says "now", and the Staff Group read every deletion site shares. The queue,
-// the latch and the one decision function (deletionAct) are added on top of it.
+// message whose rule says "now", the classifier of a delete's answer, the negative latch of a chat
+// the bot cannot act in, the queue writer and deletionAct, the one function that decides what
+// happens to a message that has a delay.
 
 // deletionNow is the clock the deletion code reads. It is a variable only so a test can fix it,
 // as raidNow is for the raid counters; production code never reassigns it.
@@ -80,18 +88,291 @@ func cancelDeletionContext() {
 // a variable only so a test can fail it or make it answer.
 var deletionStaffLookup = staff.GetStaffGroupFresh
 
+// deletionIsStaffChat reports whether chatID is a Staff Group. A read that fails counts as one:
+// nothing is deleted or scheduled in a chat that cannot be told apart from a Staff Group.
+func deletionIsStaffChat(chatID int64) bool {
+	group, err := deletionStaffLookup(chatID)
+	if err != nil {
+		log.Warnf("[Deletion] could not check chat %d for a Staff Group: %v", chatID, err)
+		return true
+	}
+	return group != nil
+}
+
 // deletionInlineMax is the most inline deletes in flight at once; a variable so a test can
-// shrink it.
+// shrink it. A call beyond it takes the durable path instead of parking another goroutine.
 var deletionInlineMax = 64
 
 // deletionInline counts the inline deletes in flight. It is a counter and not a sync.WaitGroup
 // because the stop gives up after its bounded wait while a new delete can still start.
 var deletionInline raidPostTracker
 
+// deletionVerdict is how deletionClassify reads the answer of a delete call.
+type deletionVerdict int
+
+const (
+	// deletionVerdictDone means the call succeeded.
+	deletionVerdictDone deletionVerdict = iota
+	// deletionVerdictRetryFree means the call was shed, rate limited or cut off by a shutdown:
+	// the message is not at fault, so no attempt is counted.
+	deletionVerdictRetryFree
+	// deletionVerdictGone means the bot cannot act in the chat at all (it is not in it, was
+	// kicked, or the chat is gone or was upgraded): the chat is latched for every kind.
+	deletionVerdictGone
+	// deletionVerdictRefused means Telegram refused this one message: it is dropped quietly,
+	// with no log line and no latch.
+	deletionVerdictRefused
+	// deletionVerdictRetry means a failure that may pass (a 5xx, a timeout, a transport error).
+	deletionVerdictRetry
+)
+
+// deletionGoneFragments are the lower-cased fragments of a description that say the chat is
+// unreachable for good. Only the first three have production history in this repository; the
+// rest are assumptions and the code never depends on one of them being exact (an unmatched
+// description falls to refused or retry).
+var deletionGoneFragments = []string{
+	"group chat was deactivated", "chat_not_found", "peer_id_invalid", "upgraded to a supergroup",
+}
+
+// deletionRefusedFragments are the lower-cased fragments of a description that refuse one message.
+var deletionRefusedFragments = []string{
+	"message to delete not found", "message can't be deleted", "message_id_invalid",
+}
+
+// deletionTelegramText returns the lower-cased description of a Telegram error, or "".
+func deletionTelegramText(err error) string {
+	var tgErr *gotgbot.TelegramError
+	if errors.As(err, &tgErr) && tgErr != nil {
+		return strings.ToLower(tgErr.Description)
+	}
+	return ""
+}
+
+// deletionHasFragment reports whether the description of err holds one of the fragments.
+func deletionHasFragment(err error, fragments []string) bool {
+	text := deletionTelegramText(err)
+	for _, fragment := range fragments {
+		if strings.Contains(text, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+// deletionIsRetryFree: a shed or rate-limited call, a cancelled context, a 429.
+func deletionIsRetryFree(ctx context.Context, err error) bool {
+	if errors.Is(err, ratelimit.ErrRateLimited) || errors.Is(err, context.Canceled) || ctx.Err() != nil {
+		return true
+	}
+	var tgErr *gotgbot.TelegramError
+	return errors.As(err, &tgErr) && tgErr != nil && tgErr.Code == 429
+}
+
+// deletionIsGone: the bot is not in the chat, the chat is gone, or it migrated.
+func deletionIsGone(_ context.Context, err error) bool {
+	if chat_status.IsBotMissingError(err) || deletionHasFragment(err, deletionGoneFragments) {
+		return true
+	}
+	var tgErr *gotgbot.TelegramError
+	return errors.As(err, &tgErr) && tgErr != nil && tgErr.ResponseParams != nil && tgErr.ResponseParams.MigrateToChatId != 0
+}
+
+// deletionIsRefused: this one message cannot be deleted, or any other client error.
+func deletionIsRefused(_ context.Context, err error) bool {
+	return deletionHasFragment(err, deletionRefusedFragments) || isTelegramClientError(err)
+}
+
+// deletionClassRules is the classifier's table, tried in order: a shed or cancelled call is
+// never read as a refusal, and a gone chat is never read as a refused message.
+var deletionClassRules = []struct {
+	verdict deletionVerdict
+	match   func(context.Context, error) bool
+}{
+	{deletionVerdictRetryFree, deletionIsRetryFree},
+	{deletionVerdictGone, deletionIsGone},
+	{deletionVerdictRefused, deletionIsRefused},
+}
+
+// deletionClassify reads the answer of one delete call. It matches on lower-cased fragments and
+// on codes, never on one string, and everything it cannot place is a retry.
+func deletionClassify(ctx context.Context, err error) deletionVerdict {
+	if err == nil {
+		return deletionVerdictDone
+	}
+	for _, rule := range deletionClassRules {
+		if rule.match(ctx, err) {
+			return rule.verdict
+		}
+	}
+	return deletionVerdictRetry
+}
+
+const (
+	// deletionLatchTTL is how long the negative latch of a chat lasts.
+	deletionLatchTTL = 10 * time.Minute
+	// deletionScopeGone is the latch value that stops every kind: the bot is not in the chat.
+	deletionScopeGone = "gone"
+	// deletionScopeService is the latch value that stops only service:* kinds: the bot cannot
+	// delete other people's messages there. It is set only after a live right check, never from
+	// a description (a message-level refusal says nothing about the right).
+	deletionScopeService = "service"
+)
+
+// deletionRedisClient is the operational Redis client of the latch, nil without Redis. A
+// variable so a test can take Redis away.
+var deletionRedisClient = raidRedis
+
+// deletionLatchKey is the Redis key of a chat's negative latch. It is outside the fuku:cache:
+// prefix, so CLEAR_CACHE_ON_STARTUP keeps it.
+func deletionLatchKey(chatID int64) string {
+	return "fuku:delete:norights:" + strconv.FormatInt(chatID, 10)
+}
+
+// deletionLatched reports whether deletions of the kind are stopped in the chat. One Redis read;
+// no Redis and a Redis error are "not latched": the latch only saves calls, correctness never
+// depends on it.
+func deletionLatched(ctx context.Context, chatID int64, kind string) bool {
+	client := deletionRedisClient()
+	if client == nil {
+		return false
+	}
+	readCtx, cancel := context.WithTimeout(ctx, raidRedisTimeout)
+	defer cancel()
+	scope, err := client.Get(readCtx, deletionLatchKey(chatID)).Result()
+	if err != nil {
+		return false
+	}
+	switch scope {
+	case deletionScopeGone:
+		return true
+	case deletionScopeService:
+		return deletion.IsServiceKind(kind)
+	}
+	return false
+}
+
+// deletionSetLatch latches the chat for deletionLatchTTL. The gone scope overwrites; the service
+// scope is SET NX, so it never downgrades a gone latch. A Redis error is only logged, by chat ID.
+func deletionSetLatch(ctx context.Context, chatID int64, scope string) {
+	client := deletionRedisClient()
+	if client == nil {
+		return
+	}
+	setCtx, cancel := context.WithTimeout(ctx, raidRedisTimeout)
+	defer cancel()
+	var err error
+	if scope == deletionScopeService {
+		err = client.SetNX(setCtx, deletionLatchKey(chatID), scope, deletionLatchTTL).Err()
+	} else {
+		err = client.Set(setCtx, deletionLatchKey(chatID), scope, deletionLatchTTL).Err()
+	}
+	if err != nil {
+		log.Warnf("[Deletion] could not latch chat %d: %v", chatID, err)
+	}
+}
+
+// deletionWake wakes the deletion worker for a row due now. It holds one pending wake, so a
+// send never blocks and is safe with no reader.
+var deletionWake = make(chan struct{}, 1)
+
+// wakeDeletionWorker asks the worker for a pass at once.
+func wakeDeletionWorker() {
+	select {
+	case deletionWake <- struct{}{}:
+	default:
+	}
+}
+
+// deletionSentAt is the time a message was sent: its own date as UTC, or now when the date is
+// zero, negative or in the future (clock skew must never stretch a message past its delay).
+func deletionSentAt(date int64) time.Time {
+	now := deletionNow().UTC()
+	if date <= 0 {
+		return now
+	}
+	sent := time.Unix(date, 0).UTC()
+	if sent.After(now) {
+		return now
+	}
+	return sent
+}
+
+// deletionQueueWrite is the repository's queue writer. It is a variable only so a test can make
+// a write fail; deletionSchedule is the only caller in this package.
+var deletionQueueWrite = deletion.Schedule
+
+// deletionSchedule queues one message for deletion and reports whether a row was written. It
+// refuses a delay outside 0..86400 itself, writes nothing for a latched chat, and wakes the
+// worker when the row is due now. The queue writer refuses a Staff Group again.
+func deletionSchedule(ctx context.Context, e deletion.Entry) (bool, error) {
+	if e.DelaySecs < 0 || e.DelaySecs > deletion.MaxDelaySecs {
+		return false, fukuerrors.Wrapf(deletion.ErrDelayOutOfRange, "schedule a deletion in chat %d", e.ChatID)
+	}
+	if deletionLatched(ctx, e.ChatID, e.Kind) {
+		return false, nil
+	}
+	written, err := deletionQueueWrite(ctx, e)
+	if err != nil || !written {
+		return false, err
+	}
+	if !e.SentAt.Add(time.Duration(e.DelaySecs) * time.Second).After(deletionNow()) {
+		wakeDeletionWorker()
+	}
+	return true, nil
+}
+
+// deletionRecordTimeout bounds one queue write of the deletion code. The writes never use a
+// request or run context that a shutdown cancels.
+const deletionRecordTimeout = 5 * time.Second
+
+// deletionAction is one message with a delay: where it is, what it is and when it was sent.
+type deletionAction struct {
+	ChatID    int64
+	MessageID int64
+	Kind      string
+	SentAt    time.Time
+	Delay     int
+}
+
+// deletionQueue writes the action to the queue and logs a failure by chat ID only.
+func deletionQueue(a deletionAction) {
+	ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
+	defer cancel()
+	_, err := deletionSchedule(ctx, deletion.Entry{
+		ChatID: a.ChatID, MessageID: a.MessageID, Kind: a.Kind, SentAt: a.SentAt, DelaySecs: a.Delay,
+	})
+	if err != nil {
+		log.Warnf("[Deletion] could not queue a deletion in chat %d: %v", a.ChatID, err)
+	}
+}
+
+// deletionAct is the one place that decides what happens to a message with a delay: a latched
+// chat is left alone, a Staff Group (or one that cannot be told apart from one) is never touched,
+// a delay of 0 is an inline delete, and any other delay is a queue row at the message's own time
+// plus the delay. An inline delete the cap or the pacer refuses becomes a row due now.
+func deletionAct(b *gotgbot.Bot, a deletionAction) {
+	latchCtx, cancel := context.WithTimeout(context.Background(), raidRedisTimeout)
+	latched := deletionLatched(latchCtx, a.ChatID, a.Kind)
+	cancel()
+	if latched || deletionIsStaffChat(a.ChatID) {
+		return
+	}
+	if a.Delay != 0 {
+		deletionQueue(a)
+		return
+	}
+	if !deletionDeleteNow(b, a) {
+		deletionQueue(a)
+	}
+}
+
 // deletionDeleteNow starts one inline delete of a message on its own goroutine and reports
-// whether it started. The goroutine is counted in deletionInline, recovers from a panic and
-// derives its context from deletionContext(), so the worker's stop ends it.
-func deletionDeleteNow(b *gotgbot.Bot, chatID, messageID int64) bool {
+// whether it started; false means the cap of deletionInlineMax is reached and the caller takes
+// the durable path. The goroutine is counted in deletionInline, recovers from a panic and
+// derives its context from deletionContext(), so the worker's stop ends it. It never retries: a
+// gone answer latches the chat, a refused one is dropped quietly, a shed delete becomes a row
+// due now, and any other failure loses that one message (D-08).
+func deletionDeleteNow(b *gotgbot.Bot, a deletionAction) bool {
 	if !deletionInline.startBelow(deletionInlineMax) {
 		return false
 	}
@@ -100,10 +381,25 @@ func deletionDeleteNow(b *gotgbot.Bot, chatID, messageID int64) bool {
 		defer error_handling.RecoverFromPanic("deletionInline", "Deletion")
 		ctx, cancel := context.WithTimeout(deletionContext(), deletionInlineTimeout)
 		defer cancel()
-		_ = deletionPaced(ctx, func(callCtx context.Context) error {
-			_, err := b.DeleteMessageWithContext(callCtx, chatID, messageID, nil)
-			return err
+		err := deletionPaced(ctx, func(callCtx context.Context) error {
+			_, callErr := b.DeleteMessageWithContext(callCtx, a.ChatID, a.MessageID, nil)
+			return callErr
 		})
+		deletionInlineSettle(ctx, a, err)
 	}()
 	return true
+}
+
+// deletionInlineSettle acts on the answer of an inline delete.
+func deletionInlineSettle(ctx context.Context, a deletionAction, err error) {
+	switch deletionClassify(ctx, err) {
+	case deletionVerdictGone:
+		recordCtx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
+		defer cancel()
+		deletionSetLatch(recordCtx, a.ChatID, deletionScopeGone)
+	case deletionVerdictRetryFree:
+		if errors.Is(err, ratelimit.ErrRateLimited) {
+			deletionQueue(a)
+		}
+	}
 }
