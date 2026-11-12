@@ -545,7 +545,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -954,6 +954,34 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `/autoapprove on` alike, a state no served group is in. Largest button 45 bytes (private) and 41 (group).
   `TestSettingsSwitches*`, `TestSettingsParity{Reports,AISpam,AutoApprove}`, `TestSettingsDrift{Reports,AISpam,AutoApprove}`
   and `TestSettingsAuthorityParitySwitches` hold it (`settings_switches_test.go`, `settings_switches_screens_test.go`).
+- The Language page (`settings_language.go`, page `u`, `Order` 87, icon 🌐, `settings_page_lang`, between Switches and Access,
+  Phase 18, plan 18-07) registers from its own file through `registerSettingsPage`, with no `Hidden`. It sets the language the
+  bot answers in inside the group and nothing else: its one control `l` writes through `applyGroupLanguage`, the function the
+  group branch of the `change_language` callback uses, and the page never reaches the callback's private branch, which writes the
+  user's own language (`lang.ChangeUserLanguage` does not occur in the file; `TestSettingsLanguagePrivate` checks that the
+  opener's `users.language` is unchanged). The control is `st` only (`Actions`, so a `tg` is an invalid request before any I/O)
+  with `Validate` exactly two lower-case ASCII letters (`settingsLangCodeShape`), so `v=1`, `UK`, `ukr` and an empty value are
+  refused in step 1; a two-letter code that is not one of the eight (`uk en es fr hi ru pt id`) passes step 1 and is refused by
+  the apply function with `language_invalid_selection` as a warn notice over the stored state, writing nothing. Its right is
+  `settingsRightAdmin`, as the callback's `RequireUserAdmin` asks for nothing more (the live check every press makes is
+  stricter than the callback's cached one; the owner gate's carve-out applies). The page reads through `settingsLangRead`
+  (`lang.LoadGroupLanguageContext`: the `chat_lang` key the bot reads, its error returned, no row created, a missing row or an
+  empty value reads `uk`), and a failed read is the cannot-open edit and the unknown mark on Main. Main's state is the stored
+  language by its own name and flag; a stored code the bot has no locale for (a database edit) is drawn escaped, as stored, and
+  marks no cell. The body is `settings_lang_current` and `settings_lang_hint`; the keyboard is the cells of
+  `config.AppConfig.ValidLangCodes` in its order (a code whose name and flag are both empty is skipped, as `/lang`'s keyboard
+  skips it), two to a row, each `language_flag`, a space and `language_name` of that language's own locale file, and the stored
+  language's cell shows `✅` in place of its flag (`✅ Bahasa Indonesia`, 18 code points: the prefix form is 22 and would not fit
+  a 20-point cell), then Back and Close, so five rows of two with the default eight languages. `/lang`'s Help Us Translate
+  link button is not drawn. A press of the stored language writes nothing and shows no notice. After a write in a menu opened
+  in the group the press's translator is replaced by `i18n.MustNewTranslator` of the code just written (never re-read: another
+  replica's local cache layer can still hold the old value), so the page, its notice (`language_changed_group`, the
+  callback's own text) and its Back and Close labels come out in the new language, and the next press and the next group reply
+  read the stored one; a menu opened in private keeps the opener's own language, names the group's new language in its current
+  line and notice, and never touches `users.language`. The keys `chat_lang`, `chat_settings` and `chat` are not in `skipLocal`,
+  so another replica can answer in the old language for up to `CACHE_LOCAL_TTL`, exactly as after `/lang`. Largest button 46
+  bytes (private) and 42 (group). `TestSettingsLanguage*`, `TestSettingsParityLanguage`, `TestSettingsDriftLanguage` and
+  `TestSettingsAuthorityParityLanguage` hold it (`settings_language_test.go`, `settings_language_screens_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -993,7 +1021,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t`, then Access for the owner, so eight rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page and `t` the Switches page; later Phase 18 plans add the rest of the grid) with
+  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t|u`, then Access for the owner, so eight rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page and `u` the Language page; later Phase 18 plans add the rest of the grid) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and

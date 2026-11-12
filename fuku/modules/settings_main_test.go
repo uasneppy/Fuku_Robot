@@ -30,8 +30,8 @@ func settingsMainStateLine(text, titleKey string) (string, bool) {
 // private shape ends with the Groups and Close row; the hand-built subtests of
 // TestSettingsMainGrid keep their own literals.
 const (
-	settingsMainShapeGroup   = "s|l / c|f / n|w / g|r / m|d / t / a / close"
-	settingsMainShapePrivate = "s|l / c|f / n|w / g|r / m|d / t / a / groups|close"
+	settingsMainShapeGroup   = "s|l / c|f / n|w / g|r / m|d / t|u / a / close"
+	settingsMainShapePrivate = "s|l / c|f / n|w / g|r / m|d / t|u / a / groups|close"
 	settingsMainOwnerRows    = 8
 )
 
