@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -17,6 +18,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
 	"github.com/uasneppy/fuku_robot/fuku/db/logchannels"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/utils/actionlog"
 )
 
 // settingsLogCleanup deletes the log channel rows, the chats rows and the cached log channel copies
@@ -343,11 +345,10 @@ func TestSettingsParityLogCategory(t *testing.T) {
 // settingsLogMenu is one open Log channel page: the message it sits on, the chat that message is in
 // (the group for a group menu, the presser's private chat for a private one) and the presser.
 type settingsLogMenu struct {
-	env     *settingsEnv
-	chat    gotgbot.Chat
-	user    gotgbot.User
-	msgID   int64
-	private bool
+	env   *settingsEnv
+	chat  gotgbot.Chat
+	user  gotgbot.User
+	msgID int64
 }
 
 // settingsLogOpenGroupMenu opens the page in a group menu opened by the env's administrator.
@@ -367,7 +368,7 @@ func settingsLogOpenPrivateMenu(t *testing.T, env *settingsEnv, user gotgbot.Use
 	if !ok {
 		t.Fatal("the private Main has no Log channel button")
 	}
-	menu := &settingsLogMenu{env: env, chat: settingsPrivateChat(user), user: user, msgID: sentMain.MessageID, private: true}
+	menu := &settingsLogMenu{env: env, chat: settingsPrivateChat(user), user: user, msgID: sentMain.MessageID}
 	env.pressRaw(menu.chat, user, menu.msgID, button.CallbackData)
 	return menu
 }
@@ -383,12 +384,6 @@ func (m *settingsLogMenu) pressCell(name string) {
 	m.env.t.Helper()
 	_, keyboard := m.last()
 	m.env.pressRaw(m.chat, m.user, m.msgID, settingsLogCell(m.env.t, keyboard, name).CallbackData)
-}
-
-// pressRaw presses hand-built data on the page's message.
-func (m *settingsLogMenu) pressRaw(data string) {
-	m.env.t.Helper()
-	m.env.pressRaw(m.chat, m.user, m.msgID, data)
 }
 
 func TestSettingsLogChannelNotLinked(t *testing.T) {
@@ -629,4 +624,279 @@ func TestSettingsLogChannelFailedSave(t *testing.T) {
 	if posts := settingsLogPosts(env, channelID); len(posts) != 0 {
 		t.Errorf("a failed save posted %v, want nothing", posts)
 	}
+}
+
+func TestSettingsDriftLogChannel(t *testing.T) {
+	const menuMsgID = 8484
+	env := newSettingsLogEnv(t)
+	chat := env.chat
+	channelID := settingsLogLink(t, chat)
+
+	// A command write is what the next draw shows, across the cache.
+	settingsLogRunCommand(env, chat, false, logchannels.CategoryReports)
+	dbcache.ResetLocalForTest()
+	env.pressRaw(chat, env.admin, menuMsgID, encodeCallbackData(settingsCallbackNamespace,
+		env.groupFields(env.admin, "a", "op", "p", settingsPageLog)))
+	text, keyboard := env.lastEdit(chat.Id, menuMsgID)
+	line := staffMarker("settings_main_state_line") + " ❌ " + staffMarker("settings_log_cat_reports") + " " + staffMarker("common_status_off")
+	if !strings.Contains(text, line) {
+		t.Errorf("after /nolog reports the page drew %q, want %q", text, line)
+	}
+	cell := settingsLogCell(t, keyboard, logchannels.CategoryReports)
+	if fields := settingsButtonFields(t, cell); fields["v"] != "1" || !strings.HasPrefix(cell.Text, "❌ ") {
+		t.Errorf("Reports cell = %q fields %v after /nolog reports, want the cross and target 1", cell.Text, fields)
+	}
+
+	// A page press is what the log code reads: a post of a category turned off is not sent, one of
+	// a category turned on is. The page's own #SETTINGS audit post is the first message.
+	settingsLogToggle(t, env, chat, menuMsgID, "a", "0")
+	dbcache.ResetLocalForTest()
+	if logchannels.CategoryEnabled(logchannels.Get(chat.Id), logchannels.CategoryAdmin) {
+		t.Error("the log code reads the admin category on after the page turned it off")
+	}
+	posts := len(settingsLogPosts(env, channelID))
+	actionlog.Admin(env.bot, &chat, &env.admin, "ban", 5, "")
+	if got := len(settingsLogPosts(env, channelID)); got != posts {
+		t.Errorf("an admin-category log post was sent while the category is off (%d posts, was %d)", got, posts)
+	}
+	settingsLogToggle(t, env, chat, menuMsgID, "a", "1")
+	dbcache.ResetLocalForTest()
+	posts = len(settingsLogPosts(env, channelID))
+	actionlog.Admin(env.bot, &chat, &env.admin, "ban", 5, "")
+	if got := len(settingsLogPosts(env, channelID)); got != posts+1 {
+		t.Errorf("no admin-category log post was sent after the page turned the category on (%d posts, was %d)", got, posts)
+	}
+}
+
+// settingsLogAuthorityCase is one category of the authority table: the command that changes it
+// and the press that changes it the same way.
+type settingsLogAuthorityCase struct {
+	name    string
+	command string
+	press   []string
+}
+
+// settingsLogAuthorityCases is the Admin actions category switched off, by the command and by
+// the page.
+func settingsLogAuthorityCases() []settingsLogAuthorityCase {
+	return []settingsLogAuthorityCase{
+		{"Admin actions off", "/nolog admin", []string{"a", "tg", "p", settingsPageLog, "t", "a", "v", "0"}},
+		{"Reports off", "/nolog reports", []string{"a", "tg", "p", settingsPageLog, "t", "r", "v", "0"}},
+	}
+}
+
+func TestSettingsAuthorityParityLogChannel(t *testing.T) {
+	const menuMsgID = 8585
+
+	// newChat adds a linked chat whose administrator list makes env.admin an administrator.
+	newChat := func(t *testing.T, env *settingsEnv) gotgbot.Chat {
+		t.Helper()
+		chat := env.addChat()
+		settingsLogLink(t, chat)
+		return chat
+	}
+	wrote := func(t *testing.T, chatID int64) bool {
+		t.Helper()
+		return logGoldenFlags(t, chatID) != "111111"
+	}
+	press := func(env *settingsEnv, chat gotgbot.Chat, kv []string) {
+		env.pressRaw(chat, env.admin, menuMsgID, encodeCallbackData(settingsCallbackNamespace, env.groupFields(env.admin, kv...)))
+	}
+
+	t.Run("a live administrator writes by both, and neither asks for a bot check", func(t *testing.T) {
+		for _, tc := range settingsLogAuthorityCases() {
+			t.Run(tc.name, func(t *testing.T) {
+				env := newSettingsLogEnv(t)
+				commandChat, menuChat := newChat(t, env), newChat(t, env)
+				// /log and /nolog have no bot check, so a bot that is no administrator changes nothing.
+				env.fake.setBotRole(commandChat.Id, staffRoleMember)
+				env.fake.setBotRole(menuChat.Id, staffRoleMember)
+
+				env.sendIn(commandChat, env.admin, tc.command)
+				answers := env.answerCount()
+				press(env, menuChat, tc.press)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press answered %d times, want once", got)
+				}
+				for _, id := range []int64{commandChat.Id, menuChat.Id} {
+					if !wrote(t, id) {
+						t.Errorf("chat %d: the change was not stored", id)
+					}
+				}
+				if c, m := logGoldenFlags(t, commandChat.Id), logGoldenFlags(t, menuChat.Id); c != m {
+					t.Errorf("flags: command %s, page %s, want the same", c, m)
+				}
+			})
+		}
+	})
+
+	t.Run("a plain member is refused by both", func(t *testing.T) {
+		for _, tc := range settingsLogAuthorityCases() {
+			t.Run(tc.name, func(t *testing.T) {
+				env := newSettingsLogEnv(t)
+				chat := newChat(t, env)
+				member := gotgbot.User{Id: uniqueLinkOwnerID() + 44, FirstName: "Plain"}
+				t.Cleanup(func() {
+					db.DB.Where("user_id IN ?", []int64{member.Id}).Delete(&models.User{})
+					dbcache.DeleteCache(dbcache.CacheKey("user", member.Id))
+					dbcache.ResetLocalForTest()
+				})
+				env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+				env.sendIn(chat, member, tc.command)
+				if !settingsAntifloodSentHas(env, chat.Id, staffMarker("chat_status_user_admin_cmd_error")) {
+					t.Error("the command did not refuse a plain member")
+				}
+				answers := env.answerCount()
+				env.pressPrivate(member, 777, env.privateFields(chat.Id, tc.press...))
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press answered %d times, want once", got)
+				}
+				if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+					t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+				}
+				if wrote(t, chat.Id) {
+					t.Error("a plain member's press or command wrote")
+				}
+			})
+		}
+	})
+
+	t.Run("an administrator the owner gate refuses is refused by the menu only (the documented carve-out)", func(t *testing.T) {
+		for _, tc := range settingsLogAuthorityCases() {
+			t.Run(tc.name, func(t *testing.T) {
+				resetSettingsOwnerMemo(t)
+				env := newSettingsLogEnv(t)
+				commandChat, menuChat := newChat(t, env), newChat(t, env)
+				for _, chat := range []gotgbot.Chat{commandChat, menuChat} {
+					env.newOwner(chat)
+					env.setAdminsAllowed(chat.Id, false)
+				}
+
+				answers := env.answerCount()
+				press(env, menuChat, tc.press)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the gated press answered %d times, want once", got)
+				}
+				if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_gate_owner_only")) {
+					t.Errorf("answer = %q (alert %v), want the alert settings_gate_owner_only", answer, alert)
+				}
+				if wrote(t, menuChat.Id) {
+					t.Error("the gated press wrote")
+				}
+				env.sendIn(commandChat, env.admin, tc.command)
+				if !wrote(t, commandChat.Id) {
+					t.Errorf("%s did not write for an administrator the menu refuses", tc.command)
+				}
+				env.setAdminsAllowed(menuChat.Id, true)
+				press(env, menuChat, tc.press)
+				if !wrote(t, menuChat.Id) {
+					t.Error("with the switch on the press did not write")
+				}
+			})
+		}
+	})
+}
+
+func TestSettingsLogChannelReadsCreateNothing(t *testing.T) {
+	const menuMsgID = 8686
+
+	// logKeys is the Redis keys of the log channel family of chat.
+	logKeys := func(env *settingsEnv, chatID int64) []string {
+		var keys []string
+		for _, key := range env.redis.Keys() {
+			if strings.Contains(key, "log_channel") && strings.Contains(key, fmt.Sprint(chatID)) {
+				keys = append(keys, key)
+			}
+		}
+		slices.Sort(keys)
+		return keys
+	}
+
+	t.Run("opening Main and the page with no channel leaves no row and no key", func(t *testing.T) {
+		env := newSettingsLogEnv(t)
+		chat := env.addChat()
+		settingsLogCleanup(t, chat.Id)
+		env.pressRaw(chat, env.admin, menuMsgID, encodeCallbackData(settingsCallbackNamespace,
+			env.groupFields(env.admin, "a", "op", "p", settingsPageLog)))
+		text, _ := env.lastEdit(chat.Id, menuMsgID)
+		if !strings.Contains(text, staffMarker("settings_state_not_linked")) {
+			t.Fatalf("the page drew %q, want Not linked", text)
+		}
+		env.pressRaw(chat, env.admin, menuMsgID, encodeCallbackData(settingsCallbackNamespace, env.groupFields(env.admin, "a", "bk")))
+		mainText, _ := env.lastEdit(chat.Id, menuMsgID)
+		if line, found := settingsMainStateLine(mainText, "settings_page_log"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main status line = %q (found %v), want Not linked", line, found)
+		}
+		if got := logGoldenFlags(t, chat.Id); got != "none" {
+			t.Errorf("opening created a log_channels row: %s", got)
+		}
+		var chatRows int64
+		if err := db.DB.Model(&models.Chat{}).Where("chat_id = ?", chat.Id).Count(&chatRows).Error; err != nil || chatRows != 0 {
+			t.Errorf("opening created %d chats rows (err %v)", chatRows, err)
+		}
+		if keys := logKeys(env, chat.Id); len(keys) != 0 {
+			t.Errorf("the reads cached %v for a chat with no channel", keys)
+		}
+	})
+
+	t.Run("with a channel the reads leave only the key the commands' loader makes", func(t *testing.T) {
+		env := newSettingsLogEnv(t)
+		chat := env.chat
+		settingsLogLink(t, chat)
+		dbcache.DeleteCache(dbcache.CacheKey("log_channel", chat.Id))
+		dbcache.ResetLocalForTest()
+		env.pressRaw(chat, env.admin, menuMsgID, encodeCallbackData(settingsCallbackNamespace,
+			env.groupFields(env.admin, "a", "op", "p", settingsPageLog)))
+		fromPage := logKeys(env, chat.Id)
+
+		dbcache.DeleteCache(dbcache.CacheKey("log_channel", chat.Id))
+		dbcache.ResetLocalForTest()
+		if logchannels.GetContext(context.Background(), chat.Id) == nil {
+			t.Fatal("the commands' loader found no row")
+		}
+		fromCommand := logKeys(env, chat.Id)
+		if len(fromPage) == 0 || !slices.Equal(fromPage, fromCommand) {
+			t.Errorf("the page left %v, the commands' loader %v, want the same keys", fromPage, fromCommand)
+		}
+	})
+
+	t.Run("a failing reader is the cannot-open edit and the unknown mark, and a press writes nothing", func(t *testing.T) {
+		env := newSettingsLogEnv(t)
+		settingsLogLink(t, env.chat)
+		menu := settingsLogOpenGroupMenu(t, env)
+		_, keyboard := menu.last()
+		cell := settingsLogCell(t, keyboard, logchannels.CategoryAdmin)
+		mreqSwap(t, &settingsLogRead, func(context.Context, int64) (*models.LogChannel, error) {
+			return nil, errors.New("database is down")
+		})
+
+		msgID := env.openMenu(env.admin)
+		mainText, _ := env.lastEdit(env.chat.Id, msgID)
+		if line, found := settingsMainStateLine(mainText, "settings_page_log"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Log channel status line = %q (found %v), want the unknown mark", line, found)
+		}
+		if line, found := settingsMainStateLine(mainText, "settings_page_antiflood"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Antiflood status line = %q (found %v), want its own state intact", line, found)
+		}
+		_, mainKeyboard := env.lastEdit(env.chat.Id, msgID)
+		button, ok := settingsPageButton(t, mainKeyboard, settingsPageLog)
+		if !ok {
+			t.Fatal("Main has no Log channel button")
+		}
+		env.pressRaw(env.chat, env.admin, msgID, button.CallbackData)
+		text, kb := env.lastEdit(env.chat.Id, msgID)
+		if !strings.Contains(text, staffMarker("settings_cannot_open")) || len(kb) != 0 {
+			t.Errorf("a failed read drew %q with %d rows, want the cannot-open edit", text, len(kb))
+		}
+
+		// A press of a cell drawn before the failure is the cannot-open edit too and writes nothing.
+		env.pressRaw(env.chat, env.admin, menu.msgID, cell.CallbackData)
+		if text, _ = env.lastEdit(env.chat.Id, menu.msgID); !strings.Contains(text, staffMarker("settings_cannot_open")) {
+			t.Errorf("a press with a failing reader drew %q, want the cannot-open edit", text)
+		}
+		if got := logGoldenFlags(t, env.chat.Id); got != "111111" {
+			t.Errorf("a press with a failing reader changed the flags to %s", got)
+		}
+	})
 }

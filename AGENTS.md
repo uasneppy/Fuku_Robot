@@ -1016,7 +1016,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsParityLogCategory` (the press and `/log` or `/nolog` leave the same row, cache state and audit post),
   `TestSettingsLogChannelNotLinked`, `TestSettingsLogChannelPrivacy` (a group menu and a private menu of an administrator who is not
   the creator, every kind of press, the bot's edits, answers and messages searched for the channel's title and ID),
-  `TestSettingsLogChannelForged` and `TestSettingsLogChannelFailedSave` hold it (`settings_logchannel_test.go`).
+  `TestSettingsLogChannelForged` and `TestSettingsLogChannelFailedSave` hold it (`settings_logchannel_test.go`). The category
+  controls have no extra command to compare with beyond `/log` and `/nolog`, so beside the parity test they carry a drift test
+  (`TestSettingsDriftLogChannel`: the page draws what `/nolog` stored, and a log post of a category the page turned off is not
+  sent), an authority-parity test (`TestSettingsAuthorityParityLogChannel`: a live administrator writes by both with no bot check,
+  a plain member is refused by both, an administrator the owner gate refuses is refused by the menu only, the documented
+  carve-out), `TestSettingsLogChannelReadsCreateNothing` (no row, no chats row and no cache key for a chat with no channel, the
+  commands' own key for a linked one, a failing reader is the cannot-open edit and the unknown mark) and the worst-case
+  tests `TestSettingsLogChannelCallbackBytes` (45 bytes private, 41 group, `{2,2,2,2}` for every one of the 65 states) and
+  `TestSettingsLogChannelPageFitsEveryLocale` (3800 UTF-16 units and 20-code-point cells in 8 languages)
+  (`settings_logchannel_screens_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
