@@ -329,9 +329,9 @@ var memberDeleteRun struct {
 	done chan struct{}
 }
 
-// startMemberDeleteBatcher starts the batcher goroutine. It is idempotent: while one runs, further
+// memberDeleteStart starts the batcher goroutine. It is idempotent: while one runs, further
 // calls do nothing. StartDeletionWorker calls it, so the batcher lives and stops with the worker.
-func startMemberDeleteBatcher() {
+func memberDeleteStart() {
 	memberDeleteRun.mu.Lock()
 	defer memberDeleteRun.mu.Unlock()
 	if memberDeleteRun.stop != nil {
@@ -368,11 +368,11 @@ func memberDeleteLoop(stop <-chan struct{}, every time.Duration) {
 	}
 }
 
-// stopMemberDeleteBatcher sets the draining flag (later offers are shed), asks the batcher for its
+// memberDeleteStop sets the draining flag (later offers are shed), asks the batcher for its
 // final flush and returns its done channel, or nil when no batcher runs. It is safe to call more
 // than once; StopDeletionWorker waits for the channel under its one timer. A later start runs a
 // new batcher.
-func stopMemberDeleteBatcher() <-chan struct{} {
+func memberDeleteStop() <-chan struct{} {
 	memberDeleteDraining.Store(true)
 	memberDeleteRun.mu.Lock()
 	defer memberDeleteRun.mu.Unlock()

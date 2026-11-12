@@ -193,7 +193,7 @@ func restoreMemberDeleteBatcher(t *testing.T) {
 	resetMemberDeleteState()
 	emptyMemberDeleteQueue()
 	t.Cleanup(func() {
-		if done := stopMemberDeleteBatcher(); done != nil {
+		if done := memberDeleteStop(); done != nil {
 			select {
 			case <-done:
 			case <-time.After(10 * time.Second):
