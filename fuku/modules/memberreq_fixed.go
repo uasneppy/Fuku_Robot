@@ -9,6 +9,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -210,7 +211,7 @@ func memberReqFixedRun(ctx context.Context, b *gotgbot.Bot, query *gotgbot.Callb
 	if lockedDown {
 		noticeKey, result = "mreq_notice_fixed_lockdown", memberReqFixedResult{Text: memberReqText(tr, "mreq_fixed_done_lockdown"), Alert: true}
 	}
-	memberReqFixedEdit(ctx, b, tr, chat.Id, query.Message.GetMessageId(), live.User, noticeKey)
+	memberReqFixedEdit(ctx, b, tr, chat.Id, chat.Type, query.Message.GetMessageId(), live.User, noticeKey)
 	if taken.WelcomeHeld {
 		member := live.User
 		result.Welcome = &member
@@ -289,8 +290,11 @@ func memberReqFixedRestore(ctx context.Context, hold *models.ChatRequirementHold
 
 // memberReqFixedEdit replaces the mute notice with the fix text, with no keyboard: the key's
 // template is translated with the name token and the member's mention is spliced in after.
-// A failed or rate-limited edit is logged once by its code and changes no outcome.
-func memberReqFixedEdit(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator, chatID, messageID int64, member gotgbot.User, key string) {
+// A failed or rate-limited edit is logged once by its code and changes no outcome and schedules
+// nothing: the notice then keeps the 24 hour deletion time it was queued at. After a successful
+// edit the confirmation follows the automatic-punishments timer counted from this moment (D-14,
+// D-25), which moves the notice's 24 hour row up and never later.
+func memberReqFixedEdit(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator, chatID int64, chatType string, messageID int64, member gotgbot.User, key string) {
 	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(member.Id, 10)})
 	text := memberReqText(tr, key, i18n.TranslationParams{"name": memberReqNamePlaceholder})
 	text = lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(member, fallback))
@@ -306,5 +310,7 @@ func memberReqFixedEdit(ctx context.Context, b *gotgbot.Bot, tr *i18n.Translator
 	})
 	if err != nil {
 		log.Warnf("[MemberReq] editing the notice %d in chat %d after I fixed it failed: %s", messageID, chatID, memberReqErrText(err))
+		return
 	}
+	scheduleBotMessageFromNow(chatID, chatType, messageID, deletion.KindBotAuto)
 }
