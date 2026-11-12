@@ -138,7 +138,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Handlers
 
-- Group numbers are execution order: `-10` captcha sweeper · `-8` member deletion (the edit handler now, the self-destruct watcher from plan 17-07; neither ends an update, see the `MemberDeletion` bullet) · `-7` lockdown join guard (it also counts the join surge
+- Group numbers are execution order: `-10` captcha sweeper · `-8` member deletion (two handlers: the edit handler and the self-destruct watcher, a `handlers.NewMessage(message.All, ...)` with no setter; neither ends an update, see the `MemberDeletion` bullet) · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-5` service message deletion watcher (the only handler of the group, never ends an update, `SetAllowBot`; a deletable service type is deleted now or queued by the group's stored rule) · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache (`my_chat_member` only) and the member requirements watcher (supergroup messages only, the only message handler of the group, `ext.ContinueGroups` on every path; never add another message handler to group -2) ·
   `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
@@ -213,10 +213,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutine in `fuku/modules` replies, so no handler can reply to a command after the wrapper deleted it.
 - The `MemberDeletion` module (priority 243, `member_deletion.go`, Phase 17, DEL-04) hosts the member message rules that need
   a handler of their own, at handler group `-8` (`memberDeleteGroup`, free before: the groups in use were -10, -7 to -1 and 0
-  to 12; it runs after the captcha hold and before the lockdown join guard). Today it holds the edit handler,
+  to 12; it runs after the captcha hold and before the lockdown join guard). It holds two handlers: the edit handler,
   `memberEditedHandler`, a raw `ext.Handler` whose `CheckUpdate` is `ctx.EditedMessage != nil` and nothing else (never a
   `handlers.NewMessage` with edits allowed, so a new message never reaches it), registered by `LoadMemberDeletion` with
-  `AddHandlerToGroup`; plan 17-07 adds the self-destruct watcher to the same group, which is safe because neither handler ever
+  `AddHandlerToGroup`, and the self-destruct watcher (below), in the same group, which is safe because neither handler ever
   ends an update: gotgbot moves to the next handler of a group only on `ext.ContinueGroups`, and the edit handler's result is a
   named value preset to it with `defer error_handling.RecoverFromPanic`, so a recovered panic cannot return `nil` (which would
   leave the group and skip the sibling) and no path returns `ext.EndGroups`. It is the first handler of the bot that consumes
@@ -237,10 +237,26 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   is exempt), and the pending captcha explicitly for edits (`memberEditPendingCaptcha` through the member requirements' two
   captcha seams: an attempt or any read error is pending). It never uses `antifloodModule.userIsFloodExempt`,
   `chat_status.IsUserAdmin` or `IsApprovedForUpdate` as its answer, because each reads a failed lookup as "not an admin" or
-  "not approved". Plan 17-07's self-destruct watcher reuses `memberDeletionExempt` unchanged. The handler logs by chat and user
+  "not approved". The self-destruct watcher reuses `memberDeletionExempt` unchanged. The handler logs by chat and user
   ID and the error class only, never a name, text or message ID. `TestMemberEditedDeletesLateEdit`, `TestMemberEditedGrace`,
   `TestMemberDeletionExemptTriState`, `TestMemberEditedKeeps`, `TestMemberEditedNeverEndsUpdate`,
   `TestMemberEditedStaffGroupNeverTouched` and `TestMemberEditedNeedsDeleteRight` hold it.
+  The self-destruct watcher, `memberSelfDestructWatch` (Phase 17, DEL-05; a value-receiver method of `moduleStruct`),
+  is registered by the same `LoadMemberDeletion` with `handlers.NewMessage(message.All, ...)` at `memberDeleteGroup` and
+  no setter, so it sees new messages of real users only (no edits, channel posts or bot senders), and it arrives together
+  with every exemption, the pin drop and the `/pin` hook, never before. Its result is a named value preset to
+  `ext.ContinueGroups` with `defer error_handling.RecoverFromPanic`, and it never ends an update. It only offers to the
+  batcher (`memberDeleteOffer`, see the batcher bullet): it never calls `deletionAct` or `deletionSchedule`, never writes
+  to the database and never calls Telegram itself, and group `-5` and group `-2` gain no handler. Its order is cheapest
+  first: a chat that is a group or supergroup; a `pinned_message` service message first of all, which drops the pinned
+  message's pending self-destruct row (`memberDeletePinned`, the chat taken from the service message, never the nested
+  object) and returns; the sender's shape through `raidFloodSenderCounts` (a `via_bot` message counts here, unlike for edits)
+  and not a bot; `memberContentMessage` (false for every message `deletionServiceKindOf` recognises and for the creation and
+  migration fields); the stored `member:selfdestruct` delay through `deletionRulesLookup` (only one of the six presets
+  counts, any other stored value is Off, an unreadable rule queues nothing); `memberDeletionExempt` (D-33: approved, an
+  approvals read that failed, an administrator and an unknown admin status are all exempt, so a read that fails keeps the
+  message); then the offer of an entry with `SentAt` the message's own date and the stored delay. There is no captcha lookup
+  in it, because group `-10` ends a pending member's update before this group runs (while the captcha is enabled).
 - The `MemberRequirements` module (priority 241, `memberreq.go`, `memberreq_watch.go`) registers one message watcher at
   group `-2` (`memberReqWatchGroup`), through `handlers.NewMessage` with a supergroup-only filter and no `SetAllow*`
   (new messages only: no edits, channel posts or bot senders), the only message handler of that group. The member
@@ -2244,6 +2260,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   333/s, 5 min 66/s, 10 min 33/s, 1 h 5.5/s, 6 h 0.9/s, 24 h 0.23/s), past which new messages are kept, not deleted. The
   batcher makes database writes only and never a Telegram call; it adds no Redis key. `TestMemberSelfDestructBatcherQueues`,
   `TestMemberSelfDestructBatcherSheds`, `TestMemberSelfDestructBatcherOffRace` and `TestShutdownEndsMemberDeletionBatcher` hold it.
+- Member deletion, self-destruct (`member_deletion.go`, Phase 17, DEL-05): with `member:selfdestruct` stored as 60 s, 5 min, 10 min,
+  1 h, 6 h or 24 h (`deletion.ValidateRuleDelay`; any other stored value is Off), every message of a real member in a group or
+  supergroup (text, media, stickers, polls, commands, forwards, replies, each item of an album, `via_bot` messages) is queued by
+  the batcher at its own date plus the delay and deleted by the worker (D-09), under the deletion pacer's own budget. What
+  never queues, each unknown included (D-33): a creator or administrator and anyone whose admin status could not be read, an
+  approved user and anyone whose approvals read failed, `sender_chat` senders (anonymous admins, channels, a linked channel's
+  automatic forward), bots and the bot's own messages, Telegram service IDs, every service message (the service rules own
+  them), a private chat, a Staff Group (`deletion.ScheduleBatch` refuses it and fails closed on a read error, DEL-07) and a
+  member whose captcha is pending (group `-10` holds and ends that update). Pinned messages stay (D-11): a `pinned_message`
+  service message drops the pending row of the message it names (exactly its chat, message, kind and the pending state: an
+  acting row is left to the worker), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
+  `pinChatMessage`, because the pin service message the bot causes has a bot sender that a watcher without `SetAllowBot` never
+  sees; unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
+  Off drops the chat's pending self-destruct rows in the same write (`RemoveRule`), and turning it on or changing the delay
+  drops nothing: rows queued under the old delay keep their time (D-12). Accepted limits, stated and not tested as wanted
+  behaviour: a pin that lands while the message is still in the batcher's buffer (about 300 ms) or after the worker claimed its
+  row still deletes it; a pin by another bot is never seen; exemptions are judged at send time, so a member approved or
+  promoted later still loses messages already queued; a command message deleted by command deletion leaves a self-destruct row
+  whose later delete is refused quietly. A busy group keeps pace: the burst is offered with no write, the worker claims
+  `deletionBatch` (1000) rows a cycle and makes at most one `deleteMessages` call per 100 rows of a chat, so 3000 messages are 30
+  paced calls on the `fuku:delete:pace:*` keys that no reply ever touches (`TestSelfDestructBusyGroup`: the burst, a command
+  answered under a blocked pacer, a 429 that leaves rows pending with no attempt counted, and the ceiling).
+  `TestMemberSelfDestructQueuesMessages`, `TestMemberSelfDestructKeeps`, `TestMemberSelfDestructPinnedStays`,
+  `TestMemberSelfDestructOffCancels`, `TestMemberSelfDestructNeverEndsUpdate`, `TestMemberContentMessageExcludesServiceFields`
+  and `TestMemberDeletionStaffGroupNeverTouched` (all three member rules, a Staff Group and a failing Staff Group read) hold it.
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
   reply and the click-to-read message of a group with private rules (`bot:rules`), the success replies of the manual
