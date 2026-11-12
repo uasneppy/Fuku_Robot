@@ -312,15 +312,16 @@ func TestBotWelcomeScheduled(t *testing.T) {
 	}
 	env.wantOneRow(chat.Id, ids[0], deletion.KindBotWelcome, 60*time.Second)
 
-	// With the rule removed the next welcome is sent and nothing more is queued.
+	// With the rule removed (WR-03: its already queued row goes with it) the next welcome is sent
+	// and nothing is queued.
 	env.removeBotRule(chat.Id, deletion.KindBotWelcome)
 	second := env.member("Bob")
 	env.joinMember(chat, second)
 	if got := env.sentMessageIDs(chat.Id, "Welcome"); len(got) != 2 {
 		t.Fatalf("welcomes sent after the second join = %v, want two", got)
 	}
-	if rows := env.queued(chat.Id); len(rows) != 1 {
-		t.Fatalf("queue rows with the kind off = %+v, want still the first row only", rows)
+	if rows := env.queued(chat.Id); len(rows) != 0 {
+		t.Fatalf("queue rows with the kind off = %+v, want none (the first row was dropped with the rule)", rows)
 	}
 
 	// A Staff Group gets its welcome as before and nothing is queued for it.
@@ -363,13 +364,14 @@ func TestBotGoodbyeScheduled(t *testing.T) {
 		t.Fatalf("queue rows with cleangoodbye on = %+v, want a second bot:goodbye row for message %d", rows, ids[1])
 	}
 
-	// With the kind off the goodbye is sent and nothing more is queued.
+	// With the kind off (WR-03: the two queued rows go with the rule) the goodbye is sent and
+	// nothing is queued.
 	env.removeBotRule(chat.Id, deletion.KindBotGoodbye)
 	env.leaveMember(chat, env.member("Carol"))
 	if got := env.sentMessageIDs(chat.Id, "Goodbye"); len(got) != 3 {
 		t.Fatalf("goodbyes sent with the kind off = %v, want three", got)
 	}
-	if rows := env.queued(chat.Id); len(rows) != 2 {
-		t.Fatalf("queue rows with the kind off = %+v, want still two", rows)
+	if rows := env.queued(chat.Id); len(rows) != 0 {
+		t.Fatalf("queue rows with the kind off = %+v, want none (the two queued rows were dropped with the rule)", rows)
 	}
 }
