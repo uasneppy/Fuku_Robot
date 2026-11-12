@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"slices"
 
 	log "github.com/sirupsen/logrus"
@@ -19,6 +20,62 @@ import (
 )
 
 var languagesModule = moduleStruct{moduleName: "Languages"}
+
+// groupLanguageCodes are the languages the change_language callback accepts, in the order it
+// has always listed them. The /lang keyboard offers the enabled subset of them
+// (config.AppConfig.ValidLangCodes); this list is the validation of a press.
+var groupLanguageCodes = []string{"uk", "en", "es", "fr", "hi", "ru", "pt", "id"}
+
+// languageWrites is the group language write applyGroupLanguage goes through. It is a variable
+// only so a test can make the write fail.
+var languageWrites = lang.ChangeGroupLanguage
+
+// langApplyOutcome is how applyGroupLanguage ended.
+type langApplyOutcome int
+
+const (
+	// langApplied is the zero value: the code was stored (or was already the stored one).
+	langApplied langApplyOutcome = iota
+	// langUnsupported is a code outside groupLanguageCodes; nothing was written.
+	langUnsupported
+	// langSaveFailed is a write that failed; Err holds the error.
+	langSaveFailed
+)
+
+// langApplyResult is what applyGroupLanguage reports: the outcome, the locale key of the reply
+// the callback sends with its parameter (the new language's name and flag, `s`), and the write
+// error of a failed save.
+type langApplyResult struct {
+	Outcome langApplyOutcome
+	Key     string
+	Params  i18n.TranslationParams
+	Err     error
+}
+
+// applyGroupLanguage stores a group's language. It is the one write path of the group branch of
+// the change_language callback (the buttons of /lang) and of the settings menu's Language page;
+// the private branch writes the user's own language and never reaches it. A code outside
+// groupLanguageCodes is refused before any write. lang.ChangeGroupLanguage drops the chat_lang,
+// chat_settings and chat cache keys after a write and writes nothing for a code that is already
+// stored.
+func applyGroupLanguage(ctx context.Context, chatID int64, code string) langApplyResult {
+	if !slices.Contains(groupLanguageCodes, code) {
+		log.Warnf("[Language] Unsupported callback language: %s", code)
+		return langApplyResult{Outcome: langUnsupported, Key: "language_invalid_selection"}
+	}
+	if err := ctx.Err(); err != nil {
+		return langApplyResult{Outcome: langSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	if err := languageWrites(chatID, code); err != nil {
+		log.Errorf("[Language] ChangeGroupLanguage failed for chat %d: %v", chatID, err)
+		return langApplyResult{Outcome: langSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	return langApplyResult{
+		Outcome: langApplied,
+		Key:     "language_changed_group",
+		Params:  i18n.TranslationParams{"s": keyboard.GetLangFormat(code)},
+	}
+}
 
 func (moduleStruct) genFullLanguageKb() [][]gotgbot.InlineKeyboardButton {
 	keyboard := keyboard.MakeLanguageKeyboard()
@@ -105,7 +162,7 @@ func (moduleStruct) langBtnHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 		})
 		return ext.EndGroups
 	}
-	if !slices.Contains([]string{"uk", "en", "es", "fr", "hi", "ru", "pt", "id"}, language) {
+	if !slices.Contains(groupLanguageCodes, language) {
 		log.Warnf("[Language] Unsupported callback language: %s", language)
 		currentTr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		errText, _ := currentTr.GetString("language_invalid_selection")

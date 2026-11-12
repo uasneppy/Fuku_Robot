@@ -3094,6 +3094,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   with its error returned and no row created (a chat with no row is off); `/aispam` itself still reads
   `aispam.IsAISpamEnabled`, which hides a read error as off. `ai_spam_settings` is not in `skipLocal`: another replica can
   show an old value for up to `CACHE_LOCAL_TTL`, exactly as the command can.
+  The group language (Phase 18) is `applyGroupLanguage` in `language.go`, written through the `languageWrites` seam (default
+  `lang.ChangeGroupLanguage`) and returning a `langApplyResult` (outcome `langApplied` (the zero value), `langUnsupported` or
+  `langSaveFailed`, the reply key with its `s` parameter, the error). The write lives in the group branch of the
+  `change_language` callback (the buttons of `/lang`), not in `/lang` itself, which only shows the keyboard; the callback keeps
+  its order (the code check against `groupLanguageCodes`, then the admin check, then the apply function) and its answers, and
+  its private branch writes the user's own language through `lang.ChangeUserLanguage` and is never reached from the apply
+  function (`TestLegacyLanguageRequests` pins every byte of both branches and of `/lang`'s display). A code outside the eight
+  (`uk en es fr hi ru pt id`) is refused before any write; `lang.ChangeGroupLanguage` drops `chat_lang`, `chat_settings` and
+  `chat` after a write and returns early, with no write and no drop, for the code that is already stored. The page reads
+  through `lang.LoadGroupLanguageContext`, the `chat_lang` key and loader the bot's own group updates read, with its error
+  returned and no row created (a missing row or an empty value reads `uk`). None of the three keys is in `skipLocal`: another
+  replica can answer in the old language for up to `CACHE_LOCAL_TTL`, exactly as after `/lang`.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
