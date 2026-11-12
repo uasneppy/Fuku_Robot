@@ -231,11 +231,24 @@ func settingsDelRead(chatID int64, rows []deletionRow) (settingsDelData, error) 
 	return data, nil
 }
 
+// settingsDelEffective is deletionEffectiveDelay as the page draws it. A member rule whose stored
+// delay the rule does not accept (a row written by hand, such as a grace of 45 s) is Off here, because
+// the command hook, the edit handler and the self-destruct watcher all read it as Off, and the page
+// must not claim a rule that nothing applies (D-16, C17-15). The service and bot kinds keep their own
+// reading: they accept any delay in range and the page draws an unlisted one as it is.
+func settingsDelEffective(kind string, rules *deletion.Rules, cleanServiceOn bool) (delay int, on bool) {
+	delay, on = deletionEffectiveDelay(kind, rules, cleanServiceOn)
+	if on && deletion.IsMemberKind(kind) && deletion.ValidateRuleDelay(kind, delay) != nil {
+		return 0, false
+	}
+	return delay, on
+}
+
 // settingsDelCountOn counts the rows whose effective rule is on.
 func settingsDelCountOn(rows []deletionRow, data settingsDelData) int {
 	on := 0
 	for _, row := range rows {
-		if _, isOn := deletionEffectiveDelay(row.Kind, data.Rules, data.Flag); isOn {
+		if _, isOn := settingsDelEffective(row.Kind, data.Rules, data.Flag); isOn {
 			on++
 		}
 	}
@@ -401,7 +414,7 @@ func settingsDelStateOf(tr *i18n.Translator, words settingsDelWords, delay int, 
 
 // settingsDelRowState is the drawn state of a row in a section from the data a draw read.
 func settingsDelRowState(tr *i18n.Translator, section settingsDelSection, row deletionRow, data settingsDelData) settingsDelState {
-	delay, on := deletionEffectiveDelay(row.Kind, data.Rules, data.Flag)
+	delay, on := settingsDelEffective(row.Kind, data.Rules, data.Flag)
 	return settingsDelStateOf(tr, settingsDelWordsOf(section, row), delay, on)
 }
 

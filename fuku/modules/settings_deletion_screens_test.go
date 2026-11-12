@@ -361,7 +361,9 @@ func TestSettingsDeletionStates(t *testing.T) {
 			if st.on {
 				data.Rules.Delays[tc.kind] = st.delay
 			}
-			settingsDelCheckState(t, tr, tc, data, st.delay, st.on, st.name)
+			// A member rule reads a stored delay it does not accept as Off, as its producers do (plan 17-10).
+			wantOn := st.on && !(deletion.IsMemberKind(tc.kind) && deletion.ValidateRuleDelay(tc.kind, st.delay) != nil)
+			settingsDelCheckState(t, tr, tc, data, st.delay, wantOn, st.name)
 		}
 	}
 

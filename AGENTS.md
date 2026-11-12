@@ -833,7 +833,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/cleanservice` does, and are drawn by their effective state. One function (`settingsDelStateOf`, fed one
   `settingsDelWords` struct: the none, zero and after keys of the row) maps a stored delay to
   the icon (➖ none, 🗑 delete now, ⏳ a delay), the word and the marked choice; a stored 0 on a bot row reads Delete now and
-  marks nothing, a delay that is no preset reads `{n} s` and marks nothing. Every deletion screen (hub, both lists, every
+  marks nothing, a delay that is no preset reads `{n} s` and marks nothing on a Phase 16 row. A member row reads a stored delay its
+  rule does not accept (a row written by hand, such as a grace of 45 s) as Off, in every list, screen and count
+  (`settingsDelEffective`), because the command hook, the edit handler and the self-destruct watcher read it as Off and the
+  page must not claim a rule nothing applies (`TestSettingsDriftDeletionMember`). Every deletion screen (hub, both lists, every
   row) carries one status line about the bot's right to delete, from one live `getChatMember` of the bot per draw through
   `deletionReadBotRight` and the deletion pacer under `settingsDelHereTimeout` (3 s), made after the press is answered
   empty and before the edit (so a redraw after a write reads once too): nothing when the bot can delete (an administrator's
