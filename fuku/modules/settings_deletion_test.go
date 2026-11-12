@@ -14,6 +14,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 )
 
 // settingsDelCase is one row of a table the page draws, written out here so the tests do not read the
@@ -467,6 +468,170 @@ func TestSettingsDeletionHidden(t *testing.T) {
 		}
 		if lookups != 2 {
 			t.Errorf("the Main draw made %d Staff Group reads, want 2 (Hidden and MainState)", lookups)
+		}
+	})
+}
+
+// settingsDelForged are presses of the page's buttons that a Staff Group must refuse.
+var settingsDelForged = [][]string{
+	{"a", "dl", "t", "s"},
+	{"a", "dr", "t", "sn"},
+	{"a", "st", "p", "d", "t", "sn", "v", "600"},
+	{"a", "st", "p", "d", "t", "sj", "v", "0"},
+	{"a", "st", "p", "d", "t", "bw", "v", "n"},
+}
+
+func TestSettingsDeletionStaffGroup(t *testing.T) {
+	t.Run("a forged press in a Staff Group is invalid and writes nothing", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		env.makeStaff()
+		var counter settingsDelCounter
+		counter.install(t)
+		for _, kv := range settingsDelForged {
+			edits, reads, answers := m.editCount(), env.botReads(env.chat.Id), env.answerCount()
+			m.press(kv...)
+			if text, alert := env.lastAnswer(); text != staffMarker("common_callback_invalid_request") || !alert {
+				t.Errorf("%v answered %q alert=%v, want the invalid-request alert", kv, text, alert)
+			}
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("%v was answered %d times, want once", kv, got)
+			}
+			if m.editCount() != edits {
+				t.Errorf("%v edited the menu", kv)
+			}
+			if env.botReads(env.chat.Id) != reads {
+				t.Errorf("%v read the bot's right", kv)
+			}
+		}
+		if counter.sets != 0 || counter.removes != 0 {
+			t.Errorf("a Staff Group press wrote: %d sets, %d removes", counter.sets, counter.removes)
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("an unreadable Staff Group row is the cannot-open edit with no write", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		mreqSwap(t, &deletionStaffLookup, func(int64) (*models.StaffGroup, error) { return nil, errors.New("staff read failed") })
+		var counter settingsDelCounter
+		counter.install(t)
+		for _, kv := range append([][]string{{"a", "op", "p", "d"}}, settingsDelForged...) {
+			reads := env.botReads(env.chat.Id)
+			m.press(kv...)
+			text, keyboard := m.last()
+			if text != staffMarker("settings_cannot_open") || len(keyboard) != 0 {
+				t.Errorf("%v drew %q (%d rows), want the cannot-open edit", kv, text, len(keyboard))
+			}
+			if answer, alert := env.lastAnswer(); answer != staffMarker("settings_cannot_open_alert") || !alert {
+				t.Errorf("%v answered %q alert=%v, want the cannot-open alert", kv, answer, alert)
+			}
+			if env.botReads(env.chat.Id) != reads {
+				t.Errorf("%v read the bot's right", kv)
+			}
+		}
+		if counter.sets != 0 || counter.removes != 0 {
+			t.Errorf("an unreadable Staff Group row let a write through: %d sets, %d removes", counter.sets, counter.removes)
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("a group linked to a Staff Group draws the page and never names it", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		staffChat := uniqueModuleChatID()
+		const staffTitle = "Zed Staff Title"
+		staffCleanup(t, staffChat, env.chat.Id)
+		if _, err := staff.CreateStaffGroup(staffChat, env.owner.Id, staffTitle); err != nil {
+			t.Fatalf("CreateStaffGroup error = %v", err)
+		}
+		if err := staff.CreateLink(&models.StaffGroupLink{
+			GroupChatID: env.chat.Id, StaffChatID: staffChat, OwnerUserID: env.owner.Id, GroupTitle: "Linked",
+		}); err != nil {
+			t.Fatalf("CreateLink error = %v", err)
+		}
+		m := env.groupMenu()
+		if _, ok := settingsPageButton(t, m.mainKeyboard, "d"); !ok {
+			t.Fatalf("a linked group's Main has no Deletion cell: %+v", m.mainKeyboard)
+		}
+		screens := []string{m.mainText}
+		hub, _ := m.openHub()
+		list, _ := m.open("dl", "s")
+		row, _ := m.open("dr", "sn")
+		botList, _ := m.open("dl", "b")
+		screens = append(screens, hub, list, row, botList)
+		for i, text := range screens {
+			if strings.Contains(text, staffTitle) || strings.Contains(text, fmt.Sprint(staffChat)) {
+				t.Errorf("screen %d names the Staff Group: %q", i, text)
+			}
+		}
+		for _, text := range screens[1:] {
+			if containsMarker(text, "settings_cannot_open") {
+				t.Errorf("a linked group could not open the page: %q", text)
+			}
+		}
+	})
+}
+
+func TestSettingsDeletionReadsAndWritesFail(t *testing.T) {
+	t.Run("a failed rules read is the cannot-open edit and creates no row", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) {
+			return nil, errors.New("rules read failed")
+		})
+		for _, kv := range [][]string{{"a", "op", "p", "d"}, {"a", "dl", "t", "s"}, {"a", "dl", "t", "b"}, {"a", "dr", "t", "sn"}, {"a", "dr", "t", "bw"}} {
+			m.press(kv...)
+			text, keyboard := m.last()
+			if text != staffMarker("settings_cannot_open") || len(keyboard) != 0 {
+				t.Errorf("%v drew %q (%d rows), want the cannot-open edit", kv, text, len(keyboard))
+			}
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("a failed flag read stops the screens that show joined and left only", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		mreqSwap(t, &deletionFlagLookup, func(context.Context, int64) (*models.GreetingSettings, error) {
+			return nil, errors.New("flag read failed")
+		})
+		for _, kv := range [][]string{{"a", "op", "p", "d"}, {"a", "dl", "t", "s"}, {"a", "dr", "t", "sj"}} {
+			m.press(kv...)
+			if text, _ := m.last(); text != staffMarker("settings_cannot_open") {
+				t.Errorf("%v drew %q, want the cannot-open edit", kv, text)
+			}
+		}
+		for _, kv := range [][]string{{"a", "dl", "t", "b"}, {"a", "dr", "t", "sn"}} {
+			m.press(kv...)
+			if text, _ := m.last(); containsMarker(text, "settings_cannot_open") {
+				t.Errorf("%v needs no flag but drew the cannot-open edit", kv)
+			}
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("a failed write redraws the stored state with the notice and answers once", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		m.open("dr", "sn")
+		mreqSwap(t, &deletionRuleWrites, deletionRuleWriter{
+			Set:    func(context.Context, int64, string, int) error { return errors.New("write failed") },
+			Remove: func(context.Context, int64, string) error { return errors.New("write failed") },
+		})
+		answers := env.answerCount()
+		m.choose("sn", "600")
+		text, _ := m.last()
+		if !strings.Contains(text, "⚠️ "+staffMarker("common_settings_save_failed")) {
+			t.Errorf("a failed write drew %q, want the save-failed notice", text)
+		}
+		if !strings.Contains(text, "➖ "+staffMarker("settings_del_state_keep")) {
+			t.Errorf("a failed write drew %q, want the old state (Keep)", text)
+		}
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("a failed write was answered %d times, want once", got)
+		}
+		if _, ok := env.stored(deletion.KindPinned); ok {
+			t.Error("a failed write stored a row")
 		}
 	})
 }
