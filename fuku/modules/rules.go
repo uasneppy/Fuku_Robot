@@ -12,7 +12,6 @@ import (
 	tgmd2html "github.com/PaulSonOfLars/gotg_md2html"
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
@@ -520,17 +519,17 @@ func (moduleStruct) resetRulesBtn(bot *gotgbot.Bot, ctx *ext.Context) error {
 func LoadRules(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(rulesModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("rules", rulesModule.sendRules))
+	dispatcher.AddHandler(helpers.NewBotCommand("rules", rulesModule.sendRules))
 	helpers.AddCmdToDisableable("rules")
-	dispatcher.AddHandler(handlers.NewCommand("setrules", rulesModule.setRules))
+	dispatcher.AddHandler(helpers.NewBotCommand("setrules", rulesModule.setRules))
 	helpers.MultiCommand(dispatcher, []string{"resetrules", "clearrules"}, rulesModule.clearRules)
-	dispatcher.AddHandler(handlers.NewCommand("privaterules", rulesModule.privaterules))
-	dispatcher.AddHandler(handlers.NewCommand("rulesbutton", rulesModule.rulesBtn))
-	dispatcher.AddHandler(handlers.NewCommand("rulesbtn", rulesModule.rulesBtn))
-	dispatcher.AddHandler(handlers.NewCommand("clearrulesbutton", rulesModule.resetRulesBtn))
-	dispatcher.AddHandler(handlers.NewCommand("clearrulesbtn", rulesModule.resetRulesBtn))
-	dispatcher.AddHandler(handlers.NewCommand("resetrulesbutton", rulesModule.resetRulesBtn))
-	dispatcher.AddHandler(handlers.NewCommand("resetrulesbtn", rulesModule.resetRulesBtn))
+	dispatcher.AddHandler(helpers.NewBotCommand("privaterules", rulesModule.privaterules))
+	dispatcher.AddHandler(helpers.NewBotCommand("rulesbutton", rulesModule.rulesBtn))
+	dispatcher.AddHandler(helpers.NewBotCommand("rulesbtn", rulesModule.rulesBtn))
+	dispatcher.AddHandler(helpers.NewBotCommand("clearrulesbutton", rulesModule.resetRulesBtn))
+	dispatcher.AddHandler(helpers.NewBotCommand("clearrulesbtn", rulesModule.resetRulesBtn))
+	dispatcher.AddHandler(helpers.NewBotCommand("resetrulesbutton", rulesModule.resetRulesBtn))
+	dispatcher.AddHandler(helpers.NewBotCommand("resetrulesbtn", rulesModule.resetRulesBtn))
 }
 
 func init() {
