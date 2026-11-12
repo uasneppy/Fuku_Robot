@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
+	"github.com/uasneppy/fuku_robot/fuku/utils/ratelimit"
 )
 
 // Member deletion toolkit (plan 17-05). The environment is the Phase 16 deletion environment (one
@@ -260,4 +263,71 @@ func (e *memberDeletionEnv) selfDestructRows(chatID int64) []models.ScheduledDel
 		}
 	}
 	return rows
+}
+
+// deletionPaceKeys are the two Redis keys of the deletion pacer.
+var deletionPaceKeys = []string{"fuku:delete:pace:next", "fuku:delete:pace:block"}
+
+// withRealDeletionPacer installs the production pacer options (100 ms apart, 3 retries, 60 s cap, a
+// retry_after second of one second) as deletionPacer for the test, over the env's miniredis, and
+// deletes its two keys when the test ends. The fast pacer of the deletion environment is put back by
+// the swap's own clean-up.
+func (e *memberDeletionEnv) withRealDeletionPacer(t *testing.T) {
+	t.Helper()
+	mreqSwap(t, &deletionPacer, ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+		NextKey:    deletionPaceKeys[0],
+		BlockKey:   deletionPaceKeys[1],
+		Interval:   100 * time.Millisecond,
+		MaxRetries: 3,
+		MaxWait:    60 * time.Second,
+	}))
+	t.Cleanup(func() {
+		for _, key := range deletionPaceKeys {
+			e.redis.Del(key)
+		}
+	})
+}
+
+// paceKeyState returns the value and the remaining life of each deletion pacer key that exists.
+func (e *memberDeletionEnv) paceKeyState() map[string]string {
+	e.t.Helper()
+	state := map[string]string{}
+	for _, key := range deletionPaceKeys {
+		if !e.redis.Exists(key) {
+			continue
+		}
+		value, err := e.redis.Get(key)
+		if err != nil {
+			e.t.Fatalf("read %s: %v", key, err)
+		}
+		state[key] = value + "|" + e.redis.TTL(key).String()
+	}
+	return state
+}
+
+// registerReplyCommand registers a command on the env's dispatcher that answers with one message in
+// the chat it was sent in, and returns its name. It is a command any member can use, so a test can
+// see whether the bot still answers.
+func (e *memberDeletionEnv) registerReplyCommand() string {
+	e.t.Helper()
+	const name = "selfdestructping"
+	e.dispatcher.AddHandler(helpers.NewBotCommand(name, func(b *gotgbot.Bot, ctx *ext.Context) error {
+		if _, err := ctx.EffectiveMessage.Reply(b, "pong", nil); err != nil {
+			return err
+		}
+		return ext.EndGroups
+	}))
+	return name
+}
+
+// repliesTo counts the sendMessage calls addressed to chatID.
+func (e *memberDeletionEnv) repliesTo(chatID int64) int {
+	e.t.Helper()
+	count := 0
+	for _, call := range e.fake.callsFor("sendMessage") {
+		if staffParamInt(call.Params, "chat_id") == chatID {
+			count++
+		}
+	}
+	return count
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"gorm.io/gorm"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
@@ -582,4 +583,100 @@ func TestMemberContentMessageExcludesServiceFields(t *testing.T) {
 	if memberContentMessage(nil) {
 		t.Error("memberContentMessage(nil) = true")
 	}
+}
+
+// failStaffGroupReads makes every query of the staff_groups table fail until the test ends, so the
+// Staff Group read of deletion.ScheduleBatch, deletionAct and the command wrapper all fail for real.
+func failStaffGroupReads(t *testing.T) {
+	t.Helper()
+	const name = "member-deletion-test:fail-staff-reads"
+	err := db.DB.Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == (models.StaffGroup{}).TableName() {
+			_ = tx.AddError(errors.New("staff group read failed"))
+		}
+	})
+	if err != nil {
+		t.Fatalf("register the failing staff read: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.DB.Callback().Query().Remove(name); err != nil {
+			t.Errorf("remove the failing staff read: %v", err)
+		}
+	})
+}
+
+// TestMemberDeletionStaffGroupNeverTouched proves DEL-07 for all three member rules (D-17, T-17-32):
+// in a Staff Group, with member:commands, member:edited and member:selfdestruct all stored and the
+// command wrapper installed, a member's command, a late edit and a plain message produce no
+// deleteMessage, no deleteMessages and no queue row after a flush and a worker cycle, and the same
+// holds when the Staff Group read fails. The control group deletes the command and the edit at once
+// and queues the message, so the test cannot pass because a rule is off.
+func TestMemberDeletionStaffGroupNeverTouched(t *testing.T) {
+	setup := func(t *testing.T) (*memberDeletionEnv, string) {
+		env := newSelfDestructEnv(t, memberSelfDestructRuleDelay)
+		useCommandDeletionProcessor(env.dispatcher, ext.BaseProcessor{})
+		env.storeMemberRule(deletion.KindMemberCommands, 0)
+		env.storeMemberRule(deletion.KindMemberEdited, memberEditedRuleDelay)
+		return env, env.registerReplyCommand()
+	}
+	// traffic sends the three kinds of member message and reports their IDs.
+	traffic := func(env *memberDeletionEnv, name string) (command, edit, plain int64) {
+		member := env.member()
+		command = env.sendMember(&member, commandMessage("/"+name))
+		edit = env.lateEdit(&member, 90, nil)
+		plain = env.sendMember(&member, func(m *gotgbot.Message) { m.Text = "plain" })
+		return command, edit, plain
+	}
+	untouched := func(t *testing.T, env *memberDeletionEnv, setNow func(time.Time)) {
+		t.Helper()
+		if got := memberDeleteTestFlush(t); got != 0 {
+			t.Fatalf("memberDeleteFlush() = %d, want 0: nothing may be offered or written", got)
+		}
+		setNow(env.now.Add(601 * time.Second))
+		env.pass()
+		if calls := env.deletes(env.chat.Id); len(calls) != 0 {
+			t.Fatalf("deleteMessage calls = %d, want none", len(calls))
+		}
+		if calls := env.fake.callsFor("deleteMessages"); len(calls) != 0 {
+			t.Fatalf("deleteMessages calls = %d, want none", len(calls))
+		}
+		if rows := env.queuedNoWait(env.chat.Id); len(rows) != 0 {
+			t.Fatalf("queue rows = %+v, want none", rows)
+		}
+	}
+
+	t.Run("control: an ordinary group deletes and queues", func(t *testing.T) {
+		env, name := setup(t)
+		setNow := selfDestructClock(t, env.now)
+		command, edit, plain := traffic(env, name)
+		if env.deletedMessage(env.chat.Id, command) != 1 || env.deletedMessage(env.chat.Id, edit) != 1 {
+			t.Fatalf("the command (%d) and the late edit (%d) must each be deleted once", command, edit)
+		}
+		if got := memberDeleteTestFlush(t); got < 1 {
+			t.Fatalf("memberDeleteFlush() = %d, want the plain message queued", got)
+		}
+		setNow(env.now.Add(601 * time.Second))
+		env.pass()
+		if env.deletedMessage(env.chat.Id, plain) == 0 && !slices.ContainsFunc(env.batchCalls(env.chat.Id),
+			func(batch []int64) bool { return slices.Contains(batch, plain) }) {
+			t.Fatalf("the plain message %d was never deleted", plain)
+		}
+	})
+	t.Run("a Staff Group", func(t *testing.T) {
+		env, name := setup(t)
+		setNow := selfDestructClock(t, env.now)
+		env.makeStaffGroup(env.chat.Id)
+		traffic(env, name)
+		untouched(t, env, setNow)
+	})
+	t.Run("a failing Staff Group read", func(t *testing.T) {
+		env, name := setup(t)
+		setNow := selfDestructClock(t, env.now)
+		mreqSwap(t, &deletionStaffLookup, func(int64) (*models.StaffGroup, error) {
+			return nil, errors.New("staff read failed")
+		})
+		failStaffGroupReads(t)
+		traffic(env, name)
+		untouched(t, env, setNow)
+	})
 }
