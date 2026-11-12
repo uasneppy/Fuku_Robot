@@ -56,7 +56,7 @@ func (p CommandDeletionProcessor) ProcessUpdate(d *ext.Dispatcher, b *gotgbot.Bo
 func commandDeletionAfter(b *gotgbot.Bot, ctx *ext.Context) {
 	defer error_handling.RecoverFromPanic("commandDeletion", "Deletion")
 
-	msg := ctx.Update.Message
+	msg := ctx.Message
 	if msg == nil || b == nil || msg.Chat.Id >= 0 {
 		return
 	}
@@ -136,7 +136,7 @@ func botCommandName(b *gotgbot.Bot, msg *gotgbot.Message) (string, bool) {
 		first = text[:end]
 	}
 	split := strings.SplitN(strings.ToLower(first), "@", 2)
-	if len(split) > 1 && split[1] != strings.ToLower(b.User.Username) {
+	if len(split) > 1 && split[1] != strings.ToLower(b.Username) {
 		return "", false
 	}
 	return stripCommandTrigger(split[0])

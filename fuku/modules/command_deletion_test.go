@@ -68,7 +68,7 @@ func TestCommandDeletionAfterAnswer(t *testing.T) {
 
 func TestCommandDeletionRawCommand(t *testing.T) {
 	env := newCommandDeletionEnv(t, ext.BaseProcessor{})
-	botName := env.bot.User.Username
+	botName := env.bot.Username
 	cases := []struct {
 		name  string
 		apply func(*gotgbot.Message)
