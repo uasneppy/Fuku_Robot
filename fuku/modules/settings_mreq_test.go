@@ -1415,7 +1415,8 @@ func TestSettingsControlActionAllowList(t *testing.T) {
 	})
 
 	t.Run("tg on a Deletion row control is refused in step 1", func(t *testing.T) {
-		for _, code := range []string{"sj", "sn", "bw", "ba"} {
+		// The three Member messages rows (Phase 17) are controls like the Phase 16 rows: st only.
+		for _, code := range []string{"sj", "sn", "bw", "ba", "mc", "me", "ms"} {
 			refused("tg "+code, env.groupFields(owner, "a", "tg", "p", "d", "t", code, "v", "1"))
 			refused("tg "+code+" v=n", env.groupFields(owner, "a", "tg", "p", "d", "t", code, "v", "n"))
 		}

@@ -933,6 +933,42 @@ func settingsGateDoorPress(t *testing.T, c settingsGateCase) string {
 	return "none"
 }
 
+// settingsGateDoorDeletionYes presses the Self-destruct card's Yes (the page action dy, plan 17-10) as
+// the person, who holds can_change_info when an administrator, so the gate alone decides. A press that
+// is refused answers an alert; one that is let in writes the rule and edits the menu.
+func settingsGateDoorDeletionYes(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	withFastDeletionPacer(t)
+	deletionCleanup(t, c.env.chat.Id)
+	var msgID int64
+	if !c.ownerPerson {
+		msgID = c.env.openMenu(c.env.admin)
+	}
+	c.apply()
+	person := c.person()
+	if c.ownerPerson {
+		msgID = c.env.openMenu(person)
+	} else {
+		listEditAdmin(c.env, c.env.chat, person, true)
+	}
+	edits := len(c.env.edits(c.env.chat.Id, msgID))
+	answers := c.env.answerCount()
+
+	c.env.press(person, msgID, c.env.groupFields(person, "a", "dy", "t", "ms", "v", "600", "e", settingsCardExpiry(time.Now())))
+
+	if got := c.env.answerCount() - answers; got != 1 {
+		t.Fatalf("the Yes was answered %d times, want once", got)
+	}
+	answer, alert := c.env.lastAnswer()
+	if alert {
+		return settingsGateClassify([]string{answer})
+	}
+	if len(c.env.edits(c.env.chat.Id, msgID)) > edits {
+		return "in"
+	}
+	return "none"
+}
+
 // settingsGateDoorPick presses a row of the private group list for the env's group as the
 // person. A pick that is refused answers an alert; one that is let in edits the list message
 // into the group's Main page.
@@ -1025,6 +1061,7 @@ func TestSettingsGateAllDoors(t *testing.T) {
 		{name: "anonymous re-entry", decide: settingsGateDoorAnonymous},
 		{name: "deep link", decide: settingsGateDoorDeepLink},
 		{name: "press", decide: settingsGateDoorPress},
+		{name: "deletion Yes", decide: settingsGateDoorDeletionYes},
 		{name: "pick", decide: settingsGateDoorPick},
 		{name: "typed reply", decide: settingsGateDoorTypedReply},
 	}

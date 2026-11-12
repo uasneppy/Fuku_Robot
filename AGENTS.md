@@ -1056,7 +1056,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never runs.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
-  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too). `settingsRightRefusalFor` is the one pure judgement of a right's
+  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
 
 ## Data
@@ -3483,6 +3483,28 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   own ID and type and the fixed clock's date, because the helper reads the chat from the answer). The shared staff fake gains
   `staffActionFake.sendDate` (nil means 1, so every earlier test is unchanged); the deletion environment sets it from
   `deletionNow()`, so no queued row lands in 1970.
+- Phase 17 plan 10 (the Member messages page safeguards) adds `fuku/modules/settings_deletion_member_safety_test.go`. The
+  three rules have no command, so each carries an authority test and a drift test in place of a parity test:
+  `TestSettingsAuthorityDeletionMember` (an administrator without `can_change_info` opens the section but every choice of
+  `mc`, `me`, `ms` and the card's Yes is the `settings_no_change_info` alert with nothing written, the right is judged again at
+  the Yes, a gated administrator is refused at the owner gate, the creator writes in both menu kinds),
+  `TestSettingsDeletionMemberStaffGroup` (no Deletion cell in a Staff Group, every forged member press and `dy` is the
+  invalid-request alert with no edit, no write and no read of the bot, an unreadable Staff Group row is the cannot-open edit,
+  no refusal names the Staff Group), `TestSettingsDriftDeletionMember` (the page and the command wrapper, the edit handler and
+  the self-destruct watcher through the real dispatcher on `newCommandDeletionEnv` plus `LoadMemberDeletion`, the batcher
+  drained and restored, the admin cache primed: a rule set on the page acts at the next message, Off stops it, a rule written
+  straight to the repository is drawn, a hand-written value a rule does not accept is Off on both sides, opening writes
+  nothing) and `TestSettingsDeletionMemberStale` (a snapshot drawn before another admin's write, a card's absolute value, a
+  press after the bot lost its right). `TestSettingsDeletionRightLine` and `TestSettingsDeletionCost` cover the member list,
+  rows and card through `settingsDelScreens`; `TestSettingsStaffPrivacy` adds the `unlisted values` data set and
+  `settingsPrivacyPhase17Run` (a private and a group-menu run of an administrator who is not the creator through the section
+  and the card's Yes); `TestSettingsControlActionAllowList` refuses `tg` on `mc`, `me` and `ms`; `TestSettingsGateAllDoors`
+  has a `deletion Yes` door (`dy` decides like every other door over the four owner worlds).
+  `TestSettingsDeletionPhase16ScreensUnchanged` (`settings_deletion_golden_test.go`, plan 17-09) is a characterization of the
+  Phase 16 screens whose digests are never re-recorded. Toolkit: `settingsDelEnv` and `settingsDelMenu` for the page,
+  `commandDeletionEnv` (the e2e environment with the Processor wrapper), `drainMemberDeleteQueue` and
+  `restoreMemberDeleteBatcher` for the batcher, `settingsDelDriftEnv`, `settingsDelDriftEdit` and `settingsDelDriftFlush` for
+  the drift test.
 
 ## Commits
 

@@ -299,6 +299,10 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					datas := map[string]settingsDelData{
 						"every rule set": settingsDelEveryRuleSet(),
 						"no rule":        {Rules: &deletion.Rules{ChatID: 1, Delays: map[string]int{}}},
+						// Phase 17: member rules holding values their rules do not accept, written by hand.
+						"unlisted values": {Rules: &deletion.Rules{ChatID: 1, Delays: map[string]int{
+							deletion.KindMemberCommands: 60, deletion.KindMemberEdited: 45, deletion.KindMemberSelfDestruct: 45, deletion.KindPinned: 45,
+						}}},
 					}
 					for rightName, right := range rights {
 						for dataName, data := range datas {
@@ -604,6 +608,14 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 	})
 	t.Run("a group menu Phase 16 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
 		settingsPrivacyPhase16Run(t, false)
+	})
+
+	// Phase 17: the same administrator drives the Member messages section and the Self-destruct card.
+	t.Run("a private Phase 17 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		settingsPrivacyPhase17Run(t, true)
+	})
+	t.Run("a group menu Phase 17 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		settingsPrivacyPhase17Run(t, false)
 	})
 
 	t.Run("a group menu run never names a Staff Group", func(t *testing.T) {
@@ -1037,6 +1049,127 @@ func settingsPrivacyPhase16Run(t *testing.T, private bool) {
 	} {
 		if strings.Contains(everything, leak) {
 			t.Errorf("a Phase 16 run of an admin who is not the creator received %q: %q", leak, everything)
+		}
+	}
+}
+
+// settingsPrivacyPhase17Run is the Phase 17 run of an administrator who is not the creator, in the
+// private menu or in a menu opened in the group, over a group linked to a Staff Group. It opens the
+// Member messages section and its rows, is refused every change and the card's Yes for want of
+// can_change_info, then sets Commands, Edited messages and Self-destruct (through the card) with the
+// right, sees every right line, a failed write and the unreadable right, and nothing the bot produced
+// names the Staff Group or the member the fake knows.
+func settingsPrivacyPhase17Run(t *testing.T, private bool) {
+	t.Helper()
+	mreqSwap(t, &settingsDelHereTimeout, 50*time.Millisecond)
+	env := newSettingsDelEnv(t)
+	editCleanup(t, env.chat.Id)
+	staffChat := settingsStaffTestOwnedStaffGroup(env.settingsEnv, settingsStaffPrivacyTitle)
+	linkLockdownGroupTo(env.lockdownEnv, staffChat)
+
+	moderator := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Moderator"}
+	held := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: settingsPrivacyMemberName, Username: "zzmarkeruser"}
+	memberReqCleanup(t, []int64{env.chat.Id}, []int64{moderator.Id, held.Id})
+	env.fake.setProfile(held.Id, held.FirstName, "", held.Username)
+	env.fake.setMemberRaw(env.chat.Id, moderator.Id, settingsHooksChangeInfoJSON(moderator.Id, false))
+
+	var (
+		msgID  int64
+		press  func(kv ...string)
+		chatID = env.chat.Id
+	)
+	if private {
+		msgID, chatID = 4748, moderator.Id
+		press = func(kv ...string) { env.pressPrivate(moderator, msgID, env.privateFields(env.chat.Id, kv...)) }
+	} else {
+		msgID = env.openMenu(moderator)
+		press = func(kv ...string) { env.press(moderator, msgID, env.groupFields(moderator, kv...)) }
+	}
+	choose := func(code, value string) { press("a", "st", "p", "d", "t", code, "v", value) }
+	yes := func(value string) { press("a", "dy", "t", "ms", "v", value, "e", settingsCardExpiry(time.Now())) }
+
+	// Without the right: the section and every row open, every change and the Yes are refused.
+	press("a", "op", "p", "d")
+	press("a", "dl", "t", "m")
+	for _, code := range []string{"mc", "me", "ms"} {
+		press("a", "dr", "t", code)
+	}
+	choose("mc", "0")
+	choose("me", "60")
+	choose("ms", "600")
+	yes("600")
+	// With the right: Commands, Edited messages and Self-destruct through its card, then Off again.
+	env.fake.setMemberRaw(env.chat.Id, moderator.Id, settingsHooksChangeInfoJSON(moderator.Id, true))
+	press("a", "dr", "t", "mc")
+	choose("mc", "0")
+	press("a", "dr", "t", "me")
+	choose("me", "60")
+	choose("me", "900")
+	press("a", "dr", "t", "ms")
+	choose("ms", "3600")
+	yes("3600")
+	choose("mc", "n")
+	choose("me", "n")
+	choose("ms", "86400")
+	// Every right line the bot can produce, on the list, a row and a card.
+	for _, raw := range []string{settingsDelBotJSON("member", false), settingsDelBotJSON("administrator", false), settingsDelBotJSON("creator", false)} {
+		env.setBot(raw)
+		press("a", "dl", "t", "m")
+		press("a", "dr", "t", "ms")
+		choose("ms", "21600")
+	}
+	env.scriptBot(false, staffFakeError(500, "Internal Server Error"))
+	press("a", "dl", "t", "m")
+	press("a", "dr", "t", "ms")
+	choose("ms", "300")
+	// A failed write redraws with the notice; a failed Yes does the same.
+	mreqSwap(t, &deletionRuleWrites, deletionRuleWriter{
+		Set:    func(context.Context, int64, string, int) error { return errors.New("write failed") },
+		Remove: func(context.Context, int64, string) error { return errors.New("write failed") },
+	})
+	press("a", "dr", "t", "me")
+	choose("me", "300")
+	yes("600")
+
+	var seen []string
+	for _, edit := range env.edits(chatID, msgID) {
+		seen = append(seen, fmt.Sprint(edit.Params["text"]))
+		for _, button := range settingsAllButtons(staffKeyboardOf(edit.Params["reply_markup"])) {
+			seen = append(seen, button.Text, button.CallbackData, button.Url)
+		}
+	}
+	for _, sent := range env.fake.sentTo(chatID) {
+		seen = append(seen, fmt.Sprint(sent.Params["text"]))
+	}
+	for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+		seen = append(seen, fmt.Sprint(answer.Params["text"]))
+	}
+	everything := strings.Join(seen, "\n")
+
+	if n := len(env.edits(chatID, msgID)); n < 20 {
+		t.Fatalf("the run edited the menu only %d times", n)
+	}
+	for _, want := range []string{
+		"settings_no_change_info", "settings_del_no_right", "settings_del_right_unknown", "common_settings_save_failed",
+		"settings_del_confirm_self", "settings_del_state_grace", "settings_del_state_after", "settings_del_state_on",
+	} {
+		if !containsMarker(everything, want) {
+			t.Errorf("the run never produced %s: %q", want, everything)
+		}
+	}
+	if delay, ok := env.stored(deletion.KindMemberSelfDestruct); !ok || delay != 3600 {
+		t.Errorf("stored self-destruct = %d (%v), want the 3600 s of the confirmed card", delay, ok)
+	}
+	if delay, ok := env.stored(deletion.KindMemberEdited); ok {
+		t.Errorf("stored edited = %d, want Off after the permitted press", delay)
+	}
+	for _, leak := range []string{
+		"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+		strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"), settingsStaffPrivacyDigits,
+		settingsPrivacyMemberName, "zzmarkeruser", strconv.FormatInt(held.Id, 10),
+	} {
+		if strings.Contains(everything, leak) {
+			t.Errorf("a Phase 17 run of an admin who is not the creator received %q: %q", leak, everything)
 		}
 	}
 }
