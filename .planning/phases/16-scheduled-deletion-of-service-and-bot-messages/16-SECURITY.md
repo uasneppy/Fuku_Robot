@@ -6,10 +6,10 @@ status: verified
 threats_open: 0
 threats_total: 42
 threats_closed: 42
-findings_open_nonblocking: 5
-findings_fixed: 0
-findings_accepted: 0
-hardening_pass: "pending (16-SECURITY-FIX.md)"
+findings_open_nonblocking: 0
+findings_fixed: 4
+findings_accepted: 1
+hardening_pass: "16-SECURITY-FIX.md (2026-11-12)"
 asvs_level: 1
 register_authored_at_plan_time: true
 created: "2026-11-12"
@@ -138,6 +138,23 @@ None reaches `high`; none blocks the phase. Dispositions are the orchestrator's,
   `Schedule` refuses a non-negative ID, so nothing is reachable today. *Disposition: fix* (defence in depth, one line, symmetric
   with IN-05).
 
+**Hardening pass result (`16-SECURITY-FIX.md`, commits `f768995..c808743`, each behaviour change a RED test commit then a GREEN
+fix, proved through CI's own gate, 251 top-level tests passed, none failed, only the PostgreSQL-only migration tests skipped,
+plus the whole settings family):**
+
+- **SEC-01, fixed** (`f768995` RED, `6dae7ef` GREEN, `85b3b99` gocyclo refactor). `memberReqFixedEdit` takes a `reschedule` flag
+  that is true only when the hold's stored `notice_msg_id` is positive and equals the pressed message's ID
+  (`memberReqIsOwnNotice`); a button pressed on another message, or a hold with no stored notice ID, writes no queue row, and
+  the unmute, answer and edit are unchanged.
+- **SEC-02 parts 1 and 2, fixed** (`681061f` RED, `62965b3` and `4f689bf` GREEN). A refused inline `service:*` delete runs
+  `deletionInlineDecideLatch`: a Redis `SET NX EX 600` guard `fuku:delete:chk:<chat>` and then the worker's live right check
+  (no Redis, a Redis error and a lost `SET NX` mean no check; only a live `cannot` writes the latch; bot kinds never). The
+  worker trusts the administrator flag for supergroup IDs (`deletionTrustAdminFlag`, IDs at or below -1000000000000), so an
+  administrator bot without the delete right is latched there; basic-group and positive IDs still distrust it.
+- **SEC-04, fixed** (`491bbf2`). The handler-groups page says the group `-5` filter is the deletable service message type.
+- **SEC-05, fixed** (`b45ac0a`). `deletionAct` refuses a zero or positive chat ID before any read or write on both branches.
+- **SEC-03 and SEC-02 part 3: accepted** (AR-1, AR-2), not changed.
+
 Information items with no action: a `FromNow` row with no earlier row gets `sent_at` equal to the tap time (the 47 h drop counts
 from the tap; harmless, Telegram refuses and the row is dropped quietly); Reset keeps the deletion rules, as for the other
 operational tables (asserted by the backup test); `can_change_info` without `can_delete_messages` is enough to make the bot
@@ -169,6 +186,13 @@ button are gone while the mute lasts 330 days (leave and rejoin still lifts it, 
 | AR-2 | SEC-03: `render.yaml` shutdown delay | pre-existing, owner's deploy checklist; deletion is correct under SIGKILL |
 | AR-3 | RV NEW-01 (corrected wording above) | one owner-declined deletion of the bot's own message, bounded by 90 s |
 | AR-4 | After the 24 hour cap a mute notice and its button are gone while the mute lasts | D-14: leave and rejoin lifts the mute, `/unmute` and an approval remain |
+| AR-5 | HN-01 (low): the inline latch guard is taken even when the live check answers unknown (a 429, 5xx or timeout), so a transient fault means no retry of that decision for 10 minutes | releasing the guard on unknown would reopen an unbounded loop during a Telegram outage; the cost is one more refused paced call per delete for at most 10 minutes, bounded by the inline cap |
+| AR-6 | HN-02 (low): a basic group whose administrator bot lacks the delete right is never latched (the flag stays distrusted there), so each refused delete costs one paced call | the worker has no chat type and a false latch in a basic group is worse; the bot is expected to sit in supergroups for the features this milestone adds; bounded by the same inline cap and the durable queue |
+| AR-7 | HN-03 (info): during a rolling deploy replicas on the old code have neither the guard nor the supergroup trust | transient, like the other rolling-deploy caveats of AGENTS.md; the fixes are additive |
+
+HN-04 (info): the subtest name "the inline path latches a gone chat and never latches a refused message" in `TestDeletionLatch`
+now slightly overstates (a refused pin makes one live read, never writes a latch unless the live answer is `cannot`); the test
+passes and asserts the safe behaviour, the name is left.
 
 ---
 
@@ -178,6 +202,7 @@ button are gone while the mute lasts 330 days (leave and rejoin still lifts it, 
 |------|-------|--------|
 | 2026-11-12 | `gsd-security-auditor` at `b5ad8e9`, ASVS L1 with L2 traces, wider mandate | 42/42 threats CLOSED, `threats_open: 0`; SEC-01 and SEC-02 (low), SEC-03 to SEC-05 (info); RV NEW-01 challenged, RV NEW-04 closed on PostgreSQL 16 |
 | 2026-11-12 | orchestrator dispositions | SEC-01, SEC-02 (1)(2), SEC-04, SEC-05 fix; SEC-03 and SEC-02 (3) accepted; hardening pass next |
+| 2026-11-12 | hardening pass `f768995..c808743` (`16-SECURITY-FIX.md`), re-verified by the orchestrator | SEC-01, SEC-02 (1)(2), SEC-04, SEC-05 fixed test first; HN-01..HN-04 accepted (AR-5..AR-7); build, vet, `go.mod`/`go.sum`, skip gate, gofmt, lint stand-in, `make check-docs`, `make check-translations` and the touched families all pass; the full suite runs in CI |
 
 | Threats found | Closed | Open |
 |---------------|--------|------|
