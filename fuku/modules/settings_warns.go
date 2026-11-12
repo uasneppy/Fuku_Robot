@@ -116,23 +116,28 @@ func settingsWarnsActionWord(tr *i18n.Translator, mode string) string {
 }
 
 // renderSettingsWarns draws the Warnings page: the limit line, the action line, the hint, the
-// stepper and the choice of the action. Only a mode /setwarnmode accepts is marked.
+// stepper and the choice of the action. Only a mode /setwarnmode accepts is marked; any other
+// stored action gets the inert line.
 func renderSettingsWarns(v settingsView, s *models.WarnSettings, notice string) settingsScreen {
 	body := []string{
 		settingsText(v.Tr, "settings_warns_limit", i18n.TranslationParams{"n": s.WarnLimit}),
 		settingsText(v.Tr, "settings_warns_action", i18n.TranslationParams{
 			"action": settingsWarnsActionWord(v.Tr, s.WarnMode),
 		}),
-		"",
-		settingsText(v.Tr, "settings_warns_hint"),
 	}
-	k := newSettingsKeyboard(v)
-	k.row(settingsStepperRow(k, settingsPageWarns, settingsWarnsLimitKey, s.WarnLimit,
-		[]int{-10, -1, 1, 10}, settingsWarnsStepTarget, strconv.Itoa(s.WarnLimit))...)
+	// A stored tban, tmute or empty action applies nothing at the limit (the warn module acts
+	// on ban, kick and mute only), so the page says so and marks no choice. A press of Mute,
+	// Ban or Kick replaces it.
 	selected := ""
 	if slices.Contains(warnSettingsModes, s.WarnMode) {
 		selected = s.WarnMode
+	} else {
+		body = append(body, settingsText(v.Tr, "settings_warns_action_inert"))
 	}
+	body = append(body, "", settingsText(v.Tr, "settings_warns_hint"))
+	k := newSettingsKeyboard(v)
+	k.row(settingsStepperRow(k, settingsPageWarns, settingsWarnsLimitKey, s.WarnLimit,
+		[]int{-10, -1, 1, 10}, settingsWarnsStepTarget, strconv.Itoa(s.WarnLimit))...)
 	k.row(settingsChoiceRow(k, settingsPageWarns, settingsWarnsModeKey, []settingsOption{
 		{Value: "mute", Label: settingsText(v.Tr, "settings_opt_mute")},
 		{Value: "ban", Label: settingsText(v.Tr, "settings_opt_ban")},

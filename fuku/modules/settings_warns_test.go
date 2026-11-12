@@ -16,6 +16,7 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/warns"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // settingsWarnsCleanup deletes the chats' warn settings rows and cache keys when the test
@@ -489,6 +490,227 @@ func TestSettingsParityWarnMode(t *testing.T) {
 		}
 		if row, _ := settingsWarnsRow(t, modeChat.Id); row.WarnLimit != 3 || row.WarnMode != "kick" {
 			t.Errorf("first action write stored %+v, want limit 3 and mode kick", row)
+		}
+	})
+}
+
+func TestSettingsWarnsInertAction(t *testing.T) {
+	const menuMsgID = 6363
+
+	for _, tc := range []struct {
+		name, mode, wantWord string
+	}{
+		{"tban", "tban", staffMarker("settings_opt_tban")},
+		{"tmute", "tmute", staffMarker("settings_opt_tmute")},
+		{"empty", "", staffMarker("settings_state_not_set")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsEnv(t)
+			settingsWarnsCleanup(t, env.chat.Id)
+			settingsWarnsSeed(t, env.chat.Id, 5, tc.mode)
+
+			msgID := env.openMenu(env.admin)
+			mainText, mainKeyboard := env.lastEdit(env.chat.Id, msgID)
+			line, found := settingsMainStateLine(mainText, "settings_page_warns")
+			if !found || !strings.Contains(line, tc.wantWord) {
+				t.Errorf("Main status line = %q (found %v), want the word %q", line, found, tc.wantWord)
+			}
+			button, ok := settingsPageButton(t, mainKeyboard, settingsPageWarns)
+			if !ok {
+				t.Fatal("Main has no Warnings button")
+			}
+			env.pressRaw(env.chat, env.admin, msgID, button.CallbackData)
+
+			text, keyboard := env.lastEdit(env.chat.Id, msgID)
+			if want := staffMarker("settings_warns_action") + " " + tc.wantWord; !strings.Contains(text, want) {
+				t.Errorf("page %q does not show %q on the action line", text, want)
+			}
+			if !strings.Contains(text, staffMarker("settings_warns_action_inert")) {
+				t.Errorf("page %q does not carry the inert line", text)
+			}
+			if len(keyboard) != 3 || len(keyboard[1]) != 3 {
+				t.Fatalf("keyboard widths = %v, want the three choices still offered", settingsWarnsWidths(keyboard))
+			}
+			for _, choice := range keyboard[1] {
+				if strings.HasPrefix(choice.Text, "✅ ") {
+					t.Errorf("choice %q is marked for a stored %q", choice.Text, tc.mode)
+				}
+			}
+
+			settingsWarnsPress(t, env, env.chat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", "mute")
+			if row, _ := settingsWarnsRow(t, env.chat.Id); row.WarnMode != "mute" || row.WarnLimit != 5 {
+				t.Errorf("row = %+v after Mute, want mode mute and limit 5 kept", row)
+			}
+			text, _ = env.lastEdit(env.chat.Id, menuMsgID)
+			if strings.Contains(text, staffMarker("settings_warns_action_inert")) ||
+				!strings.Contains(text, staffMarker("settings_warns_action")+" "+staffMarker("settings_opt_mute")) {
+				t.Errorf("page %q after Mute still says the action is inert or does not show Mute", text)
+			}
+		})
+	}
+
+	t.Run("a stored action is escaped", func(t *testing.T) {
+		newSettingsEnv(t) // installs the marker locale the translator reads
+		screen := renderSettingsWarns(settingsView{
+			Tr: i18n.MustNewTranslator("en"), OwnerKey: "u", OwnerValue: "9999999999",
+			GroupID: -1001234567890, GroupTitle: "G", OpenerName: "N",
+		}, &models.WarnSettings{WarnLimit: 3, WarnMode: "<b>&x"}, "")
+		if strings.Contains(screen.Text, "<b>&x") || !strings.Contains(screen.Text, "&lt;b&gt;&amp;x") {
+			t.Errorf("page %q does not show the stored action escaped", screen.Text)
+		}
+	})
+}
+
+func TestSettingsWarnsBounds(t *testing.T) {
+	const menuMsgID = 6464
+
+	// bound presses the stepper button at index i of a chat stored at limit and checks the
+	// press wrote nothing and answered the toast.
+	bound := func(t *testing.T, limit int, wantKey string, indexes ...int) {
+		t.Helper()
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		settingsWarnsSeed(t, env.chat.Id, limit, "ban")
+		msgID := env.openMenu(env.admin)
+		_, mainKeyboard := env.lastEdit(env.chat.Id, msgID)
+		page, _ := settingsPageButton(t, mainKeyboard, settingsPageWarns)
+		env.pressRaw(env.chat, env.admin, msgID, page.CallbackData)
+		stepper := settingsWarnsStepper(t, env, msgID)
+
+		for _, i := range indexes {
+			if stepper[i].Text != settingsBoundLabel {
+				t.Errorf("limit %d: stepper button %d = %q, want the bound mark", limit, i, stepper[i].Text)
+			}
+			if got := settingsButtonFields(t, stepper[i])["v"]; got != fmt.Sprint(limit) {
+				t.Errorf("limit %d: stepper button %d targets %q, want %d", limit, i, got, limit)
+			}
+			before := settingsMenuMarkOf(env)
+			env.pressRaw(env.chat, env.admin, msgID, stepper[i].CallbackData)
+			after := settingsMenuMarkOf(env)
+			if after.answers-before.answers != 1 || after.edits != before.edits {
+				t.Errorf("limit %d: press %d answered %d times and edited %d messages, want one toast and no edit",
+					limit, i, after.answers-before.answers, after.edits-before.edits)
+			}
+			answer, alert := env.lastAnswer()
+			if alert || !strings.Contains(answer, staffMarker(wantKey)) {
+				t.Errorf("limit %d: answer = %q (alert %v), want the toast %s", limit, answer, alert, wantKey)
+			}
+			if row, _ := settingsWarnsRow(t, env.chat.Id); row.WarnLimit != limit || row.WarnMode != "ban" {
+				t.Errorf("limit %d: row = %+v, want it untouched", limit, row)
+			}
+		}
+	}
+
+	t.Run("the lowest limit", func(t *testing.T) { bound(t, 1, "settings_min_value", 0, 1) })
+	t.Run("the highest limit", func(t *testing.T) { bound(t, 100, "settings_max_value", 3, 4) })
+
+	t.Run("a limit above the highest is shown as stored and every step clamps to 100", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		settingsWarnsSeed(t, env.chat.Id, 120, "ban")
+		msgID := env.openMenu(env.admin)
+		_, mainKeyboard := env.lastEdit(env.chat.Id, msgID)
+		page, _ := settingsPageButton(t, mainKeyboard, settingsPageWarns)
+		env.pressRaw(env.chat, env.admin, msgID, page.CallbackData)
+
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		if !strings.Contains(text, staffMarker("settings_warns_limit")+" 120") {
+			t.Errorf("page %q does not show the stored limit 120", text)
+		}
+		stepper := settingsWarnsStepper(t, env, msgID)
+		if stepper[2].Text != "120" {
+			t.Errorf("value button = %q, want 120", stepper[2].Text)
+		}
+		for i, button := range stepper {
+			if i == 2 {
+				continue
+			}
+			if got := settingsButtonFields(t, button)["v"]; got != "100" {
+				t.Errorf("step button %d targets %q, want 100", i, got)
+			}
+		}
+		env.pressRaw(env.chat, env.admin, msgID, stepper[0].CallbackData)
+		if row, _ := settingsWarnsRow(t, env.chat.Id); row.WarnLimit != 100 {
+			t.Errorf("stored limit = %d after a step down, want 100", row.WarnLimit)
+		}
+	})
+
+	t.Run("a bound press is not a write through the seam", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		settingsWarnsSeed(t, env.chat.Id, 1, "kick")
+		writes := 0
+		previous := warnSettingsWrites
+		warnSettingsWrites.Limit = func(int64, int) error { writes++; return nil }
+		t.Cleanup(func() { warnSettingsWrites = previous })
+
+		settingsWarnsPress(t, env, env.chat, menuMsgID, "a", "st", "p", "n", "t", "l", "v", "1")
+		if writes != 0 {
+			t.Errorf("a step at the lowest limit made %d writes, want none", writes)
+		}
+	})
+}
+
+func TestSettingsWarnsForged(t *testing.T) {
+	const menuMsgID = 6565
+
+	forged := []struct {
+		name   string
+		fields []string
+		extra  map[string]string
+		both   bool
+	}{
+		{name: "tg on the limit", fields: []string{"a", "tg", "p", "n", "t", "l", "v", "5"}},
+		{name: "tg on the action", fields: []string{"a", "tg", "p", "n", "t", "m", "v", "ban"}},
+		{name: "empty limit", fields: []string{"a", "st", "p", "n", "t", "l", "v", ""}},
+		{name: "limit 1000", fields: []string{"a", "st", "p", "n", "t", "l", "v", "1000"}},
+		{name: "limit a1", fields: []string{"a", "st", "p", "n", "t", "l", "v", "a1"}},
+		{name: "upper-case action", fields: []string{"a", "st", "p", "n", "t", "m", "v", "Mute"}},
+		{name: "empty action", fields: []string{"a", "st", "p", "n", "t", "m", "v", ""}},
+		{name: "action of 11 letters", fields: []string{"a", "st", "p", "n", "t", "m", "v", "abcdefghijk"}},
+		{name: "action with a digit", fields: []string{"a", "st", "p", "n", "t", "m", "v", "ban1"}},
+		{name: "action of 1 on the toggle shape", fields: []string{"a", "st", "p", "n", "t", "m", "v", "1"}},
+		{name: "an extra key", fields: []string{"a", "st", "p", "n", "t", "l", "v", "5"}, extra: map[string]string{"x": "1"}},
+		{name: "an unknown control", fields: []string{"a", "st", "p", "n", "t", "x", "v", "5"}},
+		{name: "c and u together", fields: []string{"a", "st", "p", "n", "t", "l", "v", "5"}, both: true},
+	}
+	for _, tc := range forged {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsEnv(t)
+			settingsWarnsCleanup(t, env.chat.Id)
+			fields := env.groupFields(env.admin, tc.fields...)
+			for k, v := range tc.extra {
+				fields[k] = v
+			}
+			if tc.both {
+				fields["c"] = "-1001" // short, so the pair still fits the 64-byte cap
+			}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("forged press %v did not encode", fields)
+			}
+			before := settingsMenuMarkOf(env)
+			env.pressRaw(env.chat, env.admin, menuMsgID, data)
+			settingsMenuWantRefused(t, env, before, "common_callback_invalid_request", true)
+			if _, has := settingsWarnsRow(t, env.chat.Id); has {
+				t.Error("a forged press wrote a row")
+			}
+		})
+	}
+
+	t.Run("a well-formed word the command refuses is a notice and writes nothing", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		settingsWarnsCleanup(t, env.chat.Id)
+		settingsWarnsSeed(t, env.chat.Id, 5, "ban")
+		for _, word := range []string{"tban", "tmute", "warn", "xyz"} {
+			settingsWarnsPress(t, env, env.chat, menuMsgID, "a", "st", "p", "n", "t", "m", "v", word)
+			text, _ := env.lastEdit(env.chat.Id, menuMsgID)
+			if !strings.Contains(text, staffMarker("warns_mode_unknown")) {
+				t.Errorf("v=%s redrew %q, want the command's warns_mode_unknown as a notice", word, text)
+			}
+			if row, _ := settingsWarnsRow(t, env.chat.Id); row.WarnMode != "ban" || row.WarnLimit != 5 {
+				t.Errorf("v=%s changed the row to %+v", word, row)
+			}
 		}
 	})
 }
