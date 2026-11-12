@@ -104,3 +104,49 @@ message with `/report` and check no admin is notified. Turn Reports on from the 
 notified. Compare `/reports` after each change.
 
 **Record:** off: nobody notified: yes / no. On: admins notified: yes / no. `/reports` agrees with the page: yes / no.
+
+### 7. The Language page redraws a group menu on two replicas within 10 s
+
+**Why:** a group menu redraws in the new language from the code just written, but `chat_lang`, `chat_settings` and `chat` are
+not in `skipLocal`, so another replica can answer in the old language for up to `CACHE_LOCAL_TTL` (10 s by default), exactly
+as after `/lang`. Only a live deployment with two replicas shows how long the old language lasts.
+
+**Steps:** with two replicas behind one bot, open `/settings` in a test group, Language, and pick another language. Send
+`/lang` and any command that replies, repeatedly, for about 15 seconds, and note which language each reply is in and when it
+changes.
+
+**Record:** the page, its notice and its Back and Close redrawn in the new language at once: yes / no. The longest time a reply
+came in the old language: ___ s (accepted up to 10 s).
+
+### 8. A private menu keeps the opener's language and never writes it
+
+**Why:** the page's private menu names the group's language and writes it, while the opener's own language (`/lang` in
+private) is a different setting that the page must never change.
+
+**Steps:** with your own language set to English (`/lang` in a private chat with the bot), open `/settings` in private, pick a
+group that answers in another language, Language, and pick a third language. Then send `/lang` in the private chat.
+
+**Record:** the page stayed in English and named the group's new language: yes / no. `/lang` still says your own language is
+English: yes / no.
+
+### 9. The eight language cells on a narrow phone in Hindi, Russian and Ukrainian
+
+**Why:** each cell is a flag, a space and the language's own name (at most 20 code points, `Bahasa Indonesia` the longest) and
+the stored one shows a check mark in place of its flag. Telegram clips a button label to the screen width, which only a real
+phone shows.
+
+**Steps:** set the group to Hindi, then Russian, then Ukrainian and open the Language page on a narrow phone (about 320 dp wide)
+in a group menu and a private menu.
+
+**Record:** every cell readable without clipping, two to a row: yes / no, per language. The check mark replaces the flag on the
+stored one: yes / no.
+
+### 10. The flag width of `Bahasa Indonesia`
+
+**Why:** the Indonesian flag is two regional-indicator code points and renders as one wide glyph on some clients and as the two
+letters `ID` on others; the cell length limit counts code points, not glyphs.
+
+**Steps:** open the Language page on Android, iOS and Telegram Desktop and look at the Bahasa Indonesia cell, unmarked and then
+marked.
+
+**Record:** the cell fits on one line on each client: yes / no. The marked cell (`✅ Bahasa Indonesia`) fits: yes / no.

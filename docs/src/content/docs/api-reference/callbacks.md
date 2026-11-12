@@ -361,6 +361,18 @@ invalid request, refused before any lookup) with `v` exactly `0` or `1`, the abs
 Each press needs the right of its command (see the permissions reference) and is refused with that command's own text. The
 largest button of the page is 45 bytes in a private menu and 41 in a group menu.
 
+The Language page (`u`, between the Switches and Access pages of Main) has one control, `l`, `st` only (a `tg` is an invalid
+request, refused before any lookup):
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| Group language | `l` | exactly two lower-case ASCII letters | one of `uk`, `en`, `es`, `fr`, `hi`, `ru`, `pt`, `id`; any other two-letter code is refused with `language_invalid_selection` as a notice and writes nothing; a press of the stored language writes nothing |
+
+The grid shows the enabled languages (`ENABLED_LOCALES`), two to a row, each in its own words, with the stored language marked
+by a check mark in place of its flag. The press writes through the function the language buttons of `/lang` use, and never
+touches the user's own language. In a menu opened in the group the page is redrawn in the new language; a menu opened in
+private stays in the opener's language. The largest button of the page is 46 bytes in a private menu and 42 in a group menu.
+
 ### Warns
 
 #### `rmAllChatWarns`
