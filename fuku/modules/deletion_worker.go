@@ -21,8 +21,11 @@ import (
 var (
 	// deletionWorkerTick is how often the worker looks for work when nothing woke it.
 	deletionWorkerTick = time.Second
-	// deletionBatch is how many due rows one cycle claims.
-	deletionBatch = 200
+	// deletionBatch is how many due rows one cycle claims. A 1000-row claim costs about 0.1 ms
+	// with 520,000 pending rows (the due index serves it) and stays far under the 90 s cycle guard
+	// and the 2 minute stale claim; each chat still gets one paced call per chunk of 100 rows
+	// (D-32).
+	deletionBatch = 1000
 	// deletionChunk is the most message IDs one deleteMessages call carries (Telegram's limit).
 	deletionChunk = 100
 	// deletionStaleClaim is how old a claim must be before it is taken to belong to a worker
@@ -322,7 +325,8 @@ func (r *deletionChatRun) drop(rows ...models.ScheduledDeletion) {
 	r.dropped += len(rows)
 }
 
-// process screens the chat's rows (latch, Staff Group) and then deletes them in chunks.
+// process screens the chat's rows (latch, Staff Group, the self-destruct rule) and then deletes them
+// in chunks.
 func (r *deletionChatRun) process() {
 	rows := r.screenLatch(r.rows)
 	if len(rows) == 0 {
@@ -340,11 +344,48 @@ func (r *deletionChatRun) process() {
 		r.drop(rows...)
 		return
 	}
+	rows = r.screenSelfDestruct(rows)
+	if len(rows) == 0 {
+		return
+	}
 	for start := 0; start < len(rows) && !r.halted(); start += deletionChunk {
 		r.chunk(r.pendingOf(rows[start:min(start+deletionChunk, len(rows))]))
 	}
 	log.Debugf("[Deletion] chat %d: %d deleted, %d dropped, %d put back of %d claimed",
 		r.chatID, r.deleted, r.dropped, r.putBack, len(r.rows))
+}
+
+// screenSelfDestruct re-checks the chat's claimed member:selfdestruct rows against the chat's current
+// rule, with one cached rules read per chat per cycle, and returns the rows that may be deleted.
+// Nothing is deleted after the owner turned the rule off except a call already in flight (D-26b): a
+// row queued before the switch, by a batch that raced it or by another replica, is completed
+// without a call when the rule is absent or holds a value the kind does not accept, and is put
+// back free, with no attempt counted, when the rules cannot be read (unknown never deletes, D-33).
+// Rows of every other kind pass untouched.
+func (r *deletionChatRun) screenSelfDestruct(rows []models.ScheduledDeletion) []models.ScheduledDeletion {
+	var selfDestruct, rest []models.ScheduledDeletion
+	for _, row := range rows {
+		if row.Kind == deletion.KindMemberSelfDestruct {
+			selfDestruct = append(selfDestruct, row)
+		} else {
+			rest = append(rest, row)
+		}
+	}
+	if len(selfDestruct) == 0 {
+		return rows
+	}
+	rules, err := deletionRulesLookup(r.cycle.ctx, r.chatID)
+	if err != nil || rules == nil {
+		log.Warnf("[Deletion] could not read the rules of chat %d to screen self-destruct rows: %v", r.chatID, err)
+		r.cycle.release(selfDestruct, false)
+		return rest
+	}
+	delay, present := rules.Delays[deletion.KindMemberSelfDestruct]
+	if !present || deletion.ValidateRuleDelay(deletion.KindMemberSelfDestruct, delay) != nil {
+		r.drop(selfDestruct...)
+		return rest
+	}
+	return rows
 }
 
 // screenLatch drops the rows of a kind the chat's latch stops and returns the rest.

@@ -1653,8 +1653,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   kind bounded by a limit (`SELECT count(*) FROM (SELECT 1 ... LIMIT n)`, served by `uk_scheduled_deletions_message`) and
   `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)`; no migration was added for them.
   The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
-  never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 200 due rows per cycle
-  (`deletionBatch`), releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
+  never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 1000 due rows per cycle
+  (`deletionBatch`) and screens the claimed member:selfdestruct rows against the chat's current rule, releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
   90 s after its claim (`deletionCycleGuard`, under the stale release, so a live cycle's rows are never handed to a second
   replica: what it has not finished is released free before it returns), drops a row whose `sent_at` is more than 47 hours
   old (`deletionDropAge`) with no call, and gives a row three counted tries (`deletionMaxAttempts`, a 5xx, a transport error or a per-call timeout; a 429
@@ -2183,11 +2183,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Logs carry the chat ID only, never a message ID, text or member.
 - Deletion worker (`deletion_worker.go`, `deletion_right.go`): `StartDeletionWorker` runs a pass at start, then one per
   `deletionWorkerTick` (1 s) or wake, a pass being cycles back to back until one settles nothing; `runDeletionCycle` starts with
-  `defer error_handling.RecoverFromPanic`. The cycle order is fixed (research S-05): release stale claims, claim up to 200
-  rows with one conditional update read by token, drop the rows whose message is over 47 hours old, then per chat in
+  `defer error_handling.RecoverFromPanic`. The cycle order is fixed (research S-05): release stale claims, claim up to 1000
+  rows with one conditional update read by token (`deletionBatch`; about 0.1 ms with 520,000 pending rows, far under the 90 s cycle guard and the 2 minute stale claim), drop the rows whose message is over 47 hours old, then per chat in
   ascending chat ID order: the latch (a `gone` value drops every kind of the chat, a `service` value drops its `service:*` and
   `member:*` rows (`deletion.NeedsDeleteRight`) and lets `bot:*` through), a fresh Staff Group read through `deletionStaffLookup` (a row drops the chat's rows with no
-  call, an error releases them free), then one paced `deleteMessages` call per chunk of at most 100 IDs. A success
+  call, an error releases them free), the self-destruct rule screen, then one paced `deleteMessages` call per chunk of at most 100 IDs. A success
   completes the chunk. A failure is read by `deletionClassify`: retry-free (a 429 past the pacer's retries, a shed pacer, a
   cancelled context) releases every unsettled row free and ends the cycle, so the next cycle's first call fails at once
   under the shared block with no request; gone sets the `gone` latch and drops the chat's claimed and pending rows;
@@ -2196,6 +2196,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `DropChatPending`, the latch) runs on `context.WithoutCancel` with its own 5 s bound through `deletionCycle.writeContext`,
   never the run context a shutdown cancels. The cycle logs one debug line per chat batch with counts and the chat ID, and
   never a message ID, a claim token or text (`TestDeletionWorkerLogsNoMessageIDs`); a dropped row has no line.
+  Throughput (D-32): a chat costs one paced call per chunk of 100 per cycle, so a cycle makes at most the sum over its chats of
+  the rows of the chat divided by 100, rounded up, calls (40 chats of 25 due rows are one cycle of 40 calls,
+  `TestDeletionWorkerManyChats`); with N chats due together that drains about 10,000 divided by N rows a second per chat,
+  capped at 1,000 a second by the pacer's 100 ms interval. The self-destruct rule screen (`screenSelfDestruct`, D-26b) runs after
+  the Staff Group read and before the first chunk: one cached `deletionRulesLookup` per chat per cycle on the cycle context
+  judges the chat's claimed `member:selfdestruct` rows, which are completed with no call when the rule is absent or holds a
+  value `deletion.ValidateRuleDelay` refuses (nothing is deleted after the owner switched it off except a call already in
+  flight) and put back free, with no attempt counted, when the rules cannot be read (unknown never deletes); the rows of every
+  other kind pass untouched (`TestDeletionWorkerScreensSelfDestructOff`).
   The service latch is set only after a live check: when a `service:*` or `member:*` message is refused with a message-level answer, once
   per chat per cycle `deletionDecideServiceLatch` reads the bot's own member record through the pacer
   (`deletionReadBotRight`, classified by `deletionClassifyBotRight` from status and error code only, never a description:
