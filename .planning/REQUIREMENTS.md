@@ -49,18 +49,18 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **MREQ-12**: The channel rule is offered only in a group linked to a channel, and checks that the member is subscribed to that channel.
 - [x] **MREQ-13**: The Russian, Arabic and Chinese name rules check the member's first and last name: Russian-only letters (ы, ъ, э, ё), Arabic script and Chinese characters. The page says these are letter-based and can also catch related languages. Invisible or whitespace-only characters do not count as a last name.
 - [x] **MREQ-14**: The AI spam-name rule sends only a member's names (first name, last name, username) to Claude Haiku, on join and when the names change, never message text. An established member's names are first recorded without a call. Verdicts are cached and hourly budgets cap the cost. `ENABLE_AISPAM=false` or a missing Anthropic key turns the rule off. No verdict means no punishment.
-- [ ] **MREQ-15**: Requirement notices are deleted automatically when the group's "automatic punishments" deletion timer is set.
+- [x] **MREQ-15**: Requirement notices are deleted automatically when the group's "automatic punishments" deletion timer is set.
 
 ### Message deletion
 
-- [ ] **DEL-01**: A Service messages page sets each Telegram service-message type (member joined, member left, new photo, new title, pinned message, forum topics, boosts, video chats, auto-delete timer changes and the other types Telegram sends) to keep, delete immediately, or delete after N seconds. Joined and left share storage with the existing `/cleanservice` setting.
-- [ ] **DEL-02**: A Bot messages page sets each kind of the bot's own message (welcome, goodbye, rules, automatic punishments, manual punishment replies to `/ban`, `/mute`, `/kick`, `/warn` and the like) to keep or delete after N minutes.
+- [x] **DEL-01**: A Service messages page sets each Telegram service-message type (member joined, member left, new photo, new title, pinned message, forum topics, boosts, video chats, auto-delete timer changes and the other types Telegram sends) to keep, delete immediately, or delete after N seconds. Joined and left share storage with the existing `/cleanservice` setting.
+- [x] **DEL-02**: A Bot messages page sets each kind of the bot's own message (welcome, goodbye, rules, automatic punishments, manual punishment replies to `/ban`, `/mute`, `/kick`, `/warn` and the like) to keep or delete after N minutes.
 - [ ] **DEL-03**: With "Delete commands" on, every member's command in the group (admins' included) is deleted after the bot has answered it.
 - [ ] **DEL-04**: With "Delete edited messages" on, a member's message edited after a grace period (1 minute by default, adjustable on the page) is deleted. Admins and approved users are exempt.
 - [ ] **DEL-05**: With "Self-destruct" on, every member message is deleted N minutes after it was sent. Admins, approved users and pinned messages are exempt.
-- [ ] **DEL-06**: Scheduled deletions survive restarts and run once across replicas. Delays are capped below Telegram's 48-hour limit, and a deletion too old for Telegram is dropped quietly.
-- [ ] **DEL-07**: Deletion never touches Staff Group summaries and cards, lockdown alerts, captcha challenges, log-channel posts or anything in a Staff Group.
-- [ ] **DEL-08**: When the bot lacks the right to delete messages, every deletion page says so instead of failing silently.
+- [x] **DEL-06**: Scheduled deletions survive restarts and run once across replicas. Delays are capped below Telegram's 48-hour limit, and a deletion too old for Telegram is dropped quietly.
+- [x] **DEL-07**: Deletion never touches Staff Group summaries and cards, lockdown alerts, captcha challenges, log-channel posts or anything in a Staff Group.
+- [x] **DEL-08**: When the bot lacks the right to delete messages, every deletion page says so instead of failing silently.
 
 ### Remaining settings pages
 
@@ -165,15 +165,15 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | MREQ-12 | Phase 14 | Complete |
 | MREQ-13 | Phase 13 | Complete |
 | MREQ-14 | Phase 15 | Complete |
-| MREQ-15 | Phase 16 | Pending |
-| DEL-01 | Phase 16 | Pending |
-| DEL-02 | Phase 16 | Pending |
+| MREQ-15 | Phase 16 | Complete |
+| DEL-01 | Phase 16 | Complete |
+| DEL-02 | Phase 16 | Complete |
 | DEL-03 | Phase 17 | Pending |
 | DEL-04 | Phase 17 | Pending |
 | DEL-05 | Phase 17 | Pending |
-| DEL-06 | Phase 16 | Pending |
-| DEL-07 | Phase 16 | Pending |
-| DEL-08 | Phase 16 | Pending |
+| DEL-06 | Phase 16 | Complete |
+| DEL-07 | Phase 16 | Complete |
+| DEL-08 | Phase 16 | Complete |
 | PAGE-01 | Phase 18 | Pending |
 | PAGE-02 | Phase 18 | Pending |
 | PAGE-03 | Phase 18 | Pending |
