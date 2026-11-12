@@ -34,6 +34,7 @@ func newSettingsDelEnv(t *testing.T) *settingsDelEnv {
 	withFastDeletionPacer(t)
 	deletionCleanup(t, env.chat.Id)
 	staffCleanup(t, env.chat.Id)
+	LoadGreetings(env.dispatcher)
 	script := &deletionScriptClient{BotClient: env.fake, fake: env.fake}
 	env.bot.BotClient = script
 	env.fake.setBotMember(env.chat.Id, lockdownBotAdminJSON(false, true, false))
@@ -55,6 +56,8 @@ type settingsDelMenu struct {
 	msgID   int64
 	chat    gotgbot.Chat
 	private bool
+	// actor is who presses: the owner unless the menu was opened by someone else.
+	actor gotgbot.User
 	// mainText and mainKeyboard are the Main page the menu opened with.
 	mainText     string
 	mainKeyboard [][]gotgbot.InlineKeyboardButton
@@ -65,7 +68,15 @@ func (e *settingsDelEnv) groupMenu() *settingsDelMenu {
 	e.t.Helper()
 	msgID := e.openMenu(e.owner)
 	text, keyboard := e.lastEdit(e.chat.Id, msgID)
-	return &settingsDelMenu{env: e, msgID: msgID, chat: e.chat, mainText: text, mainKeyboard: keyboard}
+	return &settingsDelMenu{env: e, msgID: msgID, chat: e.chat, actor: e.owner, mainText: text, mainKeyboard: keyboard}
+}
+
+// groupMenuOf opens /settings in the group as user and returns the Main message; user presses it.
+func (e *settingsDelEnv) groupMenuOf(user gotgbot.User) *settingsDelMenu {
+	e.t.Helper()
+	msgID := e.openMenu(user)
+	text, keyboard := e.lastEdit(e.chat.Id, msgID)
+	return &settingsDelMenu{env: e, msgID: msgID, chat: e.chat, actor: user, mainText: text, mainKeyboard: keyboard}
 }
 
 // privateMenu opens the settings of the group in the owner's private chat and returns the Main message.
@@ -74,7 +85,7 @@ func (e *settingsDelEnv) privateMenu() *settingsDelMenu {
 	e.sendPrivate(e.owner, fmt.Sprintf("/start settings_%d", e.chat.Id))
 	sent := settingsPrivateOnlySent(e.t, e.settingsEnv, e.owner)
 	return &settingsDelMenu{
-		env: e, msgID: sent.MessageID, chat: settingsPrivateChat(e.owner), private: true,
+		env: e, msgID: sent.MessageID, chat: settingsPrivateChat(e.owner), private: true, actor: e.owner,
 		mainText: fmt.Sprint(sent.Params["text"]), mainKeyboard: staffKeyboardOf(sent.Params["reply_markup"]),
 	}
 }
@@ -97,7 +108,7 @@ func (m *settingsDelMenu) fields(kv ...string) map[string]string {
 	if m.private {
 		return m.env.privateFields(m.env.chat.Id, kv...)
 	}
-	return m.env.groupFields(m.env.owner, kv...)
+	return m.env.groupFields(m.actor, kv...)
 }
 
 // press presses a button of this menu built from the pairs.
@@ -107,13 +118,13 @@ func (m *settingsDelMenu) press(kv ...string) {
 	if data == "" {
 		m.env.t.Fatalf("callback data %v did not encode", kv)
 	}
-	m.env.pressRaw(m.chat, m.env.owner, m.msgID, data)
+	m.env.pressRaw(m.chat, m.actor, m.msgID, data)
 }
 
 // pressButton presses an existing button of the menu, with the data it carries.
 func (m *settingsDelMenu) pressButton(button gotgbot.InlineKeyboardButton) {
 	m.env.t.Helper()
-	m.env.pressRaw(m.chat, m.env.owner, m.msgID, button.CallbackData)
+	m.env.pressRaw(m.chat, m.actor, m.msgID, button.CallbackData)
 }
 
 // last is the text and keyboard of the menu message after its last edit.
@@ -221,16 +232,4 @@ func settingsDelWidths(keyboard [][]gotgbot.InlineKeyboardButton) []int {
 		widths = append(widths, len(row))
 	}
 	return widths
-}
-
-// settingsDelButtonOf returns the button of the keyboard whose callback fields carry a=action and t=code.
-func settingsDelButtonOf(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, action, code string) (gotgbot.InlineKeyboardButton, bool) {
-	t.Helper()
-	for _, button := range settingsAllButtons(keyboard) {
-		fields := settingsButtonFields(t, button)
-		if fields["a"] == action && fields["t"] == code {
-			return button, true
-		}
-	}
-	return gotgbot.InlineKeyboardButton{}, false
 }

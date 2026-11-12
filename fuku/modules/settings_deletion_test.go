@@ -15,6 +15,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
 // settingsDelCase is one row of a table the page draws, written out here so the tests do not read the
@@ -634,4 +635,298 @@ func TestSettingsDeletionReadsAndWritesFail(t *testing.T) {
 			t.Error("a failed write stored a row")
 		}
 	})
+}
+
+func TestSettingsDeletionValidation(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	m := env.groupMenu()
+	m.openHub()
+	row := func(kv ...string) map[string]string { return m.fields(kv...) }
+	both := row("a", "dr", "t", "sj")
+	both["c"] = fmt.Sprint(env.chat.Id)
+	neither := row("a", "dr", "t", "sj")
+	delete(neither, "u")
+	forged := []struct {
+		name   string
+		fields map[string]string
+	}{
+		{"dl with an unknown t", row("a", "dl", "t", "x")},
+		{"dl with a row code", row("a", "dl", "t", "sj")},
+		{"dl with no t", row("a", "dl")},
+		{"dl with an extra key", row("a", "dl", "t", "s", "v", "1")},
+		{"dr with a section code", row("a", "dr", "t", "s")},
+		{"dr with an unknown code", row("a", "dr", "t", "xx")},
+		{"dr with no t", row("a", "dr")},
+		{"dr with an extra key", row("a", "dr", "t", "sj", "p", "d")},
+		{"dr with both c and u", both},
+		{"dr with neither c nor u", neither},
+		{"a bot row with v=0", row("a", "st", "p", "d", "t", "bw", "v", "0")},
+		{"a bot row with v=10", row("a", "st", "p", "d", "t", "bw", "v", "10")},
+		{"v=5", row("a", "st", "p", "d", "t", "sn", "v", "5")},
+		{"v=05", row("a", "st", "p", "d", "t", "sn", "v", "05")},
+		{"v=00", row("a", "st", "p", "d", "t", "sn", "v", "00")},
+		{"v=86401", row("a", "st", "p", "d", "t", "sn", "v", "86401")},
+		{"v=-1", row("a", "st", "p", "d", "t", "sn", "v", "-1")},
+		{"v=+10", row("a", "st", "p", "d", "t", "sn", "v", "+10")},
+		{"v=an Arabic-Indic digit", row("a", "st", "p", "d", "t", "sn", "v", "\u0666\u0660")},
+		{"v=a leading space", row("a", "st", "p", "d", "t", "sn", "v", " 60")},
+		{"v=N", row("a", "st", "p", "d", "t", "sn", "v", "N")},
+		{"v empty", row("a", "st", "p", "d", "t", "sn", "v", "")},
+		{"an unknown t", row("a", "st", "p", "d", "t", "zz", "v", "n")},
+		{"a section code as t", row("a", "st", "p", "d", "t", "s", "v", "n")},
+		{"an extra key", row("a", "st", "p", "d", "t", "sn", "v", "60", "e", "1")},
+		{"tg naming a row", row("a", "tg", "p", "d", "t", "sn", "v", "1")},
+		{"tg with no rule", row("a", "tg", "p", "d", "t", "sn", "v", "n")},
+	}
+	for _, tc := range forged {
+		lookups, bots, edits, answers := env.memberLookupsOf(env.chat.Id, env.owner.Id), env.botReads(env.chat.Id), m.editCount(), env.answerCount()
+		data := encodeCallbackData(settingsCallbackNamespace, tc.fields)
+		if data == "" {
+			t.Errorf("%s: the data did not encode", tc.name)
+			continue
+		}
+		env.pressRaw(m.chat, env.owner, m.msgID, data)
+		if text, alert := env.lastAnswer(); text != staffMarker("common_callback_invalid_request") || !alert {
+			t.Errorf("%s: answered %q alert=%v, want the invalid-request alert", tc.name, text, alert)
+		}
+		if env.answerCount()-answers != 1 {
+			t.Errorf("%s: answered %d times, want once", tc.name, env.answerCount()-answers)
+		}
+		if env.memberLookupsOf(env.chat.Id, env.owner.Id) != lookups || env.botReads(env.chat.Id) != bots {
+			t.Errorf("%s: made a getChatMember call before refusing", tc.name)
+		}
+		if m.editCount() != edits {
+			t.Errorf("%s: edited the menu", tc.name)
+		}
+	}
+	settingsDelNoRows(t, env.chat.Id)
+
+	// The valid shapes pass.
+	m.open("dl", "s")
+	m.open("dr", "sj")
+	m.choose("sn", "600")
+	if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 600 {
+		t.Errorf("a valid choice stored %d (%v), want 600", delay, ok)
+	}
+	m.choose("bw", "60")
+	if delay, ok := env.stored(deletion.KindBotWelcome); !ok || delay != 60 {
+		t.Errorf("a valid bot choice stored %d (%v), want 60", delay, ok)
+	}
+	m.choose("sn", "n")
+	if _, ok := env.stored(deletion.KindPinned); ok {
+		t.Error("n did not remove the row")
+	}
+}
+
+func TestSettingsAuthorityDeletion(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	admin := env.admin
+	listEditAdmin(env.settingsEnv, env.chat, admin, false)
+	m := env.groupMenuOf(admin)
+
+	// Opening needs only the admin check every press makes.
+	for _, kv := range [][]string{{"a", "op", "p", "d"}, {"a", "dl", "t", "s"}, {"a", "dr", "t", "sn"}} {
+		m.press(kv...)
+		if text, _ := m.last(); containsMarker(text, "settings_no_change_info") || containsMarker(text, "settings_cannot_open") {
+			t.Errorf("an administrator without can_change_info could not open %v: %q", kv, text)
+		}
+	}
+
+	// A change needs can_change_info on the press's fresh record.
+	edits, answers := m.editCount(), env.answerCount()
+	m.choose("sn", "600")
+	if text, alert := env.lastAnswer(); text != staffMarker("settings_no_change_info") || !alert {
+		t.Errorf("a change without the right answered %q alert=%v, want settings_no_change_info", text, alert)
+	}
+	if m.editCount() != edits || env.answerCount()-answers != 1 {
+		t.Error("a refused change edited the menu or was not answered exactly once")
+	}
+	if _, ok := env.stored(deletion.KindPinned); ok {
+		t.Error("a refused change was written")
+	}
+	env.sendIn(env.chat, admin, "/cleanservice on")
+	if settings, err := deletionFlagLookup(context.Background(), env.chat.Id); err != nil || settings.ShouldCleanService {
+		t.Errorf("the command let an administrator without the right turn /cleanservice on: %+v (%v)", settings, err)
+	}
+
+	listEditAdmin(env.settingsEnv, env.chat, admin, true)
+	cache.InvalidateAdminCache(env.chat.Id) // the command reads the cached administrator list
+	m.choose("sn", "600")
+	if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 600 {
+		t.Errorf("an administrator with can_change_info stored %d (%v), want 600", delay, ok)
+	}
+	env.sendIn(env.chat, admin, "/cleanservice on")
+	if settings, err := deletionFlagLookup(context.Background(), env.chat.Id); err != nil || !settings.ShouldCleanService {
+		t.Errorf("where the menu allows the change the command refused it: %+v (%v)", settings, err)
+	}
+
+	// The creator passes without the flag.
+	owner := env.groupMenu()
+	owner.choose("sp", "0")
+	if delay, ok := env.stored(deletion.KindPhoto); !ok || delay != 0 {
+		t.Errorf("the creator stored %d (%v), want a stored 0", delay, ok)
+	}
+}
+
+// settingsDelSnapshot is the stored state a parity test compares: the shared flag, the delay rows
+// (fresh) and whether the cached reads agree with them.
+type settingsDelSnapshot struct {
+	Flag        bool
+	Delays      map[string]int
+	CacheAgrees bool
+}
+
+func (e *settingsDelEnv) snapshot() settingsDelSnapshot {
+	e.t.Helper()
+	ctx := context.Background()
+	settings, err := deletionFlagLookup(ctx, e.chat.Id)
+	if err != nil {
+		e.t.Fatalf("read the flag: %v", err)
+	}
+	fresh, err := deletion.GetRulesFresh(ctx, e.chat.Id)
+	if err != nil {
+		e.t.Fatalf("read the rules fresh: %v", err)
+	}
+	cached, err := deletion.GetRules(ctx, e.chat.Id)
+	if err != nil {
+		e.t.Fatalf("read the rules cached: %v", err)
+	}
+	return settingsDelSnapshot{Flag: settings.ShouldCleanService, Delays: fresh.Delays, CacheAgrees: fmt.Sprint(fresh.Delays) == fmt.Sprint(cached.Delays)}
+}
+
+func TestSettingsParityCleanService(t *testing.T) {
+	modes := []struct {
+		name, value string
+		state       deletion.JoinLeftState
+	}{
+		{"keep", "n", deletion.JoinLeftState{Mode: deletion.JoinLeftKeep}},
+		{"now", "0", deletion.JoinLeftState{Mode: deletion.JoinLeftNow}},
+		{"after 10 min", "600", deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 600}},
+	}
+	for _, tc := range settingsDelServiceCases[:2] {
+		other := deletion.KindLeft
+		if tc.kind == deletion.KindLeft {
+			other = deletion.KindJoined
+		}
+		for _, mode := range modes {
+			t.Run(tc.code+" "+mode.name, func(t *testing.T) {
+				// The same earlier state in both: the flag on and a delay row on the other kind.
+				seed := func(env *settingsDelEnv) {
+					env.setJoinLeft(other, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 60})
+				}
+				menuEnv := newSettingsDelEnv(t)
+				seed(menuEnv)
+				m := menuEnv.groupMenu()
+				m.open("dr", tc.code)
+				m.choose(tc.code, mode.value)
+				viaMenu := menuEnv.snapshot()
+
+				applyEnv := newSettingsDelEnv(t)
+				seed(applyEnv)
+				applyEnv.setJoinLeft(tc.kind, mode.state)
+				viaApply := applyEnv.snapshot()
+				if fmt.Sprint(viaMenu) != fmt.Sprint(viaApply) || !viaMenu.CacheAgrees {
+					t.Errorf("menu left %+v, applyCleanServiceRule left %+v", viaMenu, viaApply)
+				}
+			})
+		}
+	}
+
+	t.Run("the command and the menu agree from a clean start", func(t *testing.T) {
+		for _, tc := range []struct{ command, value string }{{"/cleanservice on", "0"}, {"/cleanservice off", "n"}} {
+			menuEnv := newSettingsDelEnv(t)
+			m := menuEnv.groupMenu()
+			m.choose("sj", tc.value)
+			commandEnv := newSettingsDelEnv(t)
+			commandEnv.sendIn(commandEnv.chat, commandEnv.owner, tc.command)
+			if a, b := menuEnv.snapshot(), commandEnv.snapshot(); fmt.Sprint(a) != fmt.Sprint(b) {
+				t.Errorf("%s: the menu left %+v, the command %+v", tc.command, a, b)
+			}
+		}
+	})
+
+	t.Run("the command reads the same on the screens", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		for _, tc := range []struct{ command, icon, word string }{
+			{"/cleanservice on", "🗑", "settings_del_state_now"}, {"/cleanservice off", "➖", "settings_del_state_keep"},
+		} {
+			env.sendIn(env.chat, env.owner, tc.command)
+			text, _ := m.open("dl", "s")
+			for _, key := range []string{"settings_del_svc_joined", "settings_del_svc_left"} {
+				settingsDelWantLine(t, text, key, tc.icon, staffMarker(tc.word))
+			}
+		}
+	})
+}
+
+func TestSettingsDriftDeletion(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	m := env.groupMenu()
+	configs := []struct {
+		name  string
+		setup func()
+	}{
+		{"flag off with a stale joined row", func() {
+			env.setJoinLeft(deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftKeep})
+			if err := deletion.SetRule(context.Background(), env.chat.Id, deletion.KindJoined, 60); err != nil {
+				t.Fatalf("SetRule error = %v", err)
+			}
+			env.setRule(deletion.KindPinned, 600)
+			env.setRule(deletion.KindBotAuto, 3600)
+		}},
+		{"flag on with a left row and no joined row", func() {
+			env.setJoinLeft(deletion.KindLeft, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 21600})
+			env.setRule(deletion.KindPhoto, 0)
+		}},
+	}
+	for _, cfg := range configs {
+		cfg.setup()
+		for _, tc := range append(append([]settingsDelCase{}, settingsDelServiceCases...), settingsDelBotCases...) {
+			// What the watcher and the send sites act on.
+			delay, on, err := deletionRuleFor(context.Background(), env.chat.Id, tc.kind)
+			if err != nil {
+				t.Fatalf("%s: deletionRuleFor(%s) error = %v", cfg.name, tc.kind, err)
+			}
+			list := "s"
+			if tc.code[0] == 'b' {
+				list = "b"
+			}
+			text, _ := m.open("dl", list)
+			section, row, _ := settingsDelRowByCode(tc.code)
+			icon, words, _ := settingsDelWantState(section.NoneKey, row.Presets, delay, on)
+			settingsDelWantLine(t, text, tc.nameKey, icon, words...)
+		}
+	}
+}
+
+func TestSettingsDeletionStaleState(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	m := env.groupMenu()
+	text, _ := m.open("dr", "sn")
+	if !strings.Contains(text, "➖ "+staffMarker("settings_del_state_keep")) {
+		t.Fatalf("the first draw = %q, want Keep", text)
+	}
+	// Another replica writes the rule: its repository call drops the shared cache key.
+	if err := deletion.SetRule(context.Background(), env.chat.Id, deletion.KindPinned, 600); err != nil {
+		t.Fatalf("SetRule error = %v", err)
+	}
+	if old, _ := m.last(); !strings.Contains(old, "➖ "+staffMarker("settings_del_state_keep")) {
+		t.Errorf("the drawn message changed without a press: %q", old)
+	}
+	text, _ = m.open("dr", "sn")
+	if !strings.Contains(text, "⏳ "+staffMarker("settings_del_state_after")+" "+staffMarker("settings_del_delay_10m")) {
+		t.Errorf("the next press drew %q, want the new state", text)
+	}
+
+	// A press after the bot lost its right still stores the rule and shows the warning once.
+	env.setBot(settingsDelBotJSON("member", false))
+	m.choose("sn", "60")
+	text, _ = m.last()
+	if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 60 {
+		t.Errorf("stored pinned = %d (%v), want 60", delay, ok)
+	}
+	if strings.Count(text, staffMarker("settings_del_no_right")) != 1 {
+		t.Errorf("the redraw = %q, want the no-right line once", text)
+	}
 }

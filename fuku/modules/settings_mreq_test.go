@@ -1414,6 +1414,13 @@ func TestSettingsControlActionAllowList(t *testing.T) {
 		}
 	})
 
+	t.Run("tg on a Deletion row control is refused in step 1", func(t *testing.T) {
+		for _, code := range []string{"sj", "sn", "bw", "ba"} {
+			refused("tg "+code, env.groupFields(owner, "a", "tg", "p", "d", "t", code, "v", "1"))
+			refused("tg "+code+" v=n", env.groupFields(owner, "a", "tg", "p", "d", "t", code, "v", "n"))
+		}
+	})
+
 	t.Run("tg and st stay accepted on the two switches", func(t *testing.T) {
 		for _, action := range []string{"tg", "st"} {
 			for _, control := range []string{"j", "d"} {

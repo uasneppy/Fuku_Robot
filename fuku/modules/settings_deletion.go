@@ -197,7 +197,7 @@ func settingsDelRead(chatID int64, rows []deletionRow) (settingsDelData, error) 
 		if err != nil {
 			return settingsDelData{}, err
 		}
-		data.Flag = settings.ShouldCleanService
+		data.Flag = settings != nil && settings.ShouldCleanService
 		break
 	}
 	return data, nil
