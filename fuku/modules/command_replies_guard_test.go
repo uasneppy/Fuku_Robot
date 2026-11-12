@@ -31,7 +31,14 @@ const repliesGuardDepth = 4
 // empty: when plan 17-04 ran, no goroutine of the package replied (research S-01), so every reply to
 // a command happens inside its handler, before the wrapper's delete. The scan resolves calls by
 // name (a plain function) and by the caller's own receiver only, so a reply reached through another
-// object's method is outside what it sees: plan 17-11 reviews that limit with the allow-list.
+// object's method is outside what it sees. Plan 17-11 reviewed that limit (C-03, D-23): a throwaway
+// scan that followed every selector call by bare method name, to depth 4, found three more
+// candidates and no real reply. Two are the method name `start` (raidAIFireAsync reaches
+// raidPostTracker.start in raid_trigger.go, which a bare name confuses with help.go's `start`, a
+// handler that replies); the third is startJoinedStaffRun in staff_action_run.go, the Staff Group
+// run's coordinator, which can reply to a staff command in a Staff Group, a chat no member rule
+// ever deletes in (deletionAct refuses it, D-17). The allow-list therefore stays empty and the
+// guard stays as it is.
 var repliesGuardAllowed = map[string]string{}
 
 // repliesGuardFinding is one goroutine of the package that replies.

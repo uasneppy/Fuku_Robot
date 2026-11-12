@@ -210,7 +210,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   deleted (`/del`), cost one refused delete call that is dropped quietly with no row and no message ID in the log. A Staff
   Group is never touched, and a failing Staff Group read deletes nothing (`deletionAct`). The bare-name race with another
   bot that handles the same word is accepted and is a live check. `TestCommandRepliesStayInsideTheHandler` guards that no
-  goroutine in `fuku/modules` replies, so no handler can reply to a command after the wrapper deleted it.
+  goroutine in `fuku/modules` replies, so no handler can reply to a command after the wrapper deleted it. The guard resolves
+  calls by plain function name and by the caller's own receiver only (no type information), so a reply reached through
+  another object's method is outside what it sees. Plan 17-11 reviewed that limit with a throwaway scan that followed every
+  selector call by bare name: it found three candidates and none is a real reply after a delete. Two are the method name
+  `start` (`raidPostTracker.start` in `raid_trigger.go` against `start` in `help.go`) and the third is the Staff Group run's
+  coordinator, whose replies go to a Staff Group, which no member rule ever deletes in. The allow-list stays empty.
 - The `MemberDeletion` module (priority 243, `member_deletion.go`, Phase 17, DEL-04) hosts the member message rules that need
   a handler of their own, at handler group `-8` (`memberDeleteGroup`, free before: the groups in use were -10, -7 to -1 and 0
   to 12; it runs after the captcha hold and before the lockdown join guard). It holds two handlers: the edit handler,

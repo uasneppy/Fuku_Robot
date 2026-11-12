@@ -6,14 +6,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 
+	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
+	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/utils/actionlog"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
@@ -56,9 +65,15 @@ func memberE2EText(env *commandDeletionEnv, from *gotgbot.User) int64 {
 // clock and edited gap seconds after it was sent, and returns its ID.
 func memberE2EEdit(t *testing.T, env *commandDeletionEnv, from gotgbot.User, age time.Duration, gap int64) int64 {
 	t.Helper()
+	return memberE2EEditText(t, env, from, age, gap, "edited")
+}
+
+// memberE2EEditText is memberE2EEdit with the text the edited message carries.
+func memberE2EEditText(t *testing.T, env *commandDeletionEnv, from gotgbot.User, age time.Duration, gap int64, text string) int64 {
+	t.Helper()
 	id := env.updateID()
 	date := env.now().Add(-age).Unix()
-	msg := &gotgbot.Message{MessageId: id, Date: date, EditDate: date + gap, Chat: env.chat, From: &from, Text: "edited"}
+	msg := &gotgbot.Message{MessageId: id, Date: date, EditDate: date + gap, Chat: env.chat, From: &from, Text: text}
 	if err := env.dispatcher.ProcessUpdate(env.bot, &gotgbot.Update{UpdateId: id, EditedMessage: msg}, nil); err != nil {
 		t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
 	}
@@ -490,5 +505,387 @@ func memberE2EWantNothingNew(t *testing.T, env *commandDeletionEnv) {
 	}
 	if rows := env.rows(); len(rows) != 0 {
 		t.Fatalf("queue rows after Off = %+v, want none", rows)
+	}
+}
+
+// memberShortestRules stores the shortest valid preset of the three member rules for each chat
+// (commands 0, edited 30, self-destruct 60), removed when the test ends.
+func memberShortestRules(t *testing.T, chatIDs ...int64) {
+	t.Helper()
+	deletionCleanup(t, chatIDs...)
+	for _, chatID := range chatIDs {
+		for kind, delay := range map[string]int{
+			deletion.KindMemberCommands:     0,
+			deletion.KindMemberEdited:       30,
+			deletion.KindMemberSelfDestruct: 60,
+		} {
+			if err := deletion.SetRule(t.Context(), chatID, kind, delay); err != nil {
+				t.Fatalf("SetRule(%d, %s, %d) error = %v", chatID, kind, delay, err)
+			}
+		}
+	}
+}
+
+// memberExcludedProducers are the identifiers a message producer of the never-delete families would
+// use to reach a deletion: the self-destruct batcher's offer, the queue writers, the bot-message
+// helper and the core's act.
+var memberExcludedProducers = []string{
+	"memberDeleteOffer", "ScheduleBatch", "scheduleBotMessage", "deletionSchedule", "deletionAct", "deletion.Schedule",
+}
+
+// TestMemberDeletionExcludedMessages proves DEL-07 for the three member rules: with each at its
+// shortest valid preset, a Staff Group card or summary, a lockdown alert copy, a captcha challenge
+// and a log-channel post, each sent through its real sender, leave no row of any kind and get no
+// delete request, also after a worker cycle a day and a half later; no file of those families calls
+// a deletion producer; and the bot's own messages, delivered as updates, are never touched.
+func TestMemberDeletionExcludedMessages(t *testing.T) {
+	t.Run("a Staff Group action card and summary", func(t *testing.T) {
+		advance := deletionClockFixed(t)
+		withFastDeletionPacer(t)
+		env := newStaffActionEnv(t, 2)
+		LoadServiceDeletion(env.dispatcher)
+		all := append([]int64{env.staffChat}, env.groups...)
+		memberShortestRules(t, all...)
+		for _, group := range env.groups {
+			env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		}
+
+		summary, msgID := env.runStaffCommand("/mute 4242 flooding")
+		if summary == "" || msgID == 0 {
+			t.Fatalf("the staff action produced no summary (%q, %d), so the case proves nothing", summary, msgID)
+		}
+		if n := len(env.fake.sentTo(env.staffChat)); n == 0 {
+			t.Fatal("nothing was sent to the Staff Group, so the case proves nothing")
+		}
+		advance()
+		deletionWantUntouched(t, env.bot, "staff card and summary", func(chatID int64) int {
+			return len(env.callsTo("deleteMessage", chatID)) + len(env.callsTo("deleteMessages", chatID))
+		}, all...)
+	})
+
+	t.Run("a lockdown alert copy", func(t *testing.T) {
+		advance := deletionClockFixed(t)
+		withFastDeletionPacer(t)
+		env := newLockdownEnv(t)
+		LoadServiceDeletion(env.dispatcher)
+		staffChat := linkLockdownStaffGroup(env)
+		memberShortestRules(t, env.chat.Id, staffChat.Id)
+
+		env.send(env.admin, "/lockdown raid wave")
+		env.cycle()
+		env.cycle()
+		if n := len(env.fake.sentTo(staffChat.Id)); n != 1 {
+			t.Fatalf("alert copies in the Staff Group = %d, want the one, so the case proves something", n)
+		}
+		advance()
+		deletionWantUntouched(t, env.bot, "lockdown alert", func(chatID int64) int {
+			return len(callsToChat(env.fake.staffBotClient, "deleteMessage", chatID)) +
+				len(callsToChat(env.fake.staffBotClient, "deleteMessages", chatID))
+		}, env.chat.Id, staffChat.Id)
+	})
+
+	t.Run("a captcha challenge", func(t *testing.T) {
+		advance := deletionClockFixed(t)
+		withMiniredis(t)
+		withFastDeletionPacer(t)
+		s := newBotSite(t, "supergroup")
+		memberShortestRules(t, s.chat.Id)
+		member := uniqueLinkOwnerID()
+		t.Cleanup(func() {
+			db.DB.Where("chat_id = ?", s.chat.Id).Delete(&models.CaptchaAttempts{})
+			db.DB.Where("chat_id = ?", s.chat.Id).Delete(&models.CaptchaSettings{})
+		})
+		if err := captcha.SetCaptchaEnabled(s.chat.Id, true); err != nil {
+			t.Fatalf("SetCaptchaEnabled() error = %v", err)
+		}
+		ctx := newModuleMessageContext(s.bot, s.chat, gotgbot.User{Id: 777000, FirstName: "Telegram"}, "join")
+		ctx.EffectiveMessage.Date = s.now.Unix()
+
+		if err := SendCaptcha(s.bot, ctx, member, "Member"); err != nil {
+			t.Fatalf("SendCaptcha() error = %v", err)
+		}
+		if len(s.client.callsFor("sendPhoto"))+len(s.client.callsFor("sendMessage")) == 0 {
+			t.Fatal("no challenge was sent, so the case proves nothing")
+		}
+		advance()
+		deletionWantUntouched(t, s.bot, "captcha challenge", func(chatID int64) int {
+			return len(chatCalls(s.client, "deleteMessage", chatID)) + len(chatCalls(s.client, "deleteMessages", chatID))
+		}, s.chat.Id)
+	})
+
+	t.Run("a log-channel post", func(t *testing.T) {
+		advance := deletionClockFixed(t)
+		withMiniredis(t)
+		withFastDeletionPacer(t)
+		s := newBotSite(t, "supergroup")
+		channelID := uniqueModuleChatID()
+		memberShortestRules(t, s.chat.Id, channelID)
+		setStaffLogChannel(t, s.chat.Id, channelID)
+
+		actionlog.Admin(s.bot, &s.chat, &gotgbot.User{Id: 55, FirstName: "Actor"}, "BAN", 42, "why")
+		posted := 0
+		for _, call := range s.client.callsFor("sendMessage") {
+			if staffParamInt(call.Params, "chat_id") == channelID {
+				posted++
+			}
+		}
+		if posted != 1 {
+			t.Fatalf("posts to the log channel = %d, want the one, so the case proves something", posted)
+		}
+		advance()
+		deletionWantUntouched(t, s.bot, "log post", func(chatID int64) int {
+			return len(chatCalls(s.client, "deleteMessage", chatID)) + len(chatCalls(s.client, "deleteMessages", chatID))
+		}, s.chat.Id, channelID)
+	})
+
+	t.Run("the bot's own messages delivered as updates", func(t *testing.T) {
+		env := settingsDelDriftEnv(t)
+		env.del.setRule(deletion.KindMemberCommands, 0)
+		env.del.setRule(deletion.KindMemberEdited, 30)
+		env.del.setRule(deletion.KindMemberSelfDestruct, 60)
+		own := env.bot.User
+
+		// The bot's reply, a message that looks like a command and a late edit of one, all from the bot.
+		env.deliver(&own, func(m *gotgbot.Message) { m.Text = "a reply of the bot" })
+		cmd := env.deliver(&own, commandMessage("/rules"))
+		edited := memberE2EEdit(t, env, own, 5*time.Minute, 90)
+		memberE2EWantNothing(t, env, "the bot's own messages")
+		for _, id := range []int64{cmd, edited} {
+			if got := env.deleted(env.chat.Id, id); got != 0 {
+				t.Errorf("the bot's own message %d was deleted %d times", id, got)
+			}
+		}
+	})
+
+	t.Run("no file of the never-delete families calls a deletion producer", func(t *testing.T) {
+		var paths []string
+		for _, pattern := range []string{
+			"staff*.go", "lockdown*.go", "captcha*.go", "raid*.go", "logchannels.go", "../utils/actionlog/*.go",
+		} {
+			matches, err := filepath.Glob(pattern)
+			if err != nil {
+				t.Fatalf("glob %s: %v", pattern, err)
+			}
+			paths = append(paths, matches...)
+		}
+		checked := 0
+		for _, path := range paths {
+			if strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			checked++
+			for _, name := range memberExcludedProducers {
+				if strings.Contains(string(src), name) {
+					t.Errorf("%s calls or names %s: a message of a never-delete family must not reach a deletion producer", path, name)
+				}
+			}
+		}
+		if checked < 10 {
+			t.Fatalf("only %d files were checked, so the glob no longer finds the families", checked)
+		}
+	})
+}
+
+// memberLogLine is the category prefix of the member deletion code's log lines.
+var memberLogLine = regexp.MustCompile(`^\[(Deletion|MemberDeletion)\]`)
+
+// TestMemberDeletionLogsCarryIDsOnly drives every failing seam of the member rules (the command
+// wrapper's core, the edit handler, the watcher, the exemption reads, the batcher's sheds and failed
+// write, the worker's rule screen and the pin drop) with message texts, names and a username that
+// carry sentinels, and asserts no log line holds a sentinel, a message ID or a claim token, and that
+// each shed is one line for its chat and reason with the chat ID only (D-23, D-31).
+func TestMemberDeletionLogsCarryIDsOnly(t *testing.T) {
+	const textSentinel, nameSentinel, userSentinel = "ZZLEAKTEXT", "ZZLEAKNAME", "zzleakuser"
+	env := settingsDelDriftEnv(t)
+	hook := mreqShedHook(t)
+	env.del.setRule(deletion.KindMemberCommands, 0)
+	env.del.setRule(deletion.KindMemberEdited, 60)
+	env.del.setRule(deletion.KindMemberSelfDestruct, 600)
+	member := env.mreqMember(nameSentinel, "", userSentinel)
+	failing := errors.New("lookup failed")
+	var ids []int64
+	sendText := func() {
+		ids = append(ids, env.deliver(&member, func(m *gotgbot.Message) { m.Text = textSentinel }))
+	}
+	sendEdit := func() {
+		ids = append(ids, memberE2EEditText(t, env, member, 5*time.Minute, 90, textSentinel))
+	}
+	warm := func() {
+		env.del.script.set(nil)
+		cache.InvalidateAdminCache(env.chat.Id)
+		if got := cache.LoadAdminCache(env.bot, env.chat.Id); !got.Cached {
+			t.Fatalf("LoadAdminCache() = %+v, want a cached list", got)
+		}
+	}
+	cold := func() { cache.InvalidateAdminCache(env.chat.Id) }
+
+	t.Run("the approvals read fails", func(t *testing.T) {
+		mreqSwap(t, &memberDeletionApprovedLookup,
+			func(context.Context, int64, int64) (bool, error) { return false, failing })
+		sendText()
+		sendEdit()
+	})
+	t.Run("the live administrator read fails behind a cold cache", func(t *testing.T) {
+		memberE2EFailLookup(env, member.Id, memberDeletionTelegramError(429))
+		cold()
+		sendText()
+		sendEdit()
+		warm()
+	})
+	t.Run("the administrator check is saturated", func(t *testing.T) {
+		for range cap(memberDeletionAdminSlots) {
+			memberDeletionAdminSlots <- struct{}{}
+		}
+		t.Cleanup(func() {
+			for len(memberDeletionAdminSlots) > 0 {
+				<-memberDeletionAdminSlots
+			}
+		})
+		cold()
+		sendText()
+		sendEdit()
+		for len(memberDeletionAdminSlots) > 0 {
+			<-memberDeletionAdminSlots
+		}
+		warm()
+	})
+	t.Run("the captcha reads fail", func(t *testing.T) {
+		mreqSwap(t, &memberReqCaptchaPendingLookup, func(context.Context, int64) (bool, error) { return false, failing })
+		sendEdit()
+		mreqSwap(t, &memberReqCaptchaPendingLookup, func(context.Context, int64) (bool, error) { return true, nil })
+		mreqSwap(t, &memberReqCaptchaAttemptLookup, func(int64, int64) (*models.CaptchaAttempts, error) { return nil, failing })
+		sendEdit()
+	})
+	t.Run("the Staff Group read fails", func(t *testing.T) {
+		mreqSwap(t, &deletionStaffLookup, func(int64) (*models.StaffGroup, error) { return nil, failing })
+		ids = append(ids, env.deliver(&member, commandMessage("/rules "+textSentinel)))
+		sendEdit()
+	})
+	t.Run("the batcher sheds a full buffer", func(t *testing.T) {
+		resetMemberDeleteState()
+		mreqSwap(t, &memberDeleteQueue, make(chan deletion.Entry, 1))
+		sendText()
+		sendText()
+		sendText()
+		memberDeleteTestFlush(t)
+	})
+	t.Run("the batcher cannot read the rules", func(t *testing.T) {
+		resetMemberDeleteState()
+		sendText()
+		mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) { return nil, failing })
+		memberDeleteTestFlush(t)
+	})
+	t.Run("the batcher cannot count the queued rows", func(t *testing.T) {
+		resetMemberDeleteState()
+		sendText()
+		mreqSwap(t, &memberDeleteCountPending, func(context.Context, int64, string, int) (int64, error) { return 0, failing })
+		memberDeleteTestFlush(t)
+	})
+	t.Run("the batch write fails", func(t *testing.T) {
+		resetMemberDeleteState()
+		sendText()
+		mreqSwap(t, &memberDeleteBatchWrite, func(context.Context, []deletion.Entry) (int, error) { return 0, failing })
+		memberDeleteTestFlush(t)
+	})
+	t.Run("the worker cannot read the rules of a chat with due rows", func(t *testing.T) {
+		const first = 880001000
+		for i := int64(0); i < 3; i++ {
+			seedDeletionRow(t, env.chat.Id, first+i, env.now().Add(-time.Hour), env.now().Add(-2*time.Hour), deletion.KindMemberSelfDestruct)
+		}
+		ids = append(ids, first, first+1, first+2)
+		mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) { return nil, failing })
+		env.cycle()
+		db.DB.Where("chat_id = ?", env.chat.Id).Delete(&models.ScheduledDeletion{})
+	})
+	t.Run("the pin drop fails", func(t *testing.T) {
+		const name = "member_e2e_fail_pin_drop"
+		if err := db.DB.Callback().Delete().Before("gorm:delete").Register(name, func(tx *gorm.DB) {
+			if tx.Statement.Table == "scheduled_deletions" {
+				_ = tx.AddError(failing)
+			}
+		}); err != nil {
+			t.Fatalf("register the failing callback: %v", err)
+		}
+		t.Cleanup(func() {
+			if err := db.DB.Callback().Delete().Remove(name); err != nil {
+				t.Errorf("remove the failing callback: %v", err)
+			}
+		})
+		pinned := env.deliver(&member, func(m *gotgbot.Message) { m.Text = textSentinel })
+		ids = append(ids, pinned, env.deliver(&env.del.owner, func(m *gotgbot.Message) {
+			m.PinnedMessage = gotgbot.Message{MessageId: pinned, Chat: env.chat}
+		}))
+	})
+
+	entries := hook.AllEntries()
+	if len(entries) == 0 {
+		t.Fatal("nothing was logged at debug level, so the test cannot discriminate")
+	}
+	deletionWantNoMessageIDs(t, hook, ids)
+	categories := map[string]bool{}
+	shed := map[string]int{}
+	for _, entry := range entries {
+		text := entry.Message
+		for key, value := range entry.Data {
+			text += " " + key + "=" + fmt.Sprint(value)
+		}
+		for _, leak := range []string{textSentinel, nameSentinel, userSentinel} {
+			if strings.Contains(text, leak) {
+				t.Errorf("log line at %s carries %q: %q", entry.Level, leak, text)
+			}
+		}
+		if entry.Level > log.WarnLevel || !memberLogLine.MatchString(entry.Message) {
+			continue
+		}
+		categories[entry.Message[:strings.Index(entry.Message, "]")+1]] = true
+		// A Warn or Error line of the member deletion code names a chat, except the batch write's own line
+		// (a count of chats) and the worker's.
+		if !regexp.MustCompile(`chat -?\d+`).MatchString(entry.Message) && !strings.Contains(entry.Message, "chats failed") &&
+			!strings.Contains(entry.Message, "stale claims") && !strings.Contains(entry.Message, "due rows") &&
+			!strings.Contains(entry.Message, "rows:") {
+			t.Errorf("a Warn line of the member deletion code names no chat: %q", entry.Message)
+		}
+		if strings.Contains(entry.Message, "were not queued") {
+			shed[entry.Message]++
+		}
+	}
+	for _, want := range []string{"[Deletion]", "[MemberDeletion]"} {
+		if !categories[want] {
+			t.Errorf("no Warn line of %s was logged, so the failing seams of its code were not driven (saw %v)", want, categories)
+		}
+	}
+	for _, want := range []string{
+		"approval of user",
+		"the admin status of user",
+		"is saturated",
+		"captcha state of chat",
+		"captcha state of user",
+		"could not check chat",
+		"(queue full)",
+		"(rules unreadable)",
+		"(count unreadable)",
+		"(write failed)",
+		"could not read the rules of chat",
+		"could not be taken off the self-destruct queue",
+	} {
+		found := false
+		for _, entry := range entries {
+			if entry.Level <= log.WarnLevel && strings.Contains(entry.Message, want) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no Warn line contains %q: the failing seam was not driven", want)
+		}
+	}
+	// Two sheds of one chat and reason in the full-buffer case are one line.
+	for line, n := range shed {
+		if strings.Contains(line, "(queue full)") && n != 1 {
+			t.Errorf("the full-buffer shed was logged %d times, want one line per chat per hour: %q", n, line)
+		}
 	}
 }
