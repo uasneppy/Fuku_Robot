@@ -339,18 +339,22 @@ func TestMemberReqFixedRescheduleMovesUp(t *testing.T) {
 		env.wantNoRows()
 	})
 
-	t.Run("the kind turned off after the notice leaves the 24 hour row alone", func(t *testing.T) {
+	// WR-03: switching the kind off drops the already queued 24 hour row with the rule (the notice
+	// then simply stays, which is what Off means), and a tap after that reschedules nothing.
+	t.Run("the kind turned off after the notice drops the 24 hour row and the tap writes none", func(t *testing.T) {
 		env := newMreqSchedEnv(t)
 		member, notice := mreqSchedMuted(t, env, 600)
 		member = env.mreqFix(member)
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(24*time.Hour))
 		if err := deletion.RemoveRule(t.Context(), env.chat.Id, deletion.KindBotAuto); err != nil {
 			t.Fatalf("RemoveRule error = %v", err)
 		}
+		env.wantNoRows()
 		env.advance(tap)
 
 		env.mreqPressFixed(member, notice)
 
-		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
+		env.wantNoRows()
 	})
 
 	t.Run("a failed edit schedules nothing and the 24 hour row stays", func(t *testing.T) {
