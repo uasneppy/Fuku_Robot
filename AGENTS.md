@@ -794,7 +794,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r|m / d`, then Access for the owner, so seven rows in a private and in a group menu; `m` is the Member requirements page and `d` the Deletion page below) with
+  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / w|g / r|m / d`, then Access for the owner, so seven rows in a private and in a group menu; `m` is the Member requirements page and `d` the Deletion page below) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules.
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
@@ -2126,6 +2126,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   returned message and `scheduleBotMessage` ignores nil. Every hook is additive around the existing send (no request, error
   path or return changes) and runs only after a send succeeded (`TestBotAutoPunishmentNotices`, `TestMemberReqNoticeScheduled`,
   `TestMemberReqMuteNoticeAtCap`, `TestMemberReqFixedRescheduleMovesUp`).
+- Joined and left share one flag with `/cleanservice` (the Deletion page and the command, D-02, D-24, D-26). Whether either
+  kind acts at all is `greetings.clean_service_settings`, and the two `chat_delete_rules` rows only hold a delay. Keep on
+  the page and `/cleanservice off` clear the flag and remove BOTH rows; `/cleanservice on` removes both rows too, so a stale
+  delay never comes back; Delete now or After N on either row turns the flag on, so the OTHER row then reads its own stored
+  delay or, with none, Delete now. That coupling is documented and accepted: the owner who sets Member joined to After 10 min
+  sees Member left read Delete now at once. With the flag off a stored row is ignored (it reads Keep and writes no queue
+  row). A join or leave a bot caused is covered too (the watcher's, D-24; `cleanService` has never accepted a bot sender),
+  and `TestDeletionEndToEnd` drives the page, the command, the human and the bot-caused paths over the one flag.
+- A supergroup migration re-keys neither `chat_delete_rules` nor `scheduled_deletions` (like every per-chat setting but the
+  Staff Group's own link rows): the new supergroup starts at Keep and Off, and the pending rows of the old chat name a chat
+  Telegram answers "group chat was upgraded" (or the `migrate_to_chat_id` parameter), which `deletionClassify` reads as
+  `gone`: the worker latches the old chat, drops its rows and deletes nothing. The owner sets the rules again on the new group.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
@@ -3195,6 +3207,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   sees it, which means the sweep cannot catch a key leak on its own (checked by mutation): the key is held by that
   redactor and `memberReqAILogFailure`'s own scrub, while the names and hashes have no such net and are held by the
   sweep alone.
+- Phase 16 plan 09 (the closing plan) adds `fuku/modules/deletion_e2e_test.go`: `TestDeletionEndToEnd` (the vertical slice
+  through the real dispatcher with only Telegram faked: the owner's page presses, a title notice deleted now, a pin notice
+  queued at its date plus N and deleted by `runDeletionCycle` only when `deletionNow` reaches it, the welcome, a manual `/ban`
+  reply, a requirement Mute notice at the 24 hour cap moved to the tap plus the timer by the button, and a Warn notice, the
+  joined and left coupling over `/cleanservice`, a bot that cannot delete, a Staff Group, a restart, two replicas and a 48 hour
+  old row), `TestDeletionExcludedMessagesNeverScheduled` (a Staff Group card and summary, a lockdown alert copy, a captcha
+  challenge and a log post, each through its real sender with every rule at its shortest delay: no row and no delete request,
+  also after a worker cycle a day and a half later) and `TestDeletionLogsCarryIDsOnly` (a logrus hook over every failing seam
+  and worker failure shape: no text, claim token or message ID). Its toolkit is `deletionE2E` (`newDeletionE2E`: the settings
+  Deletion environment plus the member requirements toolkit plus a settable `deletionNow`; `deliver`, `command`, `pass`,
+  `deleted`, `wantRow`, `replicaBot`) and `deletionShortestRules`. `TestSettingsStaffPrivacy` also renders the Deletion hub, both
+  lists and all 17 row screens under every right line, with and without rules and with a failed write in 8 languages, and runs
+  a private and a group menu of an administrator who is not the creator through the page (`settingsPrivacyPhase16Run`).
 - Phase 16 plan 05 (scheduling the bot's own messages) test families: `TestScheduleBotMessage` and
   `TestScheduleBotMessageClampsDate` (the helper's table: nil, private, channel, no rule, latch, Staff Group, failed read,
   failed write, the date clamp), `TestBotWelcomeScheduled` and `TestBotGoodbyeScheduled` (`deletion_bot_test.go`, through the

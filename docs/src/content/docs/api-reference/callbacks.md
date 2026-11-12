@@ -314,6 +314,23 @@ the first time and again after a name change, and members who are already in the
 rename, so it does not claim to act on every member at their next message. Only the first name, last name and username
 are sent to Anthropic's Claude, never messages.
 
+The Deletion page (`d`, between the Requirements and Access pages of Main) has three levels, all built from two tables, and
+is not drawn or reachable in a Staff Group (a press there is answered as an invalid request and writes nothing):
+
+| Item | Code | Fields | Notes |
+|------|------|--------|-------|
+| Hub | `a=op`, `p=d` | none more | Service messages and Bot messages; Back is Main |
+| Section list | `a=dl` | `t` `s` (Service messages) or `b` (Bot messages) | one cell per row; Back is the hub |
+| Row screen | `a=dr` | `t` a row code | `sj` joined, `sl` left, `sp` photo, `sh` title, `sn` pinned, `sv` video chat, `sf` forum topic, `sb` boost, `sa` auto-delete timer, `sk` background, `sg` giveaway, `so` other (service); `bw` welcome, `bg` goodbye, `br` rules, `ba` automatic punishments, `bm` manual punishments (bot); Back is the row's list |
+| Choice | `a=st`, `p=d` | `t` a row code, `v` `n` or a preset | `n` is Keep on a service row and Off on a bot row; a service row's presets are `0` (Delete now), `10`, `60`, `600`, `3600`, `21600`, `86400` seconds, a bot row's `60`, `600`, `3600`, `21600`, `86400`; `tg` is refused |
+
+Every choice writes at once: there is no confirmation card and no `e` field. `v` is the canonical decimal seconds of one of the
+row's own presets (no sign, space, non-ASCII digit or leading zero); anything else, a missing or extra field, is an invalid
+request refused before any lookup. A press of the stored value writes nothing. Joined and left share one flag with
+`/cleanservice`: Keep clears it and removes both delay rows, Delete now or After N turns it on. The largest button of the
+page is 50 bytes. Every deletion screen carries one line about the bot's right to delete (nothing when it can, a warning
+when it cannot, an unknown mark when that could not be read); the rule can still be set while the line shows.
+
 A switch is pressed with the toggle action `tg`: its `t` must be a control of the page (`e`, `d`, `o` or `u` as the table
 lists them) and its `v` the absolute target, `0` or `1`; anything else is an invalid request, refused before any lookup.
 Media under text (`u`) is drawn only while the stored media is a photo, a video or a GIF; a press on a switch that is no
