@@ -39,12 +39,12 @@ var deletionPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
 	MaxWait:    60 * time.Second,
 })
 
-const (
-	// deletionCallTimeout bounds one Telegram request of the deletion code.
-	deletionCallTimeout = 10 * time.Second
-	// deletionInlineTimeout bounds one inline delete, the wait for its pacer slot included.
-	deletionInlineTimeout = 15 * time.Second
-)
+// deletionCallTimeout bounds one Telegram request of the deletion code.
+const deletionCallTimeout = 10 * time.Second
+
+// deletionInlineTimeout bounds one inline delete, the wait for its pacer slot included. It is a
+// variable only so a test can shorten it; production code never reassigns it.
+var deletionInlineTimeout = 15 * time.Second
 
 // deletionPaced runs one Telegram call under the deletion pacer: it waits for its slot, bounds
 // the call and, on a 429, waits out Telegram's retry_after and repeats the same closure. A slot
