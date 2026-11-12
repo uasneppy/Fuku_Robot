@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -483,4 +484,212 @@ func TestSettingsAnonAdminForged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// settingsAnonFailingRead makes the page's reader fail until the test ends.
+func settingsAnonFailingRead(t *testing.T) {
+	t.Helper()
+	previous := settingsAnonRead
+	settingsAnonRead = func(context.Context, int64) (bool, error) { return false, errors.New("database is down") }
+	t.Cleanup(func() { settingsAnonRead = previous })
+}
+
+func TestSettingsDriftAnonAdmin(t *testing.T) {
+	const menuMsgID = 8383
+	env := newSettingsAnonEnv(t)
+	chat := env.addChat()
+	settingsAnonCleanup(t, chat.Id)
+	owner := settingsAnonOwnerOf(t, env, chat)
+
+	// /anonadmin on by the creator is what the page draws at the next draw.
+	env.sendIn(chat, owner, "/anonadmin on")
+	dbcache.ResetLocalForTest()
+	settingsAnonPress(t, env, chat, owner, menuMsgID, "a", "op", "p", settingsPageAnon)
+	text, keyboard := env.lastEdit(chat.Id, menuMsgID)
+	if !containsMarker(text, "admin_anon_admin_enabled") {
+		t.Errorf("after /anonadmin on the page drew %q, want the on sentence", text)
+	}
+	if _, fields := settingsAnonToggleOf(t, keyboard); fields["v"] != "0" {
+		t.Errorf("toggle target = %q after /anonadmin on, want 0", fields["v"])
+	}
+	if !settingsAnonEnforces(env, chat) {
+		t.Error("the anonymous-admin check does not skip the proof after /anonadmin on")
+	}
+
+	// A press of the page is what the reader of the enforcing path sees for the next update.
+	settingsAnonToggle(t, env, chat, owner, menuMsgID, "0")
+	if admin.GetAdminSettings(chat.Id).AnonAdmin {
+		t.Error("admin.GetAdminSettings reads the mode on after the page turned it off")
+	}
+	if settingsAnonEnforces(env, chat) {
+		t.Error("the anonymous-admin check skips the proof after the page turned the mode off")
+	}
+	before := len(env.fake.sentTo(chat.Id))
+	env.sendIn(chat, owner, "/anonadmin")
+	sent := env.fake.sentTo(chat.Id)
+	if len(sent) != before+1 || !strings.Contains(fmt.Sprint(sent[len(sent)-1].Params["text"]), staffMarker("admin_anon_admin_disabled")) {
+		t.Errorf("/anonadmin after the page's Off answered %+v, want the off status", sent[before:])
+	}
+}
+
+func TestSettingsAuthorityParityAnonAdmin(t *testing.T) {
+	const menuMsgID = 8484
+
+	type actor struct {
+		name string
+		// setup returns the user who acts on a chat; it is called once per chat.
+		setup func(t *testing.T, env *settingsEnv, chat gotgbot.Chat) gotgbot.User
+		// botAdmin is whether the bot is an administrator of the chat.
+		botAdmin bool
+		// wantWrite is whether both the command and the menu write.
+		wantWrite bool
+	}
+	creator := func(t *testing.T, env *settingsEnv, chat gotgbot.Chat) gotgbot.User {
+		return settingsAnonOwnerOf(t, env, chat)
+	}
+	adminActor := func(_ *testing.T, env *settingsEnv, _ gotgbot.Chat) gotgbot.User { return env.admin }
+	plainMember := func(t *testing.T, env *settingsEnv, chat gotgbot.Chat) gotgbot.User {
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 53, FirstName: "Plain"}
+		settingsAnonUsersCleanup(t, member.Id)
+		env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		return member
+	}
+	gatedAdmin := func(t *testing.T, env *settingsEnv, chat gotgbot.Chat) gotgbot.User {
+		env.newOwner(chat)
+		env.setAdminsAllowed(chat.Id, false)
+		return env.admin
+	}
+	for _, tc := range []actor{
+		{"the creator, the bot an administrator", creator, true, true},
+		{"the creator, the bot not an administrator", creator, false, false},
+		{"an administrator who is not the creator, the bot an administrator", adminActor, true, false},
+		{"an administrator who is not the creator, the bot not an administrator", adminActor, false, false},
+		{"a plain member", plainMember, true, false},
+		{"an administrator the owner gate refuses", gatedAdmin, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsAnonEnv(t)
+			commandChat, menuChat := env.addChat(), env.addChat()
+			settingsAnonCleanup(t, commandChat.Id, menuChat.Id)
+			commandActor := tc.setup(t, env, commandChat)
+			menuActor := tc.setup(t, env, menuChat)
+			if !tc.botAdmin {
+				env.fake.setBotRole(commandChat.Id, staffRoleMember)
+				env.fake.setBotRole(menuChat.Id, staffRoleMember)
+			}
+
+			env.sendIn(commandChat, commandActor, "/anonadmin on")
+			answers := env.answerCount()
+			settingsAnonToggle(t, env, menuChat, menuActor, menuMsgID, "1")
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("the press answered %d times, want once", got)
+			}
+			for name, id := range map[string]int64{"command": commandChat.Id, "menu": menuChat.Id} {
+				if wrote := anonGoldenStored(t, id) == "on"; wrote != tc.wantWrite {
+					t.Errorf("%s wrote = %v, want %v", name, wrote, tc.wantWrite)
+				}
+			}
+			if tc.botAdmin {
+				return
+			}
+			// The bot refusal is the same words by the command and the menu.
+			refusal := staffMarker("chat_status_bot_not_admin")
+			if !settingsAntifloodSentHas(env, commandChat.Id, refusal) {
+				t.Error("/anonadmin on was not refused for the bot not being an administrator")
+			}
+			if text, _ := env.lastEdit(menuChat.Id, menuMsgID); !strings.Contains(text, refusal) {
+				t.Errorf("the press drew %q, want the bot notice", text)
+			}
+		})
+	}
+
+	t.Run("viewing: the command's status needs the bot as an administrator and the page does not", func(t *testing.T) {
+		// The accepted looseness: both show the mode to any administrator, but /anonadmin's own
+		// descriptor runs RequireBotAdmin before its status view, which the page does not repeat
+		// because viewing writes nothing.
+		env := newSettingsAnonEnv(t)
+		commandChat, menuChat := env.addChat(), env.addChat()
+		settingsAnonCleanup(t, commandChat.Id, menuChat.Id)
+		env.fake.setBotRole(commandChat.Id, staffRoleMember)
+		env.fake.setBotRole(menuChat.Id, staffRoleMember)
+
+		env.sendIn(commandChat, env.admin, "/anonadmin")
+		if settingsAntifloodSentHas(env, commandChat.Id, staffMarker("admin_anon_admin_disabled")) {
+			t.Error("/anonadmin showed its status while the bot is not an administrator")
+		}
+		if !settingsAntifloodSentHas(env, commandChat.Id, staffMarker("chat_status_bot_not_admin")) {
+			t.Error("/anonadmin status was not refused for the bot not being an administrator")
+		}
+		_, text, _ := settingsAnonOpenPage(t, env, menuChat, env.admin)
+		if !containsMarker(text, "admin_anon_admin_disabled") {
+			t.Errorf("the page drew %q while the bot is not an administrator, want the mode sentence", text)
+		}
+	})
+
+	t.Run("viewing: a plain member is refused by the menu, the command shows the status to anyone", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		chat := env.addChat()
+		settingsAnonCleanup(t, chat.Id)
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 59, FirstName: "Plain"}
+		settingsAnonUsersCleanup(t, member.Id)
+		env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+		env.sendIn(chat, member, "/anonadmin")
+		if !settingsAntifloodSentHas(env, chat.Id, staffMarker("admin_anon_admin_disabled")) {
+			t.Error("/anonadmin did not show its status to a plain member")
+		}
+		before := settingsMenuMarkOf(env)
+		settingsAnonPress(t, env, chat, member, settingsAnonMenuMsgID, "a", "op", "p", settingsPageAnon)
+		settingsMenuWantRefused(t, env, before, "settings_not_admin", false)
+	})
+}
+
+func TestSettingsAnonAdminReadsCreateNothing(t *testing.T) {
+	t.Run("opening Main and the page leaves no row", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		chat := env.addChat()
+		settingsAnonCleanup(t, chat.Id)
+
+		settingsAnonPress(t, env, chat, env.admin, settingsAnonMenuMsgID, "a", "bk")
+		mainText, _ := env.lastEdit(chat.Id, settingsAnonMenuMsgID)
+		if line, found := settingsMainStateLine(mainText, "settings_page_anon"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main status line = %q (found %v), want the default state", line, found)
+		}
+		_, text, _ := settingsAnonOpenPage(t, env, chat, env.admin)
+		if !containsMarker(text, "admin_anon_admin_disabled") {
+			t.Fatalf("the page drew %q, want the default (off)", text)
+		}
+		if n := settingsAnonRowCount(t, chat.Id); n != 0 {
+			t.Errorf("opening Main and the page created %d admin rows", n)
+		}
+	})
+
+	t.Run("a failing reader is the cannot-open edit and the unknown mark", func(t *testing.T) {
+		env := newSettingsAnonEnv(t)
+		msgID := env.openMenu(env.admin)
+		_, keyboard := env.lastEdit(env.chat.Id, msgID)
+		button, ok := settingsPageButton(t, keyboard, settingsPageAnon)
+		if !ok {
+			t.Fatal("Main has no Anonymous admins button")
+		}
+		settingsAnonFailingRead(t)
+
+		msgID = env.openMenu(env.admin)
+		mainText, _ := env.lastEdit(env.chat.Id, msgID)
+		if line, found := settingsMainStateLine(mainText, "settings_page_anon"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Anonymous admins status line = %q (found %v), want the unknown mark", line, found)
+		}
+		if line, found := settingsMainStateLine(mainText, "settings_page_antiflood"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Antiflood status line = %q (found %v), want its own state intact", line, found)
+		}
+		env.pressRaw(env.chat, env.admin, msgID, button.CallbackData)
+		text, kb := env.lastEdit(env.chat.Id, msgID)
+		if !strings.Contains(text, staffMarker("settings_cannot_open")) || len(kb) != 0 {
+			t.Errorf("a failed read drew %q with %d rows, want the cannot-open edit", text, len(kb))
+		}
+		if n := settingsAnonRowCount(t, env.chat.Id); n != 0 {
+			t.Errorf("a failed read created %d admin rows", n)
+		}
+	})
 }
