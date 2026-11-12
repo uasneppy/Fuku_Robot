@@ -39,10 +39,10 @@ const staffUsernameMatchLimit = 10
 // Placeholders for user-controlled text while a hint is translated; the real text
 // is spliced in afterwards, so it never goes through the translator.
 const (
-	staffCommandToken   = "<<staff-command>>"
-	staffUsernameToken  = "<<staff-username>>"
-	staffMatchListToken = "<<staff-match-list>>"
-	staffDateToken      = "<<staff-date>>"
+	staffCommandPlaceholder   = "<<staff-command>>"
+	staffUsernamePlaceholder  = "<<staff-username>>"
+	staffMatchListPlaceholder = "<<staff-match-list>>"
+	staffDatePlaceholder      = "<<staff-date>>"
 )
 
 // staffUserLookup resolves an @username against the users table. It is a package
@@ -153,8 +153,8 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 	// write. The anonymous check above comes first, so an anonymous /sban also gets
 	// "post as yourself".
 	if spec.Refused {
-		text, _ := tr.GetString("staff_act_hint_variant", i18n.TranslationParams{"command": staffCommandToken})
-		replyStaffAction(b, msg, strings.Replace(text, staffCommandToken, spec.Name, 1))
+		text, _ := tr.GetString("staff_act_hint_variant", i18n.TranslationParams{"command": staffCommandPlaceholder})
+		replyStaffAction(b, msg, strings.Replace(text, staffCommandPlaceholder, spec.Name, 1))
 		return ext.EndGroups
 	}
 
@@ -247,8 +247,8 @@ func resolveStaffTarget(tr *i18n.Translator, req staffActionRequest) (target sta
 		}
 		switch len(rows) {
 		case 0:
-			text, _ := tr.GetString("staff_act_username_unknown", i18n.TranslationParams{"username": staffUsernameToken})
-			return target, "", strings.Replace(text, staffUsernameToken, html.EscapeString(target.Username), 1), false
+			text, _ := tr.GetString("staff_act_username_unknown", i18n.TranslationParams{"username": staffUsernamePlaceholder})
+			return target, "", strings.Replace(text, staffUsernamePlaceholder, html.EscapeString(target.Username), 1), false
 		case 1:
 			target.UserID = rows[0].UserId
 			return target, staffRowName(rows[0]), "", true
@@ -269,17 +269,17 @@ func staffAmbiguousUsernameText(tr *i18n.Translator, username string, rows []mod
 	for _, row := range rows {
 		line := "• <b>" + staffDisplayTitle(staffRowName(row)) + "</b> <code>" + strconv.FormatInt(row.UserId, 10) + "</code>"
 		if seen := staffLastSeen(row); !seen.IsZero() {
-			lastSeen, _ := tr.GetString("staff_act_username_last_seen", i18n.TranslationParams{"date": staffDateToken})
-			line += " · " + strings.Replace(lastSeen, staffDateToken, seen.UTC().Format("2006-01-02"), 1)
+			lastSeen, _ := tr.GetString("staff_act_username_last_seen", i18n.TranslationParams{"date": staffDatePlaceholder})
+			line += " · " + strings.Replace(lastSeen, staffDatePlaceholder, seen.UTC().Format("2006-01-02"), 1)
 		}
 		lines = append(lines, line)
 	}
 	text, _ := tr.GetString("staff_act_username_ambiguous", i18n.TranslationParams{
-		"username": staffUsernameToken,
-		"list":     staffMatchListToken,
+		"username": staffUsernamePlaceholder,
+		"list":     staffMatchListPlaceholder,
 	})
-	text = strings.Replace(text, staffUsernameToken, html.EscapeString(username), 1)
-	return strings.Replace(text, staffMatchListToken, strings.Join(lines, "\n"), 1)
+	text = strings.Replace(text, staffUsernamePlaceholder, html.EscapeString(username), 1)
+	return strings.Replace(text, staffMatchListPlaceholder, strings.Join(lines, "\n"), 1)
 }
 
 // staffLastSeen is when the bot last saw a user: the last activity, else the last
