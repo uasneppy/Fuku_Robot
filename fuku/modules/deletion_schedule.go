@@ -394,23 +394,69 @@ func deletionDeleteNow(b *gotgbot.Bot, a deletionAction) bool {
 			_, callErr := b.DeleteMessageWithContext(callCtx, a.ChatID, a.MessageID, nil)
 			return callErr
 		})
-		deletionInlineSettle(ctx, a, err)
+		deletionInlineSettle(ctx, b, a, err)
 	}()
 	return true
 }
 
 // deletionInlineSettle acts on the answer of an inline delete.
-func deletionInlineSettle(ctx context.Context, a deletionAction, err error) {
+func deletionInlineSettle(ctx context.Context, b *gotgbot.Bot, a deletionAction, err error) {
 	switch deletionClassify(ctx, err) {
 	case deletionVerdictGone:
 		recordCtx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
 		defer cancel()
 		deletionSetLatch(recordCtx, a.ChatID, deletionScopeGone)
+	case deletionVerdictRefused:
+		deletionInlineDecideLatch(b, a)
 	case deletionVerdictRetryFree:
 		if deletionInlineShed(ctx, err) {
 			deletionQueue(a)
 		}
 	}
+}
+
+// deletionCheckTTL is how long the guard of the inline latch decision lasts: the live right check
+// of a chat is made at most once in that time (SEC-02).
+const deletionCheckTTL = 10 * time.Minute
+
+// deletionCheckKey is the Redis key of a chat's inline latch decision guard. It is outside the
+// fuku:cache: prefix, so CLEAR_CACHE_ON_STARTUP keeps it.
+func deletionCheckKey(chatID int64) string {
+	return "fuku:delete:chk:" + strconv.FormatInt(chatID, 10)
+}
+
+// deletionTakeCheck takes the guard of chatID with SET NX EX and reports whether this caller may
+// make the live right check. No Redis, a Redis error and a lost SET NX all answer false: the latch
+// only saves calls, so the guard fails quiet and never turns into an unbounded loop of checks.
+func deletionTakeCheck(ctx context.Context, chatID int64) bool {
+	client := deletionRedisClient()
+	if client == nil {
+		return false
+	}
+	setCtx, cancel := context.WithTimeout(ctx, raidRedisTimeout)
+	defer cancel()
+	taken, err := client.SetNX(setCtx, deletionCheckKey(chatID), "1", deletionCheckTTL).Result()
+	return err == nil && taken
+}
+
+// deletionInlineDecideLatch decides the service latch after an inline service delete was refused
+// with a message-level answer, which says nothing about the right on its own (SEC-02): through the
+// same live check the worker makes (deletionDecideServiceLatch), at most once per chat per
+// deletionCheckTTL, so a group where the bot can never delete costs one read and then no calls. A
+// bot kind never decides it (a plain-member bot can delete its own messages). It runs inside the
+// inline delete's goroutine, which already recovers from a panic, on a context derived from the
+// deletion root, so the worker's stop cancels it; only the classifier's live cannot answer writes
+// the latch.
+func deletionInlineDecideLatch(b *gotgbot.Bot, a deletionAction) {
+	if !deletion.IsServiceKind(a.Kind) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(deletionContext(), deletionInlineTimeout)
+	defer cancel()
+	if !deletionTakeCheck(ctx, a.ChatID) {
+		return
+	}
+	deletionDecideServiceLatch(ctx, b, a.ChatID)
 }
 
 // deletionInlineShed reports whether a retry-free inline answer means the delete never happened

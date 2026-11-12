@@ -1582,8 +1582,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
   every kind, set from the classifier, overwriting) or `service` (stops only `service:*` kinds, set only after a live right
   check, `SET NX`, so it never downgrades `gone`). A message-level answer (`message to delete not found`, `message can't be
-  deleted`) never sets a latch, because a plain-member bot can still delete its own messages. No Redis and a Redis error read
-  as "not latched": the latch only saves calls.
+  deleted`) never sets a latch by itself, because a plain-member bot can still delete its own messages; for a `service:*` kind
+  it only leads to the live right check (below), and only that check's `cannot` answer sets the `service` scope. No Redis and
+  a Redis error read as "not latched": the latch only saves calls.
+- `fuku:delete:chk:<chat>` is the guard of the inline latch decision (`deletionCheckKey`, `deletionTakeCheck`,
+  `deletionCheckTTL`, SEC-02): `SET NX EX 600` with the value `1`, taken after an inline `service:*` delete was refused with a
+  message-level answer, so the live right check (`deletionDecideServiceLatch`) of a chat runs at most once per chat per 10
+  minutes across replicas. It sits in the `fuku:delete:*` family, outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP`
+  keeps it. No Redis, a Redis error and a lost `SET NX` all mean no guard and no check (the latch only saves calls, so this
+  fails quiet and never loops); the key is taken whether the check then says can, cannot or unknown, so an unknown answer
+  (a 429, a 5xx, a timeout) also waits out the 10 minutes before the next try. A bot kind never takes it.
 - The same migration adds the Phase 12 message columns: `greetings.welcome_media_below`, `goodbye_media_below` and
   `welcome_once` (the Media under text switches and Greet once), and `rules.file_id` (empty for no media), `media_type`
   (0 means no media), `btns` (the rules message's URL buttons, jsonb, `'[]'`) and `media_below`. Every column is
@@ -2066,7 +2074,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   pacer's wait while the deletion root is still live (a flood-control block longer than that, under the pacer's `MaxWait`;
   `deletionInlineShed`) become a queue row due now plus a wake instead of parking goroutines or losing the message; a delete
   cut off by a cancelled root (shutdown) writes nothing and is lost; a `gone` answer sets the
-  `gone` latch, a refused one is dropped with no log line and any other failure loses that one message. `deletionClassify` is a
+  `gone` latch, a refused one is dropped with no log line (a refused `service:*` one first decides the service latch through
+  the live right check of `deletionDecideServiceLatch`, in the same goroutine and on a context derived from the deletion root,
+  at most once per chat per 10 minutes behind the `fuku:delete:chk:<chat>` guard (SEC-02); a bot kind never asks, and only a
+  live `cannot` answer writes the latch) and any other failure loses that one message. `deletionClassify` is a
   table of predicates (retryFree, gone, refused, else retry) that matches on lower-cased fragments and codes, never one string.
   Logs carry the chat ID only, never a message ID, text or member.
 - Deletion worker (`deletion_worker.go`, `deletion_right.go`): `StartDeletionWorker` runs a pass at start, then one per
