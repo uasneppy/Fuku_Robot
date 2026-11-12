@@ -73,6 +73,8 @@ func StartDeletionWorker(b *gotgbot.Bot) {
 		defer error_handling.RecoverFromPanic("deletionWorker", "Deletion")
 		deletionWorkerLoop(ctx, b)
 	}()
+	// The self-destruct batcher lives and stops with the worker (D-19).
+	memberDeleteStart()
 }
 
 // StopDeletionWorker cancels the deletion root and waits for the worker for at most
@@ -80,18 +82,40 @@ func StartDeletionWorker(b *gotgbot.Bot) {
 // blocked in Telegram does not hold shutdown up: the root cancel ends it, and a row it was
 // working on is put back or resumed after the 2 minute stale release. It is safe to call when the
 // worker is not running, and more than once.
+//
+// It also ends the member self-destruct batcher (D-08, D-19): later offers are shed, the batcher
+// runs one final flush bounded to 2 s on a context detached from the cancelled root, and the worker
+// and the batcher are waited for under the one deletionWorkerStopWait timer, so the stop adds no
+// allowance and no drain. A flush cut off loses only entries that were never queued, whose
+// messages stay.
 func StopDeletionWorker() {
 	cancelDeletionContext()
+	batcherDone := memberDeleteStop()
 	deletionWorkerMu.Lock()
 	done := deletionWorkerDone
 	deletionWorkerMu.Unlock()
-	if done == nil {
+	if done == nil && batcherDone == nil {
 		return
 	}
-	select {
-	case <-done:
-	case <-time.After(deletionWorkerStopWait):
-		log.Warnf("[Deletion] worker did not stop within %s; every row resumes from the database", deletionWorkerStopWait)
+	deadline := time.NewTimer(deletionWorkerStopWait)
+	defer deadline.Stop()
+	expired := false
+	for _, w := range []struct {
+		name string
+		ch   <-chan struct{}
+	}{{"worker", done}, {"self-destruct batcher", batcherDone}} {
+		if w.ch == nil || expired {
+			continue
+		}
+		select {
+		case <-w.ch:
+		case <-deadline.C:
+			expired = true
+			log.Warnf("[Deletion] %s did not stop within %s; every row resumes from the database", w.name, deletionWorkerStopWait)
+		}
+	}
+	if done == nil {
+		return
 	}
 	deletionWorkerMu.Lock()
 	if deletionWorkerDone == done {

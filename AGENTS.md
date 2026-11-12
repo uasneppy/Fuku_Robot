@@ -109,7 +109,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   process exits with code 1 inside `stop_grace_period: 75s`, before SIGKILL; in polling mode the updater's extra 10 s moves
   the cut earlier. This costs no correctness: every row resumes from the database, and a cycle cut off leaves its rows
   pending (or claimed, until the 2 minute stale release), because the unfinished rows are released free on a context
-  detached from the cancelled run (`TestShutdownEndsDeletionWorker`).
+  detached from the cancelled run (`TestShutdownEndsDeletionWorker`). It also stops the member self-destruct batcher
+  (`memberDeleteStop`, Phase 17): it sets the draining flag (later offers are shed), asks the batcher for one final
+  flush bounded to 2 s (`memberDeleteFinalFlushWait`) on a context detached from the cancelled root, and waits for the worker
+  and the batcher under that one 3 s timer, so the stop adds no new drain, no handler registration and no allowance: the 68 s
+  figure and `stop_grace_period: 75s` stand unchanged. A flush cut off loses only entries that were never queued, whose
+  messages stay (`TestShutdownEndsMemberDeletionBatcher`).
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 - The Turnstile web captcha is configured in `main` (`registerCaptchaWeb`) when `config.AppConfig.CaptchaWebConfigured()`
   holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
@@ -2207,6 +2212,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   right never stops `bot:*` rows, because a plain-member bot can delete its own messages. The settings page reads the right
   through the same `deletionReadBotRight`, trusting the flag outside basic groups. After the stop cancels the root, a
   delete-now starts no goroutine and takes the durable path (a row due now), so it resumes after a restart.
+- Member deletion, the self-destruct batcher (`member_deletion_batcher.go`, Phase 17): the self-destruct watcher only offers
+  entries (`memberDeleteOffer`: one non-blocking send into a buffered channel of 4096, `memberDeleteQueueSize`; a full channel, a
+  draining process and an entry of another kind are refused, and a refusal keeps the message) and never touches the database,
+  `deletionAct` or `deletionSchedule`. The batcher goroutine, started and stopped with the worker (`memberDeleteStart`
+  in `StartDeletionWorker`, `defer error_handling.RecoverFromPanic`, each flush under its own recovery), flushes every 300 ms
+  (`memberDeleteFlushEvery`) or at once when 100 entries are buffered (`memberDeleteFlushAt`, a non-blocking kick). The flush
+  order is fixed: take what is buffered (at most one buffer's worth), merge entries of one `(chat, message)` to the earliest
+  time, then per chat in ascending chat ID one `deletionRulesLookup` (an unreadable rule sheds the chat's entries; a
+  `member:selfdestruct` rule that is absent or not accepted by `deletion.ValidateRuleDelay` drops them as correct, not a shed,
+  D-26a), one exact `deletion.CountPending` bounded by the ceiling (`memberSelfDestructCeiling`, 20,000, through the
+  `memberDeleteCountPending` seam: a count that fails sheds the chat's entries, because unknown never deletes, D-33), the entries
+  past the ceiling shed latest first, and then one `memberDeleteBatchWrite` (`deletion.ScheduleBatch`: statements of at most 100
+  rows, the Staff Group refused inside it, so the flush makes no second read) over every kept entry of every chat. A write that
+  returns an error sheds what it did not write and is logged once an hour by chat count. Each flush runs on
+  `context.WithTimeout(context.WithoutCancel(deletionContext()), deletionRecordTimeout)`, never the cancelled run context, and
+  wakes the worker only when a written entry is already due. Shed reasons are counted separately in atomic counters (full,
+  stopping, ceiling, rules unreadable, count unreadable, write failed) and a shed logs at most one Warn per chat per hour with the
+  chat ID and the reason name only, never a message ID (`memberDeleteShedWarn`, a map of at most 10,000 chats that forgets
+  entries older than an hour and, when none can be forgotten, logs nothing more for a new chat after one process-wide line).
+  The ceiling bounds the table: 20,000 queued rows support at most 20000 divided by the delay messages a second per chat (1 min
+  333/s, 5 min 66/s, 10 min 33/s, 1 h 5.5/s, 6 h 0.9/s, 24 h 0.23/s), past which new messages are kept, not deleted. The
+  batcher makes database writes only and never a Telegram call; it adds no Redis key. `TestMemberSelfDestructBatcherQueues`,
+  `TestMemberSelfDestructBatcherSheds`, `TestMemberSelfDestructBatcherOffRace` and `TestShutdownEndsMemberDeletionBatcher` hold it.
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
   reply and the click-to-read message of a group with private rules (`bot:rules`), the success replies of the manual
