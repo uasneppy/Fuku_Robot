@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
@@ -419,5 +421,139 @@ func TestMemberEditedKeeps(t *testing.T) {
 				t.Fatalf("getChatMember of the bot = %d, want %d: no delete was refused", got, botLookups)
 			}
 		})
+	}
+}
+
+// memberEditProbe is a handler of a later group that matches every edited message and counts the
+// updates it sees, so a test can tell whether the edit handler ended an update.
+type memberEditProbe struct {
+	seen   atomic.Int32
+	result error
+}
+
+func (p *memberEditProbe) CheckUpdate(_ *gotgbot.Bot, ctx *ext.Context) bool {
+	return ctx.EditedMessage != nil
+}
+
+func (p *memberEditProbe) HandleUpdate(*gotgbot.Bot, *ext.Context) error {
+	p.seen.Add(1)
+	return p.result
+}
+
+func (p *memberEditProbe) Name() string { return "member_edit_probe" }
+
+// TestMemberEditedNeverEndsUpdate proves the edit handler is a watcher (D-06, T-17-21): a probe at
+// a later group sees every edited update whether the edit was deleted, kept or exempt, and also
+// when the handler panicked inside its rule read; a new message never reaches the handler.
+func TestMemberEditedNeverEndsUpdate(t *testing.T) {
+	// Two probes: one in the handler's own group right after it, which only a ext.ContinueGroups
+	// result reaches (a nil result leaves the group), and one in a later group.
+	setup := func(t *testing.T) (*memberDeletionEnv, *memberEditProbe, *memberEditProbe) {
+		env := newMemberDeletionEnv(t)
+		env.storeMemberRule(deletion.KindMemberEdited, memberEditedRuleDelay)
+		env.primeAdminCache()
+		sibling := &memberEditProbe{result: ext.ContinueGroups}
+		later := &memberEditProbe{result: ext.EndGroups}
+		env.dispatcher.AddHandlerToGroup(sibling, memberDeleteGroup)
+		env.dispatcher.AddHandlerToGroup(later, 5)
+		return env, sibling, later
+	}
+	t.Run("deleted, kept and exempt edits all reach the probe", func(t *testing.T) {
+		env, sibling, later := setup(t)
+		member := env.member()
+		env.wantDeletedOnce(env.lateEdit(&member, 90, nil))
+		env.wantKept(env.lateEdit(&member, 20, nil))
+		env.wantKept(env.lateEdit(&env.admin, 90, nil))
+		for name, probe := range map[string]*memberEditProbe{"sibling": sibling, "later": later} {
+			if got := probe.seen.Load(); got != 3 {
+				t.Fatalf("%s probe saw %d edited updates, want 3: the edit handler ended an update", name, got)
+			}
+		}
+	})
+	t.Run("a panic inside the rule read still lets the probe see the update", func(t *testing.T) {
+		env, sibling, later := setup(t)
+		mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) {
+			panic("scripted panic in the rule read")
+		})
+		member := env.member()
+		env.wantKept(env.lateEdit(&member, 90, nil))
+		for name, probe := range map[string]*memberEditProbe{"sibling": sibling, "later": later} {
+			if got := probe.seen.Load(); got != 1 {
+				t.Fatalf("%s probe saw %d edited updates, want 1: a recovered panic left the group", name, got)
+			}
+		}
+	})
+	t.Run("a new message never reaches the handler", func(t *testing.T) {
+		env, sibling, later := setup(t)
+		member := env.member()
+		id := env.updateID()
+		env.deliver(id, env.chat, &member, func(m *gotgbot.Message) {
+			m.Date = deletionNow().Unix() - 300
+			m.EditDate = m.Date + 90
+		})
+		env.wantKept(id)
+		if got := sibling.seen.Load() + later.seen.Load(); got != 0 {
+			t.Fatalf("probes saw %d edited updates for a new message, want 0", got)
+		}
+	})
+}
+
+// TestMemberEditedStaffGroupNeverTouched: deletionAct refuses a Staff Group (DEL-07, D-17), and
+// fails closed when the Staff Group read fails.
+func TestMemberEditedStaffGroupNeverTouched(t *testing.T) {
+	t.Run("a Staff Group", func(t *testing.T) {
+		env := newMemberDeletionEnv(t)
+		env.storeMemberRule(deletion.KindMemberEdited, memberEditedRuleDelay)
+		env.primeAdminCache()
+		env.makeStaffGroup(env.chat.Id)
+		member := env.member()
+		env.wantKept(env.lateEdit(&member, 90, nil))
+	})
+	t.Run("a failing Staff Group read", func(t *testing.T) {
+		env := newMemberDeletionEnv(t)
+		env.storeMemberRule(deletion.KindMemberEdited, memberEditedRuleDelay)
+		env.primeAdminCache()
+		mreqSwap(t, &deletionStaffLookup, func(int64) (*models.StaffGroup, error) {
+			return nil, errors.New("staff read failed")
+		})
+		member := env.member()
+		env.wantKept(env.lateEdit(&member, 90, nil))
+	})
+}
+
+// TestMemberEditedNeedsDeleteRight: in a group where the bot cannot delete other people's messages
+// the first late edit costs one refused call and one live check of the bot and latches the chat
+// (D-24); a second makes neither.
+func TestMemberEditedNeedsDeleteRight(t *testing.T) {
+	env := newMemberDeletionEnv(t)
+	env.storeMemberRule(deletion.KindMemberEdited, memberEditedRuleDelay)
+	// The list is cached while the bot still administers the group; the member is then a known
+	// non-administrator and no live member read confuses the bot's own.
+	env.primeAdminCache()
+	env.fake.setBotMember(env.chat.Id, deletionPlainMemberBot)
+	deletionRefuseInline(env.deletionEnv, nil)
+	member := env.member()
+	baseReads := deletionBotReads(env.deletionEnv, env.chat.Id)
+
+	env.lateEdit(&member, 90, nil)
+	if n := len(env.deletes(env.chat.Id)); n != 1 {
+		t.Fatalf("deleteMessage calls after the first edit = %d, want 1", n)
+	}
+	if n := deletionBotReads(env.deletionEnv, env.chat.Id) - baseReads; n != 1 {
+		t.Fatalf("live reads of the bot after the first edit = %d, want 1", n)
+	}
+	if got := deletionLatchValue(t, env.deletionEnv, env.chat.Id); got != deletionScopeService {
+		t.Fatalf("latch = %q, want %q", got, deletionScopeService)
+	}
+
+	env.lateEdit(&member, 90, nil)
+	if n := len(env.deletes(env.chat.Id)); n != 1 {
+		t.Fatalf("deleteMessage calls after the second edit = %d, want still 1", n)
+	}
+	if n := deletionBotReads(env.deletionEnv, env.chat.Id) - baseReads; n != 1 {
+		t.Fatalf("live reads of the bot after the second edit = %d, want still 1", n)
+	}
+	if rows := env.queued(env.chat.Id); len(rows) != 0 {
+		t.Fatalf("queue rows = %+v, want none: a latched chat writes no row", rows)
 	}
 }

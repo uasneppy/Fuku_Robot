@@ -133,7 +133,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Handlers
 
-- Group numbers are execution order: `-10` captcha sweeper · `-7` lockdown join guard (it also counts the join surge
+- Group numbers are execution order: `-10` captcha sweeper · `-8` member deletion (the edit handler now, the self-destruct watcher from plan 17-07; neither ends an update, see the `MemberDeletion` bullet) · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-5` service message deletion watcher (the only handler of the group, never ends an update, `SetAllowBot`; a deletable service type is deleted now or queued by the group's stored rule) · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache (`my_chat_member` only) and the member requirements watcher (supergroup messages only, the only message handler of the group, `ext.ContinueGroups` on every path; never add another message handler to group -2) ·
   `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
@@ -206,6 +206,36 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Group is never touched, and a failing Staff Group read deletes nothing (`deletionAct`). The bare-name race with another
   bot that handles the same word is accepted and is a live check. `TestCommandRepliesStayInsideTheHandler` guards that no
   goroutine in `fuku/modules` replies, so no handler can reply to a command after the wrapper deleted it.
+- The `MemberDeletion` module (priority 243, `member_deletion.go`, Phase 17, DEL-04) hosts the member message rules that need
+  a handler of their own, at handler group `-8` (`memberDeleteGroup`, free before: the groups in use were -10, -7 to -1 and 0
+  to 12; it runs after the captcha hold and before the lockdown join guard). Today it holds the edit handler,
+  `memberEditedHandler`, a raw `ext.Handler` whose `CheckUpdate` is `ctx.EditedMessage != nil` and nothing else (never a
+  `handlers.NewMessage` with edits allowed, so a new message never reaches it), registered by `LoadMemberDeletion` with
+  `AddHandlerToGroup`; plan 17-07 adds the self-destruct watcher to the same group, which is safe because neither handler ever
+  ends an update: gotgbot moves to the next handler of a group only on `ext.ContinueGroups`, and the edit handler's result is a
+  named value preset to it with `defer error_handling.RecoverFromPanic`, so a recovered panic cannot return `nil` (which would
+  leave the group and skip the sibling) and no path returns `ext.EndGroups`. It is the first handler of the bot that consumes
+  edits: antiflood, locks, blacklists and aispam still see new messages only. The order is cheapest first and does no I/O before
+  the rule read: the chat is a group or supergroup; the sender's shape through `raidFloodSenderCounts` (no `sender_chat`,
+  automatic forward, service ID or the bot itself), not a bot (`ctx.EffectiveSender.IsBot()`) and no `via_bot`; the pure
+  `memberEditDue`; the stored `member:edited` grace through `deletionRulesLookup` (only one of the five presets counts, any
+  other stored value, a hand-written 45 included, is Off, and an unreadable rule deletes nothing); the shared exemption
+  `memberDeletionExempt`; the pending captcha; then `deletionAct` with kind `member:edited`, delay 0 and `SentAt` the message's
+  own date (so the delete-right latch, the Staff Group refusal that fails closed, the deletion pacer and the due-now fallback
+  apply as for every kind). Unknown never deletes (D-33): the exemptions are tri-state and a lookup that fails keeps the
+  message. Approvals go through `memberDeletionApprovedLookup` (default `approvals.IsUserApprovedContext`; approved or an
+  error is exempt, never the cached predicate that turns a failed load into "not approved"), administrators through
+  `memberDeletionAdminStatus` (the cached admin list when it knows, otherwise one live `getChatMember` through the seam
+  `memberDeletionMemberLookup`, bounded by `memberDeletionAdminTimeout` (3 s) and by the semaphore `memberDeletionAdminSlots`
+  (8, a full one answers unknown at once and never waits); creator and administrator are admins, member, restricted, left and
+  kicked are not, and an error, a 429, a 5xx, a timeout, an empty or unrecognised answer or a full semaphore is unknown, which
+  is exempt), and the pending captcha explicitly for edits (`memberEditPendingCaptcha` through the member requirements' two
+  captcha seams: an attempt or any read error is pending). It never uses `antifloodModule.userIsFloodExempt`,
+  `chat_status.IsUserAdmin` or `IsApprovedForUpdate` as its answer, because each reads a failed lookup as "not an admin" or
+  "not approved". Plan 17-07's self-destruct watcher reuses `memberDeletionExempt` unchanged. The handler logs by chat and user
+  ID and the error class only, never a name, text or message ID. `TestMemberEditedDeletesLateEdit`, `TestMemberEditedGrace`,
+  `TestMemberDeletionExemptTriState`, `TestMemberEditedKeeps`, `TestMemberEditedNeverEndsUpdate`,
+  `TestMemberEditedStaffGroupNeverTouched` and `TestMemberEditedNeedsDeleteRight` hold it.
 - The `MemberRequirements` module (priority 241, `memberreq.go`, `memberreq_watch.go`) registers one message watcher at
   group `-2` (`memberReqWatchGroup`), through `handlers.NewMessage` with a supergroup-only filter and no `SetAllow*`
   (new messages only: no edits, channel posts or bot senders), the only message handler of that group. The member
@@ -2113,6 +2143,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   A basic group is never screened (mute and kick are supergroup methods): the watcher's filter is supergroups only, and the
   page says so with its basic-group line (`settings_mreq_here_basic`, one line while any rule is not Off), so it is a stated
   limit and no longer a silent one.
+- Member deletion, edited messages (`member_deletion.go`, Phase 17, DEL-04): with `member:edited` stored as a grace of 30, 60,
+  300, 900 or 3600 seconds, a member's message whose `edit_date` is more than the grace after its own `date` is deleted at once
+  (the rule judges `edit_date - date`, so a gap equal to the grace is kept, a missing or non-later `edit_date` keeps the
+  message, and a message edited twice is judged by its last `edit_date` each time). A message older than 47 hours by its own
+  date is skipped with no call and no notice (`deletionDropAge`, Telegram can no longer delete it). The exemptions are judged at
+  the edit, in the order of the `MemberDeletion` bullet under Handlers: a creator or administrator, an approved user, a
+  `sender_chat` sender, a bot, a `via_bot` message, an automatic forward, a Telegram service ID, the bot itself, a pending
+  captcha, a private chat and a Staff Group are kept, and so is every message whose exemption could not be read. Stated limits:
+  no copy of the original message is stored, so any edit after the grace counts, a link preview or a caption touch included
+  (D-04, a deferred idea; a live check is in `17-SPIKE.md`); a cold admin cache costs one bounded live `getChatMember` per
+  edit until it warms (a burst beyond the semaphore keeps the messages); a group where the bot cannot delete other people's
+  messages costs one refused call and one live check, then the latch of the deletion core takes over (D-24).
 - Scheduled deletion core (`deletion_schedule.go`): `deletionAct` is the one place that decides what happens to a message with
   a delay: a chat ID that is zero or positive (not a group's) returns first, before any read, write or Telegram call, on the
   inline branch as well as the queue branch (SEC-05, symmetric with `deletion.Schedule`'s own refusal); a latched chat returns, a chat that is a Staff Group or cannot be told apart from one (`deletionStaffLookup`, the
