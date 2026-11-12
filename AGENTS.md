@@ -446,7 +446,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -723,6 +723,38 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`TestSettingsMreqCard`, `TestSettingsAuthorityMreq`, `TestSettingsDriftMreq`, `TestSettingsControlActionAllowList`,
   `TestSettingsMreqRuleScreen`) cover the channel rule's punishing values through a linked-channel fixture
   (`settingsMreqLinkChannel`).
+- The Deletion page (`settings_deletion.go`, page `d`, `Order` 85, icon 🧹, `settings_page_del`, between Member requirements and
+  Access, Phase 16) registers from its own file. Its one framework hook is the optional `settingsPage.Hidden func(group
+  *gotgbot.Chat) bool` (D-28, the only edit to `settings_pages.go` and its matching guard in `openPage`): `settingsMainEntries`
+  skips a hidden page without calling its `MainState`, and `openPage` refuses it with `common_callback_invalid_request`, so
+  the page is not drawn or opened in a Staff Group (D-18). `Hidden` is a fresh Staff Group read (`deletionStaffLookup`,
+  true only for a definite row; an error hides nothing), `MainState` makes the same read and answers the unknown mark on an
+  error, and `Open` is the cannot-open edit for an unreadable row. Three levels, all built from two tables (the sections
+  `settingsDelSections`, `s` Service messages and `b` Bot messages, and the row tables of `deletion_kinds.go`; nothing
+  branches on a row's code or kind): the hub (`a=op&p=d`, Back is Main), a section's list (`a=dl&t=<section>`, Back is
+  `a=op&p=d`) and a row's screen (`a=dr&t=<row>`, Back is `a=dl&t=<its section>`). The row codes are `sj sl sp sh sn sv sf
+  sb sa sk sg so` (service) and `bw bg br ba bm` (bot). `dl` and `dr` take exactly `t` (a section or a row code, checked in
+  step 1) and `settingsRightAdmin`; the controls are one per row code, `st` only (a `tg` naming one is refused in step 1),
+  `p=d`, with `v` exactly `n` (Keep on a service row, Off on a bot row) or the canonical decimal seconds of one of that
+  row's own presets (service 0, 10, 60, 600, 3600, 21600, 86400; bot 60, 600, 3600, 21600, 86400: no sign, space,
+  non-ASCII digit or leading zero), right `settingsRightChangeInfo`, judged on the press's fresh member record. Every choice
+  writes at once, with no card and no `e` field (M28, `settingsActCancel` is never produced): a press of the stored state
+  writes nothing, a failed write redraws the stored state with `common_settings_save_failed`. A row writes through
+  `applyDeleteRule`; joined and left write the shared flag through `applyCleanServiceRule` (Keep, Delete now, After N), as
+  `/cleanservice` does, and are drawn by their effective state. One function (`settingsDelStateOf`) maps a stored delay to
+  the icon (➖ none, 🗑 delete now, ⏳ a delay), the word and the marked choice; a stored 0 on a bot row reads Delete now and
+  marks nothing, a delay that is no preset reads `{n} s` and marks nothing. Every deletion screen (hub, both lists, every
+  row) carries one status line about the bot's right to delete, from one live `getChatMember` of the bot per draw through
+  `deletionReadBotRight` and the deletion pacer under `settingsDelHereTimeout` (3 s), made after the press is answered
+  empty and before the edit (so a redraw after a write reads once too): nothing when the bot can delete (an administrator's
+  flag is trusted outside basic groups only), `🚫 settings_del_no_right` for a definite cannot, `❔
+  settings_del_right_unknown` for anything that could not be established, never an error text, a refusal or the
+  cannot-open edit, and no button is ever disabled (a rule can be set with the line showing). Main makes no Telegram call.
+  `dl`, `dr` and every control run `settingsDelStaffGate` first, after the press pipeline and before any read or write
+  (a Staff Group answers the generic invalid-request alert and writes nothing, an unreadable row is the cannot-open edit).
+  The largest button of the page is 50 bytes. `TestSettingsDeletion*`, `TestSettingsAuthorityDeletion`,
+  `TestSettingsDriftDeletion` and `TestSettingsParityCleanService` hold it (`settings_deletion_test.go`,
+  `settings_deletion_right_test.go`, `settings_deletion_screens_test.go`, toolkit `settings_deletion_env_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -762,7 +794,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r|m`, then Access for the owner; `m` is the Member requirements page below) with
+  with Back and Close. Main lists the three pages after Antiflood (`s|l / c|f / w|g / r|m / d`, then Access for the owner, so seven rows in a private and in a group menu; `m` is the Member requirements page and `d` the Deletion page below) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules.
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
@@ -909,7 +941,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never runs.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
-  `/cleangoodbye` refuse through `CanUserChangeInfo`). `settingsRightRefusalFor` is the one pure judgement of a right's
+  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too). `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
 
 ## Data
@@ -2687,7 +2719,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   need not be staff, so only the person who can link the group (the press's own live `getChatMember` record has status
   creator, `settingsView.Creator`, no extra Telegram call) sees `settings_staff_linked_to`; any other admin gets the same
   masked line (`settings_staff_linked_hidden`) as a group menu, and the page does not even read the Staff Group row for
-  them. A Staff Group's own page (the read-only panel inside a Staff Group) may show its linked groups to the people of
+  them. The Deletion page is not drawn in a Staff Group at all (`Hidden`, D-18) and its screens never name one. A Staff Group's own page (the read-only panel inside a Staff Group) may show its linked groups to the people of
   that Staff Group. `settingsStaffViewFor` is the one place that decides: it copies the title and chat ID into
   `settingsStaffView` only for the creator's private menu or a Staff Group's own page and clears the row's link either
   way, so every other renderer never receives them; the picker's labels in a group menu are positions
