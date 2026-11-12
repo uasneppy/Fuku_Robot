@@ -317,6 +317,37 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_warns_limit": {30, 35},
 	"settings_warns_hint":  {85, 110},
 
+	// Phase 18 (plan 18-02), the Switches, Language, Log channel and Anonymous admins pages (rows 2
+	// to 6, 8, 9, 11, 12 and 14 to 30 of the same table). The page names, the log category names
+	// and the lock names below are read through table fields, so make check-translations cannot
+	// see them: this table and TestSettingsLabelLengths are their guard.
+	"settings_page_switches":      {18, 18},
+	"settings_page_lang":          {18, 18},
+	"settings_page_log":           {18, 18},
+	"settings_page_anon":          {18, 18},
+	"settings_page_locks":         {18, 18},
+	"settings_state_sw_on":        {15, 15},
+	"settings_state_locks_on":     {20, 25},
+	"settings_warns_action":       {45, 55},
+	"settings_warns_action_inert": {85, 105},
+	"settings_btn_sw_reports":     {20, 30},
+	"settings_btn_sw_aispam":      {30, 35},
+	"settings_btn_sw_approve":     {35, 35},
+	"settings_sw_ai_off":          {60, 70},
+	"settings_sw_ai_unavailable":  {95, 120},
+	"settings_lang_current":       {35, 45},
+	"settings_lang_hint":          {130, 165},
+	"settings_log_status":         {35, 45},
+	"settings_log_hint":           {110, 140},
+	"settings_log_cat_settings":   {18, 18},
+	"settings_log_cat_admin":      {18, 18},
+	"settings_log_cat_user":       {18, 18},
+	"settings_log_cat_automated":  {18, 18},
+	"settings_log_cat_reports":    {18, 18},
+	"settings_log_cat_other":      {18, 18},
+	"settings_anon_hint":          {90, 110},
+	"settings_btn_anon_toggle":    {30, 35},
+
 	// Phase 16 (plan 16-07), the Deletion page: the Main cell's name and state word. The page
 	// name is a grid cell whose binding ceiling is the rendered 20 of TestSettingsLabelLengths.
 	"settings_page_del":     {14, 18},
@@ -404,6 +435,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 // 200 characters in every language (Telegram's cap).
 var settingsAlertKeys = []string{
 	"settings_not_your_menu",
+	"settings_sw_ai_unavailable",
 	"settings_not_admin",
 	"settings_no_restrict",
 	"settings_check_failed",
