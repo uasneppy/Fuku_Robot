@@ -4,12 +4,16 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"gorm.io/gorm"
 
 	"github.com/uasneppy/fuku_robot/fuku/config"
@@ -468,4 +472,286 @@ func TestSettingsLanguageForged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// settingsLangPress hand-builds a press of the Language page on message msgID of chat, as the
+// env's administrator in a group menu.
+func settingsLangPress(t *testing.T, env *settingsEnv, chat gotgbot.Chat, msgID int64, kv ...string) {
+	t.Helper()
+	data := encodeCallbackData(settingsCallbackNamespace, env.groupFields(env.admin, kv...))
+	if data == "" {
+		t.Fatalf("hand-built press %v did not encode", kv)
+	}
+	env.pressRaw(chat, env.admin, msgID, data)
+}
+
+// settingsLangSetPress is the st press of the language code on the Language page.
+func settingsLangSetPress(t *testing.T, env *settingsEnv, chat gotgbot.Chat, msgID int64, code string) {
+	t.Helper()
+	settingsLangPress(t, env, chat, msgID, "a", "st", "p", settingsPageLang, "t", settingsLangControlKey, "v", code)
+}
+
+// settingsLangCallback presses the language button of /lang for code in chat as user, through the
+// callback's own handler.
+func settingsLangCallback(t *testing.T, env *settingsEnv, chat gotgbot.Chat, user gotgbot.User, code string) {
+	t.Helper()
+	data := encodeCallbackData("change_language", map[string]string{"l": code})
+	if err := languagesModule.langBtnHandler(env.bot, newModuleCallbackContext(env.bot, chat, user, data)); !errors.Is(err, ext.EndGroups) {
+		t.Fatalf("change_language(%s): error = %v, want EndGroups", code, err)
+	}
+}
+
+// settingsLangRowJSON is the whole chats row of the chat with its ID and timestamps blanked, as
+// JSON, or "none" when there is no row.
+func settingsLangRowJSON(t *testing.T, chatID int64) string {
+	t.Helper()
+	var row models.Chat
+	err := db.DB.Where("chat_id = ?", chatID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "none"
+	}
+	if err != nil {
+		t.Fatalf("read chats row of %d: %v", chatID, err)
+	}
+	row.ChatId = 0
+	row.CreatedAt, row.UpdatedAt = time.Time{}, time.Time{}
+	raw, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("encode chats row: %v", err)
+	}
+	return string(raw)
+}
+
+func TestSettingsParityLanguage(t *testing.T) {
+	const menuMsgID = 7474
+
+	for _, tc := range []struct{ name, seed, code string }{
+		{"fresh chats, fr", "", "fr"},
+		{"stored en, ru", "en", "ru"},
+		{"stored es, uk", "es", "uk"},
+		{"the stored code again", "id", "id"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsLanguageEnv(t)
+			callbackChat, menuChat := env.addChat(), env.addChat()
+			settingsLangCleanup(t, []int64{callbackChat.Id, menuChat.Id}, nil)
+			for _, chat := range []gotgbot.Chat{callbackChat, menuChat} {
+				if tc.seed != "" {
+					if err := lang.ChangeGroupLanguage(chat.Id, tc.seed); err != nil {
+						t.Fatalf("seed: %v", err)
+					}
+				}
+				languageApplyPrime(t, chat.Id)
+			}
+
+			settingsLangCallback(t, env, callbackChat, env.admin, tc.code)
+			settingsLangSetPress(t, env, menuChat, menuMsgID, tc.code)
+
+			if a, b := settingsLangRowJSON(t, callbackChat.Id), settingsLangRowJSON(t, menuChat.Id); a != b {
+				t.Errorf("chats rows differ\n callback %s\n menu     %s", a, b)
+			}
+			dropped := func(chatID int64) []bool {
+				var flags []bool
+				for _, key := range languageApplyKeys(chatID) {
+					flags = append(flags, languageApplyDropped(t, chatID)[key])
+				}
+				return flags
+			}
+			if a, b := fmt.Sprint(dropped(callbackChat.Id)), fmt.Sprint(dropped(menuChat.Id)); a != b {
+				t.Errorf("dropped cache keys differ: callback %s, menu %s", a, b)
+			}
+			if a, b := languageApplyChatRead(callbackChat.Id), languageApplyChatRead(menuChat.Id); a != b || a != tc.code {
+				t.Errorf("cached chat entries read %q (callback) and %q (menu), want %q", a, b, tc.code)
+			}
+		})
+	}
+}
+
+func TestSettingsDriftLanguage(t *testing.T) {
+	const menuMsgID = 7575
+
+	t.Run("a write of the callback is on the page at the next draw", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		if err := lang.ChangeGroupLanguage(env.chat.Id, "en"); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		_, _, before := settingsLangOpenPage(t, env)
+		if cell, _ := settingsLangCell(t, before, "en"); cell.Text != "✅ English" {
+			t.Fatalf("English cell before = %q", cell.Text)
+		}
+		settingsLangCallback(t, env, env.chat, env.admin, "ru")
+		dbcache.ResetLocalForTest()
+		_, text, kb := settingsLangOpenPage(t, env)
+		ru := i18n.MustNewTranslator("ru")
+		wantCurrent, _ := ru.GetString("settings_lang_current", i18n.TranslationParams{"lang": keyboard.GetLangFormat("ru")})
+		if !strings.Contains(text, wantCurrent) {
+			t.Errorf("the page after the callback's write = %q, want %q", text, wantCurrent)
+		}
+		if cell, _ := settingsLangCell(t, kb, "ru"); cell.Text != "✅ Русский" {
+			t.Errorf("Russian cell = %q, want it marked", cell.Text)
+		}
+	})
+
+	t.Run("a write of the page is what the bot reads for the next update and the next press", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		if err := lang.ChangeGroupLanguage(env.chat.Id, "en"); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		settingsLangOpenPage(t, env)
+		settingsLangSetPress(t, env, env.chat, menuMsgID, "pt")
+		dbcache.ResetLocalForTest()
+
+		ctx := newModuleMessageContext(env.bot, env.chat, env.admin, "hello")
+		if got := lang.GetLanguage(ctx); got != "pt" {
+			t.Errorf("lang.GetLanguage for the group's next update = %q, want pt", got)
+		}
+		pt := i18n.MustNewTranslator("pt")
+		wantBack, _ := pt.GetString("settings_btn_back")
+		if gotBack, _ := ctxTr(ctx).GetString("settings_btn_back"); gotBack != wantBack {
+			t.Errorf("the next press's translator says %q, want %q", gotBack, wantBack)
+		}
+		// The next press of the menu is built from the stored language.
+		settingsLangSetPress(t, env, env.chat, menuMsgID, "pt")
+		text, kb := env.lastEdit(env.chat.Id, menuMsgID)
+		if hint, _ := pt.GetString("settings_lang_hint"); !strings.Contains(text, hint) {
+			t.Errorf("the next press drew %q, want it in Portuguese", text)
+		}
+		if last := kb[len(kb)-1]; len(last) != 2 || last[0].Text != wantBack {
+			t.Errorf("the next press's navigation row = %+v, want the Portuguese Back", last)
+		}
+	})
+}
+
+func TestSettingsAuthorityParityLanguage(t *testing.T) {
+	const menuMsgID = 7676
+
+	t.Run("a live administrator writes, as the callback lets one", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		callbackChat, menuChat := env.addChat(), env.addChat()
+		settingsLangCleanup(t, []int64{callbackChat.Id, menuChat.Id}, nil)
+		settingsLangCallback(t, env, callbackChat, env.admin, "es")
+		settingsLangSetPress(t, env, menuChat, menuMsgID, "es")
+		for _, chat := range []gotgbot.Chat{callbackChat, menuChat} {
+			if stored, _ := settingsLangStored(t, chat.Id); stored != "es" {
+				t.Errorf("chat %d stored %q, want es", chat.Id, stored)
+			}
+		}
+	})
+
+	t.Run("a plain member is refused by both", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		callbackChat, menuChat := env.addChat(), env.addChat()
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 43, FirstName: "Plain"}
+		settingsLangCleanup(t, []int64{callbackChat.Id, menuChat.Id}, []int64{member.Id})
+		for _, chat := range []gotgbot.Chat{callbackChat, menuChat} {
+			env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		}
+
+		settingsLangCallback(t, env, callbackChat, member, "es")
+		env.pressPrivate(member, 777, env.privateFields(menuChat.Id, "a", "st", "p", settingsPageLang, "t", settingsLangControlKey, "v", "es"))
+		notAdmin, _ := i18n.MustNewTranslator("uk").GetString("settings_not_admin")
+		if answer, alert := env.lastAnswer(); !alert || answer != notAdmin {
+			t.Errorf("answer = %q (alert %v), want the alert settings_not_admin (%q)", answer, alert, notAdmin)
+		}
+		for _, chat := range []gotgbot.Chat{callbackChat, menuChat} {
+			if _, has := settingsLangStored(t, chat.Id); has {
+				t.Errorf("a plain member's press or callback wrote a chats row for chat %d", chat.Id)
+			}
+		}
+	})
+
+	t.Run("an administrator the owner gate refuses is refused by the menu only (the documented carve-out)", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsLanguageEnv(t)
+		callbackChat, menuChat := env.addChat(), env.addChat()
+		settingsLangCleanup(t, []int64{callbackChat.Id, menuChat.Id}, nil)
+		for _, chat := range []gotgbot.Chat{callbackChat, menuChat} {
+			env.newOwner(chat)
+			env.setAdminsAllowed(chat.Id, false)
+		}
+
+		answers := env.answerCount()
+		settingsLangSetPress(t, env, menuChat, menuMsgID, "es")
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the gated press answered %d times, want once", got)
+		}
+		gated, _ := i18n.MustNewTranslator("uk").GetString("settings_gate_owner_only")
+		if answer, alert := env.lastAnswer(); !alert || answer != gated {
+			t.Errorf("answer = %q (alert %v), want the alert settings_gate_owner_only (%q)", answer, alert, gated)
+		}
+		if _, has := settingsLangStored(t, menuChat.Id); has {
+			t.Error("the gated press wrote a chats row")
+		}
+
+		// The callback is not tightened: the same administrator still sets it there.
+		settingsLangCallback(t, env, callbackChat, env.admin, "es")
+		if stored, _ := settingsLangStored(t, callbackChat.Id); stored != "es" {
+			t.Errorf("the callback stored %q for an administrator the menu refuses, want es", stored)
+		}
+
+		// Where the menu allows the control, the callback allows it too.
+		env.setAdminsAllowed(menuChat.Id, true)
+		settingsLangSetPress(t, env, menuChat, menuMsgID, "es")
+		if stored, _ := settingsLangStored(t, menuChat.Id); stored != "es" {
+			t.Errorf("with the switch on the press stored %q, want es", stored)
+		}
+	})
+}
+
+func TestSettingsLanguageReadsCreateNothing(t *testing.T) {
+	t.Run("opening Main and the page creates no row and no key the bot's getter would not make", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		chatsBefore := settingsLangChatRows(t, env.chat.Id)
+		settingsLangOpenPage(t, env)
+		if got := settingsLangChatRows(t, env.chat.Id); got != chatsBefore || got != 0 {
+			t.Errorf("chats rows went from %d to %d on opening Main and the page", chatsBefore, got)
+		}
+		// Main also reads the other pages' states, which make their own keys; the language reader
+		// makes the one key the bot's own group read makes and no chat or chat-settings entry.
+		for _, key := range env.redis.Keys() {
+			for _, module := range []string{"chat_settings", "chat"} {
+				if key == dbcache.CacheKey(module, env.chat.Id) {
+					t.Errorf("opening the page left the cache key %s", key)
+				}
+			}
+		}
+		if !slices.Contains(env.redis.Keys(), dbcache.CacheKey("chat_lang", env.chat.Id)) {
+			t.Error("the page's read left no chat_lang entry: it did not read the key the bot reads")
+		}
+		// The page showed the bot's default, which nothing stored.
+		if _, has := settingsLangStored(t, env.chat.Id); has {
+			t.Error("a chats row exists")
+		}
+	})
+
+	t.Run("a failing reader is the cannot-open edit and the unknown mark", func(t *testing.T) {
+		env := newSettingsLanguageEnv(t)
+		msgID := env.openMenu(env.admin)
+		_, mainKeyboard := env.lastEdit(env.chat.Id, msgID)
+		button, ok := settingsPageButton(t, mainKeyboard, settingsPageLang)
+		if !ok {
+			t.Fatal("Main has no Language button")
+		}
+		mreqSwap(t, &settingsLangRead, func(context.Context, int64) (string, error) {
+			return "", errors.New("database is down")
+		})
+		env.pressRaw(env.chat, env.admin, msgID, button.CallbackData)
+		text, _ := env.lastEdit(env.chat.Id, msgID)
+		cannot, _ := i18n.MustNewTranslator("uk").GetString("settings_cannot_open")
+		if !strings.Contains(text, cannot) {
+			t.Errorf("a failed read drew %q, want the cannot-open edit", text)
+		}
+		msgID = env.openMenu(env.admin)
+		mainText, _ := env.lastEdit(env.chat.Id, msgID)
+		title, _ := i18n.MustNewTranslator("uk").GetString("settings_page_lang")
+		found := false
+		for _, line := range strings.Split(mainText, "\n") {
+			if strings.Contains(line, title) && strings.HasSuffix(line, settingsUnknownState) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("Main %q has no Language line ending in the unknown mark", mainText)
+		}
+	})
 }
