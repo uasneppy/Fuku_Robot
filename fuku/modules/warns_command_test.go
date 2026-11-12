@@ -455,7 +455,7 @@ func TestWarnThisUserPropagatesGotgbotRequestErrors(t *testing.T) {
 
 			var err error
 			if tt.callWarnThis {
-				err = warnsModule.warnThisUser(bot, ctx, target.Id, "too noisy", "warn")
+				err = warnsModule.warnThisUser(bot, ctx, target.Id, "too noisy", "warn", warnSourceManual)
 			} else {
 				err = warnsModule.warnUser(bot, ctx)
 			}

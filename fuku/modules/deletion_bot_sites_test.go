@@ -14,11 +14,13 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/connections"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
+	"github.com/uasneppy/fuku_robot/fuku/db/warns"
 )
 
 // botSite is one chat whose sends are answered by a scripted client: every message the bot sends
@@ -241,5 +243,275 @@ func TestBotRulesPrivateNeverScheduled(t *testing.T) {
 		if len(rows) != 0 {
 			t.Fatalf("queue rows after a preview = %+v, want none", rows)
 		}
+	})
+}
+
+// botSiteAdmin is the administrator every command of the site tests comes from (the fake's creator),
+// and botSiteTarget the member they act on.
+var (
+	botSiteAdmin  = gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	botSiteTarget = gotgbot.User{Id: 42, FirstName: "Member"}
+)
+
+// commandCtx is a command message of the admin in the site's chat, dated by the fixed clock. With
+// reply it answers a message of the target, and with channel the replied message is a channel post.
+func (s *botSite) commandCtx(text string, reply, channel bool) *ext.Context {
+	ctx := newModuleMessageContext(s.bot, s.chat, botSiteAdmin, text)
+	ctx.EffectiveMessage.Date = s.now.Unix()
+	if reply {
+		replied := &gotgbot.Message{MessageId: 303, Date: 1, Chat: s.chat, From: &botSiteTarget, Text: "message being moderated"}
+		if channel {
+			replied = &gotgbot.Message{
+				MessageId: 304, Date: 1, Chat: s.chat, Text: "channel post",
+				SenderChat: &gotgbot.Chat{Id: -1001234567890, Type: "channel", Title: "Spam Channel"},
+			}
+		}
+		ctx.EffectiveMessage.ReplyToMessage = replied
+	}
+	return ctx
+}
+
+// botSiteCommand is one command of the punishment family: the handler, the message it is sent as and,
+// when the command re-enters after the anonymous admin's proof, the name it is registered under.
+type botSiteCommand struct {
+	name    string
+	text    string
+	reply   bool
+	channel bool
+	anon    string
+	call    func(b *gotgbot.Bot, ctx *ext.Context) error
+}
+
+func botSiteCommands() []botSiteCommand {
+	return []botSiteCommand{
+		{name: "ban", text: "/ban spam", reply: true, anon: "ban", call: bansModule.ban},
+		{name: "ban of a channel sender", text: "/ban -1001234567890", reply: true, channel: true, anon: "ban", call: bansModule.ban},
+		{name: "dban", text: "/dban bad post", reply: true, anon: "dban", call: bansModule.dBan},
+		{name: "tban", text: "/tban 1h temp reason", reply: true, anon: "tban", call: bansModule.tBan},
+		{name: "kick", text: "/kick", reply: true, call: bansModule.kick},
+		{name: "dkick", text: "/dkick bad post", reply: true, call: bansModule.dkick},
+		{name: "unban", text: "/unban 42", anon: "unban", call: bansModule.unban},
+		{name: "mute", text: "/mute", reply: true, anon: "mute", call: mutesModule.mute},
+		{name: "dmute", text: "/dmute bad post", reply: true, anon: "dmute", call: mutesModule.dMute},
+		{name: "tmute", text: "/tmute 1h", reply: true, anon: "tmute", call: mutesModule.tMute},
+		{name: "unmute", text: "/unmute 42", anon: "unmute", call: mutesModule.unmute},
+		{name: "warn", text: "/warn too noisy", reply: true, anon: "warn", call: warnsModule.warnUser},
+		{name: "dwarn", text: "/dwarn too noisy", reply: true, anon: "dwarn", call: warnsModule.dWarnUser},
+		{name: "swarn", text: "/swarn too noisy", reply: true, anon: "swarn", call: warnsModule.sWarnUser},
+	}
+}
+
+// botSiteWarnsCleanup removes the warn rows a command of the site tests wrote.
+func botSiteWarnsCleanup(t *testing.T, chatID int64) {
+	t.Helper()
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ?", chatID).Delete(&models.Warns{})
+		db.DB.Where("chat_id = ?", chatID).Delete(&models.WarnSettings{})
+	})
+}
+
+func TestBotManualPunishmentReplies(t *testing.T) {
+	const delay = 600
+
+	for _, cmd := range botSiteCommands() {
+		t.Run(cmd.name, func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			botSiteWarnsCleanup(t, s.chat.Id)
+			s.setRule(s.chat.Id, deletion.KindBotManual, delay)
+
+			if err := cmd.call(s.bot, s.commandCtx(cmd.text, cmd.reply, cmd.channel)); err != ext.EndGroups {
+				t.Fatalf("%s error = %v, want EndGroups", cmd.name, err)
+			}
+			s.wantRow(s.chat.Id, 9001, deletion.KindBotManual, delay*time.Second)
+		})
+
+		t.Run(cmd.name+" with the kind off", func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			botSiteWarnsCleanup(t, s.chat.Id)
+			s.setRule(s.chat.Id, deletion.KindBotAuto, delay) // another kind's rule must not matter
+
+			if err := cmd.call(s.bot, s.commandCtx(cmd.text, cmd.reply, cmd.channel)); err != ext.EndGroups {
+				t.Fatalf("%s error = %v, want EndGroups", cmd.name, err)
+			}
+			if got := len(s.client.callsFor("sendMessage")); got != 1 {
+				t.Fatalf("sendMessage calls = %d, want the one reply", got)
+			}
+			s.wantNoRows(s.chat.Id)
+		})
+
+		if cmd.anon == "" {
+			continue
+		}
+		// The anonymous admin's tap re-enters the same command with the tapper as sender, so the hook
+		// needs no special case: the registered re-entry handler leaves the same row.
+		t.Run(cmd.name+" after an anonymous admin's proof", func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			botSiteWarnsCleanup(t, s.chat.Id)
+			s.setRule(s.chat.Id, deletion.KindBotManual, delay)
+			dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+			LoadBans(dispatcher)
+			LoadMutes(dispatcher)
+			LoadWarns(dispatcher)
+
+			if err := HandleAnonymousAdmin(s.bot, s.commandCtx(cmd.text, cmd.reply, cmd.channel), cmd.anon); err != ext.EndGroups {
+				t.Fatalf("anonymous re-entry of %s error = %v, want EndGroups", cmd.anon, err)
+			}
+			s.wantRow(s.chat.Id, 9001, deletion.KindBotManual, delay*time.Second)
+		})
+	}
+}
+
+func TestBotManualRepliesNotCovered(t *testing.T) {
+	cases := []struct {
+		name      string
+		text      string
+		reply     bool
+		call      func(b *gotgbot.Bot, ctx *ext.Context) error
+		wantSends int // the messages the command sends, so a case cannot pass by sending nothing
+	}{
+		{name: "ban without a target", text: "/ban", call: bansModule.ban, wantSends: 1},
+		{name: "ban of a protected admin", text: "/ban 777000", call: bansModule.ban, wantSends: 1},
+		{name: "ban of the bot itself", text: "/ban 999", call: bansModule.ban, wantSends: 1},
+		{name: "tban with a bad duration", text: "/tban 99x", reply: true, call: bansModule.tBan, wantSends: 1},
+		{name: "kick without a target", text: "/kick", call: bansModule.kick, wantSends: 1},
+		{name: "unban without a target", text: "/unban", call: bansModule.unban, wantSends: 1},
+		{name: "mute without a target", text: "/mute", call: mutesModule.mute, wantSends: 1},
+		{name: "tmute with a bad duration", text: "/tmute 99x", reply: true, call: mutesModule.tMute, wantSends: 1},
+		{name: "unmute without a target", text: "/unmute", call: mutesModule.unmute, wantSends: 1},
+		{name: "warn of an admin", text: "/warn 777000 spam", call: warnsModule.warnUser, wantSends: 1},
+		{name: "warn list", text: "/warns", reply: true, call: warnsModule.warns, wantSends: 1},
+		{name: "warn count", text: "/warnings", call: warnsModule.warnings, wantSends: 1},
+		{name: "resetwarns", text: "/resetwarns", reply: true, call: warnsModule.resetWarns, wantSends: 1},
+		{name: "rmwarn", text: "/rmwarn", reply: true, call: warnsModule.removeWarn, wantSends: 1},
+		{name: "restrict question card", text: "/restrict 42", call: bansModule.restrict, wantSends: 1},
+		{name: "unrestrict question card", text: "/unrestrict 42", call: bansModule.unrestrict, wantSends: 1},
+		{name: "sban", text: "/sban spam", reply: true, call: bansModule.sBan, wantSends: 0},
+		{name: "skick", text: "/skick", reply: true, call: bansModule.sKick, wantSends: 0},
+		{name: "smute", text: "/smute", reply: true, call: mutesModule.sMute, wantSends: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			botSiteWarnsCleanup(t, s.chat.Id)
+			for _, kind := range []string{deletion.KindBotManual, deletion.KindBotAuto} {
+				s.setRule(s.chat.Id, kind, 600)
+			}
+
+			if err := tc.call(s.bot, s.commandCtx(tc.text, tc.reply, false)); err != ext.EndGroups {
+				t.Fatalf("%s error = %v, want EndGroups", tc.name, err)
+			}
+			if got := len(s.client.callsFor("sendMessage")); got != tc.wantSends {
+				t.Fatalf("sendMessage calls = %d, want %d", got, tc.wantSends)
+			}
+			s.wantNoRows(s.chat.Id)
+		})
+	}
+
+	// /kickme and /banme are the member's own request, not a moderator's punishment.
+	for name, call := range map[string]func(b *gotgbot.Bot, ctx *ext.Context) error{
+		"kickme": bansModule.kickme, "banme": bansModule.banme,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			s.setRule(s.chat.Id, deletion.KindBotManual, 600)
+			ctx := newModuleMessageContext(s.bot, s.chat, botSiteTarget, "/"+name)
+			ctx.EffectiveMessage.Date = s.now.Unix()
+			if err := call(s.bot, ctx); err != ext.EndGroups {
+				t.Fatalf("%s error = %v, want EndGroups", name, err)
+			}
+			if got := len(s.client.callsFor("sendMessage")); got != 1 {
+				t.Fatalf("sendMessage calls = %d, want the one reply", got)
+			}
+			s.wantNoRows(s.chat.Id)
+		})
+	}
+}
+
+func TestWarnThisUserSource(t *testing.T) {
+	sources := []struct {
+		name   string
+		source warnSource
+		set    string // the kind whose rule is stored
+		other  string // the other kind, never stored in the first case
+		want   string
+	}{
+		{name: "manual", source: warnSourceManual, set: deletion.KindBotManual, other: deletion.KindBotAuto, want: deletion.KindBotManual},
+		{name: "automatic", source: warnSourceAuto, set: deletion.KindBotAuto, other: deletion.KindBotManual, want: deletion.KindBotAuto},
+	}
+	for _, tc := range sources {
+		t.Run(tc.name+" warn schedules its own kind", func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			botSiteWarnsCleanup(t, s.chat.Id)
+			s.setRule(s.chat.Id, tc.set, 300)
+
+			ctx := s.commandCtx("/warn too noisy", true, false)
+			if err := warnsModule.warnThisUser(s.bot, ctx, botSiteTarget.Id, "too noisy", "warn", tc.source); err != ext.EndGroups {
+				t.Fatalf("warnThisUser error = %v, want EndGroups", err)
+			}
+			s.wantRow(s.chat.Id, 9001, tc.want, 300*time.Second)
+		})
+
+		t.Run(tc.name+" warn ignores the other kind's rule", func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			botSiteWarnsCleanup(t, s.chat.Id)
+			s.setRule(s.chat.Id, tc.other, 300)
+
+			ctx := s.commandCtx("/warn too noisy", true, false)
+			if err := warnsModule.warnThisUser(s.bot, ctx, botSiteTarget.Id, "too noisy", "warn", tc.source); err != ext.EndGroups {
+				t.Fatalf("warnThisUser error = %v, want EndGroups", err)
+			}
+			if got := len(s.client.callsFor("sendMessage")); got != 1 {
+				t.Fatalf("sendMessage calls = %d, want the one warning", got)
+			}
+			s.wantNoRows(s.chat.Id)
+		})
+
+		// The warn-limit text goes through the same send, so it is scheduled too.
+		t.Run(tc.name+" warn at the limit is scheduled", func(t *testing.T) {
+			s := newBotSite(t, "supergroup")
+			botSiteWarnsCleanup(t, s.chat.Id)
+			s.setRule(s.chat.Id, tc.set, 300)
+			if err := warns.SetWarnLimit(s.chat.Id, 1); err != nil {
+				t.Fatalf("SetWarnLimit() error = %v", err)
+			}
+			if err := warns.SetWarnMode(s.chat.Id, "mute"); err != nil {
+				t.Fatalf("SetWarnMode() error = %v", err)
+			}
+
+			ctx := s.commandCtx("/warn too noisy", true, false)
+			if err := warnsModule.warnThisUser(s.bot, ctx, botSiteTarget.Id, "too noisy", "warn", tc.source); err != ext.EndGroups {
+				t.Fatalf("warnThisUser error = %v, want EndGroups", err)
+			}
+			if got := len(s.client.callsFor("restrictChatMember")); got != 1 {
+				t.Fatalf("restrictChatMember calls = %d, want the limit action", got)
+			}
+			s.wantRow(s.chat.Id, 9001, tc.want, 300*time.Second)
+		})
+	}
+
+	// The blacklist's warn action is the automatic source, driven through the real watcher.
+	t.Run("the blacklist's warn is automatic", func(t *testing.T) {
+		s := newBotSite(t, "supergroup")
+		botSiteWarnsCleanup(t, s.chat.Id)
+		t.Cleanup(func() {
+			if err := blacklists.RemoveAllBlacklist(s.chat.Id); err != nil {
+				t.Errorf("RemoveAllBlacklist error = %v", err)
+			}
+		})
+		s.setRule(s.chat.Id, deletion.KindBotAuto, 300)
+		s.setRule(s.chat.Id, deletion.KindBotManual, 900)
+		if err := blacklists.AddBlacklist(s.chat.Id, "spam"); err != nil {
+			t.Fatalf("AddBlacklist error = %v", err)
+		}
+		if err := blacklists.SetBlacklistAction(s.chat.Id, "warn"); err != nil {
+			t.Fatalf("SetBlacklistAction error = %v", err)
+		}
+
+		ctx := newModuleMessageContext(s.bot, s.chat, botSiteTarget, "this has spam inside")
+		ctx.EffectiveMessage.Date = s.now.Unix()
+		if err := blacklistsModule.blacklistWatcher(s.bot, ctx); err != ext.EndGroups {
+			t.Fatalf("blacklistWatcher error = %v, want EndGroups", err)
+		}
+		s.wantRow(s.chat.Id, 9001, deletion.KindBotAuto, 300*time.Second)
 	})
 }
