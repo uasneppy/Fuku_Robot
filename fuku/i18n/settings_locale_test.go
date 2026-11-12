@@ -611,6 +611,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 		// The Deletion row screens' choices (Phase 16): Keep, Delete now and the six delay labels.
 		"settings_del_state_keep", "settings_del_state_now", "settings_del_delay_10s", "settings_del_delay_1m",
 		"settings_del_delay_10m", "settings_del_delay_1h", "settings_del_delay_6h", "settings_del_delay_24h",
+		// The Member messages row screens' new choices (Phase 17): On and the three new delay labels.
+		"settings_del_state_on", "settings_del_delay_30s", "settings_del_delay_5m", "settings_del_delay_15m",
 	}
 	// The Deletion page's list cells (Phase 16, UI-SPEC check 2): a state icon, one space and the
 	// name, so every name is at most 18 code points whichever icon the row shows.
@@ -621,8 +623,10 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_del_svc_timer", "settings_del_svc_background", "settings_del_svc_gifts", "settings_del_svc_other",
 		"settings_del_bot_welcome", "settings_del_bot_goodbye", "settings_del_bot_rules", "settings_del_bot_auto",
 		"settings_del_bot_manual",
+		// The Member messages section and its three rows (Phase 17, UI-SPEC check 2).
+		"settings_del_sec_member", "settings_del_mem_commands", "settings_del_mem_edited", "settings_del_mem_self",
 	}
-	deletionIcons := []string{"➖", "🗑", "⏳"}
+	deletionIcons := []string{"➖", "🗑", "⏳", "💬"}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
 	// written, icon included.
 	editorButtons := []string{
