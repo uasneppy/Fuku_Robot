@@ -1864,7 +1864,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   translations and not by the key ceilings (at every ceiling the sum is 636; the worst real case is French mute at 506), and
   `mreq_warn_reason` with all eight phrases is at most 300; a translation that breaks the cap is shortened, never the cap
   raised; only a
-  mute carries the `mreq|v1` "I fixed it" button (`a=f`, `h`, `u`). A mute notice is never dropped by pacing: `memberReqPostNotice` waits
+  mute carries the `mreq|v1` "I fixed it" button (`a=f`, `h`, `u`). A notice is queued for deletion by `memberReqPostNotice`
+  (as `bot:punish_auto`, a mute notice at the 24 hour cap) and the "I fixed it" edit reschedules it from the tap (see
+  "Scheduling the bot's own messages" under Subsystem traps). A mute notice is never dropped by pacing: `memberReqPostNotice` waits
   `memberReqNoticeRateLimitWait` and sends again whenever the pacer gives up on it, until its context or
   `memberReqMuteNoticeBudget` ends, and every notice whose send failed otherwise is retried once (a notice without a
   button is not retried after `ErrRateLimited`). A mute whose notice still cannot be delivered is never left in place
@@ -2063,12 +2065,35 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   through `deletionSchedule`, so the latch and the Staff Group refusal apply. It has no result: every failure is one Warn
   with the chat ID and kind (never a message ID, text or member), it runs a 3 s synchronous write on its own context and
   starts no goroutine. A stored delay of 0 for a bot kind (the page offers none, but the repository allows it) is a row due
-  now. The body is `scheduleBotRow`, which takes an optional delay override so the member requirements' notices can share
-  it later. `sendRulesMessage` returns the sent message (its requests are unchanged, the Phase 12 goldens pass unedited);
+  now. The body is `scheduleBotRow`, which always reads the rules first (a kind with no row is Off and writes nothing, so
+  an override never creates a row) and takes an optional delay override that replaces a stored delay of any value; its two
+  variants are `scheduleBotMessageCapped` (a notice with a button the member needs, queued at the 24 hour cap whatever the
+  stored delay says) and `scheduleBotMessageFromNow` (the stored delay counted from this moment, for a message the bot has
+  just edited). `sendRulesMessage` returns the sent message (its requests are unchanged, the Phase 12 goldens pass unedited);
   only `/rules` schedules it, the deep link and the settings preview discard it. The manual kind covers success replies
   only: validation and error replies, warn lists, `/resetwarns`, `/rmwarn`, the `/restrict` and `/unrestrict` question cards,
   `/kickme`, `/banme` and the silent variants (which send no reply) are never scheduled
   (`TestBotManualRepliesNotCovered`). Anonymous-admin re-entry runs the same command, so the hooks need no special case.
+  The automatic kind (`bot:punish_auto`, plan 16-06) has these named sites and no other: every member requirement notice
+  (the warn, kick, ban and mute notices of Phases 13 to 15 and the per-chat cap's pause notice) through
+  `memberReqPostNotice`, the one site both callers (`memberReqAnnounce`, the cap) reach, right after a successful send and
+  from the sent message's own date, so a retried or rate-limit-waited notice counts from the message that went out
+  (`memberReqScheduleNotice`; a notice without a button follows the timer directly, a failed send writes nothing); the
+  mute notice, which carries the "I fixed it" button, is queued at the 24 hour cap (86400 s) whatever the timer says, so a
+  short timer never removes the member's only self-service way out, and with the kind Off no row is written (D-14, D-25);
+  after the member taps the button, `memberReqFixedEdit` (which now takes the chat type) reschedules the edited
+  confirmation with `scheduleBotMessageFromNow`, whose base is the moment of the tap and never `sent_at` (that plus the
+  delay can already be in the past and the confirmation would vanish at once), and the queue keeps the earlier time, so a
+  shorter timer moves the 24 hour row up and a longer one changes nothing; a failed edit schedules nothing and the 24
+  hour row stays; the antiflood action notice in `checkFlood`; the blacklist's mute, ban and kick notices (its warn action
+  goes through `warnThisUser` with `warnSourceAuto`); and the AI spam breaker's pause notice in `aispamNotifyBreaker`,
+  which D-27 counts as an automatic punishment message because it is aispam's only group message (the owner can narrow it
+  when confirming the phase). A delete verdict of aispam is silent in the group and the owner-log dump post of
+  `aispamMirrorDeletion` is never a kind. The antiflood and aispam sends go through
+  `helpers.SendMessageWithErrorHandling`, which answers no message for a chat the bot cannot post in: the hook keeps the
+  returned message and `scheduleBotMessage` ignores nil. Every hook is additive around the existing send (no request, error
+  path or return changes) and runs only after a send succeeded (`TestBotAutoPunishmentNotices`, `TestMemberReqNoticeScheduled`,
+  `TestMemberReqMuteNoticeAtCap`, `TestMemberReqFixedRescheduleMovesUp`).
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`

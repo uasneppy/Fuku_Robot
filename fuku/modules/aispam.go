@@ -22,6 +22,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/db/aispam"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/db/user"
@@ -358,9 +359,14 @@ func aispamNotifyBreaker(b *gotgbot.Bot, chatID int64, language string) {
 	if text == "" {
 		return
 	}
-	if _, err := helpers.SendMessageWithErrorHandling(b, chatID, text, formatting.Shtml()); err != nil {
+	sent, err := helpers.SendMessageWithErrorHandling(b, chatID, text, formatting.Shtml())
+	if err != nil {
 		log.WithFields(log.Fields{"chat_id": chatID, "error": err}).Debug("[AISpam] breaker notice failed")
+		return
 	}
+	// The pause notice is aispam's only group message and counts as an automatic punishment
+	// message (D-27); the owner-log dump post in aispamMirrorDeletion is never scheduled.
+	scheduleBotMessage(sent, deletion.KindBotAuto)
 }
 
 func aispamMirrorDeletion(task aispamTask, verdict *aispamVerdict) {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/antiflood"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -399,7 +400,7 @@ func (m *moduleStruct) checkFlood(b *gotgbot.Bot, ctx *ext.Context) error {
 			}
 		}
 	}
-	if _, err := helpers.SendMessageWithErrorHandling(b, chatId,
+	sent, err := helpers.SendMessageWithErrorHandling(b, chatId,
 		func() string {
 			temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_checkflood_perform_action")
 			return fmt.Sprintf(temp, formatting.MentionHtml(userId, user.Name()), fmode)
@@ -411,10 +412,14 @@ func (m *moduleStruct) checkFlood(b *gotgbot.Bot, ctx *ext.Context) error {
 			},
 			MessageThreadId: msg.MessageThreadId,
 		},
-	); err != nil {
+	)
+	if err != nil {
 		log.Error(err)
 		return err
 	}
+	// The notice is an automatic punishment message (D-11); the helper answers nil for a chat it
+	// cannot post in, and scheduleBotMessage ignores that.
+	scheduleBotMessage(sent, deletion.KindBotAuto)
 
 	return ext.ContinueGroups
 }

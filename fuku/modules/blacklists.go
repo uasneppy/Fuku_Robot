@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
@@ -513,7 +514,8 @@ func (m moduleStruct) blacklistWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			return err
 		}
 
-		_, err = b.SendMessage(chat.Id,
+		var sent *gotgbot.Message
+		sent, err = b.SendMessage(chat.Id,
 			func() string {
 				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_bl_watcher_muted_user")
 				return fmt.Sprintf(temp, formatting.MentionHtml(user.Id(), user.Name()), fmt.Sprintf(reason, i))
@@ -523,6 +525,7 @@ func (m moduleStruct) blacklistWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Error(err)
 			return err
 		}
+		scheduleBotMessage(sent, deletion.KindBotAuto)
 	case "ban":
 		if user.IsAnonymousChannel() {
 			_, err = b.BanChatSenderChat(chat.Id, user.Id(), nil)
@@ -534,7 +537,8 @@ func (m moduleStruct) blacklistWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			return err
 		}
 
-		_, err = b.SendMessage(chat.Id,
+		var sent *gotgbot.Message
+		sent, err = b.SendMessage(chat.Id,
 			func() string {
 				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_bl_watcher_banned_user")
 				return fmt.Sprintf(temp, formatting.MentionHtml(user.Id(), user.Name()), fmt.Sprintf(reason, i))
@@ -544,6 +548,7 @@ func (m moduleStruct) blacklistWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Error(err)
 			return err
 		}
+		scheduleBotMessage(sent, deletion.KindBotAuto)
 	case "kick":
 		if user.IsAnonymousChannel() {
 			return ext.ContinueGroups
@@ -554,7 +559,8 @@ func (m moduleStruct) blacklistWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			return err
 		}
 
-		_, err = b.SendMessage(chat.Id,
+		var sent *gotgbot.Message
+		sent, err = b.SendMessage(chat.Id,
 			func() string {
 				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_bl_watcher_kicked_user")
 				return fmt.Sprintf(temp, formatting.MentionHtml(user.Id(), user.Name()), fmt.Sprintf(reason, i))
@@ -564,6 +570,7 @@ func (m moduleStruct) blacklistWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Error(err)
 			return err
 		}
+		scheduleBotMessage(sent, deletion.KindBotAuto)
 	case "warn":
 		if user.IsAnonymousChannel() {
 			return ext.ContinueGroups
