@@ -1524,9 +1524,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   still pending (WR-03: the restrict may have taken effect before the hold was marked; restoring the hold on failure), and a leave that Telegram does not report (restricted to restricted) is settled the same
   way at the rejoin, never by deleting a mute hold at the leave.
 - `chat_delete_rules` (migration 20261110120000, with `scheduled_deletions` below) is one chat's delay for one kind of
-  message, one row per `(chat_id, kind)`: `kind` is `service:<type>` or `bot:<kind>` (`fuku/db/deletion/kinds.go`, 17 kinds,
-  validated in Go by `deletion.ValidKind` and never by a CHECK, so a later type needs no migration) and `delay_secs` is 0
+  message, one row per `(chat_id, kind)`: `kind` is `service:<type>`, `bot:<kind>` or one of the three `member:*` kinds of
+  Phase 17 (`fuku/db/deletion/kinds.go`, 20 kinds, validated in Go by `deletion.ValidKind` and never by a CHECK, so a later
+  type needs no migration) and `delay_secs` is 0
   for "delete now" and 1..86400 for "delete after N seconds" under the named CHECK `chk_chat_delete_rules_delay` (0..86400).
+  The delay a rule may store is checked by value per kind by `deletion.ValidateRuleDelay`, called by `SetRule` and by the
+  menu's `applyDeleteRule` before any write (a refusal is `ErrDelayOutOfRange`): `member:commands` accepts 0 only (a stored
+  0 means On), `member:edited` 30, 60, 300, 900 or 3600 (the grace in seconds) and `member:selfdestruct` 60, 300, 600, 3600,
+  21600 or 86400, while a service or bot kind keeps 0..86400, so a database edit cannot create a grace no page offers. A
+  stored value a rule does not accept is treated as Off by that rule's reader (the readers of the command, edit and
+  self-destruct rules rely on this; `deletion.NeedsDeleteRight` is true for a service or member kind and false for a bot
+  kind, which needs no delete right).
   A chat with no row for a kind means Keep (Off for a bot kind), and a read creates nothing. It is read through
   `cache.GetFromCacheOrLoad` under `cache.CacheKey("delete_rules", chat)` (`deletion.GetRules`, one `Rules` struct whose
   `Delays` map holds only the kinds that have a row: a stored 0 is present, an absent kind has no rule; `GetRulesFresh` is
@@ -1565,7 +1573,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   empty token is refused), a counted `Release` adds an attempt and moves `delete_at` to the retry time the caller passes (UTC,
   whole seconds, a Go-computed time so SQLite and PostgreSQL run one statement; a counted release with no retry time is
   `ErrInvalidRetryAt`), the third counted `Release` deletes the row instead, an uncounted `Release` (a 429, a shutdown) leaves
-  `delete_at` alone, and `ReleaseStale` returns old acting rows to pending with no attempt. The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
+  `delete_at` alone, and `ReleaseStale` returns old acting rows to pending with no attempt. A queue entry's delay is checked
+  by `deletion.ValidateEntryDelay` in `Schedule` and `ScheduleBatch` (a `member:commands` or `member:edited` entry takes 0
+  only, being the due-now fallback of an inline delete; `member:selfdestruct` the six presets; other kinds 0..86400).
+  `deletion.ScheduleBatch` writes self-destruct entries in multi-row statements of at most `ScheduleBatchMax` (100) rows
+  after merging entries of one `(chat, message)` to the earliest time in Go, because one PostgreSQL statement cannot touch a
+  key twice (error 21000), sorted by `(chat, message)` so concurrent batches lock rows in one order, with the same
+  table-qualified earliest-wins update as `Schedule`; it validates every entry before any write and refuses a Staff Group
+  with one fresh read per distinct chat (a Staff Group chat's entries are dropped, a failed read drops that chat's entries
+  and is returned while other chats are written). `deletion.CountPending` is the exact count of a chat's queued rows of one
+  kind bounded by a limit (`SELECT count(*) FROM (SELECT 1 ... LIMIT n)`, served by `uk_scheduled_deletions_message`) and
+  `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)`; no migration was added for them.
+  The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
   never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 200 due rows per cycle
   (`deletionBatch`), releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
   90 s after its claim (`deletionCycleGuard`, under the stale release, so a live cycle's rows are never handed to a second
@@ -3037,6 +3056,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   counted failure, an uncounted one leaves `delete_at` alone), `TestDeleteRules` (`RemoveRule` drops that exact kind's pending
   rows in the same transaction) and `TestApplyJoinLeftRule` (Keep and `/cleanservice off` drop the pending joined and left rows,
   by exact kind and never an acting row, another kind or another chat).
+  Phase 17 adds four names, all in `./fuku/db/deletion` and all also run on SQLite in `make test`:
+  `TestScheduleBatchKeepsEarliest` (a batch keeps the earliest time under concurrent callers, and never rewrites kind or
+  sent time), `TestScheduleBatchDuplicateKey` (one call naming one key several times writes one row, the Go dedupe PostgreSQL
+  needs), `TestCountPending` (the bounded exact count) and `TestDropPendingMessage` (one pending row by chat, message and kind).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
