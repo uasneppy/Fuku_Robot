@@ -390,3 +390,72 @@ func TestMemberReqFixedRescheduleMovesUp(t *testing.T) {
 		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
 	})
 }
+
+// TestMemberReqFixedReschedulesOnlyTheNotice is SEC-01 of the Phase 16 audit: the confirmation is
+// rescheduled only when the pressed message is the hold's stored notice. Callback data is not
+// authenticated, so a valid button of the member's own hold attached to another message of the
+// chat must not queue that other message, while the unmute and the edit stay as Phase 13 made
+// them (the notice ID is never compared for the unmute).
+func TestMemberReqFixedReschedulesOnlyTheNotice(t *testing.T) {
+	const tap = 20 * time.Minute
+
+	t.Run("a valid button on another message unmutes and edits it but queues nothing for it", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 600)
+		member = env.mreqFix(member)
+		env.advance(tap)
+		other := notice.MessageID + 7001
+		answers := len(env.mreqAnswers())
+		restricts := len(env.mreqRestricts(member.Id))
+
+		env.mreqPressData(member, other, env.mreqFixedData(notice))
+
+		if got := env.mreqOnlyAnswer(answers); got.Text == "" {
+			t.Errorf("answer = %+v, want the done toast", got)
+		}
+		if n := len(env.mreqRestricts(member.Id)); n != restricts+1 {
+			t.Errorf("restrictChatMember calls = %d, want %d (the unmute is unchanged)", n, restricts+1)
+		}
+		if edits := env.mreqNoticeEdits(other); len(edits) != 1 {
+			t.Errorf("edits of the pressed message = %d, want the one confirmation (unchanged)", len(edits))
+		}
+		if edits := env.mreqNoticeEdits(notice.MessageID); len(edits) != 0 {
+			t.Errorf("edits of the real notice = %d, want none", len(edits))
+		}
+		// Only the real notice's 24 hour row exists, untouched; nothing for the pressed message.
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
+	})
+
+	t.Run("the real notice is rescheduled from the tap", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 600)
+		member = env.mreqFix(member)
+		if hold := env.mreqHold(member.Id); hold == nil || hold.NoticeMsgID != notice.MessageID {
+			t.Fatalf("hold = %+v, want the stored notice ID %d", hold, notice.MessageID)
+		}
+		env.advance(tap)
+
+		env.mreqPressFixed(member, notice)
+
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(600*time.Second))
+	})
+
+	t.Run("a hold whose notice ID was never stored reschedules nothing", func(t *testing.T) {
+		env := newMreqSchedEnv(t)
+		member, notice := mreqSchedMuted(t, env, 600)
+		member = env.mreqFix(member)
+		if err := db.DB.Model(&models.ChatRequirementHold{}).
+			Where("chat_id = ? AND user_id = ?", env.chat.Id, member.Id).
+			Update("notice_msg_id", 0).Error; err != nil {
+			t.Fatalf("clear the stored notice ID: %v", err)
+		}
+		env.advance(tap)
+
+		env.mreqPressFixed(member, notice)
+
+		if edits := env.mreqNoticeEdits(notice.MessageID); len(edits) != 1 {
+			t.Fatalf("edits of the notice = %d, want the one confirmation (unchanged)", len(edits))
+		}
+		env.wantRowFor(notice.MessageID, deletion.KindBotAuto, env.now().Add(-tap).Add(24*time.Hour))
+	})
+}
